@@ -60,7 +60,7 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       gains the Biome format-and-lint step [pipeline.md](../docs/pipeline.md) §4 specifies. It runs
       the touched module's tests only, because Biome does not exist until this slice.
 
-- [ ] **1.4 — Kernel lift, verbatim.** All of `src/kernel/`, renaming nothing. Migrations do **not**
+- [x] **1.4 — Kernel lift, verbatim.** All of `src/kernel/`, renaming nothing. Migrations do **not**
       come with it.
       **Done when:** the kernel's own tests pass in v5 and it imports nothing from any domain module.
       **Verify:** `npm test`; grep proves the boundary holds. · **M**
@@ -112,6 +112,17 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       last act of this slice. It was left `false` only so this slice could push a red commit directly
       to `main`; the moment that Verify is done the reason is spent, and leaving it `false` any longer
       means an admin can merge past checks that have become real.
+      **Owed by 1.4 — the deploy has to run the migrations, and nothing can run them yet.** 1.4
+      brought `kernel/migrate.ts` and three migrations, but the only caller is `pg-support.ts` inside
+      the test run: there is no `npm run migrate` and no CLI entry point, so a deployed revision
+      would serve `/health` against a database with no tables. `deploy.yml` and `release.yml` both
+      need one, between deploy and smoke (pipeline §5). Build the entry point here, in this slice.
+      **Owed by 1.4:** `REQUIRE_POSTGRES=1` now decides **23** cases, not 2 — the whole kernel
+      durability suite. Without it against a real service container the `gate` job passes having
+      touched no database at all.
+      **Owed by 1.4:** the image grows. `pdfjs-dist` and `google-auth-library` are runtime
+      dependencies from this slice and `npm ci --omit=dev` installs both. `pdfjs-dist` alone is
+      **35 MB unpacked**; check the Cloud Run build time and image size rather than be surprised.
 
 - [ ] **1.7 — The policy suite, red before the schema exists.** Case 1 (the five-hop isolation join,
       both temporal predicates) and case 2 (a recycled number resolves to nobody), plus both grep
@@ -122,6 +133,11 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       **Owed by 1.3:** `npm run test:code` already names a `tests/**/*.test.ts` glob, and a glob that
       matches nothing is silent. **Confirm by count that the policy cases are actually collected** —
       a suite the runner never found looks exactly like a suite that passed.
+      **Owed by 1.4 — the guard's path is not the one pipeline §6 writes.** Migrations live at
+      **`src/kernel/migrations/*.sql`**, not root `migrations/`. §6 and this file both wrote the
+      `current_tenant` guard against `migrations/*.sql`, which matches nothing and would be a guard
+      that passes by looking at no files — the same failure 1.3 found in a `node --test` glob. Point
+      it at the real path and prove it by tripping it.
 
 - [ ] **1.8 — The evals harness, from commit one.** Runner and three trivial cases, one per kind;
       `REQUIRE_POSTGRES=1` and `REQUIRE_EMBEDDINGS=1` on the evals job.
@@ -142,6 +158,9 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       **Done when:** an apartment is a Space with a Unit extension and a lobby is a Space with none,
       enforced by the schema.
       **Verify:** contract tests for R1, R2, R15; a Unit with no Space is rejected. · **M**
+      **Owed by 1.4:** the DDL appends from **`0004_`** in `src/kernel/migrations/`. `0001`–`0003`
+      are the kernel's own — `vector`, the durability tables, their settings seed — and estate is
+      the first domain table in this repository.
 
 - [ ] **1.10 — Prove the pipeline in both directions, on purpose.** Break → blocked; fix → merge →
       staging; tag `v0.1.0` → prod; **roll prod back**; confirm the next deploy still takes traffic.
@@ -156,6 +175,11 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       seeded **through the importer path**, and a buildings/units list on the RTL token layer.
       **Done when:** a stakeholder opens the staging URL on their own phone and sees it.
       **Verify:** the owner browses it in a browser, not a screenshot. · **M**
+      **Owed by 1.4:** v3's `kernel/ui/tokens.test.ts` was **not** lifted — it asserts against
+      module HTML shells (`staff/ui/index.html`, `channel/ui/index.html`) that v5 does not have. It
+      is the guard that keeps a hex colour, a `fonts.googleapis` URL or a physical `left:`/`right:`
+      out of a screen, and it fails on the HTML rather than the CSS because that is where the
+      discipline erodes. It lands with the first screen, which is this one.
 
 - [ ] **1.12 — The corpus, both tiers, and the controls the second one needs.** Tier 1 committed to
       the repo: the published **דירה להשכיר standard lease**, פרוטוקול מסירה, ערבות בנקאית, ארנונה

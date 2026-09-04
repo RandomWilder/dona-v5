@@ -147,8 +147,15 @@ against a document we authored to pass it.
 
 ## Status
 
-Toolchain live at slice 1.3: Node 24 type stripping, Biome, `node --test`, Postgres 16 + pgvector on
-`docker compose`, and a `/health` skeleton that asserts `db:up`. No module exists yet — `src/app.ts`,
-`src/db.ts` and `src/serve.ts` sit at the root of `src/` so slice 1.4 can lift `src/kernel/` verbatim
-into an empty space. Module specs are stubs until their build week
-([tasks/roadmap.md](tasks/roadmap.md)); a stub gaining content is the signal its build has started.
+Kernel live at slice 1.4, on 1.3's toolchain: Node 24 type stripping, Biome, `node --test`, Postgres
+16 + pgvector on `docker compose`, and a `/health` skeleton that asserts `db:up`. `src/kernel/` is
+lifted from v3 and holds ids, clock, errors, validate, config, db, the migration runner,
+idempotency, audit, outbox, durable work, object storage, pdf, embeddings, extraction and the RTL
+token layer; `src/app.ts` and `src/serve.ts` are the composition root above it. `src/kernel/
+boundary.test.ts` proves the kernel imports from no domain module.
+
+**Migrations live in `src/kernel/migrations/`**, one ordered sequence for the whole system, applied
+by `kernel/migrate.ts` under an advisory lock. Three exist and all three are the kernel's own —
+`vector`, the durability tables, their settings seed. The estate spine appends from `0004_` at slice
+1.9. No domain table exists yet, and no module does: module specs are stubs until their build week
+([tasks/roadmap.md](tasks/roadmap.md)), and a stub gaining content is the signal its build started.

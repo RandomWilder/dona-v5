@@ -19,7 +19,7 @@
 - TypeScript, erasable syntax only; explicit `.ts` on relative imports; `import type` for types.
 - Biome owns formatting — read `biome.json`, don't argue with it. Tests sit beside code (`*.test.ts`).
 - **Parameterised queries. Validate every input at the edge. No new runtime dependency without a
-  stated reason in the commit body.** Migrations, clock and UI conventions: `SPEC.md`.
+  stated reason in the commit body.** Migrations (`src/kernel/migrations/`), clock, UI: `SPEC.md`.
 
 ## Boundaries
 - `.claude/hooks/` has teeth: destructive shell commands are blocked, and a write under
@@ -27,4 +27,4 @@
 - Secrets only through `infra/set-secret.sh`; **real tenant documents never enter this repo**.
 - Now: `tasks/todo.md` · Plan: `tasks/plan.md` · Process: `docs/pipeline.md` · `docs/decisions/`
 
-**Status: toolchain live at slice 1.3** — kernel 1.4, CI 1.6, gates 1.7–1.8. `test:policy`/`evals` do not exist yet.
+**Status: kernel live at slice 1.4** — CI 1.6, gates 1.7–1.8. `test:policy`/`evals` do not exist yet.

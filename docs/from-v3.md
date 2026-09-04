@@ -104,8 +104,13 @@ builds the `Pool` and attaches **no `'error'` listener**, and nothing else in v3
 emits `'error'` on an idle client whose backend goes away — a Cloud SQL restart, a failover, a
 maintenance window — and Node throws on an unhandled `'error'`, so the process *exits* instead of
 degrading. `/health`'s 503 branch never runs, because there is nothing left to serve it. v5 has the
-listener and a test that kills its own backend to prove it (`src/db.ts`, `src/db.test.ts`); the
-verbatim lift in slice 1.4 must bring it along rather than overwrite it.
+listener and a test that kills its own backend to prove it; the verbatim lift in slice 1.4 must
+bring it along rather than overwrite it.
+
+**Carried, 2026-09-04.** Slice 1.4 merged 1.3's `src/db.ts` into `kernel/db.ts` and deleted the
+former. The listener and its case (now `src/kernel/db.test.ts`) were proved red against the verbatim
+v3 file first, which failed by terminating its own runner. It is the one file in the kernel that is
+deliberately not v3's.
 
 ### Process and enforcement — the part worth the most
 
