@@ -37,7 +37,7 @@ exercise it rather than letting the freeze slip. See risk **R1**.
 
 ## Slices
 
-- [ ] **1.1 — Repo, branch protection, context layer.** `AGENTS.md` (20–30 lines), `CLAUDE.md`
+- [x] **1.1 — Repo, branch protection, context layer.** `AGENTS.md` (20–30 lines), `CLAUDE.md`
       pointer, `SPEC.md`, empty `SPEC-<module>.md` per module, `docs/decisions/` re-adopting v3's
       ADR-0001–0004.
       **Done when:** a clean clone gives an agent `AGENTS.md` and `SPEC.md`, and a PR to `main`
@@ -96,6 +96,10 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       staging; tag `v0.1.0` → prod; **roll prod back**; confirm the next deploy still takes traffic.
       **Done when:** the round trip is complete and the post-rollback deploy serves 100%, not 0%.
       **Verify:** revision list with traffic percentages at each step. · **S**
+      **Closes an owed action from 1.1:** set `enforce_admins: true` on `main`. It was left `false`
+      so that 1.6 could push a red commit directly to `main` for its own Verify, and while it is
+      `false` an admin can merge a PR the checks have blocked — measured at 1.1, not assumed.
+      Once this flips, `tasks/evidence/1.1.md` stops being the current state of the gate.
 
 - [ ] **1.11 — The Shoham fixture and the week-1 surface.** The building, its spaces and its 72 units
       seeded **through the importer path**, and a buildings/units list on the RTL token layer.
