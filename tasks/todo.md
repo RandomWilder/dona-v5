@@ -17,7 +17,7 @@ exercise it rather than letting the freeze slip. See risk **R1**.
 
 ## Before any slice — light the fuses
 
-- [ ] Walk all five rows of [fuses.md](fuses.md). They burn while the scaffolding gets built;
+- [ ] Walk all six rows of [fuses.md](fuses.md). They burn while the scaffolding gets built;
       **nothing below is on their critical path.**
 - [ ] Confirm and record the Meta filing: lit 2026-08-21, correct legal entity, in progress. Four to
       six weeks puts it between 18 Sep and 2 Oct — roughly five weeks of slack ahead of the week-9
@@ -55,6 +55,10 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       **Done when:** clean clone → running in under five minutes; `/health` returns `ok:true` **and**
       `db:up`.
       **Verify:** time it from `git clone` on a second checkout; record the number. · **M**
+      **Owed by 1.2, and this slice is the first place it can land:** `npm test` must include
+      `.claude/hooks/hooks.test.mjs` — 34 cases that nothing currently runs — and `after-write.mjs`
+      gains the Biome format-and-lint step [pipeline.md](../docs/pipeline.md) §4 specifies. It runs
+      the touched module's tests only, because Biome does not exist until this slice.
 
 - [ ] **1.4 — Kernel lift, verbatim.** All of `src/kernel/`, renaming nothing. Migrations do **not**
       come with it.
@@ -73,6 +77,14 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       `v*` only.
       **Done when:** a red commit cannot reach staging even by a direct push to `main`.
       **Verify:** push one and watch staging not move. · **M**
+      **Owed by 1.1 — the sharpest edge in the repo.** `main` requires the check contexts **`gate`**
+      and **`evals`**, by those exact names. A CI job named anything else leaves every PR blocked
+      forever while no check ever reports. Name the jobs to match, or change protection in the same
+      commit — and confirm with a PR that goes green, not by reading the YAML.
+      **Owed by 1.1, closing here rather than at 1.10:** set `enforce_admins: true` on `main` as the
+      last act of this slice. It was left `false` only so this slice could push a red commit directly
+      to `main`; the moment that Verify is done the reason is spent, and leaving it `false` any longer
+      means an admin can merge past checks that have become real.
 
 - [ ] **1.7 — The policy suite, red before the schema exists.** Case 1 (the five-hop isolation join,
       both temporal predicates) and case 2 (a recycled number resolves to nobody), plus both grep
@@ -96,10 +108,10 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       staging; tag `v0.1.0` → prod; **roll prod back**; confirm the next deploy still takes traffic.
       **Done when:** the round trip is complete and the post-rollback deploy serves 100%, not 0%.
       **Verify:** revision list with traffic percentages at each step. · **S**
-      **Closes an owed action from 1.1:** set `enforce_admins: true` on `main`. It was left `false`
-      so that 1.6 could push a red commit directly to `main` for its own Verify, and while it is
-      `false` an admin can merge a PR the checks have blocked — measured at 1.1, not assumed.
-      Once this flips, `tasks/evidence/1.1.md` stops being the current state of the gate.
+      **Confirms an owed action from 1.1, which 1.6 closes:** `enforce_admins` is `true` on `main`.
+      This slice is the first one that runs entirely inside the enforced gate, so its break→blocked
+      leg is also the proof that the flip took. If it is still `false` here, 1.6 did not finish.
+      Once it flips, `tasks/evidence/1.1.md` stops being the current state of the gate.
 
 - [ ] **1.11 — The Shoham fixture and the week-1 surface.** The building, its spaces and its 72 units
       seeded **through the importer path**, and a buildings/units list on the RTL token layer.
@@ -116,6 +128,11 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       removed by a documented command that has actually been run.
       **Verify:** run the deletion path against a throwaway object; write the removal date into
       [fuses.md](fuses.md). · **S**
+      **Owed by 1.2:** the bash guard covers the **Bash tool only**. Write, Edit and every MCP tool
+      reach the filesystem without passing it, so nothing here may lean on the hook — `.gitignore`,
+      bucket IAM and the policy suite are what hold. Also close ADR-0004's F6 row in
+      [fuses.md](fuses.md): the tier-2 corpus is the first real personal data, and its legal basis
+      and named third parties are owed before it lands, not after.
 
 ---
 

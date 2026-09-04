@@ -7,7 +7,7 @@
 // Run: node --test .claude/hooks/hooks.test.mjs
 import { deepStrictEqual, match, ok, strictEqual } from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -195,6 +195,31 @@ describe('session-start: no session starts blind', () => {
       strictEqual(r.status, 0);
       ok(!/npm ERR!/.test(r.stdout + r.stderr), `leaked an npm error: ${r.stdout}${r.stderr}`);
       match(r.stdout, /slice 1\.3/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('names the loaded guardrails, so a session running without them looks different', () => {
+    // A session that declines .claude/settings.json has no hooks and is otherwise identical to one
+    // that has them. Nothing in the repo can detect that — the detector would itself be a hook. The
+    // banner makes it an absence a human can see. Slice 1.2 evidence, raised item 3.
+    const r = fire('session-start.mjs', {});
+    strictEqual(r.status, 0);
+    match(r.stdout, /guardrails: armed — guard-bash · after-write/);
+  });
+
+  it('says INCOMPLETE when a hook is registered but its file is gone', () => {
+    // The failure a rebase produces: settings.json still registers the hook, the file does not exist.
+    const dir = mkdtempSync(join(tmpdir(), 'dona-v5-hook-'));
+    try {
+      spawnSync('git', ['init', '-q'], { cwd: dir });
+      mkdirSync(join(dir, '.claude', 'hooks'), { recursive: true });
+      cpSync(join(hooks, 'guard-bash.mjs'), join(dir, '.claude', 'hooks', 'guard-bash.mjs'));
+      cpSync(join(repoRoot, '.claude', 'settings.json'), join(dir, '.claude', 'settings.json'));
+      const r = fire('session-start.mjs', {}, dir);
+      strictEqual(r.status, 0);
+      match(r.stdout, /guardrails: INCOMPLETE — guard-bash loaded/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

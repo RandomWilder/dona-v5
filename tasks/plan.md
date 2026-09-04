@@ -170,6 +170,10 @@ The standing bar every slice clears, on top of its own acceptance criteria:
 - [ ] Merged green → staging deployed itself → `infra/smoke.sh` passes against staging
 - [ ] `tasks/evidence/<slice>.md` written: what was proved, with the numbers
 - [ ] No new runtime dependency without a stated reason in the commit body
+- [ ] **Every item the slice raised is written into the entry of the slice that closes it** — in
+      `todo.md` and `roadmap.md`, not only in the evidence file. The bar is not *nothing open*; a
+      week of dependent slices always leaves things open. The bar is **nothing open that is
+      unowned** ([pipeline.md](../docs/pipeline.md) §8)
 
 ---
 

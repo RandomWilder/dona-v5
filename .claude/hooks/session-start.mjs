@@ -3,6 +3,11 @@
 // v3 ran this inline as `git status -sb | head -5 && npm test --silent | tail -2`. In v5 there is
 // no package.json until slice 1.3, and `npm ERR! Missing script: "test"` on every session start is
 // worse than useless — it is a hook you learn to scroll past. Say what is true instead.
+//
+// It also prints one line naming the guardrails that are loaded. A session that declines
+// `.claude/settings.json` runs with no hooks at all and is otherwise indistinguishable from one that
+// has them — nothing inside the repo can detect that state, because the detector would be a hook.
+// The banner turns it into an absence a human can see. A tell, not an enforcement.
 import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -36,4 +41,24 @@ if (!hasTestScript) {
     process.stdout.write('\n');
   }
 }
+
+// Name the hooks that are both registered in settings.json and present on disk. Registered-but-
+// missing is the interesting failure — settings.json survives a rebase that dropped the file.
+const armed = [];
+try {
+  const settings = JSON.parse(readFileSync(resolve(cwd, '.claude/settings.json'), 'utf8'));
+  const registered = JSON.stringify(settings.hooks ?? {});
+  for (const name of ['guard-bash', 'after-write']) {
+    if (registered.includes(`${name}.mjs`) && existsSync(resolve(cwd, `.claude/hooks/${name}.mjs`))) {
+      armed.push(name);
+    }
+  }
+} catch {
+  /* no settings file, or unreadable — armed stays empty and the line says so */
+}
+process.stdout.write(
+  armed.length === 2
+    ? `guardrails: armed — ${armed.join(' · ')}\n`
+    : `guardrails: INCOMPLETE — ${armed.length ? armed.join(' · ') : 'none'} loaded (AGENTS.md Boundaries)\n`,
+);
 process.exit(0);

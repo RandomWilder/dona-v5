@@ -52,6 +52,7 @@ management as their dependency, not as our delay.
 | **WhatsApp number under Dona Dom's legal entity** | W1 | Days, once the entity is decided | Verification itself — the number must belong to the company, never a personal mobile. A wrong number here means refiling, not editing. |
 | **Priority ERP read-only keys** | W1 | Client IT's calendar | The register import, the ERP foreign keys, and every financial reference. Open question #1 in the handoff decides how much of month one depends on this. |
 | **Google Drive access to the document folders** | W1 | Days | Document ingestion. Drive is the known source for lease and building paperwork, so this fuse converts a backfill expedition into an import. |
+| **ADR-0004 — personal data reaching a model provider** | W1 | Days, once asked | Slice 1.12 and everything after it. The obligation is a disclosure: the legal basis, and every third party that sees tenant text, named before it is called. A third party discovered later is a data-custody incident, not a config edit. |
 | **The client's GCP organisation decision** | W1 | Weeks — a management decision | Nothing immediately; everything eventually. The project is created under an organisation now and migrated later. Two things must be true before the move: an `@donadom.co.il` identity exists (most organisations block IAM grants to external addresses outright, which is the likeliest way to get locked out of your own project), and no real tenant data has landed yet, so the transfer is an admin task and not a data-custody event. If the GitHub repository moves with it, the `assertion.repository` attribute condition and both deploy workflows change with it. |
 
 **Open, and to be answered before week 1 is planned:** the Meta verification filed 2026-08-21 may
@@ -99,7 +100,13 @@ Rules that matter:
   at push time.
 - `PreToolUse` (Bash) → block `rm -rf /`, force push, raw `psql` against prod, destructive `gcloud`
   outside the deploy scripts, `DROP DATABASE`. Exit 2 blocks the call.
-- `SessionStart` → print the current branch and any failing tests, so no session starts blind.
+- `SessionStart` → print the current branch, any failing tests, and which guardrails are loaded, so
+  no session starts blind and a session running without them looks different from one that has them.
+
+**Exit 2 is the only code that reaches the agent, on both events.** A `PostToolUse` hook that exits 0
+has its stderr discarded, so a report written that way is never read by anything — the write has
+already happened either way, and 2 is what puts the failure in front of the model. A hook whose
+feedback exits 0 is decoration (slice 1.2 evidence, where v3's had been decoration for a year).
 
 **Permissions.** Allowlist the routine — tests, lint, `git status`/`diff`, docker compose — so flow
 is uninterrupted. Deploys and destructive commands stay behind a prompt.
@@ -256,6 +263,17 @@ It decides what a ranking change should *be*; `npm run evals` decides whether it
 4. Read the diff yourself. CI is the gate, but nothing merges unread.
 5. Merge green → staging deploys itself → two-minute smoke on staging.
 6. Close the slice with a `tasks/evidence/` file. End of day, staging is current and `todo.md` is true.
+7. **Carry every raised item into the entry of the slice that closes it** — `tasks/todo.md` and
+   `tasks/roadmap.md`, not only the evidence file. A slice is not closed while something it raised
+   has no owner.
+
+**The carry rule, and why it is a rule.** A slice legitimately leaves things open: week 1 is a
+dependency chain, and 1.2 cannot join `npm test` before 1.3 creates it. The bar is therefore not
+*nothing open* — it is **nothing open that is unowned**. Evidence files are written once and reopened
+never, so an item recorded only there is an item lost: slice 1.1 raised three, two of which had
+vanished from the plan by 1.2 — including the sharpest hazard in the repo. What an item costs to
+carry is one sentence in the closing slice's entry, read at the moment it matters. What it costs to
+lose is discovered by tripping over it.
 
 **Per week.** The week's shape belongs to the Cadence — the demo kind is declared Monday, the build
 is frozen Wednesday, the demo runs Thursday. What the pipeline owes each of those:
@@ -284,7 +302,7 @@ the Cadence, not here.
 ## 9. Day one, in order
 
 - [ ] `git init` + GitHub repo; branch protection on `main` — required checks, no force push
-- [ ] **Light all five fuses in §2 and create `tasks/fuses.md` before any of the below.** They burn
+- [ ] **Light every fuse in §2 and create `tasks/fuses.md` before any of the below.** They burn
       while the scaffolding gets built; nothing here is on their critical path
 - [ ] Scaffold: `AGENTS.md` (20 lines), `CLAUDE.md` pointer, `SPEC.md`, `tasks/todo.md`
 - [ ] `.claude/settings.json`: permissions allowlist plus the four hooks from §4
@@ -308,6 +326,11 @@ the Cadence, not here.
 
 - **Chat-driven architecture.** Deciding structure ad hoc in prompts instead of in specs and ADRs —
   agents then relitigate and drift. Write it down once, and cite it after that.
+- **An item raised in an evidence file and nowhere else.** It reads like diligence and behaves like
+  forgetting: the file is never reopened, so the item is discovered by tripping over it. §8, step 7.
+- **Handing the director a menu.** The agent's job includes the structural call. Present one
+  approach with its reasoning and its cost, not a list of options with the decision left open —
+  a choice offered without the context to decide it is work pushed uphill, not deference.
 - **Merge-then-verify.** "CI is slow, I'll push to main." The one habit that converts agent speed
   into production incidents.
 - **Context bloat.** A 300-line `CLAUDE.md` nobody maintains. Lean constitution, spec per module,

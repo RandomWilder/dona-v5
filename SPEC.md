@@ -78,6 +78,20 @@ Follows the workbook's entities, not v3's ([docs/from-v3.md](docs/from-v3.md) Ti
 
 No cycles. `Project` sits above `Building` and is optional (`Building.project_id` nullable).
 
+## Code conventions
+
+`AGENTS.md` carries the commands, the directory map and the standing instructions, and is capped at
+30 lines ([docs/pipeline.md](docs/pipeline.md) §3). Everything else it would otherwise repeat lives
+here:
+
+- **Migrations are append-only.** DDL and backfill in separate files, never one. PII columns are
+  commented `-- pii`. No migration introduces a `current_tenant` column — rule 1, enforced by a grep.
+- **Time comes from the injected clock.** No `Date.now()` in logic and no `DEFAULT now()` in SQL: a
+  timestamp the tests cannot control is a test that fails on a Tuesday.
+- **UI is self-contained HTML plus `/ui/tokens.css`, and nothing else.** No bundler, no framework.
+  Hebrew is RTL through logical properties (`margin-inline-start`, never `margin-left`), so one
+  stylesheet serves both directions.
+
 ## Error shape
 
 One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_allowed` · `conflict`
@@ -133,5 +147,5 @@ against a document we authored to pass it.
 
 ## Status
 
-Scaffolded at slice 1.1. Module specs are stubs until their build week
+Scaffolded at slice 1.2. Module specs are stubs until their build week
 ([tasks/roadmap.md](tasks/roadmap.md)); a stub gaining content is the signal its build has started.

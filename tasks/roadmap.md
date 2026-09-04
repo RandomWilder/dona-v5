@@ -85,6 +85,9 @@ Node 24 with type stripping, `tsconfig.json`, `biome.json`, `node --test`, `dock
 - **Done when:** a clean clone reaches a running server in under five minutes; `/health` returns
   `ok:true` **and** `db:up`.
 - **Verify:** time it from `git clone` on a second checkout; record the number.
+- **Owed by 1.2:** `npm test` includes `.claude/hooks/hooks.test.mjs` — 34 cases that nothing
+  currently runs — and `after-write.mjs` gains the Biome format-and-lint step
+  ([pipeline.md](../docs/pipeline.md) §4), which it could not have before Biome existed.
 - **Deps:** 1.1 · **Size:** M
 
 ### Slice 1.4 — Kernel lift (Tier 1, verbatim)
@@ -116,6 +119,13 @@ on a `v*` tag only, re-running the full gate against the tagged commit and refus
 an ancestor of `main`.
 - **Done when:** a red commit cannot reach staging even by a direct push to `main`.
 - **Verify:** push a red commit directly to `main`; staging does not move.
+- **Owed by 1.1:** branch protection requires the check contexts **`gate`** and **`evals`** by those
+  exact names. A job named anything else leaves every PR blocked forever with no check reporting —
+  name the jobs to match or change protection in the same commit, and prove it with a PR that goes
+  green rather than by reading the YAML.
+- **Owed by 1.1, closing here rather than at 1.10:** `enforce_admins: true` on `main`, as the last
+  act of the slice. It was `false` only so this Verify could push red to `main`; once that is done
+  the reason is spent, and every slice after this one merges inside a gate that is real.
 - **Deps:** 1.3, 1.5 · **Size:** M
 
 ### Slice 1.7 — The policy suite, red before the schema exists
@@ -154,6 +164,9 @@ Break a test → PR blocked. Fix → merge → staging live. Tag `v0.1.0` → pr
 the week nothing depends on it.
 - **Done when:** the round trip is complete and the post-rollback deploy serves 100%, not 0%.
 - **Verify:** revision list with traffic percentages at each step, times recorded.
+- **Confirms 1.6's flip:** this is the first slice that runs entirely inside the enforced gate, so
+  its break→blocked leg doubles as the proof that `enforce_admins: true` took. Still `false` here
+  means 1.6 did not finish.
 - **Deps:** 1.6 · **Size:** S
 
 ### Slice 1.11 — The Shoham fixture and the week-1 surface
@@ -179,6 +192,11 @@ organisation move stays an admin task rather than a data-custody event (**R8**).
   removed by a documented command that has actually been run.
 - **Verify:** run the deletion path against a throwaway object and confirm it is gone from the bucket
   and from the row; the removal date is written into [fuses.md](fuses.md).
+- **Owed by 1.2:** the bash guard covers the **Bash tool only** — Write, Edit and every MCP tool
+  reach the filesystem without passing it. Nothing in this slice may lean on it; `.gitignore`, bucket
+  IAM and the policy suite are what hold.
+- **Owed by 1.1:** close **F6** in [fuses.md](fuses.md). Tier 2 is the first real personal data in
+  the system, and ADR-0004 owes its legal basis and its named third parties *before* it lands.
 - **Deps:** 1.5 · **Size:** S
 
 > **Week-1 cut line.** If the week runs hot, cut in this order: the third and second eval cases in
