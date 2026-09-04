@@ -89,10 +89,19 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       `v*` only.
       **Done when:** a red commit cannot reach staging even by a direct push to `main`.
       **Verify:** push one and watch staging not move. · **M**
-      **Owed by 1.1 — the sharpest edge in the repo.** `main` requires the check contexts **`gate`**
-      and **`evals`**, by those exact names. A CI job named anything else leaves every PR blocked
-      forever while no check ever reports. Name the jobs to match, or change protection in the same
-      commit — and confirm with a PR that goes green, not by reading the YAML.
+      **Owed by 1.1, re-scoped at 1.3 — the sharpest edge in the repo.** `main` *did* require the
+      check contexts **`gate`** and **`evals`** from 1.1, by those exact names, with no workflow
+      behind either. A required context that never reports is not pending, it is failing: PRs #2 and
+      #3 were both `BLOCKED` with an empty rollup, and the only way through was `--admin`, which is
+      how a guardrail gets trained into background noise. Required status checks were therefore
+      **removed from `main` on 2026-09-04** (`gh api -X DELETE
+      repos/RandomWilder/dona-v5/branches/main/protection/required_status_checks`); no-force-push,
+      no-deletion and required-conversation-resolution were left untouched. **This slice re-arms
+      `gate`** — name the job exactly `gate`, let one PR go green with it, *then* add it back as a
+      required context, and confirm with a second PR, not by reading the YAML. `evals` is 1.8's to
+      re-arm, for the same reason it was wrong to require it here: it cannot be honest until the
+      golden set exists, and a stub job that exits 0 on an empty suite is a green check that proves
+      nothing.
       **Owed by 1.3:** the `gate` job runs `npm run typecheck`, `npm run lint` and `npm test` as
       three steps — `npm test` is `test:code && test:hooks`, and the hooks half is the only thing
       that runs `.claude/hooks/hooks.test.mjs`, so a `gate` that shortcuts to `test:code` drops 41
@@ -121,6 +130,12 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       **Owed by 1.3:** same as 1.7 for the `evals/**/*.test.ts` glob in `test:code` — confirm by
       count, not by reading the script. `REQUIRE_POSTGRES=1` is honoured by `src/app.test.ts` and
       `src/db.test.ts` today; the evals job needs `REQUIRE_EMBEDDINGS=1` as well.
+      **Owed by 1.3 — re-arm `evals` on `main`.** It was a required check context from 1.1 with no
+      workflow behind it and was removed on 2026-09-04 (see 1.6). This slice is the first one that
+      can satisfy it honestly. As its closing act: run the evals job on a PR, watch it go green *and*
+      watch it go red with the database URL unset, **then** add `evals` back as a required context.
+      Not before the red — a context re-armed on a job that has only ever passed is the same promise
+      1.1 made.
 
 - [ ] **1.9 — Estate schema: Project · Building · Space · Unit.** E1–E4 from the workbook's FIELDS
       sheet. `Building.project_id` nullable, six-value `space_kind`, `Unit.unit_id = Space.space_id`.
