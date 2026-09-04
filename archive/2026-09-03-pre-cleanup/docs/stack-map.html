@@ -1,0 +1,950 @@
+<title>Dona Dom Stack Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Hebrew:wght@400;600&display=swap">
+
+<style>
+  :root {
+    --paper:      #F1F2EF;
+    --surface:    #FBFCF9;
+    --surface-2:  #E7EAE4;
+    --ink:        #17222E;
+    --ink-2:      #4C5964;
+    --ink-3:      #7B858D;
+    --rule:       #C8CFC7;
+    --rule-soft:  #DDE1DA;
+    --structure:  #2F5D7C;
+    --signal:     #BF4A22;
+    --good:       #40704F;
+    --warn:       #97690C;
+    --grid:       rgba(23,34,46,.045);
+    --shadow:     0 1px 2px rgba(23,34,46,.05);
+
+    --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --font-body: "IBM Plex Sans", "IBM Plex Sans Hebrew", system-ui, -apple-system, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    --measure: 68ch;
+    --sheet: 1180px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:     #121821;
+      --surface:   #19212C;
+      --surface-2: #222C38;
+      --ink:       #E2E7E3;
+      --ink-2:     #A5B0B8;
+      --ink-3:     #79858E;
+      --rule:      #2F3B47;
+      --rule-soft: #26313C;
+      --structure: #7BADD0;
+      --signal:    #EA7F52;
+      --good:      #79B78C;
+      --warn:      #D6A644;
+      --grid:      rgba(226,231,227,.045);
+      --shadow:    0 1px 2px rgba(0,0,0,.3);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:     #121821;
+    --surface:   #19212C;
+    --surface-2: #222C38;
+    --ink:       #E2E7E3;
+    --ink-2:     #A5B0B8;
+    --ink-3:     #79858E;
+    --rule:      #2F3B47;
+    --rule-soft: #26313C;
+    --structure: #7BADD0;
+    --signal:    #EA7F52;
+    --good:      #79B78C;
+    --warn:      #D6A644;
+    --grid:      rgba(226,231,227,.045);
+    --shadow:    0 1px 2px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      repeating-linear-gradient(to right, var(--grid) 0 1px, transparent 1px 28px),
+      repeating-linear-gradient(to bottom, var(--grid) 0 1px, transparent 1px 28px);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet { max-width: var(--sheet); margin: 0 auto; padding: 0 28px 96px; }
+
+  /* ---------- title block ---------- */
+
+  .titleblock {
+    border-bottom: 2px solid var(--ink);
+    padding: 56px 0 20px; margin-bottom: 44px;
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 28px; align-items: end;
+  }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--structure); margin: 0 0 14px;
+  }
+  h1 {
+    font-family: var(--font-display); font-weight: 700;
+    font-size: clamp(2.1rem, 5.2vw, 3.4rem);
+    line-height: 1.03; letter-spacing: -.026em; margin: 0; text-wrap: balance;
+  }
+  .titleblock .lede { margin: 16px 0 0; max-width: 58ch; color: var(--ink-2); font-size: 1.03rem; }
+  .stamp {
+    font-family: var(--font-mono); font-size: 11.5px; line-height: 1.9;
+    color: var(--ink-3); border-left: 1px solid var(--rule); padding-left: 20px; white-space: nowrap;
+  }
+  .stamp b { color: var(--ink-2); font-weight: 500; }
+
+  /* ---------- sections ---------- */
+
+  section { margin: 0 0 68px; }
+  h2 {
+    font-family: var(--font-display); font-weight: 600; font-size: 1.55rem;
+    letter-spacing: -.018em; margin: 0 0 6px; text-wrap: balance;
+  }
+  h3 {
+    font-family: var(--font-display); font-weight: 600; font-size: 1.05rem;
+    letter-spacing: -.008em; margin: 0 0 8px;
+  }
+  .secnum {
+    font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .13em;
+    color: var(--structure); display: block; margin-bottom: 10px;
+  }
+  .sechead { border-top: 1px solid var(--rule); padding-top: 18px; margin-bottom: 28px; }
+  .sechead p { margin: 10px 0 0; max-width: var(--measure); color: var(--ink-2); }
+
+  .subhead {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--rule); padding-bottom: 8px; margin: 38px 0 18px;
+  }
+  .subhead h3 { margin: 0; }
+  .subhead .tag {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+
+  p { max-width: var(--measure); }
+  a { color: var(--structure); }
+  strong { font-weight: 600; }
+  code, .m { font-family: var(--font-mono); font-size: .88em; }
+  code { background: var(--surface-2); padding: .1em .35em; border-radius: 2px; }
+  .he { font-family: "IBM Plex Sans Hebrew", var(--font-body); direction: rtl; unicode-bidi: isolate; }
+
+  /* ---------- figures ---------- */
+
+  figure { margin: 0 0 32px; background: var(--surface); border: 1px solid var(--rule); box-shadow: var(--shadow); }
+  .figbody { overflow-x: auto; padding: 26px 24px 8px; }
+  figure svg { display: block; width: 100%; min-width: 720px; height: auto; color: var(--ink); }
+  figcaption { border-top: 1px solid var(--rule-soft); padding: 14px 24px 16px; font-size: .88rem; color: var(--ink-2); }
+  figcaption b { color: var(--ink); font-weight: 600; }
+
+  .n-box   { fill: var(--surface); stroke: currentColor; stroke-width: 1.2; }
+  .n-ext   { fill: var(--surface); stroke: var(--signal); stroke-width: 1.7; }
+  .n-own   { fill: var(--surface); stroke: var(--good);   stroke-width: 1.5; }
+  .n-human { fill: var(--surface-2); stroke: currentColor; stroke-width: 1; }
+  .n-zone  { fill: none; stroke: var(--signal); stroke-width: 1.2; stroke-dasharray: 7 5; opacity: .75; }
+
+  .n-label  { font-family: var(--font-display); font-weight: 600; font-size: 12.5px; fill: currentColor; }
+  .n-label.ext { fill: var(--signal); }
+  .n-label.own { fill: var(--good); }
+  .sub { font-family: var(--font-mono); font-size: 9.5px; fill: currentColor; opacity: .55; }
+  .sub.ext { fill: var(--signal); opacity: .85; }
+  .zonelab {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; fill: var(--signal); opacity: .9;
+  }
+
+  .e-line { stroke: currentColor; stroke-width: 1.2; fill: none; opacity: .6; }
+  .e-line.ext  { stroke: var(--signal); opacity: 1; stroke-width: 1.6; }
+  .e-line.own  { stroke: var(--good); opacity: .95; stroke-width: 1.4; stroke-dasharray: 6 4; }
+  .e-line.bus  { opacity: .38; }
+  .e-label { font-family: var(--font-mono); font-size: 10.5px; fill: currentColor; opacity: .72; }
+  .e-label.ext { fill: var(--signal); opacity: 1; }
+  .e-label.own { fill: var(--good); opacity: 1; }
+  .dot { fill: currentColor; opacity: .45; }
+
+  /* ---------- component grid (GCP) ---------- */
+
+  .comps { display: grid; grid-template-columns: repeat(auto-fill, minmax(252px, 1fr)); gap: 16px; }
+  .comp {
+    background: var(--surface); border: 1px solid var(--rule); border-top: 3px solid var(--structure);
+    padding: 15px 17px 16px; box-shadow: var(--shadow);
+  }
+  .comp h4 { font-family: var(--font-mono); font-weight: 500; font-size: .87rem; margin: 0 0 7px; color: var(--ink); }
+  .comp p { margin: 0; font-size: .87rem; color: var(--ink-2); max-width: none; }
+  .comp .drv {
+    display: block; margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--rule-soft);
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); letter-spacing: .02em;
+  }
+
+  /* ---------- service cards ---------- */
+
+  .svc {
+    background: var(--surface); border: 1px solid var(--rule); border-left: 4px solid var(--signal);
+    box-shadow: var(--shadow); margin-bottom: 20px;
+  }
+  .svc.is-own  { border-left-color: var(--good); }
+  .svc.is-ours { border-left-color: var(--structure); }
+  .svc-head {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap;
+    padding: 16px 22px 14px; border-bottom: 1px solid var(--rule-soft);
+  }
+  .svc-head h4 { font-family: var(--font-display); font-weight: 600; font-size: 1.1rem; margin: 0; }
+  .svc-head .who {
+    font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .09em; text-transform: uppercase;
+    padding: 3px 7px; border: 1px solid currentColor; border-radius: 2px; white-space: nowrap;
+  }
+  .who.ext  { color: var(--signal); }
+  .who.own  { color: var(--good); }
+  .who.plat { color: var(--structure); }
+  .svc-body { padding: 18px 22px 20px; display: grid; grid-template-columns: minmax(0,1.15fr) minmax(0,1fr); gap: 22px 34px; }
+  @media (max-width: 780px) { .svc-body { grid-template-columns: 1fr; } }
+  .svc-body h5 {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .11em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 400; margin: 0 0 8px;
+  }
+  .svc-body p { margin: 0; font-size: .92rem; color: var(--ink-2); max-width: none; }
+  .svc-body p + p { margin-top: 9px; }
+  .svc-body ul { margin: 0; padding-left: 18px; font-size: .92rem; color: var(--ink-2); }
+  .svc-body li { margin-bottom: 5px; }
+  .svc-body li b { color: var(--ink); font-weight: 600; }
+  .svc-foot {
+    border-top: 1px solid var(--rule-soft); padding: 12px 22px 14px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink-3);
+    display: flex; flex-wrap: wrap; gap: 6px 26px;
+  }
+  .svc-foot b { color: var(--ink-2); font-weight: 500; }
+
+  /* ---------- tables ---------- */
+
+  .tablewrap { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; min-width: 660px; font-size: .9rem; }
+  th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  thead th {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 400; border-bottom: 1px solid var(--rule); white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.total td { border-top: 1px solid var(--rule); font-weight: 600; color: var(--ink); background: var(--surface-2); }
+  tr.total td.num { font-weight: 600; }
+  .lock { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+  .lock.hi { color: var(--signal); }
+  .lock.md { color: var(--warn); }
+  .lock.lo { color: var(--good); }
+
+  /* ---------- notes ---------- */
+
+  .note {
+    border-left: 3px solid var(--signal); background: var(--surface);
+    padding: 16px 20px; margin: 26px 0; box-shadow: var(--shadow);
+  }
+  .note p { margin: 0; max-width: none; font-size: .95rem; }
+  .note p + p { margin-top: 10px; }
+  .note.blue { border-left-color: var(--structure); }
+  .note.green { border-left-color: var(--good); }
+
+  /* ---------- not buying ---------- */
+
+  .nb { display: grid; gap: 2px; background: var(--rule); border: 1px solid var(--rule); }
+  .nb > div { background: var(--surface); padding: 14px 20px; display: grid; grid-template-columns: minmax(0,.72fr) minmax(0,1.28fr); gap: 18px; align-items: baseline; }
+  .nb .x { font-weight: 600; font-size: .95rem; color: var(--ink-3); }
+  .nb .x .m { text-decoration: line-through; text-decoration-color: var(--signal); }
+  .nb .r { font-size: .9rem; color: var(--ink-2); }
+  @media (max-width: 700px) { .nb > div { grid-template-columns: 1fr; } .nb .r { margin-top: 5px; } }
+
+  /* ---------- asks ---------- */
+
+  .asks { display: grid; gap: 2px; background: var(--rule); border: 1px solid var(--rule); counter-reset: a; }
+  .asks > div { background: var(--surface); padding: 17px 20px 17px 56px; position: relative; counter-increment: a; }
+  .asks > div::before {
+    content: counter(a, decimal-leading-zero); position: absolute; left: 20px; top: 18px;
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--structure);
+  }
+  .asks h4 { font-family: var(--font-display); font-size: .99rem; font-weight: 600; margin: 0 0 5px; }
+  .asks p { margin: 0; font-size: .9rem; color: var(--ink-2); max-width: none; }
+
+  footer {
+    border-top: 2px solid var(--ink); margin-top: 20px; padding-top: 18px;
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3);
+    display: flex; flex-wrap: wrap; gap: 8px 28px; justify-content: space-between;
+  }
+
+  @media (max-width: 720px) {
+    .titleblock { grid-template-columns: 1fr; align-items: start; }
+    .stamp { border-left: none; border-top: 1px solid var(--rule); padding-left: 0; padding-top: 14px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  :focus-visible { outline: 2px solid var(--structure); outline-offset: 2px; }
+</style>
+
+<div class="sheet">
+
+  <header class="titleblock">
+    <div>
+      <p class="eyebrow">Dona Dom · Tenant Service Platform</p>
+      <h1>Dona Dom Stack Map</h1>
+      <p class="lede">Every outside service the platform depends on, what each one actually does, what it costs, and how hard it would be to replace. Built in-house — but not built from nothing.</p>
+    </div>
+    <div class="stamp">
+      REV <b>A</b> — 2 Sep 2026<br>
+      VENDORS <b>4 that matter</b><br>
+      REGION <b>me-west1 · Tel Aviv</b><br>
+      RUN COST <b>≈ $200–450 / mo pilot</b><br>
+      AT SCALE <b>≈ $750–1,850 / mo</b>
+    </div>
+  </header>
+
+  <!-- ===================== 01 ===================== -->
+  <section>
+    <div class="sechead">
+      <span class="secnum">01 — THE MAP</span>
+      <h2>What the system is made of</h2>
+      <p>The application is ours. Almost everything underneath it is rented. This page exists so that fact is visible before anyone signs anything — and so the four vendors that genuinely matter are separated from the eight that are commodities.</p>
+    </div>
+
+    <figure>
+      <div class="figbody">
+        <svg viewBox="0 0 1120 706" role="img" aria-label="System dependency map. People — tenants, providers and the operations team — reach the platform through WhatsApp or a browser. The application runs on Google Cloud Platform in the Tel Aviv region as three services over Postgres, object storage and secrets. It calls out to three third-party services: OpenAI for language, speech and embeddings; Google Document AI for optical character recognition of scanned documents; and an OTP provider for phone verification. Meta's WhatsApp Business Platform carries the messages. Priority ERP and the operational tools sit at the edges. Everything drawn in orange is outside our control.">
+          <defs>
+            <marker id="smA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+            </marker>
+            <marker id="smE" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="var(--signal)"/>
+            </marker>
+            <marker id="smO" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="var(--good)"/>
+            </marker>
+          </defs>
+
+          <!-- ---------- people ---------- -->
+          <text class="sub" x="40" y="22">PEOPLE</text>
+          <rect class="n-human" x="60"  y="30" width="160" height="50" rx="2"/>
+          <text class="n-label" x="140" y="52" text-anchor="middle">Operations team</text>
+          <text class="sub" x="140" y="68" text-anchor="middle">Dona Dom staff</text>
+
+          <rect class="n-human" x="280" y="30" width="160" height="50" rx="2"/>
+          <text class="n-label" x="360" y="52" text-anchor="middle">Tenant</text>
+          <text class="sub" x="360" y="68" text-anchor="middle">he · ru · ar · fr · en</text>
+
+          <rect class="n-human" x="470" y="30" width="160" height="50" rx="2"/>
+          <text class="n-label" x="550" y="52" text-anchor="middle">Service provider</text>
+          <text class="sub" x="550" y="68" text-anchor="middle">plumber · A/C · electrician</text>
+
+          <path class="e-line" d="M140,80 V114" marker-end="url(#smA)"/>
+          <path class="e-line" d="M360,80 V114" marker-end="url(#smA)"/>
+          <path class="e-line" d="M550,80 V114" marker-end="url(#smA)"/>
+
+          <!-- ---------- channels ---------- -->
+          <rect class="n-box" x="60"  y="118" width="160" height="56" rx="2"/>
+          <text class="n-label" x="140" y="142" text-anchor="middle">Browser</text>
+          <text class="sub" x="140" y="158" text-anchor="middle">HTTPS · admin console</text>
+
+          <rect class="n-ext" x="280" y="118" width="350" height="56" rx="2"/>
+          <text class="n-label ext" x="455" y="142" text-anchor="middle">WhatsApp Business Platform</text>
+          <text class="sub ext" x="455" y="158" text-anchor="middle">Meta Cloud API · verified business number · templates</text>
+
+          <path class="e-line" d="M140,174 V264" marker-end="url(#smA)"/>
+          <path class="e-line ext" d="M455,174 V204 H390 V264" marker-end="url(#smE)" marker-start="url(#smE)"/>
+          <text class="e-label ext" x="470" y="200">webhooks in · send API out</text>
+
+          <!-- ---------- GCP boundary ---------- -->
+          <rect class="n-zone" x="40" y="228" width="700" height="290" rx="3"/>
+          <text class="zonelab" x="40" y="219">Google Cloud Platform · region me-west1 (Tel Aviv)</text>
+
+          <!-- run row -->
+          <rect class="n-box" x="70"  y="264" width="170" height="60" rx="2"/>
+          <text class="n-label" x="155" y="288" text-anchor="middle">Admin web app</text>
+          <text class="sub" x="155" y="304" text-anchor="middle">Cloud Run · Hebrew RTL</text>
+
+          <rect class="n-box" x="280" y="264" width="220" height="60" rx="2"/>
+          <text class="n-label" x="390" y="288" text-anchor="middle">API + agent runtime</text>
+          <text class="sub" x="390" y="304" text-anchor="middle">Cloud Run · state machine · tools</text>
+
+          <rect class="n-box" x="530" y="264" width="170" height="60" rx="2"/>
+          <text class="n-label" x="615" y="288" text-anchor="middle">Workers + timers</text>
+          <text class="sub" x="615" y="304" text-anchor="middle">Cloud Tasks · Scheduler</text>
+
+          <path class="e-line" d="M240,294 H276" marker-end="url(#smA)" marker-start="url(#smA)"/>
+          <path class="e-line" d="M500,294 H526" marker-end="url(#smA)" marker-start="url(#smA)"/>
+
+          <!-- internal bus -->
+          <path class="e-line bus" d="M110,366 H660"/>
+          <path class="e-line" d="M155,324 V396"/>
+          <path class="e-line" d="M390,324 V396"/>
+          <path class="e-line" d="M615,324 V396"/>
+          <circle class="dot" cx="155" cy="366" r="2.6"/>
+          <circle class="dot" cx="390" cy="366" r="2.6"/>
+          <circle class="dot" cx="615" cy="366" r="2.6"/>
+
+          <!-- data row -->
+          <rect class="n-box" x="70"  y="396" width="170" height="64" rx="2"/>
+          <text class="n-label" x="155" y="420" text-anchor="middle">Cloud SQL</text>
+          <text class="sub" x="155" y="435" text-anchor="middle">PostgreSQL + pgvector</text>
+          <text class="sub" x="155" y="449" text-anchor="middle">the system of record</text>
+
+          <rect class="n-box" x="280" y="396" width="220" height="64" rx="2"/>
+          <text class="n-label" x="390" y="420" text-anchor="middle">Cloud Storage</text>
+          <text class="sub" x="390" y="435" text-anchor="middle">scans · photos · voice notes</text>
+          <text class="sub" x="390" y="449" text-anchor="middle">versioned, hashed, never overwritten</text>
+
+          <rect class="n-box" x="530" y="396" width="170" height="64" rx="2"/>
+          <text class="n-label" x="615" y="420" text-anchor="middle">Secrets + logs</text>
+          <text class="sub" x="615" y="435" text-anchor="middle">Secret Manager</text>
+          <text class="sub" x="615" y="449" text-anchor="middle">Logging · audit sink</text>
+
+          <!-- ---------- third parties, right column ---------- -->
+          <text class="sub ext" x="790" y="238">CALLED BY THE APPLICATION</text>
+
+          <rect class="n-ext" x="790" y="248" width="300" height="152" rx="2"/>
+          <text class="n-label ext" x="806" y="272">OpenAI</text>
+          <text class="sub ext" x="1074" y="272" text-anchor="end">comprehension</text>
+          <rect class="n-box" x="806" y="284" width="268" height="32" rx="2"/>
+          <text class="sub" x="818" y="298">LLM — the three agents' reasoning</text>
+          <text class="sub" x="818" y="310">and message drafting</text>
+          <rect class="n-box" x="806" y="320" width="268" height="32" rx="2"/>
+          <text class="sub" x="818" y="334">Speech-to-text — voice notes,</text>
+          <text class="sub" x="818" y="346">five languages</text>
+          <rect class="n-box" x="806" y="356" width="268" height="32" rx="2"/>
+          <text class="sub" x="818" y="370">Embeddings — self-help retrieval</text>
+          <text class="sub" x="818" y="382">over past resolved calls</text>
+
+          <rect class="n-ext" x="790" y="414" width="300" height="70" rx="2"/>
+          <text class="n-label ext" x="806" y="438">Google Document AI</text>
+          <text class="sub ext" x="1074" y="438" text-anchor="end">optical</text>
+          <text class="sub" x="806" y="456">OCR — Hebrew print and handwriting,</text>
+          <text class="sub" x="806" y="470">word boxes · per-word confidence · signatures</text>
+
+          <rect class="n-ext" x="790" y="498" width="300" height="56" rx="2"/>
+          <text class="n-label ext" x="940" y="522" text-anchor="middle">OTP delivery</text>
+          <text class="sub ext" x="940" y="538" text-anchor="middle">phone → party binding · SMS fallback</text>
+
+          <!-- crossings: one riser, three branches -->
+          <path class="e-line ext" d="M762,244 V526"/>
+          <path class="e-line ext" d="M390,264 V244 H762"/>
+          <text class="e-label ext" x="470" y="240">prompts · transcripts · audio</text>
+          <path class="e-line ext" d="M390,460 V480 H762"/>
+          <text class="e-label ext" x="470" y="476">stored scans, page by page</text>
+
+          <path class="e-line ext" d="M762,320 H786" marker-end="url(#smE)" marker-start="url(#smE)"/>
+          <path class="e-line ext" d="M762,448 H786" marker-end="url(#smE)" marker-start="url(#smE)"/>
+          <path class="e-line ext" d="M762,526 H786" marker-end="url(#smE)"/>
+          <text class="e-label ext" x="784" y="546" text-anchor="end">one-time codes</text>
+          <circle class="dot" cx="762" cy="320" r="2.6"/>
+          <circle class="dot" cx="762" cy="448" r="2.6"/>
+          <circle class="dot" cx="762" cy="480" r="2.6"/>
+
+          <!-- ---------- edge systems ---------- -->
+          <text class="sub" x="40" y="572">AT THE EDGES</text>
+
+          <rect class="n-own" x="60"  y="580" width="210" height="56" rx="2"/>
+          <text class="n-label own" x="165" y="604" text-anchor="middle">Priority ERP</text>
+          <text class="sub" x="165" y="620" text-anchor="middle">Dona Dom's existing system</text>
+          <path class="e-line own" d="M165,576 V470" marker-end="url(#smO)"/>
+          <text class="e-label own" x="178" y="505">read-only: balances, ids</text>
+
+          <rect class="n-ext" x="300" y="580" width="190" height="56" rx="2"/>
+          <text class="n-label ext" x="395" y="604" text-anchor="middle">Sentry</text>
+          <text class="sub ext" x="395" y="620" text-anchor="middle">error tracking</text>
+          <path class="e-line ext" d="M395,522 V576" marker-end="url(#smE)"/>
+
+          <rect class="n-ext" x="520" y="580" width="190" height="56" rx="2"/>
+          <text class="n-label ext" x="615" y="604" text-anchor="middle">Email</text>
+          <text class="sub ext" x="615" y="620" text-anchor="middle">admin invites · digests</text>
+          <path class="e-line ext" d="M615,522 V576" marker-end="url(#smE)"/>
+
+          <rect class="n-ext" x="790" y="580" width="300" height="56" rx="2"/>
+          <text class="n-label ext" x="940" y="604" text-anchor="middle">GitHub + Cloud Build</text>
+          <text class="sub ext" x="940" y="620" text-anchor="middle">source control · deploys — build time only</text>
+
+          <!-- ---------- legend ---------- -->
+          <path class="e-line" d="M40,676 H76"/>
+          <text class="sub" x="84" y="680">our code</text>
+
+          <path class="e-line ext" d="M200,676 H236"/>
+          <text class="sub ext" x="244" y="680">third party — outside our control</text>
+
+          <path class="e-line own" d="M470,676 H506"/>
+          <text class="sub" x="514" y="680">Dona Dom's existing systems</text>
+
+          <rect class="n-human" x="740" y="668" width="30" height="14" rx="2"/>
+          <text class="sub" x="778" y="680">people</text>
+        </svg>
+      </div>
+      <figcaption><b>Figure 1 — The dependency map.</b> Anything drawn in orange is a service we rent and cannot fix ourselves. Everything inside the dashed boundary is code we write, running on infrastructure we rent. Note what the map does <em>not</em> show: no ticketing SaaS, no CRM, no payment processor, no chatbot platform. Four vendors carry real weight — Google, OpenAI, Meta, and whoever delivers one-time codes — and only one of them is genuinely hard to replace. Note also that reading a document takes two of them: Document AI gets the marks off the page, OpenAI decides what they mean.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ===================== 02 ===================== -->
+  <section>
+    <div class="sechead">
+      <span class="secnum">02 — WHAT LEAVES</span>
+      <h2>Which tenant data crosses which boundary</h2>
+      <p>This is the question stakeholders will actually ask, so it is worth answering precisely rather than reassuringly. Two services receive tenant data, for two different reasons, and both are bounded.</p>
+    </div>
+
+    <figure>
+      <div class="figbody">
+        <svg viewBox="0 0 1000 200" role="img" aria-label="The journey of one tenant voice note: recorded in WhatsApp, received by our platform, the original stored permanently in Cloud Storage, sent transiently to OpenAI for transcription, and the resulting Hebrew text written to Postgres. Only the audio and the transcript cross to OpenAI; identity and tenancy data never do.">
+          <defs>
+            <marker id="dfA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="n-human" x="14" y="40" width="150" height="52" rx="2"/>
+          <text class="n-label" x="89" y="64" text-anchor="middle">Voice note</text>
+          <text class="sub" x="89" y="80" text-anchor="middle">tenant, in Russian</text>
+
+          <path class="e-line" d="M164,66 H206" marker-end="url(#dfA)"/>
+
+          <rect class="n-ext" x="212" y="40" width="150" height="52" rx="2"/>
+          <text class="n-label ext" x="287" y="64" text-anchor="middle">WhatsApp</text>
+          <text class="sub ext" x="287" y="80" text-anchor="middle">Meta · transport</text>
+
+          <path class="e-line" d="M362,66 H404" marker-end="url(#dfA)"/>
+
+          <rect class="n-box" x="410" y="40" width="170" height="52" rx="2"/>
+          <text class="n-label" x="495" y="64" text-anchor="middle">Cloud Storage</text>
+          <text class="sub" x="495" y="80" text-anchor="middle">original kept + hashed</text>
+
+          <path class="e-line" d="M580,66 H622" marker-end="url(#dfA)" marker-start="url(#dfA)"/>
+
+          <rect class="n-ext" x="628" y="40" width="170" height="52" rx="2"/>
+          <text class="n-label ext" x="713" y="64" text-anchor="middle">OpenAI</text>
+          <text class="sub ext" x="713" y="80" text-anchor="middle">audio in, text out</text>
+
+          <path class="e-line" d="M798,66 H840" marker-end="url(#dfA)"/>
+
+          <rect class="n-box" x="846" y="40" width="140" height="52" rx="2"/>
+          <text class="n-label" x="916" y="64" text-anchor="middle">Postgres</text>
+          <text class="sub" x="916" y="80" text-anchor="middle">he text + pointer</text>
+
+          <path class="e-line" d="M628,116 H798" stroke-dasharray="5 4" opacity=".45"/>
+          <text class="sub" x="713" y="136" text-anchor="middle">no name · no ID number · no unit · no tenancy · no other tenant</text>
+          <text class="sub" x="713" y="150" text-anchor="middle">nothing retained under a zero-retention term</text>
+
+          <text class="sub" x="14" y="136">Scope is already decided before this point: phone → party → active tenancy → unit,</text>
+          <text class="sub" x="14" y="150">resolved as a SQL query inside our own database. The model never held the wider scope.</text>
+        </svg>
+      </div>
+      <figcaption><b>Figure 2 — One voice note, end to end.</b> The isolation guarantee is enforced <em>before</em> the model is called, not by the model. By the time text reaches OpenAI, the rows it is allowed to see have already been decided by a SQL query bound to one active tenancy. A model that misbehaves cannot widen that scope, because it never had the wider scope to begin with.</figcaption>
+    </figure>
+
+    <div class="note blue">
+      <p><strong>The three commitments this rests on.</strong> One — all infrastructure sits in <code>me-west1</code>, Google's Tel Aviv region, so the record itself never leaves Israel. Two — the OpenAI account runs under a business agreement with zero data retention and no training on our data; this is a contract term to secure before the pilot, not an afterthought. Three — Meta sees message content and phone numbers because it is the delivery network, exactly as it does for every business on WhatsApp today; it never sees the database.</p>
+    </div>
+  </section>
+
+  <!-- ===================== 03 ===================== -->
+  <section>
+    <div class="sechead">
+      <span class="secnum">03 — THE SERVICES</span>
+      <h2>Each dependency, and what it is actually for</h2>
+      <p>Grouped by how much they matter. The platform layer is a commodity; the model and channel layers are decisions.</p>
+    </div>
+
+    <div class="subhead">
+      <h3>3.1 &nbsp;Google Cloud Platform</h3>
+      <span class="tag">the platform · one vendor, one bill</span>
+    </div>
+
+    <p style="margin-bottom:22px">One account, one invoice, one region. Nothing here is exotic — these are the seven managed pieces that let two people run a production system without anyone administering a server. Each one replaces work we would otherwise do by hand.</p>
+
+    <div class="comps">
+      <div class="comp">
+        <h4>Cloud Run</h4>
+        <p>Runs the admin web app, the API, and the agent runtime as containers. Scales to zero overnight and absorbs the morning spike in WhatsApp webhooks without anyone provisioning anything.</p>
+        <span class="drv">COST DRIVES ON: requests · CPU-seconds</span>
+      </div>
+      <div class="comp">
+        <h4>Cloud SQL — PostgreSQL</h4>
+        <p>The system of record: buildings, units, tenancies, parties, documents, assets, tickets. High availability, point-in-time recovery, and <code>pgvector</code> for retrieval so no separate vector database is needed.</p>
+        <span class="drv">COST DRIVES ON: instance size · HA · storage</span>
+      </div>
+      <div class="comp">
+        <h4>Cloud Storage</h4>
+        <p>Every original document, photo and voice note. Object versioning plus retention lock, so a scanned lease can be superseded but never silently replaced — which is what makes the audit trail meaningful.</p>
+        <span class="drv">COST DRIVES ON: GB stored (tens, not thousands)</span>
+      </div>
+      <div class="comp">
+        <h4>Cloud Tasks + Scheduler</h4>
+        <p>The durable timers the whole ticket state machine depends on: SLA clocks, provider offer timeouts, the 24-hour WhatsApp window, nightly document-expiry sweeps. Unglamorous and load-bearing.</p>
+        <span class="drv">COST DRIVES ON: task volume (negligible)</span>
+      </div>
+      <div class="comp">
+        <h4>Secret Manager</h4>
+        <p>API keys and WhatsApp tokens, versioned and access-logged. No credential ever lives in the codebase or in an environment file on someone's laptop.</p>
+        <span class="drv">COST DRIVES ON: secrets × access count</span>
+      </div>
+      <div class="comp">
+        <h4>Cloud Logging + Monitoring</h4>
+        <p>Operational visibility and the sink for the audit log — every scoped read of tenant data, retained and queryable. Uptime checks and alerting on the same bill.</p>
+        <span class="drv">COST DRIVES ON: log volume ingested</span>
+      </div>
+      <div class="comp">
+        <h4>Identity Platform</h4>
+        <p>Admin sign-in with enforced MFA. If Dona Dom is on Google Workspace this collapses into existing staff accounts and costs nothing extra — worth confirming early.</p>
+        <span class="drv">COST DRIVES ON: monthly active admins (few)</span>
+      </div>
+    </div>
+
+    <div class="subhead">
+      <h3>3.2 &nbsp;The intelligence layer</h3>
+      <span class="tag">two engines, because it is two jobs</span>
+    </div>
+
+    <p>Reading a scanned Hebrew lease is two jobs, and the system is better when they stay separate. <strong>Getting the marks off the page</strong> — printed clauses, a handwritten addition in the margin, a signature, a ticked box, and crucially <em>where on the page each one sits and how confident the engine is about it</em> — is optical character recognition. It is a narrow, measurable problem with a purpose-built engine. <strong>Deciding what those marks mean</strong> — which number is the rent, which date is the renewal option, whether that margin note changes either — is comprehension, and that is what a language model is for.</p>
+
+    <p style="margin-top:14px">Handing both jobs to a vision-capable language model demos well and fails in the place this system cares about most. The data model promises that every promoted field carries a page, a bounding box and a confidence score, so an operator can click a value and see the pixels it came from — and so a dispute a year later has an answer. A language model asked for coordinates will produce <em>plausible</em> coordinates. An OCR engine measures them.</p>
+
+    <div class="svc">
+      <div class="svc-head">
+        <h4>Google Document AI</h4>
+        <span class="who ext">Third party · the optical layer</span>
+      </div>
+      <div class="svc-body">
+        <div>
+          <h5>What we use it for</h5>
+          <ul>
+            <li><b>Full-page OCR</b> of every uploaded document, returning text word by word with a bounding box and a confidence score for each.</li>
+            <li><b>Hebrew handwriting</b> — the margin additions, corrections and initials that appear on almost every real lease and that general-purpose OCR handles poorly.</li>
+            <li><b>Signature and checkbox detection</b> — presence and location, not interpretation. "Was clause 14 initialled?" is a question about a mark, not about language.</li>
+          </ul>
+        </div>
+        <div>
+          <h5>Why this one</h5>
+          <p>Hebrew print, and Hebrew handwriting far more so, is exactly where OCR engines diverge — and Google's has been the dependable option for scanned Israeli lease documents including handwritten additions and signature blocks. It also sits on the account we already have.</p>
+          <h5 style="margin-top:16px">Which processor</h5>
+          <p>The <strong>general OCR processor, not Form Parser</strong>. We do not need Google to infer the document's structure, because the schema is already declared and the language model does the mapping. That single choice is roughly a twentyfold difference in price for the same outcome.</p>
+        </div>
+      </div>
+      <div class="svc-foot">
+        <span>ALTERNATIVES <b>Azure Document Intelligence · Amazon Textract (weak Hebrew)</b></span>
+        <span>SWITCHING COST <b>low — image in, text and boxes out</b></span>
+        <span>BILLING <b>per page processed</b></span>
+      </div>
+    </div>
+
+    <div class="svc">
+      <div class="svc-head">
+        <h4>OpenAI</h4>
+        <span class="who ext">Third party · the comprehension layer</span>
+      </div>
+      <div class="svc-body">
+        <div>
+          <h5>What we use it for</h5>
+          <ul>
+            <li><b>Language.</b> The reasoning and the drafted messages for all three agents — tenant-facing, provider-facing, admin-facing.</li>
+            <li><b>Schema mapping.</b> Turning the OCR output — text, positions, confidences — plus the page image into the schema the flow already declared. Extraction proposes; a person promotes.</li>
+            <li><b>Speech-to-text.</b> Voice notes in Hebrew, Russian, Arabic, French and English. Israeli tradesmen answer in voice notes — this is table stakes, not a nice-to-have.</li>
+            <li><b>Embeddings.</b> Retrieval over the self-help knowledge base and past resolved calls, stored in the Postgres we already pay for.</li>
+          </ul>
+        </div>
+        <div>
+          <h5>Why this one</h5>
+          <p>Strongest Hebrew and Arabic handling of the general-purpose providers, one account covering language, speech and retrieval, and no infrastructure to run. It reads the page image alongside the OCR output — a second opinion on layout and context, rather than the primary reader.</p>
+          <h5 style="margin-top:16px">The condition</h5>
+          <p>A business agreement with <strong>zero data retention and no training on our data</strong>. Without that term this vendor should not be used at all, and the alternative is Gemini on the GCP account already in place — which keeps everything under one contract and one region, at some cost in Hebrew quality.</p>
+        </div>
+      </div>
+      <div class="svc-foot">
+        <span>ALTERNATIVES <b>Google Gemini · Anthropic Claude · Azure OpenAI</b></span>
+        <span>SWITCHING COST <b>low — and lower now that OCR is a separate stage</b></span>
+        <span>BILLING <b>usage, post-paid</b></span>
+      </div>
+    </div>
+
+    <div class="note">
+      <p><strong>One flag on this split.</strong> Document AI does not run in every Google region, and to the best of our knowledge <span class="m">me-west1</span> is not among them — processing would land in the EU or US multi-region. If Israeli residency turns out to be contractual rather than preferred, this is the single component on the map that needs an exception, an alternative, or a conversation. Worth confirming before the plan is dated, not after.</p>
+    </div>
+
+    <div class="subhead">
+      <h3>3.3 &nbsp;The channel</h3>
+      <span class="tag">the one genuinely hard dependency</span>
+    </div>
+
+    <div class="svc">
+      <div class="svc-head">
+        <h4>Meta — WhatsApp Business Platform</h4>
+        <span class="who ext">Third party · critical path</span>
+      </div>
+      <div class="svc-body">
+        <div>
+          <h5>What we use it for</h5>
+          <ul>
+            <li>The tenant conversation and the provider conversation — the two threads bound to every service call.</li>
+            <li>Inbound webhooks (messages, photos, voice notes, delivery receipts) and outbound sends.</li>
+            <li><b>Message templates</b> for anything we initiate outside the 24-hour reply window: a provider offer, an appointment reminder, a document request.</li>
+          </ul>
+          <h5 style="margin-top:16px">What it needs from Dona Dom</h5>
+          <p>Meta Business verification against the company's legal registration, a dedicated phone number that is not anyone's personal mobile, display-name approval, and each template reviewed before first use.</p>
+        </div>
+        <div>
+          <h5>Why this one</h5>
+          <p>There is no alternative worth discussing. WhatsApp is where Israeli tenants and tradesmen already are, and the entire architecture rests on providers changing nothing about their habits. An SMS or app-based channel would be cheaper and would not be used.</p>
+          <h5 style="margin-top:16px">Direct or through a reseller</h5>
+          <p>Go <strong>direct on the Cloud API</strong>. Business Solution Providers add a per-message markup and a layer between us and the message log for convenience we do not need. Keep a BSP in reserve only if verification stalls.</p>
+        </div>
+      </div>
+      <div class="svc-foot">
+        <span>ALTERNATIVES <b>none credible</b></span>
+        <span>SWITCHING COST <b>high — but message history stays in our database</b></span>
+        <span>LEAD TIME <b>4–6 weeks, bureaucratic</b></span>
+      </div>
+    </div>
+
+    <div class="note">
+      <p><strong>This is the one dependency that can delay the project on its own.</strong> Verification is paperwork sitting in a queue at Meta, and no amount of engineering speed compresses it. It should be started the week the project is approved, in parallel with everything else — it is the only item on this page with that property.</p>
+    </div>
+
+    <div class="subhead">
+      <h3>3.4 &nbsp;Identity</h3>
+      <span class="tag">small service, security-critical</span>
+    </div>
+
+    <div class="svc">
+      <div class="svc-head">
+        <h4>One-time code delivery</h4>
+        <span class="who ext">Third party · low volume</span>
+      </div>
+      <div class="svc-body">
+        <div>
+          <h5>What we use it for</h5>
+          <p>Binding a phone number to a party the first time they message, and re-binding when a number changes mid-tenancy. Low volume — roughly one code per tenant per tenancy — but it is the hinge the entire isolation model hangs on. Everything downstream trusts this one edge.</p>
+        </div>
+        <div>
+          <h5>Recommendation</h5>
+          <p><strong>Send the code as a WhatsApp authentication template first, SMS only as fallback.</strong> The thing we need to bind is <em>this phone's WhatsApp</em>, because that is what will carry every future conversation — so delivering the code through that exact channel proves precisely the right thing, and costs one already-approved template.</p>
+          <p>SMS fallback covers tenants without WhatsApp and number changes: a local Israeli gateway (Inforu, Cellact) is cheapest for Israeli numbers; Twilio Verify is simpler to integrate and handles code lifecycle for us, at a higher per-message price.</p>
+        </div>
+      </div>
+      <div class="svc-foot">
+        <span>ALTERNATIVES <b>Twilio Verify · Inforu · Cellact · Firebase Phone Auth</b></span>
+        <span>SWITCHING COST <b>very low — one adapter</b></span>
+        <span>VOLUME <b>~1,500 first-time + churn</b></span>
+      </div>
+    </div>
+
+    <div class="subhead">
+      <h3>3.5 &nbsp;Dona Dom's own systems</h3>
+      <span class="tag">integration, not procurement</span>
+    </div>
+
+    <div class="svc is-own">
+      <div class="svc-head">
+        <h4>Priority ERP</h4>
+        <span class="who own">Dona Dom · existing</span>
+      </div>
+      <div class="svc-body">
+        <div>
+          <h5>What we use it for</h5>
+          <p>Read-only reference: contract ids, customer ids, supplier ids, and balances shown on the admin dashboard. We hold foreign keys and nothing else.</p>
+        </div>
+        <div>
+          <h5>The rule</h5>
+          <p><strong>We never write to it, and money never moves through our platform.</strong> Keeping the coupling read-only and thin means an ERP upgrade cannot break tenant service, and our bugs cannot corrupt the books. What is still unconfirmed is what Priority actually exposes and who at Dona Dom owns that access.</p>
+        </div>
+      </div>
+      <div class="svc-foot">
+        <span>DIRECTION <b>inbound only</b></span>
+        <span>OPEN <b>API availability · IT contact · who masters the unit register</b></span>
+      </div>
+    </div>
+
+    <div class="subhead">
+      <h3>3.6 &nbsp;Operations</h3>
+      <span class="tag">commodities · swap any of them in a day</span>
+    </div>
+
+    <div class="comps">
+      <div class="comp">
+        <h4>Sentry</h4>
+        <p>Error tracking and release health. When an agent conversation breaks at 22:00, this is what says which one and why — before a tenant tells us.</p>
+        <span class="drv">≈ FREE TIER → $26 / MO</span>
+      </div>
+      <div class="comp">
+        <h4>Transactional email</h4>
+        <p>Admin invitations, password resets, weekly digests to management. Not a tenant channel — tenants live on WhatsApp. Resend or SendGrid; the choice is uninteresting.</p>
+        <span class="drv">≈ $0–20 / MO</span>
+      </div>
+      <div class="comp">
+        <h4>GitHub + Cloud Build</h4>
+        <p>Source control, review, and automated deploys to Cloud Run. Build-time only — never in the path of a live request, so an outage here delays a release, not a service call.</p>
+        <span class="drv">≈ $0–25 / MO</span>
+      </div>
+      <div class="comp">
+        <h4>Domain + managed TLS</h4>
+        <p>One domain for the admin console, certificates issued and renewed by Google. Listed only so it is not forgotten at launch.</p>
+        <span class="drv">≈ $15 / YEAR</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 04 ===================== -->
+  <section>
+    <div class="sechead">
+      <span class="secnum">04 — COST</span>
+      <h2>What the outside services cost to run</h2>
+      <p>Two columns: the pilot at one building, and steady state across all 1,500 units. These are honest estimates from published pricing, not quotes — every figure should be re-checked at contract, and Meta's messaging prices in particular change more than once a year.</p>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Service</th>
+            <th>What drives the cost</th>
+            <th>Pilot — 72 units</th>
+            <th>Steady state — 1,500 units</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><b>Cloud Run</b></td><td>requests and CPU-seconds; scales to zero at night</td><td class="num">$30 – 70</td><td class="num">$120 – 300</td></tr>
+          <tr><td><b>Cloud SQL — Postgres</b></td><td>instance size, high availability, storage, backups</td><td class="num">$70 – 140</td><td class="num">$250 – 450</td></tr>
+          <tr><td><b>Cloud Storage</b></td><td>GB stored — ~30 GB at full scale, so effectively free</td><td class="num">&lt; $5</td><td class="num">$5 – 15</td></tr>
+          <tr><td><b>Tasks · Secrets · Logging</b></td><td>task volume and log ingestion</td><td class="num">$10 – 25</td><td class="num">$30 – 80</td></tr>
+          <tr><td><b>Google Document AI</b></td><td>pages sent through OCR — the cheap general processor, not Form Parser</td><td class="num">&lt; $5</td><td class="num">$10 – 40</td></tr>
+          <tr><td><b>OpenAI</b></td><td>conversations, schema mapping, minutes transcribed</td><td class="num">$30 – 90</td><td class="num">$190 – 520</td></tr>
+          <tr><td><b>WhatsApp — Meta</b></td><td>template messages we initiate; tenant-initiated service conversations are free</td><td class="num">$10 – 40</td><td class="num">$80 – 300</td></tr>
+          <tr><td><b>OTP delivery</b></td><td>one code per enrolment, plus number changes</td><td class="num">&lt; $10</td><td class="num">$20 – 60</td></tr>
+          <tr><td><b>Sentry · email · CI</b></td><td>seats and volume; mostly flat</td><td class="num">$30 – 60</td><td class="num">$50 – 100</td></tr>
+          <tr class="total"><td>Total, per month</td><td>excluding development, VAT, and staff time</td><td class="num">≈ $200 – 450</td><td class="num">≈ $750 – 1,850</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note green">
+      <p><strong>The number worth saying out loud.</strong> At full scale — 1,500 apartments, five sites, every tenant conversation and every dispatch — the entire external bill lands around the cost of one part-time coordinator. And it scales with usage rather than with headcount, which is the whole economic argument for the platform.</p>
+      <p>Two one-time costs sit outside the table. Backfilling the existing documents — on the order of 40,000–50,000 pages across the portfolio, through OCR and then extraction — runs <strong>$400–1,200 once</strong>, of which the OCR itself is well under $100. And any load testing before go-live is a small, deliberate spend, best budgeted rather than discovered.</p>
+    </div>
+  </section>
+
+  <!-- ===================== 05 ===================== -->
+  <section>
+    <div class="sechead">
+      <span class="secnum">05 — EXPOSURE</span>
+      <h2>How hard each one would be to leave</h2>
+      <p>A dependency map is only useful if it also says what happens when a vendor raises prices, changes terms, or fails. Ranked by how trapped we would actually be.</p>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Vendor</th><th>Lock-in</th><th>If it became a problem</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Meta — WhatsApp</b></td>
+            <td><span class="lock hi">High</span></td>
+            <td>No substitute channel exists for this market, so the mitigation is not portability but independence: every message, in both directions, is stored in our own Postgres. If access were lost we would keep the complete history and the operation, and lose the delivery mechanism.</td>
+          </tr>
+          <tr>
+            <td><b>Google Cloud</b></td>
+            <td><span class="lock md">Medium</span></td>
+            <td>Cloud Run is containers and Cloud SQL is ordinary Postgres — both portable. Cloud Tasks is the stickiest piece, and it is a few hundred lines to reimplement. A move would be a project, not a rewrite.</td>
+          </tr>
+          <tr>
+            <td><b>OpenAI</b></td>
+            <td><span class="lock lo">Low</span></td>
+            <td>Provided we keep prompts, tool definitions and evaluations in our own code and refuse any vendor agent framework, swapping providers is changing a client and re-running the test set. Weeks, not months — and lower still now that OCR is a separate stage, since a replacement model no longer has to match anyone's vision quality.</td>
+          </tr>
+          <tr>
+            <td><b>Google Document AI</b></td>
+            <td><span class="lock lo">Low</span></td>
+            <td>The contract is narrow — an image goes in, text with boxes and confidences comes out — so Azure Document Intelligence is a genuine substitute. The risk here is not lock-in but quality: Hebrew handwriting is the axis on which engines actually differ, and it should be tested on real Dona Dom scans before the choice is fixed.</td>
+          </tr>
+          <tr>
+            <td><b>OTP delivery</b></td>
+            <td><span class="lock lo">Low</span></td>
+            <td>One adapter behind one interface. Genuinely a day's work to replace.</td>
+          </tr>
+          <tr>
+            <td><b>Sentry · email · CI</b></td>
+            <td><span class="lock lo">Low</span></td>
+            <td>Commodities with several equivalent competitors each. Not worth deliberating over.</td>
+          </tr>
+          <tr>
+            <td><b>Priority ERP</b></td>
+            <td><span class="lock md">Medium</span></td>
+            <td>Not ours to choose — it is Dona Dom's. The protection is the thin read-only coupling: if Priority is replaced one day, one adapter changes and the tenant-facing system does not notice.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== 06 ===================== -->
+  <section>
+    <div class="sechead">
+      <span class="secnum">06 — NOT BUYING</span>
+      <h2>Services a project like this usually acquires, and won't</h2>
+      <p>The absences on the map are as deliberate as the entries. Each of these was considered and would add licence cost, a seat count, and a second place where the truth lives.</p>
+    </div>
+
+    <div class="nb">
+      <div><span class="x"><span class="m">Zendesk, Freshdesk, or any helpdesk SaaS</span></span><span class="r">The ticket and its state machine <em>are</em> the product. Renting a generic one means fighting its data model for the responsibility matrix, the tenancy scope and the two-sided negotiation — the exact things that make this system worth building.</span></div>
+      <div><span class="x"><span class="m">A CRM</span></span><span class="r">Parties, tenancies and conversation history already live in the record layer. A CRM would be a second, worse copy of it.</span></div>
+      <div><span class="x"><span class="m">A chatbot or conversational AI platform</span></span><span class="r">These sell flow builders and intent trees. Our agent's difficulty is the asynchronous negotiation and the scoped tools underneath it, neither of which a flow builder addresses.</span></div>
+      <div><span class="x"><span class="m">A dedicated vector database</span></span><span class="r"><code>pgvector</code> in the Postgres instance we are already paying for handles this corpus comfortably. Revisit only if retrieval quality — not volume — demands it.</span></div>
+      <div><span class="x"><span class="m">A payment processor</span></span><span class="r">Money stays in the ERP. The platform never holds funds, never quotes a price to a tenant, and therefore needs no processor, no PCI scope, and no reconciliation.</span></div>
+      <div><span class="x"><span class="m">A BI or analytics platform</span></span><span class="r">SQL against the record plus the admin dashboard answers the operational questions for a long time. Buy one when someone is actually blocked, not in advance.</span></div>
+      <div><span class="x"><span class="m">An SMS marketing platform</span></span><span class="r">Under <span class="he">חוק התקשורת</span>, service messages and marketing must ride separate rails. Keeping marketing entirely outside this system is the cleanest way to stay on the right side of that line.</span></div>
+      <div><span class="x"><span class="m">Document AI's Form Parser</span></span><span class="r">We buy the general OCR processor and let the language model do the schema mapping, because the schema is already declared before the upload. Roughly twenty times cheaper for the same outcome — the expensive processor solves a problem we designed away.</span></div>
+    </div>
+  </section>
+
+  <!-- ===================== 07 ===================== -->
+  <section>
+    <div class="sechead">
+      <span class="secnum">07 — DECISIONS</span>
+      <h2>What we need from Dona Dom to proceed</h2>
+      <p>Most of these are commercial or administrative rather than technical, and every one of them is faster to start than to finish.</p>
+    </div>
+
+    <div class="asks">
+      <div>
+        <h4>Who owns the Meta Business account and the WhatsApp number?</h4>
+        <p>It must be Dona Dom's legal entity and a company-controlled number — never a developer's account or anyone's personal mobile. Getting this wrong is painful to unwind after templates are approved. Start verification the week the project is approved.</p>
+      </div>
+      <div>
+        <h4>Whose cloud account does this run in?</h4>
+        <p>Dona Dom's own GCP organisation, or ours with the cost re-billed? This decides who holds the data, who can revoke access, and what happens at the end of an engagement. It is easier to answer now than to migrate later.</p>
+      </div>
+      <div>
+        <h4>Is US processing of message content acceptable, with zero retention?</h4>
+        <p>If yes, OpenAI under a business agreement. If not, the model layer moves to Gemini inside the same GCP region — a real quality trade-off in Hebrew, and a decision for Dona Dom rather than for us.</p>
+      </div>
+      <div>
+        <h4>Does data residency in Israel need to be contractual?</h4>
+        <p>The plan puts all infrastructure in <code>me-west1</code>, Tel Aviv. Worth confirming whether that is a preference or an obligation under the tender — it constrains vendor choices if the latter, and Document AI's processor regions are the first place it would bite.</p>
+      </div>
+      <div>
+        <h4>Who is the Priority contact, and what does it expose?</h4>
+        <p>Read access to contracts, customers and suppliers. Until someone confirms what the API offers, the ERP integration stays a plan rather than a schedule.</p>
+      </div>
+      <div>
+        <h4>Is Dona Dom on Google Workspace?</h4>
+        <p>If so, admin sign-in and MFA collapse into existing staff accounts at no extra cost. A one-sentence answer that removes a component from this map.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Dona Dom · Tenant Service Platform</span>
+    <span>Stack Map — Rev A · 2 Sep 2026</span>
+    <span>Estimates from published pricing · verify at contract</span>
+  </footer>
+
+</div>
+

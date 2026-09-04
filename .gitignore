@@ -1,0 +1,21 @@
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
+*.log
+.DS_Store
+.npm-cache/
+
+# Local machine overrides — the shared allowlist and hooks live in .claude/settings.json.
+.claude/settings.local.json
+
+# Real tenant documents never live in this repo — they belong in their own dated bucket
+# (SPEC.md, "The corpus, in three tiers"; slice 1.12). Leases, handover protocols and
+# bank guarantees arrive as PDFs and scans, so this is a safety net against a stray
+# `git add -A`, not a policy in itself. The tier-1 specimens are committed by exception.
+*.pdf
+*.jpg
+*.jpeg
+*.png
+!docs/corpus/**

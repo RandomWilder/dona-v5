@@ -1,0 +1,774 @@
+<title>Sixteen Demos to Pilot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+  :root{
+    --paper:#F1F4F7;
+    --surface:#FFFFFF;
+    --surface-2:#E9EDF2;
+    --ink:#141922;
+    --ink-2:#3C4655;
+    --muted:#6B7688;
+    --rule:#D6DCE4;
+    --rule-strong:#B6BFCB;
+    --accent:#1E44C8;
+    --accent-ink:#1E44C8;
+    --accent-soft:#E2E8FC;
+    --amber:#9E5606;
+    --amber-soft:#F8EBD8;
+    --green:#15705A;
+    --green-soft:#DCEFE8;
+    --shadow:0 1px 2px rgba(20,25,34,.05), 0 8px 24px -16px rgba(20,25,34,.28);
+
+    --f-display:"Archivo", "Helvetica Neue", Arial, sans-serif;
+    --f-body:"Source Serif 4", Georgia, "Times New Roman", serif;
+    --f-mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    --w:min(1080px, 100% - 3rem);
+  }
+
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#0F131A;
+      --surface:#161B23;
+      --surface-2:#1D242E;
+      --ink:#E7EBF2;
+      --ink-2:#AFB9C8;
+      --muted:#7B8698;
+      --rule:#28303B;
+      --rule-strong:#3A4553;
+      --accent:#8AA4FF;
+      --accent-ink:#A8BAFF;
+      --accent-soft:#1A2447;
+      --amber:#E0A75E;
+      --amber-soft:#2E2312;
+      --green:#68C7A6;
+      --green-soft:#0E2A24;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0F131A;
+    --surface:#161B23;
+    --surface-2:#1D242E;
+    --ink:#E7EBF2;
+    --ink-2:#AFB9C8;
+    --muted:#7B8698;
+    --rule:#28303B;
+    --rule-strong:#3A4553;
+    --accent:#8AA4FF;
+    --accent-ink:#A8BAFF;
+    --accent-soft:#1A2447;
+    --amber:#E0A75E;
+    --amber-soft:#2E2312;
+    --green:#68C7A6;
+    --green-soft:#0E2A24;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--f-body);
+    font-size:16.5px;
+    line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{width:var(--w);margin-inline:auto;}
+
+  h1,h2,h3,h4{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.15;letter-spacing:-.015em;}
+  p{margin:0;}
+  ul{margin:0;padding:0;list-style:none;}
+
+  .eyebrow{
+    font-family:var(--f-mono);
+    font-size:.688rem;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    color:var(--muted);
+    font-weight:500;
+  }
+
+  /* ---------- masthead ---------- */
+  header.masthead{
+    border-bottom:1px solid var(--rule);
+    background:var(--surface);
+  }
+  .masthead .wrap{
+    display:flex;
+    flex-direction:column;
+    gap:1.25rem;
+    padding:3.25rem 0 2.5rem;
+  }
+  .masthead h1{
+    font-size:clamp(2.1rem, 5.2vw, 3.4rem);
+    font-weight:700;
+    letter-spacing:-.03em;
+  }
+  .masthead .standfirst{
+    max-width:60ch;
+    font-size:1.115rem;
+    color:var(--ink-2);
+  }
+  .meta-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.5rem 1.75rem;
+    padding-top:.5rem;
+    border-top:1px solid var(--rule);
+    font-family:var(--f-mono);
+    font-size:.75rem;
+    color:var(--muted);
+  }
+  .meta-row b{color:var(--ink-2);font-weight:500;}
+
+  main .wrap{padding-block:3rem;}
+  section{margin-bottom:3.5rem;}
+  .sec-head{display:flex;flex-direction:column;gap:.4rem;margin-bottom:1.4rem;}
+  .sec-head h2{font-size:1.45rem;font-weight:600;}
+  .sec-head .lede{max-width:66ch;color:var(--ink-2);}
+
+  /* ---------- premise cards ---------- */
+  .premise{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(230px,1fr));
+    gap:1px;
+    background:var(--rule);
+    border:1px solid var(--rule);
+    border-radius:2px;
+    overflow:hidden;
+  }
+  .premise > div{background:var(--surface);padding:1.25rem 1.3rem;display:flex;flex-direction:column;gap:.5rem;}
+  .premise h3{font-size:.95rem;font-weight:600;display:flex;align-items:center;gap:.55rem;}
+  .premise p{font-size:.925rem;color:var(--ink-2);line-height:1.55;}
+  .swatch{width:.85rem;height:.85rem;border-radius:2px;flex:none;}
+  .sw-soft{background:var(--accent);}
+  .sw-data{background:var(--rule-strong);}
+  .sw-ev{background:var(--amber);}
+
+  /* ---------- strip ---------- */
+  .board{
+    background:var(--surface);
+    border:1px solid var(--rule);
+    border-radius:2px;
+    padding:1.5rem 1.4rem 1.3rem;
+    box-shadow:var(--shadow);
+  }
+  .scroller{overflow-x:auto;}
+  .grid16{
+    min-width:720px;
+    display:grid;
+    grid-template-columns:9.5rem repeat(16, 1fr);
+    gap:3px;
+    align-items:stretch;
+  }
+  .rowlabel{
+    font-family:var(--f-mono);
+    font-size:.688rem;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:var(--muted);
+    display:flex;
+    align-items:center;
+    padding-right:.75rem;
+    justify-content:flex-end;
+    text-align:right;
+  }
+  .wknum{
+    font-family:var(--f-mono);
+    font-size:.688rem;
+    color:var(--muted);
+    text-align:center;
+    padding-bottom:.35rem;
+    font-variant-numeric:tabular-nums;
+  }
+  .cell{
+    height:2.15rem;
+    border-radius:2px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:var(--f-mono);
+    font-size:.7rem;
+    font-weight:600;
+    letter-spacing:.04em;
+  }
+  .c-soft{background:var(--accent);color:#fff;}
+  :root[data-theme="dark"] .c-soft{color:#0F131A;}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .c-soft{color:#0F131A;}}
+  .c-data{background:var(--surface-2);color:var(--ink-2);border:1px solid var(--rule-strong);}
+  .c-ev{background:var(--amber);color:#fff;}
+  :root[data-theme="dark"] .c-ev{color:#1A1206;}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .c-ev{color:#1A1206;}}
+  .c-mile{outline:2px solid var(--ink);outline-offset:1px;}
+
+  .track{
+    height:1.5rem;
+    border-radius:2px;
+    display:flex;
+    align-items:center;
+    padding-left:.5rem;
+    font-family:var(--f-mono);
+    font-size:.688rem;
+    color:var(--ink-2);
+    white-space:nowrap;
+    overflow:hidden;
+  }
+  .t-meta{background:var(--amber-soft);border:1px solid var(--amber);}
+  .t-backfill{background:var(--amber-soft);border:1px solid var(--amber);}
+  .t-async{background:var(--accent-soft);border:1px solid var(--accent);}
+  .t-console{background:var(--green-soft);border:1px solid var(--green);}
+  .spacer{height:1.5rem;}
+  .gap-row{height:.55rem;grid-column:1 / -1;}
+
+  .legend{
+    display:flex;flex-wrap:wrap;gap:.4rem 1.4rem;
+    margin-top:1.1rem;padding-top:.9rem;border-top:1px solid var(--rule);
+    font-family:var(--f-mono);font-size:.7rem;color:var(--muted);
+  }
+  .legend span{display:flex;align-items:center;gap:.45rem;}
+
+  /* ---------- acts ---------- */
+  .act{margin-bottom:2.5rem;}
+  .act-head{
+    display:flex;flex-wrap:wrap;align-items:baseline;gap:.4rem 1rem;
+    padding:.85rem 0 .8rem;
+    border-top:2px solid var(--ink);
+    border-bottom:1px solid var(--rule);
+    margin-bottom:.25rem;
+  }
+  .act-head .no{font-family:var(--f-mono);font-size:.75rem;color:var(--muted);letter-spacing:.1em;}
+  .act-head h3{font-size:1.28rem;font-weight:600;flex:1 1 16rem;}
+  .act-head .span{font-family:var(--f-mono);font-size:.75rem;color:var(--muted);font-variant-numeric:tabular-nums;}
+
+  .week{
+    display:grid;
+    grid-template-columns:5.5rem 1fr;
+    gap:0 1.35rem;
+    padding:1.15rem 0;
+    border-bottom:1px solid var(--rule);
+    align-items:start;
+  }
+  .week:last-of-type{border-bottom:none;}
+  .rail{display:flex;flex-direction:column;gap:.5rem;align-items:flex-start;}
+  .rail .wk{
+    font-family:var(--f-mono);
+    font-size:1.5rem;
+    font-weight:600;
+    line-height:1;
+    color:var(--ink);
+    font-variant-numeric:tabular-nums;
+    letter-spacing:-.02em;
+  }
+  .chip{
+    font-family:var(--f-mono);
+    font-size:.625rem;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    padding:.2rem .45rem;
+    border-radius:2px;
+    font-weight:600;
+    white-space:nowrap;
+  }
+  .ch-soft{background:var(--accent-soft);color:var(--accent-ink);border:1px solid var(--accent);}
+  .ch-data{background:var(--surface-2);color:var(--ink-2);border:1px solid var(--rule-strong);}
+  .ch-ev{background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber);}
+
+  .week-body{display:flex;flex-direction:column;gap:.6rem;min-width:0;}
+  .week-body h4{font-size:1.045rem;font-weight:600;}
+  .line{display:grid;grid-template-columns:6.9rem 1fr;gap:.75rem;align-items:baseline;}
+  .line dt{
+    font-family:var(--f-mono);font-size:.65rem;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--muted);padding-top:.18rem;
+  }
+  .line dd{margin:0;color:var(--ink-2);font-size:.95rem;line-height:1.55;}
+  .line dd b{color:var(--ink);font-weight:600;}
+
+  .milestone{
+    margin-top:.35rem;
+    background:var(--green-soft);
+    border:1px solid var(--green);
+    border-radius:2px;
+    padding:.7rem .85rem;
+    display:flex;
+    flex-direction:column;
+    gap:.25rem;
+  }
+  .milestone .tag{
+    font-family:var(--f-mono);font-size:.65rem;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--green);font-weight:600;
+  }
+  .milestone p{font-size:.93rem;color:var(--ink);font-family:var(--f-display);font-weight:500;line-height:1.45;}
+
+  /* ---------- protocol ---------- */
+  .protocol{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+    gap:1px;
+    background:var(--rule);
+    border:1px solid var(--rule);
+    border-radius:2px;
+    overflow:hidden;
+  }
+  .protocol > div{background:var(--surface);padding:1.2rem 1.3rem;display:flex;flex-direction:column;gap:.55rem;}
+  .protocol h4{font-size:.95rem;font-weight:600;}
+  .protocol p{font-size:.925rem;color:var(--ink-2);line-height:1.55;}
+  .protocol .num{
+    font-family:var(--f-mono);font-size:.65rem;color:var(--muted);
+    letter-spacing:.1em;
+  }
+
+  /* ---------- risks ---------- */
+  .risk{
+    border:1px solid var(--rule);
+    border-left:3px solid var(--amber);
+    background:var(--surface);
+    border-radius:2px;
+    padding:1.05rem 1.2rem;
+    margin-bottom:.75rem;
+    display:flex;
+    flex-direction:column;
+    gap:.5rem;
+  }
+  .risk-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem .9rem;}
+  .risk-head h4{font-size:1rem;font-weight:600;flex:1 1 14rem;}
+  .bites{
+    font-family:var(--f-mono);font-size:.65rem;letter-spacing:.07em;text-transform:uppercase;
+    color:var(--amber);background:var(--amber-soft);border:1px solid var(--amber);
+    padding:.18rem .45rem;border-radius:2px;font-weight:600;white-space:nowrap;
+  }
+  .risk p{font-size:.94rem;color:var(--ink-2);}
+  .risk p b{color:var(--ink);font-weight:600;}
+
+  /* ---------- closing note ---------- */
+  .note{
+    background:var(--surface);
+    border:1px solid var(--rule);
+    border-radius:2px;
+    padding:1.4rem 1.5rem;
+    display:flex;
+    flex-direction:column;
+    gap:.7rem;
+  }
+  .note p{color:var(--ink-2);max-width:68ch;}
+  .note p b{color:var(--ink);font-weight:600;}
+
+  footer{border-top:1px solid var(--rule);background:var(--surface);}
+  footer .wrap{padding:1.5rem 0;font-family:var(--f-mono);font-size:.7rem;color:var(--muted);}
+
+  @media (max-width:620px){
+    :root{--w:min(1080px, 100% - 2rem);}
+    .week{grid-template-columns:1fr;gap:.7rem;}
+    .rail{flex-direction:row;align-items:center;gap:.7rem;}
+    .rail .wk{font-size:1.15rem;}
+    .line{grid-template-columns:1fr;gap:.1rem;}
+  }
+</style>
+
+<header class="masthead">
+  <div class="wrap">
+    <p class="eyebrow">Dona Dom tenant service platform · rollout</p>
+    <h1>Sixteen Demos to Pilot</h1>
+    <p class="standfirst">A sixteen-week sequence built backwards from a promise: every Thursday, something real is on screen. Four monthly milestones carry the decisions; the weeks in between carry the proof.</p>
+    <div class="meta-row">
+      <span><b>Span</b> 16 weeks · 4 months</span>
+      <span><b>Cadence</b> Thursday demo, Wednesday freeze</span>
+      <span><b>Gates</b> M1–M4, one per month</span>
+      <span><b>Scope</b> admin console 1,500 units · agent 72 units</span>
+    </div>
+  </div>
+</header>
+
+<main>
+<div class="wrap">
+
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">The premise</p>
+      <h2>A weekly demo is not a weekly feature</h2>
+      <p class="lede">Promising a working feature every week guarantees a broken promise around week three, when the work is Meta verification and a data backfill. Promising <em>evidence of progress</em> every week is a promise that survives contact. Three kinds of demo count — and each week's kind is declared on Monday, not discovered on Thursday.</p>
+    </div>
+    <div class="premise">
+      <div>
+        <h3><span class="swatch sw-soft"></span>Working software</h3>
+        <p>They click it. A screen that did not exist last week, on the same URL as last week. The most common kind, but not the only currency.</p>
+      </div>
+      <div>
+        <h3><span class="swatch sw-data"></span>Real data</h3>
+        <p>The same screen as last week, now holding Dona Dom's actual buildings, leases and tenancies. Stakeholders find <em>our 1,500 units</em> more convincing than a new button.</p>
+      </div>
+      <div>
+        <h3><span class="swatch sw-ev"></span>Evidence</h3>
+        <p>A measured number that closes an open question. Per-field OCR accuracy on 40 real leases. A live attempt to breach tenant isolation, and its failure.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">Shape</p>
+      <h2>Sixteen weeks at a glance</h2>
+      <p class="lede">The top row is what stakeholders see each week. The bands below are what runs underneath — including the two things no engineering speed can compress.</p>
+    </div>
+    <div class="board">
+      <div class="scroller">
+        <div class="grid16">
+          <div class="rowlabel">Week</div>
+          <div class="wknum">1</div><div class="wknum">2</div><div class="wknum">3</div><div class="wknum">4</div>
+          <div class="wknum">5</div><div class="wknum">6</div><div class="wknum">7</div><div class="wknum">8</div>
+          <div class="wknum">9</div><div class="wknum">10</div><div class="wknum">11</div><div class="wknum">12</div>
+          <div class="wknum">13</div><div class="wknum">14</div><div class="wknum">15</div><div class="wknum">16</div>
+
+          <div class="rowlabel">Demo</div>
+          <div class="cell c-soft"></div>
+          <div class="cell c-data"></div>
+          <div class="cell c-soft"></div>
+          <div class="cell c-soft c-mile">M1</div>
+          <div class="cell c-data"></div>
+          <div class="cell c-soft"></div>
+          <div class="cell c-soft"></div>
+          <div class="cell c-ev c-mile">M2</div>
+          <div class="cell c-soft"></div>
+          <div class="cell c-soft"></div>
+          <div class="cell c-soft"></div>
+          <div class="cell c-ev c-mile">M3</div>
+          <div class="cell c-ev"></div>
+          <div class="cell c-soft"></div>
+          <div class="cell c-data"></div>
+          <div class="cell c-ev c-mile">M4</div>
+
+          <div class="gap-row"></div>
+
+          <div class="rowlabel">Meta verify</div>
+          <div class="track t-meta" style="grid-column:span 6">Filed W1 · 4–6 wks · blocks W9</div>
+          <div class="spacer" style="grid-column:span 10"></div>
+
+          <div class="rowlabel">Doc backfill</div>
+          <div class="track t-backfill" style="grid-column:span 5">Dona Dom's calendar, not ours</div>
+          <div class="spacer" style="grid-column:span 11"></div>
+
+          <div class="rowlabel">Admin console</div>
+          <div class="track t-console" style="grid-column:span 8">The demo engine — no AI, no Meta</div>
+          <div class="spacer" style="grid-column:span 8"></div>
+
+          <div class="rowlabel">Async engine</div>
+          <div class="spacer" style="grid-column:span 6"></div>
+          <div class="track t-async" style="grid-column:span 8">Two-sided negotiation — the real 70%</div>
+          <div class="spacer" style="grid-column:span 2"></div>
+        </div>
+      </div>
+      <div class="legend">
+        <span><span class="swatch sw-soft"></span>Working software</span>
+        <span><span class="swatch sw-data" style="border:1px solid var(--rule-strong)"></span>Real data</span>
+        <span><span class="swatch sw-ev"></span>Evidence</span>
+        <span>M1–M4 · monthly decision gate</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ACT I ================= -->
+  <section class="act">
+    <div class="act-head">
+      <span class="no">MONTH ONE</span>
+      <h3>The record exists, and you can trust it</h3>
+      <span class="span">Weeks 1–4</span>
+    </div>
+
+    <div class="week">
+      <div class="rail"><span class="wk">01</span><span class="chip ch-soft">Software</span></div>
+      <div class="week-body">
+        <h4>A URL, a schema, and a filed application</h4>
+        <dl class="line"><dt>You show</dt><dd>A live link stakeholders open themselves: buildings and units for Shoham, real names, real addresses. Plus a screenshot of the <b>Meta business verification submission</b>, timestamped.</dd></dl>
+        <dl class="line"><dt>Underneath</dt><dd>Cloud Run + Cloud SQL in <span style="font-family:var(--f-mono);font-size:.9em">me-west1</span>, auth, the entity spine. Verification is filed on day one because it takes 4–6 weeks and nothing we do makes it faster.</dd></dl>
+        <dl class="line"><dt>Also this week</dt><dd>Name the pilot owner and agree the three success numbers. Without both, week 12 has no gate to pass.</dd></dl>
+      </div>
+    </div>
+
+    <div class="week">
+      <div class="rail"><span class="wk">02</span><span class="chip ch-data">Real data</span></div>
+      <div class="week-body">
+        <h4>All 1,500 units, from whatever holds the register today</h4>
+        <dl class="line"><dt>You show</dt><dd>The same screen, now with every building across Shoham, Beit Shemesh, Ashdod, Lod and Ashkelon — units, tenancies, parties. Searchable.</dd></dl>
+        <dl class="line"><dt>Underneath</dt><dd>Import from the Priority export. The <em>documents</em> are on Google Drive — that much is settled, and it makes the backfill an ingestion problem against a known source rather than an expedition. What is still open is the structured register: whether Priority stays master for units and tenancies, or we do.</dd></dl>
+        <dl class="line"><dt>If it goes wrong</dt><dd>If the structured data turns out to be a spreadsheet per site rather than one export, <b>that discovery is the demo</b> — and it is the single most valuable finding of the quarter. See <em>Backfill</em> below.</dd></dl>
+      </div>
+    </div>
+
+    <div class="week">
+      <div class="rail"><span class="wk">03</span><span class="chip ch-soft">Software</span></div>
+      <div class="week-body">
+        <h4>Documents filed against units</h4>
+        <dl class="line"><dt>You show</dt><dd>Pull a real lease off the Drive, then find it again in four seconds. Hashed, dated, attached to unit and tenancy, immutable.</dd></dl>
+        <dl class="line"><dt>Underneath</dt><dd>Cloud Storage, the eight document schemas, the declared-type upload flow, and the Drive ingestion path: files are <em>copied</em> and hashed at ingest, the Drive id kept as provenance and the folder path kept as a hint that pre-fills a binding — never as the binding itself. Drive is a source, never the system of record. Nothing is read yet; this is a filing cabinet with a search box.</dd></dl>
+        <dl class="line"><dt>Why it lands</dt><dd>It is already a business win over the status quo, before a single line of AI exists. Say that out loud in the room.</dd></dl>
+      </div>
+    </div>
+
+    <div class="week">
+      <div class="rail"><span class="wk">04</span><span class="chip ch-soft">Software</span></div>
+      <div class="week-body">
+        <h4>The machine reads a lease — and shows its work</h4>
+        <dl class="line"><dt>You show</dt><dd>Drop in a real Hebrew lease. Rent, dates, parties and clauses appear as fields. Click any value and <b>the page image scrolls to the pixels it came from</b>, with a confidence score.</dd></dl>
+        <dl class="line"><dt>Underneath</dt><dd>Document AI general OCR for coordinates and confidence; OpenAI for mapping into the declared schema. Two engines, because a language model asked for coordinates invents plausible ones.</dd></dl>
+        <dl class="line"><dt>Evidence</dt><dd>Per-field accuracy across ~40 real leases, on a slide. This is the number that decides how much human review the backfill needs.</dd></dl>
+        <div class="milestone">
+          <span class="tag">Milestone M1</span>
+          <p>There is a system of record for 1,500 units, and every value in it can be traced to the paper it came from.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ACT II ================= -->
+  <section class="act">
+    <div class="act-head">
+      <span class="no">MONTH TWO</span>
+      <h3>The rules are explicit, and the console works without AI</h3>
+      <span class="span">Weeks 5–8</span>
+    </div>
+
+    <div class="week">
+      <div class="rail"><span class="wk">05</span><span class="chip ch-data">Real data</span></div>
+      <div class="week-body">
+        <h4>Paper becomes truth</h4>
+        <dl class="line"><dt>You show</dt><dd>An amendment arrives for a real unit. The tenancy updates. A change log records old → new, who approved it, and which document caused it. Then a tenancy ends because a date passed, with no document at all.</dd></dl>
+        <dl class="line"><dt>Underneath</dt><dd>Promotion with provenance, tenancy reconciliation, the append-only event log.</dd></dl>
+        <dl class="line"><dt>Closes</dt><dd>How many distinct terms profiles are actually in force. The answer sizes week 6.</dd></dl>
+      </div>
+    </div>
+
+    <div class="week">
+      <div class="rail"><span class="wk">06</span><span class="chip ch-soft">Software</span></div>
+      <div class="week-body">
+        <h4>Who pays for this, and why</h4>
+        <dl class="line"><dt>You show</dt><dd>Pick a fault category and a unit. Get an answer — tenant, operator, or contractor warranty — with the clause and the policy version behind it. Then edit the table live in front of them and watch the answer change.</dd></dl>
+        <dl class="line"><dt>Underneath</dt><dd>The responsibility matrix as versioned, admin-editable data, with an <span style="font-family:var(--f-mono);font-size:.9em">asset_in_warranty</span> dimension fed by the asset register that week 3's handover protocols seed. Rules supersede by date and never overwrite, and every resolved call snapshots the rule version that decided it. <b>No AI anywhere near this decision</b> — it has to be defensible in a dispute a year from now, and a dispute only ever asks about the past.</dd></dl>
+        <dl class="line"><dt>Why it lands</dt><dd>It is their own business rules on screen, in their own vocabulary, including תקופת הבדק. This is usually the demo where a stakeholder starts correcting the table — which is exactly what you want.</dd></dl>
+      </div>
+    </div>
+
+    <div class="week">
+      <div class="rail"><span class="wk">07</span><span class="chip ch-soft">Software</span></div>
+      <div class="week-body">
+        <h4>A ticket, start to finish, by hand</h4>
+        <dl class="line"><dt>You show</dt><dd>Open a service call in the console and walk it through the canonical states by hand — <span style="font-family:var(--f-mono);font-size:.85em">NEW · IDENTIFIED · TRIAGED · RESPONSIBILITY SET · WINDOWS COLLECTED · OFFERED · SCHEDULED · CLOSED</span> — plus the three exits. Watch the SLA clock run and the escalation fire. No WhatsApp, no agent: a human doing what the agent will later do.</dd></dl>
+        <dl class="line"><dt>Underneath</dt><dd>State machine, SLA policies, timers, escalation rules — and the emergency bypass, which is a policy row and a routing rule rather than a priority label. It has to be live and tested here, in month two, because it must exist before the agent takes its first real tenant message in week 10. The async negotiation engine starts here and runs underneath for the next six weeks.</dd></dl>
+      </div>
+    </div>
+
+    <div class="week">
+      <div class="rail"><span class="wk">08</span><span class="chip ch-ev">Evidence</span></div>
+      <div class="week-body">
+        <h4>Try to break tenant isolation, live</h4>
+        <dl class="line"><dt>You show</dt><dd>The hard constraint, tested in the room. Query as one tenant's phone number and attempt to reach another tenant's documents, unit, or history — through the console, through the API, and by asking the model to do it. Every path returns nothing.</dd></dl>
+        <dl class="line"><dt>Underneath</dt><dd>Scoping enforced in SQL before any model call. The scope is a view, not a column — a misbehaving model cannot widen a scope it never held.</dd></dl>
+        <div class="milestone">
+          <span class="tag">Milestone M2</span>
+          <p>The operator console is usable on its own. If the agent were cancelled tomorrow, this is still a product worth having — and that is your negotiating position for the rest of the project.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ACT III ================= -->
+  <section class="act">
+    <div class="act-head">
+      <span class="no">MONTH THREE</span>
+      <h3>The agent takes the call and books the visit</h3>
+      <span class="span">Weeks 9–12</span>
+    </div>
+
+    <div class="week">
+      <div class="rail"><span class="wk">09</span><span class="chip ch-soft">Software</span></div>
+      <div class="week-body">
+        <h4>Message the number from your own phone</h4>
+        <dl class="line"><dt>You show</dt><dd>Hand a stakeholder the WhatsApp number. They message it. It replies with their name, their unit and their tenancy — after a one-time code delivered through WhatsApp itself.</dd></dl>
+        <dl class="line"><dt>Underneath</dt><dd>Cloud API webhooks both directions, phone → party binding, conversation and message tables.</dd></dl>
+        <dl class="line"><dt>Depends on</dt><dd>Meta verification, filed week 1. Eight weeks of runway against a 4–6 week process — the buffer is deliberate.</dd></dl>
+      </div>
+    </div>
+
+    <div class="week">
+      <div class="rail"><span class="wk">10</span><span class="chip ch-soft">Software</span></div>
+      <div class="week-body">
+        <h4>"Who fixes my dripping tap?"</h4>
+        <dl class="line"><dt>You show</dt><dd>A tenant describes a fault in plain Hebrew. The agent triages it, answers from the tenant's own lease and the knowledge base, and either resolves it as self-service or opens a ticket.</dd></dl>
+        <dl class="line"><dt>Underneath</dt><dd>Tenant-facing agent with scoped tools only. It reads the responsibility matrix; it does not decide responsibility. No prices, ever.</dd></dl>
+      </div>
+    </div>
+
+    <div class="week">
+      <div class="rail"><span class="wk">11</span><span class="chip ch-soft">Software</span></div>
+      <div class="week-body">
+        <h4>Both sides of the switchboard</h4>
+        <dl class="line"><dt>You show</dt><dd>The full loop on two phones on the table. Tenant reports a fault; the agent collects windows; the agent WhatsApps a provider with the address and slot options; the provider counter-proposes; the tenant accepts; the visit is booked. Neither human ever sees an app.</dd></dl>
+        <dl class="line"><dt>Underneath</dt><dd>The hard part, finally surfacing: <span style="font-family:var(--f-mono);font-size:.9em">WINDOWS COLLECTED → OFFERED</span> is two-sided asynchronous negotiation — two people never online at once, no delivery guarantee, either side free to go silent. Roughly seventy percent of the engineering lives between those two states.</dd></dl>
+      </div>
+    </div>
+
+    <div class="week">
+      <div class="rail"><span class="wk">12</span><span class="chip ch-ev">Evidence</span></div>
+      <div class="week-body">
+        <h4>Live, with real tenants and real tradesmen</h4>
+        <dl class="line"><dt>You show</dt><dd>The 72-unit building is on the agent. Real calls from real tenants, real providers, a week of history. Every number measured against the three agreed in week 1.</dd></dl>
+        <dl class="line"><dt>Underneath</dt><dd>Escalation queue staffed by the pilot owner, watching daily.</dd></dl>
+        <div class="milestone">
+          <span class="tag">Milestone M3 · go / no-go</span>
+          <p>The loop is closed end to end on one building. The decision at this gate is not "does it work" — it is "do the three numbers justify month four."</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ACT IV ================= -->
+  <section class="act">
+    <div class="act-head">
+      <span class="no">MONTH FOUR</span>
+      <h3>It survives contact with reality</h3>
+      <span class="span">Weeks 13–16</span>
+    </div>
+
+    <div class="week">
+      <div class="rail"><span class="wk">13</span><span class="chip ch-ev">Evidence</span></div>
+      <div class="week-body">
+        <h4>What happens when the plumber goes quiet</h4>
+        <dl class="line"><dt>You show</dt><dd>A deliberate chaos run. A provider ghosts for 36 hours; a tenant stops replying mid-thread; a message fails to deliver. Show the timeouts firing, the retries, the fallback provider, and the escalation reaching a human at the right moment.</dd></dl>
+        <dl class="line"><dt>Underneath</dt><dd>The unglamorous three-quarters of the negotiation engine. Announce this as an evidence week on Monday — there is no new screen, and that is fine.</dd></dl>
+      </div>
+    </div>
+
+    <div class="week">
+      <div class="rail"><span class="wk">14</span><span class="chip ch-soft">Software</span></div>
+      <div class="week-body">
+        <h4>Voice notes and five languages</h4>
+        <dl class="line"><dt>You show</dt><dd>A tradesman replies with a 20-second voice note; the agent understands it and the console shows both the original and the Hebrew. A Russian-speaking tenant is served in Russian while the provider side stays Hebrew throughout.</dd></dl>
+        <dl class="line"><dt>Underneath</dt><dd>Transcription, original + canonical Hebrew message bodies, and the separation of service traffic from marketing traffic required by חוק התקשורת.</dd></dl>
+      </div>
+    </div>
+
+    <div class="week">
+      <div class="rail"><span class="wk">15</span><span class="chip ch-data">Real data</span></div>
+      <div class="week-body">
+        <h4>The pilot dashboard, with four weeks of history</h4>
+        <dl class="line"><dt>You show</dt><dd>Resolution rate, time-to-booked, escalation rate, self-service share, cost per call — from actual pilot traffic, not projections. Plus the audit trail behind any single ticket.</dd></dl>
+        <dl class="line"><dt>Underneath</dt><dd>Build this early and cheaply; by week 15 it fills itself. It is both a demo in its own right and the evidence base for M4.</dd></dl>
+      </div>
+    </div>
+
+    <div class="week">
+      <div class="rail"><span class="wk">16</span><span class="chip ch-ev">Evidence</span></div>
+      <div class="week-body">
+        <h4>Pilot review and the scale decision</h4>
+        <dl class="line"><dt>You show</dt><dd>One month of operation on 72 units, measured. What the agent handled alone, what it escalated and why, what it cost, and what breaks first at 200 units and at 1,500.</dd></dl>
+        <dl class="line"><dt>The ask</dt><dd>Which building goes second, and on what date.</dd></dl>
+        <div class="milestone">
+          <span class="tag">Milestone M4</span>
+          <p>A scale-out decision made on measured data rather than on confidence — with sixteen weeks of demos behind it that nobody has to take on faith.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PROTOCOL ================= -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">The ritual</p>
+      <h2>How to run the twenty minutes</h2>
+      <p class="lede">The cadence is worth as much as the code. These are the rules that keep it credible when a week goes badly — which some week will.</p>
+    </div>
+    <div class="protocol">
+      <div>
+        <span class="num">01</span>
+        <h4>Declare the demo type on Monday</h4>
+        <p>Announce in advance whether this week delivers software, data, or evidence. Expectation set on Monday is a plan; expectation set on Thursday is an excuse.</p>
+      </div>
+      <div>
+        <span class="num">02</span>
+        <h4>Freeze Wednesday, demo Thursday</h4>
+        <p>Never demo something finished that morning. Thursday also leaves Friday for the follow-up asks, so the week does not end on a cliff.</p>
+      </div>
+      <div>
+        <span class="num">03</span>
+        <h4>Same link, same ticket, every week</h4>
+        <p>Stakeholders should watch one service call get progressively more real, not meet a new toy each week. Continuity is what makes progress legible.</p>
+      </div>
+      <div>
+        <span class="num">04</span>
+        <h4>Three slides, and one of them is asks</h4>
+        <p>What moved · what it cost · what I need from you. The standing asks slide is how the open questions in section 07 of the brief get owners at Dona Dom — the demo is your decision-extraction mechanism.</p>
+      </div>
+      <div>
+        <span class="num">05</span>
+        <h4>Show the ugly weeks too</h4>
+        <p>Week 13 has no new screen. Demo the chaos test instead. A team that only demos wins is a team nobody believes in month five.</p>
+      </div>
+      <div>
+        <span class="num">06</span>
+        <h4>Re-plan in public at each M</h4>
+        <p>Priorities will change and requirements will appear. The monthly gate is where they get absorbed on the record, not silently between weeks.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= RISKS ================= -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">Honest exposure</p>
+      <h2>What can break this, and when</h2>
+      <p class="lede">Each of these is pre-announced at the week-1 demo. A risk described in advance is a plan; the same risk described afterwards is a failure.</p>
+    </div>
+
+    <div class="risk">
+      <div class="risk-head">
+        <h4>Backfill — the structured register may not exist in usable form</h4>
+        <span class="bites">Bites week 2</span>
+      </div>
+      <p>The document side is answered: lease and building paperwork is organised per apartment on Google Drive, so weeks 3–4 are ingestion against a known source. The exposure moved to the <em>structured</em> register. If the 1,500 units live in a clean Priority export, weeks 1–3 hold. If they live in a spreadsheet per site, or exist only as the leases themselves, <b>backfill becomes its own workstream on Dona Dom's calendar</b> — and the real critical path, worse than Meta verification.</p>
+      <p><b>Fallback:</b> Act I continues against a curated slice of the 72 pilot units. Month one demos still land; the 1,500-unit claim moves to M2 and a named Dona Dom owner takes the backfill. Nothing downstream slips.</p>
+    </div>
+
+    <div class="risk">
+      <div class="risk-head">
+        <h4>Meta business verification may stall</h4>
+        <span class="bites">Bites week 9</span>
+      </div>
+      <p>Four to six weeks is the normal case, and filing in week 1 buys an eight-week runway. Rejections over entity documents or number ownership can consume that.</p>
+      <p><b>Fallback:</b> build weeks 9–11 against a message simulator and demo the loop with the transport stubbed, then swap in the live number. A BSP stays in reserve as the escape hatch. Verification is also a standing line on the asks slide from week 1 — visible to management as <em>their</em> dependency, not yours.</p>
+    </div>
+
+    <div class="risk">
+      <div class="risk-head">
+        <h4>Demo pressure distorts what gets built</h4>
+        <span class="bites">Bites weeks 11–13</span>
+      </div>
+      <p>The visible work crowds out the async negotiation engine, which is 70% of the real effort and photographs badly. This is the failure mode of every demo-driven programme.</p>
+      <p><b>Fallback:</b> one declared evidence week per month, budgeted up front, plus a standing "what's underneath" line in every demo so the invisible work is never invisible. The engine gets a six-week band on the plan precisely so it is not squeezed into one.</p>
+    </div>
+
+    <div class="risk">
+      <div class="risk-head">
+        <h4>The cadence itself costs about half a day a week</h4>
+        <span class="bites">Ongoing</span>
+      </div>
+      <p>Preparation, delivery and follow-ups run roughly 6–8% of engineering capacity across sixteen weeks. It is worth paying — but it belongs in the plan, not absorbed silently and then blamed for a slip in month three.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="note">
+      <p class="eyebrow">One structural note</p>
+      <p><b>The most valuable thing in this plan is M2.</b> By the end of month two you hold an operator console covering all 1,500 units, with traceable documents and explicit business rules — and none of it depends on the agent, on Meta, or on a model behaving. If priorities change in month three, or the agent proves harder than expected, you are not negotiating from zero. You are negotiating from a system that already replaced the filing cabinets.</p>
+      <p>Everything after M2 is upside built on ground you already own. Sequence it that way deliberately, and say so at the week-1 demo.</p>
+    </div>
+  </section>
+
+</div>
+</main>
+
+<footer>
+  <div class="wrap">Dona Dom tenant service platform · rollout cadence · 2 September 2026 · the authority on schedule · summarised as four monthly phases in section 05 of the Platform Brief · vocabulary and states from the Data Model</div>
+</footer>

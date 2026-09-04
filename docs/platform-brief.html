@@ -1,0 +1,623 @@
+<title>Dona Dom Platform Brief</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Hebrew:wght@400;600&display=swap">
+
+<style>
+  :root {
+    --paper:      #F1F2EF;
+    --surface:    #FBFCF9;
+    --surface-2:  #E7EAE4;
+    --ink:        #17222E;
+    --ink-2:      #4C5964;
+    --ink-3:      #7B858D;
+    --rule:       #C8CFC7;
+    --rule-soft:  #DDE1DA;
+    --structure:  #2F5D7C;
+    --signal:     #BF4A22;
+    --good:       #40704F;
+    --warn:       #97690C;
+    --grid:       rgba(23,34,46,.045);
+    --shadow:     0 1px 2px rgba(23,34,46,.05);
+
+    --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --font-body: "IBM Plex Sans", "IBM Plex Sans Hebrew", system-ui, -apple-system, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    --measure: 66ch;
+    --sheet: 940px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:     #121821;
+      --surface:   #19212C;
+      --surface-2: #222C38;
+      --ink:       #E2E7E3;
+      --ink-2:     #A5B0B8;
+      --ink-3:     #79858E;
+      --rule:      #2F3B47;
+      --rule-soft: #26313C;
+      --structure: #7BADD0;
+      --signal:    #EA7F52;
+      --good:      #79B78C;
+      --warn:      #D6A644;
+      --grid:      rgba(226,231,227,.045);
+      --shadow:    0 1px 2px rgba(0,0,0,.3);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:     #121821;
+    --surface:   #19212C;
+    --surface-2: #222C38;
+    --ink:       #E2E7E3;
+    --ink-2:     #A5B0B8;
+    --ink-3:     #79858E;
+    --rule:      #2F3B47;
+    --rule-soft: #26313C;
+    --structure: #7BADD0;
+    --signal:    #EA7F52;
+    --good:      #79B78C;
+    --warn:      #D6A644;
+    --grid:      rgba(226,231,227,.045);
+    --shadow:    0 1px 2px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      repeating-linear-gradient(to right, var(--grid) 0 1px, transparent 1px 28px),
+      repeating-linear-gradient(to bottom, var(--grid) 0 1px, transparent 1px 28px);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet { max-width: var(--sheet); margin: 0 auto; padding: 0 28px 96px; }
+
+  .titleblock {
+    border-bottom: 2px solid var(--ink);
+    padding: 56px 0 20px;
+    margin-bottom: 44px;
+  }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--structure); margin: 0 0 14px;
+  }
+  h1 {
+    font-family: var(--font-display); font-weight: 700;
+    font-size: clamp(2.1rem, 5.4vw, 3.3rem); line-height: 1.03;
+    letter-spacing: -.026em; margin: 0; text-wrap: balance;
+  }
+  .titleblock .lede { margin: 18px 0 0; max-width: 58ch; color: var(--ink-2); font-size: 1.05rem; }
+  .facts {
+    display: flex; flex-wrap: wrap; gap: 6px 26px; margin-top: 22px;
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3);
+  }
+  .facts b { color: var(--ink-2); font-weight: 500; }
+
+  section { margin: 0 0 62px; }
+  .sechead { border-top: 1px solid var(--rule); padding-top: 18px; margin-bottom: 24px; }
+  .secnum {
+    font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .13em;
+    color: var(--structure); display: block; margin-bottom: 10px;
+  }
+  h2 {
+    font-family: var(--font-display); font-weight: 600; font-size: 1.5rem;
+    letter-spacing: -.018em; margin: 0; text-wrap: balance;
+  }
+  h3 {
+    font-family: var(--font-display); font-weight: 600; font-size: 1.02rem;
+    margin: 0 0 8px; letter-spacing: -.006em;
+  }
+  p { max-width: var(--measure); }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+  code, .m { font-family: var(--font-mono); font-size: .87em; }
+  code { background: var(--surface-2); padding: .1em .35em; border-radius: 2px; }
+  .he { font-family: "IBM Plex Sans Hebrew", var(--font-body); direction: rtl; unicode-bidi: isolate; }
+
+  .hmw {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--structure);
+    padding: 26px 28px;
+    box-shadow: var(--shadow);
+  }
+  .hmw p {
+    margin: 0; max-width: none;
+    font-family: var(--font-display); font-weight: 500;
+    font-size: 1.28rem; line-height: 1.42; letter-spacing: -.012em;
+    text-wrap: balance;
+  }
+  .hmw .sub { margin-top: 14px; font-family: var(--font-body); font-size: .95rem; font-weight: 400; color: var(--ink-2); }
+
+  figure { margin: 30px 0; background: var(--surface); border: 1px solid var(--rule); box-shadow: var(--shadow); }
+  .figbody { overflow-x: auto; padding: 24px 22px 8px; }
+  figure svg { display: block; width: 100%; min-width: 600px; height: auto; color: var(--ink); }
+  figcaption { border-top: 1px solid var(--rule-soft); padding: 14px 22px 16px; font-size: .88rem; color: var(--ink-2); }
+  figcaption b { color: var(--ink); font-weight: 600; }
+
+  .n-box { fill: var(--surface); stroke: currentColor; stroke-width: 1.2; }
+  .n-acc { fill: var(--surface); stroke: var(--signal); stroke-width: 1.6; }
+  .n-dash { fill: none; stroke: currentColor; stroke-width: 1.1; stroke-dasharray: 5 4; opacity: .5; }
+  .n-label { font-family: var(--font-display); font-weight: 600; font-size: 11.5px; fill: currentColor; }
+  .n-label.acc { fill: var(--signal); }
+  .chip-label { font-family: var(--font-body); font-size: 12px; fill: currentColor; }
+  .chip-label.mute { opacity: .55; }
+  .e-line { stroke: currentColor; stroke-width: 1.2; fill: none; opacity: .6; }
+  .e-line.acc { stroke: var(--signal); opacity: 1; stroke-width: 1.6; }
+  .band { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .11em; fill: currentColor; opacity: .55; }
+  .band.acc { fill: var(--signal); opacity: 1; }
+
+  /* assumptions */
+  .assumptions { display: grid; gap: 2px; background: var(--rule); border: 1px solid var(--rule); }
+  .assumptions > div { background: var(--surface); padding: 18px 20px; display: grid; grid-template-columns: 34px 1fr; gap: 4px 14px; }
+  .assumptions .box {
+    grid-row: 1 / span 2; width: 20px; height: 20px; margin-top: 3px;
+    border: 1.5px solid var(--ink-3); border-radius: 2px;
+  }
+  .assumptions .kill { border-color: var(--signal); }
+  .assumptions h3 { margin: 0; }
+  .assumptions .test { margin: 0; font-size: .9rem; color: var(--ink-2); max-width: none; }
+  .assumptions .test b { color: var(--signal); font-weight: 600; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; }
+
+  /* scope columns */
+  .scope { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; background: var(--rule); border: 1px solid var(--rule); }
+  .scope > div { background: var(--surface); padding: 22px 22px 24px; }
+  .scope h3 { display: flex; align-items: baseline; gap: 10px; }
+  .scope h3 span { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; }
+  .scope h3 .in { color: var(--good); }
+  .scope h3 .out { color: var(--signal); }
+  .scope ul { margin: 0; padding-left: 0; list-style: none; }
+  .scope li { padding: 8px 0 8px 20px; border-bottom: 1px solid var(--rule-soft); font-size: .95rem; position: relative; }
+  .scope li:last-child { border-bottom: none; }
+  .scope li::before { content: ""; position: absolute; left: 0; top: 17px; width: 9px; height: 1.5px; background: var(--ink-3); }
+  .scope li b { font-weight: 600; }
+  .scope li .why { display: block; color: var(--ink-3); font-size: .85rem; margin-top: 2px; }
+
+  /* sequence */
+  .seq { display: grid; gap: 2px; background: var(--rule); border: 1px solid var(--rule); }
+  .seq > div { background: var(--surface); padding: 16px 20px; display: grid; grid-template-columns: 96px 1fr; gap: 16px; align-items: start; }
+  .seq .wk {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em;
+    color: var(--structure); padding-top: 3px; white-space: nowrap;
+  }
+  .seq .wk b { display: block; font-weight: 600; color: var(--ink-2); font-size: 10px;
+               letter-spacing: .07em; margin-top: 3px; }
+  .seq h3 { margin: 0 0 3px; font-size: .98rem; }
+  .seq p { margin: 0; font-size: .9rem; color: var(--ink-2); max-width: none; }
+  .seq p + p { margin-top: 9px; }
+  .gate {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--good); font-weight: 600;
+  }
+  .gate + span { color: var(--ink-2); }
+
+  /* not doing */
+  .nd { display: grid; gap: 2px; background: var(--rule); border: 1px solid var(--rule); }
+  .nd > div { background: var(--surface); padding: 16px 20px; }
+  .nd h3 { margin: 0 0 4px; font-size: .97rem; color: var(--signal); }
+  .nd p { margin: 0; font-size: .91rem; color: var(--ink-2); max-width: none; }
+
+  ol.disc { counter-reset: d; list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; background: var(--rule); border: 1px solid var(--rule); }
+  ol.disc li { counter-increment: d; background: var(--surface); padding: 14px 18px 14px 54px; position: relative; font-size: .95rem; }
+  ol.disc li::before {
+    content: counter(d, decimal-leading-zero); position: absolute; left: 18px; top: 15px;
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--structure);
+  }
+
+  ol.disc li.settled { border-left: 3px solid var(--good); }
+  ol.disc li.settled::before { color: var(--good); }
+  ol.disc li .ans {
+    display: block; margin-top: 4px; color: var(--ink-2); font-size: .89rem;
+  }
+  ol.disc li .ans b {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--good); font-weight: 600;
+  }
+
+  .who {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .07em;
+    text-transform: uppercase; padding: 2px 7px; border-radius: 2px;
+    display: inline-block; white-space: nowrap;
+  }
+  .who.tenant     { background: rgba(191,74,34,.11);  color: var(--signal); }
+  .who.operator   { background: rgba(47,93,124,.11);  color: var(--structure); }
+  .who.contractor { background: rgba(151,105,12,.13); color: var(--warn); }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .who.tenant     { background: rgba(234,127,82,.15); }
+    :root:not([data-theme="light"]) .who.operator   { background: rgba(123,173,208,.15); }
+    :root:not([data-theme="light"]) .who.contractor { background: rgba(214,166,68,.15); }
+  }
+  :root[data-theme="dark"] .who.tenant     { background: rgba(234,127,82,.15); }
+  :root[data-theme="dark"] .who.operator   { background: rgba(123,173,208,.15); }
+  :root[data-theme="dark"] .who.contractor { background: rgba(214,166,68,.15); }
+
+  .n-label.sm { font-size: 10px; letter-spacing: .01em; }
+  .n-good { fill: var(--surface); stroke: var(--good); stroke-width: 1.5; }
+  .n-label.gd { fill: var(--good); }
+  .e-line.good { stroke: var(--good); opacity: 1; stroke-width: 1.4; }
+
+  .note {
+    border-left: 3px solid var(--signal); background: var(--surface);
+    padding: 16px 20px; margin: 26px 0; box-shadow: var(--shadow);
+  }
+  .note.blue { border-left-color: var(--structure); }
+  .note p { margin: 0; max-width: none; font-size: .95rem; }
+  .note p + p { margin-top: 12px; }
+
+  footer {
+    border-top: 2px solid var(--ink); margin-top: 24px; padding-top: 18px;
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3);
+    display: flex; flex-wrap: wrap; gap: 8px 28px; justify-content: space-between;
+  }
+
+  @media (max-width: 700px) {
+    .scope { grid-template-columns: 1fr; }
+    .seq > div { grid-template-columns: 1fr; gap: 6px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  :focus-visible { outline: 2px solid var(--structure); outline-offset: 2px; }
+</style>
+
+<div class="sheet">
+
+  <header class="titleblock">
+    <p class="eyebrow">Idea refinement · one-pager</p>
+    <h1>Dona Dom Platform Brief</h1>
+    <p class="lede">An AI service platform for 1,500 long-term rental apartments — what to build, what to leave out, and what has to be true for it to work.</p>
+    <p class="lede" style="font-size:.9rem;color:var(--ink-3);margin-top:12px;">This is the client-facing argument, and it defers to two companion documents. The <b>Data Model</b> is the authority on what the system is — entities, states, policy, isolation. <b>Rollout Cadence</b> is the authority on the schedule: sixteen weeks, four monthly gates, a demo every Thursday. Section 05 is that schedule in four monthly phases.</p>
+    <div class="facts">
+      <span>CLIENT <b>Dona Dom</b></span>
+      <span>UNITS <b>~1,500 · 5 sites</b></span>
+      <span>CHANNEL <b>WhatsApp</b></span>
+      <span>SOURCE <b>Google Drive</b></span>
+      <span>TEAM <b>solo + AI, full-time</b></span>
+      <span>HORIZON <b>16 weeks · pilot live wk 12</b></span>
+      <span>ISSUED <b>2 Sep 2026</b></span>
+    </div>
+  </header>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum">01 — PROBLEM</span>
+      <h2>Problem statement</h2>
+    </div>
+    <div class="hmw">
+      <p>How might we let a 1,500-unit rental operator run every tenant interaction and maintenance job through WhatsApp — with the agent resolving or dispatching most of them unattended — while guaranteeing that no tenant ever sees a byte of another tenant's world?</p>
+      <p class="sub">Two tensions shape every decision below. <strong>Trust versus autonomy:</strong> an agent that answers is low-risk; an agent that commits a technician's time is not. <strong>Supply is the bottleneck:</strong> getting a tenant to describe a leak is easy; getting a technician to confirm, show up and close the loop is where operations actually break.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum">02 — DIRECTION</span>
+      <h2>Recommended direction</h2>
+    </div>
+
+    <p><strong>Build the ticket and its state machine as the product, put a five-language WhatsApp agent on both ends of it, run it in one building, and let autonomy expand category by category as it earns it.</strong></p>
+
+    <p>The agent is not a chatbot — it is a switchboard. One service call, two WhatsApp threads bound to it (tenant on one side, provider on the other), one admin console looking down at both. That framing matters commercially: providers keep doing exactly what they already do all day — read a message, reply to it — so there is no provider app to adopt and no habit to change. It also matters technically: the agents become role-scoped narrators of a single object rather than three separate products.</p>
+
+    <p>Ninety percent of the value is a correct operational record — the nine tables of the data model: <code>Building</code>, <code>Unit</code>, <code>Party</code>, <code>Tenancy</code>, <code>Document</code>, <code>Asset</code>, <code>ServiceCall</code>, <code>Visit</code>, <code>Provider</code> — and the AI is the interface to it, not the substance. One vocabulary decision matters enough to state here: <strong>“lease” means only a piece of paper</strong>, while a <strong>tenancy</strong> is the reconciled truth about a household in a unit. A lease, an amendment and a termination notice all describe one tenancy, and something has to reconcile them into a single answer — once, at promotion, rather than repeatedly inside every query. Two layers stay deliberately free of AI: <em>who is responsible for a repair</em> is a versioned policy lookup, and <em>what state a service call is in</em> is a state machine. The moment either lives in a prompt, you have built something you cannot defend in a dispute — and in a <span class="he">דירה להשכיר</span> project on a twenty-year horizon, disputes are a certainty rather than a risk.</p>
+
+    <p><strong>Responsibility is ternary, not binary.</strong> Under <span class="he">תקופת הבדק</span> the same fault in the same flat under the same lease can fall to <span class="who tenant">tenant</span>, <span class="who operator">operator</span> or <span class="who contractor">contractor</span>, and which one depends only on whether the appliance is still inside its defect period. That single fact shapes three things downstream: the responsibility table needs an <code>asset_in_warranty</code> dimension, equipment has to be a real <code>Asset</code> table with warranty windows rather than a text field, and every resolved call must snapshot the <em>rule version</em> that produced it — because the matrix as it stands today answers only about today, and the one question a dispute ever asks is about the past.</p>
+
+    <p>The cut that puts a pilot on real tenants in twelve weeks is not shortening the loop. It is narrowing what enters it.</p>
+
+    <figure>
+      <div class="figbody">
+        <svg viewBox="0 0 1080 340" role="img" aria-label="The service call state machine runs complete in version one: new, identified, triaged, responsibility set, windows collected, offered, scheduled, closed — with three terminating exits for self-help resolution, contractor warranty routing and human escalation. Only a narrow set of request types enters it: lease and account questions, six maintenance categories, in-house crew dispatch and one external trade. Other trades, other sites, renewals, move-in and move-out and predictive clustering come later.">
+          <defs>
+            <marker id="b-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+            </marker>
+            <marker id="b-ar-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#BF4A22"/>
+            </marker>
+            <marker id="b-ar-good" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#40704F"/>
+            </marker>
+          </defs>
+
+          <text class="band" x="14" y="20">THE LOOP — CANONICAL STATES, COMPLETE IN V1</text>
+
+          <rect class="n-box" x="14"  y="34" width="116" height="46" rx="2"/>
+          <text class="n-label sm" x="72"   y="61" text-anchor="middle">NEW</text>
+          <rect class="n-box" x="147" y="34" width="116" height="46" rx="2"/>
+          <text class="n-label sm" x="205"  y="61" text-anchor="middle">IDENTIFIED</text>
+          <rect class="n-box" x="280" y="34" width="116" height="46" rx="2"/>
+          <text class="n-label sm" x="338"  y="61" text-anchor="middle">TRIAGED</text>
+          <rect class="n-box" x="413" y="34" width="116" height="46" rx="2"/>
+          <text class="n-label sm" x="471"  y="54" text-anchor="middle">RESPONSIBILITY</text>
+          <text class="n-label sm" x="471"  y="68" text-anchor="middle">SET</text>
+          <rect class="n-box" x="546" y="34" width="116" height="46" rx="2"/>
+          <text class="n-label sm" x="604"  y="54" text-anchor="middle">WINDOWS</text>
+          <text class="n-label sm" x="604"  y="68" text-anchor="middle">COLLECTED</text>
+          <rect class="n-box" x="679" y="34" width="116" height="46" rx="2"/>
+          <text class="n-label sm" x="737"  y="61" text-anchor="middle">OFFERED</text>
+          <rect class="n-box" x="812" y="34" width="116" height="46" rx="2"/>
+          <text class="n-label sm" x="870"  y="61" text-anchor="middle">SCHEDULED</text>
+          <rect class="n-good" x="945" y="34" width="116" height="46" rx="2"/>
+          <text class="n-label sm gd" x="1003" y="61" text-anchor="middle">CLOSED</text>
+
+          <path class="e-line" d="M132,57 H143" marker-end="url(#b-ar)"/>
+          <path class="e-line" d="M265,57 H276" marker-end="url(#b-ar)"/>
+          <path class="e-line" d="M398,57 H409" marker-end="url(#b-ar)"/>
+          <path class="e-line" d="M531,57 H542" marker-end="url(#b-ar)"/>
+          <path class="e-line" d="M664,57 H675" marker-end="url(#b-ar)"/>
+          <path class="e-line" d="M797,57 H808" marker-end="url(#b-ar)"/>
+          <path class="e-line" d="M930,57 H941" marker-end="url(#b-ar)"/>
+
+          <text class="band" x="1061" y="140" text-anchor="end">EVERY PATH TERMINATES</text>
+
+          <path class="e-line good" d="M338,80 V112" marker-end="url(#b-ar-good)"/>
+          <text class="chip-label mute" x="345" y="102">self-help worked</text>
+          <rect class="n-good" x="275" y="118" width="126" height="34" rx="2"/>
+          <text class="n-label sm gd" x="338" y="139" text-anchor="middle">RESOLVED — SELF</text>
+
+          <path class="e-line" d="M471,80 V112" marker-end="url(#b-ar)"/>
+          <text class="chip-label mute" x="478" y="102">still in <tspan class="he">בדק</tspan></text>
+          <rect class="n-box" x="408" y="118" width="126" height="34" rx="2"/>
+          <text class="n-label sm" x="471" y="139" text-anchor="middle">TO CONTRACTOR</text>
+
+          <path class="e-line acc" d="M737,80 V112" marker-end="url(#b-ar-acc)"/>
+          <text class="chip-label mute" x="744" y="102">rejects · no reply 45m</text>
+          <rect class="n-acc" x="674" y="118" width="126" height="34" rx="2"/>
+          <text class="n-label sm acc" x="737" y="139" text-anchor="middle">ESCALATED — HUMAN</text>
+
+          <text class="band acc" x="1061" y="224" text-anchor="end">THE MOUTH — NARROW IN V1</text>
+
+          <path class="e-line acc" d="M72,192 H790"/>
+          <path class="e-line acc" d="M72,192 V82" marker-end="url(#b-ar-acc)"/>
+          <path class="e-line acc" d="M212,192 V200"/>
+          <path class="e-line acc" d="M426,192 V200"/>
+          <path class="e-line acc" d="M618,192 V200"/>
+          <path class="e-line acc" d="M790,192 V200"/>
+
+          <rect class="n-acc" x="110" y="202" width="204" height="34" rx="2"/>
+          <text class="chip-label" x="212" y="224" text-anchor="middle">Lease &amp; account questions</text>
+          <rect class="n-acc" x="326" y="202" width="200" height="34" rx="2"/>
+          <text class="chip-label" x="426" y="224" text-anchor="middle">6 maintenance categories</text>
+          <rect class="n-acc" x="538" y="202" width="160" height="34" rx="2"/>
+          <text class="chip-label" x="618" y="224" text-anchor="middle">In-house crew jobs</text>
+          <rect class="n-acc" x="710" y="202" width="160" height="34" rx="2"/>
+          <text class="chip-label" x="790" y="224" text-anchor="middle">One external trade</text>
+
+          <text class="band" x="1061" y="307" text-anchor="end">LATER — SAME LOOP, WIDER MOUTH</text>
+
+          <rect class="n-dash" x="14"  y="290" width="140" height="34" rx="2"/>
+          <text class="chip-label mute" x="84"  y="312" text-anchor="middle">All trades</text>
+          <rect class="n-dash" x="166" y="290" width="140" height="34" rx="2"/>
+          <text class="chip-label mute" x="236" y="312" text-anchor="middle">All five sites</text>
+          <rect class="n-dash" x="318" y="290" width="140" height="34" rx="2"/>
+          <text class="chip-label mute" x="388" y="312" text-anchor="middle">Renewals</text>
+          <rect class="n-dash" x="470" y="290" width="160" height="34" rx="2"/>
+          <text class="chip-label mute" x="550" y="312" text-anchor="middle">Move-in / move-out</text>
+          <rect class="n-dash" x="642" y="290" width="160" height="34" rx="2"/>
+          <text class="chip-label mute" x="722" y="312" text-anchor="middle">Fault clustering</text>
+        </svg>
+      </div>
+      <figcaption><b>Narrow the mouth, not the loop.</b> These are the data model's state names, so a conversation about “offered” is a conversation about one row in one table. Every request that enters goes all the way to a terminal state; that completeness is both the demo and the value. Two boxes deserve a second look: <b>WINDOWS COLLECTED → OFFERED</b> is the two-sided asynchronous negotiation that carries roughly seventy percent of the engineering, and <b>TO CONTRACTOR</b> is the third payer that only exists because of <span class="he">תקופת הבדק</span>. Requests outside the known categories exit to a human immediately and gracefully, in the tenant's own language. The agent's most important v1 skill is knowing what it does not handle.</figcaption>
+    </figure>
+
+    <p>Three ordering choices sit inside that. <strong>The agent's first autonomous act should be answering, not acting</strong> — lease and account questions are likely the largest share of inbound messages, are far easier than maintenance, and the cost of being wrong is embarrassment rather than a flooded apartment. <strong>Dispatch to the in-house crew before external providers</strong>, because their calendar is yours: no negotiation, no timeout, no silence, so the happy path is deterministic and testable. And <strong>pilot in one building</strong> — the 72-unit Shoham project is close to ideal: real tenants, real volume, small enough that when something goes wrong you can phone everyone affected.</p>
+
+    <div class="note">
+      <p><strong>One asymmetry worth stating plainly.</strong> The admin application should cover all 1,500 units from day one even though the agent serves one building. The record has to be complete for reporting and document alerts to mean anything, and a half-populated database is worth close to nothing. Data breadth is cheap; agent blast radius is expensive. Scale them separately.</p>
+    </div>
+
+    <div class="note blue">
+      <p><strong>The documents already exist, and that changes the shape of the first month.</strong> Dona Dom is organising lease and building documentation per apartment on Google Drive. The backfill is therefore an ingestion problem against a known source rather than an expedition — but Drive is a <em>source</em>, never the system of record. Files are copied into object storage and hashed at ingest; the folder path is kept as a hint that pre-fills a binding and is never itself the binding. If tenant isolation ever resolved through a folder name, someone tidying Drive on a Tuesday would break the one constraint the client called absolute.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum">03 — RISK</span>
+      <h2>Key assumptions to validate</h2>
+    </div>
+    <p>Ordered by how much it hurts to be wrong. None of them is a model-quality problem.</p>
+
+    <div class="assumptions">
+      <div>
+        <div class="box kill"></div>
+        <h3>Tenants will message a number instead of a person they already know</h3>
+        <p class="test"><b>test</b> &nbsp;Ask how a fault is reported <em>today</em>, then ask a crew member how many WhatsApps they personally receive per week. The competitor is not the service desk — it is the building group chat and the technician's private mobile. If that number is large, the rollout needs an answer, and “we'll tell them to use the new number” is not one.</p>
+      </div>
+      <div>
+        <div class="box kill"></div>
+        <h3>Tenant phone numbers on file are accurate, current, and bindable to one party</h3>
+        <p class="test"><b>test</b> &nbsp;Sample 50 records against reality in the pilot building, and separately decide how a number is <em>first</em> bound to a person — including shared household numbers and numbers that change mid-tenancy. The whole isolation model rests on that one step; if a quarter of numbers are stale, the agent cannot identify a quarter of tenants and v1 dies on contact.</p>
+      </div>
+      <div>
+        <div class="box kill"></div>
+        <h3>The responsibility matrix can be written down as three-way rows</h3>
+        <p class="test"><b>test</b> &nbsp;Ask ops for the rule on five faults: dripping AC, blocked drain, dead boiler, cracked tile, broken blind — and for each one, whether the answer changes while the appliance is still under <span class="he">בדק</span>. Five clear <span class="who tenant">tenant</span> / <span class="who operator">operator</span> / <span class="who contractor">contractor</span> answers means you have a policy layer. “It depends on the case” means you have a research project — and you want to know that in week one, not the week of the M2 responsibility demo.</p>
+      </div>
+      <div>
+        <div class="box kill"></div>
+        <h3>Equipment is inventoried somewhere, not only known when it breaks</h3>
+        <p class="test"><b>test</b> &nbsp;Open five apartment folders on the Drive and look for a handover protocol with appliance makes, models and dates. If they are there, the asset register and its warranty windows backfill from day one and contractor attribution works immediately. If they are not, assets fill lazily from service calls and the third column of the responsibility matrix stays theoretical for months.</p>
+      </div>
+      <div>
+        <div class="box"></div>
+        <h3>Providers reply to a business number they don't recognise</h3>
+        <p class="test"><b>test</b> &nbsp;Have the dispatcher send three real jobs from a new number this week and count replies and response times. Cheap, fast, and it de-risks the hardest box in the state machine.</p>
+      </div>
+      <div>
+        <div class="box"></div>
+        <h3>Dona Dom will commit a live building, real data and their own WhatsApp number</h3>
+        <p class="test"><b>test</b> &nbsp;Get it in writing before writing code. Without it you are building a demo indefinitely — this is a commercial commitment, not a technical one.</p>
+      </div>
+      <div>
+        <div class="box"></div>
+        <h3>Self-service actually deflects calls</h3>
+        <p class="test"><b>test</b> &nbsp;Measure deflection rate per category from week one. If “clean the filter” resolves nothing, the agent is an intake form with better manners — still useful, but a different pitch.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum">04 — SCOPE</span>
+      <h2>MVP scope</h2>
+    </div>
+
+    <div class="scope">
+      <div>
+        <h3>In <span class="in">v1</span></h3>
+        <ul>
+          <li><b>Admin web app, all 1,500 units</b><span class="why">The nine spine tables — buildings, units, parties, tenancies, documents, assets, service calls, visits, providers. Hebrew, RTL. No stored “current tenant” anywhere.</span></li>
+          <li><b>Drive backfill and the intake screen</b><span class="why">Copy and hash into object storage, path as a hint, operator binds. Built for keyboard speed — it is the tool you live in for weeks and then train crew on.</span></li>
+          <li><b>Document ingestion with a review queue</b><span class="why">Type declared by the flow, never guessed; extraction proposes with page, box and confidence, a human promotes. Eight schemas including <span class="he">ארנונה</span> and the handover protocol.</span></li>
+          <li><b>Asset register with warranty windows</b><span class="why">Make, model, serial, install batch, <span class="he">בדק</span> expiry and warranty holder. Without it the third payer cannot be resolved.</span></li>
+          <li><b>Tenant agent — answering</b><span class="why">Lease dates, rent terms, building info, document requests. Five languages; Hebrew stored alongside as the canonical rendering for ops.</span></li>
+          <li><b>Maintenance intake, triage and self-help</b><span class="why">Six categories against a frozen taxonomy, photos and voice notes in.</span></li>
+          <li><b>Responsibility determination — three-way</b><span class="why">Versioned policy lookup returning tenant, operator or contractor. Snapshots the rule version onto the call. Stated to the tenant without a price.</span></li>
+          <li><b>Emergency bypass routing</b><span class="why">A policy row and a routing rule, live and tested before the agent takes its first real tenant message.</span></li>
+          <li><b>Dispatch — in-house crew</b><span class="why">Deterministic calendar, full loop to closed.</span></li>
+          <li><b>Dispatch — one external trade over WhatsApp</b><span class="why">Offer, counter, confirm, timeout, escalate.</span></li>
+          <li><b>Break-glass human takeover</b><span class="why">A state on the conversation checked before every outbound message — not a UI affordance. It ships with the console in month two, not bolted on in month five.</span></li>
+          <li><b>Expiry and missing-document alerts</b><span class="why">Requirements declared as rows, so “what's missing” is a join. Doubles as the backfill worklist.</span></li>
+          <li><b>Tenancy history and scoped-read audit log</b><span class="why">Every change, its cause and its source document — or the clock, when nothing but a date moved. The record you'll want on the day someone asks.</span></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Out <span class="out">not v1</span></h3>
+        <ul>
+          <li><b>Any tenant-facing price or balance</b><span class="why">A number in writing is a promise. Route to billing.</span></li>
+          <li><b>Payments, invoices, provider billing</b><span class="why">Lives in the ERP. We hold keys only.</span></li>
+          <li><b>A tenant mobile app</b><span class="why">WhatsApp is the app. Adding a second surface halves adoption.</span></li>
+          <li><b>A provider app or portal</b><span class="why">The reason this works is that providers change nothing.</span></li>
+          <li><b>Move-in / move-out workflow</b><span class="why">Genuinely valuable, genuinely separate. The second sale.</span></li>
+          <li><b>Predictive fault clustering</b><span class="why">Needs six months of clean ticket history. Design for it, don't build it.</span></li>
+          <li><b>Renewals and rent escalation automation</b><span class="why">Alerting yes, acting no. Money-adjacent.</span></li>
+          <li><b>Emergency handling <em>by the agent</em></b><span class="why">The bypass itself is in v1. What is out is the agent ever touching one: an 02:00 burst pipe skips triage entirely and reaches the duty phone. Always.</span></li>
+          <li><b>Rollout beyond the pilot building</b><span class="why">Prove it at 72 units. Then it's a rollout, not a rebuild.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum">05 — SEQUENCE</span>
+      <h2>Sixteen weeks, four gates, a demo every Thursday</h2>
+    </div>
+    <p>The schedule below is the monthly shape of <b>Rollout Cadence</b>, which is the authority on the week-by-week detail and carries all sixteen demos individually. Two rules make the cadence survivable. A weekly demo is <em>not</em> a weekly feature — each week delivers <b>working software</b>, <b>real data</b> or <b>evidence</b>, and which of the three is declared on Monday rather than discovered on Thursday. And each month ends on a gate, where re-planning happens on the record instead of silently between weeks.</p>
+
+    <div class="seq">
+      <div>
+        <span class="wk">MONTH ONE<b>WEEKS 1–4</b></span>
+        <div>
+          <h3>The record exists, and you can trust it</h3>
+          <p>Meta business verification is filed in <em>week one</em> and shown as a timestamped screenshot in the first demo — it is a four-to-six week bureaucratic path that nothing we do makes faster, and every business-initiated message also needs a pre-approved template, so notification copy is designed up front. Behind it: the spine, admin CRUD, all 1,500 units, RTL throughout. Then documents filed against units — the eight schemas for lease, amendment, termination notice, ID, insurance, bank guarantee, <span class="he">ארנונה</span> and the handover protocol, ingested from the Drive by copy-and-hash with the folder path kept only as a hint. The handover protocol is what seeds the asset register, so it is not the schema to leave for later. Week four reads a real Hebrew lease and shows its work: click a value, the page image scrolls to the pixels it came from.</p>
+          <p><span class="gate">Gate M1</span> <span>— a system of record for 1,500 units, and every value in it traces to the paper it came from. Success looks like ops choosing this over their spreadsheet before any agent exists.</span></p>
+        </div>
+      </div>
+      <div>
+        <span class="wk">MONTH TWO<b>WEEKS 5–8</b></span>
+        <div>
+          <h3>The rules are explicit, and the console works without AI</h3>
+          <p>Promotion with provenance, tenancy reconciliation and the append-only log — an amendment arrives and the tenancy changes, with old → new, who approved it and which document caused it. Then the three-way responsibility table, admin-editable and versioned, edited live in the room to watch the answer change; every resolved call stamps the rule version that decided it. Then a service call walked by hand through all eight canonical states with the SLA clock running and escalation firing — including the emergency rows, which are a routing rule rather than a priority label and must be live before the agent takes a real message. Month two ends by attacking tenant isolation live and failing: scoping resolves <em>number → party → active tenancy → unit</em> with the date comparison in the SQL, before any model call.</p>
+          <p><span class="gate">Gate M2</span> <span>— the console stands on its own. If the agent were cancelled tomorrow this is still a product worth having, and that is the negotiating position for the rest of the project.</span></p>
+        </div>
+      </div>
+      <div>
+        <span class="wk">MONTH THREE<b>WEEKS 9–12</b></span>
+        <div>
+          <h3>The agent takes the call and books the visit</h3>
+          <p>The number goes live and binds phone to party — eight weeks of runway against a four-to-six week verification, and the buffer is deliberate. Then the read-only tenant agent in five languages: lease dates, terms, building info, six categories with photos and voice notes, self-help content. It <em>reads</em> the responsibility matrix; it does not decide responsibility. Then the loop closes — <code>WINDOWS COLLECTED</code> from the tenant, in-house crew scheduling, then <code>OFFERED</code>, the external negotiation with its timeouts, counters and escalation. Two people never online at once, over a channel with no delivery guarantee, either free to go silent. This is distributed-systems work, not prompting. Week twelve puts the 72-unit building on the agent with real tenants, supervised daily.</p>
+          <p><span class="gate">Gate M3 · go / no-go</span> <span>— the question at this gate is not “does it work.” It is whether the three numbers agreed in week one justify month four.</span></p>
+        </div>
+      </div>
+      <div>
+        <span class="wk">MONTH FOUR<b>WEEKS 13–16</b></span>
+        <div>
+          <h3>It survives contact with reality</h3>
+          <p>Week thirteen has no new screen, and that is declared in advance: a deliberate chaos run where a provider ghosts for thirty-six hours, a tenant goes silent mid-thread and a message fails to deliver — with the timeouts, retries, fallback provider and escalation all firing where they should. Then voice notes and the five languages, original and Hebrew side by side, with service traffic separated from marketing traffic as <span class="he">חוק התקשורת</span> requires. Then the pilot dashboard, filled by four weeks of actual traffic rather than projections. Autonomy expands category by category from measured accuracy, never from optimism.</p>
+          <p><span class="gate">Gate M4</span> <span>— a scale-out decision made on measured data, and one concrete ask: which building goes second, and on what date.</span></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="note blue">
+      <p><strong>The pilot is live at week twelve; the plan runs to sixteen.</strong> Those are two different dates and both matter. Week twelve is when real tenants first message the number — the earliest honest moment to claim the thing works. Weeks thirteen to sixteen are what turns one supervised week into a scale-out decision: the failure modes rehearsed on purpose, and four weeks of history to measure against. A programme that stops at the pilot has a demo; a programme that runs to M4 has a number.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum">06 — FOCUS</span>
+      <h2>Not doing, and why</h2>
+    </div>
+
+    <div class="nd">
+      <div>
+        <h3>No price estimates to tenants — ever, not just in v1</h3>
+        <p>“Around ₪400” against an ₪850 invoice does not read as an estimate; it reads as a broken promise, in writing, timestamped, on your client's behalf. The internal version — “similar calls here averaged ₪380” on the admin dashboard — carries the same information with none of the exposure. Log <code>actual_cost</code> from day one and that feature builds itself in month eight.</p>
+      </div>
+      <div>
+        <h3>No AI in the responsibility decision or the state machine</h3>
+        <p>Both must be inspectable, versioned and defensible a year later. The agent reads policy and reports state; it never authors either. Rules supersede by effective date rather than overwriting, and every decision records which version produced it — so a call opened in March still resolves against the March rule. This is what makes the system survivable in a dispute.</p>
+      </div>
+      <div>
+        <h3>No stored “current tenant” anywhere in the schema</h3>
+        <p>Occupancy is a tenancy row and a date comparison, never a column on the unit. A stored field answers the previous household on move-out day, and the failure is silent — nothing throws, the value is simply wrong, and you learn about it from a tenant. The client's absolute constraint is enforced by the shape of the join, not by anyone's discipline.</p>
+      </div>
+      <div>
+        <h3>No churn in the issue taxonomy after the first real call</h3>
+        <p>Responsibility, SLA, self-help and provider routing all key off the category. Renaming or re-splitting categories later destroys the history, and with it any chance of fault clustering in year two. Spend a session with whoever takes the calls today and freeze it before the pilot.</p>
+      </div>
+      <div>
+        <h3>No second app for anyone</h3>
+        <p>The tenant already has WhatsApp; the plumber already lives in it. Every additional surface is an adoption tax paid by the people least willing to pay it.</p>
+      </div>
+      <div>
+        <h3>No rollout to all five sites before the loop closes reliably once</h3>
+        <p>Scaling a workflow that still needs human rescue multiplies the rescues, not the value. Prove closure rate at 72 units first.</p>
+      </div>
+      <div>
+        <h3>No fully autonomous agent on day one</h3>
+        <p>Autonomy is granted per category on measured accuracy, with the first weeks fully supervised. This is not caution for its own sake — one incident where a tenant sees another tenant's data ends the project, and that risk is worth spending weeks to avoid.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum">07 — DISCOVERY</span>
+      <h2>Open questions for Dona Dom</h2>
+    </div>
+    <p>These cannot be answered from outside the company, and several of them change a table. This list is kept in step with section 11 of the data model — everything open there is open here.</p>
+
+    <ol class="disc">
+      <li class="settled">Where do units, leases and tenants live right now?
+        <span class="ans"><b>answered</b> &nbsp;Google Drive, organised per building and per apartment, with the filing work already under way. Backfill runs first by the head of development personally, then by trained crew.</span></li>
+      <li>Does Priority already hold units and customers — and if so, which side is master? We own the tenancy either way, but two masters is the worst available outcome.</li>
+      <li>How does a tenant report a fault today? Trace one real call end to end, including who they actually message.</li>
+      <li>How is a phone number bound to a party the first time? Shared household numbers, and numbers that change mid-tenancy, both need an answer before enrolment is built.</li>
+      <li>Can one party hold two tenancies at once — a storage unit alongside an apartment, or an overlap while moving? If yes, “the tenant's apartment” is ambiguous and the agent needs a disambiguation turn on the very first message.</li>
+      <li>How many distinct <em>terms profiles</em> are in force — that is, does each project have its own maintenance annex, or do all sites share one? If they share one, the responsibility matrix loses a whole dimension. Still the highest-leverage unknown in the model.</li>
+      <li>Are the pilot buildings still inside <span class="he">תקופת הבדק</span>, who handles warranty defects today, and do the handover protocols on the Drive list appliances with makes and dates?</li>
+      <li>How many service calls per month across the portfolio, and what are the top ten categories by volume? This is the input to freezing the taxonomy.</li>
+      <li>What SLA was committed under the tender, and what exactly is the emergency path at 02:00 — which number, whose phone, and what happens if it is not answered?</li>
+      <li>Where does the in-house crew's availability live — a calendar, a whiteboard, or someone's head?</li>
+      <li>What share of tenants writes in each language, per site?</li>
+    </ol>
+  </section>
+
+  <footer>
+    <span>DONA DOM · TENANT SERVICE PLATFORM · BRIEF · 2 SEP 2026</span>
+    <span>SEE ALSO — DATA MODEL · ROLLOUT CADENCE</span>
+  </footer>
+
+</div>

@@ -1,0 +1,1478 @@
+<title>מודל הנתונים של דונה דום</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@500;600;700&family=Assistant:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    direction: rtl;
+
+    --paper:      #F1F2EF;
+    --surface:    #FBFCF9;
+    --surface-2:  #E7EAE4;
+    --ink:        #17222E;
+    --ink-2:      #4C5964;
+    --ink-3:      #7B858D;
+    --rule:       #C8CFC7;
+    --rule-soft:  #DDE1DA;
+    --structure:  #2F5D7C;
+    --signal:     #BF4A22;
+    --good:       #40704F;
+    --warn:       #97690C;
+    --tint-structure: rgba(47,93,124,.11);
+    --tint-signal:    rgba(191,74,34,.11);
+    --tint-warn:      rgba(151,105,12,.13);
+    --tint-good:      rgba(64,112,79,.11);
+    --grid:       rgba(23,34,46,.045);
+    --shadow:     0 1px 2px rgba(23,34,46,.05);
+
+    --font-display: "Heebo", "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --font-body: "Assistant", "Heebo", system-ui, -apple-system, sans-serif;
+    --font-mono: "IBM Plex Mono", "Assistant", ui-monospace, "SF Mono", Menlo, monospace;
+
+    --measure: 68ch;
+    --sheet: 1180px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:     #121821;
+      --surface:   #19212C;
+      --surface-2: #222C38;
+      --ink:       #E2E7E3;
+      --ink-2:     #A5B0B8;
+      --ink-3:     #79858E;
+      --rule:      #2F3B47;
+      --rule-soft: #26313C;
+      --structure: #7BADD0;
+      --signal:    #EA7F52;
+      --good:      #79B78C;
+      --warn:      #D6A644;
+      --tint-structure: rgba(123,173,208,.15);
+      --tint-signal:    rgba(234,127,82,.15);
+      --tint-warn:      rgba(214,166,68,.15);
+      --tint-good:      rgba(121,183,140,.14);
+      --grid:      rgba(226,231,227,.045);
+      --shadow:    0 1px 2px rgba(0,0,0,.3);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:     #121821;
+    --surface:   #19212C;
+    --surface-2: #222C38;
+    --ink:       #E2E7E3;
+    --ink-2:     #A5B0B8;
+    --ink-3:     #79858E;
+    --rule:      #2F3B47;
+    --rule-soft: #26313C;
+    --structure: #7BADD0;
+    --signal:    #EA7F52;
+    --good:      #79B78C;
+    --warn:      #D6A644;
+    --tint-structure: rgba(123,173,208,.15);
+    --tint-signal:    rgba(234,127,82,.15);
+    --tint-warn:      rgba(214,166,68,.15);
+    --tint-good:      rgba(121,183,140,.14);
+    --grid:      rgba(226,231,227,.045);
+    --shadow:    0 1px 2px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    direction: rtl;
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      repeating-linear-gradient(to right, var(--grid) 0 1px, transparent 1px 28px),
+      repeating-linear-gradient(to bottom, var(--grid) 0 1px, transparent 1px 28px);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16.5px;
+    line-height: 1.68;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet {
+    max-width: var(--sheet);
+    margin: 0 auto;
+    padding: 0 28px 96px;
+  }
+
+  /* ---------- title block ---------- */
+
+  .titleblock {
+    border-bottom: 2px solid var(--ink);
+    padding: 56px 0 20px;
+    margin-bottom: 44px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 28px;
+    align-items: end;
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: .06em;
+    color: var(--structure);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(2.1rem, 5.2vw, 3.4rem);
+    line-height: 1.1;
+    letter-spacing: -.018em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .titleblock .lede {
+    margin: 16px 0 0;
+    max-width: 58ch;
+    color: var(--ink-2);
+    font-size: 1.05rem;
+  }
+  .stamp {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.95;
+    color: var(--ink-3);
+    border-right: 1px solid var(--rule);
+    padding-right: 20px;
+    white-space: nowrap;
+  }
+  .stamp b { color: var(--ink-2); font-weight: 500; }
+
+  /* ---------- sections ---------- */
+
+  section { margin: 0 0 68px; }
+
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.6rem;
+    letter-spacing: -.012em;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.08rem;
+    margin: 0 0 8px;
+  }
+  .secnum {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: .06em;
+    color: var(--structure);
+    display: block;
+    margin-bottom: 10px;
+  }
+  .sechead {
+    border-top: 1px solid var(--rule);
+    padding-top: 18px;
+    margin-bottom: 28px;
+  }
+  .sechead p {
+    margin: 10px 0 0;
+    max-width: var(--measure);
+    color: var(--ink-2);
+  }
+
+  p { max-width: var(--measure); }
+  a { color: var(--structure); }
+  strong { font-weight: 600; }
+  code, .m { font-family: var(--font-mono); font-size: .88em; direction: ltr; unicode-bidi: isolate; }
+  code {
+    background: var(--surface-2);
+    padding: .1em .35em;
+    border-radius: 2px;
+  }
+  .he { unicode-bidi: isolate; }
+
+  /* ---------- view dividers ---------- */
+
+  .viewdiv {
+    border-top: 2px solid var(--ink);
+    border-bottom: 1px solid var(--rule);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    margin: 0 0 44px;
+    padding: 26px 28px 28px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px 30px;
+    align-items: baseline;
+  }
+  .viewdiv .vnum {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: .06em;
+    color: var(--signal);
+    grid-row: 1 / span 2;
+    align-self: start;
+    padding-top: 9px;
+    white-space: nowrap;
+  }
+  .viewdiv h2 { font-size: clamp(1.5rem, 3.4vw, 2rem); margin: 0; }
+  .viewdiv .asks {
+    margin: 4px 0 0;
+    color: var(--ink-2);
+    max-width: 66ch;
+  }
+  .viewdiv .asks b { color: var(--ink); font-weight: 600; }
+  .viewdiv .notation {
+    grid-column: 2;
+    margin: 14px 0 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-3);
+    border-top: 1px solid var(--rule-soft);
+    padding-top: 12px;
+    max-width: none;
+  }
+
+  /* ---------- rules / tests / planes ---------- */
+
+  .rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 2px; background: var(--rule); border: 1px solid var(--rule); }
+  .rule-card { background: var(--surface); padding: 22px 22px 24px; }
+  .rule-card .n {
+    font-family: var(--font-mono);
+    font-size: 11.5px; letter-spacing: .05em;
+    color: var(--signal); display: block; margin-bottom: 12px;
+  }
+  .rule-card p { margin: 8px 0 0; font-size: .95rem; color: var(--ink-2); max-width: none; }
+  .rule-card .applied {
+    margin: 12px 0 0; padding-top: 11px;
+    border-top: 1px dashed var(--rule);
+    font-size: .89rem; color: var(--ink-3); max-width: none;
+  }
+  .rule-card .applied b { color: var(--signal); font-weight: 500; font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; display: block; margin-bottom: 4px; }
+
+  .note {
+    border-right: 3px solid var(--signal);
+    background: var(--surface);
+    padding: 16px 20px;
+    margin: 26px 0;
+    box-shadow: var(--shadow);
+  }
+  .note p { margin: 0; max-width: none; font-size: .97rem; }
+  .note p + p { margin-top: 10px; }
+  .note.blue { border-right-color: var(--structure); }
+  .note.good { border-right-color: var(--good); }
+
+  /* ---------- figures ---------- */
+
+  figure {
+    margin: 0 0 32px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    box-shadow: var(--shadow);
+  }
+  .figbody { overflow-x: auto; padding: 26px 24px 8px; direction: ltr; }
+  figure svg { display: block; width: 100%; min-width: 620px; height: auto; color: var(--ink); direction: ltr; }
+  figcaption {
+    border-top: 1px solid var(--rule-soft);
+    padding: 14px 24px 16px;
+    font-size: .9rem;
+    color: var(--ink-2);
+  }
+  figcaption b { color: var(--ink); font-weight: 600; }
+
+  .n-box { fill: var(--surface); stroke: currentColor; stroke-width: 1.2; }
+  .n-accent { fill: var(--surface); stroke: var(--signal); stroke-width: 1.8; }
+  .n-good { fill: var(--surface); stroke: var(--good); stroke-width: 1.6; }
+  .n-ghost { fill: var(--surface); stroke: currentColor; stroke-width: 1.2; stroke-dasharray: 5 4; opacity: .8; }
+  .n-label { font-family: var(--font-display); font-weight: 600; font-size: 13px; fill: currentColor; }
+  .n-label.acc { fill: var(--signal); }
+  .n-label.gd  { fill: var(--good); }
+  .n-label.st  { fill: var(--structure); }
+  .e-line { stroke: currentColor; stroke-width: 1.2; fill: none; opacity: .62; }
+  .e-line.acc { stroke: var(--signal); opacity: 1; stroke-width: 1.7; }
+  .e-line.clock { stroke: var(--structure); opacity: 1; stroke-width: 1.5; stroke-dasharray: 6 4; }
+  .e-line.dash { stroke-dasharray: 5 4; }
+  .e-label { font-family: var(--font-body); font-size: 11.5px; fill: currentColor; opacity: .75; }
+  .e-label.acc { fill: var(--signal); opacity: 1; }
+  .e-label.st  { fill: var(--structure); opacity: 1; }
+  .sub { font-family: var(--font-mono); font-size: 10px; fill: currentColor; opacity: .55; }
+
+  /* ---------- entity catalog ---------- */
+
+  .group { margin-bottom: 34px; }
+  .group-head {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 8px; margin-bottom: 18px;
+  }
+  .group-head h3 { margin: 0; }
+  .group-head .tag {
+    font-family: var(--font-mono); font-size: 11.5px;
+    letter-spacing: .04em; color: var(--ink-3);
+  }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--structure);
+    padding: 16px 18px 18px;
+    box-shadow: var(--shadow);
+  }
+  .card.is-new { border-top-color: var(--signal); }
+  .card.is-policy { border-top-color: var(--warn); }
+  .card h4 {
+    font-family: var(--font-display); font-weight: 600; font-size: 1.02rem;
+    margin: 0 0 4px; display: flex; justify-content: space-between; gap: 10px; align-items: baseline;
+    direction: ltr;
+  }
+  .own {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .05em;
+    text-transform: uppercase; padding: 2px 6px; border: 1px solid currentColor;
+    border-radius: 2px; white-space: nowrap; font-weight: 400;
+  }
+  .own.ours { color: var(--structure); }
+  .own.erp  { color: var(--warn); }
+  .card .why { font-size: .88rem; color: var(--ink-3); margin: 0 0 12px; max-width: none; }
+  .card ul { list-style: none; margin: 0; padding: 0; font-family: var(--font-mono); font-size: 12px; line-height: 1.85; direction: ltr; text-align: left; }
+  .card li { color: var(--ink-2); }
+  .card li b { color: var(--ink); font-weight: 500; }
+  .card li .t { color: var(--ink-3); }
+
+  /* ---------- tables ---------- */
+
+  .tablewrap { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); box-shadow: var(--shadow); margin-bottom: 12px; }
+  table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: .93rem; }
+  th, td { text-align: right; padding: 12px 16px; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  thead th {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em;
+    color: var(--ink-3); font-weight: 400;
+    border-bottom: 1px solid var(--rule); white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  table.policy td { font-family: var(--font-mono); font-size: 12px; padding: 10px 16px; font-variant-numeric: tabular-nums; direction: ltr; text-align: left; }
+  table.policy td.plain { font-family: var(--font-body); font-size: .9rem; color: var(--ink-2); direction: rtl; text-align: right; }
+  table.policy th { direction: ltr; text-align: left; }
+  table.policy th.plain { direction: rtl; text-align: right; }
+  tr.pair-a td { background: var(--tint-warn); }
+
+  .who {
+    font-family: var(--font-body); font-size: 11px; letter-spacing: .02em;
+    padding: 3px 8px; border-radius: 2px;
+    white-space: nowrap; display: inline-block; font-weight: 600;
+  }
+  .who.tenant     { background: var(--tint-signal);    color: var(--signal); }
+  .who.operator   { background: var(--tint-structure); color: var(--structure); }
+  .who.contractor { background: var(--tint-warn);      color: var(--warn); }
+  .who.yes        { background: var(--tint-signal);    color: var(--signal); }
+  .who.no         { background: var(--surface-2);      color: var(--ink-3); }
+
+  .tabcap {
+    font-size: .9rem; color: var(--ink-2); margin: 0 0 34px; max-width: var(--measure);
+  }
+  .tabcap b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- query list ---------- */
+
+  .queries { list-style: none; counter-reset: q; margin: 0; padding: 0; display: grid; gap: 2px; background: var(--rule); border: 1px solid var(--rule); }
+  .queries li {
+    counter-increment: q; background: var(--surface); padding: 14px 56px 14px 18px; position: relative; font-size: .97rem;
+  }
+  .queries li::before {
+    content: counter(q, decimal-leading-zero);
+    position: absolute; right: 18px; top: 15px;
+    font-family: var(--font-mono); font-size: 12px; color: var(--structure);
+  }
+  .queries li .ent { display: block; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); margin-top: 5px; direction: ltr; text-align: right; }
+
+  /* ---------- open questions ---------- */
+
+  .oq { display: grid; gap: 2px; background: var(--rule); border: 1px solid var(--rule); }
+  .oq > div { background: var(--surface); padding: 18px 20px; }
+  .oq h4 { font-family: var(--font-display); font-size: 1rem; font-weight: 600; margin: 0 0 6px; }
+  .oq p { margin: 0; font-size: .93rem; color: var(--ink-2); max-width: none; }
+  .oq .settled { border-right: 3px solid var(--good); }
+  .oq .settled h4 { color: var(--good); }
+
+  footer {
+    border-top: 2px solid var(--ink);
+    margin-top: 20px; padding-top: 18px;
+    font-family: var(--font-mono); font-size: 12px; color: var(--ink-3);
+    display: flex; flex-wrap: wrap; gap: 8px 28px; justify-content: space-between;
+  }
+
+  @media (max-width: 720px) {
+    .titleblock { grid-template-columns: 1fr; align-items: start; }
+    .stamp { border-right: none; border-top: 1px solid var(--rule); padding-right: 0; padding-top: 14px; }
+    .viewdiv { grid-template-columns: 1fr; }
+    .viewdiv .vnum { grid-row: auto; padding-top: 0; }
+    .viewdiv .notation { grid-column: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  :focus-visible { outline: 2px solid var(--structure); outline-offset: 2px; }
+</style>
+
+<div class="sheet">
+
+  <header class="titleblock">
+    <div>
+      <p class="eyebrow">דונה דום · פלטפורמת שירות לדיירים</p>
+      <h1>מודל הנתונים של דונה דום</h1>
+      <p class="lede">שלושה מבטים, משום ששלוש שאלות שונות נשאלות על המודל הזה ואף דיאגרמה אחת לא עונה על כולן. כל מה שהסוכנים עושים הוא שאילתה על הטבלאות האלה — ולכן הטבלאות הן שקובעות אם הסוכנים אפשריים.</p>
+    </div>
+    <div class="stamp">
+      הופק <b>2 בספטמבר 2026</b><br>
+      היקף <b>1,500 יחידות · 5 אתרים</b><br>
+      מקור <b>Google Drive</b><br>
+      שפות <b>he · ru · ar · fr · en</b><br>
+      שכירות <b>בבעלות המערכת</b><br>
+      כספים <b>נשארים ב־ERP</b>
+    </div>
+  </header>
+
+  <!-- ===================== 00 ===================== -->
+  <section>
+    <div class="sechead">
+      <span class="secnum">00 — שיטה</span>
+      <h2>איך לתאר מודל נתונים כך שיחזיק מעמד</h2>
+      <p>מי שמתאר מודל <em>במונחי תכונות</em> — מה יש לכל דבר — רואה את הקופסאות תופחות עד שהן מכילות הכול ומסבירות כלום. שני הרגלים מונעים את זה, והם שווים יותר מכל טבלה בודדת שלהלן.</p>
+    </div>
+
+    <h3>הרגל ראשון — למיין כל שדה לאחד משלושה מישורים</h3>
+    <p>קופסה נעשית בלתי ניתנת לניהול ברגע שהיא מחזיקה יותר מסוג אחד של אמירה. אילו מכשירים יש בדירה זו עובדה על העולם; מי משלם כשמכשיר מתקלקל זה כלל על מה שאמור לקרות. מישורים שונים, טבלאות שונות, קצבי שינוי שונים.</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th style="width:15%">מישור</th><th style="width:30%">עונה על</th><th style="width:27%">מבחן</th><th>הטבלאות במישור</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>עובדות</b></td>
+            <td>מה נכון, ובאיזו תקופה</td>
+            <td>האם בית משפט היה יכול לבסס את זה מהעולם?</td>
+            <td>Building, Unit, Party, Tenancy, Asset, ServiceCall</td>
+          </tr>
+          <tr>
+            <td><b>ראיות</b></td>
+            <td>מאיפה הגיע ערך, וכמה אנחנו בטוחים בו</td>
+            <td>אם זה יהיה שנוי במחלוקת בעוד שנה, מה אציג על המסך?</td>
+            <td>Document, DocumentSchema, ExtractedField</td>
+          </tr>
+          <tr>
+            <td><b>מדיניות</b></td>
+            <td>מה אמור לקרות, בהינתן העובדות</td>
+            <td>האם התפעול יכול לשנות את זה בלי גרסה חדשה?</td>
+            <td>ResponsibilityPolicy, DocumentRequirement, SlaPolicy</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="tabcap"><b>מדיניות חיה במישור המדיניות ובשום מקום אחר.</b> ברגע ש"מי משלם על תנור שהתקלקל" הופך לעמודה בשורת הדירה, המערכת כבר לא יכולה לענות על <em>מה הכלל אמר במרץ שעבר</em> — וזו השאלה היחידה שמחלוקת אי פעם שואלת. מדיניות היא שורות מגורסות עם תאריכי תוקף, שנקראות ברגע ההכרעה.</p>
+
+    <h3>הרגל שני — להעביר כל שדה דרך חמישה מבחנים</h3>
+    <p>אלה כל השיטה. הם זולים ליישום ברגע שבו שדה מוצע ויקרים ליישום אחרי שהוא כבר חצי שנה בייצור. כל כרטיס נחתם בתשובה של המודל הזה.</p>
+
+    <div class="rules" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));">
+      <div class="rule-card">
+        <span class="n">מבחן 01 — זהות</span>
+        <h3>מה הופך את השורה הזו ל<em>שורה הזו</em>, לתמיד?</h3>
+        <p>אם אדם יכול להקליד את זה, לערוך את זה או לשנות את הפורמט — זו תכונה, אף פעם לא מפתח. הזהות היא תמיד מזהה מלאכותי שהמערכת מייצרת ואיש לעולם לא רואה או מצטט.</p>
+        <p class="applied"><b>במודל הזה</b> כל טבלה ממופתחת על <span class="m">uuid</span> שנוצר במערכת. כתובת היא תכונה על <span class="m">Building</span> — עיריות מתקנות כתובות, והן מתועתקות בשלוש דרכים ומוקלדות עם פסיק ובלעדיו.</p>
+      </div>
+      <div class="rule-card">
+        <span class="n">מבחן 02 — זמן</span>
+        <h3>נכון לתמיד, או נכון בתוך טווח?</h3>
+        <p>אם בתוך טווח, זו <em>שורה עם תאריכים</em>, לא עמודה. שכירות, אחריות, גובה שכר דירה, פרופיל תנאים, שיוך ספק — כולם טווחים.</p>
+        <p class="applied"><b>במודל הזה</b> אכלוס עבר, הווה ועתיד הם טבלה אחת — שורות <span class="m">Tenancy</span> תחומות בתאריכים — ואיזו מהן מתקבלת זו השוואת תאריכים, לא שדה.</p>
+      </div>
+      <div class="rule-card">
+        <span class="n">מבחן 03 — גזירה</span>
+        <h3>האם אפשר לחשב את זה מעובדות אחרות?</h3>
+        <p>אם כן, זה מבט ולא עמודה שמורה. גזירות שמורות נרקבות בשקט — שום שגיאה לא נזרקת, הערך פשוט שגוי, ועל כך לומדים מדייר.</p>
+        <p class="applied"><b>במודל הזה</b> הדייר הנוכחי הוא מבט: <span class="m">today ∈ [start_date, end_date]</span>, מחושב בכל קריאה. זו ערובת בידוד הדיירים, ולכן אסור לה להיות תלויה במישהו שיעדכן עמודה ביום הפינוי.</p>
+      </div>
+      <div class="rule-card">
+        <span class="n">מבחן 04 — מקור</span>
+        <h3>אם זה יהיה שנוי במחלוקת בעוד שנה, מה אראה?</h3>
+        <p>כל ערך שנקרא מנייר נושא עמו <span class="m">(document_id, page, bbox, confidence, promoted_by, promoted_at)</span>. זה ההבדל בין <em>המערכת אומרת ₪4,800</em> לבין <em>הנה הסעיף שממנו זה נקרא.</em></p>
+        <p class="applied"><b>במודל הזה</b> הרביעייה הזו חיה ב־<span class="m">ExtractedField</span>, שורה אחת לכל ערך שנקרא מנייר. דגל אימות היה עונה <em>האם</em> מסמך נבדק; זה עונה <em>מה הוא אמר והיכן</em>.</p>
+      </div>
+      <div class="rule-card">
+        <span class="n">מבחן 05 — בידוד</span>
+        <h3>האם אפשר למתוח קו ממספר טלפון לשורה הזו?</h3>
+        <p>אם אי אפשר לתחום טבלה לפי שכירות, הסוכן לא רשאי לקרוא אותה. יש להריץ את זה ברגע שטבלה נוספת — אז זה חינם, ואחר כך זו מיגרציה.</p>
+        <p class="applied"><b>חל על כל טבלה.</b> האילוץ מצד הלקוח מוחלט: דייר מקבל אך ורק מידע הנגזר מהמסמכים שלו עצמו ומבסיס הידע הכללי.</p>
+      </div>
+      <div class="rule-card" style="border-right:3px solid var(--structure);">
+        <span class="n" style="color:var(--structure)">ואז — שלושה מבטים</span>
+        <h3>ואז לצייר שלוש דיאגרמות</h3>
+        <p>המישורים ממיינים <em>שדות</em>. המבטים הם <em>שפות סימון</em>, ודרושים שלושה משום ששלוש שאלות שונות נשאלות. הראיות מופיעות בשניים מהם ולא מחזיקות מבט משלהן — מבנה במבט הראשון, מחזור חיים במבט השני — משום שראיה היא מישור, לא צורה.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== VIEW ONE ===================== -->
+  <div class="viewdiv">
+    <span class="vnum">מבט ראשון</span>
+    <h2>העובדות</h2>
+    <p class="asks">מה קיים, מה מתחבר למה, <b>ובאיזו תקופה כל עובדה הייתה נכונה</b>. זה המישור שאפשר להעביר בו בעל עניין בלי אף מונח שהיה צריך להמציא.</p>
+    <p class="notation">סימון — ישויות ויחסים · קופסאות ומונים · בלי מצבים, בלי מדיניות</p>
+  </div>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum">01 — עמוד השדרה</span>
+      <h2>תשע טבלאות נושאות את כל המערכת</h2>
+      <p>שימו לב לקו האנכי היחיד באמצע: מסמכים מזינים שכירויות כלפי מעלה, ודבר אינו זורם חזרה למטה. ראיה הופכת לעובדה בדיוק פעם אחת, ברגע הקידום, ואף פעם לא שוב בתוך שאילתה.</p>
+    </div>
+
+    <figure>
+      <div class="figbody">
+        <svg viewBox="0 0 1110 400" role="img" aria-label="דיאגרמת ישויות ויחסים: בניין מכיל יחידה, היחידה מושכרת תחת שכירות, לשכירות שורות צד המקשרות לגורמים. מסמך מקודם לתוך השכירות. סכמת מסמך מגדירה מסמך. ליחידה יש נכסים וקריאות שירות. קריאת שירות פונה למדיניות האחריות.">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+            </marker>
+            <marker id="ar-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#BF4A22"/>
+            </marker>
+          </defs>
+
+          <rect class="n-box" x="30"  y="40" width="158" height="46" rx="2"/>
+          <text class="n-label" x="109" y="62" text-anchor="middle">Building</text>
+          <text class="sub" x="109" y="76" text-anchor="middle">בניין · אתר · כתובת</text>
+
+          <rect class="n-box" x="250" y="40" width="158" height="46" rx="2"/>
+          <text class="n-label" x="329" y="62" text-anchor="middle">Unit</text>
+          <text class="sub" x="329" y="76" text-anchor="middle">דירה · קומה · קו אנכי</text>
+
+          <rect class="n-box" x="470" y="40" width="158" height="46" rx="2"/>
+          <text class="n-label" x="549" y="62" text-anchor="middle">Tenancy</text>
+          <text class="sub" x="549" y="76" text-anchor="middle">השכירות · התחלה–סיום</text>
+
+          <rect class="n-box" x="690" y="40" width="158" height="46" rx="2"/>
+          <text class="n-label" x="769" y="62" text-anchor="middle">TenancyParty</text>
+          <text class="sub" x="769" y="76" text-anchor="middle">קישור + תפקיד</text>
+
+          <rect class="n-box" x="910" y="40" width="158" height="46" rx="2"/>
+          <text class="n-label" x="989" y="62" text-anchor="middle">Party</text>
+          <text class="sub" x="989" y="76" text-anchor="middle">אדם · טלפונים</text>
+
+          <rect class="n-accent" x="470" y="175" width="158" height="46" rx="2"/>
+          <text class="n-label acc" x="549" y="197" text-anchor="middle">Document</text>
+          <text class="sub" x="549" y="211" text-anchor="middle">הראיה · הסריקה</text>
+
+          <rect class="n-accent" x="690" y="175" width="158" height="46" rx="2"/>
+          <text class="n-label acc" x="769" y="197" text-anchor="middle">DocumentSchema</text>
+          <text class="sub" x="769" y="211" text-anchor="middle">שדות · אימות</text>
+
+          <rect class="n-box" x="250" y="310" width="158" height="46" rx="2"/>
+          <text class="n-label" x="329" y="332" text-anchor="middle">Asset</text>
+          <text class="sub" x="329" y="346" text-anchor="middle">דגם · תום אחריות</text>
+
+          <rect class="n-box" x="470" y="310" width="158" height="46" rx="2"/>
+          <text class="n-label" x="549" y="332" text-anchor="middle">ServiceCall</text>
+          <text class="sub" x="549" y="346" text-anchor="middle">הקריאה · מצב</text>
+
+          <rect class="n-box" x="690" y="310" width="158" height="46" rx="2"/>
+          <text class="n-label" x="769" y="332" text-anchor="middle">ResponsibilityPolicy</text>
+          <text class="sub" x="769" y="346" text-anchor="middle">טבלה מגורסת</text>
+
+          <path class="e-line" d="M188,63 H244" marker-end="url(#ar)"/>
+          <text class="e-label" x="216" y="55" text-anchor="middle">מכיל</text>
+
+          <path class="e-line" d="M408,63 H464" marker-end="url(#ar)"/>
+          <text class="e-label" x="436" y="55" text-anchor="middle">מושכרת ב־</text>
+
+          <path class="e-line" d="M628,63 H684" marker-end="url(#ar)"/>
+          <text class="e-label" x="656" y="55" text-anchor="middle">צדדים</text>
+
+          <path class="e-line" d="M848,63 H904" marker-end="url(#ar)"/>
+          <text class="e-label" x="876" y="55" text-anchor="middle">תפקיד</text>
+
+          <path class="e-line acc" d="M549,175 V92" marker-end="url(#ar-acc)"/>
+          <text class="e-label acc" x="559" y="126">מקודם לתוך</text>
+          <text class="e-label acc" x="559" y="141" opacity=".7">(לעולם לא נקרא דרכו)</text>
+
+          <path class="e-line acc dash" d="M690,198 H634" marker-end="url(#ar-acc)"/>
+          <text class="e-label acc" x="662" y="190" text-anchor="middle">מגדירה</text>
+
+          <path class="e-line" d="M329,86 V304" marker-end="url(#ar)"/>
+          <text class="e-label" x="337" y="150">מותקן ב־</text>
+
+          <path class="e-line" d="M390,86 V275 H530 V304" marker-end="url(#ar)"/>
+          <text class="e-label" x="462" y="268" text-anchor="middle">מדווחת ב־</text>
+
+          <path class="e-line" d="M470,333 H414" marker-end="url(#ar)"/>
+          <text class="e-label" x="442" y="325" text-anchor="middle">נוגעת ל־</text>
+
+          <path class="e-line" d="M628,333 H684" marker-end="url(#ar)"/>
+          <text class="e-label" x="656" y="325" text-anchor="middle">מי משלם?</text>
+        </svg>
+      </div>
+      <figcaption><b>תרשים 1 — ראיות זורמות מעלה לתוך עובדות, ולעולם לא חזרה.</b> הנתיב הכתום הוא הקידום. "חוזה שכירות" הוא רק פיסת נייר; <code>Tenancy</code> היא האמת המיושבת שהניירות האלה מתארים — ולכן חוזה, תוספת לחוזה והודעת סיום יכולים כולם להתקדם לאותה שורה. כל שדה מקודם שומר מצביע חזרה למסמך, לעמוד ולרמת הביטחון שממנה הגיע, כך שאיש תפעול יכול ללחוץ על תאריך ולראות את הסעיף שממנו הוא נקרא.</figcaption>
+    </figure>
+
+    <div class="group">
+      <div class="group-head"><h3>מרשם</h3><span class="tag">מישור העובדות · מי ומה קיים</span></div>
+      <div class="cards">
+
+        <div class="card">
+          <h4>Building <span class="own ours">ours</span></h4>
+          <p class="why">אתר. תשתיות ומערכות משותפות חיות כאן, לא על היחידות.</p>
+          <ul>
+            <li><b>id</b> <span class="t">uuid — not the address</span></li>
+            <li>name, address, city</li>
+            <li>type <span class="t">· dira_lehaskir | private</span></li>
+            <li>handover_date <span class="t">· starts בדק</span></li>
+            <li>site_manager_party_id</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h4>Unit <span class="own ours">ours</span></h4>
+          <p class="why">הדירה. הקומה והקו האנכי אינם קישוט — הם מה שיאפשר בהמשך לזהות אשכולות תקלות.</p>
+          <ul>
+            <li><b>id</b>, building_id</li>
+            <li>door_number, floor</li>
+            <li><b>riser_id</b> <span class="t">· stairwell / stack</span></li>
+            <li>rooms, sqm</li>
+            <li class="t">no current_tenant column</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h4>Party <span class="own ours">ours</span></h4>
+          <p class="why">אדם או חברה. טבלה אחת לדיירים, לערבים ולאנשי קשר של ספקים — ערב הוא תפקיד, לא סוג.</p>
+          <ul>
+            <li><b>id</b>, full_name, national_id</li>
+            <li><b>phones[]</b> <span class="t">· verified, primary</span></li>
+            <li><b>language</b> <span class="t">· he|ru|ar|fr|en</span></li>
+            <li>email</li>
+            <li>erp_customer_id <span class="t">· link only</span></li>
+          </ul>
+        </div>
+
+        <div class="card is-new">
+          <h4>Tenancy <span class="own ours">ours</span></h4>
+          <p class="why">האמת המיושבת על משק בית אחד בדירה אחת, תחומה בתאריכים. הישות שרוב המודל תלוי בה.</p>
+          <ul>
+            <li><b>id</b>, unit_id</li>
+            <li><b>terms_profile_id</b> <span class="t">· obligations</span></li>
+            <li><b>start_date, end_date</b></li>
+            <li>status <span class="t">· see figure 3</span></li>
+            <li>rent_amount, escalation_rule</li>
+            <li>deposit_type, renewal_option</li>
+            <li>erp_contract_id</li>
+          </ul>
+        </div>
+
+        <div class="card is-new">
+          <h4>TenancyParty <span class="own ours">ours</span></h4>
+          <p class="why">טבלת הקישור. שני בני זוג על שכירות אחת הוא המקרה הרגיל, לא מקרה קצה — ורק חלקם רשאים לדבר בשמה.</p>
+          <ul>
+            <li>tenancy_id, party_id</li>
+            <li><b>role</b> <span class="t">· tenant | co_tenant</span></li>
+            <li class="t">| guarantor | occupant</li>
+            <li><b>may_speak_for_tenancy</b> <span class="t">· bool</span></li>
+          </ul>
+        </div>
+
+        <div class="card is-new">
+          <h4>Asset <span class="own ours">ours</span></h4>
+          <p class="why">כל מכשיר, קבוע וכל פריט מערכת כשורה משלו. טבלה במקום שדה טקסט היא מה שמאפשר ניתוב לפי אחריות, התאמת ספק וזיהוי אשכולות תקלות — שלושתם בלתי ניתנים למענה מול טקסט חופשי.</p>
+          <ul>
+            <li><b>id</b>, unit_id <span class="t">or building_id</span></li>
+            <li>category, make, model, serial</li>
+            <li>install_date, <b>warranty_until</b></li>
+            <li><b>warranty_holder</b> <span class="t">· contractor</span></li>
+            <li>install_batch <span class="t">· clustering key</span></li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-head"><h3>ראיות</h3><span class="tag">מישור הראיות · מסמכים ומה שנקרא מתוכם</span></div>
+      <div class="cards">
+
+        <div class="card">
+          <h4>Document <span class="own ours">ours</span></h4>
+          <p class="why">בלתי משתנה, חתום בהאש, מתוארך. נקשר לכל נושא — שכירות, גורם, יחידה או קריאה. קריא למנהלים <em>וגם</em> לדייר שאליו הוא שייך, בתיחום זהה לכל השאר.</p>
+          <ul>
+            <li><b>id</b>, schema_id, file_hash</li>
+            <li>subject_type, subject_id</li>
+            <li><b>drive_file_id</b> <span class="t">· provenance</span></li>
+            <li><b>drive_path_hint</b> <span class="t">· never a key</span></li>
+            <li>uploaded_at, uploaded_by</li>
+            <li><b>state</b> <span class="t">· see figure 4</span></li>
+            <li>valid_from, <b>expires_at</b></li>
+            <li><b>superseded_by</b> <span class="t">· document_id</span></li>
+            <li><b>tenant_visible</b> <span class="t">· bool</span></li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h4>DocumentSchema <span class="own ours">ours</span></h4>
+          <p class="why">המרשם שהופך סוג מסמך חדש לשינוי נתונים במקום שינוי קוד. מצהירים על השדות שחוזה נושא, ומהן נגזרים החילוץ, האימות והצירוף שמאתר מסמכים חסרים.</p>
+          <ul>
+            <li><b>type_key</b> <span class="t">· lease</span></li>
+            <li class="t">| lease_amendment</li>
+            <li class="t">| termination_notice</li>
+            <li class="t">| arnona | insurance | id</li>
+            <li class="t">| bank_guarantee | handover_protocol</li>
+            <li><b>fields[]</b> <span class="t">name, type, required</span></li>
+            <li>validation_rules[], renewal_cadence</li>
+            <li><b>promotes_to</b> <span class="t">· target entity</span></li>
+          </ul>
+        </div>
+
+        <div class="card is-new">
+          <h4>ExtractedField <span class="own ours">ours</span></h4>
+          <p class="why">שורה אחת לכל ערך שנקרא מנייר, עם העמוד, המסגרת ורמת הביטחון שלו. מבחן 04 חי כאן — הטבלה הזו היא שובל הביקורת שהופך את הסוכן לבר־הגנה.</p>
+          <ul>
+            <li>document_id, field_key, value</li>
+            <li><b>confidence</b> <span class="t">· 0–1</span></li>
+            <li>page, bbox <span class="t">· click to source</span></li>
+            <li><b>promoted_to</b> <span class="t">· table.column</span></li>
+            <li>promoted_by, promoted_at</li>
+          </ul>
+        </div>
+
+        <div class="card is-policy">
+          <h4>DocumentRequirement <span class="own ours">ours</span></h4>
+          <p class="why">מישור המדיניות, ממוקם כאן משום שהוא נקרא כראיה. מצהירים על מה שפרופיל תנאים דורש, ו"מסמכים חסרים" מפסיק להיות פיצ'ר — הוא הופך לצירוף.</p>
+          <ul>
+            <li>applies_to <span class="t">· profile|unit|party</span></li>
+            <li>schema_type_key</li>
+            <li>cadence <span class="t">· once | annual</span></li>
+            <li>grace_days, blocking <span class="t">· bool</span></li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum">02 — בידוד</span>
+      <h2>מדוע האילוץ הקשיח הוא החלטה סכמתית</h2>
+      <p>"דייר לעולם לא יקבל מידע של דייר אחר" אינו ניתן לאכיפה בהנחיה למודל. הוא נאכף על ידי צורת הצירוף — ובפרט על ידי השאלה אם השכירות שמורה או נגזרת. זה מבחן 05 משורטט.</p>
+    </div>
+
+    <figure>
+      <div class="figbody">
+        <svg viewBox="0 0 1060 300" role="img" aria-label="השוואה: שרשרת הזהות הנכונה גוזרת את היחידה משכירות פעילה התחומה בתאריך היום, ואילו הקיצור קורא שדה שמור של דייר נוכחי על היחידה ומתיישן ביום הפינוי.">
+          <defs>
+            <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+            </marker>
+            <marker id="ar3-sig" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#BF4A22"/>
+            </marker>
+          </defs>
+
+          <text class="e-label" x="20" y="26" opacity=".85">נגזר — הדרך הנכונה</text>
+
+          <rect class="n-good" x="20"  y="40" width="150" height="44" rx="2"/>
+          <text class="n-label gd" x="95" y="67" text-anchor="middle">מספר בוואטסאפ</text>
+
+          <rect class="n-box" x="228" y="40" width="130" height="44" rx="2"/>
+          <text class="n-label" x="293" y="67" text-anchor="middle">Party</text>
+
+          <rect class="n-box" x="416" y="40" width="176" height="44" rx="2"/>
+          <text class="n-label" x="504" y="61" text-anchor="middle">Tenancy</text>
+          <text class="sub" x="504" y="75" text-anchor="middle">today ∈ [start, end]</text>
+
+          <rect class="n-box" x="650" y="40" width="120" height="44" rx="2"/>
+          <text class="n-label" x="710" y="67" text-anchor="middle">Unit</text>
+
+          <rect class="n-good" x="828" y="40" width="180" height="44" rx="2"/>
+          <text class="n-label gd" x="918" y="61" text-anchor="middle">שורות מתוחמות בלבד</text>
+          <text class="sub" x="918" y="75" text-anchor="middle">row-level security</text>
+
+          <path class="e-line" d="M170,62 H222" marker-end="url(#ar3)"/>
+          <text class="e-label" x="196" y="54" text-anchor="middle">מאומת</text>
+          <path class="e-line" d="M358,62 H410" marker-end="url(#ar3)"/>
+          <text class="e-label" x="384" y="54" text-anchor="middle">פעילה</text>
+          <path class="e-line" d="M592,62 H644" marker-end="url(#ar3)"/>
+          <text class="e-label" x="618" y="54" text-anchor="middle">חלה על</text>
+          <path class="e-line" d="M770,62 H822" marker-end="url(#ar3)"/>
+          <text class="e-label" x="796" y="54" text-anchor="middle">מתחמת</text>
+
+          <line x1="20" y1="140" x2="1040" y2="140" stroke="currentColor" stroke-width="1" opacity=".18"/>
+
+          <text class="e-label acc" x="20" y="180">שמור — הדליפה</text>
+
+          <rect class="n-box" x="20"  y="196" width="150" height="44" rx="2" stroke-dasharray="5 4"/>
+          <text class="n-label" x="95" y="223" text-anchor="middle">מספר בוואטסאפ</text>
+
+          <rect class="n-accent" x="416" y="196" width="176" height="44" rx="2" stroke-dasharray="5 4"/>
+          <text class="n-label acc" x="504" y="217" text-anchor="middle">Unit.current_tenant</text>
+          <text class="sub" x="504" y="231" text-anchor="middle">עמודה ניתנת לשינוי</text>
+
+          <rect class="n-box" x="828" y="196" width="180" height="44" rx="2" stroke-dasharray="5 4"/>
+          <text class="n-label" x="918" y="223" text-anchor="middle">משק הבית הלא נכון</text>
+
+          <path class="e-line acc dash" d="M170,218 H410" marker-end="url(#ar3-sig)"/>
+          <path class="e-line acc dash" d="M592,218 H822" marker-end="url(#ar3-sig)"/>
+          <text class="e-label acc" x="707" y="210" text-anchor="middle">עדכון אחד שהוחמץ</text>
+          <text class="e-label acc" x="707" y="254" text-anchor="middle">פינוי · מסירה · שכירות משנה</text>
+        </svg>
+      </div>
+      <figcaption><b>תרשים 2 — אותה שאלה, שני צירופים, תקרית אחת.</b> אם גוזרים את האכלוס משכירות תחומת תאריכים, התיישנות בלתי אפשרית מעצם הבנייה. אם שומרים אותו על היחידה, הנכונות תלויה במישהו שיזכור לעדכן עמודה ביום שדייר עוזב. <code>current_tenant</code> צריך להיות מבט, לא שדה — ושם תיקייה ב־Drive אינו תחליף לאף אחד מהשניים.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ===================== VIEW TWO ===================== -->
+  <div class="viewdiv">
+    <span class="vnum">מבט שני</span>
+    <h2>מחזורי החיים</h2>
+    <p class="asks">מה משתנה, <b>ומה גורם לו להשתנות</b>. לשלושה דברים במערכת הזו יש חיים: לשכירות, למסמך ולקריאת שירות. אף אחד מהם אינו נראה בדיאגרמת ישויות, ולכן דיאגרמת ישויות לבדה תמיד מרגישה כאילו חסר בה החלק הקשה — ואכן חסר.</p>
+    <p class="notation">סימון — מכונת מצבים · כתום מלא = מסמך גרם לזה · כחול מקווקו = תאריך גרם לזה</p>
+  </div>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum">03 — שכירות</span>
+      <h2>אכלוס משתנה משתי סיבות שונות</h2>
+      <p>חלק מהמעברים קורים משום שהגיעה פיסת נייר. אחרים קורים משום שתאריך חלף ואיש לא עשה דבר. בלבול בין השניים הוא הדרך שבה מערכת מאמינה ששכירות עדיין פעילה תשעה חודשים אחרי שהדייר עזב.</p>
+    </div>
+
+    <figure>
+      <div class="figbody">
+        <svg viewBox="0 0 1010 340" role="img" aria-label="מכונת המצבים של שכירות. טיוטה הופכת לעתידית כשחוזה מקודם; עתידית הופכת לפעילה כשתאריך ההתחלה חולף; פעילה מתעדכנת בעצמה כשתוספת מקודמת; פעילה הופכת למסתיימת תשעים יום לפני תאריך הסיום; מסתיימת הופכת להסתיימה כשתאריך הסיום חולף, או חוזרת לפעילה אם חידוש מקודם; פעילה הופכת למופסקת כשנמסרת הודעת סיום.">
+          <defs>
+            <marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+            </marker>
+            <marker id="ar5-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#BF4A22"/>
+            </marker>
+            <marker id="ar5-st" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#2F5D7C"/>
+            </marker>
+          </defs>
+
+          <rect x="30" y="18" width="14" height="3" fill="#BF4A22"/>
+          <text class="e-label acc" x="52" y="24">מסמך גרם לזה</text>
+          <rect x="240" y="18" width="14" height="3" fill="#2F5D7C"/>
+          <text class="e-label st" x="262" y="24">תאריך גרם לזה — בלי מסמך, בלי אדם</text>
+
+          <rect class="n-box" x="30"  y="140" width="140" height="46" rx="2"/>
+          <text class="n-label" x="100" y="162" text-anchor="middle">טיוטה</text>
+          <text class="sub" x="100" y="176" text-anchor="middle">DRAFT</text>
+
+          <rect class="n-box" x="230" y="140" width="140" height="46" rx="2"/>
+          <text class="n-label" x="300" y="162" text-anchor="middle">עתידית</text>
+          <text class="sub" x="300" y="176" text-anchor="middle">UPCOMING</text>
+
+          <rect class="n-box" x="430" y="140" width="140" height="46" rx="2"/>
+          <text class="n-label" x="500" y="162" text-anchor="middle">פעילה</text>
+          <text class="sub" x="500" y="176" text-anchor="middle">ACTIVE</text>
+
+          <rect class="n-box" x="630" y="140" width="140" height="46" rx="2"/>
+          <text class="n-label" x="700" y="162" text-anchor="middle">מסתיימת</text>
+          <text class="sub" x="700" y="176" text-anchor="middle">ENDING</text>
+
+          <rect class="n-good" x="830" y="140" width="140" height="46" rx="2"/>
+          <text class="n-label gd" x="900" y="162" text-anchor="middle">הסתיימה</text>
+          <text class="sub" x="900" y="176" text-anchor="middle">ENDED</text>
+
+          <rect class="n-good" x="630" y="270" width="140" height="46" rx="2"/>
+          <text class="n-label gd" x="700" y="291" text-anchor="middle">הופסקה</text>
+          <text class="sub" x="700" y="305" text-anchor="middle">TERMINATED · יציאה מוקדמת</text>
+
+          <path class="e-line acc" d="M170,163 H224" marker-end="url(#ar5-acc)"/>
+          <text class="e-label acc" x="197" y="132" text-anchor="middle">חוזה קודם</text>
+
+          <path class="e-line clock" d="M370,163 H424" marker-end="url(#ar5-st)"/>
+          <text class="e-label st" x="397" y="132" text-anchor="middle">start_date חלף</text>
+
+          <path class="e-line clock" d="M570,163 H624" marker-end="url(#ar5-st)"/>
+          <text class="e-label st" x="597" y="132" text-anchor="middle">end_date − 90 יום</text>
+
+          <path class="e-line clock" d="M770,163 H824" marker-end="url(#ar5-st)"/>
+          <text class="e-label st" x="797" y="132" text-anchor="middle">end_date חלף</text>
+
+          <path class="e-line acc" d="M470,186 C470,228 530,228 530,190" marker-end="url(#ar5-acc)"/>
+          <text class="e-label acc" x="500" y="248" text-anchor="middle">תוספת לחוזה קודמה — שכר דירה, תאריכים, צדדים</text>
+
+          <path class="e-line acc" d="M700,140 V100 H500 V134" marker-end="url(#ar5-acc)"/>
+          <text class="e-label acc" x="600" y="92" text-anchor="middle">חידוש קודם</text>
+
+          <path class="e-line acc" d="M545,186 V293 H624" marker-end="url(#ar5-acc)"/>
+          <text class="e-label acc" x="553" y="215">הודעת סיום</text>
+          <text class="e-label acc" x="553" y="229" opacity=".75">+ תאריך תוקף</text>
+        </svg>
+      </div>
+      <figcaption><b>תרשים 3 — שני שעונים, שורה אחת.</b> המעברים הכתומים מופעלים בקידום, וכל אחד מהם כותב <code>TenancyEvent</code> שמצביע על מסמך המקור. המעברים הכחולים מופעלים על ידי תהליך מתוזמן, בלי מסמך ובלי אדם מאחוריהם — וזו בדיוק הסיבה שהם נשכחים בתכנונים שחושבים רק על ניירת. שני הסוגים חייבים להיות ניתנים לשחזור בביקורת: <em>במה האמנו ב־12 במרץ, ולמה.</em></figcaption>
+    </figure>
+
+    <div class="note blue">
+      <p><strong>השורה ניתנת לשינוי; היומן לא.</strong> <code>Tenancy</code> היא שורה רגילה שנקראת מהר, וכל מעבר מוסיף <code>TenancyEvent</code> עם <span class="m">(field, old→new, actor, source_document_id)</span>. במכוון <em>לא</em> event sourcing — המצב לעולם אינו משוחזר מהיומן. היומן קיים כדי לענות על שאלות, לא כדי לשרת קריאות.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum">04 — מסמך</span>
+      <h2>הנייר בלתי משתנה; הקריאה שלו לא</h2>
+      <p>מסמך לעולם אינו משתנה אחרי שנחת. כל מה שנראה כעריכה — תיקון, חוזה חדש יותר, סריקה מחדש — הוא <em>שורה חדשה</em> שמחליפה את הקודמת. זה מה שהופך את הארכיון לשווה משהו במחלוקת.</p>
+    </div>
+
+    <figure>
+      <div class="figbody">
+        <svg viewBox="0 0 1010 275" role="img" aria-label="מחזור החיים של מסמך. מסמך שהתקבל נקרא ב־OCR, מחולץ מול הסכמה שהוצהרה, ועובר שער ביטחון. שדות בעלי ביטחון גבוה וסיכון נמוך עוברים ישירות לאישור; שדות בעלי ביטחון נמוך או סיכון גבוה עוברים לתור בדיקה של איש תפעול, שמאשר או דוחה. מסמכים מאושרים מקדמים את שדותיהם אל רשומת האמת. מסמך מאוחר יותר מחליף מסמך מוקדם; דבר לעולם אינו נערך במקום.">
+          <defs>
+            <marker id="ar6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+            </marker>
+            <marker id="ar6-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#BF4A22"/>
+            </marker>
+            <marker id="ar6-good" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#40704F"/>
+            </marker>
+          </defs>
+
+          <rect class="n-box" x="30"  y="100" width="130" height="46" rx="2"/>
+          <text class="n-label" x="95" y="122" text-anchor="middle">התקבל</text>
+          <text class="sub" x="95" y="136" text-anchor="middle">RECEIVED · חתום</text>
+
+          <rect class="n-box" x="190" y="100" width="130" height="46" rx="2"/>
+          <text class="n-label" x="255" y="122" text-anchor="middle">נקרא</text>
+          <text class="sub" x="255" y="136" text-anchor="middle">READ · OCR</text>
+
+          <rect class="n-box" x="350" y="100" width="130" height="46" rx="2"/>
+          <text class="n-label" x="415" y="122" text-anchor="middle">חולץ</text>
+          <text class="sub" x="415" y="136" text-anchor="middle">EXTRACTED · מול סכמה</text>
+
+          <rect class="n-box" x="660" y="100" width="130" height="46" rx="2"/>
+          <text class="n-label" x="725" y="122" text-anchor="middle">אושר</text>
+          <text class="sub" x="725" y="136" text-anchor="middle">ACCEPTED</text>
+
+          <rect class="n-good" x="820" y="100" width="160" height="46" rx="2"/>
+          <text class="n-label gd" x="900" y="122" text-anchor="middle">קודם לרשומה</text>
+          <text class="sub" x="900" y="136" text-anchor="middle">PROMOTED · עם מקור</text>
+
+          <rect class="n-accent" x="490" y="200" width="140" height="46" rx="2"/>
+          <text class="n-label acc" x="560" y="222" text-anchor="middle">בבדיקה</text>
+          <text class="sub" x="560" y="236" text-anchor="middle">IN REVIEW · תור תפעול</text>
+
+          <rect class="n-box" x="820" y="200" width="160" height="46" rx="2" stroke-dasharray="5 4"/>
+          <text class="n-label" x="900" y="222" text-anchor="middle">נדחה</text>
+          <text class="sub" x="900" y="236" text-anchor="middle">REJECTED · נשמר, לא נמחק</text>
+
+          <path class="e-line" d="M160,123 H184" marker-end="url(#ar6)"/>
+          <path class="e-line" d="M320,123 H344" marker-end="url(#ar6)"/>
+
+          <path class="e-line acc" d="M480,116 H654" marker-end="url(#ar6-acc)"/>
+          <text class="e-label acc" x="567" y="108" text-anchor="middle">ביטחון ≥ סף · שדה בסיכון נמוך</text>
+
+          <path class="e-line" d="M420,146 V223 H484" marker-end="url(#ar6)"/>
+          <text class="e-label" x="430" y="185">ביטחון נמוך · ת"ז · שכר דירה · תאריכים</text>
+
+          <path class="e-line" d="M630,213 H700 V152" marker-end="url(#ar6)"/>
+          <text class="e-label" x="665" y="205" text-anchor="middle">מאשר</text>
+
+          <path class="e-line dash" d="M630,233 H814" marker-end="url(#ar6)"/>
+          <text class="e-label" x="722" y="228" text-anchor="middle">הקובץ הלא נכון במקום הנכון</text>
+
+          <path class="e-line" d="M790,123 H814" marker-end="url(#ar6-good)"/>
+
+          <path class="e-line acc dash" d="M900,100 V52 H95 V94" marker-end="url(#ar6-acc)"/>
+          <text class="e-label acc" x="500" y="44" text-anchor="middle">מסמך מאוחר יותר מחליף את זה — דבר לעולם אינו נערך במקום</text>
+        </svg>
+      </div>
+      <figcaption><b>תרשים 4 — השער הוא לכל שדה, לא לכל מסמך.</b> לחוזה יכולה להיות כתובת שנקראה בביטחון וסכום שכר דירה מוטל בספק, ורק השני זקוק לאדם. מספרי זהות, סכומי שכר דירה ותאריכים מנותבים תמיד לבדיקה ללא תלות ברמת הביטחון, משום שמחיר טעות שקטה בהם אינו סימטרי למחיר בדיקה של חמש שניות. <b>"נדחה" הוא מצב, לא מחיקה</b> — הקובץ הלא נכון הוא ראיה גם הוא, לְמה שמישהו ניסה לתייק ומתי.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum">05 — קריאת שירות</span>
+      <h2>החצי שבו הסוכנים באמת חיים</h2>
+      <p>המבטים הראשון והשני מתארים מי גר היכן ואיזה נייר קיים. זה החצי האחר — המישור הדינמי, ושם יושב הקושי ההנדסי האמיתי.</p>
+    </div>
+
+    <figure>
+      <div class="figbody">
+        <svg viewBox="0 0 700 700" role="img" aria-label="מכונת המצבים של קריאת שירות, מחדשה דרך זיהוי, מיון, קביעת אחריות, איסוף חלונות זמן, הצעה לספק, קביעת מועד וסגירה, עם יציאות לפתרון עצמי, ניתוב לקבלן בתקופת הבדק, הצעה נגדית של ספק והסלמה לאדם.">
+          <defs>
+            <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+            </marker>
+            <marker id="ar4-sig" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#BF4A22"/>
+            </marker>
+            <marker id="ar4-good" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#40704F"/>
+            </marker>
+          </defs>
+
+          <rect class="n-box" x="60" y="30"  width="190" height="44" rx="2"/>
+          <text class="n-label" x="155" y="51" text-anchor="middle">חדשה</text>
+          <text class="sub" x="155" y="65" text-anchor="middle">NEW</text>
+
+          <rect class="n-box" x="60" y="110" width="190" height="44" rx="2"/>
+          <text class="n-label" x="155" y="131" text-anchor="middle">הדייר זוהה</text>
+          <text class="sub" x="155" y="145" text-anchor="middle">IDENTIFIED</text>
+
+          <rect class="n-box" x="60" y="190" width="190" height="44" rx="2"/>
+          <text class="n-label" x="155" y="211" text-anchor="middle">מוינה</text>
+          <text class="sub" x="155" y="225" text-anchor="middle">TRIAGED</text>
+
+          <rect class="n-box" x="60" y="270" width="190" height="44" rx="2"/>
+          <text class="n-label" x="155" y="291" text-anchor="middle">אחריות נקבעה</text>
+          <text class="sub" x="155" y="305" text-anchor="middle">שאילתה לטבלת המדיניות</text>
+
+          <rect class="n-box" x="60" y="350" width="190" height="44" rx="2"/>
+          <text class="n-label" x="155" y="371" text-anchor="middle">חלונות זמן נאספו</text>
+          <text class="sub" x="155" y="385" text-anchor="middle">מהדייר</text>
+
+          <rect class="n-box" x="60" y="430" width="190" height="44" rx="2"/>
+          <text class="n-label" x="155" y="451" text-anchor="middle">הוצעה</text>
+          <text class="sub" x="155" y="465" text-anchor="middle">לספק, בוואטסאפ</text>
+
+          <rect class="n-box" x="60" y="530" width="190" height="44" rx="2"/>
+          <text class="n-label" x="155" y="551" text-anchor="middle">מועד נקבע</text>
+          <text class="sub" x="155" y="565" text-anchor="middle">SCHEDULED</text>
+
+          <rect class="n-good" x="60" y="610" width="190" height="44" rx="2"/>
+          <text class="n-label gd" x="155" y="631" text-anchor="middle">נסגרה</text>
+          <text class="sub" x="155" y="645" text-anchor="middle">CLOSED</text>
+
+          <rect class="n-good" x="420" y="190" width="200" height="44" rx="2"/>
+          <text class="n-label gd" x="520" y="211" text-anchor="middle">נפתרה — עצמאית</text>
+          <text class="sub" x="520" y="225" text-anchor="middle">לא נדרש ביקור</text>
+
+          <rect class="n-box" x="420" y="270" width="200" height="44" rx="2"/>
+          <text class="n-label" x="520" y="291" text-anchor="middle">לקבלן</text>
+          <text class="sub" x="520" y="305" text-anchor="middle">תקופת הבדק</text>
+
+          <rect class="n-box" x="420" y="380" width="200" height="44" rx="2"/>
+          <text class="n-label" x="520" y="401" text-anchor="middle">הצעה נגדית</text>
+          <text class="sub" x="520" y="415" text-anchor="middle">מהספק</text>
+
+          <rect class="n-accent" x="420" y="500" width="200" height="44" rx="2"/>
+          <text class="n-label acc" x="520" y="521" text-anchor="middle">הוסלמה — לאדם</text>
+          <text class="sub" x="520" y="535" text-anchor="middle">סופי מבחינת הסוכן</text>
+
+          <path class="e-line" d="M155,74  V104" marker-end="url(#ar4)"/>
+          <path class="e-line" d="M155,154 V184" marker-end="url(#ar4)"/>
+          <path class="e-line" d="M155,234 V264" marker-end="url(#ar4)"/>
+          <path class="e-line" d="M155,314 V344" marker-end="url(#ar4)"/>
+          <path class="e-line" d="M155,394 V424" marker-end="url(#ar4)"/>
+          <path class="e-line" d="M155,474 V524" marker-end="url(#ar4)"/>
+          <text class="e-label" x="163" y="504">הספק מקבל</text>
+          <path class="e-line" d="M155,574 V604" marker-end="url(#ar4)"/>
+          <text class="e-label" x="163" y="594">תמונת הוכחה</text>
+
+          <path class="e-line" d="M250,212 H414" marker-end="url(#ar4-good)"/>
+          <text class="e-label" x="332" y="204" text-anchor="middle">העזרה העצמית עבדה</text>
+
+          <path class="e-line" d="M250,292 H414" marker-end="url(#ar4)"/>
+          <text class="e-label" x="332" y="284" text-anchor="middle">עדיין בתקופת הבדק</text>
+
+          <path class="e-line" d="M250,440 H330 V402 H414" marker-end="url(#ar4)"/>
+          <text class="e-label" x="338" y="396">מציע מועד אחר</text>
+
+          <path class="e-line acc" d="M250,462 H330 V522 H414" marker-end="url(#ar4-sig)"/>
+          <text class="e-label acc" x="338" y="480">דוחה</text>
+          <text class="e-label acc" x="338" y="494">אין מענה 45 דק'</text>
+
+          <path class="e-line" d="M620,402 H660 V560 H256" marker-end="url(#ar4)"/>
+          <text class="e-label" x="450" y="578" text-anchor="middle">הדייר מאשר את המועד החדש</text>
+        </svg>
+      </div>
+      <figcaption><b>תרשים 5 — כל מסלול מסתיים; שום דבר לא ממתין לנצח.</b> ההנדסה הקשה אינה הבנת השפה בראש התרשים — היא הקופסה שמסומנת "הוצעה": משא ומתן דו־צדדי אסינכרוני בין שני אנשים שאף פעם אינם מחוברים בו זמנית, מעל ערוץ ללא הבטחת מסירה, שבו כל צד יכול להשתתק. פסקי זמן, ניסיונות חוזרים ופעולות פיצוי הם בערך שבעים אחוז מהעבודה בתרשים הזה.</figcaption>
+    </figure>
+
+    <div class="note">
+      <p><strong>השתלטות חירום היא מצב, לא פיצ'ר.</strong> איש תפעול חייב להיות מסוגל לתפוס כל שיחה באמצע משפט; הסוכן אז משתתק בשרשור ההוא ונשאר שקט עד לשחרור מפורש. יש למדל זאת כדגל על <code>Conversation</code> שנבדק לפני כל הודעה יוצאת — לא כאלמנט ממשק שמורכב מאוחר יותר.</p>
+    </div>
+
+    <div class="group">
+      <div class="group-head"><h3>תפעול</h3><span class="tag">מישור העובדות · קריאת השירות והשובל שלה</span></div>
+      <div class="cards">
+
+        <div class="card is-new">
+          <h4>ServiceCall <span class="own ours">ours</span></h4>
+          <p class="why">מרכז הכובד. קריאת שירות היא תהליך עם מכונת מצבים, שעון SLA והכרעת אחריות מוצמדים לה — ולכן היא טבלה, וכל מה שתפעולי תלוי בה.</p>
+          <ul>
+            <li><b>id</b>, unit_id, tenancy_id, asset_id</li>
+            <li>category_key, severity</li>
+            <li><b>state</b> <span class="t">· see figure 5</span></li>
+            <li>responsible_resolved <span class="t">· snapshot</span></li>
+            <li><b>policy_version_id</b> <span class="t">· what rule applied</span></li>
+            <li>opened_at, sla_due_at, closed_at</li>
+            <li><b>actual_cost</b> <span class="t">· log it from day one</span></li>
+          </ul>
+        </div>
+
+        <div class="card is-new">
+          <h4>Provider <span class="own ours">ours</span></h4>
+          <p class="why">בתוספת טבלת כיסוי: אילו מקצועות, אילו בניינים, ריטיינר או לפי קריאה.</p>
+          <ul>
+            <li>id, name, trades[], phone</li>
+            <li><b>engagement</b> <span class="t">· retainer|per_job</span></li>
+            <li>in_house <span class="t">· central crew</span></li>
+            <li>buildings[], after_hours <span class="t">· bool</span></li>
+            <li>reliability_score <span class="t">· derived</span></li>
+          </ul>
+        </div>
+
+        <div class="card is-new">
+          <h4>Visit <span class="own ours">ours</span></h4>
+          <p class="why">נפרד מהקריאה, משום שתקלה אחת יכולה לדרוש שלושה ביקורים ולכל אחד נדרשת הוכחה משלו.</p>
+          <ul>
+            <li>service_call_id, provider_id</li>
+            <li>window_start, window_end</li>
+            <li>state <span class="t">· offered|confirmed|done</span></li>
+            <li>proof_photos[], outcome_note</li>
+            <li>access_method <span class="t">· tenant home?</span></li>
+          </ul>
+        </div>
+
+        <div class="card is-new">
+          <h4>Conversation / Message <span class="own ours">ours</span></h4>
+          <p class="why">שומרים את המקור כראיה ותרגום לעברית לצורכי התפעול. תמיד את שניהם.</p>
+          <ul>
+            <li>channel, direction, party_id</li>
+            <li>service_call_id <span class="t">· nullable</span></li>
+            <li><b>body_original</b> + lang</li>
+            <li><b>body_he</b> <span class="t">· canonical for ops</span></li>
+            <li>media[], transcript <span class="t">· voice notes</span></li>
+            <li>agent_run_id, <b>human_takeover</b></li>
+          </ul>
+        </div>
+
+        <div class="card is-new">
+          <h4>TenancyEvent <span class="own ours">ours</span></h4>
+          <p class="why">היסטוריה בהוספה בלבד של כל שינוי בשכירות, והמסמך — או השעון — שגרם לו.</p>
+          <ul>
+            <li>tenancy_id, at, actor</li>
+            <li><b>kind</b> <span class="t">· created | amended</span></li>
+            <li class="t">| notice_served | terminated | renewed</li>
+            <li>field, old_value, new_value</li>
+            <li><b>source_document_id</b> <span class="t">· null if clock</span></li>
+            <li class="t">state is not replayed from this</li>
+          </ul>
+        </div>
+
+        <div class="card is-new">
+          <h4>AuditEvent <span class="own ours">ours</span></h4>
+          <p class="why">מי או מה ראה איזו שורה, ולמה. התיעוד שתרצו ביום שבו מישהו ישאל.</p>
+          <ul>
+            <li>actor <span class="t">· user | agent | system</span></li>
+            <li>action, subject_type, subject_id</li>
+            <li>scope_party_id <span class="t">· whose data</span></li>
+            <li>at, request_id</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h4>Financials <span class="own erp">erp</span></h4>
+          <p class="why">חיובי שכר דירה, חשבוניות, תשלומים וחיובי ספקים. אנחנו מחזיקים מפתחות וקוראים יתרות עבור מנהלים — לא יותר מזה.</p>
+          <ul>
+            <li class="t">erp_contract_id</li>
+            <li class="t">erp_customer_id</li>
+            <li class="t">erp_supplier_id</li>
+            <li class="t">balance — read-only, admin view</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== VIEW THREE ===================== -->
+  <div class="viewdiv">
+    <span class="vnum">מבט שלישי</span>
+    <h2>המדיניות</h2>
+    <p class="asks">מה <em>אמור</em> לקרות, בהינתן העובדות. זו כלל לא דיאגרמה — <b>טבלאות פשוטות שאיש תפעול יכול לערוך בלי גרסה חדשה</b>, מגורסות לפי תאריך תוקף, ולעולם לא מוסקות על ידי מודל. אם אפשר להקריא את הפרק הזה בקול במחלוקת, התכנון הצליח.</p>
+    <p class="notation">סימון — טבלאות מגורסות · דטרמיניסטי · ניתן לעריכה בתפעול · בלי בינה מלאכותית</p>
+  </div>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum">06 — אחריות</span>
+      <h2>מי משלם היא פונקציה, לא תכונה</h2>
+      <p>אחריות אינה עובדה על דירה — היא שאילתה על ארבעה ממדים, ששניים מהם משתנים לאורך זמן. השורות שלהלן להמחשה, ממופתחות על פרופיל תנאים אחד.</p>
+    </div>
+
+    <div class="tablewrap">
+      <table class="policy">
+        <thead>
+          <tr>
+            <th style="width:30%">category_key</th>
+            <th style="width:19%">terms_profile</th>
+            <th style="width:15%">asset_in_warranty</th>
+            <th style="width:17%" class="plain">מי אחראי</th>
+            <th>effective_from</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>plumbing.leak.burst_riser</td><td>dira_lehaskir_v2</td><td>—</td><td class="plain"><span class="who operator">המפעיל</span></td><td>2025-01-01</td></tr>
+          <tr><td>plumbing.leak.sink_trap</td><td>dira_lehaskir_v2</td><td>—</td><td class="plain"><span class="who tenant">הדייר</span></td><td>2025-01-01</td></tr>
+          <tr class="pair-a"><td>appliance.oven.not_heating</td><td>dira_lehaskir_v2</td><td><span class="who yes">true</span></td><td class="plain"><span class="who contractor">הקבלן</span></td><td>2025-01-01</td></tr>
+          <tr class="pair-a"><td>appliance.oven.not_heating</td><td>dira_lehaskir_v2</td><td><span class="who no">false</span></td><td class="plain"><span class="who operator">המפעיל</span></td><td>2025-01-01</td></tr>
+          <tr><td>electrical.socket.dead</td><td>dira_lehaskir_v2</td><td><span class="who yes">true</span></td><td class="plain"><span class="who contractor">הקבלן</span></td><td>2025-01-01</td></tr>
+          <tr><td>glazing.window.cracked</td><td>dira_lehaskir_v2</td><td>—</td><td class="plain"><span class="who tenant">הדייר</span></td><td>2025-01-01</td></tr>
+          <tr><td>hvac.ac.no_cooling</td><td>dira_lehaskir_v2</td><td><span class="who no">false</span></td><td class="plain"><span class="who operator">המפעיל</span></td><td>2026-04-01</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="tabcap"><b>שתי השורות המודגשות הן הסיבה שתקופת הבדק אינה מחשבה שנייה.</b> אותה תקלה, אותו חוזה, אותו בניין — ומשלם אחר, אך ורק לפי השאלה אם המכשיר עדיין בתוך תקופת הבדק שלו. מודל בינארי של דייר־או־בעלים אינו יכול לבטא את זוג השורות הזה, ולכן האחריות כאן משולשת. שימו לב לשורה האחרונה: כלל שהשתנה באפריל 2026 אינו דורס את קודמו, אלא גובר עליו לפי תאריך — כך שקריאה שנפתחה במרץ עדיין נפתרת לפי הכלל של מרץ.</p>
+
+    <div class="note blue">
+      <p><strong>כל הכרעה שומרת תצלום של הכלל שהפיק אותה.</strong> כשקריאה מכריעה אחריות היא כותבת גם <code>responsible_resolved</code> וגם <code>policy_version_id</code>. בלי השדה השני הטבלה שימושית רק להווה, והשאלה היחידה שמחלוקת שואלת היא על העבר.</p>
+    </div>
+
+    <div class="sechead" style="margin-top:52px;">
+      <span class="secnum">07 — דרישות ושעונים</span>
+      <h2>שתי טבלאות נוספות, אותה צורה</h2>
+      <p>שתיהן שורות ולא קוד. יכולת שהיא שורה ניתנת לשינוי על ידי איש תפעול ביום שלישי; יכולת שהיא קוד דורשת גרסה.</p>
+    </div>
+
+    <h3>DocumentRequirement — "מה חסר" כצירוף</h3>
+    <div class="tablewrap">
+      <table class="policy">
+        <thead>
+          <tr><th style="width:30%">applies_to</th><th style="width:24%">schema_type_key</th><th style="width:14%">cadence</th><th style="width:14%">grace_days</th><th class="plain">חוסם</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>terms_profile: dira_lehaskir_v2</td><td>lease</td><td>once</td><td>—</td><td class="plain"><span class="who yes">כן</span></td></tr>
+          <tr><td>terms_profile: dira_lehaskir_v2</td><td>id</td><td>once</td><td>7</td><td class="plain"><span class="who yes">כן</span></td></tr>
+          <tr><td>terms_profile: dira_lehaskir_v2</td><td>bank_guarantee</td><td>once</td><td>14</td><td class="plain"><span class="who yes">כן</span></td></tr>
+          <tr><td>terms_profile: dira_lehaskir_v2</td><td>insurance</td><td>annual</td><td>30</td><td class="plain"><span class="who no">לא</span></td></tr>
+          <tr><td>unit</td><td>handover_protocol</td><td>once</td><td>—</td><td class="plain"><span class="who no">לא</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="tabcap">הטבלה הזו היא גם <b>רשימת המשימות למילוי הפערים</b>. מפנים אותה אל הייבוא מ־Drive והיא מפיקה, לכל שכירות, בדיוק אילו מסמכים עדיין חסרים ואילו עומדים לפוג — וזה המסך שממנו תעבדו אישית בשבועות הראשונים, ובהמשך זה שממנו יעבוד הצוות.</p>
+
+    <h3>SlaPolicy — השעון על כל קריאה פתוחה</h3>
+    <div class="tablewrap">
+      <table class="policy">
+        <thead>
+          <tr><th style="width:30%">category_key</th><th style="width:15%">severity</th><th style="width:15%" class="plain">מענה תוך</th><th style="width:18%" class="plain">פתרון תוך</th><th class="plain">מחוץ לשעות</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>plumbing.leak.burst_riser</td><td>emergency</td><td class="plain">15 דקות</td><td class="plain">4 שעות</td><td class="plain">עוקף את הסוכן ← טלפון תורן</td></tr>
+          <tr><td>electrical.outage.full_unit</td><td>emergency</td><td class="plain">15 דקות</td><td class="plain">4 שעות</td><td class="plain">עוקף את הסוכן ← טלפון תורן</td></tr>
+          <tr><td>plumbing.leak.sink_trap</td><td>high</td><td class="plain">שעתיים</td><td class="plain">2 ימי עסקים</td><td class="plain">בהמתנה עד 08:00</td></tr>
+          <tr><td>appliance.oven.not_heating</td><td>normal</td><td class="plain">4 שעות</td><td class="plain">5 ימי עסקים</td><td class="plain">בהמתנה עד 08:00</td></tr>
+          <tr><td>cosmetic.paint.scuff</td><td>low</td><td class="plain">יום עסקים אחד</td><td class="plain">30 יום</td><td class="plain">בהמתנה עד 08:00</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="tabcap"><b>שורות החירום הן כלל ניתוב, לא תווית עדיפות.</b> נזילה מקו אנכי ב־02:00 לעולם לא תיכנס למיון — היא מגיעה ישירות לאדם. המסלול הזה צריך להתקיים ולהיבדק לפני שהסוכן מקבל את הודעת הדייר האמיתית הראשונה שלו.</p>
+
+    <div class="group" style="margin-top:34px;">
+      <div class="group-head"><h3>ישויות המדיניות</h3><span class="tag">דטרמיניסטי · מגורס · ניתן לעריכה בתפעול · לעולם לא מוסק</span></div>
+      <div class="cards">
+
+        <div class="card is-policy">
+          <h4>IssueCategory <span class="own ours">ours</span></h4>
+          <p class="why">הטקסונומיה שכל השאר ממופתח לפיה. יש להקפיא אותה מוקדם; שינויים תכופים בה הורסים את ההיסטוריה ואיתה כל סיכוי לזהות אשכולות תקלות בהמשך.</p>
+          <ul>
+            <li><b>key</b> <span class="t">· plumbing.leak.sink_trap</span></li>
+            <li>label_he, label_ru, label_ar…</li>
+            <li>default_severity</li>
+            <li>self_help_article_id</li>
+            <li>provider_trade</li>
+          </ul>
+        </div>
+
+        <div class="card is-policy">
+          <h4>ResponsibilityPolicy <span class="own ours">ours</span></h4>
+          <p class="why">טבלת האחריות, ממופתחת לפי פרופיל תנאים. אם כל האתרים חולקים נספח תחזוקה אחד, <span class="m">terms_profile_id</span> מתכווץ לערך יחיד והטבלה מאבדת ממד שלם — ולכן מספר הפרופילים הוא השאלה הפתוחה המשמעותית ביותר.</p>
+          <ul>
+            <li>category_key, <b>terms_profile_id</b></li>
+            <li>asset_in_warranty <span class="t">· bool|null</span></li>
+            <li><b>responsible</b> <span class="t">· tenant</span></li>
+            <li class="t">| operator | contractor</li>
+            <li><b>effective_from / to</b> <span class="t">versioned</span></li>
+            <li>tenancy_override_id <span class="t">· exceptions</span></li>
+          </ul>
+        </div>
+
+        <div class="card is-policy">
+          <h4>SlaPolicy <span class="own ours">ours</span></h4>
+          <p class="why">מה שהמכרז התחייב אליו. מפעיל את השעון על כל קריאה פתוחה, והתשובה הכנה היחידה ל"האם אנחנו עומדים ביעדים?"</p>
+          <ul>
+            <li>category_key, severity</li>
+            <li>respond_within, resolve_within</li>
+            <li>after_hours_rule</li>
+            <li>emergency <span class="t">· bypass the agent</span></li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 08 ===================== -->
+  <section>
+    <div class="sechead">
+      <span class="secnum">08 — קליטה</span>
+      <h2>להכניס את ה־Drive של דונה דום לתוך המודל</h2>
+      <p>המסמכים כבר מאורגנים לפי בניין ולפי דירה ב־Google Drive. זה קרוב למקרה הטוב ביותר — מילוי הפערים הוא בעיית קליטה מול מקור ידוע, לא משלחת חיפוש. שני כללים מבניים מונעים ממנה להפוך לנטל.</p>
+    </div>
+
+    <figure>
+      <div class="figbody">
+        <svg viewBox="0 0 1010 250" role="img" aria-label="צינור הקליטה מ־Google Drive: נתיב התיקייה מפורק לרמז שיוך, איש תפעול מאשר את השיוך לבניין, ליחידה ולשכירות, הקובץ מועתק ונחתם ב־Cloud Storage,‏ Document AI מבצע OCR ומפיק מסגרות ורמות ביטחון, ו־OpenAI ממפה את הטקסט לסכמה שהוצהרה. רמז הנתיב לעולם אינו משמש כמפתח.">
+          <defs>
+            <marker id="ar7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+            </marker>
+            <marker id="ar7-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#BF4A22"/>
+            </marker>
+          </defs>
+
+          <rect class="n-ghost" x="20"  y="86" width="150" height="48" rx="2"/>
+          <text class="n-label" x="95" y="107" text-anchor="middle">תיקיית Drive</text>
+          <text class="sub" x="95" y="121" text-anchor="middle">מקור, לא רשומה</text>
+
+          <rect class="n-box" x="205" y="86" width="140" height="48" rx="2"/>
+          <text class="n-label" x="275" y="107" text-anchor="middle">נתיב ← רמז</text>
+          <text class="sub" x="275" y="121" text-anchor="middle">בניין · דירה · סוג</text>
+
+          <rect class="n-accent" x="380" y="86" width="150" height="48" rx="2"/>
+          <text class="n-label acc" x="455" y="107" text-anchor="middle">איש תפעול משייך</text>
+          <text class="sub" x="455" y="121" text-anchor="middle">אתם, ואז הצוות</text>
+
+          <rect class="n-box" x="565" y="86" width="145" height="48" rx="2"/>
+          <text class="n-label" x="637" y="107" text-anchor="middle">Cloud Storage</text>
+          <text class="sub" x="637" y="121" text-anchor="middle">מועתק · נחתם</text>
+
+          <rect class="n-box" x="745" y="86" width="125" height="48" rx="2"/>
+          <text class="n-label" x="807" y="107" text-anchor="middle">Document AI</text>
+          <text class="sub" x="807" y="121" text-anchor="middle">מסגרות · ביטחון</text>
+
+          <rect class="n-box" x="900" y="86" width="95" height="48" rx="2"/>
+          <text class="n-label" x="947" y="107" text-anchor="middle">OpenAI</text>
+          <text class="sub" x="947" y="121" text-anchor="middle">← סכמה</text>
+
+          <path class="e-line" d="M170,110 H199" marker-end="url(#ar7)"/>
+          <path class="e-line" d="M345,110 H374" marker-end="url(#ar7)"/>
+          <path class="e-line" d="M530,110 H559" marker-end="url(#ar7)"/>
+          <path class="e-line" d="M710,110 H739" marker-end="url(#ar7)"/>
+          <path class="e-line" d="M870,110 H894" marker-end="url(#ar7)"/>
+
+          <text class="e-label" x="95" y="66" text-anchor="middle">/Shoham/Apt 12/lease.pdf</text>
+
+          <rect class="n-accent" x="185" y="184" width="180" height="44" rx="2" stroke-dasharray="5 4"/>
+          <text class="n-label acc" x="275" y="205" text-anchor="middle">רמז בלבד — לא מפתח</text>
+          <text class="sub" x="275" y="219" text-anchor="middle">שמות תיקיות משתנים</text>
+          <path class="e-line acc dash" d="M275,134 V178" marker-end="url(#ar7-acc)"/>
+
+          <text class="e-label" x="455" y="164" text-anchor="middle">המזהים המלאכותיים נקשרים כאן, פעם אחת, בידי אדם</text>
+          <path class="e-line" d="M455,134 V152" marker-end="url(#ar7)"/>
+        </svg>
+      </div>
+      <figcaption><b>תרשים 6 — נתיב התיקייה הוא רמז, ואיש התפעול הוא הסמכות.</b> נתיב כמו <code>/Shoham/Apt 12/lease.pdf</code> נותן מיפוי ראשוני בחינם וכדאי בהחלט להשתמש בו כדי למלא מראש את השיוך. הוא לעולם לא יכול <em>להיות</em> השיוך. אם בידוד הדיירים ייפתר אי פעם דרך שם של תיקייה, אז מישהו שמסדר את ה־Drive ביום שלישי אחר הצהריים שובר את האילוץ היחיד שהלקוח הגדיר כמוחלט.</figcaption>
+    </figure>
+
+    <div class="note">
+      <p><strong>כלל ראשון — Drive הוא מקור, לא מערכת הרשומות.</strong> יש להעתיק כל קובץ ל־Cloud Storage בקליטה, לחתום אותו שם, ולשמור את <code>drive_file_id</code> כמקור. אין לקרוא מ־Drive בזמן אמת: כך היינו יורשים את מודל ההרשאות שלו, את זמן התגובה שלו ואת יכולת השינוי שלו ישירות לתוך גבול הבידוד, וקובץ שהועבר לתיקייה אחרת היה משנה בשקט מי יכול לראות אותו.</p>
+      <p><strong>כלל שני — הנתיב הוא ראיה לכוונה, לא לעובדה.</strong> יש לשמור אותו על המסמך כ־<code>drive_path_hint</code> כדי שאיש תפעול יוכל לראות מה התיוק רמז וכדי שאפשר יהיה להתחקות אחר שיוך שגוי. הקישור נעשה על מזהים מלאכותיים בלבד.</p>
+    </div>
+
+    <div class="note good">
+      <p><strong>מסך הקליטה אינו מסך זמני.</strong> זה הכלי שבו תחיו אישית במשך כמה שבועות ואז תמסרו לצוות מיומן — ולכן הוא צריך להיבנות למהירות חוזרת, לא כטופס ישויות גנרי: תמונת העמוד בצד אחד, השדות המחולצים בצד השני, מונע מקלדת, אישור / תיקון / דחייה, הבא. כל תיקון שאיש תפעול מבצע הוא גם נתון מתויג לאימון שער הביטחון, כלומר תור הבדיקה מתכווץ תוך כדי העבודה במקום להישאר קבוע.</p>
+    </div>
+  </section>
+
+  <!-- ===================== 09 ===================== -->
+  <section>
+    <div class="sechead">
+      <span class="secnum">09 — קבלה</span>
+      <h2>אחת עשרה שאילתות שהסכמה חייבת לענות עליהן</h2>
+      <p>מתכננים מלמעלה למטה מהן, ובונים מלמטה למעלה מהטבלאות. אם המודל עונה על כל אחת עשרה בנקיות, הסוכנים הם שכבה דקה של הגדרות כלים מעליו. אם לא, שום ניסוח הנחיות לא יציל אותו.</p>
+    </div>
+
+    <ol class="queries">
+      <li>מי המאכלס המאומת של יחידה X <em>היום</em>, ואילו מספרי טלפון רשאים לדבר בשמו?
+        <span class="ent">Party · TenancyParty · Tenancy · Unit</span></li>
+      <li>על אילו יחידות רשאי מספר הוואטסאפ הזה לשאול, ולאיזה טווח תאריכים?
+        <span class="ent">Party.phones · Tenancy bounds</span></li>
+      <li>עבור קטגוריית תקלה C ביחידה X, מי אחראי — הדייר, המפעיל או הקבלן?
+        <span class="ent">ResponsibilityPolicy · Asset.warranty_until</span></li>
+      <li>האם הנכס המעורב עדיין באחריות, ובידי מי?
+        <span class="ent">Asset · Building.handover_date</span></li>
+      <li>אילו שכירויות מסתיימות בתוך 90 יום ואין להן חידוש רשום?
+        <span class="ent">Tenancy.end_date · status</span></li>
+      <li>לאילו שכירויות פעילות חסר מסמך נדרש, או יש מסמך שפג בתוך 30 יום?
+        <span class="ent">DocumentRequirement ⟕ Document</span></li>
+      <li>אילו ספקים מכסים קטגוריה C בבניין B, והאם הם בריטיינר או לפי קריאה?
+        <span class="ent">Provider · coverage</span></li>
+      <li>מה מספר הקריאות הפתוחות ומצב ה־SLA לכל בניין ברגע זה?
+        <span class="ent">ServiceCall.state · SlaPolicy</span></li>
+      <li>מה התקלקל ביחידה הזו בעבר, ומה תיקן את זה?
+        <span class="ent">ServiceCall · Visit · Asset</span></li>
+      <li>הצג כל הודעה שהוחלפה אי פעם על קריאה T, בשפת המקור ובעברית.
+        <span class="ent">Conversation · Message</span></li>
+      <li>מה האמנו ששכר הדירה על יחידה X היה ב־12 במרץ, מי שינה אותו, ואיזה מסמך אומר זאת?
+        <span class="ent">TenancyEvent · Document · ExtractedField</span></li>
+    </ol>
+  </section>
+
+  <!-- ===================== 10 ===================== -->
+  <section>
+    <div class="sechead">
+      <span class="secnum">10 — פתוח</span>
+      <h2>שאלות פתוחות על המודל</h2>
+      <p>כל אחת מהן משנה טבלה. אף אחת מהן אינה ניתנת למענה מחוץ לדונה דום.</p>
+    </div>
+
+    <div class="oq">
+      <div class="settled">
+        <h4>איפה הנתונים חיים היום? — נענה</h4>
+        <p>ב־Google Drive, מאורגנים לפי בניין ולפי דירה, כשעבודת הארגון כבר בעיצומה. מילוי הפערים הוא בעיית קליטה מול מקור ידוע, שתתבצע תחילה על ידי מנהל הפיתוח אישית ואחר כך על ידי צוות מיומן.</p>
+      </div>
+      <div>
+        <h4>האם גורם אחד יכול להחזיק שתי שכירויות במקביל?</h4>
+        <p>מחסן לצד דירה, או חפיפה במעבר בין יחידות. אם כן, "הדירה של הדייר" הופכת דו־משמעית והסוכן זקוק לתור הבהרה כבר בהודעה הראשונה — בעיה של תכנון שיחה, לא של סכמה, אבל הסכמה היא שחושפת אותה.</p>
+      </div>
+      <div>
+        <h4>האם הציוד ממופה היום, או ידוע רק כשהוא מתקלקל?</h4>
+        <p>אם ה־Drive מחזיק פרוטוקולי מסירה עם רשימות מכשירים ומספרים סידוריים, <code>Asset</code> וחלונות האחריות שלו ניתנים למילוי מראש ושיוך תקופת הבדק עובד מהיום הראשון. אם לא, טבלת הנכסים מתמלאת בהדרגה מקריאות שירות, ואחריות מבוססת אחריות יצרן נעשית אמינה רק חודשים לתוך הדרך.</p>
+      </div>
+      <div>
+        <h4>כמה פרופילי תנאים באמת קיימים?</h4>
+        <p>הטבלה ממופתחת לפי מה ששכירות <em>מחייבת</em>, לעולם לא לפי איך שהנייר נראה. אם אשדוד ושוהם חולקות נספח תחזוקה אחד, זה מתכווץ לערך יחיד והטבלה מאבדת ממד שלם. עדיין הנעלם בעל המינוף הגבוה ביותר במודל.</p>
+      </div>
+      <div>
+        <h4>מי הבעלים של מרשם היחידות — אנחנו או Priority?</h4>
+        <p>השכירות בבעלותנו. אבל אם Priority כבר מחזיקה יחידות ולקוחות, אחד מהשניים חייב להיות המקור והשני שיקוף. שני מקורות אמת הן התוצאה הגרועה ביותר.</p>
+      </div>
+      <div>
+        <h4>איך מספר טלפון נקשר לגורם בפעם הראשונה?</h4>
+        <p>כל מודל הבידוד נשען על הצעד הזה. הוא דורש תהליך רישום אמיתי, מענה למספרים משותפים, ומדיניות למספרים שמשתנים באמצע שכירות.</p>
+      </div>
+      <div>
+        <h4>איפה חי היומן של הצוות באתר?</h4>
+        <p>הצוות הפנימי הוא המסלול הדטרמיניסטי המועדף לשיגור. אם הזמינות שלו נמצאת בראש של מישהו, למכונת המצבים אין יומן להזמין מולו.</p>
+      </div>
+      <div>
+        <h4>מהו מסלול העקיפה לחירום?</h4>
+        <p>נזילה מצינור ב־02:00 חייבת להגיע לאדם בלי לעבור דרך מיון. זו שורת מדיניות וכלל ניתוב, והם צריכים להתקיים לפני שהסוכן מקבל את הודעתו האמיתית הראשונה.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>דונה דום · פלטפורמת שירות לדיירים · מודל הנתונים · 2 בספטמבר 2026</span>
+    <span>ראו גם — מסמך הפלטפורמה · קצב ההשקה</span>
+  </footer>
+
+</div>
