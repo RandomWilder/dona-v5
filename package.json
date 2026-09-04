@@ -1,0 +1,30 @@
+{
+  "name": "dona-v5",
+  "version": "0.1.0-dev",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.12.0"
+  },
+  "scripts": {
+    "test": "npm run test:code && npm run test:hooks",
+    "test:code": "node --test 'src/**/*.test.ts' 'tests/**/*.test.ts' 'evals/**/*.test.ts'",
+    "test:hooks": "node --test '.claude/hooks/**/*.test.mjs'",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check --error-on-warnings",
+    "format": "biome check --write",
+    "db:up": "docker compose up -d",
+    "dev": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/serve.ts",
+    "start": "node src/serve.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.8",
+    "@types/node": "^26.2.0",
+    "@types/pg": "^8.23.1",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "fastify": "^5.12.1",
+    "pg": "^8.23.0"
+  }
+}

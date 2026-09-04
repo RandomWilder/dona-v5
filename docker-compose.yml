@@ -1,0 +1,21 @@
+# Local development database. Postgres 16 + pgvector, because retrieval over lease clauses
+# (month three) runs in the same database as the record — one store, one backup, one restore.
+#
+# Port 5434 is v3's, kept deliberately: `src/kernel/pg-support.ts` arrives verbatim in slice 1.4
+# with that port as its default connection string, and a port change here would make a "rename
+# nothing" lift into an edit. The cost is that v3's compose stack and this one cannot both be up.
+# v3 is a reference to read, not a service to run (docs/from-v3.md).
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: dona
+      POSTGRES_USER: dona
+      POSTGRES_PASSWORD: dona
+    ports:
+      - '5434:5432'
+    volumes:
+      - dona5_pg:/var/lib/postgresql/data
+
+volumes:
+  dona5_pg:

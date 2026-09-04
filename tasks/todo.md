@@ -50,7 +50,7 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       blocked with exit 2; a write under `src/<module>/` runs that module's tests.
       **Verify:** attempt all four; paste the blocks into the evidence file. · **S**
 
-- [ ] **1.3 — Toolchain and a walking skeleton.** Node 24 type stripping, tsconfig, Biome,
+- [x] **1.3 — Toolchain and a walking skeleton.** Node 24 type stripping, tsconfig, Biome,
       `node --test`, docker-compose Postgres 16 + pgvector, `npm run dev` health page.
       **Done when:** clean clone → running in under five minutes; `/health` returns `ok:true` **and**
       `db:up`.
@@ -64,6 +64,18 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       come with it.
       **Done when:** the kernel's own tests pass in v5 and it imports nothing from any domain module.
       **Verify:** `npm test`; grep proves the boundary holds. · **M**
+      **Owed by 1.3 — four things the skeleton wrote by hand for the kernel to take back.** `src/`
+      is deliberately empty of modules so this lift lands in clean space, and these are what it
+      replaces rather than duplicates: (a) `src/app.ts`'s inline `{ code, message }` 503 body →
+      `kernel/errors.ts`'s `KernelError` / `httpStatus` / `toErrorBody`, adding the
+      `setNotFoundHandler` / `setErrorHandler` v3 has and 1.3 deliberately left out; (b)
+      `src/app.test.ts`'s four-line `REQUIRE_POSTGRES` check → `kernel/pg-support.ts`'s
+      `migratedPoolOrNull()`; (c) **`src/db.ts` is deleted by this slice, and its `pool.on('error')`
+      handler must survive the deletion** — v3's `kernel/db.ts` does not have one, so a clean
+      verbatim lift silently reintroduces a bug that kills the process whenever the database
+      restarts ([from-v3.md](../docs/from-v3.md); `src/db.test.ts` is the case that catches it);
+      (d) `docker-compose.yml` stays on **port 5434** precisely so `kernel/pg-support.ts`'s default
+      connection string needs no edit — do not renumber it.
 
 - [ ] **1.5 — `infra/bootstrap.sh` against the new project.** `PROJECT` and `GITHUB_REPO` changed,
       **`REGION` stays `me-west1`**, Cloud SQL `--edition=ENTERPRISE`, WIF with the
@@ -81,6 +93,12 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       and **`evals`**, by those exact names. A CI job named anything else leaves every PR blocked
       forever while no check ever reports. Name the jobs to match, or change protection in the same
       commit — and confirm with a PR that goes green, not by reading the YAML.
+      **Owed by 1.3:** the `gate` job runs `npm run typecheck`, `npm run lint` and `npm test` as
+      three steps — `npm test` is `test:code && test:hooks`, and the hooks half is the only thing
+      that runs `.claude/hooks/hooks.test.mjs`, so a `gate` that shortcuts to `test:code` drops 41
+      cases. Set `REQUIRE_POSTGRES=1` on the job, against a real Postgres service container: without
+      it `src/app.test.ts` and `src/db.test.ts` skip green with no database. `infra/smoke.sh` asserts
+      `/health` returns `ok:true` **and** `db:up`, which is the endpoint 1.3 built for it.
       **Owed by 1.1, closing here rather than at 1.10:** set `enforce_admins: true` on `main` as the
       last act of this slice. It was left `false` only so this slice could push a red commit directly
       to `main`; the moment that Verify is done the reason is spent, and leaving it `false` any longer
@@ -92,11 +110,17 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       **Done when:** both cases fail for the right reason and each guard trips on a deliberate
       violation.
       **Verify:** two commits that each trip one guard, both blocked; the red output recorded. · **M**
+      **Owed by 1.3:** `npm run test:code` already names a `tests/**/*.test.ts` glob, and a glob that
+      matches nothing is silent. **Confirm by count that the policy cases are actually collected** —
+      a suite the runner never found looks exactly like a suite that passed.
 
 - [ ] **1.8 — The evals harness, from commit one.** Runner and three trivial cases, one per kind;
       `REQUIRE_POSTGRES=1` and `REQUIRE_EMBEDDINGS=1` on the evals job.
       **Done when:** `npm run evals` gates merges and a missing database **fails** rather than skips.
       **Verify:** unset the database URL in CI once and watch it go red. · **M**
+      **Owed by 1.3:** same as 1.7 for the `evals/**/*.test.ts` glob in `test:code` — confirm by
+      count, not by reading the script. `REQUIRE_POSTGRES=1` is honoured by `src/app.test.ts` and
+      `src/db.test.ts` today; the evals job needs `REQUIRE_EMBEDDINGS=1` as well.
 
 - [ ] **1.9 — Estate schema: Project · Building · Space · Unit.** E1–E4 from the workbook's FIELDS
       sheet. `Building.project_id` nullable, six-value `space_kind`, `Unit.unit_id = Space.space_id`.

@@ -147,5 +147,8 @@ against a document we authored to pass it.
 
 ## Status
 
-Scaffolded at slice 1.2. Module specs are stubs until their build week
+Toolchain live at slice 1.3: Node 24 type stripping, Biome, `node --test`, Postgres 16 + pgvector on
+`docker compose`, and a `/health` skeleton that asserts `db:up`. No module exists yet — `src/app.ts`,
+`src/db.ts` and `src/serve.ts` sit at the root of `src/` so slice 1.4 can lift `src/kernel/` verbatim
+into an empty space. Module specs are stubs until their build week
 ([tasks/roadmap.md](tasks/roadmap.md)); a stub gaining content is the signal its build has started.

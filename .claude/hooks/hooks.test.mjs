@@ -7,7 +7,7 @@
 // Run: node --test .claude/hooks/hooks.test.mjs
 import { deepStrictEqual, match, ok, strictEqual } from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -16,19 +16,25 @@ import { fileURLToPath } from 'node:url';
 const hooks = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(hooks, '..', '..');
 
-// This runner sets NODE_TEST_CONTEXT=child-v8, and it is inherited all the way down: the hook's
-// own `node --test` grandchild would report over *this* runner's IPC channel and exit 0, so a
-// failing module test would look green to the hook. Claude Code never spawns a hook from inside a
-// test runner, so this is the harness lying to itself, not a defect in the hook.
-const { NODE_TEST_CONTEXT: _dropped, ...cleanEnv } = process.env;
+// Two variables are scrubbed from every spawned hook's environment, for opposite reasons.
+//
+// NODE_TEST_CONTEXT=child-v8 is set by this runner and inherited all the way down: the hook's own
+// `node --test` grandchild would report over *this* runner's IPC channel and exit 0, so a failing
+// module test would look green to the hook. Claude Code never spawns a hook from inside a test
+// runner, so that is the harness lying to itself, not a defect in the hook.
+//
+// DONA_SESSION_START is session-start.mjs's own re-entry marker (slice 1.3). Inherited, it would
+// make the session-start cases behave differently under `npm test` than under `node --test` —
+// green or red depending on who ran them. The cases that care set it explicitly instead.
+const { NODE_TEST_CONTEXT: _dropped, DONA_SESSION_START: _alsoDropped, ...cleanEnv } = process.env;
 
 /** Call a hook the way Claude Code does: JSON on stdin, exit code out. */
-const fire = (script, payload, cwd = repoRoot) =>
+const fire = (script, payload, cwd = repoRoot, env = {}) =>
   spawnSync(process.execPath, [join(hooks, script)], {
     input: typeof payload === 'string' ? payload : JSON.stringify(payload),
     encoding: 'utf8',
     cwd,
-    env: cleanEnv,
+    env: { ...cleanEnv, ...env },
     timeout: 120_000,
   });
 
@@ -178,23 +184,143 @@ describe('after-write: a write under src/<module>/ runs that module\'s tests', (
   });
 });
 
-describe('session-start: no session starts blind', () => {
-  it('prints the current branch', () => {
-    const r = fire('session-start.mjs', {});
-    strictEqual(r.status, 0);
-    match(r.stdout, /## slice\/1\.2-guardrails|## main|branch/i);
+describe('after-write: Biome formats and lints the touched file', () => {
+  // The other half of pipeline §4's PostToolUse rule, unbuildable until slice 1.3 installed Biome.
+  // §4 states two rules, not one: format-and-lint on *any* touched file, and the module's tests on
+  // a file under src/<module>/. The hook conflated them, so src/serve.ts — a file with no module —
+  // was never formatted at all.
+  const fixtures = [];
+  after(() => {
+    for (const dir of fixtures) rmSync(dir, { recursive: true, force: true });
   });
 
-  it('says the toolchain is missing rather than printing an npm error', () => {
-    // AGENTS.md: the toolchain lands in 1.3. Until then "failing tests" has no answer, and the
-    // honest output is that fact — not `npm ERR! Missing script: "test"`.
+  /** A throwaway repo Biome can actually run in: its own config, and the real binary in reach. */
+  const withBiome = (relPath, contents) => {
     const dir = mkdtempSync(join(tmpdir(), 'dona-v5-hook-'));
+    fixtures.push(dir);
+    // `npx --no-install biome` resolves through ./node_modules/.bin. Symlinking the repo's is what
+    // lets a temp checkout exercise the format step instead of silently skipping it, which is the
+    // state this branch of the hook sat in for the whole of slice 1.2.
+    symlinkSync(join(repoRoot, 'node_modules'), join(dir, 'node_modules'), 'dir');
+    cpSync(join(repoRoot, 'biome.json'), join(dir, 'biome.json'));
+    const file = join(dir, relPath);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, contents);
+    return { dir, file };
+  };
+
+  it('formats a src file that belongs to no module', () => {
+    // src/serve.ts and src/app.ts are exactly this shape, and are the whole of the skeleton in 1.3.
+    const { dir, file } = withBiome('src/serve.ts', 'export function serve() {\n    return "up";\n}\n');
+    const r = write(file, dir);
+    strictEqual(r.status, 0, `expected silence, got status ${r.status}: ${r.stderr}`);
+    strictEqual(readFileSync(file, 'utf8'), "export function serve() {\n  return 'up';\n}\n");
+  });
+
+  it('exits 2 with Biome\'s own output when it cannot clean the file', () => {
+    // An unused variable: Biome's only fix for it is unsafe, so --write leaves it and the
+    // --error-on-warnings in the hook turns "noticed" into "blocked". Exit 2 is the only code a
+    // PostToolUse hook can use to put anything in front of the agent (slice 1.2).
+    const { dir, file } = withBiome('src/app.ts', 'export function app() {\n  const unused = 1;\n  return 2;\n}\n');
+    const r = write(file, dir);
+    strictEqual(r.status, 2, `expected exit 2, got ${r.status}. stderr: ${r.stderr}`);
+    // The rule by name, not just "could not clean": a Biome that processed no files at all also
+    // exits non-zero, and asserting the generic line lets that pass as a lint failure.
+    match(r.stderr, /noUnusedVariables/);
+  });
+
+  it('stays silent for a file Biome has nothing to say about', () => {
+    const clean = "export function app() {\n  return 'ok';\n}\n";
+    const { dir, file } = withBiome('src/app.ts', clean);
+    const r = write(file, dir);
+    strictEqual(r.stderr, '', `expected silence, got: ${r.stderr}`);
+    strictEqual(r.status, 0);
+    strictEqual(readFileSync(file, 'utf8'), clean);
+  });
+
+  it('leaves a .ts file outside Biome\'s configured scope alone', () => {
+    // biome.json includes src/**, tests/** and evals/** and nothing else. Running Biome on a file
+    // it is configured to ignore reports zero files processed, which is noise, not feedback.
+    const { dir, file } = withBiome('scratch/probe.ts', 'export function p() {\n    return "x";\n}\n');
+    const r = write(file, dir);
+    strictEqual(r.status, 0);
+    strictEqual(readFileSync(file, 'utf8'), 'export function p() {\n    return "x";\n}\n');
+  });
+});
+
+describe('session-start: no session starts blind', () => {
+  // The repo-root cases below set DONA_SESSION_START so the hook prints its banner without running
+  // the suite. Without it each of them would run npm inside `npm test` — see the nested case.
+  const nested = { DONA_SESSION_START: '1' };
+
+  /** A throwaway git repo whose test:code script does exactly what the case needs. */
+  const repoWithTests = (script) => {
+    const dir = mkdtempSync(join(tmpdir(), 'dona-v5-hook-'));
+    spawnSync('git', ['init', '-q'], { cwd: dir });
+    if (script !== null) {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ scripts: { 'test:code': script } }));
+    }
+    return dir;
+  };
+
+  it('prints the current branch', () => {
+    const r = fire('session-start.mjs', {}, repoRoot, nested);
+    strictEqual(r.status, 0);
+    // Not the branch's name: this suite runs on a different one every slice, and a case that has
+    // to be edited every slice is a case that gets edited without being read.
+    match(r.stdout, /^## \S/m);
+  });
+
+  it('says nothing is there to run rather than printing an npm error', () => {
+    // A checkout with no package.json — what a fresh `git init` looks like, and what this whole
+    // repo looked like before slice 1.3. The honest output is that fact, not
+    // `npm ERR! Missing script: "test:code"`.
+    const dir = repoWithTests(null);
     try {
-      spawnSync('git', ['init', '-q'], { cwd: dir });
       const r = fire('session-start.mjs', {}, dir);
       strictEqual(r.status, 0);
       ok(!/npm ERR!/.test(r.stdout + r.stderr), `leaked an npm error: ${r.stdout}${r.stderr}`);
-      match(r.stdout, /slice 1\.3/);
+      match(r.stdout, /tests: no package\.json with a test:code script/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('runs the code tests and reports green', () => {
+    // The branch that had never once executed before slice 1.3, because no package.json existed.
+    const dir = repoWithTests('node -e "process.exit(0)"');
+    try {
+      const r = fire('session-start.mjs', {}, dir);
+      strictEqual(r.status, 0);
+      match(r.stdout, /tests: green/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports FAILING with the tail of the output when the code tests are red', () => {
+    const dir = repoWithTests('node -e "console.error(\'space kinds are six, not five\'); process.exit(1)"');
+    try {
+      const r = fire('session-start.mjs', {}, dir);
+      strictEqual(r.status, 0, 'the banner reports; it never blocks the session');
+      match(r.stdout, /tests: FAILING/);
+      match(r.stdout, /space kinds are six, not five/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not run the suite again when it is already inside one', () => {
+    // `npm test` runs this suite, which spawns this hook. Without the guard the hook runs `npm
+    // test`, which runs this suite, with no bound: slice 1.3 measured 4:07, four timed-out spawns,
+    // an unrelated guard-bash case red for want of process room, and orphans still forking twenty
+    // minutes later. The scripts are split so it cannot happen; this is the belt.
+    const dir = repoWithTests('node -e "process.exit(1)"');
+    try {
+      const r = fire('session-start.mjs', {}, dir, nested);
+      strictEqual(r.status, 0);
+      match(r.stdout, /tests: not run — nested inside npm test/);
+      ok(!/FAILING/.test(r.stdout), 'it must not have run the script it was told to skip');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -204,7 +330,7 @@ describe('session-start: no session starts blind', () => {
     // A session that declines .claude/settings.json has no hooks and is otherwise identical to one
     // that has them. Nothing in the repo can detect that — the detector would itself be a hook. The
     // banner makes it an absence a human can see. Slice 1.2 evidence, raised item 3.
-    const r = fire('session-start.mjs', {});
+    const r = fire('session-start.mjs', {}, repoRoot, nested);
     strictEqual(r.status, 0);
     match(r.stdout, /guardrails: armed — guard-bash · after-write/);
   });
