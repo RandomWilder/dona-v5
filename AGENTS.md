@@ -30,9 +30,11 @@
 
 ## Boundaries
 - Plan mode before: the kernel, a migration, auth, the policy layer, or two or more modules.
+- `.claude/hooks/` has teeth: destructive shell commands are blocked outright, and a write under
+  `src/<module>/` runs that module's tests and reports the failures back.
 - Secrets enter only through `infra/set-secret.sh` — never in code, a log, a prompt or an argv.
 - **Real tenant documents never enter this repo.** Development runs on tier-1 specimens (`SPEC.md`).
 - Now: `tasks/todo.md` · Plan: `tasks/plan.md` · Process: `docs/pipeline.md` · `docs/decisions/`
 
-**Status: scaffolded at slice 1.1.** Toolchain lands in 1.3, kernel 1.4, CI 1.6 — a command above may
+**Status: scaffolded at slice 1.2.** Toolchain lands in 1.3, kernel 1.4, CI 1.6 — a command above may
 not exist yet.

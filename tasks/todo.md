@@ -44,7 +44,7 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       cannot merge without the required checks.
       **Verify:** branch protection API lists the checks; a throwaway PR reports `BLOCKED`. · **M**
 
-- [ ] **1.2 — Guardrails with teeth.** `guard-bash.mjs` and `after-write.mjs` lifted from v3,
+- [x] **1.2 — Guardrails with teeth.** `guard-bash.mjs` and `after-write.mjs` lifted from v3,
       `SessionStart` printing branch and failing tests, permissions allowlist.
       **Done when:** `rm -rf /`, force push, raw `psql` against prod and `DROP DATABASE` are each
       blocked with exit 2; a write under `src/<module>/` runs that module's tests.
