@@ -9,6 +9,15 @@ Claude-specific additions:
 - **One slice per session.** Take it from [tasks/todo.md](tasks/todo.md), where it is already written
   with acceptance criteria, and finish with its **Verify** step — never self-certify. Close it with a
   `tasks/evidence/<slice>.md` file recording what was proved, with the numbers.
+- **Make the structural call; don't hand over a menu.** Repo layout, gate design, slice sequencing,
+  what gets tested and how are the agent's to decide — take the simplest approach that is effective
+  and safe, do it, and state what was decided and why. What stays the director's: anything that
+  spends money, signs something, touches real tenant data, or makes a promise to the client. Flag
+  those; decide the rest. Options are presented only when the director asked to choose.
+- **Carry every raised item into the slice that closes it** — `tasks/todo.md` and
+  `tasks/roadmap.md`, not only the evidence file, and inside the slice that raised it. Changing the
+  plan is allowed and expected; leaving the plan behind is not. A slice is closed when nothing it
+  opened is unowned ([docs/pipeline.md](docs/pipeline.md) §8).
 - **The spec is the prompt.** Start module work by reading `SPEC-<module>.md`, and propose the spec
   edit before the code edit when behaviour changes. Requirements live in files, never in a chat
   description.
