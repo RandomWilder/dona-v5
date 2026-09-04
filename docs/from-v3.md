@@ -99,6 +99,14 @@ migrations themselves do not come) · `idempotency.ts` · `events.ts` · `work.t
 
 The Hebrew RTL token layer alone is real work that should not be redone.
 
+**One defect to carry across, found in slice 1.3 rather than read out of the file.** `kernel/db.ts`
+builds the `Pool` and attaches **no `'error'` listener**, and nothing else in v3 does either. `pg`
+emits `'error'` on an idle client whose backend goes away — a Cloud SQL restart, a failover, a
+maintenance window — and Node throws on an unhandled `'error'`, so the process *exits* instead of
+degrading. `/health`'s 503 branch never runs, because there is nothing left to serve it. v5 has the
+listener and a test that kills its own backend to prove it (`src/db.ts`, `src/db.test.ts`); the
+verbatim lift in slice 1.4 must bring it along rather than overwrite it.
+
 ### Process and enforcement — the part worth the most
 
 `PIPELINE.md` is the best-written file in the repo and every mechanism it describes was verified to

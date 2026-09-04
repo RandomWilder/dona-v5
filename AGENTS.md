@@ -27,4 +27,4 @@
 - Secrets only through `infra/set-secret.sh`; **real tenant documents never enter this repo**.
 - Now: `tasks/todo.md` · Plan: `tasks/plan.md` · Process: `docs/pipeline.md` · `docs/decisions/`
 
-**Status: scaffolded at slice 1.2** — toolchain lands in 1.3, kernel 1.4, CI 1.6; a command above may not exist yet.
+**Status: toolchain live at slice 1.3** — kernel 1.4, CI 1.6, gates 1.7–1.8. `test:policy`/`evals` do not exist yet.
