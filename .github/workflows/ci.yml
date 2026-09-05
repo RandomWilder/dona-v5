@@ -113,9 +113,3 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run evals
-      # TEMPORARY, and reverted in this same PR. The ranking ratchet is set to the rank retrieval
-      # achieves *today* (docs/pipeline.md §7), and the only place a real embedder exists is this
-      # job — there is no key on a laptop. This prints the measurement once so 002's rankAtMost is a
-      # number that was measured rather than guessed; the table goes into tasks/evidence/1.8.md and
-      # the step comes back out, because an instrument that runs on every PR is not an instrument.
-      - run: npm run measure
