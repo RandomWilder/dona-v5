@@ -31,3 +31,6 @@ Claude-specific additions:
   tool, passing `url` so it updates in place. Never leave the repo and the artifact out of step. The
   register, the hierarchy between the documents, and how they are written: [docs/README.md](docs/README.md).
 - **Never put a real tenant document in this repo**, and never paste a secret into a prompt.
+- **Report to the director in note form.** Extremely concise, grammar sacrificed for concision —
+  fragments over sentences, numbers over adjectives. Chat replies only: specs, evidence files and
+  commit bodies stay full prose, because they are read months later by someone who was not here.
