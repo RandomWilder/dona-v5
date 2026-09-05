@@ -318,26 +318,31 @@ the Cadence, not here.
 
 ## 9. Day one, in order
 
-- [ ] `git init` + GitHub repo; branch protection on `main` — required checks, no force push
+- [x] `git init` + GitHub repo; branch protection on `main` — required checks, no force push
 - [ ] **Light every fuse in §2 and create `tasks/fuses.md` before any of the below.** They burn
       while the scaffolding gets built; nothing here is on their critical path
-- [ ] Scaffold: `AGENTS.md` (20 lines), `CLAUDE.md` pointer, `SPEC.md`, `tasks/todo.md`
-- [ ] `.claude/settings.json`: permissions allowlist plus the four hooks from §4
-- [ ] Biome, tsconfig, `node --test` wiring; one passing dummy test
-- [ ] `infra/bootstrap.sh` against the new project — `REGION` stays `me-west1`. Provisions APIs,
+- [x] Scaffold: `AGENTS.md` (20 lines), `CLAUDE.md` pointer, `SPEC.md`, `tasks/todo.md`
+- [x] `.claude/settings.json`: permissions allowlist plus the four hooks from §4
+- [x] Biome, tsconfig, `node --test` wiring; one passing dummy test
+- [x] `infra/bootstrap.sh` against the new project — `REGION` stays `me-west1`. Provisions APIs,
       Artifact Registry, Cloud SQL with `--edition=ENTERPRISE` (me-west1 defaults new instances to
       `ENTERPRISE_PLUS`, which rejects shared-core tiers), the database user with its generated
       password written straight into Secret Manager, both service accounts, per-secret IAM, the docs
       bucket created closed and re-closed on every run, and Workload Identity Federation with the
       repository attribute condition
-- [ ] `ci.yml`, `deploy.yml` (staging on `workflow_run`), `release.yml` (prod on `v*`)
-- [ ] `tests/policy/` with the isolation join and the recycled-number case — **the two hardest
+- [x] `ci.yml`, `deploy.yml` (staging on `workflow_run`), `release.yml` (prod on `v*`)
+- [x] `tests/policy/` with the isolation join and the recycled-number case — **the two hardest
       constraints have a failing test before they have an implementation**
-- [ ] `evals/` with the runner and three cases, however trivial: the gate exists from commit one
-- [ ] Both grep guards wired into CI, and proved by a commit that trips each one
-- [ ] **Prove the pipeline in both directions on purpose:** break a test → PR blocked; fix → merge →
+- [x] `evals/` with the runner and three cases, however trivial: the gate exists from commit one
+- [x] Both grep guards wired into CI, and proved by a commit that trips each one
+- [x] **Prove the pipeline in both directions on purpose:** break a test → PR blocked; fix → merge →
       staging live; tag → prod; then **roll prod back**, and confirm the next deploy still takes
       traffic. The one time this is easy to do is the day nothing depends on it
+
+**Closed by slice 1.10 on 2026-09-05**, except the fuse row, which stays open on purpose: `tasks/fuses.md`
+exists and F1 is lit, but F2–F7 are someone else's decision and are walked weekly until they land. The
+last line was performed rather than built — three tags, a rollback, and a deploy that took 100% of the
+traffic afterwards ([tasks/evidence/1.10.md](../tasks/evidence/1.10.md)).
 
 ## 10. Anti-patterns
 
