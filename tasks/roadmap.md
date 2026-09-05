@@ -185,6 +185,16 @@ an ancestor of `main`.
   touched no database at all. Runtime dependencies are now four: `pdfjs-dist` and
   `google-auth-library` arrived with the kernel and `npm ci --omit=dev` installs both — `pdfjs-dist`
   alone is 35 MB unpacked, so the image and the build time both grow.
+- **Done 2026-09-05** ([evidence](evidence/1.6.md)). Staging live at
+  `https://dona-staging-681282581055.me-west1.run.app`; image 330 MiB, a whole deploy under two
+  minutes. Red commit `ed92f87` pushed straight to `main` → CI failed in 25 s, `Deploy` concluded
+  **skipped**, staging stayed on the previous revision. `gate` armed after it reported green, proved
+  from a second PR's rollup rather than from the YAML; `enforce_admins` now `true`.
+  `REQUIRE_POSTGRES=1` decides **24** cases, not 23 — this slice added one. Migrations run as a
+  Cloud Run job from the deployed image as the **runtime** account, **before** the revision serves:
+  the connection URL is bound to `app-<env>` alone, so migrating from the runner would have handed
+  the CI identity prod's connection string. [pipeline.md](../docs/pipeline.md) §5's arrow was
+  corrected in the same change. `evals` deliberately not written: 1.8 owns it.
 - **Deps:** 1.3, 1.5 · **Size:** M
 
 ### Slice 1.7 — The policy suite, red before the schema exists
@@ -204,6 +214,10 @@ against tables that do not exist yet. Wire **both grep guards**: no migration ma
   the `current_tenant` guard against `migrations/*.sql`, which matches nothing: a guard that passes
   because it read no files, which is 1.3's silent-glob finding arriving in CI instead of in a test
   runner. Point it at the real path, and prove it by tripping it.
+- **Owed by 1.6 — the guards go inside `gate`.** `ci.yml` has exactly one job and it is a
+  **required** context on `main` from 2026-09-05, so a guard added as a step in it blocks merges the
+  moment it lands — trip each one deliberately on a branch rather than discover it on `main`. With
+  `enforce_admins` true there is no admin merge past a guard that fires.
 - **Deps:** 1.6 · **Size:** M
 
 ### Slice 1.8 — The evals harness, from commit one
@@ -220,6 +234,12 @@ trivial cases, one per kind, so the gate is never introduced late. `REQUIRE_POST
   2026-09-04 (see 1.6). This is the first slice that can satisfy it honestly, so as its closing act:
   watch the job go green on a PR **and** go red with the database URL unset, then add `evals` back as
   a required context. Re-arming on a job that has only ever passed repeats 1.1's mistake.
+- **Owed by 1.6 — what to add, and the one thing that does not exist yet.** A second job in
+  `ci.yml` named exactly **`evals`**, with its own `pgvector/pgvector:pg16` service container,
+  `REQUIRE_POSTGRES=1` **and** `REQUIRE_EMBEDDINGS=1`, plus a repository secret `OPENAI_API_KEY` —
+  a **CI-only** key, deliberately not staging's or prod's, which live in Secret Manager and reach
+  only their own service account. No such repository secret exists today. Re-arm by PATCHing both
+  contexts in at once, `{"contexts":["gate","evals"]}`, keeping `strict: true`.
 - **Deps:** 1.6 · **Size:** M
 
 ### Slice 1.9 — Estate schema: Project · Building · Space · Unit
@@ -252,9 +272,14 @@ the week nothing depends on it.
   serving — the proof is the script's exit code, not a traffic percentage read off a list. It also
   prints the roll-forward command, which is what turns "confirm the next deploy still takes traffic"
   into a step rather than a memory.
+- **Owed by 1.6 — `release.yml` exists and has never run.** The first `v*` tag creates **both** the
+  `dona-prod` service and the `dona-prod-migrate` job, exactly as 1.6's first deploy created
+  staging's, so the tag leg is a first run rather than a redeploy — budget for it. The gate is
+  re-run against the tagged commit through `workflow_call`, and a tag that is not an ancestor of
+  `main` is refused.
 - **Confirms 1.6's flip:** this is the first slice that runs entirely inside the enforced gate, so
-  its break→blocked leg doubles as the proof that `enforce_admins: true` took. Still `false` here
-  means 1.6 did not finish.
+  its break→blocked leg doubles as the proof that `enforce_admins: true` took — it was flipped on
+  2026-09-05 at the end of that slice.
 - **Deps:** 1.6 · **Size:** S
 
 ### Slice 1.11 — The Shoham fixture and the week-1 surface
@@ -534,7 +559,7 @@ not the scans, the handwriting or the signatures (A7; the controls for tier 2 we
 | **5** | Real data | **Paper becomes truth.** An amendment arrives for a real unit; the tenancy updates; the change log records old → new, who approved it, which document caused it. Then a tenancy ends because a date passed, with no document at all. | Promotion at scale · tenancy reconciliation · `TenancyEvent` · Obligation + ObligationType (E9, E10) · **the settings screen: the `ObligationType` and `DocumentType` catalogues, admin-managed at last (A9) — one screen, one pattern, and `asset_type` deliberately absent from it** · staff MFA and the `national_id` field guard — **owed by 1.5:** `infra/bootstrap.sh` deliberately creates no staff seed secrets, so whatever this mechanism needs in Secret Manager is created here, by the slice that knows what it is | W4 · **closes open question 2 — how many `terms_profile`s are in force, which sizes week 6** |
 | **6** | Software | **Who pays for this, and why.** Pick a category and a unit; get tenant / operator / contractor with the clause and the policy version behind it. Then edit the table live and watch the answer change. | `policy` module: the responsibility matrix as versioned, admin-editable data · `asset_in_warranty` fed by week 3's asset register · rules supersede by `effective_from` and never overwrite · `policy_version_id` snapshotted on every resolution | W5, W3.5 · sized by question 2 |
 | **7** | Software | **A ticket, start to finish, by hand.** Walk the canonical states in the console — NEW · IDENTIFIED · TRIAGED · RESPONSIBILITY SET · WINDOWS COLLECTED · OFFERED · SCHEDULED · CLOSED — plus the three exits. Watch the SLA clock run and the escalation fire. No WhatsApp, no agent. | `calls` module: state machine · SLA policies · timers · escalation · **the emergency bypass, live and tested here** because it must exist before the agent takes its first real message in week 10 · **the async negotiation engine starts and runs underneath for six weeks** | W6 |
-| **8** | Evidence | **Try to break tenant isolation, live.** Query as one tenant's phone and attempt to reach another tenant's documents, unit or history — through the console, through the API, and by asking the model. Every path returns nothing. | Policy suite cases 4 and 5 (`UNIT` is the only kind that can be the tenant's; a live warranty moves responsibility to the contractor, and re-resolving after a policy change still returns the snapshot) · `national_id` unreachable by any agent tool · audit on every scoped read | W7 |
+| **8** | Evidence | **Try to break tenant isolation, live.** Query as one tenant's phone and attempt to reach another tenant's documents, unit or history — through the console, through the API, and by asking the model. Every path returns nothing. | Policy suite cases 4 and 5 (`UNIT` is the only kind that can be the tenant's; a live warranty moves responsibility to the contractor, and re-resolving after a policy change still returns the snapshot) · `national_id` unreachable by any agent tool · audit on every scoped read · **owed by 1.5 and unblocked by 1.6:** the deploy accounts hold `run.admin` at *project* level because scoping it per service was impossible before a service existed — the Cloud Run services exist now, so bind it per service · **owed by 1.6:** bump the four Node-20 GitHub actions (`checkout@v4`, `setup-node@v4`, `google-github-actions/auth@v2`, `setup-gcloud@v2`), which every run annotates as deprecated | W7 |
 
 ### **Checkpoint · M2**
 - [ ] The console is usable on its own — if the agent were cancelled tomorrow, this is still a product
