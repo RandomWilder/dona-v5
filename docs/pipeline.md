@@ -136,13 +136,21 @@ CI:       typecheck · lint · unit + contract tests
           evals/golden/     ← REQUIRED · grounding · refusal · isolation attempts     (§7)
           two grep guards · race + timeout tests · dependency audit
    ↓ merge to main
-staging:  deploys on workflow_run after CI succeeds → migrations → smoke
+staging:  on workflow_run after CI succeeds → migrations → deploy → take traffic → smoke
    ↓ tag v*
-prod:     full CI re-run against the tagged commit → deploy → smoke → take traffic
+prod:     full CI re-run against the tagged commit → migrations → deploy → take traffic → smoke
 ```
 
 - **Staging deploys on `workflow_run`, after CI succeeds — never on push.** That one wiring choice is
   what makes it impossible for a red commit to reach staging, even by a direct push to `main`.
+- **Migrations run before the revision serves, not after** — as their own Cloud Run job, from the
+  image that is about to be deployed, as the *runtime* service account (slice 1.6). Two reasons, and
+  the second is the one that decided it. Migrations are append-only, so old code against the new
+  schema is the safe direction and new code against the old schema is not. And the connection URL is
+  readable only by `app-<env>`: running the migration from the CI runner would mean granting the
+  deploy identity access to prod's database URL and connecting from outside the perimeter, which
+  trades a genuine isolation property for a build step. The runner orchestrates, and never holds the
+  credential.
 - **Prod deploys on a `v*` tag only**, the release workflow re-runs the whole gate against the tagged
   commit, and it refuses to release a tag that is not an ancestor of `main`.
 - **Take traffic after every deploy.** A rollback pins traffic to a named revision, and it *stays*

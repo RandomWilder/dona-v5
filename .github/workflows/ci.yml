@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Callable so a release can re-run this exact gate on the tagged commit. Tags do not match the
+  # push filter above, so without this a tag would deploy to prod having proven nothing
+  # (docs/pipeline.md §5).
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The job id and its name are both `gate` on purpose: that string is the check context branch
+  # protection requires on `main`. Slice 1.1 required `gate` and `evals` with no workflow behind
+  # either, which is not a pending check — it is a permanently failing one, and the only way past it
+  # was `--admin`. This slice re-arms `gate` only after it has reported green once. `evals` stays
+  # unarmed and unwritten until slice 1.8: a stub job that exits 0 on an empty suite is a green
+  # check that proves nothing, which is the same promise made twice.
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+
+    services:
+      # The same image as docker-compose.yml, so CI and local run one engine — and pgvector rather
+      # than stock postgres because 0001_init.sql creates the `vector` extension.
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: dona
+          POSTGRES_USER: dona
+          POSTGRES_PASSWORD: dona
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dona -d dona"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://dona:dona@127.0.0.1:5432/dona
+      # Without this the kernel durability suite skips itself and the job passes having touched no
+      # database at all — 23 cases, not 2, since slice 1.4 (src/kernel/pg-support.ts).
+      REQUIRE_POSTGRES: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      # `npm test` is test:code && test:hooks. The hooks half is the only thing that runs
+      # .claude/hooks/hooks.test.mjs, so a gate that shortcuts to test:code drops those cases and
+      # stops proving the guardrails work.
+      - run: npm test

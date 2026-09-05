@@ -1,0 +1,123 @@
+name: Deploy
+
+# Runs only after CI reports success, so a red commit can never reach staging — which covers a
+# direct push to `main` as well as a merge, because the trigger is the CI *result* and not the push
+# (docs/pipeline.md §5). This wiring is the whole acceptance criterion of slice 1.6.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    name: staging
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+
+    env:
+      PROJECT: dona-v5
+      REGION: me-west1
+      SERVICE: dona-staging
+      IMAGE: me-west1-docker.pkg.dev/dona-v5/dona/app
+      SHA: ${{ github.event.workflow_run.head_sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # workflow_run hands us the default-branch tip by default; deploy the commit that actually
+          # passed CI.
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # No service-account key exists to leak: the provider's attribute condition pins this to
+      # RandomWilder/dona-v5, so no other repository can mint a token for this project (slice 1.5).
+      # If the repository ever moves, this path and that condition change together.
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/681282581055/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: deploy-staging@dona-v5.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and push
+        run: |
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          docker build -t "$IMAGE:$SHA" -t "$IMAGE:staging" .
+          docker push "$IMAGE:$SHA"
+          docker push "$IMAGE:staging"
+          docker image inspect "$IMAGE:$SHA" --format 'image size: {{.Size}} bytes'
+
+      # Migrations run before the new revision serves, from the image about to be deployed, as the
+      # *runtime* service account — not from this runner (docs/pipeline.md §5, slice 1.6).
+      #
+      # Two reasons, and the second decided it. Migrations are append-only, so old code against the
+      # new schema is the safe direction and new code against the old schema is not. And
+      # staging-database-url is a unix-socket URL readable only by app-staging: migrating from the
+      # runner would mean granting the deploy identity access to the database URL and connecting
+      # from outside the perimeter, which trades a real isolation property for a build step. The
+      # runner orchestrates; it never holds the credential.
+      #
+      # --max-retries 0 so a bad migration fails once and fails the deploy, rather than being
+      # retried three times against a database it has already half-changed.
+      - name: Migrate
+        run: |
+          gcloud run jobs deploy "$SERVICE-migrate" \
+            --image "$IMAGE:$SHA" \
+            --region "$REGION" \
+            --project "$PROJECT" \
+            --service-account "app-staging@$PROJECT.iam.gserviceaccount.com" \
+            --set-cloudsql-instances "$PROJECT:$REGION:dona-staging" \
+            --set-secrets "DATABASE_URL=staging-database-url:latest" \
+            --command node \
+            --args src/migrate.ts \
+            --max-retries 0 \
+            --task-timeout 10m \
+            --execute-now \
+            --wait \
+            --quiet
+
+      - name: Deploy
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE:$SHA" \
+            --region "$REGION" \
+            --project "$PROJECT" \
+            --service-account "app-staging@$PROJECT.iam.gserviceaccount.com" \
+            --add-cloudsql-instances "$PROJECT:$REGION:dona-staging" \
+            --set-secrets "DATABASE_URL=staging-database-url:latest" \
+            --update-env-vars "VERSION=${SHA:0:7},DOCS_BUCKET=$PROJECT-staging-docs" \
+            --allow-unauthenticated \
+            --min-instances 0 \
+            --max-instances 3 \
+            --quiet
+
+      # A rollback pins traffic to a named revision and it stays pinned — the deploy above would
+      # then create a revision serving 0%: green pipeline, nothing changed (docs/pipeline.md §5).
+      - name: Take traffic
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --to-latest --region "$REGION" --project "$PROJECT" --quiet
+
+      # "Deployed but silently broken" must fail loudly. The same script prod uses and the same one
+      # you can run by hand: /health returning ok:true *and* db:up (infra/smoke.sh, slice 1.5).
+      - name: Smoke test
+        run: |
+          URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" --format='value(status.url)')"
+          BODY="$(./infra/smoke.sh "$URL")"
+          REVISION="$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" --format='value(status.latestReadyRevisionName)')"
+          {
+            echo "### Staging deployed"
+            echo ""
+            echo "- URL: $URL"
+            echo "- commit: \`$SHA\`"
+            echo "- revision: \`$REVISION\`"
+            echo "- health: \`$BODY\`"
+          } >> "$GITHUB_STEP_SUMMARY"
