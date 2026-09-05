@@ -98,7 +98,7 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       Identity Platform with enforced MFA, so v3's email+password pair may never be built — carried
       into the week-5 staff-MFA row in [roadmap.md](roadmap.md).
 
-- [ ] **1.6 — CI, staging, release.** `ci.yml`, `deploy.yml` on `workflow_run`, `release.yml` on
+- [x] **1.6 — CI, staging, release.** `ci.yml`, `deploy.yml` on `workflow_run`, `release.yml` on
       `v*` only.
       **Done when:** a red commit cannot reach staging even by a direct push to `main`.
       **Verify:** push one and watch staging not move. · **M**
@@ -146,6 +146,17 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       **Owed by 1.4:** the image grows. `pdfjs-dist` and `google-auth-library` are runtime
       dependencies from this slice and `npm ci --omit=dev` installs both. `pdfjs-dist` alone is
       **35 MB unpacked**; check the Cloud Run build time and image size rather than be surprised.
+      **Closed 2026-09-05** ([evidence](evidence/1.6.md)). Staging is live at
+      `https://dona-staging-681282581055.me-west1.run.app`, three revisions, `version` stamped with
+      the commit; the image is 330 MiB and a whole deploy takes under two minutes. The red commit
+      `ed92f87` was pushed straight to `main`: CI failed in 25 s, `Deploy` concluded **skipped**, and
+      staging stayed on the previous revision — what guards it is `deploy.yml`'s
+      `conclusion == 'success'`, not the branch protection, which an admin can push past. `gate` is
+      armed and `enforce_admins` is `true`. `REQUIRE_POSTGRES=1` decides **24** cases, not 23; this
+      slice added one. Migrations run as a Cloud Run job from the deployed image as the **runtime**
+      account, **before** the revision serves: `<env>-database-url` is readable only by `app-<env>`,
+      so migrating from the runner would have meant handing the CI identity prod's connection string.
+      `docs/pipeline.md` §5's arrow was corrected in the same change.
 
 - [ ] **1.7 — The policy suite, red before the schema exists.** Case 1 (the five-hop isolation join,
       both temporal predicates) and case 2 (a recycled number resolves to nobody), plus both grep
@@ -161,6 +172,11 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       `current_tenant` guard against `migrations/*.sql`, which matches nothing and would be a guard
       that passes by looking at no files — the same failure 1.3 found in a `node --test` glob. Point
       it at the real path and prove it by tripping it.
+      **Owed by 1.6 — where the guards live, and what that now costs.** `ci.yml` has exactly one
+      job, `gate`, and it is a **required** context on `main` from 2026-09-05. The guards belong as
+      steps in it rather than as a fourth job nothing requires — which means the moment one lands it
+      blocks merges, so trip each one deliberately on a branch rather than discover it on `main`.
+      `enforce_admins` is `true`, so there is no admin merge past a guard that fires.
 
 - [ ] **1.8 — The evals harness, from commit one.** Runner and three trivial cases, one per kind;
       `REQUIRE_POSTGRES=1` and `REQUIRE_EMBEDDINGS=1` on the evals job.
@@ -175,6 +191,13 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       watch it go red with the database URL unset, **then** add `evals` back as a required context.
       Not before the red — a context re-armed on a job that has only ever passed is the same promise
       1.1 made.
+      **Owed by 1.6 — what to add, and the one thing that does not exist yet.** `ci.yml` gains a
+      second job named exactly **`evals`**, with its own `pgvector/pgvector:pg16` service container,
+      `REQUIRE_POSTGRES=1` **and** `REQUIRE_EMBEDDINGS=1`. It also needs a repository secret
+      `OPENAI_API_KEY` — a **CI-only** key, deliberately not staging's or prod's, which live in
+      Secret Manager and reach only their own service account, so this one can be revoked alone. No
+      such repository secret exists today. Re-arm by PATCHing both names in at once,
+      `{"contexts":["gate","evals"]}`, keeping `strict: true`.
 
 - [ ] **1.9 — Estate schema: Project · Building · Space · Unit.** E1–E4 from the workbook's FIELDS
       sheet. `Building.project_id` nullable, six-value `space_kind`, `Unit.unit_id = Space.space_id`.
@@ -199,6 +222,10 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       rollback is proved by the script's own exit code, not by reading a traffic percentage. It also
       prints the roll-forward command, which is what makes "confirm the next deploy still takes
       traffic" a step rather than a memory.
+      **Owed by 1.6 — `release.yml` exists and has never run.** The first `v*` tag creates **both**
+      the `dona-prod` service and the `dona-prod-migrate` job, exactly as 1.6's first deploy created
+      staging's, so the tag leg is a first run and not a redeploy. The gate is re-run against the
+      tagged commit through `workflow_call`, and a tag that is not an ancestor of `main` is refused.
       **Confirms an owed action from 1.1, which 1.6 closes:** `enforce_admins` is `true` on `main`.
       This slice is the first one that runs entirely inside the enforced gate, so its break→blocked
       leg is also the proof that the flip took. If it is still `false` here, 1.6 did not finish.
