@@ -29,6 +29,12 @@ interface Probe {
 }
 
 const probes: Probe[] = [
+  // The retrieval case's own question comes first, because an instrument that
+  // measures a question the gate does not assert measures the wrong thing.
+  {
+    question: 'מי מתקן דוד מים שהתקלקל מבלאי?',
+    expect: specimenRefs.ownerRepairs,
+  },
   {
     question: 'מי אחראי על תיקון דוד המים בדירה?',
     expect: specimenRefs.ownerRepairs,

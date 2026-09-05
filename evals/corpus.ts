@@ -75,12 +75,17 @@ const searchLimit = 8;
 // PLACEHOLDER, and the only invented number in the harness. `channel` owns the
 // real refusal rule from week 3; until then a question whose nearest passage is
 // further than this is one nothing in the corpus answers. Cosine distance, so
-// 0 is identical and 1 is unrelated. Set from `npm run measure` output rather
-// than by taste -- the observation lives in tasks/evidence/1.8.md.
+// 0 is identical and 1 is unrelated.
+//
+// Measured, not chosen: run 33973510866 ranked five answerable questions at
+// 0.3105-0.4908 and two unanswerable ones at 0.6922 and 0.7322, so distance
+// separates here by a clear margin and this sits in the middle of the gap
+// rather than at one edge of it. The table is in tasks/evidence/1.8.md.
 //
 // It is asserted by no case. SPEC.md: no assertion is ever on a distance,
-// because provider embeddings are not bit-identical between runs.
-export const groundingCutoff = 0.62;
+// because provider embeddings are not bit-identical between runs -- which is
+// exactly why the number needs a gap around it and not a decimal place.
+export const groundingCutoff = 0.59;
 
 // The embedder is injected in one place only -- corpus.test.ts, which proves
 // the DDL, the insert and the `<=>` ordering against a real database with the
