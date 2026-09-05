@@ -10,6 +10,8 @@
     "test": "npm run test:code && npm run test:hooks",
     "test:code": "node --test 'src/**/*.test.ts' 'tests/**/*.test.ts' 'evals/**/*.test.ts'",
     "test:hooks": "node --test '.claude/hooks/**/*.test.mjs'",
+    "test:policy": "node --test 'tests/policy/**/*.test.ts'",
+    "guards": "node scripts/guards.ts",
     "typecheck": "tsc --noEmit",
     "lint": "biome check --error-on-warnings",
     "format": "biome check --write",

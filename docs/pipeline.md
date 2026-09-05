@@ -208,11 +208,20 @@ then add the constraint.
 argue with at 2am:
 
 - **No migration may introduce a `current_tenant` column.** `current_tenant` is a view, not a column.
-  A grep over `migrations/*.sql` fails the build. The constraint is absolute, so the guard is too.
+  A grep over **`src/kernel/migrations/*.sql`** fails the build. The constraint is absolute, so the
+  guard is too — a match in a comment fails as readily as a match in DDL. (This section said
+  `migrations/*.sql` until slice 1.7. Migrations have never lived there in this repository, so the
+  guard as written would have scanned no files and passed forever. Both guards therefore fail when
+  they scanned nothing, which is the only part of a grep guard that catches a wrong path.)
 - **Only one module may construct tenant scope.** The isolation join is written once, in one file,
-  where it can be read and defended. A grep that finds the join's temporal predicate anywhere else
-  fails the build — because the way this constraint dies is not a rewrite, it is a second copy that
-  drifts.
+  where it can be read and defended. A grep that finds either of the join's temporal predicates —
+  the contact-validity one and the tenancy-active one — outside `src/scope/` fails the build, because
+  the way this constraint dies is not a rewrite, it is a second copy that drifts. The match is on the
+  *predicates* and not on the table names: naming `party_contact` is ordinary, and re-deciding when a
+  contact or a tenancy counts is what only one file may do.
+
+**Both guards are steps of the `gate` job**, which is the required check on `main` — a guard nothing
+requires is a guard nobody obeys. `npm run guards` runs them, and `scripts/guards.ts` is the file.
 
 ## 7. The golden set — the gate for the agent
 
