@@ -147,6 +147,16 @@ an ancestor of `main`.
 - **Owed by 1.1, closing here rather than at 1.10:** `enforce_admins: true` on `main`, as the last
   act of the slice. It was `false` only so this Verify could push red to `main`; once that is done
   the reason is spent, and every slice after this one merges inside a gate that is real.
+- **Owed by 1.4 — the deploy must run the migrations, and nothing can run them yet.** 1.4 brought
+  `kernel/migrate.ts` and three migrations, but the only caller is `pg-support.ts` inside the test
+  run: there is no `npm run migrate` and no CLI entry point, so a deployed revision would serve
+  `/health` against a database with no tables. `deploy.yml` and `release.yml` both need one, between
+  the deploy and the smoke (pipeline §5). It is built here.
+- **Owed by 1.4:** `REQUIRE_POSTGRES=1` now decides **23** cases rather than 2 — the whole kernel
+  durability suite. Without it, against a real Postgres service container, `gate` goes green having
+  touched no database at all. Runtime dependencies are now four: `pdfjs-dist` and
+  `google-auth-library` arrived with the kernel and `npm ci --omit=dev` installs both — `pdfjs-dist`
+  alone is 35 MB unpacked, so the image and the build time both grow.
 - **Deps:** 1.3, 1.5 · **Size:** M
 
 ### Slice 1.7 — The policy suite, red before the schema exists
@@ -161,6 +171,11 @@ against tables that do not exist yet. Wire **both grep guards**: no migration ma
 - **Owed by 1.3:** `npm run test:code` already names a `tests/**/*.test.ts` glob, and a glob that
   matches nothing is silent. Confirm by **case count** that the policy suite is collected — a suite
   the runner never found is indistinguishable from one that passed.
+- **Owed by 1.4 — the guard's path is wrong in every document that names it.** Migrations live at
+  **`src/kernel/migrations/*.sql`**, not root `migrations/`. Pipeline §6 and this file both wrote
+  the `current_tenant` guard against `migrations/*.sql`, which matches nothing: a guard that passes
+  because it read no files, which is 1.3's silent-glob finding arriving in CI instead of in a test
+  runner. Point it at the real path, and prove it by tripping it.
 - **Deps:** 1.6 · **Size:** M
 
 ### Slice 1.8 — The evals harness, from commit one
@@ -187,6 +202,9 @@ Space.space_id` as a shared key, not a foreign key to a surrogate. Natural keys 
 - **Done when:** an apartment is a Space with a Unit extension and a lobby is a Space with none, both
   enforced by the schema rather than by convention.
 - **Verify:** contract tests for R1, R2 and R15; an insert of a Unit with no Space is rejected.
+- **Owed by 1.4:** the DDL appends from **`0004_`**. `0001`–`0003` are the kernel's own — the
+  `vector` extension, the durability tables, their settings seed — and estate is the first domain
+  table in this repository.
 - **Deps:** 1.4, 1.7 · **Size:** M
 
 ### Slice 1.10 — Prove the pipeline in both directions, on purpose
@@ -206,6 +224,10 @@ the importer path rather than by hand, and a buildings/units list screen on the 
 - **Done when:** a stakeholder opens the staging URL on their own phone and sees the building and its
   units.
 - **Verify:** the owner browses it in a browser, not a screenshot.
+- **Owed by 1.4:** v3's `kernel/ui/tokens.test.ts` was deliberately **not** lifted — it asserts
+  against module HTML shells that v5 does not have yet. It is the guard keeping a hex colour, a
+  `fonts.googleapis` URL and a physical `left:`/`right:` out of a screen, and it fails on the HTML
+  rather than the CSS because that is where the discipline erodes. It lands with this screen.
 - **Deps:** 1.9 · **Size:** M
 
 ### Slice 1.12 — The corpus, both tiers, and the controls the second one needs

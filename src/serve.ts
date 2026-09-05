@@ -3,14 +3,14 @@
 // of it with --env-file-if-exists, neither of which overrides a variable already set in the shell —
 // which is why v3's hand-written .env loader (src/dev.ts) is not lifted.
 import { buildApp } from './app.ts';
-import { createPool } from './db.ts';
+import { createPool } from './kernel/db.ts';
 
 const host = process.env.HOST ?? '0.0.0.0';
 const port = Number(process.env.PORT ?? 8080);
 
-const pool = createPool(
-  process.env.DATABASE_URL ?? 'postgres://dona:dona@127.0.0.1:5434/dona',
-);
+// No localhost fallback: createPool refuses a missing DATABASE_URL (kernel/db.ts). A production
+// service that quietly falls back to a developer's database is worse than one that will not boot.
+const pool = createPool();
 
 // The deploy stamps the commit it built (slice 1.6). Locally the honest answer is that it is a
 // working copy, not a release.
