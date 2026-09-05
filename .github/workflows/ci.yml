@@ -93,7 +93,7 @@ jobs:
           --health-retries 10
 
     env:
-      # DELIBERATELY UNSET again, now that `evals` is required — reverted in the next commit.
+      DATABASE_URL: postgres://dona:dona@127.0.0.1:5432/dona
       # Both halves of what a retrieval case needs, and both are the same argument: absent a
       # database or a key those cases *skip*, which is right on a clean clone and a lie here — the
       # job would go green having ranked nothing. `=1` turns each skip back into a failure
