@@ -190,7 +190,7 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       both `BLOCKED`, both reverted. `src/scope/` landed here rather than at 2.3, holding the join and
       nothing else, because a case that writes its own copy proves the copy.
 
-- [ ] **1.8 — The evals harness, from commit one.** Runner and three trivial cases, one per kind;
+- [x] **1.8 — The evals harness, from commit one.** Runner and three trivial cases, one per kind;
       `REQUIRE_POSTGRES=1` and `REQUIRE_EMBEDDINGS=1` on the evals job.
       **Done when:** `npm run evals` gates merges and a missing database **fails** rather than skips.
       **Verify:** unset the database URL in CI once and watch it go red. · **M**
@@ -212,6 +212,22 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       `{"contexts":["gate","evals"]}`, keeping `strict: true`.
       **Owed by 1.7:** the two grep guards are steps of the `gate` job, so the `evals` job does not
       repeat them. `npm run guards` is the command; `scripts/guards.ts` is the file.
+      **Closed 2026-09-05** ([evidence](evidence/1.8.md)). Three cases, one per kind, and 17 harness
+      tests inside `npm test` (163 → 180 — 1.3's `evals/**/*.test.ts` glob confirmed by count).
+      `evals` was seen red **twice** before it was armed, for the two different reasons it can be
+      red: no key (run `33973148375`) and no database (`b40e02b` → run `33973760443`, the Verify
+      step, reverted in `9447ff9` — whose message cites the wrong hash, `b6be1c9`; correcting it
+      needs a force push and is not worth one). Contexts are now `["gate","evals"]`, `strict: true`,
+      `enforce_admins: true`. The structural call: `evals/corpus.ts` is the one file not lifted from
+      v3, because v3 built its corpus through modules v5 does not have — nine authored Hebrew
+      passages into a **TEMP** `vector(1536)` table, through the real config rows, the real embedder
+      and pgvector's own ordering, because a corpus needing neither a database nor a key makes both
+      `REQUIRE_*` switches decorative and the acceptance bar unmeetable. `rankAtMost: 1` and the
+      grounding cutoff (0.62 → **0.59**) were both set from a measurement run rather than chosen.
+      `release.yml` gained `secrets: inherit`, and a red `evals` now stops staging too through
+      `deploy.yml`'s existing conclusion check. `AGENTS.md` is 29 lines: 1.7 raised the over-cap in
+      an evidence file and nowhere else, which is §10's own anti-pattern, so it closed here rather
+      than being carried a second time.
 
 - [ ] **1.9 — Estate schema: Project · Building · Space · Unit.** E1–E4 from the workbook's FIELDS
       sheet. `Building.project_id` nullable, six-value `space_kind`, `Unit.unit_id = Space.space_id`.
@@ -251,6 +267,11 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       This slice is the first one that runs entirely inside the enforced gate, so its break→blocked
       leg is also the proof that the flip took. If it is still `false` here, 1.6 did not finish.
       Once it flips, `tasks/evidence/1.1.md` stops being the current state of the gate.
+      **Owed by 1.8 — the first tag is the first execution of two lines.** `release.yml` re-runs the
+      gate through `workflow_call`, and that gate is **two jobs** from 1.8: a red `evals` stops the
+      release before prod. It also now carries `secrets: inherit`, added at 1.8 because a called
+      workflow inherits none by default and the evals job would otherwise fail on a key it was never
+      handed. Neither has ever run — this slice is where they first do.
 
 - [ ] **1.11 — The Shoham fixture and the week-1 surface.** The building, its spaces and its 72 units
       seeded **through the importer path**, and a buildings/units list on the RTL token layer.
@@ -284,6 +305,13 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       bucket IAM and the policy suite are what hold. Also close ADR-0004's F6 row in
       [fuses.md](fuses.md): the tier-2 corpus is the first real personal data, and its legal basis
       and named third parties are owed before it lands, not after.
+      **Owed by 1.8 — two things, one of them a naming obligation.** The golden set is graded against
+      **nine authored Hebrew passages** in `evals/fixtures/specimen-clauses.ts`, standing in for the
+      tier-1 specimens because those do not exist until this slice; swap them in here, and the ranks
+      are re-measured rather than assumed. And the CI-only `OPENAI_API_KEY` means an external model
+      provider receives text from this repository on every PR. It is authored fixture text with no
+      personal data in it, so nothing is owed today — but ADR-0004's obligation is to name third
+      parties *before* they see tenant text, and this is the slice that writes that list.
 
 ---
 

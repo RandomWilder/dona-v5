@@ -251,6 +251,18 @@ trivial cases, one per kind, so the gate is never introduced late. `REQUIRE_POST
   a **CI-only** key, deliberately not staging's or prod's, which live in Secret Manager and reach
   only their own service account. No such repository secret exists today. Re-arm by PATCHing both
   contexts in at once, `{"contexts":["gate","evals"]}`, keeping `strict: true`.
+- **Closed 2026-09-05** ([evidence](evidence/1.8.md)). Three cases, one per kind, plus 17 harness
+  tests inside `npm test` (163 → 180, which is 1.3's `evals/**/*.test.ts` glob confirmed by count).
+  `evals` was seen red **twice** before being armed, for both reasons it can be red: no key (run
+  `33973148375`) and no database (`b40e02b` → run `33973760443`, the Verify step, reverted in
+  `9447ff9`). Contexts are `["gate","evals"]`, `strict: true`, `enforce_admins: true`. The structural
+  call is `evals/corpus.ts`, the one file not lifted from v3: v3 built its corpus through
+  `occupancy` · `catalog` · `channel`, none of which exist here, and a corpus needing neither a
+  database nor a key would make both `REQUIRE_*` switches decorative — so nine authored Hebrew
+  passages are indexed into a **TEMP** `vector(1536)` table through the real config rows, the real
+  embedder and pgvector's own ordering. `rankAtMost: 1` and the grounding cutoff (0.62 → **0.59**)
+  were set from a measurement run rather than chosen. `release.yml` gained `secrets: inherit`, and a
+  red `evals` now stops staging too through `deploy.yml`'s conclusion check.
 - **Deps:** 1.6 · **Size:** M
 
 ### Slice 1.9 — Estate schema: Project · Building · Space · Unit
@@ -297,6 +309,10 @@ the week nothing depends on it.
 - **Confirms 1.6's flip:** this is the first slice that runs entirely inside the enforced gate, so
   its break→blocked leg doubles as the proof that `enforce_admins: true` took — it was flipped on
   2026-09-05 at the end of that slice.
+- **Owed by 1.8 — the first tag is the first execution of two lines.** The gate `release.yml` re-runs
+  is **two jobs** from 1.8, so a red `evals` stops the release before prod; and the call carries
+  `secrets: inherit`, added at 1.8 because a called workflow inherits none by default and the evals
+  job would otherwise fail on a key it was never handed. Neither has ever run.
 - **Deps:** 1.6 · **Size:** S
 
 ### Slice 1.11 — The Shoham fixture and the week-1 surface
@@ -338,6 +354,13 @@ organisation move stays an admin task rather than a data-custody event (**R8**).
   IAM and the policy suite are what hold.
 - **Owed by 1.1:** close **F6** in [fuses.md](fuses.md). Tier 2 is the first real personal data in
   the system, and ADR-0004 owes its legal basis and its named third parties *before* it lands.
+- **Owed by 1.8 — two things, one of them a naming obligation.** The golden set is graded against
+  **nine authored Hebrew passages** in `evals/fixtures/specimen-clauses.ts`, standing in for the
+  tier-1 specimens because those do not exist until this slice: swap them in here and re-measure the
+  ranks rather than assuming them. And the CI-only `OPENAI_API_KEY` means an external model provider
+  receives text from this repository on every PR — authored fixture text with no personal data in
+  it, so nothing is owed today, but ADR-0004's obligation is to name third parties *before* they see
+  tenant text, and this is the slice that writes that list.
 - **Deps:** 1.5 · **Size:** S
 
 > **Week-1 cut line.** If the week runs hot, cut in this order: the third and second eval cases in
@@ -613,7 +636,7 @@ not the scans, the handwriting or the signatures (A7; the controls for tier 2 we
 | Week | Demo kind | Deliverable | Workstreams | Depends on |
 |---|---|---|---|---|
 | **9** | Software | **Message the number from your own phone.** It replies with your name, your unit and your tenancy — after a one-time code delivered through WhatsApp itself. | `channel` module: Cloud API webhooks both directions · phone → party binding through `src/scope/` · Conversation and Message tables · **OTP over WhatsApp first, SMS only as fallback** (Twilio closed and working; Hebrew is missing from Verify's default locales — needs custom templates or an Israeli fallback) | **Meta verification** · W8 |
-| **10** | Software | **"Who fixes my dripping tap?"** A tenant describes a fault in plain Hebrew; the agent triages, answers from their own lease and the knowledge base, and either resolves it or opens a ticket. | Tenant-facing agent, scoped tools only · retrieval over the tenant's own documents and the global knowledge base · the golden set grows from three cases toward fifty · **the agent reads the responsibility matrix; it never decides responsibility** · no prices, ever | W9 |
+| **10** | Software | **"Who fixes my dripping tap?"** A tenant describes a fault in plain Hebrew; the agent triages, answers from their own lease and the knowledge base, and either resolves it or opens a ticket. | Tenant-facing agent, scoped tools only · retrieval over the tenant's own documents and the global knowledge base · the golden set grows from three cases toward fifty · **owed by 1.8:** `evals/subject.ts` is a placeholder and `runCases` takes a `Subject`, so the real agent replaces it in one line — and this week owns `evals/corpus.ts`'s placeholder `ground()` and its `groundingCutoff`, because the refusal rule belongs to `channel` and one threshold is not enough (1.8 measured a policy section 0.0017 from the cutoff on a repair question) · when a real chunked lease exists, point the corpus at the real retrieval path and let the ratchet move **down** · **the agent reads the responsibility matrix; it never decides responsibility** · no prices, ever | W9 |
 | **11** | Software | **Both sides of the switchboard.** Two phones on the table: tenant reports, agent collects windows, agent WhatsApps a provider with address and slots, provider counter-proposes, tenant accepts, visit booked. Neither human sees an app. | The hard part surfacing: `WINDOWS COLLECTED → OFFERED` is two-sided asynchronous negotiation — **roughly seventy percent of the engineering lives between those two states** · provider-side thread bound to the same ServiceCall · timeouts, retries, no delivery guarantee | W10 · in-house crew availability (question 5) |
 | **12** | Evidence | **Live, with real tenants and real tradesmen.** The 72-unit building is on the agent; a week of history; every number measured against the three agreed in week 1. | Pilot cutover · escalation queue staffed daily by the pilot owner · **prod tagging starts here** — from now a `v*` tag is cut for every change that reaches real tenants | W11 |
 
