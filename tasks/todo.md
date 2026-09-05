@@ -77,13 +77,26 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       (d) `docker-compose.yml` stays on **port 5434** precisely so `kernel/pg-support.ts`'s default
       connection string needs no edit — do not renumber it.
 
-- [ ] **1.5 — `infra/bootstrap.sh` against the new project.** `PROJECT` and `GITHUB_REPO` changed,
+- [x] **1.5 — `infra/bootstrap.sh` against the new project.** `PROJECT` and `GITHUB_REPO` changed,
       **`REGION` stays `me-west1`**, Cloud SQL `--edition=ENTERPRISE`, WIF with the
       `assertion.repository` condition, per-secret IAM, docs bucket created closed. Project created
       **under an organisation**.
       **Done when:** a second run is a no-op, no user-managed service-account key exists, and staging
       cannot read prod's connection URL.
       **Verify:** re-run and diff; key list empty; the cross-environment read is denied. · **M**
+      **Lifted four scripts, not one.** `bootstrap.sh` · `set-secret.sh` · `smoke.sh` ·
+      `rollback.sh`, all Tier 1 and all verbatim apart from the `PROJECT` default: `rollback.sh`
+      invokes `smoke.sh`, `bootstrap.sh` prints a `set-secret.sh` command, and `AGENTS.md` already
+      says "secrets only through `infra/set-secret.sh`". Only `bootstrap.sh` is *run* here.
+      **R8 is not satisfied and cannot be by this slice.** `dona-v5` is **org-less**, and no
+      organisation exists to move it into — creating one is a Cloud Identity signup on a domain, not
+      a script. Provisioned org-less on purpose: the move preserves project id, resources, data and
+      IAM whenever it happens, and nothing this week is blocked. What is not deferrable is the
+      ordering, which is now **fuse F7** and a warning `bootstrap.sh` prints on every run.
+      **Dropped from the lift:** the four staff seed secrets (`staff-seed-email/password`,
+      `staff-viewer-email/password`). v5 has no `src/staff/`, and the auth gap it must close is
+      Identity Platform with enforced MFA, so v3's email+password pair may never be built — carried
+      into the week-5 staff-MFA row in [roadmap.md](roadmap.md).
 
 - [ ] **1.6 — CI, staging, release.** `ci.yml`, `deploy.yml` on `workflow_run`, `release.yml` on
       `v*` only.
@@ -120,6 +133,16 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       **Owed by 1.4:** `REQUIRE_POSTGRES=1` now decides **23** cases, not 2 — the whole kernel
       durability suite. Without it against a real service container the `gate` job passes having
       touched no database at all.
+      **Owed by 1.5 — the values to wire, and two scripts already in the repo.** `smoke.sh` and
+      `rollback.sh` were lifted at 1.5, so this slice consumes them rather than writing them.
+      `deploy.yml` and `release.yml` need, exactly: WIF provider
+      `projects/681282581055/locations/global/workloadIdentityPools/github-pool/providers/github-provider`
+      (the `assertion.repository` condition pins it to `RandomWilder/dona-v5` — if the repository ever
+      moves, this and the condition change together) · deploy SA `deploy-<env>@dona-v5.iam.gserviceaccount.com`
+      · runtime SA `app-<env>@dona-v5.iam.gserviceaccount.com` · Cloud SQL `dona-v5:me-west1:dona-<env>`
+      · secret `<env>-database-url` · image `me-west1-docker.pkg.dev/dona-v5/dona/…` · docs bucket
+      `gs://dona-v5-<env>-docs`. The Cloud Run **service itself does not exist yet** — bootstrap
+      deliberately does not create it, the first deploy does.
       **Owed by 1.4:** the image grows. `pdfjs-dist` and `google-auth-library` are runtime
       dependencies from this slice and `npm ci --omit=dev` installs both. `pdfjs-dist` alone is
       **35 MB unpacked**; check the Cloud Run build time and image size rather than be surprised.
@@ -166,6 +189,16 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       staging; tag `v0.1.0` → prod; **roll prod back**; confirm the next deploy still takes traffic.
       **Done when:** the round trip is complete and the post-rollback deploy serves 100%, not 0%.
       **Verify:** revision list with traffic percentages at each step. · **S**
+      **Owed by 1.5 — the cost lever, and this is the slice that can pull it.** Prod's database is
+      idle from here until week 12: pipeline §8 starts prod tagging then, and between this slice's
+      deliberate round trip and the pilot there is nothing in prod to serve. Finish this slice by
+      stopping it — `gcloud sql instances patch dona-prod --activation-policy=NEVER` keeps the
+      instance, its storage and its data while compute stops billing, and one command reverses it.
+      **Owed by 1.5:** `infra/rollback.sh` is in the repo and ends by calling `infra/smoke.sh`, so
+      the rollback leg fails closed if the revision it lands on is not actually serving — the
+      rollback is proved by the script's own exit code, not by reading a traffic percentage. It also
+      prints the roll-forward command, which is what makes "confirm the next deploy still takes
+      traffic" a step rather than a memory.
       **Confirms an owed action from 1.1, which 1.6 closes:** `enforce_admins` is `true` on `main`.
       This slice is the first one that runs entirely inside the enforced gate, so its break→blocked
       leg is also the proof that the flip took. If it is still `false` here, 1.6 did not finish.
@@ -191,6 +224,13 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       removed by a documented command that has actually been run.
       **Verify:** run the deletion path against a throwaway object; write the removal date into
       [fuses.md](fuses.md). · **S**
+      **Owed by 1.5 — two things.** The corpus does **not** go in `gs://dona-v5-<env>-docs`, which
+      1.5 created for the application: this slice creates its own dated bucket, with the lifecycle
+      rule and the tested deletion path, so the removal is one bucket and not a search. And **fuse
+      F7 binds here**: `dona-v5` is org-less, and the move into an organisation must happen *before*
+      real tenant data lands. Landing the tier-2 corpus turns that from an admin task into a
+      data-custody event, so either the move happens first or the corpus stays in its dated bucket
+      with the removal date recorded — decide it in this slice rather than discover it in week 4.
       **Owed by 1.2:** the bash guard covers the **Bash tool only**. Write, Edit and every MCP tool
       reach the filesystem without passing it, so nothing here may lean on the hook — `.gitignore`,
       bucket IAM and the policy suite are what hold. Also close ADR-0004's F6 row in

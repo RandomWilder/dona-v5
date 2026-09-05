@@ -27,4 +27,5 @@
 - Secrets only through `infra/set-secret.sh`; **real tenant documents never enter this repo**.
 - Now: `tasks/todo.md` · Plan: `tasks/plan.md` · Process: `docs/pipeline.md` · `docs/decisions/`
 
-**Status: kernel live at slice 1.4** — CI 1.6, gates 1.7–1.8. `test:policy`/`evals` do not exist yet.
+**Status: kernel live at 1.4, GCP provisioned at 1.5** (`dona-v5`, staging + prod, org-less — fuse
+F7) — CI 1.6, gates 1.7–1.8. `test:policy`/`evals` do not exist yet.

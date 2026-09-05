@@ -120,6 +120,25 @@ condition. The project is created **under an organisation** (R8).
   staging runtime cannot read prod's connection URL.
 - **Verify:** re-run and diff; `gcloud iam service-accounts keys list` is empty of user-managed keys;
   attempt the cross-environment secret read and get denied.
+- **Lifted four scripts rather than one.** `bootstrap.sh` · `set-secret.sh` · `smoke.sh` ·
+  `rollback.sh` — all Tier 1, all verbatim apart from the `PROJECT` default. `rollback.sh` invokes
+  `smoke.sh`, `bootstrap.sh` prints a `set-secret.sh` command, and `AGENTS.md` already points at
+  `set-secret.sh`; lifting one of the four leaves the repo referencing three files that do not
+  exist. Only `bootstrap.sh` is run in this slice.
+- **R8 is not satisfied, and no slice this week can satisfy it.** `dona-v5` is **org-less** and
+  `gcloud organizations list` returns 0 items — creating an organisation means a Cloud Identity Free
+  tenancy on a domain we control plus DNS verification, which is a signup rather than a script.
+  Provisioned org-less deliberately: a project move preserves project id, resources, data and IAM
+  whenever it happens, and nothing this week depends on it. The ordering that *is* absolute — an
+  identity on the destination domain before the move, and the move before real tenant data — is now
+  **fuse F7**, and `bootstrap.sh` prints it on every run against an org-less project rather than
+  leaving it in a document.
+- **Dropped from the lift: the four staff seed secrets.** v3 created `staff-seed-email/password` and
+  `staff-viewer-email/password` here. v5 has no `src/staff/` and no seeding code, and the auth gap it
+  must close is Identity Platform with enforced MFA ([from-v3.md](../docs/from-v3.md) Tier 2), so v3's
+  email+password pair may never be built at all — a generated credential in Secret Manager that
+  nothing reads and no rotation flow owns is worse than an absent one. Carried into the **week-5**
+  staff-MFA row below.
 - **Deps:** 1.1 · **Size:** M
 
 ### Slice 1.6 — CI, staging, release
@@ -152,6 +171,15 @@ an ancestor of `main`.
   run: there is no `npm run migrate` and no CLI entry point, so a deployed revision would serve
   `/health` against a database with no tables. `deploy.yml` and `release.yml` both need one, between
   the deploy and the smoke (pipeline §5). It is built here.
+- **Owed by 1.5 — the exact values to wire, and two scripts that need no lift.** `smoke.sh` and
+  `rollback.sh` came in at 1.5, so this slice consumes them. `deploy.yml` and `release.yml` need: WIF
+  provider `projects/681282581055/locations/global/workloadIdentityPools/github-pool/providers/github-provider`,
+  whose `assertion.repository` condition pins it to `RandomWilder/dona-v5` — if the repository moves,
+  the condition and both workflows change together · deploy SA
+  `deploy-<env>@dona-v5.iam.gserviceaccount.com` · runtime SA `app-<env>@dona-v5.iam.gserviceaccount.com`
+  · Cloud SQL `dona-v5:me-west1:dona-<env>` · secret `<env>-database-url` · image
+  `me-west1-docker.pkg.dev/dona-v5/dona/…` · docs bucket `gs://dona-v5-<env>-docs`. The Cloud Run
+  service does not exist yet and bootstrap deliberately does not create it — the first deploy does.
 - **Owed by 1.4:** `REQUIRE_POSTGRES=1` now decides **23** cases rather than 2 — the whole kernel
   durability suite. Without it, against a real Postgres service container, `gate` goes green having
   touched no database at all. Runtime dependencies are now four: `pdfjs-dist` and
@@ -213,6 +241,17 @@ Break a test → PR blocked. Fix → merge → staging live. Tag `v0.1.0` → pr
 the week nothing depends on it.
 - **Done when:** the round trip is complete and the post-rollback deploy serves 100%, not 0%.
 - **Verify:** revision list with traffic percentages at each step, times recorded.
+- **Owed by 1.5 — the cost lever, pulled here.** Prod's Cloud SQL instance is idle from the end of
+  this slice until week 12, when prod tagging starts (pipeline §8): between the deliberate round trip
+  above and the pilot there is nothing in prod to serve and nobody to serve it. Close the slice with
+  `gcloud sql instances patch dona-prod --activation-policy=NEVER`, which stops compute billing while
+  keeping the instance, its storage and its data, and is reversed by one command. The project also
+  carries a ₪250/month budget filtered to it alone, with a forecasted-spend alert.
+- **Owed by 1.5:** `infra/rollback.sh` is already in the repo, and it ends by calling
+  `infra/smoke.sh`. So the rollback leg fails closed if the revision it lands on is not actually
+  serving — the proof is the script's exit code, not a traffic percentage read off a list. It also
+  prints the roll-forward command, which is what turns "confirm the next deploy still takes traffic"
+  into a step rather than a memory.
 - **Confirms 1.6's flip:** this is the first slice that runs entirely inside the enforced gate, so
   its break→blocked leg doubles as the proof that `enforce_admins: true` took. Still `false` here
   means 1.6 did not finish.
@@ -245,6 +284,13 @@ organisation move stays an admin task rather than a data-custody event (**R8**).
   removed by a documented command that has actually been run.
 - **Verify:** run the deletion path against a throwaway object and confirm it is gone from the bucket
   and from the row; the removal date is written into [fuses.md](fuses.md).
+- **Owed by 1.5 — the bucket, and the fuse that binds here.** The corpus does **not** go into
+  `gs://dona-v5-<env>-docs`; 1.5 created that for the application, with `objectViewer` +
+  `objectCreator` and deliberately not `objectAdmin`. This slice creates its own dated bucket so a
+  removal is one bucket rather than a search. And **F7 binds here**: `dona-v5` is org-less, and the
+  move into an organisation has to happen *before* real tenant data lands or it stops being an admin
+  task. Either the move happens first, or the corpus stays in its dated bucket with a removal date
+  recorded — decided in this slice, not discovered in week 4.
 - **Owed by 1.2:** the bash guard covers the **Bash tool only** — Write, Edit and every MCP tool
   reach the filesystem without passing it. Nothing in this slice may lean on it; `.gitignore`, bucket
   IAM and the policy suite are what hold.
@@ -485,7 +531,7 @@ not the scans, the handwriting or the signatures (A7; the controls for tier 2 we
 
 | Week | Demo kind | Deliverable | Workstreams | Depends on |
 |---|---|---|---|---|
-| **5** | Real data | **Paper becomes truth.** An amendment arrives for a real unit; the tenancy updates; the change log records old → new, who approved it, which document caused it. Then a tenancy ends because a date passed, with no document at all. | Promotion at scale · tenancy reconciliation · `TenancyEvent` · Obligation + ObligationType (E9, E10) · **the settings screen: the `ObligationType` and `DocumentType` catalogues, admin-managed at last (A9) — one screen, one pattern, and `asset_type` deliberately absent from it** · staff MFA and the `national_id` field guard | W4 · **closes open question 2 — how many `terms_profile`s are in force, which sizes week 6** |
+| **5** | Real data | **Paper becomes truth.** An amendment arrives for a real unit; the tenancy updates; the change log records old → new, who approved it, which document caused it. Then a tenancy ends because a date passed, with no document at all. | Promotion at scale · tenancy reconciliation · `TenancyEvent` · Obligation + ObligationType (E9, E10) · **the settings screen: the `ObligationType` and `DocumentType` catalogues, admin-managed at last (A9) — one screen, one pattern, and `asset_type` deliberately absent from it** · staff MFA and the `national_id` field guard — **owed by 1.5:** `infra/bootstrap.sh` deliberately creates no staff seed secrets, so whatever this mechanism needs in Secret Manager is created here, by the slice that knows what it is | W4 · **closes open question 2 — how many `terms_profile`s are in force, which sizes week 6** |
 | **6** | Software | **Who pays for this, and why.** Pick a category and a unit; get tenant / operator / contractor with the clause and the policy version behind it. Then edit the table live and watch the answer change. | `policy` module: the responsibility matrix as versioned, admin-editable data · `asset_in_warranty` fed by week 3's asset register · rules supersede by `effective_from` and never overwrite · `policy_version_id` snapshotted on every resolution | W5, W3.5 · sized by question 2 |
 | **7** | Software | **A ticket, start to finish, by hand.** Walk the canonical states in the console — NEW · IDENTIFIED · TRIAGED · RESPONSIBILITY SET · WINDOWS COLLECTED · OFFERED · SCHEDULED · CLOSED — plus the three exits. Watch the SLA clock run and the escalation fire. No WhatsApp, no agent. | `calls` module: state machine · SLA policies · timers · escalation · **the emergency bypass, live and tested here** because it must exist before the agent takes its first real message in week 10 · **the async negotiation engine starts and runs underneath for six weeks** | W6 |
 | **8** | Evidence | **Try to break tenant isolation, live.** Query as one tenant's phone and attempt to reach another tenant's documents, unit or history — through the console, through the API, and by asking the model. Every path returns nothing. | Policy suite cases 4 and 5 (`UNIT` is the only kind that can be the tenant's; a live warranty moves responsibility to the contractor, and re-resolving after a policy change still returns the snapshot) · `national_id` unreachable by any agent tool · audit on every scoped read | W7 |
