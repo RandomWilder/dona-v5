@@ -171,15 +171,17 @@ token layer; `src/app.ts` and `src/serve.ts` are the composition root above it. 
 boundary.test.ts` proves the kernel imports from no domain module.
 
 **Migrations live in `src/kernel/migrations/`**, one ordered sequence for the whole system, applied
-by `kernel/migrate.ts` under an advisory lock. Three exist and all three are the kernel's own —
-`vector`, the durability tables, their settings seed. The estate spine appends from `0004_` at slice
-1.9. No domain table exists yet, and `src/scope/` is the only module directory there is — the
-isolation join and its contract, landed early at 1.7 with no tables underneath it. Every other module
-spec is a stub until its build week ([tasks/roadmap.md](tasks/roadmap.md)), and a stub gaining
-content is the signal its build started.
+by `kernel/migrate.ts` under an advisory lock. Four exist: `0001`–`0003` are the kernel's own —
+`vector`, the durability tables, their settings seed — and `0004_estate.sql` is the first domain
+migration, the E1–E4 spine landed at slice 1.9. `src/estate/` and `src/scope/` are the two module
+directories: estate holds its schema contract tests and no code yet, scope the isolation join and its
+contract, landed early at 1.7 with no tables underneath it. `party`, `party_contact`, `tenancy` and
+`tenancy_party` arrive at 2.1 and 2.2, and until they do the seven policy cases report pending
+against `party`. Every other module spec is a stub until its build week
+([tasks/roadmap.md](tasks/roadmap.md)), and a stub gaining content is the signal its build started.
 
 **Where the build is: kernel 1.4 · GCP 1.5 · CI and staging 1.6 · the policy suite and both grep
-guards 1.7 · the evals harness 1.8.** The project is still org-less (fuse F7). Both gates are wired
+guards 1.7 · the evals harness 1.8 · the estate schema 1.9.** The project is still org-less (fuse F7). Both gates are wired
 from week 1 and both are required contexts on `main`: `tests/policy/` runs inside the `gate` job with
 the guards, and `evals/` runs in an `evals` job of its own — a job rather than a step because it is
 the only thing in this repository that calls a paid third party. This paragraph is the single status
