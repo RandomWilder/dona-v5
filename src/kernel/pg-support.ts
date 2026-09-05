@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { KernelError } from './errors.ts';
 import { migrate } from './migrate.ts';
 
@@ -33,3 +33,26 @@ export async function migratedPoolOrNull(): Promise<Pool | null> {
 }
 
 export const skipReason = 'postgres not running — npm run db:up';
+
+// Every suite that writes fixtures against the shared database seeds inside a transaction and rolls
+// it back, so no fixture outlives the case that wrote it and no case can start passing because of a
+// row another one left behind. The rollback is in a finally: a case that throws still leaves the
+// database as it found it.
+//
+// It lives beside migratedPoolOrNull() because that is already the seam a suite reaches for when it
+// needs a real database, and because there must be exactly one copy of this: it landed in
+// tests/policy/support.ts at slice 1.7 and moved here at 1.9, when src/estate/ became the second
+// caller.
+export async function inRolledBackTransaction(
+  pool: Pool,
+  body: (client: PoolClient) => Promise<void>,
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await body(client);
+  } finally {
+    await client.query('ROLLBACK').catch(() => {});
+    client.release();
+  }
+}

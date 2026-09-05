@@ -266,22 +266,29 @@ trivial cases, one per kind, so the gate is never introduced late. `REQUIRE_POST
 - **Deps:** 1.6 · **Size:** M
 
 ### Slice 1.9 — Estate schema: Project · Building · Space · Unit
-The new spine, from the workbook's FIELDS sheet — E1–E4, 32 columns. `Building.project_id` nullable
-with `project_code` on Project; `Space.space_kind` as the six-value enum; `Unit.unit_id =
-Space.space_id` as a shared key, not a foreign key to a surrogate. Natural keys do the work:
-`address_key` for a building.
+The new spine, from the workbook's FIELDS sheet — E1–E4, **28 stored columns** (5 · 8 · 6 · 9) plus
+two that are deliberately derived and never stored. `Building.project_id` nullable with
+`project_code` on Project; `Space.space_kind` as the six-value enum; `Unit.unit_id = Space.space_id`
+as a shared key, not a foreign key to a surrogate.
 - **Done when:** an apartment is a Space with a Unit extension and a lobby is a Space with none, both
   enforced by the schema rather than by convention.
 - **Verify:** contract tests for R1, R2 and R15; an insert of a Unit with no Space is rejected.
 - **Owed by 1.4:** the DDL appends from **`0004_`**. `0001`–`0003` are the kernel's own — the
   `vector` extension, the durability tables, their settings seed — and estate is the first domain
   table in this repository.
-- **Owed by 1.7 — three policy cases stop being pending the day this lands.**
+- **Owed by 1.7 — the pending diagnostic moves from `building` to `party` the day this lands.**
   `tests/policy/fixtures.ts` already writes `building`, `space` and `unit` from the workbook's E1–E4,
   against tables that do not exist. Any column it guessed wrong surfaces as a not-null or
-  undefined-column failure **in one file**: extend the builder, never the cases. The first pending
-  diagnostic moves from `building` to `party`, which is the visible signal this slice did what it
-  says.
+  undefined-column failure **in one file**: extend the builder, never the cases.
+- **Closed 2026-09-05** ([evidence](evidence/1.9.md)). Two claims in this entry were wrong and are
+  corrected above: E1–E4 is 28 columns and not 32, and **no policy case stops being pending here** —
+  all seven reach `party` through `seedOccupancy` and clear at 2.2. The entry also said "natural keys
+  do the work: `address_key` for a building". **No natural key was created**: the FIELDS sheet
+  specifies none, nothing yet re-runs against this schema, and the real need is an importer that can
+  run twice — carried to 1.11, which is the first slice with real addresses in front of it. R2 and
+  D3 are enforced as composite foreign keys rather than triggers, via `UNIQUE (space_id, space_kind)`
+  on `space` and three constant discriminators on `unit`; all four rejections were proved red first
+  against the same DDL without that key.
 - **Deps:** 1.4, 1.7 · **Size:** M
 
 ### Slice 1.10 — Prove the pipeline in both directions, on purpose
@@ -321,6 +328,10 @@ the importer path rather than by hand, and a buildings/units list screen on the 
 - **Done when:** a stakeholder opens the staging URL on their own phone and sees the building and its
   units.
 - **Verify:** the owner browses it in a browser, not a screenshot.
+- **Owed by 1.9 — the importer needs a natural key, and 1.9 did not invent one.** Nothing in
+  `0004_estate.sql` is unique but the primary keys, so seeding the Shoham fixture twice creates the
+  building twice. The `address_key` idea belonged to 1.9's entry and is answered here instead,
+  against real addresses rather than against a guess. It costs a migration (`0005_`).
 - **Owed by 1.4:** v3's `kernel/ui/tokens.test.ts` was deliberately **not** lifted — it asserts
   against module HTML shells that v5 does not have yet. It is the guard keeping a hex colour, a
   `fonts.googleapis` URL and a physical `left:`/`right:` out of a screen, and it fails on the HTML

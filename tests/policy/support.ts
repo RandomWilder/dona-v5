@@ -2,12 +2,16 @@
 // needs that nothing else does.
 import assert from 'node:assert/strict';
 import type { TestContext } from 'node:test';
-import type { Pool, PoolClient } from 'pg';
-import { migratedPoolOrNull, skipReason } from '../../src/kernel/pg-support.ts';
+import type { Pool } from 'pg';
+import {
+  inRolledBackTransaction,
+  migratedPoolOrNull,
+  skipReason,
+} from '../../src/kernel/pg-support.ts';
 import { ISOLATION_JOIN_RELATIONS } from '../../src/scope/contract.ts';
 import { SEEDED_RELATIONS } from './fixtures.ts';
 
-export { skipReason };
+export { inRolledBackTransaction, skipReason };
 
 // The kernel already owns the skip-vs-fail decision: absent a database this returns null locally and
 // throws under REQUIRE_POSTGRES=1, which is what stops a CI job going green having queried nothing.
@@ -61,20 +65,3 @@ export async function pendingUntilSchema(
 export const POLICY_RELATIONS: readonly string[] = [
   ...new Set<string>([...ISOLATION_JOIN_RELATIONS, ...SEEDED_RELATIONS]),
 ];
-
-// Every case seeds inside a transaction and rolls it back, so no fixture outlives the case that
-// wrote it and no case can start passing because of a row another one left behind. The rollback is
-// in a finally: a case that throws still leaves the database as it found it.
-export async function inRolledBackTransaction(
-  pool: Pool,
-  body: (client: PoolClient) => Promise<void>,
-): Promise<void> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await body(client);
-  } finally {
-    await client.query('ROLLBACK').catch(() => {});
-    client.release();
-  }
-}

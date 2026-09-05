@@ -229,7 +229,7 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       an evidence file and nowhere else, which is §10's own anti-pattern, so it closed here rather
       than being carried a second time.
 
-- [ ] **1.9 — Estate schema: Project · Building · Space · Unit.** E1–E4 from the workbook's FIELDS
+- [x] **1.9 — Estate schema: Project · Building · Space · Unit.** E1–E4 from the workbook's FIELDS
       sheet. `Building.project_id` nullable, six-value `space_kind`, `Unit.unit_id = Space.space_id`.
       **Done when:** an apartment is a Space with a Unit extension and a lobby is a Space with none,
       enforced by the schema.
@@ -237,13 +237,26 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       **Owed by 1.4:** the DDL appends from **`0004_`** in `src/kernel/migrations/`. `0001`–`0003`
       are the kernel's own — `vector`, the durability tables, their settings seed — and estate is
       the first domain table in this repository.
-      **Owed by 1.7 — three policy cases stop being pending the day this lands.**
+      **Owed by 1.7 — the pending diagnostic moves from `building` to `party` the day this lands.**
       `tests/policy/fixtures.ts` already writes `building`, `space` and `unit` with column lists
       taken from the workbook's E1–E4, against tables that do not exist. When the real DDL appears,
       any column that fixture guessed wrong is a not-null or undefined-column failure **in one
       file** — extend the builder there, and do not edit the cases, which are written so they never
-      need to be. The first pending diagnostic moves from `building` to `party` on the same day,
-      which is the visible signal this slice did what it says.
+      need to be. This entry said *three policy cases stop being pending*; **none do.** All seven
+      reach `party` through `seedOccupancy`, so they clear at **2.2**, when `tenancy_party` is the
+      last table to land. The moving diagnostic is the visible signal, and it is the whole of it.
+      **Closed 2026-09-05** ([evidence](evidence/1.9.md)). `0004_estate.sql` — four tables, 28
+      stored columns, and 14 contract cases in `src/estate/schema.test.ts` (153 code tests, up from
+      139). R2 and D3 are **composite foreign keys, not triggers**: `space` carries
+      `UNIQUE (space_id, space_kind)` and `unit` three constant discriminators pinned by CHECKs, so
+      one key rejects a unit with no space, rejects a unit on a lobby, and refuses to let a space
+      stop being a `UNIT` while its unit exists. All four rejections were **proved red first**
+      against the same DDL without that key. `tests/policy/fixtures.ts` needed no edit — the
+      workbook's column lists were right. `inRolledBackTransaction` moved from `tests/policy/
+      support.ts` to `src/kernel/pg-support.ts`, beside `migratedPoolOrNull()`, so estate's suite
+      does not carry a second copy. **No natural key was created:** `tasks/roadmap.md` said
+      "`address_key` for a building", the FIELDS sheet specifies none, and the need behind it is an
+      importer that can run twice — carried to 1.11, below.
 
 - [ ] **1.10 — Prove the pipeline in both directions, on purpose.** Break → blocked; fix → merge →
       staging; tag `v0.1.0` → prod; **roll prod back**; confirm the next deploy still takes traffic.
@@ -277,6 +290,12 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       seeded **through the importer path**, and a buildings/units list on the RTL token layer.
       **Done when:** a stakeholder opens the staging URL on their own phone and sees it.
       **Verify:** the owner browses it in a browser, not a screenshot. · **M**
+      **Owed by 1.9 — the importer needs a natural key, and 1.9 deliberately did not invent one.**
+      Nothing in `0004_estate.sql` is unique but the primary keys, so seeding twice creates the
+      building twice. The roadmap's `address_key` was reaching for this; the workbook's FIELDS sheet
+      specifies no such column, and this is the first slice with real Shoham addresses in front of
+      it to say what the key actually is. It costs a migration (`0005_`), and choosing it is part of
+      this slice rather than a discovery inside it.
       **Owed by 1.4:** v3's `kernel/ui/tokens.test.ts` was **not** lifted — it asserts against
       module HTML shells (`staff/ui/index.html`, `channel/ui/index.html`) that v5 does not have. It
       is the guard that keeps a hex colour, a `fonts.googleapis` URL or a physical `left:`/`right:`
