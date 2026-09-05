@@ -59,6 +59,10 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
+      # The two grep guards (docs/pipeline.md §6). A step of `gate` rather than a job of their own,
+      # because `gate` is the required context on `main` and a guard nothing requires is a guard
+      # nobody obeys. Both fail when they scanned zero files.
+      - run: npm run guards
       # `npm test` is test:code && test:hooks. The hooks half is the only thing that runs
       # .claude/hooks/hooks.test.mjs, so a gate that shortcuts to test:code drops those cases and
       # stops proving the guardrails work.

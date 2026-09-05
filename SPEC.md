@@ -104,6 +104,12 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   state machine. Required from commit one, before there is an agent. **Every case is proved red
   before it passes**; a case that was green before and after the change it was written for tested
   nothing.
+- **A policy case written before its schema is *pending*, never skipped and never `todo`.** The case
+  runs the real query; if a relation it needs does not exist yet, it asserts the error is exactly
+  Postgres `42P01` on a relation the query *declares* it reads, names that relation in a diagnostic,
+  and returns. Any other failure fails the build. The branch disarms itself the moment the last table
+  lands, so the case starts asserting for real with no edit and nothing to remember — which a skip and
+  a `todo` do not (slice 1.7).
 - **`evals/golden/` is the gate for the agent** — trajectory, not final-text matching. `rankAtMost`
   is a ratchet set to what retrieval achieves today, so the gate blocks regression while staying
   green. **No assertion is ever on a distance**: provider embeddings are not bit-identical between
