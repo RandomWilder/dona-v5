@@ -20,9 +20,8 @@ jobs:
   # The job id and its name are both `gate` on purpose: that string is the check context branch
   # protection requires on `main`. Slice 1.1 required `gate` and `evals` with no workflow behind
   # either, which is not a pending check — it is a permanently failing one, and the only way past it
-  # was `--admin`. This slice re-arms `gate` only after it has reported green once. `evals` stays
-  # unarmed and unwritten until slice 1.8: a stub job that exits 0 on an empty suite is a green
-  # check that proves nothing, which is the same promise made twice.
+  # was `--admin`. Slice 1.6 re-armed `gate` only after it had reported green once, and slice 1.8
+  # does the same for `evals` below — after watching it go red, not only green.
   gate:
     name: gate
     runs-on: ubuntu-latest
@@ -67,3 +66,50 @@ jobs:
       # .claude/hooks/hooks.test.mjs, so a gate that shortcuts to test:code drops those cases and
       # stops proving the guardrails work.
       - run: npm test
+
+  # The agent's gate (docs/pipeline.md §7), and the second required context on `main` from slice
+  # 1.8. A job of its own rather than a step of `gate` for one reason: it is the only thing in this
+  # repository that calls a paid third party, so what it needs, what it costs and what it can be
+  # blamed for all stay separable from typecheck and lint.
+  #
+  # It does not repeat the two grep guards. They are steps of `gate` (slice 1.7).
+  evals:
+    name: evals
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: dona
+          POSTGRES_USER: dona
+          POSTGRES_PASSWORD: dona
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dona -d dona"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://dona:dona@127.0.0.1:5432/dona
+      # Both halves of what a retrieval case needs, and both are the same argument: absent a
+      # database or a key those cases *skip*, which is right on a clean clone and a lie here — the
+      # job would go green having ranked nothing. `=1` turns each skip back into a failure
+      # (src/kernel/pg-support.ts, evals/run.ts).
+      REQUIRE_POSTGRES: '1'
+      REQUIRE_EMBEDDINGS: '1'
+      # A CI-only key, deliberately not staging's or prod's: those live in Secret Manager and reach
+      # only their own service account, so this one can be revoked on its own without touching a
+      # deployed environment (docs/pipeline.md §4, ADR-0003).
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run evals

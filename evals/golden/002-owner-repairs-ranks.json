@@ -1,0 +1,12 @@
+{
+  "id": "owner-repairs-ranks",
+  "title": "A wear-and-tear repair question retrieves the clause that assigns it",
+  "input": {
+    "message": "מי מתקן דוד מים שהתקלקל מבלאי?"
+  },
+  "retrieval": {
+    "expectRef": "חוזה §7.2",
+    "rankAtMost": 1,
+    "note": "Rank 1, measured rather than guessed: run 33973634637 on this exact question returned חוזה §7.2 first at distance 0.4659, 0.1259 ahead of the runner-up — a lead two orders of magnitude outside the 0.0004 the same question moved between two runs, so the rank is not a coin flip. A ratchet, not a target: the corpus holds three other passages about who fixes what (§7.5 tenant damage, §7.9 common parts, §11.3 utilities), so this rank has something to lose to, and the proof that a later ranking change is a fix is that this number goes down."
+  }
+}
