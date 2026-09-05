@@ -3,6 +3,7 @@
 ## Commands
 - `npm test` · `npm run typecheck` · `npm run lint` · `npm run format` · `npm run db:up && npm run dev`
   → `/health`, which asserts `db:up`. Node 24 runs `.ts` by type stripping; there is no build step.
+  `npm run migrate` applies `src/kernel/migrations/`; a deploy runs it as a Cloud Run job first.
 - **Two required gates:** `npm run test:policy` (everything no model may decide) and `npm run evals`
   (the agent). CI sets `REQUIRE_POSTGRES=1`/`REQUIRE_EMBEDDINGS=1` — a silent skip is a failure.
 - Merge to `main` → CI green → staging on `workflow_run`, **never on push**; prod on a `v*` tag only.
@@ -27,5 +28,5 @@
 - Secrets only through `infra/set-secret.sh`; **real tenant documents never enter this repo**.
 - Now: `tasks/todo.md` · Plan: `tasks/plan.md` · Process: `docs/pipeline.md` · `docs/decisions/`
 
-**Status: kernel live at 1.4, GCP provisioned at 1.5** (`dona-v5`, staging + prod, org-less — fuse
-F7) — CI 1.6, gates 1.7–1.8. `test:policy`/`evals` do not exist yet.
+**Status: kernel 1.4, GCP 1.5, CI + staging 1.6** (`dona-v5`, org-less — fuse F7). `gate` is a
+required check on `main`; `evals` is re-armed at 1.8. `test:policy`/`evals` do not exist yet.

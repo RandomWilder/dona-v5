@@ -72,6 +72,12 @@ One ordered sequence under `src/kernel/migrations/`, applied under a Postgres ad
 instances booting together cannot race. Each file runs in its own transaction and is recorded in
 `schema_migrations` by filename. Append-only; DDL and backfill never in one file (`SPEC.md`).
 
+`migrate()` **returns the filenames it applied**, in order, and an empty array when there was
+nothing to do. A runner that reports only "no error" cannot distinguish a deploy that migrated three
+files from one that connected to the wrong database and found everything already applied; the caller
+that matters — `src/migrate.ts`, whose whole output is a deploy log read after the fact — has to be
+able to say which.
+
 **The runner is kernel machinery; the tables mostly are not.** A module's tables are described in
 that module's spec, and the kernel never reads them. What the kernel *does* own, and what slice 1.4
 therefore brings with it, is the durability substrate its own suites run against:
@@ -88,6 +94,24 @@ role, and the kernel does not know any module's role vocabulary.
 `now()` inside those seed rows is the one place `SPEC.md`'s no-`DEFAULT now()` rule permits it —
 a seed running inside a migration is not a domain write, and there is no injected clock at
 migration time.
+
+### Running them (`src/migrate.ts`, slice 1.6)
+
+`migrate()` is a function, not a program. Until slice 1.6 its only caller was `pg-support.ts` inside
+the test run, which meant a deployed revision would have served `/health` against a database with no
+tables — the schema existed in the repository and nowhere else.
+
+`src/migrate.ts` is the entry point, `npm run migrate` is the command, and it is deliberately thin:
+open the pool `kernel/db.ts` builds, apply, print what was applied, close, exit non-zero if anything
+threw. It shares `serve.ts`'s rule that a missing `DATABASE_URL` is a refusal to start rather than a
+fallback to somebody's laptop.
+
+**In a deployed environment it runs as its own Cloud Run job, before the new revision serves**, from
+the identical image, as the runtime service account, with the same per-secret binding and the same
+`/cloudsql` socket mount the service gets. It is not run from the CI runner, and that is a security
+property rather than a convenience: the connection URL is readable only by `app-<env>`, so migrating
+from the runner would mean granting the deploy identity access to prod's database URL. The runner
+orchestrates; it never holds the credential. See `.github/workflows/deploy.yml`.
 
 ## Settings (`config.ts`)
 

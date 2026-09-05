@@ -14,6 +14,7 @@
     "lint": "biome check --error-on-warnings",
     "format": "biome check --write",
     "db:up": "docker compose up -d",
+    "migrate": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/migrate.ts",
     "dev": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/serve.ts",
     "start": "node src/serve.ts"
   },
