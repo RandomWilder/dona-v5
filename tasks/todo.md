@@ -158,7 +158,7 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       so migrating from the runner would have meant handing the CI identity prod's connection string.
       `docs/pipeline.md` §5's arrow was corrected in the same change.
 
-- [ ] **1.7 — The policy suite, red before the schema exists.** Case 1 (the five-hop isolation join,
+- [x] **1.7 — The policy suite, red before the schema exists.** Case 1 (the five-hop isolation join,
       both temporal predicates) and case 2 (a recycled number resolves to nobody), plus both grep
       guards.
       **Done when:** both cases fail for the right reason and each guard trips on a deliberate
@@ -177,6 +177,18 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       steps in it rather than as a fourth job nothing requires — which means the moment one lands it
       blocks merges, so trip each one deliberately on a branch rather than discover it on `main`.
       `enforce_admins` is `true`, so there is no admin merge past a guard that fires.
+      **Closed 2026-09-05** ([evidence](evidence/1.7.md)). 14 policy cases, 7 of them reporting
+      **pending** against a named missing relation — never skipped, never `todo`, and the branch is
+      unreachable the moment the last table lands. That mechanism exists because `gate` is required
+      and admin-enforced: a deliberately-red required test blocks its own merge, so the red was
+      proved and recorded rather than committed. The disarm was proved too — the seven tables built
+      in a throwaway database, 14 green, no pending lines — and then every predicate deleted from the
+      join in turn, which turned **two cases into rewrites**: a tenancy marked `ENDED` is excluded by
+      the status filter, so the date predicate tested nothing, and both recycled-number cases ended
+      the tenancy, so the contact dating — the entire point of case 2 — tested nothing either. Both
+      guards tripped in CI on purpose (`8c67318` → run `33965072969`, `f9eb13a` → run `33965119613`),
+      both `BLOCKED`, both reverted. `src/scope/` landed here rather than at 2.3, holding the join and
+      nothing else, because a case that writes its own copy proves the copy.
 
 - [ ] **1.8 — The evals harness, from commit one.** Runner and three trivial cases, one per kind;
       `REQUIRE_POSTGRES=1` and `REQUIRE_EMBEDDINGS=1` on the evals job.
@@ -198,6 +210,8 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       Secret Manager and reach only their own service account, so this one can be revoked alone. No
       such repository secret exists today. Re-arm by PATCHing both names in at once,
       `{"contexts":["gate","evals"]}`, keeping `strict: true`.
+      **Owed by 1.7:** the two grep guards are steps of the `gate` job, so the `evals` job does not
+      repeat them. `npm run guards` is the command; `scripts/guards.ts` is the file.
 
 - [ ] **1.9 — Estate schema: Project · Building · Space · Unit.** E1–E4 from the workbook's FIELDS
       sheet. `Building.project_id` nullable, six-value `space_kind`, `Unit.unit_id = Space.space_id`.
@@ -207,6 +221,13 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       **Owed by 1.4:** the DDL appends from **`0004_`** in `src/kernel/migrations/`. `0001`–`0003`
       are the kernel's own — `vector`, the durability tables, their settings seed — and estate is
       the first domain table in this repository.
+      **Owed by 1.7 — three policy cases stop being pending the day this lands.**
+      `tests/policy/fixtures.ts` already writes `building`, `space` and `unit` with column lists
+      taken from the workbook's E1–E4, against tables that do not exist. When the real DDL appears,
+      any column that fixture guessed wrong is a not-null or undefined-column failure **in one
+      file** — extend the builder there, and do not edit the cases, which are written so they never
+      need to be. The first pending diagnostic moves from `building` to `party` on the same day,
+      which is the visible signal this slice did what it says.
 
 - [ ] **1.10 — Prove the pipeline in both directions, on purpose.** Break → blocked; fix → merge →
       staging; tag `v0.1.0` → prod; **roll prod back**; confirm the next deploy still takes traffic.

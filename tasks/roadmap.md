@@ -218,6 +218,17 @@ against tables that do not exist yet. Wire **both grep guards**: no migration ma
   **required** context on `main` from 2026-09-05, so a guard added as a step in it blocks merges the
   moment it lands — trip each one deliberately on a branch rather than discover it on `main`. With
   `enforce_admins` true there is no admin merge past a guard that fires.
+- **Closed 2026-09-05** ([evidence](evidence/1.7.md)). 14 policy cases; 7 report **pending** against
+  a named missing relation rather than skipping or going `todo`, and the branch is unreachable the
+  moment the last table lands. A deliberately-red required check cannot be committed — `gate` is
+  required and admin-enforced — so the red was proved and recorded instead. The disarm was proved
+  against a throwaway database with the seven tables in it (14 green, no pending lines), and every
+  predicate was then deleted from the join in turn, which **rewrote two cases**: an `ENDED` tenancy
+  is excluded by the status filter, so the date predicate tested nothing, and both recycled-number
+  cases ended the tenancy, so the contact dating tested nothing. Both guards tripped in CI
+  (`8c67318` → `33965072969`, `f9eb13a` → `33965119613`), both `BLOCKED`, both reverted; both fail
+  when they scanned zero files, and guard one now greps the real path. `src/scope/` landed here
+  rather than at 2.3, holding the join and nothing else.
 - **Deps:** 1.6 · **Size:** M
 
 ### Slice 1.8 — The evals harness, from commit one
@@ -253,6 +264,12 @@ Space.space_id` as a shared key, not a foreign key to a surrogate. Natural keys 
 - **Owed by 1.4:** the DDL appends from **`0004_`**. `0001`–`0003` are the kernel's own — the
   `vector` extension, the durability tables, their settings seed — and estate is the first domain
   table in this repository.
+- **Owed by 1.7 — three policy cases stop being pending the day this lands.**
+  `tests/policy/fixtures.ts` already writes `building`, `space` and `unit` from the workbook's E1–E4,
+  against tables that do not exist. Any column it guessed wrong surfaces as a not-null or
+  undefined-column failure **in one file**: extend the builder, never the cases. The first pending
+  diagnostic moves from `building` to `party`, which is the visible signal this slice did what it
+  says.
 - **Deps:** 1.4, 1.7 · **Size:** M
 
 ### Slice 1.10 — Prove the pipeline in both directions, on purpose
@@ -346,6 +363,13 @@ numbers get recycled, and `language` is a locked field on Party.
 - **Done when:** the same phone number can belong to two parties over two non-overlapping periods,
   and to only one on any given day.
 - **Verify:** **policy case 2 goes green** — a recycled number resolves to nobody. It was red in 1.7.
+- **Owed by 1.7 — three cases, not one, and the sharpest is the third.** `tests/policy/` holds
+  *"resolves to nobody once the tenancy and the contact have both closed"*, *"resolves to the new
+  holder's own unit and never to the previous one"*, and — the one that matters — *"stops a stranger
+  reaching a unit whose tenancy is still running"*. Only the third makes the contact dating
+  load-bearing: in the other two the ended tenancy does the work, which mutation testing at 1.7 found
+  the hard way. Extend `tests/policy/fixtures.ts` for `party` and `party_contact`; do not edit the
+  cases.
 - **Deps:** 1.9 · **Size:** M
 
 ### Slice 2.2 — Tenancy, TenancyParty, and the guarantor constraint
@@ -354,6 +378,13 @@ E7 and E8. `TenancyParty.role` ∈ tenant · co_tenant · guarantor · occupant,
 import path, no agent override.
 - **Done when:** the insert is *rejected*, not defaulted politely.
 - **Verify:** **policy case 3 goes green**, asserting the rejection; write it red first.
+- **Owed by 1.7 — two things this slice has to supply.** The isolation join already carries
+  `tp.is_service_contact`, so the constraint built here is *spent* at the front door rather than
+  merely stored: the 1.7 case *"never resolves a guarantor to the unit they guarantee"* asserts it
+  from the other side and goes green with the table. And **`Tenancy.terms_profile_id` is a NOT NULL
+  foreign key in the workbook and is deliberately absent from `tests/policy/fixtures.ts`**, because
+  `TermsProfile` is modelled nowhere yet — add it to the builder here, in one place, rather than in
+  each case.
 - **Deps:** 2.1 · **Size:** M
 
 ### Slice 2.3 — `src/scope/` — the isolation join, written once
@@ -363,6 +394,15 @@ The five hops, in SQL, before any model call. The current-occupancy VIEW (R6) al
   module contains the join's temporal predicate.
 - **Verify:** **policy case 1 goes green**; grep guard 2 stays green with the join in exactly one
   file; guard 1 confirms no `current_tenant` column was introduced.
+- **Owed by 1.7 — the join already exists; this slice finishes the module around it.** 1.7 landed
+  `src/scope/internal/isolation-join.ts` and `contract.ts` because the policy cases could not be
+  honest without them. Three things it deliberately did not build, all recorded in `SPEC-scope.md`:
+  the **current-occupancy VIEW** in a migration, with the resolver reading it instead of the base
+  tables; the **scoped-read audit line**, which `SPEC.md`'s security defaults require and
+  `kernel/audit.ts` already supports; and **E.164 normalisation at the edge**, because a number
+  stored in one format and asked in another resolves to nobody, which looks exactly like correct
+  isolation. Guard 2 matches the join's *predicates*, not its table names, so moving the join text
+  into a view is a change it will notice.
 - **Deps:** 2.2 · **Size:** M
 
 ### Slice 2.4 — The importer
@@ -556,9 +596,9 @@ not the scans, the handwriting or the signatures (A7; the controls for tier 2 we
 
 | Week | Demo kind | Deliverable | Workstreams | Depends on |
 |---|---|---|---|---|
-| **5** | Real data | **Paper becomes truth.** An amendment arrives for a real unit; the tenancy updates; the change log records old → new, who approved it, which document caused it. Then a tenancy ends because a date passed, with no document at all. | Promotion at scale · tenancy reconciliation · `TenancyEvent` · Obligation + ObligationType (E9, E10) · **the settings screen: the `ObligationType` and `DocumentType` catalogues, admin-managed at last (A9) — one screen, one pattern, and `asset_type` deliberately absent from it** · staff MFA and the `national_id` field guard — **owed by 1.5:** `infra/bootstrap.sh` deliberately creates no staff seed secrets, so whatever this mechanism needs in Secret Manager is created here, by the slice that knows what it is | W4 · **closes open question 2 — how many `terms_profile`s are in force, which sizes week 6** |
-| **6** | Software | **Who pays for this, and why.** Pick a category and a unit; get tenant / operator / contractor with the clause and the policy version behind it. Then edit the table live and watch the answer change. | `policy` module: the responsibility matrix as versioned, admin-editable data · `asset_in_warranty` fed by week 3's asset register · rules supersede by `effective_from` and never overwrite · `policy_version_id` snapshotted on every resolution | W5, W3.5 · sized by question 2 |
-| **7** | Software | **A ticket, start to finish, by hand.** Walk the canonical states in the console — NEW · IDENTIFIED · TRIAGED · RESPONSIBILITY SET · WINDOWS COLLECTED · OFFERED · SCHEDULED · CLOSED — plus the three exits. Watch the SLA clock run and the escalation fire. No WhatsApp, no agent. | `calls` module: state machine · SLA policies · timers · escalation · **the emergency bypass, live and tested here** because it must exist before the agent takes its first real message in week 10 · **the async negotiation engine starts and runs underneath for six weeks** | W6 |
+| **5** | Real data | **Paper becomes truth.** An amendment arrives for a real unit; the tenancy updates; the change log records old → new, who approved it, which document caused it. Then a tenancy ends because a date passed, with no document at all. | Promotion at scale · tenancy reconciliation · `TenancyEvent` · Obligation + ObligationType (E9, E10) · **the settings screen: the `ObligationType` and `DocumentType` catalogues, admin-managed at last (A9) — one screen, one pattern, and `asset_type` deliberately absent from it** · staff MFA and the `national_id` field guard — **owed by 1.5:** `infra/bootstrap.sh` deliberately creates no staff seed secrets, so whatever this mechanism needs in Secret Manager is created here, by the slice that knows what it is · **owed by 1.7:** `national_id` never appearing in the response shape of an agent tool is a policy case, not a review — deterministic, so it belongs in `tests/policy/` beside the isolation cases | W4 · **closes open question 2 — how many `terms_profile`s are in force, which sizes week 6** |
+| **6** | Software | **Who pays for this, and why.** Pick a category and a unit; get tenant / operator / contractor with the clause and the policy version behind it. Then edit the table live and watch the answer change. | `policy` module: the responsibility matrix as versioned, admin-editable data · `asset_in_warranty` fed by week 3's asset register · rules supersede by `effective_from` and never overwrite · `policy_version_id` snapshotted on every resolution · **owed by 1.7: policy cases 4 and 5** — `UNIT` is the only space kind that can ever be the tenant's, and a live warranty moves responsibility to the contractor, with the snapshot still answering after the policy changes. `tests/policy/` and its pending mechanism exist from 1.7; write each case red first | W5, W3.5 · sized by question 2 |
+| **7** | Software | **A ticket, start to finish, by hand.** Walk the canonical states in the console — NEW · IDENTIFIED · TRIAGED · RESPONSIBILITY SET · WINDOWS COLLECTED · OFFERED · SCHEDULED · CLOSED — plus the three exits. Watch the SLA clock run and the escalation fire. No WhatsApp, no agent. | `calls` module: state machine · SLA policies · timers · escalation · **the emergency bypass, live and tested here** because it must exist before the agent takes its first real message in week 10 · **owed by 1.7:** the bypass is a policy case too — an emergency category routes to the duty phone **with no model call in between**, which is deterministic and therefore never an eval · **the async negotiation engine starts and runs underneath for six weeks** | W6 |
 | **8** | Evidence | **Try to break tenant isolation, live.** Query as one tenant's phone and attempt to reach another tenant's documents, unit or history — through the console, through the API, and by asking the model. Every path returns nothing. | Policy suite cases 4 and 5 (`UNIT` is the only kind that can be the tenant's; a live warranty moves responsibility to the contractor, and re-resolving after a policy change still returns the snapshot) · `national_id` unreachable by any agent tool · audit on every scoped read · **owed by 1.5 and unblocked by 1.6:** the deploy accounts hold `run.admin` at *project* level because scoping it per service was impossible before a service existed — the Cloud Run services exist now, so bind it per service · **owed by 1.6:** bump the four Node-20 GitHub actions (`checkout@v4`, `setup-node@v4`, `google-github-actions/auth@v2`, `setup-gcloud@v2`), which every run annotates as deprecated | W7 |
 
 ### **Checkpoint · M2**
