@@ -23,6 +23,10 @@ jobs:
   # typecheck, lint, and the full suite against a real Postgres. Never release red.
   gate:
     uses: ./.github/workflows/ci.yml
+    # The gate is two jobs from slice 1.8, and the second one needs OPENAI_API_KEY. A called
+    # workflow inherits no secrets by default, so without this line every release would fail its own
+    # evals job on a key it was never handed — and the first release is slice 1.10's.
+    secrets: inherit
 
   prod:
     name: prod

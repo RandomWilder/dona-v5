@@ -11,6 +11,8 @@
     "test:code": "node --test 'src/**/*.test.ts' 'tests/**/*.test.ts' 'evals/**/*.test.ts'",
     "test:hooks": "node --test '.claude/hooks/**/*.test.mjs'",
     "test:policy": "node --test 'tests/policy/**/*.test.ts'",
+    "evals": "node evals/run.ts",
+    "measure": "node evals/measure.ts",
     "guards": "node scripts/guards.ts",
     "typecheck": "tsc --noEmit",
     "lint": "biome check --error-on-warnings",

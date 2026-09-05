@@ -114,6 +114,16 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   is a ratchet set to what retrieval achieves today, so the gate blocks regression while staying
   green. **No assertion is ever on a distance**: provider embeddings are not bit-identical between
   runs, and a committed distance is a gate that fails for weather. Distances live in `tasks/evidence/`.
+- **The golden set's subject and corpus are placeholders, and say so in the file.** There is no agent
+  and no ingestion path yet, so `evals/subject.ts` answers from a stub and `evals/corpus.ts` indexes
+  nine authored Hebrew passages into a **TEMP** `vector(n)` table — through the real config rows, the
+  real embedder and pgvector's own ordering, because a corpus that needed neither a database nor a
+  key would make both `REQUIRE_*` switches decorative. What is real from commit one is the *grading*.
+  `runCases` takes a `Subject` and a `Retriever`, so the real agent and the real search replace them
+  one at a time, and the harness never has to be introduced late (slice 1.8).
+- **A skip is a failure wherever a gate runs.** `REQUIRE_POSTGRES=1` and `REQUIRE_EMBEDDINGS=1` are
+  set on the jobs that must not pass by grading nothing; locally, absent either, the cases that need
+  them skip and say so in the count.
 - **Never test a deterministic constraint through the agent.** An eval that fails to reach another
   tenant's data proves the model behaved, not that the join is sound.
 - Contract tests per module, through public commands only. Race, timeout and restart tests for
@@ -163,5 +173,14 @@ boundary.test.ts` proves the kernel imports from no domain module.
 **Migrations live in `src/kernel/migrations/`**, one ordered sequence for the whole system, applied
 by `kernel/migrate.ts` under an advisory lock. Three exist and all three are the kernel's own —
 `vector`, the durability tables, their settings seed. The estate spine appends from `0004_` at slice
-1.9. No domain table exists yet, and no module does: module specs are stubs until their build week
-([tasks/roadmap.md](tasks/roadmap.md)), and a stub gaining content is the signal its build started.
+1.9. No domain table exists yet, and `src/scope/` is the only module directory there is — the
+isolation join and its contract, landed early at 1.7 with no tables underneath it. Every other module
+spec is a stub until its build week ([tasks/roadmap.md](tasks/roadmap.md)), and a stub gaining
+content is the signal its build started.
+
+**Where the build is: kernel 1.4 · GCP 1.5 · CI and staging 1.6 · the policy suite and both grep
+guards 1.7 · the evals harness 1.8.** The project is still org-less (fuse F7). Both gates are wired
+from week 1 and both are required contexts on `main`: `tests/policy/` runs inside the `gate` job with
+the guards, and `evals/` runs in an `evals` job of its own — a job rather than a step because it is
+the only thing in this repository that calls a paid third party. This paragraph is the single status
+line; `AGENTS.md` points here rather than repeating it.
