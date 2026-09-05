@@ -258,7 +258,7 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       "`address_key` for a building", the FIELDS sheet specifies none, and the need behind it is an
       importer that can run twice — carried to 1.11, below.
 
-- [ ] **1.10 — Prove the pipeline in both directions, on purpose.** Break → blocked; fix → merge →
+- [x] **1.10 — Prove the pipeline in both directions, on purpose.** Break → blocked; fix → merge →
       staging; tag `v0.1.0` → prod; **roll prod back**; confirm the next deploy still takes traffic.
       **Done when:** the round trip is complete and the post-rollback deploy serves 100%, not 0%.
       **Verify:** revision list with traffic percentages at each step. · **S**
@@ -285,6 +285,22 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       release before prod. It also now carries `secrets: inherit`, added at 1.8 because a called
       workflow inherits none by default and the evals job would otherwise fail on a key it was never
       handed. Neither has ever run — this slice is where they first do.
+      **Closed 2026-09-05** ([evidence](evidence/1.10.md)). Six legs, three tags, and the round trip
+      as traffic percentages: `v0.1.0` → `dona-prod-00001` 100% · `v0.1.1` → `00002` 100% ·
+      `rollback.sh prod` → `00001` 100% **pinned** · `v0.1.2` → `00003` 100% with `latestRevision`
+      restored, which is the acceptance bar. PR #15 was opened red on purpose and **`--admin` was
+      refused** — 1.1's last carry proved from the outside rather than from a settings page. The
+      first release created `dona-prod`, `dona-prod-migrate` and applied **four** migrations
+      (`0004_estate.sql` included) to a virgin database as `app-prod`; three releases took
+      2 m 20 s – 2 m 30 s each. **Three tags, not one**, because `rollback.sh` derives its target by
+      walking to the ready revision after the one serving: a rollback needs somewhere to go, and one
+      tag cannot prove the leg the acceptance bar names. The closing lever was **two** commands, not
+      one: the database stopped *and* the service set to `--min-instances 0`, because `release.yml`
+      deploys prod with `--min-instances 1` and an always-warm instance in front of a stopped database
+      bills for eleven weeks. Prod now answers `503 {"ok":false,…"database unreachable"}`, which is
+      `/health` doing its job. **Found here and carried to week 12:** `environment: production` was
+      created implicitly by the first release **with no protection rules**, so a `v*` tag is currently
+      the only thing between a commit and prod — correct this week, wrong from week 12.
 
 - [ ] **1.11 — The Shoham fixture and the week-1 surface.** The building, its spaces and its 72 units
       seeded **through the importer path**, and a buildings/units list on the RTL token layer.

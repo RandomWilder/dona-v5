@@ -181,7 +181,11 @@ against `party`. Every other module spec is a stub until its build week
 ([tasks/roadmap.md](tasks/roadmap.md)), and a stub gaining content is the signal its build started.
 
 **Where the build is: kernel 1.4 · GCP 1.5 · CI and staging 1.6 · the policy suite and both grep
-guards 1.7 · the evals harness 1.8 · the estate schema 1.9.** The project is still org-less (fuse F7). Both gates are wired
+guards 1.7 · the evals harness 1.8 · the estate schema 1.9 · the proved release path 1.10.**
+Production exists and has been released to — `v0.1.0`–`v0.1.2`, rolled back and rolled forward on
+purpose — and is then **parked until week 12**: the Cloud SQL instance is stopped and the service
+scaled to zero, so `dona-prod` answers 503 by design and staging is the delivered artifact every
+week. The project is still org-less (fuse F7). Both gates are wired
 from week 1 and both are required contexts on `main`: `tests/policy/` runs inside the `gate` job with
 the guards, and `evals/` runs in an `evals` job of its own — a job rather than a step because it is
 the only thing in this repository that calls a paid third party. This paragraph is the single status
