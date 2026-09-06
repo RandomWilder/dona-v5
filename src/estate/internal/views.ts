@@ -466,6 +466,15 @@ export function renderSearchPage(term: string, results: SearchResults): string {
  * It shows a unit, a building and a date, and no party at all: which lease ends when is an
  * operations fact, and who is on it is not this screen's to say before week 5.
  */
+// Hebrew counts in three, not in two. “בעוד 1 ימים” is wrong in the way a room full of Hebrew
+// speakers notices immediately and a template that only special-cases zero produces every day.
+function daysLeft(days: number): Html {
+  if (days === 0) return h`מסתיים היום`;
+  if (days === 1) return h`מסתיים מחר`;
+  if (days === 2) return h`בעוד יומיים`;
+  return h`בעוד ${ltr(days)} ימים`;
+}
+
 export function renderExpiringPage(
   leases: ExpiringLease[],
   days: number,
@@ -488,11 +497,7 @@ export function renderExpiringPage(
                   <p class="card-title">
                     <span class="unit-no">דירה ${ltr(lease.unit_number)}</span>
                     <span>${lease.building_name}</span>
-                    <span class="chip">${
-                      lease.days_left === 0
-                        ? h`מסתיים היום`
-                        : h`בעוד ${ltr(lease.days_left)} ימים`
-                    }</span>
+                    <span class="chip">${daysLeft(lease.days_left)}</span>
                   </p>
                   <p class="lede lease-when">
                     <span>${lease.city}</span>
