@@ -497,7 +497,10 @@ numbers get recycled, and `language` is a locked field on Party.
   because a number stored one way and asked for another resolves to nobody and that is
   indistinguishable from correct isolation; and `validity_is_ordered`, whose entire value is turning
   the `daterange()` constructor's unnamed **22000** into a named **23514**, which the red-first probe
-  established rather than the commit message asserting it. Seven rejections were proved red against
+  established rather than the commit message asserting it. **Proved on staging**, which is the one
+  thing a local container could not do: `0006_` is the first migration since `0001` to add an
+  extension, and `dona-staging-migrate-zxcqv` applied it against Cloud SQL as the runtime account
+  before revision `00021-wh2` served — `{"ok":true,"version":"e3681ff","db":"up"}`. Seven rejections were proved red against
   the same DDL with only their own constraint removed; six were simply accepted and the seventh is
   the 22000 above. **Both remaining grep guards fired in this slice and neither was worked around.**
   Guard three could not see `party_contact.value` — a bare `value` on its list would fire on
