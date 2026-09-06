@@ -74,11 +74,17 @@ export interface EstatePlan {
   buildings: BuildingPlan[];
 }
 
-/** Rows in a table before the import, after it, and the difference. */
+/**
+ * What one table's upserts did — counted from the statements themselves, never from `count(*)`.
+ *
+ * A whole-table count is not a fact about *this* import: another suite, another environment or a
+ * developer's own seed can move it, and an import that reported "created 0" because somebody else's
+ * row was already there would be reporting the wrong thing while looking right. Slice 1.11 shipped
+ * the count version and CI caught it within the hour, two test files racing over one database.
+ */
 export interface TableCount {
-  before: number;
-  after: number;
   created: number;
+  updated: number;
 }
 
 export interface ImportReport {

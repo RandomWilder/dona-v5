@@ -23,31 +23,29 @@ import type {
   TableCount,
 } from './plan.ts';
 
-const TABLES = ['project', 'building', 'space', 'unit'] as const;
-type Table = (typeof TABLES)[number];
+// `xmax = 0` on the row an `ON CONFLICT DO UPDATE` returns is true when the row was inserted and
+// false when it was updated: a freshly inserted tuple carries no deleting transaction id and the
+// update path sets one. It is the only way to tell the two apart in one statement, and it is what
+// makes the report a fact about *this* import rather than about the whole table.
+//
+// It replaced a `count(*)` before and after, which was wrong in a way that looked right: another
+// suite, another environment or a developer's own `npm run seed` moves a table count, and CI caught
+// two test files racing over one database within the hour (slice 1.11).
+const INSERTED = '(xmax = 0) AS inserted';
 
-async function countRows(db: Queryable, table: Table): Promise<number> {
-  // `table` is one of four literals from TABLES and never a caller's string: there is no
-  // parameterised form of an identifier, so the safety here is that no request-derived value can
-  // reach it.
-  const result = await db.query<{ n: string }>(
-    `SELECT count(*) AS n FROM ${table}`,
-  );
-  return Number(result.rows[0]?.n ?? 0);
-}
-
-// Sequential, not Promise.all: handed a PoolClient these share one connection, and pg deprecates
-// (and serialises) a second query issued while the first is in flight.
-async function countAll(db: Queryable): Promise<Record<Table, number>> {
-  const counts = {} as Record<Table, number>;
-  for (const table of TABLES) {
-    counts[table] = await countRows(db, table);
+class Tally {
+  created = 0;
+  updated = 0;
+  count(inserted: boolean): void {
+    if (inserted) {
+      this.created += 1;
+    } else {
+      this.updated += 1;
+    }
   }
-  return counts;
-}
-
-function delta(before: number, after: number): TableCount {
-  return { before, after, created: after - before };
+  get report(): TableCount {
+    return { created: this.created, updated: this.updated };
+  }
 }
 
 // Validation at the edge (AGENTS.md). Every one of these is a plan that would otherwise fail deep
@@ -127,14 +125,15 @@ function validateBuildingSpaces(building: BuildingPlan): void {
 async function upsertProject(
   db: Queryable,
   project: EstatePlan['projects'][number],
-): Promise<void> {
-  await db.query(
+): Promise<boolean> {
+  const result = await db.query<{ inserted: boolean }>(
     `INSERT INTO project (project_id, name, project_code, tender_ref, status)
      VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (project_code) DO UPDATE
        SET name = EXCLUDED.name,
            tender_ref = EXCLUDED.tender_ref,
-           status = EXCLUDED.status`,
+           status = EXCLUDED.status
+     RETURNING ${INSERTED}`,
     [
       newId(),
       project.name,
@@ -143,15 +142,22 @@ async function upsertProject(
       project.status,
     ],
   );
+  const inserted = result.rows[0]?.inserted;
+  if (inserted === undefined) {
+    throw new KernelError('conflict', 'project upsert returned no row', {
+      projectCode: project.projectCode,
+    });
+  }
+  return inserted;
 }
 
 async function upsertBuilding(
   db: Queryable,
   building: BuildingPlan,
-): Promise<string> {
+): Promise<{ buildingId: string; inserted: boolean }> {
   // project_id is resolved by the tender code rather than carried in the plan, so a plan never holds
   // an id and the two halves cannot disagree about which project a building is in.
-  const result = await db.query<{ building_id: string }>(
+  const result = await db.query<{ building_id: string; inserted: boolean }>(
     `INSERT INTO building (building_id, name, address_line, city, project_id,
                            handover_date, warranty_end_date, status)
      VALUES ($1, $2, $3, $4,
@@ -163,7 +169,7 @@ async function upsertBuilding(
            handover_date = EXCLUDED.handover_date,
            warranty_end_date = EXCLUDED.warranty_end_date,
            status = EXCLUDED.status
-     RETURNING building_id`,
+     RETURNING building_id, ${INSERTED}`,
     [
       newId(),
       building.name,
@@ -175,13 +181,13 @@ async function upsertBuilding(
       building.status,
     ],
   );
-  const buildingId = result.rows[0]?.building_id;
-  if (!buildingId) {
+  const row = result.rows[0];
+  if (!row) {
     throw new KernelError('conflict', 'building upsert returned no row', {
       building: building.name,
     });
   }
-  return buildingId;
+  return { buildingId: row.building_id, inserted: row.inserted };
 }
 
 /** Space ids by `kind\nname`, which is the natural key `0005_` declares, minus the building. */
@@ -193,16 +199,17 @@ async function upsertSpaces(
   db: Queryable,
   buildingId: string,
   building: BuildingPlan,
+  tally: Tally,
 ): Promise<SpaceIndex> {
   const index: SpaceIndex = new Map();
   for (const space of building.spaces) {
-    const result = await db.query<{ space_id: string }>(
+    const result = await db.query<{ space_id: string; inserted: boolean }>(
       `INSERT INTO space (space_id, building_id, space_kind, name, floor, access_note)
        VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (building_id, space_kind, name) DO UPDATE
          SET floor = EXCLUDED.floor,
              access_note = EXCLUDED.access_note
-       RETURNING space_id`,
+       RETURNING space_id, ${INSERTED}`,
       [
         newId(),
         buildingId,
@@ -212,13 +219,14 @@ async function upsertSpaces(
         space.accessNote,
       ],
     );
-    const spaceId = result.rows[0]?.space_id;
-    if (!spaceId) {
+    const row = result.rows[0];
+    if (!row) {
       throw new KernelError('conflict', 'space upsert returned no row', {
         space: space.name,
       });
     }
-    index.set(spaceKey(space.kind, space.name), spaceId);
+    tally.count(row.inserted);
+    index.set(spaceKey(space.kind, space.name), row.space_id);
   }
   return index;
 }
@@ -227,6 +235,7 @@ async function upsertUnits(
   db: Queryable,
   building: BuildingPlan,
   spaces: SpaceIndex,
+  tally: Tally,
 ): Promise<void> {
   for (const unit of building.units) {
     // Non-null by validatePlan, which has already checked every one of these three against the
@@ -240,7 +249,7 @@ async function upsertUnits(
       : null;
     // The conflict target is the primary key, and it is the natural key: R2 makes a unit's identity
     // its space's, so there is no second key here to keep in step with the first.
-    await db.query(
+    const result = await db.query<{ inserted: boolean }>(
       `INSERT INTO unit (unit_id, unit_number, rooms, area_sqm, has_mamad,
                          parking_space_id, storage_space_id, warranty_end_date, condition_status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -252,7 +261,8 @@ async function upsertUnits(
              parking_space_id = EXCLUDED.parking_space_id,
              storage_space_id = EXCLUDED.storage_space_id,
              warranty_end_date = EXCLUDED.warranty_end_date,
-             condition_status = EXCLUDED.condition_status`,
+             condition_status = EXCLUDED.condition_status
+       RETURNING ${INSERTED}`,
       [
         unitId,
         unit.unitNumber,
@@ -265,6 +275,13 @@ async function upsertUnits(
         unit.conditionStatus,
       ],
     );
+    const inserted = result.rows[0]?.inserted;
+    if (inserted === undefined) {
+      throw new KernelError('conflict', 'unit upsert returned no row', {
+        unitNumber: unit.unitNumber,
+      });
+    }
+    tally.count(inserted);
   }
 }
 
@@ -279,20 +296,23 @@ export async function importEstate(
   plan: EstatePlan,
 ): Promise<ImportReport> {
   validatePlan(plan);
-  const before = await countAll(db);
-  for (const project of plan.projects) {
-    await upsertProject(db, project);
+  const project = new Tally();
+  const buildings = new Tally();
+  const space = new Tally();
+  const unit = new Tally();
+  for (const row of plan.projects) {
+    project.count(await upsertProject(db, row));
   }
   for (const building of plan.buildings) {
-    const buildingId = await upsertBuilding(db, building);
-    const spaces = await upsertSpaces(db, buildingId, building);
-    await upsertUnits(db, building, spaces);
+    const { buildingId, inserted } = await upsertBuilding(db, building);
+    buildings.count(inserted);
+    const spaces = await upsertSpaces(db, buildingId, building, space);
+    await upsertUnits(db, building, spaces, unit);
   }
-  const after = await countAll(db);
   return {
-    project: delta(before.project, after.project),
-    building: delta(before.building, after.building),
-    space: delta(before.space, after.space),
-    unit: delta(before.unit, after.unit),
+    project: project.report,
+    building: buildings.report,
+    space: space.report,
+    unit: unit.report,
   };
 }

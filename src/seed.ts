@@ -22,9 +22,11 @@ try {
     await client.query('BEGIN');
     const report = await importEstate(client, shohamPlan());
     await client.query('COMMIT');
+    // created + updated, counted from the upserts themselves rather than from the tables: on a
+    // second run every line reads `created 0`, which is the whole claim this file makes.
     for (const [table, count] of Object.entries(report)) {
       console.log(
-        `seed: ${table} — ${count.before} → ${count.after} (created ${count.created})`,
+        `seed: ${table} — created ${count.created}, updated ${count.updated}`,
       );
     }
   } catch (error) {
