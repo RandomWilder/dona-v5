@@ -23,6 +23,8 @@ import {
 const FOREIGN_KEY_VIOLATION = '23503';
 const CHECK_VIOLATION = '23514';
 const NOT_NULL_VIOLATION = '23502';
+const UNIQUE_VIOLATION = '23505';
+const GENERATED_ALWAYS = '428C9';
 
 const SPACE_KINDS = [
   'UNIT',
@@ -61,27 +63,39 @@ async function rejects(
   }
 }
 
+let projectCounter = 0;
+
 async function insertProject(db: PoolClient): Promise<string> {
   const projectId = newId();
+  projectCounter += 1;
   await db.query(
     `INSERT INTO project (project_id, name, project_code, tender_ref, status)
-     VALUES ($1, 'Shoham — Rakefet', 'SHM-01', '2024/17', 'ACTIVE')`,
-    [projectId],
+     VALUES ($1, 'Shoham — Rakefet', $2, '2024/17', 'ACTIVE')`,
+    [projectId, `SHM-${projectCounter}`],
   );
   return projectId;
+}
+
+// A distinct address per call, because `building.address_key` is UNIQUE from 0005_ and two fixtures
+// at one address would collide on the natural key rather than on the constraint a case is about.
+let addressCounter = 0;
+function nextAddress(): string {
+  addressCounter += 1;
+  return `Rakefet ${addressCounter}`;
 }
 
 async function insertBuilding(
   db: PoolClient,
   projectId: string | null = null,
+  addressLine: string = nextAddress(),
 ): Promise<string> {
   const buildingId = newId();
   await db.query(
     `INSERT INTO building (building_id, name, address_line, city, project_id,
                            handover_date, warranty_end_date, status)
-     VALUES ($1, 'Shoham — Rakefet 12', 'Rakefet 12', 'Shoham', $2,
+     VALUES ($1, 'Shoham — Rakefet', $3, 'Shoham', $2,
              '2026-01-01', '2027-01-01', 'ACTIVE')`,
-    [buildingId, projectId],
+    [buildingId, projectId, addressLine],
   );
   return buildingId;
 }
@@ -375,7 +389,8 @@ describe('estate · the schema is the constraint', () => {
     }
     try {
       await inRolledBackTransaction(pool, async (db) => {
-        // The FIELDS sheet, E1–E4, sorted. Twenty-eight stored columns.
+        // The FIELDS sheet, E1–E4, sorted — plus the four columns that exist so a constraint
+        // can be declared rather than remembered.
         assert.deepEqual(await columnsOf(db, 'project'), [
           'name',
           'project_code',
@@ -383,7 +398,11 @@ describe('estate · the schema is the constraint', () => {
           'status',
           'tender_ref',
         ]);
+        // Plus `address_key` from 0005_, which is enforcement and not a fact: GENERATED ALWAYS from
+        // city and address_line, so nothing writes it and it cannot disagree with what it is
+        // derived from. The same standing unit's three constant discriminators have below.
         assert.deepEqual(await columnsOf(db, 'building'), [
+          'address_key',
           'address_line',
           'building_id',
           'city',
@@ -434,6 +453,102 @@ describe('estate · the schema is the constraint', () => {
         );
         assert.deepEqual(derived.rows, []);
       });
+    } finally {
+      await pool.end();
+    }
+  });
+  // The natural keys — 0005_estate_natural_keys.sql, slice 1.11. 1.9 shipped this spine with nothing
+  // unique but its primary keys, which is fine for a schema and wrong for an importer: the same
+  // fixture applied twice produced 2 buildings, 368 spaces and 144 units (tasks/evidence/1.11.md).
+  // These cases were proved red against that schema, and each one is what makes a re-run a no-op.
+  it('holds the natural keys, so an import can be run twice', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await t.test('one tender code is one project', async () => {
+        await inRolledBackTransaction(pool, async (db) => {
+          await db.query(
+            `INSERT INTO project (project_id, name, project_code, status)
+             VALUES ($1, 'Shoham — Rakefet', 'SHM-DUP', 'ACTIVE')`,
+            [newId()],
+          );
+          await rejects(db, UNIQUE_VIOLATION, () =>
+            db.query(
+              `INSERT INTO project (project_id, name, project_code, status)
+               VALUES ($1, 'Another name entirely', 'SHM-DUP', 'PLANNING')`,
+              [newId()],
+            ),
+          );
+        });
+      });
+
+      await t.test('one address is one building', async () => {
+        await inRolledBackTransaction(pool, async (db) => {
+          await insertBuilding(db, null, 'Rakefet 12');
+          await rejects(db, UNIQUE_VIOLATION, () =>
+            insertBuilding(db, null, 'Rakefet 12'),
+          );
+          // A different address is a different building, which is the half that stops a natural key
+          // from being a global lock.
+          await insertBuilding(db, null, 'Rakefet 14');
+        });
+      });
+
+      await t.test(
+        'the same address typed differently is the same building',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            await insertBuilding(db, null, 'Rakefet 12');
+            // What a second export looks like. address_key normalises it in the database, so no
+            // importer has to remember to — and no importer can forget.
+            for (const variant of [
+              '  Rakefet 12',
+              'Rakefet  12',
+              'Rakefet 12 ',
+              'RAKEFET 12',
+            ]) {
+              await rejects(db, UNIQUE_VIOLATION, () =>
+                insertBuilding(db, null, variant),
+              );
+            }
+          });
+        },
+      );
+
+      await t.test('nothing may write address_key', async () => {
+        await inRolledBackTransaction(pool, async (db) => {
+          await rejects(db, GENERATED_ALWAYS, () =>
+            db.query(
+              `INSERT INTO building (building_id, name, address_line, city, address_key,
+                                     handover_date, warranty_end_date, status)
+               VALUES ($1, 'x', 'Rakefet 90', 'Shoham', 'somewhere else',
+                       '2026-01-01', '2027-01-01', 'ACTIVE')`,
+              [newId()],
+            ),
+          );
+        });
+      });
+
+      await t.test(
+        'a space is identified by its building, its kind and its name',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            const buildingId = await insertBuilding(db);
+            await insertSpace(db, buildingId, 'UNIT', 'Apartment 12');
+            await rejects(db, UNIQUE_VIOLATION, () =>
+              insertSpace(db, buildingId, 'UNIT', 'Apartment 12'),
+            );
+            // The kind is in the key because a bay and an apartment may both be called '12' — and
+            // the same name in another building is another space.
+            await insertSpace(db, buildingId, 'PARKING', 'Apartment 12');
+            const other = await insertBuilding(db);
+            await insertSpace(db, other, 'UNIT', 'Apartment 12');
+          });
+        },
+      );
     } finally {
       await pool.end();
     }

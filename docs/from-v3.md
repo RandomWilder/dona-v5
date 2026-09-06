@@ -112,6 +112,15 @@ former. The listener and its case (now `src/kernel/db.test.ts`) were proved red 
 v3 file first, which failed by terminating its own runner. It is the one file in the kernel that is
 deliberately not v3's.
 
+**A second defect, found at slice 1.11 by tripping the guard rather than by reading it.** v3's
+`kernel/ui/tokens.test.ts` claims to keep a physical side out of a screen, and its pattern is
+`(?:^|[\s;{])(?:left|right)\s*:`. The character before `left` in `padding-left` is a hyphen, so
+`padding-left`, `margin-right` and `border-left-width` — the properties anyone actually types — went
+straight through it, as did the physical *value* in `text-align: left`. The guard has been decoration
+for its most common case. v5's `tests/ui/tokens.test.ts` matches the hyphen-separated segment instead
+and was proved red against all four forms. Same lesson as `db.ts`: a lifted file is inherited, not
+trusted.
+
 ### Process and enforcement — the part worth the most
 
 `PIPELINE.md` is the best-written file in the repo and every mechanism it describes was verified to

@@ -354,6 +354,10 @@ exercise it rather than letting the freeze slip. See risk **R1**.
 **Do not cut** 1.7, 1.10 or 1.12 — the first two are cheap this week and expensive to retrofit, and
 the third has to exist before the data does.
 
-**Say it in the room:** the cadence's week-1 line reads "real names, real addresses". Addresses and
-unit numbers are real; tenant names stay fixtures until the week-2 import, under the corpus policy
-(A7). State that rather than letting it be noticed.
+**Say it in the room — rewritten at 1.11.** The cadence's week-1 line reads "real names, real
+addresses". **Nothing in Thursday's demo is real, and that is the decision, not a shortfall:**
+functionality is established against mock addresses and example leases, and real data is applied to
+it afterwards ([pipeline.md](../docs/pipeline.md) §1 principle 5). The building is רקפת 12, שוהם, and
+it is ours. What is real is the schema under it and the importer that takes the actual register in
+week 2 — through the same natural keys, which is why the second run of anything is a no-op. State it
+in those words rather than letting someone notice the address is not one of theirs.
