@@ -41,6 +41,15 @@ before editing.
 The HTML sources are artifact bodies — no `<!doctype>`, `<html>`, `<head>` or `<body>` tags, by
 design. The publish step wraps them. Don't add them.
 
+## Not one of the four
+
+**[data-subject-notice.draft.md](data-subject-notice.draft.md)** — the notice Israel's Protection of
+Privacy Law §11 requires, drafted so that fuse **F6**'s second half has a reviewer rather than an
+author. It is **a draft, unpublished, and not legal advice**; it is written by an agent, filled in
+where the system determines the answer and marked `⟨…⟩` where only the owner can. It is deliberately
+not an artifact: publishing it is the owner's act, after counsel, and doing it here would make a
+promise this repository has no standing to make.
+
 ## Which document wins
 
 The first three were reconciled deliberately on 2 Sep 2026. Preserve the hierarchy:

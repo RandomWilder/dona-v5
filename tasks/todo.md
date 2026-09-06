@@ -31,8 +31,18 @@ exercise it rather than letting the freeze slip. See risk **R1**.
 - [ ] **Take delivery of the real document corpus — after 1.12, not before.** The controls exist
       first; the data lands into them (**R4**). **The controls exist as of 2026-09-06** — bucket,
       lifecycle rule, deletion path and storage audit logging, all exercised. Still the director's,
-      and owed **after F6's other half**: the DPA and the disclosure come before the documents, not
-      after. Record the arrival and removal dates on [fuses.md](fuses.md) the day it lands.
+      and owed **after F6's other half**, which as of 6 Sep 2026 is three named acts rather than an
+      open question: **execute OpenAI's DPA** (a form), **confirm Google Cloud's is in force** (it is
+      incorporated by reference — confirm and file the record), and **publish the notice to data
+      subjects**, drafted for review at
+      [../docs/data-subject-notice.draft.md](../docs/data-subject-notice.draft.md). Meta's and
+      Twilio's terms are week 9's and do not block this; Anthropic needs none. The instruments are
+      named per processor under [fuses.md](fuses.md) → *F6 in detail*. Record the arrival and removal
+      dates on [fuses.md](fuses.md) the day it lands.
+- [ ] **Answer one question out of the notice draft early: how it reaches a tenant.** The rest of the
+      draft can wait for counsel; this one cannot, because "on first contact through the agent
+      channel" means week 9 builds a step for it
+      ([../docs/data-subject-notice.draft.md](../docs/data-subject-notice.draft.md), item 4).
 - [ ] Look at what document types the Drive folders actually contain, and record the answer against
       open question 6. It sizes how much of the catalogue gets exercised before month two.
 
@@ -393,7 +403,12 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       `ALTER TABLE` form anchored wrong before it ever ran on a real migration. **F6 is lit and half
       discharged**: every third party that sees text from this system is named in `SPEC.md`, and
       **Anthropic** is on that list — Claude Code reads this repository, and what keeps it from
-      tenant text is a mechanism and not an assurance. The DPA and the disclosure stay the owner's.
+      tenant text is a mechanism and not an assurance. The DPA and the disclosure stay the owner's —
+      **scoped on 6 Sep, after this slice closed, from five obligations to three acts**: execute
+      OpenAI's DPA, confirm Google Cloud's is in force, publish the notice to data subjects
+      ([../docs/data-subject-notice.draft.md](../docs/data-subject-notice.draft.md)). Meta's and
+      Twilio's arrive with week 9; Anthropic needs none. ADR-0004 moved `proposed` → **accepted** at
+      the same time — an outstanding deliverable belongs on a fuse, not in a status field.
       **F7 is decided**: the organisation move does not go first, and the rule becomes *before tier 2
       lands or after it is removed*.
 

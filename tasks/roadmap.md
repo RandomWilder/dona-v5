@@ -419,7 +419,13 @@ organisation move stays an admin task rather than a data-custody event (**R8**).
   column) was built here against zero violations and is carried to **2.1**, and its own test caught
   its `ALTER TABLE` form anchored wrong before it ever ran on a real migration. **F6 is lit and half
   discharged** — every third party that sees text from this system is named in `SPEC.md`, Anthropic
-  included, and the DPA and the disclosure stay the owner's. **F7 is decided:** the organisation move
+  included, and the DPA and the disclosure stay the owner's. Scoped the same day, after the slice
+  closed: the remaining ask is **three named acts, not five negotiations** — OpenAI's DPA (a form),
+  confirming Google Cloud's (incorporated by reference), and publishing the notice to data subjects
+  (drafted at [../docs/data-subject-notice.draft.md](../docs/data-subject-notice.draft.md)). Meta's
+  and Twilio's arrive with week 9; Anthropic needs none. ADR-0004 moved `proposed` → **accepted** at
+  the same time: an outstanding deliverable belongs on a fuse, which has an owner and a weekly walk,
+  not in a status field, which has neither. **F7 is decided:** the organisation move
   does not go first; the corpus gets a dated bucket instead, so the rule becomes *before tier 2 lands
   or after it is removed*.
 - **Deps:** 1.5 · **Size:** S
@@ -685,9 +691,10 @@ the backfill needs**, and it is the one place a specimen cannot serve — tier 1
 not the scans, the handwriting or the signatures (A7; the controls for tier 2 were built in 1.12).
 - **Owed by 1.12 — every control this slice needs already exists, and the data does not.** The bucket,
   its 90-day lifecycle rule, the deletion path and the storage audit config landed at 1.12 and have
-  been exercised; what did **not** land is the corpus, deliberately, because **F6**'s other half — a
-  DPA with each processor and disclosure to data subjects — is owed before real tenant documents
-  arrive. This slice cannot start until the director has taken delivery, and the arrival and removal
+  been exercised; what did **not** land is the corpus, deliberately, because **F6**'s other half is
+  owed before real tenant documents arrive — and that half is now three named acts: OpenAI's DPA,
+  confirming Google Cloud's, and publishing the notice to data subjects
+  ([fuses.md](fuses.md) → *F6 in detail*). This slice cannot start until the director has taken delivery, and the arrival and removal
   dates go on [fuses.md](fuses.md) the day it happens, not the day this slice is written up.
 - **Done when:** a per-field accuracy table exists with its sample size, its failure modes named, and
   a stated removal date for the source documents.

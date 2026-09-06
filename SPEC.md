@@ -158,9 +158,14 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   | **Twilio** | The OTP message and the mobile number it goes to, as the SMS fallback | Week 9 |
   | **Anthropic** | This repository, read by Claude Code as it is built | Today, **development-time only**. It never sees tenant text, and the mechanism that makes that true is that tier 2 never enters the repo — `.gitignore`, the bucket, and this rule, not an assurance. |
 
-  Naming them is the engineering half of ADR-0004. The other half — a DPA with each processor and
-  disclosure to data subjects — is the owner's, is tracked as **F6** on
-  [tasks/fuses.md](tasks/fuses.md), and is owed **before the tier-2 corpus lands**.
+  Naming them is the engineering half of ADR-0004. The other half is the owner's, is tracked as **F6**
+  on [tasks/fuses.md](tasks/fuses.md), and is owed **before the tier-2 corpus lands**. As of
+  2026-09-06 it is three named acts and not an open question: execute OpenAI's DPA, confirm Google
+  Cloud's is in force, and publish the notice to data subjects drafted at
+  [docs/data-subject-notice.draft.md](docs/data-subject-notice.draft.md). Meta's and Twilio's terms
+  arrive with week 9's channel work; **Anthropic needs no instrument**, because this repository never
+  holds a tenant document — which is a mechanism with tests behind it, and the day it stops being one
+  that row changes before the data moves.
 
 ## The corpus, in three tiers
 

@@ -1,7 +1,9 @@
 # ADR-0004 — Personal data reaches the model provider, and that is a decision rather than an accident
 
-- **Date:** 2026-09-04 · **re-adopted from v3**, where it was raised 2026-09-01
-- **Status:** **proposed** — the technical mitigation is decided, the legal basis is owed
+- **Date:** 2026-09-04 · **re-adopted from v3**, where it was raised 2026-09-01 · **status changed 2026-09-06**
+- **Status:** **accepted** — all four decisions bind. Decision 3's *deliverable* is outstanding and
+  is tracked as fuse **F6**, which is where an outstanding deliverable belongs; it is not a reason to
+  leave the decision unadopted
 - **Context slice:** 1.1 — re-adopted by reference, not re-argued
 - **Original:** `docs/decisions/ADR-0004-personal-data-reaches-the-model-provider.md` in `RandomWilder/dona-v3`
 
@@ -32,8 +34,8 @@ amendment tightened obligations materially, and cross-border transfer has its ow
 system" is the part that does not survive contact: the key is scoped, but the *data* leaves our
 infrastructure.
 
-Three things make v5's exposure larger than v3's, which is why this ADR is re-adopted with its status
-unchanged rather than closed:
+Three things make v5's exposure larger than v3's, which is why this ADR was re-adopted rather than
+closed:
 
 - **The corpus is 1,500 units, not one contract.** v3's real document belonged to a party who was not
   a pilot tenant. v5's are Dona Dom's actual tenants, and they arrive in **week 1** (R4).
@@ -51,8 +53,9 @@ unchanged rather than closed:
   equivalent of.
 - **The real corpus never enters the repo** and lives in a dated bucket with a tested deletion path and
   a recorded removal date (slice 1.12), so the exposure has an end date from the day it starts.
-- **The status stays `proposed` until the DPA and the disclosure exist.** They are the owner's, they
-  have the same trigger as the corpus removal date, and this ADR is not closed by an engineering change.
+- **The status was `proposed` until the DPA and the disclosure existed.** That was wrong and it was
+  corrected on 6 Sep 2026 — see *Why the status moved*, below. The obligation did not go away; it moved
+  to the register that tracks obligations.
 
 ## What slice 1.12 discharged, and what it did not
 
@@ -66,16 +69,45 @@ are what hold it there.
 **Decision 3 is not.** The DPA with each processor and the disclosure to data subjects are the
 owner's, they are **fuse F6** on [tasks/fuses.md](../../tasks/fuses.md), and they are owed **before
 the tier-2 corpus lands** — which is why 1.12 built every control and deliberately did not take
-delivery. The status stays `proposed`.
+delivery. It is still outstanding — but it is a deliverable on a fuse, not an unadopted decision;
+the status moved to `accepted` on 6 Sep 2026 for the reason set out below, and F6 now names the
+instrument for each processor.
 
 **Decision 2 — redaction at the provider boundary — is untouched and still owed before week 10.**
 Nothing in 1.12 sends personal data anywhere: the tier-1 corpus is authored text with no real person
 in it, asserted by a test rather than promised.
 
+## Why the status moved, 6 Sep 2026
+
+`proposed` meant "nobody is bound by this yet", and that had stopped being true. Decisions 1, 2 and 4
+were already being executed: `SPEC.md` carries the rule from commit one and names every third party,
+`national_id` is structurally out of reach, the tier-1 corpus is asserted to contain no real person,
+and redaction is scheduled before week 10. Only decision 3's deliverable was outstanding. Holding the
+whole ADR at `proposed` on account of it made the status field useless — it hid that three of the four
+decisions bind **today**, and it invited a later reader to treat the entire ADR as still arguable.
+
+The rule this sets, and it applies to every ADR here: **a decision is `accepted` when it has been
+taken and is being followed. An outstanding deliverable of an accepted decision belongs on
+[tasks/fuses.md](../../tasks/fuses.md), not in a status field.** A fuse has an owner, a burn time and
+a weekly walk; a status field has none of those, so parking an obligation there is how it gets lost.
+
+Nothing about the obligation changed. What changed is where it is tracked, and how precisely: F6 now
+names the instrument for each of the five processors, and the answer is that **only two of them block
+the tier-2 corpus** — OpenAI's DPA, which is a form, and Google Cloud's, which is incorporated by
+reference and needs confirming rather than signing. Meta's and Twilio's arrive with week 9's channel
+work. Anthropic needs none, because Claude Code processes no tenant personal data — a mechanism with
+tests behind it rather than an assurance, and the row changes before the data moves if it ever stops
+being true.
+
 ## Open, and owed
 
-- A DPA with each processor that sees tenant text, and disclosure to data subjects. **Not yet recorded
-  on [tasks/fuses.md](../../tasks/fuses.md)** — it belongs there, with the corpus removal date, and is
-  raised in slice 1.1's evidence file rather than added silently.
+- **The two DPAs and the notice.** Recorded on [tasks/fuses.md](../../tasks/fuses.md) as **F6**, with
+  the instrument named per processor. The notice is drafted at
+  [docs/data-subject-notice.draft.md](../data-subject-notice.draft.md) — every element PPL §11 requires,
+  filled in where the system determines the answer and marked `⟨…⟩` where only the owner can. Reviewing
+  it is the owner's, with counsel; writing it was not, and leaving it unwritten was what made the fuse
+  look unbounded.
+- **One question in that draft has a deadline that is not the corpus's:** how the notice reaches a
+  tenant. If the answer is "on first contact through the agent channel", week 9 builds a step for it.
 - Whether redaction is its own slice in month one or rides with slice 4.2's comprehension work. It must
-  precede week 10 either way.
+  precede week 10 either way. **Decision 2 is accepted; only its scheduling is open.**
