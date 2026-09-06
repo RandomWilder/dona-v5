@@ -1,12 +1,13 @@
 // The fixture builder for the isolation cases. **One place**, because the slices that create these
 // tables extend it once rather than five call sites: 1.9 brings building · space · unit, 2.1 brings
-// party · party_contact, 2.2 brings tenancy · tenancy_party.
+// party · party_contact, 2.2 brings terms_profile · tenancy · tenancy_party.
 //
 // Column lists are the workbook's (docs/model/, E1–E8), which is a specification and not a
-// description. Only the columns these cases actually turn on are named; `Tenancy.terms_profile_id`
-// is a NOT NULL foreign key in the workbook and is deliberately absent, because TermsProfile is not
-// modelled anywhere yet — the slice that creates the table adds it here, and the failure until then
-// is a not-null violation in one file rather than a mystery in four.
+// description. Only the columns these cases actually turn on are named — with one exception, and it
+// is the one this file predicted: `Tenancy.terms_profile_id` is a NOT NULL foreign key in the
+// workbook and was deliberately absent until TermsProfile was modelled. 2.2 landed the table, so the
+// builder now creates a profile and names the column, **in one place** rather than in each of the
+// seven cases, which is exactly what "the slice that creates the table adds it here" was for.
 import { newId } from '../../src/kernel/ids.ts';
 import type { Queryable } from '../../src/scope/contract.ts';
 
@@ -19,6 +20,7 @@ export const SEEDED_RELATIONS = [
   'unit',
   'party',
   'party_contact',
+  'terms_profile',
   'tenancy',
   'tenancy_party',
 ] as const;
@@ -52,26 +54,43 @@ export interface SeededOccupancy {
   tenancyId: string;
 }
 
+// One address for the whole suite, and every seeded unit is a flat in it. **Not decoration.** A
+// case that seeds two occupancies seeds two units, and 1.11's `building_address_unique` rejects the
+// second building at the same address — which is correct, and which this builder was violating
+// silently. It surfaced at 2.2 rather than at 1.11 because until `tenancy` existed the first
+// seedOccupancy raised 42P01 and aborted the transaction before a second building was ever
+// attempted: the pending branch was masking a broken fixture. Making the building shared is also
+// the truer model — the neighbour in the isolation case lives next door, not in a second building
+// at the same address.
+const ADDRESS = { line: 'Rakefet 12', city: 'Shoham' };
+
 export async function seedUnit(
   db: Queryable,
   unitNumber: string,
 ): Promise<string> {
-  const buildingId = newId();
   const unitId = newId();
   await db.query(
     `INSERT INTO building (building_id, name, address_line, city, handover_date,
                            warranty_end_date, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (address_key) DO NOTHING`,
     [
-      buildingId,
+      newId(),
       'Shoham — Rakefet 12',
-      'Rakefet 12',
-      'Shoham',
+      ADDRESS.line,
+      ADDRESS.city,
       '2026-01-01',
       '2027-01-01',
       'ACTIVE',
     ],
   );
+  // Read the key back rather than composing `address_key` here: it is GENERATED ALWAYS from these
+  // two columns, and a second copy of that expression is a second thing to keep in step.
+  const building = await db.query<{ building_id: string }>(
+    'SELECT building_id FROM building WHERE city = $1 AND address_line = $2',
+    [ADDRESS.city, ADDRESS.line],
+  );
+  const buildingId = building.rows[0]?.building_id;
   await db.query(
     `INSERT INTO space (space_id, building_id, space_kind, name)
      VALUES ($1, $2, 'UNIT', $3)`,
@@ -104,15 +123,25 @@ export async function seedOccupancy(
      VALUES ($1, $2, 'PHONE', $3, true, $4, $5)`,
     [newId(), partyId, spec.phone, spec.contactFrom, spec.contactTo],
   );
+  // Which maintenance annex governs this lease. A NOT NULL foreign key in the workbook, so every
+  // seeded tenancy needs one. A profile per seed rather than a shared one, unlike the building
+  // above: the building is shared because a unique key forces it, and nothing in these cases turns
+  // on two tenancies naming the same profile.
+  const termsProfileId = newId();
   await db.query(
-    `INSERT INTO tenancy (tenancy_id, unit_id, start_date, end_date, status)
-     VALUES ($1, $2, $3, $4, $5)`,
+    `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, 'standard')`,
+    [termsProfileId],
+  );
+  await db.query(
+    `INSERT INTO tenancy (tenancy_id, unit_id, start_date, end_date, status, terms_profile_id)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
     [
       tenancyId,
       unitId,
       spec.tenancyFrom,
       spec.tenancyTo,
       spec.status ?? 'ACTIVE',
+      termsProfileId,
     ],
   );
   await db.query(

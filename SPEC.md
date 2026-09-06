@@ -203,19 +203,22 @@ token layer; `src/app.ts`, `src/serve.ts`, `src/migrate.ts` and `src/seed.ts` ar
 root above it. `src/kernel/boundary.test.ts` proves the kernel imports from no domain module.
 
 **Migrations live in `src/kernel/migrations/`**, one ordered sequence for the whole system, applied
-by `kernel/migrate.ts` under an advisory lock. Six exist: `0001`–`0003` are the kernel's own —
+by `kernel/migrate.ts` under an advisory lock. Seven exist: `0001`–`0003` are the kernel's own —
 `vector`, the durability tables, their settings seed — `0004_estate.sql` is the first domain
 migration, the E1–E4 spine landed at slice 1.9, `0005_estate_natural_keys.sql` gives that spine the
-keys an importer needs to be run twice (1.11), and `0006_parties.sql` is E5–E6, the first tables in
-this system with a person in them (2.1). `src/estate/`, `src/scope/` and `src/parties/` are the
-module directories: estate holds the schema, the importer, the read model and the first two screens,
-scope the isolation join and its contract, landed early at 1.7 with no tables underneath it, and
-parties its schema and nothing else — there is no command and no read model to export yet, so it has
-no `contract.ts` (2.3 and 2.4 are its callers). `tenancy` and `tenancy_party` arrive at 2.2, and
-until they do **the seven policy cases report pending against `tenancy`** — the diagnostic moved off
-`party` at 2.1, which is the whole of what that slice changes about them. Every other module spec is
-a stub until its build week ([tasks/roadmap.md](tasks/roadmap.md)), and a stub gaining content is
-the signal its build started.
+keys an importer needs to be run twice (1.11), `0006_parties.sql` is E5–E6, the first tables in
+this system with a person in them (2.1), and `0007_tenancy.sql` is E7–E8 plus the `terms_profile`
+its NOT NULL foreign key needs a target for (2.2). `src/estate/`, `src/scope/`, `src/parties/` and
+`src/tenancy/` are the module directories: estate holds the schema, the importer, the read model and
+the first two screens, scope the isolation join and its contract, landed early at 1.7 with no tables
+underneath it, and parties and tenancy their schemas and nothing else — there is no command and no
+read model to export yet, so neither has a `contract.ts` (2.3 and 2.4 are their callers).
+**The seven policy cases stopped reporting pending at 2.2 and now assert**: the last two relations
+`src/scope/`'s join reads landed with that migration, and `tests/policy/relations.test.ts` fails the
+build if any case takes the pending branch again, because a case that stopped reporting pending and
+also stopped running looks identical in a green summary. Every other module spec is a stub until its
+build week ([tasks/roadmap.md](tasks/roadmap.md)), and a stub gaining content is the signal its build
+started.
 
 **The application serves screens from 1.11**: `/estate` and `/estate/buildings/:id`, server-rendered
 Hebrew RTL off `/ui/tokens.css`, with no client JavaScript and — until staff auth lands in week 5 —
@@ -248,7 +251,7 @@ comparison that is true of every well-formed row cannot express "valid on day D"
 **Where the build is: kernel 1.4 · GCP 1.5 · CI and staging 1.6 · the policy suite and the first two
 grep guards 1.7 · the evals harness 1.8 · the estate schema 1.9 · the proved release path 1.10 · the
 importer, the fixture and the first screens 1.11 · the corpus and its controls 1.12 · Party and
-PartyContact 2.1.**
+PartyContact 2.1 · Tenancy, TenancyParty and the guarantor constraint 2.2.**
 Production exists and has been released to — `v0.1.0`–`v0.1.2`, rolled back and rolled forward on
 purpose — and is then **parked until week 12**: the Cloud SQL instance is stopped and the service
 scaled to zero, so `dona-prod` answers 503 by design and staging is the delivered artifact every

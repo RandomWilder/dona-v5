@@ -528,6 +528,46 @@ import path, no agent override.
   foreign key in the workbook and is deliberately absent from `tests/policy/fixtures.ts`**, because
   `TermsProfile` is modelled nowhere yet — add it to the builder here, in one place, rather than in
   each case.
+- **Closed 2026-09-06** ([evidence](evidence/2.2.md)). `0007_tenancy.sql` — E7 and E8's 12 columns,
+  and a minimal `terms_profile` table beside them, because the workbook makes `terms_profile_id` a
+  **NOT NULL** foreign key and a NOT NULL foreign key needs a target that exists. That is E1
+  `project`'s move at 1.9 — identity now, fields when we know what they must carry — and it is
+  deliberate that the column did not become nullable instead: which maintenance annex governs a lease
+  is what the responsibility decision keys on, so a null there is a week-6 matrix with no input, and
+  the cost is that the importer has to say which profile each lease is on. **Carried into 2.4 and
+  2.5.**
+  **The whole signal, and it is what this slice was for: all seven policy cases now assert.** Zero
+  pending diagnostics, and the count still the same 26 as the day before — measured before this slice
+  added its own four cases, because a case that stopped reporting pending and also stopped running
+  looks identical in a green summary. That reading is no
+  longer a human's job: `tests/policy/relations.test.ts` fails the build if any relation the suite
+  declares is missing, which turns the warning 2.1 wrote down into a check. The pending branch itself
+  stays, because weeks 5 and 6 write cases before their tables exist.
+  **Policy case 3 was proved red against the real constraint**, dropped from the local database
+  rather than only against a rebuilt DDL: the guarantor insert was **accepted and stored**, and the
+  case failed on `actual: undefined`. Eleven further rejections were proved red against the same DDL
+  with only their own constraint removed. Two findings the probe produced rather than the commit
+  message asserting them: an inverted period on an **ACTIVE** row fails inside the exclusion
+  constraint's `daterange()` as an unnamed **22000** — 2.1's finding, repeated — while the same row
+  as **DRAFT** is simply *accepted*, because a partial index does not apply to it. So
+  `tenancy_period_is_ordered` is both the thing that names the error and the only defence a non-active
+  row has.
+  **Two calls made here rather than deferred.** The workbook's *"no overlap allowed on one unit"* is
+  an **exclusion constraint partial on `ACTIVE`** — blanket would reject correct history, because a
+  `TERMINATED_EARLY` lease keeps its contractual `end_date` while `actual_move_out` records reality,
+  and the next tenancy legitimately starts before it. And the natural key `(unit_id, start_date)`
+  landed with the table rather than at 2.4: 1.9 shipped the estate spine keyless and 1.11 measured
+  the cost in duplicate rows. **No index on `end_date`** — Q5 is 2.6's, decided at full row count.
+  **Both firing guards were the slice's own comments, and neither was worked around.** Guard one
+  fired on the forbidden column name written in prose — it is absolute, and a match in a comment
+  fails as readily as one in DDL — and guard two on a comment *quoting* the tenancy-active predicate,
+  which is the identical mistake 2.1's evidence recorded, caught again one slice later. Both were
+  fixed by rewriting the comment.
+  **The pending branch was hiding a broken fixture.** `seedUnit` inserted a second building at the
+  same address, which 1.11's `building_address_unique` has rejected since week 1; it was invisible
+  because the first `seedOccupancy` aborted the transaction on 42P01 before a second was attempted.
+  The builder now shares one building, which is also the truer model — the neighbour in the isolation
+  case lives next door. 279 tests on every merge, up from 259.
 - **Deps:** 2.1 · **Size:** M
 
 ### Slice 2.3 — `src/scope/` — the isolation join, written once
@@ -570,6 +610,13 @@ of a duplicate, with no caller-supplied intent key anywhere.
   per channel" is a plausible rule the workbook does not state; as a partial unique index it would
   fail an import that touches two rows in the wrong order, on a rule nobody asked for. Decide it here
   if the export contains the fact, and leave it out if it does not.
+- **Owed by 2.2 — every imported lease names a `terms_profile`, and the column is NOT NULL.** Which
+  maintenance annex governs a lease is what the responsibility decision keys on, so it may not be
+  nullable and quietly absent. `terms_profile` also has **no natural key**, and the importer needs one
+  to look a profile up idempotently — choosing it is the same question as *how many profiles are in
+  force*, which is week 5's, so decide the key here against the export and leave the count to week 5.
+  If the export names no profile at all, that is a question for the client raised now rather than
+  discovered at week 6 by a matrix with no input.
 - **Deps:** 2.3 · **Size:** M
 
 ### Slice 2.5 — Import the real register
@@ -578,6 +625,12 @@ The Priority export into staging: 1,500 units, their tenancies and their parties
   party the export names — including one party on two tenancies and one ended tenancy reading as a
   vacancy.
 - **Verify:** the ten spot-checks, listed individually in the evidence file.
+- **Owed by 2.2 — the overlap constraint will reject rows, and how many is a fact about the client's
+  data.** `one_active_tenancy_per_unit` refuses two ACTIVE tenancies overlapping on one unit, and a
+  register with sloppy end dates will contain some. That is the intended direction — a reject with a
+  line number rather than two households in one apartment — but the count is measured and recorded
+  here rather than discovered on Wednesday. `(unit_id, start_date)` says the same thing about one
+  lease typed twice.
 - **Deps:** 2.4 · **Size:** M
 
 ### Slice 2.6 — Browse at portfolio scale
@@ -591,6 +644,10 @@ Buildings list, unit grid, search, and the occupancy chip — **derived on every
   the hottest query in the system once the agent is live. It is a few thousand rows today and the
   right moment to decide is at full row count with a timing in front of it, which is this slice —
   not at 2.1 on a hunch.
+- **Owed by 2.2 — `tenancy` has no index on `end_date`, and Q5 is the query that wants one.** Left
+  out at 2.2 on the same principle, and it is the *Done when* of this slice. `tenancy_unit` and
+  `tenancy_party (party_id)` do exist, the latter because the composite primary key does not serve
+  the isolation join's third hop.
 - **Deps:** 2.5 · **Size:** M
 
 > **Cut line:** the obligations strip and the compliance tab — both are month two. Do not cut 2.3.
