@@ -58,8 +58,34 @@ echo "▸ Deleting $WHAT"
 gcloud storage rm --recursive "$PREFIX" --project "$PROJECT" 2>/dev/null || true
 
 echo "▸ Verifying"
-LIVE="$(gcloud storage ls "$PREFIX" --project "$PROJECT" 2>/dev/null || true)"
-SOFT="$(gcloud storage ls "$PREFIX" --soft-deleted --project "$PROJECT" 2>/dev/null || true)"
+# Listing a bucket that holds nothing is an error in gcloud, and so is asking a
+# bucket with no soft-delete policy for its soft-deleted versions -- and both of
+# those are the outcome this script wants. Every *other* failure is not, and a
+# `|| true` that flattens all three would report "permanently removed" for an
+# expired credential. So the two benign messages are named, and anything else
+# fails the script closed.
+listing() {
+  local out rc
+  out="$(gcloud storage ls "$@" --project "$PROJECT" 2>&1)" && rc=0 || rc=$?
+  if [[ $rc -eq 0 ]]; then
+    printf '%s' "$out"
+    return 0
+  fi
+  case "$out" in
+  *"matched no objects"*) return 0 ;;
+  # Set to zero by infra/corpus-bucket.sh. A bucket that keeps nothing cannot be
+  # asked what it kept, and that refusal is the control working.
+  *"Soft delete policy is required"*) return 0 ;;
+  *)
+    echo "  could not verify the listing -- refusing to report a deletion:" >&2
+    echo "$out" >&2
+    return 3
+    ;;
+  esac
+}
+
+LIVE="$(listing "$PREFIX")" || exit 1
+SOFT="$(listing "$PREFIX" --soft-deleted)" || exit 1
 
 FAILED=0
 if [[ -n "$LIVE" ]]; then

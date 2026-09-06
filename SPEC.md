@@ -215,9 +215,21 @@ every screen and fails on a hex colour, a face, a physical side or a `<script>`.
 that fills them is ours and designed for coverage, not Shoham's real addresses; real data arrives
 through the same importer at week 2.
 
-**Where the build is: kernel 1.4 · GCP 1.5 · CI and staging 1.6 · the policy suite and both grep
-guards 1.7 · the evals harness 1.8 · the estate schema 1.9 · the proved release path 1.10 · the
-importer, the fixture and the first screens 1.11.**
+**The tier-1 corpus is in [docs/corpus/](docs/corpus/) from 1.12** — six Hebrew specimens, 71
+clauses, and the golden set is graded against them rather than against a parallel copy:
+`evals/fixtures/specimen-clauses.ts` is a loader over that directory, so a clause renamed there
+breaks the import instead of the gate. **Tier 2 has not landed and its controls have**, which is the
+order `tasks/plan.md` R4 asks for: `gs://dona-v5-corpus-2026-09-06` with versioning off, a
+soft-delete window of zero, a 90-day lifecycle rule and no service account granted anything on it
+(`infra/corpus-bucket.sh`), a deletion path that verifies against the soft-deleted listing before it
+reports success (`infra/corpus-delete.sh`), and Cloud Audit Logs `DATA_READ`/`DATA_WRITE` on storage.
+The application-level audit line over every scoped read is 2.3's and cannot be honest before `party`
+exists. **Three grep guards now**, not two: `-- pii` on a person-shaped column joined them at 1.12,
+against zero violations, to fire on `0006_parties.sql` at 2.1.
+
+**Where the build is: kernel 1.4 · GCP 1.5 · CI and staging 1.6 · the policy suite and the first two
+grep guards 1.7 · the evals harness 1.8 · the estate schema 1.9 · the proved release path 1.10 · the
+importer, the fixture and the first screens 1.11 · the corpus and its controls 1.12.**
 Production exists and has been released to — `v0.1.0`–`v0.1.2`, rolled back and rolled forward on
 purpose — and is then **parked until week 12**: the Cloud SQL instance is stopped and the service
 scaled to zero, so `dona-prod` answers 503 by design and staging is the delivered artifact every

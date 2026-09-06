@@ -114,8 +114,3 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run evals
-      # TEMPORARY, slice 1.12. The ranks and the grounding cutoff were set at 1.8 against nine
-      # authored passages; the corpus is 71 clauses now, so they are re-measured rather than
-      # assumed. There is no local OPENAI_API_KEY, so the measurement runs where the key is.
-      # Reverted in the next commit, with the run id recorded in tasks/evidence/1.12.md.
-      - run: npm run measure
