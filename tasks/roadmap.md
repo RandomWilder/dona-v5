@@ -482,6 +482,34 @@ numbers get recycled, and `language` is a locked field on Party.
   load-bearing: in the other two the ended tenancy does the work, which mutation testing at 1.7 found
   the hard way. Extend `tests/policy/fixtures.ts` for `party` and `party_contact`; do not edit the
   cases.
+- **Closed 2026-09-06** ([evidence](evidence/2.1.md)). **This entry's own Verify was wrong and is
+  corrected here**, in the same way 1.9's was and for the same reason: *"policy case 2 goes green"*
+  does not happen at 2.1. All seven cases reach `party` through `seedOccupancy`, which also writes
+  `tenancy` and `tenancy_party`, so they clear at **2.2**. What this slice changes is the whole
+  signal and is visible — **the pending diagnostic moved from `party` to `tenancy`, on all seven**.
+  `tests/policy/fixtures.ts` needed **no edit**: its column lists came from the workbook, which is
+  what the DDL was written from. The acceptance bar is enforced by an **exclusion constraint** rather
+  than by application code — `EXCLUDE USING gist (channel WITH =, value WITH =,
+  daterange(valid_from, valid_to, '[]') WITH &&)` over `btree_gist` — because "at most one party on
+  any given day" is a statement about overlap, and the alternative is a rule every future writer has
+  to remember. `'[]'` matches the join's own inclusive day-grained reading, and a null `valid_to` is
+  unbounded, so an open contact blocks every later one. Two CHECKs sit beside it: `phone_is_e164`,
+  because a number stored one way and asked for another resolves to nobody and that is
+  indistinguishable from correct isolation; and `validity_is_ordered`, whose entire value is turning
+  the `daterange()` constructor's unnamed **22000** into a named **23514**, which the red-first probe
+  established rather than the commit message asserting it. Seven rejections were proved red against
+  the same DDL with only their own constraint removed; six were simply accepted and the seventh is
+  the 22000 above. **Both remaining grep guards fired in this slice and neither was worked around.**
+  Guard three could not see `party_contact.value` — a bare `value` on its list would fire on
+  `config_settings.value` — so it learned **table-qualified names**, which is its own comment's rule
+  ("a column this list misses is added to it when it is met") honoured rather than bent. Guard two
+  fired on `validity_is_ordered`, its **first firing on work that was not a violation**: its pattern
+  could not tell a comparison of `valid_to` against the other column of the same row from one against
+  the day being asked about. Tightened so it says which it means, with the exception safe by
+  construction — a comparison true of every well-formed row cannot express "valid on day D" — and
+  the fix caught two bugs of its own on the way, a backtracking hole in the lookahead and this
+  slice's own test file becoming the second copy the guard exists to catch. 259 tests on every merge,
+  up from 238. **No natural key on `party`**, deliberately, and carried into 2.4 below.
 - **Deps:** 1.9 · **Size:** M
 
 ### Slice 2.2 — Tenancy, TenancyParty, and the guarantor constraint
@@ -527,6 +555,18 @@ of a duplicate, with no caller-supplied intent key anywhere.
 - **Done when:** running it twice changes nothing the second time, and a malformed row is reported
   with its line number instead of aborting the file.
 - **Verify:** run, re-run, diff row counts; feed it a deliberately broken file.
+- **Owed by 2.1 — `party` has no natural key, deliberately, and this slice gives it one.** 2.1 left
+  it out for the reason 1.9 left `address_key` out and 1.11 vindicated: the obvious candidate is
+  `national_id`, and it is the same trap the address was. A ת.ז. is nine digits **with leading zeros
+  that every spreadsheet export drops**, so `042…` and `42…` are one person and a naive
+  `UNIQUE (national_id)` is a key that disagrees with itself the first time the register arrives. It
+  has to be `(party_kind, national_id)` at minimum — a ת.ז. and a ח.פ. are different registries and
+  can be the same nine digits — and it is nullable, which is a third decision. Choose it here,
+  against the export, and it costs a migration.
+- **Owed by 2.1 — `is_primary` carries no uniqueness either.** "At most one primary contact per party
+  per channel" is a plausible rule the workbook does not state; as a partial unique index it would
+  fail an import that touches two rows in the wrong order, on a rule nobody asked for. Decide it here
+  if the export contains the fact, and leave it out if it does not.
 - **Deps:** 2.3 · **Size:** M
 
 ### Slice 2.5 — Import the real register
@@ -542,6 +582,12 @@ Buildings list, unit grid, search, and the occupancy chip — **derived on every
 - **Done when:** search across 1,500 units returns in under a second and Q5 (leases ending in the
   next 60 days, whole portfolio) is one indexed query.
 - **Verify:** timed queries at full row count, recorded as numbers.
+- **Owed by 2.1 — one index to measure rather than assume.** `party_contact` has no btree on
+  `(channel, value)`; the exclusion constraint's **GiST** index covers that lookup, and GiST is
+  slower than btree at plain equality. That lookup is the first hop of the isolation join, which is
+  the hottest query in the system once the agent is live. It is a few thousand rows today and the
+  right moment to decide is at full row count with a timing in front of it, which is this slice —
+  not at 2.1 on a hunch.
 - **Deps:** 2.5 · **Size:** M
 
 > **Cut line:** the obligations strip and the compliance tab — both are month two. Do not cut 2.3.

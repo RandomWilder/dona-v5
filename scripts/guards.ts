@@ -87,10 +87,23 @@ export function guardMigrations(root: string): GuardResult {
 // or the constraint is revisited on the record. It is not worked around by rephrasing.
 // ---------------------------------------------------------------------------------------------
 
+// The one thing `valid_to` may be compared to outside src/scope, and the reason it is safe rather
+// than convenient. Slice 2.1's `validity_is_ordered` CHECK in `0006_parties.sql` reads
+// `valid_to IS NULL OR valid_to >= valid_from`, which is a different question from the join's: it
+// asks whether a row's own period is ordered, not whether a contact is valid on the day being asked
+// about. `valid_to >= valid_from` is true of every well-formed row, so it cannot express "valid on
+// day D" no matter who writes it or where — which is what makes this an exception the guard can
+// carry without being weakened. Anything else on the right-hand side — a parameter, a literal,
+// `CURRENT_DATE` — still trips it.
+const SAME_ROW_ORDERING = 'valid_from';
+
 const JOIN_PREDICATES: ReadonlyArray<{ name: string; pattern: RegExp }> = [
   {
     name: 'contact-validity',
-    pattern: /valid_to\s+is\s+null\s+or\s+(?:[a-z_]+\.)?valid_to\s*>=/i,
+    pattern: new RegExp(
+      `valid_to\\s+is\\s+null\\s+or\\s+(?:[a-z_]+\\.)?valid_to\\s*>=(?!\\s*${SAME_ROW_ORDERING}\\b)`,
+      'i',
+    ),
   },
   {
     name: 'tenancy-active',
@@ -186,6 +199,17 @@ const PII_COLUMNS = new Set([
   'account_number',
 ]);
 
+// **Qualified names, for the columns a bare name cannot reach.** Slice 2.1 met the first one:
+// `party_contact.value` holds a phone number or an email address and is the most person-shaped
+// column in the system, and `value` on the list above would fire on `config_settings.value` in
+// `0002_kernel_durability.sql`. A guard with a false positive is one people learn to work around,
+// which is worse than the gap — so the guard learned the table instead of the list learning a name
+// it cannot qualify.
+//
+// This set stays small on purpose. A column that needs its table named is a column whose name does
+// not say what it holds, and that is worth noticing rather than automating away.
+const PII_QUALIFIED_COLUMNS = new Set(['party_contact.value']);
+
 // Two shapes, because a column arrives two ways. A definition inside CREATE TABLE starts the line;
 // an ALTER TABLE ... ADD COLUMN carries the table name in front of it. Both are anchored on a type
 // keyword after the name, so a mention inside a comment or a constraint body is not a definition —
@@ -199,6 +223,16 @@ const COLUMN_DEFINITION: readonly RegExp[] = [
 const MARKED = /--\s*(pii|not-pii\s*:\s*\S)/i;
 const COMMENT = /^\s*--/;
 
+// What table a column line is inside, tracked as the file is read. `CREATE TABLE x (` opens one and
+// `ALTER TABLE x` opens one too — 0005 puts the ADD COLUMN on the line after it, so the name has to
+// survive the line break. A `;` closes whichever is open, which is what stops a later `value` in the
+// same file inheriting a table it is not in.
+const CREATE_TABLE =
+  /^\s*create\s+table\s+(?:if\s+not\s+exists\s+)?([a-z_][a-z0-9_]*)/i;
+const ALTER_TABLE =
+  /^\s*alter\s+table\s+(?:if\s+exists\s+)?([a-z_][a-z0-9_]*)/i;
+const STATEMENT_END = /;/;
+
 export function guardPiiComments(root: string): GuardResult {
   const dir = path.join(root, MIGRATIONS_DIR);
   const files = existsSync(dir)
@@ -209,11 +243,25 @@ export function guardPiiComments(root: string): GuardResult {
   const violations: Violation[] = [];
   for (const name of files) {
     const lines = readFileSync(path.join(dir, name), 'utf8').split('\n');
+    let table: string | null = null;
     lines.forEach((line, index) => {
+      const opened =
+        CREATE_TABLE.exec(line)?.[1] ?? ALTER_TABLE.exec(line)?.[1] ?? null;
+      if (opened) table = opened.toLowerCase();
+      // Read on the same line the statement ends on, then close it: `ALTER TABLE party ADD COLUMN
+      // birth_date date;` is one line and all three things happen on it.
+      const closes = STATEMENT_END.test(line);
+
       const column = COLUMN_DEFINITION.map((pattern) => pattern.exec(line)?.[1])
         .find((name) => name !== undefined)
         ?.toLowerCase();
-      if (!column || !PII_COLUMNS.has(column)) return;
+      const qualified = table && column ? `${table}.${column}` : null;
+      const named =
+        column !== undefined &&
+        (PII_COLUMNS.has(column) ||
+          (qualified !== null && PII_QUALIFIED_COLUMNS.has(qualified)));
+      if (closes) table = null;
+      if (!column || !named) return;
       if (MARKED.test(line)) return;
       // The comment block directly above, walked upwards until a line that is not a comment. That
       // is where `space.access_note`'s marker lives, and it is where a two-line explanation of why
@@ -228,7 +276,7 @@ export function guardPiiComments(root: string): GuardResult {
       violations.push({
         guard: 'pii-columns-are-commented',
         file: path.join(MIGRATIONS_DIR, name),
-        detail: `line ${index + 1}: \`${column}\` holds personal data and carries no \`-- pii\` (or \`-- not-pii: <why>\`)`,
+        detail: `line ${index + 1}: \`${qualified !== null && PII_QUALIFIED_COLUMNS.has(qualified) ? qualified : column}\` holds personal data and carries no \`-- pii\` (or \`-- not-pii: <why>\`)`,
       });
     });
   }

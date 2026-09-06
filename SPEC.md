@@ -203,15 +203,19 @@ token layer; `src/app.ts`, `src/serve.ts`, `src/migrate.ts` and `src/seed.ts` ar
 root above it. `src/kernel/boundary.test.ts` proves the kernel imports from no domain module.
 
 **Migrations live in `src/kernel/migrations/`**, one ordered sequence for the whole system, applied
-by `kernel/migrate.ts` under an advisory lock. Five exist: `0001`–`0003` are the kernel's own —
+by `kernel/migrate.ts` under an advisory lock. Six exist: `0001`–`0003` are the kernel's own —
 `vector`, the durability tables, their settings seed — `0004_estate.sql` is the first domain
-migration, the E1–E4 spine landed at slice 1.9, and `0005_estate_natural_keys.sql` gives that spine
-the keys an importer needs to be run twice (1.11). `src/estate/` and `src/scope/` are the two module
-directories: estate holds the schema, the importer, the read model and the first two screens, scope
-the isolation join and its contract, landed early at 1.7 with no tables underneath it. `party`,
-`party_contact`, `tenancy` and `tenancy_party` arrive at 2.1 and 2.2, and until they do the seven
-policy cases report pending against `party`. Every other module spec is a stub until its build week
-([tasks/roadmap.md](tasks/roadmap.md)), and a stub gaining content is the signal its build started.
+migration, the E1–E4 spine landed at slice 1.9, `0005_estate_natural_keys.sql` gives that spine the
+keys an importer needs to be run twice (1.11), and `0006_parties.sql` is E5–E6, the first tables in
+this system with a person in them (2.1). `src/estate/`, `src/scope/` and `src/parties/` are the
+module directories: estate holds the schema, the importer, the read model and the first two screens,
+scope the isolation join and its contract, landed early at 1.7 with no tables underneath it, and
+parties its schema and nothing else — there is no command and no read model to export yet, so it has
+no `contract.ts` (2.3 and 2.4 are its callers). `tenancy` and `tenancy_party` arrive at 2.2, and
+until they do **the seven policy cases report pending against `tenancy`** — the diagnostic moved off
+`party` at 2.1, which is the whole of what that slice changes about them. Every other module spec is
+a stub until its build week ([tasks/roadmap.md](tasks/roadmap.md)), and a stub gaining content is
+the signal its build started.
 
 **The application serves screens from 1.11**: `/estate` and `/estate/buildings/:id`, server-rendered
 Hebrew RTL off `/ui/tokens.css`, with no client JavaScript and — until staff auth lands in week 5 —
@@ -230,11 +234,21 @@ soft-delete window of zero, a 90-day lifecycle rule and no service account grant
 reports success (`infra/corpus-delete.sh`), and Cloud Audit Logs `DATA_READ`/`DATA_WRITE` on storage.
 The application-level audit line over every scoped read is 2.3's and cannot be honest before `party`
 exists. **Three grep guards now**, not two: `-- pii` on a person-shaped column joined them at 1.12,
-against zero violations, to fire on `0006_parties.sql` at 2.1.
+against zero violations, to fire on `0006_parties.sql` at 2.1. It did not fire, because the markers
+were written — but it could not have seen the column that most needed one. `party_contact.value`
+holds a phone number or an email address, and a bare `value` on the guard's list would fire on
+`config_settings.value`; the guard learned **table-qualified names** at 2.1 rather than the list
+learning a name it cannot qualify. Guard two fired in the same slice, on `0006_`'s
+`validity_is_ordered` CHECK, which was its first firing on work that was not a violation: it could
+not tell a null-guarded comparison of `valid_to` against the *other column of the same row* from one
+against the *day being asked about*. Resolved by making the pattern say which it means — never by
+rephrasing the CHECK to slip past it — and the exception is safe by construction, because a
+comparison that is true of every well-formed row cannot express "valid on day D".
 
 **Where the build is: kernel 1.4 · GCP 1.5 · CI and staging 1.6 · the policy suite and the first two
 grep guards 1.7 · the evals harness 1.8 · the estate schema 1.9 · the proved release path 1.10 · the
-importer, the fixture and the first screens 1.11 · the corpus and its controls 1.12.**
+importer, the fixture and the first screens 1.11 · the corpus and its controls 1.12 · Party and
+PartyContact 2.1.**
 Production exists and has been released to — `v0.1.0`–`v0.1.2`, rolled back and rolled forward on
 purpose — and is then **parked until week 12**: the Cloud SQL instance is stopped and the service
 scaled to zero, so `dona-prod` answers 503 by design and staging is the delivered artifact every

@@ -304,11 +304,15 @@ vanished from the plan by 1.2 — including the sharpest hazard in the repo. Wha
 carry is one sentence in the closing slice's entry, read at the moment it matters. What it costs to
 lose is discovered by tripping over it.
 
-**Per week.** The week's shape belongs to the Cadence — the demo kind is declared Monday, the build
-is frozen Wednesday, the demo runs Thursday. What the pipeline owes each of those:
+**Per week.** The week's shape belongs to the Cadence — the demo kind is declared on the week's first
+working day, the build is frozen Wednesday, the demo runs Thursday. What the pipeline owes each of
+those:
 
-- **Monday** — `tasks/todo.md` rewritten for the week, with the declared demo kind at the top, so the
-  slices and the promise cannot drift apart.
+- **Sunday** — `tasks/todo.md` rewritten for the week, with the declared demo kind at the top, so the
+  slices and the promise cannot drift apart. The Cadence says "Monday" and means the first working
+  day of the week; **the working week here is Sun–Thu**, so it is Sunday, which is what
+  `tasks/roadmap.md` has always said. Corrected at slice 2.1 — week 1's evidence raised the
+  discrepancy, and a schedule stated two ways in two files is one nobody can be held to.
 - **Wednesday** — the freeze is a pipeline event, not an intention: the last merge that reaches
   staging lands Wednesday, and anything finished after it waits on a branch until the demo is done.
   Nothing is ever demoed that was finished that morning.

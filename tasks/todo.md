@@ -1,432 +1,222 @@
-# Week 1 · Sun 6 – Thu 10 Sep 2026 — A URL, a schema, and a filed application
+# Week 2 · Sun 13 – Thu 17 Sep 2026 — All 1,500 units, from the register
 
-> **CLOSED 2026-09-06** — twelve of twelve slices, demo given off staging the same day, four days
-> ahead of the planned Thursday. What was shown, the numbers behind it, the asks put to the room and
-> everything carried into week 2: [evidence/week-1.md](evidence/week-1.md). The three unticked items
-> below are the director's and are carried there; they did not block the close.
+> **Demo kind, declared Sunday 6 Sep: REAL DATA — and it is the one line in this file that is not
+> ours to keep.** See *The declared demo kind and F3* below: slices 2.1–2.4 do not need the Priority
+> ERP keys, **2.5 and 2.6 do**, and the keys are the client's to issue. Unlit, this week ends with
+> the schema and the importer proved against a fixture we designed and the register still outside
+> the system — which is an **evidence** week, honestly declared, not a real-data one quietly missed.
 >
-> **Demo kind, declared Sunday: SOFTWARE.**
-> **Week demo (Thu 10 Sep):** a live link stakeholders open on their own phones — Shoham's building
-> and its 72 units — plus the timestamped Meta verification submission.
-> **Freeze:** Wed 9 Sep. The last merge that reaches staging lands Wednesday.
+> **Week demo (Thu):** the same URL as week 1, now with every building across Shoham, Beit Shemesh,
+> Ashdod, Lod and Ashkelon — units, tenancies, parties, searchable.
+> **Freeze:** Wednesday. The last merge that reaches staging lands Wednesday.
 >
-> One slice = one focused session, half a day or less. Every day ends with staging deployed.
-> **Done when** is the acceptance bar; **Verify** is the check that proves it — no self-certification.
-> The standing bar every slice also clears is the Definition of Done in [plan.md](plan.md).
+> Week 2 starts **6 Sep 2026**, the day week 1 closed, rather than on the planned 13 Sep. The dates
+> in [roadmap.md](roadmap.md) are never rewritten; the gap between them and the evidence files is the
+> measurement of how the project ran.
+>
+> One slice = one focused session, half a day or less. **Done when** is the acceptance bar; **Verify**
+> is the check that proves it — no self-certification. The standing bar every slice also clears is
+> the Definition of Done in [plan.md](plan.md).
 
-**Twelve slices against four build days** (Sun–Wed). It fits only because six of them are verbatim
-lifts from v3 with no design decisions in them. The cut line at the bottom is the release valve —
-exercise it rather than letting the freeze slip. See risk **R1**.
+**Six slices, and the shape of the week is a chain, not a fan.** 2.1 → 2.2 → 2.3 → 2.4 → 2.5 → 2.6,
+each depending on the one before it. There is no parallel track to fall back on, which is why the cut
+line at the bottom is at the *end* of the chain and not in the middle of it.
 
 ---
 
-## Before any slice — light the fuses
+## The declared demo kind and F3 — the director's call, stated here rather than on Thursday
 
-- [x] Walk all six rows of [fuses.md](fuses.md) — **seven rows since F7 was added at 1.5**. Walked at the demo, 6 Sep; F2, F3, F4, F5 and F7 unlit and on the asks slide. They burn while the scaffolding gets built;
-      **nothing below is on their critical path.**
-- [x] Confirm and record the Meta filing: lit 2026-08-21, correct legal entity, in progress. Four to
-      six weeks puts it between 18 Sep and 2 Oct — roughly five weeks of slack ahead of the week-9
-      need.
+The roadmap declares week 2 **Real data**. That promise is only ours to keep for four of the six
+slices:
+
+| | Needs F3 (Priority read-only keys)? |
+|---|---|
+| 2.1 Party · PartyContact | no |
+| 2.2 Tenancy · TenancyParty | no |
+| 2.3 `src/scope/` | no |
+| 2.4 The importer | no — it is proved against a designed file |
+| **2.5 Import the real register** | **yes** |
+| **2.6 Browse at portfolio scale** | **yes** — 1,500 units is what makes it *scale* |
+
+**F3 is unlit** ([fuses.md](fuses.md)). It was on week 1's asks slide and it is the ask with a date
+on it. For the declared kind to hold, the keys have to be in hand by **Tuesday**, leaving 2.5 and 2.6
+inside the Wednesday freeze. Later than that and the honest move is to re-declare the week as
+**Evidence** on Wednesday rather than demo a fixture and call it the register: a demo kind changed in
+advance is a plan, and one changed on Thursday is an excuse
+([rollout-cadence.html](../docs/rollout-cadence.html)).
+
+- [ ] **Confirm F3 by Tuesday, or re-declare the week.** The director's, and the only item in this
+      file that is.
 
 ## Also this week
 
-- [x] Put the **three success numbers** to the client for agreement at Thursday's demo
-      ([plan.md](plan.md) — calls closed with no human · time to booked visit, median and p90 ·
-      escalations per 100 calls split by cause), plus the two stop conditions.
-- [ ] **Take delivery of the real document corpus — after 1.12, not before.** The controls exist
-      first; the data lands into them (**R4**). **The controls exist as of 2026-09-06** — bucket,
-      lifecycle rule, deletion path and storage audit logging, all exercised. Still the director's,
-      and owed **after F6's other half**, which as of 6 Sep 2026 is three named acts rather than an
-      open question: **execute OpenAI's DPA** (a form), **confirm Google Cloud's is in force** (it is
-      incorporated by reference — confirm and file the record), and **publish the notice to data
-      subjects**, drafted for review at
-      [../docs/data-subject-notice.draft.md](../docs/data-subject-notice.draft.md). Meta's and
-      Twilio's terms are week 9's and do not block this; Anthropic needs none. The instruments are
-      named per processor under [fuses.md](fuses.md) → *F6 in detail*. Record the arrival and removal
-      dates on [fuses.md](fuses.md) the day it lands.
-- [ ] **Answer one question out of the notice draft early: how it reaches a tenant.** The rest of the
-      draft can wait for counsel; this one cannot, because "on first contact through the agent
-      channel" means week 9 builds a step for it
-      ([../docs/data-subject-notice.draft.md](../docs/data-subject-notice.draft.md), item 4).
-- [ ] Look at what document types the Drive folders actually contain, and record the answer against
-      open question 6. It sizes how much of the catalogue gets exercised before month two.
+- [ ] **Walk [fuses.md](fuses.md).** F2, F3, F4, F5 and F7 are unlit; F6 is lit and half discharged.
+      Everything unlit goes on Thursday's asks slide. The register is that file and this one does not
+      duplicate it.
+- [ ] **F6's other half — three named acts**, blocking the tier-2 corpus and nothing in week 2:
+      execute OpenAI's DPA, confirm Google Cloud's is in force, publish the notice to data subjects
+      ([../docs/data-subject-notice.draft.md](../docs/data-subject-notice.draft.md)).
+- [ ] **Answer one question out of the notice draft: how it reaches a tenant.** "On first contact
+      through the agent channel" means week 9 builds a step for it, so the answer is owed before
+      week 9 rather than during it (notice draft, item 4).
+- [ ] **Open question 6 — what document types the Drive folders actually contain.** Blocked on F4.
+- [ ] **Take delivery of the real document corpus** — the controls have existed since 2026-09-06 and
+      the data does not, which is the order **R4** asks for. Owed after F6's other half. Record the
+      arrival and removal dates on [fuses.md](fuses.md) the day it lands.
+
+**Carried in and already owned elsewhere, named here so nothing is unowned:** `environment:
+production` has no protection rules — a `v*` tag is the only thing between a commit and prod, which
+is correct while prod is stopped and wrong from week 12, where [roadmap.md](roadmap.md) owns it.
 
 ---
 
 ## Slices
 
-- [x] **1.1 — Repo, branch protection, context layer.** `AGENTS.md` (20–30 lines), `CLAUDE.md`
-      pointer, `SPEC.md`, empty `SPEC-<module>.md` per module, `docs/decisions/` re-adopting v3's
-      ADR-0001–0004.
-      **Done when:** a clean clone gives an agent `AGENTS.md` and `SPEC.md`, and a PR to `main`
-      cannot merge without the required checks.
-      **Verify:** branch protection API lists the checks; a throwaway PR reports `BLOCKED`. · **M**
+- [x] **2.1 — Party and PartyContact, temporally dated.** E5 and E6, 13 columns. `PartyContact`
+      carries `valid_from` / `valid_to` because Israeli mobile numbers get recycled, and
+      `preferred_language` is a locked field on Party.
+      **Done when:** the same phone number can belong to two parties over two non-overlapping
+      periods, and to only one on any given day.
+      **Verify:** contract tests in `src/parties/schema.test.ts`, every rejection proved red first
+      against the same DDL without its constraint, with the SQLSTATE recorded. · **M**
+      **The roadmap's Verify for this slice is wrong, in exactly the way 1.9's was.** It says
+      *"policy case 2 goes green — it was red in 1.7"*. **No policy case goes green here.** All seven
+      reach `party` through `seedOccupancy`, which also writes `tenancy` and `tenancy_party`, so they
+      clear at **2.2**. What this slice changes is visible and is the whole signal: **the pending
+      diagnostic moves from `party` to `tenancy`**. Recorded in [roadmap.md](roadmap.md) beside 1.9's
+      correction rather than only here.
+      **Owed by 1.12 — the first migration guard three was built for.** `0006_` is the first DDL in
+      this repository with a person in it. `scripts/guards.ts` fails the build if `phone`, `email`,
+      `national_id`, a name or a birth date arrives without `-- pii` on its line or in the comment
+      block above it; the escape is `-- not-pii: <why>` and it costs a sentence. The guard has been
+      green against five migrations since 1.12 and has never fired — this is the slice where it
+      either fires or the marker was written, and either outcome is the control working.
+      **Owed by 1.7 — three cases, not one, and the sharpest is the third.** `tests/policy/` holds
+      *"resolves to nobody once the tenancy and the contact have both closed"*, *"resolves to the new
+      holder's own unit and never to the previous one"*, and *"stops a stranger reaching a unit whose
+      tenancy is still running"*. Only the third makes the contact dating load-bearing: in the other
+      two the ended tenancy does the work, which mutation testing at 1.7 found the hard way. Extend
+      `tests/policy/fixtures.ts` for `party` and `party_contact`; do not edit the cases.
+      **Closed 2026-09-06** ([evidence](evidence/2.1.md)). `0006_parties.sql` — 13 columns, an
+      **exclusion constraint** rather than application code for the acceptance bar, and two CHECKs
+      beside it. **`tests/policy/fixtures.ts` needed no edit**, which is the workbook being a
+      specification rather than a description. The pending diagnostic moved `party` → `tenancy` on
+      all seven cases. Seven rejections proved red against the same DDL with only their own
+      constraint removed — six accepted outright, and `validity_is_ordered` rejected anyway as an
+      unnamed **22000** instead of the named **23514** the case asserts, which is the whole of that
+      CHECK's value and was found by the probe rather than claimed. **Both remaining guards fired
+      and neither was worked around:** guard three learned table-qualified names so it could see
+      `party_contact.value`, and guard two fired for the first time on work that was not a
+      violation and was made to say what it means. 259 tests on every merge, up from 238.
 
-- [x] **1.2 — Guardrails with teeth.** `guard-bash.mjs` and `after-write.mjs` lifted from v3,
-      `SessionStart` printing branch and failing tests, permissions allowlist.
-      **Done when:** `rm -rf /`, force push, raw `psql` against prod and `DROP DATABASE` are each
-      blocked with exit 2; a write under `src/<module>/` runs that module's tests.
-      **Verify:** attempt all four; paste the blocks into the evidence file. · **S**
+- [ ] **2.2 — Tenancy, TenancyParty, and the guarantor constraint.** E7 and E8. `TenancyParty.role`
+      ∈ tenant · co_tenant · guarantor · occupant, and **`is_service_contact` is forced false for
+      `GUARANTOR` by a database constraint** — no toggle, no import path, no agent override.
+      **Done when:** the insert is *rejected*, not defaulted politely.
+      **Verify:** **policy case 3 goes green**, asserting the rejection; write it red first. · **M**
+      **Owed by 1.7 — two things this slice has to supply.** The isolation join already carries
+      `tp.is_service_contact`, so the constraint built here is *spent* at the front door rather than
+      merely stored: 1.7's case *"never resolves a guarantor to the unit they guarantee"* asserts it
+      from the other side and goes green with the table. And **`Tenancy.terms_profile_id` is a NOT
+      NULL foreign key in the workbook and is deliberately absent from `tests/policy/fixtures.ts`**,
+      because `TermsProfile` is modelled nowhere yet — add it to the builder here, in one place.
+      **Owed by 2.1 — this is where the seven policy cases actually clear.** `tenancy_party` is the
+      last relation `seedOccupancy` writes, so the pending branch in `tests/policy/support.ts`
+      becomes unreachable the moment this migration lands. **Confirm it by the diagnostic lines
+      disappearing and the case count staying the same** — a case that stopped reporting pending and
+      also stopped running looks identical in a green summary.
 
-- [x] **1.3 — Toolchain and a walking skeleton.** Node 24 type stripping, tsconfig, Biome,
-      `node --test`, docker-compose Postgres 16 + pgvector, `npm run dev` health page.
-      **Done when:** clean clone → running in under five minutes; `/health` returns `ok:true` **and**
-      `db:up`.
-      **Verify:** time it from `git clone` on a second checkout; record the number. · **M**
-      **Owed by 1.2, and this slice is the first place it can land:** `npm test` must include
-      `.claude/hooks/hooks.test.mjs` — 34 cases that nothing currently runs — and `after-write.mjs`
-      gains the Biome format-and-lint step [pipeline.md](../docs/pipeline.md) §4 specifies. It runs
-      the touched module's tests only, because Biome does not exist until this slice.
+- [ ] **2.3 — `src/scope/` — the isolation join, written once.** The five hops, in SQL, before any
+      model call. The current-occupancy VIEW (R6) alongside it: `today ∈ [start_date, end_date]`,
+      computed on every load.
+      **Done when:** Q1 and Q2 from the workbook's ADMIN VIEWS sheet are each one query, and no other
+      module contains the join's temporal predicate.
+      **Verify:** **policy case 1 goes green**; grep guard 2 stays green with the join in exactly one
+      file; guard 1 confirms no `current_tenant` column was introduced. · **M**
+      **Owed by 1.7 — the join already exists; this slice finishes the module around it.** Three
+      things 1.7 deliberately did not build, all recorded in `SPEC-scope.md`: the **current-occupancy
+      VIEW** in a migration, with the resolver reading it instead of the base tables; the
+      **scoped-read audit line**, which `SPEC.md`'s security defaults require and `kernel/audit.ts`
+      already supports — re-confirmed as this slice's at 1.12, which delivered access logging for the
+      tier-2 corpus as a Cloud Audit Logs config on the bucket and could not deliver the application
+      half, because a scoped read returns nothing until `party` and `tenancy_party` exist; and
+      **E.164 normalisation at the edge**, because a number stored in one format and asked in another
+      resolves to nobody, which looks exactly like correct isolation. Guard 2 matches the join's
+      *predicates*, not its table names, so moving the join text into a view is a change it notices.
+      **Owed by 2.1 — the storage half of E.164 is already enforced and the conversion half is not.**
+      `0006_` carries a CHECK that a `PHONE` row's value is E.164-shaped, so a badly-formatted number
+      is rejected at the database rather than resolving to nobody. That is a backstop and not a
+      normaliser: the edge still has to *convert* `052-123-4567` into `+972521234567`, and until it
+      does the CHECK turns a silent miss into a loud rejection, which is the trade this slice
+      completes.
 
-- [x] **1.4 — Kernel lift, verbatim.** All of `src/kernel/`, renaming nothing. Migrations do **not**
-      come with it.
-      **Done when:** the kernel's own tests pass in v5 and it imports nothing from any domain module.
-      **Verify:** `npm test`; grep proves the boundary holds. · **M**
-      **Owed by 1.3 — four things the skeleton wrote by hand for the kernel to take back.** `src/`
-      is deliberately empty of modules so this lift lands in clean space, and these are what it
-      replaces rather than duplicates: (a) `src/app.ts`'s inline `{ code, message }` 503 body →
-      `kernel/errors.ts`'s `KernelError` / `httpStatus` / `toErrorBody`, adding the
-      `setNotFoundHandler` / `setErrorHandler` v3 has and 1.3 deliberately left out; (b)
-      `src/app.test.ts`'s four-line `REQUIRE_POSTGRES` check → `kernel/pg-support.ts`'s
-      `migratedPoolOrNull()`; (c) **`src/db.ts` is deleted by this slice, and its `pool.on('error')`
-      handler must survive the deletion** — v3's `kernel/db.ts` does not have one, so a clean
-      verbatim lift silently reintroduces a bug that kills the process whenever the database
-      restarts ([from-v3.md](../docs/from-v3.md); `src/db.test.ts` is the case that catches it);
-      (d) `docker-compose.yml` stays on **port 5434** precisely so `kernel/pg-support.ts`'s default
-      connection string needs no edit — do not renumber it.
+- [ ] **2.4 — The importer.** Idempotent, re-runnable, reports rejects rather than failing whole.
+      Natural keys do the work — `address_key` for a building, `(unit_id, start_date)` for a
+      tenancy — so a re-run is a no-op instead of a duplicate, with no caller-supplied intent key
+      anywhere.
+      **Done when:** running it twice changes nothing the second time, and a malformed row is
+      reported with its line number instead of aborting the file.
+      **Verify:** run, re-run, diff row counts; feed it a deliberately broken file. · **M**
+      **Owed by 2.1 — `party` has no natural key, deliberately, and this is the slice that gives it
+      one.** 2.1 left it out for the reason 1.9 left `address_key` out and 1.11 vindicated: the
+      obvious candidate is `national_id`, and it is the same trap the address was. A ת.ז. is nine
+      digits **with leading zeros that every spreadsheet export drops**, so `042…` and `42…` are one
+      person and a naive `UNIQUE (national_id)` is a key that disagrees with itself the first time
+      the register arrives. It also has to be `(party_kind, national_id)` at minimum — a ת.ז. and a
+      ח.פ. are different registries and can be the same nine digits — and it is nullable, which is a
+      third decision. Choose it here, against the export, and it costs a migration.
+      **Owed by 1.11 — the shape the import report has to have.** `ImportReport` counts from
+      `(xmax = 0)` on each upsert's own returned row rather than counting whole tables, because a
+      table count is moved by another suite, another environment or a developer's own `npm run seed`.
+      Parties and tenancies join it on the same terms; a count that is not about *this* import is not
+      a fact about it.
+      **Owed by 2.1 — `is_primary` carries no uniqueness.** "At most one primary contact per party
+      per channel" is a plausible rule the workbook does not state; as a partial unique index it
+      would fail an import that touches two rows in the wrong order, on a rule nobody asked for.
+      Decide it here if the export contains the fact, and leave it out if it does not.
 
-- [x] **1.5 — `infra/bootstrap.sh` against the new project.** `PROJECT` and `GITHUB_REPO` changed,
-      **`REGION` stays `me-west1`**, Cloud SQL `--edition=ENTERPRISE`, WIF with the
-      `assertion.repository` condition, per-secret IAM, docs bucket created closed. Project created
-      **under an organisation**.
-      **Done when:** a second run is a no-op, no user-managed service-account key exists, and staging
-      cannot read prod's connection URL.
-      **Verify:** re-run and diff; key list empty; the cross-environment read is denied. · **M**
-      **Lifted four scripts, not one.** `bootstrap.sh` · `set-secret.sh` · `smoke.sh` ·
-      `rollback.sh`, all Tier 1 and all verbatim apart from the `PROJECT` default: `rollback.sh`
-      invokes `smoke.sh`, `bootstrap.sh` prints a `set-secret.sh` command, and `AGENTS.md` already
-      says "secrets only through `infra/set-secret.sh`". Only `bootstrap.sh` is *run* here.
-      **R8 is not satisfied and cannot be by this slice.** `dona-v5` is **org-less**, and no
-      organisation exists to move it into — creating one is a Cloud Identity signup on a domain, not
-      a script. Provisioned org-less on purpose: the move preserves project id, resources, data and
-      IAM whenever it happens, and nothing this week is blocked. What is not deferrable is the
-      ordering, which is now **fuse F7** and a warning `bootstrap.sh` prints on every run.
-      **Dropped from the lift:** the four staff seed secrets (`staff-seed-email/password`,
-      `staff-viewer-email/password`). v5 has no `src/staff/`, and the auth gap it must close is
-      Identity Platform with enforced MFA, so v3's email+password pair may never be built — carried
-      into the week-5 staff-MFA row in [roadmap.md](roadmap.md).
+- [ ] **2.5 — Import the real register.** The Priority export into staging: 1,500 units, their
+      tenancies and their parties.
+      **Done when:** counts reconcile against the export and ten `resolveByPhone` spot-checks return
+      the party the export names — including one party on two tenancies and one ended tenancy reading
+      as a vacancy.
+      **Verify:** the ten spot-checks, listed individually in the evidence file. · **M**
+      **Blocked on F3.** See *The declared demo kind and F3* above. **Closes open question 3** in
+      [plan.md](plan.md) — how much of month one depends on the ERP.
+      **This is the first slice in the project that puts real personal data in a database.** The
+      controls that apply are not the tier-2 corpus's: staging's Cloud SQL, not the corpus bucket.
+      Confirm before the first row lands that `national_id` is not in any screen's response shape and
+      that `/estate` is still fixture-only — **week 5 is where those routes get a session**, and
+      nothing may put a real party behind an unauthenticated route before it does (1.11's carry).
 
-- [x] **1.6 — CI, staging, release.** `ci.yml`, `deploy.yml` on `workflow_run`, `release.yml` on
-      `v*` only.
-      **Done when:** a red commit cannot reach staging even by a direct push to `main`.
-      **Verify:** push one and watch staging not move. · **M**
-      **Owed by 1.1, re-scoped at 1.3 — the sharpest edge in the repo.** `main` *did* require the
-      check contexts **`gate`** and **`evals`** from 1.1, by those exact names, with no workflow
-      behind either. A required context that never reports is not pending, it is failing: PRs #2 and
-      #3 were both `BLOCKED` with an empty rollup, and the only way through was `--admin`, which is
-      how a guardrail gets trained into background noise. Required status checks were therefore
-      **removed from `main` on 2026-09-04** (`gh api -X DELETE
-      repos/RandomWilder/dona-v5/branches/main/protection/required_status_checks`); no-force-push,
-      no-deletion and required-conversation-resolution were left untouched. **This slice re-arms
-      `gate`** — name the job exactly `gate`, let one PR go green with it, *then* add it back as a
-      required context, and confirm with a second PR, not by reading the YAML. `evals` is 1.8's to
-      re-arm, for the same reason it was wrong to require it here: it cannot be honest until the
-      golden set exists, and a stub job that exits 0 on an empty suite is a green check that proves
-      nothing.
-      **Owed by 1.3:** the `gate` job runs `npm run typecheck`, `npm run lint` and `npm test` as
-      three steps — `npm test` is `test:code && test:hooks`, and the hooks half is the only thing
-      that runs `.claude/hooks/hooks.test.mjs`, so a `gate` that shortcuts to `test:code` drops 41
-      cases. Set `REQUIRE_POSTGRES=1` on the job, against a real Postgres service container: without
-      it `src/app.test.ts` and `src/db.test.ts` skip green with no database. `infra/smoke.sh` asserts
-      `/health` returns `ok:true` **and** `db:up`, which is the endpoint 1.3 built for it.
-      **Owed by 1.1, closing here rather than at 1.10:** set `enforce_admins: true` on `main` as the
-      last act of this slice. It was left `false` only so this slice could push a red commit directly
-      to `main`; the moment that Verify is done the reason is spent, and leaving it `false` any longer
-      means an admin can merge past checks that have become real.
-      **Owed by 1.4 — the deploy has to run the migrations, and nothing can run them yet.** 1.4
-      brought `kernel/migrate.ts` and three migrations, but the only caller is `pg-support.ts` inside
-      the test run: there is no `npm run migrate` and no CLI entry point, so a deployed revision
-      would serve `/health` against a database with no tables. `deploy.yml` and `release.yml` both
-      need one, between deploy and smoke (pipeline §5). Build the entry point here, in this slice.
-      **Owed by 1.4:** `REQUIRE_POSTGRES=1` now decides **23** cases, not 2 — the whole kernel
-      durability suite. Without it against a real service container the `gate` job passes having
-      touched no database at all.
-      **Owed by 1.5 — the values to wire, and two scripts already in the repo.** `smoke.sh` and
-      `rollback.sh` were lifted at 1.5, so this slice consumes them rather than writing them.
-      `deploy.yml` and `release.yml` need, exactly: WIF provider
-      `projects/681282581055/locations/global/workloadIdentityPools/github-pool/providers/github-provider`
-      (the `assertion.repository` condition pins it to `RandomWilder/dona-v5` — if the repository ever
-      moves, this and the condition change together) · deploy SA `deploy-<env>@dona-v5.iam.gserviceaccount.com`
-      · runtime SA `app-<env>@dona-v5.iam.gserviceaccount.com` · Cloud SQL `dona-v5:me-west1:dona-<env>`
-      · secret `<env>-database-url` · image `me-west1-docker.pkg.dev/dona-v5/dona/…` · docs bucket
-      `gs://dona-v5-<env>-docs`. The Cloud Run **service itself does not exist yet** — bootstrap
-      deliberately does not create it, the first deploy does.
-      **Owed by 1.4:** the image grows. `pdfjs-dist` and `google-auth-library` are runtime
-      dependencies from this slice and `npm ci --omit=dev` installs both. `pdfjs-dist` alone is
-      **35 MB unpacked**; check the Cloud Run build time and image size rather than be surprised.
-      **Closed 2026-09-05** ([evidence](evidence/1.6.md)). Staging is live at
-      `https://dona-staging-681282581055.me-west1.run.app`, three revisions, `version` stamped with
-      the commit; the image is 330 MiB and a whole deploy takes under two minutes. The red commit
-      `ed92f87` was pushed straight to `main`: CI failed in 25 s, `Deploy` concluded **skipped**, and
-      staging stayed on the previous revision — what guards it is `deploy.yml`'s
-      `conclusion == 'success'`, not the branch protection, which an admin can push past. `gate` is
-      armed and `enforce_admins` is `true`. `REQUIRE_POSTGRES=1` decides **24** cases, not 23; this
-      slice added one. Migrations run as a Cloud Run job from the deployed image as the **runtime**
-      account, **before** the revision serves: `<env>-database-url` is readable only by `app-<env>`,
-      so migrating from the runner would have meant handing the CI identity prod's connection string.
-      `docs/pipeline.md` §5's arrow was corrected in the same change.
-
-- [x] **1.7 — The policy suite, red before the schema exists.** Case 1 (the five-hop isolation join,
-      both temporal predicates) and case 2 (a recycled number resolves to nobody), plus both grep
-      guards.
-      **Done when:** both cases fail for the right reason and each guard trips on a deliberate
-      violation.
-      **Verify:** two commits that each trip one guard, both blocked; the red output recorded. · **M**
-      **Owed by 1.3:** `npm run test:code` already names a `tests/**/*.test.ts` glob, and a glob that
-      matches nothing is silent. **Confirm by count that the policy cases are actually collected** —
-      a suite the runner never found looks exactly like a suite that passed.
-      **Owed by 1.4 — the guard's path is not the one pipeline §6 writes.** Migrations live at
-      **`src/kernel/migrations/*.sql`**, not root `migrations/`. §6 and this file both wrote the
-      `current_tenant` guard against `migrations/*.sql`, which matches nothing and would be a guard
-      that passes by looking at no files — the same failure 1.3 found in a `node --test` glob. Point
-      it at the real path and prove it by tripping it.
-      **Owed by 1.6 — where the guards live, and what that now costs.** `ci.yml` has exactly one
-      job, `gate`, and it is a **required** context on `main` from 2026-09-05. The guards belong as
-      steps in it rather than as a fourth job nothing requires — which means the moment one lands it
-      blocks merges, so trip each one deliberately on a branch rather than discover it on `main`.
-      `enforce_admins` is `true`, so there is no admin merge past a guard that fires.
-      **Closed 2026-09-05** ([evidence](evidence/1.7.md)). 14 policy cases, 7 of them reporting
-      **pending** against a named missing relation — never skipped, never `todo`, and the branch is
-      unreachable the moment the last table lands. That mechanism exists because `gate` is required
-      and admin-enforced: a deliberately-red required test blocks its own merge, so the red was
-      proved and recorded rather than committed. The disarm was proved too — the seven tables built
-      in a throwaway database, 14 green, no pending lines — and then every predicate deleted from the
-      join in turn, which turned **two cases into rewrites**: a tenancy marked `ENDED` is excluded by
-      the status filter, so the date predicate tested nothing, and both recycled-number cases ended
-      the tenancy, so the contact dating — the entire point of case 2 — tested nothing either. Both
-      guards tripped in CI on purpose (`8c67318` → run `33965072969`, `f9eb13a` → run `33965119613`),
-      both `BLOCKED`, both reverted. `src/scope/` landed here rather than at 2.3, holding the join and
-      nothing else, because a case that writes its own copy proves the copy.
-
-- [x] **1.8 — The evals harness, from commit one.** Runner and three trivial cases, one per kind;
-      `REQUIRE_POSTGRES=1` and `REQUIRE_EMBEDDINGS=1` on the evals job.
-      **Done when:** `npm run evals` gates merges and a missing database **fails** rather than skips.
-      **Verify:** unset the database URL in CI once and watch it go red. · **M**
-      **Owed by 1.3:** same as 1.7 for the `evals/**/*.test.ts` glob in `test:code` — confirm by
-      count, not by reading the script. `REQUIRE_POSTGRES=1` is honoured by `src/app.test.ts` and
-      `src/db.test.ts` today; the evals job needs `REQUIRE_EMBEDDINGS=1` as well.
-      **Owed by 1.3 — re-arm `evals` on `main`.** It was a required check context from 1.1 with no
-      workflow behind it and was removed on 2026-09-04 (see 1.6). This slice is the first one that
-      can satisfy it honestly. As its closing act: run the evals job on a PR, watch it go green *and*
-      watch it go red with the database URL unset, **then** add `evals` back as a required context.
-      Not before the red — a context re-armed on a job that has only ever passed is the same promise
-      1.1 made.
-      **Owed by 1.6 — what to add, and the one thing that does not exist yet.** `ci.yml` gains a
-      second job named exactly **`evals`**, with its own `pgvector/pgvector:pg16` service container,
-      `REQUIRE_POSTGRES=1` **and** `REQUIRE_EMBEDDINGS=1`. It also needs a repository secret
-      `OPENAI_API_KEY` — a **CI-only** key, deliberately not staging's or prod's, which live in
-      Secret Manager and reach only their own service account, so this one can be revoked alone. No
-      such repository secret exists today. Re-arm by PATCHing both names in at once,
-      `{"contexts":["gate","evals"]}`, keeping `strict: true`.
-      **Owed by 1.7:** the two grep guards are steps of the `gate` job, so the `evals` job does not
-      repeat them. `npm run guards` is the command; `scripts/guards.ts` is the file.
-      **Closed 2026-09-05** ([evidence](evidence/1.8.md)). Three cases, one per kind, and 17 harness
-      tests inside `npm test` (163 → 180 — 1.3's `evals/**/*.test.ts` glob confirmed by count).
-      `evals` was seen red **twice** before it was armed, for the two different reasons it can be
-      red: no key (run `33973148375`) and no database (`b40e02b` → run `33973760443`, the Verify
-      step, reverted in `9447ff9` — whose message cites the wrong hash, `b6be1c9`; correcting it
-      needs a force push and is not worth one). Contexts are now `["gate","evals"]`, `strict: true`,
-      `enforce_admins: true`. The structural call: `evals/corpus.ts` is the one file not lifted from
-      v3, because v3 built its corpus through modules v5 does not have — nine authored Hebrew
-      passages into a **TEMP** `vector(1536)` table, through the real config rows, the real embedder
-      and pgvector's own ordering, because a corpus needing neither a database nor a key makes both
-      `REQUIRE_*` switches decorative and the acceptance bar unmeetable. `rankAtMost: 1` and the
-      grounding cutoff (0.62 → **0.59**) were both set from a measurement run rather than chosen.
-      `release.yml` gained `secrets: inherit`, and a red `evals` now stops staging too through
-      `deploy.yml`'s existing conclusion check. `AGENTS.md` is 29 lines: 1.7 raised the over-cap in
-      an evidence file and nowhere else, which is §10's own anti-pattern, so it closed here rather
-      than being carried a second time.
-
-- [x] **1.9 — Estate schema: Project · Building · Space · Unit.** E1–E4 from the workbook's FIELDS
-      sheet. `Building.project_id` nullable, six-value `space_kind`, `Unit.unit_id = Space.space_id`.
-      **Done when:** an apartment is a Space with a Unit extension and a lobby is a Space with none,
-      enforced by the schema.
-      **Verify:** contract tests for R1, R2, R15; a Unit with no Space is rejected. · **M**
-      **Owed by 1.4:** the DDL appends from **`0004_`** in `src/kernel/migrations/`. `0001`–`0003`
-      are the kernel's own — `vector`, the durability tables, their settings seed — and estate is
-      the first domain table in this repository.
-      **Owed by 1.7 — the pending diagnostic moves from `building` to `party` the day this lands.**
-      `tests/policy/fixtures.ts` already writes `building`, `space` and `unit` with column lists
-      taken from the workbook's E1–E4, against tables that do not exist. When the real DDL appears,
-      any column that fixture guessed wrong is a not-null or undefined-column failure **in one
-      file** — extend the builder there, and do not edit the cases, which are written so they never
-      need to be. This entry said *three policy cases stop being pending*; **none do.** All seven
-      reach `party` through `seedOccupancy`, so they clear at **2.2**, when `tenancy_party` is the
-      last table to land. The moving diagnostic is the visible signal, and it is the whole of it.
-      **Closed 2026-09-05** ([evidence](evidence/1.9.md)). `0004_estate.sql` — four tables, 28
-      stored columns, and 14 contract cases in `src/estate/schema.test.ts` (153 code tests, up from
-      139). R2 and D3 are **composite foreign keys, not triggers**: `space` carries
-      `UNIQUE (space_id, space_kind)` and `unit` three constant discriminators pinned by CHECKs, so
-      one key rejects a unit with no space, rejects a unit on a lobby, and refuses to let a space
-      stop being a `UNIT` while its unit exists. All four rejections were **proved red first**
-      against the same DDL without that key. `tests/policy/fixtures.ts` needed no edit — the
-      workbook's column lists were right. `inRolledBackTransaction` moved from `tests/policy/
-      support.ts` to `src/kernel/pg-support.ts`, beside `migratedPoolOrNull()`, so estate's suite
-      does not carry a second copy. **No natural key was created:** `tasks/roadmap.md` said
-      "`address_key` for a building", the FIELDS sheet specifies none, and the need behind it is an
-      importer that can run twice — carried to 1.11, below.
-
-- [x] **1.10 — Prove the pipeline in both directions, on purpose.** Break → blocked; fix → merge →
-      staging; tag `v0.1.0` → prod; **roll prod back**; confirm the next deploy still takes traffic.
-      **Done when:** the round trip is complete and the post-rollback deploy serves 100%, not 0%.
-      **Verify:** revision list with traffic percentages at each step. · **S**
-      **Owed by 1.5 — the cost lever, and this is the slice that can pull it.** Prod's database is
-      idle from here until week 12: pipeline §8 starts prod tagging then, and between this slice's
-      deliberate round trip and the pilot there is nothing in prod to serve. Finish this slice by
-      stopping it — `gcloud sql instances patch dona-prod --activation-policy=NEVER` keeps the
-      instance, its storage and its data while compute stops billing, and one command reverses it.
-      **Owed by 1.5:** `infra/rollback.sh` is in the repo and ends by calling `infra/smoke.sh`, so
-      the rollback leg fails closed if the revision it lands on is not actually serving — the
-      rollback is proved by the script's own exit code, not by reading a traffic percentage. It also
-      prints the roll-forward command, which is what makes "confirm the next deploy still takes
-      traffic" a step rather than a memory.
-      **Owed by 1.6 — `release.yml` exists and has never run.** The first `v*` tag creates **both**
-      the `dona-prod` service and the `dona-prod-migrate` job, exactly as 1.6's first deploy created
-      staging's, so the tag leg is a first run and not a redeploy. The gate is re-run against the
-      tagged commit through `workflow_call`, and a tag that is not an ancestor of `main` is refused.
-      **Confirms an owed action from 1.1, which 1.6 closes:** `enforce_admins` is `true` on `main`.
-      This slice is the first one that runs entirely inside the enforced gate, so its break→blocked
-      leg is also the proof that the flip took. If it is still `false` here, 1.6 did not finish.
-      Once it flips, `tasks/evidence/1.1.md` stops being the current state of the gate.
-      **Owed by 1.8 — the first tag is the first execution of two lines.** `release.yml` re-runs the
-      gate through `workflow_call`, and that gate is **two jobs** from 1.8: a red `evals` stops the
-      release before prod. It also now carries `secrets: inherit`, added at 1.8 because a called
-      workflow inherits none by default and the evals job would otherwise fail on a key it was never
-      handed. Neither has ever run — this slice is where they first do.
-      **Closed 2026-09-05** ([evidence](evidence/1.10.md)). Six legs, three tags, and the round trip
-      as traffic percentages: `v0.1.0` → `dona-prod-00001` 100% · `v0.1.1` → `00002` 100% ·
-      `rollback.sh prod` → `00001` 100% **pinned** · `v0.1.2` → `00003` 100% with `latestRevision`
-      restored, which is the acceptance bar. PR #15 was opened red on purpose and **`--admin` was
-      refused** — 1.1's last carry proved from the outside rather than from a settings page. The
-      first release created `dona-prod`, `dona-prod-migrate` and applied **four** migrations
-      (`0004_estate.sql` included) to a virgin database as `app-prod`; three releases took
-      2 m 20 s – 2 m 30 s each. **Three tags, not one**, because `rollback.sh` derives its target by
-      walking to the ready revision after the one serving: a rollback needs somewhere to go, and one
-      tag cannot prove the leg the acceptance bar names. The closing lever was **two** commands, not
-      one: the database stopped *and* the service set to `--min-instances 0`, because `release.yml`
-      deploys prod with `--min-instances 1` and an always-warm instance in front of a stopped database
-      bills for eleven weeks. Prod now answers `503 {"ok":false,…"database unreachable"}`, which is
-      `/health` doing its job. **Found here and carried to week 12:** `environment: production` was
-      created implicitly by the first release **with no protection rules**, so a `v*` tag is currently
-      the only thing between a commit and prod — correct this week, wrong from week 12.
-
-- [x] **1.11 — The Shoham fixture and the week-1 surface.** The building, its spaces and its 72 units
-      seeded **through the importer path**, and a buildings/units list on the RTL token layer.
-      **Done when:** a stakeholder opens the staging URL on their own phone and sees it.
-      **Verify:** the owner browses it in a browser, not a screenshot. · **M**
-      **Owed by 1.9 — the importer needs a natural key, and 1.9 deliberately did not invent one.**
-      Nothing in `0004_estate.sql` is unique but the primary keys, so seeding twice creates the
-      building twice. The roadmap's `address_key` was reaching for this; the workbook's FIELDS sheet
-      specifies no such column, and this is the first slice with real Shoham addresses in front of
-      it to say what the key actually is. It costs a migration (`0005_`), and choosing it is part of
-      this slice rather than a discovery inside it.
-      **Owed by 1.4:** v3's `kernel/ui/tokens.test.ts` was **not** lifted — it asserts against
-      module HTML shells (`staff/ui/index.html`, `channel/ui/index.html`) that v5 does not have. It
-      is the guard that keeps a hex colour, a `fonts.googleapis` URL or a physical `left:`/`right:`
-      out of a screen, and it fails on the HTML rather than the CSS because that is where the
-      discipline erodes. It lands with the first screen, which is this one.
-      **Closed 2026-09-06** ([evidence](evidence/1.11.md)). Staging serves the building and its 72
-      units at `https://dona-staging-r44j24yuaa-zf.a.run.app/estate`, revision `00014-vtx`, with
-      **zero `<script>` tags** and every colour off `/ui/tokens.css`. The natural key was measured
-      before it was chosen: the same fixture twice against `0004` alone gave **2 buildings, 368
-      spaces and 144 units**, and `0005_` makes the second run `created: 0` with every id unchanged —
-      proved again in staging, where `dona-staging-seed` was executed twice. `address_key` is a
-      **generated column, not a unique constraint over `(city, address_line)`**, because
-      `  רקפת  12 ` and `רקפת 12` are one building and normalising in the importer is a rule the next
-      caller has to remember. **The lifted token guard was broken and had been for a year**: v3's
-      pattern misses `padding-left`, `border-left-width` and `text-align: left`, which was found by
-      tripping it rather than reading it and is recorded in [from-v3.md](../docs/from-v3.md).
-      **Nothing in the fixture is real, by decision** — the demo note below was rewritten in this
-      slice, and the unauthenticated screens and the `/` redirect are carried to weeks 5 and 2.
-      **The slice shipped a defect and the gate caught it**, on the documentation-only PR that closes
-      it: `ImportReport` counted whole tables, which is not a fact about an import — a second suite,
-      another environment or a developer's own `npm run seed` moves the number, so `created: 0` could
-      mean "already correct" or "somebody else's row was there". It now counts from `(xmax = 0)` on
-      each upsert's own returned row, and every estate suite carries a city of its own. Fixed inside
-      the slice rather than carried out of it.
-
-- [x] **1.12 — The corpus, both tiers, and the controls the second one needs.** Tier 1 committed to
-      the repo: the published **דירה להשכיר standard lease**, פרוטוקול מסירה, ערבות בנקאית, ארנונה
-      and insurance specimens — real structure, no real person, and the substrate every gate runs
-      against. Tier 2, **controls before data**: the real corpus in a dated bucket of its own, with a
-      lifecycle rule, a tested deletion path, `-- pii` comments as a `SPEC.md` convention, access
-      logging on scoped reads, and a removal date recorded the day it lands.
-      **Done when:** the specimens are in the repo and a named real document can be permanently
-      removed by a documented command that has actually been run.
-      **Verify:** run the deletion path against a throwaway object; write the removal date into
-      [fuses.md](fuses.md). · **S**
-      **Owed by 1.5 — two things.** The corpus does **not** go in `gs://dona-v5-<env>-docs`, which
-      1.5 created for the application: this slice creates its own dated bucket, with the lifecycle
-      rule and the tested deletion path, so the removal is one bucket and not a search. And **fuse
-      F7 binds here**: `dona-v5` is org-less, and the move into an organisation must happen *before*
-      real tenant data lands. Landing the tier-2 corpus turns that from an admin task into a
-      data-custody event, so either the move happens first or the corpus stays in its dated bucket
-      with the removal date recorded — decide it in this slice rather than discover it in week 4.
-      **Owed by 1.2:** the bash guard covers the **Bash tool only**. Write, Edit and every MCP tool
-      reach the filesystem without passing it, so nothing here may lean on the hook — `.gitignore`,
-      bucket IAM and the policy suite are what hold. Also close ADR-0004's F6 row in
-      [fuses.md](fuses.md): the tier-2 corpus is the first real personal data, and its legal basis
-      and named third parties are owed before it lands, not after.
-      **Owed by 1.8 — two things, one of them a naming obligation.** The golden set is graded against
-      **nine authored Hebrew passages** in `evals/fixtures/specimen-clauses.ts`, standing in for the
-      tier-1 specimens because those do not exist until this slice; swap them in here, and the ranks
-      are re-measured rather than assumed. And the CI-only `OPENAI_API_KEY` means an external model
-      provider receives text from this repository on every PR. It is authored fixture text with no
-      personal data in it, so nothing is owed today — but ADR-0004's obligation is to name third
-      parties *before* they see tenant text, and this is the slice that writes that list.
-      **Closed 2026-09-06** ([evidence](evidence/1.12.md)). **Tier 1 landed; tier 2 deliberately did
-      not** — which is the order **R4** asks for, and a slice that landed both would have proved
-      nothing about it. `docs/corpus/` holds six Hebrew specimens and **71 clauses**, and this
-      entry's own premise is corrected in them: they are text **authored to the published forms'
-      structure**, not copies of the published PDFs. The gate needs text it can chunk today and the
-      path that turns a PDF into text is week 3's; and republishing a third party's document is a
-      licensing call that belongs to the director. Carried to **3.4**, where the published PDFs come
-      in beside the authored text and not over it — swapping the substrate under a ratchet silently
-      re-baselines it. `evals/fixtures/specimen-clauses.ts` became a **loader** over that directory
-      instead of a second copy of the same clauses; the ranks were re-measured in CI (run
-      `34015648330`) rather than assumed. `rankAtMost` stays **1** in a corpus eight times larger;
-      the grounding cutoff moved **0.59 → 0.56**, the midpoint of the measured gap, because 0.59 had
-      stopped being between the answers (worst 0.4654) and the refusals (best 0.6474).
-      **The deletion path was proved both ways, and the red is the useful half.** Against a probe
-      bucket left on Cloud Storage's default seven-day soft-delete window the script **failed**, and
-      printed the object still recoverable — gone from every listing a person would look at and
-      restorable on request. Against `gs://dona-v5-corpus-2026-09-06`, whose bucket script sets
-      versioning off and the soft-delete window to zero, it exited 0. It also refuses any bucket that
-      is not a corpus bucket, and fails closed when a listing errors rather than reporting a deletion
-      it could not verify. **Guard three** — `-- pii` on a person-shaped column — was built here
-      against zero violations, to fire on `0006_parties.sql` at **2.1**; its own test caught its
-      `ALTER TABLE` form anchored wrong before it ever ran on a real migration. **F6 is lit and half
-      discharged**: every third party that sees text from this system is named in `SPEC.md`, and
-      **Anthropic** is on that list — Claude Code reads this repository, and what keeps it from
-      tenant text is a mechanism and not an assurance. The DPA and the disclosure stay the owner's —
-      **scoped on 6 Sep, after this slice closed, from five obligations to three acts**: execute
-      OpenAI's DPA, confirm Google Cloud's is in force, publish the notice to data subjects
-      ([../docs/data-subject-notice.draft.md](../docs/data-subject-notice.draft.md)). Meta's and
-      Twilio's arrive with week 9; Anthropic needs none. ADR-0004 moved `proposed` → **accepted** at
-      the same time — an outstanding deliverable belongs on a fuse, not in a status field.
-      **F7 is decided**: the organisation move does not go first, and the rule becomes *before tier 2
-      lands or after it is removed*.
+- [ ] **2.6 — Browse at portfolio scale.** Buildings list, unit grid, search, and the occupancy
+      chip — **derived on every load, never stored**.
+      **Done when:** search across 1,500 units returns in under a second and Q5 (leases ending in the
+      next 60 days, whole portfolio) is one indexed query.
+      **Verify:** timed queries at full row count, recorded as numbers. · **M**
+      **Owed by 1.11 — `GET /` stops being a redirect here.** It is a 302 to `/estate` because
+      `/estate` was the only screen in the system. This slice is the week a second screen exists, so
+      the root becomes an index. One line of routing and one decision about what an index of two
+      screens should say.
+      **Owed by 1.11 — the token guard runs on every new screen and its v3 pattern is known broken.**
+      `tests/ui/tokens.test.ts` misses `padding-left`, `border-left-width` and `text-align: left`;
+      the miss is recorded in [../docs/from-v3.md](../docs/from-v3.md) and was fixed at 1.11. Any
+      screen added here is asserted by it, and a physical side that slips through is an RTL bug found
+      by a Hebrew speaker rather than by CI.
+      **Owed by 2.1 — one index to measure rather than assume.** `party_contact` has no btree on
+      `(channel, value)`; the exclusion constraint's **GiST** index covers that lookup and GiST is
+      slower than btree at plain equality. It is the first hop of the isolation join and therefore
+      the hottest query in the system once the agent is live. A few thousand rows today; the right
+      moment to decide is at full row count with a timing in front of it, which is here.
 
 ---
 
-**Cut line, in order:** the third and second eval cases in 1.8 · the unit detail screen in 1.11.
-**Do not cut** 1.7, 1.10 or 1.12 — the first two are cheap this week and expensive to retrofit, and
-the third has to exist before the data does.
+**Cut line, in order:** the occupancy chip in 2.6 · search in 2.6 (the grid at full row count is what
+proves scale) · the tenth spot-check in 2.5. **Do not cut 2.3** — it is the isolation join's only
+home, and every week after this one reads it.
 
-**Say it in the room — rewritten at 1.11.** The cadence's week-1 line reads "real names, real
-addresses". **Nothing in Thursday's demo is real, and that is the decision, not a shortfall:**
-functionality is established against mock addresses and example leases, and real data is applied to
-it afterwards ([pipeline.md](../docs/pipeline.md) §1 principle 5). The building is רקפת 12, שוהם, and
-it is ours. What is real is the schema under it and the importer that takes the actual register in
-week 2 — through the same natural keys, which is why the second run of anything is a no-op. State it
-in those words rather than letting someone notice the address is not one of theirs.
+**Say it in the room.** Week 1's demo was a fixture top to bottom and was said to be. If F3 lands,
+this is the week that stops being true, and the sentence changes to: the addresses, the unit numbers
+and the names on screen are Dona Dom's own, imported through the same path the fixture used, and the
+second run of the import changed nothing. If F3 does not land, the sentence does not change and the
+week is re-declared — **not** demoed as though it had.
