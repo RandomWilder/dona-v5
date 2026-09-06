@@ -1,7 +1,7 @@
 // The estate module's public surface. Other modules, the composition root and the tests import this
 // file and never internal/ (AGENTS.md).
 
-export { importEstate } from './internal/importer.ts';
+export { importEstate, upsertUnitRow } from './internal/importer.ts';
 export type {
   BuildingPlan,
   BuildingStatus,
@@ -15,6 +15,8 @@ export type {
   SpacePlan,
   TableCount,
   UnitPlan,
+  UnitRowResult,
+  UnitRowSpec,
 } from './internal/plan.ts';
 export type {
   BuildingDetail,

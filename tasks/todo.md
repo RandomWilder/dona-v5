@@ -201,7 +201,7 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       of one to be one-way; the inbound number belongs to the channel module's log at week 9. 297
       tests on every merge, up from 279.
 
-- [ ] **2.4 — The importer.** Idempotent, re-runnable, reports rejects rather than failing whole.
+- [x] **2.4 — The importer.** Idempotent, re-runnable, reports rejects rather than failing whole.
       Natural keys do the work — `address_key` for a building, `(unit_id, start_date)` for a
       tenancy — so a re-run is a no-op instead of a duplicate, with no caller-supplied intent key
       anywhere.
@@ -237,6 +237,39 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       per channel" is a plausible rule the workbook does not state; as a partial unique index it
       would fail an import that touches two rows in the wrong order, on a rule nobody asked for.
       Decide it here if the export contains the fact, and leave it out if it does not.
+      **Closed 2026-09-06** ([evidence](evidence/2.4.md)). `0009_import_natural_keys.sql` — three
+      keys, and the argued one is `party.national_id_key`: a **generated column**, `address_key`'s
+      technique applied to the identifier, left-padding an all-digit ת.ז. to nine so the leading zero
+      a spreadsheet drops cannot make one person two, prefixed by `party_kind` because a ת.ז. and a
+      ח.פ. are different registries, and null when the identifier is. **The file format requires an
+      identifier where the schema does not** — no identifier, no idempotence — which is a question
+      put to the client rather than an assumption made about them. `terms_profile` is keyed by
+      `UNIQUE (name)` and a blank one is a reject, never a row defaulted to `standard`.
+      `party_contact` gets `UNIQUE (party_id, channel, value, valid_from)` because `ON CONFLICT`
+      needs an arbiter and an `EXCLUDE` constraint cannot be one; `is_primary` gets nothing, which
+      confirms 2.1 rather than revisiting it.
+      **The register is a flat CSV, one row per party-on-a-tenancy**, parsed by a written parser
+      whose one hard property is that a quoted field carrying newlines moves the **line counter** and
+      not just the record index. `src/register/` is a new module — it calls `normalisePhone`, so an
+      importer inside parties or tenancy would have been the cycle `tenancy → scope → tenancy` — and
+      it **writes no SQL against a table it does not own**: `src/parties/contract.ts` and
+      `src/tenancy/contract.ts` exist from here, with the callers 2.1 and 2.2 both predicted.
+      **A SAVEPOINT per row, and it was proved load-bearing by removing it**: the first
+      database rejection then poisoned the transaction, three later rows failed `25P02` — one of them
+      a good row — and every constraint name in the report became "rejected by the database", which
+      is the count 2.5 needs. **Three probes found three things review would not have.** The
+      `ON CONFLICT` arbiter check runs before any index insertion, so the unique key resolves a
+      re-run and the exclusion constraint is never reached — measured, not reasoned about. The
+      recycled-number case asserted the wrong thing and the database said so: an `ENDED` tenancy
+      resolves to **nobody**, which is the property. And the fixture reusing `+972521234567` from
+      another suite turned thirteen tests across five files into `40P01 deadlock detected` — parallel
+      files, one database, and a speculative insertion each side waits on. **Guard three did not fire
+      and should have**: `national_id_key` was not on its list, which is the list's second miss after
+      `party_contact.value` at 2.1, and the rule stayed the rule — the list learned the name, and the
+      guard then fired on line 41 when the marker was removed on purpose. `src/kernel/boundary.test.ts`
+      now proves the boundary AGENTS.md has claimed since week 1 and nothing enforced — no module
+      reaches another's `internal/` — and it was proved red on a real violation. 326 tests on every
+      merge, up from 297.
 
 - [~] **2.5 — Import the real register. MOVED OUT OF WEEK 2 on 6 Sep 2026**, to the
       pilot-preparation step of the method ([SPEC-flows.md](../SPEC-flows.md)). Not cut, not blocked
@@ -259,6 +292,20 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       rejects is measured and recorded here, not discovered on Wednesday. The same applies to
       `(unit_id, start_date)`: two leases on one unit starting the same day are one lease typed
       twice, and the import will say so.
+      **Owed by 2.4 — two facts about the export that the file format now demands, and one it
+      cannot demand.** 2.4's register format **requires `national_id` on every row and a
+      `terms_profile` name on every lease**, and rejects a row carrying neither with its line
+      number. Both were decided against a designed file because the real one moved to step 4, and
+      both are questions for the client: **confirm the Priority export carries a ת.ז./ח.פ. on every
+      party and an annex name on every lease before the first row is imported.** If it carries no
+      identifier, 2.4's `national_id_key` is reopened here with the export in hand rather than having
+      been guessed at — a surrogate built from a name and a phone would be a key that disagrees with
+      itself in the other direction. If it names no annex, that is week 6's responsibility matrix
+      arriving with no input, and the question is asked now.
+      **Owed by 2.4 — the reject count is already a mechanism, and it is what this slice reads.**
+      Each rejected row carries its line, its SQLSTATE and the constraint that refused it, so "how
+      many rows the register loses to `one_active_tenancy_per_unit`" is a number the importer prints
+      rather than a thing to be discovered. Run `npm run import:register -- <file>` and record it.
       **This is the first slice in the project that puts real personal data in a database.** The
       controls that apply are not the tier-2 corpus's: staging's Cloud SQL, not the corpus bucket.
       Confirm before the first row lands that `national_id` is not in any screen's response shape and
@@ -297,6 +344,18 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       `occupancy` view carries no day predicate on purpose, so applying `today` in `src/estate/`
       means writing the predicate there — a second copy, and guard two fires on it.
       `resolvePartiesInUnit` is the call. Q5 is estate's own query and is unaffected.
+      **Owed by 2.4 — the generated register is loaded through `npm run import:register`, and the
+      importer's own cost is one of the things this slice measures.** A `SAVEPOINT` per row costs a
+      round trip per row, which is what makes a rejected row a reject instead of a failed file; at
+      nine rows it is invisible and at 1,500 it is a number. **Time the import and record it.**
+      Whether to batch — a savepoint per N rows, trading a coarser reject boundary for throughput —
+      is this slice's decision if the number says so, taken with a timing in front of it and not
+      before, which is the same rule both index questions below are held to.
+      **Owed by 2.4 — the register fixture is the template the generated one is produced from.**
+      `src/register/fixtures/register.csv` is nine rows carrying every case that breaks an importer;
+      the 1,500-unit file is the same twenty-two columns at volume, and it must keep the coverage
+      rather than being fifteen hundred copies of one household. Distinct phone blocks and identifier
+      blocks are not tidiness — 2.4 learned that the hard way with `40P01`.
       **Owed by 2.1 — one index to measure rather than assume.** `party_contact` has no btree on
       `(channel, value)`; the exclusion constraint's **GiST** index covers that lookup and GiST is
       slower than btree at plain equality. It is the first hop of the isolation join and therefore

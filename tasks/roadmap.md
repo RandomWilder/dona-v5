@@ -647,6 +647,29 @@ of a duplicate, with no caller-supplied intent key anywhere.
   force*, which is week 5's, so decide the key here against the export and leave the count to week 5.
   If the export names no profile at all, that is a question for the client raised now rather than
   discovered at week 6 by a matrix with no input.
+- **Closed 2026-09-06** ([evidence](evidence/2.4.md)). `0009_import_natural_keys.sql` gives all three
+  tables a key, and the argued one is `party.national_id_key` — a **generated column**, which is
+  `address_key`'s technique applied to the identifier: an all-digit ת.ז. is left-padded to nine, so
+  the leading zero every spreadsheet drops cannot make one person two, and `party_kind` is part of
+  the key because a ת.ז. and a ח.פ. are different registries. It is null when the identifier is, and
+  a UNIQUE index ignores nulls — so **the file format requires an identifier where the schema does
+  not**, which is a question put to the client rather than an assumption made about them, and it is
+  carried into 2.5 with the profile name beside it. **`src/register/` is a new module** and is in
+  `SPEC.md`'s module map: it calls `normalisePhone`, so an importer inside parties or tenancy would
+  have been the cycle `tenancy → scope → tenancy`, and it writes no SQL against a table it does not
+  own — `src/parties/contract.ts` and `src/tenancy/contract.ts` exist from here with exactly the
+  callers 2.1 and 2.2 predicted. **The savepoint per row was proved load-bearing by removing it**:
+  the first database rejection poisoned the transaction, three later rows failed `25P02` including a
+  good one, and every constraint name in the report collapsed into "rejected by the database" — which
+  is precisely the count 2.5 exists to take. **Three probes, three findings review would not have
+  made**: `ON CONFLICT` arbitrates before any index insertion, so the new unique key resolves a
+  re-run and 2.1's exclusion constraint is never reached; the recycled-number case asserted the wrong
+  thing and the database said so, because an `ENDED` tenancy resolves to **nobody**; and a fixture
+  reusing another suite's phone number turned thirteen tests across five files into `40P01 deadlock
+  detected`. **Guard three did not fire and should have** — `national_id_key` was not on its list,
+  the second miss after `party_contact.value` at 2.1, and the list learned the name rather than the
+  guard learning a pattern. `src/kernel/boundary.test.ts` now enforces the module boundary AGENTS.md
+  has claimed since week 1 with nothing behind it. 326 tests on every merge, up from 297.
 - **Deps:** 2.3 · **Size:** M
 
 ### Slice 2.5 — Import the real register
@@ -790,6 +813,15 @@ guarded, not admin-editable** — the responsibility matrix keys on it, so editi
 - **Done when:** Q3 (what is overdue for inspection in this building) and Q7 (which bay is assigned to
   unit 12, and who serviced its gate motor) are each one query.
 - **Verify:** both queries against the fixture; R3, R11, R12 and R14 as contract tests.
+- **Owed by 2.4 — a register-imported building's handover dates are placeholders, and this is the
+  document that corrects them.** The register format carries no handover date, so
+  `building.handover_date` and `warranty_end_date` are written from the lease dates by the importer
+  (`src/register/internal/importer.ts`, stated there rather than left to look like data). תקופת הבדק
+  starts at handover and not at a letting, and `warranty_end_date` is what makes responsibility
+  ternary — so a building imported from a register and never touched by a handover protocol carries a
+  warranty window that is a guess. **Correct them here, and say in the evidence how many buildings
+  had one.** The same applies to `PARKING` and `STORAGE` spaces: a register row implies exactly one
+  `UNIT` space, and bays and storage rooms (workbook D3) arrive with this document.
 - **Deps:** 3.1, 1.9 · **Size:** M
 
 ### Slice 3.6 — Find it in four seconds

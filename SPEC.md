@@ -72,11 +72,21 @@ Follows the workbook's entities, not v3's ([docs/from-v3.md](docs/from-v3.md) Ti
 | `tenancy` | E7–E10 — Tenancy · TenancyParty · Obligation · ObligationType | estate, parties |
 | `evidence` | E12, E13, E15, E16 — Document · DocumentLink · DocumentType · DocumentTypeField · ExtractedField · FieldPromotion | estate, parties, tenancy |
 | `scope` | — the isolation join and nothing else | parties, tenancy, estate |
+| `register` | — the register file and nothing else | estate, parties, tenancy, scope |
 | `policy` | responsibility matrix · SLA · escalation | estate, tenancy |
 | `calls` | ServiceCall · Visit · the state machine | scope, policy |
 | `channel` | Conversation · Message · the WhatsApp adapter | scope, calls |
 
 No cycles. `Project` sits above `Building` and is optional (`Building.project_id` nullable).
+
+Two modules own no entity and are not anomalies: `scope` owns the isolation join, and `register`
+(slice 2.4) owns the register file format and the order its rows are written in. `register` sits
+above `scope` because it calls `normalisePhone`, and an importer inside `tenancy` or `parties` would
+have been the cycle `tenancy → scope → tenancy`. **`src/kernel/boundary.test.ts` now proves two
+things rather than one**: the kernel imports from no domain module, and no module reaches another
+module's `internal/`. `AGENTS.md` claimed a guard for the second since week 1 and there was none;
+2.4 is the first slice where a module imports three others' contracts, so the claim became
+load-bearing and was made real — the move guard three made at 1.12.
 
 ## Code conventions
 
@@ -207,12 +217,16 @@ by `kernel/migrate.ts` under an advisory lock. Seven exist: `0001`–`0003` are 
 `vector`, the durability tables, their settings seed — `0004_estate.sql` is the first domain
 migration, the E1–E4 spine landed at slice 1.9, `0005_estate_natural_keys.sql` gives that spine the
 keys an importer needs to be run twice (1.11), `0006_parties.sql` is E5–E6, the first tables in
-this system with a person in them (2.1), and `0007_tenancy.sql` is E7–E8 plus the `terms_profile`
-its NOT NULL foreign key needs a target for (2.2). `src/estate/`, `src/scope/`, `src/parties/` and
-`src/tenancy/` are the module directories: estate holds the schema, the importer, the read model and
-the first two screens, scope the isolation join and its contract, landed early at 1.7 with no tables
-underneath it, and parties and tenancy their schemas and nothing else — there is no command and no
-read model to export yet, so neither has a `contract.ts` (2.3 and 2.4 are their callers).
+this system with a person in them (2.1), `0007_tenancy.sql` is E7–E8 plus the `terms_profile`
+its NOT NULL foreign key needs a target for (2.2), `0008_occupancy_view.sql` is R6's current-occupancy
+view (2.3), and `0009_import_natural_keys.sql` gives `party`, `party_contact` and `terms_profile`
+the keys the register importer needs to be run twice (2.4). `src/estate/`, `src/scope/`, `src/parties/`,
+`src/tenancy/` and `src/register/` are the module directories: estate holds the schema, the importer,
+the read model and the first two screens, scope the isolation join and its contract, landed early at
+1.7 with no tables underneath it, parties and tenancy their schemas plus the write commands the
+register calls, and register the register file format, its parser and its reject contract (2.4).
+Parties and tenancy gained a `contract.ts` at 2.4 with the caller 2.1 and 2.2 both predicted; neither
+exports a query, because who is in a unit today is `src/scope/`'s answer and nobody else's.
 **The seven policy cases stopped reporting pending at 2.2 and now assert**: the last two relations
 `src/scope/`'s join reads landed with that migration, and `tests/policy/relations.test.ts` fails the
 build if any case takes the pending branch again, because a case that stopped reporting pending and
@@ -257,9 +271,10 @@ against them.
 
 **Where the build is: kernel 1.4 · GCP 1.5 · CI and staging 1.6 · the policy suite and the first two
 grep guards 1.7 · the evals harness 1.8 · the estate schema 1.9 · the proved release path 1.10 · the
-importer, the fixture and the first screens 1.11 · the corpus and its controls 1.12 · Party and
+estate importer, the fixture and the first screens 1.11 · the corpus and its controls 1.12 · Party and
 PartyContact 2.1 · Tenancy, TenancyParty and the guarantor constraint 2.2 · the isolation join
-finished, on a view, with its audit line and E.164 at the edge 2.3.**
+finished, on a view, with its audit line and E.164 at the edge 2.3 · the register importer, its three
+natural keys and its per-row rejects 2.4.**
 Production exists and has been released to — `v0.1.0`–`v0.1.2`, rolled back and rolled forward on
 purpose — and is then **parked until week 12**: the Cloud SQL instance is stopped and the service
 scaled to zero, so `dona-prod` answers 503 by design and staging is the delivered artifact every

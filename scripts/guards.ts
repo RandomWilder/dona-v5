@@ -181,6 +181,14 @@ export function guardScopeJoin(root: string): GuardResult {
 // to work around the guard. A column this list misses is added to it when it is met.
 const PII_COLUMNS = new Set([
   'national_id',
+  // Slice 2.4. `party.national_id_key` is a ת.ז. with its separators removed and its leading zeros
+  // restored -- the identifier itself, normalised, and not an enforcement column carrying no fact
+  // the way `building.address_key` is. The guard matches names exactly rather than by pattern, on
+  // purpose (`like '%phone%'` fires on `telephone_policy` and teaches people to work around it), so
+  // it did **not** see this column until it was named here. That is the second miss this list has
+  // met -- `party_contact.value` was the first, at 2.1 -- and the rule stayed the rule: the list
+  // learns the name it met, rather than the guard learning a pattern it will be wrong about.
+  'national_id_key',
   'id_number',
   'passport_number',
   'phone',
