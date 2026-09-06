@@ -145,7 +145,7 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       `building_address_unique` has rejected since week 1 — invisible while the first `seedOccupancy`
       aborted the transaction on 42P01. 279 tests on every merge, up from 259.
 
-- [ ] **2.3 — `src/scope/` — the isolation join, written once.** The five hops, in SQL, before any
+- [x] **2.3 — `src/scope/` — the isolation join, written once.** The five hops, in SQL, before any
       model call. The current-occupancy VIEW (R6) alongside it: `today ∈ [start_date, end_date]`,
       computed on every load.
       **Done when:** Q1 and Q2 from the workbook's ADMIN VIEWS sheet are each one query, and no other
@@ -168,6 +168,24 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       normaliser: the edge still has to *convert* `052-123-4567` into `+972521234567`, and until it
       does the CHECK turns a silent miss into a loud rejection, which is the trade this slice
       completes.
+      **Closed 2026-09-06** ([evidence](evidence/2.3.md)). **This entry's Verify was wrong in the way
+      1.9's and 2.1's were** — *"policy case 1 goes green"* happened at **2.2**, with the other six.
+      What this slice proves is stronger and is the whole signal: the join moved off the five base
+      tables and onto `occupancy`, and **all thirty policy cases stayed green with no file in
+      `tests/policy/` edited**. `0008_occupancy_view.sql` carries **no temporal predicate, no status
+      filter and no `CURRENT_DATE`** — the view is the shape and the resolver is the rule — because a
+      view cannot take `today` as a parameter, because `src/kernel/migrations/` is not `src/scope/`
+      and guard two scans it, and because the decision the guard protects is *when* a tenancy counts
+      rather than the join's text. **The view very nearly defanged guard two**: written first with
+      aliased columns, which left the canonical join matching neither pattern, caught by
+      `tests/policy/guards.test.ts` going red because its violating fixture is the real join. The
+      dated columns keep the base tables' names. **Probe 1 found a second defect** — the audit line
+      was written in a `finally`, so a failed read's `42P01` was replaced by the audit INSERT's
+      `25P02` on the poisoned transaction, which would have broken every pending case in weeks 5 and
+      6. The line is written after a successful read now. **The audit line records what was reached
+      and never what was asked**, because an Israeli mobile number has too little entropy for a hash
+      of one to be one-way; the inbound number belongs to the channel module's log at week 9. 297
+      tests on every merge, up from 279.
 
 - [ ] **2.4 — The importer.** Idempotent, re-runnable, reports rejects rather than failing whole.
       Natural keys do the work — `address_key` for a building, `(unit_id, start_date)` for a
@@ -196,6 +214,11 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       *how many profiles are in force*, which is week 5's. Decide the key here against the export;
       if the export carries no profile at all, that is a question for the client, raised now rather
       than discovered at week 6 with a matrix that has no input.
+      **Owed by 2.3 — normalise every number before inserting it.** `normalisePhone` is on
+      `src/scope/`'s contract for this caller. A register formatted for a spreadsheet —
+      `052-123-4567`, `+972 52 123 4567` — is rejected row by row by 2.1's `phone_is_e164` CHECK
+      otherwise, and a bare nine-digit number is refused rather than assumed Israeli, which is a
+      reject with a line number rather than a row that silently becomes a Mexican subscriber.
       **Owed by 2.1 — `is_primary` carries no uniqueness.** "At most one primary contact per party
       per channel" is a plausible rule the workbook does not state; as a partial unique index it
       would fail an import that touches two rows in the wrong order, on a rule nobody asked for.
@@ -241,6 +264,10 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       full row count with a timing in front of it. `tenancy_unit` and `tenancy_party (party_id)` do
       exist, the latter because the composite primary key does not serve the isolation join's third
       hop.
+      **Owed by 2.3 — the occupancy chip calls `src/scope/`, it does not read the view.** R6's
+      `occupancy` view carries no day predicate on purpose, so applying `today` in `src/estate/`
+      means writing the predicate there — a second copy, and guard two fires on it.
+      `resolvePartiesInUnit` is the call. Q5 is estate's own query and is unaffected.
       **Owed by 2.1 — one index to measure rather than assume.** `party_contact` has no btree on
       `(channel, value)`; the exclusion constraint's **GiST** index covers that lookup and GiST is
       slower than btree at plain equality. It is the first hop of the isolation join and therefore

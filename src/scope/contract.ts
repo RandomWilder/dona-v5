@@ -3,11 +3,17 @@
 
 export type {
   IsolationJoinRelation,
+  OccupantRow,
   Queryable,
+  ScopeActor,
   ScopedUnit,
 } from './internal/isolation-join.ts';
 export {
   ISOLATION_JOIN_RELATIONS,
   ISOLATION_JOIN_SQL,
+  OCCUPANCY_VIEW,
+  OCCUPANCY_VIEW_COLUMNS,
+  resolvePartiesInUnit,
   resolveUnitsByPhone,
 } from './internal/isolation-join.ts';
+export { E164_PATTERN, normalisePhone } from './internal/phone.ts';

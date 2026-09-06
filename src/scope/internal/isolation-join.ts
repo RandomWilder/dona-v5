@@ -5,22 +5,54 @@
 // its own copy of the join proves that copy rather than this one — which is also a second copy of
 // the join outside src/scope/, the exact drift `scripts/guards.ts` exists to stop.
 //
-// Written against the workbook's E4–E8 field names (docs/model/), which is a specification and not a
-// description. The tables arrive at 1.9 (unit), 2.1 (party, party_contact) and 2.2 (tenancy,
-// tenancy_party); until then this query raises 42P01 and the policy cases report pending against the
-// named relation. If the DDL drifts from the workbook the cases go red, which is the gate working.
+// **At 2.3 the hops moved into a view and the rules stayed here.** `0008_occupancy_view.sql` names
+// `unit -> tenancy -> tenancy_party -> party -> party_contact` once; this file is the only place
+// that decides *when* a contact or a tenancy counts. The reasoning is in that migration and in
+// SPEC-scope.md, and the short version is that a view cannot take `today` as a parameter and
+// CURRENT_DATE inside one is SPEC.md's clock rule broken.
+//
+// Written against the workbook's E4-E8 field names (docs/model/), which is a specification and not a
+// description. If the DDL drifts from the workbook the policy cases go red, which is the gate
+// working.
 import type { Pool, PoolClient } from 'pg';
+import { type ActorKind, createAuditLog } from '../../kernel/audit.ts';
+import type { Clock } from '../../kernel/clock.ts';
+import { normalisePhone } from './phone.ts';
 
-// The relations the query reads, in hop order. Exported because tests/policy/ must name them to
-// report which one is still missing, and a test that restates them would be a second copy of the
-// join's shape maintained by hand.
-export const ISOLATION_JOIN_RELATIONS = [
-  'party_contact',
-  'party',
-  'tenancy_party',
-  'tenancy',
-  'unit',
+// The view both questions read. A constant rather than a literal in two query strings: the name is
+// what tests/policy/ reports as pending if the migration has not run, and a second spelling of it is
+// a second thing to keep in step.
+export const OCCUPANCY_VIEW = 'occupancy';
+
+// What the view exposes, in its own order. Exported because `national_id` being absent from it is a
+// claim SPEC.md makes and src/scope/scope.test.ts checks against the database rather than against
+// this list — this is what the check is *compared to*, so a column added to the view without being
+// considered here shows up as a failure.
+export const OCCUPANCY_VIEW_COLUMNS = [
+  'unit_id',
+  'unit_number',
+  'tenancy_id',
+  'start_date',
+  'end_date',
+  'status',
+  'terms_profile_id',
+  'role',
+  'is_service_contact',
+  'party_id',
+  'full_name',
+  'preferred_language',
+  'contact_id',
+  'channel',
+  'contact_value',
+  'valid_from',
+  'valid_to',
 ] as const;
+
+// The relations the queries read. Exported because tests/policy/ must name them to report which one
+// is still missing, and a test that restates them would be a second copy of the join's shape
+// maintained by hand. It is one entry from 2.3: the view's own base tables are the migration's
+// business, and tests/policy/fixtures.ts already declares the ones it writes.
+export const ISOLATION_JOIN_RELATIONS = [OCCUPANCY_VIEW] as const;
 
 export type IsolationJoinRelation = (typeof ISOLATION_JOIN_RELATIONS)[number];
 
@@ -31,53 +63,172 @@ export interface ScopedUnit {
   party_id: string;
 }
 
-// Five hops: phone -> PartyContact (valid today) -> Party -> TenancyParty -> Tenancy (active today)
-// -> Unit. Two temporal predicates, and neither is optional.
-//
-// `pc.valid_to IS NULL OR pc.valid_to >= $2` is the one that makes a recycled number representable:
-// Israeli mobile numbers get reassigned, and an undated contact row resolves a stranger to the
-// previous tenant's apartment. v3 could not express this case at all.
-//
-// `tp.is_service_contact` is not a temporal predicate and is here on purpose. Foundation rule 7 says
-// a guarantor (ערב) never receives service information; the flag is forced false for
-// role = GUARANTOR by a database constraint at 2.2, and this is where that constraint is *spent*.
-// Leaving it out would mean a guarantor resolving to a unit and the constraint protecting nothing at
-// the only point that reads it.
-//
-// $2 is a parameter and never CURRENT_DATE — SPEC.md's clock rule. A temporal predicate the tests
-// cannot control is a test that fails on a Tuesday. It is day-grained because both dated columns are
-// `date` in the workbook.
-export const ISOLATION_JOIN_SQL = `
-  SELECT t.tenancy_id, u.unit_id, u.unit_number, p.party_id
-  FROM party_contact pc
-  JOIN party p ON p.party_id = pc.party_id
-  JOIN tenancy_party tp ON tp.party_id = p.party_id
-  JOIN tenancy t ON t.tenancy_id = tp.tenancy_id
-  JOIN unit u ON u.unit_id = t.unit_id
-  WHERE pc.channel = 'PHONE'
-    AND pc.value = $1
-    AND pc.valid_from <= $2
-    AND (pc.valid_to IS NULL OR pc.valid_to >= $2)
-    AND t.status = 'ACTIVE'
-    AND t.start_date <= $2
-    AND t.end_date >= $2
-    AND tp.is_service_contact
-  ORDER BY u.unit_id
-`;
+export interface OccupantRow {
+  tenancy_id: string;
+  party_id: string;
+  full_name: string;
+  preferred_language: string;
+  role: string;
+  is_service_contact: boolean;
+}
 
 // A pool or a checked-out client. The policy suite seeds its fixtures inside a transaction it rolls
 // back, and a transaction is one connection: taking the pool only would have forced the fixtures to
-// persist, which is how a suite starts passing because of a row someone left behind.
+// persist, which is how a suite starts passing because of a row someone left behind. From 2.3 it
+// also decides where the audit line lands — on the same connection as the read, so the two are in
+// one transaction and neither can outlive the other.
 export type Queryable = Pool | PoolClient;
+
+/** Who is asking. Unknown callers are `system`; the agent and the staff console name themselves. */
+export interface ScopeActor {
+  actorKind: ActorKind;
+  actorId?: string;
+  actorRole?: string;
+}
+
+export interface ScopeOptions {
+  actor?: ScopeActor;
+  clock?: Clock;
+}
+
+const SYSTEM: ScopeActor = { actorKind: 'system' };
+
+// The two temporal predicates, and neither is optional.
+//
+// `valid_to IS NULL OR valid_to >= $today` is the one that makes a recycled number representable:
+// Israeli mobile numbers get reassigned, and an undated contact row resolves a stranger to the
+// previous tenant's apartment. v3 could not express this case at all.
+//
+// `$today` is a parameter and never CURRENT_DATE — SPEC.md's clock rule. A temporal predicate the
+// tests cannot control is a test that fails on a Tuesday. It is day-grained because both dated
+// columns are `date` in the workbook.
+//
+// **The view keeps the base tables' column names for exactly these four**, so this text still
+// matches the patterns guard two greps for. Renaming them on the view would leave the canonical join
+// matching nothing, and the guard would then wave through the very copy it exists to catch. Written
+// with aliases first and caught by tests/policy/guards.test.ts, whose violating fixture is this
+// string.
+const CONTACT_VALID_TODAY = `valid_from <= $2
+    AND (valid_to IS NULL OR valid_to >= $2)`;
+
+const TENANCY_ACTIVE_TODAY = `status = 'ACTIVE'
+    AND start_date <= $2
+    AND end_date >= $2`;
+
+// **Q2 — this phone number just messaged us, which unit, if any?** The isolation join, and the
+// answer is frequently none, which is the point.
+//
+// `is_service_contact` is not a temporal predicate and is here on purpose. Foundation rule 7 says a
+// guarantor (ערב) never receives service information; the flag is forced false for role = GUARANTOR
+// by a database constraint at 2.2, and this is where that constraint is *spent*. Leaving it out
+// would mean a guarantor resolving to a unit and the constraint protecting nothing at the only point
+// that reads it.
+export const ISOLATION_JOIN_SQL = `
+  SELECT tenancy_id, unit_id, unit_number, party_id
+  FROM ${OCCUPANCY_VIEW}
+  WHERE channel = 'PHONE'
+    AND contact_value = $1
+    AND ${CONTACT_VALID_TODAY}
+    AND ${TENANCY_ACTIVE_TODAY}
+    AND is_service_contact
+  ORDER BY unit_id
+`;
+
+// **Q1 — who lives in unit 12 today?** The workbook's four hops, and DISTINCT because the view fans
+// a party out over their contact rows and this question is about people, not about numbers.
+//
+// It deliberately does **not** filter on `is_service_contact`: the unit screen shows a guarantor as
+// a guarantor, greyed and marked unreachable (ADMIN VIEWS, Panel 1), where Q2 must not resolve one
+// at all. Two questions, one view, opposite readings of the same column.
+const OCCUPANTS_SQL = `
+  SELECT DISTINCT tenancy_id, party_id, full_name, preferred_language, role, is_service_contact
+  FROM ${OCCUPANCY_VIEW}
+  WHERE unit_id = $1
+    AND ${TENANCY_ACTIVE_TODAY}
+  ORDER BY full_name, role
+`;
+
+function day(today: Date): string {
+  return today.toISOString().slice(0, 10);
+}
+
+// Every scoped read of tenant data is logged, not only every command (SPEC.md, Security defaults).
+// The line is written on the caller's own connection, so it is in the caller's transaction: an audit
+// row that survives a rolled-back read would describe something that did not happen, and one written
+// on a separate pool could be lost while the read succeeded.
+//
+// **It records what was reached, not what was asked**, and that is a rule rather than an oversight.
+// SPEC.md also says PII never in logs. An Israeli mobile number carries about seven digits of
+// entropy, so a bare hash of one is reversible by anybody willing to run a loop, and an HMAC needs a
+// secret this module would have to own and rotate. So the line names the party that was reached and
+// how many rows came back — which is what an access review and a dispute both ask. The number that
+// was asked belongs to the channel module's message log, where an inbound message legitimately lives
+// with its sender, and it arrives at week 9.
+//
+// **The line is written after the read succeeds, and a failed read is not logged here.** It was
+// written in a `finally` first, which is the reflex, and slice 2.3's own probe showed what that
+// costs: renaming the view aborted the transaction with 42P01, the audit INSERT then failed on the
+// poisoned connection with 25P02, and *that* was the error the caller saw. An audit line that can
+// replace the error it was meant to describe is worse than an absent one — it would have turned
+// every pending policy case in weeks 5 and 6 into an unrelated failure. A read that raised returned
+// no tenant data, so there is no access to record; a read that legitimately resolved nobody is
+// `matched: 0` and is logged, which is the case an access review actually asks about.
+async function audited<T extends { party_id?: string }>(
+  db: Queryable,
+  options: ScopeOptions,
+  action: string,
+  subjectId: string | null,
+  read: () => Promise<T[]>,
+): Promise<T[]> {
+  const rows = await read();
+  await createAuditLog(db, options.clock).write(
+    {
+      ...(options.actor ?? SYSTEM),
+      action,
+      subjectId: subjectId ?? rows[0]?.party_id,
+      inputs: { matched: rows.length },
+    },
+    { outcome: 'ok' },
+  );
+  return rows;
+}
 
 export async function resolveUnitsByPhone(
   db: Queryable,
   phone: string,
   today: Date,
+  options: ScopeOptions = {},
 ): Promise<ScopedUnit[]> {
-  const result = await db.query<ScopedUnit>(ISOLATION_JOIN_SQL, [
-    phone,
-    today.toISOString().slice(0, 10),
-  ]);
-  return result.rows;
+  // Validation at the edge, and the reason it is here rather than at each caller: a number stored in
+  // one format and asked for in another resolves to nobody, and a scope of nothing is exactly what
+  // correct isolation looks like. `normalisePhone` raises `invalid` rather than guessing.
+  const value = normalisePhone(phone);
+  return audited(db, options, 'scope.resolve_by_phone', null, async () => {
+    const result = await db.query<ScopedUnit>(ISOLATION_JOIN_SQL, [
+      value,
+      day(today),
+    ]);
+    return result.rows;
+  });
+}
+
+export async function resolvePartiesInUnit(
+  db: Queryable,
+  unitId: string,
+  today: Date,
+  options: ScopeOptions = {},
+): Promise<OccupantRow[]> {
+  return audited(
+    db,
+    options,
+    'scope.resolve_unit_occupants',
+    unitId,
+    async () => {
+      const result = await db.query<OccupantRow>(OCCUPANTS_SQL, [
+        unitId,
+        day(today),
+      ]);
+      return result.rows;
+    },
+  );
 }

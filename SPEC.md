@@ -235,8 +235,10 @@ order `tasks/plan.md` R4 asks for: `gs://dona-v5-corpus-2026-09-06` with version
 soft-delete window of zero, a 90-day lifecycle rule and no service account granted anything on it
 (`infra/corpus-bucket.sh`), a deletion path that verifies against the soft-deleted listing before it
 reports success (`infra/corpus-delete.sh`), and Cloud Audit Logs `DATA_READ`/`DATA_WRITE` on storage.
-The application-level audit line over every scoped read is 2.3's and cannot be honest before `party`
-exists. **Three grep guards now**, not two: `-- pii` on a person-shaped column joined them at 1.12,
+The application-level audit line over every scoped read **landed at 2.3**, in `src/scope/`, and it
+records what was reached and never what was asked: a subject, an action and a row count, because an
+Israeli mobile number has too little entropy for a hash of one to be one-way and PII never in logs is
+the other half of the same sentence (SPEC-scope.md). **Three grep guards now**, not two: `-- pii` on a person-shaped column joined them at 1.12,
 against zero violations, to fire on `0006_parties.sql` at 2.1. It did not fire, because the markers
 were written — but it could not have seen the column that most needed one. `party_contact.value`
 holds a phone number or an email address, and a bare `value` on the guard's list would fire on
@@ -246,12 +248,18 @@ learning a name it cannot qualify. Guard two fired in the same slice, on `0006_`
 not tell a null-guarded comparison of `valid_to` against the *other column of the same row* from one
 against the *day being asked about*. Resolved by making the pattern say which it means — never by
 rephrasing the CHECK to slip past it — and the exception is safe by construction, because a
-comparison that is true of every well-formed row cannot express "valid on day D".
+comparison that is true of every well-formed row cannot express "valid on day D". Guard two fired
+again at 2.3, and in the direction that matters most: moving the join onto a view with renamed
+columns left the **canonical** join matching neither pattern, so every later copy of it would have
+passed. `tests/policy/guards.test.ts` builds its violating fixture out of the real join and went red,
+and the view now keeps the base tables' column names because the guard's patterns are written
+against them.
 
 **Where the build is: kernel 1.4 · GCP 1.5 · CI and staging 1.6 · the policy suite and the first two
 grep guards 1.7 · the evals harness 1.8 · the estate schema 1.9 · the proved release path 1.10 · the
 importer, the fixture and the first screens 1.11 · the corpus and its controls 1.12 · Party and
-PartyContact 2.1 · Tenancy, TenancyParty and the guarantor constraint 2.2.**
+PartyContact 2.1 · Tenancy, TenancyParty and the guarantor constraint 2.2 · the isolation join
+finished, on a view, with its audit line and E.164 at the edge 2.3.**
 Production exists and has been released to — `v0.1.0`–`v0.1.2`, rolled back and rolled forward on
 purpose — and is then **parked until week 12**: the Cloud SQL instance is stopped and the service
 scaled to zero, so `dona-prod` answers 503 by design and staging is the delivered artifact every
