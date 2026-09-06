@@ -104,10 +104,19 @@ testing extraction against our own assumptions tests nothing — so the developm
 **published specimens, not inventions**:
 
 1. **Specimen documents** — the **דירה להשכיר standard lease**, the standard פרוטוקול מסירה, ערבות
-   בנקאית forms, ארנונה bill and insurance certificate specimens. State-regulated, publicly
-   published, real in structure and real in Hebrew legalese, containing no real person. This is the
+   בנקאית forms, ארנונה bill and insurance certificate specimens, plus the operator's own service
+   procedure. Real in structure and real in Hebrew legalese, containing no real person. This is the
    substrate the gates run against and it is committed to the repo. It is also, not incidentally, the
    template most of Dona Dom's 1,500 leases are built on.
+   **Corrected at slice 1.12:** this said "publicly published", and what is committed is Hebrew text
+   **authored to those forms' structure** — clause numbering, headings, legal register — with each
+   file naming the form it follows and where that form is published, rather than a copy of the
+   published PDF. The gate needs text it can chunk, embed and rank and the path that turns a PDF into
+   text is week 3's; and republishing a third party's document wholesale is a licensing decision that
+   belongs to the director. The worry this paragraph ends on — *no gate green because it was measured
+   against a document we authored to pass it* — binds at the **week-4 accuracy number**, which A7
+   already assigns to tier 2. The published PDFs arrive with **F4** at week 3 and are welcome beside
+   them. See [docs/corpus/README.md](../docs/corpus/README.md).
 2. **Real documents from Dona Dom** — available week 1. They do the one job specimens cannot: measure
    accuracy against scans, handwriting and signatures. Behind the controls built in week 1 (**R4**),
    in their own dated bucket, with a removal date recorded when they land.
@@ -211,7 +220,7 @@ Two **stop conditions**, which are not success numbers and are not traded off ag
 | **R1b** | Client availability over the חגים, which are worked through on our side but not necessarily on theirs | Low | W2–W4 | Not modelled in the schedule, by decision. The exposure is other people's calendars — the ERP keys fuse and the Drive owner — which is what the fuse table and the weekly asks slide exist to make visible. |
 | **R2** | Meta verification stalls or was filed against the wrong entity | High | W9 | **Substantially de-risked.** Filed 2026-08-21 under the correct legal entity and burning: 4–6 weeks puts it between 18 Sep and 2 Oct, five weeks ahead of the week-9 need. Fallback stays armed — build W9–11 against a message simulator, swap the live number in, BSP in reserve. Standing line on the asks slide from week 1. |
 | **R3** | The structured register is not what the export promises | Medium | W2 | **Reduced** — a clean Priority export exists. What remains is the ERP read-only keys fuse (client IT's calendar) and the quality of the export itself. Fallback unchanged: a curated slice of the 72 pilot units, the 1,500-unit claim moves to M2, a named Dona Dom owner takes the backfill. |
-| **R4** | **Real documents arrive in week 1, not week 4.** Real names, ID numbers and signature images in a cloud project from the first week — the exposure moved *earlier*, not away. | **High** | W1 | Controls built **before the data lands**, in slice 1.12: a dated bucket of its own with a lifecycle rule and a tested deletion path, `-- pii` column comments, access logging on every scoped read, and a removal date recorded the day the corpus arrives. Hours, not a workstream. Functionality is developed and gated against tier-1 specimens (A7); the real corpus does accuracy, not development. |
+| **R4** | **Real documents arrive in week 1, not week 4.** Real names, ID numbers and signature images in a cloud project from the first week — the exposure moved *earlier*, not away. | **High** | W1 | Controls built **before the data lands**, in slice 1.12: a dated bucket of its own with a lifecycle rule and a tested deletion path, `-- pii` column comments, access logging on every scoped read, and a removal date recorded the day the corpus arrives. Hours, not a workstream. Functionality is developed and gated against tier-1 specimens (A7); the real corpus does accuracy, not development. **Delivered 2026-09-06 by slice 1.12, and the corpus deliberately did not land with it:** the bucket, its lifecycle rule, its deletion path and the `-- pii` guard exist first, and taking delivery is the director's act — owed after **F6**'s other half. |
 | **R5** | Demo pressure crowds out the async negotiation engine | High | W11–13 | The engine gets a six-week band (W7–W12), not a week. One declared evidence week per month, budgeted. A standing "what's underneath" line in every demo. |
 | **R6** | The cadence costs 6–8% of engineering capacity | Medium | Ongoing | In the plan, not absorbed. Roughly half a day a week; weeks are sized at ~6 slices, not 10. |
 | **R7** | Lifted v3 tests go green while asserting the model v5 replaced | High | W1–W2 | Delete Tier 3 modules outright in one commit rather than editing them — compile errors surface assumptions that edits hide. Re-derive every isolation case and prove each red first. |

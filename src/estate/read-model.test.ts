@@ -12,6 +12,13 @@
 // the whole table by design — it is what the screen shows — so a case that asserted on its length
 // would be asserting about whatever else is in the database, which on a developer's machine is the
 // seed and in CI is whichever suite committed first.
+//
+// **That rule was written at 1.11 and two cases in this file did not follow it**, which slice 1.12
+// found the way it is always found: a red `gate` on a pull request whose diff was markdown. They
+// imported the seed fixture's own city and read `listBuildings(db)[0]`, so `src/estate/routes.test.ts`
+// — which has to commit, because the routes read through the pool — could answer for them. Every
+// case here now imports `plan()` and finds its building with `ours()`. `shohamPlan` is imported by
+// `plan()` alone.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -60,14 +67,13 @@ describe('estate · the read model', () => {
         'counts the units rather than reading a column',
         async () => {
           await inRolledBackTransaction(pool, async (db) => {
-            await importEstate(db, shohamPlan());
-            const buildings = await listBuildings(db);
-            assert.equal(buildings.length, 1);
-            const building = buildings[0];
+            await importEstate(db, plan());
+            const building = ours(await listBuildings(db));
             assert.equal(building.unit_count, '72');
             assert.equal(building.space_count, '184');
-            assert.equal(building.city, 'שוהם');
-            assert.equal(building.project_code, 'SHM-01');
+            // The project join, which is the other half of what this row is: a building carries its
+            // project's code and name without storing either.
+            assert.equal(building.project_code, 'SHM-READ-TEST');
             // Cast in SQL, not converted in JavaScript: a date that arrives as a JS Date at local
             // midnight is a date that moves when the server's timezone does.
             assert.equal(building.handover_date, '2025-03-01');
@@ -122,8 +128,8 @@ describe('estate · the read model', () => {
         'carries what a unit card shows, gaps included',
         async () => {
           await inRolledBackTransaction(pool, async (db) => {
-            await importEstate(db, shohamPlan());
-            const [summary] = await listBuildings(db);
+            await importEstate(db, plan());
+            const summary = ours(await listBuildings(db));
             const detail = await getBuilding(db, summary.building_id);
 
             const first = detail.units[0];

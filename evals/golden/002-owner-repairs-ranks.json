@@ -7,6 +7,6 @@
   "retrieval": {
     "expectRef": "חוזה §7.2",
     "rankAtMost": 1,
-    "note": "Rank 1, measured rather than guessed: run 33973634637 on this exact question returned חוזה §7.2 first at distance 0.4659, 0.1259 ahead of the runner-up — a lead two orders of magnitude outside the 0.0004 the same question moved between two runs, so the rank is not a coin flip. A ratchet, not a target: the corpus holds three other passages about who fixes what (§7.5 tenant damage, §7.9 common parts, §11.3 utilities), so this rank has something to lose to, and the proof that a later ranking change is a fix is that this number goes down."
+    "note": "Rank 1, measured rather than guessed, and re-measured when the corpus changed. At 1.8 this question returned חוזה §7.2 first at 0.4659 against nine authored passages. Slice 1.12 swapped those for the 71-clause tier-1 corpus in docs/corpus/, and run 34015648330 returned it first again at 0.4654, 0.0966 ahead of the runner-up — a lead two orders of magnitude outside the 0.0004 the same question moved between two runs at 1.8, so the rank is not a coin flip. The ratchet stays at 1 because that is what retrieval achieves, not because it was left alone: the corpus it competes in is now eight times larger and holds six passages about who fixes what (§7.3 the contractor in warranty, §7.5 tenant damage, §7.6 consumables, §7.9 common parts, §11.3 utilities, and נוהל שירות §4), so this rank has more to lose to than it did. The proof that a later ranking change is a fix is still that this number goes down."
   }
 }

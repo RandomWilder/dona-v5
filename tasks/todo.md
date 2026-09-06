@@ -29,7 +29,10 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       ([plan.md](plan.md) — calls closed with no human · time to booked visit, median and p90 ·
       escalations per 100 calls split by cause), plus the two stop conditions.
 - [ ] **Take delivery of the real document corpus — after 1.12, not before.** The controls exist
-      first; the data lands into them (**R4**).
+      first; the data lands into them (**R4**). **The controls exist as of 2026-09-06** — bucket,
+      lifecycle rule, deletion path and storage audit logging, all exercised. Still the director's,
+      and owed **after F6's other half**: the DPA and the disclosure come before the documents, not
+      after. Record the arrival and removal dates on [fuses.md](fuses.md) the day it lands.
 - [ ] Look at what document types the Drive folders actually contain, and record the answer against
       open question 6. It sizes how much of the catalogue gets exercised before month two.
 
@@ -337,7 +340,7 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       each upsert's own returned row, and every estate suite carries a city of its own. Fixed inside
       the slice rather than carried out of it.
 
-- [ ] **1.12 — The corpus, both tiers, and the controls the second one needs.** Tier 1 committed to
+- [x] **1.12 — The corpus, both tiers, and the controls the second one needs.** Tier 1 committed to
       the repo: the published **דירה להשכיר standard lease**, פרוטוקול מסירה, ערבות בנקאית, ארנונה
       and insurance specimens — real structure, no real person, and the substrate every gate runs
       against. Tier 2, **controls before data**: the real corpus in a dated bucket of its own, with a
@@ -366,6 +369,33 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       provider receives text from this repository on every PR. It is authored fixture text with no
       personal data in it, so nothing is owed today — but ADR-0004's obligation is to name third
       parties *before* they see tenant text, and this is the slice that writes that list.
+      **Closed 2026-09-06** ([evidence](evidence/1.12.md)). **Tier 1 landed; tier 2 deliberately did
+      not** — which is the order **R4** asks for, and a slice that landed both would have proved
+      nothing about it. `docs/corpus/` holds six Hebrew specimens and **71 clauses**, and this
+      entry's own premise is corrected in them: they are text **authored to the published forms'
+      structure**, not copies of the published PDFs. The gate needs text it can chunk today and the
+      path that turns a PDF into text is week 3's; and republishing a third party's document is a
+      licensing call that belongs to the director. Carried to **3.4**, where the published PDFs come
+      in beside the authored text and not over it — swapping the substrate under a ratchet silently
+      re-baselines it. `evals/fixtures/specimen-clauses.ts` became a **loader** over that directory
+      instead of a second copy of the same clauses; the ranks were re-measured in CI (run
+      `34015648330`) rather than assumed. `rankAtMost` stays **1** in a corpus eight times larger;
+      the grounding cutoff moved **0.59 → 0.56**, the midpoint of the measured gap, because 0.59 had
+      stopped being between the answers (worst 0.4654) and the refusals (best 0.6474).
+      **The deletion path was proved both ways, and the red is the useful half.** Against a probe
+      bucket left on Cloud Storage's default seven-day soft-delete window the script **failed**, and
+      printed the object still recoverable — gone from every listing a person would look at and
+      restorable on request. Against `gs://dona-v5-corpus-2026-09-06`, whose bucket script sets
+      versioning off and the soft-delete window to zero, it exited 0. It also refuses any bucket that
+      is not a corpus bucket, and fails closed when a listing errors rather than reporting a deletion
+      it could not verify. **Guard three** — `-- pii` on a person-shaped column — was built here
+      against zero violations, to fire on `0006_parties.sql` at **2.1**; its own test caught its
+      `ALTER TABLE` form anchored wrong before it ever ran on a real migration. **F6 is lit and half
+      discharged**: every third party that sees text from this system is named in `SPEC.md`, and
+      **Anthropic** is on that list — Claude Code reads this repository, and what keeps it from
+      tenant text is a mechanism and not an assurance. The DPA and the disclosure stay the owner's.
+      **F7 is decided**: the organisation move does not go first, and the rule becomes *before tier 2
+      lands or after it is removed*.
 
 ---
 

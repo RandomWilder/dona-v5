@@ -400,6 +400,28 @@ organisation move stays an admin task rather than a data-custody event (**R8**).
   receives text from this repository on every PR — authored fixture text with no personal data in
   it, so nothing is owed today, but ADR-0004's obligation is to name third parties *before* they see
   tenant text, and this is the slice that writes that list.
+- **Closed 2026-09-06** ([evidence](evidence/1.12.md)). **Tier 1 landed and tier 2 did not, which is
+  the order R4 asks for.** `docs/corpus/` holds six Hebrew specimens and 71 clauses, and this entry's
+  own premise is corrected in it: they are text **authored to the published forms' structure**, not
+  copies of the published PDFs — the gate needs text it can chunk today and the path that turns a PDF
+  into text is week 3's, and republishing a third party's document is the director's call. The
+  published PDFs are carried to **3.4**, beside the authored text and not over it, because swapping
+  the substrate under a ratchet silently re-baselines it. `evals/fixtures/specimen-clauses.ts` became
+  a **loader** over that directory rather than a second copy; 9 passages → 71, and the ranks were
+  re-measured in CI (run `34015648330`) rather than assumed. `rankAtMost` stays **1** because that is
+  what retrieval achieves in a corpus eight times larger; the grounding cutoff moved **0.59 → 0.56**,
+  which is the midpoint of the measured gap — 0.59 still separated answers from refusals and had
+  stopped being between them. The deletion path was proved **both ways**: against a probe bucket left
+  on Cloud Storage's default 7-day soft-delete window it **failed**, printing the object still
+  recoverable, and against the real bucket it exited 0. That is the whole reason the bucket sets
+  versioning off and the soft-delete window to zero — without them "permanently removed" is false
+  while every listing a person reads says otherwise. **Guard three** (`-- pii` on a person-shaped
+  column) was built here against zero violations and is carried to **2.1**, and its own test caught
+  its `ALTER TABLE` form anchored wrong before it ever ran on a real migration. **F6 is lit and half
+  discharged** — every third party that sees text from this system is named in `SPEC.md`, Anthropic
+  included, and the DPA and the disclosure stay the owner's. **F7 is decided:** the organisation move
+  does not go first; the corpus gets a dated bucket instead, so the rule becomes *before tier 2 lands
+  or after it is removed*.
 - **Deps:** 1.5 · **Size:** S
 
 > **Week-1 cut line.** If the week runs hot, cut in this order: the third and second eval cases in
@@ -435,6 +457,12 @@ numbers get recycled, and `language` is a locked field on Party.
 - **Done when:** the same phone number can belong to two parties over two non-overlapping periods,
   and to only one on any given day.
 - **Verify:** **policy case 2 goes green** — a recycled number resolves to nobody. It was red in 1.7.
+- **Owed by 1.12 — the first migration guard three was built for.** `0006_` is the first DDL in this
+  repository with a person in it, and `scripts/guards.ts` fails the build if `phone`, `email`,
+  `national_id`, a name or a birth date arrives without `-- pii` on its line or in the comment block
+  above it. The escape is `-- not-pii: <why>` and it costs a sentence. The guard has been green
+  against five migrations since 1.12 and has never fired; **this is the slice where it either fires
+  or the marker was written**, and either outcome is the control working.
 - **Owed by 1.7 — three cases, not one, and the sharpest is the third.** `tests/policy/` holds
   *"resolves to nobody once the tenancy and the contact have both closed"*, *"resolves to the new
   holder's own unit and never to the previous one"*, and — the one that matters — *"stops a stranger
@@ -471,7 +499,10 @@ The five hops, in SQL, before any model call. The current-occupancy VIEW (R6) al
   honest without them. Three things it deliberately did not build, all recorded in `SPEC-scope.md`:
   the **current-occupancy VIEW** in a migration, with the resolver reading it instead of the base
   tables; the **scoped-read audit line**, which `SPEC.md`'s security defaults require and
-  `kernel/audit.ts` already supports; and **E.164 normalisation at the edge**, because a number
+  `kernel/audit.ts` already supports — **re-confirmed as this slice's at 1.12**, which delivered
+  access logging for the tier-2 corpus as a Cloud Audit Logs config on the bucket and could not
+  deliver the application half, because a scoped read returns nothing until `party` and
+  `tenancy_party` exist; and **E.164 normalisation at the edge**, because a number
   stored in one format and asked in another resolves to nobody, which looks exactly like correct
   isolation. Guard 2 matches the join's *predicates*, not its table names, so moving the join text
   into a view is a change it will notice.
@@ -563,6 +594,13 @@ name, someone tidying Drive on a Tuesday would break the client's absolute const
 of A10: convention **proposes** a type and a binding, the guard checks the file matches the slot, and
 a **confidence-ranked review queue** puts a human between the proposal and the filing. The obvious
 ones clear in bulk; the ambiguous ones get looked at.
+- **Owed by 1.12 — the published forms themselves.** Tier 1 is committed as Hebrew text authored to
+  the published forms' structure, not as copies of the PDFs (`docs/corpus/README.md` says why). This
+  is the first slice with **F4** lit and an ingestion path in front of it, so the actual published
+  דירה להשכיר lease, פרוטוקול מסירה, ערבות בנקאית, ארנונה and אישור קיום ביטוחים come in through it
+  and sit **beside** the authored text rather than replacing it — the authored clauses are what the
+  ranking ratchet is set against, and swapping the substrate under a ratchet silently re-baselines
+  it. Committing a published PDF to the repository is the director's call, not this slice's.
 - **Done when:** a folder rename in Drive changes nothing about what any document is bound to, and
   nothing reaches a unit's document panel without a person having confirmed its type.
 - **Verify:** rename a folder between two ingest runs and assert the bindings are identical; confirm
@@ -645,6 +683,12 @@ The provenance viewer: the page image scrolls to the box the value came from.
 Per-field accuracy across ~40 real leases. **This is the number that decides how much human review
 the backfill needs**, and it is the one place a specimen cannot serve — tier 1 has the structure but
 not the scans, the handwriting or the signatures (A7; the controls for tier 2 were built in 1.12).
+- **Owed by 1.12 — every control this slice needs already exists, and the data does not.** The bucket,
+  its 90-day lifecycle rule, the deletion path and the storage audit config landed at 1.12 and have
+  been exercised; what did **not** land is the corpus, deliberately, because **F6**'s other half — a
+  DPA with each processor and disclosure to data subjects — is owed before real tenant documents
+  arrive. This slice cannot start until the director has taken delivery, and the arrival and removal
+  dates go on [fuses.md](fuses.md) the day it happens, not the day this slice is written up.
 - **Done when:** a per-field accuracy table exists with its sample size, its failure modes named, and
   a stated removal date for the source documents.
 - **Verify:** the run is reproducible from a script, and the numbers are in `tasks/evidence/`, never

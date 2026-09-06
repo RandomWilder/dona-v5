@@ -1,23 +1,22 @@
-// The corpus a retrieval or grounding case is graded against, until there is a
-// real one.
+// The tier-1 corpus, loaded from the files it lives in.
 //
-// **Authored, not lifted.** The דירה להשכיר specimen documents are slice 1.12's
-// (SPEC.md, "The corpus, in three tiers"), and the ingestion path that would
-// chunk them is week 3's. These nine passages exist so that the harness has
-// something real to rank *today* -- real Hebrew, real legal register, clause
-// references spelled the way a citation is spelled -- and they are replaced by
-// the specimens the day both exist. Nothing here describes a real person, a
-// real building or a real tenancy.
+// **This file used to *be* the corpus.** Nine passages were authored here at
+// slice 1.8 because the specimens did not exist yet, and the header said in so
+// many words that 1.12 would swap them in. It did. The passages now live in
+// `docs/corpus/`, where they can be read as documents rather than as a string
+// literal, and this file is the loader over them.
 //
-// Two deliberate properties:
+// The point of loading rather than duplicating: a corpus and a gate that hold
+// two copies of the same clause drift, and the drift is invisible until a rank
+// moves for a reason nobody can find. A clause renamed in `docs/corpus/` breaks
+// this import, at parse, in `npm test` -- not the gate at 2am.
 //
-//   - **No sum of money anywhere.** Foundation rule 2 -- no tenant-facing price
-//     and no balance, ever -- and a fixture is where a habit starts. The rent
-//     clause states when rent is paid, never how much.
-//   - **Near neighbours on purpose.** Four of the lease passages talk about who
-//     fixes what. A ranking ratchet set against a corpus with one obvious
-//     answer per question measures nothing, because nothing could have won
-//     instead.
+// What a specimen file may never contain -- no sum of money, no real person --
+// is asserted in `specimen-clauses.test.ts` beside this, because "contains no
+// real person" is the kind of promise that has to be something CI reads.
+
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 
 export type ClauseSource = 'lease' | 'policy';
 
@@ -28,60 +27,157 @@ export interface SpecimenClause {
   body: string;
 }
 
-export const specimenClauses: readonly SpecimenClause[] = [
-  {
-    ref: 'חוזה §4.1',
-    source: 'lease',
-    body: 'תקופת השכירות היא לשלוש שנים מיום מסירת החזקה בדירה לשוכר, ולשוכר עומדת אופציה להארכה בשנה נוספת בהודעה מוקדמת של תשעים יום.',
-  },
-  {
-    ref: 'חוזה §7.2',
-    source: 'lease',
-    body: 'תיקון תקלות הנובעות מבלאי סביר במערכות הדירה, לרבות דוד המים, מערכת החימום ומערכת האינסטלציה, הוא באחריות בעל הדירה ועל חשבונו.',
-  },
-  {
-    ref: 'חוזה §7.5',
-    source: 'lease',
-    body: 'נזק שנגרם לדירה או לתכולתה כתוצאה משימוש בלתי סביר של השוכר, של בני ביתו או של מי מטעמו, יתוקן על ידי השוכר ועל חשבונו.',
-  },
-  {
-    ref: 'חוזה §7.9',
-    source: 'lease',
-    body: 'תיקון ליקויים ברכוש המשותף, לרבות בחדר המדרגות, בלובי ובחניון, אינו באחריות השוכר אלא באחריות מפעילת הבניין.',
-  },
-  {
-    ref: 'חוזה §10.3',
-    source: 'lease',
-    body: 'דמי השכירות משולמים מדי חודש בחודשו ביום הראשון לכל חודש קלנדרי, בהוראת קבע בנקאית לטובת בעל הדירה.',
-  },
-  {
-    ref: 'חוזה §11.3',
-    source: 'lease',
-    body: 'תשלומי הארנונה, החשמל, המים והגז בגין תקופת השכירות חלים על השוכר וישולמו על ידו במישרין לרשות המקומית ולספקים.',
-  },
-  {
-    ref: 'חוזה §13.1',
-    source: 'lease',
-    body: 'השוכר אינו רשאי להעביר את זכויותיו לפי חוזה זה, להשכיר את הדירה בשכירות משנה או לאפשר לאחר להחזיק בה, אלא בהסכמת בעל הדירה מראש ובכתב.',
-  },
-  {
-    ref: 'נוהל שירות §2',
-    source: 'policy',
-    body: 'משרדי החברה פתוחים לקהל בימים א׳ עד ה׳ בין השעות 09:00 ל-16:00, ובערבי חג עד השעה 12:00.',
-  },
-  {
-    ref: 'נוהל שירות §3',
-    source: 'policy',
-    body: 'דיווח על תקלה שאינה דחופה נמסר דרך הודעה לשירות הדיירים, ונפתחת בגינו קריאת שירות שמספרה נמסר לדייר עם פתיחתה.',
-  },
-];
+export interface SpecimenDocument {
+  /** File name, so a failure names the file a reader can open. */
+  file: string;
+  /** The published form this follows, or the note that it follows none. */
+  form: string;
+  follows: string;
+  /** Where that form is published. `—` for the one document that is ours. */
+  source: string;
+  clauseSource: ClauseSource;
+  clauses: readonly SpecimenClause[];
+}
 
-// The clause references the cases name, so a case and the fixture cannot drift
-// apart silently: a rename here breaks the import, not the gate at 2am.
+export const CORPUS_DIR = path.join('docs', 'corpus');
+
+// From this file rather than from `process.cwd()`: `npm test`, the evals runner
+// and a `node --test` invoked from a subdirectory must all find the same corpus.
+const corpusPath = path.resolve(
+  import.meta.dirname,
+  '..',
+  '..',
+  'docs',
+  'corpus',
+);
+
+// A clause is a `###` heading, and the heading *is* the citation. Everything
+// until the next heading is the body; prose before the first heading is
+// commentary about the file and is deliberately not indexed.
+const HEADING = /^###\s+(.+?)\s*$/;
+
+function parseFrontMatter(
+  file: string,
+  text: string,
+): { keys: Record<string, string>; rest: string } {
+  const lines = text.split('\n');
+  if (lines[0]?.trim() !== '---') {
+    throw new Error(`${file}: every specimen needs front matter`);
+  }
+  const end = lines.indexOf('---', 1);
+  if (end === -1) {
+    throw new Error(`${file}: front matter is not closed`);
+  }
+  const keys: Record<string, string> = {};
+  for (const line of lines.slice(1, end)) {
+    const at = line.indexOf(':');
+    if (at === -1) continue;
+    keys[line.slice(0, at).trim()] = line.slice(at + 1).trim();
+  }
+  return { keys, rest: lines.slice(end + 1).join('\n') };
+}
+
+function required(
+  file: string,
+  keys: Record<string, string>,
+  name: string,
+): string {
+  const value = keys[name];
+  if (!value) throw new Error(`${file}: front matter is missing \`${name}\``);
+  return value;
+}
+
+function parseDocument(file: string, text: string): SpecimenDocument {
+  const { keys, rest } = parseFrontMatter(file, text);
+  const clauseSource = required(file, keys, 'clause_source');
+  if (clauseSource !== 'lease' && clauseSource !== 'policy') {
+    throw new Error(
+      `${file}: clause_source is lease or policy, not ${clauseSource}`,
+    );
+  }
+
+  const clauses: SpecimenClause[] = [];
+  let ref: string | undefined;
+  let body: string[] = [];
+  const flush = (): void => {
+    if (!ref) return;
+    // Wrapped lines are joined with a space: the files are hard-wrapped for
+    // review, and a chunk embedded with its newlines in it is not the chunk a
+    // reader sees.
+    const joined = body.join(' ').replace(/\s+/g, ' ').trim();
+    if (!joined) throw new Error(`${file}: clause ${ref} has no body`);
+    clauses.push({ ref, source: clauseSource, body: joined });
+  };
+  for (const line of rest.split('\n')) {
+    const heading = HEADING.exec(line);
+    if (heading?.[1]) {
+      flush();
+      ref = heading[1];
+      body = [];
+    } else if (ref) {
+      body.push(line);
+    }
+  }
+  flush();
+
+  if (clauses.length === 0) {
+    throw new Error(
+      `${file}: no clauses -- a specimen with no \`###\` heading indexes nothing`,
+    );
+  }
+  return {
+    file,
+    form: required(file, keys, 'form'),
+    follows: required(file, keys, 'follows'),
+    source: required(file, keys, 'source'),
+    clauseSource,
+    clauses,
+  };
+}
+
+function load(): SpecimenDocument[] {
+  const files = readdirSync(corpusPath)
+    .filter((name) => name.endsWith('.md') && name !== 'README.md')
+    .sort();
+  if (files.length === 0) {
+    // The same failure mode the grep guards have: a loader that reads no files
+    // returns an empty corpus, and an empty corpus grades nothing while looking
+    // exactly like a green run.
+    throw new Error(`no specimen files under ${CORPUS_DIR}`);
+  }
+  return files.map((name) =>
+    parseDocument(name, readFileSync(path.join(corpusPath, name), 'utf8')),
+  );
+}
+
+export const specimenDocuments: readonly SpecimenDocument[] = load();
+
+export const specimenClauses: readonly SpecimenClause[] = specimenDocuments
+  .flatMap((document) => document.clauses)
+  // A duplicate ref would make a citation ambiguous and a rank meaningless --
+  // two rows, one name, and no way to say which one won.
+  .map((clause, at, all) => {
+    if (all.findIndex((other) => other.ref === clause.ref) !== at) {
+      throw new Error(`duplicate clause ref across the corpus: ${clause.ref}`);
+    }
+    return clause;
+  });
+
+// The clause references the cases name, so a case and the corpus cannot drift
+// apart silently: a rename breaks the import, not the gate at 2am. Checked
+// against what was actually loaded, because a constant that names a clause
+// nobody wrote is the same lie one file further along.
+function ref(value: string): string {
+  if (!specimenClauses.some((clause) => clause.ref === value)) {
+    throw new Error(`${value} is named by a case and is not in ${CORPUS_DIR}`);
+  }
+  return value;
+}
+
 export const specimenRefs = {
-  ownerRepairs: 'חוזה §7.2',
-  tenantDamage: 'חוזה §7.5',
-  commonParts: 'חוזה §7.9',
-  officeHours: 'נוהל שירות §2',
-  reportFault: 'נוהל שירות §3',
+  ownerRepairs: ref('חוזה §7.2'),
+  tenantDamage: ref('חוזה §7.5'),
+  commonParts: ref('חוזה §7.9'),
+  officeHours: ref('נוהל שירות §2'),
+  reportFault: ref('נוהל שירות §3'),
 } as const;
