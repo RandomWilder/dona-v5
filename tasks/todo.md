@@ -302,7 +302,7 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       created implicitly by the first release **with no protection rules**, so a `v*` tag is currently
       the only thing between a commit and prod — correct this week, wrong from week 12.
 
-- [ ] **1.11 — The Shoham fixture and the week-1 surface.** The building, its spaces and its 72 units
+- [x] **1.11 — The Shoham fixture and the week-1 surface.** The building, its spaces and its 72 units
       seeded **through the importer path**, and a buildings/units list on the RTL token layer.
       **Done when:** a stakeholder opens the staging URL on their own phone and sees it.
       **Verify:** the owner browses it in a browser, not a screenshot. · **M**
@@ -317,6 +317,25 @@ exercise it rather than letting the freeze slip. See risk **R1**.
       is the guard that keeps a hex colour, a `fonts.googleapis` URL or a physical `left:`/`right:`
       out of a screen, and it fails on the HTML rather than the CSS because that is where the
       discipline erodes. It lands with the first screen, which is this one.
+      **Closed 2026-09-06** ([evidence](evidence/1.11.md)). Staging serves the building and its 72
+      units at `https://dona-staging-r44j24yuaa-zf.a.run.app/estate`, revision `00014-vtx`, with
+      **zero `<script>` tags** and every colour off `/ui/tokens.css`. The natural key was measured
+      before it was chosen: the same fixture twice against `0004` alone gave **2 buildings, 368
+      spaces and 144 units**, and `0005_` makes the second run `created: 0` with every id unchanged —
+      proved again in staging, where `dona-staging-seed` was executed twice. `address_key` is a
+      **generated column, not a unique constraint over `(city, address_line)`**, because
+      `  רקפת  12 ` and `רקפת 12` are one building and normalising in the importer is a rule the next
+      caller has to remember. **The lifted token guard was broken and had been for a year**: v3's
+      pattern misses `padding-left`, `border-left-width` and `text-align: left`, which was found by
+      tripping it rather than reading it and is recorded in [from-v3.md](../docs/from-v3.md).
+      **Nothing in the fixture is real, by decision** — the demo note below was rewritten in this
+      slice, and the unauthenticated screens and the `/` redirect are carried to weeks 5 and 2.
+      **The slice shipped a defect and the gate caught it**, on the documentation-only PR that closes
+      it: `ImportReport` counted whole tables, which is not a fact about an import — a second suite,
+      another environment or a developer's own `npm run seed` moves the number, so `created: 0` could
+      mean "already correct" or "somebody else's row was there". It now counts from `(xmax = 0)` on
+      each upsert's own returned row, and every estate suite carries a city of its own. Fixed inside
+      the slice rather than carried out of it.
 
 - [ ] **1.12 — The corpus, both tiers, and the controls the second one needs.** Tier 1 committed to
       the repo: the published **דירה להשכיר standard lease**, פרוטוקול מסירה, ערבות בנקאית, ארנונה
