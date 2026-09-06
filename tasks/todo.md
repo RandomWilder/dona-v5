@@ -399,6 +399,15 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       global key nobody had thought of. The scope suite's own fixture could only ever seed one
       household. And the generator wrote a second contact for two parties, which the import's own
       count reported before any test did.
+      **Staging carries the register**, 1,500 units through a Cloud Run job, 0 rejected, counts
+      identical to local — and the import took **98.7 s there against 6.5 s here**, 33.95 ms a row
+      against 2.23, because every one of ~32,000 round trips crosses a socket to a shared-core
+      instance. It does not change the batching answer and it sharpens the threshold: revisit at a
+      register taking more than ten minutes, roughly 18,000 rows. **Search is 0.24 s end to end on
+      staging** against a bar of one second, and the query-free root index turned out to be the
+      network control that made those four numbers readable. **Staging also found «בעוד 1 ימים»** —
+      Hebrew counts in three and the screen special-cased only zero, which is the first thing a
+      Hebrew speaker reads on that screen.
       **Carried:** a register-created building's handover date is a lease's date and is now visible
       on a card — owned by **3.5**, which brings the real fact; the btree, at **week 12**; the root
       index moving to the composition root at **week 5**; and whether the client's export can express

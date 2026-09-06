@@ -142,6 +142,20 @@ const SCREENS: Array<[string, () => string]> = [
     () => renderSearchPage('', { buildings: [], units: [], truncated: false }),
   ],
   ['estate · leases ending', () => renderExpiringPage(expiring, 60)],
+  [
+    // Hebrew counts in three. A template that only special-cases zero renders “בעוד 1 ימים”
+    // every single day, which is the kind of thing a room full of Hebrew speakers reads first.
+    'estate · leases ending today, tomorrow and in two days',
+    () =>
+      renderExpiringPage(
+        [0, 1, 2].map((days, at) => ({
+          ...(expiring[0] as ExpiringLease),
+          tenancy_id: `0000000${at}-0000-4000-8000-00000000000${at}`,
+          days_left: days,
+        })),
+        60,
+      ),
+  ],
   ['estate · leases ending, none', () => renderExpiringPage([], 60)],
 ];
 
@@ -206,6 +220,24 @@ describe('shared UI tokens', () => {
     });
     assert.doesNotMatch(html, /<img/);
     assert.match(html, /&lt;img/);
+  });
+
+  it('counts days in Hebrew, which does not count in two', () => {
+    // “בעוד 1 ימים” is what a template that special-cases only zero renders every day, and it is
+    // the first thing a Hebrew speaker reads on this screen. Found on staging before the demo.
+    const html = renderExpiringPage(
+      [0, 1, 2, 14].map((days, at) => ({
+        ...(expiring[0] as ExpiringLease),
+        tenancy_id: `0000000${at}-0000-4000-8000-00000000000${at}`,
+        days_left: days,
+      })),
+      60,
+    );
+    assert.match(html, /מסתיים היום/);
+    assert.match(html, /מסתיים מחר/);
+    assert.match(html, /בעוד יומיים/);
+    assert.match(html, /בעוד <span dir="ltr">14<\/span> ימים/);
+    assert.doesNotMatch(html, /בעוד <span dir="ltr">1<\/span> ימים/);
   });
 
   it('shows a state and a count, and never a person', () => {
