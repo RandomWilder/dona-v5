@@ -14,6 +14,10 @@ Claude-specific additions:
   and safe, do it, and state what was decided and why. What stays the director's: anything that
   spends money, signs something, touches real tenant data, or makes a promise to the client. Flag
   those; decide the rest. Options are presented only when the director asked to choose.
+- **A week closes when its slices close and its demo has been given**, not when its Thursday arrives —
+  the next week starts the same day. Close it with `tasks/evidence/week-<n>.md`: what was demoed,
+  where, and everything carried forward. The planned dates in `tasks/roadmap.md` are never rewritten;
+  the gap between them and the evidence dates is the record of how the project ran.
 - **Carry every raised item into the slice that closes it** — `tasks/todo.md` and
   `tasks/roadmap.md`, not only the evidence file, and inside the slice that raised it. Changing the
   plan is allowed and expected; leaving the plan behind is not. A slice is closed when nothing it

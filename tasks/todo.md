@@ -1,5 +1,10 @@
 # Week 1 · Sun 6 – Thu 10 Sep 2026 — A URL, a schema, and a filed application
 
+> **CLOSED 2026-09-06** — twelve of twelve slices, demo given off staging the same day, four days
+> ahead of the planned Thursday. What was shown, the numbers behind it, the asks put to the room and
+> everything carried into week 2: [evidence/week-1.md](evidence/week-1.md). The three unticked items
+> below are the director's and are carried there; they did not block the close.
+>
 > **Demo kind, declared Sunday: SOFTWARE.**
 > **Week demo (Thu 10 Sep):** a live link stakeholders open on their own phones — Shoham's building
 > and its 72 units — plus the timestamped Meta verification submission.
@@ -17,15 +22,15 @@ exercise it rather than letting the freeze slip. See risk **R1**.
 
 ## Before any slice — light the fuses
 
-- [ ] Walk all six rows of [fuses.md](fuses.md). They burn while the scaffolding gets built;
+- [x] Walk all six rows of [fuses.md](fuses.md) — **seven rows since F7 was added at 1.5**. Walked at the demo, 6 Sep; F2, F3, F4, F5 and F7 unlit and on the asks slide. They burn while the scaffolding gets built;
       **nothing below is on their critical path.**
-- [ ] Confirm and record the Meta filing: lit 2026-08-21, correct legal entity, in progress. Four to
+- [x] Confirm and record the Meta filing: lit 2026-08-21, correct legal entity, in progress. Four to
       six weeks puts it between 18 Sep and 2 Oct — roughly five weeks of slack ahead of the week-9
       need.
 
 ## Also this week
 
-- [ ] Put the **three success numbers** to the client for agreement at Thursday's demo
+- [x] Put the **three success numbers** to the client for agreement at Thursday's demo
       ([plan.md](plan.md) — calls closed with no human · time to booked visit, median and p90 ·
       escalations per 100 calls split by cause), plus the two stop conditions.
 - [ ] **Take delivery of the real document corpus — after 1.12, not before.** The controls exist

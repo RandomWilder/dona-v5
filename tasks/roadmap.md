@@ -28,6 +28,12 @@ at six or seven slices.
 | 3 | 20–24 Sep | | 7 | 18–22 Oct | | 11 | 15–19 Nov | | 15 | 13–17 Dec |
 | **4** | 27 Sep – **1 Oct · M1** | | **8** | 25–29 Oct · **M2** | | **12** | 22–26 Nov · **M3** | | **16** | 20–24 Dec · **M4** |
 
+**The dates above are the plan and are never rewritten.** A week closes when its slices close and its
+demo has been given, not when its Thursday arrives; the next week starts the same day. The gap
+between a slice's promised week here and the date on its evidence file is the measurement of how the
+project actually ran, and it is only a measurement if neither side moves to meet the other. Week 1
+closed **6 Sep 2026** ([evidence/week-1.md](evidence/week-1.md)).
+
 ## Standing, every week
 
 - **Sunday** — rewrite [todo.md](todo.md) for the week with the declared demo kind at the top, and
