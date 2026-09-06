@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { type Clock, systemClock } from './clock.ts';
 import { KernelError } from './errors.ts';
 import { newId } from './ids.ts';
@@ -26,12 +26,18 @@ export type AuditOutcome =
   | { outcome: 'ok' }
   | { outcome: 'error'; code?: string; message?: string };
 
+// A pool or a checked-out client. Widened at slice 2.3, when src/scope/ became the first caller that
+// has to write its line **inside the caller's transaction**: an audit row written on a separate
+// connection can survive a read that rolled back, and would then describe something that did not
+// happen. Nothing else changes -- this function only ever calls .query, which both types have.
+export type AuditTarget = Pool | PoolClient;
+
 export function createAuditLog(
-  pool: Pool,
+  db: AuditTarget,
   clock: Clock = systemClock,
 ): AuditLog {
   async function write(entry: AuditEntry, result: AuditOutcome): Promise<void> {
-    await pool.query(
+    await db.query(
       `INSERT INTO audit_log
          (id, at, actor_kind, actor_id, actor_role, action, subject_id, inputs,
           outcome, error_code, error_message)

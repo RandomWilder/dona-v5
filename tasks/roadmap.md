@@ -589,6 +589,31 @@ The five hops, in SQL, before any model call. The current-occupancy VIEW (R6) al
   stored in one format and asked in another resolves to nobody, which looks exactly like correct
   isolation. Guard 2 matches the join's *predicates*, not its table names, so moving the join text
   into a view is a change it will notice.
+- **Closed 2026-09-06** ([evidence](evidence/2.3.md)). **This entry's own Verify was wrong, in the
+  way 1.9's and 2.1's were:** *"policy case 1 goes green"* happened at **2.2**, with the other six.
+  What this slice proves is the stronger claim — the join moved off the five base tables and onto
+  `occupancy`, and **all thirty policy cases stayed green with no file in `tests/policy/` edited**.
+  `0008_occupancy_view.sql` carries **no temporal predicate, no status filter and no `CURRENT_DATE`**:
+  the view is the shape and `internal/isolation-join.ts` is the rule. Three things force that and
+  each is sufficient alone — a view cannot take `today` as a parameter and `CURRENT_DATE` inside one
+  breaks the clock rule; `src/kernel/migrations/` is not `src/scope/`, so guard two scans it and a
+  view holding the tenancy-active predicate fails the build, with adding the directory to the guard's
+  exclusion list being how a guard dies; and what the guard protects is the decision about *when* a
+  contact or a tenancy counts, which now has exactly one home. **The view very nearly defanged guard
+  two.** Written first with the columns aliased — the natural thing for a view of two tables — which
+  left the **canonical** join in `src/scope/` matching neither pattern, so every later copy would
+  have passed. Caught by `tests/policy/guards.test.ts`, whose violating fixture has been the real
+  join since 1.7, and fixed by keeping the base tables' column names rather than by widening the
+  guard. **Two defects found by probes rather than by review.** Renaming the view out from under the
+  resolver was supposed to prove it reads the view; it did, and it also showed the audit line written
+  in a `finally` replacing a failed read's `42P01` with its own `25P02` on the poisoned transaction —
+  which would have broken every pending policy case weeks 5 and 6 depend on. And the audit assertions
+  were reading the whole table while `src/kernel/audit.test.ts` writes committed rows on a pool
+  concurrently; each case names its own actor now. **The audit line records what was reached and
+  never what was asked** — an Israeli mobile number has too little entropy for a hash of one to be
+  one-way, so the inbound number belongs to the channel module's message log at week 9. E.164
+  normalisation at the edge is proved load-bearing by removing it: a national number then resolves to
+  nobody, which is indistinguishable from correct isolation. 297 tests on every merge, up from 279.
 - **Deps:** 2.2 · **Size:** M
 
 ### Slice 2.4 — The importer
@@ -606,6 +631,11 @@ of a duplicate, with no caller-supplied intent key anywhere.
   has to be `(party_kind, national_id)` at minimum — a ת.ז. and a ח.פ. are different registries and
   can be the same nine digits — and it is nullable, which is a third decision. Choose it here,
   against the export, and it costs a migration.
+- **Owed by 2.3 — the importer normalises before it inserts.** `normalisePhone` is on `src/scope/`'s
+  contract for this caller. A Priority export formatted for a spreadsheet is rejected row by row by
+  2.1's `phone_is_e164` CHECK otherwise, and a bare nine-digit number is refused rather than assumed
+  Israeli — a reject with a line number instead of a row that silently becomes another country's
+  subscriber.
 - **Owed by 2.1 — `is_primary` carries no uniqueness either.** "At most one primary contact per party
   per channel" is a plausible rule the workbook does not state; as a partial unique index it would
   fail an import that touches two rows in the wrong order, on a rule nobody asked for. Decide it here
@@ -638,6 +668,9 @@ Buildings list, unit grid, search, and the occupancy chip — **derived on every
 - **Done when:** search across 1,500 units returns in under a second and Q5 (leases ending in the
   next 60 days, whole portfolio) is one indexed query.
 - **Verify:** timed queries at full row count, recorded as numbers.
+- **Owed by 2.3 — the occupancy chip calls `src/scope/`, it does not read the view.** `occupancy`
+  carries no day predicate on purpose, so applying `today` inside `src/estate/` means writing the
+  predicate there — a second copy, and guard two fires on it. `resolvePartiesInUnit` is the call.
 - **Owed by 2.1 — one index to measure rather than assume.** `party_contact` has no btree on
   `(channel, value)`; the exclusion constraint's **GiST** index covers that lookup, and GiST is
   slower than btree at plain equality. That lookup is the first hop of the isolation join, which is
