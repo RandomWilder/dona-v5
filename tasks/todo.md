@@ -1,13 +1,17 @@
 # Week 2 · Sun 13 – Thu 17 Sep 2026 — All 1,500 units, from the register
 
-> **Demo kind, declared Sunday 6 Sep: REAL DATA — and it is the one line in this file that is not
-> ours to keep.** See *The declared demo kind and F3* below: slices 2.1–2.4 do not need the Priority
-> ERP keys, **2.5 and 2.6 do**, and the keys are the client's to issue. Unlit, this week ends with
-> the schema and the importer proved against a fixture we designed and the register still outside
-> the system — which is an **evidence** week, honestly declared, not a real-data one quietly missed.
+> **Demo kind, declared Sunday 6 Sep: REAL DATA. Re-declared Sunday 6 Sep: SOFTWARE.** The line
+> below said it was the one promise in this file that was not ours to keep, and it was re-declared in
+> advance rather than missed on Thursday, which is the whole distinction
+> ([rollout-cadence.html](../docs/rollout-cadence.html)). The cause is not that F3 stayed unlit; it is
+> that the project adopted a method in which the real register belongs to a later step —
+> **concept → example documents → schema review → real documents preparing for pilot**
+> ([SPEC-flows.md](../SPEC-flows.md), [pipeline.md](../docs/pipeline.md) §1.5). The register is step 4.
+> **2.5 moves there with it, and F3 leaves month one's critical path.**
 >
 > **Week demo (Thu):** the same URL as week 1, now with every building across Shoham, Beit Shemesh,
-> Ashdod, Lod and Ashkelon — units, tenancies, parties, searchable.
+> Ashdod, Lod and Ashkelon — units, tenancies, parties, searchable — at **1,500-unit volume from a
+> generated register**, with the query timings that volume exists to produce.
 > **Freeze:** Wednesday. The last merge that reaches staging lands Wednesday.
 >
 > Week 2 starts **6 Sep 2026**, the day week 1 closed, rather than on the planned 13 Sep. The dates
@@ -21,6 +25,10 @@
 **Six slices, and the shape of the week is a chain, not a fan.** 2.1 → 2.2 → 2.3 → 2.4 → 2.5 → 2.6,
 each depending on the one before it. There is no parallel track to fall back on, which is why the cut
 line at the bottom is at the *end* of the chain and not in the middle of it.
+
+**Amended 6 Sep 2026: five slices. 2.5 leaves the week** and the chain becomes
+2.1 → 2.2 → 2.3 → 2.4 → 2.6. See the re-declaration above and *The declared demo kind and F3* below,
+which is kept rather than deleted because the reasoning it records is what produced the amendment.
 
 ---
 
@@ -45,8 +53,14 @@ inside the Wednesday freeze. Later than that and the honest move is to re-declar
 advance is a plan, and one changed on Thursday is an excuse
 ([rollout-cadence.html](../docs/rollout-cadence.html)).
 
-- [ ] **Confirm F3 by Tuesday, or re-declare the week.** The director's, and the only item in this
-      file that is.
+- [x] **Confirm F3 by Tuesday, or re-declare the week.** The director's, and the only item in this
+      file that is. **Answered 6 Sep 2026: the week is re-declared SOFTWARE, and F3 is not confirmed
+      because it is no longer needed this month.** The method adopted the same day puts the real
+      register at step 4, so F3 stops gating week 2 and becomes a pilot-preparation dependency. The
+      table above is now read as a record of why, not as a live constraint: **2.5 moves out of the
+      week; 2.6 stays and takes its 1,500 units from a generated register.** Volume is what 2.6's two
+      index decisions need, and volume is not the same fact as realness — deferring the index
+      measurement to the pilot would push it to month two on no reasoning at all.
 
 ## Also this week
 
@@ -224,7 +238,13 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       would fail an import that touches two rows in the wrong order, on a rule nobody asked for.
       Decide it here if the export contains the fact, and leave it out if it does not.
 
-- [ ] **2.5 — Import the real register.** The Priority export into staging: 1,500 units, their
+- [~] **2.5 — Import the real register. MOVED OUT OF WEEK 2 on 6 Sep 2026**, to the
+      pilot-preparation step of the method ([SPEC-flows.md](../SPEC-flows.md)). Not cut, not blocked
+      — **rescheduled to where the method puts it**, which is step 4, after the concept is proved and
+      the schema reviewed. Its dependency F3 travels with it and leaves month one's critical path.
+      Everything below stays true of the slice and is what it will be re-opened against; the only
+      thing that changed is when it runs. **2.6 no longer depends on it** and takes its volume from a
+      generated register instead. The Priority export into staging: 1,500 units, their
       tenancies and their parties.
       **Done when:** counts reconcile against the export and ten `resolveByPhone` spot-checks return
       the party the export names — including one party on two tenancies and one ended tenancy reading
@@ -250,6 +270,15 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       **Done when:** search across 1,500 units returns in under a second and Q5 (leases ending in the
       next 60 days, whole portfolio) is one indexed query.
       **Verify:** timed queries at full row count, recorded as numbers. · **M**
+      **Deps changed 6 Sep 2026: 2.4, not 2.5.** The 1,500 units come from a **generated register** —
+      a fixture file at portfolio volume, produced by the same template the data request to Dona Dom
+      is derived from and loaded through 2.4's importer, so the path under measurement is the real
+      one. **Volume and realness are different facts, and only volume is what an index decision
+      needs.** Both index questions below are answered by row count and distribution; neither is
+      answered by the names being Dona Dom's. Deferring them to the pilot would have pushed two real
+      decisions into month two for no reason the measurement supports. What the generated register
+      cannot tell us is how many rows the overlap constraint rejects — that is a fact about the
+      client's data and it stays with 2.5.
       **Owed by 1.11 — `GET /` stops being a redirect here.** It is a 302 to `/estate` because
       `/estate` was the only screen in the system. This slice is the week a second screen exists, so
       the root becomes an index. One line of routing and one decision about what an index of two
@@ -277,8 +306,9 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
 ---
 
 **Cut line, in order:** the occupancy chip in 2.6 · search in 2.6 (the grid at full row count is what
-proves scale) · the tenth spot-check in 2.5. **Do not cut 2.3** — it is the isolation join's only
-home, and every week after this one reads it.
+proves scale). ~~the tenth spot-check in 2.5~~ — 2.5 left the week, so the cut line is two items
+shorter and the week has correspondingly less slack. **Do not cut 2.3** — it is the isolation join's
+only home, and every week after this one reads it.
 
 **Say it in the room.** Week 1's demo was a fixture top to bottom and was said to be. If F3 lands,
 this is the week that stops being true, and the sentence changes to: the addresses, the unit numbers

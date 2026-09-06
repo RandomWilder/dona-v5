@@ -696,6 +696,16 @@ filing cabinet with a search box, and it is already a business win over the stat
 governed; A9 — the catalogue is dynamic now, its screen is month two; A10 — in bulk, convention
 proposes and a human confirms.
 
+> **Amended 6 Sep 2026 — the week no longer depends on F4.** The planned text above is kept because
+> the dates and the plan of record are not rewritten; this note is what actually governs the week.
+> **Intake is an administrator declaring a type and uploading a file** ([SPEC-flows.md](../SPEC-flows.md)
+> flow A1), not a crawl of someone else's Drive, so nothing here waits on Google Drive access and the
+> demo is given on tier-1 specimens. **A10 and slice 3.4 are deferred, not deleted** — bulk becomes
+> meaningful at step 4 of the method, when volume arrives. **Documents are uploaded against a
+> tenancy** (new or upcoming), and the tenancy hangs on the unit; a lease is therefore the *origin* of
+> a draft tenancy rather than an attachment to one somebody typed first. The extraction that makes
+> that true is week 4's, so week 3 ships the filing cabinet and week 4 makes it write.
+
 ### Slice 3.0 — Workbook pass: the document-schema catalogue
 **Spec before code.** The workbook is the specification for month one's tables and it currently has
 `Document` at eight fields with no catalogue behind it. Add **E15 `DocumentType`** and **E16
@@ -737,8 +747,22 @@ exist. What remains is the cheap guard for the real error: right slot, wrong fil
 - **Done when:** uploading an ארנונה bill into the lease slot is caught before it is filed.
 - **Verify:** the wrong-file case, both directions, against tier-1 specimens.
 - **Deps:** 3.1 · **Size:** M
+- **Amended 6 Sep 2026 — this slice implements flow A1, and the upload binds to a tenancy.** The
+  screen asks for the unit and the type as written, and then for the **tenancy** the document belongs
+  to: an existing one, or a new draft. A draft is never an empty shell — it needs unit, dates and at
+  least one tenant, all three of which come out of the lease — so at this slice the draft path is
+  *declared by the administrator* and week 4's extraction takes it over. The content cross-check
+  (does the address on the document match the unit it was filed against) needs extraction and lands
+  with week 4, not here; what ships here is the cheap type guard above.
 
-### Slice 3.4 — Drive ingestion, and the bulk review queue
+### Slice 3.4 — Drive ingestion, and the bulk review queue — **DEFERRED 6 Sep 2026, not deleted**
+Moved out of week 3 to the pilot-preparation step of the method, with **A10** and with **F4**. Bulk is
+the right mechanism for volume and volume is step 4's; nothing about the design below is withdrawn,
+and the confidence-ranked queue in particular is what makes bulk safe when it runs. Two consequences
+that must not be lost with it: **3.6 no longer depends on this slice** (re-pointed to 3.3), and the
+published-forms item below still has to happen — it is F4's other purpose and it is now owed at the
+step where F4 is lit rather than here.
+
 Copy and hash at ingest; keep `drive_file_id` as provenance and the folder path as a **hint that
 pre-fills a binding**. The path is never itself the binding — if isolation resolved through a folder
 name, someone tidying Drive on a Tuesday would break the client's absolute constraint. The bulk form
@@ -772,7 +796,9 @@ guarded, not admin-editable** — the responsibility matrix keys on it, so editi
 Document search and the documents panels on the building and unit screens, grouped by type.
 - **Done when:** a named lease is on screen within four seconds of deciding to look for it.
 - **Verify:** timed, by the owner, on staging.
-- **Deps:** 3.4 · **Size:** S
+- **Deps:** ~~3.4~~ **3.3** — re-pointed 6 Sep 2026 when 3.4 deferred. Documents reach the system
+  through flow A1's admin upload, so search has something to find without any bulk path existing.
+  **Size:** S
 
 > **Cut line:** the compliance tab's visual treatment (the query is what matters this week), and the
 > review queue's bulk-approve affordance — one-at-a-time confirmation still proves the design. **Do
@@ -787,6 +813,32 @@ Document search and the documents panels on the building and unit screens, group
 Rent, dates, parties and clauses appear as fields. Click any value and the page image scrolls to the
 pixels it came from, with a confidence score.
 
+> **Amended 6 Sep 2026 — this week gains flows A2, A3 and A4, and it is where extraction starts
+> writing.** Reading a lease is not the end of the story; the fields it yields have to land somewhere,
+> and [SPEC-flows.md](../SPEC-flows.md) says where. Three slices are owed here beyond 4.1 and 4.2,
+> sized when this week is planned rather than now:
+>
+> - **A2 — a lease establishes a draft tenancy.** Extract → propose → **confirm** → write. Unit,
+>   dates and every tenant named on the lease (two signatories per household is normal, not an edge).
+>   **Role is confirmed by a human before any `tenancy_party` row is written**: `is_service_contact`
+>   is forced false for GUARANTOR by a database constraint and the isolation join spends it, so a
+>   guessed role is an isolation defect and not a typo. Parties are created **under the tenancy the
+>   document was uploaded to**; no cross-tenancy identity matching, which is month two. Carries 3.3's
+>   deferred content cross-check — the address and apartment on the document asserted against the
+>   unit the tenancy hangs on.
+> - **A3 — an addendum completes a tenancy.** No special case, by construction: **fields live on the
+>   tenancy and documents are provenance**, so an addendum arriving with the lease and one arriving
+>   six months later travel the same path. Later document wins; the earlier value is retained and
+>   visible, because both provenances are recorded.
+> - **A4 — the incomplete-tenancy queue**, and the rule it exists for: *a tenancy must have at least
+>   one guarantor*. A **policy case over saved rows, written red first — never a NOT NULL**, because
+>   a requirement the database rejects is one no addendum can ever satisfy. Guarantors are frequently
+>   absent from the lease itself; extraction returning zero of them is a correct result and must not
+>   error, retry or guess.
+>
+> **A9's per-field provenance is the load-bearing decision** under all three, and it is what makes the
+> addendum case arithmetic rather than architecture.
+
 ### Slice 4.1 — Document AI OCR adapter
 The **general OCR processor, not Form Parser** — the schema is already declared, so Google needn't
 infer structure, at roughly a twentieth of the cost. Hebrew print and handwriting, word boxes,
@@ -795,7 +847,8 @@ per-word confidence.
   position is recorded in the evidence file rather than assumed.
 - **Verify:** boxes rendered over the page image for one document; a scan and a native PDF both
   handled.
-- **Deps:** 3.4 · **Size:** M
+- **Deps:** ~~3.4~~ **3.3** — re-pointed 6 Sep 2026 when 3.4 deferred. The adapter needs a document in
+  the bucket, which A1's upload supplies; it never needed the bulk path. **Size:** M
 
 ### Slice 4.2 — Comprehension into the declared schema — **the open half of A8**
 The model maps OCR output into the fields **that document type's schema declares**, read from
