@@ -27,6 +27,12 @@ restated here. What crosses over from the previous codebase, and what must not, 
    rather than for whatever a customer happened to send. Real tenant data enters at sign-off, and the
    data request that asks Dona Dom for it is *generated from* our templates. So the schema is proved
    before anyone's real records touch it, and no slice ever stalls on someone else's inbox.
+   **Generalised to documents on 2026-09-06, as the standing method for every document type and every
+   flow that touches one: concept → work with example documents → verify the concept via schema
+   review → work with real documents, preparing for pilot.** Step 2 runs on the tier-1 corpus, so
+   concept and schema are proved while the tier-2 fuse is still burning; step 4 is where volume, the
+   real register and the pilot building arrive, and it is the only step that depends on someone else's
+   export. Written out with its consequences in [SPEC-flows.md](../SPEC-flows.md).
 6. **Two required gates, not one.** Half this product is an agent and half is a console, and the
    three things the client called non-negotiable are all deterministic. The golden set gates the
    agent (§7); the policy suite gates everything no model is allowed near (§6). Neither substitutes
