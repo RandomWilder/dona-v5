@@ -13,6 +13,13 @@
 // detected`. The phone block is `+97258201xxxx` and `+97258260xxxx`, the identifiers are `0715…`
 // and `0726…`, and nothing else in the repository uses either.
 //
+// **`terms_profile.name` is part of that namespace and 2.4 missed it**, which slice 2.6 found by
+// loading a generated register into the same database and watching three suites go red on
+// `terms_profile_natural_key`. The key is global -- a profile is identified by its name and by
+// nothing else (0009) -- so a fixture naming a plausible annex collides with the register that
+// eventually names the real one. Every profile in these two files now carries the same suffix its
+// cities do.
+//
 // The cities carry a suffix no other suite uses. These fixtures are applied against a database other
 // test files are using at the same moment — `node --test` runs files in parallel and
 // src/estate/routes.test.ts commits — so every assertion in the suite is scoped to a city and

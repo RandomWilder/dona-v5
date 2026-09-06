@@ -148,6 +148,41 @@ const OCCUPANTS_SQL = `
   ORDER BY full_name, role
 `;
 
+// **Q1 for a screen full of units, which is a different query from Q1 for one.** Slice 2.6.
+//
+// `resolvePartiesInUnit` answers "who lives in unit 12 today" and the unit grid asks it of every
+// card on the page. At a hundred units that is a hundred round trips **and a hundred audit rows for
+// one page load** — an access log in which one browse is indistinguishable from a hundred lookups is
+// worse than useless in the review it exists for. So the grid asks once, for the units it is about
+// to draw, and the audit line says so.
+//
+// **It returns no name and no number**, and that is a rule rather than an economy: `/estate` has no
+// session until week 5 (SPEC-estate.md), so what a screen may show today is a state and a count.
+// `resolvePartiesInUnit` is still the call for the unit screen, where the people are the subject.
+//
+// A null `unitIds` is the whole portfolio, which is the buildings list asking how much of the estate
+// is let today. That is an administrator's question and not a tenant scope — the tenant-facing
+// question is Q2, which takes a phone number and frequently answers with nothing.
+//
+// **A guarantor is not an occupant.** They are on the lease and not in the apartment (foundation
+// rule 7, and E8's own note), so they are excluded from the count while the tenancy still counts as
+// let. That is the same reading Q1 gives them, from the other side: shown, and marked unreachable.
+const OCCUPIED_UNITS_SQL = `
+  SELECT unit_id,
+         min(tenancy_id::text) AS tenancy_id,
+         count(DISTINCT party_id) FILTER (WHERE role <> 'GUARANTOR')::int AS occupants
+  FROM ${OCCUPANCY_VIEW}
+  WHERE ($1::uuid[] IS NULL OR unit_id = ANY($1))
+    AND ${TENANCY_ACTIVE_TODAY}
+  GROUP BY unit_id
+`;
+
+export interface OccupiedUnit {
+  unit_id: string;
+  tenancy_id: string;
+  occupants: number;
+}
+
 function day(today: Date): string {
   return today.toISOString().slice(0, 10);
 }
@@ -173,7 +208,7 @@ function day(today: Date): string {
 // every pending policy case in weeks 5 and 6 into an unrelated failure. A read that raised returned
 // no tenant data, so there is no access to record; a read that legitimately resolved nobody is
 // `matched: 0` and is logged, which is the case an access review actually asks about.
-async function audited<T extends { party_id?: string }>(
+async function audited<T>(
   db: Queryable,
   options: ScopeOptions,
   action: string,
@@ -185,7 +220,11 @@ async function audited<T extends { party_id?: string }>(
     {
       ...(options.actor ?? SYSTEM),
       action,
-      subjectId: subjectId ?? rows[0]?.party_id,
+      // The unconstrained T is deliberate: a caller whose rows carry no party at all -- the grid
+      // asking which units are let -- is a legitimate scoped read, and a type constraint that forced
+      // a party onto it would push that caller out of the audit rather than into it.
+      subjectId:
+        subjectId ?? (rows[0] as { party_id?: string } | undefined)?.party_id,
       inputs: { matched: rows.length },
     },
     { outcome: 'ok' },
@@ -226,6 +265,33 @@ export async function resolvePartiesInUnit(
     async () => {
       const result = await db.query<OccupantRow>(OCCUPANTS_SQL, [
         unitId,
+        day(today),
+      ]);
+      return result.rows;
+    },
+  );
+}
+
+/**
+ * Which of these units are let today, and by how many residents.
+ *
+ * `unitIds` is the units the caller is about to draw, or `null` for the whole portfolio. One query
+ * and one audit line either way.
+ */
+export async function resolveOccupiedUnits(
+  db: Queryable,
+  unitIds: readonly string[] | null,
+  today: Date,
+  options: ScopeOptions = {},
+): Promise<OccupiedUnit[]> {
+  return audited(
+    db,
+    options,
+    'scope.resolve_occupied_units',
+    null,
+    async () => {
+      const result = await db.query<OccupiedUnit>(OCCUPIED_UNITS_SQL, [
+        unitIds === null ? null : [...unitIds],
         day(today),
       ]);
       return result.rows;

@@ -285,6 +285,12 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       **Verify:** the ten spot-checks, listed individually in the evidence file. · **M**
       **Blocked on F3.** See *The declared demo kind and F3* above. **Closes open question 3** in
       [plan.md](plan.md) — how much of month one depends on the ERP.
+      **Owed by 2.6 — a register cannot express a vacant unit, and the export may contain some.**
+      The file is one row per party on a tenancy, so an apartment with no lease has no row and does
+      not reach the database. The generated register shows vacancies through ended and draft
+      tenancies, which is what a real register does too — but if the Priority export carries empty
+      apartments, that is a format question answered here, with the export in hand, rather than a
+      set of units silently missing from the portfolio.
       **Owed by 2.2 — the overlap constraint will reject rows, and the count is a fact about the
       client's data.** `one_active_tenancy_per_unit` refuses two ACTIVE tenancies overlapping on one
       unit, which a register with sloppy end dates will contain. That is the intended direction — a
@@ -312,7 +318,7 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       that `/estate` is still fixture-only — **week 5 is where those routes get a session**, and
       nothing may put a real party behind an unauthenticated route before it does (1.11's carry).
 
-- [ ] **2.6 — Browse at portfolio scale.** Buildings list, unit grid, search, and the occupancy
+- [x] **2.6 — Browse at portfolio scale.** Buildings list, unit grid, search, and the occupancy
       chip — **derived on every load, never stored**.
       **Done when:** search across 1,500 units returns in under a second and Q5 (leases ending in the
       next 60 days, whole portfolio) is one indexed query.
@@ -361,6 +367,42 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       slower than btree at plain equality. It is the first hop of the isolation join and therefore
       the hottest query in the system once the agent is live. A few thousand rows today; the right
       moment to decide is at full row count with a timing in front of it, which is here.
+      **Closed 2026-09-06** ([evidence](evidence/2.6.md)). **Both index questions were answered and
+      they went opposite ways**, which is what deciding with a timing in front of you looks like.
+      `0010_scale_indexes.sql` adds `tenancy (end_date) WHERE status = 'ACTIVE'` — the scan reads
+      every tenancy the company has ever signed and the index reads two pages — and **does not** add
+      the btree on `party_contact (channel, value)`: it is three times faster than the exclusion
+      constraint's GiST index in isolation, and **with both present the planner chose GiST every
+      time**, so it would be a write cost with a comment. That reopens at week 12, in
+      [roadmap.md](roadmap.md), and the fix then is not the btree.
+      **Search is 2.35 ms against a bar of one second** at 1,500 units, and Q5 is one indexed query.
+      The 1,500 units come from a **generated register** — 37 buildings, 2,908 rows, zero rejects —
+      loaded through `npm run import:register` in **6.5 s, and 6.0 s the second time creating
+      nothing**, which answers `SPEC-register.md`'s batching question in favour of keeping the
+      savepoint per row.
+      **The occupancy chip did not call `resolvePartiesInUnit`, and this entry was wrong to say it
+      would.** One call per card is 29.68 ms and sixty audit rows for a sixty-unit page, against
+      0.94 ms and one for `resolveOccupiedUnits` — and the audit line is the bigger half: a log in
+      which one browse looks like sixty lookups is worse than useless in the review it is kept for.
+      **No name and no number reaches any of the five screens**, asserted from outside in
+      `tests/ui/tokens.test.ts` rather than left to the views to remember.
+      **The required gate had a latent `40P01` in it and this slice made it fire** — one run in
+      three, always in `tests/policy/`, because three suites had been seeding `+972521234567` since
+      week 2 and two policy files another number. 2.4 diagnosed this exact deadlock and blocked its
+      *register fixtures*; nobody applied the rule to the suites. Each suite owns a block now, and
+      the suite ran clean six times consecutively. A flake in a required gate is worse than a red
+      one: it teaches people to re-run.
+      **Volume found three more things review would not have.** A generated register in the development
+      database turned three suites red on `terms_profile_natural_key` — 2.4 namespaced its cities,
+      its phone block and its identifiers and then named its maintenance annexes what a real register
+      will name them, which is the third time this repository has met this lesson and the first on a
+      global key nobody had thought of. The scope suite's own fixture could only ever seed one
+      household. And the generator wrote a second contact for two parties, which the import's own
+      count reported before any test did.
+      **Carried:** a register-created building's handover date is a lease's date and is now visible
+      on a card — owned by **3.5**, which brings the real fact; the btree, at **week 12**; the root
+      index moving to the composition root at **week 5**; and whether the client's export can express
+      a vacant unit, at **2.5**.
 
 ---
 
@@ -369,8 +411,18 @@ proves scale). ~~the tenth spot-check in 2.5~~ — 2.5 left the week, so the cut
 shorter and the week has correspondingly less slack. **Do not cut 2.3** — it is the isolation join's
 only home, and every week after this one reads it.
 
+**Nothing was cut.** Both items on the line — the occupancy chip and search — shipped, and the chip
+shipped in a different shape than this file specified, for a reason the measurement gave.
+
 **Say it in the room.** Week 1's demo was a fixture top to bottom and was said to be. If F3 lands,
 this is the week that stops being true, and the sentence changes to: the addresses, the unit numbers
 and the names on screen are Dona Dom's own, imported through the same path the fixture used, and the
 second run of the import changed nothing. If F3 does not land, the sentence does not change and the
 week is re-declared — **not** demoed as though it had.
+
+**Amended 6 Sep 2026, and this is the sentence for Thursday.** The week was re-declared SOFTWARE in
+advance, so the honest line is the one that was true all along, said plainly: *every address, every
+unit number and every name on this screen is ours and invented, and the file they came from is the
+template the data request to you is derived from. What is real is the path — 1,500 units through the
+importer in six and a half seconds, and the second run changed nothing — and the timings, which are
+what this volume exists to produce.*

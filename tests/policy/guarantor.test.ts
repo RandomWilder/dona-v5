@@ -30,7 +30,12 @@ import {
 const CHECK_VIOLATION = '23514';
 
 const TODAY = new Date('2026-09-05T00:00:00Z');
-const TENANT_PHONE = '+972501112233';
+// **Its own numbers, not isolation.test.ts's.** These two files run in parallel against one database
+// and both seed a tenant, so a shared contact value means each transaction waits on the other's
+// speculative insertion inside `contact_value_resolves_to_one_party` — `40P01`, in the required
+// gate, on a schedule nobody controls. Found at 2.6 when a third suite made the window wide enough
+// to hit; the rule is 2.4's, applied to suites rather than only to register fixtures.
+const TENANT_PHONE = '+972501113344';
 const GUARANTOR_PHONE = '+972509998877';
 
 describe('policy · a guarantor is never a service contact', () => {

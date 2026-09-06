@@ -8,7 +8,8 @@ workbook is right and this file is a bug.
 - **Owns:** E1–E4, E11 — Project · Building · Space · Unit · Asset.
 - **Depends on:** kernel.
 - **Built:** Project · Building · Space · Unit at week 1, slice 1.9; the natural keys, the importer
-  and the first two screens at slice 1.11; `upsertUnitRow` for the register importer at slice 2.4.
+  and the first two screens at slice 1.11; `upsertUnitRow` for the register importer at slice 2.4;
+  the portfolio-scale surface — search, Q5, the occupancy chip and the root index — at slice 2.6.
   Asset at week 3, slice 3.5, seeded from handover protocols.
 
 ## The shape, and why it is this one
@@ -88,11 +89,11 @@ lower-cased with runs of whitespace collapsed, because address text arrives from
 inconsistent spacing and casing and normalising it in the database means every writer gets it. Nothing
 writes it and nothing reads it but the constraint; `address_line` and `city` remain the facts.
 
-## The week-1 surface — two screens, `src/estate/internal/views.ts`
+## The surface — five routes, `src/estate/internal/views.ts`
 
 `GET /estate` lists the buildings; `GET /estate/buildings/:buildingId` shows one building, its spaces
-by kind and its units. `GET /` redirects to the first of them, and stops doing so the week a second
-module has a screen.
+by kind and its units. Slice 2.6 added three more: `GET /` is an index of the screens,
+`GET /estate/search?q=` searches the portfolio, and `GET /estate/expiring` is Q5.
 
 Server-rendered through the kernel's `h` template, which escapes every interpolation — so there is
 **no client JavaScript at all**, and no JSON API that would have to be scoped before the screens can
@@ -100,9 +101,61 @@ be shown to anyone. Hebrew, RTL, and every colour, face and physical side comes 
 `/ui/tokens.css`; `tests/ui/tokens.test.ts` renders each screen and fails on a hex colour, a
 `font-family`, a `fonts.googleapis` URL, a physical `left:`/`right:` or a `<script>` tag.
 
-The unit total on the list screen is **counted, never stored** — R6, made visible.
+The unit total on the list screen is **counted, never stored** — R6, made visible. So is the
+occupancy beside it, from 2.6.
 
-**There is no authentication on either screen, and that is a dated state, not a design.** Staff auth
+### The three screens 2.6 added
+
+**`GET /` stopped being a 302.** It redirected to `/estate` because `/estate` was the only screen in
+the system, and 1.11 said it would stop the week a second one existed. **It runs no query**: a
+portfolio headline belongs on the buildings list, where those numbers are already being read for the
+cards, and an index that ran three portfolio queries to render three links would be a worse root than
+the redirect was. It moves to the composition root the week a second *module* has a screen — week 5's
+staff console — because an index of screens is not estate's fact. All three are estate's today.
+
+**`GET /estate/search?q=` searches buildings and units, and deliberately not people.** A search that
+reached `party` would put a real person behind a route with no session, the week the register
+arrives; an address and a unit number are not personal data, and a name is. The name search is week
+5's, behind the login that makes showing it lawful. A **city matches buildings and not units**: a city
+holds hundreds of apartments and sixty arbitrary ones is a worse answer than the buildings that
+contain them, while a building name or an address narrows to one building and matches both.
+
+The term is trimmed, capped at 80 characters, and its **LIKE metacharacters are escaped**. A bound
+parameter is not the same thing as a safe pattern: unescaped, a lone `%` matches the whole portfolio
+and `_` matches every one-character name. Both halves fetch one row past the limit, which is how a
+list learns it was cut off without a second `count(*)` over the predicate it just decided not to
+read.
+
+**`GET /estate/expiring` is Q5** — every ACTIVE lease in the portfolio ending inside sixty days, one
+indexed query, ordered by date. It shows a unit, a building and a date and **no party at all**.
+
+It asks *when a lease ends*, which is not the same question as whether a tenancy counts today, and
+that is why it lives here rather than in `src/scope/`. The isolation join's tenancy-active predicate
+decides who may be told what; `end_date` inside a window decides what an operations team does next
+week. Guard two protects the first and has nothing to say about the second — and the moment this
+query needs "active on a given day" it has to ask `src/scope/` for it, which is the guard working
+rather than a line to walk up to.
+
+### The occupancy chip — derived on every load, stored nowhere
+
+Every unit card says whether the unit is let today and by how many residents, and the building page
+and the buildings list both carry the total. **It is R6 on a card**: there is no column to read and no
+count to drift, in the same way the unit total has been since 1.11.
+
+The chip calls `resolveOccupiedUnits` in `src/scope/` — **once for the page, not once per card**
+([SPEC-scope.md](SPEC-scope.md)). Estate never applies the day itself: `occupancy` carries no day
+predicate on purpose, so writing `today` here would put the tenancy-active predicate in a second file
+and fail guard two.
+
+**Two questions, two modules, and neither learns the other's rule.** `src/scope/` says *which* units
+are let today, because deciding when a tenancy counts is what only that module may do;
+`countUnitsByBuilding` says *where* they are, because that is estate's own structure. The buildings
+list costs two queries rather than one per building.
+
+The chip is a state and a count and never a name, which is the rule every screen here keeps until
+week 5 gives them a session.
+
+**There is no authentication on any of these screens, and that is a dated state, not a design.** Staff auth
 is Identity Platform with enforced MFA at week 5. Until then the screens serve fixture data with no
 personal data in it, and carry `noindex`. The week-5 row in [tasks/roadmap.md](tasks/roadmap.md) owns
 closing it; nothing may put a real party, contact or document behind these routes before it does.

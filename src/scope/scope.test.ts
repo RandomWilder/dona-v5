@@ -28,13 +28,27 @@ import {
 import {
   OCCUPANCY_VIEW,
   OCCUPANCY_VIEW_COLUMNS,
+  resolveOccupiedUnits,
   resolvePartiesInUnit,
   resolveUnitsByPhone,
 } from './contract.ts';
 
 const TODAY = new Date('2026-09-06T00:00:00Z');
-const STORED_PHONE = '+972521234567';
+// **This suite's block is `0523…`**, and it is not decoration. `node --test` runs files in parallel
+// against one database, so two suites inserting one contact value on overlapping days each wait on
+// the other's speculative insertion — 2.4 met that as `40P01` and blocked its register fixtures, and
+// 2.6 found that this file, src/parties/schema.test.ts and tests/policy/ had been sharing one number
+// since week 2. The policy gate was the one that flaked.
+const STORED_PHONE = '+972523000222';
 const CITY = 'Scope suite';
+// **Two globally unique keys this suite has to own, both found at 2.6.** `party.national_id_key`
+// (0009) and `terms_profile.name` (0009) are unique across the whole database, so a fixture that
+// hardcodes either can only ever create one row — the second `seed` in one transaction collided
+// with the first — and a plausible name collides with a real register besides. The city was
+// namespaced at 2.3 for exactly this reason; these two were missed because nothing had asked for a
+// second party in one case yet.
+const PROFILE = 'Scope suite profile';
+let seeded = 0;
 
 interface SeedSpec {
   unitNumber: string;
@@ -87,10 +101,10 @@ async function seed(db: PoolClient, spec: SeedSpec): Promise<Seeded> {
   const unitId = spec.unitId ?? (await seedUnit(db, spec.unitNumber));
   const partyId = newId();
   const tenancyId = newId();
-  const termsProfileId = newId();
+  seeded += 1;
   await db.query(
     `INSERT INTO party (party_id, party_kind, full_name, national_id) VALUES ($1, 'PERSON', $2, $3)`,
-    [partyId, spec.name, '040000001'],
+    [partyId, spec.name, `04${String(seeded).padStart(7, '0')}`],
   );
   if (spec.phone !== null) {
     await db.query(
@@ -106,10 +120,15 @@ async function seed(db: PoolClient, spec: SeedSpec): Promise<Seeded> {
       ],
     );
   }
-  await db.query(
-    `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, 'standard')`,
-    [termsProfileId],
+  // One profile per transaction, found or created. `UNIQUE (name)` is global, so inserting a fresh
+  // one per call fails the moment a case seeds twice.
+  const profile = await db.query<{ terms_profile_id: string }>(
+    `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)
+     ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+     RETURNING terms_profile_id`,
+    [newId(), PROFILE],
   );
+  const termsProfileId = profile.rows[0]?.terms_profile_id;
   await db.query(
     `INSERT INTO tenancy (tenancy_id, unit_id, start_date, end_date, status, terms_profile_id)
      VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -247,6 +266,113 @@ describe('scope · Q1, who lives in unit 12 today', () => {
   });
 });
 
+// Slice 2.6. The grid's question, which is Q1 asked of a page rather than of a card.
+describe('scope · which of these units are let today', () => {
+  it('answers for a page of units in one query, and a vacancy is an absent row', async (t) => {
+    const ran = await withDb(async (db) => {
+      // Distinct numbers, because `contact_value_resolves_to_one_party` is a statement about
+      // overlap and two seeded households sharing one number is exactly what it refuses (2.1).
+      const letToday = await seed(db, {
+        unitNumber: '20',
+        name: 'Current Tenant',
+        phone: '+972523000230',
+      });
+      // R5 again, from the grid's side: an ended lease is a vacancy, not the last household. This
+      // is the property the occupancy chip exists to show and the one a stored column would drift.
+      const vacant = await seed(db, {
+        unitNumber: '21',
+        name: 'Former Tenant',
+        phone: '+972523000231',
+        tenancyFrom: '2025-01-01',
+        tenancyTo: '2026-06-30',
+      });
+      const rows = await resolveOccupiedUnits(
+        db,
+        [letToday.unitId, vacant.unitId],
+        TODAY,
+      );
+      assert.deepEqual(
+        rows.map((row) => [row.unit_id, row.occupants]),
+        [[letToday.unitId, 1]],
+      );
+    });
+    if (ran === 'skipped') t.skip(skipReason);
+  });
+
+  it('does not count a guarantor as a resident', async (t) => {
+    const ran = await withDb(async (db) => {
+      // Foundation rule 7's other face, and E8's own note: a guarantor is on the lease and is not in
+      // the apartment. Q1 shows them, marked; the chip's count leaves them out, and the unit is
+      // still let.
+      const tenant = await seed(db, { unitNumber: '22', name: 'Real Tenant' });
+      await db.query(
+        `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', 'Guarantor')`,
+        ['00000000-0000-4000-8000-00000000002b'],
+      );
+      await db.query(
+        `INSERT INTO tenancy_party (tenancy_id, party_id, role, is_service_contact)
+         VALUES ($1, $2, 'GUARANTOR', false)`,
+        [tenant.tenancyId, '00000000-0000-4000-8000-00000000002b'],
+      );
+      const rows = await resolveOccupiedUnits(db, [tenant.unitId], TODAY);
+      assert.deepEqual(
+        rows.map((row) => row.occupants),
+        [1],
+      );
+    });
+    if (ran === 'skipped') t.skip(skipReason);
+  });
+
+  it('counts a party once however many numbers they are reachable on', async (t) => {
+    const ran = await withDb(async (db) => {
+      // The view fans a party out over their contact rows. A count that forgot to be DISTINCT would
+      // report a two-phone household as two people, which is a chip that lies quietly.
+      const tenant = await seed(db, { unitNumber: '23', name: 'Two Numbers' });
+      await db.query(
+        `INSERT INTO party_contact (contact_id, party_id, channel, value, is_primary,
+                                    valid_from, valid_to)
+         VALUES ($1, $2, 'EMAIL', 'two@example.com', false, '2026-01-01', NULL)`,
+        [newId(), tenant.partyId],
+      );
+      const rows = await resolveOccupiedUnits(db, [tenant.unitId], TODAY);
+      assert.deepEqual(
+        rows.map((row) => row.occupants),
+        [1],
+      );
+    });
+    if (ran === 'skipped') t.skip(skipReason);
+  });
+
+  it('writes one audit line for the page, not one per unit', async (t) => {
+    const ran = await withDb(async (db) => {
+      // The reason this call exists. `resolvePartiesInUnit` once per card is a hundred round trips
+      // and a hundred audit rows for one page load, and an access log in which one browse looks like
+      // a hundred lookups is worse than useless in the review it is kept for.
+      const first = await seed(db, {
+        unitNumber: '24',
+        name: 'One',
+        phone: '+972523000234',
+      });
+      const second = await seed(db, {
+        unitNumber: '25',
+        name: 'Two',
+        phone: '+972523000235',
+      });
+      const before = await db.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM audit_log WHERE action = 'scope.resolve_occupied_units'`,
+      );
+      await resolveOccupiedUnits(db, [first.unitId, second.unitId], TODAY, {
+        actor: { actorKind: 'staff', actorId: 'scope-suite' },
+      });
+      const after = await db.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM audit_log WHERE action = 'scope.resolve_occupied_units'`,
+      );
+      assert.equal(Number(after.rows[0]?.n) - Number(before.rows[0]?.n), 1);
+    });
+    if (ran === 'skipped') t.skip(skipReason);
+  });
+});
+
 describe('scope · a number is asked in one format and stored in another', () => {
   it('resolves a national number against the E.164 row it belongs to', async (t) => {
     const ran = await withDb(async (db) => {
@@ -254,10 +380,10 @@ describe('scope · a number is asked in one format and stored in another', () =>
         unitNumber: '15',
         name: 'Avigail Tenant',
       });
-      // The whole of what 2.1's CHECK could not do on its own. Stored +972521234567; asked the way
+      // The whole of what 2.1's CHECK could not do on its own. Stored +972523000222; asked the way
       // an ERP export and a person both write it. Without the conversion each of these resolves to
       // nobody — and nothing on any screen looks wrong, which is the hazard.
-      for (const asked of ['052-123-4567', '052 123 4567', '00972521234567']) {
+      for (const asked of ['052-300-0222', '052 300 0222', '00972523000222']) {
         const scope = await resolveUnitsByPhone(db, asked, TODAY);
         assert.equal(scope.length, 1, asked);
         assert.equal(scope[0]?.unit_id, tenant.unitId);
@@ -352,7 +478,7 @@ describe('scope · every scoped read is logged, and the log holds no person', ()
         name: 'Avigail Tenant',
       });
       // No actor, so this also covers the default: an unnamed caller is `system`, never absent.
-      await resolveUnitsByPhone(db, '052-123-4567', TODAY);
+      await resolveUnitsByPhone(db, '052-300-0222', TODAY);
       // The whole audit row, every column, as text. SPEC.md: PII never in logs — and an Israeli
       // mobile number has too little entropy for a hash of one to be one-way, so the line names what
       // was reached and never what was asked (SPEC-scope.md). The number the sender used belongs to
@@ -365,9 +491,9 @@ describe('scope · every scoped read is logged, and the log holds no person', ()
       assert.equal(raw.rows.length, 1);
       assert.equal(raw.rows[0]?.actor_kind, 'system');
       for (const secret of [
-        '052-123-4567',
+        '052-300-0222',
         STORED_PHONE,
-        '521234567',
+        '523000222',
         'Avigail',
       ]) {
         assert.ok(

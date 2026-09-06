@@ -10,8 +10,31 @@
 // on a hex colour, a font-family, a fonts.googleapis URL, a physical left:/right: or a <script>.
 // Physical sides are the RTL trap and the reason the rule exists -- inset-inline-start is the same
 // edge in both directions, and `left` is not.
+//
+// **Four screens from 2.6, and one rule across all of them: no name and no number reaches this
+// layer.** These routes have no session until week 5 (SPEC-estate.md, and 1.11's carry restated at
+// 2.1, 2.3 and 2.4), so what an unauthenticated screen may show about a household is a *state* and a
+// *count*. The occupancy chip says a unit is let and by how many residents; it does not say by whom,
+// and search does not reach `party` at all. That is a decision the views enforce by never being
+// handed the data, not a discipline they remember.
 import { type Html, h } from '../../kernel/ui/html.ts';
-import type { BuildingDetail, BuildingSummary, UnitRow } from './read-model.ts';
+import type {
+  BuildingDetail,
+  BuildingSummary,
+  ExpiringLease,
+  SearchResults,
+  UnitRow,
+} from './read-model.ts';
+import { SEARCH_LIMIT } from './read-model.ts';
+
+/**
+ * Which units are let today, and by how many residents. `src/scope/` is the only thing that can
+ * answer it (`resolveOccupiedUnits`), and a unit absent from the map is a vacancy.
+ */
+export type OccupancyByUnit = ReadonlyMap<string, number>;
+
+/** How many units in each building are let today. Same answer, one level up. */
+export type OccupancyByBuilding = ReadonlyMap<string, number>;
 
 const BUILDING_STATUS: Record<string, string> = {
   ACTIVE: 'פעיל',
@@ -110,7 +133,43 @@ const styles = h`<style>
   .back { display: inline-block; }
   a.card-link { color: inherit; text-decoration: none; display: block; }
   a.card-link:hover .card-title { text-decoration: underline; }
+  .top-nav {
+    display: flex;
+    gap: var(--space-4);
+    align-items: center;
+    flex-wrap: wrap;
+    margin-inline-start: auto;
+  }
+  .top-nav a { color: var(--color-on-chrome); }
+  /* The search box is a plain GET form, so the screens still carry no client JavaScript at all and
+     a result page is a URL somebody can send to somebody else. */
+  .search { display: flex; gap: var(--space-2); align-items: center; }
+  .search input { min-width: 14rem; min-height: var(--size-control-ops); padding-block: var(--space-2); }
+  .search .btn { min-height: var(--size-control-ops); }
+  .index-list { display: grid; gap: var(--space-2); }
+  .lease-when { display: flex; gap: var(--space-3); align-items: baseline; flex-wrap: wrap; }
 </style>`;
+
+function chrome(): Html {
+  return h`<div class="top-inner">
+    <span class="brand">דונה דום</span>
+    <span class="top-note">נכסים · נתוני הדגמה</span>
+    <nav class="top-nav">
+      <a href="/estate">בניינים</a>
+      <a href="/estate/expiring">חוזים מסתיימים</a>
+      <form class="search" method="get" action="/estate/search" role="search">
+        <input
+          id="q"
+          name="q"
+          type="search"
+          aria-label="חיפוש בניין, כתובת או מספר דירה"
+          placeholder="כתובת, בניין או מספר דירה"
+        />
+        <button class="btn btn-secondary" type="submit">חיפוש</button>
+      </form>
+    </nav>
+  </div>`;
+}
 
 function page(title: string, body: Html): string {
   return `<!doctype html>
@@ -124,12 +183,7 @@ ${h`<html lang="he" dir="rtl">
     ${styles}
   </head>
   <body>
-    <header class="top">
-      <div class="top-inner">
-        <span class="brand">דונה דום</span>
-        <span class="top-note">נכסים · נתוני הדגמה</span>
-      </div>
-    </header>
+    <header class="top">${chrome()}</header>
     <main class="wrap">${body}</main>
   </body>
 </html>`}`;
@@ -137,13 +191,22 @@ ${h`<html lang="he" dir="rtl">
 
 function marker(status: string): Html {
   // The state marker's colour is a token and its meaning is the status. Anything but ACTIVE is not
-  // an alert, it is simply not the ordinary case, so it gets the neutral marker.
-  return h`<span class="state-marker ${status === 'ACTIVE' ? 'is-ok' : ''}"></span>`;
+  // an alert, it is simply not the ordinary case, so it gets the neutral marker. `ALERT` is the one
+  // caller that means it: a lease inside its last fortnight is something somebody has to do
+  // something about this week (2.6).
+  const state =
+    status === 'ACTIVE' ? 'is-ok' : status === 'ALERT' ? 'is-alert' : '';
+  return h`<span class="state-marker ${state}"></span>`;
 }
 
-function buildingFacts(building: BuildingSummary): Html {
+function buildingFacts(building: BuildingSummary, occupied?: number): Html {
   return h`<dl class="facts">
     <div><dt>יחידות דיור</dt><dd>${ltr(building.unit_count)}</dd></div>
+    ${
+      occupied === undefined
+        ? h``
+        : h`<div><dt>מאוכלסות</dt><dd>${ltr(occupied)}</dd></div>`
+    }
     <div><dt>חללים</dt><dd>${ltr(building.space_count)}</dd></div>
     <div><dt>מסירה</dt><dd>${ltr(building.handover_date)}</dd></div>
     <div><dt>תום תקופת הבדק</dt><dd>${ltr(building.warranty_end_date)}</dd></div>
@@ -155,11 +218,25 @@ function buildingFacts(building: BuildingSummary): Html {
   </dl>`;
 }
 
-export function renderBuildingsPage(buildings: BuildingSummary[]): string {
+export function renderBuildingsPage(
+  buildings: BuildingSummary[],
+  occupancy: OccupancyByBuilding,
+): string {
+  const units = buildings.reduce(
+    (total, building) => total + Number(building.unit_count),
+    0,
+  );
+  let occupied = 0;
+  for (const building of buildings) {
+    occupied += occupancy.get(building.building_id) ?? 0;
+  }
   const body = h`
     <div>
       <h1>בניינים</h1>
-      <p class="lede">${ltr(buildings.length)} בניינים במערכת. מספר יחידות הדיור נספר מהחללים ואינו נשמר.</p>
+      <p class="lede">
+        ${ltr(buildings.length)} בניינים · ${ltr(units)} יחידות דיור ·
+        ${ltr(occupied)} מאוכלסות היום. שתי הספירות נגזרות בכל טעינה ואינן נשמרות.
+      </p>
     </div>
     ${
       buildings.length === 0
@@ -174,7 +251,7 @@ export function renderBuildingsPage(buildings: BuildingSummary[]): string {
                     <span class="chip">${label(BUILDING_STATUS, building.status)}</span>
                   </p>
                   <p class="lede">${building.address_line}, ${building.city}</p>
-                  ${buildingFacts(building)}
+                  ${buildingFacts(building, occupancy.get(building.building_id))}
                 </a>
               </article>`,
             )}
@@ -183,11 +260,27 @@ export function renderBuildingsPage(buildings: BuildingSummary[]): string {
   return page('דונה דום — בניינים', body);
 }
 
-function unitCard(unit: UnitRow): Html {
+// **R6, on a card.** Occupancy is derived on every load and stored nowhere -- there is no column to
+// read and no count to drift, which is the foundation rule made visible in the same way the unit
+// total on the buildings list makes it visible. The number is residents and not parties: a guarantor
+// is on the lease and not in the apartment, so `src/scope/` leaves them out of the count and the
+// unit screen is where they are shown, marked.
+function occupancyChip(residents: number | undefined): Html {
+  if (residents === undefined) return h`<span class="chip">פנויה</span>`;
+  return h`<span class="chip">${
+    residents === 1
+      ? h`מאוכלסת · דייר אחד`
+      : h`מאוכלסת · ${ltr(residents)} דיירים`
+  }</span>`;
+}
+
+function unitCard(unit: UnitRow, occupancy: OccupancyByUnit): Html {
+  const residents = occupancy.get(unit.unit_id);
   return h`<article class="row-card unit-card">
     ${marker(unit.condition_status === 'READY' ? 'ACTIVE' : unit.condition_status)}
     <p class="card-title">
       <span class="unit-no">דירה ${ltr(unit.unit_number)}</span>
+      ${occupancyChip(residents)}
       <span class="chip">${label(CONDITION, unit.condition_status)}</span>
       ${unit.has_mamad ? h`<span class="chip">ממ״ד</span>` : h``}
     </p>
@@ -209,8 +302,12 @@ function unitCard(unit: UnitRow): Html {
   </article>`;
 }
 
-export function renderBuildingPage(detail: BuildingDetail): string {
+export function renderBuildingPage(
+  detail: BuildingDetail,
+  occupancy: OccupancyByUnit,
+): string {
   const { building, kinds, units } = detail;
+  const let_ = units.filter((unit) => occupancy.has(unit.unit_id)).length;
   const body = h`
     <div>
       <a class="back" href="/estate">← כל הבניינים</a>
@@ -229,11 +326,182 @@ export function renderBuildingPage(detail: BuildingDetail): string {
     </section>
     <section>
       <h2>יחידות דיור · ${ltr(units.length)}</h2>
+      <p class="lede">${ltr(let_)} מאוכלסות היום, ${ltr(units.length - let_)} פנויות. נגזר בכל טעינה ואינו נשמר.</p>
       ${
         units.length === 0
           ? h`<p class="empty-state">אין יחידות דיור בבניין זה.</p>`
-          : h`<div class="unit-grid">${units.map(unitCard)}</div>`
+          : h`<div class="unit-grid">${units.map((unit) => unitCard(unit, occupancy))}</div>`
       }
     </section>`;
   return page(`דונה דום — ${building.name}`, body);
+}
+
+// ------------------------------------------------------------------------------------------------
+// Slice 2.6 — the root index, search, and the leases ending soon.
+// ------------------------------------------------------------------------------------------------
+
+/**
+ * **`GET /` stops being a redirect here** (1.11's carry).
+ *
+ * It was a 302 to `/estate` because `/estate` was the only screen in the system, and 1.11 said it
+ * would stop the week a second one existed. Three do now.
+ *
+ * **It runs no query**, which is the decision worth stating. A portfolio headline belongs on the
+ * buildings list, where the numbers are already being read for the cards; an index that ran three
+ * portfolio queries to render three links would be a worse root than the redirect was. It moves to
+ * the composition root the week a second *module* has a screen — week 5's staff console — because
+ * an index of screens is not estate's fact. Today all three are estate's, so it lives here.
+ */
+export function renderIndexPage(): string {
+  const body = h`
+    <div>
+      <h1>דונה דום · ניהול נכסים</h1>
+      <p class="lede">נתוני הדגמה. אין עדיין הזדהות — המסכים אינם מציגים שמות או מספרי טלפון.</p>
+    </div>
+    <div class="index-list">
+      <article class="row-card">
+        ${marker('ACTIVE')}
+        <a class="card-link" href="/estate">
+          <p class="card-title"><span>בניינים</span></p>
+          <p class="lede">כל הבניינים, מספר היחידות בכל אחד וכמה מהן מאוכלסות היום.</p>
+        </a>
+      </article>
+      <article class="row-card">
+        ${marker('ACTIVE')}
+        <a class="card-link" href="/estate/expiring">
+          <p class="card-title"><span>חוזים מסתיימים</span></p>
+          <p class="lede">כל החוזים בתיק המסתיימים ב־60 הימים הקרובים, לפי תאריך.</p>
+        </a>
+      </article>
+      <article class="row-card">
+        ${marker('ACTIVE')}
+        <a class="card-link" href="/estate/search">
+          <p class="card-title"><span>חיפוש</span></p>
+          <p class="lede">כתובת, שם בניין או מספר דירה, על פני כל התיק.</p>
+        </a>
+      </article>
+    </div>`;
+  return page('דונה דום — ניהול נכסים', body);
+}
+
+function unitHits(results: SearchResults): Html {
+  return h`<div class="row-list">
+    ${results.units.map(
+      (unit) => h`<article class="row-card">
+        <a class="card-link" href="/estate/buildings/${unit.building_id}">
+          <p class="card-title">
+            <span class="unit-no">דירה ${ltr(unit.unit_number)}</span>
+            <span>${unit.building_name}</span>
+          </p>
+          <p class="lede">${unit.address_line}, ${unit.city}</p>
+        </a>
+      </article>`,
+    )}
+  </div>`;
+}
+
+/**
+ * **Search across the portfolio — buildings and units, and deliberately not people.**
+ *
+ * A search box that reached `party` would put a real person behind a route with no session, the week
+ * the register arrives. An address is not personal data and a name is; the name search is week 5's,
+ * behind the login that makes it lawful to show.
+ */
+export function renderSearchPage(term: string, results: SearchResults): string {
+  const found = results.buildings.length + results.units.length;
+  const body = h`
+    <div>
+      <h1>חיפוש</h1>
+      ${
+        term === ''
+          ? h`<p class="lede">חפשו לפי כתובת, שם בניין או מספר דירה.</p>`
+          : h`<p class="lede">${ltr(found)} תוצאות עבור «${term}».</p>`
+      }
+      ${
+        results.truncated
+          ? h`<p class="lede">מוצגות ${ltr(SEARCH_LIMIT)} התוצאות הראשונות בלבד. צמצמו את החיפוש.</p>`
+          : h``
+      }
+    </div>
+    ${
+      term !== '' && found === 0
+        ? h`<p class="empty-state">לא נמצאו בניינים או דירות התואמים את החיפוש.</p>`
+        : h``
+    }
+    ${
+      results.buildings.length === 0
+        ? h``
+        : h`<section>
+            <h2>בניינים · ${ltr(results.buildings.length)}</h2>
+            <div class="row-list">
+              ${results.buildings.map(
+                (building) => h`<article class="row-card">
+                  ${marker(building.status)}
+                  <a class="card-link" href="/estate/buildings/${building.building_id}">
+                    <p class="card-title">
+                      <span>${building.name}</span>
+                      <span class="chip">${label(BUILDING_STATUS, building.status)}</span>
+                    </p>
+                    <p class="lede">${building.address_line}, ${building.city}</p>
+                  </a>
+                </article>`,
+              )}
+            </div>
+          </section>`
+    }
+    ${
+      results.units.length === 0
+        ? h``
+        : h`<section>
+            <h2>דירות · ${ltr(results.units.length)}</h2>
+            ${unitHits(results)}
+          </section>`
+    }`;
+  return page('דונה דום — חיפוש', body);
+}
+
+/**
+ * **Q5 — every lease in the portfolio ending inside the window, one indexed query.**
+ *
+ * It shows a unit, a building and a date, and no party at all: which lease ends when is an
+ * operations fact, and who is on it is not this screen's to say before week 5.
+ */
+export function renderExpiringPage(
+  leases: ExpiringLease[],
+  days: number,
+): string {
+  const body = h`
+    <div>
+      <h1>חוזים מסתיימים</h1>
+      <p class="lede">
+        ${ltr(leases.length)} חוזים פעילים מסתיימים ב־${ltr(days)} הימים הקרובים, על פני כל התיק.
+      </p>
+    </div>
+    ${
+      leases.length === 0
+        ? h`<p class="empty-state">אין חוזים המסתיימים בטווח הזה.</p>`
+        : h`<div class="row-list">
+            ${leases.map(
+              (lease) => h`<article class="row-card">
+                ${marker(lease.days_left <= 14 ? 'ALERT' : 'ACTIVE')}
+                <a class="card-link" href="/estate/buildings/${lease.building_id}">
+                  <p class="card-title">
+                    <span class="unit-no">דירה ${ltr(lease.unit_number)}</span>
+                    <span>${lease.building_name}</span>
+                    <span class="chip">${
+                      lease.days_left === 0
+                        ? h`מסתיים היום`
+                        : h`בעוד ${ltr(lease.days_left)} ימים`
+                    }</span>
+                  </p>
+                  <p class="lede lease-when">
+                    <span>${lease.city}</span>
+                    <span>מסתיים ${ltr(lease.end_date)}</span>
+                  </p>
+                </a>
+              </article>`,
+            )}
+          </div>`
+    }`;
+  return page('דונה דום — חוזים מסתיימים', body);
 }

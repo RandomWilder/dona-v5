@@ -65,13 +65,17 @@ const BUILDING_COLUMNS = `
     WHERE s.building_id = b.building_id) AS unit_count,
   (SELECT count(*) FROM space s WHERE s.building_id = b.building_id) AS space_count`;
 
+// Named rather than inlined, from 2.6: `npm run measure:scale` explains and times **these strings**
+// and not a second copy of them typed into a script. A measurement of a query the screen does not
+// run is worth nothing, and the way that happens is a copy that drifts.
+export const LIST_BUILDINGS_SQL = `
+  SELECT ${BUILDING_COLUMNS}
+  FROM building b
+  LEFT JOIN project p ON p.project_id = b.project_id
+  ORDER BY b.city, b.address_line`;
+
 export async function listBuildings(db: Queryable): Promise<BuildingSummary[]> {
-  const result = await db.query<BuildingSummary>(
-    `SELECT ${BUILDING_COLUMNS}
-     FROM building b
-     LEFT JOIN project p ON p.project_id = b.project_id
-     ORDER BY b.city, b.address_line`,
-  );
+  const result = await db.query<BuildingSummary>(LIST_BUILDINGS_SQL);
   return result.rows;
 }
 
@@ -127,3 +131,187 @@ export async function getBuilding(
 
   return { building, kinds: kinds.rows, units: units.rows };
 }
+
+// ------------------------------------------------------------------------------------------------
+// Slice 2.6 — the portfolio-scale reads.
+// ------------------------------------------------------------------------------------------------
+
+export interface UnitHit {
+  unit_id: string;
+  unit_number: string;
+  building_id: string;
+  building_name: string;
+  address_line: string;
+  city: string;
+}
+
+export interface SearchResults {
+  buildings: BuildingSummary[];
+  units: UnitHit[];
+  /** True when either list was cut off by the limit, so the screen can say so rather than lie. */
+  truncated: boolean;
+}
+
+/** How many rows a search may return before the screen stops being a list and starts being a dump. */
+export const SEARCH_LIMIT = 60;
+
+// `%` and `_` are wildcards, and a search term is user input: unescaped, a lone `%` matches the whole
+// portfolio and `%%%` scans it three times. Validate at the edge (AGENTS.md) means here, because the
+// edge of a LIKE is the pattern and not the parameter — the value is bound safely and still means
+// something the user did not type. `\` is the escape and is escaped first, or it would escape the
+// escapes.
+function likeContains(term: string): string {
+  return `%${term.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+}
+
+const SEARCH_BUILDINGS_SQL = `
+  SELECT ${BUILDING_COLUMNS}
+  FROM building b
+  LEFT JOIN project p ON p.project_id = b.project_id
+  WHERE b.name ILIKE $1 ESCAPE '\\'
+     OR b.address_line ILIKE $1 ESCAPE '\\'
+     OR b.city ILIKE $1 ESCAPE '\\'
+  ORDER BY b.city, b.address_line
+  LIMIT $2`;
+
+const SEARCH_UNITS_SQL = `
+  SELECT u.unit_id,
+         u.unit_number,
+         b.building_id,
+         b.name AS building_name,
+         b.address_line,
+         b.city
+  FROM unit u
+  JOIN space s ON s.space_id = u.unit_id
+  JOIN building b ON b.building_id = s.building_id
+  WHERE u.unit_number ILIKE $1 ESCAPE '\\'
+     OR b.name ILIKE $1 ESCAPE '\\'
+     OR b.address_line ILIKE $1 ESCAPE '\\'
+  ORDER BY b.city, b.address_line,
+           NULLIF(regexp_replace(u.unit_number, '\\D', '', 'g'), '')::int NULLS LAST,
+           u.unit_number
+  LIMIT $2`;
+
+/**
+ * **Search across the portfolio — buildings and units, and deliberately not people.**
+ *
+ * `/estate` has no session until week 5 (SPEC-estate.md), so a search that reached `party` would put
+ * a real person behind an unauthenticated route the week the register arrives. Addresses and unit
+ * numbers are not personal data; a name and a number are, and they are week 5's to expose.
+ *
+ * **A city matches buildings and not units, deliberately.** A city holds hundreds of apartments and
+ * sixty arbitrary ones is a worse answer than the buildings that contain them, which are the way in.
+ * A building name or an address matches both, because those narrow to one building.
+ */
+export async function searchEstate(
+  db: Queryable,
+  term: string,
+): Promise<SearchResults> {
+  const pattern = likeContains(term);
+  const buildings = await db.query<BuildingSummary>(SEARCH_BUILDINGS_SQL, [
+    pattern,
+    SEARCH_LIMIT + 1,
+  ]);
+  const units = await db.query<UnitHit>(SEARCH_UNITS_SQL, [
+    pattern,
+    SEARCH_LIMIT + 1,
+  ]);
+  // One row past the limit is how a list learns it was cut off without a second count(*) over the
+  // same predicate — the count would be a whole-table read of the thing we just decided not to read.
+  const truncated =
+    buildings.rows.length > SEARCH_LIMIT || units.rows.length > SEARCH_LIMIT;
+  return {
+    buildings: buildings.rows.slice(0, SEARCH_LIMIT),
+    units: units.rows.slice(0, SEARCH_LIMIT),
+    truncated,
+  };
+}
+
+export interface ExpiringLease {
+  tenancy_id: string;
+  unit_id: string;
+  unit_number: string;
+  building_id: string;
+  building_name: string;
+  city: string;
+  end_date: string;
+  days_left: number;
+}
+
+/** The window Q5 asks about. Sixty days is the workbook's; it is a parameter so a test can move it. */
+export const EXPIRING_WINDOW_DAYS = 60;
+
+const EXPIRING_LEASES_SQL = `
+  SELECT t.tenancy_id,
+         u.unit_id,
+         u.unit_number,
+         b.building_id,
+         b.name AS building_name,
+         b.city,
+         t.end_date::text AS end_date,
+         (t.end_date - $1::date) AS days_left
+  FROM tenancy t
+  JOIN unit u ON u.unit_id = t.unit_id
+  JOIN space s ON s.space_id = u.unit_id
+  JOIN building b ON b.building_id = s.building_id
+  WHERE t.status = 'ACTIVE'
+    AND t.end_date >= $1::date
+    AND t.end_date <= $1::date + $2::int
+  ORDER BY t.end_date, b.city, b.address_line, u.unit_number`;
+
+/**
+ * **Q5 — every lease in the portfolio ending inside the window.** One query, whole estate.
+ *
+ * This asks **when a lease ends**, which is not the same question as whether a tenancy counts today,
+ * and that distinction is why the query lives here rather than in `src/scope/`. The isolation join's
+ * tenancy-active predicate decides who may be told what; `end_date` inside a window decides what an
+ * operations team does next week. Guard two protects the first and has nothing to say about the
+ * second — and the moment this query needed "active on a given day" it would have to ask
+ * `src/scope/` for it, which is the guard working rather than a line to walk up to.
+ *
+ * `today` is a parameter and never `CURRENT_DATE`: SPEC.md's clock rule, and a screen that changes
+ * its answer at midnight is not a screen a test can pin.
+ */
+export async function listExpiringLeases(
+  db: Queryable,
+  today: Date,
+  days: number = EXPIRING_WINDOW_DAYS,
+): Promise<ExpiringLease[]> {
+  const result = await db.query<ExpiringLease>(EXPIRING_LEASES_SQL, [
+    today.toISOString().slice(0, 10),
+    days,
+  ]);
+  return result.rows;
+}
+
+/**
+ * How many of these units sit in each building.
+ *
+ * The other half of the occupancy total on the buildings list: `src/scope/` says **which** units are
+ * let today, because that is a decision about when a tenancy counts, and this says **where** they
+ * are, because that is estate's own structure. Neither module has to learn the other's rule, and the
+ * screen costs two queries instead of one per building.
+ */
+export async function countUnitsByBuilding(
+  db: Queryable,
+  unitIds: readonly string[],
+): Promise<Map<string, number>> {
+  if (unitIds.length === 0) return new Map();
+  const result = await db.query<{ building_id: string; n: string }>(
+    `SELECT s.building_id, count(*)::text AS n
+     FROM unit u
+     JOIN space s ON s.space_id = u.unit_id
+     WHERE u.unit_id = ANY($1)
+     GROUP BY s.building_id`,
+    [[...unitIds]],
+  );
+  return new Map(result.rows.map((row) => [row.building_id, Number(row.n)]));
+}
+
+/** The strings `npm run measure:scale` explains, so the instrument reads what the screen runs. */
+export const MEASURED_QUERIES = {
+  'estate · buildings list': LIST_BUILDINGS_SQL,
+  'estate · search, buildings': SEARCH_BUILDINGS_SQL,
+  'estate · search, units': SEARCH_UNITS_SQL,
+  'estate · Q5, leases ending inside the window': EXPIRING_LEASES_SQL,
+};

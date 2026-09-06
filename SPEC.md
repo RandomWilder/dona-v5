@@ -219,8 +219,9 @@ migration, the E1–E4 spine landed at slice 1.9, `0005_estate_natural_keys.sql`
 keys an importer needs to be run twice (1.11), `0006_parties.sql` is E5–E6, the first tables in
 this system with a person in them (2.1), `0007_tenancy.sql` is E7–E8 plus the `terms_profile`
 its NOT NULL foreign key needs a target for (2.2), `0008_occupancy_view.sql` is R6's current-occupancy
-view (2.3), and `0009_import_natural_keys.sql` gives `party`, `party_contact` and `terms_profile`
-the keys the register importer needs to be run twice (2.4). `src/estate/`, `src/scope/`, `src/parties/`,
+view (2.3), `0009_import_natural_keys.sql` gives `party`, `party_contact` and `terms_profile`
+the keys the register importer needs to be run twice (2.4), and `0010_scale_indexes.sql` carries the
+one index 2.6 measured its way to. `src/estate/`, `src/scope/`, `src/parties/`,
 `src/tenancy/` and `src/register/` are the module directories: estate holds the schema, the importer,
 the read model and the first two screens, scope the isolation join and its contract, landed early at
 1.7 with no tables underneath it, parties and tenancy their schemas plus the write commands the
@@ -234,12 +235,25 @@ also stopped running looks identical in a green summary. Every other module spec
 build week ([tasks/roadmap.md](tasks/roadmap.md)), and a stub gaining content is the signal its build
 started.
 
-**The application serves screens from 1.11**: `/estate` and `/estate/buildings/:id`, server-rendered
-Hebrew RTL off `/ui/tokens.css`, with no client JavaScript and — until staff auth lands in week 5 —
-**no authentication**, on fixture data with no personal data in it. `tests/ui/tokens.test.ts` renders
-every screen and fails on a hex colour, a face, a physical side or a `<script>`. The Shoham fixture
-that fills them is ours and designed for coverage, not Shoham's real addresses; real data arrives
-through the same importer at week 2.
+**The application serves screens from 1.11 and five routes from 2.6**: an index at `/`, the buildings
+list, one building, `/estate/search` and `/estate/expiring` — server-rendered Hebrew RTL off
+`/ui/tokens.css`, with no client JavaScript and — until staff auth lands in week 5 — **no
+authentication**. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
+physical side or a `<script>`, and from 2.6 also on a phone number or an E.164 prefix: what an
+unauthenticated screen may say about a household is **a state and a count, never a name**, so the
+occupancy chip is derived on every load and search never reaches `party`. The fixtures that fill the
+screens are ours and designed for coverage — the Shoham plan from 1.11 and, from 2.6, a **generated
+register at 1,500 units** loaded through the real importer (`npm run seed:register`), which is where
+the week-2 query timings come from. Real data arrives through the same importer at the pilot-
+preparation step of the method.
+
+**Two decisions were held for a row count and 2.6 settled both, one in each direction.**
+`tenancy (end_date) WHERE status = 'ACTIVE'` was added, because Q5's scan grows with every lease ever
+signed while the index grows with the answer. A btree on `party_contact (channel, value)` was **not**
+added: it is three times faster than the exclusion constraint's GiST index at plain equality, and
+with both present the planner chose GiST every time — an index the planner will not choose is a write
+cost with a comment. Both numbers are in `tasks/evidence/2.6.md`; neither is asserted anywhere,
+because a timing is weather. `npm run measure:scale` is the instrument, beside `npm run measure`.
 
 **The tier-1 corpus is in [docs/corpus/](docs/corpus/) from 1.12** — six Hebrew specimens, 71
 clauses, and the golden set is graded against them rather than against a parallel copy:
@@ -274,7 +288,8 @@ grep guards 1.7 · the evals harness 1.8 · the estate schema 1.9 · the proved 
 estate importer, the fixture and the first screens 1.11 · the corpus and its controls 1.12 · Party and
 PartyContact 2.1 · Tenancy, TenancyParty and the guarantor constraint 2.2 · the isolation join
 finished, on a view, with its audit line and E.164 at the edge 2.3 · the register importer, its three
-natural keys and its per-row rejects 2.4.**
+natural keys and its per-row rejects 2.4 · the portfolio-scale surface, the generated register and
+the two index decisions 2.6.**
 Production exists and has been released to — `v0.1.0`–`v0.1.2`, rolled back and rolled forward on
 purpose — and is then **parked until week 12**: the Cloud SQL instance is stopped and the service
 scaled to zero, so `dona-prod` answers 503 by design and staging is the delivered artifact every

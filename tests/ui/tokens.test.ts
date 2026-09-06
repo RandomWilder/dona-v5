@@ -16,10 +16,16 @@ import { describe, it } from 'node:test';
 import type {
   BuildingDetail,
   BuildingSummary,
+  ExpiringLease,
+  SearchResults,
+  UnitHit,
 } from '../../src/estate/contract.ts';
 import {
   renderBuildingPage,
   renderBuildingsPage,
+  renderExpiringPage,
+  renderIndexPage,
+  renderSearchPage,
 } from '../../src/estate/contract.ts';
 
 const building: BuildingSummary = {
@@ -70,10 +76,73 @@ const detail: BuildingDetail = {
   ],
 };
 
+// Slice 2.6's screens. **The occupancy chip has to be asserted in both states**: a card that is let
+// and a card that is not are different markup, and the guard reads bytes rather than functions.
+const occupancy = new Map([['22222222-2222-4222-8222-222222222222', 2]]);
+
+const hit: UnitHit = {
+  unit_id: '44444444-4444-4444-8444-444444444444',
+  unit_number: '7',
+  building_id: building.building_id,
+  building_name: building.name,
+  address_line: building.address_line,
+  city: building.city,
+};
+
+const results: SearchResults = {
+  buildings: [building],
+  units: [hit],
+  truncated: true,
+};
+
+const expiring: ExpiringLease[] = [
+  {
+    tenancy_id: '55555555-5555-4555-8555-555555555555',
+    unit_id: hit.unit_id,
+    unit_number: '7',
+    building_id: building.building_id,
+    building_name: building.name,
+    city: building.city,
+    end_date: '2026-09-20',
+    days_left: 14,
+  },
+  {
+    tenancy_id: '66666666-6666-4666-8666-666666666666',
+    unit_id: '77777777-7777-4777-8777-777777777777',
+    unit_number: '12A',
+    building_id: building.building_id,
+    building_name: building.name,
+    city: building.city,
+    end_date: '2026-11-01',
+    days_left: 56,
+  },
+];
+
 const SCREENS: Array<[string, () => string]> = [
-  ['estate · buildings', () => renderBuildingsPage([building])],
-  ['estate · buildings, empty', () => renderBuildingsPage([])],
-  ['estate · one building', () => renderBuildingPage(detail)],
+  ['estate · index', () => renderIndexPage()],
+  [
+    'estate · buildings',
+    () =>
+      renderBuildingsPage([building], new Map([[building.building_id, 40]])),
+  ],
+  ['estate · buildings, empty', () => renderBuildingsPage([], new Map())],
+  ['estate · one building', () => renderBuildingPage(detail, occupancy)],
+  [
+    'estate · one building, nothing let',
+    () => renderBuildingPage(detail, new Map()),
+  ],
+  ['estate · search', () => renderSearchPage('רקפת', results)],
+  [
+    'estate · search, nothing found',
+    () =>
+      renderSearchPage('זזז', { buildings: [], units: [], truncated: false }),
+  ],
+  [
+    'estate · search, no term',
+    () => renderSearchPage('', { buildings: [], units: [], truncated: false }),
+  ],
+  ['estate · leases ending', () => renderExpiringPage(expiring, 60)],
+  ['estate · leases ending, none', () => renderExpiringPage([], 60)],
 ];
 
 describe('shared UI tokens', () => {
@@ -121,9 +190,33 @@ describe('shared UI tokens', () => {
       name: '<script>alert(1)</script>',
       city: 'שוהם & סביבה',
     };
-    const html = renderBuildingsPage([hostile]);
+    const html = renderBuildingsPage([hostile], new Map());
     assert.doesNotMatch(html, /<script/);
     assert.match(html, /&lt;script&gt;/);
     assert.match(html, /שוהם &amp; סביבה/);
+  });
+
+  it('escapes the search term, which is the one value a visitor chooses', () => {
+    // Every other value on these screens came out of the database. This one came off the query
+    // string, so it is the first genuinely hostile input the views have ever been handed.
+    const html = renderSearchPage('<img src=x onerror=alert(1)>', {
+      buildings: [],
+      units: [],
+      truncated: false,
+    });
+    assert.doesNotMatch(html, /<img/);
+    assert.match(html, /&lt;img/);
+  });
+
+  it('shows a state and a count, and never a person', () => {
+    // The rule these screens are built to keep until week 5 gives them a session: an
+    // unauthenticated route may say a unit is let and by how many, and may not say by whom. The
+    // views cannot break it by accident, because nothing ever hands them a name — this asserts the
+    // property from the outside anyway, because that is what a rule is for.
+    for (const [name, render] of SCREENS) {
+      const html = render();
+      assert.doesNotMatch(html, /05\d[- ]?\d/, name);
+      assert.doesNotMatch(html, /\+972/, name);
+    }
   });
 });

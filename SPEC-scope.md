@@ -46,7 +46,7 @@ leaving it to intention.
 
 **Anything that wants occupancy asks this module for it.** A screen reading the view directly would
 have to write the day predicate, which puts it in a second file and fails guard two. That is the
-guard working rather than an inconvenience: slice 2.6's occupancy chip calls `resolvePartiesInUnit`.
+guard working rather than an inconvenience.
 
 ## The two questions, one query each
 
@@ -61,6 +61,31 @@ each*. Two of them are this module's.
   today)`. The isolation join, and the answer is frequently *none*, which is the point.
 
 Both read `occupancy` and neither restates the join.
+
+### Q1 asked of a page — `resolveOccupiedUnits`, slice 2.6
+
+`tasks/todo.md` said the occupancy chip would call `resolvePartiesInUnit`, and at portfolio scale
+that is the wrong call: the unit grid asks it of every card, so a hundred-unit building is a hundred
+round trips **and a hundred audit rows for one page load**. An access log in which one browse is
+indistinguishable from a hundred lookups is worse than useless in the review it is kept for. Measured
+on a sixty-unit building: **29.68 ms and sixty audit rows the old way, 0.94 ms and one the new one.**
+
+`resolveOccupiedUnits(db, unitIds, today)` takes the units a caller is about to draw, or `null` for
+the whole portfolio, and returns which of them are let and by how many residents. One query, one
+audit line, and the tenancy-active predicate stays in this file where guard two can see it.
+
+**It returns no name and no number**, and that is a rule and not an economy. `/estate` has no session
+until week 5, so what an unauthenticated screen may show about a household is a *state* and a
+*count*; `resolvePartiesInUnit` remains the call for the unit screen, where the people are the
+subject and the session will exist.
+
+**A guarantor is not an occupant.** They are on the lease and not in the apartment (foundation rule
+7, and E8's own note), so they are excluded from the count while the tenancy still counts as let —
+the same reading Q1 gives them from the other side, where they are shown and marked unreachable.
+
+**`null` is the administrator's question, not a widened tenant scope.** The buildings list asks how
+much of the estate is let today; the tenant-facing question is Q2, which takes a phone number and
+frequently answers with nothing.
 
 ## The audit line records what was reached, not what was asked
 

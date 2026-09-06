@@ -21,16 +21,26 @@
 // `plan()` alone.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { newId } from '../kernel/ids.ts';
 import {
   inRolledBackTransaction,
   migratedPoolOrNull,
   skipReason,
 } from '../kernel/pg-support.ts';
 import type { BuildingSummary, EstatePlan } from './contract.ts';
-import { getBuilding, importEstate, listBuildings } from './contract.ts';
+import {
+  countUnitsByBuilding,
+  getBuilding,
+  importEstate,
+  listBuildings,
+  listExpiringLeases,
+  searchEstate,
+} from './contract.ts';
 import { shohamPlan } from './fixtures/shoham.ts';
 
 const CITY = 'שוהם — בדיקת מודל קריאה';
+/** Unique to this suite, so a search for it cannot be answered by another suite's rows. */
+const BUILDING = 'בניין בדיקת מודל קריאה';
 
 /** The Shoham fixture at a city of its own, so nothing else can answer for it. */
 function plan(): EstatePlan {
@@ -38,6 +48,7 @@ function plan(): EstatePlan {
   built.projects[0].projectCode = 'SHM-READ-TEST';
   built.buildings[0].projectCode = 'SHM-READ-TEST';
   built.buildings[0].city = CITY;
+  built.buildings[0].name = BUILDING;
   return built;
 }
 
@@ -179,6 +190,129 @@ describe('estate · the read model', () => {
               error.code === 'not_found' &&
               error.message === 'building not found',
           );
+        });
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+});
+
+// Slice 2.6. The portfolio-scale reads, and every case scoped to this suite's own city for 1.11's
+// reason: these queries are whole-portfolio by design, so a case that asserted on a count would be
+// asserting on whatever else is in the database — a developer's seed, a generated register, another
+// suite's rows. `find` and `filter`, never `length` of the whole answer.
+describe('estate · the portfolio-scale reads', () => {
+  it('searches, lists what is ending, and counts by building', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await t.test(
+        'finds a building by its name, and a city narrows to buildings',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            await importEstate(db, plan());
+            const byName = await searchEstate(db, BUILDING);
+            assert.ok(
+              byName.buildings.some((building) => building.city === CITY),
+              'the building is in the buildings half',
+            );
+            assert.ok(
+              byName.units.some((unit) => unit.city === CITY),
+              'its units are in the units half',
+            );
+            // The asymmetry the read model states, asserted rather than assumed: a city holds
+            // hundreds of apartments, and sixty arbitrary ones is a worse answer than the buildings
+            // that contain them.
+            const byCity = await searchEstate(db, CITY);
+            assert.ok(
+              byCity.buildings.some((building) => building.city === CITY),
+            );
+            assert.equal(
+              byCity.units.filter((unit) => unit.city === CITY).length,
+              0,
+            );
+          });
+        },
+      );
+
+      await t.test('treats a wildcard as text, not as a wildcard', async () => {
+        await inRolledBackTransaction(pool, async (db) => {
+          await importEstate(db, plan());
+          // The whole of the escaping decision, asserted rather than reasoned about: unescaped, `%`
+          // is every building in the portfolio and `_` is every one-character name. A search box is
+          // user input and a bound parameter is not the same thing as a safe pattern.
+          const wild = await searchEstate(db, '%');
+          assert.equal(wild.buildings.length, 0, 'a lone % matched rows');
+          assert.equal(wild.units.length, 0);
+          const underscore = await searchEstate(db, '_');
+          assert.equal(underscore.buildings.length, 0);
+        });
+      });
+
+      await t.test(
+        'lists a lease ending inside the window and not one outside it',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            await importEstate(db, plan());
+            const unit = await db.query<{ unit_id: string }>(
+              `SELECT u.unit_id FROM unit u
+               JOIN space s ON s.space_id = u.unit_id
+               JOIN building b ON b.building_id = s.building_id
+              WHERE b.city = $1 ORDER BY u.unit_number LIMIT 2`,
+              [CITY],
+            );
+            const [soon, later] = unit.rows;
+            assert.ok(soon && later);
+            const profile = await db.query<{ terms_profile_id: string }>(
+              `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)
+             ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+             RETURNING terms_profile_id`,
+              [
+                '88888888-8888-4888-8888-888888888888',
+                'נספח — בדיקת מודל קריאה',
+              ],
+            );
+            const today = new Date('2026-09-06T00:00:00Z');
+            for (const [unitId, end] of [
+              [soon.unit_id, '2026-10-01'],
+              [later.unit_id, '2027-10-01'],
+            ] as const) {
+              await db.query(
+                `INSERT INTO tenancy (tenancy_id, unit_id, start_date, end_date, status,
+                                    terms_profile_id)
+               VALUES ($1, $2, '2025-01-01', $3, 'ACTIVE', $4)`,
+                [newId(), unitId, end, profile.rows[0]?.terms_profile_id],
+              );
+            }
+            const ending = await listExpiringLeases(db, today);
+            const mine = ending.filter((lease) => lease.city === CITY);
+            assert.deepEqual(
+              mine.map((lease) => [
+                lease.unit_id,
+                lease.end_date,
+                lease.days_left,
+              ]),
+              [[soon.unit_id, '2026-10-01', 25]],
+            );
+          });
+        },
+      );
+
+      await t.test('counts the units it was given, by building', async () => {
+        await inRolledBackTransaction(pool, async (db) => {
+          await importEstate(db, plan());
+          const summary = ours(await listBuildings(db));
+          const detail = await getBuilding(db, summary.building_id);
+          const some = detail.units.slice(0, 5).map((unit) => unit.unit_id);
+          const counted = await countUnitsByBuilding(db, some);
+          assert.equal(counted.get(summary.building_id), 5);
+          // The empty case is the buildings list on a morning when nothing is let, and an `= ANY`
+          // over an empty array is a query worth not running.
+          assert.equal((await countUnitsByBuilding(db, [])).size, 0);
         });
       });
     } finally {
