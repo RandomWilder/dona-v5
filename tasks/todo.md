@@ -109,7 +109,7 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       `party_contact.value`, and guard two fired for the first time on work that was not a
       violation and was made to say what it means. 259 tests on every merge, up from 238.
 
-- [ ] **2.2 — Tenancy, TenancyParty, and the guarantor constraint.** E7 and E8. `TenancyParty.role`
+- [x] **2.2 — Tenancy, TenancyParty, and the guarantor constraint.** E7 and E8. `TenancyParty.role`
       ∈ tenant · co_tenant · guarantor · occupant, and **`is_service_contact` is forced false for
       `GUARANTOR` by a database constraint** — no toggle, no import path, no agent override.
       **Done when:** the insert is *rejected*, not defaulted politely.
@@ -125,6 +125,25 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       becomes unreachable the moment this migration lands. **Confirm it by the diagnostic lines
       disappearing and the case count staying the same** — a case that stopped reporting pending and
       also stopped running looks identical in a green summary.
+      **Closed 2026-09-06** ([evidence](evidence/2.2.md)). `0007_tenancy.sql` — E7 and E8's 12
+      columns, plus a minimal `terms_profile` because a NOT NULL foreign key needs a target, which is
+      E1 `project`'s move at 1.9. **All seven policy cases now assert**: zero pending diagnostics,
+      and the count still the same 26 as the day before, measured before this slice added its own four
+      cases. `tests/policy/relations.test.ts` now fails the build if one ever takes the pending branch
+      again, rather than a human having to read diagnostics. Policy case
+      3 written red first against the real constraint dropped from the database — the insert was
+      **accepted and stored**. Eleven rejections proved red against the same DDL with only their own
+      constraint removed. Two beyond the guarantor rule were decided here rather than deferred: the
+      workbook's *"no overlap allowed on one unit"* as an **exclusion constraint partial on
+      `ACTIVE`** (a `TERMINATED_EARLY` lease keeps its contractual `end_date`, so a blanket one would
+      reject correct history), and the natural key `(unit_id, start_date)`, moved up from 2.4 because
+      1.11 measured what shipping a spine without one costs. **Two guards fired on this slice's own
+      comments and neither was worked around** — guard one on the forbidden column name written in
+      prose, guard two on a comment quoting the tenancy-active predicate, which is the identical
+      mistake 2.1's evidence recorded, caught again one slice later. **The pending branch was masking
+      a broken fixture**: `seedUnit` created a second building at the same address, which 1.11's
+      `building_address_unique` has rejected since week 1 — invisible while the first `seedOccupancy`
+      aborted the transaction on 42P01. 279 tests on every merge, up from 259.
 
 - [ ] **2.3 — `src/scope/` — the isolation join, written once.** The five hops, in SQL, before any
       model call. The current-occupancy VIEW (R6) alongside it: `today ∈ [start_date, end_date]`,
@@ -170,6 +189,13 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       table count is moved by another suite, another environment or a developer's own `npm run seed`.
       Parties and tenancies join it on the same terms; a count that is not about *this* import is not
       a fact about it.
+      **Owed by 2.2 — every imported lease has to name a `terms_profile`, and it is NOT NULL.**
+      Which maintenance annex governs a lease is what the responsibility decision keys on, so the
+      column may not be nullable and quietly absent. `terms_profile` also has **no natural key**: the
+      importer needs one to look a profile up idempotently, and choosing it is the same question as
+      *how many profiles are in force*, which is week 5's. Decide the key here against the export;
+      if the export carries no profile at all, that is a question for the client, raised now rather
+      than discovered at week 6 with a matrix that has no input.
       **Owed by 2.1 — `is_primary` carries no uniqueness.** "At most one primary contact per party
       per channel" is a plausible rule the workbook does not state; as a partial unique index it
       would fail an import that touches two rows in the wrong order, on a rule nobody asked for.
@@ -183,6 +209,13 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       **Verify:** the ten spot-checks, listed individually in the evidence file. · **M**
       **Blocked on F3.** See *The declared demo kind and F3* above. **Closes open question 3** in
       [plan.md](plan.md) — how much of month one depends on the ERP.
+      **Owed by 2.2 — the overlap constraint will reject rows, and the count is a fact about the
+      client's data.** `one_active_tenancy_per_unit` refuses two ACTIVE tenancies overlapping on one
+      unit, which a register with sloppy end dates will contain. That is the intended direction — a
+      reject with a line number rather than two households in one apartment — but the number of
+      rejects is measured and recorded here, not discovered on Wednesday. The same applies to
+      `(unit_id, start_date)`: two leases on one unit starting the same day are one lease typed
+      twice, and the import will say so.
       **This is the first slice in the project that puts real personal data in a database.** The
       controls that apply are not the tier-2 corpus's: staging's Cloud SQL, not the corpus bucket.
       Confirm before the first row lands that `national_id` is not in any screen's response shape and
@@ -203,6 +236,11 @@ is correct while prod is stopped and wrong from week 12, where [roadmap.md](road
       the miss is recorded in [../docs/from-v3.md](../docs/from-v3.md) and was fixed at 1.11. Any
       screen added here is asserted by it, and a physical side that slips through is an RTL bug found
       by a Hebrew speaker rather than by CI.
+      **Owed by 2.2 — `tenancy` has no index on `end_date`, and Q5 is the query that needs one.**
+      Left out deliberately at 2.2 on the same principle as the one below: an index is decided at
+      full row count with a timing in front of it. `tenancy_unit` and `tenancy_party (party_id)` do
+      exist, the latter because the composite primary key does not serve the isolation join's third
+      hop.
       **Owed by 2.1 — one index to measure rather than assume.** `party_contact` has no btree on
       `(channel, value)`; the exclusion constraint's **GiST** index covers that lookup and GiST is
       slower than btree at plain equality. It is the first hop of the isolation join and therefore
