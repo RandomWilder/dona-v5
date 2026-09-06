@@ -7,7 +7,7 @@ not repeated here. This module owns no entities: it composes four modules that d
 - **Owns:** the register file format, the reject contract, and the order the writes happen in.
 - **Depends on:** estate, parties, tenancy, scope — all four through their `contract.ts`, never an
   `internal/`.
-- **Built:** week 2, slice 2.4.
+- **Built:** week 2, slice 2.4; the generated register at volume, slice 2.6.
 
 ## Why this is a module of its own
 
@@ -165,11 +165,53 @@ fact about *this* import, which slice 1.11 shipped wrongly and CI caught within 
 - **No caller-supplied intent key.** The natural keys do the work. An idempotency key would make the
   *call* repeatable; the natural keys make the *data* convergent, which is the property a re-run
   needs.
-- **No batching, and no `COPY`.** A savepoint per row costs a round trip per row, and 2.6 is the
-  slice that measures this path at 1,500 units. Optimising it here would be a performance decision
-  taken without a timing in front of it, which is what 2.2 and 2.6 refuse to do about indexes.
+- **No batching, and no `COPY`. 2.6 measured it and kept it.** A savepoint per row costs a round
+  trip per row, which is what makes a rejected row a reject instead of a failed file. At 1,500 units
+  — 2,908 rows, nine upserts and two savepoint statements each, about 32,000 round trips — the whole
+  import takes **6.5 seconds, 2.2 ms a row**, and a second run of the same file takes 6.0 and creates
+  nothing. A register is loaded by a person who chose the file; six seconds is not a number worth
+  trading a line number for, and batching would coarsen the reject boundary to buy something nobody
+  is waiting on. Reopened if a register ever arrives that is an order of magnitude larger.
 - **No screen.** The register is loaded by a script. `src/estate/`'s two screens and 2.6's grid are
   the surface; this module has no route.
+
+## The generated register — `fixtures/generate.ts`, slice 2.6
+
+Volume and realness are different facts, and an index decision needs only the first. The real
+register is step 4 of the method ([SPEC-flows.md](SPEC-flows.md)) and 2.5 imports it; 2.6 needed
+1,500 units in these same twenty-two columns, through this same importer, so that the path under
+measurement is the path that ships.
+
+`generateRegister({ units, today, seed, cities, block })` returns the file and a summary of what is
+in it. **Same seed and same day, same bytes** — `today` is a parameter and never a clock reading
+(SPEC.md), and here it has a second job: "leases ending in the next 60 days" is a question about a
+day, so seed *and* day are what make a file reproducible. Two entry points, neither in any workflow:
+`npm run register:generate -- <units> <file.csv> [seed]` writes the artefact an administrator would
+be handed, and `npm run seed:register -- <units> [seed]` generates in memory for an environment that
+needs volume without a 600KB file in the image.
+
+**It is the nine-row fixture at volume, not fifteen hundred copies of one household.** Every case
+that breaks an importer is still in the file and each is counted in the summary: a recycled number,
+one person under two spellings of one ת.ז., a guarantor, a company whose name carries a quotation
+mark, a unit let twice, a lease that has not started, a building with no project, a split unit
+number, a missing area.
+
+**Zero rejects, by construction.** A generated register that loses rows measures the generator. How
+many rows a *real* register loses to `one_active_tenancy_per_unit` is a fact about the client's data,
+it is 2.5's to measure, and inventing a number for it here would be worse than not having one.
+
+**Every fixture in this module owns a block**, `058-Bxx-xxxx` / `07B…` / `51B…`: `2` is the nine-row
+fixture, `4` the generated register, `7` the generator's own suite. `node --test` runs files in
+parallel against one database, and two files sharing a block claim one contact value on overlapping
+days — which the exclusion constraint rejects and which two transactions deadlock over (2.4 met that
+as `40P01`).
+
+**`terms_profile.name` is part of that namespace, and 2.4 missed it.** The key is global — a profile
+is identified by its name and by nothing else — so a fixture naming a plausible annex collides with
+the register that eventually names the real one. Loading a generated register into the development
+database turned three suites red on `terms_profile_natural_key`, which is the same lesson 1.11
+learned about addresses and 2.4 about phone numbers, met a third time on the one global key nobody
+had thought of. Every fixture profile now carries the suffix its cities do.
 
 ## Open
 

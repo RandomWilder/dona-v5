@@ -566,12 +566,12 @@ describe('tenancy · a terms profile is identified by its name', () => {
         await inRolledBackTransaction(pool, async (db) => {
           await db.query(
             `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)`,
-            [newId(), 'נספח תחזוקה — תקן'],
+            [newId(), 'נספח תחזוקה — בדיקת סכימה'],
           );
           await rejects(db, UNIQUE_VIOLATION, () =>
             db.query(
               `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)`,
-              [newId(), 'נספח תחזוקה — תקן'],
+              [newId(), 'נספח תחזוקה — בדיקת סכימה'],
             ),
           );
         });
@@ -583,11 +583,11 @@ describe('tenancy · a terms profile is identified by its name', () => {
         await inRolledBackTransaction(pool, async (db) => {
           await db.query(
             `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)`,
-            [newId(), 'נספח תחזוקה — תקן'],
+            [newId(), 'נספח תחזוקה — בדיקת סכימה'],
           );
           await db.query(
             `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)`,
-            [newId(), 'נספח תחזוקה — מורחב'],
+            [newId(), 'נספח תחזוקה — בדיקת סכימה מורחב'],
           );
         });
       });

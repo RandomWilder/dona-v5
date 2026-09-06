@@ -137,10 +137,18 @@ by tripping the guard rather than by anticipating it.
   the caller 2.2 predicted. There is still no query on this module's contract: who is in a unit today
   is `src/scope/`'s answer and never this module's, which is foundation rule 1 expressed as a module
   boundary.
-- **No index on `end_date`.** Q5 — leases ending in the next 60 days across the whole portfolio — is
-  one indexed query at **2.6**, decided at full row count with a timing in front of it rather than
-  assumed at a few thousand rows. `tenancy_party (party_id)` does exist, because the composite
-  primary key `(tenancy_id, party_id)` does not serve the isolation join's third hop.
+- **An index on `end_date`, partial on `ACTIVE`, added at 2.6** — `tenancy_end_date_active` in
+  `0010_scale_indexes.sql`. 2.2 left it out deliberately, to be decided at full row count with a
+  timing in front of it, and 2.6 is the slice with the row count. Measured over 1,674 tenancies, on the tenancy
+  access alone, with the index dropped inside a rolled-back transaction: without it a sequential scan
+  of every tenancy the company has ever signed — 53 buffers, 1,530 rows discarded, 0.080–0.086 ms;
+  with it a bitmap index scan reading two index pages, 0.032–0.043 ms. Twice the speed is not the
+  argument — nothing here is slow yet — the shape is: the scan grows with the archive and the index
+  grows with the answer. **Partial on `ACTIVE`**, which is `one_active_tenancy_per_unit`'s
+  move and for the same reason: `ACTIVE` is exactly the set the question asks about, so the index
+  holds 144 rows of 1,674 and only an `ACTIVE` row pays for it on write.
+  `tenancy_party (party_id)` also exists, because the composite primary key `(tenancy_id, party_id)`
+  does not serve the isolation join's third hop.
 
 ## Open
 

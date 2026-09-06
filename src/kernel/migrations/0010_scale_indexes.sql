@@ -1,0 +1,72 @@
+-- Slice 2.6. One index, and the argument is the one that was not added.
+--
+-- 2.1 and 2.2 each left an index out on the same principle, stated both times on the record: **an
+-- index is decided at full row count with a timing in front of it, never at a few thousand rows on
+-- a hunch.** This is the slice with the row count -- 1,500 units, 1,674 tenancies, 2,908 parties on
+-- leases and 2,871 contacts, loaded through `npm run import:register` from a generated register --
+-- and `npm run measure:scale` is the instrument. Every number below is in tasks/evidence/2.6.md
+-- with the plans it came from; none of them is asserted anywhere, because a timing is weather
+-- (docs/pipeline.md §7 says the same about embedding distances).
+--
+-- DDL only, no backfill (SPEC.md).
+
+-- ------------------------------------------------------------------------------------------------
+-- tenancy (end_date) WHERE status = 'ACTIVE' -- 2.2's deferred index, and Q5's Done when.
+-- ------------------------------------------------------------------------------------------------
+--
+-- Q5 is "every lease in the portfolio ending in the next 60 days", and its acceptance bar is that it
+-- is **one indexed query**. Measured on the tenancy access alone at 1,674 tenancies, three runs each
+-- in one session, the index dropped inside a transaction that was rolled back:
+--
+--   without: Seq Scan on tenancy, 53 buffers, 1,530 rows discarded; 0.080-0.086 ms
+--   with:    Bitmap Index Scan, 2 buffers on the index and 51 on the heap; 0.032-0.043 ms
+--
+-- Whole-Q5 medians were 0.82 ms and 0.69 ms, and those two numbers are within this laptop's noise of
+-- each other -- which is the honest way to report them and the reason the isolated pair above is
+-- what the decision rests on.
+--
+-- **Twice the speed is not the argument either.** At this row count nothing here is slow, and if the
+-- number were the whole case the index would not be worth its write cost. The argument is the shape:
+-- the scan reads *every tenancy this company has ever signed* and a tenancy table only grows, while
+-- the index reads two pages to find the answer. Q5 is also the one query in this slice the planner
+-- cannot get right without help, and it does choose this index -- which is the half of the decision
+-- the other candidate below failed.
+--
+-- **Partial on ACTIVE**, which is `one_active_tenancy_per_unit`'s move at 2.2 and for the same
+-- reason: ACTIVE is exactly the set the question asks about. It indexes 144 of 1,674 rows here
+-- rather than all of them, so it is smaller to scan and only an ACTIVE row pays for it on write.
+CREATE INDEX IF NOT EXISTS tenancy_end_date_active
+  ON tenancy (end_date)
+  WHERE status = 'ACTIVE';
+
+-- ------------------------------------------------------------------------------------------------
+-- party_contact (channel, value) -- 2.1's deferred index. **Measured, and NOT added.**
+-- ------------------------------------------------------------------------------------------------
+--
+-- The reasoning 2.1 recorded was sound and the measurement agrees with it: the exclusion constraint
+-- `contact_value_resolves_to_one_party` is a **GiST** index on (channel, value, daterange), it is
+-- what answers the isolation join's first hop today, and GiST is slower than btree at plain
+-- equality. On this data, the same lookup, three values, one session:
+--
+--   GiST  (the constraint's index):  4-6 buffers, 0.031-0.062 ms
+--   btree (channel, value):          2-3 buffers, 0.009-0.017 ms
+--
+-- Roughly three times the time and twice the pages, on the first hop of the hottest query in the
+-- system once the agent is live. Which reads like a case for adding it, and is not, because of what
+-- happened when both indexes existed at once:
+--
+--   **the planner chose the GiST index every time.** Its estimated startup cost is lower
+--   (0.14 against 0.28) and its total is lower (8.16 against 8.30), so with both present Postgres
+--   never used the btree -- inside the join or standalone, warm or cold.
+--
+-- So the btree would be maintained on every insert into a table the register writes 2,871 rows into,
+-- and read by nothing. **An index the planner will not choose is not an optimisation, it is a write
+-- cost with a comment.** It is left out, and this is 2.1's question answered rather than deferred
+-- again: the gain is real, it is 0.04 ms per lookup today, and it is unreachable while the exclusion
+-- constraint's index is the cheaper plan.
+--
+-- **What would reopen it**, recorded so the next person does not re-derive it: the agent going live
+-- on the pilot building (week 12), where `party_contact` stops being 2,871 rows and Q2 stops being
+-- run by a screen. The fix then is not "add the btree" -- that was tried here -- it is to make the
+-- planner able to prefer it, which means changing what the exclusion constraint's index looks like
+-- to the cost model. Carried in tasks/roadmap.md rather than left in this comment alone.

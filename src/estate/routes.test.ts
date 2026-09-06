@@ -74,10 +74,15 @@ describe('estate · the routes', () => {
       );
       buildingId = found.rows[0].building_id;
 
-      await t.test('the root is the one screen there is', async () => {
+      // 1.11 made the root a 302 to `/estate` and said it would stop being one the week a second
+      // screen existed. Slice 2.6 is that week, and this case is the redirect's obituary: it asserts
+      // the index renders and links onward, rather than that the root has moved.
+      await t.test('the root is an index of the screens', async () => {
         const response = await app.inject({ method: 'GET', url: '/' });
-        assert.equal(response.statusCode, 302);
-        assert.equal(response.headers.location, '/estate');
+        assert.equal(response.statusCode, 200);
+        assert.match(response.body, /href="\/estate"/);
+        assert.match(response.body, /href="\/estate\/expiring"/);
+        assert.match(response.body, /href="\/estate\/search"/);
       });
 
       await t.test(
@@ -116,6 +121,72 @@ describe('estate · the routes', () => {
         assert.equal(response.statusCode, 200);
         assert.match(String(response.headers['content-type']), /text\/css/);
       });
+
+      // Slice 2.6's three screens, asserted for their wiring and for the one end-to-end property
+      // this fixture can carry honestly. **It seeds no tenancy**: this suite commits, so a lease
+      // here would mean cleaning up tenancy, tenancy_party, party, party_contact and terms_profile
+      // afterwards, and a suite that leaves a party behind is worse than a case not written here.
+      // The occupancy chip's *let* state is proved in src/scope/scope.test.ts against the query and
+      // in tests/ui/tokens.test.ts against the markup; what is proved here is the vacant state
+      // through the whole stack, which is the one this building can tell the truth about.
+      await t.test('a unit with no lease reads as a vacancy', async () => {
+        const response = await app.inject({
+          method: 'GET',
+          url: `/estate/buildings/${buildingId}`,
+        });
+        assert.equal(response.statusCode, 200);
+        assert.match(response.body, /פנויה/);
+        assert.doesNotMatch(response.body, /מאוכלסת ·/);
+      });
+
+      await t.test('search finds the building, and by name only', async () => {
+        const found = await app.inject({
+          method: 'GET',
+          url: `/estate/search?q=${encodeURIComponent('בניין בדיקה')}`,
+        });
+        assert.equal(found.statusCode, 200);
+        assert.match(
+          String(found.headers['content-type']),
+          /text\/html; charset=utf-8/,
+        );
+        assert.match(found.body, /בניין בדיקה/);
+      });
+
+      await t.test('an empty search asks rather than lists', async () => {
+        const empty = await app.inject({
+          method: 'GET',
+          url: '/estate/search',
+        });
+        assert.equal(empty.statusCode, 200);
+        assert.match(empty.body, /חפשו לפי כתובת/);
+      });
+
+      await t.test(
+        'a lone wildcard finds nothing, through the stack',
+        async () => {
+          // The escaping decision, end to end: unescaped this is every building in the portfolio.
+          const wild = await app.inject({
+            method: 'GET',
+            url: '/estate/search?q=%25',
+          });
+          assert.equal(wild.statusCode, 200);
+          assert.match(wild.body, /לא נמצאו/);
+        },
+      );
+
+      await t.test(
+        'the leases ending screen answers for the portfolio',
+        async () => {
+          const ending = await app.inject({
+            method: 'GET',
+            url: '/estate/expiring',
+          });
+          assert.equal(ending.statusCode, 200);
+          // No count is asserted. This query is whole-portfolio by design, so its number belongs to
+          // whatever else is in the database (1.11, learned in CI within the hour).
+          assert.match(ending.body, /חוזים מסתיימים/);
+        },
+      );
 
       await t.test(
         'a malformed id is invalid, a missing one is not_found',

@@ -11,12 +11,15 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import { registerEstateRoutes } from './estate/contract.ts';
+import { type Clock, systemClock } from './kernel/clock.ts';
 import { httpStatus, KernelError, toErrorBody } from './kernel/errors.ts';
 import { registerUiAssets } from './kernel/ui/assets.ts';
 
 export interface AppDeps {
   pool: Pool;
   version: string;
+  /** Injected here and nowhere deeper. SPEC.md: the clock is a dependency, never a global read. */
+  clock?: Clock;
 }
 
 export function buildApp(deps: AppDeps): FastifyInstance {
@@ -52,7 +55,10 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   });
 
   registerUiAssets(app);
-  registerEstateRoutes(app, { pool: deps.pool });
+  registerEstateRoutes(app, {
+    pool: deps.pool,
+    clock: deps.clock ?? systemClock,
+  });
 
   return app;
 }

@@ -13,6 +13,7 @@
     "test:policy": "node --test 'tests/policy/**/*.test.ts'",
     "evals": "node evals/run.ts",
     "measure": "node evals/measure.ts",
+    "measure:scale": "node --env-file-if-exists=.env.example --env-file-if-exists=.env scripts/measure-scale.ts",
     "guards": "node scripts/guards.ts",
     "typecheck": "tsc --noEmit",
     "lint": "biome check --error-on-warnings",
@@ -21,6 +22,8 @@
     "migrate": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/migrate.ts",
     "seed": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/seed.ts",
     "import:register": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/import-register.ts",
+    "register:generate": "node src/generate-register.ts",
+    "seed:register": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/seed-register.ts",
     "dev": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/serve.ts",
     "start": "node src/serve.ts"
   },

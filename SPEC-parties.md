@@ -149,6 +149,20 @@ constraint already rejected.
   and `upsertPartyContact` — because the register importer is the caller 2.1 predicted. There is
   still no screen over this module and no query on its contract; `src/scope/` answers who is
   reachable, and 2.6's grid reads estate.
+- **No btree on `(channel, value)`, and 2.6 answered that with a measurement rather than deferring
+  it again.** 2.1's reasoning was right on the facts: the lookup is served today by
+  `contact_value_resolves_to_one_party`, which is a **GiST** index, and GiST is slower than btree at
+  plain equality. Measured over 2,871 contacts, the same lookup on three values in one session —
+  GiST 4–6 buffers and 0.031–0.062 ms, btree 2–3 buffers and 0.009–0.017 ms. Three times the time,
+  and it is the isolation join's first hop.
+
+  **The btree was still not added, because with both indexes present the planner chose the GiST one
+  every time** — its estimated startup cost is lower (0.14 against 0.28) and so is its total. An
+  index the planner will not choose is not an optimisation, it is a write cost with a comment, and
+  the register writes 2,871 rows into this table. The gain is real, it is 0.04 ms per lookup, and it
+  is unreachable while the exclusion constraint's index is the cheaper plan. **Reopened when the
+  agent goes live on the pilot** (week 12), where the fix is not "add the btree" — that was tried —
+  but changing what the exclusion constraint's index looks like to the cost model.
 
 ## Guard three learned a table-qualified name here
 

@@ -21,10 +21,32 @@ export type {
 export type {
   BuildingDetail,
   BuildingSummary,
+  ExpiringLease,
+  SearchResults,
   SpaceKindCount,
+  UnitHit,
   UnitRow,
 } from './internal/read-model.ts';
-export { getBuilding, listBuildings } from './internal/read-model.ts';
+export {
+  countUnitsByBuilding,
+  EXPIRING_WINDOW_DAYS,
+  getBuilding,
+  listBuildings,
+  listExpiringLeases,
+  MEASURED_QUERIES,
+  SEARCH_LIMIT,
+  searchEstate,
+} from './internal/read-model.ts';
 export type { EstateDeps } from './internal/routes.ts';
 export { registerEstateRoutes } from './internal/routes.ts';
-export { renderBuildingPage, renderBuildingsPage } from './internal/views.ts';
+export type {
+  OccupancyByBuilding,
+  OccupancyByUnit,
+} from './internal/views.ts';
+export {
+  renderBuildingPage,
+  renderBuildingsPage,
+  renderExpiringPage,
+  renderIndexPage,
+  renderSearchPage,
+} from './internal/views.ts';

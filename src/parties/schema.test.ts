@@ -30,9 +30,13 @@ const CHECK_VIOLATION = '23514';
 const NOT_NULL_VIOLATION = '23502';
 const EXCLUSION_VIOLATION = '23P01';
 
-// One number, and the two people who hold it in turn. The same shape tests/policy/ uses, because it
-// is the shape the real hazard has.
-const RECYCLED_PHONE = '+972521234567';
+// One number, and the two people who hold it in turn. The same *shape* tests/policy/ uses, and
+// deliberately not the same number. `node --test` runs files in parallel against one database, and
+// two suites inserting one contact value on overlapping days each wait on the other's speculative
+// insertion. 2.4 met that as `40P01` and gave every register fixture a block of its own; 2.6 found
+// that this file, src/scope/scope.test.ts and tests/policy/ had been sharing one number since week
+// 2, and the policy gate was the one that flaked. **This suite's block is `0522…`.**
+const RECYCLED_PHONE = '+972522000111';
 
 /**
  * Asserts the statement is rejected with a named SQLSTATE, and leaves the transaction usable.
@@ -290,7 +294,7 @@ describe('parties · the rest of the schema', () => {
               insertContact(db, partyId, { value }),
             );
           }
-          await insertContact(db, partyId, { value: '+972521234567' });
+          await insertContact(db, partyId, { value: '+972522000111' });
         });
       });
 
@@ -583,7 +587,7 @@ describe('parties · a contact row is identified by party, channel, value and st
         await inRolledBackTransaction(pool, async (db) => {
           const partyId = await insertParty(db);
           await insertContact(db, partyId, {
-            value: '+972521234567',
+            value: '+972522000111',
             from: '2026-01-01',
             to: null,
           });

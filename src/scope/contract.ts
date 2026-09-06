@@ -4,6 +4,7 @@
 export type {
   IsolationJoinRelation,
   OccupantRow,
+  OccupiedUnit,
   Queryable,
   ScopeActor,
   ScopedUnit,
@@ -13,6 +14,7 @@ export {
   ISOLATION_JOIN_SQL,
   OCCUPANCY_VIEW,
   OCCUPANCY_VIEW_COLUMNS,
+  resolveOccupiedUnits,
   resolvePartiesInUnit,
   resolveUnitsByPhone,
 } from './internal/isolation-join.ts';
