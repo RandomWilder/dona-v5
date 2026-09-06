@@ -24,10 +24,17 @@ holding a completed build for four days would have delayed week 2 without adding
 The cadence's demo *day* is unchanged for every later week — this is a week-1 exception recorded here
 rather than a renegotiation of the schedule.
 
-**The deck:** <https://claude.ai/code/artifact/5d5e9967-2ca4-43e6-a4d0-77c8842f8896> — three slides,
-the third of them asks, exactly as [pipeline.md](../../docs/pipeline.md) §7 specifies. It is a
-published Claude artifact, not a file in this repository, because it is a client-facing document with
-a burn date on it.
+**The deck:** three slides, the third of them asks, exactly as
+[pipeline.md](../../docs/pipeline.md) §7 specifies. Published in both languages, because the room is
+Hebrew-speaking and the screen it introduces is right-to-left:
+
+- English — <https://claude.ai/code/artifact/5d5e9967-2ca4-43e6-a4d0-77c8842f8896>
+- עברית — <https://claude.ai/code/artifact/4f49550d-efa2-4c3d-9cf9-0e1cc6383938>
+
+Both are published Claude artifacts rather than files in this repository, because they are
+client-facing documents with a burn date on them. The Hebrew one is a genuine right-to-left
+rendering — logical CSS properties, Hebrew display and body faces, and every Latin fragment isolated
+so it does not reorder — not the English page with translated strings poured into it.
 
 **Demoed off staging**, never a laptop, on the same URL the later weeks use:
 `https://dona-staging-r44j24yuaa-zf.a.run.app/estate`, revision `00014-vtx`. Health checked
