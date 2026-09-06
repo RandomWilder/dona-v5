@@ -1,11 +1,15 @@
-// The two grep guards. docs/pipeline.md §6: cheap, blunt, and impossible to argue with at 2am.
+// The grep guards. docs/pipeline.md §6: cheap, blunt, and impossible to argue with at 2am.
+//
+// Two of them are §6's own — no `current_tenant` column, and the isolation join in one file. The
+// third is slice 1.12's: `-- pii` had been a sentence in SPEC.md since 1.1 with nothing behind it,
+// and the slice whose whole thesis is *controls before data* is the one that owes it a mechanism.
 //
 // They run as a step of the `gate` job, which is a **required** check on `main` with
 // `enforce_admins: true` — so a guard that fires blocks every merge, including an admin's. That is
 // the point, and it is also why each one was tripped deliberately on a branch at slice 1.7 rather
 // than discovered on `main`.
 //
-// **Both guards fail when they scanned nothing.** A guard pointed at a path that matches no files
+// **Every guard fails when it scanned nothing.** A guard pointed at a path that matches no files
 // passes forever and reads like diligence: docs/pipeline.md §6 and tasks/todo.md both wrote guard one
 // against `migrations/*.sql`, which has never been where migrations live in this repository. The
 // count is the part of the guard that catches that, and it is not optional.
@@ -143,8 +147,102 @@ export function guardScopeJoin(root: string): GuardResult {
 
 // ---------------------------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------------------------
+// Guard three — a person-shaped column carries `-- pii`.
+//
+// SPEC.md has said "PII columns are commented `-- pii`" since slice 1.1 and nothing enforced it,
+// which is the same standing the `current_tenant` rule had before guard one. The comment is not
+// decoration: it is what a deletion request, a retention rule and an access review are read against,
+// and the one moment anybody knows a column holds personal data is the moment they add it.
+//
+// Built at 1.12, **before** the migration that needs it. `party` and `party_contact` arrive at 2.1
+// and they are the first tables in this system with a person in them — so this guard is written
+// against zero violations today and fires on `0006_` the day it lands, which is the whole point of
+// building a control before its data.
+//
+// The escape is `-- not-pii: <why>`, on the column's line or in the comment block above it. A
+// sentence somebody had to write and a reviewer can read; silence is not one of the options.
+// ---------------------------------------------------------------------------------------------
+
+// Names, not patterns over names: `like '%phone%'` would fire on `telephone_policy` and teach people
+// to work around the guard. A column this list misses is added to it when it is met.
+const PII_COLUMNS = new Set([
+  'national_id',
+  'id_number',
+  'passport_number',
+  'phone',
+  'phone_number',
+  'mobile',
+  'email',
+  'email_address',
+  'first_name',
+  'last_name',
+  'full_name',
+  'contact_name',
+  'birth_date',
+  'date_of_birth',
+  'iban',
+  'bank_account',
+  'account_number',
+]);
+
+// Two shapes, because a column arrives two ways. A definition inside CREATE TABLE starts the line;
+// an ALTER TABLE ... ADD COLUMN carries the table name in front of it. Both are anchored on a type
+// keyword after the name, so a mention inside a comment or a constraint body is not a definition —
+// and the ALTER form was written wrong first, anchored at the line start, which is what its own test
+// caught before the guard ever ran against a real migration.
+const COLUMN_DEFINITION: readonly RegExp[] = [
+  /^\s*([a-z_][a-z0-9_]*)\s+(?:text|uuid|integer|bigint|numeric|boolean|date|timestamptz|timestamp|jsonb|vector)\b/i,
+  /\badd\s+column\s+(?:if\s+not\s+exists\s+)?([a-z_][a-z0-9_]*)\s+(?:text|uuid|integer|bigint|numeric|boolean|date|timestamptz|timestamp|jsonb|vector)\b/i,
+];
+
+const MARKED = /--\s*(pii|not-pii\s*:\s*\S)/i;
+const COMMENT = /^\s*--/;
+
+export function guardPiiComments(root: string): GuardResult {
+  const dir = path.join(root, MIGRATIONS_DIR);
+  const files = existsSync(dir)
+    ? readdirSync(dir)
+        .filter((name) => name.endsWith('.sql'))
+        .sort()
+    : [];
+  const violations: Violation[] = [];
+  for (const name of files) {
+    const lines = readFileSync(path.join(dir, name), 'utf8').split('\n');
+    lines.forEach((line, index) => {
+      const column = COLUMN_DEFINITION.map((pattern) => pattern.exec(line)?.[1])
+        .find((name) => name !== undefined)
+        ?.toLowerCase();
+      if (!column || !PII_COLUMNS.has(column)) return;
+      if (MARKED.test(line)) return;
+      // The comment block directly above, walked upwards until a line that is not a comment. That
+      // is where `space.access_note`'s marker lives, and it is where a two-line explanation of why
+      // a column is marked naturally goes.
+      for (
+        let at = index - 1;
+        at >= 0 && COMMENT.test(lines[at] ?? '');
+        at -= 1
+      ) {
+        if (MARKED.test(lines[at] ?? '')) return;
+      }
+      violations.push({
+        guard: 'pii-columns-are-commented',
+        file: path.join(MIGRATIONS_DIR, name),
+        detail: `line ${index + 1}: \`${column}\` holds personal data and carries no \`-- pii\` (or \`-- not-pii: <why>\`)`,
+      });
+    });
+  }
+  return {
+    guard: 'pii-columns-are-commented',
+    scanned: files.length,
+    violations,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+
 export function runGuards(root: string): GuardResult[] {
-  return [guardMigrations(root), guardScopeJoin(root)];
+  return [guardMigrations(root), guardScopeJoin(root), guardPiiComments(root)];
 }
 
 export function report(results: GuardResult[]): boolean {

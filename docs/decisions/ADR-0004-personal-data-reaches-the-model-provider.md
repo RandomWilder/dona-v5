@@ -54,6 +54,24 @@ unchanged rather than closed:
 - **The status stays `proposed` until the DPA and the disclosure exist.** They are the owner's, they
   have the same trigger as the corpus removal date, and this ADR is not closed by an engineering change.
 
+## What slice 1.12 discharged, and what it did not
+
+**Decision 4 is done.** [SPEC.md](../../SPEC.md), Security defaults, now carries the table of every
+third party that sees text from this system — OpenAI, Google Cloud, Meta, Twilio, and **Anthropic,
+development-time only**. That last row is the one nobody had written down: Claude Code reads this
+repository as it is built, and the reason it never sees tenant text is not an assurance but a
+mechanism — tier 2 never enters the repo, and `.gitignore`, the corpus bucket and the tier-1 tests
+are what hold it there.
+
+**Decision 3 is not.** The DPA with each processor and the disclosure to data subjects are the
+owner's, they are **fuse F6** on [tasks/fuses.md](../../tasks/fuses.md), and they are owed **before
+the tier-2 corpus lands** — which is why 1.12 built every control and deliberately did not take
+delivery. The status stays `proposed`.
+
+**Decision 2 — redaction at the provider boundary — is untouched and still owed before week 10.**
+Nothing in 1.12 sends personal data anywhere: the tier-1 corpus is authored text with no real person
+in it, asserted by a test rather than promised.
+
 ## Open, and owed
 
 - A DPA with each processor that sees tenant text, and disclosure to data subjects. **Not yet recorded

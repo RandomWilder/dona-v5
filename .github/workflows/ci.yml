@@ -58,9 +58,10 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
-      # The two grep guards (docs/pipeline.md §6). A step of `gate` rather than a job of their own,
-      # because `gate` is the required context on `main` and a guard nothing requires is a guard
-      # nobody obeys. Both fail when they scanned zero files.
+      # The three grep guards (docs/pipeline.md §6): no `current_tenant` column, the isolation join in
+      # one file, and `-- pii` on a person-shaped column (slice 1.12). A step of `gate` rather than a
+      # job of their own, because `gate` is the required context on `main` and a guard nothing
+      # requires is a guard nobody obeys. Every one of them fails when it scanned zero files.
       - run: npm run guards
       # `npm test` is test:code && test:hooks. The hooks half is the only thing that runs
       # .claude/hooks/hooks.test.mjs, so a gate that shortcuts to test:code drops those cases and
@@ -72,7 +73,7 @@ jobs:
   # repository that calls a paid third party, so what it needs, what it costs and what it can be
   # blamed for all stay separable from typecheck and lint.
   #
-  # It does not repeat the two grep guards. They are steps of `gate` (slice 1.7).
+  # It does not repeat the grep guards. They are steps of `gate` (slices 1.7 and 1.12).
   evals:
     name: evals
     runs-on: ubuntu-latest

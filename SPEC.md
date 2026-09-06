@@ -84,8 +84,14 @@ No cycles. `Project` sits above `Building` and is optional (`Building.project_id
 30 lines ([docs/pipeline.md](docs/pipeline.md) §3). Everything else it would otherwise repeat lives
 here:
 
-- **Migrations are append-only.** DDL and backfill in separate files, never one. PII columns are
-  commented `-- pii`. No migration introduces a `current_tenant` column — rule 1, enforced by a grep.
+- **Migrations are append-only.** DDL and backfill in separate files, never one. No migration
+  introduces a `current_tenant` column — rule 1, enforced by a grep.
+- **PII columns are commented `-- pii`, and a grep enforces it** (guard three, slice 1.12). A column
+  whose name is person-shaped — `national_id`, `phone`, `email`, a name, a birth date, a bank
+  detail — must carry `-- pii` on its own line or in the comment block directly above it. The one
+  escape is `-- not-pii: <why>`, which is a sentence someone has to write and a reviewer can read;
+  silence is not an option the guard offers. `space.access_note` is the convention's first use and
+  says why it is marked before it has acquired the data rather than after.
 - **Time comes from the injected clock.** No `Date.now()` in logic and no `DEFAULT now()` in SQL: a
   timestamp the tests cannot control is a test that fails on a Tuesday.
 - **UI is self-contained HTML plus `/ui/tokens.css`, and nothing else.** No bundler, no framework.
@@ -142,15 +148,36 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   prompt or an argv (ADR-0003). IAM is bound per secret and per bucket, never at project level.
 - **Third parties that see tenant text are named here before they are called**, not discovered later
   (ADR-0004). Personal data reaching a model provider is a decision with a legal basis owed, not a
-  side effect.
+  side effect. The list, as of slice 1.12, and it is exhaustive by intent rather than by survey:
+
+  | Third party | What it sees | From |
+  |---|---|---|
+  | **OpenAI** | Passage text sent for embedding, and document text sent for comprehension | Today, through the CI-only `OPENAI_API_KEY` — authored fixture text with no personal data in it. Tenant text from week 4. |
+  | **Google Cloud** | Whole page images (Document AI OCR, ADR-0002); every stored document and row (Cloud Storage, Cloud SQL) as processor | Week 4 for OCR; today for storage |
+  | **Meta — WhatsApp Cloud API** | Every message either end of a conversation sends | Week 9 |
+  | **Twilio** | The OTP message and the mobile number it goes to, as the SMS fallback | Week 9 |
+  | **Anthropic** | This repository, read by Claude Code as it is built | Today, **development-time only**. It never sees tenant text, and the mechanism that makes that true is that tier 2 never enters the repo — `.gitignore`, the bucket, and this rule, not an assurance. |
+
+  Naming them is the engineering half of ADR-0004. The other half — a DPA with each processor and
+  disclosure to data subjects — is the owner's, is tracked as **F6** on
+  [tasks/fuses.md](tasks/fuses.md), and is owed **before the tier-2 corpus lands**.
 
 ## The corpus, in three tiers
 
 Only one of them is ours, and it is the one no gate runs against.
 
-1. **Specimen documents** — the published דירה להשכיר standard lease, פרוטוקול מסירה, ערבות בנקאית,
-   ארנונה and insurance specimens. State-regulated, real in structure and in Hebrew legalese,
-   containing no real person. **Committed to the repo; the substrate every gate runs against.**
+1. **Specimen documents** — the דירה להשכיר standard lease, פרוטוקול מסירה, ערבות בנקאית, ארנונה and
+   insurance forms, plus the operator's own service procedure. They live in
+   [docs/corpus/](docs/corpus/) as Hebrew **text authored to the published forms' structure** —
+   clause numbering, headings, legal register — and **not** as copies of the published PDFs; each
+   file names the form it follows and where that form is published. Two reasons, and the second
+   decided it: the gate needs text it can chunk, embed and rank, and the path that turns a PDF into
+   text is week 3's; and A7's real worry — no gate green because it was measured against a document
+   we wrote to pass it — binds at the **week-4 accuracy number**, which A7 already assigns to tier 2.
+   **Committed to the repo; the substrate every gate runs against.** What a tier-1 file may never
+   contain is asserted by a test rather than promised in a comment: no sum of money (rule 2), no
+   identifier-shaped run, no real person. The published PDFs themselves arrive with the Drive fuse at
+   week 3 and do not change what tier 1 is for (slice 1.12).
 2. **Real documents from Dona Dom** — they measure accuracy against scans, handwriting and
    signatures, and they do nothing else. They live in a dated bucket of their own with a lifecycle
    rule, a tested deletion path and a removal date recorded on `tasks/fuses.md` the day they land.

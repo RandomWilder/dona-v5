@@ -52,7 +52,7 @@ management as their dependency, not as our delay.
 | **WhatsApp number under Dona Dom's legal entity** | W1 | Days, once the entity is decided | Verification itself — the number must belong to the company, never a personal mobile. A wrong number here means refiling, not editing. |
 | **Priority ERP read-only keys** | W1 | Client IT's calendar | The register import, the ERP foreign keys, and every financial reference. Open question #1 in the handoff decides how much of month one depends on this. |
 | **Google Drive access to the document folders** | W1 | Days | Document ingestion. Drive is the known source for lease and building paperwork, so this fuse converts a backfill expedition into an import. |
-| **ADR-0004 — personal data reaching a model provider** | W1 | Days, once asked | Slice 1.12 and everything after it. The obligation is a disclosure: the legal basis, and every third party that sees tenant text, named before it is called. A third party discovered later is a data-custody incident, not a config edit. |
+| **ADR-0004 — personal data reaching a model provider** | W1 · **lit 6 Sep** | Days, once asked | Slice 1.12 and everything after it. The obligation is a disclosure: the legal basis, and every third party that sees tenant text, named before it is called. A third party discovered later is a data-custody incident, not a config edit. **Half discharged at 1.12** — the naming is in `SPEC.md`; the DPA and the disclosure are the owner's and still owed. |
 | **The client's GCP organisation decision** | W1 | Weeks — a management decision | Nothing immediately; everything eventually. The project is created under an organisation now and migrated later. Two things must be true before the move: an `@donadom.co.il` identity exists (most organisations block IAM grants to external addresses outright, which is the likeliest way to get locked out of your own project), and no real tenant data has landed yet, so the transfer is an admin task and not a data-custody event. If the GitHub repository moves with it, the `assertion.repository` attribute condition and both deploy workflows change with it. |
 
 **Open, and to be answered before week 1 is planned:** the Meta verification filed 2026-08-21 may
@@ -204,8 +204,9 @@ without a model call**, as a policy row plus a routing rule, live before the fir
 change it was written for tested nothing. Write it against the missing constraint, watch it go red,
 then add the constraint.
 
-**Two grep guards in CI**, in the same spirit as the bash hook — cheap, blunt, and impossible to
-argue with at 2am:
+**Three grep guards in CI**, in the same spirit as the bash hook — cheap, blunt, and impossible to
+argue with at 2am. Two of them were §6's from commit one; the third arrived at slice 1.12, when the
+`-- pii` convention had been a sentence in `SPEC.md` for eleven days with nothing behind it:
 
 - **No migration may introduce a `current_tenant` column.** `current_tenant` is a view, not a column.
   A grep over **`src/kernel/migrations/*.sql`** fails the build. The constraint is absolute, so the
@@ -220,8 +221,19 @@ argue with at 2am:
   *predicates* and not on the table names: naming `party_contact` is ordinary, and re-deciding when a
   contact or a tenancy counts is what only one file may do.
 
-**Both guards are steps of the `gate` job**, which is the required check on `main` — a guard nothing
-requires is a guard nobody obeys. `npm run guards` runs them, and `scripts/guards.ts` is the file.
+- **A person-shaped column carries `-- pii`.** `SPEC.md`'s Security defaults have said so since 1.1
+  and nothing enforced it, which is the standing the `current_tenant` rule had before its own guard.
+  A column named `national_id`, `phone`, `email`, a name, a birth date or a bank detail must carry
+  `-- pii` on its line or in the comment block above it; the one escape is `-- not-pii: <why>`, which
+  is a sentence somebody has to write and a reviewer can read. Built at **1.12, before the migration
+  that needs it** — `party` and `party_contact` land at 2.1 and are the first tables in this system
+  with a person in them, so the guard is written against zero violations and fires on `0006_` the day
+  it arrives. That is what *controls before data* means when it is a mechanism rather than an
+  intention.
+
+**All three guards are steps of the `gate` job**, which is the required check on `main` — a guard
+nothing requires is a guard nobody obeys. `npm run guards` runs them, and `scripts/guards.ts` is the
+file.
 
 ## 7. The golden set — the gate for the agent
 

@@ -13,6 +13,7 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 import {
   guardMigrations,
+  guardPiiComments,
   guardScopeJoin,
   MIGRATIONS_DIR,
 } from '../../scripts/guards.ts';
@@ -109,5 +110,81 @@ describe('guard · only src/scope may construct the isolation join', () => {
     const root = fixture({ 'README.md': 'no code here' });
     t.after(() => rmSync(root, { recursive: true, force: true }));
     assert.equal(guardScopeJoin(root).scanned, 0);
+  });
+});
+
+describe('guard · a person-shaped column carries -- pii', () => {
+  const migration = (body: string): Record<string, string> => ({
+    [path.join(MIGRATIONS_DIR, '0006_parties.sql')]:
+      `CREATE TABLE party_contact (\n${body}\n);\n`,
+  });
+
+  it('passes the estate migrations, which have no person in them', (t) => {
+    const root = fixture(
+      migration(
+        '  space_id uuid PRIMARY KEY,\n  name text NOT NULL,\n  floor text',
+      ),
+    );
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const result = guardPiiComments(root);
+    assert.equal(result.scanned, 1);
+    assert.deepEqual(result.violations, []);
+  });
+
+  it('trips on an unmarked person-shaped column', (t) => {
+    const root = fixture(
+      migration('  phone text NOT NULL,\n  national_id text,\n  email text'),
+    );
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const result = guardPiiComments(root);
+    assert.equal(result.violations.length, 3);
+    assert.match(result.violations[0]?.detail ?? '', /phone/);
+  });
+
+  it('accepts the marker on the line and in the comment block above it', (t) => {
+    const root = fixture(
+      migration(
+        [
+          '  phone text NOT NULL, -- pii',
+          "  -- pii -- the tenant's own address, and the reason a technician can find them",
+          '  full_name text,',
+        ].join('\n'),
+      ),
+    );
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    assert.deepEqual(guardPiiComments(root).violations, []);
+  });
+
+  // The escape exists so the guard never has to be worked around by renaming a column. It costs a
+  // sentence, which is exactly what makes it reviewable.
+  it('accepts -- not-pii with a reason, and refuses it without one', (t) => {
+    const withReason = fixture(
+      migration(
+        "  -- not-pii: the operator's switchboard, printed on the door\n  phone text",
+      ),
+    );
+    t.after(() => rmSync(withReason, { recursive: true, force: true }));
+    assert.deepEqual(guardPiiComments(withReason).violations, []);
+
+    const bare = fixture(migration('  -- not-pii:\n  phone text'));
+    t.after(() => rmSync(bare, { recursive: true, force: true }));
+    assert.equal(guardPiiComments(bare).violations.length, 1);
+  });
+
+  it('trips on an ALTER TABLE that adds one later', (t) => {
+    const root = fixture({
+      [path.join(MIGRATIONS_DIR, '0007_add.sql')]:
+        'ALTER TABLE party ADD COLUMN IF NOT EXISTS birth_date date;\n',
+    });
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    assert.equal(guardPiiComments(root).violations.length, 1);
+  });
+
+  it('fails when it scanned nothing', (t) => {
+    const root = fixture({
+      'migrations/0001_init.sql': 'CREATE TABLE party ();',
+    });
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    assert.equal(guardPiiComments(root).scanned, 0);
   });
 });
