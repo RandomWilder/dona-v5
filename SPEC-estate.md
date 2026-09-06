@@ -7,8 +7,9 @@ workbook is right and this file is a bug.
 
 - **Owns:** E1–E4, E11 — Project · Building · Space · Unit · Asset.
 - **Depends on:** kernel.
-- **Built:** Project · Building · Space · Unit at week 1, slice 1.9. Asset at week 3, slice 3.5,
-  seeded from handover protocols.
+- **Built:** Project · Building · Space · Unit at week 1, slice 1.9; the natural keys, the importer
+  and the first two screens at slice 1.11. Asset at week 3, slice 3.5, seeded from handover
+  protocols.
 
 ## The shape, and why it is this one
 
@@ -27,14 +28,15 @@ downstream requires it; `project_code` lives on Project, so the tender code has 
 
 ## Tables — `src/kernel/migrations/0004_estate.sql`
 
-28 stored columns across four tables. Ids are `uuid`, enums are `text` with a `CHECK`, and there are
-no timestamp columns: the workbook gives E1–E4 none, and a `created_at` written by anything but the
-injected clock is a second source of truth no test can see.
+The workbook's 28 columns, plus what enforcement needs — `address_key` on Building and the three
+constant discriminators on Unit, none of which carry a fact. Ids are `uuid`, enums are `text` with a
+`CHECK`, and there are no timestamp columns: the workbook gives E1–E4 none, and a `created_at`
+written by anything but the injected clock is a second source of truth no test can see.
 
 | Table | Columns |
 |---|---|
 | `project` | `project_id` PK · `name` · `project_code` · `tender_ref?` · `status` |
-| `building` | `building_id` PK · `name` · `address_line` · `city` · `project_id?` FK → project · `handover_date` · `warranty_end_date` · `status` |
+| `building` | `building_id` PK · `name` · `address_line` · `city` · `project_id?` FK → project · `handover_date` · `warranty_end_date` · `status` · `address_key` generated, UNIQUE |
 | `space` | `space_id` PK · `building_id` FK → building · `space_kind` · `name` · `floor?` · `access_note?` |
 | `unit` | `unit_id` PK, FK → space · `unit_number` · `rooms` · `area_sqm?` · `has_mamad` · `parking_space_id?` · `storage_space_id?` · `warranty_end_date?` · `condition_status` |
 
@@ -66,6 +68,59 @@ The same composite-key technique constrains `parking_space_id` to a `PARKING` sp
 so they can hold a gate motor and receive service calls). Both are nullable, and `MATCH SIMPLE`
 leaves the foreign key unenforced when the id is null, which is precisely the unassigned case.
 
+## The natural keys — `src/kernel/migrations/0005_estate_natural_keys.sql`
+
+Slice 1.9 left the spine with nothing unique but its primary keys, which is fine for a schema and
+wrong for an importer: run the same import twice and the building exists twice. The key is what makes
+a re-run a no-op, and it is decided here rather than pushed into an application that has to remember
+to look before it writes.
+
+| Table | Key | Why this one |
+|---|---|---|
+| `project` | `UNIQUE (project_code)` | The דירה להשכיר tender code. It is the identifier the client already uses, so one code is one project by definition. |
+| `building` | `UNIQUE (address_key)` | An address is what identifies a building to everyone who is not a database. |
+| `space` | `UNIQUE (building_id, space_kind, name)` | The kind is in the key because a bay and an apartment may both be called `12`. |
+| `unit` | — | R2 already settled it: `Unit.unit_id = Space.space_id`, so a unit's natural key *is* its space's and a second one could only disagree with it. |
+
+**`address_key` is an enforcement column, not a fact** — the same standing the three constant
+discriminators on `unit` have. It is `GENERATED ALWAYS AS … STORED` from `city` and `address_line`,
+lower-cased with runs of whitespace collapsed, because address text arrives from every export with
+inconsistent spacing and casing and normalising it in the database means every writer gets it. Nothing
+writes it and nothing reads it but the constraint; `address_line` and `city` remain the facts.
+
+## The week-1 surface — two screens, `src/estate/internal/views.ts`
+
+`GET /estate` lists the buildings; `GET /estate/buildings/:buildingId` shows one building, its spaces
+by kind and its units. `GET /` redirects to the first of them, and stops doing so the week a second
+module has a screen.
+
+Server-rendered through the kernel's `h` template, which escapes every interpolation — so there is
+**no client JavaScript at all**, and no JSON API that would have to be scoped before the screens can
+be shown to anyone. Hebrew, RTL, and every colour, face and physical side comes from
+`/ui/tokens.css`; `tests/ui/tokens.test.ts` renders each screen and fails on a hex colour, a
+`font-family`, a `fonts.googleapis` URL, a physical `left:`/`right:` or a `<script>` tag.
+
+The unit total on the list screen is **counted, never stored** — R6, made visible.
+
+**There is no authentication on either screen, and that is a dated state, not a design.** Staff auth
+is Identity Platform with enforced MFA at week 5. Until then the screens serve fixture data with no
+personal data in it, and carry `noindex`. The week-5 row in [tasks/roadmap.md](tasks/roadmap.md) owns
+closing it; nothing may put a real party, contact or document behind these routes before it does.
+
+## The importer — `importEstate`, `src/estate/internal/importer.ts`
+
+One transaction, one statement per row, every statement `INSERT … ON CONFLICT (natural key) DO UPDATE
+… RETURNING` the primary key. Ids are *proposed*: on a re-run Postgres returns the id already there,
+which is what makes the second run a no-op instead of a second building. Spaces are written before
+units, because `unit.parking_space_id` and `storage_space_id` point at them.
+
+`DO UPDATE` rather than `DO NOTHING`, for two reasons: `DO NOTHING` returns no row, so the importer
+would have to re-select to learn the id it just failed to insert; and an import correcting a typo in a
+floor or an area should correct it.
+
+The report is row counts before and after, so "the second run created nothing" is a number and not a
+claim.
+
 ## What is deliberately not a column
 
 - **`Building.unit_count`** — counted, never stored. A stored count drifts the first time someone
@@ -78,10 +133,12 @@ leaves the foreign key unenforced when the id is null, which is precisely the un
 
 ## Open
 
-**No natural key yet.** There is no `address_key` and no uniqueness constraint beyond the primary
-keys, because the FIELDS sheet specifies none and nothing yet re-runs against this schema. The real
-need is an importer that can be run twice, which is slice 1.11's — and 1.11 is also the first time
-real Shoham addresses say what the natural key should be. It costs a migration whenever it lands.
+**Closed at 1.11 — the natural keys exist**, above. They were chosen against a fixture designed for
+coverage rather than against Shoham's real addresses: the director's decision this week is that
+functionality is established on mock addresses and example leases first, and real data applies to it
+afterwards, which is [docs/pipeline.md](docs/pipeline.md) §1 principle 5. The week-2 Priority import
+is what puts real addresses through the same keys, and `address_key` normalises precisely the
+variation that import will bring.
 
 **`Space.building_id` is mandatory**, so a garden genuinely shared between three cores has to hang
 off one of them. Making it optional would reintroduce the two-nullable-columns fork the Space idea

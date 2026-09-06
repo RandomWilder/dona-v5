@@ -167,21 +167,30 @@ Kernel live at slice 1.4, on 1.3's toolchain: Node 24 type stripping, Biome, `no
 16 + pgvector on `docker compose`, and a `/health` skeleton that asserts `db:up`. `src/kernel/` is
 lifted from v3 and holds ids, clock, errors, validate, config, db, the migration runner,
 idempotency, audit, outbox, durable work, object storage, pdf, embeddings, extraction and the RTL
-token layer; `src/app.ts` and `src/serve.ts` are the composition root above it. `src/kernel/
-boundary.test.ts` proves the kernel imports from no domain module.
+token layer; `src/app.ts`, `src/serve.ts`, `src/migrate.ts` and `src/seed.ts` are the composition
+root above it. `src/kernel/boundary.test.ts` proves the kernel imports from no domain module.
 
 **Migrations live in `src/kernel/migrations/`**, one ordered sequence for the whole system, applied
-by `kernel/migrate.ts` under an advisory lock. Four exist: `0001`–`0003` are the kernel's own —
-`vector`, the durability tables, their settings seed — and `0004_estate.sql` is the first domain
-migration, the E1–E4 spine landed at slice 1.9. `src/estate/` and `src/scope/` are the two module
-directories: estate holds its schema contract tests and no code yet, scope the isolation join and its
-contract, landed early at 1.7 with no tables underneath it. `party`, `party_contact`, `tenancy` and
-`tenancy_party` arrive at 2.1 and 2.2, and until they do the seven policy cases report pending
-against `party`. Every other module spec is a stub until its build week
+by `kernel/migrate.ts` under an advisory lock. Five exist: `0001`–`0003` are the kernel's own —
+`vector`, the durability tables, their settings seed — `0004_estate.sql` is the first domain
+migration, the E1–E4 spine landed at slice 1.9, and `0005_estate_natural_keys.sql` gives that spine
+the keys an importer needs to be run twice (1.11). `src/estate/` and `src/scope/` are the two module
+directories: estate holds the schema, the importer, the read model and the first two screens, scope
+the isolation join and its contract, landed early at 1.7 with no tables underneath it. `party`,
+`party_contact`, `tenancy` and `tenancy_party` arrive at 2.1 and 2.2, and until they do the seven
+policy cases report pending against `party`. Every other module spec is a stub until its build week
 ([tasks/roadmap.md](tasks/roadmap.md)), and a stub gaining content is the signal its build started.
 
+**The application serves screens from 1.11**: `/estate` and `/estate/buildings/:id`, server-rendered
+Hebrew RTL off `/ui/tokens.css`, with no client JavaScript and — until staff auth lands in week 5 —
+**no authentication**, on fixture data with no personal data in it. `tests/ui/tokens.test.ts` renders
+every screen and fails on a hex colour, a face, a physical side or a `<script>`. The Shoham fixture
+that fills them is ours and designed for coverage, not Shoham's real addresses; real data arrives
+through the same importer at week 2.
+
 **Where the build is: kernel 1.4 · GCP 1.5 · CI and staging 1.6 · the policy suite and both grep
-guards 1.7 · the evals harness 1.8 · the estate schema 1.9 · the proved release path 1.10.**
+guards 1.7 · the evals harness 1.8 · the estate schema 1.9 · the proved release path 1.10 · the
+importer, the fixture and the first screens 1.11.**
 Production exists and has been released to — `v0.1.0`–`v0.1.2`, rolled back and rolled forward on
 purpose — and is then **parked until week 12**: the Cloud SQL instance is stopped and the service
 scaled to zero, so `dona-prod` answers 503 by design and staging is the delivered artifact every

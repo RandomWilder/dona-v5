@@ -2,8 +2,9 @@
 
 ## Commands
 - `npm test` · `npm run typecheck` · `npm run lint` · `npm run format` · `npm run db:up && npm run dev`
-  → `/health`, which asserts `db:up`. Node 24 type-strips `.ts`; no build step. `npm run migrate`
-  applies `src/kernel/migrations/` — a deploy runs it as a Cloud Run job before the revision serves.
+  → `/health` asserts `db:up`, `/estate` is the screen. Node 24 type-strips `.ts`; no build step.
+  `npm run migrate` applies `src/kernel/migrations/` as a Cloud Run job before a revision serves;
+  `npm run seed` loads the demo fixture and is deliberately in no workflow.
 - **Two required gates** plus `npm run guards`: `test:policy` (nothing a model may decide) and `evals`
   (the agent; `npm run measure` beside it). CI sets `REQUIRE_*=1` — a silent skip is a failure.
 - Merge to `main` → CI green → staging on `workflow_run`, **never on push**; prod on a `v*` tag only.

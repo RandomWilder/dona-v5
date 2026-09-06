@@ -392,9 +392,14 @@ organisation move stays an admin task rather than a data-custody event (**R8**).
 > list). **Do not cut** 1.7, 1.10 or 1.12 — the first two are cheap now and expensive to retrofit,
 > and the third has to exist before the data does.
 >
-> **Note on the cadence's week-1 line.** "Real names, real addresses" is met at the address and unit
-> level, which are structural facts; tenant names stay fixtures until the week-2 import under the
-> corpus policy (A7). Say so in the room rather than letting it be noticed.
+> **Note on the cadence's week-1 line — corrected at 1.11.** This said "real names, real addresses"
+> is met at the address and unit level. **It is not, and was not going to be.** The director's
+> decision this week is that functionality is established against mock addresses and example leases
+> and real data is applied to it afterwards — [pipeline.md](../docs/pipeline.md) §1 principle 5, and
+> the right call. So week 1's demo is a fixture designed for coverage, top to bottom: the address,
+> the unit numbers and the names alike. What is real is the schema underneath it and the importer
+> that will take the real register in week 2. **Say that in the room**, in those words, rather than
+> letting someone notice that רקפת 12 is not one of their buildings.
 
 ---
 
@@ -402,6 +407,11 @@ organisation move stays an admin task rather than a data-custody event (**R8**).
 
 **Demo kind:** Real data · **You show:** the same screen, now with every building across Shoham, Beit
 Shemesh, Ashdod, Lod and Ashkelon — units, tenancies, parties, searchable.
+**Owed by 1.11 — two things this week inherits.** `GET /` is a 302 to `/estate` because `/estate` was
+the only screen in the system; the week that a second screen exists, the root becomes an index rather
+than a redirect. And the real addresses arrive here: they go in through `importEstate` and
+`building.address_key`, which normalises exactly the spacing and casing variation a Priority export
+brings — so the import is re-runnable from the first attempt rather than after the first duplicate.
 **Depends on:** the Priority read-only keys fuse. **Closes:** open question 3 in [plan.md](plan.md).
 
 ### Slice 2.1 — Party and PartyContact, temporally dated
@@ -643,7 +653,7 @@ not the scans, the handwriting or the signatures (A7; the controls for tier 2 we
 
 | Week | Demo kind | Deliverable | Workstreams | Depends on |
 |---|---|---|---|---|
-| **5** | Real data | **Paper becomes truth.** An amendment arrives for a real unit; the tenancy updates; the change log records old → new, who approved it, which document caused it. Then a tenancy ends because a date passed, with no document at all. | Promotion at scale · tenancy reconciliation · `TenancyEvent` · Obligation + ObligationType (E9, E10) · **the settings screen: the `ObligationType` and `DocumentType` catalogues, admin-managed at last (A9) — one screen, one pattern, and `asset_type` deliberately absent from it** · staff MFA and the `national_id` field guard — **owed by 1.5:** `infra/bootstrap.sh` deliberately creates no staff seed secrets, so whatever this mechanism needs in Secret Manager is created here, by the slice that knows what it is · **owed by 1.7:** `national_id` never appearing in the response shape of an agent tool is a policy case, not a review — deterministic, so it belongs in `tests/policy/` beside the isolation cases | W4 · **closes open question 2 — how many `terms_profile`s are in force, which sizes week 6** |
+| **5** | Real data | **Paper becomes truth.** An amendment arrives for a real unit; the tenancy updates; the change log records old → new, who approved it, which document caused it. Then a tenancy ends because a date passed, with no document at all. | Promotion at scale · tenancy reconciliation · `TenancyEvent` · Obligation + ObligationType (E9, E10) · **the settings screen: the `ObligationType` and `DocumentType` catalogues, admin-managed at last (A9) — one screen, one pattern, and `asset_type` deliberately absent from it** · staff MFA and the `national_id` field guard — **owed by 1.11:** `/estate` and `/estate/buildings/:id` have been served **unauthenticated** since week 1, deliberately and on fixture data; this is the slice that puts them behind a session, and nothing may put a real party, contact or document behind those routes before it does — **owed by 1.5:** `infra/bootstrap.sh` deliberately creates no staff seed secrets, so whatever this mechanism needs in Secret Manager is created here, by the slice that knows what it is · **owed by 1.7:** `national_id` never appearing in the response shape of an agent tool is a policy case, not a review — deterministic, so it belongs in `tests/policy/` beside the isolation cases | W4 · **closes open question 2 — how many `terms_profile`s are in force, which sizes week 6** |
 | **6** | Software | **Who pays for this, and why.** Pick a category and a unit; get tenant / operator / contractor with the clause and the policy version behind it. Then edit the table live and watch the answer change. | `policy` module: the responsibility matrix as versioned, admin-editable data · `asset_in_warranty` fed by week 3's asset register · rules supersede by `effective_from` and never overwrite · `policy_version_id` snapshotted on every resolution · **owed by 1.7: policy cases 4 and 5** — `UNIT` is the only space kind that can ever be the tenant's, and a live warranty moves responsibility to the contractor, with the snapshot still answering after the policy changes. `tests/policy/` and its pending mechanism exist from 1.7; write each case red first | W5, W3.5 · sized by question 2 |
 | **7** | Software | **A ticket, start to finish, by hand.** Walk the canonical states in the console — NEW · IDENTIFIED · TRIAGED · RESPONSIBILITY SET · WINDOWS COLLECTED · OFFERED · SCHEDULED · CLOSED — plus the three exits. Watch the SLA clock run and the escalation fire. No WhatsApp, no agent. | `calls` module: state machine · SLA policies · timers · escalation · **the emergency bypass, live and tested here** because it must exist before the agent takes its first real message in week 10 · **owed by 1.7:** the bypass is a policy case too — an emergency category routes to the duty phone **with no model call in between**, which is deterministic and therefore never an eval · **the async negotiation engine starts and runs underneath for six weeks** | W6 |
 | **8** | Evidence | **Try to break tenant isolation, live.** Query as one tenant's phone and attempt to reach another tenant's documents, unit or history — through the console, through the API, and by asking the model. Every path returns nothing. | Policy suite cases 4 and 5 (`UNIT` is the only kind that can be the tenant's; a live warranty moves responsibility to the contractor, and re-resolving after a policy change still returns the snapshot) · `national_id` unreachable by any agent tool · audit on every scoped read · **owed by 1.5 and unblocked by 1.6:** the deploy accounts hold `run.admin` at *project* level because scoping it per service was impossible before a service existed — the Cloud Run services exist now, so bind it per service · **owed by 1.6:** bump the four Node-20 GitHub actions (`checkout@v4`, `setup-node@v4`, `google-github-actions/auth@v2`, `setup-gcloud@v2`), which every run annotates as deprecated · **owed by 1.10, in the same pass:** `release.yml` gains the `docker image inspect` size line `deploy.yml` already has | W7 |

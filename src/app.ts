@@ -1,10 +1,18 @@
-// The walking skeleton (slice 1.3), rewired onto the kernel (slice 1.4). One route, and the only
-// claim it makes is one it can prove: the process is up *and* it can reach the database.
-// "Deployed but silently broken" is what infra/smoke.sh exists to make impossible
-// (docs/pipeline.md §5), and this is the endpoint it asks.
+// The composition root. The walking skeleton (slice 1.3), rewired onto the kernel (slice 1.4), and
+// given its first screens at 1.11.
+//
+// /health is the endpoint infra/smoke.sh asks, and the only claim it makes is one it can prove: the
+// process is up *and* it can reach the database. "Deployed but silently broken" is what that script
+// exists to make impossible (docs/pipeline.md §5).
+//
+// Modules are wired here and nowhere else, through their contract.ts. registerUiAssets has existed
+// since the 1.4 kernel lift with nothing to serve; this is the slice that gives it a page to serve
+// the stylesheet to.
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
+import { registerEstateRoutes } from './estate/contract.ts';
 import { httpStatus, KernelError, toErrorBody } from './kernel/errors.ts';
+import { registerUiAssets } from './kernel/ui/assets.ts';
 
 export interface AppDeps {
   pool: Pool;
@@ -42,6 +50,9 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       return { ok: false, version: deps.version, ...toErrorBody(error) };
     }
   });
+
+  registerUiAssets(app);
+  registerEstateRoutes(app, { pool: deps.pool });
 
   return app;
 }
