@@ -82,13 +82,19 @@ const styles = h`<style>
     font-size: var(--text-lg);
     font-weight: 500;
   }
+  /* Two different measures on purpose. A building's facts are a date and a tender name and need a
+     column wide enough not to break '2027-03-01' across two lines on a phone; a unit's are
+     two-token pairs and would waste half the card at that width. Seen on staging at 375px. */
   .facts {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
     gap: var(--space-2) var(--space-4);
     margin: 0;
     color: var(--color-text-muted);
     font-size: var(--text-base);
+  }
+  .unit-card .facts {
+    grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
   }
   .facts div { display: flex; gap: var(--space-2); min-width: 0; }
   .facts dt { margin: 0; }
