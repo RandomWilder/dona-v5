@@ -541,3 +541,58 @@ describe('tenancy · the rest of the schema', () => {
     }
   });
 });
+
+// ------------------------------------------------------------------------------------------------
+// `terms_profile`'s natural key — `0009_import_natural_keys.sql`, slice 2.4.
+//
+// 2.2 landed the table with identity and one column, E1 `project`'s move at 1.9, and left the key to
+// the slice with an importer that has to look a profile up idempotently. **Written red first**
+// against `0008`, where the second insert is accepted and the register grows a second profile named
+// `standard` on every run.
+//
+// Choosing the key is not the same question as *how many profiles are in force*, which is week 5's
+// and is deliberately still open. What identifies one is all that was owed here.
+// ------------------------------------------------------------------------------------------------
+
+describe('tenancy · a terms profile is identified by its name', () => {
+  it('is what makes a re-import find the profile rather than add one', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await t.test('one name is one profile', async () => {
+        await inRolledBackTransaction(pool, async (db) => {
+          await db.query(
+            `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)`,
+            [newId(), 'נספח תחזוקה — תקן'],
+          );
+          await rejects(db, UNIQUE_VIOLATION, () =>
+            db.query(
+              `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)`,
+              [newId(), 'נספח תחזוקה — תקן'],
+            ),
+          );
+        });
+      });
+
+      // Two profiles genuinely differ by name, and the key must not stand in the way of the second
+      // one arriving at week 5.
+      await t.test('two names are two profiles', async () => {
+        await inRolledBackTransaction(pool, async (db) => {
+          await db.query(
+            `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)`,
+            [newId(), 'נספח תחזוקה — תקן'],
+          );
+          await db.query(
+            `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)`,
+            [newId(), 'נספח תחזוקה — מורחב'],
+          );
+        });
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+});

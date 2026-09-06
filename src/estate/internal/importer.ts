@@ -15,23 +15,18 @@
 // reason about, and the whole plan is one screen's worth of rows.
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
+import { INSERTED } from '../../kernel/upsert.ts';
 import type {
   BuildingPlan,
   EstatePlan,
   ImportReport,
   Queryable,
+  SpacePlan,
   TableCount,
+  UnitPlan,
+  UnitRowResult,
+  UnitRowSpec,
 } from './plan.ts';
-
-// `xmax = 0` on the row an `ON CONFLICT DO UPDATE` returns is true when the row was inserted and
-// false when it was updated: a freshly inserted tuple carries no deleting transaction id and the
-// update path sets one. It is the only way to tell the two apart in one statement, and it is what
-// makes the report a fact about *this* import rather than about the whole table.
-//
-// It replaced a `count(*)` before and after, which was wrong in a way that looked right: another
-// suite, another environment or a developer's own `npm run seed` moves a table count, and CI caught
-// two test files racing over one database within the hour (slice 1.11).
-const INSERTED = '(xmax = 0) AS inserted';
 
 class Tally {
   created = 0;
@@ -195,6 +190,36 @@ type SpaceIndex = Map<string, string>;
 
 const spaceKey = (kind: string, name: string) => `${kind}\n${name}`;
 
+async function upsertSpace(
+  db: Queryable,
+  buildingId: string,
+  space: SpacePlan,
+): Promise<{ spaceId: string; inserted: boolean }> {
+  const result = await db.query<{ space_id: string; inserted: boolean }>(
+    `INSERT INTO space (space_id, building_id, space_kind, name, floor, access_note)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (building_id, space_kind, name) DO UPDATE
+       SET floor = EXCLUDED.floor,
+           access_note = EXCLUDED.access_note
+     RETURNING space_id, ${INSERTED}`,
+    [
+      newId(),
+      buildingId,
+      space.kind,
+      space.name,
+      space.floor,
+      space.accessNote,
+    ],
+  );
+  const row = result.rows[0];
+  if (!row) {
+    throw new KernelError('conflict', 'space upsert returned no row', {
+      space: space.name,
+    });
+  }
+  return { spaceId: row.space_id, inserted: row.inserted };
+}
+
 async function upsertSpaces(
   db: Queryable,
   buildingId: string,
@@ -203,32 +228,53 @@ async function upsertSpaces(
 ): Promise<SpaceIndex> {
   const index: SpaceIndex = new Map();
   for (const space of building.spaces) {
-    const result = await db.query<{ space_id: string; inserted: boolean }>(
-      `INSERT INTO space (space_id, building_id, space_kind, name, floor, access_note)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (building_id, space_kind, name) DO UPDATE
-         SET floor = EXCLUDED.floor,
-             access_note = EXCLUDED.access_note
-       RETURNING space_id, ${INSERTED}`,
-      [
-        newId(),
-        buildingId,
-        space.kind,
-        space.name,
-        space.floor,
-        space.accessNote,
-      ],
-    );
-    const row = result.rows[0];
-    if (!row) {
-      throw new KernelError('conflict', 'space upsert returned no row', {
-        space: space.name,
-      });
-    }
-    tally.count(row.inserted);
-    index.set(spaceKey(space.kind, space.name), row.space_id);
+    const { spaceId, inserted } = await upsertSpace(db, buildingId, space);
+    tally.count(inserted);
+    index.set(spaceKey(space.kind, space.name), spaceId);
   }
   return index;
+}
+
+async function upsertUnit(
+  db: Queryable,
+  ids: { unitId: string; parking: string | null; storage: string | null },
+  unit: UnitPlan,
+): Promise<boolean> {
+  // The conflict target is the primary key, and it is the natural key: R2 makes a unit's identity
+  // its space's, so there is no second key here to keep in step with the first.
+  const result = await db.query<{ inserted: boolean }>(
+    `INSERT INTO unit (unit_id, unit_number, rooms, area_sqm, has_mamad,
+                       parking_space_id, storage_space_id, warranty_end_date, condition_status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     ON CONFLICT (unit_id) DO UPDATE
+       SET unit_number = EXCLUDED.unit_number,
+           rooms = EXCLUDED.rooms,
+           area_sqm = EXCLUDED.area_sqm,
+           has_mamad = EXCLUDED.has_mamad,
+           parking_space_id = EXCLUDED.parking_space_id,
+           storage_space_id = EXCLUDED.storage_space_id,
+           warranty_end_date = EXCLUDED.warranty_end_date,
+           condition_status = EXCLUDED.condition_status
+     RETURNING ${INSERTED}`,
+    [
+      ids.unitId,
+      unit.unitNumber,
+      unit.rooms,
+      unit.areaSqm,
+      unit.hasMamad,
+      ids.parking,
+      ids.storage,
+      unit.warrantyEndDate,
+      unit.conditionStatus,
+    ],
+  );
+  const inserted = result.rows[0]?.inserted;
+  if (inserted === undefined) {
+    throw new KernelError('conflict', 'unit upsert returned no row', {
+      unitNumber: unit.unitNumber,
+    });
+  }
+  return inserted;
 }
 
 async function upsertUnits(
@@ -247,41 +293,7 @@ async function upsertUnits(
     const storage = unit.storageSpaceName
       ? (spaces.get(spaceKey('STORAGE', unit.storageSpaceName)) as string)
       : null;
-    // The conflict target is the primary key, and it is the natural key: R2 makes a unit's identity
-    // its space's, so there is no second key here to keep in step with the first.
-    const result = await db.query<{ inserted: boolean }>(
-      `INSERT INTO unit (unit_id, unit_number, rooms, area_sqm, has_mamad,
-                         parking_space_id, storage_space_id, warranty_end_date, condition_status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       ON CONFLICT (unit_id) DO UPDATE
-         SET unit_number = EXCLUDED.unit_number,
-             rooms = EXCLUDED.rooms,
-             area_sqm = EXCLUDED.area_sqm,
-             has_mamad = EXCLUDED.has_mamad,
-             parking_space_id = EXCLUDED.parking_space_id,
-             storage_space_id = EXCLUDED.storage_space_id,
-             warranty_end_date = EXCLUDED.warranty_end_date,
-             condition_status = EXCLUDED.condition_status
-       RETURNING ${INSERTED}`,
-      [
-        unitId,
-        unit.unitNumber,
-        unit.rooms,
-        unit.areaSqm,
-        unit.hasMamad,
-        parking,
-        storage,
-        unit.warrantyEndDate,
-        unit.conditionStatus,
-      ],
-    );
-    const inserted = result.rows[0]?.inserted;
-    if (inserted === undefined) {
-      throw new KernelError('conflict', 'unit upsert returned no row', {
-        unitNumber: unit.unitNumber,
-      });
-    }
-    tally.count(inserted);
+    tally.count(await upsertUnit(db, { unitId, parking, storage }, unit));
   }
 }
 
@@ -314,5 +326,58 @@ export async function importEstate(
     building: buildings.report,
     space: space.report,
     unit: unit.report,
+  };
+}
+
+/**
+ * Upserts one register line's worth of estate — one project, one building, one `UNIT` space, one
+ * unit — and **returns the `unit_id`**, which is what `importEstate` does not.
+ *
+ * Slice 2.4. The register (SPEC-register.md) is a flat file whose rows repeat their building, so its
+ * importer needs a row-shaped call rather than a plan-shaped one, and it needs the id back in order
+ * to hang a tenancy off it. A plan-shaped caller already knows its own shape and never had to ask.
+ *
+ * It is the same four upserts, extracted rather than copied: `importEstate` and this function call
+ * one function per table. That is what keeps `src/register/` from writing SQL against tables this
+ * module owns — and it is why a change to how a building is keyed changes one statement, not two.
+ *
+ * No `validatePlan` here. Its checks are all about a plan's *internal* consistency — a unit naming a
+ * space the plan does not contain, two buildings sharing an address — and a single row has no
+ * internals to be inconsistent with. The register's own row validation is `src/register/`'s, where
+ * a rejection can carry a line number.
+ */
+export async function upsertUnitRow(
+  db: Queryable,
+  spec: UnitRowSpec,
+): Promise<UnitRowResult> {
+  const project = spec.project ? await upsertProject(db, spec.project) : null;
+  const building = await upsertBuilding(db, {
+    ...spec.building,
+    spaces: [],
+    units: [],
+  });
+
+  // A register carries apartments and nothing else — no lobby, no plant room — so the one space a
+  // row implies is the `UNIT` it names. Parking bays and storage rooms are Space rows too (workbook
+  // D3) and reach the system through a plan, which is where a handover protocol will put them.
+  const space = await upsertSpace(db, building.buildingId, {
+    kind: 'UNIT',
+    name: spec.unit.spaceName,
+    floor: spec.floor,
+    accessNote: null,
+  });
+  const unit = await upsertUnit(
+    db,
+    { unitId: space.spaceId, parking: null, storage: null },
+    { ...spec.unit, parkingSpaceName: null, storageSpaceName: null },
+  );
+  return {
+    unitId: space.spaceId,
+    inserted: {
+      project,
+      building: building.inserted,
+      space: space.inserted,
+      unit,
+    },
   };
 }

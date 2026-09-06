@@ -7,7 +7,7 @@ and this file is a bug.
 
 - **Owns:** E5, E6 — Party · PartyContact.
 - **Depends on:** kernel.
-- **Built:** week 2, slice 2.1.
+- **Built:** week 2, slice 2.1; the natural key and the module's two write commands at slice 2.4.
 
 ## The shape, and why it is this one
 
@@ -98,23 +98,57 @@ Two CHECKs sit beside it and are not decoration:
   the edge is slice 2.3's, where 1.7 carried it and [SPEC-scope.md](SPEC-scope.md) records it. Until
   then the CHECK is what stands between a badly-formatted import and a silent miss.
 
+## The natural key — `src/kernel/migrations/0009_import_natural_keys.sql`
+
+2.1 left this table with nothing unique but its primary key, deliberately, for the reason 1.9 left
+`address_key` out and 1.11 vindicated. **Slice 2.4 chose it**, because that is the slice with an
+importer that has to be run twice, and it is `address_key`'s technique applied to the identifier:
+the normalisation lives in the database, so every writer gets it rather than every writer
+remembering it.
+
+```sql
+national_id_key text GENERATED ALWAYS AS (
+  CASE WHEN national_id IS NULL THEN NULL ELSE party_kind || ':' || <normalised> END
+) STORED,  -- pii
+CONSTRAINT party_natural_key UNIQUE (national_id_key)
+```
+
+Three decisions are inside that expression, and 2.1 named all three:
+
+- **Leading zeros.** Every spreadsheet export drops them, so `042…` and `42…` are one person. An
+  all-digit identifier of nine characters or fewer is left-padded to nine. A naive
+  `UNIQUE (national_id)` is a key that disagrees with itself the first time a register arrives.
+- **Two registries.** A ת.ז. and a ח.פ. can be the same nine digits, so `party_kind` is in the key.
+- **Nullable.** A `UNIQUE` index ignores nulls, so a party with no identifier has no natural key —
+  correct rather than a gap, because the lease flow (A2, [SPEC-flows.md](SPEC-flows.md)) legitimately
+  creates a party from a document that names no ת.ז. An identifier that is *not* all digits — a
+  passport — is normalised for case and separators only; padding it would be inventing a fact.
+
+**The key is `-- pii`.** It is a normalised ת.ז., not an enforcement column carrying no fact, which
+is where it differs from `address_key`. Guard three sees it by name and asks for the marker.
+
+The register file format goes further than the schema does and **requires** an identifier on every
+row ([SPEC-register.md](SPEC-register.md)): no identifier, no idempotence. That is a constraint on
+one file format and not on the table, and it is a question put to the client rather than an
+assumption made about them.
+
+`party_contact` gains `UNIQUE (party_id, channel, value, valid_from)` in the same migration. That is
+less a decision about the domain than one the upsert forces — `ON CONFLICT` needs a unique
+constraint as its target and an `EXCLUDE` constraint cannot be one — and it sits *inside* the
+exclusion constraint above rather than competing with it: every pair it rejects, the exclusion
+constraint already rejected.
+
 ## What is deliberately not here
 
-- **No natural key on `party`.** The obvious candidate is `national_id`, and it is the same trap
-  `address_key` was at 1.9: a ת.ז. is nine digits **with leading zeros that every spreadsheet export
-  drops**, so `042…` and `42…` are one person and a naive `UNIQUE (national_id)` is a key that
-  disagrees with itself the first time the real register arrives. It would also have to be
-  `(party_kind, national_id)` — a ת.ז. and a ח.פ. are different registries and can be the same nine
-  digits — and it is nullable, which is a third decision. 1.9 left the estate spine keyless for this
-  reason and 1.11 chose the key against real addresses; **slice 2.4 chooses this one against the
-  export**, and it costs a migration.
-- **No `contract.ts`.** There is nothing to export yet: no command, no read model. Estate landed its
-  schema at 1.9 with a test and no module surface, and the surface arrived at 1.11 with a caller.
-  2.3 and 2.4 are this module's callers.
-- **No uniqueness on `is_primary`.** "At most one primary contact per party per channel" is a
-  plausible rule the workbook does not state, and stating it as a partial unique index would make an
-  import that touches two rows in the wrong order fail on a rule nobody asked for. Revisit at 2.4 if
-  the export contains the fact.
+- **No uniqueness on `is_primary`, and 2.4 confirmed it rather than revisiting it.** "At most one
+  primary contact per party per channel" is a plausible rule the workbook does not state. The
+  register carries one contact per row and does not say which of a party's numbers is primary, so a
+  partial unique index would fail an import that touched two rows in the wrong order, on a rule
+  nobody asked for.
+- **No read model.** `contract.ts` exists from 2.4 and exports two write commands — `upsertParty`
+  and `upsertPartyContact` — because the register importer is the caller 2.1 predicted. There is
+  still no screen over this module and no query on its contract; `src/scope/` answers who is
+  reachable, and 2.6's grid reads estate.
 
 ## Guard three learned a table-qualified name here
 
@@ -129,7 +163,11 @@ added to it when it is met"*; this is the first one met, and the rule stayed the
 
 ## Open
 
-- **How a party is deduplicated on import** — see *No natural key*, above. 2.4's, against the export.
+- **Closed at 2.4 — how a party is deduplicated on import.** `national_id_key`, above. It was chosen
+  against a *designed* register file rather than against Dona Dom's export, because the real register
+  moved to step 4 of the method on 6 Sep ([SPEC-flows.md](SPEC-flows.md)) and the alternative was
+  deferring a key that 2.6 needs at volume. What the designed file cannot answer is whether the real
+  export carries an identifier on every row; that is slice 2.5's, with the export in hand.
 - **Whether a company party needs a contact person.** A `COMPANY` party with a `full_name` of the
   company and a `party_contact` of whoever answers the phone works today. If the operator needs the
   contact's own name recorded, that is a person party and a relationship between them, and it is a

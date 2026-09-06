@@ -8,8 +8,9 @@ workbook disagree, the workbook is right and this file is a bug.
 - **Owns:** E7–E10 — Tenancy · TenancyParty · Obligation · ObligationType, plus an append-only
   `TenancyEvent` beside the mutable row.
 - **Depends on:** estate, parties.
-- **Built:** week 2, slice 2.2 — Tenancy and TenancyParty. Obligation, ObligationType and
-  `TenancyEvent` are week 5's.
+- **Built:** week 2, slice 2.2 — Tenancy and TenancyParty; `terms_profile`'s natural key and the
+  module's three write commands at slice 2.4. Obligation, ObligationType and `TenancyEvent` are week
+  5's.
 
 ## The shape, and why it is this one
 
@@ -120,12 +121,22 @@ by tripping the guard rather than by anticipating it.
   is week 5's, and the responsibility matrix that reads them is week 6's.** Until then the table
   holds a name, and the importer has to say which profile each lease is on, which is a question for
   the client that a nullable column would have hidden until week 6.
+
+  **Its natural key is `UNIQUE (name)`, chosen at 2.4** in `0009_import_natural_keys.sql`. The
+  importer needs to look a profile up idempotently and a register names one by its name; *how many*
+  are in force is a different question from *what identifies one*, and only the second was owed here.
+  **A lease naming no profile is a reject with its line number, not a defaulted row**
+  ([SPEC-register.md](SPEC-register.md)) — defaulting to `standard` would have answered a question
+  the client has not been asked, which is exactly what the NOT NULL exists to prevent.
 - **Obligation, ObligationType and `TenancyEvent`** — E9, E10 and the append-only log — are week 5's.
   `ObligationType` will be an admin-managed catalogue, deactivated never deleted, with
   `responsible_party` copied onto the obligation at creation so editing the catalogue cannot rewrite
   history (foundation rule 8).
-- **No `contract.ts`.** Nothing to export yet: no command, no read model. Parties landed the same way
-  at 2.1. This module's callers are 2.3 (scope) and 2.4 (the importer).
+- **No read model.** `contract.ts` exists from 2.4 and exports three write commands —
+  `upsertTermsProfile`, `upsertTenancy` and `upsertTenancyParty` — because the register importer is
+  the caller 2.2 predicted. There is still no query on this module's contract: who is in a unit today
+  is `src/scope/`'s answer and never this module's, which is foundation rule 1 expressed as a module
+  boundary.
 - **No index on `end_date`.** Q5 — leases ending in the next 60 days across the whole portfolio — is
   one indexed query at **2.6**, decided at full row count with a timing in front of it rather than
   assumed at a few thousand rows. `tenancy_party (party_id)` does exist, because the composite
@@ -133,8 +144,10 @@ by tripping the guard rather than by anticipating it.
 
 ## Open
 
-- **Which `terms_profile` a real lease is on.** Owed by 2.4 and 2.5: the Priority export may not
-  carry the fact, in which case it is a question for the client before the register is imported.
+- **Which `terms_profile` a real lease is on.** 2.4 settled how one is *identified* — by name — and
+  left this open, because it is a fact about the client's leases and not about the schema. The
+  register format requires the column, so an export that does not carry it is a question raised at
+  import time rather than a gap discovered at week 6 by a matrix with no input. **2.5's.**
 - **What the overlap constraint does to the real register.** A register with sloppy dates will have
   rows rejected at 2.5. That is the intended direction — a reject with a line number rather than two
   households in one apartment — but the count is a fact about the client's data and is recorded when

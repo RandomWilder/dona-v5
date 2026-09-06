@@ -8,8 +8,8 @@ workbook is right and this file is a bug.
 - **Owns:** E1–E4, E11 — Project · Building · Space · Unit · Asset.
 - **Depends on:** kernel.
 - **Built:** Project · Building · Space · Unit at week 1, slice 1.9; the natural keys, the importer
-  and the first two screens at slice 1.11. Asset at week 3, slice 3.5, seeded from handover
-  protocols.
+  and the first two screens at slice 1.11; `upsertUnitRow` for the register importer at slice 2.4.
+  Asset at week 3, slice 3.5, seeded from handover protocols.
 
 ## The shape, and why it is this one
 
@@ -118,8 +118,17 @@ units, because `unit.parking_space_id` and `storage_space_id` point at them.
 would have to re-select to learn the id it just failed to insert; and an import correcting a typo in a
 floor or an area should correct it.
 
-The report is row counts before and after, so "the second run created nothing" is a number and not a
-claim.
+The report is created / updated per table, taken from `(xmax = 0)` on each statement's own returned
+row rather than from a whole-table count, so "the second run created nothing" is a number about *this*
+import and not about whatever else is in the database.
+
+**`upsertUnitRow` is the same importer entered one row at a time, added at 2.4.** The register
+([SPEC-register.md](SPEC-register.md)) arrives as a flat file whose rows repeat their building, so it
+needs a call that upserts one project, one building, one `UNIT` space and one unit and **returns the
+`unit_id`** — which `importEstate` does not, because a plan-shaped caller already knows its own
+shape. It is the identical four upserts, extracted rather than copied: one function per table, called
+by both entry points. The register writes no estate SQL of its own, which is what keeps the table's
+rules in the module that owns them.
 
 ## What is deliberately not a column
 

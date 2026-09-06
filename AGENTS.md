@@ -4,17 +4,17 @@
 - `npm test` · `npm run typecheck` · `npm run lint` · `npm run format` · `npm run db:up && npm run dev`
   → `/health` asserts `db:up`, `/estate` is the screen. Node 24 type-strips `.ts`; no build step.
   `npm run migrate` applies `src/kernel/migrations/` as a Cloud Run job before a revision serves;
-  `npm run seed` loads the demo fixture and is deliberately in no workflow.
+  `npm run seed` and `npm run import:register <file>` load data and are in no workflow, on purpose.
 - **Two required gates** plus `npm run guards`: `test:policy` (nothing a model may decide) and `evals`
   (the agent; `npm run measure` beside it). CI sets `REQUIRE_*=1` — a silent skip is a failure.
 - Merge to `main` → CI green → staging on `workflow_run`, **never on push**; prod on a `v*` tag only.
   `infra/bootstrap.sh <env>` provisions (idempotent, never by hand) · `infra/rollback.sh`.
 
 ## Architecture
-- Modular monolith, one deployable, `me-west1`. `src/<module>/`: estate · parties · tenancy ·
-  evidence · scope · policy · calls · channel · staff. Shared `src/kernel/` imports from no module.
+- Modular monolith, one deployable, `me-west1`. `src/<module>/`: estate · parties · tenancy · evidence ·
+  scope · register · policy · calls · channel · staff. Shared `src/kernel/` imports from no module.
 - A module imports another's `contract.ts`, never its `internal/`, and **`src/scope/` is the only
-  place the isolation join is written**. A CI grep guard enforces both.
+  place the isolation join is written**. A grep guard and `kernel/boundary.test.ts` enforce both.
 - Read `SPEC.md` first; a module's `SPEC-<module>.md` is updated before its code, in the same change.
 
 ## Code style

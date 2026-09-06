@@ -124,14 +124,23 @@ export async function seedOccupancy(
     [newId(), partyId, spec.phone, spec.contactFrom, spec.contactTo],
   );
   // Which maintenance annex governs this lease. A NOT NULL foreign key in the workbook, so every
-  // seeded tenancy needs one. A profile per seed rather than a shared one, unlike the building
-  // above: the building is shared because a unique key forces it, and nothing in these cases turns
-  // on two tenancies naming the same profile.
-  const termsProfileId = newId();
-  await db.query(
-    `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, 'standard')`,
-    [termsProfileId],
+  // seeded tenancy needs one.
+  //
+  // **Shared rather than one per seed, from 2.4** — for the reason the building above is shared, and
+  // it arrived the same way. 2.2 wrote a profile per seed and said "nothing in these cases turns on
+  // two tenancies naming the same profile"; 2.4 gave `terms_profile` the natural key
+  // `UNIQUE (name)`, which made that false, and every case seeding two occupancies went red with
+  // `23505` on `terms_profile_natural_key`. That is the constraint doing its job on a fixture, which
+  // is the second time in three slices this builder has been the thing that was wrong — and it is
+  // also the truer model: one maintenance annex governs many leases, which is what a name being a
+  // key means.
+  const profile = await db.query<{ terms_profile_id: string }>(
+    `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, 'standard')
+     ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+     RETURNING terms_profile_id`,
+    [newId()],
   );
+  const termsProfileId = profile.rows[0]?.terms_profile_id;
   await db.query(
     `INSERT INTO tenancy (tenancy_id, unit_id, start_date, end_date, status, terms_profile_id)
      VALUES ($1, $2, $3, $4, $5, $6)`,
