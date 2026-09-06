@@ -349,6 +349,21 @@ the importer path rather than by hand, and a buildings/units list screen on the 
   against module HTML shells that v5 does not have yet. It is the guard keeping a hex colour, a
   `fonts.googleapis` URL and a physical `left:`/`right:` out of a screen, and it fails on the HTML
   rather than the CSS because that is where the discipline erodes. It lands with this screen.
+- **Closed 2026-09-06** ([evidence](evidence/1.11.md)). Staging serves it: revision `00014-vtx`,
+  `/` → `/estate` → the building → its 72 units, zero `<script>` tags, every measure off
+  `/ui/tokens.css`. `0005_` carries three keys — `project (project_code)`, `space (building_id,
+  space_kind, name)` and `building (address_key)`, a generated column rather than a unique constraint
+  over the two address columns, because a second export types the same address differently. `unit`
+  gets none: R2 already made its identity its space's. The red was measured, not asserted — 2
+  buildings, 368 spaces, 144 units from one fixture applied twice against `0004`. **The token guard
+  lifted from v3 was broken**: its pattern misses `padding-left`, `border-left-width` and
+  `text-align: left`, found by tripping it. `npm run seed` is in **no workflow** on purpose; staging
+  was seeded by a Cloud Run job as `app-staging` and run twice to show `created: 0`. The fixture is
+  ours top to bottom — see the corrected week-1 demo note below. **The slice shipped one defect and
+  the gate caught it** on its own closing PR: the import report counted whole tables rather than the
+  plan's own rows, which is a number another suite or a developer's seed can move. It counts from
+  `(xmax = 0)` per upsert now, and every estate suite is scoped to a city of its own — fixed inside
+  the slice, not carried out of it.
 - **Deps:** 1.9 · **Size:** M
 
 ### Slice 1.12 — The corpus, both tiers, and the controls the second one needs
