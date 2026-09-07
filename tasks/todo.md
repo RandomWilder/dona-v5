@@ -44,10 +44,10 @@ the workbook is the anti-pattern this project has already named once.
       carries no handover date. The Shoham plan's one building is not a placeholder (2025-03-01 was
       authored). Flow A6 writes the real date from a confirmed `building_handover_protocol`.
       [evidence/3.5.md](evidence/3.5.md).
-      **Still open, owned here and carried to 3.6's week-end if not closed:** `upsertUnitRow` still
+      **Still open, rides into week 4 with A2:** `upsertUnitRow` still
       writes only a `UNIT` space, so register-imported buildings still have no `PARKING` or
       `STORAGE` rows. The Shoham fixture already has 60 bays and 40 rooms; the gap is the register
-      path, which a protocol cannot fill until those spaces exist.
+      path, which a protocol cannot fill until those spaces exist. 3.6 did not close it.
 - [x] **The demo-day discrepancy — discharged at 3.0, and the carry was describing something that had
       already been fixed.** 3.0 edits `docs/model/`, so it inherited this. The claim was that
       [pipeline.md](../docs/pipeline.md) §7 says the demo kind is declared **Monday**. It does not,
@@ -333,10 +333,10 @@ a known size. [roadmap.md](roadmap.md) owns it at **week 8**, in the same IAM pa
       is not developer-to-operator; the tenth type `building_handover_protocol` is a seed row. The
       confirm page recomputes from stored bytes, no staging table. Placeholder count: **2/2** and
       **37/37** register buildings, **0/1** fixture. **384 code + 41 hooks green.** Raised and
-      owned: parking/storage on `upsertUnitRow` (still this week) · the inspection-date index
+      owned: parking/storage on `upsertUnitRow` (week 4 / A2) · the inspection-date index
       (measurement) · A2's staging shape (week 4).
 
-- [ ] **3.6 — Find it in four seconds.** Document search and the documents panels on the building and
+- [x] **3.6 — Find it in four seconds.** Document search and the documents panels on the building and
       unit screens, grouped by type.
       **Done when:** a named lease is on screen within four seconds of deciding to look for it.
       **Verify:** timed, by the owner, **on staging** — not locally, and not by me.
@@ -356,11 +356,17 @@ a known size. [roadmap.md](roadmap.md) owns it at **week 8**, in the same IAM pa
       to a lease whose marker terms were all found. **3.3 also gave this slice something to list**:
       the upload route files documents and binds them to a unit and, when one was chosen, a letting.
       **Deps:** ~~3.4~~ **3.3**, re-pointed 6 Sep 2026 · **S**
+      **Closed 2026-09-07** ([evidence](evidence/3.6.md)). `verification_verdict` on E12 — workbook
+      first, then `0014` / `0015`, CHECK and NOT NULL **red first** (`23514` / `23502`). Search
+      extended, not forked: same box, same escape, same `LIMIT` 60. Thin unit page; building page
+      lists BUILDING-linked paper only. Path is text, never a signed URL. **396 code + 41 hooks +
+      44 policy.** Verify remaining: owner times the four seconds on staging. Parking/storage on
+      `upsertUnitRow` not closed — week 4 / A2.
 
 ---
 
 **Cut line, in order:** the compliance tab's visual treatment (the *query* is what matters this
-week) · the documents panel's grouping in 3.6 (a flat list still finds the lease in four seconds).
+week). Grouping in 3.6 shipped (type headings); a flat list would still have met the bar.
 **Do not cut 3.0**, and do not cut 3.5's handover-date correction — it is the only thing that
 discharges a carried item, and a carry that survives two weeks stops being a carry and becomes a
 thing nobody owns.

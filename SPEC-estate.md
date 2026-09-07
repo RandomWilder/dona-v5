@@ -11,7 +11,8 @@ workbook is right and this file is a bug.
   and the first two screens at slice 1.11; `upsertUnitRow` for the register importer at slice 2.4;
   the portfolio-scale surface — search, Q5, the occupancy chip and the root index — at slice 2.6.
   Asset at week 3, slice 3.5, seeded from handover protocols. The E14 Provider stub landed in the
-  same migration so R11 has a table to point at.
+  same migration so R11 has a table to point at. Slice 3.6 added a thin unit page and grew search by
+  a documents half; both list what is filed, never who signed it.
 
 ## The shape, and why it is this one
 
@@ -129,11 +130,12 @@ lower-cased with runs of whitespace collapsed, because address text arrives from
 inconsistent spacing and casing and normalising it in the database means every writer gets it. Nothing
 writes it and nothing reads it but the constraint; `address_line` and `city` remain the facts.
 
-## The surface — five routes, `src/estate/internal/views.ts`
+## The surface — six routes, `src/estate/internal/views.ts`
 
 `GET /estate` lists the buildings; `GET /estate/buildings/:buildingId` shows one building, its spaces
 by kind and its units. Slice 2.6 added three more: `GET /` is an index of the screens,
-`GET /estate/search?q=` searches the portfolio, and `GET /estate/expiring` is Q5.
+`GET /estate/search?q=` searches the portfolio, and `GET /estate/expiring` is Q5. Slice 3.6 added
+`GET /estate/units/:unitId` — a thin unit page, not the workbook's full unit sheet.
 
 Server-rendered through the kernel's `h` template, which escapes every interpolation — so there is
 **no client JavaScript at all**, and no JSON API that would have to be scoped before the screens can
@@ -160,11 +162,18 @@ arrives; an address and a unit number are not personal data, and a name is. The 
 holds hundreds of apartments and sixty arbitrary ones is a worse answer than the buildings that
 contain them, while a building name or an address narrows to one building and matches both.
 
+**Slice 3.6 grew it by a documents half rather than forking a second search.** The documents query
+lives in evidence (`searchDocuments`) and is injected here, because evidence already imports estate
+and the other direction would be a cycle. It matches a type label, a unit number, a building name or
+address — never a city, never a party, never the file's text. A unit hit links to the unit page, not
+the building, so a 72-flat building is not the find path.
+
 The term is trimmed, capped at 80 characters, and its **LIKE metacharacters are escaped**. A bound
 parameter is not the same thing as a safe pattern: unescaped, a lone `%` matches the whole portfolio
 and `_` matches every one-character name. Both halves fetch one row past the limit, which is how a
 list learns it was cut off without a second `count(*)` over the predicate it just decided not to
-read.
+read. The documents half keeps the same escape and the same limit; a second search that forgets
+either is the defect 2.6 wrote a test for.
 
 **`GET /estate/expiring` is Q5** — every ACTIVE lease in the portfolio ending inside sixty days, one
 indexed query, ordered by date. It shows a unit, a building and a date and **no party at all**.
@@ -203,7 +212,13 @@ week 5 gives them a session.
 **There is no authentication on any of these screens, and that is a dated state, not a design.** Staff auth
 is Identity Platform with enforced MFA at week 5. Until then the screens serve fixture data with no
 personal data in it, and carry `noindex`. The week-5 row in [tasks/roadmap.md](tasks/roadmap.md) owns
-closing it; nothing may put a real party, contact or document behind these routes before it does.
+closing it; nothing may put a real party or contact behind these routes before it does.
+
+**Document metadata may appear; the bytes may not.** Slice 3.6 puts type, dates, ingest date, the
+`gs://` path as text and the verification verdict on the building page (BUILDING-linked paper) and
+on the unit page (UNIT-linked paper). A signed URL is a bearer token for one object and is week 5's
+to mint, behind the session. Who signed the paper is still `src/scope/`'s answer and is not on these
+screens. Real tenant documents remain gated behind F6.
 
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
 `GET`/`POST /documents/new`, reached from a unit row on the building page. It is unauthenticated for
@@ -215,7 +230,14 @@ week 5**, because the real corpus is gated behind F6 and arrives later than the 
 **`getUnit` joined this module's read model at 3.3**, returning the `UnitHit` shape the search screen
 already uses — a unit number and the building it is in, and no party. Evidence asks for it to render
 the unit an upload is being filed against; a document screen inventing its own unit query would be
-the second copy estate exists to prevent.
+the second copy estate exists to prevent. **`GET /estate/units/:unitId` is the thin unit page 3.6
+added**: that same header, the occupancy chip, the upload link, and the documents panel. The
+workbook's other unit-sheet panels (tenancy, obligations, assets, history) wait.
+
+**The documents listed on these screens are injected, not imported.** `EstateDeps` carries
+`listLinkedDocuments` and `searchDocuments` from evidence's contract, wired in `app.ts`. Estate
+renders the cards; evidence owns the SQL. Building-level paper stays on the building page;
+unit paper stays on the unit page.
 
 ## The importer — `importEstate`, `src/estate/internal/importer.ts`
 

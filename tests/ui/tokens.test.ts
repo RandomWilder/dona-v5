@@ -17,7 +17,8 @@ import type {
   BuildingDetail,
   BuildingSummary,
   ExpiringLease,
-  SearchResults,
+  FiledDocumentView,
+  SearchPageResults,
   UnitHit,
 } from '../../src/estate/contract.ts';
 import {
@@ -26,6 +27,7 @@ import {
   renderExpiringPage,
   renderIndexPage,
   renderSearchPage,
+  renderUnitPage,
 } from '../../src/estate/contract.ts';
 import type { DocumentTypeRow } from '../../src/evidence/contract.ts';
 import {
@@ -97,10 +99,37 @@ const hit: UnitHit = {
   city: building.city,
 };
 
-const results: SearchResults = {
+const results: SearchPageResults = {
   buildings: [building],
   units: [hit],
+  documents: [],
   truncated: true,
+};
+
+const filed: FiledDocumentView = {
+  documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  typeKey: 'lease',
+  labelHe: 'חוזה שכירות',
+  ingestedAt: '2026-09-07',
+  validFrom: '2025-01-01',
+  validTo: '2026-12-31',
+  storageUri:
+    'gs://dona-v5-staging-docs/unit/22222222-2222-4222-8222-222222222222/lease/' +
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.pdf',
+  verificationVerdict: 'verified',
+};
+
+const unverified: FiledDocumentView = {
+  ...filed,
+  documentId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  typeKey: 'handover_protocol',
+  labelHe: 'פרוטוקול מסירה',
+  validFrom: null,
+  validTo: null,
+  storageUri:
+    'gs://dona-v5-staging-docs/building/11111111-1111-4111-8111-111111111111/handover_protocol/' +
+    'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.pdf',
+  verificationVerdict: 'unverified',
 };
 
 const expiring: ExpiringLease[] = [
@@ -178,15 +207,55 @@ const SCREENS: Array<[string, () => string]> = [
     'estate · one building, nothing let',
     () => renderBuildingPage(detail, new Map()),
   ],
+  [
+    'estate · one building, with a protocol',
+    () => renderBuildingPage(detail, occupancy, [unverified]),
+  ],
+  ['estate · one unit', () => renderUnitPage(hit, 2, [filed])],
+  [
+    'estate · one unit, vacant and empty',
+    () => renderUnitPage(hit, undefined, []),
+  ],
   ['estate · search', () => renderSearchPage('רקפת', results)],
   [
     'estate · search, nothing found',
     () =>
-      renderSearchPage('זזז', { buildings: [], units: [], truncated: false }),
+      renderSearchPage('זזז', {
+        buildings: [],
+        units: [],
+        documents: [],
+        truncated: false,
+      }),
   ],
   [
     'estate · search, no term',
-    () => renderSearchPage('', { buildings: [], units: [], truncated: false }),
+    () =>
+      renderSearchPage('', {
+        buildings: [],
+        units: [],
+        documents: [],
+        truncated: false,
+      }),
+  ],
+  [
+    'estate · search, a named lease',
+    () =>
+      renderSearchPage('שכירות', {
+        buildings: [],
+        units: [],
+        documents: [
+          {
+            ...filed,
+            entityType: 'UNIT',
+            entityId: hit.unit_id,
+            unitId: hit.unit_id,
+            unitNumber: hit.unit_number,
+            buildingId: hit.building_id,
+            buildingName: hit.building_name,
+          },
+        ],
+        truncated: false,
+      }),
   ],
   ['estate · leases ending', () => renderExpiringPage(expiring, 60)],
   [
@@ -345,6 +414,7 @@ describe('shared UI tokens', () => {
     const html = renderSearchPage('<img src=x onerror=alert(1)>', {
       buildings: [],
       units: [],
+      documents: [],
       truncated: false,
     });
     assert.doesNotMatch(html, /<img/);
@@ -379,5 +449,19 @@ describe('shared UI tokens', () => {
       assert.doesNotMatch(html, /05\d[- ]?\d/, name);
       assert.doesNotMatch(html, /\+972/, name);
     }
+  });
+
+  it('shows a path and never a link to the bytes', () => {
+    // A signed URL is a bearer token for one object. Until week 5 there is no session to hang one
+    // on, so the panel renders the gs:// uri as text. The filed-document screen already kept the
+    // uri off the page entirely; the panel is allowed to name the path and still must not make it
+    // clickable.
+    const html = renderUnitPage(hit, 2, [filed]);
+    assert.match(html, /gs:\/\/dona-v5-staging-docs\//);
+    assert.doesNotMatch(html, /href="gs:/);
+    assert.doesNotMatch(html, /storage\.googleapis\.com/);
+    const buildingHtml = renderBuildingPage(detail, occupancy, [unverified]);
+    assert.match(buildingHtml, /gs:\/\/dona-v5-staging-docs\//);
+    assert.doesNotMatch(buildingHtml, /href="gs:/);
   });
 });

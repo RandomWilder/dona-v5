@@ -11,7 +11,11 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import { registerEstateRoutes } from './estate/contract.ts';
-import { registerDocumentRoutes } from './evidence/contract.ts';
+import {
+  listLinkedDocuments,
+  registerDocumentRoutes,
+  searchDocuments,
+} from './evidence/contract.ts';
 import { type Clock, systemClock } from './kernel/clock.ts';
 import { httpStatus, KernelError, toErrorBody } from './kernel/errors.ts';
 import {
@@ -75,6 +79,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   registerEstateRoutes(app, {
     pool: deps.pool,
     clock: deps.clock ?? systemClock,
+    listLinkedDocuments,
+    searchDocuments,
   });
   registerDocumentRoutes(app, {
     pool: deps.pool,

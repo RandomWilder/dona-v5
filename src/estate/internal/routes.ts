@@ -18,11 +18,14 @@ import {
   countUnitsByBuilding,
   EXPIRING_WINDOW_DAYS,
   getBuilding,
+  getUnit,
   listBuildings,
   listExpiringLeases,
   searchEstate,
 } from './read-model.ts';
 import {
+  type DocumentSearchHit,
+  type FiledDocumentView,
   type OccupancyByBuilding,
   type OccupancyByUnit,
   renderBuildingPage,
@@ -30,12 +33,30 @@ import {
   renderExpiringPage,
   renderIndexPage,
   renderSearchPage,
+  renderUnitPage,
 } from './views.ts';
 
 export interface EstateDeps {
   pool: Pool;
   /** Injected, never read here: a screen whose answer changes at midnight is one no test can pin. */
   clock: Clock;
+  /**
+   * Slice 3.6. Injected from evidence so this module never imports it — evidence already imports
+   * estate, and the other direction would be a cycle. Structural: the composition root wires the
+   * real functions.
+   */
+  listLinkedDocuments: (
+    db: Pool,
+    entityType: 'BUILDING' | 'UNIT',
+    entityId: string,
+  ) => Promise<readonly FiledDocumentView[]>;
+  searchDocuments: (
+    db: Pool,
+    term: string,
+  ) => Promise<{
+    documents: readonly DocumentSearchHit[];
+    truncated: boolean;
+  }>;
 }
 
 /** What a search box may be sent before it stops being a search box. */
@@ -84,12 +105,20 @@ export function registerEstateRoutes(
     // Validated at the edge (AGENTS.md): trimmed, capped, and the LIKE metacharacters escaped in the
     // read model. A term is bound as a parameter, and a parameter can still mean `%`.
     const term = asked.trim().slice(0, MAX_TERM);
-    const results =
+    const estate =
       term === ''
         ? { buildings: [], units: [], truncated: false }
         : await searchEstate(deps.pool, term);
+    const documents =
+      term === ''
+        ? { documents: [], truncated: false }
+        : await deps.searchDocuments(deps.pool, term);
     html(reply);
-    return renderSearchPage(term, results);
+    return renderSearchPage(term, {
+      ...estate,
+      documents: documents.documents,
+      truncated: estate.truncated || documents.truncated,
+    });
   });
 
   app.get('/estate/expiring', async (_request, reply) => {
@@ -115,7 +144,29 @@ export function registerEstateRoutes(
     const occupancy: OccupancyByUnit = new Map(
       occupied.map((unit) => [unit.unit_id, unit.occupants]),
     );
+    const documents = await deps.listLinkedDocuments(
+      deps.pool,
+      'BUILDING',
+      detail.building.building_id,
+    );
     html(reply);
-    return renderBuildingPage(detail, occupancy);
+    return renderBuildingPage(detail, occupancy, documents);
+  });
+
+  app.get('/estate/units/:unitId', async (request, reply) => {
+    const { unitId } = request.params as { unitId: string };
+    const unit = await getUnit(deps.pool, validId(unitId, 'unitId'));
+    const occupied = await resolveOccupiedUnits(
+      deps.pool,
+      [unit.unit_id],
+      deps.clock.now(),
+    );
+    const documents = await deps.listLinkedDocuments(
+      deps.pool,
+      'UNIT',
+      unit.unit_id,
+    );
+    html(reply);
+    return renderUnitPage(unit, occupied[0]?.occupants, documents);
   });
 }

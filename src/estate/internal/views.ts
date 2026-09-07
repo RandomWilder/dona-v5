@@ -24,6 +24,7 @@ import type {
   BuildingSummary,
   ExpiringLease,
   SearchResults,
+  UnitHit,
   UnitRow,
 } from './read-model.ts';
 import { SEARCH_LIMIT } from './read-model.ts';
@@ -36,6 +37,34 @@ export type OccupancyByUnit = ReadonlyMap<string, number>;
 
 /** How many units in each building are let today. Same answer, one level up. */
 export type OccupancyByBuilding = ReadonlyMap<string, number>;
+
+/**
+ * What a documents panel is handed. Structural, and defined here so this file never imports
+ * evidence: the composition root injects the rows, and the view renders them.
+ */
+export interface FiledDocumentView {
+  documentId: string;
+  typeKey: string;
+  labelHe: string;
+  ingestedAt: string;
+  validFrom: string | null;
+  validTo: string | null;
+  storageUri: string;
+  verificationVerdict: 'verified' | 'unverified' | 'unguarded';
+}
+
+export interface DocumentSearchHit extends FiledDocumentView {
+  entityType: 'UNIT' | 'BUILDING';
+  entityId: string;
+  unitId: string | null;
+  unitNumber: string | null;
+  buildingId: string | null;
+  buildingName: string | null;
+}
+
+export interface SearchPageResults extends SearchResults {
+  documents: readonly DocumentSearchHit[];
+}
 
 const BUILDING_STATUS: Record<string, string> = {
   ACTIVE: 'פעיל',
@@ -56,6 +85,18 @@ const SPACE_KIND: Record<string, string> = {
   EXTERIOR: 'שטחי חוץ',
   PARKING: 'חניות',
   STORAGE: 'מחסנים',
+};
+
+const VERDICT: Record<FiledDocumentView['verificationVerdict'], string> = {
+  verified: 'נמצאו כל הביטויים הקבועים של הטופס',
+  unverified: 'הקובץ אינו נושא שכבת טקסט — יאומת בשלב הקריאה האוטומטית',
+  unguarded: 'לסוג זה אין ביטויים קבועים להשוואה',
+};
+
+const VERDICT_CHIP: Record<FiledDocumentView['verificationVerdict'], string> = {
+  verified: 'נבדק',
+  unverified: 'ללא שכבת טקסט',
+  unguarded: 'ללא בדיקה',
 };
 
 // Hebrew for a value the schema allows and this table does not translate. A vocabulary gains a
@@ -100,6 +141,7 @@ const styles = h`<style>
   .unit-no { font-size: var(--text-lg); font-weight: 500; }
   a.card-link { color: inherit; text-decoration: none; display: block; }
   a.card-link:hover .card-title { text-decoration: underline; }
+  a.unit-no { color: inherit; }
   /* The search box is a plain GET form, so the screens still carry no client JavaScript at all and
      a result page is a URL somebody can send to somebody else. */
   .search { display: flex; gap: var(--space-2); align-items: center; }
@@ -107,6 +149,8 @@ const styles = h`<style>
   .search .btn { min-height: var(--size-control-ops); }
   .index-list { display: grid; gap: var(--space-2); }
   .lease-when { display: flex; gap: var(--space-3); align-items: baseline; flex-wrap: wrap; }
+  .doc-uri { word-break: break-all; }
+  .doc-group { display: grid; gap: var(--space-2); }
 </style>`;
 
 // Estate's nav, and it stays estate's: these are its routes, and the kernel's shell knows no route.
@@ -119,8 +163,8 @@ function nav(): Html {
         id="q"
         name="q"
         type="search"
-        aria-label="חיפוש בניין, כתובת או מספר דירה"
-        placeholder="כתובת, בניין או מספר דירה"
+        aria-label="חיפוש בניין, כתובת, מספר דירה או סוג מסמך"
+        placeholder="כתובת, בניין, דירה או סוג מסמך"
       />
       <button class="btn btn-secondary" type="submit">חיפוש</button>
     </form>
@@ -216,12 +260,59 @@ function occupancyChip(residents: number | undefined): Html {
   }</span>`;
 }
 
+function documentCard(doc: FiledDocumentView): Html {
+  return h`<article class="row-card">
+    <dl class="facts">
+      ${
+        doc.validFrom || doc.validTo
+          ? h`<div><dt>תוקף</dt><dd>${ltr(
+              [doc.validFrom, doc.validTo].filter(Boolean).join(' — '),
+            )}</dd></div>`
+          : h``
+      }
+      <div><dt>נקלט</dt><dd>${ltr(doc.ingestedAt)}</dd></div>
+      <div><dt>בדיקת התאמה</dt><dd>${VERDICT[doc.verificationVerdict]}</dd></div>
+      <div><dt>נתיב</dt><dd class="doc-uri">${ltr(doc.storageUri)}</dd></div>
+    </dl>
+  </article>`;
+}
+
+function documentsPanel(
+  docs: readonly FiledDocumentView[],
+  heading: string,
+): Html {
+  if (docs.length === 0) {
+    return h`<section>
+      <h2>${heading}</h2>
+      <p class="empty-state">אין מסמכים בתיק זה עדיין.</p>
+    </section>`;
+  }
+  const groups: Array<{ label: string; items: FiledDocumentView[] }> = [];
+  for (const doc of docs) {
+    const last = groups[groups.length - 1];
+    if (last && last.label === doc.labelHe) {
+      last.items.push(doc);
+    } else {
+      groups.push({ label: doc.labelHe, items: [doc] });
+    }
+  }
+  return h`<section>
+    <h2>${heading} · ${ltr(docs.length)}</h2>
+    ${groups.map(
+      (group) => h`<div class="doc-group">
+        <h3>${group.label}</h3>
+        ${group.items.map(documentCard)}
+      </div>`,
+    )}
+  </section>`;
+}
+
 function unitCard(unit: UnitRow, occupancy: OccupancyByUnit): Html {
   const residents = occupancy.get(unit.unit_id);
   return h`<article class="row-card unit-card">
     ${marker(unit.condition_status === 'READY' ? 'ACTIVE' : unit.condition_status)}
     <p class="card-title">
-      <span class="unit-no">דירה ${ltr(unit.unit_number)}</span>
+      <a href="/estate/units/${unit.unit_id}" class="unit-no">דירה ${ltr(unit.unit_number)}</a>
       ${occupancyChip(residents)}
       <span class="chip">${label(CONDITION, unit.condition_status)}</span>
       ${unit.has_mamad ? h`<span class="chip">ממ״ד</span>` : h``}
@@ -250,6 +341,7 @@ function unitCard(unit: UnitRow, occupancy: OccupancyByUnit): Html {
 export function renderBuildingPage(
   detail: BuildingDetail,
   occupancy: OccupancyByUnit,
+  documents: readonly FiledDocumentView[] = [],
 ): string {
   const { building, kinds, units } = detail;
   const let_ = units.filter((unit) => occupancy.has(unit.unit_id)).length;
@@ -269,6 +361,7 @@ export function renderBuildingPage(
         )}
       </div>
     </section>
+    ${documentsPanel(documents, 'מסמכי הבניין')}
     <section>
       <h2>יחידות דיור · ${ltr(units.length)}</h2>
       <p class="lede">${ltr(let_)} מאוכלסות היום, ${ltr(units.length - let_)} פנויות. נגזר בכל טעינה ואינו נשמר.</p>
@@ -279,6 +372,25 @@ export function renderBuildingPage(
       }
     </section>`;
   return page(`דונה דום — ${building.name}`, body);
+}
+
+export function renderUnitPage(
+  unit: UnitHit,
+  residents: number | undefined,
+  documents: readonly FiledDocumentView[],
+): string {
+  const body = h`
+    <div>
+      <a class="back" href="/estate/buildings/${unit.building_id}">← ${unit.building_name}</a>
+      <h1>דירה ${ltr(unit.unit_number)}</h1>
+      <p class="lede">${unit.building_name} · ${unit.address_line}, ${unit.city}</p>
+      <div class="chips">${occupancyChip(residents)}</div>
+      <p class="unit-actions">
+        <a href="/documents/new?unit=${unit.unit_id}">הוספת מסמך</a>
+      </p>
+    </div>
+    ${documentsPanel(documents, 'מסמכים')}`;
+  return page(`דונה דום — דירה ${unit.unit_number}`, body);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -322,7 +434,7 @@ export function renderIndexPage(): string {
         ${marker('ACTIVE')}
         <a class="card-link" href="/estate/search">
           <p class="card-title"><span>חיפוש</span></p>
-          <p class="lede">כתובת, שם בניין או מספר דירה, על פני כל התיק.</p>
+          <p class="lede">כתובת, שם בניין, מספר דירה או סוג מסמך, על פני כל התיק.</p>
         </a>
       </article>
     </div>`;
@@ -333,7 +445,7 @@ function unitHits(results: SearchResults): Html {
   return h`<div class="row-list">
     ${results.units.map(
       (unit) => h`<article class="row-card">
-        <a class="card-link" href="/estate/buildings/${unit.building_id}">
+        <a class="card-link" href="/estate/units/${unit.unit_id}">
           <p class="card-title">
             <span class="unit-no">דירה ${ltr(unit.unit_number)}</span>
             <span>${unit.building_name}</span>
@@ -345,21 +457,51 @@ function unitHits(results: SearchResults): Html {
   </div>`;
 }
 
+function documentHits(hits: readonly DocumentSearchHit[]): Html {
+  return h`<div class="row-list">
+    ${hits.map((hit) => {
+      const href = hit.unitId
+        ? `/estate/units/${hit.unitId}`
+        : `/estate/buildings/${hit.buildingId}`;
+      return h`<article class="row-card">
+        <a class="card-link" href="${href}">
+          <p class="card-title">
+            <span>${hit.labelHe}</span>
+            <span class="chip">${VERDICT_CHIP[hit.verificationVerdict]}</span>
+          </p>
+          <p class="lede">
+            ${
+              hit.unitNumber
+                ? h`דירה ${ltr(hit.unitNumber)} · ${hit.buildingName}`
+                : hit.buildingName
+            }
+          </p>
+        </a>
+      </article>`;
+    })}
+  </div>`;
+}
+
 /**
- * **Search across the portfolio — buildings and units, and deliberately not people.**
+ * **Search across the portfolio — buildings, units and documents, and deliberately not people.**
  *
  * A search box that reached `party` would put a real person behind a route with no session, the week
  * the register arrives. An address is not personal data and a name is; the name search is week 5's,
- * behind the login that makes it lawful to show.
+ * behind the login that makes it lawful to show. Slice 3.6 grew this screen by a documents half
+ * rather than forking a second one.
  */
-export function renderSearchPage(term: string, results: SearchResults): string {
-  const found = results.buildings.length + results.units.length;
+export function renderSearchPage(
+  term: string,
+  results: SearchPageResults,
+): string {
+  const found =
+    results.buildings.length + results.units.length + results.documents.length;
   const body = h`
     <div>
       <h1>חיפוש</h1>
       ${
         term === ''
-          ? h`<p class="lede">חפשו לפי כתובת, שם בניין או מספר דירה.</p>`
+          ? h`<p class="lede">חפשו לפי כתובת, שם בניין, מספר דירה או סוג מסמך.</p>`
           : h`<p class="lede">${ltr(found)} תוצאות עבור «${term}».</p>`
       }
       ${
@@ -370,7 +512,7 @@ export function renderSearchPage(term: string, results: SearchResults): string {
     </div>
     ${
       term !== '' && found === 0
-        ? h`<p class="empty-state">לא נמצאו בניינים או דירות התואמים את החיפוש.</p>`
+        ? h`<p class="empty-state">לא נמצאו בניינים, דירות או מסמכים התואמים את החיפוש.</p>`
         : h``
     }
     ${
@@ -400,6 +542,14 @@ export function renderSearchPage(term: string, results: SearchResults): string {
         : h`<section>
             <h2>דירות · ${ltr(results.units.length)}</h2>
             ${unitHits(results)}
+          </section>`
+    }
+    ${
+      results.documents.length === 0
+        ? h``
+        : h`<section>
+            <h2>מסמכים · ${ltr(results.documents.length)}</h2>
+            ${documentHits(results.documents)}
           </section>`
     }`;
   return page('דונה דום — חיפוש', body);

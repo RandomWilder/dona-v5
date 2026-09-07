@@ -62,8 +62,11 @@ export {
 export type { EstateDeps } from './internal/routes.ts';
 export { registerEstateRoutes } from './internal/routes.ts';
 export type {
+  DocumentSearchHit,
+  FiledDocumentView,
   OccupancyByBuilding,
   OccupancyByUnit,
+  SearchPageResults,
 } from './internal/views.ts';
 export {
   renderBuildingPage,
@@ -71,4 +74,5 @@ export {
   renderExpiringPage,
   renderIndexPage,
   renderSearchPage,
+  renderUnitPage,
 } from './internal/views.ts';

@@ -175,6 +175,7 @@ export async function fileDocument(
     driveFileId: null,
     validFrom: request.validFrom ?? null,
     validTo: request.validTo ?? null,
+    verificationVerdict: verification.verdict,
   };
   const filed = await ingestDocument(deps.db, spec, deps.clock.now());
   await linkDocument(deps.db, {

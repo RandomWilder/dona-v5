@@ -7,6 +7,7 @@ import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
 import type { Queryable } from './types.ts';
+import type { VerificationVerdict } from './verify.ts';
 
 /** The workbook's E13 `entity_type`. PROJECT is D2's — a tender document belongs to the project. */
 export type LinkEntityType =
@@ -21,6 +22,9 @@ export type LinkEntityType =
 
 export type LinkRole = 'SIGNATORY' | 'SUBJECT' | 'EVIDENCE' | 'SOURCE';
 
+/** The three filed outcomes of the door guard. `refused` never writes a row (3.3). */
+export type FiledVerdict = Exclude<VerificationVerdict, 'refused'>;
+
 export interface DocumentSpec {
   documentTypeId: string;
   /** Our copy. The path carries the place and never the people (slice 3.2). */
@@ -31,6 +35,8 @@ export interface DocumentSpec {
   driveFileId: string | null;
   validFrom: string | null;
   validTo: string | null;
+  /** Slice 3.6. The door's result, so a list can show it without re-reading the bytes. */
+  verificationVerdict: FiledVerdict;
 }
 
 export interface DocumentLinkSpec {
@@ -63,13 +69,15 @@ export async function ingestDocument(
 ): Promise<UpsertResult> {
   const result = await db.query<{ document_id: string; inserted: boolean }>(
     `INSERT INTO document (document_id, document_type_id, storage_uri, file_hash,
-                           drive_file_id, valid_from, valid_to, ingested_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                           drive_file_id, valid_from, valid_to, ingested_at,
+                           verification_verdict)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT (file_hash) DO UPDATE
        SET document_type_id = EXCLUDED.document_type_id,
            drive_file_id = EXCLUDED.drive_file_id,
            valid_from = EXCLUDED.valid_from,
-           valid_to = EXCLUDED.valid_to
+           valid_to = EXCLUDED.valid_to,
+           verification_verdict = EXCLUDED.verification_verdict
      RETURNING document_id, ${INSERTED}`,
     [
       newId(),
@@ -80,6 +88,7 @@ export async function ingestDocument(
       spec.validFrom,
       spec.validTo,
       ingestedAt,
+      spec.verificationVerdict,
     ],
   );
   const row = result.rows[0];
