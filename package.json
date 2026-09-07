@@ -24,6 +24,7 @@
     "import:register": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/import-register.ts",
     "register:generate": "node src/generate-register.ts",
     "seed:register": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/seed-register.ts",
+    "seed:doctypes": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/seed-doctypes.ts",
     "dev": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/serve.ts",
     "start": "node src/serve.ts"
   },
