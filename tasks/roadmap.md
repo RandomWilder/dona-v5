@@ -750,8 +750,10 @@ Buildings list, unit grid, search, and the occupancy chip — **derived on every
 
 ## Week 3 · Sun 20 – Thu 24 Sep — Documents filed against units
 
-> **Started 2026-09-07**, the day week 2 closed, rather than on the planned 20 Sep. The planned
-> dates above are not rewritten; the gap is the record of how the project ran.
+> **Started 2026-09-07**, the day week 2 closed, rather than on the planned 20 Sep. **Closed
+> 2026-09-07** ([evidence/week-3.md](evidence/week-3.md)): demo off staging, four-second bar timed
+> by the owner, management blessing to proceed. 3.4 stayed deferred. The planned dates above are
+> not rewritten; the gap is the record of how the project ran.
 
 **Demo kind:** Software · **You show:** pull a real lease off the Drive, then find it again in four
 seconds. Hashed, dated, attached to unit and tenancy, immutable. Nothing is read yet — this is a
@@ -1061,7 +1063,9 @@ Document search and the documents panels on the building and unit screens, group
   when one was chosen, to a letting. **Size:** S
   **Closed 2026-09-07** ([evidence](evidence/3.6.md)). `verification_verdict` on E12, workbook first,
   CHECK/NOT NULL red first. Search extended not forked. Thin unit page. Path is text. **396 code +
-  41 hooks + 44 policy.** Staging `00042-dml` at `6ff6e8f`; owner still times the four seconds.
+  41 hooks + 44 policy.** Staging `00042-dml` at `6ff6e8f`. **Owner timed the four-second bar at
+  the week-3 demo the same day** ([evidence/week-3.md](evidence/week-3.md)) — discharged there, not
+  in the slice file.
 
 > **Cut line:** the compliance tab's visual treatment (the query is what matters this week), and the
 > review queue's bulk-approve affordance — one-at-a-time confirmation still proves the design. **Do
@@ -1072,6 +1076,9 @@ Document search and the documents panels on the building and unit screens, group
 
 ## Week 4 · Sun 27 Sep – Thu 1 Oct — The machine reads a lease, and shows its work → **M1**
 
+> **Started 2026-09-07**, the day week 3 closed, rather than on the planned 27 Sep. The planned
+> dates above are not rewritten.
+
 **Demo kind:** Software, with an Evidence number attached · **You show:** drop in a real Hebrew lease.
 Rent, dates, parties and clauses appear as fields. Click any value and the page image scrolls to the
 pixels it came from, with a confidence score.
@@ -1079,7 +1086,7 @@ pixels it came from, with a confidence score.
 > **Amended 6 Sep 2026 — this week gains flows A2, A3 and A4, and it is where extraction starts
 > writing.** Reading a lease is not the end of the story; the fields it yields have to land somewhere,
 > and [SPEC-flows.md](../SPEC-flows.md) says where. Three slices are owed here beyond 4.1 and 4.2,
-> sized when this week is planned rather than now:
+> **sized 7 Sep 2026 at week 3's close** as **4.6 (A2) · 4.7 (A3) · 4.8 (A4)**:
 >
 > - **A2 — a lease establishes a draft tenancy.** Extract → propose → **confirm** → write. Unit,
 >   dates and every tenant named on the lease (two signatories per household is normal, not an edge).
@@ -1118,6 +1125,11 @@ per-word confidence.
   over those documents until this slice: verify the declared type against the OCR text at extraction
   time, and say in the evidence **how many already-filed documents the sweep changed the verdict of**.
   The count is on the `evidence.file_document` audit lines, whose `inputs.verdict` is `unverified`.
+- **Owed by the week-3 demo — a heavy signed-lease PDF must not become an uncaught 503.** Pre-demo
+  on staging, a real-looking signed lease against דירה 4 of בניין האלון 12 ground for about a minute
+  and returned `{"code":"unavailable","message":"unexpected error"}`. The unit was fine; pdfjs on
+  that file was not. Bound the reader (time and memory). Fail closed as `invalid` or file as
+  `unverified`. Record the bound in the evidence.
 - **Deps:** ~~3.4~~ **3.3** — re-pointed 6 Sep 2026 when 3.4 deferred. The adapter needs a document in
   the bucket, which A1's upload supplies; it never needed the bulk path. **Size:** M
 
@@ -1176,6 +1188,41 @@ not the scans, the handwriting or the signatures (A7; the controls for tier 2 we
 - **Verify:** the run is reproducible from a script, and the numbers are in `tasks/evidence/`, never
   in a document as an assertion.
 - **Deps:** 4.4, 3.2 · **Size:** M
+
+### Slice 4.6 — A2: a lease establishes a draft tenancy
+Extract → propose → **confirm** → write. Unit, dates, and every tenant named on the lease (two
+signatories per household is normal). **Role is confirmed by a human before any `tenancy_party` row
+is written.** Parties are created under the tenancy the document was uploaded to; no cross-tenancy
+identity matching. Zero guarantors is a correct result.
+- **Done when:** a confirmed proposal writes a `DRAFT` tenancy with per-field provenance; the address
+  and apartment on the document are asserted against the unit; a mismatch is refused and writes no
+  party.
+- **Verify:** two-signatory specimen writes two tenants; guarantor-absent specimen writes none and
+  does not error; wrong-address case refused.
+- **Owed by 3.3 — the content cross-check and the draft-tenancy path.**
+- **Owed by 3.5 — `upsertUnitRow` still writes only a `UNIT` space.** Register-imported buildings
+  have no `PARKING` or `STORAGE` rows. Close it here so A6 can land on a bay. Also A2's staging
+  shape, recorded rather than invented in the slice.
+- **Deps:** 4.3, 3.3, 3.5 · **Size:** M · plan mode first (estate · parties · tenancy · evidence)
+- **Sized:** 7 Sep 2026, week 3 close.
+
+### Slice 4.7 — A3: an addendum completes a tenancy
+No special case: fields live on the tenancy and documents are provenance. Later document wins;
+earlier value retained and visible.
+- **Done when:** a guarantor named in an addendum becomes a `tenancy_party` under the existing
+  tenancy, and a later date overwrites an earlier one without deleting the earlier provenance.
+- **Verify:** addendum after a lease, same path as 4.6; both provenances on screen.
+- **Deps:** 4.6 · **Size:** S
+- **Sized:** 7 Sep 2026, week 3 close.
+
+### Slice 4.8 — A4: the incomplete-tenancy queue
+The rule: *a tenancy must have at least one guarantor*. A **policy case over saved rows, written red
+first — never a NOT NULL**.
+- **Done when:** a tenancy that extraction returned with zero guarantors appears in the queue showing
+  what is missing; an addendum (4.7) or a recorded exception clears it.
+- **Verify:** policy case red first; lease with zero guarantors in the queue; A3 removes it.
+- **Deps:** 4.7 · **Size:** M
+- **Sized:** 7 Sep 2026, week 3 close.
 
 ### **Checkpoint · M1**
 - [ ] A system of record for 1,500 units; every value traces to the paper it came from
