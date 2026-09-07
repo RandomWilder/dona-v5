@@ -101,8 +101,11 @@ while prod is stopped and wrong from week 12, where [roadmap.md](roadmap.md) own
 exclusion constraint's GiST index, is reopened at week 12 at a different row count. And **raised at
 3.2**: the docs buckets' legacy `projectEditor` / `projectOwner` bindings carry `legacyObjectOwner`,
 which includes delete — 3.2 proved the *application* cannot destroy a signed contract, and a human
-with project editor still can. [roadmap.md](roadmap.md) owns it at **week 8**, in the same IAM pass
-as 1.5's `run.admin` scoping and in the week whose demo is *try to break isolation*.
+with project editor still can. 3.2's staging verification measured that window rather than leaving it
+unbounded: the probe object was removed by hand by exactly such a human, and versioning plus the
+explicit seven-day soft delete left a recoverable version and not a hole — grace, not a control, but
+a known size. [roadmap.md](roadmap.md) owns it at **week 8**, in the same IAM pass as 1.5's
+`run.admin` scoping and in the week whose demo is *try to break isolation*.
 
 ---
 
