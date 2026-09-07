@@ -7,6 +7,7 @@ import {
   extractionSettingKeys,
   readEmbeddingSettings,
   readExtractionSettings,
+  readOcrSettings,
   type Settings,
 } from './config.ts';
 import type { KernelError } from './errors.ts';
@@ -132,6 +133,9 @@ describe('settings', () => {
       assert.deepEqual(await readExtractionSettings(createSettings(pool)), {
         model: 'gpt-5.6-luna',
         reasoningEffort: 'none',
+      });
+      assert.deepEqual(await readOcrSettings(createSettings(pool)), {
+        processorVersion: 'pretrained-ocr-v2.1-2024-08-07',
       });
     } finally {
       await pool.end();

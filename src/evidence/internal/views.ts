@@ -12,6 +12,8 @@
 // **No client JavaScript, here as everywhere.** The type list is a `<select>` the server filled from
 // the catalogue, the file input is a file input, and the page works with scripting switched off.
 import type { UnitHit } from '../../estate/contract.ts';
+import type { OcrPageImage } from '../../kernel/ocr.ts';
+import type { PdfPage } from '../../kernel/pdf.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { renderPage } from '../../kernel/ui/page.ts';
 import type { UnitLetting } from '../../tenancy/contract.ts';
@@ -49,6 +51,18 @@ const styles = h`<style>
   .notice .facts { grid-template-columns: 1fr; }
   .terms { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0 0; padding: 0; list-style: none; }
   .digest { word-break: break-all; }
+  .page-read {
+    position: relative;
+    inline-size: min(100%, 40rem);
+    background: var(--color-surface-card);
+    border: var(--size-hairline) solid var(--color-divider-soft);
+  }
+  .page-read img { inline-size: 100%; block-size: auto; display: block; }
+  .word-box {
+    position: absolute;
+    outline: var(--size-hairline) solid var(--color-accent);
+    pointer-events: none;
+  }
 </style>`;
 
 function nav(): Html {
@@ -166,6 +180,7 @@ export interface FiledScreen {
   boundToTenancy: boolean;
   verification: Verification;
   fileHash: string;
+  documentId?: string;
 }
 
 /**
@@ -210,6 +225,11 @@ export function renderFiledPage(screen: FiledScreen): string {
       }
     </section>
     <div class="form-actions">
+      ${
+        screen.documentId
+          ? h`<a class="btn btn-secondary" href="/documents/${screen.documentId}/read">מילים על הדף</a>`
+          : h``
+      }
       <a class="btn btn-secondary" href="/documents/new?unit=${unit.unit_id}">הוספת מסמך נוסף</a>
       <a href="/estate/buildings/${unit.building_id}">חזרה לבניין</a>
     </div>`;
@@ -326,6 +346,74 @@ export function renderSeededPage(screen: SeededScreen): string {
     </div>`;
   return renderPage({
     title: 'דונה דום — המסירה נרשמה',
+    styles,
+    nav: nav(),
+    body,
+  });
+}
+
+export interface ReadScreen {
+  buildingId: string;
+  buildingName: string;
+  unitId: string | null;
+  labelHe: string;
+  fileHash: string;
+  source: 'pdfjs' | 'ocr' | 'none';
+  page: PdfPage | null;
+  image: OcrPageImage | null;
+}
+
+export function renderReadPage(screen: ReadScreen): string {
+  const back = `/estate/buildings/${screen.buildingId}`;
+  const page = screen.page;
+  const image = screen.image;
+  const boxes =
+    page && page.width > 0 && page.height > 0
+      ? page.items.map((item) => {
+          const inlineStart = (item.x / page.width) * 100;
+          const blockStart = (item.y / page.height) * 100;
+          const inlineSize = (item.width / page.width) * 100;
+          const blockSize = (item.height / page.height) * 100;
+          return h`<span class="word-box" style="inset-inline-start:${String(inlineStart)}%;inset-block-start:${String(blockStart)}%;inline-size:${String(inlineSize)}%;block-size:${String(blockSize)}%" title="${item.text}"></span>`;
+        })
+      : [];
+  const body = h`
+    <div>
+      <a class="back" href="${back}">← ${screen.buildingName}</a>
+      <h1>מילים על הדף</h1>
+      <p class="lede">${screen.labelHe}${screen.unitId ? h`` : h` · הבניין`}</p>
+    </div>
+    <section class="notice">
+      <dl class="facts">
+        <div><dt>מקור</dt><dd>${
+          screen.source === 'ocr'
+            ? h`קריאה אוטומטית`
+            : screen.source === 'pdfjs'
+              ? h`שכבת הטקסט שבקובץ`
+              : h`אין מילים לקריאה`
+        }</dd></div>
+        <div><dt>טביעת הקובץ</dt><dd class="digest">${ltr(screen.fileHash)}</dd></div>
+      </dl>
+    </section>
+    ${
+      page
+        ? h`<div class="page-read" dir="ltr" style="aspect-ratio:${String(page.width)}/${String(page.height)}">${
+            image
+              ? h`<img alt="" src="data:${image.mimeType};base64,${image.bytes.toString('base64')}" />`
+              : h``
+          }${boxes}</div>`
+        : h`<p class="lede">אין דף להצגה.</p>`
+    }
+    <div class="form-actions">
+      ${
+        screen.unitId
+          ? h`<a class="btn btn-secondary" href="/documents/new?unit=${screen.unitId}">הוספת מסמך נוסף</a>`
+          : h``
+      }
+      <a href="${back}">חזרה לבניין</a>
+    </div>`;
+  return renderPage({
+    title: 'דונה דום — מילים על הדף',
     styles,
     nav: nav(),
     body,

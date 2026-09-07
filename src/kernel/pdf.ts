@@ -31,6 +31,10 @@ export interface PdfTextItem {
   // `text` already in logical order.
   rightToLeft: boolean;
   endsLine: boolean;
+  // pdfjs has no per-word score, so the native-text adapter writes null. The
+  // OCR adapter writes the processor's. A caller that needs a number must not
+  // invent one.
+  confidence: number | null;
 }
 
 export interface PdfPage {
@@ -48,6 +52,59 @@ export interface PdfText {
   pages(bytes: Buffer): Promise<PdfPage[]>;
   // For the boot line and for tests, as ObjectStore.describe() is.
   describe(): string;
+}
+
+export interface PdfTextOptions {
+  // Code, not a config row: a bound that stops one request consuming a server
+  // is a safety limit. Eight seconds because the week-3 staging hang lasted a
+  // minute and became a 503; OCR is the next reader, and an empty result here
+  // files as unverified rather than as unavailable.
+  timeoutMs?: number;
+}
+
+export const defaultPdfTimeoutMs = 8_000;
+
+/**
+ * Resolves with empty pages when `read` has not settled in time.
+ *
+ * A later rejection from `read` is swallowed: the caller already moved on, and
+ * an unhandled rejection would take the process down the way an unbounded
+ * parse took the request down.
+ */
+export function boundPages(
+  read: () => Promise<PdfPage[]>,
+  timeoutMs: number,
+): Promise<PdfPage[]> {
+  let settled = false;
+  const pending = read();
+  pending.catch(() => {});
+  return new Promise((resolve, reject) => {
+    const id = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve([]);
+    }, timeoutMs);
+    pending.then(
+      (pages) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(id);
+        resolve(pages);
+      },
+      (error: unknown) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(id);
+        reject(error);
+      },
+    );
+  });
 }
 
 // pdfjs's own item shape, narrowed to what is used. A text content stream also
@@ -72,61 +129,62 @@ function standardFontDataUrl(): string {
   return `${path.join(path.dirname(pkg), 'standard_fonts')}${path.sep}`;
 }
 
-export function createPdfjsText(): PdfText {
+export function createPdfjsText(options: PdfTextOptions = {}): PdfText {
+  const timeoutMs = options.timeoutMs ?? defaultPdfTimeoutMs;
   return {
     async pages(bytes) {
-      // Lazily, and once per call: a process that never reads a PDF never pays
-      // for loading it, exactly as objects.ts defers reading ADC.
-      const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
-      const task = getDocument({
-        // A copy, because pdfjs transfers the buffer it is given and the caller
-        // still holds these bytes -- they are on their way into a row.
-        data: new Uint8Array(bytes),
-        // The input is a third-party PDF, and a PDF is a program. Nothing here
-        // renders, so nothing here needs a glyph: no system fonts, no font
-        // faces built at runtime. (pdfjs's old `isEvalSupported` switch is
-        // gone in v6 -- eval-based font compilation was removed outright, so
-        // there is no longer a lever to turn off.)
-        useSystemFonts: false,
-        disableFontFace: true,
-        standardFontDataUrl: standardFontDataUrl(),
-      });
-      let document: Awaited<typeof task.promise>;
-      try {
-        document = await task.promise;
-      } catch (cause) {
-        // An unopenable file is `invalid` and never a driver stack: the caller
-        // is a staff screen, and the sentence it shows should be about the
-        // file rather than about pdfjs.
-        await task.destroy().catch(() => {});
-        throw new KernelError(
-          'invalid',
-          'the file could not be read as a PDF',
-          {
-            reason: cause instanceof Error ? cause.message : 'unknown',
-          },
-        );
-      }
-      try {
-        const pages: PdfPage[] = [];
-        for (let number = 1; number <= document.numPages; number += 1) {
-          const page = await document.getPage(number);
-          const viewport = page.getViewport({ scale: 1 });
-          const content = await page.getTextContent();
-          pages.push({
-            number,
-            width: viewport.width,
-            height: viewport.height,
-            items: readItems(content.items as PdfjsItem[], viewport.height),
-          });
-        }
-        return pages;
-      } finally {
-        await task.destroy().catch(() => {});
-      }
+      return boundPages(() => readPdfjsPages(bytes), timeoutMs);
     },
     describe: () => 'pdfjs',
   };
+}
+
+async function readPdfjsPages(bytes: Buffer): Promise<PdfPage[]> {
+  // Lazily, and once per call: a process that never reads a PDF never pays
+  // for loading it, exactly as objects.ts defers reading ADC.
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const task = getDocument({
+    // A copy, because pdfjs transfers the buffer it is given and the caller
+    // still holds these bytes -- they are on their way into a row.
+    data: new Uint8Array(bytes),
+    // The input is a third-party PDF, and a PDF is a program. Nothing here
+    // renders, so nothing here needs a glyph: no system fonts, no font
+    // faces built at runtime. (pdfjs's old `isEvalSupported` switch is
+    // gone in v6 -- eval-based font compilation was removed outright, so
+    // there is no longer a lever to turn off.)
+    useSystemFonts: false,
+    disableFontFace: true,
+    standardFontDataUrl: standardFontDataUrl(),
+  });
+  let document: Awaited<typeof task.promise>;
+  try {
+    document = await task.promise;
+  } catch (cause) {
+    // An unopenable file is `invalid` and never a driver stack: the caller
+    // is a staff screen, and the sentence it shows should be about the
+    // file rather than about pdfjs.
+    await task.destroy().catch(() => {});
+    throw new KernelError('invalid', 'the file could not be read as a PDF', {
+      reason: cause instanceof Error ? cause.message : 'unknown',
+    });
+  }
+  try {
+    const pages: PdfPage[] = [];
+    for (let number = 1; number <= document.numPages; number += 1) {
+      const page = await document.getPage(number);
+      const viewport = page.getViewport({ scale: 1 });
+      const content = await page.getTextContent();
+      pages.push({
+        number,
+        width: viewport.width,
+        height: viewport.height,
+        items: readItems(content.items as PdfjsItem[], viewport.height),
+      });
+    }
+    return pages;
+  } finally {
+    await task.destroy().catch(() => {});
+  }
 }
 
 // What the tests use, so a suite about what is *done* with a document's text needs neither pdfjs nor
@@ -153,6 +211,7 @@ export function createFakePdfText(pages: readonly string[]): PdfText {
             height: 12,
             rightToLeft: true,
             endsLine: false,
+            confidence: null,
           })),
       }));
     },
@@ -194,6 +253,7 @@ function readItems(items: PdfjsItem[], pageHeight: number): PdfTextItem[] {
       height: Number(item.height) || 0,
       rightToLeft: item.dir === 'rtl',
       endsLine,
+      confidence: null,
     });
   }
   return read;

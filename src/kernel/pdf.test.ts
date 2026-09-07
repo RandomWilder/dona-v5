@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { KernelError } from './errors.ts';
-import { createPdfjsText } from './pdf.ts';
+import { boundPages, createPdfjsText } from './pdf.ts';
 import { type SampleRun, samplePdf } from './pdf-sample.ts';
 
 // The adapter is exercised against a PDF built by `samplePdf`, byte by byte,
@@ -46,6 +46,7 @@ describe('pdf text', () => {
     // label/value row arrives in, and the reason positions are kept at all.
     assert.equal(first[0]?.y, first[1]?.y);
     assert.ok((first[0]?.width ?? 0) > 0);
+    assert.equal(first[0]?.confidence, null);
 
     assert.equal(pages[1]?.items[0]?.text, 'Clause 1.');
     assert.equal(pages[1]?.number, 2);
@@ -79,5 +80,22 @@ describe('pdf text', () => {
 
   it('says which reader is running', () => {
     assert.equal(createPdfjsText().describe(), 'pdfjs');
+  });
+
+  it('returns no pages when the reader has not finished in time, rather than hanging', async () => {
+    // The week-3 staging 503: a heavy signed PDF occupied the request until the
+    // platform cut it off. Empty pages file as unverified; unavailable does not.
+    const pages = await boundPages(() => new Promise(() => {}), 20);
+    assert.deepEqual(pages, []);
+  });
+
+  it('still calls an unopenable file invalid when it fails inside the bound', async () => {
+    const error = await createPdfjsText({ timeoutMs: 8_000 })
+      .pages(Buffer.from('this is not a pdf'))
+      .then(
+        () => null,
+        (thrown: KernelError) => thrown,
+      );
+    assert.equal(error?.code, 'invalid');
   });
 });

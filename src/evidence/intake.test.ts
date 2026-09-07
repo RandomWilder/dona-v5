@@ -16,9 +16,14 @@ import type { PoolClient } from 'pg';
 import { specimenDocuments } from '../../evals/fixtures/specimen-clauses.ts';
 import { createAuditLog } from '../kernel/audit.ts';
 import { fixedClock } from '../kernel/clock.ts';
-import type { KernelError } from '../kernel/errors.ts';
+import { KernelError } from '../kernel/errors.ts';
 import { newId } from '../kernel/ids.ts';
 import { createMemoryStore } from '../kernel/objects.ts';
+import {
+  createFakeOcrText,
+  defaultOcrProcessorVersion,
+  type OcrText,
+} from '../kernel/ocr.ts';
 import { createFakePdfText } from '../kernel/pdf.ts';
 import {
   inRolledBackTransaction,
@@ -26,7 +31,11 @@ import {
   skipReason,
 } from '../kernel/pg-support.ts';
 import type { IntakeDeps } from './contract.ts';
-import { applyDocumentTypeCatalogue, fileDocument } from './contract.ts';
+import {
+  applyDocumentTypeCatalogue,
+  fileDocument,
+  sweepUnverified,
+} from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const BUCKET = 'dona-v5-test-docs';
@@ -48,11 +57,17 @@ const PNG = Buffer.concat([
   Buffer.from('a photograph of a page'),
 ]);
 
-function deps(db: PoolClient, text: string[]): IntakeDeps {
+function deps(
+  db: PoolClient,
+  text: string[],
+  extra: { ocr?: OcrText } = {},
+): IntakeDeps {
   return {
     db,
     objects: createMemoryStore(),
     pdf: createFakePdfText(text),
+    ocr: extra.ocr,
+    ocrVersion: extra.ocr ? defaultOcrProcessorVersion : undefined,
     audit: createAuditLog(db, fixedClock(AT)),
     clock: fixedClock(AT),
     bucket: BUCKET,
@@ -283,6 +298,144 @@ describe('evidence · filing a declared document', () => {
             assert.match(result.storageUri, /\.png$/);
             const lines = await auditLines(db, unitId);
             assert.equal(lines[0]?.inputs.verdict, 'unverified');
+          });
+        },
+      );
+
+      await t.test(
+        'OCRs a photograph after filing and promotes it to verified',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+            const unitId = newId();
+            const wired = deps(db, [], {
+              ocr: createFakeOcrText([specimen('lease-standard.md')]),
+            });
+            const result = await fileDocument(wired, {
+              bytes: PNG,
+              typeKey: 'lease',
+              place: { kind: 'UNIT', id: unitId },
+              tenancyId: null,
+            });
+            assert.equal(result.filed, true);
+            if (!result.filed) return;
+            assert.equal(result.verification.verdict, 'verified');
+            const row = await db.query<{ verification_verdict: string }>(
+              'SELECT verification_verdict FROM document WHERE document_id = $1',
+              [result.documentId],
+            );
+            assert.equal(row.rows[0]?.verification_verdict, 'verified');
+            const filed = await auditLines(db, unitId);
+            assert.equal(filed[0]?.inputs.verdict, 'unverified');
+            const read = await db.query<{
+              action: string;
+              inputs: Record<string, unknown>;
+            }>(
+              `SELECT action, inputs FROM audit_log
+                WHERE action = 'evidence.read_document' AND subject_id = $1`,
+              [unitId],
+            );
+            assert.equal(read.rows[0]?.inputs.verdict, 'verified');
+          });
+        },
+      );
+
+      await t.test(
+        'an OCR miss leaves the row unverified and does not throw',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+            const unitId = newId();
+            const ocr: OcrText = {
+              async pages() {
+                throw new KernelError('unavailable', 'the ocr call timed out', {
+                  timeoutMs: 20_000,
+                });
+              },
+              describe: () => 'fake',
+            };
+            const result = await fileDocument(deps(db, [], { ocr }), {
+              bytes: PNG,
+              typeKey: 'lease',
+              place: { kind: 'UNIT', id: unitId },
+              tenancyId: null,
+            });
+            assert.equal(result.filed, true);
+            if (!result.filed) return;
+            assert.equal(result.verification.verdict, 'unverified');
+          });
+        },
+      );
+
+      await t.test(
+        'does not call OCR when the native text layer already verified the file',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+            const unitId = newId();
+            let called = 0;
+            const ocr: OcrText = {
+              async pages() {
+                called += 1;
+                return { pages: [], images: [] };
+              },
+              describe: () => 'fake',
+            };
+            const result = await fileDocument(
+              deps(db, [specimen('lease-standard.md')], { ocr }),
+              {
+                bytes: pdfBytes('native lease'),
+                typeKey: 'lease',
+                place: { kind: 'UNIT', id: unitId },
+                tenancyId: null,
+              },
+            );
+            assert.equal(result.filed, true);
+            if (!result.filed) return;
+            assert.equal(result.verification.verdict, 'verified');
+            assert.equal(called, 0);
+          });
+        },
+      );
+
+      await t.test(
+        'sweeps an already-filed unverified photograph into verified',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+            const unitId = newId();
+            const wired = deps(db, []);
+            const result = await fileDocument(wired, {
+              bytes: PNG,
+              typeKey: 'lease',
+              place: { kind: 'UNIT', id: unitId },
+              tenancyId: null,
+            });
+            assert.equal(result.filed, true);
+            if (!result.filed) return;
+            assert.equal(result.verification.verdict, 'unverified');
+            const report = await sweepUnverified(
+              {
+                db,
+                objects: wired.objects,
+                pdf: wired.pdf,
+                ocr: createFakeOcrText([specimen('lease-standard.md')]),
+                ocrVersion: defaultOcrProcessorVersion,
+                audit: wired.audit,
+                clock: wired.clock,
+                bucket: wired.bucket,
+              },
+              { documentIds: [result.documentId] },
+            );
+            assert.equal(report.examined, 1);
+            assert.equal(report.verified, 1);
+            assert.equal(report.unchanged, 0);
+            assert.equal(report.failed, 0);
+            const row = await db.query<{ verification_verdict: string }>(
+              'SELECT verification_verdict FROM document WHERE document_id = $1',
+              [result.documentId],
+            );
+            assert.equal(row.rows[0]?.verification_verdict, 'verified');
           });
         },
       );

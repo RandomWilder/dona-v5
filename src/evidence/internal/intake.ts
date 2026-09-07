@@ -21,14 +21,15 @@ import type { AuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
-import type { PdfText } from '../../kernel/pdf.ts';
+import type { OcrText } from '../../kernel/ocr.ts';
+import type { PdfPage, PdfText } from '../../kernel/pdf.ts';
 import { documentTypeByKey } from './catalogue.ts';
 import {
   type DocumentSpec,
   ingestDocument,
   linkDocument,
 } from './documents.ts';
-
+import { ocrAfterFile } from './read.ts';
 import {
   documentContentTypes,
   documentFileHash,
@@ -49,6 +50,12 @@ export interface IntakeDeps {
   objects: ObjectStore;
   /** The reader. Injected, so a test files a document without pdfjs and without a fixture PDF. */
   pdf: PdfText;
+  /**
+   * The OCR reader. Absent or unconfigured leaves an `unverified` file as it
+   * was — a miss must not become a 503 on the upload.
+   */
+  ocr?: OcrText;
+  ocrVersion?: string;
   audit: AuditLog;
   clock: Clock;
   /** The bucket this process is configured for. `storage_uri` names it (slice 3.2). */
@@ -115,10 +122,10 @@ export async function fileDocument(
     throw new KernelError('invalid', 'that document type is retired');
   }
 
-  const verification = verifyDeclaredType(
-    extension === 'pdf'
-      ? documentText(await deps.pdf.pages(request.bytes))
-      : null,
+  const pdfPages: PdfPage[] =
+    extension === 'pdf' ? await deps.pdf.pages(request.bytes) : [];
+  let verification = verifyDeclaredType(
+    extension === 'pdf' ? documentText(pdfPages) : null,
     type.verificationTerms,
   );
 
@@ -200,6 +207,22 @@ export async function fileDocument(
     { ...line, inputs: { ...line.inputs, documentId: filed.id } },
     { outcome: 'ok' },
   );
+
+  if (verification.verdict === 'unverified') {
+    const after = await ocrAfterFile(deps, {
+      bytes: request.bytes,
+      extension,
+      pdfPages,
+      documentId: filed.id,
+      typeKey: type.typeKey,
+      verificationTerms: type.verificationTerms,
+      subjectId: request.place.id,
+    });
+    if (after) {
+      verification = after;
+    }
+  }
+
   return {
     filed: true,
     documentId: filed.id,

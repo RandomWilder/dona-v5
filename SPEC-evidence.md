@@ -9,8 +9,9 @@ this file and the workbook disagree, the workbook is right and this file is a bu
 - **Entities:** E12, E13, E15, E16 — Document · DocumentLink · DocumentType · DocumentTypeField ·
   ExtractedField · FieldPromotion.
 - **Depends on:** estate, parties, tenancy.
-- **Builds:** week 3 (slices 3.1–3.3, 3.5's confirm screen, 3.6) and week 4 (OCR, comprehension, promotion, the accuracy
-  number). **The stub gained content at slice 3.1**, which is the signal its build started.
+- **Builds:** week 3 (slices 3.1–3.3, 3.5's confirm screen, 3.6) and week 4 (OCR at 4.1, comprehension,
+  promotion, the accuracy number). **The stub gained content at slice 3.1**, which is the signal its
+  build started.
 - **Carries:** **capture is open, promotion is governed** ([tasks/plan.md](tasks/plan.md) A8). A new
   type or field is a row — zero migrations, zero deploys — and is citable the moment it is extracted;
   an extracted value becoming a typed column costs a migration and a reviewed mapping.
@@ -117,10 +118,10 @@ nothing outside it writes a document row.
   about utilities, so *any-term* filing would accept a lease into the ארנונה slot. The comparison is
   over whitespace-collapsed text, because a PDF breaks a term across two runs whenever the line wraps.
 - **Three verdicts, not two.** `verified` · `refused` · `unverified`, plus `unguarded` for a type with
-  no terms. **`unverified` is a file with no text layer** — a photograph, or a scan — and it is
-  **filed**, because refusing it would refuse most real leases and OCR is slice 4.1's. A verdict of
-  `unverified` filed silently would make `verified` mean nothing, so the verdict is on the audit line
-  either way.
+  no terms. **`unverified` is a file with no text layer** — a photograph, a scan, or a PDF whose
+  text reader hit its bound — and it is **filed**, because refusing it would refuse most real leases.
+  Slice 4.1 then reads it. A verdict of `unverified` filed silently would make `verified` mean
+  nothing, so the verdict is on the audit line either way.
 
 ### A refused upload leaves no row — the question slice 3.1 left open
 
@@ -265,6 +266,33 @@ building (`PlaceKind = BUILDING`), not under the unit the administrator happened
 
 A file with no text layer (`unverified`) has nothing to propose and skips the confirm screen —
 OCR at 4.1 is what gives that file a text layer to read.
+
+## Reading a filed document — slice 4.1
+
+The door guard of 3.3 still runs on whatever text the native PDF reader yields. What 4.1 adds is
+the second reader, after the row exists, for everything that reader could not see.
+
+**Order, and it is this order on purpose.** Hash → sniff → native-text verify → refuse or file →
+**if the filed verdict is `unverified`, OCR the stored bytes** → re-run `verifyDeclaredType` on the
+OCR text. The OCR step is after the write because a refused upload still writes nothing, and because
+a scan that OCR cannot finish must not become a 503 on the upload: the bound is 20 seconds, a miss
+leaves the row `unverified`, and the HTTP response is the filed page.
+
+**The sweep only promotes `unverified` → `verified`.** The CHECK on `document.verification_verdict`
+is `verified | unverified | unguarded`. Terms found after OCR update the column and write a second
+audit line (`evidence.read_document`). Terms still missing leave `unverified` — the file is already
+filed, and 3.3's refused-writes-nothing still holds at the door. `refused` is not a stored verdict
+and 4.1 does not invent one.
+
+**Two readers, one page shape.** A native PDF with a text layer is pdfjs (confidence `null`). A
+scan, a photograph, or a PDF whose pages came back empty is Document AI (confidence set, boxes from
+the OCR engine). Images skip pdfjs. More than 15 pages is not sent online; the row stays
+`unverified`. The overlay (`GET /documents/:id/read`) draws those boxes on the page image the
+processor already returned — logical CSS, one page, specimens. Clicking a *promoted value* is 4.4's.
+
+`sweepUnverified` walks already-filed `unverified` rows the same way. It is how week 3's backlog is
+discharged; the count of verdicts that moved is recorded in the slice evidence, from the audit
+lines, and is allowed to be zero.
 
 ## What E12 deliberately does not carry
 

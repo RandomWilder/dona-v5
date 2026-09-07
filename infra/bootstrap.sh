@@ -91,6 +91,7 @@ gcloud services enable \
   iam.googleapis.com \
   iamcredentials.googleapis.com \
   sts.googleapis.com \
+  documentai.googleapis.com \
   --project "$PROJECT"
 
 say "Artifact Registry (shared by both environments)"
@@ -295,6 +296,63 @@ gcloud storage buckets describe "gs://$DOCS_BUCKET" --project "$PROJECT" \
   )' | sed 's/^/  /'
 echo "  $RUNTIME_SA: objectViewer + objectCreator, and NOT objectAdmin"
 
+# Document AI does not serve me-west1. Closest residency that hosts OCR_PROCESSOR
+# is eu (eu-documentai.googleapis.com). Processor id is environment, like
+# DOCS_BUCKET; the version is a config_settings row.
+#
+# The gcloud documentai surface is a component this SDK does not ship, so this
+# talks to the REST API the adapter itself uses — same host, same resource.
+say "Document AI OCR processor (eu)"
+OCR_DISPLAY="dona-ocr-$ENV"
+OCR_LOCATION=eu
+OCR_HOST="https://${OCR_LOCATION}-documentai.googleapis.com"
+OCR_PARENT="projects/${PROJECT}/locations/${OCR_LOCATION}"
+OCR_TOKEN="$(gcloud auth print-access-token)"
+ocr_list() {
+  curl -sS -H "Authorization: Bearer $OCR_TOKEN" \
+    "${OCR_HOST}/v1/${OCR_PARENT}/processors"
+}
+OCR_NAME="$(ocr_list | python3 -c "
+import json, sys
+wanted = sys.argv[1]
+body = json.load(sys.stdin)
+if 'error' in body:
+    sys.exit(0)
+for processor in body.get('processors', []):
+    if processor.get('displayName') == wanted:
+        print(processor.get('name', ''))
+        break
+" "$OCR_DISPLAY")"
+if [[ -z "$OCR_NAME" ]]; then
+  OCR_NAME="$(curl -sfS -X POST \
+    -H "Authorization: Bearer $OCR_TOKEN" \
+    -H "Content-Type: application/json; charset=utf-8" \
+    "${OCR_HOST}/v1/${OCR_PARENT}/processors" \
+    -d "{\"type\":\"OCR_PROCESSOR\",\"displayName\":\"${OCR_DISPLAY}\"}" |
+    python3 -c "import json,sys; print(json.load(sys.stdin).get('name',''))")"
+fi
+OCR_PROCESSOR_ID="${OCR_NAME##*/}"
+if [[ -z "$OCR_PROCESSOR_ID" ]]; then
+  echo "  failed to create or find processor $OCR_DISPLAY" >&2
+  exit 1
+fi
+echo "  name:     $OCR_NAME"
+echo "  id:       $OCR_PROCESSOR_ID"
+echo "  location: $OCR_LOCATION"
+
+# apiUser can call process. editor can create and delete processors — not granted.
+gcloud projects add-iam-policy-binding "$PROJECT" \
+  --member="serviceAccount:$RUNTIME_EMAIL" \
+  --role=roles/documentai.apiUser \
+  --condition=None >/dev/null
+# Deploy looks the processor up by display name at revision time.
+gcloud projects add-iam-policy-binding "$PROJECT" \
+  --member="serviceAccount:$DEPLOY_EMAIL" \
+  --role=roles/documentai.viewer \
+  --condition=None >/dev/null
+echo "  $RUNTIME_SA: documentai.apiUser (not editor)"
+echo "  $DEPLOY_SA: documentai.viewer"
+
 say "Workload Identity Federation (no long-lived keys)"
 gcloud iam workload-identity-pools describe "$POOL" \
   --location=global --project "$PROJECT" >/dev/null 2>&1 ||
@@ -325,3 +383,4 @@ echo "  runtime SA:   $RUNTIME_EMAIL"
 echo "  sql instance: $CONNECTION_NAME"
 echo "  secret:       $SECRET"
 echo "  docs bucket:  gs://$DOCS_BUCKET"
+echo "  ocr processor: ${OCR_PROCESSOR_ID:-unset} ($OCR_LOCATION)"

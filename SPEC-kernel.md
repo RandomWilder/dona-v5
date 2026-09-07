@@ -5,7 +5,7 @@ logic** — it is the shared machinery every module is built on.
 
 - **Owns:** ids · injected clock · the one error shape · edge validation · config · db · the
   migration runner and the kernel's own tables · idempotency · audit · outbox · durable work ·
-  object storage · pdf · embeddings · extraction · the RTL UI token layer.
+  object storage · pdf · ocr · embeddings · extraction · the RTL UI token layer.
 - **Entities:** none.
 - **Depends on:** nothing. **It imports from no domain module**, and `src/kernel/boundary.test.ts`
   proves it on every run.
@@ -87,6 +87,7 @@ therefore brings with it, is the durability substrate its own suites run against
 | `0001_init.sql` | the `vector` extension |
 | `0002_kernel_durability.sql` | `idempotency_keys` · `audit_log` · `outbox` · `scheduled_work` · `config_settings` |
 | `0003_kernel_settings.sql` | the seed rows for the embedding and extraction settings |
+| `0016_ocr_settings.sql` | `ocr.processor_version` — Document AI OCR version, read per call |
 
 `audit_log.actor_role` is nullable and un-CHECKed by design: tenant, agent and system actors hold no
 role, and the kernel does not know any module's role vocabulary.
@@ -140,6 +141,10 @@ already stored, so changing it is a migration and a re-embed anyway.
 when it changes — and the failure it guards is different in kind: a model id the account cannot
 serve makes every extraction fail, and the fix has to be one row rather than a deploy.
 
+`ocr.processor_version` is read **per call** on the same argument: a processor version is not
+compiled into any column, and pinning a bad one must be fixable with a row. The processor *id* is
+environment, like `DOCS_BUCKET` — it names a GCP resource, not a tunable.
+
 ## Object store (`objects.ts`)
 
 `put(path, bytes, contentType)` and `read(path)`. Infrastructure on the same footing as `db.ts`: the
@@ -182,14 +187,55 @@ flattened text binds each value to the label on the line above. `getTextContent(
 an x/y transform, a width and a bidi direction, which is what makes both the column pairing and a
 traceable citation possible.
 
+Each item carries `confidence: number | null`. pdfjs has no per-word score, so the native-text
+adapter writes `null`. The OCR adapter writes the processor's score. A later caller that needs a
+number must not invent one.
+
 `createPdfjsText()` wraps `pdfjs-dist`, imported lazily so a process that never reads a PDF never
 pays for it. The input is a third-party PDF and a PDF is a program, so nothing here renders:
 `useSystemFonts: false` and `disableFontFace: true`, because text extraction needs no glyph built at
 runtime.
 
-A file that is not a PDF, or one the parser cannot open, is `invalid` — never a driver stack. A page
-with no text layer is **not** an error: it comes back with zero items, and saying which pages those
-were is the caller's job.
+**Bounded, because the caller is a browser request.** `pages()` races the parse against
+`AbortSignal.timeout` (8 seconds, code not a config row — same argument extraction's bound makes).
+A file that has not yielded pages by then returns **no pages**, never `unavailable`: a scan or a
+heavy signed PDF is filed as `unverified` and OCR is the next reader, and a 503 from an unbounded
+parse is the failure week 3's staging demo produced. A file that is not a PDF, or one the parser
+cannot open, is still `invalid` — never a driver stack. A page with no text layer is **not** an
+error: it comes back with zero items, and saying which pages those were is the caller's job.
+
+## OCR (`ocr.ts`)
+
+The second reader, and the one that measures a page with no text layer. Same footing as `pdf.ts`:
+bytes in, positioned items out, and it does not know what a lease is.
+
+`pages(bytes, mimeType, processorVersion)` → `{ pages, images }`. `pages` is the same `PdfPage[]`
+pdfjs returns, so every caller downstream has one shape. `images` are the page rasters the
+processor already produced — the overlay draws boxes on those, and the kernel still does not render.
+The version arrives per call from `config_settings`; the processor id is environment.
+
+`createDocumentAiOcr({ project, location, processorId, token?, fetchImpl?, timeoutMs? })` talks to
+the Document AI REST `process` method over `fetch`, with `google-auth-library` for ADC and nothing
+else — the same split `objects.ts` made. **No Document AI SDK.** Processor type is `OCR_PROCESSOR`
+(the general OCR processor, not Form Parser). Location is `eu`: Document AI does not serve
+`me-west1`, and `eu` is the closest residency that hosts this processor. The regional endpoint is
+`https://eu-documentai.googleapis.com/v1/...:process`. Version is `ocr.processor_version` in
+`config_settings`, read per call, default `pretrained-ocr-v2.1-2024-08-07`. Hebrew language hint
+`iw`. Online process only; more than 15 pages is a refusal to call, not a `batchProcess`. Timeout
+20 seconds. A failed, timed-out or unconfigured call is `unavailable` from this port; the caller
+that files a document catches it and leaves the row `unverified`, so the HTTP request is never a
+503 because OCR missed.
+
+Coordinates: Document AI's `normalizedVertices` (origin top-left, 0–1) are multiplied by the page
+dimension once, here, into the same top-down pixel space pdfjs already uses.
+
+`createUnconfiguredOcr()` throws rather than returning empty pages: empty pages mean "this file has
+no text", which would file every scan as `unverified` forever and look like a successful read.
+`createFakeOcrText(pages)` is what the tests use.
+
+Sources: [Send a processing request](https://cloud.google.com/document-ai/docs/send-request),
+[processors.process](https://cloud.google.com/document-ai/docs/reference/rest/v1/projects.locations.processors/process),
+[Enterprise Document OCR](https://cloud.google.com/document-ai/docs/ocr).
 
 ## Embeddings (`embeddings.ts`)
 

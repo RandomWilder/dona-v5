@@ -1132,6 +1132,18 @@ per-word confidence.
   `unverified`. Record the bound in the evidence.
 - **Deps:** ~~3.4~~ **3.3** — re-pointed 6 Sep 2026 when 3.4 deferred. The adapter needs a document in
   the bucket, which A1's upload supplies; it never needed the bulk path. **Size:** M
+- **Closed 2026-09-07** ([evidence](evidence/4.1.md)). General `OCR_PROCESSOR` in **`eu`**, not Form
+  Parser, not `me-west1` — Document AI does not serve that region. Processor
+  `bd23faa1bd256c46` (`dona-ocr-staging`), default version `pretrained-ocr-v2.1-2024-08-07`, the same
+  pin `0016_ocr_settings.sql` seeds. REST + ADC, no Document AI SDK. Two readers, one page shape:
+  pdfjs bounded at **8s** (empty pages, never `unavailable`); Document AI bounded at **20s**, on the
+  same request after the row exists. Live against `eu-documentai.googleapis.com` as the operator
+  account: native PDF **1978ms**, word `Shkirot` at confidence **0.985**, page PNG 20 576 bytes;
+  image-led PDF **870ms**, no words, page PNG 17 323 bytes; 1×1 PNG **1467ms**, one page image. HTTP
+  of an OCR miss is **200 unverified**, not 503. Overlay is `GET /documents/:id/read`. Sweep locally
+  **examined 1 → verified 1**. Staging sweep of the week-3 backlog waits on the revision that carries
+  this slice — owned at 4.2, not left behind. **412 code + 41 hooks**, policy 44, no new runtime
+  dependency.
 
 ### Slice 4.2 — Comprehension into the declared schema — **the open half of A8**
 The model maps OCR output into the fields **that document type's schema declares**, read from
@@ -1150,6 +1162,9 @@ model, schema_version_id)`.
   and there is no separate schema-version entity to point at. Carrying both would be two names for
   one fact, and the day they disagree is the day a value stops being explicable — which is the entire
   reason `effective_from` is there.
+- **Owed by 4.1 — staging sweep of `unverified`.** `ocr:sweep` exists; the serving revision does not
+  yet carry the reader. After 4.1 merges, run it as `app-staging` and write the count (zero is a
+  count).
 - **Deps:** 4.1, 3.1 · **Size:** M
 
 ### Slice 4.3 — Promotion, with provenance — **the governed half of A8**

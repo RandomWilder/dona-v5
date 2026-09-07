@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import { KernelError } from './errors.ts';
+import { defaultOcrProcessorVersion } from './ocr.ts';
 
 // The kernel's settings. SPEC.md rule 4 -- policies are data, "config rows
 // editable in admin, never constants" -- and until slice 12.2 nothing in this
@@ -164,4 +165,22 @@ export async function readExtractionSettings(
     reasoningEffort:
       effort === 'omit' ? undefined : (effort as ReasoningEffort),
   };
+}
+
+export const ocrSettingKeys = {
+  processorVersion: 'ocr.processor_version',
+} as const;
+
+export interface OcrSettings {
+  processorVersion: string;
+}
+
+export async function readOcrSettings(
+  settings: Settings,
+): Promise<OcrSettings> {
+  const processorVersion = await settings.text(
+    ocrSettingKeys.processorVersion,
+    defaultOcrProcessorVersion,
+  );
+  return { processorVersion };
 }

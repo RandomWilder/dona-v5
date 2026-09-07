@@ -140,6 +140,8 @@ export interface FiledDocument {
   labelHe: string;
   storageUri: string;
   fileHash: string;
+  verificationVerdict: FiledVerdict;
+  verificationTerms: string[] | null;
 }
 
 export async function getFiledDocument(
@@ -153,9 +155,11 @@ export async function getFiledDocument(
     label_he: string;
     storage_uri: string;
     file_hash: string;
+    verification_verdict: FiledVerdict;
+    verification_terms: string[] | null;
   }>(
     `SELECT d.document_id, d.document_type_id, dt.type_key, dt.label_he,
-            d.storage_uri, d.file_hash
+            d.storage_uri, d.file_hash, d.verification_verdict, dt.verification_terms
        FROM document d
        JOIN document_type dt ON dt.document_type_id = d.document_type_id
       WHERE d.document_id = $1`,
@@ -172,5 +176,56 @@ export async function getFiledDocument(
     labelHe: row.label_he,
     storageUri: row.storage_uri,
     fileHash: row.file_hash,
+    verificationVerdict: row.verification_verdict,
+    verificationTerms: row.verification_terms,
   };
+}
+
+/**
+ * The only verdict transition 4.1 writes: `unverified` → `verified`.
+ *
+ * `refused` is not a stored value (3.3: a refusal writes no row). Terms still
+ * missing after OCR leave the row as it was.
+ */
+export async function updateVerificationVerdict(
+  db: Queryable,
+  documentId: string,
+  verdict: 'verified',
+): Promise<boolean> {
+  const result = await db.query<{ document_id: string }>(
+    `UPDATE document
+        SET verification_verdict = $2
+      WHERE document_id = $1 AND verification_verdict = 'unverified'
+      RETURNING document_id`,
+    [documentId, verdict],
+  );
+  return result.rows.length === 1;
+}
+
+export async function listUnverifiedDocuments(db: Queryable): Promise<
+  Array<{
+    documentId: string;
+    storageUri: string;
+    typeKey: string;
+    verificationTerms: string[] | null;
+  }>
+> {
+  const result = await db.query<{
+    document_id: string;
+    storage_uri: string;
+    type_key: string;
+    verification_terms: string[] | null;
+  }>(
+    `SELECT d.document_id, d.storage_uri, dt.type_key, dt.verification_terms
+       FROM document d
+       JOIN document_type dt ON dt.document_type_id = d.document_type_id
+      WHERE d.verification_verdict = 'unverified'
+      ORDER BY d.ingested_at`,
+  );
+  return result.rows.map((row) => ({
+    documentId: row.document_id,
+    storageUri: row.storage_uri,
+    typeKey: row.type_key,
+    verificationTerms: row.verification_terms,
+  }));
 }
