@@ -7,6 +7,11 @@
 > **Walked once a week.** Anything unlit or overdue goes on the standing asks slide at Thursday's
 > demo — visible to Dona Dom's management as *their* dependency, not as our delay.
 > Definition and rationale: [pipeline.md](../docs/pipeline.md) §2.
+>
+> **Last walked 7 Sep 2026 (week 3 close).** No status change. F1 in progress (burn window 18 Sep –
+> 2 Oct). F2, F4, F5, F7 unlit. F3 off month one. F6 lit, engineering half discharged, three acts
+> still owed — they block 4.5 and the tier-2 corpus, nothing else in week 4. Walk again before week
+> 4's Thursday demo.
 
 | # | Fuse | Lit | Expected burn | Status | What stalls if it does not land |
 |---|---|---|---|---|---|

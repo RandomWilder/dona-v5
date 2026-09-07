@@ -4,6 +4,12 @@
 #   ./infra/docs-delete.sh --all                     everything in gs://dona-v5-staging-docs
 #   ./infra/docs-delete.sh unit/019a…/lease/         one flat's leases
 #
+# **The unit panel will still list the document after this script runs.** It reads `document` /
+# `document_link`, not the bucket. That is the filing cabinet; the object is the bytes. Clearing mock
+# filings from a screen is two acts: this script (objects), then DELETE of those rows on staging by
+# `file_hash` (the object path's leaf). The application still has no `delete`. Recorded at week 3
+# close, 7 Sep 2026, when a prefix delete left דירה 4's cards on screen until the rows were unfiled.
+#
 # **This is the half slice 3.2 deliberately left to a human.** The application has no `delete` on its
 # object port and the runtime account has no `objectAdmin`, and both of those stay true: a signed
 # contract is not something the software may destroy. What was never in question is whether a person
