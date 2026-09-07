@@ -7,12 +7,15 @@
 // SPEC-tenancy.md sets out the difference, because the line between the two is the module boundary.
 
 export type {
+  PromotedFieldSpec,
+  PromotedTenancyField,
   TenancyPartySpec,
   TenancyRole,
   TenancySpec,
   TenancyStatus,
 } from './internal/commands.ts';
 export {
+  applyPromotedField,
   upsertTenancy,
   upsertTenancyParty,
   upsertTermsProfile,

@@ -145,3 +145,106 @@ export async function upsertTenancyParty(
   }
   return { id: spec.tenancyId, inserted };
 }
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+export type PromotedTenancyField = 'start_date' | 'end_date';
+
+export interface PromotedFieldSpec {
+  tenancyId: string;
+  field: PromotedTenancyField;
+  value: string;
+  actor: string;
+  at: Date;
+  sourceDocumentId: string;
+  extractedFieldId: string;
+}
+
+function requireDate(value: string): string {
+  if (!DATE.test(value)) {
+    throw new KernelError('invalid', 'that is not a date');
+  }
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  if (
+    utc.getUTCFullYear() !== year ||
+    utc.getUTCMonth() !== month - 1 ||
+    utc.getUTCDate() !== day
+  ) {
+    throw new KernelError('invalid', 'that is not a date');
+  }
+  return value;
+}
+
+function pgCode(error: unknown): string | undefined {
+  if (error !== null && typeof error === 'object' && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Copy a promoted date onto the tenancy row and append TenancyEvent.
+ *
+ * Isolation dates from the register importer still go through `upsertTenancy` and do not write
+ * events. This command is the document path: old → new, who approved it, which document caused it.
+ */
+export async function applyPromotedField(
+  db: Queryable,
+  spec: PromotedFieldSpec,
+): Promise<void> {
+  const value = requireDate(spec.value);
+  const column = spec.field === 'start_date' ? 'start_date' : 'end_date';
+  const current = await db.query<{
+    start_date: string;
+    end_date: string;
+  }>(
+    `SELECT start_date::text, end_date::text FROM tenancy WHERE tenancy_id = $1`,
+    [spec.tenancyId],
+  );
+  const row = current.rows[0];
+  if (!row) {
+    throw new KernelError('not_found', 'tenancy not found');
+  }
+  const oldValue = column === 'start_date' ? row.start_date : row.end_date;
+  if (oldValue !== value) {
+    try {
+      await db.query(
+        `UPDATE tenancy SET ${column} = $2 WHERE tenancy_id = $1`,
+        [spec.tenancyId, value],
+      );
+    } catch (error) {
+      const code = pgCode(error);
+      if (code === '23505') {
+        throw new KernelError(
+          'conflict',
+          'that unit already has a lease starting on this date',
+        );
+      }
+      if (code === '23514') {
+        throw new KernelError('invalid', 'the lease period is not ordered');
+      }
+      throw error;
+    }
+  }
+  await db.query(
+    `INSERT INTO tenancy_event (
+       tenancy_event_id, tenancy_id, at, actor, kind, field,
+       old_value, new_value, source_document_id, extracted_field_id
+     ) VALUES ($1, $2, $3, $4, 'amended', $5, $6, $7, $8, $9)`,
+    [
+      newId(),
+      spec.tenancyId,
+      spec.at,
+      spec.actor,
+      column,
+      oldValue,
+      value,
+      spec.sourceDocumentId,
+      spec.extractedFieldId,
+    ],
+  );
+}

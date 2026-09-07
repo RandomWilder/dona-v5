@@ -353,6 +353,7 @@ export function renderSeededPage(screen: SeededScreen): string {
 }
 
 export interface ReadScreen {
+  documentId: string;
   buildingId: string;
   buildingName: string;
   unitId: string | null;
@@ -361,7 +362,46 @@ export interface ReadScreen {
   source: 'pdfjs' | 'ocr' | 'none';
   page: PdfPage | null;
   image: OcrPageImage | null;
-  extracted?: ReadonlyArray<{ labelHe: string; value: string }>;
+  extracted?: ReadonlyArray<{
+    extractedFieldId: string;
+    labelHe: string;
+    value: string;
+    promotionTarget: string | null;
+    promotedTo: string | null;
+  }>;
+}
+
+function extractedSection(screen: ReadScreen) {
+  const rows = screen.extracted ?? [];
+  if (rows.length === 0) {
+    return h``;
+  }
+  const promotable = rows.filter(
+    (row) => row.promotionTarget && !row.promotedTo,
+  );
+  return h`
+    <h2>מה שנקרא</h2>
+    <dl class="facts">${rows.map(
+      (row) =>
+        h`<div><dt>${row.labelHe}</dt><dd>${row.value}${
+          row.promotedTo
+            ? h` · קודם`
+            : row.promotionTarget
+              ? h``
+              : h` · נקרא בלבד`
+        }</dd></div>`,
+    )}</dl>
+    ${
+      promotable.length > 0
+        ? h`<form method="post" action="/documents/${screen.documentId}/promote" enctype="multipart/form-data">
+            <p><label>מי מאשר <input name="promoted_by" required maxlength="200"></label></p>
+            ${promotable.map(
+              (row) =>
+                h`<button class="btn" name="extracted_field_id" value="${row.extractedFieldId}">קדם · ${row.labelHe}</button>`,
+            )}
+          </form>`
+        : h``
+    }`;
 }
 
 export function renderReadPage(screen: ReadScreen): string {
@@ -395,14 +435,7 @@ export function renderReadPage(screen: ReadScreen): string {
         }</dd></div>
         <div><dt>טביעת הקובץ</dt><dd class="digest">${ltr(screen.fileHash)}</dd></div>
       </dl>
-      ${
-        screen.extracted && screen.extracted.length > 0
-          ? h`<h2>מה שנקרא</h2><dl class="facts">${screen.extracted.map(
-              (row) =>
-                h`<div><dt>${row.labelHe}</dt><dd>${row.value}</dd></div>`,
-            )}</dl>`
-          : h``
-      }
+      ${extractedSection(screen)}
     </section>
     ${
       page

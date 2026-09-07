@@ -71,6 +71,12 @@ export {
   SEARCH_LIMIT,
   searchDocuments,
 } from './internal/list.ts';
+export type {
+  PromoteDeps,
+  PromoteResult,
+  PromoteSpec,
+} from './internal/promote.ts';
+export { promoteExtractedField } from './internal/promote.ts';
 export type { HandoverProposal, ProposedAsset } from './internal/protocol.ts';
 export { isProtocolType, readHandoverProposal } from './internal/protocol.ts';
 export type { DocumentRead, ReadDeps, SweepReport } from './internal/read.ts';

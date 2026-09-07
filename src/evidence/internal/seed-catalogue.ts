@@ -5,6 +5,7 @@
 // It is also what the acceptance test drives — **adding a tenth type is this function over a
 // one-element list**, which is why the test proves the same path the seed uses rather than a
 // parallel one written to pass.
+import { newId } from '../../kernel/ids.ts';
 import type { UpsertResult } from '../../kernel/upsert.ts';
 import type { SeedDocumentType } from '../fixtures/document-types.ts';
 import { upsertDocumentType, upsertDocumentTypeField } from './catalogue.ts';
@@ -21,6 +22,32 @@ function count(
 ): void {
   if (result.inserted) tally.created += 1;
   else tally.updated += 1;
+}
+
+/** Reviewed mappings. A new target column still costs a migration that extends the CHECK. */
+const PROMOTION_TARGETS: Readonly<
+  Record<string, Readonly<Record<string, string>>>
+> = {
+  lease: {
+    start_date: 'tenancy.start_date',
+    end_date: 'tenancy.end_date',
+  },
+  lease_amendment: {
+    new_end_date: 'tenancy.end_date',
+  },
+};
+
+async function upsertFieldPromotion(
+  db: Queryable,
+  documentTypeFieldId: string,
+  target: string,
+): Promise<void> {
+  await db.query(
+    `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (document_type_field_id) DO UPDATE SET target = EXCLUDED.target`,
+    [newId(), documentTypeFieldId, target],
+  );
 }
 
 /**
@@ -48,6 +75,11 @@ export async function applyDocumentTypeCatalogue(
         documentTypeId: type.id,
       });
       count(report.fields, field);
+      const target =
+        PROMOTION_TARGETS[entry.type.typeKey]?.[declaration.fieldKey];
+      if (target) {
+        await upsertFieldPromotion(db, field.id, target);
+      }
     }
   }
   return report;

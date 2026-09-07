@@ -43,6 +43,10 @@ export interface ExtractedRow {
   bbox: BBox;
   confidence: number | null;
   model: string;
+  promotionTarget: string | null;
+  promotedTo: string | null;
+  promotedBy: string | null;
+  promotedAt: Date | null;
 }
 
 export interface ExtractDeps {
@@ -221,9 +225,10 @@ export async function extractFiledDocument(
     throw error;
   }
 
-  await deps.db.query('DELETE FROM extracted_field WHERE document_id = $1', [
-    input.documentId,
-  ]);
+  await deps.db.query(
+    'DELETE FROM extracted_field WHERE document_id = $1 AND promoted_at IS NULL',
+    [input.documentId],
+  );
 
   let written = 0;
   for (const finding of asFindings(reply)) {
@@ -295,12 +300,19 @@ export async function listExtractedFields(
     bbox: BBox;
     confidence: number | null;
     model: string;
+    promotion_target: string | null;
+    promoted_to: string | null;
+    promoted_by: string | null;
+    promoted_at: Date | null;
   }>(
     `SELECT e.extracted_field_id, e.document_type_field_id, f.field_key, f.label_he,
-            e.value, e.page, e.bbox, e.confidence, e.model
+            e.value, e.page, e.bbox, e.confidence, e.model,
+            p.target AS promotion_target, e.promoted_to, e.promoted_by, e.promoted_at
        FROM extracted_field e
        JOIN document_type_field f
          ON f.document_type_field_id = e.document_type_field_id
+       LEFT JOIN field_promotion p
+         ON p.document_type_field_id = e.document_type_field_id
       WHERE e.document_id = $1
       ORDER BY f.field_key, e.extracted_field_id`,
     [documentId],
@@ -315,6 +327,10 @@ export async function listExtractedFields(
     bbox: row.bbox,
     confidence: row.confidence,
     model: row.model,
+    promotionTarget: row.promotion_target,
+    promotedTo: row.promoted_to,
+    promotedBy: row.promoted_by,
+    promotedAt: row.promoted_at,
   }));
 }
 

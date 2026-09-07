@@ -205,6 +205,8 @@ const PII_COLUMNS = new Set([
   'iban',
   'bank_account',
   'account_number',
+  // Slice 4.3. The operator who signed an extracted value onto a typed column.
+  'promoted_by',
 ]);
 
 // **Qualified names, for the columns a bare name cannot reach.** Slice 2.1 met the first one:
@@ -219,6 +221,7 @@ const PII_COLUMNS = new Set([
 const PII_QUALIFIED_COLUMNS = new Set([
   'party_contact.value',
   'extracted_field.value',
+  'tenancy_event.actor',
 ]);
 
 // Two shapes, because a column arrives two ways. A definition inside CREATE TABLE starts the line;
