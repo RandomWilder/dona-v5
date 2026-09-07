@@ -73,14 +73,20 @@ ws.column_dimensions["B"].width = 112
 
 lines = [
     ("h1", "Dona Dom — Building and Unit"),
-    ("sub", "3 September 2026. Minimal fields on purpose — the goal of this pass is to get the "
+    ("sub", "3 September 2026, with the document-type catalogue added 7 September 2026 (E15, E16, "
+            "R17, R18, A8). Minimal fields on purpose — the goal of this pass is to get the "
             "relationships right, then add fields on top of a shape that already holds. Nothing "
             "here is published; this workbook is handed over as a file."),
     ("gap", ""),
     ("h2", "Numbering convention"),
-    ("n1", "Relationship numbers are append-only. A new relationship is appended (R15, R16, …) and "
-           "never inserted, so R1–R14 keep the numbers cited elsewhere — including in the Hebrew "
-           "workbook. Entity numbers (E1–E14) carry no such guarantee: nothing cross-references them."),
+    ("n1", "Relationship numbers are append-only. A new relationship is appended (R15, R16, R17, "
+           "R18, …) and never inserted, so R1–R16 keep the numbers cited elsewhere — including in "
+           "the Hebrew workbook, which is frozen at an older state. Entity numbers (E1–E16) carry "
+           "no such guarantee: nothing cross-references them."),
+    ("n1", "The DECISIONS sheet now carries two kinds of row. A D-number is a shaping decision made "
+           "inside this workbook. An A-number is a repository architecture decision from "
+           "tasks/plan.md, reproduced here because it shapes these tables — A8 is the first. "
+           "Reproduced under its own number rather than renumbered, so one decision keeps one name."),
     ("gap", ""),
     ("h2", "The one idea that keeps this simple"),
     ("p",  "A building is not a bag of apartments. It is a set of SPACES — some private and leasable "
@@ -129,8 +135,9 @@ lines = [
     ("p",  "ADMIN VIEWS — what an admin actually sees on a building screen, a unit screen and the "
            "settings screen, and which parts are stored versus derived. The test of the model is "
            "whether these screens fall out of it without special cases."),
-    ("p",  "DECISIONS — the six shaping decisions, each stated as the rule it creates and why that "
-           "rule holds. Kept in the workbook so they are read alongside the tables they explain."),
+    ("p",  "DECISIONS — the six shaping decisions plus A8, each stated as the rule it creates and "
+           "why that rule holds. Kept in the workbook so they are read alongside the tables they "
+           "explain."),
 ]
 
 r = 2
@@ -213,6 +220,16 @@ entities = [
      "Present only so an asset under warranty can point at who must fix it during תקופת הבדק. "
      "Everything else about providers is out of scope here.",
      "Out of scope"),
+    ("E15", "DocumentType", "One kind of document that can be filed, managed as a row.",
+     "The catalogue behind Document. Turns 'we now also receive a ועד בית agreement' from a "
+     "migration and a release into a seed row. Deactivated, never deleted — filed documents still "
+     "point at it.",
+     "NEW — A8"),
+    ("E16", "DocumentTypeField", "One field a document type declares, in one version of its schema.",
+     "What we expect to read off a document of that type, and what to call it. Versioned by "
+     "effective_from, so a value extracted under version 3 of a lease schema is still explicable a "
+     "year later.",
+     "NEW — A8"),
 ]
 sheet("ENTITIES",
       ["#", "Entity", "One row = ", "What it is for", "Status"],
@@ -308,6 +325,25 @@ rels = [
      "A retired type must be deactivated, never deleted — old obligations still point at it. Deleting "
      "a type orphans every historical record that used it, which is exactly the evidence a dispute "
      "needs."),
+    ("R17", "Document", "is typed by", "DocumentType", "N : 1",
+     "Document.document_type_id → DocumentType.document_type_id",
+     "NEW, A8. The kind of a document is a row in a catalogue, not a value in an enum. Adding "
+     "'ועד בית agreement' or a municipality's own ארנונה format is a seed row: no migration, no "
+     "deploy, and the document is filed, citable and searchable the same day.",
+     "As an enum, every new document type is a schema change — and document types keep arriving, "
+     "one per tender addendum and one per municipality. A retired type is deactivated and never "
+     "deleted, for R16's reason: filed documents still point at it, and those are the records a "
+     "dispute reads."),
+    ("R18", "DocumentType", "declares many", "DocumentTypeField", "1 : N, versioned",
+     "DocumentTypeField.document_type_id → DocumentType.document_type_id, "
+     "unique (document_type_id, field_key, effective_from)",
+     "NEW, A8. A type declares the fields we expect to read off it, and each declaration is dated. "
+     "Correcting or extending a schema appends a new row and closes the old one; it never edits "
+     "what a previous version said.",
+     "Without effective_from, correcting a schema silently rewrites the meaning of every value "
+     "already extracted under the old one. The extracted value points at the exact "
+     "DocumentTypeField row that governed it, which is what makes 'why does this lease say 14 "
+     "months' answerable a year later."),
 ]
 sheet("RELATIONSHIPS",
       ["#", "From", "", "To", "Cardinality", "How it is written", "What it means, in plain words",
@@ -524,12 +560,16 @@ f("Asset", "status", "enum", "yes", "", "IN_SERVICE · FAULTY · REMOVED", "")
 
 g("E12 · DOCUMENT — the evidence")
 f("Document", "document_id", "id", "yes", "PK", "", "")
-f("Document", "type_key", "enum", "yes", "",
-  "lease · lease_amendment · termination_notice · arnona · insurance · id · bank_guarantee · "
-  "handover_protocol · inspection_certificate",
-  "The first eight are already agreed. inspection_certificate is new here, and needed by SAFETY assets.")
-f("Document", "storage_uri", "text", "yes", "", "Our copy, in our object storage.", "")
-f("Document", "sha256", "text", "yes", "", "Hash taken at ingest.", "Proves the copy is the file we read.")
+f("Document", "document_type_id", "id", "yes", "FK → DocumentType",
+  "Which kind of document this is.",
+  "CHANGED BY A8 — was a fixed type_key enum of nine values, now points at an admin-managed row. "
+  "See R17. The nine become the seed rows of E15.")
+f("Document", "storage_uri", "text", "yes", "", "Our copy, in our object storage.",
+  "The path carries the place and never the people, keyed by id rather than a transliterated "
+  "address. Slice 3.2.")
+f("Document", "file_hash", "text", "yes", "", "Hash taken at ingest, immutable thereafter.",
+  "Proves the copy is the file we read. Named file_hash and not sha256: SPEC-flows.md A1 names it "
+  "that, and the field names the purpose rather than this year's algorithm.")
 f("Document", "drive_file_id", "text", "no", "",
   "Provenance — which Google Drive file this came from.",
   "Provenance only. Drive is a source, never the system of record, and a Drive folder name is never "
@@ -553,6 +593,65 @@ f("Provider", "provider_id", "id", "yes", "PK", "", "")
 f("Provider", "name", "text", "yes", "", "", "")
 f("Provider", "provider_kind", "enum", "yes", "", "IN_HOUSE_CREW · CONTRACTOR · DEVELOPER_WARRANTY",
   "Present only to make R11 resolvable. Everything else about providers waits.")
+
+g("E15 · DOCUMENTTYPE — the catalogue behind Document (A8)")
+f("DocumentType", "document_type_id", "id", "yes", "PK", "", "")
+f("DocumentType", "type_key", "text", "yes", "unique",
+  "Stable machine key. Nine seed rows: lease · lease_amendment · termination_notice · arnona · "
+  "insurance · id · bank_guarantee · handover_protocol · inspection_certificate.",
+  "The first eight are the Data Model's. inspection_certificate is the ninth, needed by SAFETY "
+  "assets and by the compliance tab. Never renamed and never reused — filed documents point at it.")
+f("DocumentType", "label_he", "text", "yes", "",
+  "What the admin sees and chooses from: חוזה שכירות · נספח · הודעת סיום · ארנונה · ביטוח · "
+  "תעודת זהות · ערבות בנקאית · פרוטוקול מסירה · תעודת בדיקה.", "")
+f("DocumentType", "label_en", "text", "no", "", "", "")
+f("DocumentType", "verification_terms", "text[]", "no", "",
+  "Marker terms a document of this type is expected to contain.",
+  "The cheap guard in slice 3.3 — right slot, wrong file — reads this and nothing else. It lives on "
+  "the type row rather than in code, or a new type would arrive with no guard until the next "
+  "release, and A8 would be true of the catalogue and false of everything that uses it.")
+f("DocumentType", "is_active", "bool", "yes", "",
+  "Retired types stay as rows and stop appearing in the 'file a document' list.",
+  "NEVER delete a type. A9: the admin screen for this catalogue lands in month two; until then we "
+  "add rows through seeds, which is the same mechanism with a different hand on it.")
+f("DocumentType", "—", "—", "—", "",
+  "NO promotes_to. NO validation_rules. NO renewal_cadence.",
+  "A8 deliberately: a promotes_to column would make promotion a row, and promotion is the half that "
+  "is governed — it costs a migration and a reviewed mapping because those columns are what the "
+  "isolation join, the responsibility matrix and the state machine read. Renewal cadence and "
+  "'what is missing' belong to DocumentRequirement, which is month two's.")
+
+g("E16 · DOCUMENTTYPEFIELD — what a type declares, in one version (A8)")
+f("DocumentTypeField", "document_type_field_id", "id", "yes", "PK", "", "")
+f("DocumentTypeField", "document_type_id", "id", "yes", "FK → DocumentType", "", "See R18.")
+f("DocumentTypeField", "field_key", "text", "yes", "unique part",
+  "Stable machine key within the type: start_date, end_date, tenant_name, apartment_number.",
+  "Unique on (document_type_id, field_key, effective_from) — the same field, redeclared, is a new "
+  "row and not an edit.")
+f("DocumentTypeField", "label_he", "text", "yes", "",
+  "What a reviewer sees beside the value on the page.", "")
+f("DocumentTypeField", "value_type", "enum", "yes", "",
+  "TEXT · NUMBER · DATE · BOOLEAN · ENUM",
+  "No MONEY type, and no money field is seeded. READ ME rule 3 binds hardest at promotion: no "
+  "amount is ever a column on a business record, and no amount is ever quoted to a tenant — the "
+  "golden set carries that as a standing refusal case.")
+f("DocumentTypeField", "is_required", "bool", "yes", "",
+  "Is this field expected in a document of this type?",
+  "A missing required field is a RESULT, not an error. A lease commonly names no guarantor — "
+  "SPEC-flows A2 — and extraction returning nothing there is correct.")
+f("DocumentTypeField", "extraction_hint", "text", "no", "",
+  "The Hebrew phrasing as printed on the form, to look for on the page.",
+  "A hint, never a key. Same rule as a Drive path.")
+f("DocumentTypeField", "effective_from", "date", "yes", "",
+  "The version. This row governs values extracted on or after this date.",
+  "A8, for policy_version_id's reason. The extracted value points at THIS row, so A8's "
+  "schema_version_id is document_type_field_id and there is no separate version entity.")
+f("DocumentTypeField", "effective_to", "date", "no", "", "Null = the current declaration.",
+  "Closing a row never edits it. Nothing is overwritten — READ ME rule 2.")
+f("DocumentTypeField", "—", "—", "—", "",
+  "NO target column, NO promotion mapping.",
+  "Capture is open; promotion is governed. The mapping from a captured field to a typed column is "
+  "a migration and a reviewed mapping, not a row an admin can add on a Tuesday. See A8.")
 
 sheet("FIELDS",
       ["Entity", "Field", "Type", "Req", "Key", "Meaning / allowed values", "Note, rule or warning"],
@@ -622,6 +721,11 @@ views = [
      "ObligationType", "Stored",
      "The point of D5. Adding a ועד בית variant or sub-metered water is a form, not a release. "
      "Retiring hides it from the 'add' list and touches no existing obligation."),
+    ("Admin-managed", "Document types and their fields — add a type, declare what it carries, retire it",
+     "DocumentType + DocumentTypeField", "Stored",
+     "A8, and A9 for the timing: the mechanism is a row from week 3, the screen lands in month two "
+     "beside the obligation-types screen whose pattern it shares. Until then we add rows through "
+     "seeds. Adding a field is safe here precisely because it cannot promote itself to a column."),
     ("Guarded", "Asset types — the list the responsibility matrix keys on",
      "Asset.asset_type", "Stored, governed",
      "NOT on this screen. Editing it edits policy, and policy is versioned with effective_from so a "
@@ -699,6 +803,21 @@ dec = [
      "stays derived from Tenancy dates.",
      "Condition and occupancy answer different questions and change for different reasons. Modelling "
      "condition as a kind of tenancy would force every occupancy query to handle a synthetic row."),
+    ("A8", "What does it cost to add a document type, or a field to one?",
+     "Capture is open; promotion is governed.",
+     "A type is a DocumentType row (E15, R17) and a field is a DocumentTypeField row (E16, R18): "
+     "zero migrations, zero deploys, and the value is citable and searchable the moment it is "
+     "extracted. DocumentTypeField is versioned by effective_from, and an extracted value points at "
+     "the exact row that governed it. Promotion — an extracted value becoming a typed column such "
+     "as Tenancy.start_date or Asset.warranty_end_date — costs a migration and a reviewed mapping. "
+     "There is deliberately no promotes_to column anywhere in E15 or E16.",
+     "This is tasks/plan.md's A8, reproduced here under its own number because it shapes these "
+     "tables. It is not a new principle: it is D5 and the asset_type rule applied to documents. "
+     "Document types keep arriving — a tender's addendum, a municipality's ארנונה format, a ועד בית "
+     "agreement — and none of them may cost a release. But the columns promotion writes are what "
+     "the isolation join, the responsibility matrix and the state machine read, so 'an admin added "
+     "a field on Tuesday and the responsibility answer changed' stays impossible by construction, "
+     "exactly as it is for asset_type."),
 ]
 ws = sheet("DECISIONS",
            ["#", "The question", "The decision", "The rule it creates", "Why it holds"],

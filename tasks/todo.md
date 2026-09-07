@@ -38,12 +38,21 @@ the workbook is the anti-pattern this project has already named once.
       תקופת הבדק starts at handover, not at a letting, so `warranty_end_date` is currently a guess and
       responsibility is ternary on a guess. **Owned by 3.5**, which brings the real fact off the
       handover protocol — and says in its evidence **how many buildings had one**.
-- [ ] **The demo-day discrepancy in the published documents.** [pipeline.md](../docs/pipeline.md) §7
-      says the demo kind is declared **Monday**; the cadence and [roadmap.md](roadmap.md) say
-      **Sunday**, and Sunday is right. Carried since week 1 because no slice since has touched
-      `docs/`. **Owned by the first week-3 slice that edits any file in `docs/`** — one line, and the
-      artifact republished to the same URL in the same change ([docs/README.md](../docs/README.md)).
-      If no slice touches `docs/` by Wednesday, it becomes a change of its own before the freeze.
+- [x] **The demo-day discrepancy — discharged at 3.0, and the carry was describing something that had
+      already been fixed.** 3.0 edits `docs/model/`, so it inherited this. The claim was that
+      [pipeline.md](../docs/pipeline.md) §7 says the demo kind is declared **Monday**. It does not,
+      and §7 never has — §7 is the golden set. The line was in **§8**, and **2.1 corrected it on
+      2026-09-06**: it now reads that the Cadence's "Monday" means the first working day of the week,
+      that the working week here is Sun–Thu, and that the day is therefore Sunday. Week 1's evidence
+      raised it, 2.1 closed it, and weeks 1 and 2 both re-carried it afterwards from a note rather
+      than from the file — which is the carry rule's own failure mode: an item can outlive its fix if
+      nobody re-reads the thing it points at. **Nothing owed in this repository.**
+      What is still literally true is that two **published** documents say the kind is declared on
+      Monday — `rollout-cadence.html` ("Declare the demo type on Monday") and `platform-brief.html`.
+      2.1's ruling covers them: the Cadence is the authority on the schedule and is never renegotiated
+      here, so "Monday" reads as its first working day and the correction is a reading recorded rather
+      than a schedule changed — no republish. **Changing the client-facing wording is the director's
+      call**, not a slice's, and it is not owed by anything.
 - [ ] **The UI comments from week 2's demo.** Stakeholders were positive on progress and their
       comments were about the interface. Nothing raised was a correctness, isolation or data question
       and nothing blocks this week. **Parked deliberately and owned by the M1 checkpoint**, where the
@@ -86,7 +95,7 @@ exclusion constraint's GiST index, is reopened at week 12 at a different row cou
 
 ## Slices
 
-- [ ] **3.0 — Workbook pass: the document-schema catalogue.** **Spec before code**, and it is first in
+- [x] **3.0 — Workbook pass: the document-schema catalogue.** **Spec before code**, and it is first in
       the week for that reason. The workbook is the specification for month one's tables and it
       currently has `Document` at eight fields with no catalogue behind it. Add **E15 `DocumentType`**
       and **E16 `DocumentTypeField`** with **R17** and **R18** — **appended, never inserted**, because
@@ -95,7 +104,17 @@ exclusion constraint's GiST index, is reopened at week 12 at a different row cou
       not a source. The Hebrew workbook stays frozen unless asked.
       **Done when:** the FIELDS sheet specifies every column of both new entities, and the DECISIONS
       sheet carries **A8** as the rule it creates and why that rule holds.
-      **Verify:** re-run the generator; assert R1–R16 are unchanged; open the workbook. · **M**
+      **Verify:** re-run the generator; assert R1–R16 are unchanged; open the workbook.
+      **Closed 2026-09-07** ([evidence](evidence/3.0.md)). E15 · E16 · R17 · R18 · A8, appended, with
+      R1–R16, E1–E14 and D1–D6 proved identical **cell for cell against the committed `.xlsx`**
+      rather than against a re-run of my own — the committed workbook regenerates exactly from
+      `build_model.py`, so the diff is against the artifact. Exactly three FIELDS rows changed, all on
+      E12: `type_key` → `document_type_id` (R17) and `sha256` → **`file_hash`**. Two calls the
+      catalogue forced — `DocumentType.verification_terms`, so 3.3's guard reads the type row instead
+      of a map in code, and **no `promotes_to` column anywhere**, because promotion as a row gives
+      away A8's governed half. A8 keeps its own number rather than becoming a D7. Raised and owned:
+      the seed is nine and not eight (3.1) · E12 versus the published Data Model (3.1) · one column
+      and not two on `ExtractedField` (4.2). · **M**
 
 - [ ] **3.1 — Document, DocumentLink, and the type catalogue.** E12, E13, E15, E16. One document,
       several bindings, because a signed lease is evidence about the tenancy *and* the unit *and*
@@ -106,6 +125,21 @@ exclusion constraint's GiST index, is reopened at week 12 at a different row cou
       re-deploy of data — **no migration**.
       **Verify:** add one in a test, extract nothing, confirm no DDL was needed; contract tests on
       R13, R17 and R18; the same file ingested twice is one document with two links.
+      **Owed by 3.0 — the seed is nine types and the bar above is therefore the tenth.** The Data
+      Model names eight; the workbook has carried `inspection_certificate` as a ninth since 3 Sep
+      because SAFETY assets and the compliance tab need it, and **3.5 needs it this week**. Keeping a
+      type the system already requires out of the seed so that a demonstration lands on the number
+      nine is a knowingly incomplete seed. Seed nine, prove the mechanism on a tenth, say so.
+      **Owed by 3.0 — two column names are settled and are not to be re-decided.** There is no
+      `type_key` on `Document`: it is `document_type_id` (R17). The hash column is **`file_hash`**,
+      not `sha256`, matching [SPEC-flows.md](../SPEC-flows.md) A1.
+      **Owed by 3.0 — E12 is narrower than the published Data Model, and this slice decides whether
+      that stands.** `docs/data-model.html`'s `Document` carries `state`, `superseded_by`,
+      `tenant_visible` and `uploaded_by`; E12 carries none of them. A column is either in the first
+      DDL or it costs a migration later. With 3.4 deferred and type declared rather than detected,
+      the review-queue states collapse to nearly nothing — but supersession is real the moment an
+      addendum lands (flow A3, week 4) and `tenant_visible` is real the moment a tenant can see a
+      document (week 9). Decide each in the evidence, with a reason.
       **Owed by week 2 — the guard-three habit holds.** A document row is not person-shaped, but
       `DocumentTypeField` will describe fields that are (a tenant's name on a lease), and
       `scripts/guards.ts` fires on the column, not the intent. Expect to write `-- pii` or the
@@ -136,7 +170,13 @@ exclusion constraint's GiST index, is reopened at week 12 at a different row cou
       **Verify:** the wrong-file case, both directions, against tier-1 specimens.
       **Not in this slice:** the content cross-check — does the address on the document match the unit
       it was filed against — needs extraction and is **week 4's**. Say so in the evidence rather than
-      letting it look like an oversight. **Deps:** 3.1 · **M**
+      letting it look like an oversight.
+      **Owed by 3.0 — the guard reads the catalogue, never a map in TypeScript.**
+      `DocumentType.verification_terms` was added at 3.0 for this guard alone: the marker terms a
+      document of a given type is expected to contain live on the type row, so a type added as a seed
+      row arrives with its own guard. A `Record<TypeKey, string[]>` in code means every new type ships
+      unguarded until the next release — A8 true of the catalogue and false of the first thing that
+      consumes it. **Deps:** 3.1 · **M**
 
 - [~] **3.4 — Drive ingestion and the bulk review queue. DEFERRED 6 Sep 2026, not deleted.** See the
       carried-in section above. Nothing about the design is withdrawn: convention **proposes** a type

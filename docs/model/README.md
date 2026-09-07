@@ -26,19 +26,22 @@ workbook.
 python3 docs/model/build_model.py
 ```
 
-Each script writes its workbook into the directory it lives in. `openpyxl` is the only dependency.
-The scripts contain no formulas, so no recalculation step is needed.
+Each script writes its workbook into the directory it lives in. `openpyxl` is the only dependency,
+and it is deliberately not installed anywhere in this repo — a Python package for a build output of a
+document has no business in a Node service. Run it from a throwaway virtualenv
+(`python3 -m venv /tmp/wb && /tmp/wb/bin/pip install openpyxl`). The scripts contain no formulas, so
+no recalculation step is needed.
 
 ## The six sheets
 
 | Sheet | What it holds |
 |---|---|
 | **READ ME** | The shape of the model in one page, and the conventions the rest of the workbook obeys |
-| **ENTITIES** | Fourteen entities (E1–E14), one line each, plus why it exists |
-| **RELATIONSHIPS** | R1–R16 — the edges, their cardinality, and the rule each one enforces |
+| **ENTITIES** | Sixteen entities (E1–E16), one line each, plus why it exists |
+| **RELATIONSHIPS** | R1–R18 — the edges, their cardinality, and the rule each one enforces |
 | **FIELDS** | Every column: type, required, key, meaning, and the note explaining any non-obvious choice |
 | **ADMIN VIEWS** | The screens these tables have to produce, panel by panel — including the settings screen |
-| **DECISIONS** | Six shaping decisions, each as the rule it creates and why that rule holds |
+| **DECISIONS** | Six shaping decisions plus **A8**, each as the rule it creates and why that rule holds |
 
 ## The rules the workbook encodes
 
@@ -71,13 +74,25 @@ These are the parts that must survive contact with code.
   `asset_in_warranty`, with `warranty_provider_id` naming who owes the fix.
 - **`asset_type` is guarded, not admin-editable** — the responsibility matrix keys on it, so editing
   it edits policy. The settings sheet says so explicitly.
+- **Document types are a catalogue, not an enum** (`DocumentType` E15, `DocumentTypeField` E16, R17,
+  R18). A new type is a row and a new field is a row — no migration, no deploy — and
+  `DocumentTypeField` is versioned by `effective_from` so a value extracted under an older schema
+  stays explicable. **Promotion is the governed half:** an extracted value becoming a typed column
+  costs a migration and a reviewed mapping, which is why there is deliberately no `promotes_to`
+  column anywhere in E15 or E16. Added 7 Sep 2026 by slice 3.0; this is [../../tasks/plan.md](../../tasks/plan.md)'s
+  **A8**, and it is `ObligationType` and `asset_type` applied to documents.
 
 ## Two conventions to preserve
 
-**Relationship numbers are append-only.** New relationships are appended (R15, R16, …) and never
-inserted, so R1–R14 keep the numbers cited elsewhere — including in the frozen Hebrew file. R6 is
-the isolation view and R9 the isolation join in *both* workbooks. Entity numbers (E1–E14) carry no
+**Relationship numbers are append-only.** New relationships are appended (R15, R16, R17, R18, …) and
+never inserted, so R1–R16 keep the numbers cited elsewhere — including in the frozen Hebrew file. R6
+is the isolation view and R9 the isolation join in *both* workbooks. Entity numbers (E1–E16) carry no
 such guarantee, since nothing cross-references them.
+
+**The DECISIONS sheet carries two namespaces.** A **D**-number is a shaping decision made inside this
+workbook; an **A**-number is a repository architecture decision from `tasks/plan.md`, reproduced here
+because it shapes these tables. A8 is the first, and it keeps its own number rather than becoming a
+D7 — one decision, one name, however many files cite it.
 
 **Nothing here is published.** Unlike the four documents in `docs/`, these workbooks have no artifact
 URL. They are files, handed over directly.
