@@ -779,6 +779,25 @@ Hebrew workbook stays frozen unless asked.
 - **Done when:** the FIELDS sheet specifies every column of both new entities, and the DECISIONS
   sheet carries A8 as the rule it creates and why that rule holds.
 - **Verify:** re-run the generator; relationship numbers R1–R16 unchanged; open the workbook.
+- **Closed 2026-09-07** ([evidence](evidence/3.0.md)). E15 · E16 · R17 · R18 · A8, all appended, and
+  the append-only claim is **measured rather than asserted**: the committed `.xlsx` regenerates
+  cell-for-cell from `build_model.py` before the edit, so the diff is against the artifact and not
+  against my own baseline. R1–R16 identical cell for cell, E1–E14 and D1–D6 identical, and **exactly
+  three FIELDS rows changed**, all on E12 and both changes forced rather than chosen:
+  `type_key` (enum of nine) → `document_type_id` FK, and `sha256` → **`file_hash`**, because
+  [SPEC-flows.md](../SPEC-flows.md) A1 already named it that and two specs disagreeing on a column
+  name is a defect 3.1 would inherit. A8 keeps **its own number** in a sheet otherwise numbered D1–D6
+  rather than becoming a D7 — one decision, one name, however many files cite it — and the READ ME
+  now says the sheet carries two namespaces. **Two calls the acceptance bar did not ask for and the
+  catalogue forces.** `DocumentType.verification_terms` exists because 3.3's guard has to read the
+  markers off the type row; in code, a new type would arrive with no guard until the next release,
+  and A8 would be true of the catalogue and false of everything that uses it. And there is
+  deliberately **no `promotes_to` column** anywhere in E15 or E16, because a promotion target as a
+  row makes promotion a row — 4.3's `FieldPromotion` is where that mapping lives, at the cost of a
+  migration, which is the whole of A8's governed half. Raised and owned: the seed is **nine** types
+  and not eight (3.1), `DocumentTypeField` versioning collapses 4.2's `type_field_id` and
+  `schema_version_id` into one column (4.2), and E12 still lacks the published Data Model's `state`,
+  `superseded_by`, `tenant_visible` and `uploaded_by` (3.1).
 - **Deps:** none · **Size:** M
 
 ### Slice 3.1 — Document, DocumentLink, and the type catalogue
@@ -791,6 +810,23 @@ eight from the Data Model and **deactivated, never deleted**; `DocumentTypeField
   re-deploy of data — **no migration**.
 - **Verify:** add one in a test, extract nothing, and confirm no DDL was needed; contract test on
   R13, R17, R18; the same file ingested twice is one document with two links.
+- **Owed by 3.0 — the seed is nine types, not eight, so the bar above is the *tenth*.** The eight
+  named in the Data Model's `DocumentSchema` are `lease · lease_amendment · termination_notice ·
+  arnona · insurance · id · bank_guarantee · handover_protocol`; the workbook has carried
+  `inspection_certificate` as a ninth since 3 Sep because SAFETY assets and the compliance tab need
+  it, and 3.5 needs it this week. Holding a type the system already requires out of the seed to make
+  a demonstration land on the number nine would be a knowingly incomplete seed. Seed nine, prove the
+  mechanism on a tenth in a test, and say so in the evidence.
+- **Owed by 3.0 — two column names are settled and must not be re-decided.** `Document.type_key` is
+  gone: it is `document_type_id`, a foreign key to E15 (R17). And the hash column is **`file_hash`**,
+  not `sha256`, matching [SPEC-flows.md](../SPEC-flows.md) A1. Both are in the FIELDS sheet.
+- **Owed by 3.0 — E12 is narrower than the published Data Model and this slice decides whether that
+  stands.** `docs/data-model.html`'s `Document` carries `state`, `superseded_by`, `tenant_visible`
+  and `uploaded_by`; the workbook's E12 carries none of them. A column is either in the first DDL or
+  it costs a migration later, so this is decided here rather than discovered. With 3.4 deferred and
+  the type declared rather than detected, figure 5's review-queue states collapse to almost nothing —
+  but supersession is real the moment an addendum lands (flow A3, week 4), and `tenant_visible` is
+  real the moment a tenant can see a document (week 9). Decide each, in the evidence, with a reason.
 - **Deps:** 3.0, 2.2 · **Size:** M
 
 ### Slice 3.2 — Object storage and the path convention
@@ -810,6 +846,11 @@ The interactive path: the flow already knows what it asked for ("upload the leas
 exist. What remains is the cheap guard for the real error: right slot, wrong file.
 - **Done when:** uploading an ארנונה bill into the lease slot is caught before it is filed.
 - **Verify:** the wrong-file case, both directions, against tier-1 specimens.
+- **Owed by 3.0 — the guard reads the catalogue, not a map in TypeScript.**
+  `DocumentType.verification_terms` was added at 3.0 for exactly this: the marker terms a document of
+  a given type is expected to contain live on the type row, so a type added as a seed row arrives
+  with its own guard. A `Record<TypeKey, string[]>` in code would mean every new type ships unguarded
+  until the next release — A8 true of the catalogue and false of the first thing that consumes it.
 - **Deps:** 3.1 · **Size:** M
 - **Amended 6 Sep 2026 — this slice implements flow A1, and the upload binds to a tenancy.** The
   screen asks for the unit and the type as written, and then for the **tenancy** the document belongs
@@ -937,6 +978,12 @@ model, schema_version_id)`.
   the OCR engine, never from the model.
 - **Verify:** add a field to a specimen type mid-test and re-extract; a contract test asserts no bbox
   in the system originates from a model response.
+- **Owed by 3.0 — `type_field_id` and `schema_version_id` above are one column, not two.** E16 is
+  versioned by `effective_from` on the field row itself, so the row *is* the version: an
+  `ExtractedField` pointing at `document_type_field_id` already says which declaration governed it,
+  and there is no separate schema-version entity to point at. Carrying both would be two names for
+  one fact, and the day they disagree is the day a value stops being explicable — which is the entire
+  reason `effective_from` is there.
 - **Deps:** 4.1, 3.1 · **Size:** M
 
 ### Slice 4.3 — Promotion, with provenance — **the governed half of A8**
