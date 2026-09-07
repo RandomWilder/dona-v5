@@ -9,8 +9,8 @@ workbook disagree, the workbook is right and this file is a bug.
   `TenancyEvent` beside the mutable row.
 - **Depends on:** estate, parties.
 - **Built:** week 2, slice 2.2 — Tenancy and TenancyParty; `terms_profile`'s natural key and the
-  module's three write commands at slice 2.4. Obligation, ObligationType and `TenancyEvent` are week
-  5's.
+  module's three write commands at slice 2.4. `TenancyEvent` lands at slice 4.3 with promotion.
+  Obligation and ObligationType remain week 5's, with clock-driven event kinds.
 
 ## The shape, and why it is this one
 
@@ -128,13 +128,22 @@ by tripping the guard rather than by anticipating it.
   **A lease naming no profile is a reject with its line number, not a defaulted row**
   ([SPEC-register.md](SPEC-register.md)) — defaulting to `standard` would have answered a question
   the client has not been asked, which is exactly what the NOT NULL exists to prevent.
-- **Obligation, ObligationType and `TenancyEvent`** — E9, E10 and the append-only log — are week 5's.
-  `ObligationType` will be an admin-managed catalogue, deactivated never deleted, with
-  `responsible_party` copied onto the obligation at creation so editing the catalogue cannot rewrite
-  history (foundation rule 8).
-- **No read model, and from 3.3 exactly one read.** `contract.ts` exists from 2.4 and exports three
-  write commands — `upsertTermsProfile`, `upsertTenancy` and `upsertTenancyParty` — because the
-  register importer is the caller 2.2 predicted. `listUnitTenancies` joins them at 3.3, and the line
+- **Obligation and ObligationType** — E9 and E10 — are week 5's. `ObligationType` will be an
+  admin-managed catalogue, deactivated never deleted, with `responsible_party` copied onto the
+  obligation at creation so editing the catalogue cannot rewrite history (foundation rule 8).
+- **`TenancyEvent` (slice 4.3, `src/kernel/migrations/0019_tenancy_event.sql`).** The row is
+  mutable; the log is not. Every promotion that copies an extracted date onto `start_date` or
+  `end_date` appends `(field, old → new, actor, source_document_id, extracted_field_id)` with
+  `kind = 'amended'`. `source_document_id` is NOT NULL for that kind. Clock-driven kinds
+  (`terminated` with a null document) are week 5's and will relax the column. UPDATE and DELETE are
+  rejected (`restrict_violation`). `at` comes from the injected clock; there is no `DEFAULT now()`.
+  `actor` is `-- pii`. Register `upsertTenancy` does **not** write events — isolation dates from the
+  import stay legal without a document. `applyPromotedField` is the fourth write command: parse a
+  DATE, update the named column, append the event. A collision on `(unit_id, start_date)` is
+  `conflict`.
+- **No read model, and from 3.3 exactly one read.** `contract.ts` exists from 2.4 and exports the
+  register importer's three write commands — `upsertTermsProfile`, `upsertTenancy` and
+  `upsertTenancyParty` — plus `applyPromotedField` from 4.3. `listUnitTenancies` joins them at 3.3, and the line
   it does not cross is the one that matters: **who is in a unit today is `src/scope/`'s answer and
   never this module's**, which is foundation rule 1 expressed as a module boundary. This query
   answers *which lettings does this flat have* — every status, ordered by date — for an administrator

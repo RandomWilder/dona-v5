@@ -675,6 +675,9 @@ describe('extracted_field — one value, one declaration (A8 open half)', () => 
     'confidence',
     'model',
     'extracted_at',
+    'promoted_to',
+    'promoted_by',
+    'promoted_at',
   ];
 
   async function seedField(
@@ -695,7 +698,7 @@ describe('extracted_field — one value, one declaration (A8 open half)', () => 
     return result.id;
   }
 
-  it('has the pointer-only columns and no schema_version_id', async (t) => {
+  it('has the pointer columns, the 4.3 stamp, and no schema_version_id', async (t) => {
     if (!pool) return t.skip(skipReason);
     await inRolledBackTransaction(pool, async (db) => {
       const result = await db.query<{ column_name: string }>(
@@ -713,14 +716,6 @@ describe('extracted_field — one value, one declaration (A8 open half)', () => 
       );
       assert.equal(
         result.rows.some((row) => row.column_name === 'field_key'),
-        false,
-      );
-      assert.equal(
-        result.rows.some((row) =>
-          ['promoted_to', 'promoted_by', 'promoted_at'].includes(
-            row.column_name,
-          ),
-        ),
         false,
       );
     });
@@ -831,6 +826,7 @@ describe('the acceptance bar — a new type costs no DDL', () => {
     'document_type',
     'document_type_field',
     'extracted_field',
+    'field_promotion',
   ];
 
   async function schemaSnapshot(db: PoolClient): Promise<string> {
@@ -960,6 +956,164 @@ describe('the acceptance bar — a new type costs no DDL', () => {
         `${BLOCK}-tenth-hash`,
       );
       assert.ok(documentId);
+    });
+  });
+});
+
+describe('field_promotion — A8 governed half', () => {
+  const PROMOTION_COLUMNS = [
+    'field_promotion_id',
+    'document_type_field_id',
+    'target',
+  ];
+
+  async function seedField(
+    db: PoolClient,
+    documentTypeId: string,
+    fieldKey = 'start_date',
+  ): Promise<string> {
+    const result = await upsertDocumentTypeField(db, {
+      documentTypeId,
+      fieldKey,
+      labelHe: 'תחילת תקופת השכירות',
+      valueType: 'DATE',
+      isRequired: true,
+      extractionHint: 'תקופת השכירות',
+      effectiveFrom: TODAY,
+      effectiveTo: null,
+    });
+    return result.id;
+  }
+
+  async function insertExtracted(
+    db: PoolClient,
+    documentId: string,
+    fieldId: string,
+  ): Promise<string> {
+    const id = newId();
+    await db.query(
+      `INSERT INTO extracted_field (
+         extracted_field_id, document_id, document_type_field_id, value,
+         page, bbox, confidence, model, extracted_at
+       ) VALUES ($1, $2, $3, '2026-01-01', 1,
+                 '{"x":1,"y":2,"width":3,"height":4}', null, 'fake', $4)`,
+      [id, documentId, fieldId, INGESTED_AT],
+    );
+    return id;
+  }
+
+  it('is a relation, with the mapping columns and no promotes_to on the catalogue', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      await db.query('SELECT 1 FROM field_promotion LIMIT 0');
+      const result = await db.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'field_promotion'
+          ORDER BY ordinal_position`,
+      );
+      assert.deepEqual(
+        result.rows.map((row) => row.column_name),
+        PROMOTION_COLUMNS,
+      );
+      const catalogue = await db.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name IN ('document_type', 'document_type_field')
+            AND column_name = 'promotes_to'`,
+      );
+      assert.deepEqual(catalogue.rows, []);
+    });
+  });
+
+  it('refuses a mapping whose declaration is missing, a second mapping, and an ungoverned target', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const documentTypeId = await seedType(db, { name: 'promo-fk' });
+      const fieldId = await seedField(db, documentTypeId);
+      await rejects(db, FOREIGN_KEY_VIOLATION, () =>
+        db.query(
+          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+           VALUES ($1, $2, 'tenancy.start_date')`,
+          [newId(), newId()],
+        ),
+      );
+      await db.query(
+        `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+         VALUES ($1, $2, 'tenancy.start_date')`,
+        [newId(), fieldId],
+      );
+      await rejects(db, UNIQUE_VIOLATION, () =>
+        db.query(
+          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+           VALUES ($1, $2, 'tenancy.end_date')`,
+          [newId(), fieldId],
+        ),
+      );
+      const other = await seedField(db, documentTypeId, 'end_date');
+      await rejects(db, CHECK_VIOLATION, () =>
+        db.query(
+          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+           VALUES ($1, $2, 'tenancy.notice_date')`,
+          [newId(), other],
+        ),
+      );
+    });
+  });
+
+  it('refuses a stamp written outside the promotion path, and a delete of a stamped row', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const documentTypeId = await seedType(db, { name: 'promo-stamp' });
+      const fieldId = await seedField(db, documentTypeId);
+      const documentId = await seedDocument(
+        db,
+        documentTypeId,
+        `${BLOCK}-promo-stamp-hash`,
+      );
+      const extractedId = await insertExtracted(db, documentId, fieldId);
+
+      await rejects(db, RESTRICT_VIOLATION, () =>
+        db.query(
+          `UPDATE extracted_field
+              SET promoted_to = 'tenancy.start_date',
+                  promoted_by = 'אסף',
+                  promoted_at = $2
+            WHERE extracted_field_id = $1`,
+          [extractedId, INGESTED_AT],
+        ),
+      );
+      await rejects(db, RESTRICT_VIOLATION, () =>
+        db.query(
+          `INSERT INTO extracted_field (
+             extracted_field_id, document_id, document_type_field_id, value,
+             page, bbox, confidence, model, extracted_at,
+             promoted_to, promoted_by, promoted_at
+           ) VALUES ($1, $2, $3, '2026-01-01', 1,
+                     '{"x":1,"y":2,"width":3,"height":4}', null, 'fake', $4,
+                     'tenancy.start_date', 'אסף', $4)`,
+          [newId(), documentId, fieldId, INGESTED_AT],
+        ),
+      );
+
+      await db.query("SELECT set_config('dona.promoting', 'on', true)");
+      await db.query(
+        `UPDATE extracted_field
+            SET promoted_to = 'tenancy.start_date',
+                promoted_by = 'אסף',
+                promoted_at = $2
+          WHERE extracted_field_id = $1`,
+        [extractedId, INGESTED_AT],
+      );
+      await db.query("SELECT set_config('dona.promoting', 'off', true)");
+      await rejects(db, RESTRICT_VIOLATION, () =>
+        db.query('DELETE FROM extracted_field WHERE extracted_field_id = $1', [
+          extractedId,
+        ]),
+      );
+      await db.query(
+        'DELETE FROM extracted_field WHERE document_id = $1 AND promoted_at IS NULL',
+        [documentId],
+      );
     });
   });
 });

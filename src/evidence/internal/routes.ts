@@ -30,12 +30,13 @@ import type { Extractor } from '../../kernel/extraction.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
 import { createUnconfiguredOcr, type OcrText } from '../../kernel/ocr.ts';
 import type { PdfText } from '../../kernel/pdf.ts';
-import { validId } from '../../kernel/validate.ts';
+import { requireText, validId } from '../../kernel/validate.ts';
 import type { WorkRunner } from '../../kernel/work.ts';
 import { listUnitTenancies } from '../../tenancy/contract.ts';
 import { documentTypeByKey, listDocumentTypes } from './catalogue.ts';
 import { listExtractedFields } from './extract.ts';
 import { fileDocument } from './intake.ts';
+import { promoteExtractedField } from './promote.ts';
 import { isProtocolType } from './protocol.ts';
 import { readFiledDocument } from './read.ts';
 import {
@@ -214,6 +215,7 @@ export function registerDocumentRoutes(
       if (link?.entity_type === 'UNIT') {
         const unit = await getUnit(deps.pool, link.entity_id);
         return renderReadPage({
+          documentId,
           buildingId: unit.building_id,
           buildingName: unit.building_name,
           unitId: unit.unit_id,
@@ -228,6 +230,7 @@ export function registerDocumentRoutes(
       if (link?.entity_type === 'BUILDING') {
         const detail = await getBuilding(deps.pool, link.entity_id);
         return renderReadPage({
+          documentId,
           buildingId: detail.building.building_id,
           buildingName: detail.building.name,
           unitId: null,
@@ -240,6 +243,29 @@ export function registerDocumentRoutes(
         });
       }
       throw new KernelError('not_found', 'document not found');
+    },
+  );
+
+  app.post<{ Params: { documentId: string } }>(
+    '/documents/:documentId/promote',
+    async (request, reply) => {
+      const documentId = validId(request.params.documentId, 'document');
+      const fields = await readFields(request);
+      await promoteExtractedField(
+        {
+          db: deps.pool,
+          audit: createAuditLog(deps.pool, deps.clock),
+          clock: deps.clock,
+        },
+        {
+          extractedFieldId: validId(
+            fields.extracted_field_id ?? '',
+            'extracted field',
+          ),
+          promotedBy: requireText(fields.promoted_by ?? '', 'promoted_by', 200),
+        },
+      );
+      return reply.redirect(`/documents/${documentId}/read`);
     },
   );
 
@@ -298,6 +324,23 @@ interface Upload {
  * only what arrived *before* the file and would silently depend on the order of inputs in the form.
  * A second file is drained and discarded rather than ignored: an unread part stalls the request.
  */
+async function readFields(request: {
+  parts: () => AsyncIterableIterator<
+    | { type: 'field'; fieldname: string; value: unknown }
+    | { type: 'file'; toBuffer: () => Promise<Buffer> }
+  >;
+}): Promise<Record<string, string>> {
+  const fields: Record<string, string> = {};
+  for await (const part of request.parts()) {
+    if (part.type === 'file') {
+      await part.toBuffer();
+      continue;
+    }
+    fields[part.fieldname] = String(part.value);
+  }
+  return fields;
+}
+
 async function readUpload(request: {
   parts: () => AsyncIterableIterator<
     | { type: 'field'; fieldname: string; value: unknown }

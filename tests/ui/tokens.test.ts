@@ -330,6 +330,7 @@ const SCREENS: Array<[string, () => string]> = [
     'documents · read overlay',
     () =>
       renderReadPage({
+        documentId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
         buildingId: building.building_id,
         buildingName: building.name,
         unitId: hit.unit_id,
@@ -361,7 +362,15 @@ const SCREENS: Array<[string, () => string]> = [
             'base64',
           ),
         },
-        extracted: [{ labelHe: 'מספר הדירה', value: '14' }],
+        extracted: [
+          {
+            extractedFieldId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+            labelHe: 'מספר הדירה',
+            value: '14',
+            promotionTarget: null,
+            promotedTo: null,
+          },
+        ],
       }),
   ],
   [

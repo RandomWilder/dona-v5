@@ -99,28 +99,18 @@ btree — week 12. Session, CSRF, and a cap on upload *count* — week 5. Signed
       **Deps:** 3.3 · **M** · **plan mode first** (kernel + evidence)
 
 - [ ] **Staging sweep of already-filed `unverified` rows.** 4.1 built `ocr:sweep` and measured it
-      locally (examined 1, verified 1). Not run at 4.2: no serving revision yet, laptop cannot
+      locally (examined 1, verified 1). Not run at 4.2 or 4.3: no serving revision yet, laptop cannot
       impersonate `app-staging`. After that revision serves, run `npm run ocr:sweep` as
-      `app-staging` and write the count (zero is a count). **4.3.**
+      `app-staging` and write the count (zero is a count). **4.4.**
 
 - [x] **4.2 — Comprehension into the declared schema — the open half of A8.** **Closed 7 Sep** —
       [evidence/4.2.md](evidence/4.2.md). Pointer-only `extracted_field`; geometry from the
       measuring engine; extra field mid-test with no DDL. Staging sweep carried to 4.3.
       **Deps:** 4.1, 3.1 · **M**
 
-- [ ] **4.3 — Promotion, with provenance — the governed half of A8.** Copying an extracted value onto
-      a typed column of the business record, keeping `(document_id, page, bbox, confidence,
-      promoted_by, promoted_at)`. The mapping is `FieldPromotion` and it costs a migration on
-      purpose. The operator proposes-and-promotes; append-only `TenancyEvent` records old → new, who
-      approved it, and which document caused it.
-      **Done when:** no extracted value reaches a business record without a named promoter, a source
-      and a mapping — and an unmapped field is capturable, visible and searchable while being
-      **incapable** of becoming business truth.
-      **Verify:** attempt a direct write to a promoted column outside the promotion path; it fails.
-      A contract test asserts no policy input, isolation predicate or state-machine guard reads an
-      `ExtractedField` value directly (**R9**).
-      **Owed by 4.1 / 4.2 — staging sweep of `unverified`.** After the revision that includes the
-      reader serves, run `ocr:sweep` as `app-staging` and write the count (zero is a count).
+- [x] **4.3 — Promotion, with provenance — the governed half of A8.** **Closed 7 Sep** —
+      [evidence/4.3.md](evidence/4.3.md). FieldPromotion CHECK; stamp `23001` off-path; unmapped
+      field cannot promote; TenancyEvent `amended`; R9 scan red first. Staging sweep carried to 4.4.
       **Deps:** 4.2 · **M** · **plan mode first** (evidence + tenancy)
 
 - [ ] **4.6 — A2: a lease establishes a draft tenancy.** Extract → propose → **confirm** → write.
@@ -150,6 +140,8 @@ btree — week 12. Session, CSRF, and a cap on upload *count* — week 5. Signed
       box the value came from.
       **Done when:** every promoted field on the unit screen is clickable through to its pixels.
       **Verify:** demonstrated live on three different documents.
+      **Owed by 4.1 / 4.2 / 4.3 — staging sweep of `unverified`.** After the reader serves,
+      `ocr:sweep` as `app-staging`; write the count (zero is a count).
       **Deps:** 4.3 · **M**
 
 - [ ] **4.8 — A4: the incomplete-tenancy queue.** The rule: *a tenancy must have at least one

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { glob, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -140,5 +141,37 @@ describe('the module boundary', () => {
       }
     }
     assert.deepEqual(violations, []);
+  });
+});
+
+// ------------------------------------------------------------------------------------------------
+// R9 — nothing deterministic reads ExtractedField. Slice 4.3, A8's governed half.
+// ------------------------------------------------------------------------------------------------
+
+const R9_MODULES = ['policy', 'scope', 'calls'] as const;
+
+describe('R9 · policy, isolation and the state machine never read extracted_field', () => {
+  it('scans those trees, including empty ones, and finds no mention', async () => {
+    const hits: string[] = [];
+    let scanned = 0;
+    for (const module of R9_MODULES) {
+      const root = path.join(srcRoot, module);
+      if (!existsSync(root)) {
+        continue;
+      }
+      for await (const entry of glob('**/*.ts', { cwd: root })) {
+        scanned += 1;
+        const file = path.join(root, entry);
+        const source = await readFile(file, 'utf8');
+        if (source.includes('extracted_field')) {
+          hits.push(path.join(module, entry));
+        }
+      }
+    }
+    assert.ok(
+      scanned >= 1,
+      'R9 scanned no files — a guard over an empty set passes forever',
+    );
+    assert.deepEqual(hits, []);
   });
 });

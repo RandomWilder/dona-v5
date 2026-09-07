@@ -11,7 +11,7 @@ this file and the workbook disagree, the workbook is right and this file is a bu
 - **Depends on:** estate, parties, tenancy.
 - **Builds:** week 3 (slices 3.1–3.3, 3.5's confirm screen, 3.6) and week 4 (OCR at 4.1, comprehension
   at 4.2, promotion, the accuracy number). **The stub gained content at slice 3.1**, which is the
-  signal its build started. ExtractedField lands at 4.2; FieldPromotion is still 4.3.
+  signal its build started. ExtractedField landed at 4.2; FieldPromotion lands at 4.3.
 - **Carries:** **capture is open, promotion is governed** ([tasks/plan.md](tasks/plan.md) A8). A new
   type or field is a row — zero migrations, zero deploys — and is citable the moment it is extracted;
   an extracted value becoming a typed column costs a migration and a reviewed mapping.
@@ -51,10 +51,11 @@ workbook a specification rather than a description.
 
 ## ExtractedField (slice 4.2, `src/kernel/migrations/0017_extracted_field.sql`)
 
-One row per value read off the paper. The published Data Model card still mixes this table with
-promotion (`promoted_to`, `promoted_by`, `promoted_at`); those columns are **4.3's** and are not
-here. The workbook FIELDS sheet does not yet list this table, so this section is the specification
-the migration is measured against — the same standing 3.1 used for E12–E16 once the sheet existed.
+One row per value read off the paper. Slice 4.3 adds the promotion stamp (`promoted_to`,
+`promoted_by`, `promoted_at`) on this table; the mapping that *permits* a stamp is `field_promotion`,
+not these columns. The workbook FIELDS sheet does not yet list this table, so this section is the
+specification the migration is measured against — the same standing 3.1 used for E12–E16 once the
+sheet existed.
 
 - **`extracted_field`** — generic capture. Points at `document_type_field_id` and at `document_id`.
   **There is no `schema_version_id` and no `field_key` column.** E16 is versioned by `effective_from`
@@ -72,9 +73,10 @@ the migration is measured against — the same standing 3.1 used for E12–E16 o
   (`extracted_field.value`) because a bare `value` would fire on `config_settings`.
 - **A missing required field is a result, not an error.** No row. The same for an unconfigured
   extractor or a timed-out call: the file stays, HTTP stays 200, zero extracted rows.
-- **Re-extract replaces.** Delete that document's extracted rows, then insert. Adding a field to the
-  type and re-running is A8's open half: no migration, no code change.
-- **FieldPromotion is not this table** and is not this slice.
+- **Re-extract replaces unstamped rows only.** A row with `promoted_at` set is a promotion that
+  already became business truth; deleting it would erase the stamp. The database refuses that
+  DELETE. Extract deletes rows where `promoted_at IS NULL`, then inserts. Adding a field to the
+  type and re-running is still A8's open half: no migration, no code change.
 
 ## The object path convention (slice 3.2)
 
@@ -352,13 +354,36 @@ All four are nullable `ADD COLUMN`s when they come.
   could hold only a placeholder, and a provenance column holding a placeholder for six weeks is worse
   than one that arrives with the identity it names.
 
-## Later in this module, and not here yet
+## FieldPromotion (slice 4.3, `src/kernel/migrations/0018_field_promotion.sql`)
 
-`FieldPromotion` is slice 4.3. Two things about it are already settled and are recorded so they are
-not re-decided:
+The governed half of A8. Capture stays a row. Becoming a typed column costs a reviewed mapping, and
+the CHECK on `target` is that cost: a new business column the isolation join or the responsibility
+matrix could read cannot be added by seeding a catalogue field.
 
 - **There is no `promotes_to` column anywhere in E15 or E16** (slice 3.0). A promotion target as a
   catalogue row would make promotion a row, which is the half A8 governs.
-- **`ExtractedField` (4.2) points at `document_type_field_id` and carries no separate
-  `schema_version_id`.** Promotion copies an extracted value onto a typed business column; it does
-  not get to re-decide which declaration governed the capture.
+- **`field_promotion`** — one mapping per declaration. `document_type_field_id` is unique: a field
+  promotes to at most one column. `target` is `tenancy.start_date` or `tenancy.end_date` this slice.
+  Extending that CHECK is a migration. Mapping *rows* are seed data, applied by the same function as
+  the catalogue, because they point at ids that only exist after `seed:doctypes`.
+- **Stamp on `extracted_field`.** `promoted_to`, `promoted_by`, `promoted_at` — nullable until a
+  promotion succeeds. `promoted_by` is `-- pii`: it names the operator who signed the copy. No staff
+  table until week 5, so this is a snapshot string, not a foreign key. Empty is `invalid`.
+- **The database is what refuses a stamp outside the command.** A trigger rejects UPDATE/INSERT of
+  the stamp columns unless `dona.promoting` is `on` for the transaction (`restrict_violation`, the
+  same class as `document_is_immutable`). A DELETE of a stamped row is the same rejection. Direct
+  writes to `tenancy.start_date` stay legal — the register importer writes those columns without a
+  document, and locking them would break week 2.
+- **`promoteExtractedField`** is the command. It requires a mapping row, a `TENANCY` link on the
+  document, and a non-empty promoter. It asks tenancy to apply the typed value (dates only, this
+  slice), then stamps. An unmapped field (`apartment_number`, `address`, `tenant_name`,
+  `guarantor_name`) is capturable, listed, searchable, and **incapable** of becoming business truth:
+  the command returns `invalid` and the tenancy row does not move.
+- **R9.** Nothing in `src/policy/`, `src/scope/` or `src/calls/` may mention `extracted_field`.
+  Isolation, responsibility and the state machine read typed columns. A contract test scans those
+  trees.
+
+## Later in this module, and not here yet
+
+Click-to-pixels on a promoted value is 4.4. A lease establishing a draft tenancy is 4.6. The accuracy
+number is 4.5 and waits on the corpus.

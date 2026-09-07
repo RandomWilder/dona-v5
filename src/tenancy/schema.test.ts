@@ -29,6 +29,7 @@ const FOREIGN_KEY_VIOLATION = '23503';
 const CHECK_VIOLATION = '23514';
 const UNIQUE_VIOLATION = '23505';
 const EXCLUSION_VIOLATION = '23P01';
+const RESTRICT_VIOLATION = '23001';
 
 /**
  * Asserts the statement is rejected with a named SQLSTATE, and leaves the transaction usable.
@@ -590,6 +591,136 @@ describe('tenancy · a terms profile is identified by its name', () => {
             [newId(), 'נספח תחזוקה — בדיקת סכימה מורחב'],
           );
         });
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+});
+
+describe('tenancy_event — append-only promotion log', () => {
+  const EVENT_COLUMNS = [
+    'tenancy_event_id',
+    'tenancy_id',
+    'at',
+    'actor',
+    'kind',
+    'field',
+    'old_value',
+    'new_value',
+    'source_document_id',
+    'extracted_field_id',
+  ];
+
+  it('is a relation with the published log columns and no DEFAULT now()', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await db.query('SELECT 1 FROM tenancy_event LIMIT 0');
+        const result = await db.query<{ column_name: string }>(
+          `SELECT column_name FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'tenancy_event'
+            ORDER BY ordinal_position`,
+        );
+        assert.deepEqual(
+          result.rows.map((row) => row.column_name),
+          EVENT_COLUMNS,
+        );
+        const defaults = await db.query<{ column_default: string | null }>(
+          `SELECT column_default FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'tenancy_event'
+              AND column_name = 'at'`,
+        );
+        assert.equal(defaults.rows[0]?.column_default, null);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('refuses update and delete, and an amended row without a document', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const estate = await seedEstate(db);
+        const tenancyId = await seedTenancy(db, {
+          ...estate,
+          from: '2026-01-01',
+          to: '2027-01-01',
+        });
+        await rejects(db, CHECK_VIOLATION, () =>
+          db.query(
+            `INSERT INTO tenancy_event (
+               tenancy_event_id, tenancy_id, at, actor, kind, field,
+               old_value, new_value, source_document_id, extracted_field_id
+             ) VALUES ($1, $2, $3, 'אסף', 'amended', 'end_date',
+                       '2027-01-01', '2028-01-01', NULL, NULL)`,
+            [newId(), tenancyId, new Date('2026-09-07T09:00:00.000Z')],
+          ),
+        );
+        await rejects(db, CHECK_VIOLATION, () =>
+          db.query(
+            `INSERT INTO tenancy_event (
+               tenancy_event_id, tenancy_id, at, actor, kind, field,
+               old_value, new_value, source_document_id, extracted_field_id
+             ) VALUES ($1, $2, $3, 'אסף', 'terminated', 'status',
+                       'ACTIVE', 'ENDED', NULL, NULL)`,
+            [newId(), tenancyId, new Date('2026-09-07T09:00:00.000Z')],
+          ),
+        );
+        const typeId = newId();
+        const documentId = newId();
+        await db.query(
+          `INSERT INTO document_type (
+             document_type_id, type_key, label_he, label_en, verification_terms, is_active
+           ) VALUES ($1, $2, 'חוזה', NULL, NULL, true)`,
+          [typeId, `t43-event-${typeId.slice(0, 8)}`],
+        );
+        await db.query(
+          `INSERT INTO document (
+             document_id, document_type_id, storage_uri, file_hash,
+             ingested_at, verification_verdict
+           ) VALUES ($1, $2, 'gs://x/a.pdf', $3, $4, 'unguarded')`,
+          [
+            documentId,
+            typeId,
+            `hash-${documentId}`,
+            new Date('2026-09-07T09:00:00.000Z'),
+          ],
+        );
+        const eventId = newId();
+        await db.query(
+          `INSERT INTO tenancy_event (
+             tenancy_event_id, tenancy_id, at, actor, kind, field,
+             old_value, new_value, source_document_id, extracted_field_id
+           ) VALUES ($1, $2, $3, 'אסף', 'amended', 'end_date',
+                     '2027-01-01', '2028-01-01', $4, NULL)`,
+          [
+            eventId,
+            tenancyId,
+            new Date('2026-09-07T09:00:00.000Z'),
+            documentId,
+          ],
+        );
+        await rejects(db, RESTRICT_VIOLATION, () =>
+          db.query(
+            'UPDATE tenancy_event SET actor = $2 WHERE tenancy_event_id = $1',
+            [eventId, 'לא'],
+          ),
+        );
+        await rejects(db, RESTRICT_VIOLATION, () =>
+          db.query('DELETE FROM tenancy_event WHERE tenancy_event_id = $1', [
+            eventId,
+          ]),
+        );
       });
     } finally {
       await pool.end();
