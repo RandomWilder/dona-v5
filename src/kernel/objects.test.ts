@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { KernelError } from './errors.ts';
-import { createGcsStore, createMemoryStore } from './objects.ts';
+import {
+  createConfiguredStore,
+  createGcsStore,
+  createMemoryStore,
+} from './objects.ts';
 
 // The GCS store is exercised through an injected fetch: what is worth testing
 // here is the shape of the request and how a failure is reported, not that
@@ -51,9 +55,34 @@ describe('object store', () => {
   it('names which store is running, for the boot line', () => {
     assert.equal(createMemoryStore().describe(), 'memory');
     assert.equal(
-      createGcsStore({ bucket: 'dona-v3-staging-docs' }).describe(),
-      'gs://dona-v3-staging-docs',
+      createGcsStore({ bucket: 'dona-v5-staging-docs' }).describe(),
+      'gs://dona-v5-staging-docs',
     );
+  });
+
+  it('falls back to memory without DOCS_BUCKET, and says which it took', () => {
+    // The gap slice 3.2 closed: deploy.yml has injected DOCS_BUCKET since 1.6 and nothing in this
+    // repository read it, so a revision serving off memory was indistinguishable from one serving
+    // off the bucket. `describe()` is what src/serve.ts prints on the boot line.
+    assert.equal(createConfiguredStore({}).describe(), 'memory');
+    assert.equal(
+      createConfiguredStore({ DOCS_BUCKET: 'dona-v5-staging-docs' }).describe(),
+      'gs://dona-v5-staging-docs',
+    );
+  });
+
+  it('has no delete, and that is a property worth asserting', () => {
+    // SPEC-kernel.md: the bucket holds signed contracts, so the application has no method to
+    // destroy one and the runtime account has no permission to either. This asserts the half a
+    // reader can check without a cloud console; src/docs-probe.ts asserts the other half on
+    // staging by issuing the request the port refuses to offer.
+    for (const store of [
+      createMemoryStore(),
+      createGcsStore({ bucket: 'b', token: async () => 't' }),
+    ]) {
+      assert.ok(!('delete' in store), 'ObjectStore must expose no delete');
+      assert.deepEqual(Object.keys(store).sort(), ['describe', 'put', 'read']);
+    }
   });
 
   it('encodes the whole object name, slashes included', async () => {

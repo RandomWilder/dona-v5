@@ -867,6 +867,38 @@ flavour, arriving quietly. (The retention and deletion controls landed in 1.12.)
 - **Done when:** the app can write and read a contract and cannot delete one.
 - **Verify:** attempt the delete as the runtime account and get denied.
 - **Deps:** 3.1, 1.5, 1.12 · **Size:** S
+- **Closed 2026-09-07** ([evidence](evidence/3.2.md)). The path is
+  `gs://<bucket>/<place kind>/<place id>/<type key>/<file hash>.<ext>`, built in
+  `src/evidence/internal/storage-path.ts` because the kernel's store is handed paths and never
+  invents one. **The headline rule is enforced by type rather than by care:** `PlaceKind` is four of
+  `DocumentLink`'s eight kinds — `TENANCY`, `PARTY`, `ASSET` and `OBLIGATION` are absent — so a lease
+  cannot be filed under a signatory's id, and the rule holds on the way back out as well, because a
+  hand-edited `storage_uri` is the case that matters. Every input is validated and none sanitised.
+  The leaf is the `file_hash` and not the `document_id`, which makes the object write idempotent on
+  the same column `ingestDocument` already is. `storage_uri` holds `gs://<bucket>/…` and a read
+  **refuses a bucket that is not the configured one**, so a database cloned from staging cannot walk
+  a laptop into another environment's documents. **The delete refusal holds twice and was proved
+  both ways:** `ObjectStore` has no `delete` method (asserted in a test), and `src/docs-probe.ts`
+  goes around the missing method with a raw `DELETE` carrying the store's own token, as
+  `app-staging`, and records the 403 — with the write and the read in the same run as the positive
+  control, which is 1.5's lesson that a denial with no accompanying success is not evidence. **Three
+  things found while reading and fixed here:** `DOCS_BUCKET` had been injected by `deploy.yml` since
+  1.6 and read by no code, so `SPEC-kernel.md`'s "reported at boot" was a claim and a revision on the
+  memory store was invisible — `src/serve.ts` now prints it; `objects.ts` cited `SPEC-occupancy.md`,
+  a v3 filename that has never existed here; and the docs bucket's **soft-delete window was a vendor
+  default nobody had chosen** — 1.5 raised it, and it is now set explicitly to 7 days, which is the
+  opposite call from the corpus bucket's cleared window at 1.12 and for the opposite reason. **A
+  fourth, in the same file:** `bootstrap.sh prod` had stopped working entirely — a STOPPED Cloud SQL
+  instance answers *Invalid request since instance is not running* to both `databases describe` and
+  `databases create`, so the describe-or-create pair failed and `set -e` killed the run before the
+  service accounts, the bucket and the WIF binding, none of which need the instance. That is 1.5's
+  own cost lever biting 1.5's own script: stopping `dona-prod` until week 12 quietly made
+  *idempotent, safe to re-run* false for prod, and the slice that discovered it is the one that
+  needed to reapply a bucket control there. The state is now checked rather than inferred from an
+  error, and a stopped instance skips the database step **loudly** and lets the rest of the run
+  finish. Both docs buckets carry the four controls, prod included. Raised
+  and owned: the ingest ordering rule (3.3) · signed URLs are not 3.6's (3.6) · the bucket's legacy
+  `projectEditor` delete (week 8).
 
 ### Slice 3.3 — Declared-type upload, with a verification guard
 The interactive path: the flow already knows what it asked for ("upload the lease for unit 14"), so
@@ -891,7 +923,16 @@ exist. What remains is the cheap guard for the real error: right slot, wrong fil
   caption being a statement about the bulk queue that does not bind the interactive path — or it is
   filed as evidence of an attempt, which costs `state` and therefore a migration. Decided here, with
   a reason, rather than by drift.
-- **Deps:** 3.1 · **Size:** M
+- **Owed by 3.2 — the ingest order, and it is not the obvious one.** Hash the bytes → look the hash
+  up → `put` the object **only when no document already holds it** → `ingestDocument`. Hashing first
+  is what makes the path computable before anything is written, and looking up before putting is
+  what stops the same bytes filed against a second place writing a second copy of one file.
+  `ingestDocument` excludes `storage_uri` from its update path, so the first path filed stays
+  authoritative whatever a later caller computes. The path is built by `documentObjectPath` from
+  `src/evidence/contract.ts` and **never by string concatenation** — the whole convention is that
+  every segment was validated rather than assembled — and the file types the screen accepts are
+  `documentExtensions` from the same module, not a second list in the upload handler.
+- **Deps:** 3.1, 3.2 · **Size:** M
 - **Amended 6 Sep 2026 — this slice implements flow A1, and the upload binds to a tenancy.** The
   screen asks for the unit and the type as written, and then for the **tenancy** the document belongs
   to: an existing one, or a new draft. A draft is never an empty shell — it needs unit, dates and at
@@ -957,6 +998,12 @@ guarded, not admin-editable** — the responsibility matrix keys on it, so editi
 Document search and the documents panels on the building and unit screens, grouped by type.
 - **Done when:** a named lease is on screen within four seconds of deciding to look for it.
 - **Verify:** timed, by the owner, on staging.
+- **Owed by 3.2 — the panel shows a path, never a link to the bytes.** `document.storage_uri` is a
+  `gs://` uri and nothing in this system mints a signed URL. A signed URL is a bearer token for one
+  object: whoever holds the string reads the document, isolation join or not, so issuing one is a
+  decision that belongs behind a session, and sessions are week 5's. Until then the panel renders
+  what is filed — type, dates, ingest date — which is also the shape `tests/ui/tokens.test.ts`
+  already enforces: a state and a count, never a name.
 - **Deps:** ~~3.4~~ **3.3** — re-pointed 6 Sep 2026 when 3.4 deferred. Documents reach the system
   through flow A1's admin upload, so search has something to find without any bulk path existing.
   **Size:** S
@@ -1087,7 +1134,7 @@ not the scans, the handwriting or the signatures (A7; the controls for tier 2 we
 | **5** | Real data | **Paper becomes truth.** An amendment arrives for a real unit; the tenancy updates; the change log records old → new, who approved it, which document caused it. Then a tenancy ends because a date passed, with no document at all. | Promotion at scale · tenancy reconciliation · `TenancyEvent` · Obligation + ObligationType (E9, E10) · **the settings screen: the `ObligationType` and `DocumentType` catalogues, admin-managed at last (A9) — one screen, one pattern, and `asset_type` deliberately absent from it** · staff MFA and the `national_id` field guard — **owed by 1.11, widened by 2.6:** `/`, `/estate`, `/estate/buildings/:id`, `/estate/search` and `/estate/expiring` have been served **unauthenticated** since week 1, deliberately and on fixture data; this is the slice that puts them behind a session, and nothing may put a real party, contact or document behind those routes before it does. Until it does, every one of the five shows **a state and a count and never a name** — the occupancy chip, and a search that covers buildings and units and never `party` — which is asserted from outside in `tests/ui/tokens.test.ts`. **This is the slice that may lift that rule**, and it is also where the root index moves from `src/estate/` to the composition root, because week 5 is when a second *module* has a screen and an index of screens is not estate's fact — **owed by 1.5:** `infra/bootstrap.sh` deliberately creates no staff seed secrets, so whatever this mechanism needs in Secret Manager is created here, by the slice that knows what it is · **owed by 1.7:** `national_id` never appearing in the response shape of an agent tool is a policy case, not a review — deterministic, so it belongs in `tests/policy/` beside the isolation cases  · **owed by 3.1 — two columns of E12 held for this week.** `uploaded_by` could only have held a placeholder until an authenticated actor existed, and is a nullable `ADD COLUMN` the moment one does. And `superseded_by` is reopened here because this is the amendment week: 3.1's ruling is that SPEC-flows.md invariant 2 already made supersession a fact about *values*, and that a genuinely re-issued document is answered by `valid_from`/`valid_to` — so what this week asks is whether promotion at scale finds a case that ruling does not cover | W4 · **closes open question 2 — how many `terms_profile`s are in force, which sizes week 6** |
 | **6** | Software | **Who pays for this, and why.** Pick a category and a unit; get tenant / operator / contractor with the clause and the policy version behind it. Then edit the table live and watch the answer change. | `policy` module: the responsibility matrix as versioned, admin-editable data · `asset_in_warranty` fed by week 3's asset register · rules supersede by `effective_from` and never overwrite · `policy_version_id` snapshotted on every resolution · **owed by 1.7: policy cases 4 and 5** — `UNIT` is the only space kind that can ever be the tenant's, and a live warranty moves responsibility to the contractor, with the snapshot still answering after the policy changes. `tests/policy/` and its pending mechanism exist from 1.7; write each case red first | W5, W3.5 · sized by question 2 |
 | **7** | Software | **A ticket, start to finish, by hand.** Walk the canonical states in the console — NEW · IDENTIFIED · TRIAGED · RESPONSIBILITY SET · WINDOWS COLLECTED · OFFERED · SCHEDULED · CLOSED — plus the three exits. Watch the SLA clock run and the escalation fire. No WhatsApp, no agent. | `calls` module: state machine · SLA policies · timers · escalation · **the emergency bypass, live and tested here** because it must exist before the agent takes its first real message in week 10 · **owed by 1.7:** the bypass is a policy case too — an emergency category routes to the duty phone **with no model call in between**, which is deterministic and therefore never an eval · **the async negotiation engine starts and runs underneath for six weeks** | W6 |
-| **8** | Evidence | **Try to break tenant isolation, live.** Query as one tenant's phone and attempt to reach another tenant's documents, unit or history — through the console, through the API, and by asking the model. Every path returns nothing. | Policy suite cases 4 and 5 (`UNIT` is the only kind that can be the tenant's; a live warranty moves responsibility to the contractor, and re-resolving after a policy change still returns the snapshot) · `national_id` unreachable by any agent tool · audit on every scoped read · **owed by 1.5 and unblocked by 1.6:** the deploy accounts hold `run.admin` at *project* level because scoping it per service was impossible before a service existed — the Cloud Run services exist now, so bind it per service · **owed by 1.6:** bump the four Node-20 GitHub actions (`checkout@v4`, `setup-node@v4`, `google-github-actions/auth@v2`, `setup-gcloud@v2`), which every run annotates as deprecated · **owed by 1.10, in the same pass:** `release.yml` gains the `docker image inspect` size line `deploy.yml` already has | W7 |
+| **8** | Evidence | **Try to break tenant isolation, live.** Query as one tenant's phone and attempt to reach another tenant's documents, unit or history — through the console, through the API, and by asking the model. Every path returns nothing. | Policy suite cases 4 and 5 (`UNIT` is the only kind that can be the tenant's; a live warranty moves responsibility to the contractor, and re-resolving after a policy change still returns the snapshot) · `national_id` unreachable by any agent tool · audit on every scoped read · **owed by 1.5 and unblocked by 1.6:** the deploy accounts hold `run.admin` at *project* level because scoping it per service was impossible before a service existed — the Cloud Run services exist now, so bind it per service · **owed by 1.5, raised again and given an owner at 3.2:** the docs buckets' legacy `projectEditor` / `projectOwner` bindings carry `legacyObjectOwner`, which includes delete. 3.2 proved the *application* cannot destroy a signed contract — no `delete` on the port, no `objectAdmin` on the runtime account — and a human with project editor still can. It is inherent to a GCS bucket in a project with basic roles rather than a choice `bootstrap.sh` made, so removing it is the same pass as the `run.admin` scoping above and belongs in the week whose demo is *try to break isolation* · **owed by 1.6:** bump the four Node-20 GitHub actions (`checkout@v4`, `setup-node@v4`, `google-github-actions/auth@v2`, `setup-gcloud@v2`), which every run annotates as deprecated · **owed by 1.10, in the same pass:** `release.yml` gains the `docker image inspect` size line `deploy.yml` already has | W7 |
 
 ### **Checkpoint · M2**
 - [ ] The console is usable on its own — if the agent were cancelled tomorrow, this is still a product

@@ -131,10 +131,36 @@ gcloud sql instances describe "$SQL_INSTANCE" --project "$PROJECT" >/dev/null 2>
     "${BACKUP_FLAGS[@]}" \
     --project "$PROJECT"
 
-gcloud sql databases describe "$DB_NAME" \
-  --instance "$SQL_INSTANCE" --project "$PROJECT" >/dev/null 2>&1 ||
-  gcloud sql databases create "$DB_NAME" \
-    --instance "$SQL_INSTANCE" --project "$PROJECT"
+# A STOPPED instance answers "Invalid request since instance is not running" to
+# both `databases describe` and `databases create`, so the describe-or-create
+# pair below fails outright rather than being a no-op -- and `set -e` then kills
+# the whole run before the service accounts, the bucket and the WIF binding,
+# every one of which works perfectly well against a stopped instance.
+#
+# Found at slice 3.2, and it is 1.5's own cost lever biting: 1.5 stopped
+# dona-prod until week 12 (--activation-policy=NEVER) because prod has nothing to
+# serve and nobody to serve it, which quietly made the script's headline claim --
+# "Idempotent -- safe to re-run" -- false for prod for as long as that saving
+# lasts. The version that discovers this is the version that needed to reapply a
+# bucket control to prod and could not.
+#
+# So the state is checked rather than inferred from an error, and a stopped
+# instance skips the database step LOUDLY and lets the rest of the run finish.
+# Skipping quietly would be the worse failure: the database step is the one that
+# creates something, and "it was already there" and "we never looked" must not
+# print the same way.
+SQL_STATE="$(gcloud sql instances describe "$SQL_INSTANCE" \
+  --project "$PROJECT" --format='value(state)')"
+if [[ "$SQL_STATE" != RUNNABLE ]]; then
+  echo "  !! $SQL_INSTANCE is $SQL_STATE, not RUNNABLE — skipping the database step."
+  echo "     Everything after this point does not need the instance. To finish it:"
+  echo "     gcloud sql instances patch $SQL_INSTANCE --activation-policy=ALWAYS --project $PROJECT"
+else
+  gcloud sql databases describe "$DB_NAME" \
+    --instance "$SQL_INSTANCE" --project "$PROJECT" >/dev/null 2>&1 ||
+    gcloud sql databases create "$DB_NAME" \
+      --instance "$SQL_INSTANCE" --project "$PROJECT"
+fi
 
 say "Database user and connection secret"
 if gcloud secrets describe "$SECRET" --project "$PROJECT" >/dev/null 2>&1; then
@@ -207,8 +233,8 @@ gcloud storage buckets describe "gs://$DOCS_BUCKET" --project "$PROJECT" >/dev/n
     --public-access-prevention \
     --project "$PROJECT"
 
-# Re-applied every run rather than only at creation: these three are the
-# controls that matter, and a re-run is how a console click gets corrected.
+# Re-applied every run rather than only at creation: these four are the controls
+# that matter, and a re-run is how a console click gets corrected.
 #   public access prevention — the bucket can never be made public, even by
 #     someone who wants to; it is not a default that can be toggled off per
 #     object.
@@ -216,26 +242,58 @@ gcloud storage buckets describe "gs://$DOCS_BUCKET" --project "$PROJECT" >/dev/n
 #     one place that can be read at a glance.
 #   versioning — an overwrite or a delete is recoverable, which matters when
 #     the object is the only copy of a signed contract.
+#   soft delete, 7 days — stated at slice 3.2 rather than inherited. It was on
+#     by default and slice 1.5 recorded that as an open observation: a
+#     "permanently removed" claim and a seven-day recovery window are not the
+#     same statement, and somebody had to decide which one this bucket makes.
+#     Here the answer is the OPPOSITE of the corpus bucket's. infra/corpus-
+#     bucket.sh clears the window (1.12) because a corpus has a removal date and
+#     recoverability would make its deletion path a lie; a signed contract has no
+#     removal date, and the window is a second layer under versioning. A control
+#     that is only a vendor default is a control nobody chose.
 gcloud storage buckets update "gs://$DOCS_BUCKET" \
   --uniform-bucket-level-access \
   --public-access-prevention \
   --versioning \
+  --soft-delete-duration=7d \
   --project "$PROJECT" >/dev/null
 
 # On this bucket alone — never a project-level storage role, so app-staging
 # cannot read prod's documents.
 #
-# objectCreator is the grant slice 7.0 deferred "until the slice that needs it";
-# slice 11.2 is that slice, and the admin lease upload is what needs it. Note
-# what is still *not* granted: objectAdmin, which carries delete. The app can
-# write a new object and read one, and it cannot destroy a signed contract —
-# which matters while there is no retention rule and no deletion path (week 6).
+# **Not granted, and this is the whole of slice 3.2's acceptance bar:**
+# objectAdmin, which carries delete. The app can write a new object and read one,
+# and it cannot destroy a signed contract. There is no delete method in
+# src/kernel/objects.ts either, so the property holds twice — and 3.2 proves this
+# half by going around the missing method, issuing a raw DELETE as
+# $RUNTIME_EMAIL and recording the refusal (src/docs-probe.ts).
+#
+# What this does NOT cover, and 1.5 said so first: the bucket's legacy
+# projectEditor / projectOwner bindings carry legacyObjectOwner, and that does
+# include delete. The application cannot destroy a contract; a human with project
+# editor still can. That is inherent to a GCS bucket in a project with basic
+# roles rather than something this script chose, and it is owned at **week 8**
+# on tasks/roadmap.md -- the same IAM pass as 1.5's run.admin scoping, in the
+# week whose demo is trying to break isolation.
 for role in roles/storage.objectViewer roles/storage.objectCreator; do
   gcloud storage buckets add-iam-policy-binding "gs://$DOCS_BUCKET" \
     --member "serviceAccount:$RUNTIME_EMAIL" \
     --role "$role" \
     --project "$PROJECT" >/dev/null
 done
+
+# Read back and printed rather than assumed. A re-run that reapplies four
+# controls silently looks identical to a re-run that reapplied nothing, and the
+# output is read every time while the document is read when somebody remembers
+# to (slice 1.5's reason for the organisation warning).
+gcloud storage buckets describe "gs://$DOCS_BUCKET" --project "$PROJECT" \
+  --format='value[separator="  "](
+    format("uniform={0}", uniform_bucket_level_access),
+    format("public_access_prevention={0}", public_access_prevention),
+    format("versioning={0}", versioning_enabled),
+    format("soft_delete={0}", soft_delete_policy.retentionDurationSeconds)
+  )' | sed 's/^/  /'
+echo "  $RUNTIME_SA: objectViewer + objectCreator, and NOT objectAdmin"
 
 say "Workload Identity Federation (no long-lived keys)"
 gcloud iam workload-identity-pools describe "$POOL" \

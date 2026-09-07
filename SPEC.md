@@ -248,6 +248,16 @@ Data Model's `Document` card carries** — `state`, `superseded_by`, `tenant_vis
 `tasks/evidence/3.1.md`; the sharpest is `tenant_visible`, because a per-row boolean deciding what a
 tenant may see is a second access control standing beside the isolation join, and foundation rule 1
 is that the scope is a view and never a column.
+**A document's bytes live under a path that carries the place and never the people** (3.2):
+`gs://<bucket>/<place kind>/<place id>/<type key>/<file hash>.<ext>`, built by
+`src/evidence/internal/storage-path.ts` because the kernel's object store stores the path it is
+handed and never invents one. The rule is enforced by type — `PlaceKind` is `PROJECT · BUILDING ·
+SPACE · UNIT`, four of `DocumentLink`'s eight kinds, so a lease cannot be filed under a signatory's
+id — and every input is validated rather than sanitised, because a builder that cleans a street name
+into a path segment *is* the transliteration collision the convention exists to prevent. **The
+application cannot destroy a signed contract, and that holds twice**: `ObjectStore` has no `delete`
+and the runtime account has `objectViewer` + `objectCreator` and not `objectAdmin`. A human with
+project editor still can, which is 1.5's observation and now a week-6 item with an owner.
 **The seven policy cases stopped reporting pending at 2.2 and now assert**: the last two relations
 `src/scope/`'s join reads landed with that migration, and `tests/policy/relations.test.ts` fails the
 build if any case takes the pending branch again, because a case that stopped reporting pending and
@@ -310,7 +320,8 @@ PartyContact 2.1 · Tenancy, TenancyParty and the guarantor constraint 2.2 · th
 finished, on a view, with its audit line and E.164 at the edge 2.3 · the register importer, its three
 natural keys and its per-row rejects 2.4 · the portfolio-scale surface, the generated register and
 the two index decisions 2.6 · the document-type catalogue in the workbook 3.0 · the evidence schema,
-its catalogue commands and the nine-type seed 3.1.**
+its catalogue commands and the nine-type seed 3.1 · the object path convention, the docs bucket's
+four controls and the proved delete refusal 3.2.**
 Production exists and has been released to — `v0.1.0`–`v0.1.2`, rolled back and rolled forward on
 purpose — and is then **parked until week 12**: the Cloud SQL instance is stopped and the service
 scaled to zero, so `dona-prod` answers 503 by design and staging is the delivered artifact every

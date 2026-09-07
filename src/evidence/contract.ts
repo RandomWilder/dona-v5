@@ -33,4 +33,22 @@ export type {
 export { ingestDocument, linkDocument } from './internal/documents.ts';
 export type { CatalogueReport } from './internal/seed-catalogue.ts';
 export { applyDocumentTypeCatalogue } from './internal/seed-catalogue.ts';
+// The object path convention (slice 3.2). It is exported from the module that owns the paper
+// because `src/kernel/objects.ts` stores the path it is handed and never invents one — and it is
+// **not** a query, so it does not touch the rule above: a path names a place and a digest, and it
+// cannot name a person, which SPEC-evidence.md states and `PlaceKind` enforces.
+export type {
+  DocumentExtension,
+  ObjectPathSpec,
+  Place,
+  PlaceKind,
+} from './internal/storage-path.ts';
+export {
+  documentExtensions,
+  documentFileHash,
+  documentObjectPath,
+  documentStorageUri,
+  parseObjectPath,
+  parseStorageUri,
+} from './internal/storage-path.ts';
 export type { Queryable } from './internal/types.ts';
