@@ -361,6 +361,7 @@ export interface ReadScreen {
   source: 'pdfjs' | 'ocr' | 'none';
   page: PdfPage | null;
   image: OcrPageImage | null;
+  extracted?: ReadonlyArray<{ labelHe: string; value: string }>;
 }
 
 export function renderReadPage(screen: ReadScreen): string {
@@ -394,6 +395,14 @@ export function renderReadPage(screen: ReadScreen): string {
         }</dd></div>
         <div><dt>טביעת הקובץ</dt><dd class="digest">${ltr(screen.fileHash)}</dd></div>
       </dl>
+      ${
+        screen.extracted && screen.extracted.length > 0
+          ? h`<h2>מה שנקרא</h2><dl class="facts">${screen.extracted.map(
+              (row) =>
+                h`<div><dt>${row.labelHe}</dt><dd>${row.value}</dd></div>`,
+            )}</dl>`
+          : h``
+      }
     </section>
     ${
       page

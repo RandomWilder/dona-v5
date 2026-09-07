@@ -9,9 +9,9 @@ this file and the workbook disagree, the workbook is right and this file is a bu
 - **Entities:** E12, E13, E15, E16 — Document · DocumentLink · DocumentType · DocumentTypeField ·
   ExtractedField · FieldPromotion.
 - **Depends on:** estate, parties, tenancy.
-- **Builds:** week 3 (slices 3.1–3.3, 3.5's confirm screen, 3.6) and week 4 (OCR at 4.1, comprehension,
-  promotion, the accuracy number). **The stub gained content at slice 3.1**, which is the signal its
-  build started.
+- **Builds:** week 3 (slices 3.1–3.3, 3.5's confirm screen, 3.6) and week 4 (OCR at 4.1, comprehension
+  at 4.2, promotion, the accuracy number). **The stub gained content at slice 3.1**, which is the
+  signal its build started. ExtractedField lands at 4.2; FieldPromotion is still 4.3.
 - **Carries:** **capture is open, promotion is governed** ([tasks/plan.md](tasks/plan.md) A8). A new
   type or field is a row — zero migrations, zero deploys — and is citable the moment it is extracted;
   an extracted value becoming a typed column costs a migration and a reviewed mapping.
@@ -48,6 +48,33 @@ workbook a specification rather than a description.
   `entity_id` carries **no foreign key**, which is the price of not having six nullable ones on
   `document`; `entity_type` is checked against the workbook's eight kinds and the pair is half the
   primary key.
+
+## ExtractedField (slice 4.2, `src/kernel/migrations/0017_extracted_field.sql`)
+
+One row per value read off the paper. The published Data Model card still mixes this table with
+promotion (`promoted_to`, `promoted_by`, `promoted_at`); those columns are **4.3's** and are not
+here. The workbook FIELDS sheet does not yet list this table, so this section is the specification
+the migration is measured against — the same standing 3.1 used for E12–E16 once the sheet existed.
+
+- **`extracted_field`** — generic capture. Points at `document_type_field_id` and at `document_id`.
+  **There is no `schema_version_id` and no `field_key` column.** E16 is versioned by `effective_from`
+  on the field row itself, so the row *is* the version; carrying both names is a pair that can
+  disagree. Two values for the same declaration (two tenants on one lease) are two rows: there is
+  no unique on `(document_id, document_type_field_id)`.
+- **Two engines.** Document AI or pdfjs **measures** `(page, bbox, confidence)`. The language model
+  **maps** meaning: it is handed numbered words `{id, page, text}` and the live field list from
+  `documentTypeFields`, and it returns `{field_key, value, word_ids}`. Geometry is the union of
+  those words' boxes. A bbox, page or confidence in the model reply is ignored. Empty or unknown
+  `word_ids` drop the finding — no invented box. Native pdfjs may store `confidence` null; a scan
+  stores Document AI's score. The mapping model id is stored on the row so a dispute can name which
+  comprehension pass produced the value.
+- **`value` is `-- pii`.** Names and addresses land here. Guard three matches a qualified name
+  (`extracted_field.value`) because a bare `value` would fire on `config_settings`.
+- **A missing required field is a result, not an error.** No row. The same for an unconfigured
+  extractor or a timed-out call: the file stays, HTTP stays 200, zero extracted rows.
+- **Re-extract replaces.** Delete that document's extracted rows, then insert. Adding a field to the
+  type and re-running is A8's open half: no migration, no code change.
+- **FieldPromotion is not this table** and is not this slice.
 
 ## The object path convention (slice 3.2)
 
@@ -327,11 +354,11 @@ All four are nullable `ADD COLUMN`s when they come.
 
 ## Later in this module, and not here yet
 
-`ExtractedField` and `FieldPromotion` are week 4's (slices 4.2 and 4.3). Two things about them are
-already settled and are recorded so they are not re-decided:
+`FieldPromotion` is slice 4.3. Two things about it are already settled and are recorded so they are
+not re-decided:
 
 - **There is no `promotes_to` column anywhere in E15 or E16** (slice 3.0). A promotion target as a
   catalogue row would make promotion a row, which is the half A8 governs.
-- **`ExtractedField` points at `document_type_field_id` and carries no separate `schema_version_id`.**
-  E16 is versioned by `effective_from` on the field row itself, so the row *is* the version. Two names
-  for one fact is a pair that can disagree.
+- **`ExtractedField` (4.2) points at `document_type_field_id` and carries no separate
+  `schema_version_id`.** Promotion copies an extracted value onto a typed business column; it does
+  not get to re-decide which declaration governed the capture.

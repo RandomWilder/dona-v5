@@ -411,10 +411,24 @@ describe('evidence · the upload route', () => {
             url: '/documents',
             ...upload(
               { unit: unitId, type: 'lease', tenancy: '' },
-              { filename: 'scan.png', bytes: pngBytes('ocr lease') },
+              {
+                filename: 'scan.png',
+                bytes: pngBytes(`ocr-overlay-${unitId}`),
+              },
             ),
           });
           assert.equal(response.statusCode, 200);
+          const posted = await pool.query<{ file_hash: string }>(
+            `SELECT d.file_hash FROM document d
+               JOIN document_link l ON l.document_id = d.document_id
+              WHERE l.entity_id = $1
+              ORDER BY d.ingested_at DESC
+              LIMIT 1`,
+            [unitId],
+          );
+          const postedHash = posted.rows[0]?.file_hash;
+          assert.ok(postedHash);
+          hashes.push(postedHash);
           assert.match(response.body, /נמצאו כל הביטויים הקבועים של הטופס/);
           assert.match(response.body, /מילים על הדף/);
           const href = response.body.match(
@@ -425,20 +439,9 @@ describe('evidence · the upload route', () => {
             method: 'GET',
             url: href[1],
           });
-          assert.equal(overlay.statusCode, 200);
+          assert.equal(overlay.statusCode, 200, overlay.body.slice(0, 400));
           assert.match(overlay.body, /word-box/);
           assert.match(overlay.body, /קריאה אוטומטית/);
-          const verified = await pool.query<{ file_hash: string }>(
-            `SELECT d.file_hash FROM document d
-               JOIN document_link l ON l.document_id = d.document_id
-              WHERE l.entity_id = $1
-                AND d.verification_verdict = 'verified'
-                AND d.storage_uri LIKE '%.png'`,
-            [unitId],
-          );
-          const hash = verified.rows[0]?.file_hash;
-          assert.ok(hash);
-          hashes.push(hash);
         },
       );
 
@@ -476,7 +479,11 @@ describe('evidence · the upload route', () => {
         await pool
           .query(
             `DELETE FROM audit_log
-              WHERE action IN ('evidence.file_document', 'evidence.read_document')
+              WHERE action IN (
+                'evidence.file_document',
+                'evidence.read_document',
+                'evidence.extract_document'
+              )
                 AND subject_id = $1`,
             [unitId],
           )

@@ -18,6 +18,7 @@ import {
 } from './evidence/contract.ts';
 import { type Clock, systemClock } from './kernel/clock.ts';
 import { httpStatus, KernelError, toErrorBody } from './kernel/errors.ts';
+import type { Extractor } from './kernel/extraction.ts';
 import {
   configuredBucket,
   createMemoryStore,
@@ -26,6 +27,7 @@ import {
 import type { OcrText } from './kernel/ocr.ts';
 import { createPdfjsText, type PdfText } from './kernel/pdf.ts';
 import { registerUiAssets } from './kernel/ui/assets.ts';
+import type { WorkRunner } from './kernel/work.ts';
 
 export interface AppDeps {
   pool: Pool;
@@ -42,6 +44,8 @@ export interface AppDeps {
   pdf?: PdfText;
   /** The OCR reader. Absent or unconfigured leaves scans unverified. */
   ocr?: OcrText;
+  extractor?: Extractor;
+  work?: WorkRunner;
   /** The bucket a `storage_uri` names, which is not the same statement as which store is running. */
   bucket?: string;
 }
@@ -91,6 +95,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     objects: deps.objects ?? createMemoryStore(),
     pdf: deps.pdf ?? createPdfjsText(),
     ocr: deps.ocr,
+    extractor: deps.extractor,
+    work: deps.work,
     bucket: deps.bucket ?? configuredBucket(),
   });
 

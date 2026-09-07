@@ -20,14 +20,21 @@ import {
 } from '../../estate/contract.ts';
 import { createAuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
-import { createSettings, readOcrSettings } from '../../kernel/config.ts';
+import {
+  createSettings,
+  readExtractionSettings,
+  readOcrSettings,
+} from '../../kernel/config.ts';
 import { KernelError } from '../../kernel/errors.ts';
+import type { Extractor } from '../../kernel/extraction.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
 import { createUnconfiguredOcr, type OcrText } from '../../kernel/ocr.ts';
 import type { PdfText } from '../../kernel/pdf.ts';
 import { validId } from '../../kernel/validate.ts';
+import type { WorkRunner } from '../../kernel/work.ts';
 import { listUnitTenancies } from '../../tenancy/contract.ts';
 import { documentTypeByKey, listDocumentTypes } from './catalogue.ts';
+import { listExtractedFields } from './extract.ts';
 import { fileDocument } from './intake.ts';
 import { isProtocolType } from './protocol.ts';
 import { readFiledDocument } from './read.ts';
@@ -50,6 +57,8 @@ export interface DocumentDeps {
   objects: ObjectStore;
   pdf: PdfText;
   ocr?: OcrText;
+  extractor?: Extractor;
+  work?: WorkRunner;
   clock: Clock;
   /** The bucket `storage_uri` names. The memory store's stand-in locally (slice 3.2). */
   bucket: string;
@@ -110,6 +119,7 @@ export function registerDocumentRoutes(
       throw new KernelError('invalid', 'that is not a document type');
     }
     const unit = await getUnit(deps.pool, unitId);
+    const extraction = await readExtractionSettings(createSettings(deps.pool));
 
     const result = await fileDocument(
       {
@@ -119,6 +129,10 @@ export function registerDocumentRoutes(
         ocr: deps.ocr,
         ocrVersion: (await readOcrSettings(createSettings(deps.pool)))
           .processorVersion,
+        extractor: deps.extractor,
+        extractModel: extraction.model,
+        extractReasoningEffort: extraction.reasoningEffort,
+        work: deps.work,
         audit: createAuditLog(deps.pool, deps.clock),
         clock: deps.clock,
         bucket: deps.bucket,
@@ -194,6 +208,7 @@ export function registerDocumentRoutes(
           WHERE document_id = $1 AND link_role = 'SUBJECT' LIMIT 1`,
         [documentId],
       );
+      const extracted = await listExtractedFields(deps.pool, documentId);
       const link = subject.rows[0];
       html(reply);
       if (link?.entity_type === 'UNIT') {
@@ -207,6 +222,7 @@ export function registerDocumentRoutes(
           source: read.source,
           page: read.pages[0] ?? null,
           image: read.images[0] ?? null,
+          extracted,
         });
       }
       if (link?.entity_type === 'BUILDING') {
@@ -220,6 +236,7 @@ export function registerDocumentRoutes(
           source: read.source,
           page: read.pages[0] ?? null,
           image: read.images[0] ?? null,
+          extracted,
         });
       }
       throw new KernelError('not_found', 'document not found');

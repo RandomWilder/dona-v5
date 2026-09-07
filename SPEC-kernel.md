@@ -337,9 +337,16 @@ after a crash or restart.
 - `tick()` drains everything due at the clock's current time; `start()` only calls `tick()` on an
   interval. Tests drive `tick()` directly, so no test ever sleeps.
 - Claiming uses `FOR UPDATE SKIP LOCKED`: two runners can never take the same job.
+  A runner only claims kinds it has registered, so two suites sharing one database cannot steal
+  each other's work.
 - A failing handler backs off exponentially, capped at 60s, and records `last_error`.
 - Work outlives the process — it lives in Postgres, so a runner started after a restart picks up
   what an earlier one scheduled.
+
+**The runner is started** in `serve.ts` (slice 4.2). Cloud Run `--min-instances 0` still only ticks
+while the instance is up, so a job scheduled on a request is also `tick()`ed once on that request —
+the same-request drain is what makes filing complete. Evidence registers `evidence.extract_document`;
+the kernel still does not know what a lease is.
 
 ## Shared UI surface (`ui/`)
 

@@ -107,7 +107,7 @@ export async function ocrAfterFile(
     verificationTerms: string[] | null;
     subjectId: string;
   },
-): Promise<Verification | null> {
+): Promise<{ verification: Verification; pages: PdfPage[] } | null> {
   if (!ocrConfigured(deps.ocr) || !deps.ocrVersion) {
     return null;
   }
@@ -129,9 +129,13 @@ export async function ocrAfterFile(
       input.verificationTerms,
     );
     if (next.verdict !== 'verified') {
-      return next.verdict === 'refused'
-        ? { verdict: 'unverified', missingTerms: [] }
-        : next;
+      return {
+        verification:
+          next.verdict === 'refused'
+            ? { verdict: 'unverified', missingTerms: [] }
+            : next,
+        pages: result.pages,
+      };
     }
     await promoteVerified(
       deps,
@@ -139,7 +143,7 @@ export async function ocrAfterFile(
       input.typeKey,
       input.subjectId,
     );
-    return next;
+    return { verification: next, pages: result.pages };
   } catch (error) {
     if (error instanceof KernelError && error.code === 'unavailable') {
       return null;
