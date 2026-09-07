@@ -3,8 +3,20 @@ import { KernelError } from './errors.ts';
 
 // Object storage, on the same footing as db.ts: the shape of a transfer and no
 // business logic. It does not know what a lease is. The paths it is handed are
-// built by the module that owns them (SPEC-occupancy.md), and it never invents
-// one.
+// built by the module that owns them -- `src/evidence/internal/storage-path.ts`
+// and SPEC-evidence.md, "The object path convention" -- and it never invents
+// one. (This cited SPEC-occupancy.md until slice 3.2, which is a v3 filename
+// that has never existed in this repository: the 1.4 lift brought the comment
+// with the code, and 3.2 is the slice that gave the sentence a real referent.)
+//
+// **There is no `delete` here, and there is not going to be one.** The bucket
+// holds signed contracts. The runtime account carries objectViewer +
+// objectCreator and deliberately not objectAdmin (slice 1.5, re-applied on every
+// bootstrap run), so a delete would fail at the credential anyway -- having
+// neither is the point, and the absent method is the control a reader can check
+// without a cloud console. Permanent removal is an act somebody performs through
+// a script with its own refusals (infra/corpus-delete.sh, slice 1.12), never a
+// method the application happens to hold.
 
 export interface StoredObject {
   bytes: Buffer;
@@ -118,4 +130,21 @@ export function createGcsStore(options: GcsOptions): ObjectStore {
 
     describe: () => `gs://${bucket}`,
   };
+}
+
+/**
+ * The store this process is configured for, on `createPool`'s pattern of reading the environment in
+ * the kernel and nowhere deeper.
+ *
+ * **An absent `DOCS_BUCKET` falls back to memory and the caller says so on the boot line.** It is
+ * not an error: locally there is no bucket and `npm run dev` must still start. It is not silent
+ * either — a deployed revision running on memory is wrong in the same visible way a `-dev` version
+ * string is, and `deploy.yml` has injected `DOCS_BUCKET` since slice 1.6 while nothing in this
+ * repository read it, so until slice 3.2 that failure had no way to be seen at all.
+ */
+export function createConfiguredStore(
+  env: Record<string, string | undefined> = process.env,
+): ObjectStore {
+  const bucket = env.DOCS_BUCKET;
+  return bucket ? createGcsStore({ bucket }) : createMemoryStore();
 }

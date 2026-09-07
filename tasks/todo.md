@@ -98,7 +98,11 @@ the workbook is the anti-pattern this project has already named once.
 production` has no protection rules — a `v*` tag is the only thing between a commit and prod, correct
 while prod is stopped and wrong from week 12, where [roadmap.md](roadmap.md) owns it. And the
 `party_contact (channel, value)` btree, rejected at 2.6 because the planner never chose it over the
-exclusion constraint's GiST index, is reopened at week 12 at a different row count.
+exclusion constraint's GiST index, is reopened at week 12 at a different row count. And **raised at
+3.2**: the docs buckets' legacy `projectEditor` / `projectOwner` bindings carry `legacyObjectOwner`,
+which includes delete — 3.2 proved the *application* cannot destroy a signed contract, and a human
+with project editor still can. [roadmap.md](roadmap.md) owns it at **week 8**, in the same IAM pass
+as 1.5's `run.admin` scoping and in the week whose demo is *try to break isolation*.
 
 ---
 
@@ -172,7 +176,7 @@ exclusion constraint's GiST index, is reopened at week 12 at a different row cou
       times and **three `-- not-pii:` sentences were written anyway**, on the catalogue columns that
       name personal data without holding it.
 
-- [ ] **3.2 — Object storage and the path convention.** The docs bucket with uniform access,
+- [x] **3.2 — Object storage and the path convention.** The docs bucket with uniform access,
       public-access prevention and versioning, **re-applied on every bootstrap run** so the control is
       a script and not a memory. The runtime account gets `objectViewer` + `objectCreator` and
       deliberately **not** `objectAdmin`, so the application cannot destroy a signed contract. Object
@@ -182,6 +186,31 @@ exclusion constraint's GiST index, is reopened at week 12 at a different row cou
       **Done when:** the app can write and read a contract and cannot delete one.
       **Verify:** attempt the delete as the runtime account and get denied, with the error recorded.
       **Deps:** 3.1, 1.5, 1.12 · **S**
+      **Closed 2026-09-07** ([evidence](evidence/3.2.md)). The path is
+      `gs://<bucket>/<place kind>/<place id>/<type key>/<file hash>.<ext>`, and *the place and never
+      the people* is **enforced by type**: `PlaceKind` is four of `DocumentLink`'s eight kinds, so a
+      lease cannot be filed under a signatory's id, and the rule holds on the way back out too
+      because a hand-edited `storage_uri` is the case that matters. Every input validated, none
+      sanitised. The leaf is the `file_hash`, which makes the object write idempotent on the column
+      `ingestDocument` already is. A read **refuses a bucket that is not the configured one**.
+      **The delete refusal holds twice**: `ObjectStore` has no `delete`, and `src/docs-probe.ts`
+      goes around the missing method with a raw `DELETE` as `app-staging` and records the 403, with
+      the write and the read as its positive control. 20 new tests, **345 code + 41 hooks green**;
+      the policy case was **red first**. Three things found while reading and fixed: `DOCS_BUCKET`
+      was injected by the deploy and read by no code, so "reported at boot" was a claim — `serve.ts`
+      now prints it; `objects.ts` cited a v3 filename; and the bucket's **soft-delete window was a
+      vendor default nobody had chosen**, now 7 days explicitly, which is the opposite call from the
+      corpus bucket's cleared window and for the opposite reason. **A fourth, in the same file:**
+      `bootstrap.sh prod` had stopped working entirely — a STOPPED Cloud SQL instance answers
+      *Invalid request since instance is not running* to both `databases describe` and `databases
+      create`, so the pair failed and `set -e` killed the run before the service accounts, the bucket
+      and the WIF binding, none of which need the instance. That is 1.5's cost lever biting 1.5's
+      script: stopping `dona-prod` until week 12 quietly made *idempotent, safe to re-run* false for
+      prod. The state is now checked rather than inferred from an error, and a stopped instance skips
+      the database step **loudly**. Both buckets carry the four controls now, prod included. Raised
+      and owned: the ingest
+      ordering rule (3.3) · signed URLs are not 3.6's (3.6) · the bucket's legacy `projectEditor`
+      delete (week 8).
 
 - [ ] **3.3 — Declared-type upload, with a verification guard.** This slice implements **flow A1**.
       The flow already knows what it asked for ("upload the lease for unit 14"), so **type is
@@ -212,7 +241,16 @@ exclusion constraint's GiST index, is reopened at week 12 at a different row cou
       disagreement. Decide it here, with a reason: either a caught upload is refused and unrecorded —
       and figure 4's caption is a statement about the bulk queue that does not bind the interactive
       path — or it is filed as evidence of an attempt, which costs `state` and therefore a migration,
-      and is worth taking deliberately rather than by drift. **Deps:** 3.1 · **M**
+      and is worth taking deliberately rather than by drift.
+      **Owed by 3.2 — the ingest order, and it is not the obvious one.** Hash the bytes → look the
+      hash up → `put` the object **only when no document already holds it** → `ingestDocument`.
+      Hashing first is what makes the path computable before anything is written, and looking up
+      before putting is what stops the same bytes filed against a second place writing a second copy
+      of one file. `ingestDocument` excludes `storage_uri` from its update path, so the first path
+      filed stays authoritative whatever a later caller computes. The path is built by
+      `documentObjectPath` from `src/evidence/contract.ts` and **never by string concatenation**, and
+      the file types the screen accepts are `documentExtensions` from the same module rather than a
+      second list in the upload handler. **Deps:** 3.1, 3.2 · **M**
 
 - [~] **3.4 — Drive ingestion and the bulk review queue. DEFERRED 6 Sep 2026, not deleted.** See the
       carried-in section above. Nothing about the design is withdrawn: convention **proposes** a type
@@ -246,6 +284,12 @@ exclusion constraint's GiST index, is reopened at week 12 at a different row cou
       that forgets either is the defect 2.6 wrote a test for. Every new screen goes into the `SCREENS`
       registry in `tests/ui/tokens.test.ts` in the same change — that registry is what catches a
       physical CSS property or a name on a screen that must not carry one.
+      **Owed by 3.2 — the panel shows a path, never a link to the bytes.** `document.storage_uri` is
+      a `gs://` uri and nothing in this system mints a signed URL. A signed URL is a bearer token for
+      one object: whoever holds the string reads the document, isolation join or not, so issuing one
+      is a decision that belongs behind a session, and sessions are week 5's. Until then the panel
+      renders what is filed — type, dates, ingest date — which is the shape the tokens test already
+      enforces.
       **Deps:** ~~3.4~~ **3.3**, re-pointed 6 Sep 2026 · **S**
 
 ---

@@ -44,6 +44,48 @@ workbook a specification rather than a description.
   `document`; `entity_type` is checked against the workbook's eight kinds and the pair is half the
   primary key.
 
+## The object path convention (slice 3.2)
+
+`document.storage_uri` is `NOT NULL` from 3.1 and this is the rule that fills it. The object store
+itself is infrastructure and knows nothing about leases ([SPEC-kernel.md](SPEC-kernel.md)); **the
+path is built here, by the module that owns the paper.**
+
+```
+gs://<bucket>/<place kind>/<place id>/<type key>/<file hash>.<ext>
+gs://dona-v5-staging-docs/unit/019a4c7e-…-6f1a0d3e9b42/lease/3f9c…8a1.pdf
+```
+
+Every segment is a uuid, a word from a fixed vocabulary, or a hex digest. There is no name, no
+address, no transliteration and no uploader-supplied filename anywhere in it.
+
+- **The path carries the place and never the people, and that is enforced by type rather than by
+  care.** `documentObjectPath` accepts a **`PlaceKind`** — `PROJECT · BUILDING · SPACE · UNIT` — which
+  is a narrower union than `DocumentLink`'s eight `entity_type` values. `TENANCY`, `PARTY`, `ASSET`
+  and `OBLIGATION` are not places and cannot be passed, so a lease cannot be filed under a
+  signatory's id even by a caller who wants to. [SPEC-flows.md](SPEC-flows.md) invariant 1 makes the
+  *tenancy* the upload's primary binding; that stays a `document_link` row. A tenancy is temporal,
+  and rooting the filing cabinet at it would scatter one flat's papers across its lettings.
+- **Inputs are validated, never sanitised.** A builder that cleans a street name into a path segment
+  is exactly the failure the convention exists to prevent, wearing a helmet: two streets that
+  transliterate alike would file one flat's lease under another's — a correctness failure with
+  isolation flavour, and it arrives quietly. Anything that is not a uuid, a `type_key`-shaped word, a
+  64-character lowercase hex digest or an allowed extension is `invalid` at the edge.
+- **The leaf is the `file_hash`, not the `document_id`.** `document.file_hash` is `UNIQUE` and
+  `ingestDocument` is idempotent on it, so keying the object by the digest makes the *object* write
+  idempotent too. A `document_id` leaf would strand an object every time a re-ingest returned the
+  existing row rather than the fresh uuid the caller had already written under.
+- **`storage_uri` holds `gs://<bucket>/<path>` and not a bare path**, and a read parses it and
+  **refuses a bucket that is not the configured one**. A database cloned from staging to a laptop
+  then names the bucket it means, and a row pointing at another environment's bucket is refused
+  rather than followed.
+
+**The ingest order, which slice 3.3 must follow:** hash the bytes → look the hash up → `put` the
+object only when no document already holds it → `ingestDocument`. Hashing first is what makes the
+whole path computable before anything is written, and looking up before putting is what keeps the
+same bytes filed against a second place from writing a second copy. `ingestDocument` excludes
+`storage_uri` from its update path, so the first path filed stays authoritative whatever a later
+caller computes.
+
 ## What this module exports, and what it refuses
 
 `src/evidence/contract.ts` is the whole public surface; nothing outside the module imports

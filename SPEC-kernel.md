@@ -152,10 +152,25 @@ laptop's ADC, and hand-rolling an OAuth refresh for a bucket holding signed cont
 economy, while the transfer itself is two HTTP calls that need no SDK. `createMemoryStore()` is what
 the tests use, so no test reaches the network and none needs a bucket.
 
-**Which one is running is reported at boot.** An absent `DOCS_BUCKET` is not an error — locally there
-is no bucket and `npm run dev` must still start — so it falls back to memory and *says so*. A
-deployed revision whose boot line reads `docs: memory` is wrong in the same visible way a `-dev`
-version string is. A missing object is `not_found`, never empty bytes.
+**Which one is running is reported at boot, and from slice 3.2 that is true rather than intended.**
+This paragraph claimed it from the 1.4 lift onward while `DOCS_BUCKET` was read by no code in this
+repository: the deploy injected it (`deploy.yml`, `release.yml`) and `src/serve.ts` never asked for
+it, so a revision running on the memory store would have looked exactly like one running on the
+bucket. `src/serve.ts` now builds the store and prints `describe()` on the boot line. An absent
+`DOCS_BUCKET` is still not an error — locally there is no bucket and `npm run dev` must start — so it
+falls back to memory and *says so*. A deployed revision whose boot line reads `docs: memory` is wrong
+in the same visible way a `-dev` version string is. A missing object is `not_found`, never empty
+bytes.
+
+**There is no `delete` on this port, and there is not going to be one.** The bucket holds signed
+contracts; the runtime account carries `objectViewer` + `objectCreator` and deliberately not
+`objectAdmin` (slice 1.5, re-applied on every `bootstrap.sh` run), so a delete would fail at the
+credential anyway. Having neither is the point: **two independent controls, and the absent method is
+the one a reader can check without a cloud console.** `infra/`'s corpus deletion path is a script
+with its own refusals (1.12) precisely because permanent removal is an act somebody performs, never
+a method the application happens to hold. Slice 3.2's probe proves the second control by issuing a
+raw `DELETE` with the store's own token — going around the port on purpose, because proving only the
+absent method would be proving our own politeness.
 
 ## PDF text (`pdf.ts`)
 
