@@ -4,7 +4,11 @@ import { KernelError } from './errors.ts';
 
 // PDF text, on the same footing as objects.ts: the shape of a document and no
 // business logic at all. It does not know what a lease or a clause is -- the
-// module that does turns these items into chunks (SPEC-occupancy.md).
+// module that does is `src/evidence/`, and SPEC-evidence.md is where what is
+// done with this text is specified. (This cited SPEC-occupancy.md until slice
+// 3.3, a v3 filename that has never existed in this repository; slice 3.2 fixed
+// the identical lifted citation in objects.ts and this was the second copy of
+// it. `verify.ts` is the first reader, and chunking for retrieval is week 4's.)
 //
 // Positions and not a string, deliberately. A reader that hands back a page as
 // one paragraph is unusable for the document this system exists to read: the

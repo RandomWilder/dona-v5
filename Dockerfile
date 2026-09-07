@@ -1,7 +1,8 @@
 # Node 24 strips TypeScript natively, so there is no build step to stage.
-# Debian slim over alpine: glibc avoids musl surprises. Four runtime dependencies since slice 1.4 --
-# fastify, pg, pdfjs-dist and google-auth-library -- and pdfjs-dist alone is ~35 MB unpacked, so the
-# alpine saving is small against what npm ci --omit=dev already installs.
+# Debian slim over alpine: glibc avoids musl surprises. Five runtime dependencies -- fastify, pg,
+# pdfjs-dist and google-auth-library since slice 1.4, and @fastify/multipart added at 3.3 for the
+# first route that accepts a file -- and pdfjs-dist alone is ~35 MB unpacked, so the alpine saving is
+# small against what npm ci --omit=dev already installs.
 FROM node:24-slim
 
 ENV NODE_ENV=production
