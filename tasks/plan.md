@@ -236,7 +236,13 @@ Two **stop conditions**, which are not success numbers and are not traded off ag
 2. **How many distinct `terms_profile`s are in force?** Multi-week swing on week 6. Closed by week 5's
    promotion work, which is where the answer surfaces from the leases themselves.
 3. **What does the Priority export actually contain** — units and tenancies both, or units only?
-   Decides whether week 2 is one importer or two. The keys fuse answers it.
+   Decides whether week 2 is one importer or two. The keys fuse answers it. **Amended 7 Sep 2026: it
+   did not close in week 2 and it no longer gates the schema.** The importer shipped at 2.4 as one
+   importer over a twenty-two-column register and was proved at volume at 2.6 against a *generated*
+   file, so the format question now decides how much adaptation an import costs rather than what gets
+   built. It moves with **2.5** to the pilot-preparation step of the method, and it still owns two
+   facts only the real file can produce: how many rows the constraints reject, and whether the export
+   carries vacant apartments as rows at all.
 4. **Are the Shoham buildings still inside תקופת הבדק?** Decides whether week 6's ternary
    responsibility has a live case to demo or a synthetic one.
 5. **Where does the in-house crew's availability live?** Determines whether month three integrates a

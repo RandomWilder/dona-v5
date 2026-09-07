@@ -223,7 +223,7 @@ view (2.3), `0009_import_natural_keys.sql` gives `party`, `party_contact` and `t
 the keys the register importer needs to be run twice (2.4), and `0010_scale_indexes.sql` carries the
 one index 2.6 measured its way to. `src/estate/`, `src/scope/`, `src/parties/`,
 `src/tenancy/` and `src/register/` are the module directories: estate holds the schema, the importer,
-the read model and the first two screens, scope the isolation join and its contract, landed early at
+the read model and the five screens 2.6 left behind it, scope the isolation join and its contract, landed early at
 1.7 with no tables underneath it, parties and tenancy their schemas plus the write commands the
 register calls, and register the register file format, its parser and its reject contract (2.4).
 Parties and tenancy gained a `contract.ts` at 2.4 with the caller 2.1 and 2.2 both predicted; neither
