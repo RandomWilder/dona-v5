@@ -16,6 +16,12 @@
 > search box, and it is already a business win over the status quo.
 > **Freeze:** Wednesday. The last merge that reaches staging lands Wednesday.
 >
+> **Staging already holds the demo's own material, from 3.3's staging verification on 7 Sep:** two
+> tier-1 specimens filed against דירה 1 and דירה 2 of בניין האלון 12 — 86.66 kiB, one lease counted
+> once across two flats. They stay until the demo has been given; **clearing them is part of closing
+> the week**, with `./infra/docs-delete.sh --all`, which is also the first run of that script's
+> delete leg against a real bucket.
+>
 > One slice = one focused session, half a day or less. **Done when** is the acceptance bar; **Verify**
 > is the check that proves it — no self-certification. The standing bar every slice also clears is
 > the Definition of Done in [plan.md](plan.md).
@@ -287,6 +293,13 @@ a known size. [roadmap.md](roadmap.md) owns it at **week 8**, in the same IAM pa
       the documents panel and still no signed URL (3.6) · **the anonymous upload route's unbounded
       *count*, as opposed to its bounded size (week 5)** — 20 MB is a cap per request and there is no
       cap on requests, so the bound standing in for a session is one file and not one caller.
+      **Staging-verified 7 Sep 2026**, `dona-staging-00039-hps`: seven requests, 422 both directions
+      with the right missing terms, 400 for a zip, and **three filings leaving two objects in the
+      real bucket while the two refusals left none** — the acceptance bar proved against storage and
+      not against a status code. The dedupe case added a link and wrote nothing, the object staying
+      under the first flat's path. `שכירות כהן.pdf` was posted on every request and comes back
+      nowhere. Not proved on staging and said so in the evidence: the audit lines, which have no
+      route to read them and are held by `intake.test.ts` over a real Postgres instead.
 
 - [~] **3.4 — Drive ingestion and the bulk review queue. DEFERRED 6 Sep 2026, not deleted.** See the
       carried-in section above. Nothing about the design is withdrawn: convention **proposes** a type
