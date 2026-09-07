@@ -220,14 +220,34 @@ keys an importer needs to be run twice (1.11), `0006_parties.sql` is E5–E6, th
 this system with a person in them (2.1), `0007_tenancy.sql` is E7–E8 plus the `terms_profile`
 its NOT NULL foreign key needs a target for (2.2), `0008_occupancy_view.sql` is R6's current-occupancy
 view (2.3), `0009_import_natural_keys.sql` gives `party`, `party_contact` and `terms_profile`
-the keys the register importer needs to be run twice (2.4), and `0010_scale_indexes.sql` carries the
-one index 2.6 measured its way to. `src/estate/`, `src/scope/`, `src/parties/`,
-`src/tenancy/` and `src/register/` are the module directories: estate holds the schema, the importer,
+the keys the register importer needs to be run twice (2.4), `0010_scale_indexes.sql` carries the
+one index 2.6 measured its way to, and `0011_evidence.sql` is the evidence plane — E15, E16, E12 and
+E13, the type catalogue before the document that points at it (3.1). It carries **the first trigger
+in this repository**, `document_is_immutable`, because "`file_hash` at ingest, immutable thereafter"
+is otherwise a comment and 2.1's principle is that the claim is what the database refuses.
+`src/estate/`, `src/scope/`, `src/parties/`, `src/tenancy/`, `src/register/` and `src/evidence/` are
+the module directories: estate holds the schema, the importer,
 the read model and the five screens 2.6 left behind it, scope the isolation join and its contract, landed early at
 1.7 with no tables underneath it, parties and tenancy their schemas plus the write commands the
-register calls, and register the register file format, its parser and its reject contract (2.4).
+register calls, register the register file format, its parser and its reject contract (2.4), and
+evidence the four document tables, its catalogue commands and the seed that fills them (3.1).
 Parties and tenancy gained a `contract.ts` at 2.4 with the caller 2.1 and 2.2 both predicted; neither
-exports a query, because who is in a unit today is `src/scope/`'s answer and nobody else's.
+exports a query, because who is in a unit today is `src/scope/`'s answer and nobody else's — and
+**evidence's contract carries no query that returns a person either**, which is that rule not bending
+for documents.
+
+**The document-type catalogue is data and not a migration**, which is A8's open half made literal:
+adding a type with four fields of its own costs a seed row and a re-deploy of data, proved at 3.1 by
+adding a tenth through the same function `npm run seed:doctypes` calls and asserting
+`information_schema.columns` did not move. Nine types are seeded — the published Data Model's eight
+plus `inspection_certificate`, which the workbook has carried since 3 Sep and 3.5 needs — and slice
+3.3's verification guard reads its marker terms off the type row rather than out of TypeScript, so a
+type added as a row arrives with its own guard. **E12 deliberately omits four columns the published
+Data Model's `Document` card carries** — `state`, `superseded_by`, `tenant_visible` and
+`uploaded_by` — each for a reason recorded in [SPEC-evidence.md](SPEC-evidence.md) and
+`tasks/evidence/3.1.md`; the sharpest is `tenant_visible`, because a per-row boolean deciding what a
+tenant may see is a second access control standing beside the isolation join, and foundation rule 1
+is that the scope is a view and never a column.
 **The seven policy cases stopped reporting pending at 2.2 and now assert**: the last two relations
 `src/scope/`'s join reads landed with that migration, and `tests/policy/relations.test.ts` fails the
 build if any case takes the pending branch again, because a case that stopped reporting pending and
@@ -289,7 +309,8 @@ estate importer, the fixture and the first screens 1.11 · the corpus and its co
 PartyContact 2.1 · Tenancy, TenancyParty and the guarantor constraint 2.2 · the isolation join
 finished, on a view, with its audit line and E.164 at the edge 2.3 · the register importer, its three
 natural keys and its per-row rejects 2.4 · the portfolio-scale surface, the generated register and
-the two index decisions 2.6.**
+the two index decisions 2.6 · the document-type catalogue in the workbook 3.0 · the evidence schema,
+its catalogue commands and the nine-type seed 3.1.**
 Production exists and has been released to — `v0.1.0`–`v0.1.2`, rolled back and rolled forward on
 purpose — and is then **parked until week 12**: the Cloud SQL instance is stopped and the service
 scaled to zero, so `dona-prod` answers 503 by design and staging is the delivered artifact every

@@ -81,6 +81,15 @@ the workbook is the anti-pattern this project has already named once.
 - [ ] **Answer one question out of the notice draft: how it reaches a tenant.** "On first contact
       through the agent channel" means week 9 builds a step for it, so the answer is owed before
       week 9 rather than during it (notice draft, item 4).
+- [ ] **Director's call, raised at 3.1 and owned by no slice: the published Data Model's `Document`
+      card is now out of step with the schema.** It lists `state`, `superseded_by`, `tenant_visible`
+      and `uploaded_by`, and the entity it calls `DocumentSchema` is `DocumentType` (E15). Every one
+      of those differences is a decision made with a reason and recorded
+      ([evidence/3.1.md](evidence/3.1.md), [SPEC-evidence.md](../SPEC-evidence.md)); the repository is
+      not out of step with itself. What is open is whether the **published** artifact gets
+      republished, and that is a promise to the client and therefore not a slice's to make — the same
+      treatment 3.0 gave the "Monday" wording. Flagged, not owned, and it changes nothing that ships.
+
 - [ ] **Take delivery of the real document corpus.** The controls have existed since 2026-09-06 and
       the data does not, which is the order **R4** asks for. Owed after F6's other half. Record the
       arrival and removal dates on [fuses.md](fuses.md) the day it lands.
@@ -116,7 +125,7 @@ exclusion constraint's GiST index, is reopened at week 12 at a different row cou
       the seed is nine and not eight (3.1) · E12 versus the published Data Model (3.1) · one column
       and not two on `ExtractedField` (4.2). · **M**
 
-- [ ] **3.1 — Document, DocumentLink, and the type catalogue.** E12, E13, E15, E16. One document,
+- [x] **3.1 — Document, DocumentLink, and the type catalogue.** E12, E13, E15, E16. One document,
       several bindings, because a signed lease is evidence about the tenancy *and* the unit *and*
       both signatories — six nullable foreign keys works until the seventh entity needs documents.
       `file_hash` at ingest; immutable thereafter. `DocumentType` seeded with the eight from the Data
@@ -147,6 +156,21 @@ exclusion constraint's GiST index, is reopened at week 12 at a different row cou
       **Owed by 2.6 — the isolation rule does not bend for documents.** Nothing here reaches a person
       except through `src/scope/`; a document panel shows what is filed, not who signed it, until
       week 5 puts a session behind the screens. **Deps:** 3.0, 2.2 · **M**
+      **Closed 2026-09-07** ([evidence](evidence/3.1.md)). `0011_evidence.sql` — E15, E16, E12, E13,
+      every column the FIELDS sheet specifies and no others — plus `src/evidence/` and a **nine**-type
+      seed that is **data and not a migration**, because nine types in a backfill would have made the
+      tenth a migration and the acceptance bar false the day it was written. The bar is proved on the
+      **tenth**: a ועד בית agreement with four fields, added through the same function
+      `npm run seed:doctypes` calls, with `information_schema.columns` snapshotted either side and
+      asserted identical. 19 new tests, **325 code + 41 hooks green**, and **nine constraints proved
+      red first** with their SQLSTATEs in the evidence. **E12's four missing columns are decided, not
+      deferred: all four omitted**, each with a reason and each carried — `state` → 3.3,
+      `superseded_by` and `uploaded_by` → week 5, `tenant_visible` → week 9. Two calls beyond the
+      bar: **the first trigger in this repository** (`document_is_immutable`, because "immutable
+      thereafter" is otherwise a comment), and `UNIQUE (file_hash)` carrying "the same file twice is
+      one document with two links" in the database rather than in the caller. Guard three fired zero
+      times and **three `-- not-pii:` sentences were written anyway**, on the catalogue columns that
+      name personal data without holding it.
 
 - [ ] **3.2 — Object storage and the path convention.** The docs bucket with uniform access,
       public-access prevention and versioning, **re-applied on every bootstrap run** so the control is
@@ -176,7 +200,19 @@ exclusion constraint's GiST index, is reopened at week 12 at a different row cou
       document of a given type is expected to contain live on the type row, so a type added as a seed
       row arrives with its own guard. A `Record<TypeKey, string[]>` in code means every new type ships
       unguarded until the next release — A8 true of the catalogue and false of the first thing that
-      consumes it. **Deps:** 3.1 · **M**
+      consumes it. **Landed at 3.1**: `document_type.verification_terms` is a column, nullable,
+      seeded on all nine types, and `listDocumentTypes` on `src/evidence/contract.ts` is what reads
+      it. Nothing is owed here; the input exists.
+      **Owed by 3.1 — does a wrong file caught at the door leave a row behind it?** 3.1 decided E12
+      carries **no `state` column**: figure 5's `RECEIVED → EXTRACTED → ACCEPTED / REJECTED` is the
+      review queue's state machine and the queue is 3.4, deferred with F4. But the published Data
+      Model's figure 4 says **"REJECTED is a state, not a deletion — the wrong file is evidence too,
+      of what someone tried to file and when"**, while this slice's own bar says the ארנונה bill is
+      *caught before it is filed*. Those two disagree, and this is the slice that meets the
+      disagreement. Decide it here, with a reason: either a caught upload is refused and unrecorded —
+      and figure 4's caption is a statement about the bulk queue that does not bind the interactive
+      path — or it is filed as evidence of an attempt, which costs `state` and therefore a migration,
+      and is worth taking deliberately rather than by drift. **Deps:** 3.1 · **M**
 
 - [~] **3.4 — Drive ingestion and the bulk review queue. DEFERRED 6 Sep 2026, not deleted.** See the
       carried-in section above. Nothing about the design is withdrawn: convention **proposes** a type
@@ -195,7 +231,11 @@ exclusion constraint's GiST index, is reopened at week 12 at a different row cou
       **Owed by 2.4 and made visible by 2.6 — the placeholder handover dates.** Correct them here from
       the handover protocol, and **record in the evidence how many buildings had a placeholder**. The
       same applies to `PARKING` and `STORAGE` spaces: a register row implies exactly one `UNIT` space,
-      and bays and storage rooms (workbook D3) arrive with this document. **Deps:** 3.1, 1.9 · **M**
+      and bays and storage rooms (workbook D3) arrive with this document. **Both dependencies from
+      3.1 exist**: `document` is a table `Asset.source_document_id` can point at, and
+      `handover_protocol` is one of the nine seeded types, declaring `handover_date` and
+      `apartment_number` — `handover_date` being the field that turns the placeholder מסירה dates
+      into a fact. **Deps:** 3.1, 1.9 · **M**
 
 - [ ] **3.6 — Find it in four seconds.** Document search and the documents panels on the building and
       unit screens, grouped by type.
