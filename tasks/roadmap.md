@@ -968,6 +968,15 @@ exist. What remains is the cheap guard for the real error: right slot, wrong fil
   (4.2 / A2) · session **and** CSRF together (week 5) · the documents panel (3.6) · **the anonymous
   upload route's unbounded request count (week 5)** — 20 MB bounds a file and nothing bounds a
   caller.
+  **Staging-verified 7 Sep 2026** on revision `dona-staging-00039-hps`: seven requests, both
+  refusals at 422 with the right missing terms, the zip at 400, and **three successful filings
+  leaving two objects in `gs://dona-v5-staging-docs` while the two refusals left none** — which is
+  what makes *caught before it is filed* a statement about a bucket rather than about a status code.
+  The lease filed against a second flat added a link and wrote nothing, with the object still under
+  the first flat's path. Every request carried the filename `שכירות כהן.pdf` and it appears in no
+  response, no path and no log. **The boot line stopped being cosmetic here:** before this slice a
+  revision on the memory fallback was merely mislabelled, and from 3.3 it would accept a document,
+  report it filed, write a `storage_uri` and hold the bytes in a process that scales to zero.
 
 ### Slice 3.4 — Drive ingestion, and the bulk review queue — **DEFERRED 6 Sep 2026, not deleted**
 Moved out of week 3 to the pilot-preparation step of the method, with **A10** and with **F4**. Bulk is
