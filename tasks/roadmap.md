@@ -1149,22 +1149,16 @@ per-word confidence.
 The model maps OCR output into the fields **that document type's schema declares**, read from
 `DocumentTypeField` at run time rather than from code. **Two engines, deliberately:** a language
 model asked for coordinates produces plausible coordinates; an OCR engine measures them. Output is a
-generic `ExtractedField` row per value — `(document_id, type_field_id, value, page, bbox, confidence,
-model, schema_version_id)`.
+generic `ExtractedField` row per value — `(document_id, document_type_field_id, value, page, bbox,
+confidence, model)`. **No `schema_version_id`.**
 - **Done when:** adding a field to a document type and re-running extraction produces that field,
   with **no code change and no migration** — and every value's `(page, bbox, confidence)` came from
   the OCR engine, never from the model.
 - **Verify:** add a field to a specimen type mid-test and re-extract; a contract test asserts no bbox
   in the system originates from a model response.
-- **Owed by 3.0 — `type_field_id` and `schema_version_id` above are one column, not two.** E16 is
-  versioned by `effective_from` on the field row itself, so the row *is* the version: an
-  `ExtractedField` pointing at `document_type_field_id` already says which declaration governed it,
-  and there is no separate schema-version entity to point at. Carrying both would be two names for
-  one fact, and the day they disagree is the day a value stops being explicable — which is the entire
-  reason `effective_from` is there.
-- **Owed by 4.1 — staging sweep of `unverified`.** `ocr:sweep` exists; the serving revision does not
-  yet carry the reader. After 4.1 merges, run it as `app-staging` and write the count (zero is a
-  count).
+- **Closed 2026-09-07** ([evidence](evidence/4.2.md)). Pointer-only FK; extra field mid-test; fake
+  model bbox ignored. **419 code + 41 hooks**, policy 44. Staging sweep of week-3 unverified rows
+  did not run (no serving revision) — owned at 4.3.
 - **Deps:** 4.1, 3.1 · **Size:** M
 
 ### Slice 4.3 — Promotion, with provenance — **the governed half of A8**
@@ -1179,6 +1173,8 @@ append-only `TenancyEvent` records old → new, who approved it, and which docum
 - **Verify:** attempt a direct write to a promoted column outside the promotion path; it fails. A
   contract test asserts no policy input, isolation predicate or state-machine guard reads an
   `ExtractedField` value directly (**R9**).
+- **Owed by 4.1 / 4.2 — staging sweep of `unverified`.** After the reader serves, `ocr:sweep` as
+  `app-staging`; write the count (zero is a count).
 - **Deps:** 4.2 · **Size:** M
 
 ### Slice 4.4 — Click a value, see the pixels

@@ -20,15 +20,23 @@ import type { AuditLog } from '../../kernel/audit.ts';
 
 import type { Clock } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
+import type { Extractor } from '../../kernel/extraction.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
 import type { OcrText } from '../../kernel/ocr.ts';
 import type { PdfPage, PdfText } from '../../kernel/pdf.ts';
+import type { WorkRunner } from '../../kernel/work.ts';
 import { documentTypeByKey } from './catalogue.ts';
 import {
   type DocumentSpec,
   ingestDocument,
   linkDocument,
 } from './documents.ts';
+import {
+  EXTRACT_WORK_KIND,
+  extractFiledDocument,
+  numberWords,
+  parseMeasuredWords,
+} from './extract.ts';
 import { ocrAfterFile } from './read.ts';
 import {
   documentContentTypes,
@@ -56,6 +64,10 @@ export interface IntakeDeps {
    */
   ocr?: OcrText;
   ocrVersion?: string;
+  extractor?: Extractor;
+  extractModel?: string;
+  extractReasoningEffort?: string;
+  work?: WorkRunner;
   audit: AuditLog;
   clock: Clock;
   /** The bucket this process is configured for. `storage_uri` names it (slice 3.2). */
@@ -124,6 +136,7 @@ export async function fileDocument(
 
   const pdfPages: PdfPage[] =
     extension === 'pdf' ? await deps.pdf.pages(request.bytes) : [];
+  let pagesForExtract = pdfPages;
   let verification = verifyDeclaredType(
     extension === 'pdf' ? documentText(pdfPages) : null,
     type.verificationTerms,
@@ -219,9 +232,14 @@ export async function fileDocument(
       subjectId: request.place.id,
     });
     if (after) {
-      verification = after;
+      verification = after.verification;
+      if (after.pages.some((page) => page.items.length > 0)) {
+        pagesForExtract = after.pages;
+      }
     }
   }
+
+  await extractAfterFile(deps, filed.id, pagesForExtract);
 
   return {
     filed: true,
@@ -230,6 +248,45 @@ export async function fileDocument(
     storageUri,
     verification,
   };
+}
+
+async function extractAfterFile(
+  deps: IntakeDeps,
+  documentId: string,
+  pages: PdfPage[],
+): Promise<void> {
+  if (!deps.extractor) {
+    return;
+  }
+  const words = numberWords(pages);
+  if (words.length === 0) {
+    return;
+  }
+  const extract: Parameters<typeof extractFiledDocument>[0] = {
+    db: deps.db,
+    extractor: deps.extractor,
+    audit: deps.audit,
+    clock: deps.clock,
+    model: deps.extractModel ?? 'unconfigured',
+    reasoningEffort: deps.extractReasoningEffort,
+  };
+  if (!deps.work) {
+    await extractFiledDocument(extract, { documentId, words });
+    return;
+  }
+  deps.work.register(EXTRACT_WORK_KIND, async (payload) => {
+    await extractFiledDocument(extract, {
+      documentId: String(payload.documentId ?? ''),
+      words: parseMeasuredWords(payload.words),
+    });
+  });
+  await deps.work.schedule({
+    kind: EXTRACT_WORK_KIND,
+    runAt: deps.clock.now(),
+    payload: { documentId, words },
+    intentKey: `extract:${documentId}`,
+  });
+  await deps.work.tick();
 }
 
 /**

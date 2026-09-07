@@ -216,7 +216,10 @@ const PII_COLUMNS = new Set([
 //
 // This set stays small on purpose. A column that needs its table named is a column whose name does
 // not say what it holds, and that is worth noticing rather than automating away.
-const PII_QUALIFIED_COLUMNS = new Set(['party_contact.value']);
+const PII_QUALIFIED_COLUMNS = new Set([
+  'party_contact.value',
+  'extracted_field.value',
+]);
 
 // Two shapes, because a column arrives two ways. A definition inside CREATE TABLE starts the line;
 // an ALTER TABLE ... ADD COLUMN carries the table name in front of it. Both are anchored on a type

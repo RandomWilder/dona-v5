@@ -4,9 +4,11 @@
 // which is why v3's hand-written .env loader (src/dev.ts) is not lifted.
 import { buildApp } from './app.ts';
 import { createPool } from './kernel/db.ts';
+import { createConfiguredExtractor } from './kernel/extraction.ts';
 import { configuredBucket, createConfiguredStore } from './kernel/objects.ts';
 import { createConfiguredOcr } from './kernel/ocr.ts';
 import { createPdfjsText } from './kernel/pdf.ts';
+import { createWorkRunner } from './kernel/work.ts';
 
 const host = process.env.HOST ?? '0.0.0.0';
 const port = Number(process.env.PORT ?? 8080);
@@ -23,6 +25,9 @@ const pool = createPool();
 // version string.
 const objects = createConfiguredStore();
 const ocr = createConfiguredOcr();
+const extractor = createConfiguredExtractor();
+const work = createWorkRunner(pool);
+work.start();
 
 // The deploy stamps the commit it built (slice 1.6). Locally the honest answer is that it is a
 // working copy, not a release.
@@ -34,6 +39,8 @@ const app = buildApp({
   objects,
   pdf: createPdfjsText(),
   ocr,
+  extractor,
+  work,
   bucket: configuredBucket(),
 });
 
@@ -41,3 +48,4 @@ await app.listen({ host, port });
 console.log(`dona-v5: http://127.0.0.1:${port}/health`);
 console.log(`docs: ${objects.describe()}`);
 console.log(`ocr: ${ocr.describe()}`);
+console.log(`extract: ${extractor.describe()}`);

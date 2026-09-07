@@ -664,6 +664,163 @@ describe('the same file ingested twice is one document with two links', () => {
   });
 });
 
+describe('extracted_field — one value, one declaration (A8 open half)', () => {
+  const EXTRACTED_COLUMNS = [
+    'extracted_field_id',
+    'document_id',
+    'document_type_field_id',
+    'value',
+    'page',
+    'bbox',
+    'confidence',
+    'model',
+    'extracted_at',
+  ];
+
+  async function seedField(
+    db: PoolClient,
+    documentTypeId: string,
+    fieldKey = 'apartment_number',
+  ): Promise<string> {
+    const result = await upsertDocumentTypeField(db, {
+      documentTypeId,
+      fieldKey,
+      labelHe: 'מספר הדירה',
+      valueType: 'TEXT',
+      isRequired: true,
+      extractionHint: 'המושכר',
+      effectiveFrom: TODAY,
+      effectiveTo: null,
+    });
+    return result.id;
+  }
+
+  it('has the pointer-only columns and no schema_version_id', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const result = await db.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'extracted_field'
+          ORDER BY ordinal_position`,
+      );
+      assert.deepEqual(
+        result.rows.map((row) => row.column_name),
+        EXTRACTED_COLUMNS,
+      );
+      assert.equal(
+        result.rows.some((row) => row.column_name === 'schema_version_id'),
+        false,
+      );
+      assert.equal(
+        result.rows.some((row) => row.column_name === 'field_key'),
+        false,
+      );
+      assert.equal(
+        result.rows.some((row) =>
+          ['promoted_to', 'promoted_by', 'promoted_at'].includes(
+            row.column_name,
+          ),
+        ),
+        false,
+      );
+    });
+  });
+
+  it('refuses a value whose document or declaration is missing', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const documentTypeId = await seedType(db, { name: 'extract-fk' });
+      const fieldId = await seedField(db, documentTypeId);
+      const documentId = await seedDocument(
+        db,
+        documentTypeId,
+        `${BLOCK}-extract-fk-hash`,
+      );
+
+      await rejects(db, FOREIGN_KEY_VIOLATION, () =>
+        db.query(
+          `INSERT INTO extracted_field (
+             extracted_field_id, document_id, document_type_field_id, value,
+             page, bbox, confidence, model, extracted_at
+           ) VALUES ($1, $2, $3, '14', 1, '{"x":1,"y":2,"width":3,"height":4}',
+                     null, 'fake', $4)`,
+          [newId(), newId(), fieldId, INGESTED_AT],
+        ),
+      );
+      await rejects(db, FOREIGN_KEY_VIOLATION, () =>
+        db.query(
+          `INSERT INTO extracted_field (
+             extracted_field_id, document_id, document_type_field_id, value,
+             page, bbox, confidence, model, extracted_at
+           ) VALUES ($1, $2, $3, '14', 1, '{"x":1,"y":2,"width":3,"height":4}',
+                     null, 'fake', $4)`,
+          [newId(), documentId, newId(), INGESTED_AT],
+        ),
+      );
+    });
+  });
+
+  it('allows two values for the same declaration on one document', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const documentTypeId = await seedType(db, { name: 'extract-two' });
+      const fieldId = await seedField(db, documentTypeId, 'tenant_name');
+      const documentId = await seedDocument(
+        db,
+        documentTypeId,
+        `${BLOCK}-extract-two-hash`,
+      );
+      const bbox = '{"x":1,"y":2,"width":3,"height":4}';
+      await db.query(
+        `INSERT INTO extracted_field (
+           extracted_field_id, document_id, document_type_field_id, value,
+           page, bbox, confidence, model, extracted_at
+         ) VALUES ($1, $2, $3, 'אלון', 1, $4, null, 'fake', $5),
+                  ($6, $2, $3, 'דנה', 1, $4, null, 'fake', $5)`,
+        [newId(), documentId, fieldId, bbox, INGESTED_AT, newId()],
+      );
+      const count = await db.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM extracted_field WHERE document_id = $1`,
+        [documentId],
+      );
+      assert.equal(count.rows[0]?.n, '2');
+    });
+  });
+
+  it('refuses a page below 1 and a bbox that is not the four edges', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const documentTypeId = await seedType(db, { name: 'extract-check' });
+      const fieldId = await seedField(db, documentTypeId);
+      const documentId = await seedDocument(
+        db,
+        documentTypeId,
+        `${BLOCK}-extract-check-hash`,
+      );
+      await rejects(db, CHECK_VIOLATION, () =>
+        db.query(
+          `INSERT INTO extracted_field (
+             extracted_field_id, document_id, document_type_field_id, value,
+             page, bbox, confidence, model, extracted_at
+           ) VALUES ($1, $2, $3, '14', 0, '{"x":1,"y":2,"width":3,"height":4}',
+                     null, 'fake', $4)`,
+          [newId(), documentId, fieldId, INGESTED_AT],
+        ),
+      );
+      await rejects(db, CHECK_VIOLATION, () =>
+        db.query(
+          `INSERT INTO extracted_field (
+             extracted_field_id, document_id, document_type_field_id, value,
+             page, bbox, confidence, model, extracted_at
+           ) VALUES ($1, $2, $3, '14', 1, '{"x":1,"y":2}',
+                     null, 'fake', $4)`,
+          [newId(), documentId, fieldId, INGESTED_AT],
+        ),
+      );
+    });
+  });
+});
+
 describe('the acceptance bar — a new type costs no DDL', () => {
   // 3.1's criterion, still the criterion. The seed now carries ten types (3.5 added
   // `building_handover_protocol` as a row), so the demonstration is a type that is *not* in the
@@ -673,6 +830,7 @@ describe('the acceptance bar — a new type costs no DDL', () => {
     'document_link',
     'document_type',
     'document_type_field',
+    'extracted_field',
   ];
 
   async function schemaSnapshot(db: PoolClient): Promise<string> {

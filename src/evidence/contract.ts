@@ -40,6 +40,21 @@ export {
   updateVerificationVerdict,
 } from './internal/documents.ts';
 export type {
+  BBox,
+  ExtractDeps,
+  ExtractedRow,
+  ExtractReport,
+  MeasuredWord,
+} from './internal/extract.ts';
+export {
+  EXTRACT_WORK_KIND,
+  extractFiledDocument,
+  listExtractedFields,
+  numberWords,
+  parseMeasuredWords,
+  unionBox,
+} from './internal/extract.ts';
+export type {
   IntakeDeps,
   IntakeRequest,
   IntakeResult,

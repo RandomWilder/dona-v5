@@ -361,6 +361,7 @@ const SCREENS: Array<[string, () => string]> = [
             'base64',
           ),
         },
+        extracted: [{ labelHe: 'מספר הדירה', value: '14' }],
       }),
   ],
   [

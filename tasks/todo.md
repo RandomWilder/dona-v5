@@ -33,13 +33,13 @@ A2, A3 and A4 were named on 6 Sep and **sized at week 3's close on 7 Sep** as 4.
 - [x] **`unverified` is a backlog with no reader.** Discharged at 4.1: sweep already-filed documents
       and record how many verdicts moved. Count is on `evidence.file_document` audit lines whose
       `inputs.verdict` is `unverified`. Local: examined 1, verified 1. Staging sweep waits on the
-      4.1 revision — owned at 4.2.
+      revision that carries the reader — owned at 4.3.
 - [x] **A real signed-lease PDF on staging became `unavailable` / unexpected error after ~1 minute.**
       Discharged at 4.1: the reader must bound itself. A file it cannot finish is `invalid` or
       `unverified`, never an uncaught 503, and must not hold the request for a minute to get there.
       The demo used a printed specimen; that was the right call, not a workaround to keep.
       pdfjs **8s**; OCR **20s**. HTTP of a miss is 200 unverified.
-- [ ] **E16 versioning is one column, not two.** Discharged at 4.2: `ExtractedField` points at
+- [x] **E16 versioning is one column, not two.** Discharged at 4.2: `ExtractedField` points at
       `document_type_field_id`. No separate schema-version entity.
 - [ ] **`upsertUnitRow` still writes only a `UNIT` space.** Discharged at 4.6: register-imported
       buildings still have no `PARKING` or `STORAGE` rows. The Shoham fixture already has 60 bays and
@@ -95,28 +95,17 @@ btree — week 12. Session, CSRF, and a cap on upload *count* — week 5. Signed
       the reader (time and memory). Fail closed as `invalid` or file as `unverified`. Record the
       bound in the evidence.
       **Closed 7 Sep** — [evidence/4.1.md](evidence/4.1.md). Processor `eu` /
-      `bd23faa1bd256c46`. Staging backlog sweep owned at 4.2.
+      `bd23faa1bd256c46`. Staging backlog sweep owned at 4.3.
       **Deps:** 3.3 · **M** · **plan mode first** (kernel + evidence)
 
 - [ ] **Staging sweep of already-filed `unverified` rows.** 4.1 built `ocr:sweep` and measured it
-      locally (examined 1, verified 1). The serving revision does not yet carry the reader, so the
-      week-3 staging backlog was not walked. After 4.1 merges, run `npm run ocr:sweep` as
-      `app-staging` and write the count (zero is a count). **4.2.**
+      locally (examined 1, verified 1). Not run at 4.2: no serving revision yet, laptop cannot
+      impersonate `app-staging`. After that revision serves, run `npm run ocr:sweep` as
+      `app-staging` and write the count (zero is a count). **4.3.**
 
-- [ ] **4.2 — Comprehension into the declared schema — the open half of A8.** The model maps OCR
-      output into the fields **that document type's schema declares**, read from `DocumentTypeField`
-      at run time rather than from code. Two engines, deliberately: a language model asked for
-      coordinates produces plausible coordinates; an OCR engine measures them. Output is a generic
-      `ExtractedField` row per value.
-      **Done when:** adding a field to a document type and re-running extraction produces that field,
-      with **no code change and no migration** — and every value's `(page, bbox, confidence)` came
-      from the OCR engine, never from the model.
-      **Verify:** add a field to a specimen type mid-test and re-extract; a contract test asserts no
-      bbox in the system originates from a model response.
-      **Owed by 3.0 — `type_field_id` and `schema_version_id` are one column, not two.** E16 is
-      versioned by `effective_from` on the field row itself.
-      **Owed by 4.1 — staging sweep of `unverified`.** Run `ocr:sweep` as `app-staging` after the
-      4.1 revision serves; write the count (zero is a count).
+- [x] **4.2 — Comprehension into the declared schema — the open half of A8.** **Closed 7 Sep** —
+      [evidence/4.2.md](evidence/4.2.md). Pointer-only `extracted_field`; geometry from the
+      measuring engine; extra field mid-test with no DDL. Staging sweep carried to 4.3.
       **Deps:** 4.1, 3.1 · **M**
 
 - [ ] **4.3 — Promotion, with provenance — the governed half of A8.** Copying an extracted value onto
@@ -130,6 +119,8 @@ btree — week 12. Session, CSRF, and a cap on upload *count* — week 5. Signed
       **Verify:** attempt a direct write to a promoted column outside the promotion path; it fails.
       A contract test asserts no policy input, isolation predicate or state-machine guard reads an
       `ExtractedField` value directly (**R9**).
+      **Owed by 4.1 / 4.2 — staging sweep of `unverified`.** After the revision that includes the
+      reader serves, run `ocr:sweep` as `app-staging` and write the count (zero is a count).
       **Deps:** 4.2 · **M** · **plan mode first** (evidence + tenancy)
 
 - [ ] **4.6 — A2: a lease establishes a draft tenancy.** Extract → propose → **confirm** → write.

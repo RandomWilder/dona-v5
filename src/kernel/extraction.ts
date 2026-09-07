@@ -162,6 +162,16 @@ export function createOpenAiExtractor(
 // empty object, on the argument createUnconfiguredEmbedder makes: a twin with no
 // fields and a twin nobody could read look identical on every screen, and the
 // second one is a lease the system has quietly decided says nothing.
+export function createConfiguredExtractor(
+  env: Record<string, string | undefined> = process.env,
+): Extractor {
+  const apiKey = env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return createUnconfiguredExtractor();
+  }
+  return createOpenAiExtractor({ apiKey });
+}
+
 export function createUnconfiguredExtractor(): Extractor {
   return {
     async extract() {

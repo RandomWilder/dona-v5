@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { type Clock, systemClock } from './clock.ts';
 import { KernelError } from './errors.ts';
 import { newId } from './ids.ts';
@@ -39,7 +39,7 @@ function backoffMs(attempts: number): number {
 }
 
 export function createWorkRunner(
-  pool: Pool,
+  pool: Pool | PoolClient,
   options: WorkOptions = {},
 ): WorkRunner {
   const clock = options.clock ?? systemClock;
@@ -51,6 +51,10 @@ export function createWorkRunner(
 
   // SKIP LOCKED is what makes two runners safe: neither can take the same row.
   async function claim(): Promise<ClaimedRow | undefined> {
+    const kinds = [...handlers.keys()];
+    if (kinds.length === 0) {
+      return undefined;
+    }
     const now = clock.now();
     const result = await pool.query<ClaimedRow>(
       `UPDATE scheduled_work SET
@@ -60,13 +64,14 @@ export function createWorkRunner(
          SELECT id FROM scheduled_work
          WHERE done_at IS NULL
            AND run_at <= $1
+           AND kind = ANY($3)
            AND (locked_until IS NULL OR locked_until <= $1)
          ORDER BY run_at
          FOR UPDATE SKIP LOCKED
          LIMIT 1
        )
        RETURNING id, kind, payload, attempts`,
-      [now, new Date(now.getTime() + lockMs)],
+      [now, new Date(now.getTime() + lockMs), kinds],
     );
     return result.rows[0];
   }
