@@ -463,6 +463,19 @@ than a redirect. And the real addresses arrive here: they go in through `importE
 brings — so the import is re-runnable from the first attempt rather than after the first duplicate.
 **Depends on:** the Priority read-only keys fuse. **Closes:** open question 3 in [plan.md](plan.md).
 
+> **Closed 2026-09-07** ([evidence](evidence/week-2.md)). **Five slices of six**, 2.1 – 2.4 and 2.6;
+> the cut line was never reached. **2.5 moved out of the week on 6 Sep, before it started**, when the
+> project adopted a method that puts the real register at step 4 — so the declared kind was
+> re-declared from *Real data* to **Software** in advance, with four planned build days still on the
+> clock, and F3 left month one's critical path. Demoed off staging at `e6c4375` on **7 Sep**, ten
+> calendar days ahead of the planned window: 1,500 units, 37 buildings, five cities, search, the
+> occupancy chip and Q5, from a **generated** register imported with zero rejects. Search runs in
+> 2.35 ms against a bar of one second. Stakeholder comments were about the UI and none of them block
+> week 3; they are carried to the **M1 checkpoint**, where a design pass either earns a slice or does
+> not. **Open question 3 does not close here** — what the Priority export actually contains is a fact
+> about a file nobody has opened, and it moved to the pilot-preparation step with 2.5 rather than
+> being answered by a register we generated ourselves. 346 tests on every merge, up from 326.
+
 ### Slice 2.1 — Party and PartyContact, temporally dated
 E5 and E6 — 13 columns. `PartyContact` carries `valid_from` / `valid_to` because Israeli mobile
 numbers get recycled, and `language` is a locked field on Party.
@@ -736,6 +749,9 @@ Buildings list, unit grid, search, and the occupancy chip — **derived on every
 ---
 
 ## Week 3 · Sun 20 – Thu 24 Sep — Documents filed against units
+
+> **Started 2026-09-07**, the day week 2 closed, rather than on the planned 20 Sep. The planned
+> dates above are not rewritten; the gap is the record of how the project ran.
 
 **Demo kind:** Software · **You show:** pull a real lease off the Drive, then find it again in four
 seconds. Hashed, dated, attached to unit and tenancy, immutable. Nothing is read yet — this is a
