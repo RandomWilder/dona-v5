@@ -1061,7 +1061,7 @@ Document search and the documents panels on the building and unit screens, group
   when one was chosen, to a letting. **Size:** S
   **Closed 2026-09-07** ([evidence](evidence/3.6.md)). `verification_verdict` on E12, workbook first,
   CHECK/NOT NULL red first. Search extended not forked. Thin unit page. Path is text. **396 code +
-  41 hooks + 44 policy.** Owner still times staging.
+  41 hooks + 44 policy.** Staging `00042-dml` at `6ff6e8f`; owner still times the four seconds.
 
 > **Cut line:** the compliance tab's visual treatment (the query is what matters this week), and the
 > review queue's bulk-approve affordance — one-at-a-time confirmation still proves the design. **Do

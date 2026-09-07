@@ -360,8 +360,9 @@ a known size. [roadmap.md](roadmap.md) owns it at **week 8**, in the same IAM pa
       first, then `0014` / `0015`, CHECK and NOT NULL **red first** (`23514` / `23502`). Search
       extended, not forked: same box, same escape, same `LIMIT` 60. Thin unit page; building page
       lists BUILDING-linked paper only. Path is text, never a signed URL. **396 code + 41 hooks +
-      44 policy.** Verify remaining: owner times the four seconds on staging. Parking/storage on
-      `upsertUnitRow` not closed — week 4 / A2.
+      44 policy.** Staging `dona-staging-00042-dml` at `6ff6e8f`, find-path proved against the 3.3
+      lease. Owner still times the four seconds. Parking/storage on `upsertUnitRow` not closed —
+      week 4 / A2.
 
 ---
 
