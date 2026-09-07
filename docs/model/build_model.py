@@ -582,6 +582,12 @@ f("Document", "drive_file_id", "text", "no", "",
 f("Document", "valid_from", "date", "no", "", "For dated documents: bill period, policy period.", "")
 f("Document", "valid_to", "date", "no", "", "", "")
 f("Document", "ingested_at", "timestamp", "yes", "", "", "")
+f("Document", "verification_verdict", "enum", "yes", "",
+  "verified · unverified · unguarded",
+  "Slice 3.6. The 3.3 guard's result, made a property of a list so a scan does not look identical "
+  "to a lease whose marker terms were found. Not figure 5's state (RECEIVED / EXTRACTED / ACCEPTED / "
+  "REJECTED), which is still omitted: refused uploads still leave no row. 4.1 may later move "
+  "unverified → verified once OCR gives the file a text layer.")
 
 g("E13 · DOCUMENTLINK — one document, several bindings")
 f("DocumentLink", "document_id", "id", "yes", "PK part, FK", "", "")

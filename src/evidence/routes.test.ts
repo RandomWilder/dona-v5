@@ -203,6 +203,31 @@ describe('evidence · the upload route', () => {
       });
 
       await t.test(
+        'the named lease is on the unit page and in search, as text not a link',
+        async () => {
+          const unitPage = await lease.inject({
+            method: 'GET',
+            url: `/estate/units/${unitId}`,
+          });
+          assert.equal(unitPage.statusCode, 200);
+          assert.match(unitPage.body, /חוזה שכירות/);
+          assert.match(unitPage.body, /gs:\/\/dona-v5-test-docs\//);
+          assert.match(unitPage.body, /נמצאו כל הביטויים הקבועים של הטופס/);
+          assert.doesNotMatch(unitPage.body, /href="gs:/);
+          assert.doesNotMatch(unitPage.body, /storage\.googleapis\.com/);
+
+          const found = await lease.inject({
+            method: 'GET',
+            url: `/estate/search?q=${encodeURIComponent('בניין מסמכים')}`,
+          });
+          assert.equal(found.statusCode, 200);
+          assert.match(found.body, /מסמכים/);
+          assert.match(found.body, /חוזה שכירות/);
+          assert.match(found.body, new RegExp(`/estate/units/${unitId}`));
+        },
+      );
+
+      await t.test(
         'refuses an ארנונה bill in the lease slot, and files nothing',
         async () => {
           const response = await arnona.inject({

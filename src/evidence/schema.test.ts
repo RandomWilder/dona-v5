@@ -121,6 +121,7 @@ async function seedDocument(
       driveFileId: null,
       validFrom: null,
       validTo: null,
+      verificationVerdict: 'verified',
     },
     INGESTED_AT,
   );
@@ -438,6 +439,72 @@ describe('E12 · document — one file, hashed at ingest (R17)', () => {
     });
   });
 
+  it('refuses a stored verdict that is not one of the three filed outcomes', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const documentTypeId = await seedType(db, { name: 'verdict' });
+      // `refused` is a door outcome and never a row (3.3). Figure 5's REJECTED is the review
+      // queue and is still not a column. The CHECK is what makes both of those statements true
+      // of every list, not of the caller.
+      for (const verdict of ['refused', 'REJECTED', 'state']) {
+        await rejects(db, CHECK_VIOLATION, () =>
+          db.query(
+            `INSERT INTO document (document_id, document_type_id, storage_uri, file_hash,
+                                   ingested_at, verification_verdict)
+             VALUES ($1, $2, 'gs://x/y.pdf', $3, $4, $5)`,
+            [
+              newId(),
+              documentTypeId,
+              `${BLOCK}-verdict-${verdict}-hash`,
+              INGESTED_AT,
+              verdict,
+            ],
+          ),
+        );
+      }
+    });
+  });
+
+  it('refuses a document with no verification verdict', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const documentTypeId = await seedType(db, { name: 'no-verdict' });
+      await rejects(db, NOT_NULL_VIOLATION, () =>
+        db.query(
+          `INSERT INTO document (document_id, document_type_id, storage_uri, file_hash, ingested_at)
+           VALUES ($1, $2, 'gs://x/y.pdf', $3, $4)`,
+          [newId(), documentTypeId, `${BLOCK}-no-verdict-hash`, INGESTED_AT],
+        ),
+      );
+    });
+  });
+
+  it('lets a verdict change after ingest, because OCR is not a rewrite of the file', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const documentTypeId = await seedType(db, { name: 'ocr-later' });
+      const filed = await ingestDocument(
+        db,
+        {
+          documentTypeId,
+          storageUri: 'gs://dona-v5-docs/x/scan.pdf',
+          fileHash: `${BLOCK}-ocr-later-hash`,
+          driveFileId: null,
+          validFrom: null,
+          validTo: null,
+          verificationVerdict: 'unverified',
+        },
+        INGESTED_AT,
+      );
+      // 4.1 will move unverified → verified once a scan has a text layer. The immutability
+      // trigger names file_hash and storage_uri and nothing else, which is the claim.
+      await db.query(
+        `UPDATE document SET verification_verdict = 'verified' WHERE document_id = $1`,
+        [filed.id],
+      );
+    });
+  });
+
   it('refuses a validity window that ends before it starts', async (t) => {
     if (!pool) return t.skip(skipReason);
     await inRolledBackTransaction(pool, async (db) => {
@@ -452,6 +519,7 @@ describe('E12 · document — one file, hashed at ingest (R17)', () => {
             driveFileId: null,
             validFrom: '2026-12-31',
             validTo: '2026-01-01',
+            verificationVerdict: 'verified',
           },
           INGESTED_AT,
         ),
@@ -557,6 +625,7 @@ describe('the same file ingested twice is one document with two links', () => {
         driveFileId: null,
         validFrom: null,
         validTo: null,
+        verificationVerdict: 'verified' as const,
       };
 
       // Two administrators, two units, one file — or the same administrator filing twice. The

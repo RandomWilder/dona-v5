@@ -38,7 +38,11 @@ workbook a specification rather than a description.
   *the same file filed twice is one document with two links* a property of the database rather than a
   habit of the caller. `file_hash` and `storage_uri` are **immutable after insert**, enforced by the
   `document_is_immutable` trigger — the first trigger in this repository, and it is here because
-  "immutable thereafter" is otherwise a comment.
+  "immutable thereafter" is otherwise a comment. **`verification_verdict`** is the 3.3 guard's
+  result, stored so a list can show it without re-reading the bytes (`verified` · `unverified` ·
+  `unguarded`). It is not figure 5's `state` and is not on the immutability trigger: slice 4.1 may
+  later move `unverified` to `verified` once OCR gives the file a text layer. `refused` still writes
+  no row.
 - **`document_link`** — E13. R13: one document binds to many entities, so the binding is its own row.
   `entity_id` carries **no foreign key**, which is the price of not having six nullable ones on
   `document`; `entity_type` is checked against the workbook's eight kinds and the pair is half the
@@ -191,6 +195,37 @@ ever have, so a document with no tenancy link is an ordinary case and not a gap.
 - **Ingest is idempotent on `file_hash`**, and linking is idempotent on the primary key. Filing the
   same file against a second entity adds a link and never a document.
 - **`ingested_at` comes from the injected clock**, never `DEFAULT now()`.
+- **A list of what is filed never mints a signed URL.** `listLinkedDocuments` and `searchDocuments`
+  return the `gs://` path as text. A signed URL is a bearer token for one object: whoever holds the
+  string reads the document, isolation join or not, so issuing one belongs behind a session (week 5).
+
+## Finding a document — slice 3.6
+
+The week's demo is a named lease on screen within four seconds of deciding to look for it. Two
+reads, both here, because the paper is this module's.
+
+**`listLinkedDocuments(entityType, entityId)`** is the panel's query. It uses the
+`document_link_entity` index 3.1 wrote for this access path. Distinct on `document_id`, so a lease
+bound to the unit *and* the tenancy is one row, not two. Ordered by type then ingest date, which is
+how the panel groups without a second query. Unit A's paper does not appear on unit B.
+
+**`searchDocuments(term)`** is the documents half of `/estate/search`. It extends that screen rather
+than forking a second one: same `LIMIT` (60, fetching one past so the list can say it was cut off),
+same LIKE-escape at the edge (`%` and `_` are text). It matches type labels, a unit number, a
+building name or address — **never a city** (same asymmetry as estate's unit search), **never a
+party**, **never a filename** (none is stored), **never the file's text** (that is week 4's
+retrieval). Estate composes the two searches at the route; this module does not import estate's
+search, and estate does not import this one — `app.ts` injects both.
+
+**The panel shows type, dates, ingest date, the `gs://` path as text, and the verdict.** A scan
+nobody has read yet (`unverified`) must not look identical to a lease whose marker terms were all
+found (`verified`). The confirmation screen already said this in words; the panel is where it
+becomes a property of a list, which is why `verification_verdict` is a column rather than a scrape
+of `audit_log`. Audit is who-did-what JSON and is the wrong read model for a card.
+
+Building-level paper (`entity_type = BUILDING`, the handover protocol) lists on the building page.
+Unit paper lists on the unit page. Grouping is by type heading; a flat list still finds the lease,
+and that is the week's cut line.
 
 ## Seeding the catalogue — data, not a migration
 
@@ -244,6 +279,8 @@ All four are nullable `ADD COLUMN`s when they come.
   second state machine standing beside `calls`' real one (foundation rule 3). **Slice 3.3 decided it
   and the answer is still no column**: a refused upload leaves no row at all, and what someone tried
   to file and when is an `audit_log` line — see "A refused upload leaves no row" above.
+  **`verification_verdict` is a different column**, added at 3.6: the three filed outcomes of the
+  door guard, not the review-queue vocabulary, and `refused` is still not a row.
 - **`superseded_by`** — [SPEC-flows.md](SPEC-flows.md) invariant 2 already moved this: an addendum is
   not patching a document, it is contributing a value to a tenancy, so supersession is a fact about
   **values** and lives with their provenance (4.2, 4.3). A genuinely re-issued document — a corrected

@@ -25,6 +25,10 @@ import {
   MEASURED_QUERIES,
   searchEstate,
 } from '../src/estate/contract.ts';
+import {
+  MEASURED_QUERIES as EVIDENCE_QUERIES,
+  searchDocuments,
+} from '../src/evidence/contract.ts';
 import { createPool } from '../src/kernel/db.ts';
 import {
   ISOLATION_JOIN_SQL,
@@ -160,6 +164,10 @@ async function main(pool: Pool): Promise<void> {
         const found = await searchEstate(db, term);
         return found.buildings.length + found.units.length;
       });
+      await time(`evidence · search documents "${term}"`, async () => {
+        const found = await searchDocuments(db, term);
+        return found.documents.length;
+      });
     }
     await time('estate · Q5, leases ending in 60 days', async () => {
       const rows = await listExpiringLeases(db, today);
@@ -228,6 +236,12 @@ async function main(pool: Pool): Promise<void> {
       db,
       'estate · search, units',
       MEASURED_QUERIES['estate · search, units'],
+      ['%רקפת%', 61],
+    );
+    await explain(
+      db,
+      'evidence · search, documents',
+      EVIDENCE_QUERIES['evidence · search, documents'],
       ['%רקפת%', 61],
     );
     await explain(

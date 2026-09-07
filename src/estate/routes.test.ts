@@ -66,6 +66,7 @@ describe('estate · the routes', () => {
     }
     const app = buildApp({ pool, version: '9.9.9-test' });
     let buildingId = '';
+    let unitId = '';
     try {
       await importEstate(pool, plan);
       const found = await pool.query<{ building_id: string }>(
@@ -73,6 +74,13 @@ describe('estate · the routes', () => {
         [CITY, ADDRESS],
       );
       buildingId = found.rows[0].building_id;
+      const unit = await pool.query<{ unit_id: string }>(
+        `SELECT u.unit_id FROM unit u
+         JOIN space s ON s.space_id = u.unit_id
+        WHERE s.building_id = $1`,
+        [buildingId],
+      );
+      unitId = unit.rows[0]?.unit_id ?? '';
 
       // 1.11 made the root a 302 to `/estate` and said it would stop being one the week a second
       // screen existed. Slice 2.6 is that week, and this case is the redirect's obituary: it asserts
@@ -111,7 +119,27 @@ describe('estate · the routes', () => {
         assert.equal(response.statusCode, 200);
         assert.match(response.body, /דירה <span dir="ltr">12A<\/span>/);
         assert.match(response.body, /ממ״ד/);
+        assert.match(response.body, new RegExp(`/estate/units/${unitId}`));
+        assert.match(response.body, /מסמכי הבניין/);
       });
+
+      await t.test(
+        'the unit screen is a thin sheet with a documents panel',
+        async () => {
+          const response = await app.inject({
+            method: 'GET',
+            url: `/estate/units/${unitId}`,
+          });
+          assert.equal(response.statusCode, 200);
+          assert.match(response.body, /דירה <span dir="ltr">12A<\/span>/);
+          assert.match(response.body, /מסמכים/);
+          assert.match(response.body, /אין מסמכים בתיק זה עדיין/);
+          assert.match(
+            response.body,
+            new RegExp(`/documents/new\\?unit=${unitId}`),
+          );
+        },
+      );
 
       await t.test('the stylesheet the screens link to is served', async () => {
         const response = await app.inject({
@@ -206,6 +234,14 @@ describe('estate · the routes', () => {
           assert.equal(missing.json().code, 'not_found');
           // The refusal says not_found and nothing more (SPEC.md error shape).
           assert.equal(missing.json().message, 'building not found');
+
+          const missingUnit = await app.inject({
+            method: 'GET',
+            url: '/estate/units/11111111-1111-4111-8111-111111111111',
+          });
+          assert.equal(missingUnit.statusCode, 404);
+          assert.equal(missingUnit.json().code, 'not_found');
+          assert.equal(missingUnit.json().message, 'unit not found');
         },
       );
     } finally {

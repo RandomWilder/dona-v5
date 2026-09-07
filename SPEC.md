@@ -271,13 +271,15 @@ also stopped running looks identical in a green summary. Every other module spec
 build week ([tasks/roadmap.md](tasks/roadmap.md)), and a stub gaining content is the signal its build
 started.
 
-**The application serves screens from 1.11 and five routes from 2.6**: an index at `/`, the buildings
-list, one building, `/estate/search` and `/estate/expiring` — server-rendered Hebrew RTL off
+**The application serves screens from 1.11 and six estate routes from 3.6**: an index at `/`, the buildings
+list, one building, one unit, `/estate/search` and `/estate/expiring` — server-rendered Hebrew RTL off
 `/ui/tokens.css`, with no client JavaScript and — until staff auth lands in week 5 — **no
 authentication**. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
 physical side or a `<script>`, and from 2.6 also on a phone number or an E.164 prefix: what an
 unauthenticated screen may say about a household is **a state and a count, never a name**, so the
-occupancy chip is derived on every load and search never reaches `party`. The fixtures that fill the
+occupancy chip is derived on every load and search never reaches `party`. Slice 3.6 lets the same
+screens show what is filed — type, dates, path as text, verdict — and still not who signed it, and
+never a link to the bytes. The fixtures that fill the
 screens are ours and designed for coverage — the Shoham plan from 1.11 and, from 2.6, a **generated
 register at 1,500 units** loaded through the real importer (`npm run seed:register`), which is where
 the week-2 query timings come from. Real data arrives through the same importer at the pilot-
@@ -347,7 +349,8 @@ natural keys and its per-row rejects 2.4 · the portfolio-scale surface, the gen
 the two index decisions 2.6 · the document-type catalogue in the workbook 3.0 · the evidence schema,
 its catalogue commands and the nine-type seed 3.1 · the object path convention, the docs bucket's
 four controls and the proved delete refusal 3.2 · the declared-type upload, its verification guard
-and the first write route 3.3 · Asset, the Provider stub, Q3 and Q7, and flow A6 3.5.**
+and the first write route 3.3 · Asset, the Provider stub, Q3 and Q7, and flow A6 3.5 · document
+search and the documents panels, with the guard verdict stored on the row 3.6.**
 Production exists and has been released to — `v0.1.0`–`v0.1.2`, rolled back and rolled forward on
 purpose — and is then **parked until week 12**: the Cloud SQL instance is stopped and the service
 scaled to zero, so `dona-prod` answers 503 by design and staging is the delivered artifact every

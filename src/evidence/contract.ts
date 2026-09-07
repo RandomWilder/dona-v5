@@ -28,6 +28,7 @@ export {
 export type {
   DocumentLinkSpec,
   DocumentSpec,
+  FiledVerdict,
   LinkEntityType,
   LinkRole,
 } from './internal/documents.ts';
@@ -42,6 +43,17 @@ export type {
   IntakeResult,
 } from './internal/intake.ts';
 export { fileDocument, findDocumentByHash } from './internal/intake.ts';
+export type {
+  DocumentHit,
+  DocumentSearchResults,
+  LinkedDocument,
+} from './internal/list.ts';
+export {
+  listLinkedDocuments,
+  MEASURED_QUERIES,
+  SEARCH_LIMIT,
+  searchDocuments,
+} from './internal/list.ts';
 export type { HandoverProposal, ProposedAsset } from './internal/protocol.ts';
 export { isProtocolType, readHandoverProposal } from './internal/protocol.ts';
 export type { DocumentDeps } from './internal/routes.ts';
