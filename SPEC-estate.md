@@ -5,12 +5,13 @@ repeated here. The column lists below are the workbook's FIELDS sheet ([docs/mod
 which is a specification and not a description; where this file and the workbook disagree, the
 workbook is right and this file is a bug.
 
-- **Owns:** E1–E4, E11 — Project · Building · Space · Unit · Asset.
+- **Owns:** E1–E4, E11, E14 — Project · Building · Space · Unit · Asset · Provider (stub).
 - **Depends on:** kernel.
 - **Built:** Project · Building · Space · Unit at week 1, slice 1.9; the natural keys, the importer
   and the first two screens at slice 1.11; `upsertUnitRow` for the register importer at slice 2.4;
   the portfolio-scale surface — search, Q5, the occupancy chip and the root index — at slice 2.6.
-  Asset at week 3, slice 3.5, seeded from handover protocols.
+  Asset at week 3, slice 3.5, seeded from handover protocols. The E14 Provider stub landed in the
+  same migration so R11 has a table to point at.
 
 ## The shape, and why it is this one
 
@@ -27,7 +28,7 @@ avoids both.
 **Project sits above Building and is optional** (R15). `Building.project_id` is nullable and nothing
 downstream requires it; `project_code` lives on Project, so the tender code has one home.
 
-## Tables — `src/kernel/migrations/0004_estate.sql`
+## Tables — `src/kernel/migrations/0004_estate.sql` and `0012_assets.sql`
 
 The workbook's 28 columns, plus what enforcement needs — `address_key` on Building and the three
 constant discriminators on Unit, none of which carry a fact. Ids are `uuid`, enums are `text` with a
@@ -40,10 +41,16 @@ written by anything but the injected clock is a second source of truth no test c
 | `building` | `building_id` PK · `name` · `address_line` · `city` · `project_id?` FK → project · `handover_date` · `warranty_end_date` · `status` · `address_key` generated, UNIQUE |
 | `space` | `space_id` PK · `building_id` FK → building · `space_kind` · `name` · `floor?` · `access_note?` |
 | `unit` | `unit_id` PK, FK → space · `unit_number` · `rooms` · `area_sqm?` · `has_mamad` · `parking_space_id?` · `storage_space_id?` · `warranty_end_date?` · `condition_status` |
+| `provider` | `provider_id` PK · `name` · `provider_kind` — E14, stub only. Present so R11 is resolvable. Everything else about providers waits. |
+| `asset` | `asset_id` PK · `space_id` FK → space, NOT NULL · `asset_class` · `asset_type` · `make_model?` · `serial_no?` · `installed_date?` · `warranty_end_date?` · `warranty_provider_id?` FK → provider · `compliance_regime` · `next_inspection_due?` · `last_certificate_document_id?` FK → document · `source_document_id?` FK → document · `status` |
 
 Vocabularies: `project.status` = `PLANNING · ACTIVE · EXITED`; `building.status` = `ACTIVE ·
 IN_CONSTRUCTION · EXITED`; `space.space_kind` = `UNIT · COMMON · TECHNICAL · EXTERIOR · PARKING ·
-STORAGE`; `unit.condition_status` = `READY · RENOVATION · WITHHELD`.
+STORAGE`; `unit.condition_status` = `READY · RENOVATION · WITHHELD`; `provider.provider_kind` =
+`IN_HOUSE_CREW · CONTRACTOR · DEVELOPER_WARRANTY`; `asset.asset_class` = `FIXTURE · SAFETY ·
+UTILITY`; `asset.compliance_regime` = `NONE · PERIODIC_INSPECTION`; `asset.status` = `IN_SERVICE ·
+FAULTY · REMOVED`. `asset_type` is the governed list on the FIELDS sheet, and a composite CHECK
+binds each type to one class so a SAFETY sprinkler cannot be filed as a FIXTURE.
 
 `unit_number` is text, not a number — `12A` exists. `rooms` is numeric because the Israeli
 convention is 3, 3.5, 4. `handover_date` starts תקופת הבדק and `warranty_end_date` ends it; a unit
@@ -68,6 +75,39 @@ The same composite-key technique constrains `parking_space_id` to a `PARKING` sp
 `storage_space_id` to a `STORAGE` one (workbook decision D3 — bays and storage rooms are Space rows,
 so they can hold a gate motor and receive service calls). Both are nullable, and `MATCH SIMPLE`
 leaves the foreign key unenforced when the id is null, which is precisely the unassigned case.
+
+## Asset — E11, slice 3.5, `src/kernel/migrations/0012_assets.sql`
+
+Fourteen columns, the widest entity in the workbook, and every one of them is on the FIELDS sheet.
+`space_id` is `NOT NULL` with an FK — R3, and it is what makes responsibility fall out of location.
+`asset_type` is a CHECK against a governed list, not a catalogue row, because the responsibility
+matrix keys on it (foundation rule 8). The class/type pair is a composite CHECK: a type belongs to
+exactly one class, so a `SAFETY` sprinkler cannot be filed as a `FIXTURE`.
+
+`serial_no` is identifier-shaped and about a thing, not a person, and carries `-- not-pii:` so the
+guard has a sentence to read. `warranty_provider_id` points at the E14 stub (R11).
+`source_document_id` points at the handover protocol that created the row (R12).
+`last_certificate_document_id` points at the most recent inspection certificate. Both document
+columns are nullable: an asset can exist before its paper does, which is the lazy-fill path the
+published Data Model already named.
+
+The index is `asset (space_id)`, for the join Q3 and Q7 both take. An index on `next_inspection_due`
+is deferred to a measurement: 2.6's precedent is that an index is decided at a row count with a
+timing in front of it.
+
+**R14 lives on Unit and Building, and Asset may override it further.** `building.warranty_end_date`
+is the default; `unit.warranty_end_date` is the override when a flat was handed over separately; an
+asset replaced under claim can carry its own. Flow A6 writes the first two from the two handover
+protocols; an asset-level override is a later write.
+
+**Q3 and Q7 are each one query** in `src/estate/internal/read-model.ts`, with `today` a parameter
+and never `CURRENT_DATE`. There is no screen for them this week: the compliance tab's visual
+treatment is on the week's cut line, and the acceptance bar is the query. Both strings sit in
+`MEASURED_QUERIES` so `measure:scale` times what would run.
+
+**The E14 Provider stub** is three columns — `provider_id`, `name`, `provider_kind` — and a unique
+on `name` so a seed can be run twice. It lives in estate because R11 is an Asset fact and a second
+module for three columns would be a cycle looking for a home. Everything else about providers waits.
 
 ## The natural keys — `src/kernel/migrations/0005_estate_natural_keys.sql`
 
@@ -128,6 +168,11 @@ read.
 
 **`GET /estate/expiring` is Q5** — every ACTIVE lease in the portfolio ending inside sixty days, one
 indexed query, ordered by date. It shows a unit, a building and a date and **no party at all**.
+
+**Q3 (what is overdue for inspection in this building) and Q7 (which bay is assigned to unit 12,
+and who serviced its gate motor)** landed as queries at 3.5, not as screens. Q3 is `Space → Asset
+where next_inspection_due < today`. Q7 is `Unit.parking_space_id → Space → Asset`. Both are one
+statement because every asset hangs on exactly one space.
 
 It asks *when a lease ends*, which is not the same question as whether a tenancy counts today, and
 that is why it lives here rather than in `src/scope/`. The isolation join's tenancy-active predicate

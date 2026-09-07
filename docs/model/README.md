@@ -73,7 +73,11 @@ These are the parts that must survive contact with code.
 - **Ternary responsibility under תקופת הבדק** is driven by `Asset.warranty_end_date` →
   `asset_in_warranty`, with `warranty_provider_id` naming who owes the fix.
 - **`asset_type` is guarded, not admin-editable** — the responsibility matrix keys on it, so editing
-  it edits policy. The settings sheet says so explicitly.
+  it edits policy. The settings sheet says so explicitly. The list itself is enumerated on the
+  FIELDS sheet (slice 3.5): FIXTURE `AC · WATER_HEATER · OVEN · BLINDS · PLUMBING`; SAFETY
+  `EXTINGUISHER · SPRINKLER · SMOKE_DETECTOR · EMERGENCY_LIGHT · MAMAD_BLAST_DOOR`; UTILITY
+  `PUMP · ELEVATOR · BOILER · GATE_MOTOR · INTERCOM · METER`. A composite CHECK on the class/type
+  pair stops a SAFETY sprinkler being filed as a FIXTURE.
 - **Document types are a catalogue, not an enum** (`DocumentType` E15, `DocumentTypeField` E16, R17,
   R18). A new type is a row and a new field is a row — no migration, no deploy — and
   `DocumentTypeField` is versioned by `effective_from` so a value extracted under an older schema

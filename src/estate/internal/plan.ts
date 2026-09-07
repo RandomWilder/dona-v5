@@ -67,10 +67,59 @@ export interface BuildingPlan {
   status: BuildingStatus;
   spaces: SpacePlan[];
   units: UnitPlan[];
+  /** Optional: a plan with no assets is the ordinary 1.11 shape. */
+  assets?: AssetPlan[];
+}
+
+export type AssetClass = 'FIXTURE' | 'SAFETY' | 'UTILITY';
+export type AssetType =
+  | 'AC'
+  | 'WATER_HEATER'
+  | 'OVEN'
+  | 'BLINDS'
+  | 'PLUMBING'
+  | 'EXTINGUISHER'
+  | 'SPRINKLER'
+  | 'SMOKE_DETECTOR'
+  | 'EMERGENCY_LIGHT'
+  | 'MAMAD_BLAST_DOOR'
+  | 'PUMP'
+  | 'ELEVATOR'
+  | 'BOILER'
+  | 'GATE_MOTOR'
+  | 'INTERCOM'
+  | 'METER';
+export type ComplianceRegime = 'NONE' | 'PERIODIC_INSPECTION';
+export type AssetStatus = 'IN_SERVICE' | 'FAULTY' | 'REMOVED';
+export type ProviderKind =
+  | 'IN_HOUSE_CREW'
+  | 'CONTRACTOR'
+  | 'DEVELOPER_WARRANTY';
+
+export interface ProviderPlan {
+  name: string;
+  kind: ProviderKind;
+}
+
+export interface AssetPlan {
+  spaceKind: SpaceKind;
+  spaceName: string;
+  assetClass: AssetClass;
+  assetType: AssetType;
+  makeModel: string | null;
+  serialNo: string | null;
+  installedDate: string | null;
+  warrantyEndDate: string | null;
+  warrantyProviderName: string | null;
+  complianceRegime: ComplianceRegime;
+  nextInspectionDue: string | null;
+  status: AssetStatus;
 }
 
 export interface EstatePlan {
   projects: ProjectPlan[];
+  /** E14 stub rows. Optional: a plan with no providers is the ordinary 1.11 shape. */
+  providers?: ProviderPlan[];
   buildings: BuildingPlan[];
 }
 
@@ -124,4 +173,6 @@ export interface ImportReport {
   building: TableCount;
   space: TableCount;
   unit: TableCount;
+  provider: TableCount;
+  asset: TableCount;
 }

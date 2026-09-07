@@ -38,12 +38,16 @@ the workbook is the anti-pattern this project has already named once.
 
 ## Carried in from week 2 — every item, with the slice that closes it
 
-- [ ] **The register-derived handover dates are placeholders, and they are on screen.** Every
-      building card on `/estate` shows a מסירה date that is one of its leases' start dates, because
-      the last row of a building wins the upsert and the register format carries no handover date.
-      תקופת הבדק starts at handover, not at a letting, so `warranty_end_date` is currently a guess and
-      responsibility is ternary on a guess. **Owned by 3.5**, which brings the real fact off the
-      handover protocol — and says in its evidence **how many buildings had one**.
+- [x] **The register-derived handover dates are placeholders, and they are on screen.** Discharged
+      at 3.5: every building that arrived through the register importer had one — **2 of 2** in the
+      nine-row fixture, **37 of 37** in the generated 1,500-unit register — because a register
+      carries no handover date. The Shoham plan's one building is not a placeholder (2025-03-01 was
+      authored). Flow A6 writes the real date from a confirmed `building_handover_protocol`.
+      [evidence/3.5.md](evidence/3.5.md).
+      **Still open, owned here and carried to 3.6's week-end if not closed:** `upsertUnitRow` still
+      writes only a `UNIT` space, so register-imported buildings still have no `PARKING` or
+      `STORAGE` rows. The Shoham fixture already has 60 bays and 40 rooms; the gap is the register
+      path, which a protocol cannot fill until those spaces exist.
 - [x] **The demo-day discrepancy — discharged at 3.0, and the carry was describing something that had
       already been fixed.** 3.0 edits `docs/model/`, so it inherited this. The claim was that
       [pipeline.md](../docs/pipeline.md) §7 says the demo kind is declared **Monday**. It does not,
@@ -307,7 +311,7 @@ a known size. [roadmap.md](roadmap.md) owns it at **week 8**, in the same IAM pa
       queue** puts a human between the proposal and the filing. Bulk becomes meaningful at step 4,
       when volume arrives.
 
-- [ ] **3.5 — Assets, seeded from handover protocols.** E11 — 14 columns, the widest entity in the
+- [x] **3.5 — Assets, seeded from handover protocols.** E11 — 14 columns, the widest entity in the
       workbook. `Asset.space_id` as a single non-null FK, `warranty_end_date` and
       `warranty_provider_id` for תקופת הבדק, `source_document_id` so each asset remembers the page it
       came from, `compliance_regime` for the inspection tab. **`asset_type` is guarded, not
@@ -323,6 +327,14 @@ a known size. [roadmap.md](roadmap.md) owns it at **week 8**, in the same IAM pa
       `handover_protocol` is one of the nine seeded types, declaring `handover_date` and
       `apartment_number` — `handover_date` being the field that turns the placeholder מסירה dates
       into a fact. **Deps:** 3.1, 1.9 · **M**
+      **Closed 2026-09-07** ([evidence](evidence/3.5.md)). `0012_assets.sql` — E14 stub then E11's
+      fourteen columns — plus `0013` for the natural key `UNIQUE (space_id, asset_type)`. Q3 and Q7
+      each one query against the Shoham fixture. Flow A6: two protocols, because operator-to-tenant
+      is not developer-to-operator; the tenth type `building_handover_protocol` is a seed row. The
+      confirm page recomputes from stored bytes, no staging table. Placeholder count: **2/2** and
+      **37/37** register buildings, **0/1** fixture. **384 code + 41 hooks green.** Raised and
+      owned: parking/storage on `upsertUnitRow` (still this week) · the inspection-date index
+      (measurement) · A2's staging shape (week 4).
 
 - [ ] **3.6 — Find it in four seconds.** Document search and the documents panels on the building and
       unit screens, grouped by type.

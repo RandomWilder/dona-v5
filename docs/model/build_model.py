@@ -534,9 +534,14 @@ f("Asset", "asset_class", "enum", "yes", "",
   "SAFETY = extinguisher, sprinkler, smoke detector, emergency light. UTILITY = pump, elevator, "
   "boiler, gate motor, intercom.")
 f("Asset", "asset_type", "enum", "yes", "",
-  "The specific kind, from a controlled list.",
+  "FIXTURE: AC · WATER_HEATER · OVEN · BLINDS · PLUMBING. "
+  "SAFETY: EXTINGUISHER · SPRINKLER · SMOKE_DETECTOR · EMERGENCY_LIGHT · MAMAD_BLAST_DOOR. "
+  "UTILITY: PUMP · ELEVATOR · BOILER · GATE_MOTOR · INTERCOM · METER.",
   "This is the field the responsibility matrix keys on. It must be a list, never free text — and "
-  "unlike obligation types, this list is governed, not admin-editable. Editing it edits policy.")
+  "unlike obligation types, this list is governed, not admin-editable. Editing it edits policy. "
+  "The pairs are the workbook's own class examples, enumerated rather than left as prose, because "
+  "a governed list that is nowhere written down is not governed. A composite CHECK on the pair "
+  "stops a SAFETY sprinkler being filed as a FIXTURE.")
 f("Asset", "make_model", "text", "no", "", "", "")
 f("Asset", "serial_no", "text", "no", "", "", "")
 f("Asset", "installed_date", "date", "no", "", "", "")

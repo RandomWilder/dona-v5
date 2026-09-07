@@ -39,7 +39,7 @@ function corpusFiles(): { name: string; text: string }[] {
 
 describe('the tier-1 corpus', () => {
   it('is loaded from the files, and every file contributes clauses', () => {
-    assert.equal(specimenDocuments.length, 6);
+    assert.equal(specimenDocuments.length, 7);
     for (const document of specimenDocuments) {
       assert.ok(
         document.clauses.length > 0,

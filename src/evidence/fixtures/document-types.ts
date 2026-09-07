@@ -6,11 +6,12 @@
 // tenth a migration too, and the bar would have been false the day it was written. So the catalogue
 // is seeded by `npm run seed:doctypes`, which is wired into no workflow (src/seed.ts's reason).
 //
-// **Nine types, not eight, and the difference is deliberate.** The published Data Model names eight;
+// **Ten types, not eight, and the difference is deliberate.** The published Data Model names eight;
 // `inspection_certificate` has been in the workbook since 3 Sep because SAFETY assets and the
-// compliance tab need it, and slice 3.5 needs it this week. Holding a type the system already
-// requires out of the seed so that a demonstration lands on the number nine would be a knowingly
-// incomplete seed dressed as a proof. The mechanism is proved on a **tenth**, added inside a test.
+// compliance tab need it. Slice 3.5 added `building_handover_protocol` as the tenth — a seed row,
+// not a migration — because the unit-level protocol is operator-to-tenant and the building's
+// מסירה date is developer-to-operator. The mechanism is still proved on a type that is *not* in
+// the seed, added inside a test.
 //
 // **The fields are the extraction target list and not where answers land** (SPEC-flows.md invariant
 // 3). They are declared for the types week 4's comprehension reads first — lease and lease_amendment
@@ -180,14 +181,31 @@ export const seedDocumentTypes: SeedDocumentType[] = [
       verificationTerms: ['פרוטוקול', 'מצב המושכר', 'מונה מים'],
       isActive: true,
     },
-    // Slice 3.5 reads these. `handover_date` is the fact that discharges week 2's carried item: the
-    // מסירה dates on every building card are currently one of the building's lease start dates,
-    // because the register carries no handover date — and תקופת הבדק starts at handover, so
-    // `warranty_end_date` and a ternary responsibility decision are resting on a guess until this
-    // field is filled from this document.
+    // Slice 3.5 reads these. `handover_date` is the fact that dates the *flat* (R14's override on
+    // `unit.warranty_end_date`). The building's מסירה date is a different act and a different
+    // type — `building_handover_protocol` below — because operator-to-tenant is not
+    // developer-to-operator.
     fields: [
       field('handover_date', 'מועד המסירה', 'DATE', true, 'מועד המסירה'),
       field('apartment_number', 'מספר הדירה', 'TEXT', true, 'המושכר'),
+    ],
+  },
+  {
+    type: {
+      typeKey: 'building_handover_protocol',
+      labelHe: 'פרוטוקול מסירת בניין',
+      labelEn: 'Building handover protocol',
+      // Three terms that a unit-level protocol and a lease both lack: this is the developer
+      // handing the *building* to the operator, so מסירת הבניין, מהיזם and מערכות הבניין are
+      // the printed language that separates it. Slice 3.3's lesson — terms from the document,
+      // not from the form's name — applied on the first type added after that lesson.
+      verificationTerms: ['מסירת הבניין', 'מהיזם', 'מערכות הבניין'],
+      isActive: true,
+    },
+    // The field that discharges week 2's carried item: every register-imported building currently
+    // shows a מסירה date that is one of its leases' start dates.
+    fields: [
+      field('handover_date', 'מועד המסירה', 'DATE', true, 'מועד המסירה'),
     ],
   },
   {

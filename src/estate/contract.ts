@@ -1,15 +1,32 @@
 // The estate module's public surface. Other modules, the composition root and the tests import this
 // file and never internal/ (AGENTS.md).
 
+export type {
+  ProposedAsset,
+  ProtocolSeed,
+  ProtocolSeedResult,
+} from './internal/assets.ts';
+export {
+  addCalendarYears,
+  applyProtocolSeed,
+  WARRANTY_YEARS,
+} from './internal/assets.ts';
 export { importEstate, upsertUnitRow } from './internal/importer.ts';
 export type {
+  AssetClass,
+  AssetPlan,
+  AssetStatus,
+  AssetType,
   BuildingPlan,
   BuildingStatus,
+  ComplianceRegime,
   ConditionStatus,
   EstatePlan,
   ImportReport,
   ProjectPlan,
   ProjectStatus,
+  ProviderKind,
+  ProviderPlan,
   Queryable,
   SpaceKind,
   SpacePlan,
@@ -22,9 +39,11 @@ export type {
   BuildingDetail,
   BuildingSummary,
   ExpiringLease,
+  OverdueInspection,
   SearchResults,
   SpaceKindCount,
   UnitHit,
+  UnitParkingAsset,
   UnitRow,
 } from './internal/read-model.ts';
 export {
@@ -34,6 +53,8 @@ export {
   getUnit,
   listBuildings,
   listExpiringLeases,
+  listOverdueInspections,
+  listUnitParkingAssets,
   MEASURED_QUERIES,
   SEARCH_LIMIT,
   searchEstate,

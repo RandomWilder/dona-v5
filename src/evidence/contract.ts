@@ -31,15 +31,26 @@ export type {
   LinkEntityType,
   LinkRole,
 } from './internal/documents.ts';
-export { ingestDocument, linkDocument } from './internal/documents.ts';
+export {
+  getFiledDocument,
+  ingestDocument,
+  linkDocument,
+} from './internal/documents.ts';
 export type {
   IntakeDeps,
   IntakeRequest,
   IntakeResult,
 } from './internal/intake.ts';
 export { fileDocument, findDocumentByHash } from './internal/intake.ts';
+export type { HandoverProposal, ProposedAsset } from './internal/protocol.ts';
+export { isProtocolType, readHandoverProposal } from './internal/protocol.ts';
 export type { DocumentDeps } from './internal/routes.ts';
 export { registerDocumentRoutes } from './internal/routes.ts';
+export type { ProtocolProposal, SeedDeps } from './internal/seed.ts';
+export {
+  confirmProtocol,
+  proposeProtocol,
+} from './internal/seed.ts';
 export type { CatalogueReport } from './internal/seed-catalogue.ts';
 export { applyDocumentTypeCatalogue } from './internal/seed-catalogue.ts';
 // The object path convention (slice 3.2). It is exported from the module that owns the paper
@@ -67,5 +78,15 @@ export type { Queryable } from './internal/types.ts';
 // is its gate and the policy suite reads contracts, never internals.
 export type { Verification, VerificationVerdict } from './internal/verify.ts';
 export { documentText, verifyDeclaredType } from './internal/verify.ts';
-export type { FiledScreen, UploadScreen } from './internal/views.ts';
-export { renderFiledPage, renderUploadPage } from './internal/views.ts';
+export type {
+  FiledScreen,
+  SeededScreen,
+  SeedScreen,
+  UploadScreen,
+} from './internal/views.ts';
+export {
+  renderFiledPage,
+  renderSeededPage,
+  renderSeedPage,
+  renderUploadPage,
+} from './internal/views.ts';

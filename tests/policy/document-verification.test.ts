@@ -32,6 +32,7 @@ const SPECIMEN_TYPES: Record<string, string> = {
   'lease-standard.md': 'lease',
   'arnona-bill.md': 'arnona',
   'handover-protocol.md': 'handover_protocol',
+  'building-handover-protocol.md': 'building_handover_protocol',
   'bank-guarantee.md': 'bank_guarantee',
   'insurance-certificate.md': 'insurance',
 };

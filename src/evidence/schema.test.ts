@@ -595,12 +595,10 @@ describe('the same file ingested twice is one document with two links', () => {
   });
 });
 
-describe('the acceptance bar — a tenth type costs no DDL', () => {
-  // The slice's criterion, measured rather than read off the screen. The seed carries **nine**
-  // types (the Data Model's eight plus inspection_certificate, which the workbook has carried since
-  // 3 Sep and slice 3.5 needs this week), so the demonstration is the **tenth** — and it goes
-  // through `applyDocumentTypeCatalogue`, the same function `npm run seed:doctypes` calls, rather
-  // than a parallel path written to pass.
+describe('the acceptance bar — a new type costs no DDL', () => {
+  // 3.1's criterion, still the criterion. The seed now carries ten types (3.5 added
+  // `building_handover_protocol` as a row), so the demonstration is a type that is *not* in the
+  // seed — and it still goes through `applyDocumentTypeCatalogue`.
   const EVIDENCE_TABLES = [
     'document',
     'document_link',
@@ -620,14 +618,18 @@ describe('the acceptance bar — a tenth type costs no DDL', () => {
     return result.rows.map((row) => row.shape).join('\n');
   }
 
-  it('seeds nine types, and the ninth is inspection_certificate', async (t) => {
+  it('seeds ten types, and the tenth is building_handover_protocol', async (t) => {
     if (!pool) return t.skip(skipReason);
-    // A count and a name, because the seed being nine rather than eight is a decision (slice 3.0)
-    // and a decision nothing asserts is a decision somebody helpfully undoes.
-    assert.equal(seedDocumentTypes.length, 9);
+    assert.equal(seedDocumentTypes.length, 10);
     assert.equal(
       seedDocumentTypes.some(
         (entry) => entry.type.typeKey === 'inspection_certificate',
+      ),
+      true,
+    );
+    assert.equal(
+      seedDocumentTypes.some(
+        (entry) => entry.type.typeKey === 'building_handover_protocol',
       ),
       true,
     );
@@ -640,7 +642,7 @@ describe('the acceptance bar — a tenth type costs no DDL', () => {
     );
   });
 
-  it('adds a tenth type with four fields, and the schema does not move', async (t) => {
+  it('adds a type with four fields, and the schema does not move', async (t) => {
     if (!pool) return t.skip(skipReason);
     await inRolledBackTransaction(pool, async (db) => {
       const before = await schemaSnapshot(db);

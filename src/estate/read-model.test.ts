@@ -34,6 +34,8 @@ import {
   importEstate,
   listBuildings,
   listExpiringLeases,
+  listOverdueInspections,
+  listUnitParkingAssets,
   searchEstate,
 } from './contract.ts';
 import { shohamPlan } from './fixtures/shoham.ts';
@@ -315,6 +317,45 @@ describe('estate · the portfolio-scale reads', () => {
           assert.equal((await countUnitsByBuilding(db, [])).size, 0);
         });
       });
+
+      await t.test(
+        'Q3 · overdue inspections in this building, one query',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            await importEstate(db, plan());
+            const summary = ours(await listBuildings(db));
+            const overdue = await listOverdueInspections(
+              db,
+              summary.building_id,
+              new Date('2026-09-07T00:00:00.000Z'),
+            );
+            assert.equal(overdue.length, 1);
+            assert.equal(overdue[0]?.asset_type, 'EXTINGUISHER');
+            assert.equal(overdue[0]?.space_name, 'לובי');
+          });
+        },
+      );
+
+      await t.test(
+        'Q7 · the bay assigned to 12A and the gate motor on it, one query',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            await importEstate(db, plan());
+            const summary = ours(await listBuildings(db));
+            const detail = await getBuilding(db, summary.building_id);
+            const unit = detail.units.find((row) => row.unit_number === '12A');
+            assert.ok(unit);
+            const rows = await listUnitParkingAssets(db, unit.unit_id);
+            assert.equal(rows[0]?.parking_name, 'ח-12');
+            assert.ok(rows.some((row) => row.asset_type === 'GATE_MOTOR'));
+            assert.equal(
+              rows.find((row) => row.asset_type === 'GATE_MOTOR')
+                ?.provider_name,
+              'קבלן הבדק',
+            );
+          });
+        },
+      );
     } finally {
       await pool.end();
     }

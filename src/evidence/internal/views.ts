@@ -220,3 +220,114 @@ export function renderFiledPage(screen: FiledScreen): string {
     body,
   });
 }
+
+export interface SeedScreen {
+  documentId: string;
+  labelHe: string;
+  buildingId: string;
+  buildingName: string;
+  unitId: string | null;
+  unitNumber: string | null;
+  handoverDate: string | null;
+  apartmentNumber: string | null;
+  warrantyEndDate: string | null;
+  assets: ReadonlyArray<{ labelHe: string; assetType: string }>;
+}
+
+export function renderSeedPage(screen: SeedScreen): string {
+  const back = `/estate/buildings/${screen.buildingId}`;
+  const body = h`
+    <div>
+      <a class="back" href="${back}">← ${screen.buildingName}</a>
+      <h1>אישור מסירה</h1>
+      <p class="lede">${screen.labelHe}${
+        screen.unitNumber ? h` · דירה ${ltr(screen.unitNumber)}` : h` · הבניין`
+      }</p>
+    </div>
+    <section class="notice">
+      <h2>מה שנקרא מהמסמך</h2>
+      <dl class="facts">
+        <div><dt>מועד המסירה</dt><dd>${
+          screen.handoverDate
+            ? ltr(screen.handoverDate)
+            : h`לא נמצא תאריך במסמך`
+        }</dd></div>
+        ${
+          screen.apartmentNumber
+            ? h`<div><dt>דירה</dt><dd>${ltr(screen.apartmentNumber)}</dd></div>`
+            : h``
+        }
+        ${
+          screen.warrantyEndDate
+            ? h`<div><dt>סיום תקופת הבדק</dt><dd>${ltr(screen.warrantyEndDate)}</dd></div>`
+            : h``
+        }
+      </dl>
+      ${
+        screen.assets.length === 0
+          ? h`<p class="lede">לא זוהו מערכות במסמך.</p>`
+          : h`<ul class="terms">${screen.assets.map(
+              (asset) => h`<li class="chip">${asset.labelHe}</li>`,
+            )}</ul>`
+      }
+    </section>
+    ${
+      screen.handoverDate
+        ? h`<form class="form-actions" method="post" action="/documents/${screen.documentId}/seed">
+            <button class="btn btn-primary" type="submit">אישור וכתיבה</button>
+            <a href="${back}">ביטול</a>
+          </form>`
+        : h`<div class="form-actions"><a href="${back}">חזרה לבניין</a></div>`
+    }`;
+  return renderPage({
+    title: 'דונה דום — אישור מסירה',
+    styles,
+    nav: nav(),
+    body,
+  });
+}
+
+export interface SeededScreen {
+  buildingId: string;
+  buildingName: string;
+  unitId: string | null;
+  handoverDate: string;
+  warrantyEndDate: string;
+  assetsWritten: number;
+  alreadySeeded: boolean;
+}
+
+export function renderSeededPage(screen: SeededScreen): string {
+  const back = `/estate/buildings/${screen.buildingId}`;
+  const body = h`
+    <div>
+      <a class="back" href="${back}">← ${screen.buildingName}</a>
+      <h1>המסירה נרשמה</h1>
+    </div>
+    <section class="notice">
+      <dl class="facts">
+        <div><dt>מועד המסירה</dt><dd>${ltr(screen.handoverDate)}</dd></div>
+        <div><dt>סיום תקופת הבדק</dt><dd>${ltr(screen.warrantyEndDate)}</dd></div>
+        <div><dt>מערכות שנרשמו</dt><dd>${ltr(String(screen.assetsWritten))}</dd></div>
+      </dl>
+      ${
+        screen.alreadySeeded
+          ? h`<p class="lede">מסמך זה כבר נזרע. התאריכים עודכנו, ולא נוסף עותק שני של המערכות.</p>`
+          : h``
+      }
+    </section>
+    <div class="form-actions">
+      ${
+        screen.unitId
+          ? h`<a class="btn btn-secondary" href="/documents/new?unit=${screen.unitId}">הוספת מסמך נוסף</a>`
+          : h``
+      }
+      <a href="${back}">חזרה לבניין</a>
+    </div>`;
+  return renderPage({
+    title: 'דונה דום — המסירה נרשמה',
+    styles,
+    nav: nav(),
+    body,
+  });
+}

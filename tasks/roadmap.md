@@ -1030,6 +1030,12 @@ guarded, not admin-editable** — the responsibility matrix keys on it, so editi
   `apartment_number` — `handover_date` being the one field that turns the placeholder מסירה dates on
   every building card into a fact.
 - **Deps:** 3.1, 1.9 · **Size:** M
+- **Closed 2026-09-07** ([evidence](evidence/3.5.md)). `0012_assets.sql` then `0013` for the natural
+  key. Q3 and Q7 each one query against the Shoham fixture. Flow A6: two protocols, tenth type a
+  seed row, confirm recomputes from stored bytes. Placeholder count: **2/2** and **37/37** register
+  buildings, **0/1** fixture. **384 code + 41 hooks + 44 policy.** Raised and owned:
+  parking/storage on `upsertUnitRow` (3.6's week-end if not closed) · inspection-date index
+  (measurement) · A2's staging shape (week 4).
 
 ### Slice 3.6 — Find it in four seconds
 Document search and the documents panels on the building and unit screens, grouped by type.
@@ -1045,6 +1051,10 @@ Document search and the documents panels on the building and unit screens, group
   `verified`, `unverified` or `unguarded`, and a scan nobody has read yet must not look identical to
   a lease whose marker terms were all found. The confirmation screen says it in words already; the
   panel is where it becomes a property of a list.
+- **Owed by 3.5 — `upsertUnitRow` still writes only a `UNIT` space.** Register-imported buildings
+  have no `PARKING` or `STORAGE` rows. The Shoham fixture already has 60 bays and 40 rooms; a
+  protocol cannot land a gate motor on a bay that does not exist. Close here if it still sits at
+  week-end, otherwise it rides into week 4 with A2.
 - **Deps:** ~~3.4~~ **3.3** — re-pointed 6 Sep 2026 when 3.4 deferred. Documents reach the system
   through flow A1's admin upload, so search has something to find without any bulk path existing.
   **Landed 7 Sep 2026**: the upload route files them and `document_link` binds them to a unit and,

@@ -211,14 +211,53 @@ which tenancies are incomplete, where is the lease for unit 14.
 **Note:** these are the questions that justify indexes. Q5's index is decided at real row count with a
 timing in front of it (slice 2.6), not assumed.
 
+### A6 — A handover protocol seeds the asset register
+
+**Trigger:** A1 completes for a document of type `handover_protocol` or
+`building_handover_protocol`.
+**Sequence:** read → propose → confirm → write.
+
+There are two protocols, because there are two handovers, and they are not the same act:
+
+- **`handover_protocol`** is operator to tenant — `פרוטוקול מסירת דירה`. It dates the flat
+  (`unit.warranty_end_date`, R14's override) and seeds the appliances of that `UNIT` space.
+- **`building_handover_protocol`** is developer to operator — `פרוטוקול מסירת בניין`. It dates the
+  building (`building.handover_date` and `building.warranty_end_date`) and is what discharges week
+  2's placeholder מסירה dates. Building-level assets land on a `COMMON` space of that building when
+  one exists; a register-imported building has only `UNIT` spaces, so the date correction still
+  runs and the assets wait.
+
+Both types are catalogue rows. The second was added at 3.5 as the tenth seed, through the same
+function `npm run seed:doctypes` calls, which is A8's open half used for real.
+
+1. A deterministic reader runs over the text `documentText` already produces. No model, no OCR, no
+   `ExtractedField`. It proposes a handover date, an apartment number (unit-level only), and the
+   appliances whose Hebrew names appear in the file, mapped onto the governed `asset_type` list.
+2. **The administrator confirms before anything is written to estate.** `handover_date` drives
+   `warranty_end_date` drives the ternary responsibility answer, which is invariant 5 applied to a
+   date rather than a role.
+3. **Nothing is held between propose and confirm.** The document is immutable and the reader is a
+   pure function, so the confirm page recomputes the proposal from the stored bytes. A staging
+   table would be a second copy of a fact the document already is. A2's model-based proposals still
+   owe their own answer; this is the deterministic case only.
+4. Each written asset carries `source_document_id` (R12). Confirming the same document twice is a
+   no-op on the assets and a re-statement of the dates.
+5. תקופת הבדק is two calendar years from the confirmed handover date, matching the fixture the
+   screens have shown since 1.11.
+
+**Module:** evidence owns the reader and the confirm screen; estate owns the writes, because Asset
+is estate's table and a document module that updated `building.handover_date` would be writing
+through the wall.
+
 ## Open
 
 - **Which three to five document types open the concept work.** The catalogue seeds eight; the working
   set is smaller and is chosen by which ones a tenancy's fields actually depend on. Lease and
-  lease-addendum are certain, given A2 and A3.
-- **Where extraction proposals are held between propose and confirm.** A staging shape that is not the
-  live tenancy, since invariant 5 forbids writing an unconfirmed role. Owed by the slice that
-  implements A2.
+  lease-addendum are certain, given A2 and A3. The two handover protocols are A6's, landed at 3.5.
+- **Where extraction proposals are held between propose and confirm.** A6 answered it for the
+  deterministic case: recompute from stored bytes, no staging table. A2's model-based proposals
+  still owe a staging shape that is not the live tenancy, since invariant 5 forbids writing an
+  unconfirmed role.
 - **The completeness vocabulary.** A4 needs to say *what* is missing, and that list is the set of
   policy cases over tenancy, which grows. Whether it is a derived view or a materialised state is
   decided when the second rule joins the guarantor rule.
