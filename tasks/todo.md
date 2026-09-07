@@ -275,9 +275,18 @@ a known size. [roadmap.md](roadmap.md) owns it at **week 8**, in the same IAM pa
       `src/kernel/ui/page.ts`, `.facts` to the token sheet, and tenancy's first read function
       (`listUnitTenancies` — dates and a status, no person). One defect found by *using* the app:
       the intake tests counted audit rows over the whole table and would have gone red on any
-      database somebody had filed a document into. Raised and owned: the `unverified` backlog (4.1) ·
-      a tenancy from a lease (A2, week 4) · session **and** CSRF together (week 5) · the documents
-      panel and still no signed URL (3.6).
+      database somebody had filed a document into. **`infra/docs-delete.sh` was added on review**,
+      because this is the slice that starts putting bytes in the bucket and *how does mock data leave
+      again* had no answer in the repository: the application still has no `delete` and the runtime
+      account still has no `objectAdmin` — what the script writes down is the act 3.2 proved a human
+      with owner credentials can already perform. It refuses prod with any flag, refuses a bucket
+      that is not a `dona-v5-*-docs`, takes the bucket's own name as its confirmation, and
+      **leaves the seven-day soft-delete window alone**, which is the opposite assertion from
+      `infra/corpus-delete.sh` and for the opposite reason. Raised and owned: the `unverified`
+      backlog (4.1) · a tenancy from a lease (A2, week 4) · session **and** CSRF together (week 5) ·
+      the documents panel and still no signed URL (3.6) · **the anonymous upload route's unbounded
+      *count*, as opposed to its bounded size (week 5)** — 20 MB is a cap per request and there is no
+      cap on requests, so the bound standing in for a session is one file and not one caller.
 
 - [~] **3.4 — Drive ingestion and the bulk review queue. DEFERRED 6 Sep 2026, not deleted.** See the
       carried-in section above. Nothing about the design is withdrawn: convention **proposes** a type
