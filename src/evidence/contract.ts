@@ -36,6 +36,8 @@ export {
   getFiledDocument,
   ingestDocument,
   linkDocument,
+  listUnverifiedDocuments,
+  updateVerificationVerdict,
 } from './internal/documents.ts';
 export type {
   IntakeDeps,
@@ -56,6 +58,12 @@ export {
 } from './internal/list.ts';
 export type { HandoverProposal, ProposedAsset } from './internal/protocol.ts';
 export { isProtocolType, readHandoverProposal } from './internal/protocol.ts';
+export type { DocumentRead, ReadDeps, SweepReport } from './internal/read.ts';
+export {
+  ocrAfterFile,
+  readFiledDocument,
+  sweepUnverified,
+} from './internal/read.ts';
 export type { DocumentDeps } from './internal/routes.ts';
 export { registerDocumentRoutes } from './internal/routes.ts';
 export type { ProtocolProposal, SeedDeps } from './internal/seed.ts';
@@ -92,12 +100,14 @@ export type { Verification, VerificationVerdict } from './internal/verify.ts';
 export { documentText, verifyDeclaredType } from './internal/verify.ts';
 export type {
   FiledScreen,
+  ReadScreen,
   SeededScreen,
   SeedScreen,
   UploadScreen,
 } from './internal/views.ts';
 export {
   renderFiledPage,
+  renderReadPage,
   renderSeededPage,
   renderSeedPage,
   renderUploadPage,

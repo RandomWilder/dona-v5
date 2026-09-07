@@ -20,14 +20,17 @@ import {
 } from '../../estate/contract.ts';
 import { createAuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
+import { createSettings, readOcrSettings } from '../../kernel/config.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
+import { createUnconfiguredOcr, type OcrText } from '../../kernel/ocr.ts';
 import type { PdfText } from '../../kernel/pdf.ts';
 import { validId } from '../../kernel/validate.ts';
 import { listUnitTenancies } from '../../tenancy/contract.ts';
 import { documentTypeByKey, listDocumentTypes } from './catalogue.ts';
 import { fileDocument } from './intake.ts';
 import { isProtocolType } from './protocol.ts';
+import { readFiledDocument } from './read.ts';
 import {
   confirmProtocol,
   type ProtocolProposal,
@@ -36,6 +39,7 @@ import {
 import type { SeedScreen } from './views.ts';
 import {
   renderFiledPage,
+  renderReadPage,
   renderSeededPage,
   renderSeedPage,
   renderUploadPage,
@@ -45,6 +49,7 @@ export interface DocumentDeps {
   pool: Pool;
   objects: ObjectStore;
   pdf: PdfText;
+  ocr?: OcrText;
   clock: Clock;
   /** The bucket `storage_uri` names. The memory store's stand-in locally (slice 3.2). */
   bucket: string;
@@ -111,6 +116,9 @@ export function registerDocumentRoutes(
         db: deps.pool,
         objects: deps.objects,
         pdf: deps.pdf,
+        ocr: deps.ocr,
+        ocrVersion: (await readOcrSettings(createSettings(deps.pool)))
+          .processorVersion,
         audit: createAuditLog(deps.pool, deps.clock),
         clock: deps.clock,
         bucket: deps.bucket,
@@ -155,8 +163,68 @@ export function registerDocumentRoutes(
       boundToTenancy: tenancyId !== null,
       verification: result.verification,
       fileHash: fileHashOf(result.storageUri),
+      documentId: result.documentId,
     });
   });
+
+  app.get<{ Params: { documentId: string } }>(
+    '/documents/:documentId/read',
+    async (request, reply) => {
+      const documentId = validId(request.params.documentId, 'document');
+      const ocrVersion = (await readOcrSettings(createSettings(deps.pool)))
+        .processorVersion;
+      const read = await readFiledDocument(
+        {
+          db: deps.pool,
+          objects: deps.objects,
+          pdf: deps.pdf,
+          ocr: deps.ocr ?? createUnconfiguredOcr(),
+          ocrVersion,
+          audit: createAuditLog(deps.pool, deps.clock),
+          clock: deps.clock,
+          bucket: deps.bucket,
+        },
+        documentId,
+      );
+      const subject = await deps.pool.query<{
+        entity_type: string;
+        entity_id: string;
+      }>(
+        `SELECT entity_type, entity_id FROM document_link
+          WHERE document_id = $1 AND link_role = 'SUBJECT' LIMIT 1`,
+        [documentId],
+      );
+      const link = subject.rows[0];
+      html(reply);
+      if (link?.entity_type === 'UNIT') {
+        const unit = await getUnit(deps.pool, link.entity_id);
+        return renderReadPage({
+          buildingId: unit.building_id,
+          buildingName: unit.building_name,
+          unitId: unit.unit_id,
+          labelHe: read.labelHe,
+          fileHash: read.fileHash,
+          source: read.source,
+          page: read.pages[0] ?? null,
+          image: read.images[0] ?? null,
+        });
+      }
+      if (link?.entity_type === 'BUILDING') {
+        const detail = await getBuilding(deps.pool, link.entity_id);
+        return renderReadPage({
+          buildingId: detail.building.building_id,
+          buildingName: detail.building.name,
+          unitId: null,
+          labelHe: read.labelHe,
+          fileHash: read.fileHash,
+          source: read.source,
+          page: read.pages[0] ?? null,
+          image: read.images[0] ?? null,
+        });
+      }
+      throw new KernelError('not_found', 'document not found');
+    },
+  );
 
   const seedDeps = () => ({
     db: deps.pool,

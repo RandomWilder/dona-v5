@@ -163,7 +163,7 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   | Third party | What it sees | From |
   |---|---|---|
   | **OpenAI** | Passage text sent for embedding, and document text sent for comprehension | Today, through the CI-only `OPENAI_API_KEY` — authored fixture text with no personal data in it. Tenant text from week 4. |
-  | **Google Cloud** | Whole page images (Document AI OCR, ADR-0002); every stored document and row (Cloud Storage, Cloud SQL) as processor | Week 4 for OCR; today for storage |
+  | **Google Cloud** | Whole page images (Document AI OCR, ADR-0002, processor location **`eu`** — Document AI does not serve `me-west1`); every stored document and row (Cloud Storage, Cloud SQL) as processor | Week 4 for OCR (slice 4.1); today for storage |
   | **Meta — WhatsApp Cloud API** | Every message either end of a conversation sends | Week 9 |
   | **Twilio** | The OTP message and the mobile number it goes to, as the SMS fallback | Week 9 |
   | **Anthropic** | This repository, read by Claude Code as it is built | Today, **development-time only**. It never sees tenant text, and the mechanism that makes that true is that tier 2 never enters the repo — `.gitignore`, the bucket, and this rule, not an assurance. |

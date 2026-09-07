@@ -16,7 +16,9 @@ import { buildApp } from '../app.ts';
 import type { EstatePlan } from '../estate/contract.ts';
 import { importEstate } from '../estate/contract.ts';
 import { fixedClock } from '../kernel/clock.ts';
+import { KernelError } from '../kernel/errors.ts';
 import { createMemoryStore } from '../kernel/objects.ts';
+import { createFakeOcrText, type OcrText } from '../kernel/ocr.ts';
 import { createFakePdfText } from '../kernel/pdf.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
 import { applyDocumentTypeCatalogue } from './contract.ts';
@@ -114,6 +116,23 @@ function upload(
 const pdfBytes = (marker: string): Buffer =>
   Buffer.from(`%PDF-1.4\n% ${marker}\n`, 'latin1');
 
+const pngBytes = (marker: string): Buffer =>
+  Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.from(marker),
+  ]);
+
+function unavailableOcr(): OcrText {
+  return {
+    async pages() {
+      throw new KernelError('unavailable', 'the ocr call timed out', {
+        timeoutMs: 20_000,
+      });
+    },
+    describe: () => 'fake',
+  };
+}
+
 describe('evidence · the upload route', () => {
   it('files the right file and refuses the wrong one, both directions', async (t) => {
     const pool = await migratedPoolOrNull();
@@ -134,7 +153,9 @@ describe('evidence · the upload route', () => {
       });
     const lease = appFor(specimen('lease-standard.md'));
     const arnona = appFor(specimen('arnona-bill.md'));
+    const blank = appFor('');
     const hashes: string[] = [];
+    const extraApps: ReturnType<typeof buildApp>[] = [];
     let unitId = '';
 
     try {
@@ -284,6 +305,144 @@ describe('evidence · the upload route', () => {
       });
 
       await t.test(
+        'an empty text layer files as unverified, HTTP 200 not 503',
+        async () => {
+          const response = await blank.inject({
+            method: 'POST',
+            url: '/documents',
+            ...upload(
+              { unit: unitId, type: 'lease', tenancy: '' },
+              { filename: 'scan.pdf', bytes: pdfBytes('empty layer') },
+            ),
+          });
+          assert.equal(response.statusCode, 200);
+          assert.match(response.body, /המסמך נשמר/);
+          assert.match(response.body, /אינו נושא שכבת טקסט/);
+          assert.doesNotMatch(response.body, /503/);
+          const rows = await pool.query<{
+            file_hash: string;
+            document_id: string;
+          }>(
+            `SELECT d.file_hash, d.document_id FROM document d
+               JOIN document_link l ON l.document_id = d.document_id
+              WHERE l.entity_id = $1 AND d.verification_verdict = 'unverified'`,
+            [unitId],
+          );
+          const filed = rows.rows[0];
+          assert.ok(filed);
+          hashes.push(filed.file_hash);
+        },
+      );
+
+      await t.test(
+        'GET /documents/:id/read draws word boxes for a native PDF',
+        async () => {
+          const rows = await pool.query<{ document_id: string }>(
+            `SELECT d.document_id FROM document d
+               JOIN document_link l ON l.document_id = d.document_id
+              WHERE l.entity_id = $1 AND d.verification_verdict = 'verified'
+              LIMIT 1`,
+            [unitId],
+          );
+          const documentId = rows.rows[0]?.document_id ?? '';
+          assert.ok(documentId);
+          const response = await lease.inject({
+            method: 'GET',
+            url: `/documents/${documentId}/read`,
+          });
+          assert.equal(response.statusCode, 200);
+          assert.match(response.body, /מילים על הדף/);
+          assert.match(response.body, /word-box/);
+          assert.match(response.body, /inset-inline-start/);
+          assert.doesNotMatch(response.body, /(?:^|[\s;{])left\s*:/);
+        },
+      );
+
+      await t.test(
+        'an OCR timeout still files the scan, HTTP 200 not 503',
+        async () => {
+          const app = buildApp({
+            pool,
+            version: '9.9.9-test',
+            clock: fixedClock(AT),
+            objects: createMemoryStore(),
+            pdf: createFakePdfText([]),
+            ocr: unavailableOcr(),
+            bucket: BUCKET,
+          });
+          extraApps.push(app);
+          const response = await app.inject({
+            method: 'POST',
+            url: '/documents',
+            ...upload(
+              { unit: unitId, type: 'lease', tenancy: '' },
+              { filename: 'photo.png', bytes: pngBytes('timeout') },
+            ),
+          });
+          assert.equal(response.statusCode, 200);
+          assert.match(response.body, /אינו נושא שכבת טקסט/);
+          const rows = await pool.query<{ file_hash: string }>(
+            `SELECT d.file_hash FROM document d
+               JOIN document_link l ON l.document_id = d.document_id
+              WHERE l.entity_id = $1 AND d.storage_uri LIKE '%.png'`,
+            [unitId],
+          );
+          const hash = rows.rows[0]?.file_hash;
+          assert.ok(hash);
+          hashes.push(hash);
+        },
+      );
+
+      await t.test(
+        'OCRs a scan on the same request and offers the overlay',
+        async () => {
+          const app = buildApp({
+            pool,
+            version: '9.9.9-test',
+            clock: fixedClock(AT),
+            objects: createMemoryStore(),
+            pdf: createFakePdfText([]),
+            ocr: createFakeOcrText([specimen('lease-standard.md')]),
+            bucket: BUCKET,
+          });
+          extraApps.push(app);
+          const response = await app.inject({
+            method: 'POST',
+            url: '/documents',
+            ...upload(
+              { unit: unitId, type: 'lease', tenancy: '' },
+              { filename: 'scan.png', bytes: pngBytes('ocr lease') },
+            ),
+          });
+          assert.equal(response.statusCode, 200);
+          assert.match(response.body, /נמצאו כל הביטויים הקבועים של הטופס/);
+          assert.match(response.body, /מילים על הדף/);
+          const href = response.body.match(
+            /href="(\/documents\/[0-9a-f-]{36}\/read)"/,
+          );
+          assert.ok(href?.[1]);
+          const overlay = await app.inject({
+            method: 'GET',
+            url: href[1],
+          });
+          assert.equal(overlay.statusCode, 200);
+          assert.match(overlay.body, /word-box/);
+          assert.match(overlay.body, /קריאה אוטומטית/);
+          const verified = await pool.query<{ file_hash: string }>(
+            `SELECT d.file_hash FROM document d
+               JOIN document_link l ON l.document_id = d.document_id
+              WHERE l.entity_id = $1
+                AND d.verification_verdict = 'verified'
+                AND d.storage_uri LIKE '%.png'`,
+            [unitId],
+          );
+          const hash = verified.rows[0]?.file_hash;
+          assert.ok(hash);
+          hashes.push(hash);
+        },
+      );
+
+      await t.test(
         'a malformed unit is invalid and a missing one is not_found',
         async () => {
           const malformed = await lease.inject({
@@ -316,7 +475,9 @@ describe('evidence · the upload route', () => {
       if (unitId) {
         await pool
           .query(
-            "DELETE FROM audit_log WHERE action = 'evidence.file_document' AND subject_id = $1",
+            `DELETE FROM audit_log
+              WHERE action IN ('evidence.file_document', 'evidence.read_document')
+                AND subject_id = $1`,
             [unitId],
           )
           .catch(() => {});
@@ -348,6 +509,10 @@ describe('evidence · the upload route', () => {
         .catch(() => {});
       await lease.close();
       await arnona.close();
+      await blank.close();
+      for (const extra of extraApps) {
+        await extra.close();
+      }
       await pool.end();
     }
   });

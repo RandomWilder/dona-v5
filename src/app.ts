@@ -23,6 +23,7 @@ import {
   createMemoryStore,
   type ObjectStore,
 } from './kernel/objects.ts';
+import type { OcrText } from './kernel/ocr.ts';
 import { createPdfjsText, type PdfText } from './kernel/pdf.ts';
 import { registerUiAssets } from './kernel/ui/assets.ts';
 
@@ -39,6 +40,8 @@ export interface AppDeps {
   objects?: ObjectStore;
   /** The PDF reader the verification guard reads text through. */
   pdf?: PdfText;
+  /** The OCR reader. Absent or unconfigured leaves scans unverified. */
+  ocr?: OcrText;
   /** The bucket a `storage_uri` names, which is not the same statement as which store is running. */
   bucket?: string;
 }
@@ -87,6 +90,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     clock: deps.clock ?? systemClock,
     objects: deps.objects ?? createMemoryStore(),
     pdf: deps.pdf ?? createPdfjsText(),
+    ocr: deps.ocr,
     bucket: deps.bucket ?? configuredBucket(),
   });
 

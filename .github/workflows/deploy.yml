@@ -84,8 +84,23 @@ jobs:
             --wait \
             --quiet
 
+      - name: Document AI processor
+        id: ocr
+        run: |
+          ID="$(./infra/ocr-processor-id.sh staging || true)"
+          echo "processor=$ID" >> "$GITHUB_OUTPUT"
+          if [[ -z "$ID" ]]; then
+            echo "no dona-ocr-staging processor — OCR boots unconfigured" >&2
+          else
+            echo "DOCUMENT_AI_PROCESSOR=$ID"
+          fi
+
       - name: Deploy
         run: |
+          ENV_VARS="VERSION=${SHA:0:7},DOCS_BUCKET=$PROJECT-staging-docs,GOOGLE_CLOUD_PROJECT=$PROJECT,DOCUMENT_AI_LOCATION=eu"
+          if [[ -n "${{ steps.ocr.outputs.processor }}" ]]; then
+            ENV_VARS="$ENV_VARS,DOCUMENT_AI_PROCESSOR=${{ steps.ocr.outputs.processor }}"
+          fi
           gcloud run deploy "$SERVICE" \
             --image "$IMAGE:$SHA" \
             --region "$REGION" \
@@ -93,7 +108,7 @@ jobs:
             --service-account "app-staging@$PROJECT.iam.gserviceaccount.com" \
             --add-cloudsql-instances "$PROJECT:$REGION:dona-staging" \
             --set-secrets "DATABASE_URL=staging-database-url:latest" \
-            --update-env-vars "VERSION=${SHA:0:7},DOCS_BUCKET=$PROJECT-staging-docs" \
+            --update-env-vars "$ENV_VARS" \
             --allow-unauthenticated \
             --min-instances 0 \
             --max-instances 3 \

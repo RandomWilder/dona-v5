@@ -30,13 +30,15 @@ A2, A3 and A4 were named on 6 Sep and **sized at week 3's close on 7 Sep** as 4.
 
 ## Carried in from week 3 — every item, with the slice that closes it
 
-- [ ] **`unverified` is a backlog with no reader.** Discharged at 4.1: sweep already-filed documents
+- [x] **`unverified` is a backlog with no reader.** Discharged at 4.1: sweep already-filed documents
       and record how many verdicts moved. Count is on `evidence.file_document` audit lines whose
-      `inputs.verdict` is `unverified`.
-- [ ] **A real signed-lease PDF on staging became `unavailable` / unexpected error after ~1 minute.**
+      `inputs.verdict` is `unverified`. Local: examined 1, verified 1. Staging sweep waits on the
+      4.1 revision — owned at 4.2.
+- [x] **A real signed-lease PDF on staging became `unavailable` / unexpected error after ~1 minute.**
       Discharged at 4.1: the reader must bound itself. A file it cannot finish is `invalid` or
       `unverified`, never an uncaught 503, and must not hold the request for a minute to get there.
       The demo used a printed specimen; that was the right call, not a workaround to keep.
+      pdfjs **8s**; OCR **20s**. HTTP of a miss is 200 unverified.
 - [ ] **E16 versioning is one column, not two.** Discharged at 4.2: `ExtractedField` points at
       `document_type_field_id`. No separate schema-version entity.
 - [ ] **`upsertUnitRow` still writes only a `UNIT` space.** Discharged at 4.6: register-imported
@@ -79,7 +81,7 @@ btree — week 12. Session, CSRF, and a cap on upload *count* — week 5. Signed
 
 ## Slices
 
-- [ ] **4.1 — Document AI OCR adapter.** The **general OCR processor, not Form Parser** — the schema
+- [x] **4.1 — Document AI OCR adapter.** The **general OCR processor, not Form Parser** — the schema
       is already declared, so Google needn't infer structure. Hebrew print and handwriting, word
       boxes, per-word confidence.
       **Done when:** a scanned Hebrew lease yields word-level boxes and confidences, and the
@@ -92,7 +94,14 @@ btree — week 12. Session, CSRF, and a cap on upload *count* — week 5. Signed
       **Owed by the week-3 demo — a heavy signed-lease PDF must not become an uncaught 503.** Bound
       the reader (time and memory). Fail closed as `invalid` or file as `unverified`. Record the
       bound in the evidence.
+      **Closed 7 Sep** — [evidence/4.1.md](evidence/4.1.md). Processor `eu` /
+      `bd23faa1bd256c46`. Staging backlog sweep owned at 4.2.
       **Deps:** 3.3 · **M** · **plan mode first** (kernel + evidence)
+
+- [ ] **Staging sweep of already-filed `unverified` rows.** 4.1 built `ocr:sweep` and measured it
+      locally (examined 1, verified 1). The serving revision does not yet carry the reader, so the
+      week-3 staging backlog was not walked. After 4.1 merges, run `npm run ocr:sweep` as
+      `app-staging` and write the count (zero is a count). **4.2.**
 
 - [ ] **4.2 — Comprehension into the declared schema — the open half of A8.** The model maps OCR
       output into the fields **that document type's schema declares**, read from `DocumentTypeField`
@@ -106,6 +115,8 @@ btree — week 12. Session, CSRF, and a cap on upload *count* — week 5. Signed
       bbox in the system originates from a model response.
       **Owed by 3.0 — `type_field_id` and `schema_version_id` are one column, not two.** E16 is
       versioned by `effective_from` on the field row itself.
+      **Owed by 4.1 — staging sweep of `unverified`.** Run `ocr:sweep` as `app-staging` after the
+      4.1 revision serves; write the count (zero is a count).
       **Deps:** 4.1, 3.1 · **M**
 
 - [ ] **4.3 — Promotion, with provenance — the governed half of A8.** Copying an extracted value onto

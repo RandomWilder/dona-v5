@@ -5,6 +5,7 @@
 import { buildApp } from './app.ts';
 import { createPool } from './kernel/db.ts';
 import { configuredBucket, createConfiguredStore } from './kernel/objects.ts';
+import { createConfiguredOcr } from './kernel/ocr.ts';
 import { createPdfjsText } from './kernel/pdf.ts';
 
 const host = process.env.HOST ?? '0.0.0.0';
@@ -21,6 +22,7 @@ const pool = createPool();
 // start — but `docs: memory` on a deployed revision is now visible, and is as wrong as a `-dev`
 // version string.
 const objects = createConfiguredStore();
+const ocr = createConfiguredOcr();
 
 // The deploy stamps the commit it built (slice 1.6). Locally the honest answer is that it is a
 // working copy, not a release.
@@ -31,9 +33,11 @@ const app = buildApp({
   version: process.env.VERSION ?? '0.0.0-dev',
   objects,
   pdf: createPdfjsText(),
+  ocr,
   bucket: configuredBucket(),
 });
 
 await app.listen({ host, port });
 console.log(`dona-v5: http://127.0.0.1:${port}/health`);
 console.log(`docs: ${objects.describe()}`);
+console.log(`ocr: ${ocr.describe()}`);

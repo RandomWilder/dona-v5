@@ -93,8 +93,23 @@ jobs:
             --wait \
             --quiet
 
+      - name: Document AI processor
+        id: ocr
+        run: |
+          ID="$(./infra/ocr-processor-id.sh prod || true)"
+          echo "processor=$ID" >> "$GITHUB_OUTPUT"
+          if [[ -z "$ID" ]]; then
+            echo "no dona-ocr-prod processor — OCR boots unconfigured" >&2
+          else
+            echo "DOCUMENT_AI_PROCESSOR=$ID"
+          fi
+
       - name: Deploy
         run: |
+          ENV_VARS="VERSION=$TAG,DOCS_BUCKET=$PROJECT-prod-docs,GOOGLE_CLOUD_PROJECT=$PROJECT,DOCUMENT_AI_LOCATION=eu"
+          if [[ -n "${{ steps.ocr.outputs.processor }}" ]]; then
+            ENV_VARS="$ENV_VARS,DOCUMENT_AI_PROCESSOR=${{ steps.ocr.outputs.processor }}"
+          fi
           gcloud run deploy "$SERVICE" \
             --image "$IMAGE:$SHA" \
             --region "$REGION" \
@@ -102,7 +117,7 @@ jobs:
             --service-account "app-prod@$PROJECT.iam.gserviceaccount.com" \
             --add-cloudsql-instances "$PROJECT:$REGION:dona-prod" \
             --set-secrets "DATABASE_URL=prod-database-url:latest" \
-            --update-env-vars "VERSION=$TAG,DOCS_BUCKET=$PROJECT-prod-docs" \
+            --update-env-vars "$ENV_VARS" \
             --allow-unauthenticated \
             --min-instances 1 \
             --max-instances 5 \

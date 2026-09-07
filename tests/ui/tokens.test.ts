@@ -32,6 +32,7 @@ import {
 import type { DocumentTypeRow } from '../../src/evidence/contract.ts';
 import {
   renderFiledPage,
+  renderReadPage,
   renderSeededPage,
   renderSeedPage,
   renderUploadPage,
@@ -309,6 +310,7 @@ const SCREENS: Array<[string, () => string]> = [
         boundToTenancy: true,
         verification: { verdict: 'verified', missingTerms: [] },
         fileHash: 'c'.repeat(64),
+        documentId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       }),
   ],
   [
@@ -321,6 +323,44 @@ const SCREENS: Array<[string, () => string]> = [
         boundToTenancy: false,
         verification: { verdict: 'unverified', missingTerms: [] },
         fileHash: 'd'.repeat(64),
+        documentId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      }),
+  ],
+  [
+    'documents · read overlay',
+    () =>
+      renderReadPage({
+        buildingId: building.building_id,
+        buildingName: building.name,
+        unitId: hit.unit_id,
+        labelHe: 'חוזה שכירות',
+        fileHash: 'e'.repeat(64),
+        source: 'ocr',
+        page: {
+          number: 1,
+          width: 100,
+          height: 200,
+          items: [
+            {
+              text: 'שכירות',
+              x: 10,
+              y: 40,
+              width: 30,
+              height: 20,
+              rightToLeft: true,
+              endsLine: false,
+              confidence: 0.91,
+            },
+          ],
+        },
+        image: {
+          pageNumber: 1,
+          mimeType: 'image/png',
+          bytes: Buffer.from(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+            'base64',
+          ),
+        },
       }),
   ],
   [
