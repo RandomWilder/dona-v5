@@ -215,7 +215,7 @@ a known size. [roadmap.md](roadmap.md) owns it at **week 8**, in the same IAM pa
       ordering rule (3.3) · signed URLs are not 3.6's (3.6) · the bucket's legacy `projectEditor`
       delete (week 8).
 
-- [ ] **3.3 — Declared-type upload, with a verification guard.** This slice implements **flow A1**.
+- [x] **3.3 — Declared-type upload, with a verification guard.** This slice implements **flow A1**.
       The flow already knows what it asked for ("upload the lease for unit 14"), so **type is
       declared, not detected**, and classification — the riskiest ingestion step — simply does not
       exist. What remains is the cheap guard for the real error: right slot, wrong file. The upload
@@ -254,6 +254,39 @@ a known size. [roadmap.md](roadmap.md) owns it at **week 8**, in the same IAM pa
       `documentObjectPath` from `src/evidence/contract.ts` and **never by string concatenation**, and
       the file types the screen accepts are `documentExtensions` from the same module rather than a
       second list in the upload handler. **Deps:** 3.1, 3.2 · **M**
+      **Closed 2026-09-07** ([evidence](evidence/3.3.md)). `GET /documents/new` and `POST /documents`
+      — **the first write route in this system**, and it has no session either, so the bounds are
+      one file, 20 MB, four kinds **sniffed from the bytes and never from the name**, the filename
+      discarded, and nothing personal in the response. **The verify step sits before the lookup and
+      before the put**, because *caught before it is filed* is a claim about writes. **3.1's open
+      question is decided: a refused upload leaves no row** — figure 4's "REJECTED is a state"
+      caption binds the bulk queue, which is 3.4 and deferred, not the interactive path where an
+      administrator is looking at the screen; the attempt is an `audit_log` line carrying the digest,
+      the type, the verdict and the missing terms, and never a filename. **All of a type's terms must
+      match, not one**: the lease says ארנונה, in the clause about the utilities, so a single-term
+      guard would have filed a lease as a bill and called it verified. A file with no text layer is
+      `unverified` rather than refused, because refusing every scan refuses most real leases — carried
+      to 4.1. 24 new tests, **369 code + 41 hooks green**; the policy case was **red first** and
+      caught two seeded types whose marker terms had been written from the *name* of the form rather
+      than its printed language (`handover_protocol`, `bank_guarantee` — fixed as seed rows, not as a
+      release, which is what a guard reading the catalogue buys). Verified against the tier-1
+      specimens **printed to real Hebrew PDFs and read through the real pdfjs adapter**, both
+      directions, 422 each way. Three things moved while writing it: the page shell to
+      `src/kernel/ui/page.ts`, `.facts` to the token sheet, and tenancy's first read function
+      (`listUnitTenancies` — dates and a status, no person). One defect found by *using* the app:
+      the intake tests counted audit rows over the whole table and would have gone red on any
+      database somebody had filed a document into. **`infra/docs-delete.sh` was added on review**,
+      because this is the slice that starts putting bytes in the bucket and *how does mock data leave
+      again* had no answer in the repository: the application still has no `delete` and the runtime
+      account still has no `objectAdmin` — what the script writes down is the act 3.2 proved a human
+      with owner credentials can already perform. It refuses prod with any flag, refuses a bucket
+      that is not a `dona-v5-*-docs`, takes the bucket's own name as its confirmation, and
+      **leaves the seven-day soft-delete window alone**, which is the opposite assertion from
+      `infra/corpus-delete.sh` and for the opposite reason. Raised and owned: the `unverified`
+      backlog (4.1) · a tenancy from a lease (A2, week 4) · session **and** CSRF together (week 5) ·
+      the documents panel and still no signed URL (3.6) · **the anonymous upload route's unbounded
+      *count*, as opposed to its bounded size (week 5)** — 20 MB is a cap per request and there is no
+      cap on requests, so the bound standing in for a session is one file and not one caller.
 
 - [~] **3.4 — Drive ingestion and the bulk review queue. DEFERRED 6 Sep 2026, not deleted.** See the
       carried-in section above. Nothing about the design is withdrawn: convention **proposes** a type
@@ -293,6 +326,10 @@ a known size. [roadmap.md](roadmap.md) owns it at **week 8**, in the same IAM pa
       is a decision that belongs behind a session, and sessions are week 5's. Until then the panel
       renders what is filed — type, dates, ingest date — which is the shape the tokens test already
       enforces.
+      **Owed by 3.3 — the panel shows the verdict, not only the type.** A filed document is
+      `verified`, `unverified` or `unguarded`, and a scan nobody has read yet must not look identical
+      to a lease whose marker terms were all found. **3.3 also gave this slice something to list**:
+      the upload route files documents and binds them to a unit and, when one was chosen, a letting.
       **Deps:** ~~3.4~~ **3.3**, re-pointed 6 Sep 2026 · **S**
 
 ---

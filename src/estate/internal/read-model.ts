@@ -145,6 +145,37 @@ export interface UnitHit {
   city: string;
 }
 
+/**
+ * One unit and the building it is in. Slice 3.3, for the screen that files a document against it.
+ *
+ * It returns `UnitHit` — the shape the search results already use — rather than a shape of its own,
+ * because a unit and its building is one fact and two names for it would drift. **No party and no
+ * date**: what an unauthenticated screen may say about a flat is where it is, which is the rule
+ * every screen keeps until week 5.
+ */
+export async function getUnit(db: Queryable, unitId: string): Promise<UnitHit> {
+  const result = await db.query<UnitHit>(
+    `SELECT u.unit_id,
+            u.unit_number,
+            b.building_id,
+            b.name AS building_name,
+            b.address_line,
+            b.city
+     FROM unit u
+     JOIN space s ON s.space_id = u.unit_id
+     JOIN building b ON b.building_id = s.building_id
+     WHERE u.unit_id = $1`,
+    [unitId],
+  );
+  const unit = result.rows[0];
+  if (!unit) {
+    // `getBuilding`'s rule: an id that does not exist and an id that exists elsewhere are
+    // indistinguishable from outside.
+    throw new KernelError('not_found', 'unit not found');
+  }
+  return unit;
+}
+
 export interface SearchResults {
   buildings: BuildingSummary[];
   units: UnitHit[];

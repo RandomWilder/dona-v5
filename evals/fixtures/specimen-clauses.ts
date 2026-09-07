@@ -37,6 +37,19 @@ export interface SpecimenDocument {
   source: string;
   clauseSource: ClauseSource;
   clauses: readonly SpecimenClause[];
+  /**
+   * The whole document below the front matter — title, commentary and every clause.
+   *
+   * The clauses are what a *question* is graded against, and this is what a *file* looks like to
+   * something reading it whole. Slice 3.3's verification guard needs the second: the marker terms
+   * of a form are printed in its title as often as in its clauses (`חוזה שכירות` appears on the
+   * standard lease's first line and in none of its numbered sections), so a guard graded against
+   * clause bodies alone would refuse the very document it was seeded from.
+   *
+   * Added here rather than in a second reader of `docs/corpus/`, because two loaders over one
+   * directory is the drift this file exists to prevent.
+   */
+  text: string;
 }
 
 export const CORPUS_DIR = path.join('docs', 'corpus');
@@ -132,6 +145,7 @@ function parseDocument(file: string, text: string): SpecimenDocument {
     source: required(file, keys, 'source'),
     clauseSource,
     clauses,
+    text: rest.trim(),
   };
 }
 

@@ -207,6 +207,34 @@ textarea {
   line-height: 1.2;
 }
 
+/* A list of label-and-value pairs. Estate's cards from 1.11 and, from 3.3, the sentence a filed
+   document leaves behind — a shared shape, so it lives here beside .chip rather than in whichever
+   module happened to draw it first. A module that needs a narrower measure overrides the columns
+   under its own class. */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-base);
+}
+
+.facts div {
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.facts dt {
+  margin: 0;
+}
+
+.facts dd {
+  margin: 0;
+  color: var(--color-text);
+}
+
 .row-card {
   position: relative;
   background: var(--color-surface-card);

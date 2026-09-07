@@ -7,6 +7,7 @@ import {
   documentStorageUri,
   parseObjectPath,
   parseStorageUri,
+  sniffExtension,
 } from './storage-path.ts';
 
 // No database and no bucket: the convention is a pure function, and it is the one part of slice 3.2
@@ -215,5 +216,39 @@ describe('storage uri', () => {
       fileHash: hash,
       extension: 'pdf',
     });
+  });
+});
+
+// The kind of a file, read from the file. Slice 3.3.
+describe('sniffing the kind of an uploaded file', () => {
+  const png = Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
+  ]);
+
+  it('reads the kind out of the bytes', () => {
+    assert.equal(sniffExtension(Buffer.from('%PDF-1.7 a lease')), 'pdf');
+    assert.equal(sniffExtension(Buffer.from([0xff, 0xd8, 0xff, 0xe0])), 'jpg');
+    assert.equal(sniffExtension(png), 'png');
+    assert.equal(sniffExtension(Buffer.from([0x49, 0x49, 0x2a, 0x00])), 'tif');
+    assert.equal(sniffExtension(Buffer.from([0x4d, 0x4d, 0x00, 0x2a])), 'tif');
+  });
+
+  it('believes the bytes and not the name', () => {
+    // The upload route never sees this file's name. A `.pdf` that is a PNG is filed as a PNG, and a
+    // `.jpg` that is a Windows executable is refused — which is the whole reason the extension in
+    // the object path is derived here rather than taken from the form.
+    assert.equal(sniffExtension(png), 'png');
+    rejects(
+      () => sniffExtension(Buffer.from([0x4d, 0x5a, 0x90, 0x00])),
+      'is not one of the kinds we store',
+    );
+  });
+
+  it('refuses an empty file and a file too short to have a signature', () => {
+    rejects(() => sniffExtension(Buffer.alloc(0)), 'is not one of the kinds');
+    rejects(
+      () => sniffExtension(Buffer.from([0x25, 0x50])),
+      'is not one of the kinds',
+    );
   });
 });

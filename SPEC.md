@@ -231,8 +231,10 @@ the read model and the five screens 2.6 left behind it, scope the isolation join
 1.7 with no tables underneath it, parties and tenancy their schemas plus the write commands the
 register calls, register the register file format, its parser and its reject contract (2.4), and
 evidence the four document tables, its catalogue commands and the seed that fills them (3.1).
-Parties and tenancy gained a `contract.ts` at 2.4 with the caller 2.1 and 2.2 both predicted; neither
-exports a query, because who is in a unit today is `src/scope/`'s answer and nobody else's — and
+Parties and tenancy gained a `contract.ts` at 2.4 with the caller 2.1 and 2.2 both predicted; parties
+still exports no query, and tenancy's first one arrived at 3.3 — `listUnitTenancies`, the lettings of
+one flat as dates and a status, no person and no isolation predicate, because who is in a unit today
+is `src/scope/`'s answer and nobody else's — and
 **evidence's contract carries no query that returns a person either**, which is that rule not bending
 for documents.
 
@@ -276,6 +278,25 @@ screens are ours and designed for coverage — the Shoham plan from 1.11 and, fr
 register at 1,500 units** loaded through the real importer (`npm run seed:register`), which is where
 the week-2 query timings come from. Real data arrives through the same importer at the pilot-
 preparation step of the method.
+
+**3.3 added the first write route, and it has no session either**: `GET /documents/new` and
+`POST /documents`, flow A1, reached from a unit on the building page. The bounds that stand in for a
+session until week 5 are stated in [SPEC-evidence.md](SPEC-evidence.md) and applied in
+`src/evidence/internal/routes.ts` — one file, 20 MB, four kinds **sniffed from the bytes and never
+from the name**, the filename discarded, and nothing personal in the response. There is no CSRF
+token and that is not an omission: a CSRF token defends a session's authority, and an anonymous
+caller can already post directly; week 5's login is the slice that owes one. `@fastify/multipart` is
+the one runtime dependency the slice added, because an HTML file input posts `multipart/form-data`
+and hand-parsing a boundary-delimited stream of untrusted bytes is the work a maintained plugin
+exists to save. The page shell every screen shares moved to `src/kernel/ui/page.ts` in the same
+change, so `noindex`, the RTL direction and the token stylesheet are written once rather than per
+module. **The type a caller declares is checked against the file before anything is written**:
+`verifyDeclaredType` looks for the type row's `verification_terms` in the document's text, all of
+them, over text normalised for niqqud, bidi controls and whitespace. A miss is a refusal that leaves
+no row and no object and one audit line; a file with no text layer is filed `unverified` rather than
+refused, because refusing every scan would refuse most real leases, and OCR closes that gap at 4.1.
+`tests/policy/document-verification.test.ts` is the constraint over every corpus specimen against
+every seeded type, and it was red before the terms were tuned.
 
 **Two decisions were held for a row count and 2.6 settled both, one in each direction.**
 `tenancy (end_date) WHERE status = 'ACTIVE'` was added, because Q5's scan grows with every lease ever
@@ -321,7 +342,8 @@ finished, on a view, with its audit line and E.164 at the edge 2.3 · the regist
 natural keys and its per-row rejects 2.4 · the portfolio-scale surface, the generated register and
 the two index decisions 2.6 · the document-type catalogue in the workbook 3.0 · the evidence schema,
 its catalogue commands and the nine-type seed 3.1 · the object path convention, the docs bucket's
-four controls and the proved delete refusal 3.2.**
+four controls and the proved delete refusal 3.2 · the declared-type upload, its verification guard
+and the first write route 3.3.**
 Production exists and has been released to — `v0.1.0`–`v0.1.2`, rolled back and rolled forward on
 purpose — and is then **parked until week 12**: the Cloud SQL instance is stopped and the service
 scaled to zero, so `dona-prod` answers 503 by design and staging is the delivered artifact every

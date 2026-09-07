@@ -86,6 +86,95 @@ same bytes filed against a second place from writing a second copy. `ingestDocum
 `storage_uri` from its update path, so the first path filed stays authoritative whatever a later
 caller computes.
 
+## Filing a document — flow A1 (slice 3.3)
+
+The administrator holds a file and knows what it is, so **the type is declared and never detected**
+([SPEC-flows.md](SPEC-flows.md) invariant 6). Classification does not exist in this system. What is
+left is the cheap guard for the error that actually happens: the right slot with the wrong file.
+
+**The order, and it is the one slice 3.2 fixed:** read the bytes → **sniff the kind** → hash →
+**verify the declared type** → look the hash up → `put` the object only when no document already
+holds it → `ingestDocument` → `linkDocument`. `fileDocument` on `contract.ts` is the whole of it, and
+nothing outside it writes a document row.
+
+- **The extension comes from the bytes and never from the upload.** `%PDF-`, `\xFF\xD8\xFF`, the PNG
+  signature and both TIFF byte orders are the four `documentExtensions` this system stores, and the
+  browser's filename and `content-type` are both discarded unread. A filename is uploader-supplied
+  text that routinely carries a household's name (`שכירות כהן.pdf`), and the path convention above
+  exists to keep exactly that out of the object store — reading the extension off it would put the
+  rest of the name one edit away from the path. **The filename is not stored, not logged and not
+  rendered.**
+- **The guard reads the catalogue.** `document_type.verification_terms` is its only input, so a type
+  added as a seed row arrives with its own guard and a type nobody wrote terms for is unguarded
+  rather than unfileable (A8, and slice 3.0's call). There is no `Record<TypeKey, string[]>` anywhere.
+- **Every declared term must be present**, and the rule is that strict because the terms are the
+  fixed printed language of the form rather than anything a particular household's copy says. One
+  matching term is not enough and the corpus shows why: the standard lease says ארנונה in the clause
+  about utilities, so *any-term* filing would accept a lease into the ארנונה slot. The comparison is
+  over whitespace-collapsed text, because a PDF breaks a term across two runs whenever the line wraps.
+- **Three verdicts, not two.** `verified` · `refused` · `unverified`, plus `unguarded` for a type with
+  no terms. **`unverified` is a file with no text layer** — a photograph, or a scan — and it is
+  **filed**, because refusing it would refuse most real leases and OCR is slice 4.1's. A verdict of
+  `unverified` filed silently would make `verified` mean nothing, so the verdict is on the audit line
+  either way.
+
+### A refused upload leaves no row — the question slice 3.1 left open
+
+**Decided at 3.3: a caught upload is refused, and no `document`, no `document_link` and no object are
+written.** The guard runs before the hash is looked up and before anything is `put`, which is what
+the acceptance bar means by *caught before it is filed*.
+
+The published Data Model's figure 4 says *"REJECTED is a state, not a deletion — the wrong file is
+evidence too, of what someone tried to file and when"*, and that is read here as **a statement about
+the bulk review queue** (figure 5's `RECEIVED → EXTRACTED → ACCEPTED / REJECTED`, slice 3.4, deferred
+with F4). In bulk, a rejection is a work item somebody comes back to. On the interactive path the
+administrator is standing in front of the refusal and can act on it immediately, so a row would be a
+second state machine standing beside `calls`' real one with nothing reading it (foundation rule 3).
+
+**What someone tried to file and when is recorded, and not by a column.** Every filing attempt writes
+an `audit_log` line — the declared type, the unit, the file hash, the sniffed extension, the verdict
+and, on a refusal, the terms that were missing. The fact figure 4 wants is kept; the state machine it
+would have cost is not. **No filename and no document text ever reaches that line** (SPEC.md: PII
+never in logs). `state` therefore stays off E12, and remains a nullable `ADD COLUMN` on the day 3.4
+lands and needs it.
+
+### What the upload binds to
+
+**A place, always: the `UNIT`.** That is the object path's root and the first `document_link`.
+
+**A tenancy, when the administrator names one** — `document_link` with `entity_type = 'TENANCY'` —
+chosen from the lettings that unit already has. This is [SPEC-flows.md](SPEC-flows.md) invariant 1's
+primary binding, and it stays a link rather than a path root because a tenancy is temporal and
+rooting the filing cabinet at it would scatter one flat's papers across its lettings.
+
+### The first write route in this system, and it has no session
+
+Every route before 3.3 was a read. This one accepts bytes from anybody who can reach the service, and
+staff auth is week 5's ([SPEC-estate.md](SPEC-estate.md) says the same of the screens beside it, and
+[tasks/roadmap.md](tasks/roadmap.md)'s week 5 owns closing it). What stands in for a session until
+then is bounds rather than intentions:
+
+- **One file per request, 20 MB, and four kinds** — sniffed from the bytes, so a `.pdf` that is not a
+  PDF is `invalid` at the edge rather than an object in the bucket.
+- **The application cannot delete what it writes** (slice 3.2), so the worst an anonymous caller
+  achieves is a bounded object it cannot remove and a row naming a unit.
+- **Nothing personal is on the screen or in the response** — a unit number, a type and a date. The
+  tenancy options are dates and a status, never a name, which is the rule every screen keeps until
+  week 5.
+- **Only tier-1 specimens are filed before week 5.** Real tenant documents are gated behind F6 and
+  arrive at the pilot-preparation step of the method; that ordering is what keeps this window empty
+  rather than merely supervised.
+
+**Declaring a *new draft* tenancy at upload is week 4's, with flow A2**, and the reason is a
+constraint that already exists rather than a preference: a draft is never an empty shell — unit,
+dates and at least one tenant — and `upsertParty` requires a ת.ז., because `national_id_key` is
+`party`'s natural key and an upsert without one is an insert wearing an upsert's name
+(`src/parties/internal/commands.ts`, which assigns the `createParty` this needs to week 4 with its
+confirmation step around it). Building it here would mean an **unauthenticated route that accepts a
+person's name and identity number**, six weeks before the session that gates it (week 5) and before
+the confirmation step invariant 5 requires. A handover protocol precedes every tenancy its flat will
+ever have, so a document with no tenancy link is an ordinary case and not a gap.
+
 ## What this module exports, and what it refuses
 
 `src/evidence/contract.ts` is the whole public surface; nothing outside the module imports
@@ -128,8 +217,9 @@ All four are nullable `ADD COLUMN`s when they come.
 - **`state`** — figure 5's `RECEIVED → EXTRACTED → ACCEPTED / REJECTED` is the review queue's state
   machine, and the review queue is slice 3.4, deferred with fuse F4. Type is declared rather than
   detected, so nothing this week branches on a document state, and a state column nothing reads is a
-  second state machine standing beside `calls`' real one (foundation rule 3). **Slice 3.3 decides**
-  whether a wrong file caught at the door leaves a row behind it.
+  second state machine standing beside `calls`' real one (foundation rule 3). **Slice 3.3 decided it
+  and the answer is still no column**: a refused upload leaves no row at all, and what someone tried
+  to file and when is an `audit_log` line — see "A refused upload leaves no row" above.
 - **`superseded_by`** — [SPEC-flows.md](SPEC-flows.md) invariant 2 already moved this: an addendum is
   not patching a document, it is contributing a value to a tenancy, so supersession is a fact about
   **values** and lives with their provenance (4.2, 4.3). A genuinely re-issued document — a corrected

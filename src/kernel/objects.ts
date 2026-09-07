@@ -148,3 +148,18 @@ export function createConfiguredStore(
   const bucket = env.DOCS_BUCKET;
   return bucket ? createGcsStore({ bucket }) : createMemoryStore();
 }
+
+// The name a `storage_uri` carries when nothing configured a bucket. Slice 3.3.
+//
+// `document.storage_uri` holds `gs://<bucket>/<path>` and a read refuses a bucket that is not the
+// one this process is configured for, so a row written on a laptop still has to name a bucket. It
+// names this one rather than a deployment's, because a local row pointing at
+// `dona-v5-staging-docs` would be a row that a staging process would happily follow.
+export const devBucketName = 'dona-v5-dev-docs';
+
+/** The bucket this process writes into rows, beside the store it writes objects into. */
+export function configuredBucket(
+  env: Record<string, string | undefined> = process.env,
+): string {
+  return env.DOCS_BUCKET ?? devBucketName;
+}

@@ -18,6 +18,7 @@
 // and search does not reach `party` at all. That is a decision the views enforce by never being
 // handed the data, not a discipline they remember.
 import { type Html, h } from '../../kernel/ui/html.ts';
+import { renderPage } from '../../kernel/ui/page.ts';
 import type {
   BuildingDetail,
   BuildingSummary,
@@ -67,35 +68,10 @@ const label = (table: Record<string, string>, value: string): string =>
 const ltr = (value: string | number): Html =>
   h`<span dir="ltr">${value}</span>`;
 
+// The shell — doctype, head, chrome bar, `.wrap` and the shared typography — moved to
+// `src/kernel/ui/page.ts` at slice 3.3, when evidence gained a screen and the alternative was a
+// second copy of it. What stays here is the layout of estate's own cards.
 const styles = h`<style>
-  .wrap {
-    max-width: var(--size-shell-max);
-    margin-inline: auto;
-    padding: var(--space-4);
-    display: grid;
-    gap: var(--space-5);
-  }
-  .top {
-    background: var(--color-chrome);
-    color: var(--color-on-chrome);
-    padding: var(--space-4);
-  }
-  .top-inner {
-    max-width: var(--size-shell-max);
-    margin-inline: auto;
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-  }
-  .brand { font-weight: 500; }
-  .top-note {
-    color: var(--color-on-chrome-muted);
-    font-size: var(--text-sm);
-  }
-  h1 { font-size: var(--text-xl); margin: 0; }
-  h2 { font-size: var(--text-lg); margin: 0 0 var(--space-3); }
-  .lede { color: var(--color-text-muted); margin: var(--space-1) 0 0; }
   .card-title {
     display: flex;
     align-items: baseline;
@@ -107,22 +83,14 @@ const styles = h`<style>
   }
   /* Two different measures on purpose. A building's facts are a date and a tender name and need a
      column wide enough not to break '2027-03-01' across two lines on a phone; a unit's are
-     two-token pairs and would waste half the card at that width. Seen on staging at 375px. */
-  .facts {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
-    gap: var(--space-2) var(--space-4);
-    margin: 0;
-    color: var(--color-text-muted);
-    font-size: var(--text-base);
-  }
+     two-token pairs and would waste half the card at that width. Seen on staging at 375px. The
+     wider one is .facts in the token sheet, shared with the filed-document screen since 3.3;
+     only the narrow override is estate's. */
   .unit-card .facts {
     grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
   }
-  .facts div { display: flex; gap: var(--space-2); min-width: 0; }
-  .facts dt { margin: 0; }
-  .facts dd { margin: 0; color: var(--color-text); }
   .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .unit-actions { margin: var(--space-3) 0 0; }
   .unit-grid {
     display: grid;
     gap: var(--space-2);
@@ -130,17 +98,8 @@ const styles = h`<style>
   }
   .unit-card { padding-inline-start: var(--space-6); }
   .unit-no { font-size: var(--text-lg); font-weight: 500; }
-  .back { display: inline-block; }
   a.card-link { color: inherit; text-decoration: none; display: block; }
   a.card-link:hover .card-title { text-decoration: underline; }
-  .top-nav {
-    display: flex;
-    gap: var(--space-4);
-    align-items: center;
-    flex-wrap: wrap;
-    margin-inline-start: auto;
-  }
-  .top-nav a { color: var(--color-on-chrome); }
   /* The search box is a plain GET form, so the screens still carry no client JavaScript at all and
      a result page is a URL somebody can send to somebody else. */
   .search { display: flex; gap: var(--space-2); align-items: center; }
@@ -150,43 +109,26 @@ const styles = h`<style>
   .lease-when { display: flex; gap: var(--space-3); align-items: baseline; flex-wrap: wrap; }
 </style>`;
 
-function chrome(): Html {
-  return h`<div class="top-inner">
-    <span class="brand">דונה דום</span>
-    <span class="top-note">נכסים · נתוני הדגמה</span>
-    <nav class="top-nav">
-      <a href="/estate">בניינים</a>
-      <a href="/estate/expiring">חוזים מסתיימים</a>
-      <form class="search" method="get" action="/estate/search" role="search">
-        <input
-          id="q"
-          name="q"
-          type="search"
-          aria-label="חיפוש בניין, כתובת או מספר דירה"
-          placeholder="כתובת, בניין או מספר דירה"
-        />
-        <button class="btn btn-secondary" type="submit">חיפוש</button>
-      </form>
-    </nav>
-  </div>`;
+// Estate's nav, and it stays estate's: these are its routes, and the kernel's shell knows no route.
+function nav(): Html {
+  return h`<nav class="top-nav">
+    <a href="/estate">בניינים</a>
+    <a href="/estate/expiring">חוזים מסתיימים</a>
+    <form class="search" method="get" action="/estate/search" role="search">
+      <input
+        id="q"
+        name="q"
+        type="search"
+        aria-label="חיפוש בניין, כתובת או מספר דירה"
+        placeholder="כתובת, בניין או מספר דירה"
+      />
+      <button class="btn btn-secondary" type="submit">חיפוש</button>
+    </form>
+  </nav>`;
 }
 
 function page(title: string, body: Html): string {
-  return `<!doctype html>
-${h`<html lang="he" dir="rtl">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="robots" content="noindex" />
-    <title>${title}</title>
-    <link rel="stylesheet" href="/ui/tokens.css" />
-    ${styles}
-  </head>
-  <body>
-    <header class="top">${chrome()}</header>
-    <main class="wrap">${body}</main>
-  </body>
-</html>`}`;
+  return renderPage({ title, styles, nav: nav(), body });
 }
 
 function marker(status: string): Html {
@@ -299,6 +241,9 @@ function unitCard(unit: UnitRow, occupancy: OccupancyByUnit): Html {
           : h``
       }
     </dl>
+    <p class="unit-actions">
+      <a href="/documents/new?unit=${unit.unit_id}">הוספת מסמך</a>
+    </p>
   </article>`;
 }
 

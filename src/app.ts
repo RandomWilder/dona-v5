@@ -11,8 +11,15 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import { registerEstateRoutes } from './estate/contract.ts';
+import { registerDocumentRoutes } from './evidence/contract.ts';
 import { type Clock, systemClock } from './kernel/clock.ts';
 import { httpStatus, KernelError, toErrorBody } from './kernel/errors.ts';
+import {
+  configuredBucket,
+  createMemoryStore,
+  type ObjectStore,
+} from './kernel/objects.ts';
+import { createPdfjsText, type PdfText } from './kernel/pdf.ts';
 import { registerUiAssets } from './kernel/ui/assets.ts';
 
 export interface AppDeps {
@@ -20,6 +27,16 @@ export interface AppDeps {
   version: string;
   /** Injected here and nowhere deeper. SPEC.md: the clock is a dependency, never a global read. */
   clock?: Clock;
+  /**
+   * Where a filed document's bytes go (slice 3.3). **Memory unless the caller says otherwise**, so a
+   * test builds an app without reaching a bucket and `npm run dev` on a clean clone still starts;
+   * `serve.ts` passes the configured store and prints which one it is.
+   */
+  objects?: ObjectStore;
+  /** The PDF reader the verification guard reads text through. */
+  pdf?: PdfText;
+  /** The bucket a `storage_uri` names, which is not the same statement as which store is running. */
+  bucket?: string;
 }
 
 export function buildApp(deps: AppDeps): FastifyInstance {
@@ -58,6 +75,13 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   registerEstateRoutes(app, {
     pool: deps.pool,
     clock: deps.clock ?? systemClock,
+  });
+  registerDocumentRoutes(app, {
+    pool: deps.pool,
+    clock: deps.clock ?? systemClock,
+    objects: deps.objects ?? createMemoryStore(),
+    pdf: deps.pdf ?? createPdfjsText(),
+    bucket: deps.bucket ?? configuredBucket(),
   });
 
   return app;

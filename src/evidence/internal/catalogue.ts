@@ -193,6 +193,44 @@ export async function listDocumentTypes(
 }
 
 /**
+ * One type, by its natural key. Slice 3.3's intake reads it for two things at once: the
+ * `document_type_id` a document row points at, and the marker terms the guard checks.
+ *
+ * Null for a key nobody has seeded, rather than a throw: whether an unknown declared type is
+ * `invalid` at the edge or a 404 on a screen is the caller's decision, and a read that made it here
+ * would be making it for every caller.
+ */
+export async function documentTypeByKey(
+  db: Queryable,
+  typeKey: string,
+): Promise<DocumentTypeRow | null> {
+  const result = await db.query<{
+    document_type_id: string;
+    type_key: string;
+    label_he: string;
+    label_en: string | null;
+    verification_terms: string[] | null;
+    is_active: boolean;
+  }>(
+    `SELECT document_type_id, type_key, label_he, label_en, verification_terms, is_active
+       FROM document_type
+      WHERE type_key = $1`,
+    [typeKey],
+  );
+  const row = result.rows[0];
+  return row
+    ? {
+        documentTypeId: row.document_type_id,
+        typeKey: row.type_key,
+        labelHe: row.label_he,
+        labelEn: row.label_en,
+        verificationTerms: row.verification_terms,
+        isActive: row.is_active,
+      }
+    : null;
+}
+
+/**
  * The field declarations governing a type **on a given day**.
  *
  * The date is a parameter and never `CURRENT_DATE`, for the reason every date in this system is:

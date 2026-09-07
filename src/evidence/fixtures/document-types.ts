@@ -152,7 +152,12 @@ export const seedDocumentTypes: SeedDocumentType[] = [
       typeKey: 'bank_guarantee',
       labelHe: 'ערבות בנקאית',
       labelEn: 'Bank guarantee',
-      verificationTerms: ['ערבות', 'אוטונומית', 'הבנק'],
+      // **Corrected at 3.3, for the same reason `handover_protocol`'s were.** These were
+      // `['ערבות', 'אוטונומית', 'הבנק']`. The specimen never says הבנק — a guarantee is written in
+      // the bank's own voice, *אנו ערבים* — and the first two are both in the lease's clause 14,
+      // which requires the guarantee. The terms that separate are the ones only the instrument
+      // itself carries: it *is* a כתב ערבות, and בלתי מותנית is what makes it autonomous.
+      verificationTerms: ['כתב ערבות', 'אוטונומית', 'בלתי מותנית'],
       isActive: true,
     },
     // No amount here either — the specimen in docs/corpus/ says so in as many words, and for the
@@ -165,7 +170,14 @@ export const seedDocumentTypes: SeedDocumentType[] = [
       typeKey: 'handover_protocol',
       labelHe: 'פרוטוקול מסירה',
       labelEn: 'Handover protocol',
-      verificationTerms: ['פרוטוקול מסירה', 'מצב המושכר'],
+      // **Corrected at 3.3, and the correction is the guard doing its job before it shipped.** These
+      // were `['פרוטוקול מסירה', 'מצב המושכר']`, written from the form's *name* rather than from a
+      // document, and neither term separates: the specimen is headed פרוטוקול מסירת דירה, so the
+      // first appears nowhere in it, and the second is in the standard lease's clause 6, which
+      // refers to the protocol. The lease would have been refused as a protocol for the right
+      // reason and the protocol refused as itself for the wrong one. A meter reading is what a
+      // handover protocol has and a lease does not.
+      verificationTerms: ['פרוטוקול', 'מצב המושכר', 'מונה מים'],
       isActive: true,
     },
     // Slice 3.5 reads these. `handover_date` is the fact that discharges week 2's carried item: the
