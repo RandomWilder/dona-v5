@@ -30,6 +30,8 @@ import {
 import type { DocumentTypeRow } from '../../src/evidence/contract.ts';
 import {
   renderFiledPage,
+  renderSeededPage,
+  renderSeedPage,
   renderUploadPage,
 } from '../../src/evidence/contract.ts';
 import type { UnitLetting } from '../../src/tenancy/contract.ts';
@@ -250,6 +252,38 @@ const SCREENS: Array<[string, () => string]> = [
         boundToTenancy: false,
         verification: { verdict: 'unverified', missingTerms: [] },
         fileHash: 'd'.repeat(64),
+      }),
+  ],
+  [
+    'documents · seed a protocol',
+    () =>
+      renderSeedPage({
+        documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        labelHe: 'פרוטוקול מסירה',
+        buildingId: building.building_id,
+        buildingName: building.name,
+        unitId: hit.unit_id,
+        unitNumber: hit.unit_number,
+        handoverDate: '2024-06-01',
+        apartmentNumber: '12',
+        warrantyEndDate: '2026-06-01',
+        assets: [
+          { labelHe: 'מזגן', assetType: 'AC' },
+          { labelHe: 'דוד מים', assetType: 'WATER_HEATER' },
+        ],
+      }),
+  ],
+  [
+    'documents · protocol seeded',
+    () =>
+      renderSeededPage({
+        buildingId: building.building_id,
+        buildingName: building.name,
+        unitId: hit.unit_id,
+        handoverDate: '2024-06-01',
+        warrantyEndDate: '2026-06-01',
+        assetsWritten: 2,
+        alreadySeeded: false,
       }),
   ],
 ];

@@ -130,6 +130,8 @@ describe('estate · the import runs twice', () => {
               building: { created: 1, updated: 0 },
               space: { created: 5, updated: 0 },
               unit: { created: 2, updated: 0 },
+              provider: { created: 0, updated: 0 },
+              asset: { created: 0, updated: 0 },
             });
 
             const afterFirst = await idsIn(db, CITY);
@@ -140,6 +142,8 @@ describe('estate · the import runs twice', () => {
               building: { created: 0, updated: 1 },
               space: { created: 0, updated: 5 },
               unit: { created: 0, updated: 2 },
+              provider: { created: 0, updated: 0 },
+              asset: { created: 0, updated: 0 },
             });
 
             // `created: 0` is the weak half of the claim. The ids staying still is the strong half:
@@ -207,6 +211,8 @@ describe('estate · the import runs twice', () => {
             assert.equal(report.building.created, 1);
             assert.equal(report.space.created, 184);
             assert.equal(report.unit.created, 72);
+            assert.equal(report.provider.created, 1);
+            assert.equal(report.asset.created, 3);
 
             // Coverage, asserted rather than described: a fixture that quietly became 72 identical
             // apartments would still satisfy the counts above. Scoped to this building, because the
@@ -248,6 +254,8 @@ describe('estate · the import runs twice', () => {
           assert.deepEqual(second.building, { created: 0, updated: 1 });
           assert.deepEqual(second.space, { created: 0, updated: 184 });
           assert.deepEqual(second.unit, { created: 0, updated: 72 });
+          assert.deepEqual(second.provider, { created: 0, updated: 1 });
+          assert.deepEqual(second.asset, { created: 0, updated: 3 });
         });
       });
     } finally {

@@ -554,3 +554,116 @@ describe('estate · the schema is the constraint', () => {
     }
   });
 });
+
+describe('estate · Asset and the Provider stub', () => {
+  it('holds R3, R11, R12, R14 and the workbook’s columns', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await t.test('the fourteen columns, and the stub’s three', async () => {
+        await inRolledBackTransaction(pool, async (db) => {
+          assert.deepEqual(await columnsOf(db, 'provider'), [
+            'name',
+            'provider_id',
+            'provider_kind',
+          ]);
+          assert.deepEqual(await columnsOf(db, 'asset'), [
+            'asset_class',
+            'asset_id',
+            'asset_type',
+            'compliance_regime',
+            'installed_date',
+            'last_certificate_document_id',
+            'make_model',
+            'next_inspection_due',
+            'serial_no',
+            'source_document_id',
+            'space_id',
+            'status',
+            'warranty_end_date',
+            'warranty_provider_id',
+          ]);
+        });
+      });
+
+      await t.test('R11 · a warranty provider must be a real one', async () => {
+        await inRolledBackTransaction(pool, async (db) => {
+          const buildingId = await insertBuilding(db);
+          const spaceId = await insertSpace(db, buildingId, 'UNIT');
+          await rejects(db, FOREIGN_KEY_VIOLATION, () =>
+            db.query(
+              `INSERT INTO asset (asset_id, space_id, asset_class, asset_type,
+                                  warranty_provider_id, compliance_regime, status)
+               VALUES ($1, $2, 'FIXTURE', 'AC', $3, 'NONE', 'IN_SERVICE')`,
+              [newId(), spaceId, newId()],
+            ),
+          );
+          const providerId = newId();
+          await db.query(
+            `INSERT INTO provider (provider_id, name, provider_kind)
+             VALUES ($1, $2, 'DEVELOPER_WARRANTY')`,
+            [providerId, `provider-${providerId.slice(0, 8)}`],
+          );
+          await db.query(
+            `INSERT INTO asset (asset_id, space_id, asset_class, asset_type,
+                                warranty_provider_id, compliance_regime, status)
+             VALUES ($1, $2, 'FIXTURE', 'AC', $3, 'NONE', 'IN_SERVICE')`,
+            [newId(), spaceId, providerId],
+          );
+        });
+      });
+
+      await t.test(
+        'R12 · a source document must be a real document',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            const buildingId = await insertBuilding(db);
+            const spaceId = await insertSpace(db, buildingId, 'UNIT');
+            await rejects(db, FOREIGN_KEY_VIOLATION, () =>
+              db.query(
+                `INSERT INTO asset (asset_id, space_id, asset_class, asset_type,
+                                    source_document_id, compliance_regime, status)
+                 VALUES ($1, $2, 'FIXTURE', 'AC', $3, 'NONE', 'IN_SERVICE')`,
+                [newId(), spaceId, newId()],
+              ),
+            );
+          });
+        },
+      );
+
+      await t.test(
+        'R14 · a unit may override the building’s warranty window',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            const buildingId = await insertBuilding(db);
+            const spaceId = await insertSpace(db, buildingId, 'UNIT');
+            await insertUnit(db, spaceId);
+            await db.query(
+              `UPDATE unit SET warranty_end_date = '2028-01-01' WHERE unit_id = $1`,
+              [spaceId],
+            );
+            const row = await db.query<{
+              building: string;
+              unit: string | null;
+            }>(
+              `SELECT b.warranty_end_date::text AS building,
+                      u.warranty_end_date::text AS unit
+                 FROM building b
+                 JOIN space s ON s.building_id = b.building_id
+                 JOIN unit u ON u.unit_id = s.space_id
+                WHERE u.unit_id = $1`,
+              [spaceId],
+            );
+            assert.equal(row.rows[0]?.building, '2027-01-01');
+            assert.equal(row.rows[0]?.unit, '2028-01-01');
+          });
+        },
+      );
+    } finally {
+      await pool.end();
+    }
+  });
+});

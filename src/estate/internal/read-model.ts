@@ -339,10 +339,96 @@ export async function countUnitsByBuilding(
   return new Map(result.rows.map((row) => [row.building_id, Number(row.n)]));
 }
 
+export interface OverdueInspection {
+  asset_id: string;
+  asset_type: string;
+  asset_class: string;
+  next_inspection_due: string;
+  space_id: string;
+  space_name: string;
+  space_kind: string;
+}
+
+const OVERDUE_INSPECTIONS_SQL = `
+  SELECT a.asset_id,
+         a.asset_type,
+         a.asset_class,
+         a.next_inspection_due::text AS next_inspection_due,
+         s.space_id,
+         s.name AS space_name,
+         s.space_kind
+    FROM asset a
+    JOIN space s ON s.space_id = a.space_id
+   WHERE s.building_id = $1
+     AND a.next_inspection_due < $2::date
+     AND a.status = 'IN_SERVICE'
+   ORDER BY a.next_inspection_due, s.name, a.asset_type`;
+
+/**
+ * **Q3 — what is overdue for inspection in this building.** One query, because every asset hangs
+ * on exactly one space (R3). `today` is a parameter and never `CURRENT_DATE`.
+ */
+export async function listOverdueInspections(
+  db: Queryable,
+  buildingId: string,
+  today: Date,
+): Promise<OverdueInspection[]> {
+  const result = await db.query<OverdueInspection>(OVERDUE_INSPECTIONS_SQL, [
+    buildingId,
+    today.toISOString().slice(0, 10),
+  ]);
+  return result.rows;
+}
+
+export interface UnitParkingAsset {
+  unit_id: string;
+  unit_number: string;
+  parking_space_id: string | null;
+  parking_name: string | null;
+  asset_id: string | null;
+  asset_type: string | null;
+  make_model: string | null;
+  status: string | null;
+  provider_name: string | null;
+}
+
+const UNIT_PARKING_ASSETS_SQL = `
+  SELECT u.unit_id,
+         u.unit_number,
+         parking.space_id AS parking_space_id,
+         parking.name AS parking_name,
+         a.asset_id,
+         a.asset_type,
+         a.make_model,
+         a.status,
+         p.name AS provider_name
+    FROM unit u
+    LEFT JOIN space parking ON parking.space_id = u.parking_space_id
+    LEFT JOIN asset a ON a.space_id = parking.space_id
+    LEFT JOIN provider p ON p.provider_id = a.warranty_provider_id
+   WHERE u.unit_id = $1
+   ORDER BY a.asset_type`;
+
+/**
+ * **Q7 — which bay is assigned to this unit, and what sits on it.** One query:
+ * `Unit.parking_space_id → Space → Asset`.
+ */
+export async function listUnitParkingAssets(
+  db: Queryable,
+  unitId: string,
+): Promise<UnitParkingAsset[]> {
+  const result = await db.query<UnitParkingAsset>(UNIT_PARKING_ASSETS_SQL, [
+    unitId,
+  ]);
+  return result.rows;
+}
+
 /** The strings `npm run measure:scale` explains, so the instrument reads what the screen runs. */
 export const MEASURED_QUERIES = {
   'estate · buildings list': LIST_BUILDINGS_SQL,
   'estate · search, buildings': SEARCH_BUILDINGS_SQL,
   'estate · search, units': SEARCH_UNITS_SQL,
   'estate · Q5, leases ending inside the window': EXPIRING_LEASES_SQL,
+  'estate · Q3, overdue inspections in a building': OVERDUE_INSPECTIONS_SQL,
+  'estate · Q7, bay and assets assigned to a unit': UNIT_PARKING_ASSETS_SQL,
 };

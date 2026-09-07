@@ -9,7 +9,7 @@ this file and the workbook disagree, the workbook is right and this file is a bu
 - **Entities:** E12, E13, E15, E16 — Document · DocumentLink · DocumentType · DocumentTypeField ·
   ExtractedField · FieldPromotion.
 - **Depends on:** estate, parties, tenancy.
-- **Builds:** week 3 (slices 3.1–3.3, 3.6) and week 4 (OCR, comprehension, promotion, the accuracy
+- **Builds:** week 3 (slices 3.1–3.3, 3.5's confirm screen, 3.6) and week 4 (OCR, comprehension, promotion, the accuracy
   number). **The stub gained content at slice 3.1**, which is the signal its build started.
 - **Carries:** **capture is open, promotion is governed** ([tasks/plan.md](tasks/plan.md) A8). A new
   type or field is a row — zero migrations, zero deploys — and is citable the moment it is extracted;
@@ -194,18 +194,42 @@ ever have, so a document with no tenancy link is an ordinary case and not a gap.
 
 ## Seeding the catalogue — data, not a migration
 
-The nine seed types live in `src/evidence/fixtures/document-types.ts` and are applied by
+The seed types live in `src/evidence/fixtures/document-types.ts` and are applied by
 `npm run seed:doctypes`, which is **wired into no workflow**, for `src/seed.ts`'s reason: a fixture
 that seeds itself on every deploy puts rows into production the next time a `v*` tag is cut.
 
 They are data and not a backfill migration **because the acceptance bar says so**: a new document
-type must cost a seed row and a re-deploy of data. If the nine arrived in a migration, the tenth
-would too, and A8's open half would be false the day it was written.
+type must cost a seed row and a re-deploy of data. If the catalogue arrived in a migration, every
+later type would too, and A8's open half would be false the day it was written.
 
-The nine: `lease · lease_amendment · termination_notice · arnona · insurance · id · bank_guarantee ·
-handover_protocol · inspection_certificate`. The first eight are the published Data Model's; the
-ninth has been in the workbook since 3 Sep because SAFETY assets and the compliance tab need it, and
-slice 3.5 needs it this week.
+The nine at 3.1: `lease · lease_amendment · termination_notice · arnona · insurance · id ·
+bank_guarantee · handover_protocol · inspection_certificate`. The first eight are the published Data
+Model's; the ninth has been in the workbook since 3 Sep because SAFETY assets and the compliance tab
+need it. **Slice 3.5 added the tenth, `building_handover_protocol`**, because the unit-level protocol
+is operator-to-tenant and `building.handover_date` is developer-to-operator — two acts, two forms,
+and A8's open half means the second is a seed row rather than a migration. The 3.1 acceptance bar
+(a type with four fields of its own costs no DDL) still holds and is still proved on a type that is
+not in the seed.
+
+## Flow A6 — seeding from a handover protocol (slice 3.5)
+
+After A1 files a `handover_protocol` or `building_handover_protocol` that the guard verified, the
+next screen is a proposal, not a done page. A deterministic reader runs over the same
+`documentText` the guard already produced and proposes a handover date, an apartment number
+(unit-level) and the appliances whose Hebrew names appear in the file.
+
+**The confirm page recomputes the proposal from the stored bytes.** There is no staging table: the
+document is immutable and the reader is a pure function, so holding a copy between GET and POST
+would be a second fact that can disagree with the first. A2 still owes its own answer for
+model-based proposals.
+
+**Estate writes, evidence does not.** `applyProtocolSeed` on estate's contract is what inserts the
+asset rows and updates the dates. Evidence calls it after the administrator confirms, and never
+issues SQL against `asset`, `unit` or `building`. A `building_handover_protocol` is filed under the
+building (`PlaceKind = BUILDING`), not under the unit the administrator happened to be looking at.
+
+A file with no text layer (`unverified`) has nothing to propose and skips the confirm screen —
+OCR at 4.1 is what gives that file a text layer to read.
 
 ## What E12 deliberately does not carry
 

@@ -16,6 +16,7 @@
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { INSERTED } from '../../kernel/upsert.ts';
+import { upsertAsset, upsertProvider } from './assets.ts';
 import type {
   BuildingPlan,
   EstatePlan,
@@ -114,6 +115,9 @@ function validateBuildingSpaces(building: BuildingPlan): void {
     requireSpace('UNIT', unit.spaceName, 'space');
     requireSpace('PARKING', unit.parkingSpaceName, 'parking space');
     requireSpace('STORAGE', unit.storageSpaceName, 'storage space');
+  }
+  for (const asset of building.assets ?? []) {
+    requireSpace(asset.spaceKind, asset.spaceName, 'asset space');
   }
 }
 
@@ -297,6 +301,41 @@ async function upsertUnits(
   }
 }
 
+async function upsertAssets(
+  db: Queryable,
+  building: BuildingPlan,
+  spaces: SpaceIndex,
+  providers: Map<string, string>,
+  tally: Tally,
+): Promise<void> {
+  for (const asset of building.assets ?? []) {
+    const spaceId = spaces.get(spaceKey(asset.spaceKind, asset.spaceName));
+    if (!spaceId) {
+      throw new KernelError(
+        'invalid',
+        'asset names a space that is not in the plan',
+        {
+          spaceName: asset.spaceName,
+        },
+      );
+    }
+    const warrantyProviderId = asset.warrantyProviderName
+      ? (providers.get(asset.warrantyProviderName) ?? null)
+      : null;
+    if (asset.warrantyProviderName && !warrantyProviderId) {
+      throw new KernelError('invalid', 'asset names an unknown provider', {
+        name: asset.warrantyProviderName,
+      });
+    }
+    tally.count(
+      await upsertAsset(db, spaceId, asset, {
+        warrantyProviderId,
+        sourceDocumentId: null,
+      }),
+    );
+  }
+}
+
 /**
  * Applies a plan. Idempotent: the second run over the same plan creates nothing and changes no id.
  *
@@ -312,20 +351,31 @@ export async function importEstate(
   const buildings = new Tally();
   const space = new Tally();
   const unit = new Tally();
+  const provider = new Tally();
+  const asset = new Tally();
   for (const row of plan.projects) {
     project.count(await upsertProject(db, row));
+  }
+  const providers = new Map<string, string>();
+  for (const row of plan.providers ?? []) {
+    const upserted = await upsertProvider(db, row);
+    provider.count(upserted.inserted);
+    providers.set(row.name, upserted.providerId);
   }
   for (const building of plan.buildings) {
     const { buildingId, inserted } = await upsertBuilding(db, building);
     buildings.count(inserted);
     const spaces = await upsertSpaces(db, buildingId, building, space);
     await upsertUnits(db, building, spaces, unit);
+    await upsertAssets(db, building, spaces, providers, asset);
   }
   return {
     project: project.report,
     building: buildings.report,
     space: space.report,
     unit: unit.report,
+    provider: provider.report,
+    asset: asset.report,
   };
 }
 

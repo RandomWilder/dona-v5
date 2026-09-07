@@ -123,3 +123,45 @@ export async function linkDocument(
   }
   return { id: spec.documentId, inserted };
 }
+
+export interface FiledDocument {
+  documentId: string;
+  documentTypeId: string;
+  typeKey: string;
+  labelHe: string;
+  storageUri: string;
+  fileHash: string;
+}
+
+export async function getFiledDocument(
+  db: Queryable,
+  documentId: string,
+): Promise<FiledDocument> {
+  const result = await db.query<{
+    document_id: string;
+    document_type_id: string;
+    type_key: string;
+    label_he: string;
+    storage_uri: string;
+    file_hash: string;
+  }>(
+    `SELECT d.document_id, d.document_type_id, dt.type_key, dt.label_he,
+            d.storage_uri, d.file_hash
+       FROM document d
+       JOIN document_type dt ON dt.document_type_id = d.document_type_id
+      WHERE d.document_id = $1`,
+    [documentId],
+  );
+  const row = result.rows[0];
+  if (!row) {
+    throw new KernelError('not_found', 'document not found');
+  }
+  return {
+    documentId: row.document_id,
+    documentTypeId: row.document_type_id,
+    typeKey: row.type_key,
+    labelHe: row.label_he,
+    storageUri: row.storage_uri,
+    fileHash: row.file_hash,
+  };
+}

@@ -12,7 +12,12 @@
 import multipart from '@fastify/multipart';
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
-import { getUnit } from '../../estate/contract.ts';
+import {
+  addCalendarYears,
+  getBuilding,
+  getUnit,
+  WARRANTY_YEARS,
+} from '../../estate/contract.ts';
 import { createAuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
@@ -22,7 +27,19 @@ import { validId } from '../../kernel/validate.ts';
 import { listUnitTenancies } from '../../tenancy/contract.ts';
 import { documentTypeByKey, listDocumentTypes } from './catalogue.ts';
 import { fileDocument } from './intake.ts';
-import { renderFiledPage, renderUploadPage } from './views.ts';
+import { isProtocolType } from './protocol.ts';
+import {
+  confirmProtocol,
+  type ProtocolProposal,
+  proposeProtocol,
+} from './seed.ts';
+import type { SeedScreen } from './views.ts';
+import {
+  renderFiledPage,
+  renderSeededPage,
+  renderSeedPage,
+  renderUploadPage,
+} from './views.ts';
 
 export interface DocumentDeps {
   pool: Pool;
@@ -101,9 +118,10 @@ export function registerDocumentRoutes(
       {
         bytes,
         typeKey: type.typeKey,
-        // The place, and it is always the unit on this screen. `PlaceKind` refuses a person's id by
-        // type, which is the object path convention enforced rather than remembered (slice 3.2).
-        place: { kind: 'UNIT', id: unitId },
+        place:
+          type.typeKey === 'building_handover_protocol'
+            ? { kind: 'BUILDING', id: unit.building_id }
+            : { kind: 'UNIT', id: unitId },
         tenancyId,
       },
     );
@@ -124,6 +142,12 @@ export function registerDocumentRoutes(
         refused: { type, verification: result.verification },
       });
     }
+    if (
+      isProtocolType(type.typeKey) &&
+      result.verification.verdict === 'verified'
+    ) {
+      return reply.redirect(`/documents/${result.documentId}/seed`);
+    }
     return renderFiledPage({
       unit,
       type,
@@ -133,6 +157,43 @@ export function registerDocumentRoutes(
       fileHash: fileHashOf(result.storageUri),
     });
   });
+
+  const seedDeps = () => ({
+    db: deps.pool,
+    objects: deps.objects,
+    pdf: deps.pdf,
+    bucket: deps.bucket,
+  });
+
+  app.get<{ Params: { documentId: string } }>(
+    '/documents/:documentId/seed',
+    async (request, reply) => {
+      const documentId = validId(request.params.documentId, 'document');
+      const proposed = await proposeProtocol(seedDeps(), documentId);
+      html(reply);
+      return renderSeedPage(await seedScreen(deps, proposed));
+    },
+  );
+
+  app.post<{ Params: { documentId: string } }>(
+    '/documents/:documentId/seed',
+    async (request, reply) => {
+      const documentId = validId(request.params.documentId, 'document');
+      const proposed = await proposeProtocol(seedDeps(), documentId);
+      const confirmed = await confirmProtocol(seedDeps(), documentId);
+      const screen = await seedScreen(deps, proposed);
+      html(reply);
+      return renderSeededPage({
+        buildingId: screen.buildingId,
+        buildingName: screen.buildingName,
+        unitId: screen.unitId,
+        handoverDate: proposed.proposal.handoverDate ?? '',
+        warrantyEndDate: confirmed.warrantyEndDate,
+        assetsWritten: confirmed.assetsWritten,
+        alreadySeeded: confirmed.alreadySeeded,
+      });
+    },
+  );
 }
 
 interface Upload {
@@ -195,4 +256,42 @@ async function readUpload(request: {
 function fileHashOf(storageUri: string): string {
   const leaf = storageUri.slice(storageUri.lastIndexOf('/') + 1);
   return leaf.slice(0, leaf.lastIndexOf('.'));
+}
+
+async function seedScreen(
+  deps: DocumentDeps,
+  proposed: ProtocolProposal,
+): Promise<SeedScreen> {
+  if (proposed.placeKind === 'UNIT') {
+    const unit = await getUnit(deps.pool, proposed.placeId);
+    return {
+      documentId: proposed.documentId,
+      labelHe: proposed.labelHe,
+      buildingId: unit.building_id,
+      buildingName: unit.building_name,
+      unitId: unit.unit_id,
+      unitNumber: unit.unit_number,
+      handoverDate: proposed.proposal.handoverDate,
+      apartmentNumber: proposed.proposal.apartmentNumber,
+      warrantyEndDate: proposed.proposal.handoverDate
+        ? addCalendarYears(proposed.proposal.handoverDate, WARRANTY_YEARS)
+        : null,
+      assets: proposed.proposal.assets,
+    };
+  }
+  const detail = await getBuilding(deps.pool, proposed.placeId);
+  return {
+    documentId: proposed.documentId,
+    labelHe: proposed.labelHe,
+    buildingId: detail.building.building_id,
+    buildingName: detail.building.name,
+    unitId: null,
+    unitNumber: null,
+    handoverDate: proposed.proposal.handoverDate,
+    apartmentNumber: null,
+    warrantyEndDate: proposed.proposal.handoverDate
+      ? addCalendarYears(proposed.proposal.handoverDate, WARRANTY_YEARS)
+      : null,
+    assets: proposed.proposal.assets,
+  };
 }
