@@ -940,6 +940,27 @@ exist. What remains is the cheap guard for the real error: right slot, wrong fil
   *declared by the administrator* and week 4's extraction takes it over. The content cross-check
   (does the address on the document match the unit it was filed against) needs extraction and lands
   with week 4, not here; what ships here is the cheap type guard above.
+- **Closed 7 Sep 2026** ([evidence](evidence/3.3.md)). `GET /documents/new` and `POST /documents`,
+  **the first write route in this system** and one without a session, so the bounds that stand in for
+  one until week 5 are stated and applied: one file, 20 MB, four kinds **sniffed from the bytes and
+  never from the name**, the filename discarded, nothing personal in the response, and **no CSRF
+  token on purpose** — a token defends a session's authority and there is none, so week 5 owes both
+  halves in one change. The verify step sits **before the lookup and before the put**, because
+  *caught before it is filed* is a claim about writes. **3.1's open question is decided: a refused
+  upload leaves no row.** Figure 4's caption binds the bulk queue — 3.4, deferred, where nobody is
+  watching — and not the interactive path where an administrator is looking at the screen; what is
+  kept of it is *what someone tried to file and when*, as an `audit_log` line carrying the digest,
+  the declared type, the verdict and the missing terms, and never a filename. **All of a type's
+  marker terms must match, not any one**: the lease says ארנונה, in the clause about the utilities,
+  so a single-term guard would have filed a lease as a bill and called it verified. A file with no
+  text layer is `unverified` rather than refused. 24 new tests, **369 code + 41 hooks green**, the
+  policy case **red first** — and it caught two seeded types whose terms had been written from the
+  *name* of the form rather than its printed language, fixed as seed rows rather than as a release,
+  which is what a guard reading the catalogue buys. Verified against the tier-1 specimens **printed
+  to real Hebrew PDFs and read through the real pdfjs adapter**, both directions, 422 each way, plus
+  dedupe, an image and a file of no known kind. Raised and owned: the `unverified` backlog (4.1) · a
+  tenancy created from a lease (4.2 / A2) · session **and** CSRF together (week 5) · the documents
+  panel (3.6).
 
 ### Slice 3.4 — Drive ingestion, and the bulk review queue — **DEFERRED 6 Sep 2026, not deleted**
 Moved out of week 3 to the pilot-preparation step of the method, with **A10** and with **F4**. Bulk is
@@ -1004,9 +1025,14 @@ Document search and the documents panels on the building and unit screens, group
   decision that belongs behind a session, and sessions are week 5's. Until then the panel renders
   what is filed — type, dates, ingest date — which is also the shape `tests/ui/tokens.test.ts`
   already enforces: a state and a count, never a name.
+- **Owed by 3.3 — the panel has to show the verdict, not only the type.** A filed document is
+  `verified`, `unverified` or `unguarded`, and a scan nobody has read yet must not look identical to
+  a lease whose marker terms were all found. The confirmation screen says it in words already; the
+  panel is where it becomes a property of a list.
 - **Deps:** ~~3.4~~ **3.3** — re-pointed 6 Sep 2026 when 3.4 deferred. Documents reach the system
   through flow A1's admin upload, so search has something to find without any bulk path existing.
-  **Size:** S
+  **Landed 7 Sep 2026**: the upload route files them and `document_link` binds them to a unit and,
+  when one was chosen, to a letting. **Size:** S
 
 > **Cut line:** the compliance tab's visual treatment (the query is what matters this week), and the
 > review queue's bulk-approve affordance — one-at-a-time confirmation still proves the design. **Do
@@ -1033,7 +1059,10 @@ pixels it came from, with a confidence score.
 >   guessed role is an isolation defect and not a typo. Parties are created **under the tenancy the
 >   document was uploaded to**; no cross-tenancy identity matching, which is month two. Carries 3.3's
 >   deferred content cross-check — the address and apartment on the document asserted against the
->   unit the tenancy hangs on.
+>   unit the tenancy hangs on — **and 3.3's deferred draft-tenancy path**: the upload screen binds to
+>   an existing letting or to the flat alone, because declaring a draft needs at least one tenant and
+>   that is a person's name typed into a page anybody can reach until week 5. Here the dates and the
+>   parties come out of the document instead, which is the reason the path was deferred and not cut.
 > - **A3 — an addendum completes a tenancy.** No special case, by construction: **fields live on the
 >   tenancy and documents are provenance**, so an addendum arriving with the lease and one arriving
 >   six months later travel the same path. Later document wins; the earlier value is retained and
@@ -1055,6 +1084,11 @@ per-word confidence.
   position is recorded in the evidence file rather than assumed.
 - **Verify:** boxes rendered over the page image for one document; a scan and a native PDF both
   handled.
+- **Owed by 3.3 — `unverified` is a backlog with no reader.** A file with no text layer is filed and
+  marked *not checked*, because refusing every scan would refuse most real leases. Nothing goes back
+  over those documents until this slice: verify the declared type against the OCR text at extraction
+  time, and say in the evidence **how many already-filed documents the sweep changed the verdict of**.
+  The count is on the `evidence.file_document` audit lines, whose `inputs.verdict` is `unverified`.
 - **Deps:** ~~3.4~~ **3.3** — re-pointed 6 Sep 2026 when 3.4 deferred. The adapter needs a document in
   the bucket, which A1's upload supplies; it never needed the bulk path. **Size:** M
 
@@ -1131,7 +1165,7 @@ not the scans, the handwriting or the signatures (A7; the controls for tier 2 we
 
 | Week | Demo kind | Deliverable | Workstreams | Depends on |
 |---|---|---|---|---|
-| **5** | Real data | **Paper becomes truth.** An amendment arrives for a real unit; the tenancy updates; the change log records old → new, who approved it, which document caused it. Then a tenancy ends because a date passed, with no document at all. | Promotion at scale · tenancy reconciliation · `TenancyEvent` · Obligation + ObligationType (E9, E10) · **the settings screen: the `ObligationType` and `DocumentType` catalogues, admin-managed at last (A9) — one screen, one pattern, and `asset_type` deliberately absent from it** · staff MFA and the `national_id` field guard — **owed by 1.11, widened by 2.6:** `/`, `/estate`, `/estate/buildings/:id`, `/estate/search` and `/estate/expiring` have been served **unauthenticated** since week 1, deliberately and on fixture data; this is the slice that puts them behind a session, and nothing may put a real party, contact or document behind those routes before it does. Until it does, every one of the five shows **a state and a count and never a name** — the occupancy chip, and a search that covers buildings and units and never `party` — which is asserted from outside in `tests/ui/tokens.test.ts`. **This is the slice that may lift that rule**, and it is also where the root index moves from `src/estate/` to the composition root, because week 5 is when a second *module* has a screen and an index of screens is not estate's fact — **owed by 1.5:** `infra/bootstrap.sh` deliberately creates no staff seed secrets, so whatever this mechanism needs in Secret Manager is created here, by the slice that knows what it is · **owed by 1.7:** `national_id` never appearing in the response shape of an agent tool is a policy case, not a review — deterministic, so it belongs in `tests/policy/` beside the isolation cases  · **owed by 3.1 — two columns of E12 held for this week.** `uploaded_by` could only have held a placeholder until an authenticated actor existed, and is a nullable `ADD COLUMN` the moment one does. And `superseded_by` is reopened here because this is the amendment week: 3.1's ruling is that SPEC-flows.md invariant 2 already made supersession a fact about *values*, and that a genuinely re-issued document is answered by `valid_from`/`valid_to` — so what this week asks is whether promotion at scale finds a case that ruling does not cover | W4 · **closes open question 2 — how many `terms_profile`s are in force, which sizes week 6** |
+| **5** | Real data | **Paper becomes truth.** An amendment arrives for a real unit; the tenancy updates; the change log records old → new, who approved it, which document caused it. Then a tenancy ends because a date passed, with no document at all. | Promotion at scale · tenancy reconciliation · `TenancyEvent` · Obligation + ObligationType (E9, E10) · **the settings screen: the `ObligationType` and `DocumentType` catalogues, admin-managed at last (A9) — one screen, one pattern, and `asset_type` deliberately absent from it** · staff MFA and the `national_id` field guard — **owed by 1.11, widened by 2.6:** `/`, `/estate`, `/estate/buildings/:id`, `/estate/search` and `/estate/expiring` have been served **unauthenticated** since week 1, deliberately and on fixture data; this is the slice that puts them behind a session, and nothing may put a real party, contact or document behind those routes before it does. **Widened again by 3.3:** there are now two *write* routes as well, `GET /documents/new` and `POST /documents`, and they carry **no CSRF token** — deliberately, because a token defends a session's authority and there is none, so an anonymous caller can already post directly. This slice owes both halves in one change: the session, and the token that then means something. Until it lands, the bounds standing in for one are one file, 20 MB, four kinds sniffed from the bytes, the filename discarded and nothing personal in the response. Until it does, every one of the five shows **a state and a count and never a name** — the occupancy chip, and a search that covers buildings and units and never `party` — which is asserted from outside in `tests/ui/tokens.test.ts`. **This is the slice that may lift that rule**, and it is also where the root index moves from `src/estate/` to the composition root, because week 5 is when a second *module* has a screen and an index of screens is not estate's fact — **owed by 1.5:** `infra/bootstrap.sh` deliberately creates no staff seed secrets, so whatever this mechanism needs in Secret Manager is created here, by the slice that knows what it is · **owed by 1.7:** `national_id` never appearing in the response shape of an agent tool is a policy case, not a review — deterministic, so it belongs in `tests/policy/` beside the isolation cases  · **owed by 3.1 — two columns of E12 held for this week.** `uploaded_by` could only have held a placeholder until an authenticated actor existed, and is a nullable `ADD COLUMN` the moment one does. And `superseded_by` is reopened here because this is the amendment week: 3.1's ruling is that SPEC-flows.md invariant 2 already made supersession a fact about *values*, and that a genuinely re-issued document is answered by `valid_from`/`valid_to` — so what this week asks is whether promotion at scale finds a case that ruling does not cover | W4 · **closes open question 2 — how many `terms_profile`s are in force, which sizes week 6** |
 | **6** | Software | **Who pays for this, and why.** Pick a category and a unit; get tenant / operator / contractor with the clause and the policy version behind it. Then edit the table live and watch the answer change. | `policy` module: the responsibility matrix as versioned, admin-editable data · `asset_in_warranty` fed by week 3's asset register · rules supersede by `effective_from` and never overwrite · `policy_version_id` snapshotted on every resolution · **owed by 1.7: policy cases 4 and 5** — `UNIT` is the only space kind that can ever be the tenant's, and a live warranty moves responsibility to the contractor, with the snapshot still answering after the policy changes. `tests/policy/` and its pending mechanism exist from 1.7; write each case red first | W5, W3.5 · sized by question 2 |
 | **7** | Software | **A ticket, start to finish, by hand.** Walk the canonical states in the console — NEW · IDENTIFIED · TRIAGED · RESPONSIBILITY SET · WINDOWS COLLECTED · OFFERED · SCHEDULED · CLOSED — plus the three exits. Watch the SLA clock run and the escalation fire. No WhatsApp, no agent. | `calls` module: state machine · SLA policies · timers · escalation · **the emergency bypass, live and tested here** because it must exist before the agent takes its first real message in week 10 · **owed by 1.7:** the bypass is a policy case too — an emergency category routes to the duty phone **with no model call in between**, which is deterministic and therefore never an eval · **the async negotiation engine starts and runs underneath for six weeks** | W6 |
 | **8** | Evidence | **Try to break tenant isolation, live.** Query as one tenant's phone and attempt to reach another tenant's documents, unit or history — through the console, through the API, and by asking the model. Every path returns nothing. | Policy suite cases 4 and 5 (`UNIT` is the only kind that can be the tenant's; a live warranty moves responsibility to the contractor, and re-resolving after a policy change still returns the snapshot) · `national_id` unreachable by any agent tool · audit on every scoped read · **owed by 1.5 and unblocked by 1.6:** the deploy accounts hold `run.admin` at *project* level because scoping it per service was impossible before a service existed — the Cloud Run services exist now, so bind it per service · **owed by 1.5, raised again and given an owner at 3.2:** the docs buckets' legacy `projectEditor` / `projectOwner` bindings carry `legacyObjectOwner`, which includes delete. 3.2 proved the *application* cannot destroy a signed contract — no `delete` on the port, no `objectAdmin` on the runtime account — and a human with project editor still can. 3.2's staging verification then measured that exposure instead of leaving it unbounded: the probe object was removed by hand by exactly such a human, and versioning plus the explicit seven-day soft-delete window left a recoverable noncurrent version rather than a hole. Seven days of grace is not a control and the binding still has to go, but this week is closing a known window and not an open one. It is inherent to a GCS bucket in a project with basic roles rather than a choice `bootstrap.sh` made, so removing it is the same pass as the `run.admin` scoping above and belongs in the week whose demo is *try to break isolation* · **owed by 1.6:** bump the four Node-20 GitHub actions (`checkout@v4`, `setup-node@v4`, `google-github-actions/auth@v2`, `setup-gcloud@v2`), which every run annotates as deprecated · **owed by 1.10, in the same pass:** `release.yml` gains the `docker image inspect` size line `deploy.yml` already has | W7 |

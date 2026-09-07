@@ -19,6 +19,7 @@ export type {
   FieldValueType,
 } from './internal/catalogue.ts';
 export {
+  documentTypeByKey,
   documentTypeFields,
   listDocumentTypes,
   upsertDocumentType,
@@ -31,6 +32,14 @@ export type {
   LinkRole,
 } from './internal/documents.ts';
 export { ingestDocument, linkDocument } from './internal/documents.ts';
+export type {
+  IntakeDeps,
+  IntakeRequest,
+  IntakeResult,
+} from './internal/intake.ts';
+export { fileDocument, findDocumentByHash } from './internal/intake.ts';
+export type { DocumentDeps } from './internal/routes.ts';
+export { registerDocumentRoutes } from './internal/routes.ts';
 export type { CatalogueReport } from './internal/seed-catalogue.ts';
 export { applyDocumentTypeCatalogue } from './internal/seed-catalogue.ts';
 // The object path convention (slice 3.2). It is exported from the module that owns the paper
@@ -44,11 +53,19 @@ export type {
   PlaceKind,
 } from './internal/storage-path.ts';
 export {
+  documentContentTypes,
   documentExtensions,
   documentFileHash,
   documentObjectPath,
   documentStorageUri,
   parseObjectPath,
   parseStorageUri,
+  sniffExtension,
 } from './internal/storage-path.ts';
 export type { Queryable } from './internal/types.ts';
+// The verification guard (slice 3.3). Exported because `tests/policy/document-verification.test.ts`
+// is its gate and the policy suite reads contracts, never internals.
+export type { Verification, VerificationVerdict } from './internal/verify.ts';
+export { documentText, verifyDeclaredType } from './internal/verify.ts';
+export type { FiledScreen, UploadScreen } from './internal/views.ts';
+export { renderFiledPage, renderUploadPage } from './internal/views.ts';

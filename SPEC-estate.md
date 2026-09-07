@@ -160,6 +160,18 @@ is Identity Platform with enforced MFA at week 5. Until then the screens serve f
 personal data in it, and carry `noindex`. The week-5 row in [tasks/roadmap.md](tasks/roadmap.md) owns
 closing it; nothing may put a real party, contact or document behind these routes before it does.
 
+**Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
+`GET`/`POST /documents/new`, reached from a unit row on the building page. It is unauthenticated for
+the same dated reason and is bounded rather than trusted, which
+[SPEC-evidence.md](SPEC-evidence.md) states in full: one file, 20 MB, four kinds sniffed from the
+bytes, no filename kept, nothing personal on the screen, and **only tier-1 specimens filed before
+week 5**, because the real corpus is gated behind F6 and arrives later than the session does.
+
+**`getUnit` joined this module's read model at 3.3**, returning the `UnitHit` shape the search screen
+already uses — a unit number and the building it is in, and no party. Evidence asks for it to render
+the unit an upload is being filed against; a document screen inventing its own unit query would be
+the second copy estate exists to prevent.
+
 ## The importer — `importEstate`, `src/estate/internal/importer.ts`
 
 One transaction, one statement per row, every statement `INSERT … ON CONFLICT (natural key) DO UPDATE

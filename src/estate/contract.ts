@@ -31,6 +31,7 @@ export {
   countUnitsByBuilding,
   EXPIRING_WINDOW_DAYS,
   getBuilding,
+  getUnit,
   listBuildings,
   listExpiringLeases,
   MEASURED_QUERIES,

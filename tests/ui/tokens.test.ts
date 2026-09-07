@@ -27,6 +27,12 @@ import {
   renderIndexPage,
   renderSearchPage,
 } from '../../src/estate/contract.ts';
+import type { DocumentTypeRow } from '../../src/evidence/contract.ts';
+import {
+  renderFiledPage,
+  renderUploadPage,
+} from '../../src/evidence/contract.ts';
+import type { UnitLetting } from '../../src/tenancy/contract.ts';
 
 const building: BuildingSummary = {
   building_id: '11111111-1111-4111-8111-111111111111',
@@ -118,6 +124,45 @@ const expiring: ExpiringLease[] = [
   },
 ];
 
+// Slice 3.3's screens. The upload form is the first screen in this system that *writes*, and it is
+// in this registry for the reason every other one is: the guard reads rendered bytes, so a screen
+// that is not rendered here is a screen nothing checks. Both of its answers are registered —
+// a refusal is a different page from the empty form, and the refusal is the one that renders text
+// the catalogue supplied.
+const documentTypes: DocumentTypeRow[] = [
+  {
+    documentTypeId: '88888888-8888-4888-8888-888888888888',
+    typeKey: 'lease',
+    labelHe: 'חוזה שכירות',
+    labelEn: 'Lease',
+    verificationTerms: ['חוזה שכירות', 'המושכר', 'תקופת השכירות'],
+    isActive: true,
+  },
+  {
+    documentTypeId: '99999999-9999-4999-8999-999999999999',
+    typeKey: 'arnona',
+    labelHe: 'ארנונה',
+    labelEn: 'Municipal tax bill',
+    verificationTerms: ['ארנונה', 'המחזיק', 'הרשות המקומית'],
+    isActive: true,
+  },
+];
+
+const lettings: UnitLetting[] = [
+  {
+    tenancy_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    start_date: '2025-01-01',
+    end_date: '2027-12-31',
+    status: 'ACTIVE',
+  },
+  {
+    tenancy_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    start_date: '2022-01-01',
+    end_date: '2024-12-31',
+    status: 'ENDED',
+  },
+];
+
 const SCREENS: Array<[string, () => string]> = [
   ['estate · index', () => renderIndexPage()],
   [
@@ -157,6 +202,56 @@ const SCREENS: Array<[string, () => string]> = [
       ),
   ],
   ['estate · leases ending, none', () => renderExpiringPage([], 60)],
+  [
+    'documents · upload',
+    () => renderUploadPage({ unit: hit, types: documentTypes, lettings }),
+  ],
+  [
+    'documents · upload, a flat with no letting on it',
+    () => renderUploadPage({ unit: hit, types: documentTypes, lettings: [] }),
+  ],
+  [
+    'documents · upload, refused',
+    () =>
+      renderUploadPage({
+        unit: hit,
+        types: documentTypes,
+        lettings,
+        declaredTypeKey: 'lease',
+        declaredTenancyId: lettings[0]?.tenancy_id,
+        refused: {
+          type: documentTypes[0] as DocumentTypeRow,
+          verification: {
+            verdict: 'refused',
+            missingTerms: ['המושכר', 'תקופת השכירות'],
+          },
+        },
+      }),
+  ],
+  [
+    'documents · filed',
+    () =>
+      renderFiledPage({
+        unit: hit,
+        type: documentTypes[0] as DocumentTypeRow,
+        inserted: true,
+        boundToTenancy: true,
+        verification: { verdict: 'verified', missingTerms: [] },
+        fileHash: 'c'.repeat(64),
+      }),
+  ],
+  [
+    'documents · filed, already on file and unverified',
+    () =>
+      renderFiledPage({
+        unit: hit,
+        type: documentTypes[1] as DocumentTypeRow,
+        inserted: false,
+        boundToTenancy: false,
+        verification: { verdict: 'unverified', missingTerms: [] },
+        fileHash: 'd'.repeat(64),
+      }),
+  ],
 ];
 
 describe('shared UI tokens', () => {

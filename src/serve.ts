@@ -4,7 +4,8 @@
 // which is why v3's hand-written .env loader (src/dev.ts) is not lifted.
 import { buildApp } from './app.ts';
 import { createPool } from './kernel/db.ts';
-import { createConfiguredStore } from './kernel/objects.ts';
+import { configuredBucket, createConfiguredStore } from './kernel/objects.ts';
+import { createPdfjsText } from './kernel/pdf.ts';
 
 const host = process.env.HOST ?? '0.0.0.0';
 const port = Number(process.env.PORT ?? 8080);
@@ -23,7 +24,15 @@ const objects = createConfiguredStore();
 
 // The deploy stamps the commit it built (slice 1.6). Locally the honest answer is that it is a
 // working copy, not a release.
-const app = buildApp({ pool, version: process.env.VERSION ?? '0.0.0-dev' });
+// The store, the reader and the bucket name reach the app from here and nowhere deeper — the same
+// rule the pool and the clock follow. Slice 3.3, which is the first slice with a route that writes.
+const app = buildApp({
+  pool,
+  version: process.env.VERSION ?? '0.0.0-dev',
+  objects,
+  pdf: createPdfjsText(),
+  bucket: configuredBucket(),
+});
 
 await app.listen({ host, port });
 console.log(`dona-v5: http://127.0.0.1:${port}/health`);

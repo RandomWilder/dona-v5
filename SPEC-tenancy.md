@@ -132,11 +132,17 @@ by tripping the guard rather than by anticipating it.
   `ObligationType` will be an admin-managed catalogue, deactivated never deleted, with
   `responsible_party` copied onto the obligation at creation so editing the catalogue cannot rewrite
   history (foundation rule 8).
-- **No read model.** `contract.ts` exists from 2.4 and exports three write commands —
-  `upsertTermsProfile`, `upsertTenancy` and `upsertTenancyParty` — because the register importer is
-  the caller 2.2 predicted. There is still no query on this module's contract: who is in a unit today
-  is `src/scope/`'s answer and never this module's, which is foundation rule 1 expressed as a module
-  boundary.
+- **No read model, and from 3.3 exactly one read.** `contract.ts` exists from 2.4 and exports three
+  write commands — `upsertTermsProfile`, `upsertTenancy` and `upsertTenancyParty` — because the
+  register importer is the caller 2.2 predicted. `listUnitTenancies` joins them at 3.3, and the line
+  it does not cross is the one that matters: **who is in a unit today is `src/scope/`'s answer and
+  never this module's**, which is foundation rule 1 expressed as a module boundary. This query
+  answers *which lettings does this flat have* — every status, ordered by date — for an administrator
+  choosing which one a lease belongs to. It takes a `unit_id` and never a phone number, it returns
+  dates and a status and **no party and no name**, it carries neither of the isolation join's
+  temporal predicates, and nothing decides what anybody may see from its result. A query here that
+  answered "who is in this unit today" would be the second copy of the join, and guard two exists
+  because that is how the constraint dies.
 - **An index on `end_date`, partial on `ACTIVE`, added at 2.6** — `tenancy_end_date_active` in
   `0010_scale_indexes.sql`. 2.2 left it out deliberately, to be decided at full row count with a
   timing in front of it, and 2.6 is the slice with the row count. Measured over 1,674 tenancies, on the tenancy

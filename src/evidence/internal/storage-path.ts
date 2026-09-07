@@ -47,6 +47,51 @@ const placeSegments: Record<PlaceKind, string> = {
 export const documentExtensions = ['pdf', 'jpg', 'png', 'tif'] as const;
 export type DocumentExtension = (typeof documentExtensions)[number];
 
+/** What the object is stored as. One list, beside the extensions, so the two cannot disagree. */
+export const documentContentTypes: Record<DocumentExtension, string> = {
+  pdf: 'application/pdf',
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  tif: 'image/tiff',
+};
+
+// The first bytes of each kind we store. TIFF is here twice because the two byte orders are two
+// signatures for one format -- `II` is little-endian and `MM` is big-endian, and a scanner picks
+// whichever its vendor picked.
+const signatures: Array<[DocumentExtension, number[]]> = [
+  ['pdf', [0x25, 0x50, 0x44, 0x46, 0x2d]],
+  ['jpg', [0xff, 0xd8, 0xff]],
+  ['png', [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]],
+  ['tif', [0x49, 0x49, 0x2a, 0x00]],
+  ['tif', [0x4d, 0x4d, 0x00, 0x2a]],
+];
+
+/**
+ * What kind of file this is, **read from the bytes and never from the upload** (slice 3.3).
+ *
+ * A browser sends a filename and a content type, and both are the caller's opinion. The filename is
+ * the sharper problem: it routinely carries a household's name — `שכירות כהן.pdf` — and this whole
+ * convention exists to keep a person out of the object path, so taking the extension off it would
+ * put the rest of the name one edit away from a path segment. It is not read here, not stored, not
+ * logged and not rendered.
+ *
+ * A file that is none of the four is `invalid` at the edge rather than an unreadable object in the
+ * bucket, which is what the extension list has said since 3.2.
+ */
+export function sniffExtension(bytes: Buffer): DocumentExtension {
+  for (const [extension, signature] of signatures) {
+    if (
+      bytes.length >= signature.length &&
+      signature.every((byte, at) => bytes[at] === byte)
+    ) {
+      return extension;
+    }
+  }
+  throw new KernelError('invalid', 'file is not one of the kinds we store', {
+    accepted: documentExtensions.join(', '),
+  });
+}
+
 // The catalogue's own `type_key` shape (`lease`, `handover_protocol`, …). Checked here as well as
 // seeded there, because the path is built from the key and a key with a slash in it would address a
 // directory rather than name a type.

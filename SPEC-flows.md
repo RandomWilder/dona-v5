@@ -119,6 +119,20 @@ right slot with the wrong file, not an unknown file. Slice 3.3.
 the convention-proposes-human-confirms rule (A10) are **deferred, not deleted**; they become
 meaningful when volume arrives at step 4 of the method.
 
+**What 3.3 built, and the one thing it did not** ([SPEC-evidence.md](SPEC-evidence.md), "Filing a
+document"). The screen asks for the unit, the type and the file, and offers the lettings that unit
+already has so the document can be bound to one. Every declared marker term of the type must appear
+in the file's text; a file with no text layer is filed as `unverified` rather than refused, because
+OCR is slice 4.1's. A refused upload writes nothing — no row, no object — and is recorded as an
+`audit_log` line instead of as a `state`.
+
+**Declaring a *new draft* tenancy from the upload screen is A2's, not A1's.** Invariant 5 puts a human
+confirmation between a proposed party and a written `tenancy_party` row, and `upsertParty` needs a
+ת.ז. it can key on, so the "declared by the administrator" path 3.3 was planned with would have been
+an unauthenticated form collecting a name and an identity number before week 5's session exists. A2
+creates the draft from the lease it extracted, under the document that was already filed against the
+unit — which is the sequence step 5 of that flow describes anyway.
+
 ### A2 — A lease establishes a tenancy
 
 **Trigger:** A1 completes for a document of type lease.

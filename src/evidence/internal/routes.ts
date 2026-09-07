@@ -1,0 +1,198 @@
+// Evidence's HTTP surface — the upload screen and the post that files a document. Slice 3.3, flow
+// A1, and **the first write route in this system**.
+//
+// Every route before this one was a read. SPEC-evidence.md, "The first write route in this system,
+// and it has no session", is where the bounds that stand in for a session until week 5 are set out
+// and argued; they are applied here: one file, 20 MB, four kinds sniffed from the bytes, no filename
+// kept, and nothing personal in the response.
+//
+// **There is no CSRF token, and that is not an omission.** A CSRF token defends a session's
+// authority, and there is no session: an anonymous caller can already post directly. Week 5's login
+// is the slice that owes one, in the same change that gives this route something worth riding.
+import multipart from '@fastify/multipart';
+import type { FastifyInstance } from 'fastify';
+import type { Pool } from 'pg';
+import { getUnit } from '../../estate/contract.ts';
+import { createAuditLog } from '../../kernel/audit.ts';
+import type { Clock } from '../../kernel/clock.ts';
+import { KernelError } from '../../kernel/errors.ts';
+import type { ObjectStore } from '../../kernel/objects.ts';
+import type { PdfText } from '../../kernel/pdf.ts';
+import { validId } from '../../kernel/validate.ts';
+import { listUnitTenancies } from '../../tenancy/contract.ts';
+import { documentTypeByKey, listDocumentTypes } from './catalogue.ts';
+import { fileDocument } from './intake.ts';
+import { renderFiledPage, renderUploadPage } from './views.ts';
+
+export interface DocumentDeps {
+  pool: Pool;
+  objects: ObjectStore;
+  pdf: PdfText;
+  clock: Clock;
+  /** The bucket `storage_uri` names. The memory store's stand-in locally (slice 3.2). */
+  bucket: string;
+}
+
+/**
+ * One file, and it may not be a large one.
+ *
+ * A lease is a few hundred kilobytes and a scanned one a few megabytes; twenty is generous and is
+ * chosen as a bound on a runaway rather than as a budget, which is `kernel/extraction.ts`'s
+ * reasoning about its own timeout. `fields` and `fieldSize` are bounded for the same reason: this
+ * route is reachable by anybody until week 5.
+ */
+const LIMITS = {
+  files: 1,
+  fileSize: 20 * 1024 * 1024,
+  fields: 8,
+  fieldSize: 200,
+};
+
+function html(reply: { header: (k: string, v: string) => unknown }): void {
+  reply.header('content-type', 'text/html; charset=utf-8');
+  reply.header('cache-control', 'no-cache');
+  reply.header('x-content-type-options', 'nosniff');
+}
+
+export function registerDocumentRoutes(
+  app: FastifyInstance,
+  deps: DocumentDeps,
+): void {
+  app.register(multipart, { limits: LIMITS });
+
+  // The screen. Reached from a unit on the building page, so the unit is in the query string and is
+  // validated before it reaches a query — a malformed id is `invalid` and a well-formed one that is
+  // not there is `not_found`, and neither says which.
+  app.get('/documents/new', async (request, reply) => {
+    const asked = (request.query as { unit?: string }).unit ?? '';
+    const unitId = validId(asked, 'unit');
+    const [unit, types, lettings] = await Promise.all([
+      getUnit(deps.pool, unitId),
+      listDocumentTypes(deps.pool),
+      listUnitTenancies(deps.pool, unitId),
+    ]);
+    html(reply);
+    return renderUploadPage({ unit, types, lettings });
+  });
+
+  app.post('/documents', async (request, reply) => {
+    const { fields, bytes } = await readUpload(request);
+    const unitId = validId(fields.unit ?? '', 'unit');
+    const typeKey = fields.type ?? '';
+    const tenancyId = fields.tenancy
+      ? validId(fields.tenancy, 'tenancy')
+      : null;
+
+    const type = await documentTypeByKey(deps.pool, typeKey);
+    if (!type) {
+      throw new KernelError('invalid', 'that is not a document type');
+    }
+    const unit = await getUnit(deps.pool, unitId);
+
+    const result = await fileDocument(
+      {
+        db: deps.pool,
+        objects: deps.objects,
+        pdf: deps.pdf,
+        audit: createAuditLog(deps.pool, deps.clock),
+        clock: deps.clock,
+        bucket: deps.bucket,
+      },
+      {
+        bytes,
+        typeKey: type.typeKey,
+        // The place, and it is always the unit on this screen. `PlaceKind` refuses a person's id by
+        // type, which is the object path convention enforced rather than remembered (slice 3.2).
+        place: { kind: 'UNIT', id: unitId },
+        tenancyId,
+      },
+    );
+
+    html(reply);
+    if (!result.filed) {
+      // A refusal is the form again, with what was chosen still chosen and the missing terms above
+      // it. **422 and not 400**: the request was well formed and the file was wrong, and an
+      // operator who sees a 400 in a log goes looking for a bug in the form.
+      reply.code(422);
+      const lettings = await listUnitTenancies(deps.pool, unitId);
+      return renderUploadPage({
+        unit,
+        types: await listDocumentTypes(deps.pool),
+        lettings,
+        declaredTypeKey: type.typeKey,
+        declaredTenancyId: tenancyId ?? undefined,
+        refused: { type, verification: result.verification },
+      });
+    }
+    return renderFiledPage({
+      unit,
+      type,
+      inserted: result.inserted,
+      boundToTenancy: tenancyId !== null,
+      verification: result.verification,
+      fileHash: fileHashOf(result.storageUri),
+    });
+  });
+}
+
+interface Upload {
+  fields: Record<string, string>;
+  bytes: Buffer;
+}
+
+/**
+ * The multipart body, read once and bounded.
+ *
+ * `@fastify/multipart` is the one runtime dependency this slice added, and the reason is that an
+ * HTML file input posts `multipart/form-data` and hand-writing a parser for a boundary-delimited
+ * stream of untrusted input is precisely the work a maintained plugin exists to save. It is
+ * Fastify's own, over busboy.
+ *
+ * Parts are iterated rather than taken from `request.file()`, because that helper's `fields` carry
+ * only what arrived *before* the file and would silently depend on the order of inputs in the form.
+ * A second file is drained and discarded rather than ignored: an unread part stalls the request.
+ */
+async function readUpload(request: {
+  parts: () => AsyncIterableIterator<
+    | { type: 'field'; fieldname: string; value: unknown }
+    | {
+        type: 'file';
+        fieldname: string;
+        file: { truncated: boolean };
+        toBuffer: () => Promise<Buffer>;
+      }
+  >;
+}): Promise<Upload> {
+  const fields: Record<string, string> = {};
+  let bytes: Buffer | null = null;
+  for await (const part of request.parts()) {
+    if (part.type === 'file') {
+      const read = await part.toBuffer();
+      if (part.file.truncated) {
+        throw new KernelError('invalid', 'the file is larger than we accept', {
+          maxBytes: LIMITS.fileSize,
+        });
+      }
+      if (part.fieldname === 'file' && !bytes) {
+        bytes = read;
+      }
+      continue;
+    }
+    fields[part.fieldname] = String(part.value);
+  }
+  if (!bytes || bytes.length === 0) {
+    throw new KernelError('invalid', 'no file was attached');
+  }
+  return { fields, bytes };
+}
+
+/**
+ * The digest, read back off the uri the intake returned.
+ *
+ * It is the path's leaf by construction (slice 3.2), so the screen shows the same string the row
+ * holds rather than a second hash of the same bytes taken for display.
+ */
+function fileHashOf(storageUri: string): string {
+  const leaf = storageUri.slice(storageUri.lastIndexOf('/') + 1);
+  return leaf.slice(0, leaf.lastIndexOf('.'));
+}
