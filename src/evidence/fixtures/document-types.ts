@@ -41,6 +41,8 @@ export interface SeedDocumentType {
 // re-run tomorrow must produce the same rows, and `effective_from` is half the natural key. A
 // corrected declaration is a new row at a new date, never an edit to this one (R18).
 const SCHEMA_V1 = '2026-09-07';
+const SCHEMA_V2 = '2026-09-08';
+const ISO_DATE_HINT = 'YYYY-MM-DD. Not Hebrew month names and not dd/mm/yyyy.';
 
 function field(
   fieldKey: string,
@@ -48,6 +50,7 @@ function field(
   valueType: DocumentTypeFieldSpec['valueType'],
   isRequired: boolean,
   extractionHint: string | null,
+  window: { from?: string; to?: string | null } = {},
 ): Omit<DocumentTypeFieldSpec, 'documentTypeId'> {
   return {
     fieldKey,
@@ -55,8 +58,8 @@ function field(
     valueType,
     isRequired,
     extractionHint,
-    effectiveFrom: SCHEMA_V1,
-    effectiveTo: null,
+    effectiveFrom: window.from ?? SCHEMA_V1,
+    effectiveTo: window.to === undefined ? null : window.to,
   };
 }
 
@@ -74,10 +77,47 @@ export const seedDocumentTypes: SeedDocumentType[] = [
     // lease commonly names no guarantor and extraction returning zero of them is a correct result,
     // not an error and not a retry.
     fields: [
-      field('start_date', 'תחילת תקופת השכירות', 'DATE', true, 'תקופת השכירות'),
-      field('end_date', 'סיום תקופת השכירות', 'DATE', true, 'תקופת השכירות'),
-      field('apartment_number', 'מספר הדירה', 'TEXT', true, 'המושכר'),
-      field('address', 'כתובת המושכר', 'TEXT', true, 'המושכר'),
+      field(
+        'start_date',
+        'תחילת תקופת השכירות',
+        'DATE',
+        true,
+        'תקופת השכירות',
+        {
+          to: SCHEMA_V1,
+        },
+      ),
+      field('start_date', 'תחילת תקופת השכירות', 'DATE', true, ISO_DATE_HINT, {
+        from: SCHEMA_V2,
+      }),
+      field('end_date', 'סיום תקופת השכירות', 'DATE', true, 'תקופת השכירות', {
+        to: SCHEMA_V1,
+      }),
+      field('end_date', 'סיום תקופת השכירות', 'DATE', true, ISO_DATE_HINT, {
+        from: SCHEMA_V2,
+      }),
+      field('apartment_number', 'מספר הדירה', 'TEXT', true, 'המושכר', {
+        to: SCHEMA_V1,
+      }),
+      field(
+        'apartment_number',
+        'מספר הדירה',
+        'TEXT',
+        true,
+        'דירה מספר בלבד. לא בניין מספר ולא מספר חניה.',
+        { from: SCHEMA_V2 },
+      ),
+      field('address', 'כתובת המושכר', 'TEXT', true, 'המושכר', {
+        to: SCHEMA_V1,
+      }),
+      field(
+        'address',
+        'כתובת המושכר',
+        'TEXT',
+        true,
+        'רחוב + בניין מספר + עיר. לא דירה מספר במקום מספר הבניין.',
+        { from: SCHEMA_V2 },
+      ),
       field('tenant_name', 'שם השוכר', 'TEXT', true, 'השוכר'),
       field('guarantor_name', 'שם הערב', 'TEXT', false, 'ערב'),
     ],
@@ -93,9 +133,24 @@ export const seedDocumentTypes: SeedDocumentType[] = [
     // Flow A3. The same path as A2 with no special case: an addendum contributes values to the
     // tenancy, each carrying its own provenance, rather than patching the lease document.
     fields: [
-      field('effective_date', 'מועד תחילת הנספח', 'DATE', true, 'תוקף'),
+      field('effective_date', 'מועד תחילת הנספח', 'DATE', true, 'תוקף', {
+        to: SCHEMA_V1,
+      }),
+      field('effective_date', 'מועד תחילת הנספח', 'DATE', true, ISO_DATE_HINT, {
+        from: SCHEMA_V2,
+      }),
       field('guarantor_name', 'שם הערב', 'TEXT', false, 'ערב'),
-      field('new_end_date', 'מועד סיום מעודכן', 'DATE', false, 'תקופת השכירות'),
+      field(
+        'new_end_date',
+        'מועד סיום מעודכן',
+        'DATE',
+        false,
+        'תקופת השכירות',
+        { to: SCHEMA_V1 },
+      ),
+      field('new_end_date', 'מועד סיום מעודכן', 'DATE', false, ISO_DATE_HINT, {
+        from: SCHEMA_V2,
+      }),
     ],
   },
   {
@@ -186,7 +241,12 @@ export const seedDocumentTypes: SeedDocumentType[] = [
     // type — `building_handover_protocol` below — because operator-to-tenant is not
     // developer-to-operator.
     fields: [
-      field('handover_date', 'מועד המסירה', 'DATE', true, 'מועד המסירה'),
+      field('handover_date', 'מועד המסירה', 'DATE', true, 'מועד המסירה', {
+        to: SCHEMA_V1,
+      }),
+      field('handover_date', 'מועד המסירה', 'DATE', true, ISO_DATE_HINT, {
+        from: SCHEMA_V2,
+      }),
       field('apartment_number', 'מספר הדירה', 'TEXT', true, 'המושכר'),
     ],
   },
@@ -205,7 +265,12 @@ export const seedDocumentTypes: SeedDocumentType[] = [
     // The field that discharges week 2's carried item: every register-imported building currently
     // shows a מסירה date that is one of its leases' start dates.
     fields: [
-      field('handover_date', 'מועד המסירה', 'DATE', true, 'מועד המסירה'),
+      field('handover_date', 'מועד המסירה', 'DATE', true, 'מועד המסירה', {
+        to: SCHEMA_V1,
+      }),
+      field('handover_date', 'מועד המסירה', 'DATE', true, ISO_DATE_HINT, {
+        from: SCHEMA_V2,
+      }),
     ],
   },
   {

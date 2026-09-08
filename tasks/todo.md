@@ -131,6 +131,14 @@ btree — week 12. Session, CSRF, and a cap on upload *count* — week 5. Signed
       after a verified lease with no tenancy. `createParty` has no ת.ז. Register line: 3 spaces.
       **Deps:** 4.3, 3.3, 3.5 · **M** · **plan mode first** (estate · parties · tenancy · evidence)
 
+- [x] **4.6a — Lease place fields: building number is not the flat.** Staging extracted האלון **4**
+      / דירה **12** from a lease that prints בניין **12** / דירה **4**. Mapping instructions and a
+      new `effective_from` hint (R18) distinguish them. Cross-check still refuses a remaining swap.
+      **Closed 8 Sep** — [evidence/4.6a.md](evidence/4.6a.md). Instructions + 2026-09-08 hints.
+      ISO DATE capture. Hebrew dates dropped. **437 code + 41 hooks.** Evals 1/3, 2 skipped.
+      Staging still needs `seed:doctypes` then a re-file (same hash will not re-extract).
+      **Deps:** 4.2, 4.6 · **S**
+
 - [ ] **4.7 — A3: an addendum completes a tenancy.** No special case: fields live on the tenancy and
       documents are provenance. Later document wins; earlier value retained and visible.
       **Done when:** a guarantor named in an addendum becomes a `tenancy_party` under the existing
