@@ -157,7 +157,7 @@ export function renderUploadPage(screen: UploadScreen): string {
           )}
         </select>
         <p class="hint">
-          חוזי הדירה, לפי תאריכים. יצירת חוזה חדש מתוך מסמך שייכת לשלב הקריאה האוטומטית.
+          להקמת חוזה חדש מהמסמך השאירו ללא שיוך. שיוך לחוזה קיים הוא לקדם תאריך על חוזה שכבר נרשם.
         </p>
       </div>
       <div class="form-row">
@@ -237,6 +237,11 @@ export function renderFiledPage(screen: FiledScreen): string {
       ${
         screen.documentId
           ? h`<a class="btn btn-secondary" href="/documents/${screen.documentId}/read">מילים על הדף</a>`
+          : h``
+      }
+      ${
+        screen.documentId && type.typeKey === 'lease'
+          ? h`<a class="btn btn-secondary" href="/documents/${screen.documentId}/tenancy">אישור חוזה</a>`
           : h``
       }
       <a class="btn btn-secondary" href="/documents/new?unit=${unit.unit_id}">הוספת מסמך נוסף</a>
@@ -366,6 +371,7 @@ export interface ReadScreen {
   buildingId: string;
   buildingName: string;
   unitId: string | null;
+  typeKey: string;
   labelHe: string;
   fileHash: string;
   source: 'pdfjs' | 'ocr' | 'none';
@@ -410,7 +416,7 @@ function boxPercents(
 function extractedSection(screen: ReadScreen) {
   const rows = screen.extracted ?? [];
   if (rows.length === 0) {
-    return h``;
+    return h`<p class="lede">לא נקראו שדות מהמסמך. אין מה לקדם עד שהקריאה תשלים.</p>`;
   }
   const promotable = rows.filter(
     (row) => row.promotionTarget && !row.promotedTo,
@@ -490,6 +496,11 @@ export function renderReadPage(screen: ReadScreen): string {
         : h`<p class="lede">אין דף להצגה.</p>`
     }
     <div class="form-actions">
+      ${
+        screen.typeKey === 'lease'
+          ? h`<a class="btn btn-secondary" href="/documents/${screen.documentId}/tenancy">אישור חוזה</a>`
+          : h``
+      }
       ${
         screen.unitId
           ? h`<a class="btn btn-secondary" href="/documents/new?unit=${screen.unitId}">הוספת מסמך נוסף</a>`

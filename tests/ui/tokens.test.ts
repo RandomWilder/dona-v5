@@ -355,6 +355,7 @@ const SCREENS: Array<[string, () => string]> = [
         buildingId: building.building_id,
         buildingName: building.name,
         unitId: hit.unit_id,
+        typeKey: 'lease',
         labelHe: 'חוזה שכירות',
         fileHash: 'e'.repeat(64),
         source: 'ocr',
@@ -395,6 +396,22 @@ const SCREENS: Array<[string, () => string]> = [
             promotedTo: null,
           },
         ],
+      }),
+  ],
+  [
+    'documents · read overlay, no fields',
+    () =>
+      renderReadPage({
+        documentId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        buildingId: building.building_id,
+        buildingName: building.name,
+        unitId: hit.unit_id,
+        typeKey: 'lease',
+        labelHe: 'חוזה שכירות',
+        fileHash: 'e'.repeat(64),
+        source: 'ocr',
+        page: null,
+        image: null,
       }),
   ],
   [
@@ -570,6 +587,55 @@ describe('shared UI tokens', () => {
     const buildingHtml = renderBuildingPage(detail, occupancy, [unverified]);
     assert.match(buildingHtml, /gs:\/\/dona-v5-staging-docs\//);
     assert.doesNotMatch(buildingHtml, /href="gs:/);
+  });
+
+  it('opens a listed document on the read overlay, and a lease on confirm', () => {
+    const html = renderUnitPage(hit, 2, [filed]);
+    assert.match(
+      html,
+      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read"/,
+    );
+    assert.match(
+      html,
+      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/tenancy"/,
+    );
+    const search = renderSearchPage('שכירות', {
+      buildings: [],
+      units: [],
+      documents: [
+        {
+          ...filed,
+          entityType: 'UNIT',
+          entityId: hit.unit_id,
+          unitId: hit.unit_id,
+          unitNumber: hit.unit_number,
+          buildingId: hit.building_id,
+          buildingName: hit.building_name,
+        },
+      ],
+      truncated: false,
+    });
+    assert.match(
+      search,
+      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read"/,
+    );
+    const emptyRead = renderReadPage({
+      documentId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      buildingId: building.building_id,
+      buildingName: building.name,
+      unitId: hit.unit_id,
+      typeKey: 'lease',
+      labelHe: 'חוזה שכירות',
+      fileHash: 'e'.repeat(64),
+      source: 'ocr',
+      page: null,
+      image: null,
+    });
+    assert.match(emptyRead, /לא נקראו שדות מהמסמך/);
+    assert.match(
+      emptyRead,
+      /href="\/documents\/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee\/tenancy"/,
+    );
   });
 
   it('links a promoted date to its pixels, not the object bytes', () => {

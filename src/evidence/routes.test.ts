@@ -234,7 +234,7 @@ describe('evidence · the upload route', () => {
       });
 
       await t.test(
-        'the named lease is on the unit page and in search, as text not a link',
+        'the named lease is on the unit page and in search, as a door not a gs:// href',
         async () => {
           const unitPage = await lease.inject({
             method: 'GET',
@@ -244,6 +244,8 @@ describe('evidence · the upload route', () => {
           assert.match(unitPage.body, /חוזה שכירות/);
           assert.match(unitPage.body, /gs:\/\/dona-v5-test-docs\//);
           assert.match(unitPage.body, /נמצאו כל הביטויים הקבועים של הטופס/);
+          assert.match(unitPage.body, /\/documents\/[0-9a-f-]{36}\/read/);
+          assert.match(unitPage.body, /\/documents\/[0-9a-f-]{36}\/tenancy/);
           assert.doesNotMatch(unitPage.body, /href="gs:/);
           assert.doesNotMatch(unitPage.body, /storage\.googleapis\.com/);
 
@@ -254,7 +256,7 @@ describe('evidence · the upload route', () => {
           assert.equal(found.statusCode, 200);
           assert.match(found.body, /מסמכים/);
           assert.match(found.body, /חוזה שכירות/);
-          assert.match(found.body, new RegExp(`/estate/units/${unitId}`));
+          assert.match(found.body, /\/documents\/[0-9a-f-]{36}\/read/);
         },
       );
 

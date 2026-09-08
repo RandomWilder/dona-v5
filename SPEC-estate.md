@@ -220,6 +220,11 @@ on the unit page (UNIT-linked paper). A signed URL is a bearer token for one obj
 to mint, behind the session. Who signed the paper is still `src/scope/`'s answer and is not on these
 screens. Real tenant documents remain gated behind F6.
 
+**Each listed document opens the read overlay** (`/documents/:id/read`). A lease also offers
+`/documents/:id/tenancy` (flow A2). Search hits the overlay, not only the unit. The `gs://` path
+stays text. Building-level paper still lists only on the building page; unit paper still lists only
+on the unit page — the building screen is not a tenancy draft.
+
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
 `GET`/`POST /documents/new`, reached from a unit row on the building page. It is unauthenticated for
 the same dated reason and is bounded rather than trusted, which
