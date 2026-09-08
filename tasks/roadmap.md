@@ -1226,7 +1226,7 @@ identity matching. Zero guarantors is a correct result.
 - **Closed 2026-09-08** ([evidence](evidence/4.6.md)). Confirm recomputes from capture. Verified
   lease without a tenancy → `/documents/:id/tenancy`. Two tenants, zero guarantors, mismatch writes
   nothing. `upsertUnitRow` implies `חניה`/`מחסן` placeholders. **434 code + 41 hooks + 44 policy.**
-  No migration. Carry: terms profile still typed; real bay counts 2.5; A3 is 4.7.
+  No migration. Carry: terms profile still typed until 4.6b; real bay counts 2.5; A3 is 4.7.
 
 ### Slice 4.6a — Lease place fields: building number is not the flat
 Staging extracted האלון 4 / דירה 12 from a lease that prints בניין 12 / דירה 4. Mapping
@@ -1237,6 +1237,16 @@ instructions plus a new `effective_from` hint (R18). The 4.6 cross-check still r
 - **Sized:** 8 Sep 2026, from the staging demo.
 - **Closed 2026-09-08** ([evidence](evidence/4.6a.md)). Mapping instructions + R18 hint version.
   ISO DATE capture. **437 code + 41 hooks.** Evals 1/3, 2 skipped. Staging: `seed:doctypes` then re-file.
+
+### Slice 4.6b — Confirm picks an existing terms profile
+The A2 confirm screen listed a typed name. Staging typed `נספח תחזוקה 1` and the lookup refused it.
+- **Done when:** the field is a select of `terms_profile.name` rows; empty list withholds write and
+  does not insert.
+- **Verify:** select with an existing name; empty list has no submit; confirm still looks up by name.
+- **Deps:** 4.6 · **Size:** S
+- **Sized:** 8 Sep 2026, from the staging demo.
+- **Closed 2026-09-08** ([evidence](evidence/4.6b.md)). Local already had two profiles — no seed.
+  **440 code + 41 hooks.** Select of existing names; empty list withholds write.
 
 ### Slice 4.7 — A3: an addendum completes a tenancy
 No special case: fields live on the tenancy and documents are provenance. Later document wins;

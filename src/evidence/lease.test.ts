@@ -22,6 +22,7 @@ import {
   fileDocument,
   listExtractedFields,
   proposeLeaseTenancy,
+  renderTenancyPage,
 } from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
@@ -123,6 +124,9 @@ describe('evidence · flow A2 confirms a lease into a draft tenancy', () => {
         assert.equal(proposed.people.length, 2);
         assert.equal(proposed.people[0]?.proposedRole, 'PRIMARY_TENANT');
         assert.equal(proposed.people[1]?.proposedRole, 'CO_TENANT');
+        assert.ok(
+          proposed.termsProfileNames.includes(`a2-${unitId.slice(0, 8)}`),
+        );
 
         const roles = Object.fromEntries(
           proposed.people.map((person) => [
@@ -260,5 +264,54 @@ describe('evidence · flow A2 confirms a lease into a draft tenancy', () => {
     } finally {
       await pool.end();
     }
+  });
+});
+
+describe('evidence · confirm screen lists terms profiles', () => {
+  const unit = {
+    unit_id: '11111111-1111-4111-8111-111111111111',
+    unit_number: '4',
+    building_id: '22222222-2222-4222-8222-222222222222',
+    building_name: 'בדיקה',
+    address_line: 'האלון 12',
+    city: 'אשדוד',
+  };
+  const base = {
+    documentId: '33333333-3333-4333-8333-333333333333',
+    unit,
+    startDate: '2026-09-15',
+    endDate: '2027-09-14',
+    apartmentNumber: '4',
+    address: 'האלון 12',
+    people: [
+      {
+        extractedFieldId: '44444444-4444-4444-8444-444444444444',
+        fieldKey: 'tenant_name' as const,
+        value: 'יעל',
+        proposedRole: 'PRIMARY_TENANT' as const,
+      },
+    ],
+    matchesUnit: true,
+    alreadyEstablished: false,
+  };
+
+  it('is a select of existing names, not a typed field', () => {
+    const html = renderTenancyPage({
+      ...base,
+      termsProfileNames: ['נספח תחזוקה — תקן'],
+    });
+    assert.match(html, /<select name="terms_profile"/);
+    assert.match(html, /נספח תחזוקה — תקן/);
+    assert.match(html, /אישור וכתיבה/);
+  });
+
+  it('withholds the write when none exist rather than inventing one', () => {
+    const html = renderTenancyPage({
+      ...base,
+      termsProfileNames: [],
+    });
+    assert.match(html, /אין נספח תחזוקה במערכת/);
+    assert.doesNotMatch(html, /אישור וכתיבה/);
+    assert.doesNotMatch(html, /<select name="terms_profile"/);
   });
 });

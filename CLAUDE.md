@@ -8,7 +8,9 @@ Claude-specific additions:
 
 - **One slice per session.** Take it from [tasks/todo.md](tasks/todo.md), where it is already written
   with acceptance criteria, and finish with its **Verify** step — never self-certify. Close it with a
-  `tasks/evidence/<slice>.md` file recording what was proved, with the numbers.
+  `tasks/evidence/<slice>.md` file recording what was proved, with the numbers. A screen or write
+  path: restart `npm run dev` (it does not watch) and click the path on `:3000` before merge —
+  leftover local is not current.
 - **Make the structural call; don't hand over a menu.** Repo layout, gate design, slice sequencing,
   what gets tested and how are the agent's to decide — take the simplest approach that is effective
   and safe, do it, and state what was decided and why. What stays the director's: anything that

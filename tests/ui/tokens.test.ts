@@ -466,6 +466,7 @@ const SCREENS: Array<[string, () => string]> = [
         ],
         matchesUnit: true,
         alreadyEstablished: false,
+        termsProfileNames: ['נספח תחזוקה — תקן'],
       }),
   ],
   [

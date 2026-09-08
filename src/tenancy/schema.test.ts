@@ -22,6 +22,7 @@ import {
   migratedPoolOrNull,
   skipReason,
 } from '../kernel/pg-support.ts';
+import { listTermsProfiles } from './contract.ts';
 
 // Postgres SQLSTATEs. Asserting the class and not merely "it threw" is what stops a typo in a
 // fixture from reading as a constraint doing its job.
@@ -590,6 +591,18 @@ describe('tenancy · a terms profile is identified by its name', () => {
             `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)`,
             [newId(), 'נספח תחזוקה — בדיקת סכימה מורחב'],
           );
+        });
+      });
+
+      await t.test('listTermsProfiles returns names that exist', async () => {
+        await inRolledBackTransaction(pool, async (db) => {
+          const name = `נספח רשימה — ${newId().slice(0, 8)}`;
+          await db.query(
+            `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)`,
+            [newId(), name],
+          );
+          const names = await listTermsProfiles(db);
+          assert.ok(names.includes(name));
         });
       });
     } finally {

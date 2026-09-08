@@ -317,10 +317,12 @@ the same skip A6 uses. Extraction has already written `extracted_field` rows on 
 confirm page **recomputes from those rows plus `getUnit`**. There is no staging table.
 
 **Evidence orchestrates; it does not write estate, party or tenancy SQL.** After the administrator
-confirms each proposed person's role and names an existing `terms_profile`, evidence calls
-`createParty`, `upsertTenancy`, `upsertTenancyParty` and `promoteExtractedField`. Dates become truth
-through FieldPromotion (the CHECK is still dates only). Names do not get a promotion target: party
-provenance is a `PARTY` / `SIGNATORY` link and the `evidence.confirm_lease` audit line.
+confirms each proposed person's role and selects an existing `terms_profile` from the list tenancy
+already holds, evidence calls `createParty`, `upsertTenancy`, `upsertTenancyParty` and
+`promoteExtractedField`. The name is never typed and never invented: an empty list shows that fact
+and withholds the write. Dates become truth through FieldPromotion (the CHECK is still dates only).
+Names do not get a promotion target: party provenance is a `PARTY` / `SIGNATORY` link and the
+`evidence.confirm_lease` audit line.
 
 **Role is a POST field.** A missing role for any captured `tenant_name` or `guarantor_name` is
 `invalid` and writes nothing. Zero `guarantor_name` rows is success. Two `tenant_name` rows are two

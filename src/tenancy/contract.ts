@@ -17,6 +17,7 @@ export type {
 export {
   applyPromotedField,
   findTermsProfileByName,
+  listTermsProfiles,
   upsertTenancy,
   upsertTenancyParty,
   upsertTermsProfile,
