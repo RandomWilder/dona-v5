@@ -66,6 +66,7 @@ export type {
   FiledDocumentView,
   OccupancyByBuilding,
   OccupancyByUnit,
+  PromotedFieldView,
   SearchPageResults,
 } from './internal/views.ts';
 export {

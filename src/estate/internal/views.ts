@@ -53,6 +53,15 @@ export interface FiledDocumentView {
   verificationVerdict: 'verified' | 'unverified' | 'unguarded';
 }
 
+export interface PromotedFieldView {
+  extractedFieldId: string;
+  documentId: string;
+  labelHe: string;
+  value: string;
+  page: number;
+  confidence: number | null;
+}
+
 export interface DocumentSearchHit extends FiledDocumentView {
   entityType: 'UNIT' | 'BUILDING';
   entityId: string;
@@ -374,10 +383,28 @@ export function renderBuildingPage(
   return page(`דונה דום — ${building.name}`, body);
 }
 
+function promotedPanel(fields: readonly PromotedFieldView[]): Html {
+  if (fields.length === 0) {
+    return h``;
+  }
+  return h`<section>
+    <h2>מקור</h2>
+    <dl class="facts">${fields.map((field) => {
+      const href = `/documents/${field.documentId}/read?page=${String(field.page)}#f-${field.extractedFieldId}`;
+      const score =
+        field.confidence === null
+          ? h``
+          : h` · ${ltr(`${Math.round(field.confidence * 100)}%`)}`;
+      return h`<div><dt>${field.labelHe}</dt><dd><a href="${href}">${ltr(field.value)}</a>${score}</dd></div>`;
+    })}</dl>
+  </section>`;
+}
+
 export function renderUnitPage(
   unit: UnitHit,
   residents: number | undefined,
   documents: readonly FiledDocumentView[],
+  promoted: readonly PromotedFieldView[] = [],
 ): string {
   const body = h`
     <div>
@@ -389,6 +416,7 @@ export function renderUnitPage(
         <a href="/documents/new?unit=${unit.unit_id}">הוספת מסמך</a>
       </p>
     </div>
+    ${promotedPanel(promoted)}
     ${documentsPanel(documents, 'מסמכים')}`;
   return page(`דונה דום — דירה ${unit.unit_number}`, body);
 }

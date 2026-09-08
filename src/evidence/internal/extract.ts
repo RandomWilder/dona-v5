@@ -334,6 +334,54 @@ export async function listExtractedFields(
   }));
 }
 
+export interface PromotedField {
+  extractedFieldId: string;
+  documentId: string;
+  labelHe: string;
+  value: string;
+  page: number;
+  confidence: number | null;
+}
+
+/** Stamped values on paper bound to this unit. Slice 4.4. */
+export async function listPromotedFieldsForUnit(
+  db: Queryable,
+  unitId: string,
+): Promise<PromotedField[]> {
+  const result = await db.query<{
+    extracted_field_id: string;
+    document_id: string;
+    label_he: string;
+    value: string;
+    page: number;
+    confidence: number | null;
+  }>(
+    `SELECT e.extracted_field_id, e.document_id, f.label_he, e.value, e.page, e.confidence
+       FROM extracted_field e
+       JOIN document_type_field f
+         ON f.document_type_field_id = e.document_type_field_id
+      WHERE e.promoted_at IS NOT NULL
+        AND e.document_id IN (
+          SELECT document_id FROM document_link
+           WHERE entity_type = 'UNIT' AND entity_id = $1
+          UNION
+          SELECT l.document_id FROM document_link l
+            JOIN tenancy t ON t.tenancy_id = l.entity_id
+           WHERE l.entity_type = 'TENANCY' AND t.unit_id = $1
+        )
+      ORDER BY f.field_key, e.extracted_field_id`,
+    [unitId],
+  );
+  return result.rows.map((row) => ({
+    extractedFieldId: row.extracted_field_id,
+    documentId: row.document_id,
+    labelHe: row.label_he,
+    value: row.value,
+    page: row.page,
+    confidence: row.confidence,
+  }));
+}
+
 export function parseMeasuredWords(value: unknown): MeasuredWord[] {
   if (!Array.isArray(value)) {
     return [];

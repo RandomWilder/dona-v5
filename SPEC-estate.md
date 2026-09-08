@@ -231,13 +231,15 @@ week 5**, because the real corpus is gated behind F6 and arrives later than the 
 already uses — a unit number and the building it is in, and no party. Evidence asks for it to render
 the unit an upload is being filed against; a document screen inventing its own unit query would be
 the second copy estate exists to prevent. **`GET /estate/units/:unitId` is the thin unit page 3.6
-added**: that same header, the occupancy chip, the upload link, and the documents panel. The
-workbook's other unit-sheet panels (tenancy, obligations, assets, history) wait.
+added**: that same header, the occupancy chip, the upload link, and the documents panel. Slice 4.4
+adds the **promoted values** on that page: each stamped date is a link through to its pixels on the
+read overlay. The workbook's other unit-sheet panels (tenancy, obligations, assets, history) wait.
 
 **The documents listed on these screens are injected, not imported.** `EstateDeps` carries
-`listLinkedDocuments` and `searchDocuments` from evidence's contract, wired in `app.ts`. Estate
-renders the cards; evidence owns the SQL. Building-level paper stays on the building page;
-unit paper stays on the unit page.
+`listLinkedDocuments`, `searchDocuments` and (from 4.4) `listPromotedFieldsForUnit` from evidence's
+contract, wired in `app.ts`. Estate renders the cards; evidence owns the SQL. Building-level paper
+stays on the building page; unit paper stays on the unit page. Promoted values never come from an
+estate query of `extracted_field`.
 
 ## The importer — `importEstate`, `src/estate/internal/importer.ts`
 

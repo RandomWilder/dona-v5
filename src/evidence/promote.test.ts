@@ -21,6 +21,7 @@ import {
   extractFiledDocument,
   fileDocument,
   listExtractedFields,
+  listPromotedFieldsForUnit,
   numberWords,
   promoteExtractedField,
   renderReadPage,
@@ -235,6 +236,12 @@ describe('evidence · promote an extracted field', () => {
           stamped.find((row) => row.fieldKey === 'start_date')?.promotedTo,
           'tenancy.start_date',
         );
+        const onUnit = await listPromotedFieldsForUnit(db, unitId);
+        assert.equal(onUnit.length, 1);
+        assert.equal(onUnit[0]?.value, '2026-03-01');
+        assert.equal(onUnit[0]?.extractedFieldId, start?.extractedFieldId);
+        const other = newId();
+        assert.equal((await listPromotedFieldsForUnit(db, other)).length, 0);
 
         await extractFiledDocument(
           {
@@ -293,6 +300,9 @@ describe('evidence · promote an extracted field', () => {
           extractedFieldId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
           labelHe: 'תחילת תקופת השכירות',
           value: '2026-03-01',
+          page: 1,
+          bbox: { x: 10, y: 20, width: 40, height: 12 },
+          confidence: null,
           promotionTarget: 'tenancy.start_date',
           promotedTo: null,
         },
@@ -300,6 +310,9 @@ describe('evidence · promote an extracted field', () => {
           extractedFieldId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
           labelHe: 'מספר הדירה',
           value: '12',
+          page: 1,
+          bbox: { x: 10, y: 40, width: 20, height: 12 },
+          confidence: null,
           promotionTarget: null,
           promotedTo: null,
         },
@@ -309,5 +322,67 @@ describe('evidence · promote an extracted field', () => {
     assert.match(html, /קדם · תחילת תקופת השכירות/);
     assert.match(html, /name="promoted_by"/);
     assert.doesNotMatch(html, /קדם · מספר הדירה/);
+  });
+
+  it('links an extracted value to its pixels on that page', () => {
+    const fieldId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const otherId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    const html = renderReadPage({
+      documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      buildingId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      buildingName: 'בניין',
+      unitId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      labelHe: 'חוזה שכירות',
+      fileHash: 'e'.repeat(64),
+      source: 'ocr',
+      page: {
+        number: 1,
+        width: 100,
+        height: 200,
+        items: [
+          {
+            text: 'שכירות',
+            x: 8,
+            y: 18,
+            width: 20,
+            height: 10,
+            rightToLeft: true,
+            endsLine: false,
+            confidence: 0.91,
+          },
+        ],
+      },
+      image: null,
+      extracted: [
+        {
+          extractedFieldId: fieldId,
+          labelHe: 'תחילת תקופת השכירות',
+          value: '2026-03-01',
+          page: 1,
+          bbox: { x: 10, y: 20, width: 40, height: 12 },
+          confidence: 0.91,
+          promotionTarget: 'tenancy.start_date',
+          promotedTo: 'tenancy.start_date',
+        },
+        {
+          extractedFieldId: otherId,
+          labelHe: 'סיום',
+          value: '2027-02-28',
+          page: 2,
+          bbox: { x: 10, y: 80, width: 40, height: 12 },
+          confidence: null,
+          promotionTarget: 'tenancy.end_date',
+          promotedTo: null,
+        },
+      ],
+    });
+    assert.match(
+      html,
+      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read\?page=1#f-dddddddd-dddd-4ddd-8ddd-dddddddddddd"/,
+    );
+    assert.match(html, /id="f-dddddddd-dddd-4ddd-8ddd-dddddddddddd"/);
+    assert.match(html, /field-box/);
+    assert.match(html, /91%/);
+    assert.doesNotMatch(html, /id="f-eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"/);
   });
 });

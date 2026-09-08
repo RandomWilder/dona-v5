@@ -214,6 +214,25 @@ const SCREENS: Array<[string, () => string]> = [
   ],
   ['estate · one unit', () => renderUnitPage(hit, 2, [filed])],
   [
+    'estate · one unit, with a promoted date',
+    () =>
+      renderUnitPage(
+        hit,
+        2,
+        [filed],
+        [
+          {
+            extractedFieldId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            documentId: filed.documentId,
+            labelHe: 'תחילת תקופת השכירות',
+            value: '2026-03-01',
+            page: 1,
+            confidence: 0.91,
+          },
+        ],
+      ),
+  ],
+  [
     'estate · one unit, vacant and empty',
     () => renderUnitPage(hit, undefined, []),
   ],
@@ -367,6 +386,9 @@ const SCREENS: Array<[string, () => string]> = [
             extractedFieldId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
             labelHe: 'מספר הדירה',
             value: '14',
+            page: 1,
+            bbox: { x: 10, y: 40, width: 30, height: 20 },
+            confidence: 0.91,
             promotionTarget: null,
             promotedTo: null,
           },
@@ -513,5 +535,73 @@ describe('shared UI tokens', () => {
     const buildingHtml = renderBuildingPage(detail, occupancy, [unverified]);
     assert.match(buildingHtml, /gs:\/\/dona-v5-staging-docs\//);
     assert.doesNotMatch(buildingHtml, /href="gs:/);
+  });
+
+  it('links a promoted date to its pixels, not the object bytes', () => {
+    const html = renderUnitPage(
+      hit,
+      2,
+      [filed],
+      [
+        {
+          extractedFieldId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          documentId: filed.documentId,
+          labelHe: 'תחילת תקופת השכירות',
+          value: '2026-03-01',
+          page: 1,
+          confidence: 0.91,
+        },
+      ],
+    );
+    assert.match(
+      html,
+      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read\?page=1#f-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"/,
+    );
+    assert.match(html, /91%/);
+    assert.doesNotMatch(html, /href="gs:/);
+    assert.doesNotMatch(html, /<script/);
+    const three = renderUnitPage(
+      hit,
+      2,
+      [filed],
+      [
+        {
+          extractedFieldId: '11111111-1111-4111-8111-111111111111',
+          documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          labelHe: 'תחילה',
+          value: '2026-01-01',
+          page: 1,
+          confidence: null,
+        },
+        {
+          extractedFieldId: '22222222-2222-4222-8222-222222222222',
+          documentId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          labelHe: 'סיום',
+          value: '2027-01-01',
+          page: 2,
+          confidence: null,
+        },
+        {
+          extractedFieldId: '33333333-3333-4333-8333-333333333333',
+          documentId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          labelHe: 'סיום מתוקן',
+          value: '2027-06-30',
+          page: 1,
+          confidence: 0.8,
+        },
+      ],
+    );
+    assert.match(
+      three,
+      /aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read\?page=1#f-11111111/,
+    );
+    assert.match(
+      three,
+      /bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\/read\?page=2#f-22222222/,
+    );
+    assert.match(
+      three,
+      /cccccccc-cccc-4ccc-8ccc-cccccccccccc\/read\?page=1#f-33333333/,
+    );
   });
 });

@@ -13,6 +13,7 @@ import type { Pool } from 'pg';
 import { registerEstateRoutes } from './estate/contract.ts';
 import {
   listLinkedDocuments,
+  listPromotedFieldsForUnit,
   registerDocumentRoutes,
   searchDocuments,
 } from './evidence/contract.ts';
@@ -88,6 +89,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     clock: deps.clock ?? systemClock,
     listLinkedDocuments,
     searchDocuments,
+    listPromotedFieldsForUnit,
   });
   registerDocumentRoutes(app, {
     pool: deps.pool,

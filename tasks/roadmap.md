@@ -1185,6 +1185,9 @@ The provenance viewer: the page image scrolls to the box the value came from.
 - **Verify:** demonstrated live on three different documents.
 - **Owed by 4.1 / 4.2 / 4.3 — staging sweep of `unverified`.** After the revision that includes the
   reader serves, `ocr:sweep` as `app-staging`; write the count (zero is a count).
+- **Closed 2026-09-08** ([evidence](evidence/4.4.md)). Href
+  `/documents/:id/read?page=N#f-<id>`, no script. Estate injects `listPromotedFieldsForUnit`.
+  **430 code + 41 hooks**, policy 44. Staging sweep still director after this revision serves.
 - **Deps:** 4.3 · **Size:** M
 
 ### Slice 4.5 — The accuracy number
