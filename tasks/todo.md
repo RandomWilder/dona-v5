@@ -41,11 +41,11 @@ A2, A3 and A4 were named on 6 Sep and **sized at week 3's close on 7 Sep** as 4.
       pdfjs **8s**; OCR **20s**. HTTP of a miss is 200 unverified.
 - [x] **E16 versioning is one column, not two.** Discharged at 4.2: `ExtractedField` points at
       `document_type_field_id`. No separate schema-version entity.
-- [ ] **`upsertUnitRow` still writes only a `UNIT` space.** Discharged at 4.6: register-imported
-      buildings still have no `PARKING` or `STORAGE` rows. The Shoham fixture already has 60 bays and
-      40 rooms; a protocol cannot fill a bay that does not exist.
-- [ ] **A2 — a lease establishes a draft tenancy**, including 3.3's content cross-check and the
-      draft path upload could not take. **4.6.**
+- [x] **`upsertUnitRow` still writes only a `UNIT` space.** Discharged at 4.6: one register line now
+      also upserts `PARKING` `חניה {n}` and `STORAGE` `מחסן {n}` and assigns them. Placeholders, same
+      standing as מסירה dates. Shoham 60/40 stay the plan. Real bay counts: 2.5.
+- [x] **A2 — a lease establishes a draft tenancy**, including 3.3's content cross-check and the
+      draft path upload could not take. **Closed 8 Sep** — [evidence/4.6.md](evidence/4.6.md).
 - [ ] **A3 — an addendum completes a tenancy.** Same path as A2. **4.7.**
 - [ ] **A4 — incomplete-tenancy queue** (at least one guarantor; policy case, never NOT NULL). **4.8.**
 - [ ] **The UI comments from weeks 2 and 3.** Parked at **M1**. Nothing raised was a correctness,
@@ -113,7 +113,7 @@ btree — week 12. Session, CSRF, and a cap on upload *count* — week 5. Signed
       field cannot promote; TenancyEvent `amended`; R9 scan red first. Staging sweep carried to 4.4.
       **Deps:** 4.2 · **M** · **plan mode first** (evidence + tenancy)
 
-- [ ] **4.6 — A2: a lease establishes a draft tenancy.** Extract → propose → **confirm** → write.
+- [x] **4.6 — A2: a lease establishes a draft tenancy.** Extract → propose → **confirm** → write.
       Unit, dates, and every tenant named on the lease (two signatories per household is normal).
       **Role is confirmed by a human before any `tenancy_party` row is written.** Parties are created
       **under the tenancy the document was uploaded to**; no cross-tenancy identity matching.
@@ -127,6 +127,8 @@ btree — week 12. Session, CSRF, and a cap on upload *count* — week 5. Signed
       **Owed by 3.5 — `upsertUnitRow` still writes only a `UNIT` space**, so register-imported
       buildings have no `PARKING` or `STORAGE` rows. Close it here so A6 can land on a bay.
       **Owed by 3.5 — A2's staging shape**, recorded rather than invented in the slice.
+      **Closed 8 Sep** — [evidence/4.6.md](evidence/4.6.md). Capture is the staging shape. Redirect
+      after a verified lease with no tenancy. `createParty` has no ת.ז. Register line: 3 spaces.
       **Deps:** 4.3, 3.3, 3.5 · **M** · **plan mode first** (estate · parties · tenancy · evidence)
 
 - [ ] **4.7 — A3: an addendum completes a tenancy.** No special case: fields live on the tenancy and

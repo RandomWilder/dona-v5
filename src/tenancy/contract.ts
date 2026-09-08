@@ -16,6 +16,7 @@ export type {
 } from './internal/commands.ts';
 export {
   applyPromotedField,
+  findTermsProfileByName,
   upsertTenancy,
   upsertTenancyParty,
   upsertTermsProfile,

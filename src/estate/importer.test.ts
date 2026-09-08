@@ -22,7 +22,7 @@ import {
   skipReason,
 } from '../kernel/pg-support.ts';
 import type { EstatePlan } from './contract.ts';
-import { importEstate } from './contract.ts';
+import { importEstate, upsertUnitRow } from './contract.ts';
 import { shohamPlan } from './fixtures/shoham.ts';
 
 const CITY = 'שוהם — בדיקת ייבוא';
@@ -319,6 +319,86 @@ describe('estate · the import runs twice', () => {
           });
         });
       }
+    } finally {
+      await pool.end();
+    }
+  });
+});
+
+const ROW_CITY = 'לוד — בדיקת שורת יחידה';
+
+describe('estate · upsertUnitRow implies parking and storage', () => {
+  it('assigns a bay and a store named from the apartment, twice is a no-op', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const spec = {
+          project: null,
+          building: {
+            name: 'בניין שורה',
+            addressLine: 'הרצל 1',
+            city: ROW_CITY,
+            projectCode: null,
+            handoverDate: '2025-01-01',
+            warrantyEndDate: '2027-01-01',
+            status: 'ACTIVE' as const,
+          },
+          unit: {
+            spaceName: '12',
+            unitNumber: '12',
+            rooms: 3,
+            areaSqm: 70,
+            hasMamad: false,
+            warrantyEndDate: null,
+            conditionStatus: 'READY' as const,
+          },
+          floor: null,
+        };
+        const first = await upsertUnitRow(db, spec);
+        const kinds = await db.query<{ space_kind: string; name: string }>(
+          `SELECT s.space_kind, s.name
+             FROM space s
+             JOIN building b ON b.building_id = s.building_id
+            WHERE b.city = $1
+            ORDER BY s.space_kind, s.name`,
+          [ROW_CITY],
+        );
+        assert.deepEqual(
+          kinds.rows.map((row) => `${row.space_kind}:${row.name}`),
+          ['PARKING:חניה 12', 'STORAGE:מחסן 12', 'UNIT:12'],
+        );
+        const assigned = await db.query<{
+          parking: string | null;
+          storage: string | null;
+        }>(
+          `SELECT p.name AS parking, st.name AS storage
+             FROM unit u
+             LEFT JOIN space p ON p.space_id = u.parking_space_id
+             LEFT JOIN space st ON st.space_id = u.storage_space_id
+            WHERE u.unit_id = $1`,
+          [first.unitId],
+        );
+        assert.equal(assigned.rows[0]?.parking, 'חניה 12');
+        assert.equal(assigned.rows[0]?.storage, 'מחסן 12');
+        assert.equal(first.inserted.parking, true);
+        assert.equal(first.inserted.storage, true);
+
+        const second = await upsertUnitRow(db, spec);
+        assert.equal(second.unitId, first.unitId);
+        assert.equal(second.inserted.parking, false);
+        assert.equal(second.inserted.storage, false);
+        const again = await db.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM space s
+             JOIN building b ON b.building_id = s.building_id
+            WHERE b.city = $1`,
+          [ROW_CITY],
+        );
+        assert.equal(again.rows[0]?.n, '3');
+      });
     } finally {
       await pool.end();
     }

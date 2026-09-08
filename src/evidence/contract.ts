@@ -63,6 +63,19 @@ export type {
 } from './internal/intake.ts';
 export { fileDocument, findDocumentByHash } from './internal/intake.ts';
 export type {
+  ConfirmLeaseResult,
+  ConfirmLeaseSpec,
+  LeaseDeps,
+  LeaseProposal,
+  ProposedPerson,
+} from './internal/lease.ts';
+export {
+  addressMatches,
+  apartmentMatches,
+  confirmLeaseTenancy,
+  proposeLeaseTenancy,
+} from './internal/lease.ts';
+export type {
   DocumentHit,
   DocumentSearchResults,
   LinkedDocument,
@@ -126,6 +139,8 @@ export type {
   ReadScreen,
   SeededScreen,
   SeedScreen,
+  TenancyScreen,
+  TenancyWrittenScreen,
   UploadScreen,
 } from './internal/views.ts';
 export {
@@ -133,5 +148,7 @@ export {
   renderReadPage,
   renderSeededPage,
   renderSeedPage,
+  renderTenancyPage,
+  renderTenancyWrittenPage,
   renderUploadPage,
 } from './internal/views.ts';

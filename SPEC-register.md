@@ -218,6 +218,8 @@ had thought of. Every fixture profile now carries the suffix its cities do.
 - **Whether the real export carries a ת.ז. on every row, and a profile name on every lease.** Both
   are required by this format and both are questions for the client. 2.5 answers them with the export
   in hand.
-- **Whether a register row should be able to name a space that is not a unit.** It cannot today, and
-  nothing has asked for it. Parking bays and storage rooms reach the system through the estate plan
-  (D3 in the workbook), which the handover protocol at week 3 fills in.
+- **Whether a register row should be able to name a space that is not a unit.** Closed at 4.6: the
+  file still cannot. The 22-column header is unchanged. `upsertUnitRow` implies a `PARKING` and a
+  `STORAGE` space named from the apartment number and assigns them, as placeholders, so A6 has a bay.
+  A building whose real bay count is known still arrives as an estate plan (D3). What a *real*
+  export's bay column would look like is 2.5's, with the export in hand.

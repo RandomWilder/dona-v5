@@ -86,6 +86,7 @@ export interface IntakeRequest {
    * Optional, and not because a tenancy is optional to the model: a handover protocol precedes every
    * tenancy its flat will ever have. Creating a *draft* tenancy from this screen is week 4's, with
    * flow A2 and the human confirmation invariant 5 requires — SPEC-evidence.md says why.
+   * Slice 4.6 is that path: a verified lease with no tenancy link redirects to confirm.
    */
   tenancyId: string | null;
   /** The validity window on the paper itself, when the type has one. Both null is the ordinary case. */

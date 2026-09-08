@@ -3,11 +3,10 @@
 // The shell is the kernel's (`src/kernel/ui/page.ts`) and every colour, face and physical side comes
 // from `/ui/tokens.css`. What is here is the layout of a form and of the sentence that follows it.
 //
-// **Nothing on these screens is a person.** A unit number, a building, a type, a date range and a
-// digest — that is the whole vocabulary. The tenancy options are dates and a status, which is the
-// same rule the occupancy chip keeps: an unauthenticated screen may say a flat is let and may not
-// say by whom, until week 5 puts a session in front of it. `tests/ui/tokens.test.ts` asserts it from
-// the outside, on the rendered bytes, because that is what a rule is for.
+// **Nothing on these screens is a person, except A2's confirm page.** A unit number, a building, a
+// type, a date range and a digest — that is the ordinary vocabulary. The tenancy options are dates
+// and a status. Slice 4.6's confirm screen shows captured names so a human can confirm each role;
+// it still does not query `party`. `tests/ui/tokens.test.ts` asserts the rest from the outside.
 //
 // **No client JavaScript, here as everywhere.** The type list is a `<select>` the server filled from
 // the catalogue, the file input is a file input, and the page works with scripting switched off.
@@ -18,6 +17,7 @@ import { type Html, h } from '../../kernel/ui/html.ts';
 import { renderPage } from '../../kernel/ui/page.ts';
 import type { UnitLetting } from '../../tenancy/contract.ts';
 import type { DocumentTypeRow } from './catalogue.ts';
+import type { ProposedPerson } from './lease.ts';
 import { documentExtensions } from './storage-path.ts';
 import type { Verification } from './verify.ts';
 
@@ -499,6 +499,141 @@ export function renderReadPage(screen: ReadScreen): string {
     </div>`;
   return renderPage({
     title: 'דונה דום — מילים על הדף',
+    styles,
+    nav: nav(),
+    body,
+  });
+}
+
+const ROLE_LABEL: Record<string, string> = {
+  PRIMARY_TENANT: 'שוכר ראשי',
+  CO_TENANT: 'שוכר נוסף',
+  GUARANTOR: 'ערב',
+  OCCUPANT: 'דייר',
+};
+
+export interface TenancyScreen {
+  documentId: string;
+  unit: UnitHit;
+  startDate: string | null;
+  endDate: string | null;
+  apartmentNumber: string | null;
+  address: string | null;
+  people: readonly ProposedPerson[];
+  matchesUnit: boolean;
+  alreadyEstablished: boolean;
+}
+
+export function renderTenancyPage(screen: TenancyScreen): string {
+  const back = `/estate/units/${screen.unit.unit_id}`;
+  const people = screen.people.map(
+    (person) => h`<div class="form-row">
+      <label>${person.value}
+        <select name="role-${person.extractedFieldId}">
+          ${Object.entries(ROLE_LABEL).map(
+            ([value, label]) =>
+              h`<option value="${value}"${
+                person.proposedRole === value ? h` selected` : h``
+              }>${label}</option>`,
+          )}
+        </select>
+      </label>
+    </div>`,
+  );
+  const canWrite =
+    screen.matchesUnit &&
+    !screen.alreadyEstablished &&
+    screen.startDate !== null &&
+    screen.endDate !== null &&
+    screen.people.some((person) => person.fieldKey === 'tenant_name');
+  const body = h`
+    <div>
+      <a class="back" href="${back}">← דירה ${ltr(screen.unit.unit_number)}</a>
+      <h1>אישור חוזה</h1>
+      ${unitLine(screen.unit)}
+    </div>
+    <section class="notice">
+      <h2>מה שנקרא מהמסמך</h2>
+      <dl class="facts">
+        <div><dt>תחילת השכירות</dt><dd>${
+          screen.startDate ? ltr(screen.startDate) : h`לא נמצא`
+        }</dd></div>
+        <div><dt>סיום השכירות</dt><dd>${
+          screen.endDate ? ltr(screen.endDate) : h`לא נמצא`
+        }</dd></div>
+        <div><dt>דירה במסמך</dt><dd>${
+          screen.apartmentNumber ? ltr(screen.apartmentNumber) : h`לא נמצא`
+        }</dd></div>
+        <div><dt>כתובת במסמך</dt><dd>${screen.address ?? h`לא נמצא`}</dd></div>
+      </dl>
+      ${
+        screen.matchesUnit
+          ? h``
+          : h`<p class="lede">הכתובת או מספר הדירה במסמך אינם תואמים את הדירה שאליה הוגש. לא נכתוב שוכרים.</p>`
+      }
+    </section>
+    ${
+      canWrite
+        ? h`<form class="form-grid" method="post" action="/documents/${screen.documentId}/tenancy" enctype="multipart/form-data">
+            ${people}
+            <div class="form-row">
+              <label>נספח תחזוקה
+                <input name="terms_profile" required maxlength="200">
+              </label>
+            </div>
+            <div class="form-row">
+              <label>מי מאשר
+                <input name="confirmed_by" required maxlength="200">
+              </label>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit">אישור וכתיבה</button>
+              <a href="${back}">ביטול</a>
+            </div>
+          </form>`
+        : h`<div class="form-actions"><a href="${back}">חזרה לדירה</a></div>`
+    }`;
+  return renderPage({
+    title: 'דונה דום — אישור חוזה',
+    styles,
+    nav: nav(),
+    body,
+  });
+}
+
+export interface TenancyWrittenScreen {
+  unit: UnitHit;
+  startDate: string;
+  endDate: string;
+  partiesWritten: number;
+  alreadyEstablished: boolean;
+}
+
+export function renderTenancyWrittenPage(screen: TenancyWrittenScreen): string {
+  const back = `/estate/units/${screen.unit.unit_id}`;
+  const body = h`
+    <div>
+      <a class="back" href="${back}">← דירה ${ltr(screen.unit.unit_number)}</a>
+      <h1>החוזה נרשם כטיוטה</h1>
+    </div>
+    <section class="notice">
+      <dl class="facts">
+        <div><dt>תחילת השכירות</dt><dd>${ltr(screen.startDate)}</dd></div>
+        <div><dt>סיום השכירות</dt><dd>${ltr(screen.endDate)}</dd></div>
+        <div><dt>שוכרים שנרשמו</dt><dd>${ltr(String(screen.partiesWritten))}</dd></div>
+      </dl>
+      ${
+        screen.alreadyEstablished
+          ? h`<p class="lede">מסמך זה כבר הקים השכרה. לא נוסף בית שני.</p>`
+          : h``
+      }
+    </section>
+    <div class="form-actions">
+      <a class="btn btn-secondary" href="/documents/new?unit=${screen.unit.unit_id}">הוספת מסמך נוסף</a>
+      <a href="${back}">חזרה לדירה</a>
+    </div>`;
+  return renderPage({
+    title: 'דונה דום — החוזה נרשם',
     styles,
     nav: nav(),
     body,

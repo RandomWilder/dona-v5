@@ -49,10 +49,11 @@ function pageIndex(asked: unknown, pageCount: number): number {
 }
 
 import type { WorkRunner } from '../../kernel/work.ts';
-import { listUnitTenancies } from '../../tenancy/contract.ts';
+import { listUnitTenancies, type TenancyRole } from '../../tenancy/contract.ts';
 import { documentTypeByKey, listDocumentTypes } from './catalogue.ts';
 import { listExtractedFields } from './extract.ts';
 import { fileDocument } from './intake.ts';
+import { confirmLeaseTenancy, proposeLeaseTenancy } from './lease.ts';
 import { promoteExtractedField } from './promote.ts';
 import { isProtocolType } from './protocol.ts';
 import { readFiledDocument } from './read.ts';
@@ -67,6 +68,8 @@ import {
   renderReadPage,
   renderSeededPage,
   renderSeedPage,
+  renderTenancyPage,
+  renderTenancyWrittenPage,
   renderUploadPage,
 } from './views.ts';
 
@@ -93,7 +96,7 @@ export interface DocumentDeps {
 const LIMITS = {
   files: 1,
   fileSize: 20 * 1024 * 1024,
-  fields: 8,
+  fields: 40,
   fieldSize: 200,
 };
 
@@ -187,6 +190,13 @@ export function registerDocumentRoutes(
       result.verification.verdict === 'verified'
     ) {
       return reply.redirect(`/documents/${result.documentId}/seed`);
+    }
+    if (
+      type.typeKey === 'lease' &&
+      tenancyId === null &&
+      result.verification.verdict === 'verified'
+    ) {
+      return reply.redirect(`/documents/${result.documentId}/tenancy`);
     }
     return renderFiledPage({
       unit,
@@ -326,6 +336,52 @@ export function registerDocumentRoutes(
         warrantyEndDate: confirmed.warrantyEndDate,
         assetsWritten: confirmed.assetsWritten,
         alreadySeeded: confirmed.alreadySeeded,
+      });
+    },
+  );
+
+  app.get<{ Params: { documentId: string } }>(
+    '/documents/:documentId/tenancy',
+    async (request, reply) => {
+      const documentId = validId(request.params.documentId, 'document');
+      const proposed = await proposeLeaseTenancy(deps.pool, documentId);
+      html(reply);
+      return renderTenancyPage(proposed);
+    },
+  );
+
+  app.post<{ Params: { documentId: string } }>(
+    '/documents/:documentId/tenancy',
+    async (request, reply) => {
+      const documentId = validId(request.params.documentId, 'document');
+      const fields = await readFields(request);
+      const roles: Record<string, TenancyRole> = {};
+      for (const [name, value] of Object.entries(fields)) {
+        if (name.startsWith('role-')) {
+          roles[name.slice(5)] = value as TenancyRole;
+        }
+      }
+      const confirmed = await confirmLeaseTenancy(
+        {
+          db: deps.pool,
+          audit: createAuditLog(deps.pool, deps.clock),
+          clock: deps.clock,
+        },
+        {
+          documentId,
+          termsProfileName: fields.terms_profile ?? '',
+          confirmedBy: fields.confirmed_by ?? '',
+          roles,
+        },
+      );
+      const proposed = await proposeLeaseTenancy(deps.pool, documentId);
+      html(reply);
+      return renderTenancyWrittenPage({
+        unit: proposed.unit,
+        startDate: proposed.startDate ?? '',
+        endDate: proposed.endDate ?? '',
+        partiesWritten: confirmed.partiesWritten,
+        alreadyEstablished: confirmed.alreadyEstablished,
       });
     },
   );

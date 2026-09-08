@@ -1223,6 +1223,10 @@ identity matching. Zero guarantors is a correct result.
   shape, recorded rather than invented in the slice.
 - **Deps:** 4.3, 3.3, 3.5 · **Size:** M · plan mode first (estate · parties · tenancy · evidence)
 - **Sized:** 7 Sep 2026, week 3 close.
+- **Closed 2026-09-08** ([evidence](evidence/4.6.md)). Confirm recomputes from capture. Verified
+  lease without a tenancy → `/documents/:id/tenancy`. Two tenants, zero guarantors, mismatch writes
+  nothing. `upsertUnitRow` implies `חניה`/`מחסן` placeholders. **434 code + 41 hooks + 44 policy.**
+  No migration. Carry: terms profile still typed; real bay counts 2.5; A3 is 4.7.
 
 ### Slice 4.7 — A3: an addendum completes a tenancy
 No special case: fields live on the tenancy and documents are provenance. Later document wins;

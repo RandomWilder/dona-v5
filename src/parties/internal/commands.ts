@@ -12,6 +12,7 @@
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
+import { requireText } from '../../kernel/validate.ts';
 import type { Queryable } from './types.ts';
 
 export type PartyKind = 'PERSON' | 'COMPANY';
@@ -53,6 +54,35 @@ export interface PartyContactSpec {
   validTo: string | null;
   /** Written by the injected clock or not at all — there is no `DEFAULT now()` (SPEC.md). */
   verifiedAt: Date | null;
+}
+
+export interface CreatePartySpec {
+  kind: PartyKind;
+  /** -- pii. */
+  fullName: string;
+  preferredLanguage: PreferredLanguage;
+}
+
+/**
+ * A person named on a lease, with no identifier. Always an insert: there is no natural key to
+ * conflict on, and matching a name across tenancies is month two's. Slice 4.6, flow A2.
+ */
+export async function createParty(
+  db: Queryable,
+  spec: CreatePartySpec,
+): Promise<UpsertResult> {
+  const fullName = requireText(spec.fullName, 'full_name', 200);
+  const result = await db.query<{ party_id: string; inserted: boolean }>(
+    `INSERT INTO party (party_id, party_kind, full_name, national_id, preferred_language)
+     VALUES ($1, $2, $3, NULL, $4)
+     RETURNING party_id, ${INSERTED}`,
+    [newId(), spec.kind, fullName, spec.preferredLanguage],
+  );
+  const row = result.rows[0];
+  if (!row) {
+    throw new KernelError('conflict', 'party insert returned no row');
+  }
+  return { id: row.party_id, inserted: row.inserted };
 }
 
 /** One person or company, identified by its normalised ת.ז. / ח.פ. */

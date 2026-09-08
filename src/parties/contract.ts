@@ -6,10 +6,15 @@
 
 export type {
   ContactChannel,
+  CreatePartySpec,
   PartyContactSpec,
   PartyKind,
   PartySpec,
   PreferredLanguage,
 } from './internal/commands.ts';
-export { upsertParty, upsertPartyContact } from './internal/commands.ts';
+export {
+  createParty,
+  upsertParty,
+  upsertPartyContact,
+} from './internal/commands.ts';
 export type { Queryable } from './internal/types.ts';

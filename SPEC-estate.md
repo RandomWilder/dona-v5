@@ -264,6 +264,12 @@ shape. It is the identical four upserts, extracted rather than copied: one funct
 by both entry points. The register writes no estate SQL of its own, which is what keeps the table's
 rules in the module that owns them.
 
+**Slice 4.6 also upserts a `PARKING` space `חניה {unit_number}` and a `STORAGE` space `מחסן
+{unit_number}` and assigns them on the unit.** The register file still has no bay columns; these
+rows are placeholders, the same standing as the מסירה dates the importer copies from the lease, so a
+handover protocol has a bay to land a gate motor on. A building whose real bay count is known (Shoham)
+arrives as a plan. A real register whose counts disagree is 2.5's to measure.
+
 ## What is deliberately not a column
 
 - **`Building.unit_count`** — counted, never stored. A stored count drifts the first time someone
