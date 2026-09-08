@@ -21,6 +21,7 @@ import { createMemoryStore } from '../kernel/objects.ts';
 import { createFakeOcrText, type OcrText } from '../kernel/ocr.ts';
 import { createFakePdfText } from '../kernel/pdf.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
+import { upsertTenancy, upsertTermsProfile } from '../tenancy/contract.ts';
 import { applyDocumentTypeCatalogue, documentFileHash } from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
@@ -583,6 +584,169 @@ describe('evidence · the upload route', () => {
       for (const extra of extraApps) {
         await extra.close();
       }
+      await pool.end();
+    }
+  });
+});
+
+describe('evidence · A3 addendum upload redirects to confirm', () => {
+  it('a verified addendum filed against a letting is 302 to /tenancy', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const CITY_A3 = 'עיר נספח';
+    const ADDRESS_A3 = 'רחוב הנספח 7';
+    const PROJECT_A3 = 'TEST-AMEND';
+    const objects = createMemoryStore();
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      clock: fixedClock(AT),
+      objects,
+      pdf: createFakePdfText(['נספח לחוזה השכירות']),
+      bucket: BUCKET,
+    });
+    let unitId = '';
+    const hashes: string[] = [];
+    try {
+      await applyDocumentTypeCatalogue(pool, seedDocumentTypes);
+      await importEstate(pool, {
+        projects: [
+          {
+            name: 'מכרז נספח',
+            projectCode: PROJECT_A3,
+            tenderRef: null,
+            status: 'ACTIVE',
+          },
+        ],
+        buildings: [
+          {
+            name: 'בניין נספח',
+            addressLine: ADDRESS_A3,
+            city: CITY_A3,
+            projectCode: PROJECT_A3,
+            handoverDate: '2025-03-01',
+            warrantyEndDate: '2027-03-01',
+            status: 'ACTIVE',
+            spaces: [
+              { kind: 'UNIT', name: 'דירה 4', floor: '1', accessNote: null },
+            ],
+            units: [
+              {
+                spaceName: 'דירה 4',
+                unitNumber: '4',
+                rooms: 3,
+                areaSqm: 70,
+                hasMamad: false,
+                parkingSpaceName: null,
+                storageSpaceName: null,
+                warrantyEndDate: null,
+                conditionStatus: 'READY',
+              },
+            ],
+          },
+        ],
+      });
+      const found = await pool.query<{ unit_id: string }>(
+        `SELECT u.unit_id FROM unit u
+           JOIN space s ON s.space_id = u.unit_id
+           JOIN building b ON b.building_id = s.building_id
+          WHERE b.city = $1 AND b.address_line = $2`,
+        [CITY_A3, ADDRESS_A3],
+      );
+      unitId = found.rows[0]?.unit_id ?? '';
+      assert.ok(unitId);
+      const profile = await upsertTermsProfile(
+        pool,
+        `a3-http-${unitId.slice(0, 8)}`,
+      );
+      const tenancy = await upsertTenancy(pool, {
+        unitId,
+        startDate: '2026-03-01',
+        endDate: '2027-02-28',
+        status: 'DRAFT',
+        termsProfileId: profile.id,
+        noticeDate: null,
+        actualMoveOut: null,
+      });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/documents',
+        ...upload(
+          {
+            unit: unitId,
+            type: 'lease_amendment',
+            tenancy: tenancy.id,
+          },
+          { filename: 'amendment.pdf', bytes: pdfBytes('a3-http') },
+        ),
+      });
+      assert.equal(response.statusCode, 302);
+      assert.match(
+        response.headers.location ?? '',
+        /\/documents\/[0-9a-f-]{36}\/tenancy$/,
+      );
+      const hashed = await pool.query<{ file_hash: string }>(
+        `SELECT file_hash FROM document d
+           JOIN document_link l ON l.document_id = d.document_id
+          WHERE l.entity_id = $1
+          ORDER BY d.ingested_at DESC LIMIT 1`,
+        [unitId],
+      );
+      if (hashed.rows[0]) hashes.push(hashed.rows[0].file_hash);
+    } finally {
+      for (const hash of hashes) {
+        await pool.query(
+          `DELETE FROM extracted_field WHERE document_id IN
+             (SELECT document_id FROM document WHERE file_hash = $1)`,
+          [hash],
+        );
+        await pool.query(
+          `DELETE FROM document_link WHERE document_id IN
+             (SELECT document_id FROM document WHERE file_hash = $1)`,
+          [hash],
+        );
+        await pool.query('DELETE FROM document WHERE file_hash = $1', [hash]);
+      }
+      if (unitId) {
+        await pool.query(
+          `DELETE FROM tenancy_event WHERE tenancy_id IN
+             (SELECT tenancy_id FROM tenancy WHERE unit_id = $1)`,
+          [unitId],
+        );
+        await pool.query(
+          `DELETE FROM tenancy_party WHERE tenancy_id IN
+             (SELECT tenancy_id FROM tenancy WHERE unit_id = $1)`,
+          [unitId],
+        );
+        await pool.query('DELETE FROM tenancy WHERE unit_id = $1', [unitId]);
+        await pool.query(
+          `DELETE FROM audit_log WHERE action LIKE 'evidence.%' AND subject_id = $1`,
+          [unitId],
+        );
+      }
+      await pool.query(
+        `DELETE FROM unit WHERE unit_id IN (
+           SELECT space_id FROM space s
+           JOIN building b ON b.building_id = s.building_id
+           WHERE b.city = $1 AND b.address_line = $2)`,
+        [CITY_A3, ADDRESS_A3],
+      );
+      await pool.query(
+        `DELETE FROM space WHERE building_id IN (
+           SELECT building_id FROM building WHERE city = $1 AND address_line = $2)`,
+        [CITY_A3, ADDRESS_A3],
+      );
+      await pool.query(
+        'DELETE FROM building WHERE city = $1 AND address_line = $2',
+        [CITY_A3, ADDRESS_A3],
+      );
+      await pool.query('DELETE FROM project WHERE project_code = $1', [
+        PROJECT_A3,
+      ]);
+      await app.close();
       await pool.end();
     }
   });

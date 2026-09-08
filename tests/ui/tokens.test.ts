@@ -451,6 +451,7 @@ const SCREENS: Array<[string, () => string]> = [
     () =>
       renderTenancyPage({
         documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        typeKey: 'lease',
         unit: hit,
         startDate: '2026-03-01',
         endDate: '2027-02-28',
@@ -466,6 +467,7 @@ const SCREENS: Array<[string, () => string]> = [
         ],
         matchesUnit: true,
         alreadyEstablished: false,
+        boundToTenancy: false,
         termsProfileNames: ['נספח תחזוקה — תקן'],
       }),
   ],
@@ -478,6 +480,31 @@ const SCREENS: Array<[string, () => string]> = [
         endDate: '2027-02-28',
         partiesWritten: 2,
         alreadyEstablished: false,
+      }),
+  ],
+  [
+    'documents · confirm an addendum',
+    () =>
+      renderTenancyPage({
+        documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        typeKey: 'lease_amendment',
+        unit: hit,
+        startDate: null,
+        endDate: '2028-02-28',
+        apartmentNumber: null,
+        address: null,
+        people: [
+          {
+            extractedFieldId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+            fieldKey: 'guarantor_name',
+            value: 'רותם ערב',
+            proposedRole: 'GUARANTOR',
+          },
+        ],
+        matchesUnit: true,
+        alreadyEstablished: false,
+        boundToTenancy: true,
+        termsProfileNames: [],
       }),
   ],
 ];

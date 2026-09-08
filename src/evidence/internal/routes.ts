@@ -198,6 +198,13 @@ export function registerDocumentRoutes(
     ) {
       return reply.redirect(`/documents/${result.documentId}/tenancy`);
     }
+    if (
+      type.typeKey === 'lease_amendment' &&
+      tenancyId !== null &&
+      result.verification.verdict === 'verified'
+    ) {
+      return reply.redirect(`/documents/${result.documentId}/tenancy`);
+    }
     return renderFiledPage({
       unit,
       type,
@@ -380,6 +387,7 @@ export function registerDocumentRoutes(
       html(reply);
       return renderTenancyWrittenPage({
         unit: proposed.unit,
+        typeKey: proposed.typeKey,
         startDate: proposed.startDate ?? '',
         endDate: proposed.endDate ?? '',
         partiesWritten: confirmed.partiesWritten,

@@ -1,4 +1,5 @@
-// Flow A2. Slice 4.6. Extracted fields propose a draft tenancy; a human confirms roles.
+// Flow A2 (slice 4.6) and A3 (slice 4.7). Extracted fields propose a draft tenancy or an
+// addendum onto an existing one; a human confirms roles.
 //
 // The confirm page recomputes from extracted_field plus the unit — no staging table. Capture is
 // already immutable. Estate, parties and tenancy write through their contracts.
@@ -43,6 +44,7 @@ export interface ProposedPerson {
 
 export interface LeaseProposal {
   documentId: string;
+  typeKey: 'lease' | 'lease_amendment';
   unit: UnitHit;
   startDate: string | null;
   endDate: string | null;
@@ -51,6 +53,7 @@ export interface LeaseProposal {
   people: ProposedPerson[];
   matchesUnit: boolean;
   alreadyEstablished: boolean;
+  boundToTenancy: boolean;
   /** Existing annex names. Empty means confirm cannot write — never a default insert. */
   termsProfileNames: string[];
 }
@@ -189,17 +192,48 @@ async function tenancyLinkOf(
   return link.rows[0]?.entity_id ?? null;
 }
 
+async function amendmentAlreadyConfirmed(
+  db: Queryable,
+  documentId: string,
+): Promise<boolean> {
+  const done = await db.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM audit_log
+      WHERE action = 'evidence.confirm_amendment'
+        AND subject_id = $1
+        AND outcome = 'ok'`,
+    [documentId],
+  );
+  return (done.rows[0]?.n ?? '0') !== '0';
+}
+
 export async function proposeLeaseTenancy(
   db: Queryable,
   documentId: string,
 ): Promise<LeaseProposal> {
   const filed = await getFiledDocument(db, validId(documentId, 'document'));
-  if (filed.typeKey !== 'lease') {
+  if (filed.typeKey !== 'lease' && filed.typeKey !== 'lease_amendment') {
     throw new KernelError('invalid', 'that document is not a lease');
   }
   const unitId = await unitIdOf(db, filed.documentId);
   const unit = await getUnit(db, unitId);
   const rows = await listExtractedFields(db, filed.documentId);
+  const boundToTenancy = (await tenancyLinkOf(db, filed.documentId)) !== null;
+  if (filed.typeKey === 'lease_amendment') {
+    return {
+      documentId: filed.documentId,
+      typeKey: 'lease_amendment',
+      unit,
+      startDate: firstValue(rows, 'effective_date'),
+      endDate: firstValue(rows, 'new_end_date'),
+      apartmentNumber: null,
+      address: null,
+      people: peopleOf(rows),
+      matchesUnit: true,
+      alreadyEstablished: await amendmentAlreadyConfirmed(db, filed.documentId),
+      boundToTenancy,
+      termsProfileNames: [],
+    };
+  }
   const apartmentNumber = firstValue(rows, 'apartment_number');
   const address = firstValue(rows, 'address');
   const matchesUnit =
@@ -209,6 +243,7 @@ export async function proposeLeaseTenancy(
     addressMatches(address, unit.address_line);
   return {
     documentId: filed.documentId,
+    typeKey: 'lease',
     unit,
     startDate: firstValue(rows, 'start_date'),
     endDate: firstValue(rows, 'end_date'),
@@ -216,7 +251,8 @@ export async function proposeLeaseTenancy(
     address,
     people: peopleOf(rows),
     matchesUnit,
-    alreadyEstablished: (await tenancyLinkOf(db, filed.documentId)) !== null,
+    alreadyEstablished: boundToTenancy,
+    boundToTenancy,
     termsProfileNames: await listTermsProfiles(db),
   };
 }
@@ -231,20 +267,112 @@ function asRole(value: string | undefined): TenancyRole {
   return value as TenancyRole;
 }
 
+async function confirmAmendment(
+  deps: LeaseDeps,
+  db: Queryable,
+  spec: {
+    documentId: string;
+    confirmedBy: string;
+    roles: Record<string, TenancyRole>;
+    proposed: LeaseProposal;
+  },
+): Promise<ConfirmLeaseResult> {
+  const { documentId, confirmedBy, proposed } = spec;
+  if (proposed.alreadyEstablished) {
+    const existing = await tenancyLinkOf(db, documentId);
+    if (!existing) {
+      throw new KernelError(
+        'invalid',
+        'that document is not bound to a tenancy',
+      );
+    }
+    return {
+      tenancyId: existing,
+      alreadyEstablished: true,
+      partiesWritten: 0,
+    };
+  }
+  const tenancyId = await tenancyLinkOf(db, documentId);
+  if (!tenancyId) {
+    throw new KernelError('invalid', 'that document is not bound to a tenancy');
+  }
+  for (const person of proposed.people) {
+    asRole(spec.roles[person.extractedFieldId]);
+  }
+
+  const rows = await listExtractedFields(db, documentId);
+  const promote = {
+    db,
+    audit: deps.audit,
+    clock: deps.clock,
+  };
+  const endDate = rows.find((field) => field.fieldKey === 'new_end_date');
+  if (endDate) {
+    await promoteExtractedField(promote, {
+      extractedFieldId: endDate.extractedFieldId,
+      promotedBy: confirmedBy,
+    });
+  }
+
+  let partiesWritten = 0;
+  for (const person of proposed.people) {
+    const role = asRole(spec.roles[person.extractedFieldId]);
+    const party = await createParty(db, {
+      kind: 'PERSON',
+      fullName: person.value,
+      preferredLanguage: 'he',
+    });
+    await upsertTenancyParty(db, {
+      tenancyId,
+      partyId: party.id,
+      role,
+      isServiceContact: role !== 'GUARANTOR',
+    });
+    await linkDocument(db, {
+      documentId,
+      entityType: 'PARTY',
+      entityId: party.id,
+      linkRole: 'SIGNATORY',
+    });
+    partiesWritten += 1;
+  }
+
+  await deps.audit.write(
+    {
+      actorKind: 'staff',
+      actorId: confirmedBy,
+      action: 'evidence.confirm_amendment',
+      subjectId: documentId,
+      inputs: { tenancyId, partiesWritten },
+    },
+    { outcome: 'ok' },
+  );
+
+  return { tenancyId, alreadyEstablished: false, partiesWritten };
+}
+
 export async function confirmLeaseTenancy(
   deps: LeaseDeps,
   spec: ConfirmLeaseSpec,
 ): Promise<ConfirmLeaseResult> {
   const documentId = validId(spec.documentId, 'document');
   const confirmedBy = requireText(spec.confirmedBy, 'confirmed_by', 200);
-  const termsProfileName = requireText(
-    spec.termsProfileName,
-    'terms_profile',
-    200,
-  );
 
   return inTransaction(deps.db, async (db) => {
     const proposed = await proposeLeaseTenancy(db, documentId);
+    if (proposed.typeKey === 'lease_amendment') {
+      return confirmAmendment(deps, db, {
+        documentId,
+        confirmedBy,
+        roles: spec.roles,
+        proposed,
+      });
+    }
+    const termsProfileName = requireText(
+      spec.termsProfileName,
+      'terms_profile',
+      200,
+    );
     const existing = await tenancyLinkOf(db, documentId);
     if (existing) {
       return {

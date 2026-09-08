@@ -278,6 +278,7 @@ describe('evidence · confirm screen lists terms profiles', () => {
   };
   const base = {
     documentId: '33333333-3333-4333-8333-333333333333',
+    typeKey: 'lease' as const,
     unit,
     startDate: '2026-09-15',
     endDate: '2027-09-14',
@@ -293,6 +294,7 @@ describe('evidence · confirm screen lists terms profiles', () => {
     ],
     matchesUnit: true,
     alreadyEstablished: false,
+    boundToTenancy: false,
   };
 
   it('is a select of existing names, not a typed field', () => {

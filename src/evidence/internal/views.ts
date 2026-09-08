@@ -244,6 +244,13 @@ export function renderFiledPage(screen: FiledScreen): string {
           ? h`<a class="btn btn-secondary" href="/documents/${screen.documentId}/tenancy">אישור חוזה</a>`
           : h``
       }
+      ${
+        screen.documentId &&
+        type.typeKey === 'lease_amendment' &&
+        screen.boundToTenancy
+          ? h`<a class="btn btn-secondary" href="/documents/${screen.documentId}/tenancy">אישור נספח</a>`
+          : h``
+      }
       <a class="btn btn-secondary" href="/documents/new?unit=${unit.unit_id}">הוספת מסמך נוסף</a>
       <a href="/estate/buildings/${unit.building_id}">חזרה לבניין</a>
     </div>`;
@@ -502,6 +509,11 @@ export function renderReadPage(screen: ReadScreen): string {
           : h``
       }
       ${
+        screen.typeKey === 'lease_amendment'
+          ? h`<a class="btn btn-secondary" href="/documents/${screen.documentId}/tenancy">אישור נספח</a>`
+          : h``
+      }
+      ${
         screen.unitId
           ? h`<a class="btn btn-secondary" href="/documents/new?unit=${screen.unitId}">הוספת מסמך נוסף</a>`
           : h``
@@ -525,6 +537,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 export interface TenancyScreen {
   documentId: string;
+  typeKey: 'lease' | 'lease_amendment';
   unit: UnitHit;
   startDate: string | null;
   endDate: string | null;
@@ -533,11 +546,13 @@ export interface TenancyScreen {
   people: readonly ProposedPerson[];
   matchesUnit: boolean;
   alreadyEstablished: boolean;
+  boundToTenancy: boolean;
   termsProfileNames: readonly string[];
 }
 
 export function renderTenancyPage(screen: TenancyScreen): string {
   const back = `/estate/units/${screen.unit.unit_id}`;
+  const isAmendment = screen.typeKey === 'lease_amendment';
   const people = screen.people.map(
     (person) => h`<div class="form-row">
       <label>${person.value}
@@ -552,54 +567,65 @@ export function renderTenancyPage(screen: TenancyScreen): string {
       </label>
     </div>`,
   );
-  const canWrite =
-    screen.matchesUnit &&
-    !screen.alreadyEstablished &&
-    screen.startDate !== null &&
-    screen.endDate !== null &&
-    screen.people.some((person) => person.fieldKey === 'tenant_name') &&
-    screen.termsProfileNames.length > 0;
+  const canWrite = isAmendment
+    ? screen.boundToTenancy && !screen.alreadyEstablished
+    : screen.matchesUnit &&
+      !screen.alreadyEstablished &&
+      screen.startDate !== null &&
+      screen.endDate !== null &&
+      screen.people.some((person) => person.fieldKey === 'tenant_name') &&
+      screen.termsProfileNames.length > 0;
   const profileOptions = screen.termsProfileNames.map(
     (name) => h`<option value="${name}">${name}</option>`,
   );
   const body = h`
     <div>
       <a class="back" href="${back}">← דירה ${ltr(screen.unit.unit_number)}</a>
-      <h1>אישור חוזה</h1>
+      <h1>${isAmendment ? h`אישור נספח` : h`אישור חוזה`}</h1>
       ${unitLine(screen.unit)}
     </div>
     <section class="notice">
       <h2>מה שנקרא מהמסמך</h2>
       <dl class="facts">
-        <div><dt>תחילת השכירות</dt><dd>${
-          screen.startDate ? ltr(screen.startDate) : h`לא נמצא`
-        }</dd></div>
+        ${
+          isAmendment
+            ? h`<div><dt>מועד סיום מעודכן</dt><dd>${
+                screen.endDate ? ltr(screen.endDate) : h`לא נמצא`
+              }</dd></div>`
+            : h`<div><dt>תחילת השכירות</dt><dd>${
+                screen.startDate ? ltr(screen.startDate) : h`לא נמצא`
+              }</dd></div>
         <div><dt>סיום השכירות</dt><dd>${
           screen.endDate ? ltr(screen.endDate) : h`לא נמצא`
         }</dd></div>
         <div><dt>דירה במסמך</dt><dd>${
           screen.apartmentNumber ? ltr(screen.apartmentNumber) : h`לא נמצא`
         }</dd></div>
-        <div><dt>כתובת במסמך</dt><dd>${screen.address ?? h`לא נמצא`}</dd></div>
+        <div><dt>כתובת במסמך</dt><dd>${screen.address ?? h`לא נמצא`}</dd></div>`
+        }
       </dl>
       ${
-        screen.matchesUnit
-          ? h``
-          : h`<p class="lede">הכתובת או מספר הדירה במסמך אינם תואמים את הדירה שאליה הוגש. לא נכתוב שוכרים.</p>`
+        !isAmendment && !screen.matchesUnit
+          ? h`<p class="lede">הכתובת או מספר הדירה במסמך אינם תואמים את הדירה שאליה הוגש. לא נכתוב שוכרים.</p>`
+          : h``
       }
     </section>
     ${
       canWrite
         ? h`<form class="form-grid" method="post" action="/documents/${screen.documentId}/tenancy" enctype="multipart/form-data">
             ${people}
-            <div class="form-row">
+            ${
+              isAmendment
+                ? h``
+                : h`<div class="form-row">
               <label>נספח תחזוקה
                 <select name="terms_profile" required>
                   <option value="">בחרו נספח</option>
                   ${profileOptions}
                 </select>
               </label>
-            </div>
+            </div>`
+            }
             <div class="form-row">
               <label>מי מאשר
                 <input name="confirmed_by" required maxlength="200">
@@ -611,6 +637,7 @@ export function renderTenancyPage(screen: TenancyScreen): string {
             </div>
           </form>`
         : h`${
+            !isAmendment &&
             screen.matchesUnit &&
             !screen.alreadyEstablished &&
             screen.termsProfileNames.length === 0
@@ -620,7 +647,7 @@ export function renderTenancyPage(screen: TenancyScreen): string {
             <div class="form-actions"><a href="${back}">חזרה לדירה</a></div>`
     }`;
   return renderPage({
-    title: 'דונה דום — אישור חוזה',
+    title: isAmendment ? 'דונה דום — אישור נספח' : 'דונה דום — אישור חוזה',
     styles,
     nav: nav(),
     body,
@@ -629,6 +656,7 @@ export function renderTenancyPage(screen: TenancyScreen): string {
 
 export interface TenancyWrittenScreen {
   unit: UnitHit;
+  typeKey?: 'lease' | 'lease_amendment';
   startDate: string;
   endDate: string;
   partiesWritten: number;
@@ -637,20 +665,29 @@ export interface TenancyWrittenScreen {
 
 export function renderTenancyWrittenPage(screen: TenancyWrittenScreen): string {
   const back = `/estate/units/${screen.unit.unit_id}`;
+  const isAmendment = screen.typeKey === 'lease_amendment';
   const body = h`
     <div>
       <a class="back" href="${back}">← דירה ${ltr(screen.unit.unit_number)}</a>
-      <h1>החוזה נרשם כטיוטה</h1>
+      <h1>${isAmendment ? h`הנספח נרשם` : h`החוזה נרשם כטיוטה`}</h1>
     </div>
     <section class="notice">
       <dl class="facts">
-        <div><dt>תחילת השכירות</dt><dd>${ltr(screen.startDate)}</dd></div>
-        <div><dt>סיום השכירות</dt><dd>${ltr(screen.endDate)}</dd></div>
-        <div><dt>שוכרים שנרשמו</dt><dd>${ltr(String(screen.partiesWritten))}</dd></div>
+        ${
+          isAmendment
+            ? h`<div><dt>מועד סיום מעודכן</dt><dd>${
+                screen.endDate ? ltr(screen.endDate) : h`לא השתנה`
+              }</dd></div>`
+            : h`<div><dt>תחילת השכירות</dt><dd>${ltr(screen.startDate)}</dd></div>
+        <div><dt>סיום השכירות</dt><dd>${ltr(screen.endDate)}</dd></div>`
+        }
+        <div><dt>${isAmendment ? h`ערבים שנרשמו` : h`שוכרים שנרשמו`}</dt><dd>${ltr(String(screen.partiesWritten))}</dd></div>
       </dl>
       ${
         screen.alreadyEstablished
-          ? h`<p class="lede">מסמך זה כבר הקים השכרה. לא נוסף בית שני.</p>`
+          ? isAmendment
+            ? h`<p class="lede">מסמך זה כבר נרשם. לא נוסף ערב שני.</p>`
+            : h`<p class="lede">מסמך זה כבר הקים השכרה. לא נוסף בית שני.</p>`
           : h``
       }
     </section>
