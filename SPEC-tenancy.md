@@ -150,7 +150,10 @@ by tripping the guard rather than by anticipating it.
   rather than a free-text guess. An empty list is legal and writes nothing — it does not insert a
   default. Flow A2 writes a `DRAFT`
   through these same commands; evidence is the only caller that creates `tenancy_party` from a
-  lease, and only after a human confirms each role. The line this module does not cross is the one
+  lease, and only after a human confirms each role. Slice 4.7's addendum confirm uses the same
+  `upsertTenancyParty` path to add a `GUARANTOR` under the existing tenancy, and
+  `applyPromotedField` to let a later `end_date` overwrite the earlier column while the event log
+  keeps both. The line this module does not cross is the one
   that matters: **who is in a unit today is `src/scope/`'s answer and never this module's**, which
   is foundation rule 1 expressed as a module boundary. `listUnitTenancies` answers *which lettings
   does this flat have* — every status, ordered by date — for an administrator choosing which one a

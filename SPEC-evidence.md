@@ -10,7 +10,7 @@ this file and the workbook disagree, the workbook is right and this file is a bu
   ExtractedField · FieldPromotion.
 - **Depends on:** estate, parties, tenancy.
 - **Builds:** week 3 (slices 3.1–3.3, 3.5's confirm screen, 3.6) and week 4 (OCR at 4.1, comprehension
-  at 4.2, promotion at 4.3, A2's draft tenancy at 4.6). **The stub gained content at slice 3.1**, which
+  at 4.2, promotion at 4.3, A2's draft tenancy at 4.6, A3's addendum at 4.7). **The stub gained content at slice 3.1**, which
   is the signal its build started. ExtractedField landed at 4.2; FieldPromotion lands at 4.3.
 - **Carries:** **capture is open, promotion is governed** ([tasks/plan.md](tasks/plan.md) A8). A new
   type or field is a row — zero migrations, zero deploys — and is citable the moment it is extracted;
@@ -336,6 +336,29 @@ is `invalid`: no tenancy, no party, no new link. This is the content check 3.3 d
 
 **The confirm screen may show captured names.** That is the exception the confirmation step exists
 for. It still does not query `party`. Until week 5, every other screen still shows no person.
+
+## Flow A3 — an addendum completes a tenancy (slice 4.7)
+
+After A1 files a verified `lease_amendment` **already bound to a letting**, the next screen is the
+same confirm path A2 uses (`/documents/:id/tenancy`). There is no second mechanism. An addendum
+without a tenancy stays on the filed page: it does not invent a household. An unverified file skips
+confirm, the same skip A2 and A6 use.
+
+**The addendum contributes to the existing tenancy.** Evidence does not call `upsertTenancy` and does
+not ask for a `terms_profile`. It calls `createParty` and `upsertTenancyParty` for each confirmed
+`guarantor_name`, and `promoteExtractedField` for `new_end_date` when capture has one. Zero
+guarantors is success. A missing role for a captured name is `invalid` and writes nothing. There is
+no address/apartment cross-check: those fields are not on this type, and the letting was chosen at
+upload.
+
+**Later document wins; earlier provenance stays.** Promoting `new_end_date` copies onto
+`tenancy.end_date` and appends `tenancy_event`. The lease's stamped `end_date` row is not un-stamped.
+The unit page lists every stamped capture on the unit, so both values remain clickable.
+
+**Idempotent confirm.** Upload already wrote the `TENANCY` / `EVIDENCE` link, so that link is the
+target, not the done flag. A second confirm of the same addendum returns `alreadyEstablished` when
+an `evidence.confirm_amendment` audit line for that document already exists, and writes no second
+party. Completeness (at least one guarantor) is A4 / slice 4.8, not this screen.
 
 ## Reading a filed document — slice 4.1
 

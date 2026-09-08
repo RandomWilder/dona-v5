@@ -46,7 +46,7 @@ A2, A3 and A4 were named on 6 Sep and **sized at week 3's close on 7 Sep** as 4.
       standing as מסירה dates. Shoham 60/40 stay the plan. Real bay counts: 2.5.
 - [x] **A2 — a lease establishes a draft tenancy**, including 3.3's content cross-check and the
       draft path upload could not take. **Closed 8 Sep** — [evidence/4.6.md](evidence/4.6.md).
-- [ ] **A3 — an addendum completes a tenancy.** Same path as A2. **4.7.**
+- [x] **A3 — an addendum completes a tenancy.** Same path as A2. **Closed 8 Sep** — [evidence/4.7.md](evidence/4.7.md).
 - [ ] **A4 — incomplete-tenancy queue** (at least one guarantor; policy case, never NOT NULL). **4.8.**
 - [ ] **The UI comments from weeks 2 and 3.** Parked at **M1**. Nothing raised was a correctness,
       isolation or data question.
@@ -145,11 +145,13 @@ btree — week 12. Session, CSRF, and a cap on upload *count* — week 5. Signed
       **Closed 8 Sep** — [evidence/4.6b.md](evidence/4.6b.md).
       **Deps:** 4.6 · **S**
 
-- [ ] **4.7 — A3: an addendum completes a tenancy.** No special case: fields live on the tenancy and
+- [x] **4.7 — A3: an addendum completes a tenancy.** No special case: fields live on the tenancy and
       documents are provenance. Later document wins; earlier value retained and visible.
       **Done when:** a guarantor named in an addendum becomes a `tenancy_party` under the existing
       tenancy, and a later date overwrites an earlier one without deleting the earlier provenance.
       **Verify:** addendum after a lease, same path as 4.6; both provenances on screen.
+      **Closed 8 Sep** — [evidence/4.7.md](evidence/4.7.md). Same `/tenancy` path. TENANCY link is
+      the target, not the done flag. Audit `evidence.confirm_amendment`. No queue (4.8).
       **Deps:** 4.6 · **S**
 
 - [x] **4.4 — Click a value, see the pixels.** The provenance viewer: the page image scrolls to the

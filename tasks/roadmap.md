@@ -1256,6 +1256,9 @@ earlier value retained and visible.
 - **Verify:** addendum after a lease, same path as 4.6; both provenances on screen.
 - **Deps:** 4.6 · **Size:** S
 - **Sized:** 7 Sep 2026, week 3 close.
+- **Closed 2026-09-08** ([evidence](evidence/4.7.md)). **445 code + 41 hooks.** Same confirm URL.
+  TENANCY link from upload is the target. Second confirm via `evidence.confirm_amendment`.
+  Completeness queue remains 4.8.
 
 ### Slice 4.8 — A4: the incomplete-tenancy queue
 The rule: *a tenancy must have at least one guarantor*. A **policy case over saved rows, written red
