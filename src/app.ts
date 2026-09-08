@@ -29,6 +29,10 @@ import type { OcrText } from './kernel/ocr.ts';
 import { createPdfjsText, type PdfText } from './kernel/pdf.ts';
 import { registerUiAssets } from './kernel/ui/assets.ts';
 import type { WorkRunner } from './kernel/work.ts';
+import {
+  listIncompleteTenancies,
+  recordCompletenessException,
+} from './tenancy/contract.ts';
 
 export interface AppDeps {
   pool: Pool;
@@ -90,6 +94,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     listLinkedDocuments,
     searchDocuments,
     listPromotedFieldsForUnit,
+    listIncompleteTenancies,
+    recordCompletenessException,
   });
   registerDocumentRoutes(app, {
     pool: deps.pool,

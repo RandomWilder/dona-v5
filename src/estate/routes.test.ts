@@ -10,6 +10,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { buildApp } from '../app.ts';
+import { newId } from '../kernel/ids.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
 import type { EstatePlan } from './contract.ts';
 import { importEstate } from './contract.ts';
@@ -90,6 +91,7 @@ describe('estate · the routes', () => {
         assert.equal(response.statusCode, 200);
         assert.match(response.body, /href="\/estate"/);
         assert.match(response.body, /href="\/estate\/expiring"/);
+        assert.match(response.body, /href="\/estate\/incomplete"/);
         assert.match(response.body, /href="\/estate\/search"/);
       });
 
@@ -217,6 +219,93 @@ describe('estate · the routes', () => {
       );
 
       await t.test(
+        'a document-backed draft with no ערב is in the incomplete queue, and an exception clears it',
+        async () => {
+          const typeId = newId();
+          const documentId = newId();
+          const tenancyId = newId();
+          const partyId = newId();
+          const profile = await pool.query<{ terms_profile_id: string }>(
+            `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)
+             ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+             RETURNING terms_profile_id`,
+            [newId(), `routes-48-${PROJECT_CODE}`],
+          );
+          await pool.query(
+            `INSERT INTO tenancy (tenancy_id, unit_id, start_date, end_date, status, terms_profile_id)
+             VALUES ($1, $2, '2026-03-01', '2027-02-28', 'DRAFT', $3)`,
+            [tenancyId, unitId, profile.rows[0]?.terms_profile_id],
+          );
+          await pool.query(
+            `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', $2)`,
+            [partyId, 'Tenant of routes-48'],
+          );
+          await pool.query(
+            `INSERT INTO tenancy_party (tenancy_id, party_id, role, is_service_contact)
+             VALUES ($1, $2, 'PRIMARY_TENANT', true)`,
+            [tenancyId, partyId],
+          );
+          await pool.query(
+            `INSERT INTO document_type (
+               document_type_id, type_key, label_he, label_en, verification_terms, is_active
+             ) VALUES ($1, $2, 'חוזה שכירות', NULL, NULL, true)`,
+            [typeId, `lease-routes-48-${typeId.slice(0, 8)}`],
+          );
+          await pool.query(
+            `INSERT INTO document (
+               document_id, document_type_id, storage_uri, file_hash,
+               ingested_at, verification_verdict
+             ) VALUES ($1, $2, $3, $4, $5, 'unguarded')`,
+            [
+              documentId,
+              typeId,
+              `gs://x/${documentId}.pdf`,
+              `hash-${documentId}`,
+              new Date('2026-09-08T12:00:00Z'),
+            ],
+          );
+          await pool.query(
+            `INSERT INTO document_link (document_id, entity_type, entity_id, link_role)
+             VALUES ($1, 'TENANCY', $2, 'EVIDENCE')`,
+            [documentId, tenancyId],
+          );
+
+          const listed = await app.inject({
+            method: 'GET',
+            url: '/estate/incomplete',
+          });
+          assert.equal(listed.statusCode, 200);
+          assert.match(listed.body, /חוזים לא שלמים/);
+          assert.match(listed.body, /חסר ערב/);
+          assert.match(listed.body, new RegExp(`/estate/units/${unitId}`));
+          assert.match(
+            listed.body,
+            new RegExp(`/documents/${documentId}/read`),
+          );
+
+          const cleared = await app.inject({
+            method: 'POST',
+            url: `/estate/incomplete/${tenancyId}/exception`,
+            headers: {
+              'content-type': 'application/x-www-form-urlencoded',
+            },
+            payload: `reason=${encodeURIComponent('אין ערב על החוזה')}`,
+          });
+          assert.equal(cleared.statusCode, 302);
+          assert.equal(cleared.headers.location, '/estate/incomplete');
+
+          const after = await app.inject({
+            method: 'GET',
+            url: '/estate/incomplete',
+          });
+          assert.doesNotMatch(
+            after.body,
+            new RegExp(`/estate/units/${unitId}`),
+          );
+        },
+      );
+
+      await t.test(
         'a malformed id is invalid, a missing one is not_found',
         async () => {
           const malformed = await app.inject({
@@ -246,6 +335,52 @@ describe('estate · the routes', () => {
       );
     } finally {
       // Precise, and in dependency order. Nothing else in the database is touched.
+      await pool.query(
+        `DELETE FROM tenancy_completeness_exception
+          WHERE tenancy_id IN (
+            SELECT t.tenancy_id FROM tenancy t
+            JOIN space s ON s.space_id = t.unit_id
+            JOIN building b ON b.building_id = s.building_id
+            WHERE b.city = $1 AND b.address_line = $2)`,
+        [CITY, ADDRESS],
+      );
+      await pool.query(
+        `DELETE FROM tenancy_party
+          WHERE tenancy_id IN (
+            SELECT t.tenancy_id FROM tenancy t
+            JOIN space s ON s.space_id = t.unit_id
+            JOIN building b ON b.building_id = s.building_id
+            WHERE b.city = $1 AND b.address_line = $2)`,
+        [CITY, ADDRESS],
+      );
+      await pool.query(
+        `DELETE FROM document_link
+          WHERE entity_type = 'TENANCY' AND entity_id IN (
+            SELECT t.tenancy_id FROM tenancy t
+            JOIN space s ON s.space_id = t.unit_id
+            JOIN building b ON b.building_id = s.building_id
+            WHERE b.city = $1 AND b.address_line = $2)`,
+        [CITY, ADDRESS],
+      );
+      await pool.query(
+        `DELETE FROM tenancy
+          WHERE unit_id IN (
+            SELECT space_id FROM space s
+            JOIN building b ON b.building_id = s.building_id
+            WHERE b.city = $1 AND b.address_line = $2)`,
+        [CITY, ADDRESS],
+      );
+      await pool.query(
+        `DELETE FROM document WHERE document_type_id IN (
+           SELECT document_type_id FROM document_type
+            WHERE type_key LIKE 'lease-routes-48-%')`,
+      );
+      await pool.query(
+        `DELETE FROM document_type WHERE type_key LIKE 'lease-routes-48-%'`,
+      );
+      await pool.query(
+        `DELETE FROM party WHERE full_name = 'Tenant of routes-48'`,
+      );
       await pool
         .query(
           `DELETE FROM unit WHERE unit_id IN (

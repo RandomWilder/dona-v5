@@ -78,6 +78,7 @@ function nav(): Html {
   return h`<nav class="top-nav">
     <a href="/estate">בניינים</a>
     <a href="/estate/expiring">חוזים מסתיימים</a>
+    <a href="/estate/incomplete">חוזים לא שלמים</a>
   </nav>`;
 }
 

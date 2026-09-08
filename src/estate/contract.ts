@@ -64,6 +64,7 @@ export { registerEstateRoutes } from './internal/routes.ts';
 export type {
   DocumentSearchHit,
   FiledDocumentView,
+  IncompleteTenancyRow,
   OccupancyByBuilding,
   OccupancyByUnit,
   PromotedFieldView,
@@ -73,6 +74,7 @@ export {
   renderBuildingPage,
   renderBuildingsPage,
   renderExpiringPage,
+  renderIncompletePage,
   renderIndexPage,
   renderSearchPage,
   renderUnitPage,

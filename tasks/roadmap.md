@@ -1268,6 +1268,9 @@ first — never a NOT NULL**.
 - **Verify:** policy case red first; lease with zero guarantors in the queue; A3 removes it.
 - **Deps:** 4.7 · **Size:** M
 - **Sized:** 7 Sep 2026, week 3 close.
+- **Closed 2026-09-08** ([evidence](evidence/4.8.md)). **450 code + 41 hooks. 47 policy.** Red first:
+  missing export. Derived query; exception table `0020_`. Screen `/estate/incomplete`. A3 confirm
+  removes the row.
 
 ### **Checkpoint · M1**
 - [ ] A system of record for 1,500 units; every value traces to the paper it came from

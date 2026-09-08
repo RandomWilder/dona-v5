@@ -178,11 +178,24 @@ are recorded.
 **Trigger:** a tenancy fails a completeness rule.
 **The rule this flow exists for:** *a tenancy must have at least one guarantor.* It is a **policy
 case, written red first**, evaluated over saved rows — never a column constraint, or the addendum in
-A3 could never land.
-**Screen:** a queue of incomplete tenancies, each showing what is missing and the document it was
-expected in.
+A3 could never land. Zero guarantors remains a legal insert.
+**The query, not a status.** Completeness is derived on each load. The first rule id is `guarantor`.
+A tenancy is incomplete when it is `DRAFT` or `ACTIVE`, it has a `document_link` of
+`entity_type = 'TENANCY'` (the paper path A2/A3 writes; register lettings with no such link stay
+off the queue), it has zero `tenancy_party` rows with `role = 'GUARANTOR'`, and it has no exception
+row for that rule. What is missing is the rule id; the Hebrew on the screen is ערב. A second
+rule later is another predicate on the same query — not a column on `tenancy`.
+**Exception:** a row in `tenancy_completeness_exception`, keyed `(tenancy_id, rule)`. Recording it
+clears the queue the way an addendum that writes a `GUARANTOR` does. A second record of the same
+pair is a no-op. It is not `tenancy.complete`.
+**Screen:** `GET /estate/incomplete` — each row shows what is missing and the TENANCY-linked
+document it was expected in (a `lease` type wins when both a lease and an addendum are linked).
+No party names, until week 5.
 **Resolution:** the administrator uploads the addendum (A3), or records the exception.
-**Module:** policy owns the rule; the admin surface owns the queue.
+**Module:** tenancy owns the query and the exception write (`listIncompleteTenancies`,
+`recordCompletenessException`); the case lives in `tests/policy/` until week 6 stands up
+`src/policy/`; estate owns the queue screen, with those commands injected at the composition root
+so estate does not import tenancy.
 
 ### A5 — A draft tenancy becomes active
 
@@ -259,7 +272,7 @@ through the wall.
   deterministic case: recompute from stored bytes, no staging table. A2's model-based proposals
   still owe a staging shape that is not the live tenancy, since invariant 5 forbids writing an
   unconfirmed role.
-- **The completeness vocabulary.** A4 needs to say *what* is missing, and that list is the set of
-  policy cases over tenancy, which grows. Whether it is a derived view or a materialised state is
-  decided when the second rule joins the guarantor rule.
+- **The completeness vocabulary.** **Closed for the first rule at 4.8:** it is a derived query, rule
+  id `guarantor`, exception a separate row. Materialised state waits until a second rule joins and
+  the list of missing things is no longer one label.
 - **Cross-tenancy party identity.** Deliberately absent from A2 step 5. Month two.

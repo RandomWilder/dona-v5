@@ -740,3 +740,30 @@ describe('tenancy_event — append-only promotion log', () => {
     }
   });
 });
+
+describe('tenancy_completeness_exception — A4 exception row, not a status', () => {
+  it('has the published columns and no DEFAULT now() on at', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        assert.deepEqual(
+          await columnsOf(db, 'tenancy_completeness_exception'),
+          ['actor', 'at', 'reason', 'rule', 'tenancy_id'],
+        );
+        const defaults = await db.query<{ column_default: string | null }>(
+          `SELECT column_default FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'tenancy_completeness_exception'
+              AND column_name = 'at'`,
+        );
+        assert.equal(defaults.rows[0]?.column_default, null);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+});
