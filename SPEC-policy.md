@@ -8,7 +8,8 @@ repeated here.
   definitions. **Versioned data. No AI anywhere in it.**
 - **Entities:** policy rows and their versions; `asset_in_warranty` is fed by estate's asset register.
 - **Depends on:** estate, tenancy.
-- **Builds:** week 6.
+- **Builds:** week 6. Slice 4.8's completeness case (`tests/policy/completeness.test.ts`) lives in
+  the policy *suite* until this module exists; it does not start `src/policy/`.
 - **Carries:** **responsibility is ternary** — tenant / operator / contractor — because of תקופת
   הבדק, and a binary model of it is wrong. Rules supersede by `effective_from` and **never
   overwrite**; every resolved call snapshots the `policy_version_id` that decided it, and re-resolving

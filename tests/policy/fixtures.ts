@@ -23,6 +23,10 @@ export const SEEDED_RELATIONS = [
   'terms_profile',
   'tenancy',
   'tenancy_party',
+  'tenancy_completeness_exception',
+  'document_type',
+  'document',
+  'document_link',
 ] as const;
 
 export type TenancyStatus = 'DRAFT' | 'ACTIVE' | 'ENDED' | 'TERMINATED_EARLY';

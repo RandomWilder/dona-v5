@@ -47,7 +47,8 @@ A2, A3 and A4 were named on 6 Sep and **sized at week 3's close on 7 Sep** as 4.
 - [x] **A2 — a lease establishes a draft tenancy**, including 3.3's content cross-check and the
       draft path upload could not take. **Closed 8 Sep** — [evidence/4.6.md](evidence/4.6.md).
 - [x] **A3 — an addendum completes a tenancy.** Same path as A2. **Closed 8 Sep** — [evidence/4.7.md](evidence/4.7.md).
-- [ ] **A4 — incomplete-tenancy queue** (at least one guarantor; policy case, never NOT NULL). **4.8.**
+- [x] **A4 — incomplete-tenancy queue** (at least one guarantor; policy case, never NOT NULL).
+      **Closed 8 Sep** — [evidence/4.8.md](evidence/4.8.md).
 - [ ] **The UI comments from weeks 2 and 3.** Parked at **M1**. Nothing raised was a correctness,
       isolation or data question.
 - [~] **2.5 — import the real register.** Pilot-preparation with F3.
@@ -165,11 +166,13 @@ btree — week 12. Session, CSRF, and a cap on upload *count* — week 5. Signed
       serves.
       **Deps:** 4.3 · **M**
 
-- [ ] **4.8 — A4: the incomplete-tenancy queue.** The rule: *a tenancy must have at least one
+- [x] **4.8 — A4: the incomplete-tenancy queue.** The rule: *a tenancy must have at least one
       guarantor*. A **policy case over saved rows, written red first — never a NOT NULL**.
       **Done when:** a tenancy that extraction returned with zero guarantors appears in the queue
       showing what is missing; an addendum (4.7) or a recorded exception clears it.
       **Verify:** policy case red first; lease with zero guarantors in the queue; A3 removes it.
+      **Closed 8 Sep** — [evidence/4.8.md](evidence/4.8.md). Policy red as a missing export.
+      Query, not a column. `/estate/incomplete`. Exception row. A3 confirm clears.
       **Deps:** 4.7 · **M**
 
 - [ ] **4.5 — The accuracy number.** Per-field accuracy across ~40 real leases. **Cannot start

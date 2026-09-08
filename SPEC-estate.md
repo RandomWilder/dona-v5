@@ -12,7 +12,11 @@ workbook is right and this file is a bug.
   the portfolio-scale surface — search, Q5, the occupancy chip and the root index — at slice 2.6.
   Asset at week 3, slice 3.5, seeded from handover protocols. The E14 Provider stub landed in the
   same migration so R11 has a table to point at. Slice 3.6 added a thin unit page and grew search by
-  a documents half; both list what is filed, never who signed it.
+  a documents half; both list what is filed, never who signed it. Slice 4.8 added
+  `GET /estate/incomplete`, the A4 queue: a derived list of document-backed drafts and live
+  lettings missing an ערב. The query and the exception write live in tenancy; estate renders them
+  through `EstateDeps`, the same injection `listLinkedDocuments` already uses, so this module
+  still does not import tenancy.
 
 ## The shape, and why it is this one
 
@@ -245,6 +249,12 @@ read overlay. The workbook's other unit-sheet panels (tenancy, obligations, asse
 contract, wired in `app.ts`. Estate renders the cards; evidence owns the SQL. Building-level paper
 stays on the building page; unit paper stays on the unit page. Promoted values never come from an
 estate query of `extracted_field`.
+
+**`GET /estate/incomplete` is A4's queue (slice 4.8).** Same standing as `/estate/expiring`: a
+portfolio operations list, a unit and a date and a missing-rule label, and no party. Completeness
+is tenancy's query; the POST that records an exception is tenancy's write; both are injected. The
+root index and the top nav gain a fourth link. The index still lives here — week 5 still moves it
+when a second *module* has a screen.
 
 ## The importer — `importEstate`, `src/estate/internal/importer.ts`
 

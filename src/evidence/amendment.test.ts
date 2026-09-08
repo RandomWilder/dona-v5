@@ -14,7 +14,10 @@ import {
   migratedPoolOrNull,
   skipReason,
 } from '../kernel/pg-support.ts';
-import { upsertTermsProfile } from '../tenancy/contract.ts';
+import {
+  listIncompleteTenancies,
+  upsertTermsProfile,
+} from '../tenancy/contract.ts';
 import type { IntakeDeps } from './contract.ts';
 import {
   applyDocumentTypeCatalogue,
@@ -163,6 +166,8 @@ describe('evidence · flow A3 completes a tenancy from an addendum', () => {
         await applyDocumentTypeCatalogue(db, seedDocumentTypes);
         const unitId = await insertUnit(db, '12', ADDRESS);
         const { tenancyId } = await confirmLease(db, unitId);
+        const waiting = await listIncompleteTenancies(db);
+        assert.ok(waiting.some((row) => row.tenancy_id === tenancyId));
         const documentId = await fileAmendment(
           db,
           unitId,
@@ -203,6 +208,9 @@ describe('evidence · flow A3 completes a tenancy from an addendum', () => {
         );
         assert.equal(guarantor.rows.length, 1);
         assert.equal(guarantor.rows[0]?.is_service_contact, false);
+
+        const cleared = await listIncompleteTenancies(db);
+        assert.ok(!cleared.some((row) => row.tenancy_id === tenancyId));
 
         const again = await confirmLeaseTenancy(deps, {
           documentId,

@@ -358,7 +358,8 @@ The unit page lists every stamped capture on the unit, so both values remain cli
 **Idempotent confirm.** Upload already wrote the `TENANCY` / `EVIDENCE` link, so that link is the
 target, not the done flag. A second confirm of the same addendum returns `alreadyEstablished` when
 an `evidence.confirm_amendment` audit line for that document already exists, and writes no second
-party. Completeness (at least one guarantor) is A4 / slice 4.8, not this screen.
+party. Completeness (at least one guarantor) is A4: a query over the rows this confirm writes,
+  not a check on this screen. An addendum that adds a `GUARANTOR` clears the incomplete queue.
 
 ## Reading a filed document — slice 4.1
 

@@ -160,6 +160,18 @@ const styles = h`<style>
   .lease-when { display: flex; gap: var(--space-3); align-items: baseline; flex-wrap: wrap; }
   .doc-uri { word-break: break-all; }
   .doc-group { display: grid; gap: var(--space-2); }
+  .queue-card {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5);
+  }
+  .queue-card form {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .queue-card input { min-height: var(--size-control-ops); flex: 1; min-width: 12rem; }
 </style>`;
 
 // Estate's nav, and it stays estate's: these are its routes, and the kernel's shell knows no route.
@@ -167,6 +179,7 @@ function nav(): Html {
   return h`<nav class="top-nav">
     <a href="/estate">בניינים</a>
     <a href="/estate/expiring">חוזים מסתיימים</a>
+    <a href="/estate/incomplete">חוזים לא שלמים</a>
     <form class="search" method="get" action="/estate/search" role="search">
       <input
         id="q"
@@ -437,7 +450,7 @@ export function renderUnitPage(
  * **`GET /` stops being a redirect here** (1.11's carry).
  *
  * It was a 302 to `/estate` because `/estate` was the only screen in the system, and 1.11 said it
- * would stop the week a second one existed. Three do now.
+ * would stop the week a second one existed. Four do now.
  *
  * **It runs no query**, which is the decision worth stating. A portfolio headline belongs on the
  * buildings list, where the numbers are already being read for the cards; an index that ran three
@@ -464,6 +477,13 @@ export function renderIndexPage(): string {
         <a class="card-link" href="/estate/expiring">
           <p class="card-title"><span>חוזים מסתיימים</span></p>
           <p class="lede">כל החוזים בתיק המסתיימים ב־60 הימים הקרובים, לפי תאריך.</p>
+        </a>
+      </article>
+      <article class="row-card">
+        ${marker('ALERT')}
+        <a class="card-link" href="/estate/incomplete">
+          <p class="card-title"><span>חוזים לא שלמים</span></p>
+          <p class="lede">טיוטות וחוזים פעילים שחסר בהם ערב, על המסמך שהיה אמור לשאת אותו.</p>
         </a>
       </article>
       <article class="row-card">
@@ -638,4 +658,88 @@ export function renderExpiringPage(
           </div>`
     }`;
   return page('דונה דום — חוזים מסתיימים', body);
+}
+
+const TENANCY_STATUS: Record<string, string> = {
+  DRAFT: 'טיוטה',
+  ACTIVE: 'פעיל',
+  ENDED: 'הסתיים',
+  TERMINATED_EARLY: 'הופסק',
+};
+
+export interface IncompleteTenancyRow {
+  tenancy_id: string;
+  unit_id: string;
+  unit_number: string;
+  building_id: string;
+  building_name: string;
+  city: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+  missing: string;
+  expected_document_id: string;
+  expected_document_label: string;
+}
+
+/**
+ * A4 — document-backed drafts and live lettings missing an ערב.
+ *
+ * A unit, dates, a missing-rule label and the document the rule was expected in. No party.
+ */
+export function renderIncompletePage(
+  rows: readonly IncompleteTenancyRow[],
+): string {
+  const body = h`
+    <div>
+      <h1>חוזים לא שלמים</h1>
+      <p class="lede">
+        ${ltr(rows.length)} חוזים בתיק שחסר בהם ערב. נספח משלים, או רישום חריג.
+      </p>
+    </div>
+    ${
+      rows.length === 0
+        ? h`<p class="empty-state">אין חוזים ממתינים להשלמה.</p>`
+        : h`<div class="row-list">
+            ${rows.map((row) => {
+              const missing =
+                row.missing === 'guarantor' ? 'חסר ערב' : row.missing;
+              return h`<article class="row-card queue-card">
+                ${marker('ALERT')}
+                <p class="card-title">
+                  <a href="/estate/units/${row.unit_id}">
+                    <span class="unit-no">דירה ${ltr(row.unit_number)}</span>
+                    <span>${row.building_name}</span>
+                  </a>
+                  <span class="chip">${missing}</span>
+                </p>
+                <p class="lede lease-when">
+                  <span>${row.city}</span>
+                  <span>${ltr(row.start_date)} — ${ltr(row.end_date)}</span>
+                  <span>${TENANCY_STATUS[row.status] ?? row.status}</span>
+                </p>
+                <p class="lede">
+                  המסמך:
+                  <a href="/documents/${row.expected_document_id}/read">${row.expected_document_label}</a>
+                </p>
+                <form
+                  method="post"
+                  action="/estate/incomplete/${row.tenancy_id}/exception"
+                >
+                  <input
+                    id="reason-${row.tenancy_id}"
+                    name="reason"
+                    type="text"
+                    maxlength="200"
+                    required
+                    aria-label="סיבת החריג"
+                    placeholder="סיבת החריג"
+                  />
+                  <button class="btn btn-secondary" type="submit">רשום חריג</button>
+                </form>
+              </article>`;
+            })}
+          </div>`
+    }`;
+  return page('דונה דום — חוזים לא שלמים', body);
 }

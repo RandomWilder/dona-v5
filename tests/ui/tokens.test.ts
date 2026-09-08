@@ -25,6 +25,7 @@ import {
   renderBuildingPage,
   renderBuildingsPage,
   renderExpiringPage,
+  renderIncompletePage,
   renderIndexPage,
   renderSearchPage,
   renderUnitPage,
@@ -295,6 +296,27 @@ const SCREENS: Array<[string, () => string]> = [
       ),
   ],
   ['estate · leases ending, none', () => renderExpiringPage([], 60)],
+  [
+    'estate · incomplete tenancies',
+    () =>
+      renderIncompletePage([
+        {
+          tenancy_id: '55555555-5555-4555-8555-555555555555',
+          unit_id: hit.unit_id,
+          unit_number: '12A',
+          building_id: building.building_id,
+          building_name: building.name,
+          city: building.city,
+          start_date: '2026-03-01',
+          end_date: '2027-02-28',
+          status: 'DRAFT',
+          missing: 'guarantor',
+          expected_document_id: filed.documentId,
+          expected_document_label: 'חוזה שכירות',
+        },
+      ]),
+  ],
+  ['estate · incomplete tenancies, none', () => renderIncompletePage([])],
   [
     'documents · upload',
     () => renderUploadPage({ unit: hit, types: documentTypes, lettings }),

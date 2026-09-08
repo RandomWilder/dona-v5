@@ -10,7 +10,8 @@ workbook disagree, the workbook is right and this file is a bug.
 - **Depends on:** estate, parties.
 - **Built:** week 2, slice 2.2 — Tenancy and TenancyParty; `terms_profile`'s natural key and the
   module's three write commands at slice 2.4. `TenancyEvent` lands at slice 4.3 with promotion.
-  Obligation and ObligationType remain week 5's, with clock-driven event kinds.
+  Slice 4.8 adds the completeness query and `tenancy_completeness_exception` (A4). Obligation and
+  ObligationType remain week 5's, with clock-driven event kinds.
 
 ## The shape, and why it is this one
 
@@ -153,7 +154,11 @@ by tripping the guard rather than by anticipating it.
   lease, and only after a human confirms each role. Slice 4.7's addendum confirm uses the same
   `upsertTenancyParty` path to add a `GUARANTOR` under the existing tenancy, and
   `applyPromotedField` to let a later `end_date` overwrite the earlier column while the event log
-  keeps both. The line this module does not cross is the one
+  keeps both. Slice 4.8 adds `listIncompleteTenancies` and `recordCompletenessException`: a
+  portfolio question (S1 / A4), not "who is in this unit today". It takes no phone number, returns
+  no party and no name, and carries neither isolation predicate. Completeness is a query over saved
+  rows plus an exception table — never a NOT NULL on `tenancy_party` and never a status column on
+  `tenancy`. The line this module does not cross is the one
   that matters: **who is in a unit today is `src/scope/`'s answer and never this module's**, which
   is foundation rule 1 expressed as a module boundary. `listUnitTenancies` answers *which lettings
   does this flat have* — every status, ordered by date — for an administrator choosing which one a
@@ -162,6 +167,11 @@ by tripping the guard rather than by anticipating it.
   nothing decides what anybody may see from its result. A query here that answered "who is in this
   unit today" would be the second copy of the join, and guard two exists because that is how the
   constraint dies.
+- **`tenancy_completeness_exception` (slice 4.8, `src/kernel/migrations/0020_tenancy_completeness.sql`).**
+  `(tenancy_id, rule)` unique. `rule` is `guarantor` today. `at` comes from the injected clock; no
+  `DEFAULT now()`. `actor` is `-- pii`, same standing as `tenancy_event.actor` until week 5 has
+  staff. `reason` is required text, validated at the POST. A second insert of the same pair is a
+  no-op. There is no completeness column and no CHECK that a tenancy has a guarantor.
 - **An index on `end_date`, partial on `ACTIVE`, added at 2.6** — `tenancy_end_date_active` in
   `0010_scale_indexes.sql`. 2.2 left it out deliberately, to be decided at full row count with a
   timing in front of it, and 2.6 is the slice with the row count. Measured over 1,674 tenancies, on the tenancy

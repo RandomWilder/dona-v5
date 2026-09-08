@@ -12,7 +12,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import type { Clock } from '../../kernel/clock.ts';
-import { validId } from '../../kernel/validate.ts';
+import { requireText, validId } from '../../kernel/validate.ts';
 import { resolveOccupiedUnits } from '../../scope/contract.ts';
 import {
   countUnitsByBuilding,
@@ -26,12 +26,14 @@ import {
 import {
   type DocumentSearchHit,
   type FiledDocumentView,
+  type IncompleteTenancyRow,
   type OccupancyByBuilding,
   type OccupancyByUnit,
   type PromotedFieldView,
   renderBuildingPage,
   renderBuildingsPage,
   renderExpiringPage,
+  renderIncompletePage,
   renderIndexPage,
   renderSearchPage,
   renderUnitPage,
@@ -62,6 +64,19 @@ export interface EstateDeps {
     db: Pool,
     unitId: string,
   ) => Promise<readonly PromotedFieldView[]>;
+  listIncompleteTenancies: (
+    db: Pool,
+  ) => Promise<readonly IncompleteTenancyRow[]>;
+  recordCompletenessException: (
+    db: Pool,
+    spec: {
+      tenancyId: string;
+      rule: 'guarantor';
+      actor: string;
+      reason: string;
+      at: Date;
+    },
+  ) => Promise<'recorded' | 'alreadyRecorded'>;
 }
 
 /** What a search box may be sent before it stops being a search box. */
@@ -79,6 +94,18 @@ export function registerEstateRoutes(
   app: FastifyInstance,
   deps: EstateDeps,
 ): void {
+  app.addContentTypeParser(
+    'application/x-www-form-urlencoded',
+    { parseAs: 'string' },
+    (_request, body, done) => {
+      try {
+        done(null, Object.fromEntries(new URLSearchParams(String(body))));
+      } catch (error) {
+        done(error as Error);
+      }
+    },
+  );
+
   // 1.11 made this a 302 to `/estate` and said it would stop being one the week a second screen
   // existed. This is that week.
   app.get('/', async (_request, reply) => {
@@ -131,6 +158,28 @@ export function registerEstateRoutes(
     html(reply);
     return renderExpiringPage(leases, EXPIRING_WINDOW_DAYS);
   });
+
+  app.get('/estate/incomplete', async (_request, reply) => {
+    const rows = await deps.listIncompleteTenancies(deps.pool);
+    html(reply);
+    return renderIncompletePage(rows);
+  });
+
+  app.post<{ Params: { tenancyId: string } }>(
+    '/estate/incomplete/:tenancyId/exception',
+    async (request, reply) => {
+      const tenancyId = validId(request.params.tenancyId, 'tenancyId');
+      const posted = request.body as { reason?: string };
+      await deps.recordCompletenessException(deps.pool, {
+        tenancyId,
+        rule: 'guarantor',
+        actor: 'console',
+        reason: requireText(posted.reason ?? '', 'reason', 200),
+        at: deps.clock.now(),
+      });
+      return reply.redirect('/estate/incomplete');
+    },
+  );
 
   app.get('/estate/buildings/:buildingId', async (request, reply) => {
     const { buildingId } = request.params as { buildingId: string };
