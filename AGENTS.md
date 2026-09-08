@@ -3,6 +3,8 @@
 ## Commands
 - `npm test` · `npm run typecheck` · `npm run lint` · `npm run format` · `npm run db:up && npm run dev`
   → `/health` asserts `db:up`; `/` is the index. Node 24 type-strips `.ts`; no build step.
+  **`npm run dev` does not watch** — restart it after a slice, then click the changed screen before
+  merge ([docs/pipeline.md](docs/pipeline.md) §8).
   `npm run migrate` applies `src/kernel/migrations/` as a Cloud Run job before a revision serves;
   `seed` · `import:register` · `seed:register` · `register:generate` are in no workflow, on purpose.
 - **Two required gates** plus `npm run guards`: `test:policy` (nothing a model may decide) and `evals`

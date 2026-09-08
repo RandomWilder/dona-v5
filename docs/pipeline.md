@@ -136,6 +136,7 @@ constitution measurably changes what agents generate.
 
 ```
 local:    biome + typecheck + focused tests            (hooks run these as you go)
+          restart `npm run dev` — it does not watch — then click the changed screen
    ↓ push / PR
 CI:       typecheck · lint · unit + contract tests
           tests/policy/     ← REQUIRED · isolation · responsibility · state machine   (§6)
@@ -169,6 +170,11 @@ prod:     full CI re-run against the tagged commit → migrations → deploy →
   ask a lease question, assert a citation is present — plus the emergency path, which must route to
   the duty phone with no model call in between. "Deployed but silently broken" is the failure this
   exists to make impossible.
+- **`npm run dev` does not reload.** Node loads the process once. A browser refresh is not a new
+  revision. After any slice that changes a screen or a write path, **stop the listener and start
+  `npm run dev` again**, then click the path on `:3000` before merge. Tests `inject` the current
+  files; they do not update the leftover process. Staging is still Thursday's demo; local is the
+  first look so a typed field or a refuse is not discovered only after deploy.
 
 ## 6. The policy suite — the gate for everything no model may decide
 
@@ -296,9 +302,13 @@ It decides what a ranking change should *be*; `npm run evals` decides whether it
 2. Update `SPEC-<module>.md` if behaviour changes — before the code, not after.
 3. Plan mode if it is non-trivial or on the §4 mandatory list; approve the plan; implement with tests.
 4. Read the diff yourself. CI is the gate, but nothing merges unread.
-5. Merge green → staging deploys itself → two-minute smoke on staging.
-6. Close the slice with a `tasks/evidence/` file. End of day, staging is current and `todo.md` is true.
-7. **Carry every raised item into the entry of the slice that closes it** — `tasks/todo.md` and
+5. **Restart local and look.** `npm run dev` has no watch. Kill the listener, start it on the
+   working copy, click the screen this slice changed. Record in the evidence that it was this
+   process, not a leftover from yesterday. Skip only when the slice has no human-facing path
+   (a constraint, a migration, a guard).
+6. Merge green → staging deploys itself → two-minute smoke on staging.
+7. Close the slice with a `tasks/evidence/` file. End of day, staging is current and `todo.md` is true.
+8. **Carry every raised item into the entry of the slice that closes it** — `tasks/todo.md` and
    `tasks/roadmap.md`, not only the evidence file. A slice is not closed while something it raised
    has no owner.
 

@@ -145,7 +145,10 @@ by tripping the guard rather than by anticipating it.
   and exports the register importer's three write commands — `upsertTermsProfile`, `upsertTenancy` and
   `upsertTenancyParty` — plus `applyPromotedField` from 4.3. `listUnitTenancies` joins them at 3.3.
   Slice 4.6 added `findTermsProfileByName`: A2 must hang a draft on a profile that already exists and
-  must not invent `standard`. A missing name is `null`, not an upsert. Flow A2 writes a `DRAFT`
+  must not invent `standard`. A missing name is `null`, not an upsert. Slice 4.6b added
+  `listTermsProfiles`: names only, ordered, so the confirm screen is a select of what already exists
+  rather than a free-text guess. An empty list is legal and writes nothing — it does not insert a
+  default. Flow A2 writes a `DRAFT`
   through these same commands; evidence is the only caller that creates `tenancy_party` from a
   lease, and only after a human confirms each role. The line this module does not cross is the one
   that matters: **who is in a unit today is `src/scope/`'s answer and never this module's**, which

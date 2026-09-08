@@ -90,6 +90,17 @@ export async function findTermsProfileByName(
 }
 
 /**
+ * Every maintenance annex name, ordered. Slice 4.6b: the confirm screen lists these; it does not
+ * invent a row when the list is empty.
+ */
+export async function listTermsProfiles(db: Queryable): Promise<string[]> {
+  const result = await db.query<{ name: string }>(
+    `SELECT name FROM terms_profile ORDER BY name`,
+  );
+  return result.rows.map((row) => row.name);
+}
+
+/**
  * One lease term on one unit.
  *
  * The conflict target is `(unit_id, start_date)`, which landed with the table at 2.2 rather than

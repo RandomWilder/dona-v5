@@ -176,6 +176,8 @@ The standing bar every slice clears, on top of its own acceptance criteria:
 - [ ] `tests/policy/` green — and any new deterministic constraint has a case that was **red first**
 - [ ] `npm run evals` green; no silent skips (`REQUIRE_POSTGRES=1`, `REQUIRE_EMBEDDINGS=1`)
 - [ ] Diff read by a human before merge; CI is the gate, but nothing merges unread
+- [ ] Local UI on a **restarted** `npm run dev` (no watch): the changed screen clicked before merge,
+      unless the slice has no human-facing path
 - [ ] Merged green → staging deployed itself → `infra/smoke.sh` passes against staging
 - [ ] `tasks/evidence/<slice>.md` written: what was proved, with the numbers
 - [ ] No new runtime dependency without a stated reason in the commit body

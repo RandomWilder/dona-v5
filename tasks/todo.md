@@ -139,6 +139,12 @@ btree — week 12. Session, CSRF, and a cap on upload *count* — week 5. Signed
       Staging still needs `seed:doctypes` then a re-file (same hash will not re-extract).
       **Deps:** 4.2, 4.6 · **S**
 
+- [x] **4.6b — Confirm picks an existing terms profile.** Free-text name refused guesses. Select of
+      names already in the table; empty list withholds the write and does not insert a default.
+      Local already had two (`נספח תחזוקה — תקן` / `מורחב`) — **no seed**.
+      **Closed 8 Sep** — [evidence/4.6b.md](evidence/4.6b.md).
+      **Deps:** 4.6 · **S**
+
 - [ ] **4.7 — A3: an addendum completes a tenancy.** No special case: fields live on the tenancy and
       documents are provenance. Later document wins; earlier value retained and visible.
       **Done when:** a guarantor named in an addendum becomes a `tenancy_party` under the existing

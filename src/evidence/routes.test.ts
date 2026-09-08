@@ -183,7 +183,8 @@ describe('evidence · the upload route', () => {
         assert.match(response.body, /value="handover_protocol"/);
         assert.match(response.body, /enctype="multipart\/form-data"/);
         // The rule every screen keeps until week 5: a flat, a type and a date, never a name.
-        assert.doesNotMatch(response.body, /05\d[- ]?\d/);
+        // A ULID can contain `053-0`; a mobile number is 05x plus seven more digits.
+        assert.doesNotMatch(response.body, /05\d[- ]?\d{7}/);
       });
 
       await t.test('files a lease declared as a lease', async () => {

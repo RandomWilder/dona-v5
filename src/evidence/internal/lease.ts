@@ -11,6 +11,7 @@ import { requireText, validId } from '../../kernel/validate.ts';
 import { createParty } from '../../parties/contract.ts';
 import {
   findTermsProfileByName,
+  listTermsProfiles,
   type TenancyRole,
   upsertTenancy,
   upsertTenancyParty,
@@ -50,6 +51,8 @@ export interface LeaseProposal {
   people: ProposedPerson[];
   matchesUnit: boolean;
   alreadyEstablished: boolean;
+  /** Existing annex names. Empty means confirm cannot write — never a default insert. */
+  termsProfileNames: string[];
 }
 
 export interface ConfirmLeaseSpec {
@@ -214,6 +217,7 @@ export async function proposeLeaseTenancy(
     people: peopleOf(rows),
     matchesUnit,
     alreadyEstablished: (await tenancyLinkOf(db, filed.documentId)) !== null,
+    termsProfileNames: await listTermsProfiles(db),
   };
 }
 

@@ -533,6 +533,7 @@ export interface TenancyScreen {
   people: readonly ProposedPerson[];
   matchesUnit: boolean;
   alreadyEstablished: boolean;
+  termsProfileNames: readonly string[];
 }
 
 export function renderTenancyPage(screen: TenancyScreen): string {
@@ -556,7 +557,11 @@ export function renderTenancyPage(screen: TenancyScreen): string {
     !screen.alreadyEstablished &&
     screen.startDate !== null &&
     screen.endDate !== null &&
-    screen.people.some((person) => person.fieldKey === 'tenant_name');
+    screen.people.some((person) => person.fieldKey === 'tenant_name') &&
+    screen.termsProfileNames.length > 0;
+  const profileOptions = screen.termsProfileNames.map(
+    (name) => h`<option value="${name}">${name}</option>`,
+  );
   const body = h`
     <div>
       <a class="back" href="${back}">← דירה ${ltr(screen.unit.unit_number)}</a>
@@ -589,7 +594,10 @@ export function renderTenancyPage(screen: TenancyScreen): string {
             ${people}
             <div class="form-row">
               <label>נספח תחזוקה
-                <input name="terms_profile" required maxlength="200">
+                <select name="terms_profile" required>
+                  <option value="">בחרו נספח</option>
+                  ${profileOptions}
+                </select>
               </label>
             </div>
             <div class="form-row">
@@ -602,7 +610,14 @@ export function renderTenancyPage(screen: TenancyScreen): string {
               <a href="${back}">ביטול</a>
             </div>
           </form>`
-        : h`<div class="form-actions"><a href="${back}">חזרה לדירה</a></div>`
+        : h`${
+            screen.matchesUnit &&
+            !screen.alreadyEstablished &&
+            screen.termsProfileNames.length === 0
+              ? h`<p class="lede">אין נספח תחזוקה במערכת. לא נכתוב השכרה עד שייובא הפנקס.</p>`
+              : h``
+          }
+            <div class="form-actions"><a href="${back}">חזרה לדירה</a></div>`
     }`;
   return renderPage({
     title: 'דונה דום — אישור חוזה',
