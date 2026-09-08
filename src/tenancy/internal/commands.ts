@@ -75,6 +75,21 @@ export async function upsertTermsProfile(
 }
 
 /**
+ * Looks up a maintenance annex by name. Missing is `null`, never an insert — A2 must not invent
+ * a default profile (slice 4.6).
+ */
+export async function findTermsProfileByName(
+  db: Queryable,
+  name: string,
+): Promise<string | null> {
+  const result = await db.query<{ terms_profile_id: string }>(
+    `SELECT terms_profile_id FROM terms_profile WHERE name = $1`,
+    [name],
+  );
+  return result.rows[0]?.terms_profile_id ?? null;
+}
+
+/**
  * One lease term on one unit.
  *
  * The conflict target is `(unit_id, start_date)`, which landed with the table at 2.2 rather than

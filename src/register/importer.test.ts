@@ -87,7 +87,7 @@ describe('register · the file runs twice', () => {
           assert.deepEqual(first.counts, {
             project: { created: 1, updated: 6 },
             building: { created: 2, updated: 7 },
-            space: { created: 5, updated: 4 },
+            space: { created: 15, updated: 12 },
             unit: { created: 5, updated: 4 },
             terms_profile: { created: 2, updated: 7 },
             party: { created: 8, updated: 1 },

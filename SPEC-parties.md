@@ -146,9 +146,13 @@ constraint already rejected.
   partial unique index would fail an import that touched two rows in the wrong order, on a rule
   nobody asked for.
 - **No read model.** `contract.ts` exists from 2.4 and exports two write commands — `upsertParty`
-  and `upsertPartyContact` — because the register importer is the caller 2.1 predicted. There is
-  still no screen over this module and no query on its contract; `src/scope/` answers who is
-  reachable, and 2.6's grid reads estate.
+  and `upsertPartyContact` — because the register importer is the caller 2.1 predicted. Slice 4.6
+  added `createParty` for flow A2: a lease names a person and often no ת.ז., so an upsert on
+  `national_id_key` would be an insert wearing an upsert's name. `createParty` is always an insert
+  (`national_id` null). Two calls with the same name are two people. There is still no screen over
+  this module and no query on its contract; `src/scope/` answers who is reachable, and 2.6's grid
+  reads estate. Evidence calls this after a human confirms the role, and never matches a name
+  across tenancies.
 - **No btree on `(channel, value)`, and 2.6 answered that with a measurement rather than deferring
   it again.** 2.1's reasoning was right on the facts: the lookup is served today by
   `contact_value_resolves_to_one_party`, which is a **GiST** index, and GiST is slower than btree at

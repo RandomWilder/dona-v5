@@ -198,9 +198,18 @@ describe('evidence · the upload route', () => {
           url: '/documents',
           ...body,
         });
-        assert.equal(response.statusCode, 200);
-        assert.match(response.body, /המסמך נשמר/);
-        assert.doesNotMatch(response.body, /כהן/);
+        assert.equal(response.statusCode, 302);
+        assert.match(
+          response.headers.location ?? '',
+          /\/documents\/[0-9a-f-]{36}\/tenancy$/,
+        );
+        const confirm = await lease.inject({
+          method: 'GET',
+          url: String(response.headers.location),
+        });
+        assert.equal(confirm.statusCode, 200);
+        assert.match(confirm.body, /אישור חוזה/);
+        assert.doesNotMatch(confirm.body, /כהן/);
 
         const rows = await pool.query<{
           file_hash: string;
@@ -384,7 +393,7 @@ describe('evidence · the upload route', () => {
               { filename: 'two.pdf', bytes },
             ),
           });
-          assert.equal(posted.statusCode, 200, posted.body.slice(0, 400));
+          assert.equal(posted.statusCode, 302, posted.body.slice(0, 400));
           const rows = await pool.query<{ document_id: string }>(
             'SELECT document_id FROM document WHERE file_hash = $1',
             [documentFileHash(bytes)],
@@ -470,7 +479,7 @@ describe('evidence · the upload route', () => {
               },
             ),
           });
-          assert.equal(response.statusCode, 200);
+          assert.equal(response.statusCode, 302);
           const posted = await pool.query<{ file_hash: string }>(
             `SELECT d.file_hash FROM document d
                JOIN document_link l ON l.document_id = d.document_id
@@ -482,15 +491,13 @@ describe('evidence · the upload route', () => {
           const postedHash = posted.rows[0]?.file_hash;
           assert.ok(postedHash);
           hashes.push(postedHash);
-          assert.match(response.body, /נמצאו כל הביטויים הקבועים של הטופס/);
-          assert.match(response.body, /מילים על הדף/);
-          const href = response.body.match(
-            /href="(\/documents\/[0-9a-f-]{36}\/read)"/,
-          );
-          assert.ok(href?.[1]);
+          const location = String(response.headers.location ?? '');
+          const documentId =
+            location.match(/\/documents\/([0-9a-f-]{36})\/tenancy$/)?.[1] ?? '';
+          assert.ok(documentId);
           const overlay = await app.inject({
             method: 'GET',
-            url: href[1],
+            url: `/documents/${documentId}/read`,
           });
           assert.equal(overlay.statusCode, 200, overlay.body.slice(0, 400));
           assert.match(overlay.body, /word-box/);

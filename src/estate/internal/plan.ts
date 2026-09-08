@@ -127,9 +127,8 @@ export interface EstatePlan {
  * One register line's worth of estate. Slice 2.4, for `upsertUnitRow`.
  *
  * Row-shaped rather than plan-shaped, because the register (SPEC-register.md) is a flat file whose
- * rows repeat their building and converge through the natural keys. It offers **no parking or
- * storage assignment**: a register carries apartments and nothing else, and a type that offered a
- * field the file cannot fill is a type that invites somebody to fill it from somewhere else.
+ * rows repeat their building and converge through the natural keys. The file still names no bay:
+ * slice 4.6 implies `חניה {unit}` and `מחסן {unit}` so a protocol has a space to land on.
  */
 export interface UnitRowSpec {
   /** Null is R15's ordinary case — a building with no project. */
@@ -143,7 +142,8 @@ export interface UnitRowSpec {
 /**
  * What `upsertUnitRow` did. Booleans and not counts, because a row touches each table exactly once
  * and the caller is the one aggregating — `src/register/` owns the report, this module owns the
- * rows. `project` is null when the row named none (R15).
+ * rows. `project` is null when the row named none (R15). `parking` and `storage` are the implied
+ * spaces 4.6 added; they are still Space rows, so the register counts them under `space`.
  */
 export interface UnitRowResult {
   unitId: string;
@@ -151,6 +151,8 @@ export interface UnitRowResult {
     project: boolean | null;
     building: boolean;
     space: boolean;
+    parking: boolean;
+    storage: boolean;
     unit: boolean;
   };
 }

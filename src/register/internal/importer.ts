@@ -156,6 +156,8 @@ async function writeRow(
   record(counts, 'project', unit.inserted.project);
   record(counts, 'building', unit.inserted.building);
   record(counts, 'space', unit.inserted.space);
+  record(counts, 'space', unit.inserted.parking);
+  record(counts, 'space', unit.inserted.storage);
   record(counts, 'unit', unit.inserted.unit);
 
   const tenancy = await upsertTenancy(db, {

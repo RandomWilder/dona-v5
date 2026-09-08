@@ -381,7 +381,8 @@ export async function importEstate(
 
 /**
  * Upserts one register line's worth of estate — one project, one building, one `UNIT` space, one
- * unit — and **returns the `unit_id`**, which is what `importEstate` does not.
+ * unit, plus the implied `PARKING` and `STORAGE` placeholders (slice 4.6) — and **returns the
+ * `unit_id`**, which is what `importEstate` does not.
  *
  * Slice 2.4. The register (SPEC-register.md) is a flat file whose rows repeat their building, so its
  * importer needs a row-shaped call rather than a plan-shaped one, and it needs the id back in order
@@ -407,19 +408,38 @@ export async function upsertUnitRow(
     units: [],
   });
 
-  // A register carries apartments and nothing else — no lobby, no plant room — so the one space a
-  // row implies is the `UNIT` it names. Parking bays and storage rooms are Space rows too (workbook
-  // D3) and reach the system through a plan, which is where a handover protocol will put them.
+  const parkingName = `חניה ${spec.unit.unitNumber}`;
+  const storageName = `מחסן ${spec.unit.unitNumber}`;
   const space = await upsertSpace(db, building.buildingId, {
     kind: 'UNIT',
     name: spec.unit.spaceName,
     floor: spec.floor,
     accessNote: null,
   });
+  const parking = await upsertSpace(db, building.buildingId, {
+    kind: 'PARKING',
+    name: parkingName,
+    floor: null,
+    accessNote: null,
+  });
+  const storage = await upsertSpace(db, building.buildingId, {
+    kind: 'STORAGE',
+    name: storageName,
+    floor: null,
+    accessNote: null,
+  });
   const unit = await upsertUnit(
     db,
-    { unitId: space.spaceId, parking: null, storage: null },
-    { ...spec.unit, parkingSpaceName: null, storageSpaceName: null },
+    {
+      unitId: space.spaceId,
+      parking: parking.spaceId,
+      storage: storage.spaceId,
+    },
+    {
+      ...spec.unit,
+      parkingSpaceName: parkingName,
+      storageSpaceName: storageName,
+    },
   );
   return {
     unitId: space.spaceId,
@@ -427,6 +447,8 @@ export async function upsertUnitRow(
       project,
       building: building.inserted,
       space: space.inserted,
+      parking: parking.inserted,
+      storage: storage.inserted,
       unit,
     },
   };

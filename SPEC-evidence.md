@@ -10,8 +10,8 @@ this file and the workbook disagree, the workbook is right and this file is a bu
   ExtractedField · FieldPromotion.
 - **Depends on:** estate, parties, tenancy.
 - **Builds:** week 3 (slices 3.1–3.3, 3.5's confirm screen, 3.6) and week 4 (OCR at 4.1, comprehension
-  at 4.2, promotion, the accuracy number). **The stub gained content at slice 3.1**, which is the
-  signal its build started. ExtractedField landed at 4.2; FieldPromotion lands at 4.3.
+  at 4.2, promotion at 4.3, A2's draft tenancy at 4.6). **The stub gained content at slice 3.1**, which
+  is the signal its build started. ExtractedField landed at 4.2; FieldPromotion lands at 4.3.
 - **Carries:** **capture is open, promotion is governed** ([tasks/plan.md](tasks/plan.md) A8). A new
   type or field is a row — zero migrations, zero deploys — and is citable the moment it is extracted;
   an extracted value becoming a typed column costs a migration and a reviewed mapping.
@@ -199,15 +199,12 @@ then is bounds rather than intentions:
   arrive at the pilot-preparation step of the method; that ordering is what keeps this window empty
   rather than merely supervised.
 
-**Declaring a *new draft* tenancy at upload is week 4's, with flow A2**, and the reason is a
-constraint that already exists rather than a preference: a draft is never an empty shell — unit,
-dates and at least one tenant — and `upsertParty` requires a ת.ז., because `national_id_key` is
-`party`'s natural key and an upsert without one is an insert wearing an upsert's name
-(`src/parties/internal/commands.ts`, which assigns the `createParty` this needs to week 4 with its
-confirmation step around it). Building it here would mean an **unauthenticated route that accepts a
-person's name and identity number**, six weeks before the session that gates it (week 5) and before
-the confirmation step invariant 5 requires. A handover protocol precedes every tenancy its flat will
-ever have, so a document with no tenancy link is an ordinary case and not a gap.
+**Declaring a *new draft* tenancy at upload is slice 4.6, flow A2.** A draft is never an empty shell —
+unit, dates and at least one tenant — and `upsertParty` requires a ת.ז., so A2 calls `createParty`
+instead (name only, no identity match). Filing a `lease` with no tenancy link redirects to
+`/documents/:id/tenancy`. Upload to an existing letting stays 3.3 plus 4.3's per-field promote. A
+handover protocol precedes every tenancy its flat will ever have, so a document with no tenancy link
+is an ordinary case and not a gap.
 
 ## What this module exports, and what it refuses
 
@@ -285,8 +282,9 @@ next screen is a proposal, not a done page. A deterministic reader runs over the
 
 **The confirm page recomputes the proposal from the stored bytes.** There is no staging table: the
 document is immutable and the reader is a pure function, so holding a copy between GET and POST
-would be a second fact that can disagree with the first. A2 still owes its own answer for
-model-based proposals.
+would be a second fact that can disagree with the first. A2's equivalent for a model-based proposal
+is the same idea over capture: recompute from `extracted_field` plus the unit the document was filed
+against.
 
 **Estate writes, evidence does not.** `applyProtocolSeed` on estate's contract is what inserts the
 asset rows and updates the dates. Evidence calls it after the administrator confirms, and never
@@ -295,6 +293,32 @@ building (`PlaceKind = BUILDING`), not under the unit the administrator happened
 
 A file with no text layer (`unverified`) has nothing to propose and skips the confirm screen —
 OCR at 4.1 is what gives that file a text layer to read.
+
+## Flow A2 — a lease establishes a draft tenancy (slice 4.6)
+
+After A1 files a `lease` that is **verified** and not already bound to a tenancy, the next screen is a
+proposal, not a done page. An `unverified` file has nothing to propose and stays on the filed page,
+the same skip A6 uses. Extraction has already written `extracted_field` rows on a verified file. The
+confirm page **recomputes from those rows plus `getUnit`**. There is no staging table.
+
+**Evidence orchestrates; it does not write estate, party or tenancy SQL.** After the administrator
+confirms each proposed person's role and names an existing `terms_profile`, evidence calls
+`createParty`, `upsertTenancy`, `upsertTenancyParty` and `promoteExtractedField`. Dates become truth
+through FieldPromotion (the CHECK is still dates only). Names do not get a promotion target: party
+provenance is a `PARTY` / `SIGNATORY` link and the `evidence.confirm_lease` audit line.
+
+**Role is a POST field.** A missing role for any captured `tenant_name` or `guarantor_name` is
+`invalid` and writes nothing. Zero `guarantor_name` rows is success. Two `tenant_name` rows are two
+parties. No name is matched against the global party register.
+
+**Cross-check.** Extracted `apartment_number` and `address` are asserted against the unit. A mismatch
+is `invalid`: no tenancy, no party, no new link. This is the content check 3.3 deferred.
+
+**Idempotent confirm.** A lease that already has a `TENANCY` / `EVIDENCE` link returns
+`alreadyEstablished` and creates no second household.
+
+**The confirm screen may show captured names.** That is the exception the confirmation step exists
+for. It still does not query `party`. Until week 5, every other screen still shows no person.
 
 ## Reading a filed document — slice 4.1
 

@@ -155,11 +155,12 @@ unit — which is the sequence step 5 of that flow describes anyway.
    attempt is made to match a name against the global party register — cross-tenancy identity
    resolution is a month-two problem and a materially harder one.
 6. The written tenancy is `DRAFT` and carries per-field provenance back to the lease.
+7. **A2 runs only when the lease has no `TENANCY` link yet.** Binding to an existing letting is A1
+   plus per-field promotion. Confirm recomputes from captured fields; a second confirm is a no-op.
 
 **Cross-check:** the address and apartment number extracted from the document are asserted against the
 unit the tenancy hangs on. This catches the error the type guard cannot — the right kind of document
-filed against the wrong apartment. It needs extraction to exist, so it lands with comprehension rather
-than with upload.
+filed against the wrong apartment. A mismatch writes no tenancy and no party.
 
 ### A3 — An addendum completes a tenancy
 

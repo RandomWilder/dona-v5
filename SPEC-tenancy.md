@@ -141,17 +141,21 @@ by tripping the guard rather than by anticipating it.
   import stay legal without a document. `applyPromotedField` is the fourth write command: parse a
   DATE, update the named column, append the event. A collision on `(unit_id, start_date)` is
   `conflict`.
-- **No read model, and from 3.3 exactly one read.** `contract.ts` exists from 2.4 and exports the
-  register importer's three write commands — `upsertTermsProfile`, `upsertTenancy` and
-  `upsertTenancyParty` — plus `applyPromotedField` from 4.3. `listUnitTenancies` joins them at 3.3, and the line
-  it does not cross is the one that matters: **who is in a unit today is `src/scope/`'s answer and
-  never this module's**, which is foundation rule 1 expressed as a module boundary. This query
-  answers *which lettings does this flat have* — every status, ordered by date — for an administrator
-  choosing which one a lease belongs to. It takes a `unit_id` and never a phone number, it returns
-  dates and a status and **no party and no name**, it carries neither of the isolation join's
-  temporal predicates, and nothing decides what anybody may see from its result. A query here that
-  answered "who is in this unit today" would be the second copy of the join, and guard two exists
-  because that is how the constraint dies.
+- **No read model, and from 3.3 exactly one list plus one lookup.** `contract.ts` exists from 2.4
+  and exports the register importer's three write commands — `upsertTermsProfile`, `upsertTenancy` and
+  `upsertTenancyParty` — plus `applyPromotedField` from 4.3. `listUnitTenancies` joins them at 3.3.
+  Slice 4.6 added `findTermsProfileByName`: A2 must hang a draft on a profile that already exists and
+  must not invent `standard`. A missing name is `null`, not an upsert. Flow A2 writes a `DRAFT`
+  through these same commands; evidence is the only caller that creates `tenancy_party` from a
+  lease, and only after a human confirms each role. The line this module does not cross is the one
+  that matters: **who is in a unit today is `src/scope/`'s answer and never this module's**, which
+  is foundation rule 1 expressed as a module boundary. `listUnitTenancies` answers *which lettings
+  does this flat have* — every status, ordered by date — for an administrator choosing which one a
+  lease belongs to. It takes a `unit_id` and never a phone number, it returns dates and a status and
+  **no party and no name**, it carries neither of the isolation join's temporal predicates, and
+  nothing decides what anybody may see from its result. A query here that answered "who is in this
+  unit today" would be the second copy of the join, and guard two exists because that is how the
+  constraint dies.
 - **An index on `end_date`, partial on `ACTIVE`, added at 2.6** — `tenancy_end_date_active` in
   `0010_scale_indexes.sql`. 2.2 left it out deliberately, to be decided at full row count with a
   timing in front of it, and 2.6 is the slice with the row count. Measured over 1,674 tenancies, on the tenancy

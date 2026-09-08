@@ -35,6 +35,8 @@ import {
   renderReadPage,
   renderSeededPage,
   renderSeedPage,
+  renderTenancyPage,
+  renderTenancyWrittenPage,
   renderUploadPage,
 } from '../../src/evidence/contract.ts';
 import type { UnitLetting } from '../../src/tenancy/contract.ts';
@@ -425,6 +427,39 @@ const SCREENS: Array<[string, () => string]> = [
         warrantyEndDate: '2026-06-01',
         assetsWritten: 2,
         alreadySeeded: false,
+      }),
+  ],
+  [
+    'documents · confirm a lease',
+    () =>
+      renderTenancyPage({
+        documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        unit: hit,
+        startDate: '2026-03-01',
+        endDate: '2027-02-28',
+        apartmentNumber: '12A',
+        address: 'רקפת 12',
+        people: [
+          {
+            extractedFieldId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            fieldKey: 'tenant_name',
+            value: 'יעל כהן',
+            proposedRole: 'PRIMARY_TENANT',
+          },
+        ],
+        matchesUnit: true,
+        alreadyEstablished: false,
+      }),
+  ],
+  [
+    'documents · lease written',
+    () =>
+      renderTenancyWrittenPage({
+        unit: hit,
+        startDate: '2026-03-01',
+        endDate: '2027-02-28',
+        partiesWritten: 2,
+        alreadyEstablished: false,
       }),
   ],
 ];
