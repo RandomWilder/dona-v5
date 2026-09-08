@@ -283,6 +283,14 @@ function documentCard(doc: FiledDocumentView): Html {
       <div><dt>בדיקת התאמה</dt><dd>${VERDICT[doc.verificationVerdict]}</dd></div>
       <div><dt>נתיב</dt><dd class="doc-uri">${ltr(doc.storageUri)}</dd></div>
     </dl>
+    <p class="unit-actions">
+      <a href="/documents/${doc.documentId}/read">מילים על הדף</a>
+      ${
+        doc.typeKey === 'lease'
+          ? h`<a href="/documents/${doc.documentId}/tenancy">אישור חוזה</a>`
+          : h``
+      }
+    </p>
   </article>`;
 }
 
@@ -488,9 +496,7 @@ function unitHits(results: SearchResults): Html {
 function documentHits(hits: readonly DocumentSearchHit[]): Html {
   return h`<div class="row-list">
     ${hits.map((hit) => {
-      const href = hit.unitId
-        ? `/estate/units/${hit.unitId}`
-        : `/estate/buildings/${hit.buildingId}`;
+      const href = `/documents/${hit.documentId}/read`;
       return h`<article class="row-card">
         <a class="card-link" href="${href}">
           <p class="card-title">

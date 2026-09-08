@@ -250,6 +250,11 @@ found (`verified`). The confirmation screen already said this in words; the pane
 becomes a property of a list, which is why `verification_verdict` is a column rather than a scrape
 of `audit_log`. Audit is who-did-what JSON and is the wrong read model for a card.
 
+**The card is a door, not a dead end.** `מילים על הדף` is `/documents/:id/read`. A lease also offers
+`אישור חוזה` (`/documents/:id/tenancy`). The overlay says when no fields were extracted, rather than
+rendering an empty card as if nothing was due. Promote buttons appear only for mapped fields that
+are not yet stamped, and only after extraction has written rows.
+
 Building-level paper (`entity_type = BUILDING`, the handover protocol) lists on the building page.
 Unit paper lists on the unit page. Grouping is by type heading; a flat list still finds the lease,
 and that is the week's cut line.
