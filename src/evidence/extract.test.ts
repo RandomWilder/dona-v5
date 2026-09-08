@@ -22,6 +22,7 @@ import {
 import type { IntakeDeps } from './contract.ts';
 import {
   applyDocumentTypeCatalogue,
+  EXTRACT_INSTRUCTIONS,
   extractFiledDocument,
   fileDocument,
   listExtractedFields,
@@ -276,6 +277,157 @@ describe('evidence · extract into the declared schema', () => {
         assert.equal(filed.verification.verdict, 'verified');
         const rows = await listExtractedFields(db, filed.documentId);
         assert.equal(rows.length, 0);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('tells the model not to swap building number and apartment number', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const afterHint = new Date('2026-09-08T09:00:00.000Z');
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const extractor = createFakeExtractor(() => ({ findings: [] }));
+        const filed = await fileDocument(
+          {
+            db,
+            objects: createMemoryStore(),
+            pdf: createFakePdfText(['חוזה שכירות המושכר תקופת השכירות השוכר']),
+            audit: createAuditLog(db, fixedClock(afterHint)),
+            clock: fixedClock(afterHint),
+            bucket: BUCKET,
+            extractor: createUnconfiguredExtractor(),
+          } satisfies IntakeDeps,
+          {
+            bytes: pdfBytes('extract-place-hints'),
+            typeKey: 'lease',
+            place: { kind: 'UNIT', id: newId() },
+            tenancyId: null,
+          },
+        );
+        assert.equal(filed.filed, true);
+        if (!filed.filed) return;
+        await extractFiledDocument(
+          {
+            db,
+            extractor,
+            audit: createAuditLog(db, fixedClock(afterHint)),
+            clock: fixedClock(afterHint),
+            model: 'gpt-test',
+          },
+          {
+            documentId: filed.documentId,
+            words: wordsOf('בניין מספר 12 דירה מספר 4'),
+          },
+        );
+        const request = extractor.calls[0];
+        assert.ok(request);
+        assert.equal(request.instructions, EXTRACT_INSTRUCTIONS);
+        assert.match(request.instructions, /בניין מספר/);
+        assert.match(request.instructions, /דירה מספר/);
+        const payload = JSON.parse(request.input) as {
+          fields: Array<{ field_key: string; extraction_hint: string | null }>;
+        };
+        const apartment = payload.fields.find(
+          (field) => field.field_key === 'apartment_number',
+        );
+        const address = payload.fields.find(
+          (field) => field.field_key === 'address',
+        );
+        assert.ok(apartment);
+        assert.ok(address);
+        assert.match(apartment.extraction_hint ?? '', /דירה מספר/);
+        assert.doesNotMatch(apartment.extraction_hint ?? '', /^המושכר$/);
+        assert.match(address.extraction_hint ?? '', /בניין מספר/);
+        assert.match(request.instructions, /YYYY-MM-DD/);
+        const start = payload.fields.find(
+          (field) => field.field_key === 'start_date',
+        );
+        assert.ok(start);
+        assert.match(start.extraction_hint ?? '', /YYYY-MM-DD/);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('keeps an ISO date and drops Hebrew or slash-shaped DATE values', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const words = wordsOf('15 בספטמבר 2026 2027-09-14');
+        const extractor = createFakeExtractor(() => ({
+          findings: [
+            {
+              field_key: 'start_date',
+              value: '15 בספטמבר 2026',
+              word_ids: [0],
+            },
+            {
+              field_key: 'end_date',
+              value: '2027-09-14',
+              word_ids: [words.length - 1],
+            },
+            {
+              field_key: 'apartment_number',
+              value: '08/09/2026',
+              word_ids: [0],
+            },
+          ],
+        }));
+        const filed = await fileDocument(
+          {
+            db,
+            objects: createMemoryStore(),
+            pdf: createFakePdfText(['חוזה שכירות המושכר תקופת השכירות השוכר']),
+            audit: createAuditLog(db, fixedClock(AT)),
+            clock: fixedClock(AT),
+            bucket: BUCKET,
+            extractor: createUnconfiguredExtractor(),
+          } satisfies IntakeDeps,
+          {
+            bytes: pdfBytes('extract-iso-date'),
+            typeKey: 'lease',
+            place: { kind: 'UNIT', id: newId() },
+            tenancyId: null,
+          },
+        );
+        assert.equal(filed.filed, true);
+        if (!filed.filed) return;
+        await extractFiledDocument(
+          {
+            db,
+            extractor,
+            audit: createAuditLog(db, fixedClock(AT)),
+            clock: fixedClock(AT),
+            model: 'gpt-test',
+          },
+          { documentId: filed.documentId, words },
+        );
+        const rows = await listExtractedFields(db, filed.documentId);
+        assert.equal(
+          rows.find((row) => row.fieldKey === 'start_date'),
+          undefined,
+        );
+        assert.equal(
+          rows.find((row) => row.fieldKey === 'end_date')?.value,
+          '2027-09-14',
+        );
+        assert.equal(
+          rows.find((row) => row.fieldKey === 'apartment_number')?.value,
+          '08/09/2026',
+        );
       });
     } finally {
       await pool.end();

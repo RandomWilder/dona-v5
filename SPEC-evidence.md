@@ -69,6 +69,16 @@ sheet existed.
   `word_ids` drop the finding — no invented box. Native pdfjs may store `confidence` null; a scan
   stores Document AI's score. The mapping model id is stored on the row so a dispute can name which
   comprehension pass produced the value.
+- **Building number is not the flat.** On a Hebrew lease `בניין מספר` belongs in `address` (street,
+  building number, city). `apartment_number` is `דירה מספר` only. A parking bay (`חניה`) is neither.
+  From 2026-09-08 the mapping instructions say that, and the lease field hints do too — a new
+  `effective_from` row, not an edit of 2026-09-07 (R18). The 4.6 cross-check still refuses a swap;
+  this is what stops the swap being the usual result.
+- **A DATE value is ISO `YYYY-MM-DD`.** That is what `tenancy.start_date` / `end_date` and
+  FieldPromotion already accept. Hebrew month names and `dd/mm/yyyy` are the paper, not capture.
+  The mapping instructions ask for ISO; a DATE finding that is not a real calendar day is dropped —
+  no row, same as any other missing required field. Screens may later print dd/mm/yyyy; they do not
+  store it.
 - **`value` is `-- pii`.** Names and addresses land here. Guard three matches a qualified name
   (`extracted_field.value`) because a bare `value` would fire on `config_settings`.
 - **A missing required field is a result, not an error.** No row. The same for an unconfigured

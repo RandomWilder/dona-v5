@@ -15,6 +15,10 @@ import type { Queryable } from './types.ts';
 
 export const EXTRACT_WORK_KIND = 'evidence.extract_document';
 
+/** Mapping instructions. A change here is a prompt change and runs the golden set. */
+export const EXTRACT_INSTRUCTIONS =
+  'Fill the declared fields from the numbered words. Return word_ids that support each value. Never invent coordinates. On a Hebrew lease, בניין מספר belongs in address; דירה מספר is apartment_number only. Do not swap them. Ignore חניה and parking numbers. Address is street, building number and city — not the flat number as the house number. DATE values are ISO YYYY-MM-DD only, never Hebrew month names and never dd/mm/yyyy.';
+
 export interface MeasuredWord {
   id: number;
   page: number;
@@ -102,6 +106,28 @@ export function unionBox(words: readonly MeasuredWord[]): BBox {
     maxY = Math.max(maxY, word.y + word.height);
   }
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Capture for a DATE field: a real calendar day, same shape promotion already requires. */
+function asIsoDate(value: string): string | null {
+  const trimmed = value.trim();
+  if (!ISO_DATE.test(trimmed)) {
+    return null;
+  }
+  const year = Number(trimmed.slice(0, 4));
+  const month = Number(trimmed.slice(5, 7));
+  const day = Number(trimmed.slice(8, 10));
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  if (
+    utc.getUTCFullYear() !== year ||
+    utc.getUTCMonth() !== month - 1 ||
+    utc.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return trimmed;
 }
 
 function onDate(clock: Clock): string {
@@ -195,8 +221,7 @@ export async function extractFiledDocument(
     reply = await deps.extractor.extract({
       model: deps.model,
       name: 'document_fields',
-      instructions:
-        'Fill the declared fields from the numbered words. Return word_ids that support each value. Never invent coordinates.',
+      instructions: EXTRACT_INSTRUCTIONS,
       input: JSON.stringify({
         fields: fields.map((field) => ({
           field_key: field.fieldKey,
@@ -236,6 +261,11 @@ export async function extractFiledDocument(
     if (!field || finding.value.trim().length === 0) {
       continue;
     }
+    const value =
+      field.valueType === 'DATE' ? asIsoDate(finding.value) : finding.value;
+    if (!value) {
+      continue;
+    }
     const selected: MeasuredWord[] = [];
     for (const id of finding.word_ids) {
       const word = byId.get(id);
@@ -259,7 +289,7 @@ export async function extractFiledDocument(
         newId(deps.clock),
         input.documentId,
         field.documentTypeFieldId,
-        finding.value,
+        value,
         selected[0]?.page,
         JSON.stringify(bbox),
         confidence,

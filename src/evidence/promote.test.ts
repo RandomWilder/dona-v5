@@ -93,7 +93,8 @@ describe('evidence · promote an extracted field', () => {
         const mappings = await db.query<{ n: string }>(
           `SELECT count(*)::text AS n FROM field_promotion`,
         );
-        assert.equal(mappings.rows[0]?.n, '3');
+        // start_date, end_date, new_end_date — two effective_from rows each (R18).
+        assert.equal(mappings.rows[0]?.n, '6');
 
         const unitId = await insertUnit(db);
         const profile = await upsertTermsProfile(

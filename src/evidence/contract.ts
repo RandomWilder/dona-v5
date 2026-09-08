@@ -48,6 +48,7 @@ export type {
   PromotedField,
 } from './internal/extract.ts';
 export {
+  EXTRACT_INSTRUCTIONS,
   EXTRACT_WORK_KIND,
   extractFiledDocument,
   listExtractedFields,

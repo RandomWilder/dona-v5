@@ -1228,6 +1228,16 @@ identity matching. Zero guarantors is a correct result.
   nothing. `upsertUnitRow` implies `חניה`/`מחסן` placeholders. **434 code + 41 hooks + 44 policy.**
   No migration. Carry: terms profile still typed; real bay counts 2.5; A3 is 4.7.
 
+### Slice 4.6a — Lease place fields: building number is not the flat
+Staging extracted האלון 4 / דירה 12 from a lease that prints בניין 12 / דירה 4. Mapping
+instructions plus a new `effective_from` hint (R18). The 4.6 cross-check still refuses a swap.
+- **Done when:** instructions and 2026-09-08 hints distinguish בניין מספר from דירה מספר; golden set green.
+- **Verify:** extract test on the prompt and hints; `npm run evals`.
+- **Deps:** 4.2, 4.6 · **Size:** S
+- **Sized:** 8 Sep 2026, from the staging demo.
+- **Closed 2026-09-08** ([evidence](evidence/4.6a.md)). Mapping instructions + R18 hint version.
+  ISO DATE capture. **437 code + 41 hooks.** Evals 1/3, 2 skipped. Staging: `seed:doctypes` then re-file.
+
 ### Slice 4.7 — A3: an addendum completes a tenancy
 No special case: fields live on the tenancy and documents are provenance. Later document wins;
 earlier value retained and visible.
