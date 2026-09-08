@@ -99,9 +99,9 @@ btree — week 12. Session, CSRF, and a cap on upload *count* — week 5. Signed
       **Deps:** 3.3 · **M** · **plan mode first** (kernel + evidence)
 
 - [ ] **Staging sweep of already-filed `unverified` rows.** 4.1 built `ocr:sweep` and measured it
-      locally (examined 1, verified 1). Not run at 4.2 or 4.3: no serving revision yet, laptop cannot
-      impersonate `app-staging`. After that revision serves, run `npm run ocr:sweep` as
-      `app-staging` and write the count (zero is a count). **4.4.**
+      locally (examined 1, verified 1). Not run at 4.2–4.4: laptop cannot impersonate
+      `app-staging`. After the 4.4 revision serves, run `npm run ocr:sweep` as `app-staging` and
+      write the count (zero is a count). **Director.**
 
 - [x] **4.2 — Comprehension into the declared schema — the open half of A8.** **Closed 7 Sep** —
       [evidence/4.2.md](evidence/4.2.md). Pointer-only `extracted_field`; geometry from the
@@ -136,12 +136,15 @@ btree — week 12. Session, CSRF, and a cap on upload *count* — week 5. Signed
       **Verify:** addendum after a lease, same path as 4.6; both provenances on screen.
       **Deps:** 4.6 · **S**
 
-- [ ] **4.4 — Click a value, see the pixels.** The provenance viewer: the page image scrolls to the
+- [x] **4.4 — Click a value, see the pixels.** The provenance viewer: the page image scrolls to the
       box the value came from.
       **Done when:** every promoted field on the unit screen is clickable through to its pixels.
       **Verify:** demonstrated live on three different documents.
       **Owed by 4.1 / 4.2 / 4.3 — staging sweep of `unverified`.** After the reader serves,
       `ocr:sweep` as `app-staging`; write the count (zero is a count).
+      **Closed 8 Sep** — [evidence/4.4.md](evidence/4.4.md). Href + `:target`, no script.
+      Three-document hrefs in the token suite. Staging sweep still director after this revision
+      serves.
       **Deps:** 4.3 · **M**
 
 - [ ] **4.8 — A4: the incomplete-tenancy queue.** The rule: *a tenancy must have at least one

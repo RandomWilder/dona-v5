@@ -31,6 +31,23 @@ import type { ObjectStore } from '../../kernel/objects.ts';
 import { createUnconfiguredOcr, type OcrText } from '../../kernel/ocr.ts';
 import type { PdfText } from '../../kernel/pdf.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
+
+const PAGE_NUMBER = /^[1-9]\d*$/;
+
+/** 0-based index into the reader's pages. Missing → 0. Out of range clamps. Garbage is invalid. */
+function pageIndex(asked: unknown, pageCount: number): number {
+  if (asked === undefined || asked === '') {
+    return 0;
+  }
+  if (typeof asked !== 'string' || !PAGE_NUMBER.test(asked)) {
+    throw new KernelError('invalid', 'page is not a page number');
+  }
+  if (pageCount < 1) {
+    return 0;
+  }
+  return Math.min(Number(asked), pageCount) - 1;
+}
+
 import type { WorkRunner } from '../../kernel/work.ts';
 import { listUnitTenancies } from '../../tenancy/contract.ts';
 import { documentTypeByKey, listDocumentTypes } from './catalogue.ts';
@@ -211,6 +228,13 @@ export function registerDocumentRoutes(
       );
       const extracted = await listExtractedFields(deps.pool, documentId);
       const link = subject.rows[0];
+      const asked = (request.query as { page?: string }).page;
+      const at = pageIndex(asked, read.pages.length);
+      const page = read.pages[at] ?? null;
+      const image =
+        page === null
+          ? null
+          : (read.images.find((img) => img.pageNumber === page.number) ?? null);
       html(reply);
       if (link?.entity_type === 'UNIT') {
         const unit = await getUnit(deps.pool, link.entity_id);
@@ -222,8 +246,8 @@ export function registerDocumentRoutes(
           labelHe: read.labelHe,
           fileHash: read.fileHash,
           source: read.source,
-          page: read.pages[0] ?? null,
-          image: read.images[0] ?? null,
+          page,
+          image,
           extracted,
         });
       }
@@ -237,8 +261,8 @@ export function registerDocumentRoutes(
           labelHe: read.labelHe,
           fileHash: read.fileHash,
           source: read.source,
-          page: read.pages[0] ?? null,
-          image: read.images[0] ?? null,
+          page,
+          image,
           extracted,
         });
       }

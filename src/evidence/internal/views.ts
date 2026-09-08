@@ -63,6 +63,15 @@ const styles = h`<style>
     outline: var(--size-hairline) solid var(--color-accent);
     pointer-events: none;
   }
+  .field-box {
+    position: absolute;
+    outline: var(--size-hairline) dashed var(--color-divider-soft);
+    scroll-margin-block-start: var(--space-8);
+    pointer-events: none;
+  }
+  .field-box:target {
+    outline: var(--size-focus) solid var(--color-accent);
+  }
 </style>`;
 
 function nav(): Html {
@@ -366,9 +375,36 @@ export interface ReadScreen {
     extractedFieldId: string;
     labelHe: string;
     value: string;
+    page: number;
+    bbox: { x: number; y: number; width: number; height: number };
+    confidence: number | null;
     promotionTarget: string | null;
     promotedTo: string | null;
   }>;
+}
+
+function fieldAnchor(extractedFieldId: string): string {
+  return `f-${extractedFieldId}`;
+}
+
+function pixelsHref(documentId: string, page: number, fieldId: string): string {
+  return `/documents/${documentId}/read?page=${String(page)}#${fieldAnchor(fieldId)}`;
+}
+
+function confidenceLabel(confidence: number | null): Html {
+  if (confidence === null) return h``;
+  return h` · ${ltr(`${Math.round(confidence * 100)}%`)}`;
+}
+
+function boxPercents(
+  box: { x: number; y: number; width: number; height: number },
+  page: { width: number; height: number },
+): string {
+  const inlineStart = (box.x / page.width) * 100;
+  const blockStart = (box.y / page.height) * 100;
+  const inlineSize = (box.width / page.width) * 100;
+  const blockSize = (box.height / page.height) * 100;
+  return `inset-inline-start:${String(inlineStart)}%;inset-block-start:${String(blockStart)}%;inline-size:${String(inlineSize)}%;block-size:${String(blockSize)}%`;
 }
 
 function extractedSection(screen: ReadScreen) {
@@ -383,7 +419,7 @@ function extractedSection(screen: ReadScreen) {
     <h2>מה שנקרא</h2>
     <dl class="facts">${rows.map(
       (row) =>
-        h`<div><dt>${row.labelHe}</dt><dd>${row.value}${
+        h`<div><dt>${row.labelHe}</dt><dd><a href="${pixelsHref(screen.documentId, row.page, row.extractedFieldId)}">${row.value}</a>${confidenceLabel(row.confidence)}${
           row.promotedTo
             ? h` · קודם`
             : row.promotionTarget
@@ -408,16 +444,23 @@ export function renderReadPage(screen: ReadScreen): string {
   const back = `/estate/buildings/${screen.buildingId}`;
   const page = screen.page;
   const image = screen.image;
-  const boxes =
+  const wordBoxes =
     page && page.width > 0 && page.height > 0
-      ? page.items.map((item) => {
-          const inlineStart = (item.x / page.width) * 100;
-          const blockStart = (item.y / page.height) * 100;
-          const inlineSize = (item.width / page.width) * 100;
-          const blockSize = (item.height / page.height) * 100;
-          return h`<span class="word-box" style="inset-inline-start:${String(inlineStart)}%;inset-block-start:${String(blockStart)}%;inline-size:${String(inlineSize)}%;block-size:${String(blockSize)}%" title="${item.text}"></span>`;
-        })
+      ? page.items.map(
+          (item) =>
+            h`<span class="word-box" style="${boxPercents(item, page)}" title="${item.text}"></span>`,
+        )
       : [];
+  const fieldBoxes =
+    page && page.width > 0 && page.height > 0
+      ? (screen.extracted ?? [])
+          .filter((row) => row.page === page.number)
+          .map(
+            (row) =>
+              h`<span id="${fieldAnchor(row.extractedFieldId)}" class="field-box" style="${boxPercents(row.bbox, page)}"></span>`,
+          )
+      : [];
+  const boxes = [...wordBoxes, ...fieldBoxes];
   const body = h`
     <div>
       <a class="back" href="${back}">← ${screen.buildingName}</a>

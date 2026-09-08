@@ -317,7 +317,8 @@ and 4.1 does not invent one.
 scan, a photograph, or a PDF whose pages came back empty is Document AI (confidence set, boxes from
 the OCR engine). Images skip pdfjs. More than 15 pages is not sent online; the row stays
 `unverified`. The overlay (`GET /documents/:id/read`) draws those boxes on the page image the
-processor already returned — logical CSS, one page, specimens. Clicking a *promoted value* is 4.4's.
+processor already returned — logical CSS, specimens. **Which page** is a query
+(`?page=`, 1-based, matching the stored field). Clicking a promoted value is 4.4's.
 
 `sweepUnverified` walks already-filed `unverified` rows the same way. It is how week 3's backlog is
 discharged; the count of verdicts that moved is recorded in the slice evidence, from the audit
@@ -383,7 +384,25 @@ matrix could read cannot be added by seeding a catalogue field.
   Isolation, responsibility and the state machine read typed columns. A contract test scans those
   trees.
 
+## Provenance viewer (slice 4.4)
+
+A promoted value on the unit screen is a link to the pixels it came from. Capture stays a row;
+the click is an `href`, not a script.
+
+- **No client JavaScript.** The screens have never had any ([SPEC-estate.md](SPEC-estate.md)). The
+  link is `/documents/:id/read?page=N#f-<extracted_field_id>`. The overlay draws the field's stored
+  union box with that `id`; the browser's `:target` and `scroll-margin` do the rest. A hash is not
+  sent to the server, so the page number cannot live only in the fragment.
+- **The box is the field's, not every word.** Word boxes stay as 4.1's overlay. The highlighted
+  rectangle is `extracted_field.bbox` on that page. Confidence is shown next to the value (a percent
+  when Document AI scored the words; omitted when pdfjs stored `null`).
+- **Estate does not query `extracted_field`.** `listPromotedFieldsForUnit` lives here and is
+  injected the same way `listLinkedDocuments` already is, so the estate ↔ evidence cycle stays
+  broken. The list is every stamped field on paper linked to that unit (the unit itself, or a
+  tenancy of that unit). Unmapped capture does not appear: it never became a value on the unit.
+- **Still no names.** The only mappings this week are dates. A name that extraction captured stays
+  on the read page and off the unit screen until week 5.
+
 ## Later in this module, and not here yet
 
-Click-to-pixels on a promoted value is 4.4. A lease establishing a draft tenancy is 4.6. The accuracy
-number is 4.5 and waits on the corpus.
+A lease establishing a draft tenancy is 4.6. The accuracy number is 4.5 and waits on the corpus.

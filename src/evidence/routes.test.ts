@@ -21,7 +21,7 @@ import { createMemoryStore } from '../kernel/objects.ts';
 import { createFakeOcrText, type OcrText } from '../kernel/ocr.ts';
 import { createFakePdfText } from '../kernel/pdf.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
-import { applyDocumentTypeCatalogue } from './contract.ts';
+import { applyDocumentTypeCatalogue, documentFileHash } from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const CITY = 'עיר מסמכים';
@@ -142,12 +142,13 @@ describe('evidence · the upload route', () => {
     }
     // One app per document, because the reader is a dependency: the bytes say which *kind* of file
     // this is and the injected reader says what it says.
+    const objects = createMemoryStore();
     const appFor = (text: string) =>
       buildApp({
         pool,
         version: '9.9.9-test',
         clock: fixedClock(AT),
-        objects: createMemoryStore(),
+        objects,
         pdf: createFakePdfText([text]),
         bucket: BUCKET,
       });
@@ -355,6 +356,58 @@ describe('evidence · the upload route', () => {
           assert.match(response.body, /word-box/);
           assert.match(response.body, /inset-inline-start/);
           assert.doesNotMatch(response.body, /(?:^|[\s;{])left\s*:/);
+        },
+      );
+
+      await t.test(
+        'GET /documents/:id/read?page=2 shows that page, not page 1',
+        async () => {
+          const bytes = pdfBytes(`two-page-read-${Date.now()}`);
+          hashes.push(documentFileHash(bytes));
+          const two = buildApp({
+            pool,
+            version: '9.9.9-test',
+            clock: fixedClock(AT),
+            objects,
+            pdf: createFakePdfText([
+              specimen('lease-standard.md'),
+              'PAGE-TWO-ONLY-WORD',
+            ]),
+            bucket: BUCKET,
+          });
+          extraApps.push(two);
+          const posted = await two.inject({
+            method: 'POST',
+            url: '/documents',
+            ...upload(
+              { unit: unitId, type: 'lease', tenancy: '' },
+              { filename: 'two.pdf', bytes },
+            ),
+          });
+          assert.equal(posted.statusCode, 200, posted.body.slice(0, 400));
+          const rows = await pool.query<{ document_id: string }>(
+            'SELECT document_id FROM document WHERE file_hash = $1',
+            [documentFileHash(bytes)],
+          );
+          const documentId = rows.rows[0]?.document_id ?? '';
+          assert.ok(documentId);
+          const first = await two.inject({
+            method: 'GET',
+            url: `/documents/${documentId}/read`,
+          });
+          assert.equal(first.statusCode, 200, first.body.slice(0, 400));
+          assert.doesNotMatch(first.body, /PAGE-TWO-ONLY-WORD/);
+          const second = await two.inject({
+            method: 'GET',
+            url: `/documents/${documentId}/read?page=2`,
+          });
+          assert.equal(second.statusCode, 200, second.body.slice(0, 400));
+          assert.match(second.body, /PAGE-TWO-ONLY-WORD/);
+          const bad = await two.inject({
+            method: 'GET',
+            url: `/documents/${documentId}/read?page=nope`,
+          });
+          assert.equal(bad.statusCode, 400);
         },
       );
 

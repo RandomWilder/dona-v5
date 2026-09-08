@@ -45,11 +45,13 @@ export type {
   ExtractedRow,
   ExtractReport,
   MeasuredWord,
+  PromotedField,
 } from './internal/extract.ts';
 export {
   EXTRACT_WORK_KIND,
   extractFiledDocument,
   listExtractedFields,
+  listPromotedFieldsForUnit,
   numberWords,
   parseMeasuredWords,
   unionBox,

@@ -28,6 +28,7 @@ import {
   type FiledDocumentView,
   type OccupancyByBuilding,
   type OccupancyByUnit,
+  type PromotedFieldView,
   renderBuildingPage,
   renderBuildingsPage,
   renderExpiringPage,
@@ -41,9 +42,9 @@ export interface EstateDeps {
   /** Injected, never read here: a screen whose answer changes at midnight is one no test can pin. */
   clock: Clock;
   /**
-   * Slice 3.6. Injected from evidence so this module never imports it — evidence already imports
-   * estate, and the other direction would be a cycle. Structural: the composition root wires the
-   * real functions.
+   * Slice 3.6 / 4.4. Injected from evidence so this module never imports it — evidence already
+   * imports estate, and the other direction would be a cycle. Structural: the composition root
+   * wires the real functions.
    */
   listLinkedDocuments: (
     db: Pool,
@@ -57,6 +58,10 @@ export interface EstateDeps {
     documents: readonly DocumentSearchHit[];
     truncated: boolean;
   }>;
+  listPromotedFieldsForUnit: (
+    db: Pool,
+    unitId: string,
+  ) => Promise<readonly PromotedFieldView[]>;
 }
 
 /** What a search box may be sent before it stops being a search box. */
@@ -166,7 +171,11 @@ export function registerEstateRoutes(
       'UNIT',
       unit.unit_id,
     );
+    const promoted = await deps.listPromotedFieldsForUnit(
+      deps.pool,
+      unit.unit_id,
+    );
     html(reply);
-    return renderUnitPage(unit, occupied[0]?.occupants, documents);
+    return renderUnitPage(unit, occupied[0]?.occupants, documents, promoted);
   });
 }
