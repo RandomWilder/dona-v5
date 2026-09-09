@@ -1,200 +1,235 @@
-# Week 4 · Sun 27 Sep – Thu 1 Oct 2026 — The machine reads a lease, and shows its work → **M1**
+# Week 5 · Sun 4 – Thu 8 Oct 2026 — Paper becomes truth
 
-> **Started 7 Sep 2026**, the day week 3 closed, rather than on the planned 27 Sep. The dates in
+> **Started 9 Sep 2026**, the day week 4 closed, rather than on the planned 4 Oct. The dates in
 > [roadmap.md](roadmap.md) are never rewritten; the gap between them and the evidence files is the
-> measurement of how the project ran. After three weeks the project is running roughly three
-> calendar weeks ahead of its plan.
+> measurement of how the project ran. After four weeks the project is running roughly three and a
+> half calendar weeks ahead of its plan.
 >
-> **Demo kind, declared Sunday 7 Sep: SOFTWARE, with an Evidence number attached.** Nothing in 4.1–
-> 4.4 or 4.6–4.8 depends on an unlit fuse. **4.5 does** — it needs the tier-2 corpus, which waits on
-> F6's three acts. Week 4 runs on tier-1 specimens until that lands.
+> **M1 was reached 9 Sep on five of six boxes** ([evidence/week-4.md](evidence/week-4.md)). The open
+> one — the three success numbers agreed with the client — is the director's and blocks **M3**, not
+> this week.
 >
-> **Week demo (Thu):** drop in a Hebrew lease. Rent, dates, parties and clauses appear as fields.
-> Click any value and the page image scrolls to the pixels it came from, with a confidence score.
+> **Demo kind, declared Sunday 9 Sep: SOFTWARE — and the roadmap says *Real data*, deliberately not
+> rewritten.** We have no real data to demo. The 1,500-unit register is **generated** (2.5 travelled
+> to pilot preparation with **F3**) and every document filed is a **tier-1 authored specimen** (the
+> corpus waits on **F6**). An amendment against a generated unit is a working amendment, not real
+> data, and calling it real data is precisely the claim this project exists to refuse. **If F3 burns
+> before Wednesday's freeze the kind is upgradeable**; until then the honest declaration is Software.
+>
+> **Week demo (Thu):** an amendment arrives for a unit; the tenancy updates; the change log shows old
+> → new, who approved it, and which document caused it. Then a tenancy ends because a date passed,
+> with no document at all. **And it is all behind a login, which it has never been before.**
 > **Freeze:** Wednesday. The last merge that reaches staging lands Wednesday.
 >
-> **Plan mode is mandatory** for 4.1 (kernel reader + evidence), 4.3 (promotion across evidence and
-> tenancy), and 4.6 (estate, parties, tenancy, evidence). A new session starts at 4.1, in plan mode,
-> after reading [SPEC-evidence.md](../SPEC-evidence.md) and [SPEC-flows.md](../SPEC-flows.md) A2–A4.
+> **Plan mode is mandatory** for **5.1** (auth — the whole of it), **5.2** (auth + estate + evidence +
+> the composition root), **5.4** (a migration across evidence and kernel), **5.6** (a migration
+> relaxing a live CHECK) and **5.7** (two new entities). That is five of eight; this is an
+> auth-and-migration week and almost nothing in it is single-module.
 >
 > One slice = one focused session, half a day or less. **Done when** is the acceptance bar; **Verify**
 > is the check that proves it — no self-certification. The standing bar every slice also clears is
 > the Definition of Done in [plan.md](plan.md).
 
-**The chain is 4.1 → 4.2 → 4.3, then a fan: 4.4 and 4.6 hang off 4.3.** 4.7 hangs off 4.6, 4.8 off
-4.7. 4.5 is last and is the one that may not start.
+**Where a new session starts: 5.1, in plan mode**, after reading [SPEC-staff.md](../SPEC-staff.md)
+(a stub — it gains content *in* this slice, and that is the signal the build has started),
+[SPEC.md](../SPEC.md) Security defaults, and [docs/from-v3.md](../docs/from-v3.md) Tier 2, which is
+what 5.1 is lifted from.
 
-A2, A3 and A4 were named on 6 Sep and **sized at week 3's close on 7 Sep** as 4.6, 4.7 and 4.8.
+**The chain is 5.1 → 5.2, then a fan: 5.3 and 5.4 hang off 5.2.** 5.5 → 5.6 → 5.7 → 5.8 runs
+underneath. 5.1 and 5.2 gate literally everything else in the week and in the three weeks after it.
+
+**No slice this week depends on any fuse.** Walked 9 Sep. Week 6 is the first week a fuse touches,
+and it touches its *sizing* rather than its ability to start.
 
 ---
 
-## Carried in from week 3 — every item, with the slice that closes it
+## The one sentence that must survive this week
 
-- [x] **`unverified` is a backlog with no reader.** Discharged at 4.1: sweep already-filed documents
-      and record how many verdicts moved. Count is on `evidence.file_document` audit lines whose
-      `inputs.verdict` is `unverified`. Local: examined 1, verified 1. Staging sweep waits on the
-      revision that carries the reader — owned at 4.3.
-- [x] **A real signed-lease PDF on staging became `unavailable` / unexpected error after ~1 minute.**
-      Discharged at 4.1: the reader must bound itself. A file it cannot finish is `invalid` or
-      `unverified`, never an uncaught 503, and must not hold the request for a minute to get there.
-      The demo used a printed specimen; that was the right call, not a workaround to keep.
-      pdfjs **8s**; OCR **20s**. HTTP of a miss is 200 unverified.
-- [x] **E16 versioning is one column, not two.** Discharged at 4.2: `ExtractedField` points at
-      `document_type_field_id`. No separate schema-version entity.
-- [x] **`upsertUnitRow` still writes only a `UNIT` space.** Discharged at 4.6: one register line now
-      also upserts `PARKING` `חניה {n}` and `STORAGE` `מחסן {n}` and assigns them. Placeholders, same
-      standing as מסירה dates. Shoham 60/40 stay the plan. Real bay counts: 2.5.
-- [x] **A2 — a lease establishes a draft tenancy**, including 3.3's content cross-check and the
-      draft path upload could not take. **Closed 8 Sep** — [evidence/4.6.md](evidence/4.6.md).
-- [x] **A3 — an addendum completes a tenancy.** Same path as A2. **Closed 8 Sep** — [evidence/4.7.md](evidence/4.7.md).
-- [x] **A4 — incomplete-tenancy queue** (at least one guarantor; policy case, never NOT NULL).
-      **Closed 8 Sep** — [evidence/4.8.md](evidence/4.8.md).
-- [ ] **The UI comments from weeks 2 and 3.** Parked at **M1**. Nothing raised was a correctness,
-      isolation or data question.
-- [~] **2.5 — import the real register.** Pilot-preparation with F3.
-- [~] **3.4 and A10 — Drive ingestion and the bulk review queue.** Deferred with F4. Published forms
-      sit beside tier-1 text at that step.
+**Seven routes have been served unauthenticated since week 1** — `/`, `/estate`,
+`/estate/buildings/:id`, `/estate/search`, `/estate/expiring`, `GET /documents/new` and
+`POST /documents` — deliberately, on fixture data, stated in six files rather than hidden in one.
+**Nothing may put a real party, contact or document behind them before 5.2 closes.** That constraint
+is now four weeks old. It is the reason the corpus is gated behind F6 *and* behind a session, and it
+is the single most important thing carried out of month one.
+
+---
+
+## Carried in from week 4 — every item, with the slice that closes it
+
+- [ ] **Session, CSRF, and a cap on upload *count*.** → **5.2**, all three halves in one change. A
+      token defends a session's authority and there is none; 20 MB bounds a file and nothing bounds a
+      caller.
+- [ ] **`uploaded_by`, signed URLs, and `superseded_by` re-asked.** → **5.4**. All three held for the
+      same reason and released by the same fact.
+- [ ] **`national_id` never in an agent tool's response shape.** → **5.3**, a policy case, red first.
+      Owed by 1.7, restated at 2.1, in `SPEC-parties.md` and in `0006_parties.sql`.
+- [ ] **Cross-tenancy party identity.** → **5.5**. `SPEC-flows.md` said "month two" and named no week
+      until 9 Sep.
+- [ ] **Clock-driven `TenancyEvent` kinds; Obligation and ObligationType (E9, E10).** → **5.6**,
+      **5.7**.
+- [ ] **The A9 settings screen** — the catalogue has been dynamic since week 3 and the hand on it has
+      been a seed. → **5.8**.
+- [ ] **The root index moves from `src/estate/` to the composition root** — this is the week a second
+      *module* has a screen. → **5.2**.
+- [x] **4.5 — the accuracy number. CUT and travelling**, not this week's. It goes to pilot
+      preparation with **F6**, bounded by **week 12**; the same treatment 2.5 took with F3 and 3.4
+      with F4. Recorded in full at [roadmap.md](roadmap.md) § 4.5 and
+      [evidence/week-4.md](evidence/week-4.md).
+- [x] **The UI-pass decision. DECIDED: no.** Parked at week 2, parked at week 3, closed at M1 rather
+      than parked a third time. Nothing raised was a correctness, isolation or data question, and
+      **this week changes what those screens show** — a design pass now runs against screens about to
+      change shape. Reconsidered at **M2**.
+- [~] **2.5 — import the real register.** Pilot preparation, with **F3**.
+- [~] **3.4 and A10 — Drive ingestion and the bulk review queue.** Pilot preparation, with **F4**.
 
 ## Also this week
 
-- [ ] **Walk [fuses.md](fuses.md).** Walked at week 3 close, 7 Sep. Walk again before the Thursday
-      demo. F2, F4, F5, F7 unlit; F3 off month one; F6 three acts still owed; F1 burning (18 Sep –
-      2 Oct).
-- [ ] **F6's other half — three named acts**, blocking **4.5** and nothing else this week: execute
-      OpenAI's DPA, confirm Google Cloud's is in force, publish the notice to data subjects
-      ([../docs/data-subject-notice.draft.md](../docs/data-subject-notice.draft.md)).
-- [ ] **Answer one question out of the notice draft: how it reaches a tenant.** Owed before week 9.
-- [ ] **Director's call:** whether the published Data Model's `Document` card is republished. Flagged,
-      not owned.
-- [ ] **Take delivery of the real document corpus** — after F6's other half. Dates on [fuses.md](fuses.md)
-      the day it lands. **4.5 cannot start without it.**
-- [x] **Clear week 3's director-uploaded staging filings** — 7 Sep. Bucket prefix
-      `unit/01a07769-777c-72c7-a31d-ae989efe9b47/` then unfile those two `file_hash` rows on staging
-      (2 links, 2 documents). Unit page then empty. Specimens on the other אלון 12 unit left.
-      `docs-delete.sh` alone does not clear the panel.
+- [ ] **Walk [fuses.md](fuses.md).** Walked 9 Sep at week 4's close; no fuse changed state. Walk
+      again before Thursday's demo. **Ask F1 specifically on 18 Sep**, when its burn window opens and
+      silence stops being the expected state.
+- [ ] **F6 — the ask is now four questions, not three acts.** Settle the **signing entity** first (it
+      decides what goes on the OpenAI form) · execute OpenAI's DPA · confirm Google Cloud's is in
+      force and file the record · review and publish the notice
+      ([../docs/data-subject-notice.draft.md](../docs/data-subject-notice.draft.md)). If the accounts
+      stay ours, a **Dona Dom ↔ us DPA** is owed and is written nowhere. Handed to the director 9 Sep
+      in English and Hebrew. **Blocks 4.5 and nothing in this week.**
+- [ ] **Answer one question out of the notice draft: how it reaches a tenant.** Owed before **week
+      9** — it is the only item in the draft with an engineering consequence.
+- [ ] **Ask at Thursday's demo, for week 6: are the Shoham buildings still inside תקופת הבדק?** Open
+      question 4. It decides whether **6.3** demos a live ternary responsibility case or a synthetic
+      one. Either is a correct slice; only one is a good demo.
+- [ ] **The three success numbers agreed with the client** — the open M1 box. Director's. Blocks the
+      **M3 go/no-go**, which is the decision those numbers exist to make.
+- [ ] **Director's call:** whether the published Data Model's `Document` card is republished.
+      Flagged, not owned.
+- [ ] **Take delivery of the real document corpus** — after F6. Arrival and removal dates go on
+      [fuses.md](fuses.md) the day it lands, and the removal is **run by hand on the day** rather
+      than trusted to the lifecycle rule, which is the backstop and not the record.
 
-**Carried in and already owned elsewhere:** `environment: production` has no protection rules —
-[roadmap.md](roadmap.md) week 12. Docs-bucket `legacyObjectOwner` delete — week 8. `party_contact`
-btree — week 12. Session, CSRF, and a cap on upload *count* — week 5. Signed URLs — week 5.
-`uploaded_by` and `superseded_by` — week 5. `tenant_visible` — week 9.
+**Carried in and already owned elsewhere:** policy cases 4 and 5 — **6.4** / **6.5**. The emergency
+bypass — **7.5**. Redaction at the provider boundary (ADR-0004 decision 2, **hard-bounded by week
+10**) — **8.1**. `run.admin` per service and the docs-bucket `legacyObjectOwner` delete — **8.4**.
+Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible` — week 9. Prod PITR,
+`environment: production` protection rules and the `party_contact` btree — week 12.
 
 ---
 
 ## Slices
 
-- [x] **4.1 — Document AI OCR adapter.** The **general OCR processor, not Form Parser** — the schema
-      is already declared, so Google needn't infer structure. Hebrew print and handwriting, word
-      boxes, per-word confidence.
-      **Done when:** a scanned Hebrew lease yields word-level boxes and confidences, and the
-      residency position is recorded in the evidence file rather than assumed.
-      **Verify:** boxes rendered over the page image for one document; a scan and a native PDF both
-      handled.
-      **Owed by 3.3 — `unverified` is a backlog with no reader.** Verify the declared type against
-      the OCR text at extraction time, and say in the evidence **how many already-filed documents
-      the sweep changed the verdict of**.
-      **Owed by the week-3 demo — a heavy signed-lease PDF must not become an uncaught 503.** Bound
-      the reader (time and memory). Fail closed as `invalid` or file as `unverified`. Record the
-      bound in the evidence.
-      **Closed 7 Sep** — [evidence/4.1.md](evidence/4.1.md). Processor `eu` /
-      `bd23faa1bd256c46`. Staging backlog sweep owned at 4.3.
-      **Deps:** 3.3 · **M** · **plan mode first** (kernel + evidence)
+- [ ] **5.1 — Staff identity, the session, and the role matrix in code.** Identity Platform with
+      **enforced MFA**, an invite flow, and `src/staff/` — the admin edge, not a domain module; it
+      owns none of E1–E16. **The role matrix is code, not a config row**, a deliberate exception to
+      *policies are data*: an access-control matrix a database write could widen is a
+      privilege-escalation path wearing the clothes of a setting. Sessions store `token_hash` and
+      never the token. The refusal says `not_allowed` and nothing more.
+      **Done when:** a named operator signs in with a second factor and holds a session; an account
+      with no role is refused with `not_allowed` and no other detail; and no token value exists
+      anywhere in the database.
+      **Verify:** sign in on staging with MFA *enforced*, not offered; a test asserts the stored hash
+      is not the cookie; a role-less account is refused on every route with the same message.
+      **Owed by 1.5:** `infra/bootstrap.sh` deliberately creates no staff seed secrets — a generated
+      credential nothing reads and no rotation flow owns is worse than an absent one. This slice
+      creates in Secret Manager exactly what its mechanism needs, and `bootstrap.sh` gains those
+      lines here.
+      **Plan mode. Deps:** none · **L**
 
-- [ ] **Staging sweep of already-filed `unverified` rows.** 4.1 built `ocr:sweep` and measured it
-      locally (examined 1, verified 1). Not run at 4.2–4.4: laptop cannot impersonate
-      `app-staging`. After the 4.4 revision serves, run `npm run ocr:sweep` as `app-staging` and
-      write the count (zero is a count). **Director.**
+- [ ] **5.2 — The screens go behind the session, and the write route gets a token that means
+      something.** Both halves in one change, plus the bound none of 3.3's bounds are: a **per-caller**
+      cap on upload *count*. The root index moves to the composition root.
+      **Done when:** none of the seven routes answers without a session; a POST with a valid session
+      and no token is refused; an authenticated caller is bounded on upload **count** as well as
+      size; and `src/estate/` no longer owns the root index.
+      **Verify:** unauthenticated GET on all five read routes refused; POST with session and no token
+      refused; the cap+1 upload from one session refused; week 5's screens **appended to
+      `tests/ui/tokens.test.ts`'s `SCREENS` registry** — never a second copy of the guard, which is
+      how a guard dies.
+      **This slice may lift the never-a-name rule.** Every screen shows a state and a count and never
+      a name. Behind a session a name may become lawful to show. **Lifting it is a decision this
+      slice records; keeping it is equally an answer.** What is not allowed is the rule lapsing
+      because a session arrived.
+      **Plan mode. Deps:** 5.1 · **L**
 
-- [x] **4.2 — Comprehension into the declared schema — the open half of A8.** **Closed 7 Sep** —
-      [evidence/4.2.md](evidence/4.2.md). Pointer-only `extracted_field`; geometry from the
-      measuring engine; extra field mid-test with no DDL. Staging sweep carried to 4.3.
-      **Deps:** 4.1, 3.1 · **M**
+- [ ] **5.3 — `national_id` is unreachable by any agent tool.**
+      **Done when:** a policy case in `tests/policy/` fails against a tool response shape carrying
+      `national_id` and passes when it does not.
+      **Verify:** committed red, then green, in that order.
+      **Owed by 1.7**, restated at 2.1, in `SPEC-parties.md` and in `0006_parties.sql` — deterministic,
+      so a policy case and never a review and never an eval. This week owns it because this is the
+      week a staff surface exists that could leak it.
+      **Deps:** 5.1 · **S**
 
-- [x] **4.3 — Promotion, with provenance — the governed half of A8.** **Closed 7 Sep** —
-      [evidence/4.3.md](evidence/4.3.md). FieldPromotion CHECK; stamp `23001` off-path; unmapped
-      field cannot promote; TenancyEvent `amended`; R9 scan red first. Staging sweep carried to 4.4.
-      **Deps:** 4.2 · **M** · **plan mode first** (evidence + tenancy)
+- [ ] **5.4 — What the session unlocks in evidence: `uploaded_by`, signed URLs, and the supersession
+      question re-asked.** `uploaded_by` is a nullable `ADD COLUMN` the moment an authenticated actor
+      exists. A signed URL is a bearer token for one object — whoever holds the string reads the
+      document, isolation join or not — so minting one belongs behind a session, which is why 3.2 and
+      3.6 both declined to. And `superseded_by` is **re-asked, not re-opened**: 3.1 ruled that
+      `SPEC-flows.md` invariant 2 already made supersession a fact about *values*; this is the
+      amendment week, so what it asks that ruling is whether promotion at scale finds a case it does
+      not cover.
+      **Done when:** every document filed after this slice names its uploader; the panel serves a
+      signed URL where it rendered a `gs://` string as text; and `superseded_by` either exists with
+      the case that forced it or is recorded as still unnecessary **against a stated number of
+      promotions**.
+      **Verify:** `uploaded_by` is the signed-in operator; a stale URL is refused; the supersession
+      answer cites a count, not a view.
+      **Plan mode. Deps:** 5.1, 5.2 · **M**
 
-- [x] **4.6 — A2: a lease establishes a draft tenancy.** Extract → propose → **confirm** → write.
-      Unit, dates, and every tenant named on the lease (two signatories per household is normal).
-      **Role is confirmed by a human before any `tenancy_party` row is written.** Parties are created
-      **under the tenancy the document was uploaded to**; no cross-tenancy identity matching.
-      Guarantors frequently absent: returning zero of them is a correct result.
-      **Done when:** a confirmed proposal writes a `DRAFT` tenancy with per-field provenance; the
-      address and apartment on the document are asserted against the unit; a mismatch is refused
-      and writes no party.
-      **Verify:** two-signatory specimen writes two tenants; guarantor-absent specimen writes none
-      and does not error; wrong-address case refused.
-      **Owed by 3.3 — the content cross-check and the draft-tenancy path.**
-      **Owed by 3.5 — `upsertUnitRow` still writes only a `UNIT` space**, so register-imported
-      buildings have no `PARKING` or `STORAGE` rows. Close it here so A6 can land on a bay.
-      **Owed by 3.5 — A2's staging shape**, recorded rather than invented in the slice.
-      **Closed 8 Sep** — [evidence/4.6.md](evidence/4.6.md). Capture is the staging shape. Redirect
-      after a verified lease with no tenancy. `createParty` has no ת.ז. Register line: 3 spaces.
-      **Deps:** 4.3, 3.3, 3.5 · **M** · **plan mode first** (estate · parties · tenancy · evidence)
+- [ ] **5.5 — Promotion at scale, and the amendment that changes a real unit.** The demo's first
+      half. `applyPromotedField` and `TenancyEvent` landed at 4.3 against one document at a time;
+      this is where they meet a portfolio. **Cross-tenancy party identity gets its ruling here** —
+      `SPEC-flows.md` A2 step 5 forbids matching a name across tenancies and deferred the question to
+      "month two". Matching people is a privacy decision before it is a data-quality one, so the
+      **duplicate count** is what should provoke the ruling, not the convenience of a join.
+      **Done when:** an amendment promoted against a unit changes the tenancy and appends an event
+      naming the operator and the source document; and the cross-tenancy question has a written
+      ruling citing the duplicate-party count that provoked it.
+      **Verify:** read the change log back for one unit — old → new, actor, document, in order; A2
+      step 5's prohibition still holds, or its replacement is a policy case written red first.
+      **Deps:** 5.4 · **M**
 
-- [x] **4.6a — Lease place fields: building number is not the flat.** Staging extracted האלון **4**
-      / דירה **12** from a lease that prints בניין **12** / דירה **4**. Mapping instructions and a
-      new `effective_from` hint (R18) distinguish them. Cross-check still refuses a remaining swap.
-      **Closed 8 Sep** — [evidence/4.6a.md](evidence/4.6a.md). Instructions + 2026-09-08 hints.
-      ISO DATE capture. Hebrew dates dropped. **437 code + 41 hooks.** Evals 1/3, 2 skipped.
-      Staging still needs `seed:doctypes` then a re-file (same hash will not re-extract).
-      **Deps:** 4.2, 4.6 · **S**
+- [ ] **5.6 — A tenancy ends because a date passed, with no document at all.** `0019_tenancy_event.sql`
+      makes `source_document_id` NOT NULL for `amended`, because a promotion that changed a value
+      without naming the paper is the exact claim this system refuses. `terminated` has no paper by
+      construction. **The column relaxes for that kind only, by CHECK, never by dropping the
+      constraint.** `at` comes from the injected clock; no `DEFAULT now()`, which is what makes this
+      demonstrable in a room rather than merely true in November.
+      **Done when:** advancing the injected clock past an `ACTIVE` tenancy's `end_date` terminates it
+      and appends `terminated` with a null document — **and an `amended` event with a null document
+      is still rejected by the database**.
+      **Verify:** both directions in one test. The demo runs off the injected clock, on staging, with
+      the date said out loud.
+      **Plan mode. Deps:** 5.5 · **M**
 
-- [x] **4.6b — Confirm picks an existing terms profile.** Free-text name refused guesses. Select of
-      names already in the table; empty list withholds the write and does not insert a default.
-      Local already had two (`נספח תחזוקה — תקן` / `מורחב`) — **no seed**.
-      **Closed 8 Sep** — [evidence/4.6b.md](evidence/4.6b.md).
-      **Deps:** 4.6 · **S**
+- [ ] **5.7 — Obligation and ObligationType — E9 and E10.** The last two entities month one deferred.
+      `ObligationType` is admin-managed, **deactivated never deleted**, with `responsible_party`
+      **copied onto the obligation at creation** so editing the catalogue cannot rewrite history —
+      foundation rule 8, the same shape as `FieldPromotion`'s snapshot of who approved a copy.
+      **Done when:** an obligation carries its own `responsible_party`, and editing or deactivating
+      its type afterwards changes nothing the obligation says.
+      **Verify:** create, edit the type, read the obligation back unchanged; a DELETE on a type is
+      refused.
+      **Plan mode. Deps:** 5.6 · **M**
 
-- [x] **4.7 — A3: an addendum completes a tenancy.** No special case: fields live on the tenancy and
-      documents are provenance. Later document wins; earlier value retained and visible.
-      **Done when:** a guarantor named in an addendum becomes a `tenancy_party` under the existing
-      tenancy, and a later date overwrites an earlier one without deleting the earlier provenance.
-      **Verify:** addendum after a lease, same path as 4.6; both provenances on screen.
-      **Closed 8 Sep** — [evidence/4.7.md](evidence/4.7.md). Same `/tenancy` path. TENANCY link is
-      the target, not the done flag. Audit `evidence.confirm_amendment`. No queue (4.8).
-      **Deps:** 4.6 · **S**
-
-- [x] **4.4 — Click a value, see the pixels.** The provenance viewer: the page image scrolls to the
-      box the value came from.
-      **Done when:** every promoted field on the unit screen is clickable through to its pixels.
-      **Verify:** demonstrated live on three different documents.
-      **Owed by 4.1 / 4.2 / 4.3 — staging sweep of `unverified`.** After the reader serves,
-      `ocr:sweep` as `app-staging`; write the count (zero is a count).
-      **Closed 8 Sep** — [evidence/4.4.md](evidence/4.4.md). Href + `:target`, no script.
-      Three-document hrefs in the token suite. Staging sweep still director after this revision
-      serves.
-      **Deps:** 4.3 · **M**
-
-- [x] **4.8 — A4: the incomplete-tenancy queue.** The rule: *a tenancy must have at least one
-      guarantor*. A **policy case over saved rows, written red first — never a NOT NULL**.
-      **Done when:** a tenancy that extraction returned with zero guarantors appears in the queue
-      showing what is missing; an addendum (4.7) or a recorded exception clears it.
-      **Verify:** policy case red first; lease with zero guarantors in the queue; A3 removes it.
-      **Closed 8 Sep** — [evidence/4.8.md](evidence/4.8.md). Policy red as a missing export.
-      Query, not a column. `/estate/incomplete`. Exception row. A3 confirm clears.
-      **Deps:** 4.7 · **M**
-
-- [ ] **4.5 — The accuracy number.** Per-field accuracy across ~40 real leases. **Cannot start
-      until the director has taken delivery of the corpus**, after F6's three acts. Arrival and
-      removal dates go on [fuses.md](fuses.md) the day it happens.
-      **Done when:** a per-field accuracy table exists with its sample size, its failure modes named,
-      and a stated removal date for the source documents.
-      **Verify:** the run is reproducible from a script; numbers in `tasks/evidence/`, never as an
-      assertion in a document.
-      **Deps:** 4.4, 3.2 · **M**
-
-### **Checkpoint · M1** (end of this week)
-
-- [ ] A system of record for 1,500 units; every value traces to the paper it came from
-- [ ] Policy cases 1, 2 and 3 green, each having been red first; both grep guards live
-- [ ] Meta verification landed or its status confirmed on the asks slide
-- [ ] The three success numbers agreed with the client, not proposed
-- [ ] Weeks 5–8 decomposed to slice level in [roadmap.md](roadmap.md) before week 5 starts
-- [ ] UI-pass decision: whether week 2 and 3 interface comments earn a slice of their own
+- [ ] **5.8 — The settings screen — A9, delivered.** A9 has been true of the mechanism since week 3
+      and false of the hand on it. **One screen, one pattern, both catalogues** — `ObligationType`
+      and `DocumentType` — and `asset_type` deliberately absent, because the asset register's kinds
+      are estate's and not a setting. Inherits ADR-0003's question of **who may change a reference**:
+      pointing production at a different secret is a privileged act even when the value never
+      appears.
+      **Done when:** an `ObligationType` and a `DocumentType` are each added through the screen with
+      no release and no migration, by an operator whose role permits it; and `asset_type` is not on
+      it.
+      **Verify:** add one of each on staging; a role without the permission is refused with
+      `not_allowed`; grep the screen for `asset_type` and find nothing.
+      **Deps:** 5.1, 5.7 · **M**
 
 ---
 
-**Cut line, in order:** 4.5 (blocked on the corpus — say so at freeze rather than stretching the
-week); then 4.8's queue chrome (the policy case is what matters); then 4.7 if A2 already travels the
-addendum path. **Do not cut 4.1, 4.2, 4.3, 4.6 or 4.4** — those are the demo.
+**Cut line, in order:** **5.8** first — the catalogue keeps its seed for another week, which is the
+honest state it has been in since week 3 and not a regression. Then **5.7** — obligations slide into
+week 6, which is lighter. **Never 5.1 or 5.2**: every week after this one assumes the session, and a
+week 6 that starts without it inherits an unauthenticated console with a responsibility matrix
+behind it.
+
+**M2 is at the end of week 8**, not this week. Its boxes: the console usable on its own · all five
+policy cases green, each red first · weeks 9–12 decomposed before week 9's Monday.

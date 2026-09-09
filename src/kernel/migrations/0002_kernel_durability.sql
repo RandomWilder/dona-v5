@@ -76,8 +76,8 @@ CREATE INDEX IF NOT EXISTS scheduled_work_due ON scheduled_work (run_at) WHERE d
 
 -- SPEC.md rule 8 -- a tunable is a row, never a constant. jsonb rather than text so a value keeps
 -- its type: 1536 comes back a number, not a string every reader has to parse. The admin screen for
--- these is month two; until then a row is changed by hand, which is the honest state rather than a
--- hidden one (SPEC-kernel.md, "Settings").
+-- these is month two -- slice 5.8; until then a row is changed by hand, which is the honest state
+-- rather than a hidden one (SPEC-kernel.md, "Settings").
 CREATE TABLE IF NOT EXISTS config_settings (
   key text PRIMARY KEY,
   value jsonb NOT NULL,

@@ -263,7 +263,10 @@ id — and every input is validated rather than sanitised, because a builder tha
 into a path segment *is* the transliteration collision the convention exists to prevent. **The
 application cannot destroy a signed contract, and that holds twice**: `ObjectStore` has no `delete`
 and the runtime account has `objectViewer` + `objectCreator` and not `objectAdmin`. A human with
-project editor still can, which is 1.5's observation and now a week-6 item with an owner.
+project editor still can, which is 1.5's observation and is now **slice 8.4** — the IAM pass in the
+week whose demo is trying to break isolation. 3.2 measured the window that stands between such a
+human and a loss: versioning plus an explicit seven-day soft-delete leaves a recoverable noncurrent
+version, so the true sentence is *removed with seven days to undo it*, not *destroyed*.
 **The seven policy cases stopped reporting pending at 2.2 and now assert**: the last two relations
 `src/scope/`'s join reads landed with that migration, and `tests/policy/relations.test.ts` fails the
 build if any case takes the pending branch again, because a case that stopped reporting pending and
