@@ -135,8 +135,11 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       `mfa_required` and no token — and that run found two defects the fake could not have
       (`x-goog-user-project` on the admin call, `displayName` on enrolment), both now pinned as
       tests. `bootstrap.sh`'s config step was silently failing on a wrong enum name and now reads
-      the config back and exits 1 if it did not take. **What remains is a human signing in on the
-      staging URL as themselves**, which is the director's and is written out in the evidence file.
+      the config back and exits 1 if it did not take. Staging serves `dc45dff` on revision
+      `dona-staging-00056-kvp` with `identity: identity-platform:dona-v5` on its boot line;
+      `/staff/login` answers 200 with no script and `/staff` redirects without a cookie.
+      **What remains is a human signing in on the staging URL as themselves**, which is the
+      director's — two commands, in the evidence file.
       *Original entry:* Identity Platform with
       **enforced MFA**, an invite flow, and `src/staff/` — the admin edge, not a domain module; it
       owns none of E1–E16. **The role matrix is code, not a config row**, a deliberate exception to
