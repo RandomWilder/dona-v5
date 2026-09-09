@@ -121,8 +121,9 @@ orchestrates; it never holds the credential. See `.github/workflows/deploy.yml`.
 back; a row of the **wrong type** raises `invalid`, because somebody edited it by hand and reading
 past that would apply a setting nobody intended.
 
-No admin screen yet; that is month two's settings screen. Until then a row is changed by hand, which
-is the honest state rather than a hidden one.
+No admin screen yet; that is month two's settings screen — **slice 5.8** since 9 Sep 2026, with the
+`ObligationType` and `DocumentType` catalogues whose pattern it shares. Until then a row is changed
+by hand, which is the honest state rather than a hidden one.
 
 ### The dimension is config *and* schema, and the reader says so
 

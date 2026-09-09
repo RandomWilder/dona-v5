@@ -5,8 +5,10 @@
 > [pipeline.md](../docs/pipeline.md) §8. Decisions, risks and open questions are in
 > [plan.md](plan.md).
 >
-> **Weeks 1–4 are at slice level with acceptance criteria. Weeks 5–16 are at week level** — each
-> monthly gate hands the next month its detail, which is what M1–M4 are for.
+> **Weeks 1–8 are at slice level with acceptance criteria. Weeks 9–16 are at week level** — each
+> monthly gate hands the next month its detail, which is what M1–M4 are for. Weeks 5–8 gained theirs
+> at the M1 checkpoint on **9 Sep 2026**; the month-two table below them is the plan of record and
+> was not rewritten to make room for it.
 >
 > Every slice: one focused session, half a day or less. **Done when** is the acceptance bar;
 > **Verify** is the command or check that proves it — no self-certification. Sizes are S / M / L.
@@ -1076,8 +1078,11 @@ Document search and the documents panels on the building and unit screens, group
 
 ## Week 4 · Sun 27 Sep – Thu 1 Oct — The machine reads a lease, and shows its work → **M1**
 
-> **Started 2026-09-07**, the day week 3 closed, rather than on the planned 27 Sep. The planned
-> dates above are not rewritten.
+> **Started 2026-09-07**, the day week 3 closed, rather than on the planned 27 Sep. **Closed
+> 2026-09-09** ([evidence/week-4.md](evidence/week-4.md)): **nine slices closed** — 4.1–4.4, 4.6,
+> 4.6a, 4.6b, 4.7, 4.8 — and **4.5 cut and travelling** with F6 (see its entry below). M1 reached on
+> five of its six boxes; the sixth is the director's. The planned dates above
+> are not rewritten; the gap — three calendar weeks ahead — is the record of how the project ran.
 
 **Demo kind:** Software, with an Evidence number attached · **You show:** drop in a real Hebrew lease.
 Rent, dates, parties and clauses appear as fields. Click any value and the page image scrolls to the
@@ -1206,6 +1211,18 @@ not the scans, the handwriting or the signatures (A7; the controls for tier 2 we
 - **Verify:** the run is reproducible from a script, and the numbers are in `tasks/evidence/`, never
   in a document as an assertion.
 - **Deps:** 4.4, 3.2 · **Size:** M
+- **CUT 2026-09-09 at week 4's close — cut, not silent, and travelling rather than deleted.** The
+  reason is entirely external and was known before the week started: the tier-2 corpus waits on
+  **F6**, whose burn time belongs to the director and to counsel. Nothing engineering owed this slice
+  was missing — 1.12 built every control and 4.1–4.4 built the whole read path it would measure.
+  **It travels to pilot preparation**, which is the same treatment **2.5** took with F3 and **3.4**
+  took with F4: a slice blocked on a burn time we do not control moves to the step where its fuse
+  lands, instead of being held open against a week that has closed or being restated each week as
+  though restating moved it. **Bounded by week 12**, the pilot cutover — the accuracy number decides
+  how much human review the backfill needs, so it must exist before the backfill and the backfill
+  must exist before the pilot. Until then, waiting costs nothing; after that it costs the pilot.
+  **Not cut from the week for room** — the M1 checkpoint's other five boxes were reached and this one
+  was declared blocked at the Sunday that opened the week, not discovered at the freeze.
 
 ### Slice 4.6 — A2: a lease establishes a draft tenancy
 Extract → propose → **confirm** → write. Unit, dates, and every tenant named on the lease (two
@@ -1273,11 +1290,27 @@ first — never a NOT NULL**.
   removes the row.
 
 ### **Checkpoint · M1**
-- [ ] A system of record for 1,500 units; every value traces to the paper it came from
-- [ ] Policy cases 1, 2 and 3 green, each having been red first; both grep guards live
-- [ ] Meta verification landed or its status confirmed on the asks slide
-- [ ] The three success numbers agreed with the client, not proposed
-- [ ] Weeks 5–8 decomposed to slice level, in this file, before week 5's Monday
+**Reached 2026-09-09 on five of six. The sixth is the director's and does not block week 5**
+([evidence/week-4.md](evidence/week-4.md)).
+- [x] A system of record for 1,500 units; every value traces to the paper it came from — volume at
+      2.6 (1,500 units, 0 rejected, from a *generated* register — 2.5 travelled with **F3**),
+      provenance at 4.2 → 4.4
+- [x] Policy cases 1, 2 and 3 green, each having been red first; both grep guards live — **450 code +
+      41 hooks + 47 policy, 0 failed**, and the guards are now **three**, not the two this box was
+      written against
+- [x] Meta verification landed or its status confirmed on the asks slide — **status confirmed, not
+      landed.** F1 is in progress on the correct legal entity and its burn window (18 Sep – 2 Oct)
+      has not opened. The box asks for either, and this is the honest one
+- [ ] The three success numbers agreed with the client, not proposed — **the director's, and the one
+      box month one did not reach.** It does not block week 5; it blocks the M3 go/no-go, which is
+      the decision those numbers exist to make
+- [x] Weeks 5–8 decomposed to slice level, in this file, before week 5's Monday — **25 slices**,
+      done 9 Sep, above
+- [x] UI-pass decision: whether weeks 2 and 3's interface comments earn a slice — **decided: no.**
+      Parked twice, raised here as the checkpoint requires, and closed. Nothing raised was a
+      correctness, isolation or data question, and week 5 puts every one of those screens behind a
+      session and may change what they show — a design pass run now would be run against screens
+      that are about to change shape. Reconsidered at **M2**, when the console is the product
 
 ---
 
@@ -1294,6 +1327,383 @@ first — never a NOT NULL**.
 | **7** | Software | **A ticket, start to finish, by hand.** Walk the canonical states in the console — NEW · IDENTIFIED · TRIAGED · RESPONSIBILITY SET · WINDOWS COLLECTED · OFFERED · SCHEDULED · CLOSED — plus the three exits. Watch the SLA clock run and the escalation fire. No WhatsApp, no agent. | `calls` module: state machine · SLA policies · timers · escalation · **the emergency bypass, live and tested here** because it must exist before the agent takes its first real message in week 10 · **owed by 1.7:** the bypass is a policy case too — an emergency category routes to the duty phone **with no model call in between**, which is deterministic and therefore never an eval · **the async negotiation engine starts and runs underneath for six weeks** | W6 |
 | **8** | Evidence | **Try to break tenant isolation, live.** Query as one tenant's phone and attempt to reach another tenant's documents, unit or history — through the console, through the API, and by asking the model. Every path returns nothing. | Policy suite cases 4 and 5 (`UNIT` is the only kind that can be the tenant's; a live warranty moves responsibility to the contractor, and re-resolving after a policy change still returns the snapshot) · `national_id` unreachable by any agent tool · audit on every scoped read · **owed by 1.5 and unblocked by 1.6:** the deploy accounts hold `run.admin` at *project* level because scoping it per service was impossible before a service existed — the Cloud Run services exist now, so bind it per service · **owed by 1.5, raised again and given an owner at 3.2:** the docs buckets' legacy `projectEditor` / `projectOwner` bindings carry `legacyObjectOwner`, which includes delete. 3.2 proved the *application* cannot destroy a signed contract — no `delete` on the port, no `objectAdmin` on the runtime account — and a human with project editor still can. 3.2's staging verification then measured that exposure instead of leaving it unbounded: the probe object was removed by hand by exactly such a human, and versioning plus the explicit seven-day soft-delete window left a recoverable noncurrent version rather than a hole. Seven days of grace is not a control and the binding still has to go, but this week is closing a known window and not an open one. It is inherent to a GCS bucket in a project with basic roles rather than a choice `bootstrap.sh` made, so removing it is the same pass as the `run.admin` scoping above and belongs in the week whose demo is *try to break isolation* · **owed by 1.6:** bump the four Node-20 GitHub actions (`checkout@v4`, `setup-node@v4`, `google-github-actions/auth@v2`, `setup-gcloud@v2`), which every run annotates as deprecated · **owed by 1.10, in the same pass:** `release.yml` gains the `docker image inspect` size line `deploy.yml` already has | W7 |
 
+## Week 5 · Sun 4 – Thu 8 Oct — Paper becomes truth
+
+> **Decomposed 9 Sep 2026** at the M1 checkpoint, from the week-5 row above. That row is the plan of
+> record and is not rewritten; what follows is its detail, and every sentence of it that named an
+> obligation now names the slice that discharges it.
+
+**Demo kind:** Real data · **You show:** an amendment arrives for a real unit; the tenancy updates,
+and the change log records old → new, who approved it, and which document caused it. Then a tenancy
+ends because a date passed, with no document at all. **Depends on:** W4 · **Governed by:** A9 — the
+catalogue has been dynamic since week 3 and this is the week its screen arrives.
+
+> **This week discharges five weeks of "until week 5", which is why it carries two L slices.** The
+> five screens have been unauthenticated since week 1 — deliberately, on fixture data, and stated in
+> six files rather than hidden in one. The cost of having deferred it honestly instead of
+> half-building it is that the session, the CSRF token, the per-caller bound, `uploaded_by`, signed
+> URLs and the name-showing rule all come due in the same week. **Cut line, in order:** 5.8 first
+> (the catalogue keeps its seed for another week), then 5.7 (obligations slide into week 6, which is
+> lighter). **Never 5.1 or 5.2** — every week after this one assumes the session.
+>
+> **Open question 2 is not this week's to close, and that is a change from the row above.** The row
+> promises week 5 settles *how many `terms_profile`s are in force*, which sizes week 6. But the
+> answer surfaces from the **real** register, and 2.5 travelled to pilot preparation with **F3**;
+> 4.6b already ruled that an empty dropdown on staging is answered by importing the register and
+> never by seeding a fake annex. So the question is **F3-blocked, not week-5-blocked**. If F3 has
+> not burned by this week's freeze, week 6 is sized on the client's answer to a question rather than
+> on measured data, and that is the fact to put on the asks slide rather than a number nobody
+> measured.
+
+### Slice 5.1 — Staff identity, the session, and the role matrix in code
+Identity Platform with **enforced MFA** and an invite flow, lifted from v3 and extended
+([docs/from-v3.md](../docs/from-v3.md) Tier 2). `src/staff/` is the admin edge and not a domain
+module: it owns no entity of E1–E16. **The role matrix is code, not a config row** — a deliberate
+exception to *policies are data*, because an access-control matrix that a database write could widen
+is a privilege-escalation path wearing the clothes of a setting. Sessions store `token_hash` and
+never the token. The refusal says `not_allowed` and nothing more.
+- **Done when:** a named operator signs in with a second factor and holds a session; an account
+  without a role is refused with `not_allowed` and no other detail; and no token value exists
+  anywhere in the database.
+- **Verify:** sign in on staging with MFA enforced, not offered; assert in a test that the stored
+  hash is not the cookie; a role-less account is refused on every route with the same message.
+- **Owed by 1.5 — `infra/bootstrap.sh` deliberately creates no staff seed secrets**, because a
+  generated credential that nothing reads and no rotation flow owns is worse than an absent one. The
+  slice that builds the mechanism creates exactly what the mechanism needs, and `bootstrap.sh` gains
+  those lines here rather than having held a placeholder since week 1.
+- **Deps:** none · **Size:** L
+
+### Slice 5.2 — The screens go behind the session, and the write route gets a token that means something
+`/`, `/estate`, `/estate/buildings/:id`, `/estate/search` and `/estate/expiring` have served
+unauthenticated since week 1, widened at 2.6 when the register arrived and again at 3.3 by two
+*write* routes, `GET /documents/new` and `POST /documents`. **Both halves land in one change:** the
+session, and the CSRF token that then defends something. A token defends a session's authority and
+there was none, so an earlier token would have defended nothing while looking like protection. **And
+the bound that none of 3.3's bounds are:** one file, 20 MB and four sniffed kinds bound a *request*,
+and nothing bounds a *caller*, so an anonymous poster can fill a versioned bucket the application is
+built to be unable to empty. A **per-caller** limit is the second half of the same change, and it
+belongs to the first slice that has a caller. The root index moves from `src/estate/` to the
+composition root here, because this is the week a second *module* has a screen and an index of
+screens is not estate's fact.
+- **Done when:** none of the seven routes answers without a session; a POST carrying a valid session
+  and no token is refused; an authenticated caller is bounded on upload **count** as well as size;
+  and `src/estate/` no longer owns the root index.
+- **Verify:** unauthenticated GET on all five read routes refused; POST with session and no token
+  refused; the cap+1 upload from one session refused; `tests/ui/tokens.test.ts` still asserts from
+  outside, and week 5's screens are appended to its `SCREENS` registry rather than a second copy of
+  the guard being made.
+- **This is the slice that may lift the never-a-name rule.** Every screen shows a state and a count
+  and never a name — the occupancy chip, and a search covering buildings and units and never
+  `party`. Behind a session a name may become lawful to show. **Lifting it is a decision this slice
+  records, and keeping it is equally an answer**; what is not allowed is the rule lapsing because a
+  session arrived.
+- **Deps:** 5.1 · **Size:** L
+
+### Slice 5.3 — `national_id` is unreachable by any agent tool
+- **Done when:** a policy case in `tests/policy/` fails against a tool response shape carrying
+  `national_id` and passes when it does not.
+- **Verify:** committed red, then green, in that order.
+- **Owed by 1.7, restated at 2.1, in [SPEC-parties.md](../SPEC-parties.md) and in
+  `0006_parties.sql`** — that the number never appears in an agent tool's response shape is
+  deterministic, so it is a policy case and never a review and never an eval. Week 5 owns it because
+  this is the week a staff surface exists that could leak it.
+- **Deps:** 5.1 · **Size:** S
+
+### Slice 5.4 — What the session unlocks in evidence: `uploaded_by`, signed URLs, and the supersession question re-asked
+Three items held for the same reason and released by the same fact. **`uploaded_by`** could have held
+only a placeholder until an authenticated actor existed, and a provenance column holding a
+placeholder for six weeks is worse than one that arrives with the identity it names; it is a nullable
+`ADD COLUMN` the moment one does. **A signed URL is a bearer token for one object** — whoever holds
+the string reads the document, isolation join or not — so minting one is a decision that belongs
+behind a session, which is why 3.2 and 3.6 both declined to. And **`superseded_by` is re-asked, not
+re-opened**: 3.1 ruled that [SPEC-flows.md](../SPEC-flows.md) invariant 2 already made supersession a
+fact about *values*, and that a genuinely re-issued document is answered by `valid_from`/`valid_to`.
+This is the amendment week, so what it puts to that ruling is whether promotion at scale finds a case
+the ruling does not cover. **A ruling that survives is recorded as having survived, with the volume
+that tested it.**
+- **Done when:** every document filed after this slice names its uploader; the documents panel serves
+  a signed URL where it rendered a `gs://` string as text; and `superseded_by` either exists with the
+  case that forced it or is recorded as still unnecessary against a stated number of promotions.
+- **Verify:** a filed document's `uploaded_by` is the signed-in operator; the URL expires and a
+  stale one is refused; the supersession answer cites a count, not a view.
+- **Deps:** 5.1, 5.2 · **Size:** M
+
+### Slice 5.5 — Promotion at scale, and the amendment that changes a real unit
+The demo's first half, and the reconciliation underneath it. `applyPromotedField` and `TenancyEvent`
+landed at 4.3 against one document at a time; this is where they meet a portfolio. **Cross-tenancy
+party identity gets its ruling here**: [SPEC-flows.md](../SPEC-flows.md) A2 step 5 deliberately
+forbids matching a name across tenancies and defers the question to "month two" without naming a
+week — and month two is now four named weeks, so it is named. Matching people is a privacy decision
+before it is a data-quality one, and the duplicate count is what should provoke it rather than the
+convenience of a join.
+- **Done when:** an amendment promoted against a real unit changes the tenancy and appends an event
+  naming the operator and the source document; and the cross-tenancy identity question has a written
+  ruling citing the duplicate-party count that provoked it.
+- **Verify:** read the change log back for one unit — old → new, actor, document, in order; A2 step
+  5's prohibition still holds, or its replacement is a policy case written red first.
+- **Deps:** 5.4 · **Size:** M
+
+### Slice 5.6 — A tenancy ends because a date passed, with no document at all
+Clock-driven `TenancyEvent` kinds. `0019_tenancy_event.sql` makes `source_document_id` NOT NULL for
+`amended`, because a promotion that changed a value without naming the paper is exactly the claim
+this system exists to refuse. `terminated` has no paper by construction — the lease ran out — so the
+column relaxes **for that kind only, by CHECK, and never by dropping the constraint**. `at` comes
+from the injected clock and there is no `DEFAULT now()`, which is what makes this demonstrable in a
+room rather than only true in November.
+- **Done when:** advancing the injected clock past an `ACTIVE` tenancy's `end_date` terminates it and
+  appends `terminated` with a null document — and an `amended` event with a null document is still
+  rejected by the database.
+- **Verify:** both directions in one test. The demo runs off the injected clock, on staging, with the
+  date said out loud.
+- **Deps:** 5.5 · **Size:** M
+
+### Slice 5.7 — Obligation and ObligationType — E9 and E10
+The last two entities month one deferred. `ObligationType` is an admin-managed catalogue,
+**deactivated never deleted**, with `responsible_party` **copied onto the obligation at creation** so
+that editing the catalogue cannot rewrite history — foundation rule 8, and the same shape as
+`FieldPromotion`'s snapshot of who approved a copy.
+- **Done when:** an obligation carries its own `responsible_party`, and editing or deactivating its
+  type afterwards changes nothing the obligation says.
+- **Verify:** create, edit the type, read the obligation back unchanged; a DELETE on a type is
+  refused.
+- **Deps:** 5.6 · **Size:** M
+
+### Slice 5.8 — The settings screen — A9, delivered
+A9 has been true of the mechanism since week 3 and false of the hand on it: types are rows added with
+no release, and *we* have been adding them by seed. This is the screen. **One screen, one pattern,
+both catalogues** — `ObligationType` and `DocumentType` — and `asset_type` deliberately absent,
+because the asset register's kinds are estate's and not a setting. It inherits
+[ADR-0003](../docs/decisions/ADR-0003-api-keys-stay-in-secret-manager.md)'s question of **who may
+change a reference**: pointing production at a different secret is a privileged act even when the
+value never appears.
+- **Done when:** an `ObligationType` and a `DocumentType` are each added through the screen with no
+  release and no migration, by an operator whose role permits it; and `asset_type` is not on it.
+- **Verify:** add one of each on staging; a role without the permission is refused with
+  `not_allowed`; grep the screen for `asset_type` and find nothing.
+- **Deps:** 5.1, 5.7 · **Size:** M
+
+---
+
+## Week 6 · Sun 11 – Thu 15 Oct — Who pays for this, and why
+
+> **Decomposed 9 Sep 2026**, from the week-6 row above.
+
+**Demo kind:** Software · **You show:** pick a category and a unit; get tenant / operator /
+contractor with the clause and the policy version behind it. Then edit the table live and watch the
+answer change. **Depends on:** W5, 3.5 · **Sized by** open question 2, which 5's header note now
+places behind **F3**.
+
+> **`src/policy/` starts here and not before.** 4.8's completeness case lives in the policy *suite*
+> and does not start the module ([SPEC-policy.md](../SPEC-policy.md)); it moves into the module this
+> week. **Policy cases 4 and 5 are written and go green here**, with the tables that make them
+> possible. Week 8's row lists them too, and that is sequence rather than duplication: week 6 writes
+> them, week 8 attacks them.
+
+### Slice 6.1 — `src/policy/`, and the responsibility matrix as versioned rows
+**Responsibility is ternary** — tenant / operator / contractor — because of תקופת הבדק, and a binary
+model of it is wrong in a way that is expensive to discover later. Rules supersede by
+`effective_from` and **never overwrite**, which is the same shape as `valid_from`/`valid_to` on a
+document and `TenancyEvent` beside a mutable row: the current answer is a query, and the old answer
+is still there.
+- **Done when:** a rule superseded by a later `effective_from` is still readable, and no write path
+  updates a rule in place.
+- **Verify:** an UPDATE on a rule is refused; two rules with different `effective_from` both exist
+  and the resolver picks by date.
+- **Deps:** 5.8 · **Size:** L
+
+### Slice 6.2 — Resolution, with the version that decided it
+A category and a unit yield a party, the clause behind it, and a **snapshotted `policy_version_id`**.
+**Re-resolving after the policy changes must still return what the snapshot says** — the same rule as
+`FieldPromotion`'s promoter and `ObligationType`'s `responsible_party`, for the third time in three
+weeks, because it is the same rule.
+- **Done when:** a resolution stamps its version; changing the matrix afterwards does not change what
+  that resolution answers.
+- **Verify:** resolve, change the matrix, re-read the stored resolution; the answer is the old one
+  and it names why.
+- **Deps:** 6.1 · **Size:** M
+
+### Slice 6.3 — `asset_in_warranty`, and the third leg of the ternary
+Fed by week 3's asset register (3.5), seeded from handover protocols. This is what makes
+responsibility ternary rather than a table with two columns.
+- **Done when:** an asset inside its warranty period moves responsibility to the contractor, from
+  data, with no code branch naming a building.
+- **Verify:** flip one asset's warranty dates and watch the resolved party change.
+- **Director's, and it decides the demo:** **open question 4** — are the Shoham buildings still
+  inside תקופת הבדק ([plan.md](plan.md))? A live case is a much better demo than a synthetic one,
+  and either is a correct slice. Asked at week 5's demo so week 6 knows which it is showing.
+- **Deps:** 6.2, 3.5 · **Size:** M
+
+### Slice 6.4 — Policy case 4, red first — `UNIT` is the only space kind that can ever be the tenant's
+- **Done when:** the case fails against a resolver that will answer for a `COMMON` or `SERVICE`
+  space, and passes when it will not.
+- **Verify:** committed red, then green.
+- **Owed by 1.7.** The pending mechanism has existed since week 1 precisely so this could be written
+  before its table did.
+- **Deps:** 6.2 · **Size:** S
+
+### Slice 6.5 — Policy case 5, red first — a live warranty moves responsibility, and the snapshot still answers
+- **Done when:** the case covers both halves — the warranty changes the answer, and a resolution
+  taken before a policy change still returns the old answer afterwards.
+- **Verify:** committed red, then green.
+- **Owed by 1.7.**
+- **Deps:** 6.3 · **Size:** S
+
+### Slice 6.6 — The matrix, edited live
+The half of the demo that lands in the room, built on 5.8's screen pattern rather than a second one.
+- **Done when:** the matrix is edited in front of the client and the resolved answer changes, while a
+  resolution taken thirty seconds earlier still reads the same.
+- **Verify:** demonstrated live on staging, both halves in one sitting.
+- **Deps:** 6.5, 5.8 · **Size:** M
+
+---
+
+## Week 7 · Sun 18 – Thu 22 Oct — A ticket, start to finish, by hand
+
+> **Decomposed 9 Sep 2026**, from the week-7 row above.
+
+**Demo kind:** Software · **You show:** walk the canonical states in the console — NEW · IDENTIFIED ·
+TRIAGED · RESPONSIBILITY SET · WINDOWS COLLECTED · OFFERED · SCHEDULED · CLOSED — plus the three
+exits. The SLA clock runs and the escalation fires. **No WhatsApp, no agent. Depends on:** W6.
+
+> **The agent arrives in month three without changing any of this**, which is the whole point of
+> building it agent-free. And **R5's six-week band opens here**: `WINDOWS COLLECTED → OFFERED` is
+> roughly seventy percent of the engineering and it photographs badly, so it runs underneath weeks
+> 7–12 and gets a standing *what's underneath* line in every demo rather than a week of its own.
+
+### Slice 7.1 — ServiceCall, Visit, and the state machine
+Eight canonical states and three exits. **The machine is deterministic and no model decides a
+transition** — in month three the agent will propose and this machine will still decide.
+- **Done when:** every legal transition is a row the code checks, and an illegal one is refused by
+  the database rather than by a branch.
+- **Verify:** attempt each illegal transition; each is refused. The three exits are reachable.
+- **Deps:** 6.6 · **Size:** L
+
+### Slice 7.2 — The console: walk it by hand
+- **Done when:** one call goes NEW → CLOSED entirely by clicking, with no seed and no SQL.
+- **Verify:** done live on staging, in front of the room.
+- **Deps:** 7.1 · **Size:** M
+
+### Slice 7.3 — SLA policies and timers, off the injected clock
+Thresholds are policy rows (week 6's module), not constants. `at` comes from the injected clock and
+there is no `DEFAULT now()` — the same rule as `tenancy_event`, and for the same reason: a clock a
+test cannot move is a demo nobody can give.
+- **Done when:** advancing the clock breaches an SLA and the breach is visible without waiting.
+- **Verify:** the demo runs on an advanced clock, and the threshold that fired is read from a policy
+  row.
+- **Deps:** 7.1, 6.1 · **Size:** M
+
+### Slice 7.4 — Escalation
+- **Done when:** a breached SLA escalates by rule, to a named recipient, and the escalation is on the
+  audit trail.
+- **Verify:** watched firing in the demo; the trail read back afterwards.
+- **Deps:** 7.3 · **Size:** M
+
+### Slice 7.5 — The emergency bypass, live and tested
+An emergency category routes to the duty phone **with no model call in between**. It is a **policy
+row plus a routing rule**, never a priority label — a label is something a model can get wrong and a
+route is not.
+- **Done when:** a policy case, red first, fails if any model call can sit between an emergency
+  category and the duty phone.
+- **Verify:** committed red, then green, in `tests/policy/`. Deterministic, therefore never an eval.
+- **Owed by 1.7, and dated by week 10** — this must exist before the agent takes its first real
+  tenant message, which is why it is built in a week with no agent in it.
+- **Deps:** 7.4 · **Size:** M
+
+### Slice 7.6 — The negotiation engine's first stones
+`WINDOWS COLLECTED → OFFERED` becomes an explicit two-sided asynchronous state with **no counterparty
+channel yet** — the provider side arrives at week 11. What lands here is the state, the timers it
+needs, and the shape that six weeks of work will fill.
+- **Done when:** a call can sit in `WINDOWS COLLECTED` with an offer outstanding, a timeout pending
+  and no second party reachable, and nothing in the machine assumes anyone is online.
+- **Verify:** named on the demo's *what's underneath* line, with what exists and what does not.
+- **Deps:** 7.1 · **Size:** M
+
+---
+
+## Week 8 · Sun 25 – Thu 29 Oct — Try to break tenant isolation, live → **M2**
+
+> **Decomposed 9 Sep 2026**, from the week-8 row above. **One item was added that the row does not
+> carry** — see 8.1.
+
+**Demo kind:** Evidence · **You show:** query as one tenant's phone and try to reach another tenant's
+documents, unit and history — through the console, through the API, and by asking the model. Every
+path returns nothing. **Depends on:** W7.
+
+> **8.1 is not in the row above, and it is the largest thing in month two.** Redaction at the
+> provider boundary is decision 2 of
+> [ADR-0004](../docs/decisions/ADR-0004-personal-data-reaches-the-model-provider.md), which left it
+> as "its own slice in month one or riding with 4.2" and said it **must land before week 10**. Month
+> one is closing without it, and week 10 puts a tenant's own question and their own lease through a
+> model call. Month two is therefore the last container, and this week is the one whose demo already
+> asks the model to break isolation. **It goes first in the week, not last**, because it is the only
+> item in month two with a deadline the project does not control.
+
+### Slice 8.1 — Redaction at the provider boundary
+An identifier-shaped run is masked in the copy sent to the embedder and the extractor, and **never in
+the copy stored**. Measured on a real contract at v3, 19 of 211 indexed chunks mentioned ת״ז inside
+numbered annex clauses; excluding the cover page removes the densest chunk and not the category.
+**It needs its own golden cases:** masking must not change which clause answers a question, and that
+is a claim the eval suite makes rather than a claim this file makes.
+- **Done when:** no identifier-shaped run leaves for a provider, the stored copy is byte-identical to
+  what was filed, and the golden set is green **at or below** its existing threshold with masking on.
+- **Verify:** the full golden set, before and after, with the ratchet unchanged; a contract test
+  asserts the stored bytes are unmasked and the outbound payload is not.
+- **Deps:** none in month two · **Size:** L
+- **Dated externally by week 10.** If it slips it slips into week 9 and no further, and that is a
+  fact for the asks slide the day it looks likely rather than the day it happens.
+
+### Slice 8.2 — Audit on every scoped read
+- **Done when:** no read that crosses `src/scope/` completes without an audit line naming who asked
+  and what for.
+- **Verify:** a contract test that a scoped read with auditing disabled fails rather than proceeds
+  quietly.
+- **Deps:** 7.6 · **Size:** M
+
+### Slice 8.3 — Workflow hygiene
+Bump the four Node-20 GitHub actions — `checkout@v4`, `setup-node@v4`,
+`google-github-actions/auth@v2`, `setup-gcloud@v2` — which every run has been annotating as
+deprecated since week 1. In the same pass, `release.yml` gains the `docker image inspect` size line
+`deploy.yml` already has.
+- **Done when:** a full CI + deploy run annotates no deprecation, and a release prints its image
+  size.
+- **Verify:** one green run of each workflow, with the annotations gone.
+- **Owed by 1.6 and 1.10.**
+- **Deps:** none · **Size:** S
+
+### Slice 8.4 — The IAM pass
+Two bindings, one pass, in the week whose demo is trying to break isolation. **`run.admin` is bound
+per service**: the deploy accounts hold it at *project* level because scoping it per service was
+impossible before a service existed, and the services exist now. **The docs buckets' legacy
+`projectEditor` / `projectOwner` bindings carry `legacyObjectOwner`, which includes delete.** 3.2
+proved the *application* cannot destroy a signed contract — no `delete` on the port, no `objectAdmin`
+on the runtime account — and a human with project editor still can. 3.2 then measured that exposure
+rather than describing it as unbounded: the probe object was removed by hand by exactly such a human,
+and versioning plus the explicit seven-day soft-delete window left a recoverable noncurrent version
+rather than a hole. **The claim is not that a human with project editor can destroy a signed
+contract; it is that they can remove one and have seven days to undo it.** Seven days of grace is not
+a control and the binding still goes, but this slice closes a known window and the evidence carries
+its size.
+- **Done when:** neither deploy account holds `run.admin` at project level, and neither docs bucket
+  carries a `legacyObjectOwner` binding — with a deploy run after both, proving the pipeline still
+  works.
+- **Verify:** `gcloud` policy read on both, before and after, in the evidence file; then a full
+  deploy.
+- **Owed by 1.5, raised again and given an owner at 3.2.** Two files still schedule these in week 6
+  — `SPEC.md` and `infra/bootstrap.sh` — against five that say week 8; both are corrected to point
+  here.
+- **Deps:** 8.3 · **Size:** M
+
+### Slice 8.5 — The attack — three paths, and every one returns nothing
+The demo. Policy cases 4 and 5 have been green since week 6; this week attacks them rather than
+writes them.
+- **Done when:** as one tenant's phone, another tenant's documents, unit and history are unreachable
+  through the console, through the API, and by asking the model — and `national_id` is unreachable by
+  any agent tool (5.3, attacked here).
+- **Verify:** performed live, all three paths, in front of the room, off staging.
+- **Deps:** 8.1, 8.2, 8.4, 6.5 · **Size:** M
+
+---
+
 ### **Checkpoint · M2**
 - [ ] The console is usable on its own — if the agent were cancelled tomorrow, this is still a product
 - [ ] All five policy cases green, each red first; the two extra constraints covered
@@ -1308,7 +1718,7 @@ first — never a NOT NULL**.
 | **9** | Software | **Message the number from your own phone.** It replies with your name, your unit and your tenancy — after a one-time code delivered through WhatsApp itself. | `channel` module: Cloud API webhooks both directions · phone → party binding through `src/scope/` · Conversation and Message tables · **OTP over WhatsApp first, SMS only as fallback** (Twilio closed and working; Hebrew is missing from Verify's default locales — needs custom templates or an Israeli fallback)  · **owed by 3.1 — `tenant_visible`, and the only form it may take.** E12 deliberately carries no per-row visibility boolean: what a tenant may see is derived from `document_link` through `src/scope/`, and a boolean beside the isolation join is a second access control of exactly the shape foundation rule 1 forbids — a model cannot widen a scope it never held, but it can be handed a row whose boolean somebody flipped. If this week finds a class of document that must stay admin-only *inside its own tenancy*, it belongs on the **type** — one row, one rule, readable — and never on each document | **Meta verification** · W8 |
 | **10** | Software | **"Who fixes my dripping tap?"** A tenant describes a fault in plain Hebrew; the agent triages, answers from their own lease and the knowledge base, and either resolves it or opens a ticket. | Tenant-facing agent, scoped tools only · retrieval over the tenant's own documents and the global knowledge base · the golden set grows from three cases toward fifty · **owed by 1.8:** `evals/subject.ts` is a placeholder and `runCases` takes a `Subject`, so the real agent replaces it in one line — and this week owns `evals/corpus.ts`'s placeholder `ground()` and its `groundingCutoff`, because the refusal rule belongs to `channel` and one threshold is not enough (1.8 measured a policy section 0.0017 from the cutoff on a repair question) · when a real chunked lease exists, point the corpus at the real retrieval path and let the ratchet move **down** · **the agent reads the responsibility matrix; it never decides responsibility** · no prices, ever | W9 |
 | **11** | Software | **Both sides of the switchboard.** Two phones on the table: tenant reports, agent collects windows, agent WhatsApps a provider with address and slots, provider counter-proposes, tenant accepts, visit booked. Neither human sees an app. | The hard part surfacing: `WINDOWS COLLECTED → OFFERED` is two-sided asynchronous negotiation — **roughly seventy percent of the engineering lives between those two states** · provider-side thread bound to the same ServiceCall · timeouts, retries, no delivery guarantee | W10 · in-house crew availability (question 5) |
-| **12** | Evidence | **Live, with real tenants and real tradesmen.** The 72-unit building is on the agent; a week of history; every number measured against the three agreed in week 1. | Pilot cutover · escalation queue staffed daily by the pilot owner · **prod tagging starts here** — from now a `v*` tag is cut for every change that reaches real tenants · **owed by 1.10, before the first pilot tag:** restart prod with `gcloud sql instances patch dona-prod --activation-policy=ALWAYS` — that is the whole manual act, because `--min-instances 1` comes back on its own with the first tag deploy; until then prod answers 503 by design · **owed by 1.10:** give the `production` GitHub environment its protection rules — a required reviewer and a deployment tag policy limited to `v*` — before it protects anything real. It was created implicitly by the first release with none, so today a tag is the only thing between a commit and prod · **owed by 2.6:** re-open the btree on `party_contact (channel, value)`. It is three times faster than the exclusion constraint's GiST index at the isolation join's first hop, and 2.6 measured that adding it changes nothing — with both present the planner chooses GiST on cost. This is the week that table stops being 2,871 rows and Q2 stops being run by a screen, and **the fix is not "add the btree"**, which was already tried: it is changing what the exclusion constraint's index looks like to the cost model | W11 |
+| **12** | Evidence | **Live, with real tenants and real tradesmen.** The 72-unit building is on the agent; a week of history; every number measured against the three agreed in week 1. | Pilot cutover · escalation queue staffed daily by the pilot owner · **prod tagging starts here** — from now a `v*` tag is cut for every change that reaches real tenants · **owed by 1.10, before the first pilot tag:** restart prod with `gcloud sql instances patch dona-prod --activation-policy=ALWAYS` — that is the whole manual act, because `--min-instances 1` comes back on its own with the first tag deploy; until then prod answers 503 by design · **re-homed here 9 Sep 2026 from an orphaned "week 6" comment in `infra/bootstrap.sh`: enable point-in-time recovery on `dona-prod`**, in the same act. Prod keeps backups from week 1 and deliberately not PITR, and PITR bought before the first pilot tag pays to recover a database answering 503 · **owed by 1.10:** give the `production` GitHub environment its protection rules — a required reviewer and a deployment tag policy limited to `v*` — before it protects anything real. It was created implicitly by the first release with none, so today a tag is the only thing between a commit and prod · **owed by 2.6:** re-open the btree on `party_contact (channel, value)`. It is three times faster than the exclusion constraint's GiST index at the isolation join's first hop, and 2.6 measured that adding it changes nothing — with both present the planner chooses GiST on cost. This is the week that table stops being 2,871 rows and Q2 stops being run by a screen, and **the fix is not "add the btree"**, which was already tried: it is changing what the exclusion constraint's index looks like to the cost model | W11 |
 
 ### **Checkpoint · M3 · go / no-go**
 - [ ] The loop is closed end to end on one building

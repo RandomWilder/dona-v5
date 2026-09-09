@@ -155,8 +155,9 @@ is: a value extracted under version 3 of a schema must still be explicable a yea
 **A9 · The catalogue is dynamic from week 3; its admin screen lands in month two.** The mechanism is
 schema-driven from the first migration — types and fields are rows, added with no release — but
 during development *we* are the ones adding them, through seeds. The admin CRUD screen arrives in
-month two, alongside the `ObligationType` settings screen whose pattern it shares. Deactivated, never
-deleted: a retired type still has documents pointing at it.
+month two — **slice 5.8** since the 9 Sep 2026 decomposition — alongside the `ObligationType`
+settings screen whose pattern it shares. One screen, both catalogues, `asset_type` deliberately
+absent. Deactivated, never deleted: a retired type still has documents pointing at it.
 
 **A10 · In bulk, convention proposes and a human confirms.** Nobody declares the type of 1,500 units'
 worth of Drive files by hand, and nothing detects it either. The folder path and filename **propose**
@@ -235,8 +236,13 @@ Two **stop conditions**, which are not success numbers and are not traded off ag
 
 1. ~~**When does week 1 start?**~~ **Closed 4 Sep 2026: Sunday 6 September**, Sun–Thu weeks, holidays
    worked through and not modelled. Thursday demo kept as published. See the calendar in the overview.
-2. **How many distinct `terms_profile`s are in force?** Multi-week swing on week 6. Closed by week 5's
-   promotion work, which is where the answer surfaces from the leases themselves.
+2. **How many distinct `terms_profile`s are in force?** Multi-week swing on week 6. **Amended 9 Sep
+   2026 at the weeks-5–8 decomposition: it is not week 5's to close, it is F3's.** The answer
+   surfaces from the leases themselves and therefore from the *real* register, which travelled to
+   pilot preparation with **F3** at 2.5; 4.6b already ruled that an empty profile list on staging is
+   answered by importing the register and never by seeding a fake annex. So week 6's sizing now
+   depends on a fuse rather than on the week before it, and if F3 has not burned by week 5's freeze,
+   week 6 is sized on the client's answer to a question rather than on measured data.
 3. **What does the Priority export actually contain** — units and tenancies both, or units only?
    Decides whether week 2 is one importer or two. The keys fuse answers it. **Amended 7 Sep 2026: it
    did not close in week 2 and it no longer gates the schema.** The importer shipped at 2.4 as one
@@ -246,7 +252,9 @@ Two **stop conditions**, which are not success numbers and are not traded off ag
    facts only the real file can produce: how many rows the constraints reject, and whether the export
    carries vacant apartments as rows at all.
 4. **Are the Shoham buildings still inside תקופת הבדק?** Decides whether week 6's ternary
-   responsibility has a live case to demo or a synthetic one.
+   responsibility has a live case to demo or a synthetic one. **Owned by slice 6.3 since 9 Sep 2026**,
+   and asked at week 5's demo so week 6 knows which of the two it is showing. Either is a correct
+   slice; only one is a good demo.
 5. **Where does the in-house crew's availability live?** Determines whether month three integrates a
    calendar or invents scheduling. Not on the critical path until week 11.
 6. **Which document types does the seed catalogue start with?** The eight in the Data Model are the

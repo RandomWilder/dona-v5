@@ -275,4 +275,7 @@ through the wall.
 - **The completeness vocabulary.** **Closed for the first rule at 4.8:** it is a derived query, rule
   id `guarantor`, exception a separate row. Materialised state waits until a second rule joins and
   the list of missing things is no longer one label.
-- **Cross-tenancy party identity.** Deliberately absent from A2 step 5. Month two.
+- **Cross-tenancy party identity.** Deliberately absent from A2 step 5. Month two — and **slice 5.5**
+  since 9 Sep 2026, the week promotion meets a portfolio and duplicates actually surface. Matching
+  people is a privacy decision before it is a data-quality one, so what provokes the ruling is a
+  measured duplicate count and not the convenience of a join.

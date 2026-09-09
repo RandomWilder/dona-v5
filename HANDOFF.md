@@ -1,8 +1,21 @@
 # Dona Dom Platform — Session Handoff
 
-> **Read this first in a new session.** It carries the decisions *and the reasoning behind them*,
-> so they don't get relitigated. Last updated 3 Sep 2026. No application code exists yet.
+> **Read this for the *reasoning* behind the decisions**, so they don't get relitigated.
 > [CLAUDE.md](CLAUDE.md) is the shorter orientation; this file is the depth behind it.
+>
+> **The body of this file is dated 3 Sep 2026 and was written before any code existed.** Its
+> decisions and reasoning still hold; its *status* claims do not. **For where the project actually
+> is, read [tasks/todo.md](tasks/todo.md) first** — it is rewritten every Sunday and is always
+> current — then [tasks/roadmap.md](tasks/roadmap.md), [tasks/fuses.md](tasks/fuses.md) and the
+> newest file in [tasks/evidence/](tasks/evidence/).
+>
+> **Status as of 9 Sep 2026 (week 4 close · M1):** application code exists and is deployed. **450
+> code + 41 hooks + 47 policy tests, 0 failed; 3 grep guards.** Staging serves at
+> `https://dona-staging-r44j24yuaa-zf.a.run.app`. Weeks 1–4 closed (34 slices; 4.5 cut and travelling
+> with F6). **M1 reached on five of six boxes** — the open one is the three success numbers, the
+> director's. Weeks 5–8 are decomposed to slice level; weeks 9–16 are still at week level. **Week 5
+> is in progress and starts at slice 5.1** — staff auth, which is the first session this system has
+> ever had.
 
 ## Companion documents
 
@@ -318,6 +331,11 @@ has no new screen.
 ---
 
 ## Where we left off
+
+> **This section is the state on 3 Sep 2026, before the build started. It is kept because it explains
+> how the plan was arrived at, not because it is current.** Four weeks of building have happened
+> since; the header of this file carries the status, and [tasks/todo.md](tasks/todo.md) carries the
+> detail. Read this section as history.
 
 The refinement arc is complete and **all three documents have been reconciled against each other**
 (2 Sep 2026). The Data Model was approved first and treated as authority; the Brief was aligned to

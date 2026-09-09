@@ -107,7 +107,11 @@ gcloud artifacts repositories describe "$REPO" \
 BACKUP_FLAGS=(--no-backup)
 if [[ "$ENV" == prod ]]; then
   # 02:00 UTC ≈ 05:00 Israel — off-peak for a Tel Aviv tenancy product.
-  # Point-in-time recovery is deliberately not enabled yet (week 6 item).
+  # Point-in-time recovery is deliberately not enabled yet. Re-homed to week 12
+  # on 9 Sep 2026 at the weeks-5-8 decomposition: it said "week 6", and week 6
+  # is the policy module. Prod answers 503 by design until the first pilot tag,
+  # so PITR bought in week 6 pays to recover an empty database. It belongs
+  # beside the prod restart, before the first tag that reaches real tenants.
   BACKUP_FLAGS=(
     --backup
     --backup-start-time=02:00
@@ -213,8 +217,9 @@ done
 
 # Deploy: push images, roll revisions, act as the runtime account. These are
 # project-level today, so deploy-staging and deploy-prod differ in audit trail
-# rather than in power; scoping run.admin per service is a week-6 hardening
-# item (it can only be bound after the service exists).
+# rather than in power; scoping run.admin per service is slice 8.4 on
+# tasks/roadmap.md (it can only be bound after the service exists, and the
+# services exist from 1.6).
 for role in roles/run.admin roles/artifactregistry.writer roles/iam.serviceAccountUser; do
   gcloud projects add-iam-policy-binding "$PROJECT" \
     --member "serviceAccount:$DEPLOY_EMAIL" \
