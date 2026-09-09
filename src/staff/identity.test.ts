@@ -13,6 +13,7 @@ import {
   createUnconfiguredIdentity,
   IdentityRefusal,
   readIdTokenClaims,
+  TOTP_FACTOR_NAME,
 } from './contract.ts';
 
 const PROJECT = 'dona-v5';
@@ -24,19 +25,26 @@ function idToken(claims: Record<string, unknown>): string {
   return `${part({ alg: 'RS256' })}.${part({ aud: PROJECT, ...claims })}.signature`;
 }
 
+interface SeenRequest {
+  url: string;
+  body: Record<string, unknown>;
+  headers: Record<string, string>;
+}
+
 function respondingWith(
   handler: (
     url: string,
     body: Record<string, unknown>,
   ) => { status?: number; body: unknown },
-): {
-  call: typeof fetch;
-  seen: Array<{ url: string; body: Record<string, unknown> }>;
-} {
-  const seen: Array<{ url: string; body: Record<string, unknown> }> = [];
+): { call: typeof fetch; seen: SeenRequest[] } {
+  const seen: SeenRequest[] = [];
   const call = (async (url: string | URL, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body ?? '{}'));
-    seen.push({ url: String(url), body });
+    seen.push({
+      url: String(url),
+      body,
+      headers: (init?.headers ?? {}) as Record<string, string>,
+    });
     const answer = handler(String(url), body);
     return new Response(JSON.stringify(answer.body), {
       status: answer.status ?? 200,
@@ -199,6 +207,47 @@ describe('identity platform, over REST', () => {
       `https://identitytoolkit.googleapis.com/v1/projects/${PROJECT}/accounts`,
     );
     assert.doesNotMatch(seen[0]?.url ?? '', /key=/);
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // The next two assert facts the fake could never have taught us. Both were found by running this
+  // module against the **live** Identity Platform during 5.1's verification, and both are the kind
+  // of detail a port hides: the fake answered happily to a request the provider refuses. They are
+  // pinned here so a later refactor cannot drop either and still go green.
+  // ---------------------------------------------------------------------------------------------
+
+  it('sends a quota project on the admin call, which ADC does not always imply', async () => {
+    // Live, under user credentials, the bare call answers 403 -- "requires a quota project, which
+    // is not set by default". A Cloud Run service account would not have shown it, so without this
+    // header the failure would have been found by whoever first ran the invite flow on a laptop,
+    // which is the worst place to find it.
+    const { call, seen } = respondingWith(() => ({
+      body: { localId: 'uid-new' },
+    }));
+    const identity = createIdentityPlatform({
+      project: PROJECT,
+      apiKey: 'test-key',
+      fetchImpl: call,
+      token: async () => 'adc-token',
+    });
+    await identity.createAccount('new@example.test', 'a-long-password');
+    assert.equal(seen[0]?.headers['x-goog-user-project'], PROJECT);
+    assert.equal(seen[0]?.headers.authorization, 'Bearer adc-token');
+  });
+
+  it('names the factor when finalising enrolment, because the provider requires it', async () => {
+    // Live, the bare call answers 400 MISSING_DISPLAY_NAME. It names the *factor* and not the
+    // person, so a constant is right: this system offers one kind of second factor and never asks
+    // an operator to name it.
+    const { call, seen } = respondingWith(() => ({ body: {} }));
+    const identity = createIdentityPlatform({
+      project: PROJECT,
+      apiKey: 'test-key',
+      fetchImpl: call,
+    });
+    await identity.finalizeTotpEnrollment('id-token', 'sess-1', '123456');
+    assert.equal(seen[0]?.body.displayName, TOTP_FACTOR_NAME);
+    assert.ok(String(seen[0]?.body.displayName ?? '').length > 0);
   });
 
   it('is unconfigured, loudly, when there is no key', async () => {

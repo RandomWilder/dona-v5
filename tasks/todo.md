@@ -130,9 +130,13 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
 - [x] **5.1 — Staff identity, the session, and the role matrix in code.** **Closed 9 Sep 2026**
       ([evidence/5.1.md](evidence/5.1.md)) — 481 code + 41 hooks + 50 policy, 0 failed; the
       no-plaintext-token policy case red against a deliberately wrong `0021_` before it was green;
-      the `-- pii` guard fired on `staff_account.display_name` and then passed. **The staging
-      sign-in with MFA enforced is the one half not yet performed** — `./infra/bootstrap.sh staging`
-      needs the director's approval to run; see the evidence file.
+      the `-- pii` guard fired on `staff_account.display_name` and then passed. **MFA enforcement was
+      proved against the live Identity Platform** — after enrolment the same password returns
+      `mfa_required` and no token — and that run found two defects the fake could not have
+      (`x-goog-user-project` on the admin call, `displayName` on enrolment), both now pinned as
+      tests. `bootstrap.sh`'s config step was silently failing on a wrong enum name and now reads
+      the config back and exits 1 if it did not take. **What remains is a human signing in on the
+      staging URL as themselves**, which is the director's and is written out in the evidence file.
       *Original entry:* Identity Platform with
       **enforced MFA**, an invite flow, and `src/staff/` — the admin edge, not a domain module; it
       owns none of E1–E16. **The role matrix is code, not a config row**, a deliberate exception to

@@ -77,6 +77,8 @@ export interface IdentityProvider {
 }
 
 export const defaultIdentityTimeoutMs = 10_000;
+/** The label Identity Platform stores beside the enrolled factor. One kind, so one constant. */
+export const TOTP_FACTOR_NAME = 'Authenticator app';
 const adminScope = 'https://www.googleapis.com/auth/identitytoolkit';
 
 export interface IdentityPlatformOptions {
@@ -276,7 +278,16 @@ export function createIdentityPlatform(
       const body = (await post(
         `/v1/projects/${project}/accounts`,
         { email, password, emailVerified: true },
-        { authorization: `Bearer ${await adminToken()}` },
+        {
+          authorization: `Bearer ${await adminToken()}`,
+          // **The admin endpoint bills to a quota project and ADC does not always imply one.**
+          // Found at 5.1 by running this path against the real provider rather than the fake: with
+          // user credentials it answers 403 "requires a quota project, which is not set by default"
+          // — a failure a Cloud Run service account would not have shown, so it would have been
+          // discovered by whoever first ran the invite flow on a laptop. The header is correct in
+          // both cases and costs nothing when the project is already implied.
+          'x-goog-user-project': project,
+        },
       )) as { localId?: string };
       if (!body.localId) {
         throw new KernelError(
@@ -313,6 +324,12 @@ export function createIdentityPlatform(
     async finalizeTotpEnrollment(idToken, sessionInfo, code) {
       await post(`/v2/accounts/mfaEnrollment:finalize?key=${apiKey}`, {
         idToken,
+        // **Required, and the provider says so only when asked for real** — `MISSING_DISPLAY_NAME`,
+        // found at 5.1 against the live endpoint. It names the *factor* rather than the person, and
+        // it is the label Identity Platform shows beside the enrolment; a constant is right because
+        // this system offers exactly one kind of second factor and never asks the operator to name
+        // it.
+        displayName: TOTP_FACTOR_NAME,
         totpVerificationInfo: { sessionInfo, verificationCode: code },
       });
     },

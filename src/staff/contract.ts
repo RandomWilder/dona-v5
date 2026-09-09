@@ -30,6 +30,7 @@ export {
   createUnconfiguredIdentity,
   IdentityRefusal,
   readIdTokenClaims,
+  TOTP_FACTOR_NAME,
 } from './internal/identity.ts';
 export type { StaffInvite } from './internal/invites.ts';
 export { createInvite, otpauthUri } from './internal/invites.ts';

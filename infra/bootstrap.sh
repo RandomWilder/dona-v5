@@ -219,9 +219,17 @@ say "Identity Platform — enforced MFA, TOTP, no public sign-up"
 # Platform API key is a browser key by design; with public sign-up off, holding
 # it is not holding an account. Accounts are created only through the admin
 # endpoint, under the runtime service account's ADC, from the invite flow.
+# **The state name is MANDATORY and not ENFORCED**, which this script learned the
+# hard way at 5.1: the first run PATCHed "ENFORCED", Identity Platform answered
+# 400 INVALID_ARGUMENT, curl exited 0 because an HTTP error is not a transport
+# error, and the output was thrown away -- so a bootstrap that printed nothing
+# but success left MFA DISABLED. That is slice 1.2's lesson in a different
+# costume: a step that cannot fail the run is decoration. Hence --fail-with-body
+# below, and hence the read-back after it, which is the only part that proves
+# anything.
 IDENTITY_HOST=https://identitytoolkit.googleapis.com
 identity_curl() {
-  curl -sS -X "$1" \
+  curl -sS --fail-with-body -X "$1" \
     -H "Authorization: Bearer $(gcloud auth print-access-token)" \
     -H "Content-Type: application/json" \
     -H "X-Goog-User-Project: $PROJECT" \
@@ -229,7 +237,8 @@ identity_curl() {
 }
 
 # Idempotent: initializeAuth fails with ALREADY_EXISTS on a project that has it,
-# which is the state every run after the first is in.
+# which is the state every run after the first is in. **The one call here whose
+# failure is expected**, and the only one allowed to swallow its own output.
 identity_curl POST "$IDENTITY_HOST/v2/projects/$PROJECT/identityPlatform:initializeAuth" \
   -d '{}' >/dev/null 2>&1 || true
 
@@ -237,7 +246,7 @@ identity_curl PATCH \
   "$IDENTITY_HOST/admin/v2/projects/$PROJECT/config?updateMask=mfa,client.permissions,signIn.email" \
   -d '{
         "mfa": {
-          "state": "ENFORCED",
+          "state": "MANDATORY",
           "providerConfigs": [
             { "state": "ENABLED", "totpProviderConfig": { "adjacentIntervals": 1 } }
           ]
@@ -245,6 +254,18 @@ identity_curl PATCH \
         "client": { "permissions": { "disabledUserSignup": true } },
         "signIn": { "email": { "enabled": true, "passwordRequired": true } }
       }' >/dev/null
+
+# Read it back and refuse to continue if it did not take. The application half of
+# "enforced, not offered" has a test behind it (src/staff/routes.test.ts); this
+# half has only this line, so this line has to be an assertion rather than a
+# hope.
+IDENTITY_STATE="$(identity_curl GET "$IDENTITY_HOST/admin/v2/projects/$PROJECT/config" |
+  python3 -c 'import json,sys; c=json.load(sys.stdin); print(c.get("mfa",{}).get("state","MISSING"), c.get("client",{}).get("permissions",{}).get("disabledUserSignup"))')"
+if [[ "$IDENTITY_STATE" != "MANDATORY True" ]]; then
+  echo "  !! Identity Platform did not take the config: mfa/sign-up = $IDENTITY_STATE" >&2
+  exit 1
+fi
+echo "  mfa: MANDATORY (TOTP) · public sign-up: disabled"
 
 if gcloud secrets describe "$IDENTITY_SECRET" --project "$PROJECT" >/dev/null 2>&1; then
   echo "  $IDENTITY_SECRET already exists — leaving the key untouched"
@@ -466,6 +487,6 @@ echo "  deploy SA:    $DEPLOY_EMAIL"
 echo "  runtime SA:   $RUNTIME_EMAIL"
 echo "  sql instance: $CONNECTION_NAME"
 echo "  secret:       $SECRET"
-echo "  identity:     $IDENTITY_SECRET (MFA enforced, TOTP, sign-up off)"
+echo "  identity:     $IDENTITY_SECRET (mfa MANDATORY, TOTP, sign-up off)"
 echo "  docs bucket:  gs://$DOCS_BUCKET"
 echo "  ocr processor: ${OCR_PROCESSOR_ID:-unset} ($OCR_LOCATION)"
