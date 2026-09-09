@@ -28,7 +28,13 @@ import {
 import type { OcrText } from './kernel/ocr.ts';
 import { createPdfjsText, type PdfText } from './kernel/pdf.ts';
 import { registerUiAssets } from './kernel/ui/assets.ts';
+import { registerFormBodies } from './kernel/ui/forms.ts';
 import type { WorkRunner } from './kernel/work.ts';
+import {
+  createUnconfiguredIdentity,
+  type IdentityProvider,
+  registerStaffRoutes,
+} from './staff/contract.ts';
 import {
   listIncompleteTenancies,
   recordCompletenessException,
@@ -53,6 +59,13 @@ export interface AppDeps {
   work?: WorkRunner;
   /** The bucket a `storage_uri` names, which is not the same statement as which store is running. */
   bucket?: string;
+  /**
+   * Who signs in (slice 5.1). **Unconfigured unless the caller says otherwise**, on the same
+   * argument the object store makes: a test builds an app without an API key, `npm run dev` on a
+   * clean clone still starts, and `/staff/login` says the provider is not configured rather than
+   * answering a real password as though it were wrong.
+   */
+  identity?: IdentityProvider;
 }
 
 export function buildApp(deps: AppDeps): FastifyInstance {
@@ -88,6 +101,10 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   });
 
   registerUiAssets(app);
+  // One parser for every HTML form in this system (slice 5.1). Estate has posted one since 2.6 and
+  // staff is the second module to, so it belongs to the root rather than to whichever module got
+  // there first.
+  registerFormBodies(app);
   registerEstateRoutes(app, {
     pool: deps.pool,
     clock: deps.clock ?? systemClock,
@@ -96,6 +113,14 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     listPromotedFieldsForUnit,
     listIncompleteTenancies,
     recordCompletenessException,
+  });
+  // Slice 5.1. The staff routes are the only ones behind a session today; the seven that have
+  // served unauthenticated since week 1 go behind `requireStaff` at 5.2, which owns the CSRF token
+  // and the per-caller upload bound in the same change.
+  registerStaffRoutes(app, {
+    pool: deps.pool,
+    clock: deps.clock ?? systemClock,
+    identity: deps.identity ?? createUnconfiguredIdentity(),
   });
   registerDocumentRoutes(app, {
     pool: deps.pool,

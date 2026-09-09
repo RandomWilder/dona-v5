@@ -94,17 +94,8 @@ export function registerEstateRoutes(
   app: FastifyInstance,
   deps: EstateDeps,
 ): void {
-  app.addContentTypeParser(
-    'application/x-www-form-urlencoded',
-    { parseAs: 'string' },
-    (_request, body, done) => {
-      try {
-        done(null, Object.fromEntries(new URLSearchParams(String(body))));
-      } catch (error) {
-        done(error as Error);
-      }
-    },
-  );
+  // The urlencoded parser lived here from 2.6 and moved to `src/kernel/ui/forms.ts` at 5.1, when
+  // `src/staff/` became the second module with a form. The composition root registers it once.
 
   // 1.11 made this a 302 to `/estate` and said it would stop being one the week a second screen
   // existed. This is that week.

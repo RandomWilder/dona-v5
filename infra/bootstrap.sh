@@ -47,6 +47,15 @@ SECRET="$ENV-database-url"
 # account able to reach a key it is supposed to read, or able to reach one it
 # is not.
 OPENAI_SECRET="$ENV-openai-api-key"
+
+# Slice 5.1, and this is what discharges 1.5's deliberate omission above. That
+# comment says the slice that builds staff auth creates exactly what its own
+# mechanism needs -- so what arrives here is one API key and no seeded
+# operator. The first operator is invited by a human who can already reach the
+# database (`npm run staff:invite`), which is why there is still no credential
+# in this file that nothing reads.
+IDENTITY_SECRET="$ENV-identity-api-key"
+IDENTITY_KEY_ID="dona-identity-$ENV"
 DOCS_BUCKET="$PROJECT-$ENV-docs"
 RUNTIME_SA="app-$ENV"
 DEPLOY_SA="deploy-$ENV"
@@ -92,6 +101,8 @@ gcloud services enable \
   iamcredentials.googleapis.com \
   sts.googleapis.com \
   documentai.googleapis.com \
+  identitytoolkit.googleapis.com \
+  apikeys.googleapis.com \
   --project "$PROJECT"
 
 say "Artifact Registry (shared by both environments)"
@@ -187,6 +198,95 @@ else
   unset DB_PASSWORD
 fi
 
+say "Identity Platform — enforced MFA, TOTP, no public sign-up"
+# Slice 5.1. Two things are created here and neither is an operator.
+#
+# **The config is per PROJECT and not per environment**, because staging and
+# prod share one project today. So a staging operator is a prod operator, and
+# that is a real fact rather than an oversight: prod answers 503 by design
+# until the first pilot tag, and separating the two is either an Identity
+# Platform tenant or a second project. It is carried to **week 12**, beside the
+# prod restart and the organisation move (fuse F7), where it is decided once
+# with the rest of the prod hardening rather than twice.
+#
+# **mfa.state = MANDATORY is one half of "enforced, not offered".** The other
+# half is src/staff/, which refuses any ID token carrying no
+# `firebase.sign_in_second_factor` claim -- and that half is the one with a
+# test behind it, because a console setting is not something this repository
+# can assert (SPEC-staff.md).
+#
+# **disabledUserSignup is what makes the API key safe to hold.** An Identity
+# Platform API key is a browser key by design; with public sign-up off, holding
+# it is not holding an account. Accounts are created only through the admin
+# endpoint, under the runtime service account's ADC, from the invite flow.
+# **The state name is MANDATORY and not ENFORCED**, which this script learned the
+# hard way at 5.1: the first run PATCHed "ENFORCED", Identity Platform answered
+# 400 INVALID_ARGUMENT, curl exited 0 because an HTTP error is not a transport
+# error, and the output was thrown away -- so a bootstrap that printed nothing
+# but success left MFA DISABLED. That is slice 1.2's lesson in a different
+# costume: a step that cannot fail the run is decoration. Hence --fail-with-body
+# below, and hence the read-back after it, which is the only part that proves
+# anything.
+IDENTITY_HOST=https://identitytoolkit.googleapis.com
+identity_curl() {
+  curl -sS --fail-with-body -X "$1" \
+    -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+    -H "Content-Type: application/json" \
+    -H "X-Goog-User-Project: $PROJECT" \
+    "${@:2}"
+}
+
+# Idempotent: initializeAuth fails with ALREADY_EXISTS on a project that has it,
+# which is the state every run after the first is in. **The one call here whose
+# failure is expected**, and the only one allowed to swallow its own output.
+identity_curl POST "$IDENTITY_HOST/v2/projects/$PROJECT/identityPlatform:initializeAuth" \
+  -d '{}' >/dev/null 2>&1 || true
+
+identity_curl PATCH \
+  "$IDENTITY_HOST/admin/v2/projects/$PROJECT/config?updateMask=mfa,client.permissions,signIn.email" \
+  -d '{
+        "mfa": {
+          "state": "MANDATORY",
+          "providerConfigs": [
+            { "state": "ENABLED", "totpProviderConfig": { "adjacentIntervals": 1 } }
+          ]
+        },
+        "client": { "permissions": { "disabledUserSignup": true } },
+        "signIn": { "email": { "enabled": true, "passwordRequired": true } }
+      }' >/dev/null
+
+# Read it back and refuse to continue if it did not take. The application half of
+# "enforced, not offered" has a test behind it (src/staff/routes.test.ts); this
+# half has only this line, so this line has to be an assertion rather than a
+# hope.
+IDENTITY_STATE="$(identity_curl GET "$IDENTITY_HOST/admin/v2/projects/$PROJECT/config" |
+  python3 -c 'import json,sys; c=json.load(sys.stdin); print(c.get("mfa",{}).get("state","MISSING"), c.get("client",{}).get("permissions",{}).get("disabledUserSignup"))')"
+if [[ "$IDENTITY_STATE" != "MANDATORY True" ]]; then
+  echo "  !! Identity Platform did not take the config: mfa/sign-up = $IDENTITY_STATE" >&2
+  exit 1
+fi
+echo "  mfa: MANDATORY (TOTP) · public sign-up: disabled"
+
+if gcloud secrets describe "$IDENTITY_SECRET" --project "$PROJECT" >/dev/null 2>&1; then
+  echo "  $IDENTITY_SECRET already exists — leaving the key untouched"
+else
+  # Restricted to the one API it is for, so a leaked key is a key that can call
+  # identitytoolkit and nothing else. Created and read in the same breath and
+  # piped straight into Secret Manager: never an argv, never a file, never a log
+  # (ADR-0003).
+  gcloud services api-keys create \
+    --key-id "$IDENTITY_KEY_ID" \
+    --display-name "dona identity ($ENV)" \
+    --api-target=service=identitytoolkit.googleapis.com \
+    --project "$PROJECT" >/dev/null 2>&1 || true
+  gcloud services api-keys get-key-string \
+    "projects/$PROJECT_NUMBER/locations/global/keys/$IDENTITY_KEY_ID" \
+    --project "$PROJECT" --format='value(keyString)' |
+    tr -d '\n' |
+    gcloud secrets create "$IDENTITY_SECRET" \
+      --data-file=- --replication-policy=automatic --project "$PROJECT"
+fi
+
 say "Service accounts"
 for sa in "$RUNTIME_SA" "$DEPLOY_SA"; do
   gcloud iam service-accounts describe "$sa@$PROJECT.iam.gserviceaccount.com" \
@@ -200,7 +300,7 @@ done
 gcloud projects add-iam-policy-binding "$PROJECT" \
   --member "serviceAccount:$RUNTIME_EMAIL" \
   --role roles/cloudsql.client --condition=None >/dev/null
-for secret in "$SECRET" "$OPENAI_SECRET"; do
+for secret in "$SECRET" "$OPENAI_SECRET" "$IDENTITY_SECRET"; do
   # The model key may not exist yet -- a fresh environment has no OpenAI key
   # until someone runs set-secret.sh, and that is not an error worth failing a
   # bootstrap over. The deploy will mount it when it is there; until then the
@@ -387,5 +487,6 @@ echo "  deploy SA:    $DEPLOY_EMAIL"
 echo "  runtime SA:   $RUNTIME_EMAIL"
 echo "  sql instance: $CONNECTION_NAME"
 echo "  secret:       $SECRET"
+echo "  identity:     $IDENTITY_SECRET (mfa MANDATORY, TOTP, sign-up off)"
 echo "  docs bucket:  gs://$DOCS_BUCKET"
 echo "  ocr processor: ${OCR_PROCESSOR_ID:-unset} ($OCR_LOCATION)"

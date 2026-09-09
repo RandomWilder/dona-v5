@@ -152,6 +152,15 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   attempt to cross it.
 - `national_id` (ת.ז. / ח.פ.) is **admin-only, unreachable by any agent tool, and access-logged**. It
   never appears in the response shape of an agent tool; the policy suite asserts this.
+- **Staff identity is Identity Platform's; the session is ours** (slice 5.1, `SPEC-staff.md`). No
+  password hash and no TOTP secret exist in this schema. **The second factor is enforced by code and
+  not only by configuration**: an ID token carrying no `firebase.sign_in_second_factor` is refused,
+  which is what makes "enforced, not offered" a claim with a test behind it. Sessions store
+  `token_hash` and never the token — 32 CSPRNG bytes, SHA-256, no pepper, because a pepper defends a
+  secret whose preimage space can be searched. **The refusal says `not_allowed` and nothing more**,
+  byte-identically for an unknown account, an account with no role and a disabled one, because the
+  alternative is an account-enumeration oracle on the login screen. The role matrix is code and not
+  a config row — a deliberate exception to rule 8, argued in `SPEC-staff.md`.
 - **Every scoped read of tenant data is logged**, not only every command.
 - PII columns are commented `-- pii`. PII never in logs. Parameterised queries. Validate at the edge.
 - Secrets live in Secret Manager and enter through `infra/set-secret.sh` — never in the repo, a log, a
@@ -225,8 +234,10 @@ one index 2.6 measured its way to, `0011_evidence.sql` is the evidence plane —
 E13, the type catalogue before the document that points at it (3.1), `0012_assets.sql` is E14's
 three-column Provider stub plus E11 Asset (3.5), so R11 has a table to point at and Q3 and Q7 have
 a row to read, and `0013_asset_natural_key.sql` is the unique index `(space_id, asset_type)` that
-makes a re-import and a second A6 confirm the same fact stated twice. It carries **the first trigger
-in this repository**, `document_is_immutable`, because "`file_hash` at ingest, immutable thereafter"
+makes a re-import and a second A6 confirm the same fact stated twice. `0021_staff.sql` is the admin edge's own three
+tables — `staff_account`, `staff_session`, `staff_invite` — which are the mechanism by which
+somebody is allowed to look at the entities and are themselves none of E1–E16 (5.1). It carries
+**the first trigger in this repository**, `document_is_immutable`, because "`file_hash` at ingest, immutable thereafter"
 is otherwise a comment and 2.1's principle is that the claim is what the database refuses.
 `src/estate/`, `src/scope/`, `src/parties/`, `src/tenancy/`, `src/register/` and `src/evidence/` are
 the module directories: estate holds the schema, the importer,
@@ -276,8 +287,8 @@ started.
 
 **The application serves screens from 1.11 and six estate routes from 3.6**: an index at `/`, the buildings
 list, one building, one unit, `/estate/search` and `/estate/expiring` — server-rendered Hebrew RTL off
-`/ui/tokens.css`, with no client JavaScript and — until staff auth lands in week 5 — **no
-authentication**. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
+`/ui/tokens.css`, with no client JavaScript and — until **slice 5.2** puts them behind the session
+5.1 built — **no authentication**. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
 physical side or a `<script>`, and from 2.6 also on a phone number or an E.164 prefix: what an
 unauthenticated screen may say about a household is **a state and a count, never a name**, so the
 occupancy chip is derived on every load and search never reaches `party`. Slice 3.6 lets the same
@@ -306,6 +317,31 @@ no row and no object and one audit line; a file with no text layer is filed `unv
 refused, because refusing every scan would refuse most real leases, and OCR closes that gap at 4.1.
 `tests/policy/document-verification.test.ts` is the constraint over every corpus specimen against
 every seeded type, and it was red before the terms were tuned.
+
+**5.1 gave this system its first session, and `src/staff/` is the admin edge that holds it.** It owns
+none of E1–E16: what it answers is who is asking and what they may do, never which rows a person may
+see about a tenant, which is `src/scope/`'s and nobody else's. **Identity Platform holds the
+credential and the second factor and this schema holds neither** — no password hash, no TOTP secret,
+only a uid. **The second factor is TOTP and that is a consequence of a rule rather than a
+preference**: Identity Platform's SMS factor needs a reCAPTCHA token minted by Google's browser SDK,
+and the UI rule plus `tests/ui/tokens.test.ts` would have made that the system's first `<script>`, on
+the screens that guard everything else. TOTP's REST endpoints need none, so sign-in, the second
+factor and enrolment are all server-rendered forms. **"Enforced, not offered" is claimed twice**:
+`infra/bootstrap.sh` sets the project config to `mfa.state = MANDATORY` with TOTP and public sign-up
+off — and reads it back and fails, because the first version of that block left MFA disabled while
+printing success — and `src/staff/` refuses any ID token with no `firebase.sign_in_second_factor` — and only the
+second has a test behind it, because a console setting is not something this repository can assert.
+The session is ours rather than the provider's, because an ID token is an hour of authority this
+application cannot revoke. **`staff_session` stores `token_hash` and never the token**, and
+`tests/policy/staff-session.test.ts` is the standing form of that: no column in this database whose
+name contains `token` may be anything but a `_hash`, proved by a case that builds the violating
+column itself and was red against a deliberately wrong `0021_` before it was green. The invite is a
+**printed one-time URL and never an email** — there is no mail transport and acquiring one is an
+external dependency with its own DPA — and the first operator comes from `npm run staff:invite`,
+which is **1.5's argument honoured rather than reversed**: `bootstrap.sh` still creates no seeded
+operator, only the one API key the mechanism needs. The urlencoded form parser moved from
+`src/estate/` to `src/kernel/ui/forms.ts` in the same change, the move the page shell made at 3.3,
+because staff is the second module with a form.
 
 **Two decisions were held for a row count and 2.6 settled both, one in each direction.**
 `tenancy (end_date) WHERE status = 'ACTIVE'` was added, because Q5's scan grows with every lease ever
@@ -353,7 +389,8 @@ the two index decisions 2.6 · the document-type catalogue in the workbook 3.0 �
 its catalogue commands and the nine-type seed 3.1 · the object path convention, the docs bucket's
 four controls and the proved delete refusal 3.2 · the declared-type upload, its verification guard
 and the first write route 3.3 · Asset, the Provider stub, Q3 and Q7, and flow A6 3.5 · document
-search and the documents panels, with the guard verdict stored on the row 3.6.**
+search and the documents panels, with the guard verdict stored on the row 3.6 · **the staff session,
+enforced MFA and the role matrix in code 5.1.**
 Production exists and has been released to — `v0.1.0`–`v0.1.2`, rolled back and rolled forward on
 purpose — and is then **parked until week 12**: the Cloud SQL instance is stopped and the service
 scaled to zero, so `dona-prod` answers 503 by design and staging is the delivered artifact every

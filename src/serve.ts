@@ -9,6 +9,7 @@ import { configuredBucket, createConfiguredStore } from './kernel/objects.ts';
 import { createConfiguredOcr } from './kernel/ocr.ts';
 import { createPdfjsText } from './kernel/pdf.ts';
 import { createWorkRunner } from './kernel/work.ts';
+import { createConfiguredIdentity } from './staff/contract.ts';
 
 const host = process.env.HOST ?? '0.0.0.0';
 const port = Number(process.env.PORT ?? 8080);
@@ -26,6 +27,11 @@ const pool = createPool();
 const objects = createConfiguredStore();
 const ocr = createConfiguredOcr();
 const extractor = createConfiguredExtractor();
+// Who signs in (slice 5.1). Same shape as the store and the readers above, and for the sharper
+// reason: a deployed revision that signs nobody in must be visibly different from one that does,
+// and `identity: unconfigured` on staging is as wrong as a `-dev` version string — readable on the
+// boot line rather than discovered by an operator failing to log in.
+const identity = createConfiguredIdentity();
 const work = createWorkRunner(pool);
 work.start();
 
@@ -42,6 +48,7 @@ const app = buildApp({
   extractor,
   work,
   bucket: configuredBucket(),
+  identity,
 });
 
 await app.listen({ host, port });
@@ -49,3 +56,4 @@ console.log(`dona-v5: http://127.0.0.1:${port}/health`);
 console.log(`docs: ${objects.describe()}`);
 console.log(`ocr: ${ocr.describe()}`);
 console.log(`extract: ${extractor.describe()}`);
+console.log(`identity: ${identity.describe()}`);

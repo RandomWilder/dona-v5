@@ -40,6 +40,14 @@ import {
   renderTenancyWrittenPage,
   renderUploadPage,
 } from '../../src/evidence/contract.ts';
+import {
+  renderEnrolledPage,
+  renderEnrolPage,
+  renderInvitePage,
+  renderLoginPage,
+  renderSecondFactorPage,
+  renderStaffHomePage,
+} from '../../src/staff/contract.ts';
 import type { UnitLetting } from '../../src/tenancy/contract.ts';
 
 const building: BuildingSummary = {
@@ -527,6 +535,99 @@ const SCREENS: Array<[string, () => string]> = [
         alreadyEstablished: false,
         boundToTenancy: true,
         termsProfileNames: [],
+      }),
+  ],
+  // Slice 5.1's screens. **Appended here rather than guarded by a copy of this file** — the header
+  // has said since 1.11 that week 5's staff screens append to this registry, and the second copy is
+  // how a guard dies. They are also the screens with the most to lose by drifting: a `<script>` on
+  // a login page is a dependency loaded before anybody is authenticated, and the reason the second
+  // factor is TOTP rather than SMS is precisely that SMS would have put one there (SPEC-staff.md).
+  ['staff · login', () => renderLoginPage()],
+  [
+    'staff · login, refused',
+    () => renderLoginPage({ refused: 'לא ניתן להיכנס.' }),
+  ],
+  [
+    'staff · login, no provider configured',
+    () => renderLoginPage({ unconfigured: true }),
+  ],
+  [
+    'staff · second factor',
+    () =>
+      renderSecondFactorPage({
+        pendingCredential: 'pending-abc',
+        enrollmentId: 'enrol-1',
+      }),
+  ],
+  [
+    'staff · second factor, refused',
+    () =>
+      renderSecondFactorPage({
+        pendingCredential: 'pending-abc',
+        enrollmentId: 'enrol-1',
+        refused: 'לא ניתן להיכנס.',
+      }),
+  ],
+  [
+    'staff · invite',
+    () =>
+      renderInvitePage({
+        token: 'invite-token',
+        email: 'yael@example.test',
+        role: 'OPERATOR',
+      }),
+  ],
+  [
+    'staff · enrol the second factor',
+    () =>
+      renderEnrolPage({
+        token: 'invite-token',
+        email: 'yael@example.test',
+        sharedSecretKey: 'JBSWY3DPEHPK3PXP',
+        otpauthUri:
+          'otpauth://totp/Dona%20Dom%3Ayael%40example.test?secret=JBSWY3DPEHPK3PXP&issuer=Dona%20Dom',
+        sessionInfo: 'sess-1',
+        idToken: 'id-token',
+      }),
+  ],
+  ['staff · enrolled', () => renderEnrolledPage('yael@example.test')],
+  [
+    'staff · home, an admin',
+    () =>
+      renderStaffHomePage({
+        email: 'yael@example.test',
+        role: 'ADMIN',
+        permissions: [
+          'estate.read',
+          'documents.read',
+          'documents.write',
+          'tenancy.write',
+          'settings.write',
+          'staff.invite',
+          'party.national_id.read',
+        ],
+        mayInvite: true,
+      }),
+  ],
+  [
+    'staff · home, an admin who just issued an invite',
+    () =>
+      renderStaffHomePage({
+        email: 'yael@example.test',
+        role: 'ADMIN',
+        permissions: ['estate.read', 'staff.invite'],
+        mayInvite: true,
+        issuedInviteUrl: 'https://example.test/staff/invite/invite-token',
+      }),
+  ],
+  [
+    'staff · home, a viewer who may not invite',
+    () =>
+      renderStaffHomePage({
+        email: 'dana@example.test',
+        role: 'VIEWER',
+        permissions: ['estate.read', 'documents.read'],
+        mayInvite: false,
       }),
   ],
 ];
