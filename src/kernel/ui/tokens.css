@@ -104,6 +104,11 @@
   --size-sidebar: 200px;
   --size-icon-rail: 64px;
   --size-shell-max: 72rem;
+  /* Slice 5.1. The measure a single-column form reads well at. The staff screens are the first
+     pages in this system that are one narrow card rather than a portfolio, and the number belongs
+     here for the reason every other number does: a measure typed into a view is how a design system
+     stops being one (tests/ui/tokens.test.ts). */
+  --size-form-max: 28rem;
   --size-content-max: 1200px;
   --size-marker: 3px;
   --size-focus: 2px;

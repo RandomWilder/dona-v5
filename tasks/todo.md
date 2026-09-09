@@ -102,6 +102,17 @@ is the single most important thing carried out of month one.
       **M3 go/no-go**, which is the decision those numbers exist to make.
 - [ ] **Director's call:** whether the published Data Model's `Document` card is republished.
       Flagged, not owned.
+- [ ] **Raised at 5.1 and owned at week 12: staging and prod share one Identity Platform tenant**,
+      because they share one GCP project — so a staging operator is a prod operator. Prod answers
+      503 by design until the first pilot tag, so this is a known window rather than an open one.
+      It is decided **once**, beside the prod restart and the F7 organisation move, as either an
+      Identity Platform tenant per environment or a second project. `release.yml` mounts no
+      `prod-identity-api-key` today and gains one in the same pass.
+- [ ] **Raised at 5.1, owner the director: an invite is a printed URL because there is no mail
+      transport.** Adding one is a third party that sees an operator's address, so it is an
+      **ADR-0004 naming** before it is an integration. Not urgent while the operators are three
+      people in one office; it bites when Dona Dom's own staff are onboarded, which is **week 8**,
+      the week the console has to be usable on its own.
 - [ ] **Take delivery of the real document corpus** — after F6. Arrival and removal dates go on
       [fuses.md](fuses.md) the day it lands, and the removal is **run by hand on the day** rather
       than trusted to the lifecycle rule, which is the backstop and not the record.
@@ -116,7 +127,13 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
 
 ## Slices
 
-- [ ] **5.1 — Staff identity, the session, and the role matrix in code.** Identity Platform with
+- [x] **5.1 — Staff identity, the session, and the role matrix in code.** **Closed 9 Sep 2026**
+      ([evidence/5.1.md](evidence/5.1.md)) — 481 code + 41 hooks + 50 policy, 0 failed; the
+      no-plaintext-token policy case red against a deliberately wrong `0021_` before it was green;
+      the `-- pii` guard fired on `staff_account.display_name` and then passed. **The staging
+      sign-in with MFA enforced is the one half not yet performed** — `./infra/bootstrap.sh staging`
+      needs the director's approval to run; see the evidence file.
+      *Original entry:* Identity Platform with
       **enforced MFA**, an invite flow, and `src/staff/` — the admin edge, not a domain module; it
       owns none of E1–E16. **The role matrix is code, not a config row**, a deliberate exception to
       *policies are data*: an access-control matrix a database write could widen is a
@@ -147,6 +164,15 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       a name. Behind a session a name may become lawful to show. **Lifting it is a decision this
       slice records; keeping it is equally an answer.** What is not allowed is the rule lapsing
       because a session arrived.
+      **Carried in from 5.1, three things.** (1) **The CSRF token's scope is every write route and
+      not only `POST /documents`** — `POST /staff/login`, `/staff/login/verify`, `/staff/logout`,
+      `/staff/invites` and both invite POSTs are inside it. 5.1 deliberately built no half of a
+      token; what stands in for one until this slice is `SameSite=Lax` on the session cookie, which
+      is stated as the defence it is in `SPEC-staff.md`. (2) **The guard is
+      `requireStaff` from `src/staff/contract.ts`, called once per route and never re-implemented** —
+      the same rule `tests/ui/tokens.test.ts`'s `SCREENS` registry carries, for the same reason.
+      (3) **The four staff screens are already in that registry**; week 5's remaining screens append
+      beside them.
       **Plan mode. Deps:** 5.1 · **L**
 
 - [ ] **5.3 — `national_id` is unreachable by any agent tool.**
@@ -156,6 +182,10 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       **Owed by 1.7**, restated at 2.1, in `SPEC-parties.md` and in `0006_parties.sql` — deterministic,
       so a policy case and never a review and never an eval. This week owns it because this is the
       week a staff surface exists that could leak it.
+      **Carried in from 5.1:** the permission `party.national_id.read` exists in the role matrix,
+      held by `ADMIN` alone, **with no reader**. That is the admin-only half of `SPEC.md`'s security
+      default given a vocabulary before the unreachable half is enforced; this slice is what gives
+      it a reader, and a permission still unread when this slice closes is a permission to delete.
       **Deps:** 5.1 · **S**
 
 - [ ] **5.4 — What the session unlocks in evidence: `uploaded_by`, signed URLs, and the supersession
@@ -219,6 +249,10 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       **Done when:** an `ObligationType` and a `DocumentType` are each added through the screen with
       no release and no migration, by an operator whose role permits it; and `asset_type` is not on
       it.
+      **Carried in from 5.1: and neither is the role matrix.** Two catalogues, and never a third card
+      for who may do what — an access-control matrix a database write could widen is a
+      privilege-escalation path wearing the clothes of a setting (`SPEC-staff.md`). The permission
+      this screen guards with is `settings.write`, which exists from 5.1.
       **Verify:** add one of each on staging; a role without the permission is refused with
       `not_allowed`; grep the screen for `asset_type` and find nothing.
       **Deps:** 5.1, 5.7 · **M**

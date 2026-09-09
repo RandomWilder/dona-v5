@@ -200,6 +200,11 @@ const PII_COLUMNS = new Set([
   'last_name',
   'full_name',
   'contact_name',
+  // Slice 5.1. `staff_account.display_name` is an operator's own name, typed by whoever invited
+  // them. The list has learned four names now -- `party_contact.value` at 2.1, `national_id_key` at
+  // 2.4, `promoted_by` at 4.3 and this one -- and each time the rule held: the list learns the name
+  // it met, rather than the guard learning a pattern it will be wrong about.
+  'display_name',
   'birth_date',
   'date_of_birth',
   'iban',
