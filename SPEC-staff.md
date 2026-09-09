@@ -68,8 +68,12 @@ because Workspace SSO would move the second factor to Google's own and cost noth
 
 ### "Enforced, not offered" is a claim this module makes twice
 
-- `infra/bootstrap.sh` sets the Identity Platform project config to `mfa.state = ENFORCED` with the
-  TOTP provider, and disables public sign-up so the API key cannot self-register an account.
+- `infra/bootstrap.sh` sets the Identity Platform project config to `mfa.state = MANDATORY` — the
+  enum's name for enforced — with the TOTP provider, and disables public sign-up so the API key
+  cannot self-register an account. **The script reads the config back and exits 1 if it did not
+  take**, because the first version of that block PATCHed `ENFORCED`, got a `400`, exited 0 (an HTTP
+  error is not a transport error) and left MFA *disabled* while printing success. A configuration
+  step that cannot fail the run is decoration — slice 1.2's lesson about hooks, in another costume.
 - **And this module refuses any ID token that does not carry `firebase.sign_in_second_factor`.**
 
 The second is the one with a test behind it. A console checkbox — or a `PATCH` in a shell script no

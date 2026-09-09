@@ -239,7 +239,7 @@ describe('staff · sign-in, end to end', () => {
   });
 
   it('refuses an account with no second factor, however good its password is', async (t) => {
-    // Identity Platform's project config says mfa.state = ENFORCED. **This is the half with a test
+    // Identity Platform's project config says mfa.state = MANDATORY. **This is the half with a test
     // behind it**: an ID token that arrives straight out of the password step means the account
     // has no second factor, and the route refuses it (SPEC-staff.md).
     const pool = await migratedPoolOrNull();

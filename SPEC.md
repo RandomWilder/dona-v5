@@ -327,8 +327,9 @@ preference**: Identity Platform's SMS factor needs a reCAPTCHA token minted by G
 and the UI rule plus `tests/ui/tokens.test.ts` would have made that the system's first `<script>`, on
 the screens that guard everything else. TOTP's REST endpoints need none, so sign-in, the second
 factor and enrolment are all server-rendered forms. **"Enforced, not offered" is claimed twice**:
-`infra/bootstrap.sh` sets the project config to `mfa.state = ENFORCED` with TOTP and public sign-up
-off, and `src/staff/` refuses any ID token with no `firebase.sign_in_second_factor` — and only the
+`infra/bootstrap.sh` sets the project config to `mfa.state = MANDATORY` with TOTP and public sign-up
+off — and reads it back and fails, because the first version of that block left MFA disabled while
+printing success — and `src/staff/` refuses any ID token with no `firebase.sign_in_second_factor` — and only the
 second has a test behind it, because a console setting is not something this repository can assert.
 The session is ours rather than the provider's, because an ID token is an hour of authority this
 application cannot revoke. **`staff_session` stores `token_hash` and never the token**, and

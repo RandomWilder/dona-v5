@@ -1374,7 +1374,7 @@ never the token. The refusal says `not_allowed` and nothing more.
 - **Deps:** none · **Size:** L
 
 > **5.1 closed 9 Sep 2026** ([evidence/5.1.md](evidence/5.1.md)). `src/staff/` exists, the session
-> exists, `mfa.state = ENFORCED` is claimed twice — once in `infra/bootstrap.sh` and once by a
+> exists, enforced MFA is claimed twice — once in `infra/bootstrap.sh` and once by a
 > refusal with a test behind it — and `bootstrap.sh` gained the one secret the mechanism needs and
 > still creates no seeded operator, which is 1.5 discharged rather than reversed. Three things it
 > raised are carried below into 5.2, 5.3 and 5.8, and two into week 12 and week 8.

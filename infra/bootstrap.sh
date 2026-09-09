@@ -209,7 +209,7 @@ say "Identity Platform — enforced MFA, TOTP, no public sign-up"
 # prod restart and the organisation move (fuse F7), where it is decided once
 # with the rest of the prod hardening rather than twice.
 #
-# **mfa.state = ENFORCED is one half of "enforced, not offered".** The other
+# **mfa.state = MANDATORY is one half of "enforced, not offered".** The other
 # half is src/staff/, which refuses any ID token carrying no
 # `firebase.sign_in_second_factor` claim -- and that half is the one with a
 # test behind it, because a console setting is not something this repository

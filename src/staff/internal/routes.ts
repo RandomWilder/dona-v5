@@ -194,7 +194,7 @@ export function registerStaffRoutes(
 
       if (result.kind === 'signed_in') {
         // **Enforced, not offered.** A password alone produced a token, which means this account
-        // has no second factor. Identity Platform's project config says ENFORCED and this line is
+        // has no second factor. Identity Platform's project config says MANDATORY and this line is
         // the claim with a test behind it (SPEC-staff.md).
         await audit.write(
           {
