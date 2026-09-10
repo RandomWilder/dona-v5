@@ -1,11 +1,12 @@
 // The staff screens. Slice 5.1 — the first screens in this system that exist to decide who is
-// looking, rather than to show what is there.
+// looking, rather than to show what is there. **Slice 5.1b deleted four of the six**: the password
+// form, the second-factor form, the enrolment screen and the invite-acceptance screen all existed
+// to manage a credential this system no longer holds any part of (ADR-0005).
 //
-// **Six screens and not one line of client JavaScript**, which is the rule SPEC.md states and
-// tests/ui/tokens.test.ts fails the build over. It is also the reason the second factor is TOTP
-// rather than SMS: Identity Platform's SMS factor needs a reCAPTCHA token minted by Google's
-// browser SDK, and buying it would have put the system's first `<script>` on the screens that guard
-// everything else (SPEC-staff.md).
+// **Two screens and not one line of client JavaScript**, which is the rule SPEC.md states and
+// tests/ui/tokens.test.ts fails the build over. That rule decided the second factor at 5.1 — SMS
+// would have needed a reCAPTCHA token minted by Google's browser SDK — and it outlives the second
+// factor: the OIDC flow here is a plain redirect precisely so these screens stay HTML.
 //
 // **No screen here ever says why it refused.** One frozen sentence covers a wrong password, a wrong
 // code, an account with no role and an account that does not exist, because the alternative is an
@@ -78,6 +79,16 @@ const styles = h`<style>
     font-size: var(--text-body);
     cursor: pointer;
   }
+  .signin {
+    display: inline-block;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-1);
+    background: var(--color-chrome);
+    color: var(--color-on-chrome);
+    font-size: var(--text-body);
+    text-decoration: none;
+  }
   .identity-row {
     display: flex;
     gap: var(--space-3);
@@ -101,11 +112,18 @@ export const REFUSED_HE = 'לא ניתן להיכנס.';
 
 export interface LoginScreen {
   refused?: string;
-  /** No API key in this environment. Said out loud rather than answered as a wrong password. */
+  /** No OAuth client in this environment. Said out loud rather than answered as a failed sign-in. */
   unconfigured?: boolean;
 }
 
 export function renderLoginPage(screen: LoginScreen = {}): string {
+  const start =
+    screen.unconfigured === true
+      ? h``
+      : h`<div class="auth-card">
+            <p class="note">הכניסה היא דרך חשבון Google. אין כאן סיסמה ואין קוד.</p>
+            <p><a class="signin" href="/staff/auth/start">המשך עם Google</a></p>
+          </div>`;
   const body = h`
     <div class="auth">
       <div>
@@ -113,142 +131,10 @@ export function renderLoginPage(screen: LoginScreen = {}): string {
         <p class="lede">מערכת דונה דום · ניהול נכסים</p>
       </div>
       ${screen.unconfigured === true ? h`<p class="refusal">שירות הזהויות אינו מוגדר בסביבה הזו.</p>` : refusal(screen.refused)}
-      <form class="auth-card" method="post" action="/staff/login">
-        <div class="field">
-          <label for="email">דואר אלקטרוני</label>
-          <input id="email" name="email" type="email" dir="ltr" autocomplete="username" required />
-        </div>
-        <div class="field">
-          <label for="password">סיסמה</label>
-          <input id="password" name="password" type="password" dir="ltr" autocomplete="current-password" required />
-        </div>
-        <button type="submit">המשך</button>
-      </form>
-      <p class="note">הכניסה מחייבת גורם שני. חשבון ללא גורם שני אינו יכול להיכנס.</p>
+      ${start}
+      <p class="note">רק כתובת שכבר נמצאת ברשימת המשתמשים יכולה להיכנס.</p>
     </div>`;
   return page('דונה דום — כניסת צוות', body);
-}
-
-export interface SecondFactorScreen {
-  /**
-   * Google's short-lived credential for the half-finished sign-in, carried in a hidden field.
-   * **It never enters this system's database** — that is what keeps "no token value exists anywhere
-   * in the database" true, and it goes straight back to Google (SPEC-staff.md).
-   */
-  pendingCredential: string;
-  enrollmentId: string;
-  refused?: string;
-}
-
-export function renderSecondFactorPage(screen: SecondFactorScreen): string {
-  const body = h`
-    <div class="auth">
-      <div>
-        <h1>הגורם השני</h1>
-        <p class="lede">הזינו את הקוד מאפליקציית האימות שלכם.</p>
-      </div>
-      ${refusal(screen.refused)}
-      <form class="auth-card" method="post" action="/staff/login/verify">
-        <input type="hidden" name="pending" value="${screen.pendingCredential}" />
-        <input type="hidden" name="enrollment" value="${screen.enrollmentId}" />
-        <div class="field">
-          <label for="code">קוד בן שש ספרות</label>
-          <input id="code" name="code" type="text" dir="ltr" inputmode="numeric"
-                 autocomplete="one-time-code" maxlength="6" required />
-        </div>
-        <button type="submit">כניסה</button>
-      </form>
-    </div>`;
-  return page('דונה דום — הגורם השני', body);
-}
-
-export interface InviteScreen {
-  token: string;
-  email: string;
-  role: Role;
-  refused?: string;
-}
-
-export function renderInvitePage(screen: InviteScreen): string {
-  const body = h`
-    <div class="auth">
-      <div>
-        <h1>הצטרפות לצוות</h1>
-        <p class="lede">
-          הזמנה עבור <span dir="ltr">${screen.email}</span> · הרשאה ${screen.role}
-        </p>
-      </div>
-      ${refusal(screen.refused)}
-      <form class="auth-card" method="post" action="/staff/invite/${screen.token}">
-        <div class="field">
-          <label for="password">בחרו סיסמה</label>
-          <input id="password" name="password" type="password" dir="ltr"
-                 autocomplete="new-password" minlength="12" required />
-        </div>
-        <button type="submit">המשך לרישום הגורם השני</button>
-      </form>
-      <p class="note">לפחות שתים־עשרה תווים. בשלב הבא תרשמו אפליקציית אימות; ההרשאה נכנסת לתוקף רק בסיומו.</p>
-    </div>`;
-  return page('דונה דום — הצטרפות לצוות', body);
-}
-
-export interface EnrolScreen {
-  token: string;
-  email: string;
-  /** Base32, exactly as Google returned it — which is why this module carries no encoder. */
-  sharedSecretKey: string;
-  otpauthUri: string;
-  sessionInfo: string;
-  idToken: string;
-  refused?: string;
-}
-
-export function renderEnrolPage(screen: EnrolScreen): string {
-  const body = h`
-    <div class="auth">
-      <div>
-        <h1>רישום הגורם השני</h1>
-        <p class="lede">הוסיפו את המפתח לאפליקציית האימות, ואשרו בקוד הראשון.</p>
-      </div>
-      ${refusal(screen.refused)}
-      <div class="auth-card">
-        <div class="field">
-          <label>מפתח משותף</label>
-          <p class="secret" dir="ltr">${screen.sharedSecretKey}</p>
-        </div>
-        <div class="field">
-          <label>או כתובת מלאה להעתקה</label>
-          <p class="secret" dir="ltr">${screen.otpauthUri}</p>
-        </div>
-      </div>
-      <form class="auth-card" method="post" action="/staff/invite/${screen.token}/enrol">
-        <input type="hidden" name="session_info" value="${screen.sessionInfo}" />
-        <input type="hidden" name="id_token" value="${screen.idToken}" />
-        <div class="field">
-          <label for="code">הקוד הראשון</label>
-          <input id="code" name="code" type="text" dir="ltr" inputmode="numeric"
-                 autocomplete="one-time-code" maxlength="6" required />
-        </div>
-        <button type="submit">סיום הרישום</button>
-      </form>
-      <p class="note">אין כאן קוד QR בכוונה: המסכים במערכת הזו אינם מריצים קוד בדפדפן.</p>
-    </div>`;
-  return page('דונה דום — רישום הגורם השני', body);
-}
-
-export function renderEnrolledPage(email: string): string {
-  const body = h`
-    <div class="auth">
-      <div>
-        <h1>הרישום הושלם</h1>
-        <p class="lede"><span dir="ltr">${email}</span> — ההרשאה נכנסה לתוקף.</p>
-      </div>
-      <div class="auth-card">
-        <p class="note">היכנסו עכשיו עם הסיסמה והקוד מאפליקציית האימות.</p>
-        <p><a href="/staff/login">למסך הכניסה</a></p>
-      </div>
-    </div>`;
-  return page('דונה דום — הרישום הושלם', body);
 }
 
 export interface StaffHomeScreen {
@@ -256,15 +142,15 @@ export interface StaffHomeScreen {
   role: Role;
   permissions: readonly Permission[];
   mayInvite: boolean;
-  /** Shown once, on the page that created it. The row keeps only a hash (SPEC-staff.md). */
-  issuedInviteUrl?: string;
+  /** The operator just added. There is no URL to hand over, because there is nothing to deliver. */
+  addedOperator?: { email: string; role: Role; created: boolean };
   refused?: string;
 }
 
 export function renderStaffHomePage(screen: StaffHomeScreen): string {
   const invite = screen.mayInvite
-    ? h`<form class="auth-card" method="post" action="/staff/invites">
-          <h2>הזמנת משתמש</h2>
+    ? h`<form class="auth-card" method="post" action="/staff/operators">
+          <h2>הוספת משתמש</h2>
           <div class="field">
             <label for="invite-email">דואר אלקטרוני</label>
             <input id="invite-email" name="email" type="email" dir="ltr" required />
@@ -274,16 +160,19 @@ export function renderStaffHomePage(screen: StaffHomeScreen): string {
             <input id="invite-role" name="role" type="text" dir="ltr"
                    value="OPERATOR" required />
           </div>
-          <button type="submit">יצירת הזמנה</button>
+          <button type="submit">הוספה</button>
+          <p class="note">הוספה של כתובת שכבר קיימת מעבירה את ההרשאה ואינה יוצרת משתמש שני.</p>
         </form>`
     : h``;
   const issued =
-    screen.issuedInviteUrl === undefined
+    screen.addedOperator === undefined
       ? h``
       : h`<div class="auth-card">
-            <h2>ההזמנה נוצרה</h2>
-            <p class="note">הכתובת מוצגת פעם אחת בלבד. העבירו אותה בערוץ שאתם סומכים עליו.</p>
-            <p class="secret" dir="ltr">${screen.issuedInviteUrl}</p>
+            <h2>${screen.addedOperator.created ? 'המשתמש נוסף' : 'ההרשאה עודכנה'}</h2>
+            <p class="note">
+              <span dir="ltr">${screen.addedOperator.email}</span> · ${screen.addedOperator.role}
+            </p>
+            <p class="note">אין קישור להעביר: המשתמש נכנס עם חשבון ה־Google שלו.</p>
           </div>`;
   const body = h`
     <div class="auth">

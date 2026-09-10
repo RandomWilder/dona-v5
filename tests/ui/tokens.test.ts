@@ -41,11 +41,7 @@ import {
   renderUploadPage,
 } from '../../src/evidence/contract.ts';
 import {
-  renderEnrolledPage,
-  renderEnrolPage,
-  renderInvitePage,
   renderLoginPage,
-  renderSecondFactorPage,
   renderStaffHomePage,
 } from '../../src/staff/contract.ts';
 import type { UnitLetting } from '../../src/tenancy/contract.ts';
@@ -537,11 +533,12 @@ const SCREENS: Array<[string, () => string]> = [
         termsProfileNames: [],
       }),
   ],
-  // Slice 5.1's screens. **Appended here rather than guarded by a copy of this file** — the header
-  // has said since 1.11 that week 5's staff screens append to this registry, and the second copy is
-  // how a guard dies. They are also the screens with the most to lose by drifting: a `<script>` on
-  // a login page is a dependency loaded before anybody is authenticated, and the reason the second
-  // factor is TOTP rather than SMS is precisely that SMS would have put one there (SPEC-staff.md).
+  // Slice 5.1's screens, **four of them deleted at 5.1b with the flow they belonged to**. Appended
+  // here rather than guarded by a copy of this file — the header has said since 1.11 that week 5's
+  // staff screens append to this registry, and the second copy is how a guard dies. They are also
+  // the screens with the most to lose by drifting: a `<script>` on a login page is a dependency
+  // loaded before anybody is authenticated, and that rule is what kept 5.1's second factor off SMS
+  // and 5.1b's sign-in a plain redirect (SPEC-staff.md).
   ['staff · login', () => renderLoginPage()],
   [
     'staff · login, refused',
@@ -551,46 +548,6 @@ const SCREENS: Array<[string, () => string]> = [
     'staff · login, no provider configured',
     () => renderLoginPage({ unconfigured: true }),
   ],
-  [
-    'staff · second factor',
-    () =>
-      renderSecondFactorPage({
-        pendingCredential: 'pending-abc',
-        enrollmentId: 'enrol-1',
-      }),
-  ],
-  [
-    'staff · second factor, refused',
-    () =>
-      renderSecondFactorPage({
-        pendingCredential: 'pending-abc',
-        enrollmentId: 'enrol-1',
-        refused: 'לא ניתן להיכנס.',
-      }),
-  ],
-  [
-    'staff · invite',
-    () =>
-      renderInvitePage({
-        token: 'invite-token',
-        email: 'yael@example.test',
-        role: 'OPERATOR',
-      }),
-  ],
-  [
-    'staff · enrol the second factor',
-    () =>
-      renderEnrolPage({
-        token: 'invite-token',
-        email: 'yael@example.test',
-        sharedSecretKey: 'JBSWY3DPEHPK3PXP',
-        otpauthUri:
-          'otpauth://totp/Dona%20Dom%3Ayael%40example.test?secret=JBSWY3DPEHPK3PXP&issuer=Dona%20Dom',
-        sessionInfo: 'sess-1',
-        idToken: 'id-token',
-      }),
-  ],
-  ['staff · enrolled', () => renderEnrolledPage('yael@example.test')],
   [
     'staff · home, an admin',
     () =>
@@ -610,14 +567,33 @@ const SCREENS: Array<[string, () => string]> = [
       }),
   ],
   [
-    'staff · home, an admin who just issued an invite',
+    'staff · home, an admin who just added an operator',
     () =>
       renderStaffHomePage({
         email: 'yael@example.test',
         role: 'ADMIN',
         permissions: ['estate.read', 'staff.invite'],
         mayInvite: true,
-        issuedInviteUrl: 'https://example.test/staff/invite/invite-token',
+        addedOperator: {
+          email: 'amit@example.test',
+          role: 'OPERATOR',
+          created: true,
+        },
+      }),
+  ],
+  [
+    'staff · home, an admin who moved an existing role',
+    () =>
+      renderStaffHomePage({
+        email: 'yael@example.test',
+        role: 'ADMIN',
+        permissions: ['estate.read', 'staff.invite'],
+        mayInvite: true,
+        addedOperator: {
+          email: 'amit@example.test',
+          role: 'VIEWER',
+          created: false,
+        },
       }),
   ],
   [

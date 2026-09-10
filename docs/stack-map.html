@@ -593,9 +593,9 @@
         <span class="drv">COST DRIVES ON: log volume ingested</span>
       </div>
       <div class="comp">
-        <h4>Identity Platform</h4>
-        <p>Admin sign-in with enforced MFA. If Dona Dom is on Google Workspace this collapses into existing staff accounts and costs nothing extra — worth confirming early.</p>
-        <span class="drv">COST DRIVES ON: monthly active admins (few)</span>
+        <h4>Google sign-in (OAuth / OIDC)</h4>
+        <p>Admin sign-in is a Google account, and only an address already on the operator list may use it. Built on Identity Platform at week 5 and simplified to Google itself days later — the credential, the password and the second factor are all Google's, and this system holds none of them. Free. If Dona Dom is on Workspace it adds a domain check and nothing else.</p>
+        <span class="drv">COST DRIVES ON: nothing — no per-admin charge</span>
       </div>
     </div>
 
@@ -775,7 +775,7 @@
       </div>
       <div class="comp">
         <h4>Transactional email</h4>
-        <p>Admin invitations, password resets, weekly digests to management. Not a tenant channel — tenants live on WhatsApp. Resend or SendGrid; the choice is uninteresting.</p>
+        <p>Weekly digests to management, and whatever later needs to reach an inbox. Not a tenant channel — tenants live on WhatsApp — and no longer an admin one either: sign-in is Google, so there is no invitation to send and no password to reset. Resend or SendGrid; the choice is uninteresting.</p>
         <span class="drv">≈ $0–20 / MO</span>
       </div>
       <div class="comp">
@@ -935,7 +935,7 @@
       </div>
       <div>
         <h4>Is Dona Dom on Google Workspace?</h4>
-        <p>If so, admin sign-in and MFA collapse into existing staff accounts at no extra cost. A one-sentence answer that removes a component from this map.</p>
+        <p>Admin sign-in is a Google account either way, so this no longer decides whether a component exists. On Workspace it adds one check — that the account belongs to Dona Dom's domain — on top of the operator list. A one-sentence answer that tightens one line of configuration.</p>
       </div>
     </div>
   </section>

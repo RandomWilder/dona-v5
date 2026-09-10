@@ -152,10 +152,12 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   attempt to cross it.
 - `national_id` (ת.ז. / ח.פ.) is **admin-only, unreachable by any agent tool, and access-logged**. It
   never appears in the response shape of an agent tool; the policy suite asserts this.
-- **Staff identity is Identity Platform's; the session is ours** (slice 5.1, `SPEC-staff.md`). No
-  password hash and no TOTP secret exist in this schema. **The second factor is enforced by code and
-  not only by configuration**: an ID token carrying no `firebase.sign_in_second_factor` is refused,
-  which is what makes "enforced, not offered" a claim with a test behind it. Sessions store
+- **The staff credential is Google's; the session is ours** (slice 5.1, amended at 5.1b —
+  `SPEC-staff.md`, ADR-0005). No password hash and no second-factor secret exist in this schema.
+  **What this system asserts is an allowlist and not a factor**: only an email that already has a
+  `staff_account` row may sign in at all, and that row is bound to the first Google `sub` that uses
+  it. Whatever second factor Google enforces on the account is Google's to enforce and ours to
+  inherit rather than to prove. Sessions store
   `token_hash` and never the token — 32 CSPRNG bytes, SHA-256, no pepper, because a pepper defends a
   secret whose preimage space can be searched. **The refusal says `not_allowed` and nothing more**,
   byte-identically for an unknown account, an account with no role and a disabled one, because the
@@ -320,26 +322,27 @@ every seeded type, and it was red before the terms were tuned.
 
 **5.1 gave this system its first session, and `src/staff/` is the admin edge that holds it.** It owns
 none of E1–E16: what it answers is who is asking and what they may do, never which rows a person may
-see about a tenant, which is `src/scope/`'s and nobody else's. **Identity Platform holds the
-credential and the second factor and this schema holds neither** — no password hash, no TOTP secret,
-only a uid. **The second factor is TOTP and that is a consequence of a rule rather than a
-preference**: Identity Platform's SMS factor needs a reCAPTCHA token minted by Google's browser SDK,
-and the UI rule plus `tests/ui/tokens.test.ts` would have made that the system's first `<script>`, on
-the screens that guard everything else. TOTP's REST endpoints need none, so sign-in, the second
-factor and enrolment are all server-rendered forms. **"Enforced, not offered" is claimed twice**:
-`infra/bootstrap.sh` sets the project config to `mfa.state = MANDATORY` with TOTP and public sign-up
-off — and reads it back and fails, because the first version of that block left MFA disabled while
-printing success — and `src/staff/` refuses any ID token with no `firebase.sign_in_second_factor` — and only the
-second has a test behind it, because a console setting is not something this repository can assert.
-The session is ours rather than the provider's, because an ID token is an hour of authority this
-application cannot revoke. **`staff_session` stores `token_hash` and never the token**, and
+see about a tenant, which is `src/scope/`'s and nobody else's. **Google holds the credential and this
+schema holds none of it** — no password hash, no second-factor secret. Sign-in is the standard OIDC
+authorization-code flow, server-side: one link, one redirect, one code exchange, one verified ID
+token, and **not one line of client JavaScript**, which is the UI rule holding on the screens that
+guard everything else. `state` and `nonce` ride a short-lived `HttpOnly` cookie and never reach the
+database.
+
+**5.1 built this on Identity Platform with a password form, a TOTP form and an invite flow, and 5.1b
+deleted all three** (ADR-0005). What was lost is the *assertable* second factor: 5.1 refused any ID
+token with no `firebase.sign_in_second_factor`, and no equivalent claim survives delegation. What
+replaces it is narrower on the other axis — **only an email that already has a `staff_account` row
+may sign in at all**, where the old fence was public sign-up being disabled in someone else's
+console. The session is ours rather than the provider's, because an ID token is an hour of authority
+this application cannot revoke. **`staff_session` stores `token_hash` and never the token**, and
 `tests/policy/staff-session.test.ts` is the standing form of that: no column in this database whose
 name contains `token` may be anything but a `_hash`, proved by a case that builds the violating
-column itself and was red against a deliberately wrong `0021_` before it was green. The invite is a
-**printed one-time URL and never an email** — there is no mail transport and acquiring one is an
-external dependency with its own DPA — and the first operator comes from `npm run staff:invite`,
-which is **1.5's argument honoured rather than reversed**: `bootstrap.sh` still creates no seeded
-operator, only the one API key the mechanism needs. The urlencoded form parser moved from
+column itself and was red against a deliberately wrong `0021_` before it was green. **An operator is
+a row an admin wrote** — an email and a role, with `idp_local_id` filled by the first sign-in — and
+the first one comes from `npm run staff:add`, which is **1.5's argument honoured rather than
+reversed**: `bootstrap.sh` creates no seeded operator, and after 5.1b there is no secret in that row
+to seed. The urlencoded form parser moved from
 `src/estate/` to `src/kernel/ui/forms.ts` in the same change, the move the page shell made at 3.3,
 because staff is the second module with a form.
 

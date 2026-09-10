@@ -60,12 +60,16 @@ export interface AppDeps {
   /** The bucket a `storage_uri` names, which is not the same statement as which store is running. */
   bucket?: string;
   /**
-   * Who signs in (slice 5.1). **Unconfigured unless the caller says otherwise**, on the same
-   * argument the object store makes: a test builds an app without an API key, `npm run dev` on a
-   * clean clone still starts, and `/staff/login` says the provider is not configured rather than
-   * answering a real password as though it were wrong.
+   * Who signs in (slice 5.1, Google from 5.1b). **Unconfigured unless the caller says otherwise**,
+   * on the same argument the object store makes: a test builds an app with no OAuth client, `npm
+   * run dev` on a clean clone still starts, and `/staff/login` says the provider is not configured
+   * rather than starting a redirect to nowhere.
    */
   identity?: IdentityProvider;
+  /** Where Google is told to send an operator back. Absent, the request's own origin is used. */
+  staffBaseUrl?: string;
+  /** The Workspace domain to require, when Dona Dom's answer is known (slice 5.1b). */
+  staffHostedDomain?: string | null;
 }
 
 export function buildApp(deps: AppDeps): FastifyInstance {
@@ -121,6 +125,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     pool: deps.pool,
     clock: deps.clock ?? systemClock,
     identity: deps.identity ?? createUnconfiguredIdentity(),
+    baseUrl: deps.staffBaseUrl,
+    hostedDomain: deps.staffHostedDomain ?? null,
   });
   registerDocumentRoutes(app, {
     pool: deps.pool,

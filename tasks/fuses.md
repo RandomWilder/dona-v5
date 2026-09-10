@@ -21,7 +21,8 @@
 >   plan file carried. Handed to the director 9 Sep in English and Hebrew.
 >
 > **What this walk changes for week 5: nothing.** **No slice of week 5 depends on any fuse.** 5.1's
-> Identity Platform is in a project we already control; 5.2 through 5.8 are internal. Week 6 is the
+> Identity Platform — and 5.1b's OAuth client, which replaced it — are in a project we already
+> control; 5.2 through 5.8 are internal. Week 6 is the
 > first week a fuse touches, and it touches its *sizing* rather than its ability to start. **Week 4's
 > only fuse-blocked slice was 4.5, and it is cut and travelling** — see the row for F6 and
 > [roadmap.md](roadmap.md) § 4.5.
