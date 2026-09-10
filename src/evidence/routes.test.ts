@@ -246,16 +246,19 @@ describe('evidence · the upload route', () => {
         const rows = await pool.query<{
           file_hash: string;
           storage_uri: string;
+          uploaded_by: string | null;
         }>(
-          `SELECT d.file_hash, d.storage_uri FROM document d
+          `SELECT d.file_hash, d.storage_uri, d.uploaded_by FROM document d
              JOIN document_link l ON l.document_id = d.document_id
-            WHERE l.entity_id = $1`,
-          [unitId],
+            WHERE l.entity_id = $1 AND d.uploaded_by = $2
+            ORDER BY d.ingested_at DESC`,
+          [unitId, who.staffAccountId],
         );
         assert.equal(rows.rows.length, 1);
         const filed = rows.rows[0];
         assert.ok(filed);
         hashes.push(filed.file_hash);
+        assert.equal(filed.uploaded_by, who.staffAccountId);
         assert.match(
           filed.storage_uri,
           new RegExp(
@@ -266,7 +269,7 @@ describe('evidence · the upload route', () => {
       });
 
       await t.test(
-        'the named lease is on the unit page and in search, as a door not a gs:// href',
+        'the named lease is on the unit page and in search, as a door with a signed read',
         async () => {
           const unitPage = await as(lease).inject({
             method: 'GET',
@@ -274,12 +277,13 @@ describe('evidence · the upload route', () => {
           });
           assert.equal(unitPage.statusCode, 200);
           assert.match(unitPage.body, /חוזה שכירות/);
-          assert.match(unitPage.body, /gs:\/\/dona-v5-test-docs\//);
+          assert.match(unitPage.body, /storage\.googleapis\.com/);
+          assert.match(unitPage.body, /X-Goog-Expires=/);
           assert.match(unitPage.body, /נמצאו כל הביטויים הקבועים של הטופס/);
           assert.match(unitPage.body, /\/documents\/[0-9a-f-]{36}\/read/);
           assert.match(unitPage.body, /\/documents\/[0-9a-f-]{36}\/tenancy/);
           assert.doesNotMatch(unitPage.body, /href="gs:/);
-          assert.doesNotMatch(unitPage.body, /storage\.googleapis\.com/);
+          assert.doesNotMatch(unitPage.body, /gs:\/\/dona-v5-test-docs\//);
 
           const found = await as(lease).inject({
             method: 'GET',
@@ -558,7 +562,6 @@ describe('evidence · the upload route', () => {
         },
       );
     } finally {
-      await signOutAll(pool, STAFF_DOMAIN);
       for (const hash of hashes) {
         await pool
           .query(
@@ -570,6 +573,7 @@ describe('evidence · the upload route', () => {
           .query('DELETE FROM document WHERE file_hash = $1', [hash])
           .catch(() => {});
       }
+      await signOutAll(pool, STAFF_DOMAIN);
       if (unitId) {
         await pool
           .query(

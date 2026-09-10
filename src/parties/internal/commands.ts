@@ -65,8 +65,9 @@ export interface CreatePartySpec {
 
 /**
  * A person named on a lease, with no identifier. Always an insert: there is no natural key to
- * conflict on, and matching a name across tenancies is month two's — slice 5.5, where promotion
- * meets a portfolio and the duplicate count is what provokes the ruling. Slice 4.6, flow A2.
+ * conflict on. Slice 5.5 measured the portfolio and kept that: 0 parties with no identifier, 0
+ * nameless same-name groups. Matching a name across tenancies stays forbidden (SPEC-flows.md A2
+ * step 5). Slice 4.6, flow A2.
  */
 export async function createParty(
   db: Queryable,

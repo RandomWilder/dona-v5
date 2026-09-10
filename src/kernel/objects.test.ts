@@ -5,6 +5,7 @@ import {
   createConfiguredStore,
   createGcsStore,
   createMemoryStore,
+  signedReadLiveUntil,
 } from './objects.ts';
 
 // The GCS store is exercised through an injected fetch: what is worth testing
@@ -81,7 +82,12 @@ describe('object store', () => {
       createGcsStore({ bucket: 'b', token: async () => 't' }),
     ]) {
       assert.ok(!('delete' in store), 'ObjectStore must expose no delete');
-      assert.deepEqual(Object.keys(store).sort(), ['describe', 'put', 'read']);
+      assert.deepEqual(Object.keys(store).sort(), [
+        'describe',
+        'put',
+        'read',
+        'signRead',
+      ]);
     }
   });
 
@@ -135,5 +141,72 @@ describe('object store', () => {
         return true;
       },
     );
+  });
+
+  it('mints a V4 URL that dies when the clock says so', async () => {
+    const now = new Date('2026-09-10T16:00:00.000Z');
+    const fresh = new Date(now.getTime() + 15 * 60 * 1000);
+    const url = await createMemoryStore().signRead(
+      'unit/a/lease/x.pdf',
+      fresh,
+      now,
+    );
+    assert.match(
+      url,
+      /^https:\/\/storage\.googleapis\.com\/dona-v5-memory-docs\//,
+    );
+    assert.match(url, /X-Goog-Expires=900/);
+    assert.match(url, /X-Goog-Signature=/);
+    const until = signedReadLiveUntil(url);
+    assert.ok(until);
+    assert.equal(until.getTime(), fresh.getTime());
+    assert.ok(until.getTime() > now.getTime());
+    assert.ok(
+      until.getTime() <= new Date('2026-09-10T16:15:00.000Z').getTime(),
+    );
+
+    await assert.rejects(
+      createMemoryStore().signRead('unit/a/lease/x.pdf', now, now),
+      (error: KernelError) => error.code === 'invalid',
+    );
+    await assert.rejects(
+      createMemoryStore().signRead(
+        'unit/a/lease/x.pdf',
+        new Date(now.getTime() - 1),
+        now,
+      ),
+      (error: KernelError) => error.code === 'invalid',
+    );
+  });
+
+  it('GCS signRead posts signBlob and never mints an expired URL', async () => {
+    const fake = fakeFetch(
+      () =>
+        new Response(
+          JSON.stringify({ signedBlob: Buffer.from('sig').toString('base64') }),
+          {
+            status: 200,
+          },
+        ),
+    );
+    const now = new Date('2026-09-10T16:00:00.000Z');
+    const store = createGcsStore({
+      bucket: 'dona-v5-staging-docs',
+      fetchImpl: fake.impl,
+      token: async () => 't',
+      serviceAccountEmail: 'runtime@dona-v5.iam.gserviceaccount.com',
+      signBlob: async () => Buffer.from('sig'),
+    });
+    const url = await store.signRead(
+      'unit/id/lease/ab.pdf',
+      new Date(now.getTime() + 900_000),
+      now,
+    );
+    assert.match(
+      url,
+      /^https:\/\/storage\.googleapis\.com\/dona-v5-staging-docs\//,
+    );
+    assert.match(url, /GOOG4-RSA-SHA256/);
+    assert.equal(fake.calls.length, 0, 'injected signBlob must not hit IAM');
   });
 });

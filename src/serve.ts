@@ -56,6 +56,7 @@ const app = buildApp({
   // rather than letting a proxy header decide it.
   staffBaseUrl: process.env.STAFF_BASE_URL,
   staffHostedDomain: configuredHostedDomain(),
+  devMockups: (process.env.VERSION ?? '0.0.0-dev').endsWith('-dev'),
 });
 
 await app.listen({ host, port });

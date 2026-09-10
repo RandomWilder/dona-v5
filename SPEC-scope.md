@@ -76,8 +76,9 @@ audit line, and the tenancy-active predicate stays in this file where guard two 
 
 **It returns no name and no number**, and that is a rule and not an economy. `/estate` went behind
 the session at 5.2, **and the rule did not lift with it** — 5.2 was the slice entitled to lift it
-and recorded a decision to keep it (SPEC.md). What a screen may show about a household is a *state*
-and a
+and recorded a decision to keep it (SPEC.md). 5.4 reconsidered the same rule while unlocking who
+filed a document and a signed read of its bytes, and kept it again. What a screen may show about a
+household is a *state* and a
 *count*; `resolvePartiesInUnit` remains the call for the unit screen, where the people are the
 subject and the session will exist.
 

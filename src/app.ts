@@ -17,6 +17,7 @@ import {
   listPromotedFieldsForUnit,
   registerDocumentRoutes,
   searchDocuments,
+  signLinkedDocuments,
 } from './evidence/contract.ts';
 import { renderIndexPage } from './index-page.ts';
 import { type Clock, systemClock } from './kernel/clock.ts';
@@ -47,7 +48,14 @@ import {
   verifyCsrf,
 } from './staff/contract.ts';
 import {
+  CALLS_STUB,
+  renderIaMockup,
+  renderStubPage,
+  SETTINGS_STUB,
+} from './stub-page.ts';
+import {
   listIncompleteTenancies,
+  listTenancyEvents,
   recordCompletenessException,
 } from './tenancy/contract.ts';
 
@@ -81,6 +89,11 @@ export interface AppDeps {
   staffBaseUrl?: string;
   /** The Workspace domain to require, when Dona Dom's answer is known (slice 5.1b). */
   staffHostedDomain?: string | null;
+  /**
+   * Painted mockups at `/dev/mockups/:flow`. **Local `-dev` only** (slice 5.3). A stamped
+   * revision must not serve a second product beside the live screens.
+   */
+  devMockups?: boolean;
 }
 
 /**
@@ -289,13 +302,70 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     return renderIndexPage({ csrf: csrfFrom(request) });
   });
 
+  const stubHeaders = (reply: {
+    header: (name: string, value: string) => unknown;
+  }) => {
+    reply.header('content-type', 'text/html; charset=utf-8');
+    reply.header('cache-control', 'no-store');
+    reply.header('x-content-type-options', 'nosniff');
+  };
+
+  app.get(
+    '/calls',
+    { config: { staff: 'estate.read' } },
+    async (request, reply) => {
+      stubHeaders(reply);
+      return renderStubPage({ csrf: csrfFrom(request) }, CALLS_STUB, 'wired');
+    },
+  );
+  app.get(
+    '/settings',
+    { config: { staff: 'estate.read' } },
+    async (request, reply) => {
+      stubHeaders(reply);
+      return renderStubPage(
+        { csrf: csrfFrom(request) },
+        SETTINGS_STUB,
+        'wired',
+      );
+    },
+  );
+
+  if (deps.devMockups === true) {
+    app.get(
+      '/dev/mockups/:flow',
+      { config: { staff: 'estate.read' } },
+      async (request, reply) => {
+        const flow = (request.params as { flow: string }).flow;
+        if (flow !== 'ia') {
+          const error = new KernelError('not_found', 'route not found');
+          reply.code(httpStatus(error.code));
+          return toErrorBody(error);
+        }
+        stubHeaders(reply);
+        return renderIaMockup(csrfFrom(request));
+      },
+    );
+  }
+
+  const clock = deps.clock ?? systemClock;
+  const objects = deps.objects ?? createMemoryStore();
+  const bucket = deps.bucket ?? configuredBucket();
+
   registerEstateRoutes(app, {
     pool: deps.pool,
-    clock: deps.clock ?? systemClock,
+    clock,
     chrome: signedInChrome,
-    listLinkedDocuments,
+    listLinkedDocuments: async (db, entityType, entityId) =>
+      signLinkedDocuments(
+        await listLinkedDocuments(db, entityType, entityId),
+        objects,
+        bucket,
+        clock.now(),
+      ),
     searchDocuments,
     listPromotedFieldsForUnit,
+    listTenancyEvents,
     listIncompleteTenancies,
     recordCompletenessException,
   });
@@ -304,13 +374,13 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   registerStaffRoutes(app, staffDeps);
   registerDocumentRoutes(app, {
     pool: deps.pool,
-    clock: deps.clock ?? systemClock,
-    objects: deps.objects ?? createMemoryStore(),
+    clock,
+    objects,
     pdf: deps.pdf ?? createPdfjsText(),
     ocr: deps.ocr,
     extractor: deps.extractor,
     work: deps.work,
-    bucket: deps.bucket ?? configuredBucket(),
+    bucket,
     chrome: signedInChrome,
   });
 

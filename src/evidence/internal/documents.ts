@@ -37,6 +37,11 @@ export interface DocumentSpec {
   validTo: string | null;
   /** Slice 3.6. The door's result, so a list can show it without re-reading the bytes. */
   verificationVerdict: FiledVerdict;
+  /**
+   * Slice 5.4. The operator who filed this, when a session named one. Null on seed and importer
+   * paths, and on rows ingested before the column existed.
+   */
+  uploadedBy?: string | null;
 }
 
 export interface DocumentLinkSpec {
@@ -60,7 +65,8 @@ export interface DocumentLinkSpec {
  * **`file_hash` and `storage_uri` are excluded from the update path deliberately**, so a re-ingest
  * is a no-op on the two columns the trigger protects rather than an `UPDATE … SET file_hash =
  * file_hash` that trips it. The rest of the row is refreshed: a document re-filed with a corrected
- * validity window is the same evidence, better described.
+ * validity window is the same evidence, better described. `uploaded_by` keeps the first operator
+ * (`COALESCE`): a second filing of the same bytes is a link, not a new author.
  */
 export async function ingestDocument(
   db: Queryable,
@@ -70,14 +76,15 @@ export async function ingestDocument(
   const result = await db.query<{ document_id: string; inserted: boolean }>(
     `INSERT INTO document (document_id, document_type_id, storage_uri, file_hash,
                            drive_file_id, valid_from, valid_to, ingested_at,
-                           verification_verdict)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                           verification_verdict, uploaded_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      ON CONFLICT (file_hash) DO UPDATE
        SET document_type_id = EXCLUDED.document_type_id,
            drive_file_id = EXCLUDED.drive_file_id,
            valid_from = EXCLUDED.valid_from,
            valid_to = EXCLUDED.valid_to,
-           verification_verdict = EXCLUDED.verification_verdict
+           verification_verdict = EXCLUDED.verification_verdict,
+           uploaded_by = COALESCE(document.uploaded_by, EXCLUDED.uploaded_by)
      RETURNING document_id, ${INSERTED}`,
     [
       newId(),
@@ -89,6 +96,7 @@ export async function ingestDocument(
       spec.validTo,
       ingestedAt,
       spec.verificationVerdict,
+      spec.uploadedBy ?? null,
     ],
   );
   const row = result.rows[0];

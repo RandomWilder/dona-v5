@@ -159,9 +159,10 @@ fact about *this* import, which slice 1.11 shipped wrongly and CI caught within 
 ## What is deliberately not here
 
 - **No cross-tenancy identity resolution.** The `national_id_key` deduplicates a party *by
-  identifier*, which is a key and not a judgment. Matching a name against the register is a month-two
-  problem and is forbidden to the lease flow by [SPEC-flows.md](SPEC-flows.md) A2 step 5 for the same
-  reason.
+  identifier*, which is a key and not a judgment. Matching a name against the register is forbidden
+  to the lease flow by [SPEC-flows.md](SPEC-flows.md) A2 step 5. **5.5 measured it and kept the
+  prohibition:** 0 nameless parties, 0 nameless same-name groups, on 2,871 identified register
+  people.
 - **No caller-supplied intent key.** The natural keys do the work. An idempotency key would make the
   *call* repeatable; the natural keys make the *data* convergent, which is the property a re-run
   needs.

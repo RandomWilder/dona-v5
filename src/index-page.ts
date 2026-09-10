@@ -83,6 +83,20 @@ export function renderIndexPage(screen: IndexScreen): string {
           <p class="lede">מי מורשה להיכנס למערכת, ומה כל תפקיד רשאי לעשות.</p>
         </a>
       </article>
+      <article class="row-card">
+        ${marker('is-alert')}
+        <a class="card-link" href="/calls">
+          <p class="card-title"><span>קריאות</span></p>
+          <p class="lede">שבוע 7 · סלייס 7.2</p>
+        </a>
+      </article>
+      <article class="row-card">
+        ${marker('is-alert')}
+        <a class="card-link" href="/settings">
+          <p class="card-title"><span>הגדרות</span></p>
+          <p class="lede">שבוע 5 · סלייס 5.8</p>
+        </a>
+      </article>
     </div>`;
   return renderPage({
     title: 'דונה דום — ניהול נכסים',

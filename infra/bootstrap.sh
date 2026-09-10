@@ -355,6 +355,14 @@ gcloud storage buckets describe "gs://$DOCS_BUCKET" --project "$PROJECT" \
   )' | sed 's/^/  /'
 echo "  $RUNTIME_SA: objectViewer + objectCreator, and NOT objectAdmin"
 
+# Slice 5.4. V4 signed URLs are signed with IAM signBlob. The runtime
+# account may sign as itself; it still cannot delete.
+gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_EMAIL" \
+  --member "serviceAccount:$RUNTIME_EMAIL" \
+  --role roles/iam.serviceAccountTokenCreator \
+  --project "$PROJECT" >/dev/null
+echo "  $RUNTIME_SA: serviceAccountTokenCreator on itself (signBlob)"
+
 # Document AI does not serve me-west1. Closest residency that hosts OCR_PROCESSOR
 # is eu (eu-documentai.googleapis.com). Processor id is environment, like
 # DOCS_BUCKET; the version is a config_settings row.

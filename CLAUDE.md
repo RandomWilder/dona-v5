@@ -8,9 +8,9 @@ Claude-specific additions:
 
 - **One slice per session.** Take it from [tasks/todo.md](tasks/todo.md), where it is already written
   with acceptance criteria, and finish with its **Verify** step — never self-certify. Close it with a
-  `tasks/evidence/<slice>.md` file recording what was proved, with the numbers. A screen or write
-  path: restart `npm run dev` (it does not watch) and click the path on `:3000` before merge —
-  leftover local is not current.
+  `tasks/evidence/<slice>.md` file recording what was proved, with the numbers — **cap ~40 lines**.
+  A screen or write path: restart `npm run dev` (it does not watch) and click the path on `:3000`
+  before merge — leftover local is not current.
 - **Make the structural call; don't hand over a menu.** Repo layout, gate design, slice sequencing,
   what gets tested and how are the agent's to decide — take the simplest approach that is effective
   and safe, do it, and state what was decided and why. What stays the director's: anything that
@@ -27,6 +27,10 @@ Claude-specific additions:
 - **The spec is the prompt.** Start module work by reading `SPEC-<module>.md`, and propose the spec
   edit before the code edit when behaviour changes. Requirements live in files, never in a chat
   description.
+- **Mockup per unbuilt flow, in the live shell, before the slice that wires it.** `mockups/<flow>.html`
+  on a dev-only route (`/dev/mockups/<flow>`). The director clicks `:3000` and comments; then the
+  slice may be wired. A slice with no screen has no mockup. `scripts/guards.ts` fails if a mockup
+  file and that flow's evidence file both exist.
 - **Plan mode is mandatory** for the kernel, a migration, auth, the policy layer, or any change
   touching two or more modules ([docs/pipeline.md](docs/pipeline.md) §4).
 - **Both gates are test suites.** Any change to a prompt, model id, retrieval config or tool

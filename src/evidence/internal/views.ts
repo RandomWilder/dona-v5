@@ -202,9 +202,8 @@ export interface FiledScreen {
  * without being checked has to look different from one that was checked. OCR closes the gap at
  * slice 4.1.
  *
- * The digest is shown and the `gs://` uri is not. Nothing in this system mints a signed URL — a
- * signed URL is a bearer token for one object, and issuing one is a decision that belongs behind a
- * session (slice 3.6 carries the same rule for the documents panel).
+ * The digest is shown and the `gs://` uri is not. The documents panel mints a signed URL (slice
+ * 5.4); this confirmation screen does not.
  */
 export function renderFiledPage(screen: FiledScreen): string {
   const { unit, type, verification } = screen;
@@ -439,7 +438,6 @@ function extractedSection(screen: ReadScreen) {
       promotable.length > 0
         ? h`<form method="post" action="/documents/${screen.documentId}/promote" enctype="multipart/form-data">
             ${csrfInput(screen.csrf)}
-            <p><label>מי מאשר <input name="promoted_by" required maxlength="200"></label></p>
             ${promotable.map(
               (row) =>
                 h`<button class="btn" name="extracted_field_id" value="${row.extractedFieldId}">קדם · ${row.labelHe}</button>`,
@@ -621,11 +619,6 @@ export function renderTenancyPage(screen: TenancyScreen): string {
               </label>
             </div>`
             }
-            <div class="form-row">
-              <label>מי מאשר
-                <input name="confirmed_by" required maxlength="200">
-              </label>
-            </div>
             <div class="form-actions">
               <button class="btn btn-primary" type="submit">אישור וכתיבה</button>
               <a href="${back}">ביטול</a>

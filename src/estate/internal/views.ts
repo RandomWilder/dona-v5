@@ -51,6 +51,8 @@ export interface FiledDocumentView {
   validFrom: string | null;
   validTo: string | null;
   storageUri: string;
+  /** Slice 5.4. Present on the documents panel, absent on search. */
+  readUrl?: string;
   verificationVerdict: 'verified' | 'unverified' | 'unguarded';
 }
 
@@ -61,6 +63,15 @@ export interface PromotedFieldView {
   value: string;
   page: number;
   confidence: number | null;
+}
+
+/** Slice 5.5. Injected from tenancy; this file never queries `tenancy_event`. */
+export interface TenancyEventView {
+  field: string;
+  old_value: string | null;
+  new_value: string;
+  actor: string;
+  source_document_id: string;
 }
 
 export interface DocumentSearchHit extends FiledDocumentView {
@@ -107,6 +118,11 @@ const VERDICT_CHIP: Record<FiledDocumentView['verificationVerdict'], string> = {
   verified: 'נבדק',
   unverified: 'ללא שכבת טקסט',
   unguarded: 'ללא בדיקה',
+};
+
+const EVENT_FIELD: Record<string, string> = {
+  start_date: 'תחילת השכירות',
+  end_date: 'סיום השכירות',
 };
 
 // Hebrew for a value the schema allows and this table does not translate. A vocabulary gains a
@@ -168,6 +184,17 @@ const styles = h`<style>
     align-items: center;
   }
   .queue-card input { min-height: var(--size-control-ops); flex: 1; min-width: 12rem; }
+  .change-log {
+    display: grid;
+    gap: var(--space-2);
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+  .change-log li {
+    padding: var(--space-3) 0;
+    border-block-end: var(--size-hairline) solid var(--color-divider);
+  }
 </style>`;
 
 function page(title: string, body: Html, nav: Html): string {
@@ -272,7 +299,11 @@ function documentCard(doc: FiledDocumentView): Html {
       }
       <div><dt>נקלט</dt><dd>${ltr(doc.ingestedAt)}</dd></div>
       <div><dt>בדיקת התאמה</dt><dd>${VERDICT[doc.verificationVerdict]}</dd></div>
-      <div><dt>נתיב</dt><dd class="doc-uri">${ltr(doc.storageUri)}</dd></div>
+      ${
+        doc.readUrl
+          ? h`<div><dt>קובץ</dt><dd><a href="${doc.readUrl}" rel="noreferrer">הורדה</a></dd></div>`
+          : h``
+      }
     </dl>
     <p class="unit-actions">
       <a href="/documents/${doc.documentId}/read">מילים על הדף</a>
@@ -400,12 +431,32 @@ function promotedPanel(fields: readonly PromotedFieldView[]): Html {
   </section>`;
 }
 
+function changeLogPanel(events: readonly TenancyEventView[]): Html {
+  if (events.length === 0) {
+    return h``;
+  }
+  return h`<section>
+    <h2>יומן שינויים</h2>
+    <ol class="change-log">${events.map((event) => {
+      const field = label(EVENT_FIELD, event.field);
+      const oldValue = event.old_value ?? '—';
+      return h`<li>
+        ${field}
+        <span dir="ltr">${oldValue} → ${event.new_value}</span>
+        · <span dir="ltr">${event.actor}</span>
+        · <a href="/documents/${event.source_document_id}">מסמך</a>
+      </li>`;
+    })}</ol>
+  </section>`;
+}
+
 export function renderUnitPage(
   unit: UnitHit,
   residents: number | undefined,
   documents: readonly FiledDocumentView[],
   nav: Html,
   promoted: readonly PromotedFieldView[] = [],
+  events: readonly TenancyEventView[] = [],
 ): string {
   const body = h`
     <div>
@@ -418,6 +469,7 @@ export function renderUnitPage(
       </p>
     </div>
     ${promotedPanel(promoted)}
+    ${changeLogPanel(events)}
     ${documentsPanel(documents, 'מסמכים')}`;
   return page(`דונה דום — דירה ${unit.unit_number}`, body, nav);
 }

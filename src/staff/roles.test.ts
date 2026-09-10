@@ -51,7 +51,7 @@ describe('the role matrix is code', () => {
 
   it('leaves no permission unheld by any role', () => {
     // A permission nobody holds is a typo or a guard that can never pass. `party.national_id.read`
-    // has no reader until slice 5.3 and is still held by ADMIN, which is the difference between
+    // has no reader until week 9 and is still held by ADMIN, which is the difference between
     // "not used yet" and "unreachable".
     for (const permission of PERMISSIONS) {
       const holders = ROLES.filter((role) => can(role, permission));

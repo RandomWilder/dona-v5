@@ -143,6 +143,8 @@ describe('every route in the application', () => {
       'GET /estate/search',
       'GET /estate/expiring',
       'GET /documents/new',
+      'GET /calls',
+      'GET /settings',
       'POST /documents',
     ]) {
       const stance = declared.find(([name]) => name === url)?.[1];
@@ -193,6 +195,8 @@ describe('a request with no session', () => {
         '/documents/11111111-1111-4111-8111-111111111111/read',
         '/documents/11111111-1111-4111-8111-111111111111/seed',
         '/documents/11111111-1111-4111-8111-111111111111/tenancy',
+        '/calls',
+        '/settings',
       ]) {
         const response = await app.inject({ method: 'GET', url });
         assert.equal(response.statusCode, 303, url);
@@ -443,5 +447,40 @@ describe('a request with a session', () => {
       await app.close();
       await pool.end();
     }
+  });
+});
+
+describe('dev mockups', () => {
+  it('are not registered on a stamped version', async () => {
+    const pool = deadPool();
+    const app = buildApp({ pool, version: '9.9.9-test' });
+    await app.ready();
+    const urls = app.stances.map((route) => `${route.method} ${route.url}`);
+    assert.equal(
+      urls.includes('GET /dev/mockups/:flow'),
+      false,
+      'a non-dev process served mockups',
+    );
+    await app.close();
+    await pool.end();
+  });
+
+  it('exist only when asked for, and stay behind the session', async () => {
+    const pool = deadPool();
+    const app = buildApp({
+      pool,
+      version: '0.0.0-dev',
+      devMockups: true,
+    });
+    await app.ready();
+    const stance = app.stances.find(
+      (route) => route.method === 'GET' && route.url === '/dev/mockups/:flow',
+    );
+    assert.equal(stance?.stance, 'estate.read');
+    const anon = await app.inject({ method: 'GET', url: '/dev/mockups/ia' });
+    assert.equal(anon.statusCode, 303);
+    assert.equal(anon.headers.location, '/staff/login');
+    await app.close();
+    await pool.end();
   });
 });

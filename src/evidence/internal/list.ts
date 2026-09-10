@@ -4,7 +4,9 @@
 // lease linked to the unit *and* the tenancy is one row. `searchDocuments` is the documents half of
 // `/estate/search` — same LIMIT, same LIKE-escape, never a fork of that screen.
 import { SEARCH_LIMIT as ESTATE_SEARCH_LIMIT } from '../../estate/contract.ts';
+import { type ObjectStore, SIGN_READ_TTL_MS } from '../../kernel/objects.ts';
 import type { FiledVerdict, LinkEntityType } from './documents.ts';
+import { parseStorageUri } from './storage-path.ts';
 import type { Queryable } from './types.ts';
 
 /** Same cap estate's search carries. A second search that forgets it is the 2.6 defect. */
@@ -175,4 +177,34 @@ function toLinked(row: {
     storageUri: row.storage_uri,
     verificationVerdict: row.verification_verdict,
   };
+}
+
+export interface LinkedDocumentRead extends LinkedDocument {
+  readUrl: string;
+}
+
+/**
+ * Slice 5.4. The panel's signed reads, minted here so estate never parses a `gs://` uri.
+ * A uri that names another bucket is skipped rather than taking the whole page down.
+ */
+export async function signLinkedDocuments(
+  docs: readonly LinkedDocument[],
+  store: ObjectStore,
+  bucket: string,
+  now: Date,
+): Promise<LinkedDocumentRead[]> {
+  const expiresAt = new Date(now.getTime() + SIGN_READ_TTL_MS);
+  return Promise.all(
+    docs.map(async (doc) => {
+      try {
+        const { path } = parseStorageUri(doc.storageUri, bucket);
+        return {
+          ...doc,
+          readUrl: await store.signRead(path, expiresAt, now),
+        };
+      } catch {
+        return { ...doc, readUrl: '' };
+      }
+    }),
+  );
 }

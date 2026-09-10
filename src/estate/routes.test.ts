@@ -150,6 +150,7 @@ describe('estate · the routes', () => {
           assert.match(response.body, /דירה <span dir="ltr">12A<\/span>/);
           assert.match(response.body, /מסמכים/);
           assert.match(response.body, /אין מסמכים בתיק זה עדיין/);
+          assert.doesNotMatch(response.body, /יומן שינויים/);
           assert.match(
             response.body,
             new RegExp(`/documents/new\\?unit=${unitId}`),

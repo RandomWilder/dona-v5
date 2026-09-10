@@ -4,8 +4,7 @@
 // **No query here returns a person.** Documents bind to parties — `entity_type = 'PARTY'` is one of
 // R13's eight — but who those parties are is `src/scope/`'s answer and nobody else's (foundation
 // rule 1). A document panel shows what is filed, not who signed it — and still does after 5.2 put
-// a session behind the screens and declined to lift the rule on the strength of it. That is the same sentence `src/tenancy/contract.ts` and
-// `src/parties/contract.ts` carry, and it does not bend for documents.
+// a session behind the screens and declined to lift the rule, and after 5.4 kept that rule again.
 //
 // The catalogue reads are here on purpose and are not an exception to the rule above: a document
 // type is a row about paper, not about anybody. They exist because slice 3.3's guard and slice 4.2's
@@ -80,12 +79,14 @@ export type {
   DocumentHit,
   DocumentSearchResults,
   LinkedDocument,
+  LinkedDocumentRead,
 } from './internal/list.ts';
 export {
   listLinkedDocuments,
   MEASURED_QUERIES,
   SEARCH_LIMIT,
   searchDocuments,
+  signLinkedDocuments,
 } from './internal/list.ts';
 export type {
   PromoteDeps,
