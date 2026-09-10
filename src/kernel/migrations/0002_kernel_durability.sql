@@ -2,24 +2,23 @@
 --
 -- v3's *domain* migrations do not cross over -- they encode the three shapes v5 examined and
 -- rejected (docs/from-v3.md Tier 3), and the estate spine is written fresh from the workbook at
--- slice 1.9. What does cross over is the durability substrate the kernel is built on: idempotency,
--- audit, the outbox, durable work and settings. Without it seven kernel suites skip locally and
--- fail in CI from 1.6, which sets REQUIRE_POSTGRES=1 -- and a suite that only ever skips is the
--- failure mode SPEC.md's testing section exists to refuse.
+-- slice 1.9. What does cross over is the durability substrate the kernel is built on: audit,
+-- durable work and settings. Without it seven kernel suites skip locally and fail in CI from 1.6,
+-- which sets REQUIRE_POSTGRES=1 -- and a suite that only ever skips is the failure mode SPEC.md's
+-- testing section exists to refuse.
 --
 -- No `DEFAULT now()` anywhere below: every timestamp is written by the caller from the injected
 -- clock (SPEC.md, "Time comes from the injected clock"). A column default is a second source of
 -- truth no test can see.
-
--- Explicit `state`, not a null `result` meaning "in flight": v2 used the latter and could not
--- distinguish it from a command whose result is legitimately null (SPEC-kernel.md, decision 4).
-CREATE TABLE IF NOT EXISTS idempotency_keys (
-  key text PRIMARY KEY,
-  state text NOT NULL CHECK (state IN ('running', 'done')),
-  result jsonb,
-  claimed_at timestamptz NOT NULL,
-  completed_at timestamptz
-);
+--
+-- **Slice 5.0-cut removed `idempotency_keys` and `outbox` from this file** rather than dropping
+-- them in a later migration. Both were written at 1.4 ahead of a caller and five weeks later still
+-- had none: `createEventBus` and `createIdempotency` were imported by nothing but their own tests,
+-- and `src/register/internal/importer.ts:9` had already recorded that there is no caller-supplied
+-- intent key anywhere in this system. With no real data in any environment a migration is still
+-- editable (docs/from-v3.md), and an ALTER undoing a table this repository never used would be the
+-- theatre the audit_log comment below refuses. They come back into this file, unchanged, on the day
+-- something publishes an event or replays a command.
 
 -- A table, not a log. SPEC.md's "PII never in logs" governs log output; command inputs are stored
 -- here deliberately, because this is the system of record for who did what.
@@ -43,20 +42,6 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE INDEX IF NOT EXISTS audit_log_at ON audit_log (at DESC);
 CREATE INDEX IF NOT EXISTS audit_log_subject ON audit_log (subject_id, at DESC);
-
--- The row is written before delivery is attempted, so an event is never lost to a handler that
--- throws; `handled_at IS NULL` is the replay set.
-CREATE TABLE IF NOT EXISTS outbox (
-  id uuid PRIMARY KEY,
-  type text NOT NULL,
-  subject_id text NOT NULL,
-  payload jsonb NOT NULL,
-  at timestamptz NOT NULL,
-  handled_at timestamptz,
-  last_error text
-);
-
-CREATE INDEX IF NOT EXISTS outbox_unhandled ON outbox (at) WHERE handled_at IS NULL;
 
 -- Work outlives the process. `intent_key` is UNIQUE so scheduling twice on the same business
 -- intent returns the existing job rather than a duplicate -- the same rule commands follow.

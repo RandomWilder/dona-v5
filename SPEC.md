@@ -216,9 +216,9 @@ against a document we authored to pass it.
 
 Kernel live at slice 1.4, on 1.3's toolchain: Node 24 type stripping, Biome, `node --test`, Postgres
 16 + pgvector on `docker compose`, and a `/health` skeleton that asserts `db:up`. `src/kernel/` is
-lifted from v3 and holds ids, clock, errors, validate, config, db, the migration runner,
-idempotency, audit, outbox, durable work, object storage, pdf, embeddings, extraction and the RTL
-token layer; `src/app.ts`, `src/serve.ts`, `src/migrate.ts` and `src/seed.ts` are the composition
+lifted from v3 and holds ids, clock, errors, validate, config, db, the migration runner, audit,
+durable work, object storage, pdf, embeddings, extraction and the RTL token layer (idempotency and
+the outbox were lifted too, and removed unused at slice 5.0-cut); `src/app.ts`, `src/serve.ts`, `src/migrate.ts` and `src/seed.ts` are the composition
 root above it. `src/kernel/boundary.test.ts` proves the kernel imports from no domain module.
 
 **Migrations live in `src/kernel/migrations/`**, one ordered sequence for the whole system, applied
