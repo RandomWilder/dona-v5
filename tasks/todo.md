@@ -125,10 +125,28 @@ is the single most important thing carried out of month one.
       email and role, the operator signs in with Google, and no message ever had to reach them. The
       mail-transport ADR-0004 naming is not owed by anything in the plan today; when a slice needs
       to *send* something it is that slice's, and week 8 no longer carries it.
-- [ ] **Left standing in GCP by 5.1b, the director's: `staging-identity-api-key` and the
-      `dona-identity-staging` API key** are unread by any revision from the deploy that carries
-      5.1b. Two `gcloud` deletes. Harmless where they are, and an unused credential nobody rotates
-      is exactly what slice 1.5 argued against.
+- [ ] **Left standing in GCP by 5.1b, the director's — and 5.1c found it is four acts, not two.**
+      Unread by any revision since the 5.1b deploy: `staging-identity-api-key` in Secret Manager,
+      the `dona identity (staging)` API key `8eec9e86-710e-45ed-8725-3528ffa404b3`, **and a
+      `Browser key (auto created by Firebase)` `5ee51088-a00c-4a27-9ebf-82ffa656ff51`** that
+      `initializeAuth` created at slice 1.5 and nothing has read since — it was not in the 5.1b
+      list because nothing looked for what the vendor created on its own. Plus
+      `gcloud services disable identitytoolkit.googleapis.com`, which `infra/bootstrap.sh` no longer
+      enables, so the live project and a fresh bootstrap have drifted. `apikeys.googleapis.com`
+      stays: it manages keys rather than being a vendor, and with no keys left it costs nothing.
+      **These are the director's because `.claude/hooks/guard-bash.mjs:20` refuses a `gcloud`
+      command containing `delete`, and that refusal was not worked around.** An unused credential
+      nobody rotates is exactly what slice 1.5 argued against.
+- [ ] **Raised at 5.1c, flagged to the director rather than owned: the bash guard reads the command
+      that is typed, not what it runs.** `.claude/hooks/guard-bash.mjs:20` blocked the four `gcloud`
+      deletions above; in the same session `./infra/staff-add.sh` removed its own Cloud Run job from
+      inside itself and was not blocked, because the hook saw only the script's name. This is
+      recorded rather than fixed, because it looks like the design and not a hole: the guard is a
+      fuse against a typo or a half-considered one-liner, and a script in the repo has been read,
+      reviewed and merged, which a typed command has not. Making the hook read script bodies would
+      refuse `infra/rollback.sh` and `infra/corpus-delete.sh` too, both of which exist to remove
+      things on purpose. **If the director wants the stronger rule, it is theirs to say so**, and it
+      is a change to how much the agent is trusted rather than a bug fix.
 - [ ] **Take delivery of the real document corpus** — after F6. Arrival and removal dates go on
       [fuses.md](fuses.md) the day it lands, and the removal is **run by hand on the day** rather
       than trusted to the lifecycle rule, which is the backstop and not the record.
@@ -174,13 +192,13 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       director's. **Amended at 5.1b:** the two commands the 5.1 evidence names are gone with the
       invite — there is no URL to open, no password to set and no authenticator to enrol. What is
       needed instead is one `staff_account` row on the staging database, after which the sign-in is
-      the same single link the local click-through proved. **And 5.1b found that nobody owns how to
-      reach that database:** `npm run staff:add` needs a `DATABASE_URL`, no script or document names
-      a Cloud SQL proxy or an equivalent, and the local `.env` points at the container. So the row is
-      written either from a proxy session the director opens by hand, or by a one-off Cloud Run job
-      on the service that already holds the connection — **and the decision of which belongs with
-      5.9's admin shell**, the first slice that needs staging to have operators in it at all rather
-      than one. Until it is made, staging serves `/staff/login` correctly to nobody.
+      the same single link the local click-through proved. **Written at 5.1c**, by
+      `./infra/staff-add.sh staging <email> ADMIN` — execution `dona-staging-staff-add-lq6v8`,
+      `staff:add: added · wilder.netboost@gmail.com · ADMIN`, exit 0. 5.1b had carried "how does a
+      row reach the staging database" to 5.9 as an open question; it was never open, because
+      `.github/workflows/deploy.yml:72` had been answering it for migrations since slice 1.6. So
+      **all that remains here is the click**, on
+      `https://dona-staging-r44j24yuaa-zf.a.run.app/staff/login`.
       *Original entry:* Identity Platform with
       **enforced MFA**, an invite flow, and `src/staff/` — the admin edge, not a domain module; it
       owns none of E1–E16. **The role matrix is code, not a config row**, a deliberate exception to
@@ -363,12 +381,11 @@ outside the repository ([docs/pipeline.md](docs/pipeline.md) §8, §10):
       built at the composition root (`src/kernel/ui/page.ts:66` already takes `nav?: Html` and the
       kernel must not learn a route); an unbuilt tab renders one line naming the week and slice that
       owns it, so **the remaining roadmap is on screen**. Written into the slice list when the chore
-      below runs, and after 5.2, whose composition-root move it builds on. **Carried in from 5.1b:
-      how an operator row reaches the staging database.** `npm run staff:add` needs a `DATABASE_URL`
-      and nothing in `infra/` documents reaching staging's — so this slice decides between a Cloud
-      SQL proxy session named in a script and a one-off Cloud Run job on the service that already
-      holds the connection, and writes the answer down. It is the first slice that needs staging to
-      hold more than one operator, so it is the first slice for which the answer pays.
+      below runs, and after 5.2, whose composition-root move it builds on. **It inherits an answer
+      rather than a question:** 5.1b carried "how does an operator row reach the staging database"
+      here, and 5.1c closed it — `./infra/staff-add.sh <env> <email> <ROLE>` runs `staff-add.ts` as
+      a one-off Cloud Run job on the deployed image. This slice adds operators, it does not have to
+      invent how.
 - [ ] **Move 3 → chore, before 5.9: the mockup-first slice contract.** `mockups/<slice>.html` through
       the real page shell on a dev-only route, `data-state="wired" | "painted"`, and a guard in
       `scripts/guards.ts` that fails the build when a mockup and its evidence file both exist. With

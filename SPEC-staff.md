@@ -241,6 +241,16 @@ slice 1.5's argument honoured rather than reversed: *a generated credential that
 no rotation flow owns is worse than an absent one*. There is nothing to seed now in any case: the
 row carries no secret at all.
 
+**In a deployed environment nobody can reach the database, and that is deliberate.** The connection
+string is a unix-socket URL held in Secret Manager and readable only by that environment's runtime
+service account, so there is no laptop from which `npm run staff:add` could be pointed at staging
+without first taking the credential outside the perimeter. `./infra/staff-add.sh <staging|prod>
+<email> <ROLE>` is therefore the deployed form of the same command: it runs `src/staff-add.ts` as a
+one-off Cloud Run job, on the image the environment is serving, as that runtime service account,
+with the database URL mounted rather than read. It is the shape the deploy workflow already uses to
+run migrations, for the same reason. The job is deleted when the run finishes, so no standing button
+that writes an `ADMIN` row is left in the project.
+
 ---
 
 ## Configuration
