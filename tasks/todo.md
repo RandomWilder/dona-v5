@@ -125,7 +125,10 @@ is the single most important thing carried out of month one.
       email and role, the operator signs in with Google, and no message ever had to reach them. The
       mail-transport ADR-0004 naming is not owed by anything in the plan today; when a slice needs
       to *send* something it is that slice's, and week 8 no longer carries it.
-- [ ] **Left standing in GCP by 5.1b, the director's — and 5.1c found it is four acts, not two.**
+- [x] **DONE 10 Sep 2026. Left standing in GCP by 5.1b, the director's — and 5.1c found it was four
+      acts, not two.** All four ran: the secret and both keys removed, `identitytoolkit` disabled.
+      Staging signed in again afterwards and smoke returned `ok:true` with `db:up`, which is what
+      proves nothing still read them. Original entry follows.
       Unread by any revision since the 5.1b deploy: `staging-identity-api-key` in Secret Manager,
       the `dona identity (staging)` API key `8eec9e86-710e-45ed-8725-3528ffa404b3`, **and a
       `Browser key (auto created by Firebase)` `5ee51088-a00c-4a27-9ebf-82ffa656ff51`** that
@@ -198,7 +201,9 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       row reach the staging database" to 5.9 as an open question; it was never open, because
       `.github/workflows/deploy.yml:72` had been answering it for migrations since slice 1.6. So
       **all that remains here is the click**, on
-      `https://dona-staging-r44j24yuaa-zf.a.run.app/staff/login`.
+      `https://dona-staging-r44j24yuaa-zf.a.run.app/staff/login` — **and the director clicked it on
+      10 Sep 2026, landing on `/staff` as ADMIN against revision `06ec20c`. The step 5.1 opened and
+      5.1b carried is closed**, in `tasks/evidence/5.1.md`.
       *Original entry:* Identity Platform with
       **enforced MFA**, an invite flow, and `src/staff/` — the admin edge, not a domain module; it
       owns none of E1–E16. **The role matrix is code, not a config row**, a deliberate exception to
