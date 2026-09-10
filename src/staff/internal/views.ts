@@ -20,7 +20,7 @@ import type { Permission, Role } from './roles.ts';
 
 const styles = h`<style>
   .auth {
-    max-width: var(--size-form-max);
+    max-width: min(var(--size-form-max), 100%);
     margin-inline: auto;
     display: grid;
     gap: var(--space-4);

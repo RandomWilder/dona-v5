@@ -352,7 +352,12 @@ and every screen in every module is a self-contained HTML file that links it.
 
 - **`ui/tokens.css`** — the only place a colour, a type face, a size, a radius or a spacing step is
   named. RTL through logical properties, so one stylesheet serves both directions. A screen that
-  hard-codes `#fff` or `14px` has left the system.
+  hard-codes `#fff` or `14px` has left the system. Phone measures live here too: the drawer z-index,
+  the scrim, and the 16px field size that stops iOS zooming a focused input.
+- **`ui/page.ts`** — the shell every signed-in screen is painted into. Below 840px it is a sticky
+  bar and an off-canvas rail, not a wrapping wrap of the same links. The destinations still arrive
+  as `nav`; the kernel still learns no path. A module that needs a phone layout of *its* cards keeps
+  that in its own `styles`. The guest frame (login) has no rail and no menu.
 - **`ui/fonts/*.woff2`** — Heebo (Hebrew + Latin subsets) and IBM Plex Mono, self-hosted with their
   OFL licences beside them. No Google Fonts request: tenant screens must not leak a visit to a third
   party, and the pages must render on a slow Israeli mobile connection without a second DNS lookup.

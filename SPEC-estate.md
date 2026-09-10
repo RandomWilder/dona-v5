@@ -160,8 +160,9 @@ the redirect was. **It moved to the composition root at slice 5.2**, as this par
 would since 2.6 — the week a second *module* had a screen — because an index of screens is not
 estate's fact. It lives at `src/index-page.ts`, beside `src/app.ts` which registers it, and it is the
 one screen in this system whose nav spans two modules and carries the sign-out form. **Slice 5.2b
-moved that bar off this module entirely**; **5.2c is the same rail as an ops sidebar**. Estate
-writes none of it. The composition root injects the chrome every signed-in screen carries.
+moved that bar off this module entirely**; **5.2c is the same rail as an ops sidebar**; **5.2d
+is that rail as a phone drawer**, still not this module's. Estate writes none of it. The
+composition root injects the chrome every signed-in screen carries.
 
 **`GET /estate/search?q=` searches buildings and units, and deliberately not people.** A search that
 reached `party` would put a real person behind a route with no session, the week the register

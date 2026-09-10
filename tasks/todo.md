@@ -80,9 +80,10 @@ it**, tightening the wording rather than relaxing it. **Reconsidered at 5.4.**
       preparation with **F6**, bounded by **week 12**; the same treatment 2.5 took with F3 and 3.4
       with F4. Recorded in full at [roadmap.md](roadmap.md) § 4.5 and
       [evidence/week-4.md](evidence/week-4.md).
-- [x] **The UI-pass decision. DECIDED: no** at M1, **amended at 5.2b** to a chrome pass, **and at
-      5.2c** to v3's ops sidebar on the live destinations only — not a card redesign. Unbuilt tabs
-      and the rest of the parked comments wait on **M2** / **5.9**.
+- [x] **The UI-pass decision. DECIDED: no** at M1, **amended at 5.2b** to a chrome pass, **at
+      5.2c** to v3's ops sidebar on the live destinations only, **and at 5.2d** to that rail as a
+      phone drawer — still not a card redesign. Unbuilt tabs and the rest of the parked comments
+      wait on **M2** / **5.9**.
 - [~] **2.5 — import the real register.** Pilot preparation, with **F3**.
 - [~] **3.4 and A10 — Drive ingestion and the bulk review queue.** Pilot preparation, with **F4**.
 
@@ -320,6 +321,18 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       the index, and login without any of it; restart `npm run dev` and sign out from a **non-index**
       screen. No push until the director approves localhost.
       **Plan mode. Deps:** 5.2b · **M**
+
+- [x] **5.2d — Phone shell: the ops rail is a drawer below 840px.** CLOSED 10 Sep. 5.2c left the
+      rail wrapping into a second header on a phone. The drawer lives in the kernel page shell so
+      every later signed-in screen inherits it. Still no `<script>`: open state is a checkbox.
+      **Done when:** below 840px a signed-in screen shows a menu control, not the full rail; the
+      destinations and sign-out are in the drawer; tapping the scrim or סגירה closes it; login has
+      neither. Desktop rail unchanged. Fields on a phone are 16px so iOS does not zoom.
+      **Verify:** token registry asserts the menu control on signed-in screens and its absence on
+      login; restarted `npm run dev`; 375px drawer open/close; 1280px rail unchanged. Login card at
+      375px is 317px and does not overflow.
+      [evidence/5.2d.md](evidence/5.2d.md)
+      **Plan mode. Deps:** 5.2c · **S**
 
 - [ ] **5.3 — `national_id` is unreachable by any agent tool.**
       **Done when:** a policy case in `tests/policy/` fails against a tool response shape carrying

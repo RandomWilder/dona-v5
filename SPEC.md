@@ -110,7 +110,11 @@ here:
   ops sidebar** — buildings, expiring, incomplete, search, staff, and sign-out — built once at the
   composition root and injected, because the kernel may not learn a route and a module may not own
   another module's. The current destination is marked on the rail. The login screen has none of
-  those links and no sidebar.
+  those links and no sidebar. **From 5.2d the shell is a phone first:** below 840px the rail is a
+  drawer behind a menu control in that same shell, so a new screen inherits the drawer by calling
+  `renderPage` with `nav` and never draws its own. Still no client JavaScript: the open state is a
+  checkbox the menu label and the scrim both drive. The viewport is `viewport-fit=cover`. Login
+  stays a centred guest card.
 
 ## Error shape
 
@@ -314,7 +318,8 @@ an open route is open because somebody wrote it down. The root index moved from 
 composition root in the same slice, because an index of screens stopped being one module's fact the
 week a second module had one. **Slice 5.2b put one chrome on every signed-in screen**, and **5.2c
 gave that chrome v3's ops sidebar** rather than a top bar, still with only the live destinations —
-unbuilt tabs stay 5.9. The login screen stays without that rail. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
+unbuilt tabs stay 5.9. **5.2d put that rail behind a menu control below 840px**, in the kernel
+shell so every later screen inherits it, still with no `<script>`. The login screen stays without that rail. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
 physical side or a `<script>`, and from 2.6 also on a phone number or an E.164 prefix: what a screen
 may say about a household is **a state and a count, never a tenant's name**, so the
 occupancy chip is derived on every load and search never reaches `party`.
