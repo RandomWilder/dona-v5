@@ -1488,19 +1488,19 @@ screens is not estate's fact.
   inherits it. Unbuilt tabs stay 5.9. Not a card redesign.
 - **Deps:** 5.2c · **Size:** S
 
-### Slice 5.3 — `national_id` is unreachable by any agent tool
-- **Done when:** a policy case in `tests/policy/` fails against a tool response shape carrying
-  `national_id` and passes when it does not.
-- **Verify:** committed red, then green, in that order.
-- **Owed by 1.7, restated at 2.1, in [SPEC-parties.md](../SPEC-parties.md) and in
-  `0006_parties.sql`** — that the number never appears in an agent tool's response shape is
-  deterministic, so it is a policy case and never a review and never an eval. Week 5 owns it because
-  this is the week a staff surface exists that could leak it.
-- **Carried in from 5.1:** `party.national_id.read` exists in the role matrix, held by `ADMIN`
-  alone, **with no reader** — the admin-only half of the security default given a vocabulary before
-  the unreachable half is enforced. This slice gives it one; a permission still unread when this
-  slice closes is a permission to delete.
-- **Deps:** 5.1 · **Size:** S
+### Slice 5.3 — The rest of the ops destinations
+- **Done when:** every signed-in rail names seven destinations (buildings, expiring, incomplete,
+  search, staff, calls, settings); `/calls` and `/settings` each render one line naming the week
+  and slice that owns them; login has none of it.
+- **Verify:** the token registry asserts the new hrefs and the stub line; `/dev/mockups/ia`
+  exists only on a `-dev` process; restart `npm run dev` and click the new destinations.
+- **What the 10 Sep re-plan called 5.9.** 5.9 is never used. The `national_id` policy case that used
+  to hold this number waits on week 9.
+- **Deps:** 5.2d · **Size:** S
+
+### Slice 5.3-was — `national_id` is unreachable by any agent tool → **week 9**
+Held here so the obligation is not lost. Owed by 1.7. `party.national_id.read` exists in the role
+matrix with no reader until that week is decomposed.
 
 ### Slice 5.4 — What the session unlocks in evidence: `uploaded_by`, signed URLs, and the supersession question re-asked
 Three items held for the same reason and released by the same fact. **`uploaded_by`** could have held
@@ -1525,6 +1525,9 @@ that tested it.**
   deciding what a session unlocks; 5.2 kept it and wrote down why.
 - **Verify:** a filed document's `uploaded_by` is the signed-in operator; the URL expires and a
   stale one is refused; the supersession answer cites a count, not a view.
+  **Closed 10 Sep** — [evidence/5.4.md](evidence/5.4.md). Never-a-name kept. HTTP provenance is the
+  operator email. `superseded_by` still omitted (6 mappings, 2 targets, 0 live stamps) → 5.5 if a
+  case appears.
 - **Deps:** 5.1, 5.2 · **Size:** M
 
 ### Slice 5.5 — Promotion at scale, and the amendment that changes a real unit
@@ -1537,10 +1540,13 @@ before it is a data-quality one, and the duplicate count is what should provoke 
 convenience of a join.
 - **Done when:** an amendment promoted against a real unit changes the tenancy and appends an event
   naming the operator and the source document; and the cross-tenancy identity question has a written
-  ruling citing the duplicate-party count that provoked it.
+  ruling citing the duplicate-party count that provoked it. **Carried from 5.4:** if this pass finds
+  a document-level supersession case the 5.4 count did not, this slice owns `superseded_by`.
 - **Verify:** read the change log back for one unit — old → new, actor, document, in order; A2 step
   5's prohibition still holds, or its replacement is a policy case written red first.
 - **Deps:** 5.4 · **Size:** M
+  **Closed 11 Sep** — [evidence/5.5.md](evidence/5.5.md). A2 step 5 kept (0 nameless duplicates).
+  Change log on the unit. `superseded_by` still omitted.
 
 ### Slice 5.6 — A tenancy ends because a date passed, with no document at all
 Clock-driven `TenancyEvent` kinds. `0019_tenancy_event.sql` makes `source_document_id` NOT NULL for

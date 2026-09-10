@@ -153,8 +153,12 @@ unit — which is the sequence step 5 of that flow describes anyway.
    the model guessed wrong is an isolation defect and not a data-entry defect. The model proposes the
    role; the administrator accepts it.
 5. Parties named on the lease are **created under the tenancy the document was uploaded to.** No
-   attempt is made to match a name against the global party register — cross-tenancy identity
-   resolution is a month-two problem and a materially harder one.
+   attempt is made to match a name against the global party register. **Closed at 5.5:** the
+   generated portfolio held **2,871** identified parties and **0** with no identifier. Nameless
+   same-name groups: **0**. Identified people sharing a full name: **303** names covering every
+   generated person — the fixture's name pool, already keyed by `national_id_key`, not a person
+   appearing twice without an identifier. Matching a name is a privacy decision; that count does
+   not provoke a join. A2 still inserts.
 6. The written tenancy is `DRAFT` and carries per-field provenance back to the lease.
 7. **A2 runs only when the lease has no `TENANCY` link yet.** Binding to an existing letting is A1
    plus per-field promotion. Confirm recomputes from captured fields; a second confirm is a no-op.
@@ -191,8 +195,10 @@ clears the queue the way an addendum that writes a `GUARANTOR` does. A second re
 pair is a no-op. It is not `tenancy.complete`.
 **Screen:** `GET /estate/incomplete` — each row shows what is missing and the TENANCY-linked
 document it was expected in (a `lease` type wins when both a lease and an addendum are linked).
-No party names — a rule 5.2 kept rather than lifted when it put the screen behind a session.
-**Resolution:** the administrator uploads the addendum (A3), or records the exception.
+No party names — a rule 5.2 kept rather than lifted when it put the screen behind a session, and 5.4
+kept again.
+**Resolution:** the administrator uploads the addendum (A3), or records the exception. The exception
+row's `actor` is the signed-in operator (slice 5.4), not a typed name and not the word `console`.
 **Module:** tenancy owns the query and the exception write (`listIncompleteTenancies`,
 `recordCompletenessException`); the case lives in `tests/policy/` until week 6 stands up
 `src/policy/`; estate owns the queue screen, with those commands injected at the composition root
@@ -276,7 +282,6 @@ through the wall.
 - **The completeness vocabulary.** **Closed for the first rule at 4.8:** it is a derived query, rule
   id `guarantor`, exception a separate row. Materialised state waits until a second rule joins and
   the list of missing things is no longer one label.
-- **Cross-tenancy party identity.** Deliberately absent from A2 step 5. Month two — and **slice 5.5**
-  since 9 Sep 2026, the week promotion meets a portfolio and duplicates actually surface. Matching
-  people is a privacy decision before it is a data-quality one, so what provokes the ruling is a
-  measured duplicate count and not the convenience of a join.
+- **Cross-tenancy party identity.** **Closed at 5.5.** A2 step 5 stands: no name match across
+  tenancies. The count that provoked the ruling is in that step. A matcher waits on a nameless
+  duplicate that this portfolio does not have.

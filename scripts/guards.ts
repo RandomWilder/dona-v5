@@ -26,6 +26,8 @@ export interface GuardResult {
   guard: string;
   scanned: number;
   violations: Violation[];
+  /** Zero files is a pass. Used by the mockup guard: no painted flow is the idle state. */
+  allowEmpty?: boolean;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -307,15 +309,73 @@ export function guardPiiComments(root: string): GuardResult {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Guard four — a painted mockup cannot outlive the slice that wired it.
+//
+// `mockups/<flow>.html` is the director's review surface. `tasks/evidence/<slice>.md` is the proof
+// that slice closed. Both at once means two products. Zero mockup files is the idle state, not a
+// dead path, so this guard is allowed to scan nothing.
+// ---------------------------------------------------------------------------------------------
+
+export const MOCKUPS_DIR = 'mockups';
+export const MOCKUP_OWNERS: Record<string, string> = {
+  ia: '5.3',
+  changelog: '5.5',
+  a9: '5.8',
+  responsibility: '6.6',
+  ticket: '7.2',
+};
+
+export function guardMockups(root: string): GuardResult {
+  const dir = path.join(root, MOCKUPS_DIR);
+  const files = existsSync(dir)
+    ? readdirSync(dir)
+        .filter((name) => name.endsWith('.html'))
+        .sort()
+    : [];
+  const violations: Violation[] = [];
+  for (const name of files) {
+    const flow = name.replace(/\.html$/, '');
+    const slice = MOCKUP_OWNERS[flow];
+    if (slice === undefined) {
+      violations.push({
+        guard: 'mockup-does-not-outlive-evidence',
+        file: path.join(MOCKUPS_DIR, name),
+        detail: `no owner slice registered for flow "${flow}"`,
+      });
+      continue;
+    }
+    const evidence = path.join('tasks', 'evidence', `${slice}.md`);
+    if (existsSync(path.join(root, evidence))) {
+      violations.push({
+        guard: 'mockup-does-not-outlive-evidence',
+        file: path.join(MOCKUPS_DIR, name),
+        detail: `${evidence} exists; delete the mockup or do not close the slice yet`,
+      });
+    }
+  }
+  return {
+    guard: 'mockup-does-not-outlive-evidence',
+    scanned: files.length,
+    violations,
+    allowEmpty: true,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
 
 export function runGuards(root: string): GuardResult[] {
-  return [guardMigrations(root), guardScopeJoin(root), guardPiiComments(root)];
+  return [
+    guardMigrations(root),
+    guardScopeJoin(root),
+    guardPiiComments(root),
+    guardMockups(root),
+  ];
 }
 
 export function report(results: GuardResult[]): boolean {
   let ok = true;
   for (const result of results) {
-    if (result.scanned === 0) {
+    if (result.scanned === 0 && result.allowEmpty !== true) {
       ok = false;
       console.error(
         `guard ${result.guard}: FAILED — scanned 0 files. A guard that reads nothing passes forever.`,

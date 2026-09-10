@@ -88,12 +88,6 @@ const shell = h`<style>
     display: grid;
     gap: var(--space-2);
   }
-  .ops-footer-note {
-    margin: 0;
-    padding-inline: var(--space-5);
-    color: var(--color-on-chrome-muted);
-    font-size: var(--text-sm);
-  }
   .ops-footer form { margin: 0; display: grid; }
   .ops-main {
     min-width: 0;
@@ -118,8 +112,7 @@ const shell = h`<style>
   @media (max-width: 1099px) and (min-width: 840px) {
     .ops { grid-template-columns: var(--size-icon-rail) minmax(0, 1fr); }
     .nav-label,
-    .ops-brand,
-    .ops-footer-note {
+    .ops-brand {
       position: absolute;
       width: var(--size-hairline);
       height: var(--size-hairline);

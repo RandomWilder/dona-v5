@@ -15,7 +15,11 @@ import {
   migratedPoolOrNull,
   skipReason,
 } from '../kernel/pg-support.ts';
-import { upsertTenancy, upsertTermsProfile } from '../tenancy/contract.ts';
+import {
+  listTenancyEvents,
+  upsertTenancy,
+  upsertTermsProfile,
+} from '../tenancy/contract.ts';
 import type { IntakeDeps } from './contract.ts';
 import {
   applyDocumentTypeCatalogue,
@@ -234,6 +238,12 @@ describe('evidence · promote an extracted field', () => {
           new_value: '2026-03-01',
           actor: 'אסף',
         });
+        const onUnitLog = await listTenancyEvents(db, unitId);
+        assert.equal(onUnitLog.length, 1);
+        assert.equal(onUnitLog[0]?.old_value, '2025-01-01');
+        assert.equal(onUnitLog[0]?.new_value, '2026-03-01');
+        assert.equal(onUnitLog[0]?.actor, 'אסף');
+        assert.equal(onUnitLog[0]?.source_document_id, filed.documentId);
         const stamped = await listExtractedFields(db, filed.documentId);
         assert.equal(
           stamped.find((row) => row.fieldKey === 'start_date')?.promotedTo,
@@ -326,7 +336,7 @@ describe('evidence · promote an extracted field', () => {
     });
     assert.match(html, /נקרא בלבד/);
     assert.match(html, /קדם · תחילת תקופת השכירות/);
-    assert.match(html, /name="promoted_by"/);
+    assert.doesNotMatch(html, /name="promoted_by"/);
     assert.doesNotMatch(html, /קדם · מספר הדירה/);
   });
 

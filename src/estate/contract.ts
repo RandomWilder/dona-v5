@@ -69,6 +69,7 @@ export type {
   OccupancyByUnit,
   PromotedFieldView,
   SearchPageResults,
+  TenancyEventView,
 } from './internal/views.ts';
 export {
   renderBuildingPage,

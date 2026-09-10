@@ -48,6 +48,12 @@ import {
   renderLoginPage,
   renderStaffHomePage,
 } from '../../src/staff/contract.ts';
+import {
+  CALLS_STUB,
+  renderIaMockup,
+  renderStubPage,
+  SETTINGS_STUB,
+} from '../../src/stub-page.ts';
 import type { UnitLetting } from '../../src/tenancy/contract.ts';
 
 const building: BuildingSummary = {
@@ -129,6 +135,9 @@ const filed: FiledDocumentView = {
     'gs://dona-v5-staging-docs/unit/22222222-2222-4222-8222-222222222222/lease/' +
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.pdf',
   verificationVerdict: 'verified',
+  readUrl:
+    'https://storage.googleapis.com/dona-v5-staging-docs/unit/x.pdf' +
+    '?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Expires=900&X-Goog-Signature=ab',
 };
 
 const unverified: FiledDocumentView = {
@@ -142,6 +151,9 @@ const unverified: FiledDocumentView = {
     'gs://dona-v5-staging-docs/building/11111111-1111-4111-8111-111111111111/handover_protocol/' +
     'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.pdf',
   verificationVerdict: 'unverified',
+  readUrl:
+    'https://storage.googleapis.com/dona-v5-staging-docs/building/y.pdf' +
+    '?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Expires=900&X-Goog-Signature=cd',
 };
 
 const expiring: ExpiringLease[] = [
@@ -250,6 +262,26 @@ const SCREENS: Array<[string, () => string]> = [
           confidence: 0.91,
         },
       ]),
+  ],
+  [
+    'estate · one unit, with a change log',
+    () =>
+      renderUnitPage(
+        hit,
+        2,
+        [filed],
+        NAV,
+        [],
+        [
+          {
+            field: 'end_date',
+            old_value: '2028-01-17',
+            new_value: '2029-01-17',
+            actor: 'ops@example.test',
+            source_document_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+      ),
   ],
   [
     'estate · one unit, vacant and empty',
@@ -682,6 +714,15 @@ const SCREENS: Array<[string, () => string]> = [
         mayInvite: false,
       }),
   ],
+  [
+    'root · calls stub',
+    () => renderStubPage({ csrf: CSRF }, CALLS_STUB, 'wired'),
+  ],
+  [
+    'root · settings stub',
+    () => renderStubPage({ csrf: CSRF }, SETTINGS_STUB, 'wired'),
+  ],
+  ['root · ia mockup', () => renderIaMockup(CSRF)],
 ];
 
 describe('shared UI tokens', () => {
@@ -775,6 +816,10 @@ describe('shared UI tokens', () => {
       assert.match(html, /href="\/estate\/incomplete"/, name);
       assert.match(html, /href="\/estate\/search"/, name);
       assert.match(html, /href="\/staff"/, name);
+      assert.match(html, /href="\/calls"/, name);
+      assert.match(html, /href="\/settings"/, name);
+      assert.match(html, />קריאות</, name);
+      assert.match(html, />הגדרות</, name);
       assert.match(html, /action="\/staff\/logout"/, name);
       assert.match(html, />יציאה</, name);
       assert.match(
@@ -785,12 +830,22 @@ describe('shared UI tokens', () => {
         name,
       );
       const marked = html.match(/<a[^>]*aria-current="page"/g) ?? [];
-      if (name.startsWith('root ·')) {
+      if (name.startsWith('root · index') || name.startsWith('root · ia')) {
         assert.equal(marked.length, 0, name);
       } else {
         assert.equal(marked.length, 1, name);
       }
     }
+  });
+
+  it('names the owner on an unbuilt destination', () => {
+    const calls = renderStubPage({ csrf: CSRF }, CALLS_STUB, 'wired');
+    assert.match(calls, /data-state="wired"/);
+    assert.match(calls, /שבוע 7 · סלייס 7.2/);
+    const settings = renderStubPage({ csrf: CSRF }, SETTINGS_STUB, 'wired');
+    assert.match(settings, /שבוע 5 · סלייס 5.8/);
+    const painted = renderIaMockup(CSRF);
+    assert.match(painted, /data-state="painted"/);
   });
 
   it('keeps the login screen without that chrome', () => {
@@ -802,6 +857,8 @@ describe('shared UI tokens', () => {
       assert.doesNotMatch(html, /id="nav-toggle"/, name);
       assert.doesNotMatch(html, /class="ops-menu"/, name);
       assert.doesNotMatch(html, /href="\/estate"/, name);
+      assert.doesNotMatch(html, /href="\/calls"/, name);
+      assert.doesNotMatch(html, /href="\/settings"/, name);
       assert.doesNotMatch(html, /href="\/estate\/search"/, name);
       assert.doesNotMatch(html, /action="\/staff\/logout"/, name);
       assert.doesNotMatch(html, />יציאה</, name);
@@ -860,11 +917,9 @@ describe('shared UI tokens', () => {
   });
 
   it('shows a state and a count, and never a person', () => {
-    // The rule these screens keep, **and kept after 5.2 put them behind a session**: a screen may
-    // say a unit is let and by how many, and may not say by whom. 5.2 was the slice entitled to
-    // lift it and declined — a session says who is asking, not what a household's name is for
-    // (SPEC.md). The views cannot break it by accident, because nothing ever hands them a name —
-    // this asserts the property from the outside anyway, because that is what a rule is for.
+    // The rule these screens keep, **and kept after 5.2 and again after 5.4**: a screen may
+    // say a unit is let and by how many, and may not say by whom. 5.4 unlocked who filed a
+    // document and a signed read of its bytes; it did not put a household on a chip (SPEC.md).
     //
     // The operator's own email is on the staff board and always was: this rule is about tenants.
     for (const [name, render] of SCREENS) {
@@ -874,19 +929,18 @@ describe('shared UI tokens', () => {
     }
   });
 
-  it('shows a path and never a link to the bytes', () => {
-    // A signed URL is a bearer token for one object. The session to hang one on exists from 5.2 and
-    // **slice 5.4 is where the panel mints one**; until then it renders the gs:// uri as text. The filed-document screen already kept the
-    // uri off the page entirely; the panel is allowed to name the path and still must not make it
-    // clickable.
+  it('serves a signed read on the panel, never a gs:// href', () => {
+    // A signed URL is a bearer token for one object. Slice 5.4 mints one on the panel.
+    // Search still does not. The filed-document screen keeps the uri off the page entirely.
     const html = renderUnitPage(hit, 2, [filed], NAV);
-    assert.match(html, /gs:\/\/dona-v5-staging-docs\//);
+    assert.match(html, /storage\.googleapis\.com/);
+    assert.match(html, /X-Goog-Expires=900/);
     assert.doesNotMatch(html, /href="gs:/);
-    assert.doesNotMatch(html, /storage\.googleapis\.com/);
+    assert.doesNotMatch(html, /gs:\/\/dona-v5-staging-docs\//);
     const buildingHtml = renderBuildingPage(detail, occupancy, NAV, [
       unverified,
     ]);
-    assert.match(buildingHtml, /gs:\/\/dona-v5-staging-docs\//);
+    assert.match(buildingHtml, /storage\.googleapis\.com/);
     assert.doesNotMatch(buildingHtml, /href="gs:/);
   });
 
@@ -924,6 +978,7 @@ describe('shared UI tokens', () => {
       search,
       /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read"/,
     );
+    assert.doesNotMatch(search, /storage\.googleapis\.com/);
     const emptyRead = renderReadPage({
       nav: NAV,
       csrf: '',
@@ -1001,5 +1056,33 @@ describe('shared UI tokens', () => {
       three,
       /cccccccc-cccc-4ccc-8ccc-cccccccccccc\/read\?page=1#f-33333333/,
     );
+  });
+
+  it('shows a unit change log as old to new, actor, and document, never a tenant name', () => {
+    const html = renderUnitPage(
+      hit,
+      2,
+      [filed],
+      NAV,
+      [],
+      [
+        {
+          field: 'end_date',
+          old_value: '2028-01-17',
+          new_value: '2029-01-17',
+          actor: 'ops@example.test',
+          source_document_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      ],
+    );
+    assert.match(html, /יומן שינויים/);
+    assert.match(html, /2028-01-17 → 2029-01-17/);
+    assert.match(html, /ops@example.test/);
+    assert.match(
+      html,
+      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"/,
+    );
+    const empty = renderUnitPage(hit, 2, [filed], NAV);
+    assert.doesNotMatch(empty, /יומן שינויים/);
   });
 });

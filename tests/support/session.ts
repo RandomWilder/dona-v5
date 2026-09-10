@@ -62,6 +62,13 @@ export async function signOutAll(pool: Pool, domain: string): Promise<void> {
        (SELECT staff_account_id FROM staff_account WHERE email LIKE $1)`,
     [`%@${domain}`],
   );
+  // Slice 5.4: documents name their uploader. The FK refuses deleting an operator who filed
+  // paper; tests drop the pointer, not the document — the document is the suite's other cleanup.
+  await pool.query(
+    `UPDATE document SET uploaded_by = NULL WHERE uploaded_by IN
+       (SELECT staff_account_id FROM staff_account WHERE email LIKE $1)`,
+    [`%@${domain}`],
+  );
   await pool.query('DELETE FROM staff_account WHERE email LIKE $1', [
     `%@${domain}`,
   ]);

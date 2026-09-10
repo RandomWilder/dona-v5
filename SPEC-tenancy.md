@@ -158,7 +158,9 @@ by tripping the guard rather than by anticipating it.
   portfolio question (S1 / A4), not "who is in this unit today". It takes no phone number, returns
   no party and no name, and carries neither isolation predicate. Completeness is a query over saved
   rows plus an exception table — never a NOT NULL on `tenancy_party` and never a status column on
-  `tenancy`. The line this module does not cross is the one
+  `tenancy`. Slice 5.5 adds `listTenancyEvents`: every `amended` row on every letting of one unit,
+  oldest first, `unit_id` in, field / old → new / actor / source document out, **no party and no
+  name**. An empty list is a register-only letting. The line this module does not cross is the one
   that matters: **who is in a unit today is `src/scope/`'s answer and never this module's**, which
   is foundation rule 1 expressed as a module boundary. `listUnitTenancies` answers *which lettings
   does this flat have* — every status, ordered by date — for an administrator choosing which one a

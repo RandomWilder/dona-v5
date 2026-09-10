@@ -148,9 +148,23 @@ environment, like `DOCS_BUCKET` — it names a GCP resource, not a tunable.
 
 ## Object store (`objects.ts`)
 
-`put(path, bytes, contentType)` and `read(path)`. Infrastructure on the same footing as `db.ts`: the
-shape of a transfer and no business logic at all. It does not know what a lease is; the paths it is
-handed are built by the module that owns them.
+`put(path, bytes, contentType)`, `read(path)`, and from slice 5.4 `signRead(path, expiresAt, now)`.
+Infrastructure on the same footing as `db.ts`: the shape of a transfer and no business logic at all.
+It does not know what a lease is; the paths it is handed are built by the module that owns them.
+
+**`signRead` mints a GCS V4 GET URL.** The TTL this system uses is fifteen minutes
+(`SIGN_READ_TTL_MS`), taken from the injected clock's `now` so a test can expire one without sleeping.
+`expiresAt` at or before `now` is `invalid` — that is the half of "a stale URL is refused" this
+process can assert before Google does. The URL is a bearer token for one object: whoever holds the
+string reads the bytes, isolation join or not, so **minting belongs behind a session** and the URL
+never reaches `audit_log`. The documents panel is the only caller; `searchDocuments` still returns
+the `gs://` path as text.
+
+Signing uses IAM `signBlob` over `fetch` and the same access token `put`/`read` already hold —
+`google-auth-library` for the token, no Storage SDK. The runtime account must be allowed to sign as
+itself (`roles/iam.serviceAccountTokenCreator` on itself, applied by `infra/bootstrap.sh`). Still not
+`objectAdmin`. `createMemoryStore()` mints the same URL shape with a local HMAC so tests never reach
+the network; those URLs are not live GCS objects.
 
 `createGcsStore({ bucket })` talks to the GCS JSON API over `fetch`, with `google-auth-library` for
 access tokens and nothing else — token acquisition differs between Cloud Run's metadata server and a

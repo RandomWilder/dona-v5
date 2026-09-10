@@ -439,6 +439,82 @@ describe('E12 · document — one file, hashed at ingest (R17)', () => {
     });
   });
 
+  it('names the uploader when one is supplied, and keeps the first on conflict', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const { addOperator } = await import('../staff/contract.ts');
+      const { fixedClock } = await import('../kernel/clock.ts');
+      const clock = fixedClock(INGESTED_AT);
+      const first = await addOperator(db, clock, {
+        email: `first-${BLOCK}@evidence.test`,
+        role: 'OPERATOR',
+      });
+      const second = await addOperator(db, clock, {
+        email: `second-${BLOCK}@evidence.test`,
+        role: 'OPERATOR',
+      });
+      const documentTypeId = await seedType(db, { name: 'uploader' });
+      const fileHash = `${BLOCK}-uploader-hash`;
+      const one = await ingestDocument(
+        db,
+        {
+          documentTypeId,
+          storageUri: `gs://dona-v5-docs/buildings/${newId()}/${fileHash}.pdf`,
+          fileHash,
+          driveFileId: null,
+          validFrom: null,
+          validTo: null,
+          verificationVerdict: 'verified',
+          uploadedBy: first.account.staffAccountId,
+        },
+        INGESTED_AT,
+      );
+      const two = await ingestDocument(
+        db,
+        {
+          documentTypeId,
+          storageUri: `gs://dona-v5-docs/buildings/${newId()}/${fileHash}.pdf`,
+          fileHash,
+          driveFileId: null,
+          validFrom: null,
+          validTo: null,
+          verificationVerdict: 'verified',
+          uploadedBy: second.account.staffAccountId,
+        },
+        INGESTED_AT,
+      );
+      assert.equal(two.id, one.id);
+      const row = await db.query<{ uploaded_by: string | null }>(
+        'SELECT uploaded_by FROM document WHERE document_id = $1',
+        [one.id],
+      );
+      assert.equal(row.rows[0]?.uploaded_by, first.account.staffAccountId);
+    });
+  });
+
+  it('accepts a document with no uploader, and refuses an unknown staff id', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const documentTypeId = await seedType(db, { name: 'no-uploader' });
+      const id = await seedDocument(
+        db,
+        documentTypeId,
+        `${BLOCK}-no-uploader-hash`,
+      );
+      const row = await db.query<{ uploaded_by: string | null }>(
+        'SELECT uploaded_by FROM document WHERE document_id = $1',
+        [id],
+      );
+      assert.equal(row.rows[0]?.uploaded_by, null);
+      await rejects(db, FOREIGN_KEY_VIOLATION, () =>
+        db.query(
+          'UPDATE document SET uploaded_by = $2 WHERE document_id = $1',
+          [id, newId()],
+        ),
+      );
+    });
+  });
+
   it('refuses a stored verdict that is not one of the three filed outcomes', async (t) => {
     if (!pool) return t.skip(skipReason);
     await inRolledBackTransaction(pool, async (db) => {

@@ -13,9 +13,11 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 import {
   guardMigrations,
+  guardMockups,
   guardPiiComments,
   guardScopeJoin,
   MIGRATIONS_DIR,
+  MOCKUPS_DIR,
 } from '../../scripts/guards.ts';
 import { ISOLATION_JOIN_SQL } from '../../src/scope/contract.ts';
 
@@ -281,5 +283,46 @@ describe('guard · a person-shaped column carries -- pii', () => {
     });
     t.after(() => rmSync(root, { recursive: true, force: true }));
     assert.deepEqual(guardPiiComments(root).violations, []);
+  });
+});
+
+describe('guard · a mockup does not outlive its evidence', () => {
+  it('passes when a mockup has no evidence yet', (t) => {
+    const root = fixture({
+      [path.join(MOCKUPS_DIR, 'ia.html')]: '<!-- ia -->\n',
+    });
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const result = guardMockups(root);
+    assert.equal(result.scanned, 1);
+    assert.deepEqual(result.violations, []);
+  });
+
+  it('trips when the owner slice has already closed', (t) => {
+    const root = fixture({
+      [path.join(MOCKUPS_DIR, 'ia.html')]: '<!-- ia -->\n',
+      [path.join('tasks', 'evidence', '5.3.md')]: '# closed\n',
+    });
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const result = guardMockups(root);
+    assert.equal(result.violations.length, 1);
+  });
+
+  it('trips on a flow with no owner', (t) => {
+    const root = fixture({
+      [path.join(MOCKUPS_DIR, 'mystery.html')]: '<!-- ? -->\n',
+    });
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    assert.equal(guardMockups(root).violations.length, 1);
+  });
+
+  it('treats an empty mockups directory as idle, not a dead path', (t) => {
+    const root = fixture({
+      [path.join(MOCKUPS_DIR, '.gitkeep')]: '',
+    });
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const result = guardMockups(root);
+    assert.equal(result.scanned, 0);
+    assert.equal(result.allowEmpty, true);
+    assert.deepEqual(result.violations, []);
   });
 });

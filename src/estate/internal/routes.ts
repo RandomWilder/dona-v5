@@ -39,6 +39,7 @@ import {
   renderIncompletePage,
   renderSearchPage,
   renderUnitPage,
+  type TenancyEventView,
 } from './views.ts';
 
 export interface EstateDeps {
@@ -71,6 +72,10 @@ export interface EstateDeps {
     db: Pool,
     unitId: string,
   ) => Promise<readonly PromotedFieldView[]>;
+  listTenancyEvents: (
+    db: Pool,
+    unitId: string,
+  ) => Promise<readonly TenancyEventView[]>;
   listIncompleteTenancies: (
     db: Pool,
   ) => Promise<readonly IncompleteTenancyRow[]>;
@@ -193,7 +198,7 @@ export function registerEstateRoutes(
       await deps.recordCompletenessException(deps.pool, {
         tenancyId,
         rule: 'guarantor',
-        actor: 'console',
+        actor: requireText(request.staff?.email ?? '', 'actor', 200),
         reason: requireText(posted.reason ?? '', 'reason', 200),
         at: deps.clock.now(),
       });
@@ -249,6 +254,7 @@ export function registerEstateRoutes(
       deps.pool,
       unit.unit_id,
     );
+    const events = await deps.listTenancyEvents(deps.pool, unit.unit_id);
     html(reply);
     return renderUnitPage(
       unit,
@@ -256,6 +262,7 @@ export function registerEstateRoutes(
       documents,
       deps.chrome(csrfFrom(request), 'estate'),
       promoted,
+      events,
     );
   });
 }

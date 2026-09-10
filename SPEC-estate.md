@@ -217,7 +217,8 @@ are let today, because deciding when a tenancy counts is what only that module m
 list costs two queries rather than one per building.
 
 The chip is a state and a count and never a tenant's name, which is the rule every screen here keeps
-— including after 5.2, which was entitled to lift it behind the session and did not.
+— including after 5.2, which was entitled to lift it behind the session and did not, and after 5.4,
+which reconsidered it while unlocking evidence provenance and kept it again.
 
 **These screens went behind the session at slice 5.2**, which closed the dated state this paragraph
 described from 1.11 to week 5. Staff auth is Google sign-in behind an allowlist (5.1, amended by
@@ -226,15 +227,17 @@ described from 1.11 to week 5. Staff auth is Google sign-in behind an allowlist 
 rather than served. The screens still carry `noindex` and still serve fixture data, because the real
 corpus is gated behind F6 and not behind the login.
 
-**Document metadata may appear; the bytes may not.** Slice 3.6 puts type, dates, ingest date, the
-`gs://` path as text and the verification verdict on the building page (BUILDING-linked paper) and
-on the unit page (UNIT-linked paper). A signed URL is a bearer token for one object; the session it
-needs exists from 5.2, and **slice 5.4 is where the panel mints one**. Who signed the paper is still `src/scope/`'s answer and is not on these
-screens. Real tenant documents remain gated behind F6.
+**Document metadata may appear; the bytes on the panel are a short-lived signed read.** Slice 3.6
+puts type, dates, ingest date and the verification verdict on the building page (BUILDING-linked
+paper) and on the unit page (UNIT-linked paper). **Slice 5.4 is where the panel mints a GCS V4 URL
+(fifteen minutes)** in place of the `gs://` path as text. A signed URL is a bearer token for one
+object; minting stays behind the session that 5.2 put on these screens, and search still does not
+mint one. Who signed the paper is still `src/scope/`'s answer and is not on these screens. Real
+tenant documents remain gated behind F6.
 
 **Each listed document opens the read overlay** (`/documents/:id/read`). A lease also offers
-`/documents/:id/tenancy` (flow A2). Search hits the overlay, not only the unit. The `gs://` path
-stays text. Building-level paper still lists only on the building page; unit paper still lists only
+`/documents/:id/tenancy` (flow A2). Search hits the overlay, not only the unit, and never a signed
+URL. Building-level paper still lists only on the building page; unit paper still lists only
 on the unit page — the building screen is not a tenancy draft.
 
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
@@ -252,13 +255,16 @@ the unit an upload is being filed against; a document screen inventing its own u
 the second copy estate exists to prevent. **`GET /estate/units/:unitId` is the thin unit page 3.6
 added**: that same header, the occupancy chip, the upload link, and the documents panel. Slice 4.4
 adds the **promoted values** on that page: each stamped date is a link through to its pixels on the
-read overlay. The workbook's other unit-sheet panels (tenancy, obligations, assets, history) wait.
+read overlay. **Slice 5.5 adds the change log** — old → new, the operator email, the source
+document — from `listTenancyEvents`, injected the same way. Empty is legal. Never a tenant's name.
+The workbook's other unit-sheet panels (tenancy, obligations, assets) wait.
 
 **The documents listed on these screens are injected, not imported.** `EstateDeps` carries
 `listLinkedDocuments`, `searchDocuments` and (from 4.4) `listPromotedFieldsForUnit` from evidence's
-contract, wired in `app.ts`. Estate renders the cards; evidence owns the SQL. Building-level paper
-stays on the building page; unit paper stays on the unit page. Promoted values never come from an
-estate query of `extracted_field`.
+contract, and from 5.5 `listTenancyEvents` from tenancy's, wired in `app.ts`. Estate renders the
+cards; evidence and tenancy own the SQL. Building-level paper stays on the building page; unit
+paper stays on the unit page. Promoted values never come from an estate query of `extracted_field`.
+The change log never comes from an estate query of `tenancy_event`.
 
 **`GET /estate/incomplete` is A4's queue (slice 4.8).** Same standing as `/estate/expiring`: a
 portfolio operations list, a unit and a date and a missing-rule label, and no party. Completeness

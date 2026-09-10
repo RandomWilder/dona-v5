@@ -107,7 +107,7 @@ here:
 - **UI is self-contained HTML plus `/ui/tokens.css`, and nothing else.** No bundler, no framework.
   Hebrew is RTL through logical properties (`margin-inline-start`, never `margin-left`), so one
   stylesheet serves both directions. **From slice 5.2c, every signed-in screen carries the same
-  ops sidebar** — buildings, expiring, incomplete, search, staff, and sign-out — built once at the
+  ops sidebar** — buildings, expiring, incomplete, search, staff, calls, settings, and sign-out — built once at the
   composition root and injected, because the kernel may not learn a route and a module may not own
   another module's. The current destination is marked on the rail. The login screen has none of
   those links and no sidebar. **From 5.2d the shell is a phone first:** below 840px the rail is a
@@ -283,12 +283,17 @@ adding a tenth through the same function `npm run seed:doctypes` calls and asser
 plus `inspection_certificate`, which the workbook has carried since 3 Sep — and slice 3.5 added
 `building_handover_protocol` as the tenth, a seed row and not a migration, which is A8's open half
 used for real rather than demonstrated in a test. Slice 3.3's verification guard reads its marker terms off the type row rather than out of TypeScript, so a
-type added as a row arrives with its own guard. **E12 deliberately omits four columns the published
-Data Model's `Document` card carries** — `state`, `superseded_by`, `tenant_visible` and
-`uploaded_by` — each for a reason recorded in [SPEC-evidence.md](SPEC-evidence.md) and
-`tasks/evidence/3.1.md`; the sharpest is `tenant_visible`, because a per-row boolean deciding what a
-tenant may see is a second access control standing beside the isolation join, and foundation rule 1
-is that the scope is a view and never a column.
+type added as a row arrives with its own guard. **E12 still omits three columns the published
+Data Model's `Document` card carries** — `state`, `superseded_by` and `tenant_visible` — each for a
+reason recorded in [SPEC-evidence.md](SPEC-evidence.md) and `tasks/evidence/3.1.md`. **`uploaded_by`
+arrived at 5.4**: a nullable foreign key to `staff_account`, filled on every document filed through
+the session, left null on rows ingested before there was one. The sharpest remaining omission is
+`tenant_visible`, because a per-row boolean deciding what a tenant may see is a second access
+control standing beside the isolation join, and foundation rule 1 is that the scope is a view and
+never a column. **`superseded_by` was re-asked at 5.4 and is still omitted**: promotion at the
+volume then in the database (two mapping targets, and the stamped `extracted_field` count recorded
+in `tasks/evidence/5.4.md`) found no case invariant 2 does not already cover. 5.5 owns the column if
+that pass finds one.
 **A document's bytes live under a path that carries the place and never the people** (3.2):
 `gs://<bucket>/<place kind>/<place id>/<type key>/<file hash>.<ext>`, built by
 `src/evidence/internal/storage-path.ts` because the kernel's object store stores the path it is
@@ -297,7 +302,9 @@ SPACE · UNIT`, four of `DocumentLink`'s eight kinds, so a lease cannot be filed
 id — and every input is validated rather than sanitised, because a builder that cleans a street name
 into a path segment *is* the transliteration collision the convention exists to prevent. **The
 application cannot destroy a signed contract, and that holds twice**: `ObjectStore` has no `delete`
-and the runtime account has `objectViewer` + `objectCreator` and not `objectAdmin`. A human with
+and the runtime account has `objectViewer` + `objectCreator` and not `objectAdmin`. From 5.4 it does
+have `signRead`: a fifteen-minute V4 URL, signed with IAM `signBlob` (the runtime account may sign
+as itself; still not `objectAdmin`). A human with
 project editor still can, which is 1.5's observation and is now **slice 8.4** — the IAM pass in the
 week whose demo is trying to break isolation. 3.2 measured the window that stands between such a
 human and a loss: versioning plus an explicit seven-day soft-delete leaves a recoverable noncurrent
@@ -317,9 +324,8 @@ an `onRoute` hook refuses to start the process if one declares neither, so the d
 an open route is open because somebody wrote it down. The root index moved from `src/estate/` to the
 composition root in the same slice, because an index of screens stopped being one module's fact the
 week a second module had one. **Slice 5.2b put one chrome on every signed-in screen**, and **5.2c
-gave that chrome v3's ops sidebar** rather than a top bar, still with only the live destinations —
-unbuilt tabs stay 5.9. **5.2d put that rail behind a menu control below 840px**, in the kernel
-shell so every later screen inherits it, still with no `<script>`. The login screen stays without that rail. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
+gave that chrome v3's ops sidebar** rather than a top bar. **5.2d put that rail behind a menu control below 840px**, in the kernel
+shell so every later screen inherits it, still with no `<script>`. **Slice 5.3 added the remaining destinations** — קריאות and הגדרות — as stubs that name the week and slice that own them. The login screen stays without that rail. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
 physical side or a `<script>`, and from 2.6 also on a phone number or an E.164 prefix: what a screen
 may say about a household is **a state and a count, never a tenant's name**, so the
 occupancy chip is derived on every load and search never reaches `party`.
@@ -327,12 +333,15 @@ occupancy chip is derived on every load and search never reaches `party`.
 **5.2 was the slice entitled to lift that rule, and kept it — which is the decision, not the
 absence of one.** A session says who is asking; it does not by itself make a household's name
 lawful to show. The two things that would are not yet true: `national_id` is not unreachable until
-5.3, and SPEC.md's "every scoped read of tenant data is logged" has no screen-level reader. The
+week 9, and SPEC.md's "every scoped read of tenant data is logged" has no screen-level reader. The
 wording was tightened rather than relaxed — *a tenant's* name, because the staff home page has shown
-the **operator's own** email since 5.1 and that was never the rule's subject. **Reconsidered at
-5.4**, which is already deciding what a session unlocks. Slice 3.6 lets the same
-screens show what is filed — type, dates, path as text, verdict — and still not who signed it, and
-never a link to the bytes. The fixtures that fill the
+the **operator's own** email since 5.1 and that was never the rule's subject. **5.4 reconsidered it
+and kept it a second time**, for the same reasons: unlocking who filed a document and a short-lived
+signed read of its bytes is not the same as putting a household on a chip. Slice 3.6 lets the same
+screens show what is filed — type, dates, verdict — and still not who signed it. **From 5.4 the
+documents panel mints a fifteen-minute GCS V4 URL for the bytes**; search still does not. The URL is
+a bearer token (whoever holds it reads the object, isolation join or not), which is why minting
+stays behind the session, the TTL is short, and it never reaches `audit_log`. The fixtures that fill the
 screens are ours and designed for coverage — the Shoham plan from 1.11 and, from 2.6, a **generated
 register at 1,500 units** loaded through the real importer (`npm run seed:register`), which is where
 the week-2 query timings come from. Real data arrives through the same importer at the pilot-

@@ -32,7 +32,7 @@ import type { ObjectStore } from '../../kernel/objects.ts';
 import { createUnconfiguredOcr, type OcrText } from '../../kernel/ocr.ts';
 import type { PdfText } from '../../kernel/pdf.ts';
 import type { Html } from '../../kernel/ui/html.ts';
-import { requireText, validId } from '../../kernel/validate.ts';
+import { validId } from '../../kernel/validate.ts';
 import {
   CSRF_FIELD,
   csrfFrom,
@@ -177,6 +177,14 @@ function requireOperator(request: FastifyRequest): string {
     throw new KernelError('not_allowed', 'not_allowed');
   }
   return id;
+}
+
+function requireOperatorEmail(request: FastifyRequest): string {
+  const email = request.staff?.email;
+  if (email === undefined || email === '') {
+    throw new KernelError('not_allowed', 'not_allowed');
+  }
+  return email;
 }
 
 function html(reply: { header: (k: string, v: string) => unknown }): void {
@@ -425,7 +433,7 @@ export function registerDocumentRoutes(
             fields.extracted_field_id ?? '',
             'extracted field',
           ),
-          promotedBy: requireText(fields.promoted_by ?? '', 'promoted_by', 200),
+          promotedBy: requireOperatorEmail(request),
         },
       );
       return reply.redirect(`/documents/${documentId}/read`);
@@ -520,7 +528,7 @@ export function registerDocumentRoutes(
         {
           documentId,
           termsProfileName: fields.terms_profile ?? '',
-          confirmedBy: fields.confirmed_by ?? '',
+          confirmedBy: requireOperatorEmail(request),
           roles,
         },
       );

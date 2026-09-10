@@ -93,13 +93,9 @@ export interface IntakeRequest {
   validFrom?: string | null;
   validTo?: string | null;
   /**
-   * The operator filing this, from slice 5.2 — the `staff_account` id the session resolved to.
-   *
-   * **This is the audit line's actor and not a column on `document`.** `uploaded_by` is slice 5.4's,
-   * and the distinction is not pedantry: a log line records that a person did a thing at a time, and
-   * a column asserts a fact about the row that other code may then join on and depend upon. This
-   * slice needs the first, because the per-caller cap counts exactly these lines. Optional, because
-   * the seeding and importer paths that call this function have no session and never will.
+   * The operator filing this, from the session. Slice 5.2 put it on the audit line for the
+   * per-caller cap; slice 5.4 also writes it to `document.uploaded_by`. Optional, because the
+   * seeding and importer paths that call this function have no session and never will.
    */
   filedBy?: string;
 }
@@ -210,6 +206,7 @@ export async function fileDocument(
     validFrom: request.validFrom ?? null,
     validTo: request.validTo ?? null,
     verificationVerdict: verification.verdict,
+    uploadedBy: request.filedBy ?? null,
   };
   const filed = await ingestDocument(deps.db, spec, deps.clock.now());
   await linkDocument(deps.db, {

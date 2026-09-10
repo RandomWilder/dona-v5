@@ -21,22 +21,17 @@
 > with no document at all. **And it is all behind a login, which it has never been before.**
 > **Freeze:** Wednesday. The last merge that reaches staging lands Wednesday.
 >
-> **Plan mode is mandatory** for **5.1** (auth — the whole of it), **5.2** (auth + estate + evidence +
-> the composition root), **5.4** (a migration across evidence and kernel), **5.6** (a migration
-> relaxing a live CHECK) and **5.7** (two new entities). That is five of eight; this is an
-> auth-and-migration week and almost nothing in it is single-module.
+> **Plan mode is mandatory** for **5.6** (a migration relaxing a live CHECK) and **5.7** (two new
+> entities). 5.1–5.5 are closed.
 >
 > One slice = one focused session, half a day or less. **Done when** is the acceptance bar; **Verify**
 > is the check that proves it — no self-certification. The standing bar every slice also clears is
 > the Definition of Done in [plan.md](plan.md).
 
-**Where a new session starts: 5.1, in plan mode**, after reading [SPEC-staff.md](../SPEC-staff.md)
-(a stub — it gains content *in* this slice, and that is the signal the build has started),
-[SPEC.md](../SPEC.md) Security defaults, and [docs/from-v3.md](../docs/from-v3.md) Tier 2, which is
-what 5.1 is lifted from.
-
-**The chain is 5.1 → 5.2, then a fan: 5.3 and 5.4 hang off 5.2.** 5.5 → 5.6 → 5.7 → 5.8 runs
-underneath. 5.1 and 5.2 gate literally everything else in the week and in the three weeks after it.
+**Where a new session starts: 5.6.** 5.5 is closed. Then **5.7 → 5.8**.
+Week 6 runs **6.1 → 6.6** in order. The old 5.3 (`national_id` in an agent tool) waits on week 9.
+An unbuilt flow is painted in the live shell (`mockups/<flow>.html`, `/dev/mockups/<flow>` on a
+`-dev` process) before it is wired; a guard fails if that file and the slice's evidence both exist.
 
 **No slice this week depends on any fuse.** Walked 9 Sep. Week 6 is the first week a fuse touches,
 and it touches its *sizing* rather than its ability to start.
@@ -52,8 +47,8 @@ starting rather than serving. The corpus stays gated behind **F6** — that was 
 and it is unchanged by this.
 
 **What replaces it as the sentence to keep:** *every screen shows a state and a count and never a
-tenant's name.* 5.2 was the slice entitled to lift that on the strength of the session and **kept
-it**, tightening the wording rather than relaxing it. **Reconsidered at 5.4.**
+tenant's name.* 5.2 kept it; **5.4 kept it a second time**; **5.5 kept it a third** on the unit
+change log (dates, operator email, document — never who lives there).
 
 ---
 
@@ -63,12 +58,16 @@ it**, tightening the wording rather than relaxing it. **Reconsidered at 5.4.**
       22 routes declare a stance and 7 are `public`; the token is `sha256('csrf:' + session token)`
       and is held in no column; the cap is **50 filed documents per operator per rolling 24h**,
       counted off `audit_log`, refused attempts included. `too_many` → 429 is the sixth `ErrorCode`.
-- [ ] **`uploaded_by`, signed URLs, and `superseded_by` re-asked.** → **5.4**. All three held for the
-      same reason and released by the same fact.
-- [ ] **`national_id` never in an agent tool's response shape.** → **5.3**, a policy case, red first.
-      Owed by 1.7, restated at 2.1, in `SPEC-parties.md` and in `0006_parties.sql`.
-- [ ] **Cross-tenancy party identity.** → **5.5**. `SPEC-flows.md` said "month two" and named no week
-      until 9 Sep.
+- [x] **`uploaded_by`, signed URLs, and `superseded_by` re-asked.** CLOSED 10 Sep by **5.4**.
+      Nullable `uploaded_by` on every HTTP filing; panel mints a 15-minute V4 URL; search does not.
+      `superseded_by` still omitted: 6 mapping rows, 2 targets, 0 live stamps. Never-a-name **kept**
+      again. HTTP provenance is the operator's email (snapshot), not a typed field.
+- [ ] **`national_id` never in an agent tool's response shape.** → **week 9**, numbered when that week
+      is decomposed. No agent exists yet that could reach it. `party.national_id.read` stays in the
+      matrix with no reader until then; silence does not delete it.
+- [x] **Cross-tenancy party identity.** CLOSED 11 Sep by **5.5**. A2 step 5 kept. 2,871 identified
+      parties, 0 nameless, 0 nameless same-name groups. 303 identified name collisions are the
+      generator's pool, already keyed.
 - [ ] **Clock-driven `TenancyEvent` kinds; Obligation and ObligationType (E9, E10).** → **5.6**,
       **5.7**.
 - [ ] **The A9 settings screen** — the catalogue has been dynamic since week 3 and the hand on it has
@@ -83,7 +82,7 @@ it**, tightening the wording rather than relaxing it. **Reconsidered at 5.4.**
 - [x] **The UI-pass decision. DECIDED: no** at M1, **amended at 5.2b** to a chrome pass, **at
       5.2c** to v3's ops sidebar on the live destinations only, **and at 5.2d** to that rail as a
       phone drawer — still not a card redesign. Unbuilt tabs and the rest of the parked comments
-      wait on **M2** / **5.9**.
+      wait on **M2**. The unbuilt destinations themselves are **5.3**.
 - [~] **2.5 — import the real register.** Pilot preparation, with **F3**.
 - [~] **3.4 and A10 — Drive ingestion and the bulk review queue.** Pilot preparation, with **F4**.
 
@@ -303,13 +302,13 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
 - [x] **5.2b — One chrome on every signed-in screen.** The session arrived at 5.2 and each module
       kept writing its own bar: the index had staff and sign-out; estate had search and neither;
       evidence had three links and no search; staff home had no chrome at all. Sign-out existed on
-      two screens. **This slice does not redesign cards** and is not 5.9's seven-tab shell.
+      two screens. **This slice does not redesign cards** and is not the remaining-destinations slice.
       **Done when:** every authenticated screen carries the same bar — buildings, expiring,
       incomplete, search, staff, sign-out — and the login screen carries none of it.
       **Verify:** `tests/ui/tokens.test.ts` asserts the chrome over the signed-in registry and its
       absence on login; restart `npm run dev` and sign out from a **non-index** screen.
       **The M1 “no UI-pass” call is reversed only this far** — chrome and shared controls, so an
-      operator can leave any screen. Reconsidered again at M2 / 5.9.
+      operator can leave any screen. Remaining destinations are **5.3**. Reconsidered again at M2.
       **Plan mode. Deps:** 5.2 · **M**
 
 - [x] **5.2c — v3's ops shell on v5's live URLs.** 5.2b put one bar on every signed-in screen; it
@@ -334,54 +333,33 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       [evidence/5.2d.md](evidence/5.2d.md)
       **Plan mode. Deps:** 5.2c · **S**
 
-- [ ] **5.3 — `national_id` is unreachable by any agent tool.**
-      **Done when:** a policy case in `tests/policy/` fails against a tool response shape carrying
-      `national_id` and passes when it does not.
-      **Verify:** committed red, then green, in that order.
-      **Owed by 1.7**, restated at 2.1, in `SPEC-parties.md` and in `0006_parties.sql` — deterministic,
-      so a policy case and never a review and never an eval. This week owns it because this is the
-      week a staff surface exists that could leak it.
-      **Carried in from 5.1:** the permission `party.national_id.read` exists in the role matrix,
-      held by `ADMIN` alone, **with no reader**. That is the admin-only half of `SPEC.md`'s security
-      default given a vocabulary before the unreachable half is enforced; this slice is what gives
-      it a reader, and a permission still unread when this slice closes is a permission to delete.
-      **Deps:** 5.1 · **S**
+- [x] **5.3 — The rest of the ops destinations.** CLOSED 10 Sep. What the 10 Sep re-plan called 5.9; the number is
+      5.3 because we take the next integer. The rail already has the live screens. This slice adds
+      **קריאות** (`/calls`, owned by 7.2) and **הגדרות** (`/settings`, stub until 5.8). An unbuilt
+      tab is one line naming the week and slice that owns it. Kernel still learns no route. Seven
+      destinations: buildings, expiring, incomplete, search, staff, calls, settings.
+      **Done when:** every signed-in screen's rail names those seven; `/calls` and `/settings` each
+      render the owner line; login has none of it.
+      **Verify:** token registry asserts the new hrefs and the stub line; `/dev/mockups/ia` exists
+      only on a `-dev` process; restart `npm run dev` and click the new destinations.
+      **Deps:** 5.2d · **S**
+      [evidence/5.3.md](evidence/5.3.md)
 
-- [ ] **5.4 — What the session unlocks in evidence: `uploaded_by`, signed URLs, and the supersession
-      question re-asked.** `uploaded_by` is a nullable `ADD COLUMN` the moment an authenticated actor
-      exists. A signed URL is a bearer token for one object — whoever holds the string reads the
-      document, isolation join or not — so minting one belongs behind a session, which is why 3.2 and
-      3.6 both declined to. And `superseded_by` is **re-asked, not re-opened**: 3.1 ruled that
-      `SPEC-flows.md` invariant 2 already made supersession a fact about *values*; this is the
-      amendment week, so what it asks that ruling is whether promotion at scale finds a case it does
-      not cover.
-      **Done when:** every document filed after this slice names its uploader; the panel serves a
-      signed URL where it rendered a `gs://` string as text; and `superseded_by` either exists with
-      the case that forced it or is recorded as still unnecessary **against a stated number of
-      promotions**.
-      **Verify:** `uploaded_by` is the signed-in operator; a stale URL is refused; the supersession
-      answer cites a count, not a view.
-      **Carried in from 5.2, two things.** (1) **`request.staff` is set on every guarded route and
-      read by exactly one handler** — `POST /documents`, for the cap and the audit line. Every other
-      write route still records a *user-typed* name: `confirmed_by`, `promoted_by`, and the
-      exception's `actor: 'console'`. This is the slice that owns provenance, so it is the slice that
-      decides whether those become the signed-in operator or stay snapshot strings on purpose.
-      (2) **The never-a-name rule is reconsidered here**, because this slice is already deciding what
-      a session unlocks. 5.2 kept it and said why; keeping it a second time is an answer, and so is
-      lifting it — what is not allowed is it lapsing.
-      **Plan mode. Deps:** 5.1, 5.2 · **M**
+- [x] **5.4 — What the session unlocks in evidence: `uploaded_by`, signed URLs, and the supersession
+      question re-asked.** CLOSED 10 Sep — [evidence/5.4.md](evidence/5.4.md). 500 code + 41 hooks +
+      54 policy, 0 failed. `0024_` nullable `uploaded_by`. Panel mints a 15-minute V4 URL; search
+      does not. `superseded_by` still omitted (6 mappings, 2 targets, 0 live stamps). Never-a-name
+      **kept**. HTTP `promoted_by` / `confirmed_by` / incomplete actor = operator email.
+      **Carried → 5.5:** if portfolio promotion finds a case this ruling does not cover, 5.5 owns
+      the column. **Closed at 5.5 still omitted** (same 6 / 2 / 0).
+      **Director:** restart `npm run dev` (it does not watch); re-run `infra/bootstrap.sh staging`
+      for `serviceAccountTokenCreator` before a staging click can open a file.
+      **Deps:** 5.1, 5.2 · **M**
 
-- [ ] **5.5 — Promotion at scale, and the amendment that changes a real unit.** The demo's first
-      half. `applyPromotedField` and `TenancyEvent` landed at 4.3 against one document at a time;
-      this is where they meet a portfolio. **Cross-tenancy party identity gets its ruling here** —
-      `SPEC-flows.md` A2 step 5 forbids matching a name across tenancies and deferred the question to
-      "month two". Matching people is a privacy decision before it is a data-quality one, so the
-      **duplicate count** is what should provoke the ruling, not the convenience of a join.
-      **Done when:** an amendment promoted against a unit changes the tenancy and appends an event
-      naming the operator and the source document; and the cross-tenancy question has a written
-      ruling citing the duplicate-party count that provoked it.
-      **Verify:** read the change log back for one unit — old → new, actor, document, in order; A2
-      step 5's prohibition still holds, or its replacement is a policy case written red first.
+- [x] **5.5 — Promotion at scale, and the amendment that changes a real unit.** CLOSED 11 Sep —
+      [evidence/5.5.md](evidence/5.5.md). 502 code + 41 hooks + 54 policy, 0 failed. Unit change
+      log: old → new, operator email, document. A2 step 5 **kept** (0 nameless duplicates).
+      `superseded_by` still omitted (6 mappings, 2 targets, 0 stamps). Never-a-name **kept**.
       **Deps:** 5.4 · **M**
 
 - [ ] **5.6 — A tenancy ends because a date passed, with no document at all.** `0019_tenancy_event.sql`
@@ -436,46 +414,14 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
 
 ---
 
-## The 10 Sep re-plan, and where each of its moves now lives
+## What the 10 Sep re-plan became
 
-The re-plan the director stopped the build for is Moves 0–4. Move 0 is **5.0-cut**, closed. Move 1 is
-**5.1b**, above. The rest are recorded here so that nothing it decided is owned only by a plan file
-outside the repository ([docs/pipeline.md](docs/pipeline.md) §8, §10):
+Move 0 is **5.0-cut**, closed. Move 1 is **5.1b**, closed. Move 2's destinations are **5.3**, not
+5.9. Move 3 is not a slice: mockup-first and the evidence cap live in [CLAUDE.md](../CLAUDE.md) and
+`scripts/guards.ts`. Move 4's skip list is **retired**: 5.4–5.8 stay this week, in order; week 6
+is 6.1–6.6; 7.1 still depends on 6.6. **5.9 is never used.**
 
-- [ ] **Move 2 → new slice `5.9`: unbuilt tabs, where the navigation *is* the plan.** The ops
-      frame itself landed at **5.2c**. This slice adds the destinations that do not exist yet —
-      seven tabs at the composition root (the kernel must not learn a route); an unbuilt tab
-      renders one line naming the week and slice that owns it, so **the remaining roadmap is on
-      screen**. Written into the slice list when the chore below runs. **It inherits an answer
-      rather than a question:** 5.1b carried "how does an operator row reach the staging database"
-      here, and 5.1c closed it — `./infra/staff-add.sh <env> <email> <ROLE>` runs `staff-add.ts` as
-      a one-off Cloud Run job on the deployed image. This slice adds operators, it does not have to
-      invent how.
-- [ ] **Move 3 → chore, before 5.9: the mockup-first slice contract.** `mockups/<slice>.html` through
-      the real page shell on a dev-only route, `data-state="wired" | "painted"`, and a guard in
-      `scripts/guards.ts` that fails the build when a mockup and its evidence file both exist. With
-      it: `tasks/todo.md` holds the current week only, `tasks/roadmap.md` stops being retrospective,
-      evidence files are capped at ~40 lines, and `CLAUDE.md` gains the gate. **5.1b adopts the
-      evidence cap early**; the rest is that chore's, because restructuring three plan files inside
-      an auth slice is how both jobs get done badly.
-- [ ] **Move 4 → the reorder.** `5.2` keeps its place; then `5.9` → `6.1` → `6.2` → `6.3` → `7.1` →
-      `7.2`, which is the first thing in this project the director can judge by looking. The
-      deferrals it decided, each with its new owner: **5.3 → week 9** (no agent exists to reach
-      `national_id` before week 10) · **5.7 → folded into 6.1**, its first reader · **5.4, 5.5, 5.6 →
-      post-7.2** · **5.8 → cut**, and it becomes the `הגדרות` stub tab in 5.9 under
-      [SPEC-flows.md](../SPEC-flows.md):16. The slice list below still reads in the old order and is
-      rewritten by the Move 3 chore, not here.
-- [ ] **One dependency to re-check before week 6 starts:** `roadmap.md:1604` gives 7.1 a dependency on
-      **6.6**, which the order above does not reach. Either 7.1's dependency is really 6.2, or 6.6
-      comes forward. Resolved when 6.1 is taken.
-
----
-
-**Cut line, in order:** **5.8** first — the catalogue keeps its seed for another week, which is the
-honest state it has been in since week 3 and not a regression. Then **5.7** — obligations slide into
-week 6, which is lighter. **Never 5.1 or 5.2**: every week after this one assumes the session, and a
-week 6 that starts without it inherits an unauthenticated console with a responsibility matrix
-behind it.
+The `national_id` policy case that used to be 5.3 waits on **week 9**.
 
 **M2 is at the end of week 8**, not this week. Its boxes: the console usable on its own · all five
 policy cases green, each red first · weeks 9–12 decomposed before week 9's Monday.

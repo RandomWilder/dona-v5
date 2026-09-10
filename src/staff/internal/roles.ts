@@ -21,7 +21,7 @@ export const PERMISSIONS = [
   'staff.invite',
   // Unused at 5.1, and here on purpose. SPEC.md's security default says `national_id` is
   // **admin-only, unreachable by any agent tool, and access-logged**; the "admin-only" half needs a
-  // permission to name before slice 5.3 can write the policy case that enforces the "unreachable"
+  // permission to name before week 9 can write the policy case that enforces the "unreachable"
   // half. A permission with no reader is a smaller lie than a security default with no vocabulary.
   'party.national_id.read',
 ] as const;

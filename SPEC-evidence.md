@@ -35,7 +35,8 @@ workbook a specification rather than a description.
   `(document_type_id, field_key, effective_from)`: redeclaring a field is a **new row**, never an
   edit, and closing a declaration sets `effective_to` without touching what the old row said.
   `value_type` has no `MONEY` member and no money field is ever seeded (foundation rule 2).
-- **`document`** — E12. One file, hashed at ingest. `file_hash` is **unique**, which is what makes
+- **`document`** — E12. One file, hashed at ingest. From 5.4 it also carries **`uploaded_by`**, a
+  nullable FK to `staff_account`. `file_hash` is **unique**, which is what makes
   *the same file filed twice is one document with two links* a property of the database rather than a
   habit of the caller. `file_hash` and `storage_uri` are **immutable after insert**, enforced by the
   `document_is_immutable` trigger — the first trigger in this repository, and it is here because
@@ -218,7 +219,7 @@ bound a different quantity and an authenticated operator can still post a 200 MB
   achieves is a bounded object it cannot remove and a row naming a unit.
 - **Nothing personal is on the screen or in the response** — a unit number, a type and a date. The
   tenancy options are dates and a status, never a name, which is the rule every screen still keeps
-  after 5.2 chose to keep it.
+  after 5.2 chose to keep it and 5.4 kept it again.
 - **No private nav** (slices 5.2b, 5.2c and 5.2d). Document screens receive the same signed-in ops
   rail the composition root injects everywhere else — buildings, expiring, incomplete, search,
   staff, sign-out — mark the estate destination as current, and write none of their own. The phone
@@ -243,7 +244,7 @@ is an ordinary case and not a gap.
   `src/scope/`'s answer and nobody else's — the same rule `src/tenancy/` and `src/parties/` state.
   A document panel shows what is filed, not who signed it (slice 3.6; `tests/ui/tokens.test.ts`
   asserts it from outside, and still does after 5.2 put a session behind the screens and kept the
-  rule anyway).
+  rule, and after 5.4 kept it a second time).
 - **The catalogue is read at run time, never compiled in.** `listDocumentTypes` and
   `documentTypeFields` are what slice 3.3's guard and slice 4.2's extraction read. A
   `Record<TypeKey, …>` in TypeScript would make A8 true of the catalogue and false of everything that
@@ -252,9 +253,10 @@ is an ordinary case and not a gap.
   same file against a second entity adds a link and never a document.
 - **`ingested_at` comes from the injected clock**, never `DEFAULT now()`.
 - **A list of what is filed never mints a signed URL.** `listLinkedDocuments` and `searchDocuments`
-  return the `gs://` path as text. A signed URL is a bearer token for one object: whoever holds the
-  string reads the document, isolation join or not, so issuing one belongs behind a session — which
-  exists from 5.2, and **slice 5.4 is where the panel starts minting one**.
+  return the `gs://` path as text. The **documents panel** (unit page, building page) is where
+  slice 5.4 mints a fifteen-minute V4 URL, at the composition root, so estate still does not import
+  the object store's internals. Search does not mint. A signed URL is a bearer token for one object:
+  whoever holds the string reads the document, isolation join or not.
 
 ## Finding a document — slice 3.6
 
@@ -274,7 +276,7 @@ party**, **never a filename** (none is stored), **never the file's text** (that 
 retrieval). Estate composes the two searches at the route; this module does not import estate's
 search, and estate does not import this one — `app.ts` injects both.
 
-**The panel shows type, dates, ingest date, the `gs://` path as text, and the verdict.** A scan
+**The panel shows type, dates, ingest date, a short-lived signed read of the bytes, and the verdict.** A scan
 nobody has read yet (`unverified`) must not look identical to a lease whose marker terms were all
 found (`verified`). The confirmation screen already said this in words; the panel is where it
 becomes a property of a list, which is why `verification_verdict` is a column rather than a scrape
@@ -356,8 +358,8 @@ is `invalid`: no tenancy, no party, no new link. This is the content check 3.3 d
 
 **The confirm screen may show captured names.** That is the exception the confirmation step exists
 for. It still does not query `party`. Every other screen still shows no tenant's name — 5.2 was
-entitled to lift that rule behind its session and **kept it**, so this exception is still the only
-one.
+entitled to lift that rule behind its session and **kept it**, and 5.4 kept it again, so this
+exception is still the only one. Confirm writes `confirmed_by` from the signed-in operator.
 
 ## Flow A3 — an addendum completes a tenancy (slice 4.7)
 
@@ -431,18 +433,21 @@ All four are nullable `ADD COLUMN`s when they come.
   **values** and lives with their provenance (4.2, 4.3). A genuinely re-issued document — a corrected
   ארנונה bill, a renewed certificate — is answered by `valid_from`/`valid_to`, which E12 has: the
   current one is the one whose window covers today, which is a fact rather than a pointer somebody
-  has to remember to set.
+  has to remember to set. **Re-asked at 5.4 and again at 5.5, still omitted.** Two promotion
+  targets (`tenancy.start_date`, `tenancy.end_date`), six mapping rows, and the stamped-row count
+  in `tasks/evidence/5.5.md` still found no case the ruling does not cover.
 - **`tenant_visible`** — a per-row boolean deciding what a tenant may see is a **second access
   control standing beside the isolation join**, and foundation rule 1 is that the scope is a view and
   never a column. A model that misbehaves cannot widen a scope it never held, but it can be handed a
   row whose boolean someone flipped. What a tenant may see is derived from `document_link` through
   `src/scope/`. If week 9 needs a class of document that is admin-only even inside its own tenancy,
   that belongs on the **type** — one row, one rule, readable — and not on each document.
-- **`uploaded_by`** — there was no authenticated actor in this system until 5.1, so the column
-  could hold only a placeholder, and a provenance column holding a placeholder for six weeks is worse
-  than one that arrives with the identity it names. **Slice 5.4 adds it.** From 5.2 the operator is
-  already named on the `evidence.file_document` audit line, which is what the per-caller cap counts;
-  a log naming the actor is not the column, and does not pre-empt it.
+- **`uploaded_by`** — **slice 5.4 added it** (`0024_document_uploaded_by.sql`): nullable
+  `uuid REFERENCES staff_account`. Not `-- pii` — it is a staff id, like the other FKs to that
+  table. Rows filed through `POST /documents` name the signed-in operator. Rows ingested before 5.4,
+  and callers with no session (seed, importer), stay null. A re-ingest of the same hash keeps the
+  first uploader (`COALESCE`). The `evidence.file_document` audit line still names the actor for the
+  per-caller cap; the column is the fact other code may join on.
 
 ## FieldPromotion (slice 4.3, `src/kernel/migrations/0018_field_promotion.sql`)
 
@@ -457,10 +462,11 @@ matrix could read cannot be added by seeding a catalogue field.
   Extending that CHECK is a migration. Mapping *rows* are seed data, applied by the same function as
   the catalogue, because they point at ids that only exist after `seed:doctypes`.
 - **Stamp on `extracted_field`.** `promoted_to`, `promoted_by`, `promoted_at` — nullable until a
-  promotion succeeds. `promoted_by` is `-- pii`: it names the operator who signed the copy. No staff
-  table existed when it was written, so this is a snapshot string, not a foreign key — and it stays
-  one after 5.1, because what it records is who signed the copy at that moment, not a row that can
-  later be disabled. Empty is `invalid`.
+  promotion succeeds. `promoted_by` is `-- pii`: it names the operator who signed the copy. It stays
+  a snapshot string, not a staff FK, because what it records is who signed the copy at that moment,
+  not a row that can later be disabled. From 5.4 the HTTP path fills it from the session's email;
+  there is no typed name field. Empty is `invalid`. Confirm (`confirmed_by`) is the same snapshot,
+  filled the same way.
 - **The database is what refuses a stamp outside the command.** A trigger rejects UPDATE/INSERT of
   the stamp columns unless `dona.promoting` is `on` for the transaction (`restrict_violation`, the
   same class as `document_is_immutable`). A DELETE of a stamped row is the same rejection. Direct
@@ -492,7 +498,7 @@ the click is an `href`, not a script.
   broken. The list is every stamped field on paper linked to that unit (the unit itself, or a
   tenancy of that unit). Unmapped capture does not appear: it never became a value on the unit.
 - **Still no names.** The only mappings this week are dates. A name that extraction captured stays
-  on the read page and off the unit screen — and 5.2, which could have changed that, chose not to.
+  on the read page and off the unit screen — 5.2 chose not to change that, and 5.4 did not either.
 
 ## Later in this module, and not here yet
 
