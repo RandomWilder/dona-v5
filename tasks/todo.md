@@ -127,6 +127,20 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
 
 ## Slices
 
+- [x] **5.0-cut — Delete the speculative kernel while the migrations are still editable.**
+      **Closed 10 Sep 2026** ([evidence/5.0-cut.md](evidence/5.0-cut.md)) — `events.ts` and
+      `idempotency.ts` deleted with their suites, `outbox` and `idempotency_keys` squashed out of
+      `0002_kernel_durability.sql`. **−176 production lines, −220 test lines, 29 → 27 tables**, all
+      gates green, 50 policy cases untouched. Three further deletions the re-plan asked for were
+      **disproved and not done** — `kernel/embeddings.ts`, the `vector` extension and
+      `resolvePartiesInUnit` all have live callers in `evals/` and `scripts/`; the numbers and the
+      greps are in the evidence file. Taken ahead of 5.2 because a migration is only editable while
+      no environment holds real data (`docs/from-v3.md`), and F3 closes that window.
+      **Opened → 5.1b:** the local `dona` database still carries both dead tables, because the
+      migration ledger is by filename with no checksum; rebuilding it needs a `DROP SCHEMA` the
+      bash guard refuses, and 5.1b rebuilds local from empty anyway.
+      **Carried → post-7.2:** `work.ts` left standing, its durability claim still unearned.
+
 - [x] **5.1 — Staff identity, the session, and the role matrix in code.** **Closed 9 Sep 2026**
       ([evidence/5.1.md](evidence/5.1.md)) — 481 code + 41 hooks + 50 policy, 0 failed; the
       no-plaintext-token policy case red against a deliberately wrong `0021_` before it was green;

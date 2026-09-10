@@ -4,8 +4,8 @@ Conventions inherited from [SPEC.md](SPEC.md) and not repeated here. The kernel 
 logic** — it is the shared machinery every module is built on.
 
 - **Owns:** ids · injected clock · the one error shape · edge validation · config · db · the
-  migration runner and the kernel's own tables · idempotency · audit · outbox · durable work ·
-  object storage · pdf · ocr · embeddings · extraction · the RTL UI token layer.
+  migration runner and the kernel's own tables · audit · durable work · object storage · pdf · ocr ·
+  embeddings · extraction · the RTL UI token layer.
 - **Entities:** none.
 - **Depends on:** nothing. **It imports from no domain module**, and `src/kernel/boundary.test.ts`
   proves it on every run.
@@ -85,7 +85,7 @@ therefore brings with it, is the durability substrate its own suites run against
 | File | What it creates |
 |---|---|
 | `0001_init.sql` | the `vector` extension |
-| `0002_kernel_durability.sql` | `idempotency_keys` · `audit_log` · `outbox` · `scheduled_work` · `config_settings` |
+| `0002_kernel_durability.sql` | `audit_log` · `scheduled_work` · `config_settings` |
 | `0003_kernel_settings.sql` | the seed rows for the embedding and extraction settings |
 | `0016_ocr_settings.sql` | `ocr.processor_version` — Document AI OCR version, read per call |
 
@@ -290,19 +290,6 @@ parameter rather than ignoring it.
 that sees tenant text to be named before it is called, and ADR-0004 owes the legal basis. Neither
 port is wired to real tenant text before slice 1.12 closes that.
 
-## Idempotency (`idempotency.ts`)
-
-`once<T>(key, work)` — the key is the caller's business intent (job id, offer id), never a random
-value.
-
-- First call claims the key atomically and runs the work.
-- A later call with the same key returns the **first result**, deep-copied so callers cannot mutate
-  the stored value.
-- A call arriving while the first is still running gets `conflict`.
-- A command that **throws** releases its key: failures are retryable, only successes are memoized.
-- A claim older than `staleAfterMs` (default 60s, on the injected clock) is reclaimable, so a
-  process that dies mid-command cannot wedge a key permanently.
-
 ## Audit (`audit.ts`)
 
 `write(entry)` records one row: actor (kind + id + role), action, subject, inputs, outcome.
@@ -321,12 +308,21 @@ what.
 **Owed, and not built here.** `SPEC.md` commits to logging **every scoped read of tenant data**, not
 only every command. `around()` is the hook for it; the extension lands with `src/scope/` in week 2.
 
-## Outbox (`events.ts`)
+## Idempotency and the outbox — removed at 5.0-cut, not deferred
 
-`publish(event)` writes the row first, then attempts delivery in the same call. A handler that
-throws leaves the row unhandled with `last_error` set; the event is never lost because the write
-precedes delivery. `deliverPending()` replays unhandled rows in `at` order and is the recovery path
-after a crash or restart.
+`idempotency.ts` and `events.ts` were written at slice 1.4 ahead of a caller and five weeks later
+still had none: both were imported by nothing but their own tests, and `SPEC-register.md`'s "no
+caller-supplied intent key" had already recorded why the first plausible caller did not want one.
+Slice 5.0-cut deleted both and squashed `idempotency_keys` and `outbox` out of
+`0002_kernel_durability.sql` rather than dropping them in a later migration — possible only while no
+environment holds real data (`docs/from-v3.md`).
+
+**What returns with them, on the day something publishes an event or replays a command:**
+`once<T>(key, work)` keyed on business intent, with an explicit `state` column because a null
+`result` cannot distinguish "in flight" from a command whose result is legitimately null; and
+`publish(event)` writing the row before attempting delivery, with `deliverPending()` replaying
+unhandled rows in `at` order. Both shapes are in git at `0b81eed`. Re-deriving them was never the
+cost that mattered — carrying two unused tables through every schema test was.
 
 ## Durable work (`work.ts`)
 
@@ -410,7 +406,8 @@ Recorded so they are not relitigated.
 3. **The clock is a parameter, not `NOW()`.** Time in SQL comes from the injected clock, so deadline
    behaviour is provable without waiting for it.
 4. **Explicit `state` on idempotency keys.** A null `result` cannot distinguish "in flight" from a
-   command whose result is legitimately null.
+   command whose result is legitimately null. *Held rather than deleted at 5.0-cut: the mechanism
+   went, the decision is what the mechanism costs to rebuild.*
 5. **Failed commands release their key.** Memoizing failures would make a transient database blip
    permanent for that intent.
 6. **The pool has an `'error'` listener** (see *Database*). The one deliberate divergence from the
