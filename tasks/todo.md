@@ -109,6 +109,17 @@ is the single most important thing carried out of month one.
       first pilot tag, so this is a known window rather than an open one. Decided **once**, beside
       the prod restart and the F7 organisation move, as either a client per environment or a second
       project. `release.yml` mounts no `prod-google-oauth-*` today and gains both in the same pass.
+- [ ] **Raised at 5.1b, owned at week 12 beside the entry above: the consent screen stays in
+      `Testing`, so every operator is also a row in Google's test-user list.** Publishing the app
+      is blocked on the Branding page, which requires an application home page, a privacy policy
+      URL, a terms-of-service URL and an authorised domain — and the project has no domain of its
+      own; `run.app` is a public suffix and cannot be claimed. Testing costs nothing operationally:
+      `access_type=online` means no refresh token, so the seven-day testing expiry never applies,
+      and our own session is 12h regardless. The cost is a second list saying what `staff_account`
+      already says, capped at 100 lifetime users, and an unverified-app interstitial the operator
+      clicks through. Decided **once**, with the domain — which is also what the client-facing URL
+      needs. Until then `staff:add` has an undocumented second half: add the address as a test user
+      too.
 - [x] **Raised at 5.1, owner the director: an invite is a printed URL because there is no mail
       transport. RETIRED at 5.1b** — there is no invite and no URL. An admin adds an operator's
       email and role, the operator signs in with Google, and no message ever had to reach them. The
