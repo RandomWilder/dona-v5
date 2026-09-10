@@ -13,6 +13,7 @@
 // account-enumeration oracle on the login page of a system holding 1,500 households.
 //
 // Every colour, face, radius and measure is a token; the CSS below is layout for these pages only.
+
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import type { Permission, Role } from './roles.ts';
@@ -70,25 +71,6 @@ const styles = h`<style>
     font-size: var(--text-sm);
     color: var(--color-text-muted);
   }
-  button {
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-1);
-    background: var(--color-chrome);
-    color: var(--color-on-chrome);
-    font-size: var(--text-body);
-    cursor: pointer;
-  }
-  .signin {
-    display: inline-block;
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-1);
-    background: var(--color-chrome);
-    color: var(--color-on-chrome);
-    font-size: var(--text-body);
-    text-decoration: none;
-  }
   .identity-row {
     display: flex;
     gap: var(--space-3);
@@ -122,7 +104,7 @@ export function renderLoginPage(screen: LoginScreen = {}): string {
       ? h``
       : h`<div class="auth-card">
             <p class="note">הכניסה היא דרך חשבון Google. אין כאן סיסמה ואין קוד.</p>
-            <p><a class="signin" href="/staff/auth/start">המשך עם Google</a></p>
+            <p><a class="btn btn-primary" href="/staff/auth/start">המשך עם Google</a></p>
           </div>`;
   const body = h`
     <div class="auth">
@@ -138,6 +120,8 @@ export function renderLoginPage(screen: LoginScreen = {}): string {
 }
 
 export interface StaffHomeScreen {
+  /** Slice 5.2b. Login does not receive this. */
+  nav: Html;
   /** The CSRF token for this session (slice 5.2). Both forms on this screen carry it. */
   csrf: string;
   email: string;
@@ -163,7 +147,7 @@ export function renderStaffHomePage(screen: StaffHomeScreen): string {
             <input id="invite-role" name="role" type="text" dir="ltr"
                    value="OPERATOR" required />
           </div>
-          <button type="submit">הוספה</button>
+          <button class="btn btn-primary" type="submit">הוספה</button>
           <p class="note">הוספה של כתובת שכבר קיימת מעבירה את ההרשאה ואינה יוצרת משתמש שני.</p>
         </form>`
     : h``;
@@ -197,10 +181,11 @@ export function renderStaffHomePage(screen: StaffHomeScreen): string {
       </div>
       ${issued}
       ${invite}
-      <form method="post" action="/staff/logout">
-        ${csrfInput(screen.csrf)}
-        <button type="submit">יציאה</button>
-      </form>
     </div>`;
-  return page('דונה דום — הצוות', body);
+  return renderPage({
+    title: 'דונה דום — הצוות',
+    styles,
+    nav: screen.nav,
+    body,
+  });
 }

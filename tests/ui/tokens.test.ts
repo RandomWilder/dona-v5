@@ -13,6 +13,9 @@
 // here rather than copy this file — the second copy is how a guard dies.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+// The root index is the composition root's screen from 5.2, not estate's. It is in this registry
+// under the same rule as every other screen: rendered here, asserted on the bytes.
+import { signedInChrome } from '../../src/chrome.ts';
 import type {
   BuildingDetail,
   BuildingSummary,
@@ -39,8 +42,6 @@ import {
   renderTenancyWrittenPage,
   renderUploadPage,
 } from '../../src/evidence/contract.ts';
-// The root index is the composition root's screen from 5.2, not estate's. It is in this registry
-// under the same rule as every other screen: rendered here, asserted on the bytes.
 import { renderIndexPage } from '../../src/index-page.ts';
 import { CSRF_FIELD } from '../../src/kernel/ui/page.ts';
 import {
@@ -208,90 +209,109 @@ const lettings: UnitLetting[] = [
 // A token shaped like the real one — 64 hex characters — so an assertion about the *shape* of what
 // a form carries is testing the shape a session actually produces.
 const CSRF = 'a1b2c3d4'.repeat(8);
+const NAV = signedInChrome(CSRF, 'estate');
+const NAV_SEARCH = signedInChrome(CSRF, 'search');
+const NAV_EXPIRING = signedInChrome(CSRF, 'expiring');
+const NAV_INCOMPLETE = signedInChrome(CSRF, 'incomplete');
+const NAV_STAFF = signedInChrome(CSRF, 'staff');
 
 const SCREENS: Array<[string, () => string]> = [
   ['root · index', () => renderIndexPage({ csrf: CSRF })],
   [
     'estate · buildings',
     () =>
-      renderBuildingsPage([building], new Map([[building.building_id, 40]])),
+      renderBuildingsPage(
+        [building],
+        new Map([[building.building_id, 40]]),
+        NAV,
+      ),
   ],
-  ['estate · buildings, empty', () => renderBuildingsPage([], new Map())],
-  ['estate · one building', () => renderBuildingPage(detail, occupancy)],
+  ['estate · buildings, empty', () => renderBuildingsPage([], new Map(), NAV)],
+  ['estate · one building', () => renderBuildingPage(detail, occupancy, NAV)],
   [
     'estate · one building, nothing let',
-    () => renderBuildingPage(detail, new Map()),
+    () => renderBuildingPage(detail, new Map(), NAV),
   ],
   [
     'estate · one building, with a protocol',
-    () => renderBuildingPage(detail, occupancy, [unverified]),
+    () => renderBuildingPage(detail, occupancy, NAV, [unverified]),
   ],
-  ['estate · one unit', () => renderUnitPage(hit, 2, [filed])],
+  ['estate · one unit', () => renderUnitPage(hit, 2, [filed], NAV)],
   [
     'estate · one unit, with a promoted date',
     () =>
-      renderUnitPage(
-        hit,
-        2,
-        [filed],
-        [
-          {
-            extractedFieldId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-            documentId: filed.documentId,
-            labelHe: 'תחילת תקופת השכירות',
-            value: '2026-03-01',
-            page: 1,
-            confidence: 0.91,
-          },
-        ],
-      ),
+      renderUnitPage(hit, 2, [filed], NAV, [
+        {
+          extractedFieldId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          documentId: filed.documentId,
+          labelHe: 'תחילת תקופת השכירות',
+          value: '2026-03-01',
+          page: 1,
+          confidence: 0.91,
+        },
+      ]),
   ],
   [
     'estate · one unit, vacant and empty',
-    () => renderUnitPage(hit, undefined, []),
+    () => renderUnitPage(hit, undefined, [], NAV),
   ],
-  ['estate · search', () => renderSearchPage('רקפת', results)],
+  ['estate · search', () => renderSearchPage('רקפת', results, NAV_SEARCH)],
   [
     'estate · search, nothing found',
     () =>
-      renderSearchPage('זזז', {
-        buildings: [],
-        units: [],
-        documents: [],
-        truncated: false,
-      }),
+      renderSearchPage(
+        'זזז',
+        {
+          buildings: [],
+          units: [],
+          documents: [],
+          truncated: false,
+        },
+        NAV_SEARCH,
+      ),
   ],
   [
     'estate · search, no term',
     () =>
-      renderSearchPage('', {
-        buildings: [],
-        units: [],
-        documents: [],
-        truncated: false,
-      }),
+      renderSearchPage(
+        '',
+        {
+          buildings: [],
+          units: [],
+          documents: [],
+          truncated: false,
+        },
+        NAV_SEARCH,
+      ),
   ],
   [
     'estate · search, a named lease',
     () =>
-      renderSearchPage('שכירות', {
-        buildings: [],
-        units: [],
-        documents: [
-          {
-            ...filed,
-            entityType: 'UNIT',
-            entityId: hit.unit_id,
-            unitId: hit.unit_id,
-            unitNumber: hit.unit_number,
-            buildingId: hit.building_id,
-            buildingName: hit.building_name,
-          },
-        ],
-        truncated: false,
-      }),
+      renderSearchPage(
+        'שכירות',
+        {
+          buildings: [],
+          units: [],
+          documents: [
+            {
+              ...filed,
+              entityType: 'UNIT',
+              entityId: hit.unit_id,
+              unitId: hit.unit_id,
+              unitNumber: hit.unit_number,
+              buildingId: hit.building_id,
+              buildingName: hit.building_name,
+            },
+          ],
+          truncated: false,
+        },
+        NAV_SEARCH,
+      ),
   ],
-  ['estate · leases ending', () => renderExpiringPage(expiring, 60)],
+  [
+    'estate · leases ending',
+    () => renderExpiringPage(expiring, 60, NAV_EXPIRING),
+  ],
   [
     // Hebrew counts in three. A template that only special-cases zero renders “בעוד 1 ימים”
     // every single day, which is the kind of thing a room full of Hebrew speakers reads first.
@@ -304,9 +324,13 @@ const SCREENS: Array<[string, () => string]> = [
           days_left: days,
         })),
         60,
+        NAV_EXPIRING,
       ),
   ],
-  ['estate · leases ending, none', () => renderExpiringPage([], 60)],
+  [
+    'estate · leases ending, none',
+    () => renderExpiringPage([], 60, NAV_EXPIRING),
+  ],
   [
     'estate · incomplete tenancies',
     () =>
@@ -328,13 +352,18 @@ const SCREENS: Array<[string, () => string]> = [
           },
         ],
         CSRF,
+        NAV_INCOMPLETE,
       ),
   ],
-  ['estate · incomplete tenancies, none', () => renderIncompletePage([], CSRF)],
+  [
+    'estate · incomplete tenancies, none',
+    () => renderIncompletePage([], CSRF, NAV_INCOMPLETE),
+  ],
   [
     'documents · upload',
     () =>
       renderUploadPage({
+        nav: NAV,
         csrf: CSRF,
         unit: hit,
         types: documentTypes,
@@ -345,6 +374,7 @@ const SCREENS: Array<[string, () => string]> = [
     'documents · upload, a flat with no letting on it',
     () =>
       renderUploadPage({
+        nav: NAV,
         csrf: CSRF,
         unit: hit,
         types: documentTypes,
@@ -355,6 +385,7 @@ const SCREENS: Array<[string, () => string]> = [
     'documents · upload, refused',
     () =>
       renderUploadPage({
+        nav: NAV,
         csrf: CSRF,
         unit: hit,
         types: documentTypes,
@@ -374,6 +405,7 @@ const SCREENS: Array<[string, () => string]> = [
     'documents · filed',
     () =>
       renderFiledPage({
+        nav: NAV,
         unit: hit,
         type: documentTypes[0] as DocumentTypeRow,
         inserted: true,
@@ -387,6 +419,7 @@ const SCREENS: Array<[string, () => string]> = [
     'documents · filed, already on file and unverified',
     () =>
       renderFiledPage({
+        nav: NAV,
         unit: hit,
         type: documentTypes[1] as DocumentTypeRow,
         inserted: false,
@@ -400,6 +433,7 @@ const SCREENS: Array<[string, () => string]> = [
     'documents · read overlay',
     () =>
       renderReadPage({
+        nav: NAV,
         csrf: CSRF,
         documentId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
         buildingId: building.building_id,
@@ -452,6 +486,7 @@ const SCREENS: Array<[string, () => string]> = [
     'documents · read overlay, no fields',
     () =>
       renderReadPage({
+        nav: NAV,
         csrf: CSRF,
         documentId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
         buildingId: building.building_id,
@@ -469,6 +504,7 @@ const SCREENS: Array<[string, () => string]> = [
     'documents · seed a protocol',
     () =>
       renderSeedPage({
+        nav: NAV,
         csrf: CSRF,
         documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         labelHe: 'פרוטוקול מסירה',
@@ -489,6 +525,7 @@ const SCREENS: Array<[string, () => string]> = [
     'documents · protocol seeded',
     () =>
       renderSeededPage({
+        nav: NAV,
         buildingId: building.building_id,
         buildingName: building.name,
         unitId: hit.unit_id,
@@ -502,6 +539,7 @@ const SCREENS: Array<[string, () => string]> = [
     'documents · confirm a lease',
     () =>
       renderTenancyPage({
+        nav: NAV,
         csrf: CSRF,
         documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         typeKey: 'lease',
@@ -528,6 +566,7 @@ const SCREENS: Array<[string, () => string]> = [
     'documents · lease written',
     () =>
       renderTenancyWrittenPage({
+        nav: NAV,
         unit: hit,
         startDate: '2026-03-01',
         endDate: '2027-02-28',
@@ -539,6 +578,7 @@ const SCREENS: Array<[string, () => string]> = [
     'documents · confirm an addendum',
     () =>
       renderTenancyPage({
+        nav: NAV,
         csrf: CSRF,
         documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         typeKey: 'lease_amendment',
@@ -580,6 +620,7 @@ const SCREENS: Array<[string, () => string]> = [
     'staff · home, an admin',
     () =>
       renderStaffHomePage({
+        nav: NAV_STAFF,
         csrf: CSRF,
         email: 'yael@example.test',
         role: 'ADMIN',
@@ -599,6 +640,7 @@ const SCREENS: Array<[string, () => string]> = [
     'staff · home, an admin who just added an operator',
     () =>
       renderStaffHomePage({
+        nav: NAV_STAFF,
         csrf: CSRF,
         email: 'yael@example.test',
         role: 'ADMIN',
@@ -615,6 +657,7 @@ const SCREENS: Array<[string, () => string]> = [
     'staff · home, an admin who moved an existing role',
     () =>
       renderStaffHomePage({
+        nav: NAV_STAFF,
         csrf: CSRF,
         email: 'yael@example.test',
         role: 'ADMIN',
@@ -631,6 +674,7 @@ const SCREENS: Array<[string, () => string]> = [
     'staff · home, a viewer who may not invite',
     () =>
       renderStaffHomePage({
+        nav: NAV_STAFF,
         csrf: CSRF,
         email: 'dana@example.test',
         role: 'VIEWER',
@@ -714,6 +758,51 @@ describe('shared UI tokens', () => {
     }
   });
 
+  it('puts the same chrome on every signed-in screen', () => {
+    // Slice 5.2c: one ops rail, built once, injected. A screen that invents its own list is how
+    // the bar drifts — staff without a way out, evidence without search, the index as the only
+    // page that could sign you out.
+    for (const [name, render] of SCREENS) {
+      if (name.startsWith('staff · login')) continue;
+      const html = render();
+      assert.match(html, /class="ops"/, name);
+      assert.match(html, /<aside class="ops-nav">/, name);
+      assert.match(html, /href="\/estate"/, name);
+      assert.match(html, /href="\/estate\/expiring"/, name);
+      assert.match(html, /href="\/estate\/incomplete"/, name);
+      assert.match(html, /href="\/estate\/search"/, name);
+      assert.match(html, /href="\/staff"/, name);
+      assert.match(html, /action="\/staff\/logout"/, name);
+      assert.match(html, />יציאה</, name);
+      assert.match(
+        html,
+        new RegExp(
+          `<form class="sign-out"[\\s\\S]*name="${CSRF_FIELD}" value="${CSRF}"`,
+        ),
+        name,
+      );
+      const marked = html.match(/<a[^>]*aria-current="page"/g) ?? [];
+      if (name.startsWith('root ·')) {
+        assert.equal(marked.length, 0, name);
+      } else {
+        assert.equal(marked.length, 1, name);
+      }
+    }
+  });
+
+  it('keeps the login screen without that chrome', () => {
+    for (const [name, render] of SCREENS) {
+      if (!name.startsWith('staff · login')) continue;
+      const html = render();
+      assert.doesNotMatch(html, /class="ops"/, name);
+      assert.doesNotMatch(html, /<aside class="ops-nav">/, name);
+      assert.doesNotMatch(html, /href="\/estate"/, name);
+      assert.doesNotMatch(html, /href="\/estate\/search"/, name);
+      assert.doesNotMatch(html, /action="\/staff\/logout"/, name);
+      assert.doesNotMatch(html, />יציאה</, name);
+    }
+  });
+
   it('escapes what the database hands it', () => {
     // The kernel's `h` escapes by default and has no raw escape hatch, so this is a property of the
     // template rather than of the view remembering. It is asserted here because the view is the
@@ -723,7 +812,7 @@ describe('shared UI tokens', () => {
       name: '<script>alert(1)</script>',
       city: 'שוהם & סביבה',
     };
-    const html = renderBuildingsPage([hostile], new Map());
+    const html = renderBuildingsPage([hostile], new Map(), NAV);
     assert.doesNotMatch(html, /<script/);
     assert.match(html, /&lt;script&gt;/);
     assert.match(html, /שוהם &amp; סביבה/);
@@ -732,12 +821,16 @@ describe('shared UI tokens', () => {
   it('escapes the search term, which is the one value a visitor chooses', () => {
     // Every other value on these screens came out of the database. This one came off the query
     // string, so it is the first genuinely hostile input the views have ever been handed.
-    const html = renderSearchPage('<img src=x onerror=alert(1)>', {
-      buildings: [],
-      units: [],
-      documents: [],
-      truncated: false,
-    });
+    const html = renderSearchPage(
+      '<img src=x onerror=alert(1)>',
+      {
+        buildings: [],
+        units: [],
+        documents: [],
+        truncated: false,
+      },
+      NAV,
+    );
     assert.doesNotMatch(html, /<img/);
     assert.match(html, /&lt;img/);
   });
@@ -752,6 +845,7 @@ describe('shared UI tokens', () => {
         days_left: days,
       })),
       60,
+      NAV,
     );
     assert.match(html, /מסתיים היום/);
     assert.match(html, /מסתיים מחר/);
@@ -780,17 +874,19 @@ describe('shared UI tokens', () => {
     // **slice 5.4 is where the panel mints one**; until then it renders the gs:// uri as text. The filed-document screen already kept the
     // uri off the page entirely; the panel is allowed to name the path and still must not make it
     // clickable.
-    const html = renderUnitPage(hit, 2, [filed]);
+    const html = renderUnitPage(hit, 2, [filed], NAV);
     assert.match(html, /gs:\/\/dona-v5-staging-docs\//);
     assert.doesNotMatch(html, /href="gs:/);
     assert.doesNotMatch(html, /storage\.googleapis\.com/);
-    const buildingHtml = renderBuildingPage(detail, occupancy, [unverified]);
+    const buildingHtml = renderBuildingPage(detail, occupancy, NAV, [
+      unverified,
+    ]);
     assert.match(buildingHtml, /gs:\/\/dona-v5-staging-docs\//);
     assert.doesNotMatch(buildingHtml, /href="gs:/);
   });
 
   it('opens a listed document on the read overlay, and a lease on confirm', () => {
-    const html = renderUnitPage(hit, 2, [filed]);
+    const html = renderUnitPage(hit, 2, [filed], NAV);
     assert.match(
       html,
       /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read"/,
@@ -799,27 +895,32 @@ describe('shared UI tokens', () => {
       html,
       /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/tenancy"/,
     );
-    const search = renderSearchPage('שכירות', {
-      buildings: [],
-      units: [],
-      documents: [
-        {
-          ...filed,
-          entityType: 'UNIT',
-          entityId: hit.unit_id,
-          unitId: hit.unit_id,
-          unitNumber: hit.unit_number,
-          buildingId: hit.building_id,
-          buildingName: hit.building_name,
-        },
-      ],
-      truncated: false,
-    });
+    const search = renderSearchPage(
+      'שכירות',
+      {
+        buildings: [],
+        units: [],
+        documents: [
+          {
+            ...filed,
+            entityType: 'UNIT',
+            entityId: hit.unit_id,
+            unitId: hit.unit_id,
+            unitNumber: hit.unit_number,
+            buildingId: hit.building_id,
+            buildingName: hit.building_name,
+          },
+        ],
+        truncated: false,
+      },
+      NAV,
+    );
     assert.match(
       search,
       /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read"/,
     );
     const emptyRead = renderReadPage({
+      nav: NAV,
       csrf: '',
       documentId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
       buildingId: building.building_id,
@@ -840,21 +941,16 @@ describe('shared UI tokens', () => {
   });
 
   it('links a promoted date to its pixels, not the object bytes', () => {
-    const html = renderUnitPage(
-      hit,
-      2,
-      [filed],
-      [
-        {
-          extractedFieldId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-          documentId: filed.documentId,
-          labelHe: 'תחילת תקופת השכירות',
-          value: '2026-03-01',
-          page: 1,
-          confidence: 0.91,
-        },
-      ],
-    );
+    const html = renderUnitPage(hit, 2, [filed], NAV, [
+      {
+        extractedFieldId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        documentId: filed.documentId,
+        labelHe: 'תחילת תקופת השכירות',
+        value: '2026-03-01',
+        page: 1,
+        confidence: 0.91,
+      },
+    ]);
     assert.match(
       html,
       /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read\?page=1#f-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"/,
@@ -862,37 +958,32 @@ describe('shared UI tokens', () => {
     assert.match(html, /91%/);
     assert.doesNotMatch(html, /href="gs:/);
     assert.doesNotMatch(html, /<script/);
-    const three = renderUnitPage(
-      hit,
-      2,
-      [filed],
-      [
-        {
-          extractedFieldId: '11111111-1111-4111-8111-111111111111',
-          documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          labelHe: 'תחילה',
-          value: '2026-01-01',
-          page: 1,
-          confidence: null,
-        },
-        {
-          extractedFieldId: '22222222-2222-4222-8222-222222222222',
-          documentId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-          labelHe: 'סיום',
-          value: '2027-01-01',
-          page: 2,
-          confidence: null,
-        },
-        {
-          extractedFieldId: '33333333-3333-4333-8333-333333333333',
-          documentId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-          labelHe: 'סיום מתוקן',
-          value: '2027-06-30',
-          page: 1,
-          confidence: 0.8,
-        },
-      ],
-    );
+    const three = renderUnitPage(hit, 2, [filed], NAV, [
+      {
+        extractedFieldId: '11111111-1111-4111-8111-111111111111',
+        documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        labelHe: 'תחילה',
+        value: '2026-01-01',
+        page: 1,
+        confidence: null,
+      },
+      {
+        extractedFieldId: '22222222-2222-4222-8222-222222222222',
+        documentId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        labelHe: 'סיום',
+        value: '2027-01-01',
+        page: 2,
+        confidence: null,
+      },
+      {
+        extractedFieldId: '33333333-3333-4333-8333-333333333333',
+        documentId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        labelHe: 'סיום מתוקן',
+        value: '2027-06-30',
+        page: 1,
+        confidence: 0.8,
+      },
+    ]);
     assert.match(
       three,
       /aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read\?page=1#f-11111111/,

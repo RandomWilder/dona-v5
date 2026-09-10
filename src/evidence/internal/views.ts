@@ -74,12 +74,8 @@ const styles = h`<style>
   }
 </style>`;
 
-function nav(): Html {
-  return h`<nav class="top-nav">
-    <a href="/estate">בניינים</a>
-    <a href="/estate/expiring">חוזים מסתיימים</a>
-    <a href="/estate/incomplete">חוזים לא שלמים</a>
-  </nav>`;
+function shell(title: string, body: Html, nav: Html): string {
+  return renderPage({ title, styles, nav, body });
 }
 
 function unitLine(unit: UnitHit): Html {
@@ -109,6 +105,8 @@ function refusal(type: DocumentTypeRow, verification: Verification): Html {
 }
 
 export interface UploadScreen {
+  /** Slice 5.2b — injected by the composition root. */
+  nav: Html;
   /** The CSRF token for this session (slice 5.2). Every form in this system carries it. */
   csrf: string;
   unit: UnitHit;
@@ -177,15 +175,15 @@ export function renderUploadPage(screen: UploadScreen): string {
         <a href="/estate/buildings/${unit.building_id}">ביטול</a>
       </div>
     </form>`;
-  return renderPage({
-    title: `דונה דום — הוספת מסמך לדירה ${unit.unit_number}`,
-    styles,
-    nav: nav(),
+  return shell(
+    `דונה דום — הוספת מסמך לדירה ${unit.unit_number}`,
     body,
-  });
+    screen.nav,
+  );
 }
 
 export interface FiledScreen {
+  nav: Html;
   unit: UnitHit;
   type: DocumentTypeRow;
   /** False when these bytes were already on file: one document, a second binding. */
@@ -258,15 +256,11 @@ export function renderFiledPage(screen: FiledScreen): string {
       <a class="btn btn-secondary" href="/documents/new?unit=${unit.unit_id}">הוספת מסמך נוסף</a>
       <a href="/estate/buildings/${unit.building_id}">חזרה לבניין</a>
     </div>`;
-  return renderPage({
-    title: `דונה דום — המסמך נשמר`,
-    styles,
-    nav: nav(),
-    body,
-  });
+  return shell('דונה דום — המסמך נשמר', body, screen.nav);
 }
 
 export interface SeedScreen {
+  nav: Html;
   /** The CSRF token for this session (slice 5.2). Every form in this system carries it. */
   csrf: string;
   documentId: string;
@@ -327,15 +321,11 @@ export function renderSeedPage(screen: SeedScreen): string {
           </form>`
         : h`<div class="form-actions"><a href="${back}">חזרה לבניין</a></div>`
     }`;
-  return renderPage({
-    title: 'דונה דום — אישור מסירה',
-    styles,
-    nav: nav(),
-    body,
-  });
+  return shell('דונה דום — אישור מסירה', body, screen.nav);
 }
 
 export interface SeededScreen {
+  nav: Html;
   buildingId: string;
   buildingName: string;
   unitId: string | null;
@@ -372,15 +362,11 @@ export function renderSeededPage(screen: SeededScreen): string {
       }
       <a href="${back}">חזרה לבניין</a>
     </div>`;
-  return renderPage({
-    title: 'דונה דום — המסירה נרשמה',
-    styles,
-    nav: nav(),
-    body,
-  });
+  return shell('דונה דום — המסירה נרשמה', body, screen.nav);
 }
 
 export interface ReadScreen {
+  nav: Html;
   /** The CSRF token for this session (slice 5.2). Every form in this system carries it. */
   csrf: string;
   documentId: string;
@@ -530,12 +516,7 @@ export function renderReadPage(screen: ReadScreen): string {
       }
       <a href="${back}">חזרה לבניין</a>
     </div>`;
-  return renderPage({
-    title: 'דונה דום — מילים על הדף',
-    styles,
-    nav: nav(),
-    body,
-  });
+  return shell('דונה דום — מילים על הדף', body, screen.nav);
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -546,6 +527,7 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 export interface TenancyScreen {
+  nav: Html;
   /** The CSRF token for this session (slice 5.2). Every form in this system carries it. */
   csrf: string;
   documentId: string;
@@ -659,15 +641,15 @@ export function renderTenancyPage(screen: TenancyScreen): string {
           }
             <div class="form-actions"><a href="${back}">חזרה לדירה</a></div>`
     }`;
-  return renderPage({
-    title: isAmendment ? 'דונה דום — אישור נספח' : 'דונה דום — אישור חוזה',
-    styles,
-    nav: nav(),
+  return shell(
+    isAmendment ? 'דונה דום — אישור נספח' : 'דונה דום — אישור חוזה',
     body,
-  });
+    screen.nav,
+  );
 }
 
 export interface TenancyWrittenScreen {
+  nav: Html;
   unit: UnitHit;
   typeKey?: 'lease' | 'lease_amendment';
   startDate: string;
@@ -708,10 +690,5 @@ export function renderTenancyWrittenPage(screen: TenancyWrittenScreen): string {
       <a class="btn btn-secondary" href="/documents/new?unit=${screen.unit.unit_id}">הוספת מסמך נוסף</a>
       <a href="${back}">חזרה לדירה</a>
     </div>`;
-  return renderPage({
-    title: 'דונה דום — החוזה נרשם',
-    styles,
-    nav: nav(),
-    body,
-  });
+  return shell('דונה דום — החוזה נרשם', body, screen.nav);
 }

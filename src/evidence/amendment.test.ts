@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { PoolClient } from 'pg';
+import { signedInChrome } from '../chrome.ts';
 import { createAuditLog } from '../kernel/audit.ts';
 import { fixedClock } from '../kernel/clock.ts';
 import type { KernelError } from '../kernel/errors.ts';
@@ -31,6 +32,7 @@ import {
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const AT = new Date('2026-09-08T12:00:00.000Z');
+const NAV = signedInChrome('x'.repeat(64), 'estate');
 const BUCKET = 'dona-v5-test-docs';
 const LEASE_MARKERS = 'חוזה שכירות המושכר תקופת השכירות השוכר';
 const AMEND_MARKERS = 'נספח לחוזה השכירות';
@@ -376,6 +378,7 @@ describe('evidence · addendum confirm screen', () => {
 
   it('writes without a terms profile', () => {
     const html = renderTenancyPage({
+      nav: NAV,
       csrf: '',
       documentId: '33333333-3333-4333-8333-333333333333',
       typeKey: 'lease_amendment',

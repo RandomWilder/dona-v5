@@ -209,8 +209,13 @@ describe('evidence · the upload route', () => {
         assert.match(response.body, /enctype="multipart\/form-data"/);
         // The rule every screen keeps, and 5.2 kept deliberately: a flat, a type and a date,
         // never a name.
-        // A ULID can contain `053-0`; a mobile number is 05x plus seven more digits.
-        assert.doesNotMatch(response.body, /05\d[- ]?\d{7}/);
+        // A ULID can contain `053-0`; a CSRF hash can contain `054` plus seven digits; a mobile
+        // number is 05x plus seven more digits. Hidden tokens are not a person on the screen.
+        const visible = response.body.replace(
+          /<input type="hidden"[^>]*>/g,
+          '',
+        );
+        assert.doesNotMatch(visible, /05\d[- ]?\d{7}/);
       });
 
       await t.test('files a lease declared as a lease', async () => {

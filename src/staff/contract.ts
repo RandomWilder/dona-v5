@@ -45,7 +45,12 @@ export {
   NOT_ALLOWED,
   normaliseEmail,
 } from './internal/accounts.ts';
-export { CSRF_FIELD, csrfTokenFor, verifyCsrf } from './internal/csrf.ts';
+export {
+  CSRF_FIELD,
+  csrfFrom,
+  csrfTokenFor,
+  verifyCsrf,
+} from './internal/csrf.ts';
 export type {
   GoogleClaims,
   IdentityProvider,

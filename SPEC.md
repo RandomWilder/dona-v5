@@ -106,7 +106,11 @@ here:
   timestamp the tests cannot control is a test that fails on a Tuesday.
 - **UI is self-contained HTML plus `/ui/tokens.css`, and nothing else.** No bundler, no framework.
   Hebrew is RTL through logical properties (`margin-inline-start`, never `margin-left`), so one
-  stylesheet serves both directions.
+  stylesheet serves both directions. **From slice 5.2c, every signed-in screen carries the same
+  ops sidebar** — buildings, expiring, incomplete, search, staff, and sign-out — built once at the
+  composition root and injected, because the kernel may not learn a route and a module may not own
+  another module's. The current destination is marked on the rail. The login screen has none of
+  those links and no sidebar.
 
 ## Error shape
 
@@ -308,7 +312,9 @@ Every route in this application declares its own stance — a permission, or the
 an `onRoute` hook refuses to start the process if one declares neither, so the default is deny and
 an open route is open because somebody wrote it down. The root index moved from `src/estate/` to the
 composition root in the same slice, because an index of screens stopped being one module's fact the
-week a second module had one. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
+week a second module had one. **Slice 5.2b put one chrome on every signed-in screen**, and **5.2c
+gave that chrome v3's ops sidebar** rather than a top bar, still with only the live destinations —
+unbuilt tabs stay 5.9. The login screen stays without that rail. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
 physical side or a `<script>`, and from 2.6 also on a phone number or an E.164 prefix: what a screen
 may say about a household is **a state and a count, never a tenant's name**, so the
 occupancy chip is derived on every load and search never reaches `party`.

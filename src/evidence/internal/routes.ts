@@ -12,6 +12,7 @@
 import multipart from '@fastify/multipart';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
+import type { ChromeDest } from '../../chrome.ts';
 import {
   addCalendarYears,
   getBuilding,
@@ -30,9 +31,11 @@ import type { Extractor } from '../../kernel/extraction.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
 import { createUnconfiguredOcr, type OcrText } from '../../kernel/ocr.ts';
 import type { PdfText } from '../../kernel/pdf.ts';
+import type { Html } from '../../kernel/ui/html.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
 import {
   CSRF_FIELD,
+  csrfFrom,
   readSessionCookie,
   verifyCsrf,
 } from '../../staff/contract.ts';
@@ -88,6 +91,8 @@ export interface DocumentDeps {
   clock: Clock;
   /** The bucket `storage_uri` names. The memory store's stand-in locally (slice 3.2). */
   bucket: string;
+  /** Slice 5.2b. Built at the composition root. */
+  chrome: (csrf: string, dest: ChromeDest) => Html;
 }
 
 /**
@@ -162,12 +167,8 @@ function sessionTokenOf(request: FastifyRequest): string {
  * Who is filing. The guard set this before the handler ran, so its absence is a wiring fault rather
  * than an unauthenticated request — and it fails closed instead of filing a document under nobody.
  */
-/**
- * The token this session's forms carry. Derived once by the composition root's guard; a screen
- * reads it and never computes it, which is what stops two screens deriving it two ways.
- */
-function csrfOf(request: FastifyRequest): string {
-  return request.csrf ?? '';
+function chromeOf(deps: DocumentDeps, request: FastifyRequest): Html {
+  return deps.chrome(csrfFrom(request), 'estate');
 }
 
 function requireOperator(request: FastifyRequest): string {
@@ -216,7 +217,13 @@ export function registerDocumentRoutes(
       listUnitTenancies(deps.pool, unitId),
     ]);
     html(reply);
-    return renderUploadPage({ csrf: csrfOf(request), unit, types, lettings });
+    return renderUploadPage({
+      nav: chromeOf(deps, request),
+      csrf: csrfFrom(request),
+      unit,
+      types,
+      lettings,
+    });
   });
 
   app.post('/documents', FILE, async (request, reply) => {
@@ -281,7 +288,8 @@ export function registerDocumentRoutes(
       reply.code(422);
       const lettings = await listUnitTenancies(deps.pool, unitId);
       return renderUploadPage({
-        csrf: csrfOf(request),
+        nav: chromeOf(deps, request),
+        csrf: csrfFrom(request),
         unit,
         types: await listDocumentTypes(deps.pool),
         lettings,
@@ -311,6 +319,7 @@ export function registerDocumentRoutes(
       return reply.redirect(`/documents/${result.documentId}/tenancy`);
     }
     return renderFiledPage({
+      nav: chromeOf(deps, request),
       unit,
       type,
       inserted: result.inserted,
@@ -362,7 +371,8 @@ export function registerDocumentRoutes(
       if (link?.entity_type === 'UNIT') {
         const unit = await getUnit(deps.pool, link.entity_id);
         return renderReadPage({
-          csrf: csrfOf(request),
+          nav: chromeOf(deps, request),
+          csrf: csrfFrom(request),
           documentId,
           buildingId: unit.building_id,
           buildingName: unit.building_name,
@@ -379,7 +389,8 @@ export function registerDocumentRoutes(
       if (link?.entity_type === 'BUILDING') {
         const detail = await getBuilding(deps.pool, link.entity_id);
         return renderReadPage({
-          csrf: csrfOf(request),
+          nav: chromeOf(deps, request),
+          csrf: csrfFrom(request),
           documentId,
           buildingId: detail.building.building_id,
           buildingName: detail.building.name,
@@ -435,7 +446,14 @@ export function registerDocumentRoutes(
       const documentId = validId(request.params.documentId, 'document');
       const proposed = await proposeProtocol(seedDeps(), documentId);
       html(reply);
-      return renderSeedPage(await seedScreen(deps, proposed, csrfOf(request)));
+      return renderSeedPage(
+        await seedScreen(
+          deps,
+          proposed,
+          csrfFrom(request),
+          chromeOf(deps, request),
+        ),
+      );
     },
   );
 
@@ -446,9 +464,15 @@ export function registerDocumentRoutes(
       const documentId = validId(request.params.documentId, 'document');
       const proposed = await proposeProtocol(seedDeps(), documentId);
       const confirmed = await confirmProtocol(seedDeps(), documentId);
-      const screen = await seedScreen(deps, proposed, csrfOf(request));
+      const screen = await seedScreen(
+        deps,
+        proposed,
+        csrfFrom(request),
+        chromeOf(deps, request),
+      );
       html(reply);
       return renderSeededPage({
+        nav: chromeOf(deps, request),
         buildingId: screen.buildingId,
         buildingName: screen.buildingName,
         unitId: screen.unitId,
@@ -467,7 +491,11 @@ export function registerDocumentRoutes(
       const documentId = validId(request.params.documentId, 'document');
       const proposed = await proposeLeaseTenancy(deps.pool, documentId);
       html(reply);
-      return renderTenancyPage({ ...proposed, csrf: csrfOf(request) });
+      return renderTenancyPage({
+        ...proposed,
+        nav: chromeOf(deps, request),
+        csrf: csrfFrom(request),
+      });
     },
   );
 
@@ -499,6 +527,7 @@ export function registerDocumentRoutes(
       const proposed = await proposeLeaseTenancy(deps.pool, documentId);
       html(reply);
       return renderTenancyWrittenPage({
+        nav: chromeOf(deps, request),
         unit: proposed.unit,
         typeKey: proposed.typeKey,
         startDate: proposed.startDate ?? '',
@@ -593,10 +622,12 @@ async function seedScreen(
   deps: DocumentDeps,
   proposed: ProtocolProposal,
   csrf: string,
+  nav: Html,
 ): Promise<SeedScreen> {
   if (proposed.placeKind === 'UNIT') {
     const unit = await getUnit(deps.pool, proposed.placeId);
     return {
+      nav,
       csrf,
       documentId: proposed.documentId,
       labelHe: proposed.labelHe,
@@ -614,6 +645,7 @@ async function seedScreen(
   }
   const detail = await getBuilding(deps.pool, proposed.placeId);
   return {
+    nav,
     csrf,
     documentId: proposed.documentId,
     labelHe: proposed.labelHe,

@@ -1460,6 +1460,25 @@ screens is not estate's fact.
   reconsidered at 5.4. And the restart-and-click step found a screen serving an **empty** token that
   typecheck, lint, 486 tests, the policy suite and the grep guards had all passed.
 
+### Slice 5.2b — One chrome on every signed-in screen
+- **Done when:** every authenticated screen carries the same bar (buildings, expiring, incomplete,
+  search, staff, sign-out) and the login screen carries none of it.
+- **Verify:** the token registry asserts that chrome on signed-in screens and its absence on login;
+  sign out from a non-index screen after restarting `npm run dev`.
+- **The session at 5.2 left each module with its own nav.** Only the composition root may name every
+  module's routes plus the way out; the kernel still learns no route. Not 5.9's unbuilt-tab shell,
+  and not a card redesign. The M1 “no UI-pass” call is reversed this far only.
+- **Deps:** 5.2 · **Size:** M
+
+### Slice 5.2c — v3's ops shell on v5's live URLs
+- **Done when:** every authenticated screen is the ops sidebar (buildings, expiring, incomplete,
+  search, staff, sign-out in the footer); the current destination is marked; login has no rail.
+- **Verify:** the token registry asserts `.ops` and `aria-current`; sign out from a non-index
+  screen after restarting `npm run dev`. No push until localhost is approved.
+- **5.2b put one chrome on every screen and left it a top bar.** The frame is v3's; the URLs are
+  v5's. Unbuilt tabs stay 5.9. Not a card redesign. Kernel still learns no route.
+- **Deps:** 5.2b · **Size:** M
+
 ### Slice 5.3 — `national_id` is unreachable by any agent tool
 - **Done when:** a policy case in `tests/policy/` fails against a tool response shape carrying
   `national_id` and passes when it does not.
