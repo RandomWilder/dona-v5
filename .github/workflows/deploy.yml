@@ -97,7 +97,13 @@ jobs:
 
       - name: Deploy
         run: |
+          # Google matches the OAuth redirect URI character for character, so the revision is told
+          # its own origin rather than deriving one from a proxy header (slice 5.1b).
+          BASE_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" --format='value(status.url)' 2>/dev/null || true)"
           ENV_VARS="VERSION=${SHA:0:7},DOCS_BUCKET=$PROJECT-staging-docs,GOOGLE_CLOUD_PROJECT=$PROJECT,DOCUMENT_AI_LOCATION=eu"
+          if [[ -n "$BASE_URL" ]]; then
+            ENV_VARS="$ENV_VARS,STAFF_BASE_URL=$BASE_URL"
+          fi
           if [[ -n "${{ steps.ocr.outputs.processor }}" ]]; then
             ENV_VARS="$ENV_VARS,DOCUMENT_AI_PROCESSOR=${{ steps.ocr.outputs.processor }}"
           fi
@@ -107,7 +113,7 @@ jobs:
             --project "$PROJECT" \
             --service-account "app-staging@$PROJECT.iam.gserviceaccount.com" \
             --add-cloudsql-instances "$PROJECT:$REGION:dona-staging" \
-            --set-secrets "DATABASE_URL=staging-database-url:latest,OPENAI_API_KEY=staging-openai-api-key:latest,IDENTITY_API_KEY=staging-identity-api-key:latest" \
+            --set-secrets "DATABASE_URL=staging-database-url:latest,OPENAI_API_KEY=staging-openai-api-key:latest,GOOGLE_OAUTH_CLIENT_ID=staging-google-oauth-client-id:latest,GOOGLE_OAUTH_CLIENT_SECRET=staging-google-oauth-client-secret:latest" \
             --update-env-vars "$ENV_VARS" \
             --allow-unauthenticated \
             --min-instances 0 \

@@ -214,7 +214,7 @@ The chip is a state and a count and never a name, which is the rule every screen
 week 5 gives them a session.
 
 **There is no authentication on any of these screens, and that is a dated state, not a design.** Staff auth
-is Identity Platform with enforced MFA at week 5. Until then the screens serve fixture data with no
+is Google sign-in behind an allowlist, built at week 5 (5.1, amended by 5.1b). Until then the screens serve fixture data with no
 personal data in it, and carry `noindex`. The week-5 row in [tasks/roadmap.md](tasks/roadmap.md) owns
 closing it; nothing may put a real party or contact behind these routes before it does.
 

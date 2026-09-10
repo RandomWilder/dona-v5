@@ -14,26 +14,24 @@ export type { StaffAccount } from './internal/accounts.ts';
 export {
   accountByEmail,
   accountByLocalId,
+  addOperator,
+  assignRole,
+  linkLocalId,
   NOT_ALLOWED,
   normaliseEmail,
 } from './internal/accounts.ts';
 export type {
+  GoogleClaims,
   IdentityProvider,
-  MfaRequired,
-  SignedIn,
-  SignInResult,
-  TotpEnrollment,
 } from './internal/identity.ts';
 export {
+  acceptClaims,
+  configuredHostedDomain,
   createConfiguredIdentity,
-  createIdentityPlatform,
+  createGoogleOidc,
   createUnconfiguredIdentity,
   IdentityRefusal,
-  readIdTokenClaims,
-  TOTP_FACTOR_NAME,
 } from './internal/identity.ts';
-export type { StaffInvite } from './internal/invites.ts';
-export { createInvite, otpauthUri } from './internal/invites.ts';
 export type { Permission, Role } from './internal/roles.ts';
 export {
   can,
@@ -48,6 +46,7 @@ export type { ResolvedSession } from './internal/sessions.ts';
 export {
   hashToken,
   mintSession,
+  OAUTH_COOKIE,
   readSessionCookie,
   resolveSession,
   revokeSession,
@@ -57,18 +56,5 @@ export {
   sessionCookie,
 } from './internal/sessions.ts';
 export type { Queryable } from './internal/types.ts';
-export type {
-  EnrolScreen,
-  InviteScreen,
-  LoginScreen,
-  SecondFactorScreen,
-  StaffHomeScreen,
-} from './internal/views.ts';
-export {
-  renderEnrolledPage,
-  renderEnrolPage,
-  renderInvitePage,
-  renderLoginPage,
-  renderSecondFactorPage,
-  renderStaffHomePage,
-} from './internal/views.ts';
+export type { LoginScreen, StaffHomeScreen } from './internal/views.ts';
+export { renderLoginPage, renderStaffHomePage } from './internal/views.ts';

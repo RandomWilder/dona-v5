@@ -1,5 +1,7 @@
-// The staff module's HTTP surface. Slice 5.1 — the first routes in this system that decide who is
-// asking rather than what to show.
+// The staff module's HTTP surface. Slice 5.1 gave this system its first routes that decide who is
+// asking rather than what to show; **slice 5.1b cut them from nine to five** by handing the
+// credential to Google (ADR-0005). What is left is one link, one redirect, one callback, the board
+// and the way out.
 //
 // **What this slice does not do: guard the other seven routes.** `/`, `/estate`,
 // `/estate/buildings/:id`, `/estate/search`, `/estate/expiring`, `GET /documents/new` and
@@ -8,9 +10,11 @@
 // CSRF token worth having. A reader who finds an open estate route in a tree that contains this
 // file is looking at a commit between the two, not at an omission.
 //
-// **The refusal is one sentence, always.** A wrong password, a wrong code, an unknown account, an
-// account with no role and a disabled account all answer identically — otherwise the login screen
-// of a system holding 1,500 households is an account-enumeration oracle (SPEC-staff.md).
+// **The refusal is one sentence, always.** An address that is not on the list, an unverified
+// address, an account with no role, a disabled account, a replayed `state` and a token minted for
+// another sign-in all answer identically — otherwise the login screen of a system holding 1,500
+// households is an account-enumeration oracle (SPEC-staff.md).
+import { timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { createAuditLog } from '../../kernel/audit.ts';
@@ -19,25 +23,12 @@ import { KernelError } from '../../kernel/errors.ts';
 import { requireText } from '../../kernel/validate.ts';
 import {
   accountByEmail,
-  accountByLocalId,
-  clearFailedAttempts,
-  createAccount,
-  normaliseEmail,
+  addOperator,
+  linkLocalId,
   notAllowed,
-  noteFailedAttempt,
   requireUsableAccount,
 } from './accounts.ts';
-import {
-  type IdentityProvider,
-  IdentityRefusal,
-  type SignedIn,
-} from './identity.ts';
-import {
-  createInvite,
-  markInviteAccepted,
-  openInviteByToken,
-  otpauthUri,
-} from './invites.ts';
+import { acceptClaims, type IdentityProvider } from './identity.ts';
 import {
   can,
   isRole,
@@ -46,37 +37,35 @@ import {
   type Role,
 } from './roles.ts';
 import {
+  clearedOauthCookie,
   clearedSessionCookie,
   mintSession,
+  newSessionToken,
+  oauthCookie,
   type ResolvedSession,
+  readOauthCookie,
   readSessionCookie,
   resolveSession,
   revokeSession,
   sessionCookie,
 } from './sessions.ts';
-import {
-  REFUSED_HE,
-  renderEnrolledPage,
-  renderEnrolPage,
-  renderInvitePage,
-  renderLoginPage,
-  renderSecondFactorPage,
-  renderStaffHomePage,
-} from './views.ts';
+import { REFUSED_HE, renderLoginPage, renderStaffHomePage } from './views.ts';
 
 export interface StaffDeps {
   pool: Pool;
   clock: Clock;
   identity: IdentityProvider;
-  /** Where an invite URL points. The request's own origin when absent, which is what `npm run dev` wants. */
+  /** Where Google is told to send the operator back. The request's own origin when absent, which is what `npm run dev` wants. */
   baseUrl?: string;
+  /** The Workspace domain to require, when Dona Dom's answer is known. Null means the allowlist is the only fence. */
+  hostedDomain?: string | null;
 }
 
 function html(reply: FastifyReply): void {
   reply.header('content-type', 'text/html; charset=utf-8');
   // A login screen in a shared browser's back button is a session handed to the next person at the
-  // desk. `no-store` rather than `no-cache`: these pages carry a pending credential and an ID token
-  // in hidden fields, and neither belongs in a disk cache.
+  // desk. `no-store` rather than `no-cache`: the callback's URL carries a one-time code, and a
+  // cached page of a signed-in board is the same mistake in another costume.
   reply.header('cache-control', 'no-store');
   reply.header('x-content-type-options', 'nosniff');
 }
@@ -95,8 +84,8 @@ function isSecure(request: FastifyRequest): boolean {
 }
 
 function redirect(reply: FastifyReply, to: string): FastifyReply {
-  // 303 and not 302: every redirect here follows a POST, and 303 is the one that says "now GET
-  // this" rather than leaving the method to the browser's judgement.
+  // 303 and not 302: it says "now GET this" rather than leaving the method to the browser's
+  // judgement, which matters on the POST paths and costs nothing on the GET ones.
   return reply.code(303).header('location', to).send();
 }
 
@@ -104,6 +93,21 @@ type Form = Record<string, string>;
 
 function field(body: unknown, name: string, max: number): string {
   return requireText((body as Form | undefined)?.[name], name, max);
+}
+
+/** Where Google sends the operator back, and the value Google matches character for character. */
+function callbackUrl(deps: StaffDeps, request: FastifyRequest): string {
+  const base =
+    deps.baseUrl ??
+    `${isSecure(request) ? 'https' : 'http'}://${request.headers.host ?? '127.0.0.1'}`;
+  return `${base.replace(/\/$/, '')}/staff/auth/callback`;
+}
+
+/** Constant time, because comparing a secret with `===` leaks its prefix one request at a time. */
+function sameValue(a: string, b: string): boolean {
+  const left = Buffer.from(a, 'utf8');
+  const right = Buffer.from(b, 'utf8');
+  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 /**
@@ -144,6 +148,7 @@ export function registerStaffRoutes(
   deps: StaffDeps,
 ): void {
   const audit = createAuditLog(deps.pool, deps.clock);
+  const unconfigured = () => deps.identity.describe() === 'unconfigured';
 
   // The urlencoded body these forms post is parsed by `src/kernel/ui/forms.ts`, registered once by
   // the composition root — estate has posted a form since 2.6 and staff is the second module to,
@@ -152,122 +157,109 @@ export function registerStaffRoutes(
   app.register(async (scope) => {
     scope.get('/staff/login', async (_request, reply) => {
       html(reply);
-      return renderLoginPage({
-        unconfigured: deps.identity.describe() === 'unconfigured',
-      });
+      return renderLoginPage({ unconfigured: unconfigured() });
     });
 
-    scope.post('/staff/login', async (request, reply) => {
-      const email = normaliseEmail(field(request.body, 'email', 320));
-      const password = field(request.body, 'password', 1024);
+    // **The redirect begins here so that the one-shot cookie is set by this system**, on this
+    // origin, in the same response that sends the operator away. `state` and `nonce` are minted
+    // together, spent together, and never reach the database (SPEC-staff.md).
+    scope.get('/staff/auth/start', async (request, reply) => {
+      if (unconfigured()) {
+        html(reply);
+        reply.code(503);
+        return renderLoginPage({ unconfigured: true });
+      }
+      const state = newSessionToken();
+      const nonce = newSessionToken();
+      reply.header('set-cookie', oauthCookie(state, nonce, isSecure(request)));
+      return redirect(
+        reply,
+        deps.identity.authorizeUrl({
+          state,
+          nonce,
+          redirectUri: callbackUrl(deps, request),
+        }),
+      );
+    });
+
+    scope.get('/staff/auth/callback', async (request, reply) => {
+      const query = request.query as {
+        code?: string;
+        state?: string;
+        error?: string;
+      };
+      const carried = readOauthCookie(request.headers.cookie);
+      // Spent on arrival, whatever happens next: the same redirect must not work twice from the
+      // browser's history.
+      const cookies = [clearedOauthCookie(isSecure(request))];
       html(reply);
 
-      // The account is read first so a failed attempt can be counted against it, and **the answer
-      // does not depend on whether it was found**. Counting is the only thing this lookup changes.
-      const account = await accountByEmail(deps.pool, email);
-
-      let result: Awaited<ReturnType<IdentityProvider['signInWithPassword']>>;
-      try {
-        result = await deps.identity.signInWithPassword(email, password);
-      } catch (error) {
-        if (error instanceof IdentityRefusal) {
-          if (account)
-            await noteFailedAttempt(
-              deps.pool,
-              deps.clock,
-              account.staffAccountId,
-            );
-          await audit.write(
-            {
-              actorKind: 'staff',
-              actorId: account?.staffAccountId,
-              action: 'staff.login.refused',
-              inputs: {},
-            },
-            { outcome: 'error', code: 'not_allowed' },
-          );
-          reply.code(403);
-          return renderLoginPage({ refused: REFUSED_HE });
-        }
-        throw error;
-      }
-
-      if (result.kind === 'signed_in') {
-        // **Enforced, not offered.** A password alone produced a token, which means this account
-        // has no second factor. Identity Platform's project config says MANDATORY and this line is
-        // the claim with a test behind it (SPEC-staff.md).
+      const refuse = async (accountId?: string): Promise<string> => {
         await audit.write(
           {
             actorKind: 'staff',
-            actorId: account?.staffAccountId,
-            action: 'staff.login.no_second_factor',
+            actorId: accountId,
+            action: 'staff.login.refused',
             inputs: {},
           },
           { outcome: 'error', code: 'not_allowed' },
         );
+        reply.header('set-cookie', cookies);
         reply.code(403);
         return renderLoginPage({ refused: REFUSED_HE });
+      };
+
+      // Google declined, or the callback arrived without the redirect that should have started it.
+      if (
+        query.error !== undefined ||
+        typeof query.code !== 'string' ||
+        typeof query.state !== 'string' ||
+        carried === null ||
+        !sameValue(carried.state, query.state)
+      ) {
+        return refuse();
       }
 
-      return renderSecondFactorPage({
-        pendingCredential: result.pendingCredential,
-        enrollmentId: result.enrollmentId,
-      });
-    });
-
-    scope.post('/staff/login/verify', async (request, reply) => {
-      const pending = field(request.body, 'pending', 4096);
-      const enrollment = field(request.body, 'enrollment', 256);
-      const code = field(request.body, 'code', 16);
-      html(reply);
-
-      let signedIn: SignedIn;
+      let claims: Awaited<ReturnType<IdentityProvider['exchangeCode']>>;
       try {
-        signedIn = await deps.identity.finalizeMfaSignIn(
-          pending,
-          enrollment,
-          code,
-        );
+        claims = await deps.identity.exchangeCode({
+          code: query.code,
+          redirectUri: callbackUrl(deps, request),
+        });
       } catch (error) {
-        if (error instanceof IdentityRefusal) {
-          reply.code(403);
-          return renderSecondFactorPage({
-            pendingCredential: pending,
-            enrollmentId: enrollment,
-            refused: REFUSED_HE,
-          });
+        if (error instanceof KernelError && error.code === 'unavailable') {
+          throw error;
         }
-        throw error;
+        return refuse();
       }
 
-      // The second factor has to be *in the token*, not merely in the flow that produced it.
-      if (signedIn.secondFactor === null) {
-        reply.code(403);
-        return renderLoginPage({ refused: REFUSED_HE });
-      }
+      const accepted = acceptClaims(claims, {
+        nonce: carried.nonce,
+        hd: deps.hostedDomain ?? null,
+      });
+      if (accepted === null) return refuse();
 
-      const account = await accountByLocalId(deps.pool, signedIn.localId);
+      // **The allowlist.** An address with no row reaches exactly the same answer as an address
+      // with no Google account behind it (ADR-0005).
+      const account = await accountByEmail(deps.pool, accepted.email);
       let role: Role;
       try {
         role = requireUsableAccount(account, deps.clock);
       } catch {
         // No row, no role, disabled, locked — one answer, and the audit line names the account only
         // when there is one to name. PII never in logs: no email here, ever (SPEC.md).
-        await audit.write(
-          {
-            actorKind: 'staff',
-            actorId: account?.staffAccountId,
-            action: 'staff.login.refused',
-            inputs: {},
-          },
-          { outcome: 'error', code: 'not_allowed' },
-        );
-        reply.code(403);
-        return renderLoginPage({ refused: REFUSED_HE });
+        return refuse(account?.staffAccountId);
+      }
+      const usable = account as NonNullable<typeof account>;
+
+      // **The row is bound to the first Google account that ever uses it.** A re-created address is
+      // not the same operator, and rebinding silently is how a stranger inherits a role.
+      if (usable.idpLocalId === null) {
+        await linkLocalId(deps.pool, usable.staffAccountId, accepted.subject);
+      } else if (!sameValue(usable.idpLocalId, accepted.subject)) {
+        return refuse(usable.staffAccountId);
       }
 
-      const usable = account as NonNullable<typeof account>;
-      await clearFailedAttempts(deps.pool, usable.staffAccountId);
       const { token, expiresAt } = await mintSession(
         deps.pool,
         deps.clock,
@@ -283,10 +275,8 @@ export function registerStaffRoutes(
         },
         { outcome: 'ok' },
       );
-      reply.header(
-        'set-cookie',
-        sessionCookie(token, expiresAt, isSecure(request)),
-      );
+      cookies.push(sessionCookie(token, expiresAt, isSecure(request)));
+      reply.header('set-cookie', cookies);
       return redirect(reply, '/staff');
     });
 
@@ -317,7 +307,9 @@ export function registerStaffRoutes(
       });
     });
 
-    scope.post('/staff/invites', async (request, reply) => {
+    // **Adding an operator is writing the row that authorises them.** There is no invite, no token
+    // and nothing to deliver: the person signs in with a Google account they already have.
+    scope.post('/staff/operators', async (request, reply) => {
       let session: ResolvedSession;
       try {
         session = await requireStaff(deps, request, 'staff.invite');
@@ -330,20 +322,15 @@ export function registerStaffRoutes(
       if (!isRole(asked)) {
         throw new KernelError('invalid', 'that is not a role');
       }
-      const { invite, token } = await audit.around(
+      const added = await audit.around(
         {
           actorKind: 'staff',
           actorId: session.staffAccountId,
           actorRole: session.role ?? undefined,
-          action: 'staff.invite.create',
+          action: 'staff.operator.add',
           inputs: { role: asked },
         },
-        () =>
-          createInvite(deps.pool, deps.clock, {
-            email,
-            role: asked,
-            createdBy: session.staffAccountId,
-          }),
+        () => addOperator(deps.pool, deps.clock, { email, role: asked }),
       );
       html(reply);
       const role = session.role as Role;
@@ -352,157 +339,12 @@ export function registerStaffRoutes(
         role,
         permissions: permissionsOf(role),
         mayInvite: true,
-        issuedInviteUrl: inviteUrl(deps, request, token),
-        refused: invite.acceptedAt === null ? undefined : REFUSED_HE,
-      });
-    });
-
-    scope.get('/staff/invite/:token', async (request, reply) => {
-      const token = (request.params as { token: string }).token;
-      const invite = await openInviteByToken(deps.pool, deps.clock, token);
-      // Expired, already accepted and never existed are one answer, for the same reason sign-in's
-      // three causes are: this page must not confirm that an address was ever invited.
-      if (invite === null) throw new KernelError('not_found', 'no such invite');
-      html(reply);
-      return renderInvitePage({
-        token,
-        email: invite.email,
-        role: invite.role,
-      });
-    });
-
-    scope.post('/staff/invite/:token', async (request, reply) => {
-      const token = (request.params as { token: string }).token;
-      const invite = await openInviteByToken(deps.pool, deps.clock, token);
-      if (invite === null) throw new KernelError('not_found', 'no such invite');
-      const password = field(request.body, 'password', 1024);
-      if (password.length < 12) {
-        html(reply);
-        reply.code(400);
-        return renderInvitePage({
-          token,
-          email: invite.email,
-          role: invite.role,
-          refused: 'הסיסמה קצרה מדי.',
-        });
-      }
-
-      // Created through the **admin** endpoint under ADC — never the public sign-up endpoint, which
-      // stays disabled, so possession of the API key is not possession of an account.
-      const created = await deps.identity.createAccount(invite.email, password);
-      const existing = await accountByLocalId(deps.pool, created.localId);
-      const account =
-        existing ??
-        (await createAccount(deps.pool, deps.clock, {
-          idpLocalId: created.localId,
-          email: invite.email,
-        }));
-
-      // **The row exists and has no role.** The role lands only when enrolment finalises, below —
-      // which is "enforced, not offered" read from the other end: an account that never enrolled a
-      // second factor never acquires a role, so the two paths cannot disagree.
-      const signedIn = await deps.identity.signInWithPassword(
-        invite.email,
-        password,
-      );
-      if (signedIn.kind !== 'signed_in') {
-        throw new KernelError(
-          'conflict',
-          'that account already has a second factor',
-        );
-      }
-      const enrolment = await deps.identity.startTotpEnrollment(
-        signedIn.idToken,
-      );
-      await audit.write(
-        {
-          actorKind: 'staff',
-          actorId: account.staffAccountId,
-          action: 'staff.invite.accept',
-          inputs: {},
+        addedOperator: {
+          email: added.account.email,
+          role: asked,
+          created: added.created,
         },
-        { outcome: 'ok' },
-      );
-      html(reply);
-      return renderEnrolPage({
-        token,
-        email: invite.email,
-        sharedSecretKey: enrolment.sharedSecretKey,
-        otpauthUri: otpauthUri(invite.email, enrolment.sharedSecretKey),
-        sessionInfo: enrolment.sessionInfo,
-        idToken: signedIn.idToken,
       });
-    });
-
-    scope.post('/staff/invite/:token/enrol', async (request, reply) => {
-      const token = (request.params as { token: string }).token;
-      const invite = await openInviteByToken(deps.pool, deps.clock, token);
-      if (invite === null) throw new KernelError('not_found', 'no such invite');
-      const sessionInfo = field(request.body, 'session_info', 4096);
-      const idToken = field(request.body, 'id_token', 4096);
-      const code = field(request.body, 'code', 16);
-
-      try {
-        await deps.identity.finalizeTotpEnrollment(idToken, sessionInfo, code);
-      } catch (error) {
-        if (error instanceof IdentityRefusal) {
-          html(reply);
-          reply.code(403);
-          return renderEnrolPage({
-            token,
-            email: invite.email,
-            sharedSecretKey: '',
-            otpauthUri: '',
-            sessionInfo,
-            idToken,
-            refused: REFUSED_HE,
-          });
-        }
-        throw error;
-      }
-
-      const account = await accountByEmail(deps.pool, invite.email);
-      if (account === null)
-        throw new KernelError('conflict', 'the account is not on file');
-      await audit.around(
-        {
-          actorKind: 'staff',
-          actorId: account.staffAccountId,
-          actorRole: invite.role,
-          action: 'staff.invite.enrolled',
-          inputs: {},
-        },
-        async () => {
-          await deps.pool.query(
-            'UPDATE staff_account SET role = $2 WHERE staff_account_id = $1',
-            [account.staffAccountId, invite.role],
-          );
-          await markInviteAccepted(
-            deps.pool,
-            deps.clock,
-            invite.inviteId,
-            account.staffAccountId,
-          );
-        },
-      );
-      html(reply);
-      return renderEnrolledPage(invite.email);
     });
   });
-}
-
-/**
- * Where the invite URL points. The request's own origin unless the deployment says otherwise, so
- * `npm run dev` prints a link that works on 127.0.0.1 and staging prints its own hostname without a
- * second configuration value to keep in step.
- */
-function inviteUrl(
-  deps: StaffDeps,
-  request: FastifyRequest,
-  token: string,
-): string {
-  const base =
-    deps.baseUrl ??
-    `${isSecure(request) ? 'https' : 'http'}://${request.headers.host ?? '127.0.0.1'}`;
-  return `${base}/staff/invite/${token}`;
 }

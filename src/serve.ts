@@ -9,7 +9,10 @@ import { configuredBucket, createConfiguredStore } from './kernel/objects.ts';
 import { createConfiguredOcr } from './kernel/ocr.ts';
 import { createPdfjsText } from './kernel/pdf.ts';
 import { createWorkRunner } from './kernel/work.ts';
-import { createConfiguredIdentity } from './staff/contract.ts';
+import {
+  configuredHostedDomain,
+  createConfiguredIdentity,
+} from './staff/contract.ts';
 
 const host = process.env.HOST ?? '0.0.0.0';
 const port = Number(process.env.PORT ?? 8080);
@@ -27,10 +30,10 @@ const pool = createPool();
 const objects = createConfiguredStore();
 const ocr = createConfiguredOcr();
 const extractor = createConfiguredExtractor();
-// Who signs in (slice 5.1). Same shape as the store and the readers above, and for the sharper
-// reason: a deployed revision that signs nobody in must be visibly different from one that does,
-// and `identity: unconfigured` on staging is as wrong as a `-dev` version string — readable on the
-// boot line rather than discovered by an operator failing to log in.
+// Who signs in (slice 5.1, Google from 5.1b). Same shape as the store and the readers above, and
+// for the sharper reason: a deployed revision that signs nobody in must be visibly different from
+// one that does, and `identity: unconfigured` on staging is as wrong as a `-dev` version string —
+// readable on the boot line rather than discovered by an operator failing to log in.
 const identity = createConfiguredIdentity();
 const work = createWorkRunner(pool);
 work.start();
@@ -49,6 +52,10 @@ const app = buildApp({
   work,
   bucket: configuredBucket(),
   identity,
+  // Google matches the redirect URI character for character, so a deployment says its own origin
+  // rather than letting a proxy header decide it.
+  staffBaseUrl: process.env.STAFF_BASE_URL,
+  staffHostedDomain: configuredHostedDomain(),
 });
 
 await app.listen({ host, port });

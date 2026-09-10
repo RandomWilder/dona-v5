@@ -3,11 +3,11 @@
 // preimage. tests/policy/staff-session.test.ts is the standing form of that rule and was red before
 // 0021_staff.sql existed.
 //
-// **Why this system mints a session at all, when Identity Platform already returns a token.** An
-// ID token is a JWT with a one-hour life that this application cannot revoke, so an operator
-// dismissed at 09:00 would still hold authority until 10:00. The ID token is therefore consumed
-// once, at the end of sign-in, and never stored or re-presented; what the browser carries is an
-// opaque value this system minted, expires on its own injected clock, and revokes in one row.
+// **Why this system mints a session at all, when Google already returns a token.** An ID token is a
+// JWT with a one-hour life that this application cannot revoke, so an operator dismissed at 09:00
+// would still hold authority until 10:00. The ID token is therefore consumed once, at the end of
+// sign-in, and never stored or re-presented; what the browser carries is an opaque value this
+// system minted, expires on its own injected clock, and revokes in one row.
 //
 // **No pepper**, and that is a decision rather than an omission (SPEC-staff.md): a pepper defends a
 // secret whose preimage space can be searched, and 256 bits of CSPRNG output is not one. It would
@@ -20,6 +20,15 @@ import type { Role } from './roles.ts';
 import type { Queryable } from './types.ts';
 
 export const SESSION_COOKIE = 'dona_session';
+
+/**
+ * The one-shot cookie the OIDC redirect rides on, carrying `state` and `nonce` and **nothing that
+ * reaches the database** (slice 5.1b). `SameSite=Lax` is what lets it come back on the top-level
+ * GET redirect from Google, which is exactly the case Lax exists to permit; ten minutes is longer
+ * than any sign-in takes and shorter than a browser tab left open over lunch.
+ */
+export const OAUTH_COOKIE = 'dona_oauth';
+export const OAUTH_TTL_SECONDS = 600;
 
 /** 12 hours absolute, 60 minutes idle. Both walked by the injected clock, so a test needs no sleep. */
 export const SESSION_ABSOLUTE_MS = 12 * 60 * 60 * 1000;
@@ -167,15 +176,64 @@ export function clearedSessionCookie(secure: boolean): string {
   return parts.join('; ');
 }
 
-/** Fastify hands cookies as one header. No cookie plugin for one read of one name. */
-export function readSessionCookie(header: string | undefined): string | null {
+/**
+ * The two cookies this system sets, and the pair the OIDC redirect carries. `state` and `nonce`
+ * live together because they are minted together, spent together and meaningless apart.
+ */
+export function oauthCookie(
+  state: string,
+  nonce: string,
+  secure: boolean,
+): string {
+  const parts = [
+    `${OAUTH_COOKIE}=${state}.${nonce}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${OAUTH_TTL_SECONDS}`,
+  ];
+  if (secure) parts.push('Secure');
+  return parts.join('; ');
+}
+
+export function clearedOauthCookie(secure: boolean): string {
+  const parts = [
+    `${OAUTH_COOKIE}=`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+  ];
+  if (secure) parts.push('Secure');
+  return parts.join('; ');
+}
+
+export function readOauthCookie(
+  header: string | undefined,
+): { state: string; nonce: string } | null {
+  const value = readCookie(header, OAUTH_COOKIE);
+  if (value === null) return null;
+  const [state, nonce] = value.split('.');
+  if (!state || !nonce) return null;
+  return { state, nonce };
+}
+
+/** Fastify hands cookies as one header. No cookie plugin for two reads of two names. */
+export function readCookie(
+  header: string | undefined,
+  name: string,
+): string | null {
   if (!header) return null;
   for (const pair of header.split(';')) {
     const at = pair.indexOf('=');
     if (at < 0) continue;
-    if (pair.slice(0, at).trim() !== SESSION_COOKIE) continue;
+    if (pair.slice(0, at).trim() !== name) continue;
     const value = pair.slice(at + 1).trim();
     return value.length > 0 ? value : null;
   }
   return null;
+}
+
+export function readSessionCookie(header: string | undefined): string | null {
+  return readCookie(header, SESSION_COOKIE);
 }

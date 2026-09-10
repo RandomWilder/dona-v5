@@ -102,17 +102,22 @@ is the single most important thing carried out of month one.
       **M3 go/no-go**, which is the decision those numbers exist to make.
 - [ ] **Director's call:** whether the published Data Model's `Document` card is republished.
       Flagged, not owned.
-- [ ] **Raised at 5.1 and owned at week 12: staging and prod share one Identity Platform tenant**,
-      because they share one GCP project — so a staging operator is a prod operator. Prod answers
-      503 by design until the first pilot tag, so this is a known window rather than an open one.
-      It is decided **once**, beside the prod restart and the F7 organisation move, as either an
-      Identity Platform tenant per environment or a second project. `release.yml` mounts no
-      `prod-identity-api-key` today and gains one in the same pass.
-- [ ] **Raised at 5.1, owner the director: an invite is a printed URL because there is no mail
-      transport.** Adding one is a third party that sees an operator's address, so it is an
-      **ADR-0004 naming** before it is an integration. Not urgent while the operators are three
-      people in one office; it bites when Dona Dom's own staff are onboarded, which is **week 8**,
-      the week the console has to be usable on its own.
+- [ ] **Raised at 5.1, amended at 5.1b, owned at week 12: staging and prod share one identity
+      configuration**, because they share one GCP project — so a staging operator is a prod
+      operator. 5.1b changes what the shared thing *is*, not that it is shared: an OAuth client and
+      a consent screen rather than an Identity Platform tenant. Prod answers 503 by design until the
+      first pilot tag, so this is a known window rather than an open one. Decided **once**, beside
+      the prod restart and the F7 organisation move, as either a client per environment or a second
+      project. `release.yml` mounts no `prod-google-oauth-*` today and gains both in the same pass.
+- [x] **Raised at 5.1, owner the director: an invite is a printed URL because there is no mail
+      transport. RETIRED at 5.1b** — there is no invite and no URL. An admin adds an operator's
+      email and role, the operator signs in with Google, and no message ever had to reach them. The
+      mail-transport ADR-0004 naming is not owed by anything in the plan today; when a slice needs
+      to *send* something it is that slice's, and week 8 no longer carries it.
+- [ ] **Left standing in GCP by 5.1b, the director's: `staging-identity-api-key` and the
+      `dona-identity-staging` API key** are unread by any revision from the deploy that carries
+      5.1b. Two `gcloud` deletes. Harmless where they are, and an unused credential nobody rotates
+      is exactly what slice 1.5 argued against.
 - [ ] **Take delivery of the real document corpus** — after F6. Arrival and removal dates go on
       [fuses.md](fuses.md) the day it lands, and the removal is **run by hand on the day** rather
       than trusted to the lifecycle rule, which is the backstop and not the record.
@@ -136,9 +141,11 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       `resolvePartiesInUnit` all have live callers in `evals/` and `scripts/`; the numbers and the
       greps are in the evidence file. Taken ahead of 5.2 because a migration is only editable while
       no environment holds real data (`docs/from-v3.md`), and F3 closes that window.
-      **Opened → 5.1b:** the local `dona` database still carries both dead tables, because the
-      migration ledger is by filename with no checksum; rebuilding it needs a `DROP SCHEMA` the
-      bash guard refuses, and 5.1b rebuilds local from empty anyway.
+      **Opened → 5.1b:** local *and staging* still carry both dead tables, because the migration
+      ledger is by filename with no checksum — an edited migration does not re-run anywhere it has
+      already run. Rebuilding local needs a `DROP SCHEMA` the bash guard refuses and rebuilding
+      staging is a hand-run against a live environment, so **5.1b's `0022_` drops them where they
+      stand**, which is the one mechanism that reaches both.
       **Carried → post-7.2:** `work.ts` left standing, its durability claim still unearned.
 
 - [x] **5.1 — Staff identity, the session, and the role matrix in code.** **Closed 9 Sep 2026**
@@ -171,6 +178,48 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       lines here.
       **Plan mode. Deps:** none · **L**
 
+- [ ] **5.1b — The credential is Google's, and the TOTP machinery goes.** Slice 5.1 is closed; this
+      **amends** it rather than reopening it, which is why it carries a letter. Move 1 of the 10 Sep
+      re-plan: the director's own worked example was the admin login, and the instinct — *more
+      machinery than the job needs* — was right. The correct simplification is not a hand-rolled
+      password (that is `docs/from-v3.md` gap 1, the thing v3 failed at) but the opposite direction:
+      **delegate the whole credential and delete our screens.** Our password form, our TOTP form,
+      the invite URL, the enrolment screen and the base32 secret an operator hand-types are replaced
+      by **one link → Google → our session** — a server-side OIDC authorization-code flow, one
+      redirect, still not one line of client JavaScript. Identity Platform is **dropped entirely**,
+      not kept as a directory in front of Google. `google-auth-library` is already a dependency, so
+      no new one.
+      **The invite becomes a row and `staff_invite` is dropped.** An admin adds `email` + `role`;
+      that row *is* the authorisation, and first sign-in fills `idp_local_id`. No token, no expiry,
+      no acceptance URL.
+      **What is lost, stated plainly: the assertable second factor.** 5.1 refused any ID token
+      without `firebase.sign_in_second_factor`; whatever factor Google enforces, we cannot assert
+      it. What replaces it is narrower on the other axis — **only an email that already has a
+      `staff_account` row may sign in at all**, where before it was anyone Identity Platform knew.
+      The allowlist is what makes this safe without Workspace, which **retires open question 12 as a
+      blocker** rather than leaving auth waiting on it. `ADR-0005` is where that trade is written
+      down.
+      **Done when:** an operator added by `npm run staff:add` signs in through Google and holds a
+      session; an email with no row, an unverified email, a role-less account and a disabled account
+      are each refused with `not_allowed` and nothing more; a replayed or absent `state` is refused;
+      and `grep -rn "totp\|mfa\|otpauth" src/` returns nothing.
+      **Verify:** every refusal committed **red first**; `npm run migrate` leaves **26 tables** with
+      no `staff_invite`, no `outbox` and no `idempotency_keys`; and the sign-in is clicked on `:3000`
+      against the real Google client, not the fake — 5.1 found two defects the fake could not have.
+      **One manual step, the director's:** Google exposes no API for creating an OAuth 2.0 Web
+      client, so a human creates it and the consent screen once per project (~10 minutes) and
+      `bootstrap.sh` **documents** that rather than pretending to do it — `bootstrap.sh:222`'s own
+      lesson. The two secrets reach the system through `infra/set-secret.sh` and nowhere else.
+      **Carried in from 5.0-cut:** `0022_` drops `outbox` and `idempotency_keys` where they still
+      stand, and `assignRole` gets the first caller 5.0-cut said it was owed.
+      **Two of the re-plan's own instructions are corrected here**, in the shape 5.0-cut used:
+      squashing `staff_invite` out of `0021_` cannot work — staging applied `0021_` at the 5.1 deploy
+      and the ledger has no checksum, so the edit would reach nothing and leave staging with
+      `idp_local_id NOT NULL` and a first sign-in that fails on an INSERT. Hence a forward `0022_`,
+      and `0021_` left standing as the record of what every environment actually ran. And "25 tables
+      → 24" is **27 → 26**: 5.0-cut removed two tables, not three.
+      **Plan mode. Deps:** 5.1 · **M**
+
 - [ ] **5.2 — The screens go behind the session, and the write route gets a token that means
       something.** Both halves in one change, plus the bound none of 3.3's bounds are: a **per-caller**
       cap on upload *count*. The root index moves to the composition root.
@@ -185,15 +234,17 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       a name. Behind a session a name may become lawful to show. **Lifting it is a decision this
       slice records; keeping it is equally an answer.** What is not allowed is the rule lapsing
       because a session arrived.
-      **Carried in from 5.1, three things.** (1) **The CSRF token's scope is every write route and
-      not only `POST /documents`** — `POST /staff/login`, `/staff/login/verify`, `/staff/logout`,
-      `/staff/invites` and both invite POSTs are inside it. 5.1 deliberately built no half of a
-      token; what stands in for one until this slice is `SameSite=Lax` on the session cookie, which
-      is stated as the defence it is in `SPEC-staff.md`. (2) **The guard is
+      **Carried in from 5.1, amended by 5.1b, three things.** (1) **The CSRF token's scope is every
+      write route and not only `POST /documents`** — after 5.1b the staff module has exactly two:
+      `POST /staff/operators` and `POST /staff/logout`. The two new GETs, `/staff/auth/start` and
+      `/staff/auth/callback`, are deliberately **outside** the token's scope: they change no row of
+      ours, and `state` is the anti-forgery value that flow carries by construction. 5.1 built no
+      half of a token; what stands in for one until this slice is `SameSite=Lax` on the session
+      cookie, which is stated as the defence it is in `SPEC-staff.md`. (2) **The guard is
       `requireStaff` from `src/staff/contract.ts`, called once per route and never re-implemented** —
       the same rule `tests/ui/tokens.test.ts`'s `SCREENS` registry carries, for the same reason.
-      (3) **The four staff screens are already in that registry**; week 5's remaining screens append
-      beside them.
+      (3) **The staff screens are already in that registry** — two of them after 5.1b, where four
+      were deleted with the flow they belonged to; week 5's remaining screens append beside them.
       **Plan mode. Deps:** 5.1 · **L**
 
 - [ ] **5.3 — `national_id` is unreachable by any agent tool.**
@@ -277,6 +328,39 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       **Verify:** add one of each on staging; a role without the permission is refused with
       `not_allowed`; grep the screen for `asset_type` and find nothing.
       **Deps:** 5.1, 5.7 · **M**
+
+---
+
+---
+
+## The 10 Sep re-plan, and where each of its moves now lives
+
+The re-plan the director stopped the build for is Moves 0–4. Move 0 is **5.0-cut**, closed. Move 1 is
+**5.1b**, above. The rest are recorded here so that nothing it decided is owned only by a plan file
+outside the repository ([docs/pipeline.md](docs/pipeline.md) §8, §10):
+
+- [ ] **Move 2 → new slice `5.9`: the admin shell, where the navigation *is* the plan.** Seven tabs
+      built at the composition root (`src/kernel/ui/page.ts:66` already takes `nav?: Html` and the
+      kernel must not learn a route); an unbuilt tab renders one line naming the week and slice that
+      owns it, so **the remaining roadmap is on screen**. Written into the slice list when the chore
+      below runs, and after 5.2, whose composition-root move it builds on.
+- [ ] **Move 3 → chore, before 5.9: the mockup-first slice contract.** `mockups/<slice>.html` through
+      the real page shell on a dev-only route, `data-state="wired" | "painted"`, and a guard in
+      `scripts/guards.ts` that fails the build when a mockup and its evidence file both exist. With
+      it: `tasks/todo.md` holds the current week only, `tasks/roadmap.md` stops being retrospective,
+      evidence files are capped at ~40 lines, and `CLAUDE.md` gains the gate. **5.1b adopts the
+      evidence cap early**; the rest is that chore's, because restructuring three plan files inside
+      an auth slice is how both jobs get done badly.
+- [ ] **Move 4 → the reorder.** `5.2` keeps its place; then `5.9` → `6.1` → `6.2` → `6.3` → `7.1` →
+      `7.2`, which is the first thing in this project the director can judge by looking. The
+      deferrals it decided, each with its new owner: **5.3 → week 9** (no agent exists to reach
+      `national_id` before week 10) · **5.7 → folded into 6.1**, its first reader · **5.4, 5.5, 5.6 →
+      post-7.2** · **5.8 → cut**, and it becomes the `הגדרות` stub tab in 5.9 under
+      [SPEC-flows.md](../SPEC-flows.md):16. The slice list below still reads in the old order and is
+      rewritten by the Move 3 chore, not here.
+- [ ] **One dependency to re-check before week 6 starts:** `roadmap.md:1604` gives 7.1 a dependency on
+      **6.6**, which the order above does not reach. Either 7.1's dependency is really 6.2, or 6.6
+      comes forward. Resolved when 6.1 is taken.
 
 ---
 

@@ -92,10 +92,14 @@ describe('policy · no column in this database holds a bearer token', () => {
   });
 
   it('accepts the hashes the mechanism does keep', async (t) => {
-    // staff_session.token_hash and staff_invite.token_hash are the two columns this constraint is
-    // written around, and a check that also rejected them would be a check nobody could ship. This
-    // asserts they exist and are excluded — so the case fails if a later migration renames the
-    // hash back to the thing it is a hash of.
+    // staff_session.token_hash is the column this constraint is written around, and a check that
+    // also rejected it would be a check nobody could ship. This asserts it exists and is excluded —
+    // so the case fails if a later migration renames the hash back to the thing it is a hash of.
+    //
+    // **It was two columns until slice 5.1b**: staff_invite.token_hash went with the invite when the
+    // credential became Google's, and the only bearer value this system still stores is a session's
+    // (ADR-0005). The count is what makes that a fact rather than a claim — a later table that
+    // starts keeping a token has to come through this case.
     const pool = await policyPool();
     if (pool === null) return t.skip(skipReason);
     t.after(() => pool.end());
@@ -109,7 +113,7 @@ describe('policy · no column in this database holds a bearer token', () => {
     );
     assert.deepEqual(
       rows.map((row) => row.table_name),
-      ['staff_invite', 'staff_session'],
+      ['staff_session'],
     );
   });
 });

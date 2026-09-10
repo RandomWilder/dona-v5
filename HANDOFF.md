@@ -299,7 +299,9 @@ no engineering speed compresses it. Start it the week the project is approved.
    layer moves to Gemini in-region, at a real cost in Hebrew quality.
 10. Is data residency in Israel contractual or merely preferred?
 11. What does Priority actually expose, and who is the IT contact?
-12. Is Dona Dom on Google Workspace? (If so, admin SSO/MFA costs nothing extra.)
+12. Is Dona Dom on Google Workspace? (If so, admin SSO/MFA costs nothing extra.) **No longer
+    blocks anything, from slice 5.1b:** staff sign-in is Google either way, and Workspace would only
+    add the `hd` domain as a second condition — one environment variable, `STAFF_GOOGLE_HD`.
 13. How is a phone number bound to a party the first time — shared numbers, numbers changing
     mid-tenancy?
 14. Are the pilot buildings still inside תקופת הבדק?

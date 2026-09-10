@@ -168,12 +168,18 @@ Sound, and the reasoning behind it is right for v5. Keep:
 
 Three gaps v5 must close:
 
-1. **No MFA.** Stack Map §3.1 specifies Identity Platform with enforced MFA, and notes it may
+1. **No MFA.** Stack Map §3.1 specified Identity Platform with enforced MFA, and noted it may
    collapse into Dona Dom's Workspace accounts at no cost. v3 hand-rolled email + password.
+   **Closed at 5.1 and then closed differently at 5.1b** (ADR-0005): the credential is Google's
+   outright, so the factor is whatever Google enforces and this system asserts an allowlist instead
+   — which is the Workspace collapse the Stack Map hoped for, reached without waiting for the
+   Workspace answer.
 2. **No field-level guard.** `national_id` (ת.ז. / ח.פ.) is admin-only, unreachable by any agent
    tool, and access-logged. Nothing in v3 enforces per-field access.
 3. **Seeded operators, no invite flow.** v3 creates the first operator from Secret Manager and never
-   updates it — fine for one environment, not a way to onboard Dona Dom's staff.
+   updates it — fine for one environment, not a way to onboard Dona Dom's staff. **Closed at 5.1
+   with an invite, and at 5.1b by deleting it**: an admin adds an email and a role, the person signs
+   in with Google, and there is no credential to seed, print or deliver.
 
 ### `src/kernel/audit.ts` — right shape, wrong scope
 
