@@ -291,6 +291,25 @@ describe('estate · the routes', () => {
           assert.equal(listed.statusCode, 200);
           assert.match(listed.body, /חוזים לא שלמים/);
           assert.match(listed.body, /חסר ערב/);
+          // **Slice 5.2, and the defect this case now owns.** `renderIncompletePage` took its token
+          // with a default of `''`, so the route that never passed one compiled, rendered, and
+          // served an exception form refused on every submit. It is asserted *here* rather than in
+          // `src/guard.test.ts` because this screen renders one form per incomplete tenancy, and
+          // this is the case that builds the tenancy — a database with none renders no form, and an
+          // assertion over no forms is a guard that passed because it looked at nothing.
+          const tokens = [
+            ...listed.body.matchAll(/name="csrf" value="([^"]*)"/g),
+          ].map((match) => match[1]);
+          //
+          // The floor is `> 0` and not `=== 1`: this case *creates* one incomplete tenancy, so at
+          // least one form exists whatever else the database holds — but a developer's database
+          // holds whatever `npm run seed:register` left, and a count of exactly one would be this
+          // assertion depending on a fixture from the other direction. Every token is checked,
+          // which is the property; the floor is what stops it passing over an empty page.
+          assert.ok(tokens.length > 0, 'the exception form is not on the page');
+          for (const token of tokens) {
+            assert.equal(token, who.csrf);
+          }
           assert.match(listed.body, new RegExp(`/estate/units/${unitId}`));
           assert.match(
             listed.body,

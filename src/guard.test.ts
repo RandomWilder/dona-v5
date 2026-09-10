@@ -361,6 +361,15 @@ describe('a request with a session', () => {
     //
     // So the assertion lives where the bug was — at the route, over what the wire carries. The
     // default is gone too, but a required parameter is a fix for one screen and this is the rule.
+    //
+    // **These two routes and not the screen the defect was on**, which is the correction CI made to
+    // this case: `/estate/incomplete` renders one form per incomplete tenancy, so on a database with
+    // none it renders none, and the floor assertion below was asserting the *fixture* rather than
+    // the property. A guard that passes because it looked at nothing is the failure
+    // `kernel/boundary.test.ts` names in its own words. `/` and `/staff` always render a form —
+    // the sign-out — whatever the database holds, so the floor is real for them. The screen that
+    // carried the defect is asserted in `src/estate/routes.test.ts`, inside the case that already
+    // builds the row that makes its form exist.
     const pool = await migratedPoolOrNull();
     if (!pool) {
       t.skip(skipReason);
@@ -375,7 +384,7 @@ describe('a request with a session', () => {
         role: 'ADMIN',
       });
       const { token } = await mintSession(pool, clock, account.staffAccountId);
-      for (const url of ['/', '/staff', '/estate/incomplete']) {
+      for (const url of ['/', '/staff']) {
         const response = await app.inject({
           method: 'GET',
           url,
