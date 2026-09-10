@@ -163,6 +163,20 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   byte-identically for an unknown account, an account with no role and a disabled one, because the
   alternative is an account-enumeration oracle on the login screen. The role matrix is code and not
   a config row — a deliberate exception to rule 8, argued in `SPEC-staff.md`.
+- **Every route declares its stance, and the default is deny** (slice 5.2). A route carries
+  `config: { staff: <permission> }` or `config: { staff: 'public' }`; one `onRequest` hook in the
+  composition root calls `requireStaff`, and an `onRoute` hook **refuses to start the process** if a
+  route declares neither. Openness is a written word, never what happened when nobody said
+  otherwise.
+- **Every write route carries a CSRF token, and the token is derived rather than stored** (slice
+  5.2): `sha256('csrf:' + <session token>)`, computed from the `HttpOnly` cookie the request already
+  carries, held in no column and defended by the same policy case that forbids a stored token.
+  `SameSite=Lax` on the session cookie is now the second of two defences rather than the only one.
+  The `GET /staff/auth/*` routes are outside the scope on purpose — they change no row, and `state`
+  is the anti-forgery value that flow already carries.
+- **A caller is bounded as well as a request** (slice 5.2): fifty filed documents per operator per
+  rolling 24 hours, counted from `audit_log` rather than from a new column, refused attempts
+  included. 3.3's twenty megabytes bound one upload and nothing bounded a poster.
 - **Every scoped read of tenant data is logged**, not only every command.
 - PII columns are commented `-- pii`. PII never in logs. Parameterised queries. Validate at the edge.
 - Secrets live in Secret Manager and enter through `infra/set-secret.sh` — never in the repo, a log, a
@@ -289,11 +303,23 @@ started.
 
 **The application serves screens from 1.11 and six estate routes from 3.6**: an index at `/`, the buildings
 list, one building, one unit, `/estate/search` and `/estate/expiring` — server-rendered Hebrew RTL off
-`/ui/tokens.css`, with no client JavaScript and — until **slice 5.2** puts them behind the session
-5.1 built — **no authentication**. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
-physical side or a `<script>`, and from 2.6 also on a phone number or an E.164 prefix: what an
-unauthenticated screen may say about a household is **a state and a count, never a name**, so the
-occupancy chip is derived on every load and search never reaches `party`. Slice 3.6 lets the same
+`/ui/tokens.css`, with no client JavaScript and, **from slice 5.2, behind the session 5.1 built**.
+Every route in this application declares its own stance — a permission, or the word `public` — and
+an `onRoute` hook refuses to start the process if one declares neither, so the default is deny and
+an open route is open because somebody wrote it down. The root index moved from `src/estate/` to the
+composition root in the same slice, because an index of screens stopped being one module's fact the
+week a second module had one. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
+physical side or a `<script>`, and from 2.6 also on a phone number or an E.164 prefix: what a screen
+may say about a household is **a state and a count, never a tenant's name**, so the
+occupancy chip is derived on every load and search never reaches `party`.
+
+**5.2 was the slice entitled to lift that rule, and kept it — which is the decision, not the
+absence of one.** A session says who is asking; it does not by itself make a household's name
+lawful to show. The two things that would are not yet true: `national_id` is not unreachable until
+5.3, and SPEC.md's "every scoped read of tenant data is logged" has no screen-level reader. The
+wording was tightened rather than relaxed — *a tenant's* name, because the staff home page has shown
+the **operator's own** email since 5.1 and that was never the rule's subject. **Reconsidered at
+5.4**, which is already deciding what a session unlocks. Slice 3.6 lets the same
 screens show what is filed — type, dates, path as text, verdict — and still not who signed it, and
 never a link to the bytes. The fixtures that fill the
 screens are ours and designed for coverage — the Shoham plan from 1.11 and, from 2.6, a **generated
@@ -301,13 +327,14 @@ register at 1,500 units** loaded through the real importer (`npm run seed:regist
 the week-2 query timings come from. Real data arrives through the same importer at the pilot-
 preparation step of the method.
 
-**3.3 added the first write route, and it has no session either**: `GET /documents/new` and
-`POST /documents`, flow A1, reached from a unit on the building page. The bounds that stand in for a
-session until week 5 are stated in [SPEC-evidence.md](SPEC-evidence.md) and applied in
+**3.3 added the first write route**: `GET /documents/new` and
+`POST /documents`, flow A1, reached from a unit on the building page. The bounds it carries are
+stated in [SPEC-evidence.md](SPEC-evidence.md) and applied in
 `src/evidence/internal/routes.ts` — one file, 20 MB, four kinds **sniffed from the bytes and never
-from the name**, the filename discarded, and nothing personal in the response. There is no CSRF
-token and that is not an omission: a CSRF token defends a session's authority, and an anonymous
-caller can already post directly; week 5's login is the slice that owes one. `@fastify/multipart` is
+from the name**, the filename discarded, and nothing personal in the response. Those bound a
+*request*; **slice 5.2 added the bound on a *caller***, which is a different quantity — fifty filed
+documents per operator per rolling day, counted off the audit log, because nothing else stopped one
+poster filling a versioned bucket this application is built to be unable to empty. `@fastify/multipart` is
 the one runtime dependency the slice added, because an HTML file input posts `multipart/form-data`
 and hand-parsing a boundary-delimited stream of untrusted bytes is the work a maintained plugin
 exists to save. The page shell every screen shares moved to `src/kernel/ui/page.ts` in the same
@@ -392,8 +419,9 @@ the two index decisions 2.6 · the document-type catalogue in the workbook 3.0 �
 its catalogue commands and the nine-type seed 3.1 · the object path convention, the docs bucket's
 four controls and the proved delete refusal 3.2 · the declared-type upload, its verification guard
 and the first write route 3.3 · Asset, the Provider stub, Q3 and Q7, and flow A6 3.5 · document
-search and the documents panels, with the guard verdict stored on the row 3.6 · **the staff session,
-enforced MFA and the role matrix in code 5.1.**
+search and the documents panels, with the guard verdict stored on the row 3.6 · the staff session,
+Google-held credential and the role matrix in code 5.1 · **every route behind that session, every
+write route behind a derived CSRF token, and a per-caller upload cap 5.2.**
 Production exists and has been released to — `v0.1.0`–`v0.1.2`, rolled back and rolled forward on
 purpose — and is then **parked until week 12**: the Cloud SQL instance is stopped and the service
 scaled to zero, so `dona-prod` answers 503 by design and staging is the delivered artifact every

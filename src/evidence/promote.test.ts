@@ -287,6 +287,7 @@ describe('evidence · promote an extracted field', () => {
 
   it('shows unmapped values as capture-only and a promote control for mapped ones', () => {
     const html = renderReadPage({
+      csrf: '',
       documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       buildingId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
       buildingName: 'בניין',
@@ -330,6 +331,7 @@ describe('evidence · promote an extracted field', () => {
     const fieldId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
     const otherId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
     const html = renderReadPage({
+      csrf: '',
       documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       buildingId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
       buildingName: 'בניין',

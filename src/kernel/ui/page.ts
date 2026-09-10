@@ -99,3 +99,23 @@ ${h`<html lang="he" dir="rtl">
   </body>
 </html>`}`;
 }
+
+/**
+ * The name of the hidden field every form in this system carries, and the markup that carries it.
+ * **Slice 5.2.**
+ *
+ * The *value* is `src/staff/`'s — it is derived from the session, and the session is that module's
+ * fact. The *name* and the *markup* are the page's, and they are here for the reason the shell
+ * itself is: four modules render forms, and a field name spelled in four places is a field name
+ * that will one day be spelled three ways. `src/staff/internal/csrf.ts` reads `CSRF_FIELD` from
+ * here rather than declaring its own, so the form and the check cannot disagree about what the
+ * input is called.
+ *
+ * This is not the kernel learning a domain: it is one string and one input element, and it knows
+ * nothing about who is signed in or what the value means.
+ */
+export const CSRF_FIELD = 'csrf';
+
+export function csrfInput(token: string): Html {
+  return h`<input type="hidden" name="${CSRF_FIELD}" value="${token}" />`;
+}

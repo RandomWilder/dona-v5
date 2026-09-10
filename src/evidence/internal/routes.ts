@@ -2,7 +2,7 @@
 // A1, and **the first write route in this system**.
 //
 // Every route before this one was a read. SPEC-evidence.md, "The first write route in this system,
-// and it has no session", is where the bounds that stand in for a session until week 5 are set out
+// and what bounds it", is where these bounds are set out
 // and argued; they are applied here: one file, 20 MB, four kinds sniffed from the bytes, no filename
 // kept, and nothing personal in the response.
 //
@@ -10,7 +10,7 @@
 // authority, and there is no session: an anonymous caller can already post directly. Week 5's login
 // is the slice that owes one, in the same change that gives this route something worth riding.
 import multipart from '@fastify/multipart';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import {
   addCalendarYears,
@@ -18,7 +18,7 @@ import {
   getUnit,
   WARRANTY_YEARS,
 } from '../../estate/contract.ts';
-import { createAuditLog } from '../../kernel/audit.ts';
+import { countActions, createAuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import {
   createSettings,
@@ -31,6 +31,11 @@ import type { ObjectStore } from '../../kernel/objects.ts';
 import { createUnconfiguredOcr, type OcrText } from '../../kernel/ocr.ts';
 import type { PdfText } from '../../kernel/pdf.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
+import {
+  CSRF_FIELD,
+  readSessionCookie,
+  verifyCsrf,
+} from '../../staff/contract.ts';
 
 const PAGE_NUMBER = /^[1-9]\d*$/;
 
@@ -90,8 +95,9 @@ export interface DocumentDeps {
  *
  * A lease is a few hundred kilobytes and a scanned one a few megabytes; twenty is generous and is
  * chosen as a bound on a runaway rather than as a budget, which is `kernel/extraction.ts`'s
- * reasoning about its own timeout. `fields` and `fieldSize` are bounded for the same reason: this
- * route is reachable by anybody until week 5.
+ * reasoning about its own timeout. `fields` and `fieldSize` are bounded for the same reason. From
+ * 5.2 the caller is authenticated and bounded too, and these stay: they bound one request, and an
+ * operator can post a runaway by accident as easily as a stranger could on purpose.
  */
 const LIMITS = {
   files: 1,
@@ -100,11 +106,97 @@ const LIMITS = {
   fieldSize: 200,
 };
 
+/**
+ * **The bound on the caller. Slice 5.2.**
+ *
+ * `LIMITS` above bounds a request; this bounds an operator. Nothing bounded one until 5.2, because
+ * until 5.2 there was no operator to bound — an anonymous poster could fill a versioned bucket this
+ * application is deliberately unable to empty (slice 3.2), one legal 20 MB request at a time.
+ *
+ * **Fifty a day, per operator.** A person filing paper for 1,500 units files a handful in a day and
+ * a bad afternoon is a dozen; fifty is chosen as the bound on a runaway rather than as a budget,
+ * which is the same reasoning 3.3 wrote for its twenty megabytes. Bulk arrives through the register
+ * importer and through 3.4's Drive ingestion, and neither goes anywhere near this route. If an
+ * operator ever legitimately reaches it, the number is wrong and moving it is one line and one
+ * evidence file — which is a better failure than discovering the bucket has been full for a week.
+ *
+ * **Counted over a rolling day, not a calendar one.** A calendar reset hands a caller the whole cap
+ * again at midnight and twice the cap across two minutes either side of it.
+ */
+const UPLOADS_PER_DAY = 50;
+const UPLOAD_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Refuses the fifty-first. `too_many` and 429, not `not_allowed` and 403: the operator may do this,
+ * and may not do it this many times today, and a refusal that said the first thing would send
+ * somebody to look at the role matrix for an answer that is not there.
+ *
+ * Both outcomes count. A refused upload consumed the work the bound exists to bound, and counting
+ * only the ones that were filed would let a caller stay under the cap for ever by being wrong.
+ */
+async function boundTheCaller(
+  deps: DocumentDeps,
+  staffAccountId: string,
+): Promise<void> {
+  const since = new Date(deps.clock.now().getTime() - UPLOAD_WINDOW_MS);
+  const filed = await countActions(deps.pool, {
+    action: 'evidence.file_document',
+    actorId: staffAccountId,
+    since,
+  });
+  if (filed >= UPLOADS_PER_DAY) {
+    throw new KernelError('too_many', 'too many documents filed today');
+  }
+}
+
+/**
+ * The raw session token, for the one route that verifies its own CSRF field. The guard has already
+ * refused this request if there was no session, so the cookie is there; `??` is the type system's
+ * question, not a real branch, and an empty string could never verify against anything.
+ */
+function sessionTokenOf(request: FastifyRequest): string {
+  return readSessionCookie(request.headers.cookie) ?? '';
+}
+
+/**
+ * Who is filing. The guard set this before the handler ran, so its absence is a wiring fault rather
+ * than an unauthenticated request — and it fails closed instead of filing a document under nobody.
+ */
+/**
+ * The token this session's forms carry. Derived once by the composition root's guard; a screen
+ * reads it and never computes it, which is what stops two screens deriving it two ways.
+ */
+function csrfOf(request: FastifyRequest): string {
+  return request.csrf ?? '';
+}
+
+function requireOperator(request: FastifyRequest): string {
+  const id = request.staff?.staffAccountId;
+  if (id === undefined) {
+    throw new KernelError('not_allowed', 'not_allowed');
+  }
+  return id;
+}
+
 function html(reply: { header: (k: string, v: string) => unknown }): void {
   reply.header('content-type', 'text/html; charset=utf-8');
   reply.header('cache-control', 'no-cache');
   reply.header('x-content-type-options', 'nosniff');
 }
+
+/**
+ * The stances, from slice 5.2. Reading what is filed is `documents.read`; the upload screen and the
+ * POST behind it are `documents.write`; promoting a captured value, seeding a protocol and
+ * confirming a lease all write a tenancy or a unit through another module's command, so they ask
+ * for `tenancy.write` — the permission that names what actually changes, rather than the one that
+ * names the screen it changed from.
+ */
+const READ = { config: { staff: 'documents.read' } } as const;
+const NEW = { config: { staff: 'documents.write' } } as const;
+const FILE = {
+  config: { staff: 'documents.write', csrf: 'in-body' },
+} as const;
+const CONFIRM = { config: { staff: 'tenancy.write' } } as const;
 
 export function registerDocumentRoutes(
   app: FastifyInstance,
@@ -115,7 +207,7 @@ export function registerDocumentRoutes(
   // The screen. Reached from a unit on the building page, so the unit is in the query string and is
   // validated before it reaches a query — a malformed id is `invalid` and a well-formed one that is
   // not there is `not_found`, and neither says which.
-  app.get('/documents/new', async (request, reply) => {
+  app.get('/documents/new', NEW, async (request, reply) => {
     const asked = (request.query as { unit?: string }).unit ?? '';
     const unitId = validId(asked, 'unit');
     const [unit, types, lettings] = await Promise.all([
@@ -124,11 +216,22 @@ export function registerDocumentRoutes(
       listUnitTenancies(deps.pool, unitId),
     ]);
     html(reply);
-    return renderUploadPage({ unit, types, lettings });
+    return renderUploadPage({ csrf: csrfOf(request), unit, types, lettings });
   });
 
-  app.post('/documents', async (request, reply) => {
+  app.post('/documents', FILE, async (request, reply) => {
     const { fields, bytes } = await readUpload(request);
+    // **The token is checked here and not in the hook**, because the hook runs before the handler
+    // and this body is a stream: reading the field there would consume the parts `readUpload` is
+    // about to iterate. The comparison is `src/staff/`'s, not a second implementation of one.
+    //
+    // It is checked *after* the parts are read and *before* anything is written, which is the only
+    // order available: the field arrives inside the thing being defended. The bytes are held in
+    // memory and bounded at 20 MB by `LIMITS`, so a forged post costs a bounded read and no row.
+    verifyCsrf(sessionTokenOf(request), fields[CSRF_FIELD]);
+    // The caller, bounded, before the type lookup and before a single object is written.
+    const operator = requireOperator(request);
+    await boundTheCaller(deps, operator);
     const unitId = validId(fields.unit ?? '', 'unit');
     const typeKey = fields.type ?? '';
     const tenancyId = fields.tenancy
@@ -166,6 +269,7 @@ export function registerDocumentRoutes(
             ? { kind: 'BUILDING', id: unit.building_id }
             : { kind: 'UNIT', id: unitId },
         tenancyId,
+        filedBy: operator,
       },
     );
 
@@ -177,6 +281,7 @@ export function registerDocumentRoutes(
       reply.code(422);
       const lettings = await listUnitTenancies(deps.pool, unitId);
       return renderUploadPage({
+        csrf: csrfOf(request),
         unit,
         types: await listDocumentTypes(deps.pool),
         lettings,
@@ -218,6 +323,7 @@ export function registerDocumentRoutes(
 
   app.get<{ Params: { documentId: string } }>(
     '/documents/:documentId/read',
+    READ,
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
       const ocrVersion = (await readOcrSettings(createSettings(deps.pool)))
@@ -256,6 +362,7 @@ export function registerDocumentRoutes(
       if (link?.entity_type === 'UNIT') {
         const unit = await getUnit(deps.pool, link.entity_id);
         return renderReadPage({
+          csrf: csrfOf(request),
           documentId,
           buildingId: unit.building_id,
           buildingName: unit.building_name,
@@ -272,6 +379,7 @@ export function registerDocumentRoutes(
       if (link?.entity_type === 'BUILDING') {
         const detail = await getBuilding(deps.pool, link.entity_id);
         return renderReadPage({
+          csrf: csrfOf(request),
           documentId,
           buildingId: detail.building.building_id,
           buildingName: detail.building.name,
@@ -291,6 +399,7 @@ export function registerDocumentRoutes(
 
   app.post<{ Params: { documentId: string } }>(
     '/documents/:documentId/promote',
+    CONFIRM,
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
       const fields = await readFields(request);
@@ -321,21 +430,23 @@ export function registerDocumentRoutes(
 
   app.get<{ Params: { documentId: string } }>(
     '/documents/:documentId/seed',
+    READ,
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
       const proposed = await proposeProtocol(seedDeps(), documentId);
       html(reply);
-      return renderSeedPage(await seedScreen(deps, proposed));
+      return renderSeedPage(await seedScreen(deps, proposed, csrfOf(request)));
     },
   );
 
   app.post<{ Params: { documentId: string } }>(
     '/documents/:documentId/seed',
+    CONFIRM,
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
       const proposed = await proposeProtocol(seedDeps(), documentId);
       const confirmed = await confirmProtocol(seedDeps(), documentId);
-      const screen = await seedScreen(deps, proposed);
+      const screen = await seedScreen(deps, proposed, csrfOf(request));
       html(reply);
       return renderSeededPage({
         buildingId: screen.buildingId,
@@ -351,16 +462,18 @@ export function registerDocumentRoutes(
 
   app.get<{ Params: { documentId: string } }>(
     '/documents/:documentId/tenancy',
+    READ,
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
       const proposed = await proposeLeaseTenancy(deps.pool, documentId);
       html(reply);
-      return renderTenancyPage(proposed);
+      return renderTenancyPage({ ...proposed, csrf: csrfOf(request) });
     },
   );
 
   app.post<{ Params: { documentId: string } }>(
     '/documents/:documentId/tenancy',
+    CONFIRM,
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
       const fields = await readFields(request);
@@ -479,10 +592,12 @@ function fileHashOf(storageUri: string): string {
 async function seedScreen(
   deps: DocumentDeps,
   proposed: ProtocolProposal,
+  csrf: string,
 ): Promise<SeedScreen> {
   if (proposed.placeKind === 'UNIT') {
     const unit = await getUnit(deps.pool, proposed.placeId);
     return {
+      csrf,
       documentId: proposed.documentId,
       labelHe: proposed.labelHe,
       buildingId: unit.building_id,
@@ -499,6 +614,7 @@ async function seedScreen(
   }
   const detail = await getBuilding(deps.pool, proposed.placeId);
   return {
+    csrf,
     documentId: proposed.documentId,
     labelHe: proposed.labelHe,
     buildingId: detail.building.building_id,

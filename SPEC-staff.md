@@ -8,7 +8,9 @@ piece of paper. Shared conventions live in [SPEC.md](SPEC.md) and are not repeat
   row.
 - **Entities:** none of E1–E16. Its two tables — `staff_account`, `staff_session` — are the
   mechanism's own and appear in no entity catalogue.
-- **Depends on:** kernel. Nothing else, and nothing depends on it before slice 5.2.
+- **Depends on:** kernel. Nothing else. **Every other module depends on it from slice 5.2**, which
+  put every route in the application behind `requireStaff` and every write route behind a CSRF
+  token derived from the session.
 - **Built:** slice 5.1 on Identity Platform, with a password form, a TOTP form and an invite flow.
   **Amended at slice 5.1b**, which deleted all three and made the credential Google's. The
   `national_id` field guard is **5.3**.
@@ -20,9 +22,18 @@ piece of paper. Shared conventions live in [SPEC.md](SPEC.md) and are not repeat
 Until slice 5.1 this system had never had a session. Seven routes had served unauthenticated since
 week 1 — `/`, `/estate`, `/estate/buildings/:id`, `/estate/search`, `/estate/expiring`,
 `GET /documents/new` and `POST /documents` — deliberately, on fixture data, and stated in six files
-rather than hidden in one. **5.1 built the mechanism; 5.2 puts those routes behind it.** A reader
-who finds an unauthenticated estate route in a tree that already contains this file is looking at a
-commit between the two, not at an omission.
+rather than hidden in one. **5.1 built the mechanism; 5.2 put those routes behind it** — and not
+only those seven. The application had twenty-two routes by then, and guarding the seven that had
+been named while leaving `/estate/units/:id`, `/estate/incomplete` and the four
+`/documents/:id/...` screens open would have satisfied the sentence and defeated it.
+
+**The stance is declared at the route and enforced in one place.** Every route in this application
+carries `config: { staff: <permission> }` or `config: { staff: 'public' }`, an `onRequest` hook in
+the composition root calls this module's `requireStaff` with whatever the route declared, and an
+`onRoute` hook **refuses to start the application** if a route declares neither. The default is
+therefore deny, and a route that is open is open because somebody wrote the word `public` next to
+it. That inversion is the whole point: the seven routes were not open because anyone decided they
+should stay open, they were open because being open was what happened when nobody said otherwise.
 
 This module answers exactly three questions and refuses to answer a fourth:
 
@@ -205,16 +216,42 @@ read once and discarded in the same request.
 
 ### The cookie
 
-`dona_session`, `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`. `SameSite=Lax` is this module's real
-cross-site defence until 5.2 and is stated as such: a cross-origin form POST does not carry the
-cookie.
+`dona_session`, `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`. `SameSite=Lax` is a real cross-site
+defence and is stated as one — a cross-origin form POST does not carry the cookie — but from 5.2 it
+is the second of two rather than the only one.
 
-**There is no CSRF token before 5.2**, which owns "the write route gets a token that means
-something". Building half of one here — a token on the staff forms and none on `POST /documents` —
-is precisely the drift that moving the page shell into `src/kernel/ui/page.ts` existed to prevent.
-When 5.2 lands, `POST /staff/operators` and `POST /staff/logout` are inside the token's scope with
-every other write route, the two `GET /staff/auth/*` routes are deliberately outside it, and this
-paragraph is deleted rather than amended.
+### The CSRF token, and why it is derived rather than stored
+
+**Slice 5.2.** The token is `sha256('csrf:' + <session token>)`, hex, computed from the cookie the
+request already carries. It is **never stored**: no column, no second secret to rotate, and
+`tests/policy/staff-session.test.ts` — no column in this database whose name contains `token` may be
+anything but a `_hash` — stays green by construction rather than by remembering. The session cookie
+is `HttpOnly`, so a cross-origin page cannot read the token to derive the value; a page on this
+origin can, and a page on this origin could post anyway.
+
+It is one token per session, not one per form. A per-form nonce would need somewhere to live, and
+the only somewhere available is the table this module is forbidden to put a token in.
+
+**The scope is every write route in the application**, not this module's alone: `POST /documents`,
+`POST /documents/:id/promote`, `POST /documents/:id/seed`, `POST /documents/:id/tenancy`,
+`POST /estate/incomplete/:tenancyId/exception`, `POST /staff/operators` and `POST /staff/logout`.
+Enforcement is one `preHandler` hook in the composition root, which is why the list above is a
+consequence of the method rather than a list anybody maintains.
+
+**The two `GET /staff/auth/*` routes are deliberately outside it.** They change no row of ours, and
+`state` — minted into a one-shot `HttpOnly` cookie and compared in constant time — is the
+anti-forgery value that flow carries by construction. A CSRF token on them would be a second
+mechanism doing the first one's job.
+
+**`POST /documents` is the one route that checks the token inside its handler.** Its body is a
+multipart stream, and a `preHandler` that read the field would consume the stream the handler needs.
+It declares `csrf: 'in-body'` in its route config and calls the same `verifyCsrf` the hook calls —
+one comparison, two call sites, and a test asserts that exactly one route in the application
+declares `in-body`.
+
+A screen that renders a `<form method="post">` and no hidden `csrf` input is caught by
+`tests/ui/tokens.test.ts` over its whole `SCREENS` registry, which is the assertion that catches the
+eighth form rather than the seven that exist today.
 
 ---
 
@@ -298,8 +335,6 @@ non-answer the screen gives.
 
 ## What this module deliberately does not do yet
 
-- **Guard the seven unauthenticated routes.** Slice 5.2, with the CSRF token and the per-caller
-  upload bound in the same change.
 - **Enforce `national_id`.** Slice 5.3, as a policy case, red first.
 - **Assert what second factor Google used.** It cannot; see ADR-0005 and the allowlist that stands
   in its place.

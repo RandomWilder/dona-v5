@@ -156,8 +156,9 @@ const OCCUPANTS_SQL = `
 // worse than useless in the review it exists for. So the grid asks once, for the units it is about
 // to draw, and the audit line says so.
 //
-// **It returns no name and no number**, and that is a rule rather than an economy: `/estate` has no
-// session until week 5 (SPEC-estate.md), so what a screen may show today is a state and a count.
+// **It returns no name and no number**, and that is a rule rather than an economy: `/estate` went
+// behind the session at 5.2 and the rule stayed (SPEC.md), so what a screen shows is a state and a
+// count.
 // `resolvePartiesInUnit` is still the call for the unit screen, where the people are the subject.
 //
 // A null `unitIds` is the whole portfolio, which is the buildings list asking how much of the estate

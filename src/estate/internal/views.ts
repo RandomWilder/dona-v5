@@ -12,13 +12,14 @@
 // edge in both directions, and `left` is not.
 //
 // **Four screens from 2.6, and one rule across all of them: no name and no number reaches this
-// layer.** These routes have no session until week 5 (SPEC-estate.md, and 1.11's carry restated at
-// 2.1, 2.3 and 2.4), so what an unauthenticated screen may show about a household is a *state* and a
+// layer.** These routes went behind the session at 5.2, **and the rule survived the slice that was
+// entitled to lift it** (SPEC.md, and 1.11's carry restated at 2.1, 2.3 and 2.4): what a screen may
+// show about a household is a *state* and a
 // *count*. The occupancy chip says a unit is let and by how many residents; it does not say by whom,
 // and search does not reach `party` at all. That is a decision the views enforce by never being
 // handed the data, not a discipline they remember.
 import { type Html, h } from '../../kernel/ui/html.ts';
-import { renderPage } from '../../kernel/ui/page.ts';
+import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import type {
   BuildingDetail,
   BuildingSummary,
@@ -443,59 +444,19 @@ export function renderUnitPage(
 }
 
 // ------------------------------------------------------------------------------------------------
-// Slice 2.6 — the root index, search, and the leases ending soon.
+// Slice 2.6 — search and the leases ending soon. (The root index was here too, until 5.2.)
 // ------------------------------------------------------------------------------------------------
 
 /**
- * **`GET /` stops being a redirect here** (1.11's carry).
+ * **The root index left this file at slice 5.2**, on the schedule 2.6 set for it: it moves to the
+ * composition root the week a second *module* has a screen, because an index of screens is not
+ * estate's fact. It is `src/index-page.ts` now, registered by `src/app.ts`, and its nav names both
+ * modules' routes and carries the sign-out form — none of which estate could have written.
  *
- * It was a 302 to `/estate` because `/estate` was the only screen in the system, and 1.11 said it
- * would stop the week a second one existed. Four do now.
- *
- * **It runs no query**, which is the decision worth stating. A portfolio headline belongs on the
- * buildings list, where the numbers are already being read for the cards; an index that ran three
- * portfolio queries to render three links would be a worse root than the redirect was. It moves to
- * the composition root the week a second *module* has a screen — week 5's staff console — because
- * an index of screens is not estate's fact. Today all three are estate's, so it lives here.
+ * What 2.6 decided about it still holds and is worth keeping where somebody looking for it will
+ * find it: **it runs no query**. A portfolio headline belongs on the buildings list, where those
+ * numbers are already being read for the cards.
  */
-export function renderIndexPage(): string {
-  const body = h`
-    <div>
-      <h1>דונה דום · ניהול נכסים</h1>
-      <p class="lede">נתוני הדגמה. אין עדיין הזדהות — המסכים אינם מציגים שמות או מספרי טלפון.</p>
-    </div>
-    <div class="index-list">
-      <article class="row-card">
-        ${marker('ACTIVE')}
-        <a class="card-link" href="/estate">
-          <p class="card-title"><span>בניינים</span></p>
-          <p class="lede">כל הבניינים, מספר היחידות בכל אחד וכמה מהן מאוכלסות היום.</p>
-        </a>
-      </article>
-      <article class="row-card">
-        ${marker('ACTIVE')}
-        <a class="card-link" href="/estate/expiring">
-          <p class="card-title"><span>חוזים מסתיימים</span></p>
-          <p class="lede">כל החוזים בתיק המסתיימים ב־60 הימים הקרובים, לפי תאריך.</p>
-        </a>
-      </article>
-      <article class="row-card">
-        ${marker('ALERT')}
-        <a class="card-link" href="/estate/incomplete">
-          <p class="card-title"><span>חוזים לא שלמים</span></p>
-          <p class="lede">טיוטות וחוזים פעילים שחסר בהם ערב, על המסמך שהיה אמור לשאת אותו.</p>
-        </a>
-      </article>
-      <article class="row-card">
-        ${marker('ACTIVE')}
-        <a class="card-link" href="/estate/search">
-          <p class="card-title"><span>חיפוש</span></p>
-          <p class="lede">כתובת, שם בניין, מספר דירה או סוג מסמך, על פני כל התיק.</p>
-        </a>
-      </article>
-    </div>`;
-  return page('דונה דום — ניהול נכסים', body);
-}
 
 function unitHits(results: SearchResults): Html {
   return h`<div class="row-list">
@@ -539,9 +500,9 @@ function documentHits(hits: readonly DocumentSearchHit[]): Html {
 /**
  * **Search across the portfolio — buildings, units and documents, and deliberately not people.**
  *
- * A search box that reached `party` would put a real person behind a route with no session, the week
- * the register arrives. An address is not personal data and a name is; the name search is week 5's,
- * behind the login that makes it lawful to show. Slice 3.6 grew this screen by a documents half
+ * A search box that reached `party` would put a real person on a screen. An address is not personal
+ * data and a name is; **5.2 put a login in front of this screen and did not open the name search**,
+ * because a session says who is asking rather than what a household's name is for (SPEC.md). Slice 3.6 grew this screen by a documents half
  * rather than forking a second one.
  */
 export function renderSearchPage(
@@ -613,7 +574,7 @@ export function renderSearchPage(
  * **Q5 — every lease in the portfolio ending inside the window, one indexed query.**
  *
  * It shows a unit, a building and a date, and no party at all: which lease ends when is an
- * operations fact, and who is on it is not this screen's to say before week 5.
+ * operations fact, and who is on it is still not this screen's to say (SPEC.md, decided at 5.2).
  */
 // Hebrew counts in three, not in two. “בעוד 1 ימים” is wrong in the way a room full of Hebrew
 // speakers notices immediately and a template that only special-cases zero produces every day.
@@ -689,6 +650,15 @@ export interface IncompleteTenancyRow {
  */
 export function renderIncompletePage(
   rows: readonly IncompleteTenancyRow[],
+  /**
+   * The CSRF token for this session (slice 5.2). The one form on this screen carries it.
+   *
+   * **Required, and it was briefly a default.** A default of `''` type-checks at every call site
+   * and renders an empty hidden input, which is a form that posts and is always refused — found by
+   * clicking the screen on `:3000` before merge, which is what that step is for. A required
+   * parameter makes the route that forgets it fail to compile.
+   */
+  csrf: string,
 ): string {
   const body = h`
     <div>
@@ -726,6 +696,7 @@ export function renderIncompletePage(
                   method="post"
                   action="/estate/incomplete/${row.tenancy_id}/exception"
                 >
+                  ${csrfInput(csrf)}
                   <input
                     id="reason-${row.tenancy_id}"
                     name="reason"

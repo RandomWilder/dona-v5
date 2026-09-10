@@ -156,13 +156,16 @@ occupancy beside it, from 2.6.
 the system, and 1.11 said it would stop the week a second one existed. **It runs no query**: a
 portfolio headline belongs on the buildings list, where those numbers are already being read for the
 cards, and an index that ran three portfolio queries to render three links would be a worse root than
-the redirect was. It moves to the composition root the week a second *module* has a screen — week 5's
-staff console — because an index of screens is not estate's fact. All three are estate's today.
+the redirect was. **It moved to the composition root at slice 5.2**, as this paragraph had said it
+would since 2.6 — the week a second *module* had a screen — because an index of screens is not
+estate's fact. It lives at `src/index-page.ts`, beside `src/app.ts` which registers it, and it is the
+one screen in this system whose nav spans two modules and carries the sign-out form.
 
 **`GET /estate/search?q=` searches buildings and units, and deliberately not people.** A search that
 reached `party` would put a real person behind a route with no session, the week the register
 arrives; an address and a unit number are not personal data, and a name is. The name search is week
-5's, behind the login that makes showing it lawful. A **city matches buildings and not units**: a city
+still owed: 5.2 built the login and **declined to lift the rule on the strength of it alone**
+(SPEC.md, and 5.4 reconsiders). A **city matches buildings and not units**: a city
 holds hundreds of apartments and sixty arbitrary ones is a worse answer than the buildings that
 contain them, while a building name or an address narrows to one building and matches both.
 
@@ -210,18 +213,20 @@ are let today, because deciding when a tenancy counts is what only that module m
 `countUnitsByBuilding` says *where* they are, because that is estate's own structure. The buildings
 list costs two queries rather than one per building.
 
-The chip is a state and a count and never a name, which is the rule every screen here keeps until
-week 5 gives them a session.
+The chip is a state and a count and never a tenant's name, which is the rule every screen here keeps
+— including after 5.2, which was entitled to lift it behind the session and did not.
 
-**There is no authentication on any of these screens, and that is a dated state, not a design.** Staff auth
-is Google sign-in behind an allowlist, built at week 5 (5.1, amended by 5.1b). Until then the screens serve fixture data with no
-personal data in it, and carry `noindex`. The week-5 row in [tasks/roadmap.md](tasks/roadmap.md) owns
-closing it; nothing may put a real party or contact behind these routes before it does.
+**These screens went behind the session at slice 5.2**, which closed the dated state this paragraph
+described from 1.11 to week 5. Staff auth is Google sign-in behind an allowlist (5.1, amended by
+5.1b); every estate route now declares the permission it requires — `estate.read` for the six reads,
+`tenancy.write` for the exception POST — and a request with no session is sent to `/staff/login`
+rather than served. The screens still carry `noindex` and still serve fixture data, because the real
+corpus is gated behind F6 and not behind the login.
 
 **Document metadata may appear; the bytes may not.** Slice 3.6 puts type, dates, ingest date, the
 `gs://` path as text and the verification verdict on the building page (BUILDING-linked paper) and
-on the unit page (UNIT-linked paper). A signed URL is a bearer token for one object and is week 5's
-to mint, behind the session. Who signed the paper is still `src/scope/`'s answer and is not on these
+on the unit page (UNIT-linked paper). A signed URL is a bearer token for one object; the session it
+needs exists from 5.2, and **slice 5.4 is where the panel mints one**. Who signed the paper is still `src/scope/`'s answer and is not on these
 screens. Real tenant documents remain gated behind F6.
 
 **Each listed document opens the read overlay** (`/documents/:id/read`). A lease also offers
@@ -230,11 +235,13 @@ stays text. Building-level paper still lists only on the building page; unit pap
 on the unit page — the building screen is not a tenancy draft.
 
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
-`GET`/`POST /documents/new`, reached from a unit row on the building page. It is unauthenticated for
-the same dated reason and is bounded rather than trusted, which
-[SPEC-evidence.md](SPEC-evidence.md) states in full: one file, 20 MB, four kinds sniffed from the
-bytes, no filename kept, nothing personal on the screen, and **only tier-1 specimens filed before
-week 5**, because the real corpus is gated behind F6 and arrives later than the session does.
+`GET`/`POST /documents/new`, reached from a unit row on the building page. It went behind the session
+at 5.2 with everything else, and its bounds are stated in full by
+[SPEC-evidence.md](SPEC-evidence.md): one file, 20 MB, four kinds sniffed from the
+bytes, no filename kept, nothing personal on the screen, a CSRF token from 5.2, and **fifty filed
+documents per operator per rolling day**, which is the bound on a caller that none of the others
+were. Only tier-1 specimens are filed until the corpus arrives, because it is gated behind F6 and
+not behind the login.
 
 **`getUnit` joined this module's read model at 3.3**, returning the `UnitHit` shape the search screen
 already uses — a unit number and the building it is in, and no party. Evidence asks for it to render
@@ -253,8 +260,8 @@ estate query of `extracted_field`.
 **`GET /estate/incomplete` is A4's queue (slice 4.8).** Same standing as `/estate/expiring`: a
 portfolio operations list, a unit and a date and a missing-rule label, and no party. Completeness
 is tenancy's query; the POST that records an exception is tenancy's write; both are injected. The
-root index and the top nav gain a fourth link. The index still lives here — week 5 still moves it
-when a second *module* has a screen.
+root index and the top nav gain a fourth link. The index lived here until **5.2 moved it to
+`src/index-page.ts`**, on the schedule 2.6 set for it.
 
 ## The importer — `importEstate`, `src/estate/internal/importer.ts`
 

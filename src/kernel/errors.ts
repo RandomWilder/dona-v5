@@ -3,6 +3,10 @@ export type ErrorCode =
   | 'not_allowed'
   | 'conflict'
   | 'invalid'
+  // Slice 5.2. A cap refusal is not the same sentence as a permission refusal: `not_allowed` tells
+  // an operator "you may not do this" when the truth is "not this many, not today". The per-caller
+  // upload bound is the first caller, and it will not be the last.
+  | 'too_many'
   | 'unavailable';
 
 export interface ErrorBody {
@@ -42,6 +46,7 @@ const statusByCode: Record<ErrorCode, number> = {
   not_allowed: 403,
   not_found: 404,
   conflict: 409,
+  too_many: 429,
   unavailable: 503,
 };
 

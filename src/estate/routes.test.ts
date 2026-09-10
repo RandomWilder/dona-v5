@@ -9,11 +9,17 @@
 // had put in a developer's database.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { asOperator, signIn, signOutAll } from '../../tests/support/session.ts';
 import { buildApp } from '../app.ts';
+import { systemClock } from '../kernel/clock.ts';
 import { newId } from '../kernel/ids.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
 import type { EstatePlan } from './contract.ts';
 import { importEstate } from './contract.ts';
+
+// Slice 5.2: these routes are behind the session now, so the suite holds one. What it asserts is
+// unchanged — what changed is that a request without this cookie never reaches the assertion.
+const STAFF_DOMAIN = 'estate-routes.test';
 
 const CITY = 'עיר בדיקה';
 const ADDRESS = 'רחוב בדיקה 1';
@@ -66,6 +72,11 @@ describe('estate · the routes', () => {
       return;
     }
     const app = buildApp({ pool, version: '9.9.9-test' });
+    await signOutAll(pool, STAFF_DOMAIN);
+    const who = await signIn(pool, systemClock, {
+      email: `ops@${STAFF_DOMAIN}`,
+    });
+    const client = asOperator(app, who);
     let buildingId = '';
     let unitId = '';
     try {
@@ -87,7 +98,7 @@ describe('estate · the routes', () => {
       // screen existed. Slice 2.6 is that week, and this case is the redirect's obituary: it asserts
       // the index renders and links onward, rather than that the root has moved.
       await t.test('the root is an index of the screens', async () => {
-        const response = await app.inject({ method: 'GET', url: '/' });
+        const response = await client.inject({ method: 'GET', url: '/' });
         assert.equal(response.statusCode, 200);
         assert.match(response.body, /href="\/estate"/);
         assert.match(response.body, /href="\/estate\/expiring"/);
@@ -98,7 +109,10 @@ describe('estate · the routes', () => {
       await t.test(
         'the buildings list is HTML and names the building',
         async () => {
-          const response = await app.inject({ method: 'GET', url: '/estate' });
+          const response = await client.inject({
+            method: 'GET',
+            url: '/estate',
+          });
           assert.equal(response.statusCode, 200);
           assert.match(
             String(response.headers['content-type']),
@@ -114,7 +128,7 @@ describe('estate · the routes', () => {
       );
 
       await t.test('the building screen names its units', async () => {
-        const response = await app.inject({
+        const response = await client.inject({
           method: 'GET',
           url: `/estate/buildings/${buildingId}`,
         });
@@ -128,7 +142,7 @@ describe('estate · the routes', () => {
       await t.test(
         'the unit screen is a thin sheet with a documents panel',
         async () => {
-          const response = await app.inject({
+          const response = await client.inject({
             method: 'GET',
             url: `/estate/units/${unitId}`,
           });
@@ -144,7 +158,7 @@ describe('estate · the routes', () => {
       );
 
       await t.test('the stylesheet the screens link to is served', async () => {
-        const response = await app.inject({
+        const response = await client.inject({
           method: 'GET',
           url: '/ui/tokens.css',
         });
@@ -160,7 +174,7 @@ describe('estate · the routes', () => {
       // in tests/ui/tokens.test.ts against the markup; what is proved here is the vacant state
       // through the whole stack, which is the one this building can tell the truth about.
       await t.test('a unit with no lease reads as a vacancy', async () => {
-        const response = await app.inject({
+        const response = await client.inject({
           method: 'GET',
           url: `/estate/buildings/${buildingId}`,
         });
@@ -170,7 +184,7 @@ describe('estate · the routes', () => {
       });
 
       await t.test('search finds the building, and by name only', async () => {
-        const found = await app.inject({
+        const found = await client.inject({
           method: 'GET',
           url: `/estate/search?q=${encodeURIComponent('בניין בדיקה')}`,
         });
@@ -183,7 +197,7 @@ describe('estate · the routes', () => {
       });
 
       await t.test('an empty search asks rather than lists', async () => {
-        const empty = await app.inject({
+        const empty = await client.inject({
           method: 'GET',
           url: '/estate/search',
         });
@@ -195,7 +209,7 @@ describe('estate · the routes', () => {
         'a lone wildcard finds nothing, through the stack',
         async () => {
           // The escaping decision, end to end: unescaped this is every building in the portfolio.
-          const wild = await app.inject({
+          const wild = await client.inject({
             method: 'GET',
             url: '/estate/search?q=%25',
           });
@@ -207,7 +221,7 @@ describe('estate · the routes', () => {
       await t.test(
         'the leases ending screen answers for the portfolio',
         async () => {
-          const ending = await app.inject({
+          const ending = await client.inject({
             method: 'GET',
             url: '/estate/expiring',
           });
@@ -270,20 +284,39 @@ describe('estate · the routes', () => {
             [documentId, tenancyId],
           );
 
-          const listed = await app.inject({
+          const listed = await client.inject({
             method: 'GET',
             url: '/estate/incomplete',
           });
           assert.equal(listed.statusCode, 200);
           assert.match(listed.body, /חוזים לא שלמים/);
           assert.match(listed.body, /חסר ערב/);
+          // **Slice 5.2, and the defect this case now owns.** `renderIncompletePage` took its token
+          // with a default of `''`, so the route that never passed one compiled, rendered, and
+          // served an exception form refused on every submit. It is asserted *here* rather than in
+          // `src/guard.test.ts` because this screen renders one form per incomplete tenancy, and
+          // this is the case that builds the tenancy — a database with none renders no form, and an
+          // assertion over no forms is a guard that passed because it looked at nothing.
+          const tokens = [
+            ...listed.body.matchAll(/name="csrf" value="([^"]*)"/g),
+          ].map((match) => match[1]);
+          //
+          // The floor is `> 0` and not `=== 1`: this case *creates* one incomplete tenancy, so at
+          // least one form exists whatever else the database holds — but a developer's database
+          // holds whatever `npm run seed:register` left, and a count of exactly one would be this
+          // assertion depending on a fixture from the other direction. Every token is checked,
+          // which is the property; the floor is what stops it passing over an empty page.
+          assert.ok(tokens.length > 0, 'the exception form is not on the page');
+          for (const token of tokens) {
+            assert.equal(token, who.csrf);
+          }
           assert.match(listed.body, new RegExp(`/estate/units/${unitId}`));
           assert.match(
             listed.body,
             new RegExp(`/documents/${documentId}/read`),
           );
 
-          const cleared = await app.inject({
+          const cleared = await client.inject({
             method: 'POST',
             url: `/estate/incomplete/${tenancyId}/exception`,
             headers: {
@@ -294,7 +327,7 @@ describe('estate · the routes', () => {
           assert.equal(cleared.statusCode, 302);
           assert.equal(cleared.headers.location, '/estate/incomplete');
 
-          const after = await app.inject({
+          const after = await client.inject({
             method: 'GET',
             url: '/estate/incomplete',
           });
@@ -308,14 +341,14 @@ describe('estate · the routes', () => {
       await t.test(
         'a malformed id is invalid, a missing one is not_found',
         async () => {
-          const malformed = await app.inject({
+          const malformed = await client.inject({
             method: 'GET',
             url: '/estate/buildings/not-an-id',
           });
           assert.equal(malformed.statusCode, 400);
           assert.equal(malformed.json().code, 'invalid');
 
-          const missing = await app.inject({
+          const missing = await client.inject({
             method: 'GET',
             url: '/estate/buildings/11111111-1111-4111-8111-111111111111',
           });
@@ -324,7 +357,7 @@ describe('estate · the routes', () => {
           // The refusal says not_found and nothing more (SPEC.md error shape).
           assert.equal(missing.json().message, 'building not found');
 
-          const missingUnit = await app.inject({
+          const missingUnit = await client.inject({
             method: 'GET',
             url: '/estate/units/11111111-1111-4111-8111-111111111111',
           });
@@ -334,6 +367,7 @@ describe('estate · the routes', () => {
         },
       );
     } finally {
+      await signOutAll(pool, STAFF_DOMAIN);
       // Precise, and in dependency order. Nothing else in the database is touched.
       await pool.query(
         `DELETE FROM tenancy_completeness_exception

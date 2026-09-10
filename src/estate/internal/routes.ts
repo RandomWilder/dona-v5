@@ -34,7 +34,6 @@ import {
   renderBuildingsPage,
   renderExpiringPage,
   renderIncompletePage,
-  renderIndexPage,
   renderSearchPage,
   renderUnitPage,
 } from './views.ts';
@@ -90,6 +89,21 @@ function html(reply: { header: (k: string, v: string) => unknown }): void {
   reply.header('x-content-type-options', 'nosniff');
 }
 
+/**
+ * **What every route on this module declares, from slice 5.2.** These screens served
+ * unauthenticated from week 1 to week 5 — deliberately, on fixture data, and stated in six files
+ * rather than hidden in one. They are behind the session now, and the stance is written at the
+ * route because `src/app.ts` refuses to start the process for a route that declares none: a
+ * screen added here next month is guarded before anybody remembers to guard it.
+ *
+ * `estate.read` and not `documents.read`, even on the screens that list filed paper: what those
+ * panels show is estate's answer about a building or a unit, and the document module's own routes
+ * are where `documents.read` is asked for. The exception POST writes a tenancy row through
+ * `src/tenancy/`, so it asks for `tenancy.write` rather than for anything of estate's.
+ */
+const READ = { config: { staff: 'estate.read' } } as const;
+const WRITE = { config: { staff: 'tenancy.write' } } as const;
+
 export function registerEstateRoutes(
   app: FastifyInstance,
   deps: EstateDeps,
@@ -97,14 +111,10 @@ export function registerEstateRoutes(
   // The urlencoded parser lived here from 2.6 and moved to `src/kernel/ui/forms.ts` at 5.1, when
   // `src/staff/` became the second module with a form. The composition root registers it once.
 
-  // 1.11 made this a 302 to `/estate` and said it would stop being one the week a second screen
-  // existed. This is that week.
-  app.get('/', async (_request, reply) => {
-    html(reply);
-    return renderIndexPage();
-  });
+  // `GET /` was registered here from 1.11 and **moved to the composition root at 5.2**, with the
+  // view it rendered. It is `src/app.ts` and `src/index-page.ts` now.
 
-  app.get('/estate', async (_request, reply) => {
+  app.get('/estate', READ, async (_request, reply) => {
     const buildings = await listBuildings(deps.pool);
     // **Two questions, two modules, and neither learns the other's rule.** `src/scope/` says which
     // units are let today, because deciding when a tenancy counts is what only that module may do;
@@ -123,7 +133,7 @@ export function registerEstateRoutes(
     return renderBuildingsPage(buildings, byBuilding);
   });
 
-  app.get('/estate/search', async (request, reply) => {
+  app.get('/estate/search', READ, async (request, reply) => {
     const asked = (request.query as { q?: string }).q ?? '';
     // Validated at the edge (AGENTS.md): trimmed, capped, and the LIKE metacharacters escaped in the
     // read model. A term is bound as a parameter, and a parameter can still mean `%`.
@@ -144,20 +154,21 @@ export function registerEstateRoutes(
     });
   });
 
-  app.get('/estate/expiring', async (_request, reply) => {
+  app.get('/estate/expiring', READ, async (_request, reply) => {
     const leases = await listExpiringLeases(deps.pool, deps.clock.now());
     html(reply);
     return renderExpiringPage(leases, EXPIRING_WINDOW_DAYS);
   });
 
-  app.get('/estate/incomplete', async (_request, reply) => {
+  app.get('/estate/incomplete', READ, async (request, reply) => {
     const rows = await deps.listIncompleteTenancies(deps.pool);
     html(reply);
-    return renderIncompletePage(rows);
+    return renderIncompletePage(rows, request.csrf ?? '');
   });
 
   app.post<{ Params: { tenancyId: string } }>(
     '/estate/incomplete/:tenancyId/exception',
+    WRITE,
     async (request, reply) => {
       const tenancyId = validId(request.params.tenancyId, 'tenancyId');
       const posted = request.body as { reason?: string };
@@ -172,7 +183,7 @@ export function registerEstateRoutes(
     },
   );
 
-  app.get('/estate/buildings/:buildingId', async (request, reply) => {
+  app.get('/estate/buildings/:buildingId', READ, async (request, reply) => {
     const { buildingId } = request.params as { buildingId: string };
     // Validated at the edge, before it reaches a query: a malformed id is `invalid` and a
     // well-formed one that is not there is `not_found`, and neither leaks which. getBuilding throws
@@ -198,7 +209,7 @@ export function registerEstateRoutes(
     return renderBuildingPage(detail, occupancy, documents);
   });
 
-  app.get('/estate/units/:unitId', async (request, reply) => {
+  app.get('/estate/units/:unitId', READ, async (request, reply) => {
     const { unitId } = request.params as { unitId: string };
     const unit = await getUnit(deps.pool, validId(unitId, 'unitId'));
     const occupied = await resolveOccupiedUnits(

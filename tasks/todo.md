@@ -45,20 +45,24 @@ and it touches its *sizing* rather than its ability to start.
 
 ## The one sentence that must survive this week
 
-**Seven routes have been served unauthenticated since week 1** — `/`, `/estate`,
-`/estate/buildings/:id`, `/estate/search`, `/estate/expiring`, `GET /documents/new` and
-`POST /documents` — deliberately, on fixture data, stated in six files rather than hidden in one.
-**Nothing may put a real party, contact or document behind them before 5.2 closes.** That constraint
-is now four weeks old. It is the reason the corpus is gated behind F6 *and* behind a session, and it
-is the single most important thing carried out of month one.
+~~**Seven routes have been served unauthenticated since week 1**~~ — **closed 10 Sep by 5.2**
+([evidence/5.2.md](evidence/5.2.md)). Every route in the application is behind the session, every
+write route carries a CSRF token derived from it, and an undeclared route now stops the process from
+starting rather than serving. The corpus stays gated behind **F6** — that was always the other half,
+and it is unchanged by this.
+
+**What replaces it as the sentence to keep:** *every screen shows a state and a count and never a
+tenant's name.* 5.2 was the slice entitled to lift that on the strength of the session and **kept
+it**, tightening the wording rather than relaxing it. **Reconsidered at 5.4.**
 
 ---
 
 ## Carried in from week 4 — every item, with the slice that closes it
 
-- [ ] **Session, CSRF, and a cap on upload *count*.** → **5.2**, all three halves in one change. A
-      token defends a session's authority and there is none; 20 MB bounds a file and nothing bounds a
-      caller.
+- [x] **Session, CSRF, and a cap on upload *count*. CLOSED 10 Sep by 5.2**, all three in one change.
+      22 routes declare a stance and 7 are `public`; the token is `sha256('csrf:' + session token)`
+      and is held in no column; the cap is **50 filed documents per operator per rolling 24h**,
+      counted off `audit_log`, refused attempts included. `too_many` → 429 is the sixth `ErrorCode`.
 - [ ] **`uploaded_by`, signed URLs, and `superseded_by` re-asked.** → **5.4**. All three held for the
       same reason and released by the same fact.
 - [ ] **`national_id` never in an agent tool's response shape.** → **5.3**, a policy case, red first.
@@ -69,8 +73,9 @@ is the single most important thing carried out of month one.
       **5.7**.
 - [ ] **The A9 settings screen** — the catalogue has been dynamic since week 3 and the hand on it has
       been a seed. → **5.8**.
-- [ ] **The root index moves from `src/estate/` to the composition root** — this is the week a second
-      *module* has a screen. → **5.2**.
+- [x] **The root index moved from `src/estate/` to the composition root. CLOSED 10 Sep by 5.2** —
+      `src/index-page.ts`, registered by `src/app.ts`. It is the one screen whose nav names both
+      modules' routes and carries the sign-out form.
 - [x] **4.5 — the accuracy number. CUT and travelling**, not this week's. It goes to pilot
       preparation with **F6**, bounded by **week 12**; the same treatment 2.5 took with F3 and 3.4
       with F4. Recorded in full at [roadmap.md](roadmap.md) § 4.5 and
@@ -263,8 +268,11 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       → 24" is **27 → 26**: 5.0-cut removed two tables, not three.
       **Plan mode. Deps:** 5.1 · **M**
 
-- [ ] **5.2 — The screens go behind the session, and the write route gets a token that means
-      something.** Both halves in one change, plus the bound none of 3.3's bounds are: a **per-caller**
+- [x] **5.2 — The screens go behind the session, and the write route gets a token that means
+      something. CLOSED 10 Sep** — [evidence/5.2.md](evidence/5.2.md). 487 code + 41 hooks + 50
+      policy, 0 failed. Two cases red first; a third was written because clicking `:3000` found a
+      screen serving an **empty** token that every gate had passed. **The never-a-name rule was
+      KEPT** and the wording tightened to *a tenant's name*; reconsidered at 5.4. Both halves in one change, plus the bound none of 3.3's bounds are: a **per-caller**
       cap on upload *count*. The root index moves to the composition root.
       **Done when:** none of the seven routes answers without a session; a POST with a valid session
       and no token is refused; an authenticated caller is bounded on upload **count** as well as
@@ -317,6 +325,14 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       promotions**.
       **Verify:** `uploaded_by` is the signed-in operator; a stale URL is refused; the supersession
       answer cites a count, not a view.
+      **Carried in from 5.2, two things.** (1) **`request.staff` is set on every guarded route and
+      read by exactly one handler** — `POST /documents`, for the cap and the audit line. Every other
+      write route still records a *user-typed* name: `confirmed_by`, `promoted_by`, and the
+      exception's `actor: 'console'`. This is the slice that owns provenance, so it is the slice that
+      decides whether those become the signed-in operator or stay snapshot strings on purpose.
+      (2) **The never-a-name rule is reconsidered here**, because this slice is already deciding what
+      a session unlocks. 5.2 kept it and said why; keeping it a second time is an answer, and so is
+      lifting it — what is not allowed is it lapsing.
       **Plan mode. Deps:** 5.1, 5.2 · **M**
 
 - [ ] **5.5 — Promotion at scale, and the amendment that changes a real unit.** The demo's first
@@ -368,8 +384,16 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       for who may do what — an access-control matrix a database write could widen is a
       privilege-escalation path wearing the clothes of a setting (`SPEC-staff.md`). The permission
       this screen guards with is `settings.write`, which exists from 5.1.
+      **Carried in from 5.2: the route→permission mapping is a first cut and nothing tests that it
+      is the *intended* one.** 22 routes each declare a permission or `public`, and the boot check
+      proves every route declares *something* — it cannot prove `/documents/:id/promote` should ask
+      for `tenancy.write` rather than `documents.write`. This is the first slice with an operator
+      looking at the matrix, so it is the slice that reads the mapping back and says whether it is
+      the one meant. **The public list is 7 and is asserted exactly** in `src/guard.test.ts`; a
+      change to it is a decision, not a diff.
       **Verify:** add one of each on staging; a role without the permission is refused with
-      `not_allowed`; grep the screen for `asset_type` and find nothing.
+      `not_allowed`; grep the screen for `asset_type` and find nothing; the route→permission mapping
+      is read back against the matrix on screen and either confirmed or corrected in writing.
       **Deps:** 5.1, 5.7 · **M**
 
 ---

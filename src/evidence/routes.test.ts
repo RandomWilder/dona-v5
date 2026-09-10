@@ -12,6 +12,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { specimenDocuments } from '../../evals/fixtures/specimen-clauses.ts';
+import {
+  asOperator,
+  type SignedIn,
+  signIn,
+  signOutAll,
+} from '../../tests/support/session.ts';
 import { buildApp } from '../app.ts';
 import type { EstatePlan } from '../estate/contract.ts';
 import { importEstate } from '../estate/contract.ts';
@@ -73,6 +79,17 @@ const specimen = (file: string): string => {
   return found.text;
 };
 
+const STAFF_DOMAIN = 'evidence-routes.test';
+
+/**
+ * The operator this suite drives as. **Slice 5.2**: this route is behind the session now, it is the
+ * one route in the system that verifies its own CSRF token, and both facts are properties of the
+ * request rather than of the assertions — so they are here, once, and every case gets them.
+ */
+let who: SignedIn;
+const as = <T extends { inject: (o: never) => unknown }>(app: T): T =>
+  asOperator(app as never, who) as unknown as T;
+
 const BOUNDARY = '----donadomtest';
 
 /**
@@ -88,7 +105,10 @@ function upload(
   file: { filename: string; bytes: Buffer } | null,
 ): { payload: Buffer; headers: Record<string, string> } {
   const parts: Buffer[] = [];
-  for (const [name, value] of Object.entries(fields)) {
+  // The token rides in the body, as a part, because this body is the multipart stream the route
+  // parses itself (SPEC-evidence.md). It is first, before the file, which is the order an HTML form
+  // sends a hidden input that is written above the file input.
+  for (const [name, value] of Object.entries({ csrf: who.csrf, ...fields })) {
     parts.push(
       Buffer.from(
         `--${BOUNDARY}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
@@ -161,6 +181,10 @@ describe('evidence · the upload route', () => {
     let unitId = '';
 
     try {
+      await signOutAll(pool, STAFF_DOMAIN);
+      who = await signIn(pool, fixedClock(AT), {
+        email: `ops@${STAFF_DOMAIN}`,
+      });
       await applyDocumentTypeCatalogue(pool, seedDocumentTypes);
       await importEstate(pool, plan);
       const found = await pool.query<{ unit_id: string }>(
@@ -174,7 +198,7 @@ describe('evidence · the upload route', () => {
       assert.ok(unitId);
 
       await t.test('the screen offers the catalogue and the flat', async () => {
-        const response = await lease.inject({
+        const response = await as(lease).inject({
           method: 'GET',
           url: `/documents/new?unit=${unitId}`,
         });
@@ -183,7 +207,8 @@ describe('evidence · the upload route', () => {
         assert.match(response.body, /value="lease"/);
         assert.match(response.body, /value="handover_protocol"/);
         assert.match(response.body, /enctype="multipart\/form-data"/);
-        // The rule every screen keeps until week 5: a flat, a type and a date, never a name.
+        // The rule every screen keeps, and 5.2 kept deliberately: a flat, a type and a date,
+        // never a name.
         // A ULID can contain `053-0`; a mobile number is 05x plus seven more digits.
         assert.doesNotMatch(response.body, /05\d[- ]?\d{7}/);
       });
@@ -195,7 +220,7 @@ describe('evidence · the upload route', () => {
           // and it must reach neither the path nor the row nor the screen.
           { filename: 'שכירות כהן.pdf', bytes: pdfBytes('lease one') },
         );
-        const response = await lease.inject({
+        const response = await as(lease).inject({
           method: 'POST',
           url: '/documents',
           ...body,
@@ -205,7 +230,7 @@ describe('evidence · the upload route', () => {
           response.headers.location ?? '',
           /\/documents\/[0-9a-f-]{36}\/tenancy$/,
         );
-        const confirm = await lease.inject({
+        const confirm = await as(lease).inject({
           method: 'GET',
           url: String(response.headers.location),
         });
@@ -238,7 +263,7 @@ describe('evidence · the upload route', () => {
       await t.test(
         'the named lease is on the unit page and in search, as a door not a gs:// href',
         async () => {
-          const unitPage = await lease.inject({
+          const unitPage = await as(lease).inject({
             method: 'GET',
             url: `/estate/units/${unitId}`,
           });
@@ -251,7 +276,7 @@ describe('evidence · the upload route', () => {
           assert.doesNotMatch(unitPage.body, /href="gs:/);
           assert.doesNotMatch(unitPage.body, /storage\.googleapis\.com/);
 
-          const found = await lease.inject({
+          const found = await as(lease).inject({
             method: 'GET',
             url: `/estate/search?q=${encodeURIComponent('בניין מסמכים')}`,
           });
@@ -265,7 +290,7 @@ describe('evidence · the upload route', () => {
       await t.test(
         'refuses an ארנונה bill in the lease slot, and files nothing',
         async () => {
-          const response = await arnona.inject({
+          const response = await as(arnona).inject({
             method: 'POST',
             url: '/documents',
             ...upload(
@@ -290,7 +315,7 @@ describe('evidence · the upload route', () => {
       await t.test(
         'refuses a lease in the ארנונה slot — the other direction',
         async () => {
-          const response = await lease.inject({
+          const response = await as(lease).inject({
             method: 'POST',
             url: '/documents',
             ...upload(
@@ -309,7 +334,7 @@ describe('evidence · the upload route', () => {
       );
 
       await t.test('refuses a post with no file at all', async () => {
-        const response = await lease.inject({
+        const response = await as(lease).inject({
           method: 'POST',
           url: '/documents',
           ...upload({ unit: unitId, type: 'lease' }, null),
@@ -321,7 +346,7 @@ describe('evidence · the upload route', () => {
       await t.test(
         'an empty text layer files as unverified, HTTP 200 not 503',
         async () => {
-          const response = await blank.inject({
+          const response = await as(blank).inject({
             method: 'POST',
             url: '/documents',
             ...upload(
@@ -360,7 +385,7 @@ describe('evidence · the upload route', () => {
           );
           const documentId = rows.rows[0]?.document_id ?? '';
           assert.ok(documentId);
-          const response = await lease.inject({
+          const response = await as(lease).inject({
             method: 'GET',
             url: `/documents/${documentId}/read`,
           });
@@ -389,7 +414,7 @@ describe('evidence · the upload route', () => {
             bucket: BUCKET,
           });
           extraApps.push(two);
-          const posted = await two.inject({
+          const posted = await as(two).inject({
             method: 'POST',
             url: '/documents',
             ...upload(
@@ -404,19 +429,19 @@ describe('evidence · the upload route', () => {
           );
           const documentId = rows.rows[0]?.document_id ?? '';
           assert.ok(documentId);
-          const first = await two.inject({
+          const first = await as(two).inject({
             method: 'GET',
             url: `/documents/${documentId}/read`,
           });
           assert.equal(first.statusCode, 200, first.body.slice(0, 400));
           assert.doesNotMatch(first.body, /PAGE-TWO-ONLY-WORD/);
-          const second = await two.inject({
+          const second = await as(two).inject({
             method: 'GET',
             url: `/documents/${documentId}/read?page=2`,
           });
           assert.equal(second.statusCode, 200, second.body.slice(0, 400));
           assert.match(second.body, /PAGE-TWO-ONLY-WORD/);
-          const bad = await two.inject({
+          const bad = await as(two).inject({
             method: 'GET',
             url: `/documents/${documentId}/read?page=nope`,
           });
@@ -437,7 +462,7 @@ describe('evidence · the upload route', () => {
             bucket: BUCKET,
           });
           extraApps.push(app);
-          const response = await app.inject({
+          const response = await as(app).inject({
             method: 'POST',
             url: '/documents',
             ...upload(
@@ -472,7 +497,7 @@ describe('evidence · the upload route', () => {
             bucket: BUCKET,
           });
           extraApps.push(app);
-          const response = await app.inject({
+          const response = await as(app).inject({
             method: 'POST',
             url: '/documents',
             ...upload(
@@ -499,7 +524,7 @@ describe('evidence · the upload route', () => {
           const documentId =
             location.match(/\/documents\/([0-9a-f-]{36})\/tenancy$/)?.[1] ?? '';
           assert.ok(documentId);
-          const overlay = await app.inject({
+          const overlay = await as(app).inject({
             method: 'GET',
             url: `/documents/${documentId}/read`,
           });
@@ -512,14 +537,14 @@ describe('evidence · the upload route', () => {
       await t.test(
         'a malformed unit is invalid and a missing one is not_found',
         async () => {
-          const malformed = await lease.inject({
+          const malformed = await as(lease).inject({
             method: 'GET',
             url: '/documents/new?unit=not-an-id',
           });
           assert.equal(malformed.statusCode, 400);
           assert.equal(malformed.json().code, 'invalid');
 
-          const missing = await lease.inject({
+          const missing = await as(lease).inject({
             method: 'GET',
             url: '/documents/new?unit=11111111-1111-4111-8111-111111111111',
           });
@@ -528,6 +553,7 @@ describe('evidence · the upload route', () => {
         },
       );
     } finally {
+      await signOutAll(pool, STAFF_DOMAIN);
       for (const hash of hashes) {
         await pool
           .query(
@@ -611,6 +637,10 @@ describe('evidence · A3 addendum upload redirects to confirm', () => {
     let unitId = '';
     const hashes: string[] = [];
     try {
+      await signOutAll(pool, STAFF_DOMAIN);
+      who = await signIn(pool, fixedClock(AT), {
+        email: `ops@${STAFF_DOMAIN}`,
+      });
       await applyDocumentTypeCatalogue(pool, seedDocumentTypes);
       await importEstate(pool, {
         projects: [
@@ -671,7 +701,7 @@ describe('evidence · A3 addendum upload redirects to confirm', () => {
         noticeDate: null,
         actualMoveOut: null,
       });
-      const response = await app.inject({
+      const response = await as(app).inject({
         method: 'POST',
         url: '/documents',
         ...upload(
@@ -697,6 +727,7 @@ describe('evidence · A3 addendum upload redirects to confirm', () => {
       );
       if (hashed.rows[0]) hashes.push(hashed.rows[0].file_hash);
     } finally {
+      await signOutAll(pool, STAFF_DOMAIN);
       for (const hash of hashes) {
         await pool.query(
           `DELETE FROM extracted_field WHERE document_id IN

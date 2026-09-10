@@ -1,7 +1,9 @@
 import { strictEqual } from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { Pool } from 'pg';
+import { signIn, signOutAll } from '../tests/support/session.ts';
 import { buildApp } from './app.ts';
+import { fixedClock } from './kernel/clock.ts';
 import { migratedPoolOrNull, skipReason } from './kernel/pg-support.ts';
 
 // app.inject drives the route without binding a socket, so the suite never races a port.
@@ -54,17 +56,27 @@ describe('/health', () => {
     }
   });
 
-  it('renders an unknown route as the kernel not_found shape, rather than Fastify default', async () => {
-    const deadPool = new Pool({
-      connectionString: 'postgres://dona:dona@127.0.0.1:59999/dona',
-      connectionTimeoutMillis: 500,
-      allowExitOnIdle: true,
-    });
-    const app = buildApp({ pool: deadPool, version: '9.9.9-test' });
+  it('renders an unknown route as the kernel not_found shape, rather than Fastify default', async (t) => {
+    // **Slice 5.2 moved this case behind a session, and that is the finding rather than a chore.**
+    // Before it, an unknown path answered 404 and a known one answered a screen, so an anonymous
+    // caller could map this application by asking. Now both answer the same redirect until somebody
+    // signs in (`src/guard.test.ts` asserts that half), and the SPEC.md error shape — which is what
+    // *this* case is about — is what an operator sees.
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(new Date('2026-10-04T06:00:00.000Z'));
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    const domain = 'app-404.test';
     try {
+      await signOutAll(pool, domain);
+      const who = await signIn(pool, clock, { email: `ops@${domain}` });
       const response = await app.inject({
         method: 'GET',
         url: '/no-such-route',
+        headers: { cookie: who.cookie },
       });
       strictEqual(response.statusCode, 404);
       const body = response.json();
@@ -73,8 +85,9 @@ describe('/health', () => {
       // Fastify's own 404 echoes the requested path back into the body. This one does not.
       strictEqual(/no-such-route/.test(response.body), false);
     } finally {
+      await signOutAll(pool, domain);
       await app.close();
-      await deadPool.end();
+      await pool.end();
     }
   });
 });

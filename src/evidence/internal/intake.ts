@@ -92,6 +92,16 @@ export interface IntakeRequest {
   /** The validity window on the paper itself, when the type has one. Both null is the ordinary case. */
   validFrom?: string | null;
   validTo?: string | null;
+  /**
+   * The operator filing this, from slice 5.2 — the `staff_account` id the session resolved to.
+   *
+   * **This is the audit line's actor and not a column on `document`.** `uploaded_by` is slice 5.4's,
+   * and the distinction is not pedantry: a log line records that a person did a thing at a time, and
+   * a column asserts a fact about the row that other code may then join on and depend upon. This
+   * slice needs the first, because the per-caller cap counts exactly these lines. Optional, because
+   * the seeding and importer paths that call this function have no session and never will.
+   */
+  filedBy?: string;
 }
 
 export type IntakeResult =
@@ -145,6 +155,9 @@ export async function fileDocument(
 
   const line = {
     actorKind: 'staff' as const,
+    // Named from slice 5.2. Before it there was no authenticated actor to name, and the per-caller
+    // upload cap counts these rows by this column.
+    actorId: request.filedBy,
     action: 'evidence.file_document',
     subjectId: request.place.id,
     inputs: {

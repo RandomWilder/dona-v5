@@ -14,7 +14,7 @@ import type { UnitHit } from '../../estate/contract.ts';
 import type { OcrPageImage } from '../../kernel/ocr.ts';
 import type { PdfPage } from '../../kernel/pdf.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
-import { renderPage } from '../../kernel/ui/page.ts';
+import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import type { UnitLetting } from '../../tenancy/contract.ts';
 import type { DocumentTypeRow } from './catalogue.ts';
 import type { ProposedPerson } from './lease.ts';
@@ -109,6 +109,8 @@ function refusal(type: DocumentTypeRow, verification: Verification): Html {
 }
 
 export interface UploadScreen {
+  /** The CSRF token for this session (slice 5.2). Every form in this system carries it. */
+  csrf: string;
   unit: UnitHit;
   types: DocumentTypeRow[];
   lettings: UnitLetting[];
@@ -128,6 +130,7 @@ export function renderUploadPage(screen: UploadScreen): string {
     </div>
     ${screen.refused ? refusal(screen.refused.type, screen.refused.verification) : h``}
     <form class="form-grid" method="post" action="/documents" enctype="multipart/form-data">
+      ${csrfInput(screen.csrf)}
       <input type="hidden" name="unit" value="${unit.unit_id}" />
       <div class="form-row">
         <label for="type">סוג המסמך</label>
@@ -264,6 +267,8 @@ export function renderFiledPage(screen: FiledScreen): string {
 }
 
 export interface SeedScreen {
+  /** The CSRF token for this session (slice 5.2). Every form in this system carries it. */
+  csrf: string;
   documentId: string;
   labelHe: string;
   buildingId: string;
@@ -316,6 +321,7 @@ export function renderSeedPage(screen: SeedScreen): string {
     ${
       screen.handoverDate
         ? h`<form class="form-actions" method="post" action="/documents/${screen.documentId}/seed">
+            ${csrfInput(screen.csrf)}
             <button class="btn btn-primary" type="submit">אישור וכתיבה</button>
             <a href="${back}">ביטול</a>
           </form>`
@@ -375,6 +381,8 @@ export function renderSeededPage(screen: SeededScreen): string {
 }
 
 export interface ReadScreen {
+  /** The CSRF token for this session (slice 5.2). Every form in this system carries it. */
+  csrf: string;
   documentId: string;
   buildingId: string;
   buildingName: string;
@@ -444,6 +452,7 @@ function extractedSection(screen: ReadScreen) {
     ${
       promotable.length > 0
         ? h`<form method="post" action="/documents/${screen.documentId}/promote" enctype="multipart/form-data">
+            ${csrfInput(screen.csrf)}
             <p><label>מי מאשר <input name="promoted_by" required maxlength="200"></label></p>
             ${promotable.map(
               (row) =>
@@ -537,6 +546,8 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 export interface TenancyScreen {
+  /** The CSRF token for this session (slice 5.2). Every form in this system carries it. */
+  csrf: string;
   documentId: string;
   typeKey: 'lease' | 'lease_amendment';
   unit: UnitHit;
@@ -614,6 +625,7 @@ export function renderTenancyPage(screen: TenancyScreen): string {
     ${
       canWrite
         ? h`<form class="form-grid" method="post" action="/documents/${screen.documentId}/tenancy" enctype="multipart/form-data">
+            ${csrfInput(screen.csrf)}
             ${people}
             ${
               isAmendment

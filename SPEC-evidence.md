@@ -191,23 +191,37 @@ chosen from the lettings that unit already has. This is [SPEC-flows.md](SPEC-flo
 primary binding, and it stays a link rather than a path root because a tenancy is temporal and
 rooting the filing cabinet at it would scatter one flat's papers across its lettings.
 
-### The first write route in this system, and it has no session
+### The first write route in this system, and what bounds it
 
-Every route before 3.3 was a read. This one accepts bytes from anybody who can reach the service, and
-staff auth is week 5's ([SPEC-estate.md](SPEC-estate.md) says the same of the screens beside it, and
-[tasks/roadmap.md](tasks/roadmap.md)'s week 5 owns closing it). What stands in for a session until
-then is bounds rather than intentions:
+Every route before 3.3 was a read. From 3.3 to 5.2 this one accepted bytes from anybody who could
+reach the service, and what stood in for a session was bounds rather than intentions. **Slice 5.2
+gave it the session, a CSRF token and a bound on the caller**; the 3.3 bounds are kept, because they
+bound a different quantity and an authenticated operator can still post a 200 MB file by accident.
 
 - **One file per request, 20 MB, and four kinds** — sniffed from the bytes, so a `.pdf` that is not a
   PDF is `invalid` at the edge rather than an object in the bucket.
-- **The application cannot delete what it writes** (slice 3.2), so the worst an anonymous caller
+- **Fifty filed documents per operator per rolling 24 hours** (slice 5.2). This is the bound none of
+  the others is: they bound a *request*, and nothing bounded a *caller*, so one poster could fill a
+  versioned bucket the application is built to be unable to empty. It is counted from `audit_log` —
+  `evidence.file_document` rows carrying the operator's `actor_id` — rather than from a new column,
+  because the log already records exactly the event being bounded, and **a refused attempt counts**:
+  the bound is on what reached intake, not on what survived it. Over it, the answer is `too_many`
+  and 429, which is a different sentence from `not_allowed` and says the true thing — not today,
+  rather than not you. Bulk arrives through the register importer and 3.4's Drive ingestion, never
+  through this route.
+- **A CSRF token on the POST** (slice 5.2), derived from the session cookie and checked **inside the
+  handler** rather than in the `preHandler` hook that covers every other write route: this body is a
+  multipart stream, and a hook that read the field would consume the stream the handler needs. The
+  comparison is `verifyCsrf` from `src/staff/contract.ts` either way — one function, a second call
+  site, not a second implementation.
+- **The application cannot delete what it writes** (slice 3.2), so the worst a caller
   achieves is a bounded object it cannot remove and a row naming a unit.
 - **Nothing personal is on the screen or in the response** — a unit number, a type and a date. The
-  tenancy options are dates and a status, never a name, which is the rule every screen keeps until
-  week 5.
-- **Only tier-1 specimens are filed before week 5.** Real tenant documents are gated behind F6 and
-  arrive at the pilot-preparation step of the method; that ordering is what keeps this window empty
-  rather than merely supervised.
+  tenancy options are dates and a status, never a name, which is the rule every screen still keeps
+  after 5.2 chose to keep it.
+- **Only tier-1 specimens are filed before the corpus arrives.** Real tenant documents are gated
+  behind F6 and arrive at the pilot-preparation step of the method; that ordering is what keeps this
+  window empty rather than merely supervised.
 
 **Declaring a *new draft* tenancy at upload is slice 4.6, flow A2.** A draft is never an empty shell —
 unit, dates and at least one tenant — and `upsertParty` requires a ת.ז., so A2 calls `createParty`
@@ -223,8 +237,9 @@ is an ordinary case and not a gap.
 
 - **No query here returns a person.** Documents link to parties, and who those parties are is
   `src/scope/`'s answer and nobody else's — the same rule `src/tenancy/` and `src/parties/` state.
-  A document panel shows what is filed, not who signed it (slice 3.6, and until week 5 puts a session
-  behind the screens, `tests/ui/tokens.test.ts` asserts it from outside).
+  A document panel shows what is filed, not who signed it (slice 3.6; `tests/ui/tokens.test.ts`
+  asserts it from outside, and still does after 5.2 put a session behind the screens and kept the
+  rule anyway).
 - **The catalogue is read at run time, never compiled in.** `listDocumentTypes` and
   `documentTypeFields` are what slice 3.3's guard and slice 4.2's extraction read. A
   `Record<TypeKey, …>` in TypeScript would make A8 true of the catalogue and false of everything that
@@ -234,7 +249,8 @@ is an ordinary case and not a gap.
 - **`ingested_at` comes from the injected clock**, never `DEFAULT now()`.
 - **A list of what is filed never mints a signed URL.** `listLinkedDocuments` and `searchDocuments`
   return the `gs://` path as text. A signed URL is a bearer token for one object: whoever holds the
-  string reads the document, isolation join or not, so issuing one belongs behind a session (week 5).
+  string reads the document, isolation join or not, so issuing one belongs behind a session — which
+  exists from 5.2, and **slice 5.4 is where the panel starts minting one**.
 
 ## Finding a document — slice 3.6
 
@@ -335,7 +351,9 @@ is `invalid`: no tenancy, no party, no new link. This is the content check 3.3 d
 `alreadyEstablished` and creates no second household.
 
 **The confirm screen may show captured names.** That is the exception the confirmation step exists
-for. It still does not query `party`. Until week 5, every other screen still shows no person.
+for. It still does not query `party`. Every other screen still shows no tenant's name — 5.2 was
+entitled to lift that rule behind its session and **kept it**, so this exception is still the only
+one.
 
 ## Flow A3 — an addendum completes a tenancy (slice 4.7)
 
@@ -416,9 +434,11 @@ All four are nullable `ADD COLUMN`s when they come.
   row whose boolean someone flipped. What a tenant may see is derived from `document_link` through
   `src/scope/`. If week 9 needs a class of document that is admin-only even inside its own tenancy,
   that belongs on the **type** — one row, one rule, readable — and not on each document.
-- **`uploaded_by`** — there is no authenticated actor in this system until week 5, so the column
+- **`uploaded_by`** — there was no authenticated actor in this system until 5.1, so the column
   could hold only a placeholder, and a provenance column holding a placeholder for six weeks is worse
-  than one that arrives with the identity it names.
+  than one that arrives with the identity it names. **Slice 5.4 adds it.** From 5.2 the operator is
+  already named on the `evidence.file_document` audit line, which is what the per-caller cap counts;
+  a log naming the actor is not the column, and does not pre-empt it.
 
 ## FieldPromotion (slice 4.3, `src/kernel/migrations/0018_field_promotion.sql`)
 
@@ -434,7 +454,9 @@ matrix could read cannot be added by seeding a catalogue field.
   the catalogue, because they point at ids that only exist after `seed:doctypes`.
 - **Stamp on `extracted_field`.** `promoted_to`, `promoted_by`, `promoted_at` — nullable until a
   promotion succeeds. `promoted_by` is `-- pii`: it names the operator who signed the copy. No staff
-  table until week 5, so this is a snapshot string, not a foreign key. Empty is `invalid`.
+  table existed when it was written, so this is a snapshot string, not a foreign key — and it stays
+  one after 5.1, because what it records is who signed the copy at that moment, not a row that can
+  later be disabled. Empty is `invalid`.
 - **The database is what refuses a stamp outside the command.** A trigger rejects UPDATE/INSERT of
   the stamp columns unless `dona.promoting` is `on` for the transaction (`restrict_violation`, the
   same class as `document_is_immutable`). A DELETE of a stamped row is the same rejection. Direct
@@ -466,7 +488,7 @@ the click is an `href`, not a script.
   broken. The list is every stamped field on paper linked to that unit (the unit itself, or a
   tenancy of that unit). Unmapped capture does not appear: it never became a value on the unit.
 - **Still no names.** The only mappings this week are dates. A name that extraction captured stays
-  on the read page and off the unit screen until week 5.
+  on the read page and off the unit screen — and 5.2, which could have changed that, chose not to.
 
 ## Later in this module, and not here yet
 

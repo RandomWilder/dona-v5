@@ -3,8 +3,8 @@
 //
 // **No query here returns a person.** Documents bind to parties — `entity_type = 'PARTY'` is one of
 // R13's eight — but who those parties are is `src/scope/`'s answer and nobody else's (foundation
-// rule 1). A document panel shows what is filed, not who signed it, until week 5 puts a session
-// behind the screens. That is the same sentence `src/tenancy/contract.ts` and
+// rule 1). A document panel shows what is filed, not who signed it — and still does after 5.2 put
+// a session behind the screens and declined to lift the rule on the strength of it. That is the same sentence `src/tenancy/contract.ts` and
 // `src/parties/contract.ts` carry, and it does not bend for documents.
 //
 // The catalogue reads are here on purpose and are not an exception to the rule above: a document
