@@ -171,7 +171,16 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       `dona-staging-00056-kvp` with `identity: identity-platform:dona-v5` on its boot line;
       `/staff/login` answers 200 with no script and `/staff` redirects without a cookie.
       **What remains is a human signing in on the staging URL as themselves**, which is the
-      director's — two commands, in the evidence file.
+      director's. **Amended at 5.1b:** the two commands the 5.1 evidence names are gone with the
+      invite — there is no URL to open, no password to set and no authenticator to enrol. What is
+      needed instead is one `staff_account` row on the staging database, after which the sign-in is
+      the same single link the local click-through proved. **And 5.1b found that nobody owns how to
+      reach that database:** `npm run staff:add` needs a `DATABASE_URL`, no script or document names
+      a Cloud SQL proxy or an equivalent, and the local `.env` points at the container. So the row is
+      written either from a proxy session the director opens by hand, or by a one-off Cloud Run job
+      on the service that already holds the connection — **and the decision of which belongs with
+      5.9's admin shell**, the first slice that needs staging to have operators in it at all rather
+      than one. Until it is made, staging serves `/staff/login` correctly to nobody.
       *Original entry:* Identity Platform with
       **enforced MFA**, an invite flow, and `src/staff/` — the admin edge, not a domain module; it
       owns none of E1–E16. **The role matrix is code, not a config row**, a deliberate exception to
@@ -354,7 +363,12 @@ outside the repository ([docs/pipeline.md](docs/pipeline.md) §8, §10):
       built at the composition root (`src/kernel/ui/page.ts:66` already takes `nav?: Html` and the
       kernel must not learn a route); an unbuilt tab renders one line naming the week and slice that
       owns it, so **the remaining roadmap is on screen**. Written into the slice list when the chore
-      below runs, and after 5.2, whose composition-root move it builds on.
+      below runs, and after 5.2, whose composition-root move it builds on. **Carried in from 5.1b:
+      how an operator row reaches the staging database.** `npm run staff:add` needs a `DATABASE_URL`
+      and nothing in `infra/` documents reaching staging's — so this slice decides between a Cloud
+      SQL proxy session named in a script and a one-off Cloud Run job on the service that already
+      holds the connection, and writes the answer down. It is the first slice that needs staging to
+      hold more than one operator, so it is the first slice for which the answer pays.
 - [ ] **Move 3 → chore, before 5.9: the mockup-first slice contract.** `mockups/<slice>.html` through
       the real page shell on a dev-only route, `data-state="wired" | "painted"`, and a guard in
       `scripts/guards.ts` that fails the build when a mockup and its evidence file both exist. With
