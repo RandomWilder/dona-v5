@@ -13,7 +13,9 @@ piece of paper. Shared conventions live in [SPEC.md](SPEC.md) and are not repeat
   token derived from the session.
 - **Built:** slice 5.1 on Identity Platform, with a password form, a TOTP form and an invite flow.
   **Amended at slice 5.1b**, which deleted all three and made the credential Google's. The
-  `national_id` field guard is **5.3**.
+  `national_id` field guard is **5.3**. The signed-in chrome (slices **5.2b** and **5.2c**) is
+  the composition root's, not this module's: the staff home uses the ops rail; the login screen
+  does not.
 
 ---
 
@@ -252,6 +254,11 @@ declares `in-body`.
 A screen that renders a `<form method="post">` and no hidden `csrf` input is caught by
 `tests/ui/tokens.test.ts` over its whole `SCREENS` registry, which is the assertion that catches the
 eighth form rather than the seven that exist today.
+
+**The staff home uses the signed-in ops rail; the login screen does not** (slices 5.2b and 5.2c).
+Sign-out lives in that rail's footer and nowhere else on the page. The Google link and the
+add-operator submit use the token `.btn` / `.btn-primary` classes, not a second button skin in this
+module's page CSS.
 
 ---
 

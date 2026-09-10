@@ -9,18 +9,13 @@
 // the buildings list where those numbers are already being read for the cards, and an index that
 // ran three portfolio queries to render four links would be a worse root than the 302 it replaced.
 //
-// **This is the one screen whose nav spans two modules**, and that is the whole reason it is here.
-// Estate's nav names estate's routes; staff's names staff's; only the root can name both, and only
-// the root can carry the way out without one module rendering the other's form.
-//
-// It lives beside `src/app.ts` rather than in a `src/ui/` of its own: a directory under `src/`
-// reads as a module in this repository (SPEC.md's module map, and `src/kernel/boundary.test.ts`
-// enumerates them), and this is not one — it is the composition root's own screen, and the
-// composition root is a file.
+// **Slice 5.2b / 5.2c:** the chrome this page used to own is `src/chrome.ts`, the ops rail every
+// screen. This file still lives beside `src/app.ts` rather than in a `src/ui/` of its own: a
+// directory under `src/` reads as a module in this repository.
 
+import { signedInChrome } from './chrome.ts';
 import { type Html, h } from './kernel/ui/html.ts';
 import { renderPage } from './kernel/ui/page.ts';
-import { CSRF_FIELD } from './staff/contract.ts';
 
 export interface IndexScreen {
   /** The token every form in this system carries from 5.2. The sign-out form is this screen's one. */
@@ -40,37 +35,10 @@ const styles = h`<style>
   }
   a.card-link { color: inherit; text-decoration: none; display: block; }
   a.card-link:hover .card-title { text-decoration: underline; }
-  .sign-out { display: inline; }
-  .sign-out button {
-    background: none;
-    border: 0;
-    padding: 0;
-    color: inherit;
-    font: inherit;
-    text-decoration: underline;
-    cursor: pointer;
-  }
 </style>`;
 
-// The state marker's colour is a token and its meaning is the status — the same two-line helper
-// estate's views carry, and deliberately not imported from them: this page owns four links and no
-// domain, and importing a module's private view helper to draw a dot is how the root re-acquires
-// the dependency the move existed to break.
 function marker(state: 'is-ok' | 'is-alert'): Html {
   return h`<span class="state-marker ${state}"></span>`;
-}
-
-function nav(csrf: string): Html {
-  return h`<nav class="top-nav">
-    <a href="/estate">בניינים</a>
-    <a href="/estate/expiring">חוזים מסתיימים</a>
-    <a href="/estate/incomplete">חוזים לא שלמים</a>
-    <a href="/staff">צוות</a>
-    <form class="sign-out" method="post" action="/staff/logout">
-      <input type="hidden" name="${CSRF_FIELD}" value="${csrf}" />
-      <button type="submit">יציאה</button>
-    </form>
-  </nav>`;
 }
 
 export function renderIndexPage(screen: IndexScreen): string {
@@ -119,7 +87,7 @@ export function renderIndexPage(screen: IndexScreen): string {
   return renderPage({
     title: 'דונה דום — ניהול נכסים',
     styles,
-    nav: nav(screen.csrf),
+    nav: signedInChrome(screen.csrf, 'index'),
     body,
   });
 }

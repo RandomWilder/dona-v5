@@ -152,11 +152,6 @@ const styles = h`<style>
   a.card-link { color: inherit; text-decoration: none; display: block; }
   a.card-link:hover .card-title { text-decoration: underline; }
   a.unit-no { color: inherit; }
-  /* The search box is a plain GET form, so the screens still carry no client JavaScript at all and
-     a result page is a URL somebody can send to somebody else. */
-  .search { display: flex; gap: var(--space-2); align-items: center; }
-  .search input { min-width: 14rem; min-height: var(--size-control-ops); padding-block: var(--space-2); }
-  .search .btn { min-height: var(--size-control-ops); }
   .index-list { display: grid; gap: var(--space-2); }
   .lease-when { display: flex; gap: var(--space-3); align-items: baseline; flex-wrap: wrap; }
   .doc-uri { word-break: break-all; }
@@ -175,27 +170,8 @@ const styles = h`<style>
   .queue-card input { min-height: var(--size-control-ops); flex: 1; min-width: 12rem; }
 </style>`;
 
-// Estate's nav, and it stays estate's: these are its routes, and the kernel's shell knows no route.
-function nav(): Html {
-  return h`<nav class="top-nav">
-    <a href="/estate">בניינים</a>
-    <a href="/estate/expiring">חוזים מסתיימים</a>
-    <a href="/estate/incomplete">חוזים לא שלמים</a>
-    <form class="search" method="get" action="/estate/search" role="search">
-      <input
-        id="q"
-        name="q"
-        type="search"
-        aria-label="חיפוש בניין, כתובת, מספר דירה או סוג מסמך"
-        placeholder="כתובת, בניין, דירה או סוג מסמך"
-      />
-      <button class="btn btn-secondary" type="submit">חיפוש</button>
-    </form>
-  </nav>`;
-}
-
-function page(title: string, body: Html): string {
-  return renderPage({ title, styles, nav: nav(), body });
+function page(title: string, body: Html, nav: Html): string {
+  return renderPage({ title, styles, nav, body });
 }
 
 function marker(status: string): Html {
@@ -230,6 +206,7 @@ function buildingFacts(building: BuildingSummary, occupied?: number): Html {
 export function renderBuildingsPage(
   buildings: BuildingSummary[],
   occupancy: OccupancyByBuilding,
+  nav: Html,
 ): string {
   const units = buildings.reduce(
     (total, building) => total + Number(building.unit_count),
@@ -266,7 +243,7 @@ export function renderBuildingsPage(
             )}
           </div>`
     }`;
-  return page('דונה דום — בניינים', body);
+  return page('דונה דום — בניינים', body, nav);
 }
 
 // **R6, on a card.** Occupancy is derived on every load and stored nowhere -- there is no column to
@@ -372,6 +349,7 @@ function unitCard(unit: UnitRow, occupancy: OccupancyByUnit): Html {
 export function renderBuildingPage(
   detail: BuildingDetail,
   occupancy: OccupancyByUnit,
+  nav: Html,
   documents: readonly FiledDocumentView[] = [],
 ): string {
   const { building, kinds, units } = detail;
@@ -402,7 +380,7 @@ export function renderBuildingPage(
           : h`<div class="unit-grid">${units.map((unit) => unitCard(unit, occupancy))}</div>`
       }
     </section>`;
-  return page(`דונה דום — ${building.name}`, body);
+  return page(`דונה דום — ${building.name}`, body, nav);
 }
 
 function promotedPanel(fields: readonly PromotedFieldView[]): Html {
@@ -426,6 +404,7 @@ export function renderUnitPage(
   unit: UnitHit,
   residents: number | undefined,
   documents: readonly FiledDocumentView[],
+  nav: Html,
   promoted: readonly PromotedFieldView[] = [],
 ): string {
   const body = h`
@@ -440,7 +419,7 @@ export function renderUnitPage(
     </div>
     ${promotedPanel(promoted)}
     ${documentsPanel(documents, 'מסמכים')}`;
-  return page(`דונה דום — דירה ${unit.unit_number}`, body);
+  return page(`דונה דום — דירה ${unit.unit_number}`, body, nav);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -508,6 +487,7 @@ function documentHits(hits: readonly DocumentSearchHit[]): Html {
 export function renderSearchPage(
   term: string,
   results: SearchPageResults,
+  nav: Html,
 ): string {
   const found =
     results.buildings.length + results.units.length + results.documents.length;
@@ -567,7 +547,7 @@ export function renderSearchPage(
             ${documentHits(results.documents)}
           </section>`
     }`;
-  return page('דונה דום — חיפוש', body);
+  return page('דונה דום — חיפוש', body, nav);
 }
 
 /**
@@ -588,6 +568,7 @@ function daysLeft(days: number): Html {
 export function renderExpiringPage(
   leases: ExpiringLease[],
   days: number,
+  nav: Html,
 ): string {
   const body = h`
     <div>
@@ -618,7 +599,7 @@ export function renderExpiringPage(
             )}
           </div>`
     }`;
-  return page('דונה דום — חוזים מסתיימים', body);
+  return page('דונה דום — חוזים מסתיימים', body, nav);
 }
 
 const TENANCY_STATUS: Record<string, string> = {
@@ -659,6 +640,7 @@ export function renderIncompletePage(
    * parameter makes the route that forgets it fail to compile.
    */
   csrf: string,
+  nav: Html,
 ): string {
   const body = h`
     <div>
@@ -712,5 +694,5 @@ export function renderIncompletePage(
             })}
           </div>`
     }`;
-  return page('דונה דום — חוזים לא שלמים', body);
+  return page('דונה דום — חוזים לא שלמים', body, nav);
 }

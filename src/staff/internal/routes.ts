@@ -19,10 +19,12 @@
 // households is an account-enumeration oracle (SPEC-staff.md).
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
+import type { ChromeDest } from '../../chrome.ts';
 import { createAuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import { sameValue } from '../../kernel/compare.ts';
 import { KernelError } from '../../kernel/errors.ts';
+import type { Html } from '../../kernel/ui/html.ts';
 import { requireText } from '../../kernel/validate.ts';
 import {
   accountByEmail,
@@ -31,6 +33,7 @@ import {
   notAllowed,
   requireUsableAccount,
 } from './accounts.ts';
+import { csrfFrom } from './csrf.ts';
 import { acceptClaims, type IdentityProvider } from './identity.ts';
 import {
   can,
@@ -62,6 +65,8 @@ export interface StaffDeps {
   baseUrl?: string;
   /** The Workspace domain to require, when Dona Dom's answer is known. Null means the allowlist is the only fence. */
   hostedDomain?: string | null;
+  /** Slice 5.2b. Built at the composition root. Login screens do not receive it. */
+  chrome: (csrf: string, dest: ChromeDest) => Html;
 }
 
 function html(reply: FastifyReply): void {
@@ -306,8 +311,10 @@ export function registerStaffRoutes(
       const session = operator(request);
       html(reply);
       const role = session.role as Role;
+      const csrf = csrfFrom(request);
       return renderStaffHomePage({
-        csrf: request.csrf ?? '',
+        nav: deps.chrome(csrf, 'staff'),
+        csrf,
         email: session.email,
         role,
         permissions: permissionsOf(role),
@@ -336,8 +343,10 @@ export function registerStaffRoutes(
       );
       html(reply);
       const role = session.role as Role;
+      const csrf = csrfFrom(request);
       return renderStaffHomePage({
-        csrf: request.csrf ?? '',
+        nav: deps.chrome(csrf, 'staff'),
+        csrf,
         email: session.email,
         role,
         permissions: permissionsOf(role),

@@ -80,10 +80,9 @@ it**, tightening the wording rather than relaxing it. **Reconsidered at 5.4.**
       preparation with **F6**, bounded by **week 12**; the same treatment 2.5 took with F3 and 3.4
       with F4. Recorded in full at [roadmap.md](roadmap.md) § 4.5 and
       [evidence/week-4.md](evidence/week-4.md).
-- [x] **The UI-pass decision. DECIDED: no.** Parked at week 2, parked at week 3, closed at M1 rather
-      than parked a third time. Nothing raised was a correctness, isolation or data question, and
-      **this week changes what those screens show** — a design pass now runs against screens about to
-      change shape. Reconsidered at **M2**.
+- [x] **The UI-pass decision. DECIDED: no** at M1, **amended at 5.2b** to a chrome pass, **and at
+      5.2c** to v3's ops sidebar on the live destinations only — not a card redesign. Unbuilt tabs
+      and the rest of the parked comments wait on **M2** / **5.9**.
 - [~] **2.5 — import the real register.** Pilot preparation, with **F3**.
 - [~] **3.4 and A10 — Drive ingestion and the bulk review queue.** Pilot preparation, with **F4**.
 
@@ -226,7 +225,9 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       lines here.
       **Plan mode. Deps:** none · **L**
 
-- [ ] **5.1b — The credential is Google's, and the TOTP machinery goes.** Slice 5.1 is closed; this
+- [x] **5.1b — The credential is Google's, and the TOTP machinery goes.** **Closed 10 Sep**
+      ([evidence/5.1b.md](evidence/5.1b.md)). Ticked here at 5.2b: the evidence was already written
+      and the director had signed in on staging; the week list had not caught up. Slice 5.1 is closed; this
       **amends** it rather than reopening it, which is why it carries a letter. Move 1 of the 10 Sep
       re-plan: the director's own worked example was the admin login, and the instinct — *more
       machinery than the job needs* — was right. The correct simplification is not a hand-rolled
@@ -297,6 +298,28 @@ Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible`
       (3) **The staff screens are already in that registry** — two of them after 5.1b, where four
       were deleted with the flow they belonged to; week 5's remaining screens append beside them.
       **Plan mode. Deps:** 5.1 · **L**
+
+- [x] **5.2b — One chrome on every signed-in screen.** The session arrived at 5.2 and each module
+      kept writing its own bar: the index had staff and sign-out; estate had search and neither;
+      evidence had three links and no search; staff home had no chrome at all. Sign-out existed on
+      two screens. **This slice does not redesign cards** and is not 5.9's seven-tab shell.
+      **Done when:** every authenticated screen carries the same bar — buildings, expiring,
+      incomplete, search, staff, sign-out — and the login screen carries none of it.
+      **Verify:** `tests/ui/tokens.test.ts` asserts the chrome over the signed-in registry and its
+      absence on login; restart `npm run dev` and sign out from a **non-index** screen.
+      **The M1 “no UI-pass” call is reversed only this far** — chrome and shared controls, so an
+      operator can leave any screen. Reconsidered again at M2 / 5.9.
+      **Plan mode. Deps:** 5.2 · **M**
+
+- [x] **5.2c — v3's ops shell on v5's live URLs.** 5.2b put one bar on every signed-in screen; it
+      was still a top bar, so the console did not look like the temp admin v3 already had. **This
+      slice does not add unbuilt tabs** and is not a card redesign.
+      **Done when:** every authenticated screen is the ops sidebar (buildings, expiring, incomplete,
+      search, staff, sign-out in the footer); the current destination is marked; login has no rail.
+      **Verify:** the token registry asserts `.ops`, the live hrefs, one `aria-current` except on
+      the index, and login without any of it; restart `npm run dev` and sign out from a **non-index**
+      screen. No push until the director approves localhost.
+      **Plan mode. Deps:** 5.2b · **M**
 
 - [ ] **5.3 — `national_id` is unreachable by any agent tool.**
       **Done when:** a policy case in `tests/policy/` fails against a tool response shape carrying
@@ -406,11 +429,11 @@ The re-plan the director stopped the build for is Moves 0–4. Move 0 is **5.0-c
 **5.1b**, above. The rest are recorded here so that nothing it decided is owned only by a plan file
 outside the repository ([docs/pipeline.md](docs/pipeline.md) §8, §10):
 
-- [ ] **Move 2 → new slice `5.9`: the admin shell, where the navigation *is* the plan.** Seven tabs
-      built at the composition root (`src/kernel/ui/page.ts:66` already takes `nav?: Html` and the
-      kernel must not learn a route); an unbuilt tab renders one line naming the week and slice that
-      owns it, so **the remaining roadmap is on screen**. Written into the slice list when the chore
-      below runs, and after 5.2, whose composition-root move it builds on. **It inherits an answer
+- [ ] **Move 2 → new slice `5.9`: unbuilt tabs, where the navigation *is* the plan.** The ops
+      frame itself landed at **5.2c**. This slice adds the destinations that do not exist yet —
+      seven tabs at the composition root (the kernel must not learn a route); an unbuilt tab
+      renders one line naming the week and slice that owns it, so **the remaining roadmap is on
+      screen**. Written into the slice list when the chore below runs. **It inherits an answer
       rather than a question:** 5.1b carried "how does an operator row reach the staging database"
       here, and 5.1c closed it — `./infra/staff-add.sh <env> <email> <ROLE>` runs `staff-add.ts` as
       a one-off Cloud Run job on the deployed image. This slice adds operators, it does not have to

@@ -1,4 +1,4 @@
-// The page shell every screen in this system is rendered into. Slice 3.3.
+// The page shell every screen in this system is rendered into. Slice 3.3; ops frame at 5.2c.
 //
 // It lived in `src/estate/internal/views.ts` from 1.11, because estate had the only screens there
 // were. Slice 3.3 gives a second module a screen, and the choice at that moment is to copy the
@@ -8,54 +8,134 @@
 // property twice against two implementations.
 //
 // **What is here is the shell and nothing a module knows.** The kernel imports from no domain
-
 // module (SPEC.md rule 9, proved by boundary.test.ts) and it does not know a route either: the nav
 // is an `Html` the caller builds, because `/estate/expiring` is estate's fact and naming it here
 // would be the kernel learning the estate. Layout for a module's own cards stays in that module's
 // views and arrives through `styles`.
+//
+// **Slice 5.2c** put v3's ops sidebar in this file. The destinations still arrive as `nav`. Login
+// calls with no nav and gets no rail. The rail is a real grid column, not a `<details>` with
+// `display: contents` — Chromium leaves that closed and paints no sidebar.
 import { type Html, h } from './html.ts';
 
 // The chrome, the page frame, and the typography both modules' screens share. Everything physical
 // is logical -- `margin-inline`, `inset-inline-start` -- because Hebrew is RTL and one stylesheet
 // serves both directions (SPEC.md). tests/ui/tokens.test.ts fails the build on a `left:` here.
 const shell = h`<style>
-  .wrap {
-    max-width: var(--size-shell-max);
-    margin-inline: auto;
-    padding: var(--space-4);
+  .ops {
+    min-height: 100dvh;
     display: grid;
-    gap: var(--space-5);
+    grid-template-columns: var(--size-sidebar) minmax(0, 1fr);
   }
-  .top {
+  .ops-nav {
     background: var(--color-chrome);
     color: var(--color-on-chrome);
-    padding: var(--space-4);
-  }
-  .top-inner {
-    max-width: var(--size-shell-max);
-    margin-inline: auto;
     display: flex;
-    align-items: baseline;
-    gap: var(--space-3);
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-block: var(--space-4);
+    border-inline-end: var(--size-hairline) solid var(--color-on-chrome-raised);
   }
-  .brand { font-weight: 500; }
-  .top-note {
+  .ops-brand {
+    padding-inline: var(--space-5);
+    padding-block: var(--space-2);
+    font-weight: 500;
+  }
+  .ops-nav nav {
+    display: grid;
+    gap: var(--space-1);
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: var(--size-control-ops);
+    margin-inline: var(--space-3);
+    padding-inline: var(--space-3);
+    border: 0;
+    border-radius: var(--radius-2);
+    background: transparent;
+    color: var(--color-on-chrome);
+    font: inherit;
+    text-align: start;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .nav-item[aria-current="page"] {
+    background: var(--color-on-chrome-raised);
+  }
+  .nav-item svg {
+    flex: 0 0 auto;
+    width: var(--space-5);
+    height: var(--space-5);
+  }
+  .ops-footer {
+    margin-block-start: auto;
+    padding-block: var(--space-4);
+    display: grid;
+    gap: var(--space-2);
+  }
+  .ops-footer-note {
+    margin: 0;
+    padding-inline: var(--space-5);
     color: var(--color-on-chrome-muted);
     font-size: var(--text-sm);
   }
-  .top-nav {
-    display: flex;
-    gap: var(--space-4);
-    align-items: center;
-    flex-wrap: wrap;
-    margin-inline-start: auto;
+  .ops-footer form { margin: 0; display: grid; }
+  .ops-main {
+    min-width: 0;
+    padding: var(--space-6);
+    max-width: var(--size-content-max);
   }
-  .top-nav a { color: var(--color-on-chrome); }
+  .guest {
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: var(--space-5);
+  }
   h1 { font-size: var(--text-xl); margin: 0; }
   h2 { font-size: var(--text-lg); margin: 0 0 var(--space-3); }
   .lede { color: var(--color-text-muted); margin: var(--space-1) 0 0; }
   .back { display: inline-block; }
+  @media (max-width: 1099px) and (min-width: 840px) {
+    .ops { grid-template-columns: var(--size-icon-rail) minmax(0, 1fr); }
+    .nav-label,
+    .ops-brand,
+    .ops-footer-note {
+      position: absolute;
+      width: var(--size-hairline);
+      height: var(--size-hairline);
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+    .nav-item { justify-content: center; padding-inline: 0; }
+  }
+  @media (max-width: 839px) {
+    .ops {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto 1fr;
+    }
+    .ops-nav {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      padding-block: var(--space-2);
+    }
+    .ops-nav nav {
+      display: flex;
+      flex-wrap: wrap;
+    }
+    .ops-footer {
+      margin-block-start: 0;
+      padding-block: 0;
+      margin-inline-start: auto;
+    }
+    .ops-footer-note { display: none; }
+    .ops-main { padding: var(--space-4); }
+  }
+  @media (max-width: 479px) {
+    .nav-item { min-height: var(--size-touch); }
+  }
 </style>`;
 
 export interface PageOptions {
@@ -63,7 +143,7 @@ export interface PageOptions {
   title: string;
   /** The screens' own layout. One `<style>` per page, after the shell's. */
   styles?: Html;
-  /** What sits in the chrome bar beside the brand. The caller's, never the kernel's. */
+  /** What sits in the ops rail. The caller's, never the kernel's. Absent on login. */
   nav?: Html;
   body: Html;
 }
@@ -76,6 +156,16 @@ export interface PageOptions {
  * property that has to be remembered per screen is one a screen will eventually forget.
  */
 export function renderPage(options: PageOptions): string {
+  const frame =
+    options.nav === undefined
+      ? h`<main class="guest">${options.body}</main>`
+      : h`<div class="ops">
+            <aside class="ops-nav">
+              <p class="ops-brand">דונה דום</p>
+              ${options.nav}
+            </aside>
+            <main class="ops-main">${options.body}</main>
+          </div>`;
   return `<!doctype html>
 ${h`<html lang="he" dir="rtl">
   <head>
@@ -88,14 +178,7 @@ ${h`<html lang="he" dir="rtl">
     ${options.styles ?? h``}
   </head>
   <body>
-    <header class="top">
-      <div class="top-inner">
-        <span class="brand">דונה דום</span>
-        <span class="top-note">נכסים · נתוני הדגמה</span>
-        ${options.nav ?? h``}
-      </div>
-    </header>
-    <main class="wrap">${options.body}</main>
+    ${frame}
   </body>
 </html>`}`;
 }

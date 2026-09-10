@@ -159,7 +159,9 @@ cards, and an index that ran three portfolio queries to render three links would
 the redirect was. **It moved to the composition root at slice 5.2**, as this paragraph had said it
 would since 2.6 — the week a second *module* had a screen — because an index of screens is not
 estate's fact. It lives at `src/index-page.ts`, beside `src/app.ts` which registers it, and it is the
-one screen in this system whose nav spans two modules and carries the sign-out form.
+one screen in this system whose nav spans two modules and carries the sign-out form. **Slice 5.2b
+moved that bar off this module entirely**; **5.2c is the same rail as an ops sidebar**. Estate
+writes none of it. The composition root injects the chrome every signed-in screen carries.
 
 **`GET /estate/search?q=` searches buildings and units, and deliberately not people.** A search that
 reached `party` would put a real person behind a route with no session, the week the register
@@ -260,8 +262,9 @@ estate query of `extracted_field`.
 **`GET /estate/incomplete` is A4's queue (slice 4.8).** Same standing as `/estate/expiring`: a
 portfolio operations list, a unit and a date and a missing-rule label, and no party. Completeness
 is tenancy's query; the POST that records an exception is tenancy's write; both are injected. The
-root index and the top nav gain a fourth link. The index lived here until **5.2 moved it to
-`src/index-page.ts`**, on the schedule 2.6 set for it.
+root index and the rail gain a fourth link. The index lived here until **5.2 moved it to
+`src/index-page.ts`**, on the schedule 2.6 set for it. **5.2b took the remaining private nav with
+it**; **5.2c did not give it back**. This module's screens receive the composition root's chrome.
 
 ## The importer — `importEstate`, `src/estate/internal/importer.ts`
 

@@ -52,3 +52,15 @@ export function verifyCsrf(sessionToken: string, supplied: unknown): void {
     throw new KernelError('not_allowed', 'not_allowed');
   }
 }
+
+/**
+ * The token the composition root derived onto the request. **Required**, because a default of `''`
+ * type-checks and renders an empty hidden input — the 5.2 defect class. A signed-in route that
+ * reaches here without one is a wiring fault, and it fails closed.
+ */
+export function csrfFrom(request: { csrf?: string | null }): string {
+  if (typeof request.csrf !== 'string' || request.csrf.length === 0) {
+    throw new KernelError('not_allowed', 'not_allowed');
+  }
+  return request.csrf;
+}

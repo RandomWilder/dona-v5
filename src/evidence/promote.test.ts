@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { PoolClient } from 'pg';
+import { signedInChrome } from '../chrome.ts';
 import { createAuditLog } from '../kernel/audit.ts';
 import { fixedClock } from '../kernel/clock.ts';
 import type { KernelError } from '../kernel/errors.ts';
@@ -29,6 +30,7 @@ import {
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const AT = new Date('2026-09-07T09:00:00.000Z');
+const NAV = signedInChrome('x'.repeat(64), 'estate');
 const BUCKET = 'dona-v5-test-docs';
 const MARKERS = 'חוזה שכירות המושכר תקופת השכירות השוכר';
 
@@ -287,6 +289,7 @@ describe('evidence · promote an extracted field', () => {
 
   it('shows unmapped values as capture-only and a promote control for mapped ones', () => {
     const html = renderReadPage({
+      nav: NAV,
       csrf: '',
       documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       buildingId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
@@ -331,6 +334,7 @@ describe('evidence · promote an extracted field', () => {
     const fieldId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
     const otherId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
     const html = renderReadPage({
+      nav: NAV,
       csrf: '',
       documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       buildingId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',

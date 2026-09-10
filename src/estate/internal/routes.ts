@@ -11,9 +11,12 @@
 // search never touches `party`, and Q5 shows a unit and a date.
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
+import type { ChromeDest } from '../../chrome.ts';
 import type { Clock } from '../../kernel/clock.ts';
+import type { Html } from '../../kernel/ui/html.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
 import { resolveOccupiedUnits } from '../../scope/contract.ts';
+import { csrfFrom } from '../../staff/contract.ts';
 import {
   countUnitsByBuilding,
   EXPIRING_WINDOW_DAYS,
@@ -42,6 +45,11 @@ export interface EstateDeps {
   pool: Pool;
   /** Injected, never read here: a screen whose answer changes at midnight is one no test can pin. */
   clock: Clock;
+  /**
+   * Slice 5.2b. Built at the composition root, because this module may not name staff's routes
+   * and the kernel may not name anyone's.
+   */
+  chrome: (csrf: string, dest: ChromeDest) => Html;
   /**
    * Slice 3.6 / 4.4. Injected from evidence so this module never imports it — evidence already
    * imports estate, and the other direction would be a cycle. Structural: the composition root
@@ -114,7 +122,7 @@ export function registerEstateRoutes(
   // `GET /` was registered here from 1.11 and **moved to the composition root at 5.2**, with the
   // view it rendered. It is `src/app.ts` and `src/index-page.ts` now.
 
-  app.get('/estate', READ, async (_request, reply) => {
+  app.get('/estate', READ, async (request, reply) => {
     const buildings = await listBuildings(deps.pool);
     // **Two questions, two modules, and neither learns the other's rule.** `src/scope/` says which
     // units are let today, because deciding when a tenancy counts is what only that module may do;
@@ -130,7 +138,8 @@ export function registerEstateRoutes(
       occupied.map((unit) => unit.unit_id),
     );
     html(reply);
-    return renderBuildingsPage(buildings, byBuilding);
+    const nav = deps.chrome(csrfFrom(request), 'estate');
+    return renderBuildingsPage(buildings, byBuilding, nav);
   });
 
   app.get('/estate/search', READ, async (request, reply) => {
@@ -147,23 +156,32 @@ export function registerEstateRoutes(
         ? { documents: [], truncated: false }
         : await deps.searchDocuments(deps.pool, term);
     html(reply);
-    return renderSearchPage(term, {
-      ...estate,
-      documents: documents.documents,
-      truncated: estate.truncated || documents.truncated,
-    });
+    return renderSearchPage(
+      term,
+      {
+        ...estate,
+        documents: documents.documents,
+        truncated: estate.truncated || documents.truncated,
+      },
+      deps.chrome(csrfFrom(request), 'search'),
+    );
   });
 
-  app.get('/estate/expiring', READ, async (_request, reply) => {
+  app.get('/estate/expiring', READ, async (request, reply) => {
     const leases = await listExpiringLeases(deps.pool, deps.clock.now());
     html(reply);
-    return renderExpiringPage(leases, EXPIRING_WINDOW_DAYS);
+    return renderExpiringPage(
+      leases,
+      EXPIRING_WINDOW_DAYS,
+      deps.chrome(csrfFrom(request), 'expiring'),
+    );
   });
 
   app.get('/estate/incomplete', READ, async (request, reply) => {
     const rows = await deps.listIncompleteTenancies(deps.pool);
+    const csrf = csrfFrom(request);
     html(reply);
-    return renderIncompletePage(rows, request.csrf ?? '');
+    return renderIncompletePage(rows, csrf, deps.chrome(csrf, 'incomplete'));
   });
 
   app.post<{ Params: { tenancyId: string } }>(
@@ -206,7 +224,12 @@ export function registerEstateRoutes(
       detail.building.building_id,
     );
     html(reply);
-    return renderBuildingPage(detail, occupancy, documents);
+    return renderBuildingPage(
+      detail,
+      occupancy,
+      deps.chrome(csrfFrom(request), 'estate'),
+      documents,
+    );
   });
 
   app.get('/estate/units/:unitId', READ, async (request, reply) => {
@@ -227,6 +250,12 @@ export function registerEstateRoutes(
       unit.unit_id,
     );
     html(reply);
-    return renderUnitPage(unit, occupied[0]?.occupants, documents, promoted);
+    return renderUnitPage(
+      unit,
+      occupied[0]?.occupants,
+      documents,
+      deps.chrome(csrfFrom(request), 'estate'),
+      promoted,
+    );
   });
 }

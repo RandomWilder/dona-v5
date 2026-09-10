@@ -10,6 +10,7 @@
 // the stylesheet to.
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
+import { signedInChrome } from './chrome.ts';
 import { registerEstateRoutes } from './estate/contract.ts';
 import {
   listLinkedDocuments,
@@ -34,6 +35,7 @@ import type { WorkRunner } from './kernel/work.ts';
 import {
   CSRF_FIELD,
   createUnconfiguredIdentity,
+  csrfFrom,
   csrfTokenFor,
   type IdentityProvider,
   PERMISSIONS,
@@ -134,6 +136,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     identity: deps.identity ?? createUnconfiguredIdentity(),
     baseUrl: deps.staffBaseUrl,
     hostedDomain: deps.staffHostedDomain ?? null,
+    chrome: signedInChrome,
   };
 
   // **The boot check. Slice 5.2, and it is the whole of the inversion.**
@@ -283,12 +286,13 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     reply.header('content-type', 'text/html; charset=utf-8');
     reply.header('cache-control', 'no-store');
     reply.header('x-content-type-options', 'nosniff');
-    return renderIndexPage({ csrf: request.csrf ?? '' });
+    return renderIndexPage({ csrf: csrfFrom(request) });
   });
 
   registerEstateRoutes(app, {
     pool: deps.pool,
     clock: deps.clock ?? systemClock,
+    chrome: signedInChrome,
     listLinkedDocuments,
     searchDocuments,
     listPromotedFieldsForUnit,
@@ -307,6 +311,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     extractor: deps.extractor,
     work: deps.work,
     bucket: deps.bucket ?? configuredBucket(),
+    chrome: signedInChrome,
   });
 
   return app;

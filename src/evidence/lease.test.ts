@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { PoolClient } from 'pg';
+import { signedInChrome } from '../chrome.ts';
 import { createAuditLog } from '../kernel/audit.ts';
 import { fixedClock } from '../kernel/clock.ts';
 import type { KernelError } from '../kernel/errors.ts';
@@ -27,6 +28,7 @@ import {
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const AT = new Date('2026-09-08T09:00:00.000Z');
+const NAV = signedInChrome('x'.repeat(64), 'estate');
 const BUCKET = 'dona-v5-test-docs';
 const MARKERS = 'חוזה שכירות המושכר תקופת השכירות השוכר';
 const ADDRESS = 'רקפת 12';
@@ -299,6 +301,7 @@ describe('evidence · confirm screen lists terms profiles', () => {
 
   it('is a select of existing names, not a typed field', () => {
     const html = renderTenancyPage({
+      nav: NAV,
       csrf: '',
       ...base,
       termsProfileNames: ['נספח תחזוקה — תקן'],
@@ -310,6 +313,7 @@ describe('evidence · confirm screen lists terms profiles', () => {
 
   it('withholds the write when none exist rather than inventing one', () => {
     const html = renderTenancyPage({
+      nav: NAV,
       csrf: '',
       ...base,
       termsProfileNames: [],
