@@ -3,22 +3,25 @@
 // credential to Google (ADR-0005). What is left is one link, one redirect, one callback, the board
 // and the way out.
 //
-// **What this slice does not do: guard the other seven routes.** `/`, `/estate`,
-// `/estate/buildings/:id`, `/estate/search`, `/estate/expiring`, `GET /documents/new` and
-// `POST /documents` have served unauthenticated since week 1, deliberately and on fixture data.
-// **Slice 5.2** puts them behind `requireStaff` in the same change that gives every write route a
-// CSRF token worth having. A reader who finds an open estate route in a tree that contains this
-// file is looking at a commit between the two, not at an omission.
+// **Slice 5.2 made this module's guard the whole application's.** `requireStaff` is now called from
+// exactly one place — the `onRequest` hook in `src/app.ts` — against the permission each route
+// declares in its own `config`. These five routes declare theirs like every other route in the
+// system, and their handlers read `request.staff` rather than calling the guard again: a guard
+// called twice is a guard that can be called once by mistake.
+//
+// **Three of them are `public`, and that is written rather than assumed.** The login screen, the
+// redirect to Google and the callback all serve somebody who by definition has no session. The
+// callback in particular must be reachable without one — it is what mints the first.
 //
 // **The refusal is one sentence, always.** An address that is not on the list, an unverified
 // address, an account with no role, a disabled account, a replayed `state` and a token minted for
 // another sign-in all answer identically — otherwise the login screen of a system holding 1,500
 // households is an account-enumeration oracle (SPEC-staff.md).
-import { timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { createAuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
+import { sameValue } from '../../kernel/compare.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { requireText } from '../../kernel/validate.ts';
 import {
@@ -103,17 +106,12 @@ function callbackUrl(deps: StaffDeps, request: FastifyRequest): string {
   return `${base.replace(/\/$/, '')}/staff/auth/callback`;
 }
 
-/** Constant time, because comparing a secret with `===` leaks its prefix one request at a time. */
-function sameValue(a: string, b: string): boolean {
-  const left = Buffer.from(a, 'utf8');
-  const right = Buffer.from(b, 'utf8');
-  return left.length === right.length && timingSafeEqual(left, right);
-}
-
 /**
- * The guard. **Slice 5.2's caller**, exported through `contract.ts` so the seven open routes get
- * exactly this one and never a second copy — a guard's second copy is how a guard dies
- * (tests/ui/tokens.test.ts carries the same sentence about its `SCREENS` registry).
+ * The guard, and **the application's only one from slice 5.2**. It is exported through
+ * `contract.ts` and called from exactly one place: the `onRequest` hook in `src/app.ts`, with
+ * whatever permission the matched route declared. A guard's second copy is how a guard dies
+ * (tests/ui/tokens.test.ts carries the same sentence about its `SCREENS` registry), and a guard
+ * with sixteen call sites is fifteen chances to forget the seventeenth.
  *
  * No session at all is not a refusal: it is a request from somebody who has not signed in, and it
  * goes to the login screen. A session whose account has since lost its role, or been disabled, is a
@@ -138,9 +136,24 @@ export async function requireStaff(
   return session;
 }
 
-/** Distinguishes "not signed in" from "not allowed" at the route, and nowhere else. */
-function isMissingSession(error: unknown): boolean {
-  return error instanceof KernelError && error.code === 'not_found';
+/**
+ * The stances. `public` on the three sign-in routes because a person who is signing in has no
+ * session yet, and on `POST /staff/logout` for a sharper reason: an operator whose role was
+ * withdrawn holds a live session with no permission at all, and a logout behind a permission would
+ * leave them unable to sign out of a system that will not let them do anything. It is still
+ * defended — the CSRF hook keys on the presence of a session cookie, not on the route's stance.
+ */
+const PUBLIC = { config: { staff: 'public' } } as const;
+const BOARD = { config: { staff: 'estate.read' } } as const;
+const INVITE = { config: { staff: 'staff.invite' } } as const;
+
+/** The session the guard already resolved. Absent only on a `public` route. */
+function operator(request: FastifyRequest): ResolvedSession {
+  const session = request.staff;
+  if (!session) {
+    throw notAllowed();
+  }
+  return session;
 }
 
 export function registerStaffRoutes(
@@ -155,7 +168,7 @@ export function registerStaffRoutes(
   // which is the moment a parser stops being one module's fact (the move the page shell made at
   // 3.3).
   app.register(async (scope) => {
-    scope.get('/staff/login', async (_request, reply) => {
+    scope.get('/staff/login', PUBLIC, async (_request, reply) => {
       html(reply);
       return renderLoginPage({ unconfigured: unconfigured() });
     });
@@ -163,7 +176,7 @@ export function registerStaffRoutes(
     // **The redirect begins here so that the one-shot cookie is set by this system**, on this
     // origin, in the same response that sends the operator away. `state` and `nonce` are minted
     // together, spent together, and never reach the database (SPEC-staff.md).
-    scope.get('/staff/auth/start', async (request, reply) => {
+    scope.get('/staff/auth/start', PUBLIC, async (request, reply) => {
       if (unconfigured()) {
         html(reply);
         reply.code(503);
@@ -182,7 +195,7 @@ export function registerStaffRoutes(
       );
     });
 
-    scope.get('/staff/auth/callback', async (request, reply) => {
+    scope.get('/staff/auth/callback', PUBLIC, async (request, reply) => {
       const query = request.query as {
         code?: string;
         state?: string;
@@ -280,7 +293,7 @@ export function registerStaffRoutes(
       return redirect(reply, '/staff');
     });
 
-    scope.post('/staff/logout', async (request, reply) => {
+    scope.post('/staff/logout', PUBLIC, async (request, reply) => {
       const token = readSessionCookie(request.headers.cookie);
       if (token !== null) {
         await revokeSession(deps.pool, deps.clock, token);
@@ -289,17 +302,12 @@ export function registerStaffRoutes(
       return redirect(reply, '/staff/login');
     });
 
-    scope.get('/staff', async (request, reply) => {
-      let session: ResolvedSession;
-      try {
-        session = await requireStaff(deps, request, 'estate.read');
-      } catch (error) {
-        if (isMissingSession(error)) return redirect(reply, '/staff/login');
-        throw error;
-      }
+    scope.get('/staff', BOARD, async (request, reply) => {
+      const session = operator(request);
       html(reply);
       const role = session.role as Role;
       return renderStaffHomePage({
+        csrf: request.csrf ?? '',
         email: session.email,
         role,
         permissions: permissionsOf(role),
@@ -309,14 +317,8 @@ export function registerStaffRoutes(
 
     // **Adding an operator is writing the row that authorises them.** There is no invite, no token
     // and nothing to deliver: the person signs in with a Google account they already have.
-    scope.post('/staff/operators', async (request, reply) => {
-      let session: ResolvedSession;
-      try {
-        session = await requireStaff(deps, request, 'staff.invite');
-      } catch (error) {
-        if (isMissingSession(error)) return redirect(reply, '/staff/login');
-        throw error;
-      }
+    scope.post('/staff/operators', INVITE, async (request, reply) => {
+      const session = operator(request);
       const email = field(request.body, 'email', 320);
       const asked = field(request.body, 'role', 32);
       if (!isRole(asked)) {
@@ -335,6 +337,7 @@ export function registerStaffRoutes(
       html(reply);
       const role = session.role as Role;
       return renderStaffHomePage({
+        csrf: request.csrf ?? '',
         email: session.email,
         role,
         permissions: permissionsOf(role),

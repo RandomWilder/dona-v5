@@ -1447,6 +1447,18 @@ screens is not estate's fact.
   are already in `tests/ui/tokens.test.ts`'s `SCREENS` registry and week 5's remaining screens
   append beside them.
 - **Deps:** 5.1 · **Size:** L
+- **CLOSED 10 Sep 2026** — [evidence/5.2.md](evidence/5.2.md). 487 code + 41 hooks + 50 policy, 0
+  failed. **22 routes, 7 public**, every one declaring its stance in its own `config`; an undeclared
+  route now **stops the process from starting** rather than serving, which is the inversion the
+  slice is really about — the seven routes were never open by decision, they were open because open
+  is what happened when nobody said otherwise. The token is **derived and never stored**,
+  `sha256('csrf:' + session token)`, so the policy case forbidding a stored token stays green by
+  construction. The cap is **50 filed documents per operator per rolling 24h**, counted off
+  `audit_log` — which needed `0023_audit_actor_index.sql` after the plan had said no migration was
+  needed, because without it the cap is a growing scan on the upload path. `too_many` → 429 is the
+  sixth `ErrorCode`. **The never-a-name rule was KEPT**, wording tightened to *a tenant's* name,
+  reconsidered at 5.4. And the restart-and-click step found a screen serving an **empty** token that
+  typecheck, lint, 486 tests, the policy suite and the grep guards had all passed.
 
 ### Slice 5.3 — `national_id` is unreachable by any agent tool
 - **Done when:** a policy case in `tests/policy/` fails against a tool response shape carrying
@@ -1477,6 +1489,12 @@ that tested it.**
 - **Done when:** every document filed after this slice names its uploader; the documents panel serves
   a signed URL where it rendered a `gs://` string as text; and `superseded_by` either exists with the
   case that forced it or is recorded as still unnecessary against a stated number of promotions.
+- **Carried in from 5.2:** `request.staff` is set on every guarded route and read by exactly one
+  handler. Every other write route still records a **user-typed** name — `confirmed_by`,
+  `promoted_by`, and the exception's `actor: 'console'` — beside a known identity. This is the
+  provenance slice, so it decides whether those become the operator or stay snapshot strings on
+  purpose. **And the never-a-name rule is reconsidered here**, because this slice is already
+  deciding what a session unlocks; 5.2 kept it and wrote down why.
 - **Verify:** a filed document's `uploaded_by` is the signed-in operator; the URL expires and a
   stale one is refused; the supersession answer cites a count, not a view.
 - **Deps:** 5.1, 5.2 · **Size:** M

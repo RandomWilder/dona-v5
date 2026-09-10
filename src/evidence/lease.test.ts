@@ -299,6 +299,7 @@ describe('evidence · confirm screen lists terms profiles', () => {
 
   it('is a select of existing names, not a typed field', () => {
     const html = renderTenancyPage({
+      csrf: '',
       ...base,
       termsProfileNames: ['נספח תחזוקה — תקן'],
     });
@@ -309,6 +310,7 @@ describe('evidence · confirm screen lists terms profiles', () => {
 
   it('withholds the write when none exist rather than inventing one', () => {
     const html = renderTenancyPage({
+      csrf: '',
       ...base,
       termsProfileNames: [],
     });

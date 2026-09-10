@@ -17,6 +17,7 @@ import {
   registerDocumentRoutes,
   searchDocuments,
 } from './evidence/contract.ts';
+import { renderIndexPage } from './index-page.ts';
 import { type Clock, systemClock } from './kernel/clock.ts';
 import { httpStatus, KernelError, toErrorBody } from './kernel/errors.ts';
 import type { Extractor } from './kernel/extraction.ts';
@@ -31,9 +32,17 @@ import { registerUiAssets } from './kernel/ui/assets.ts';
 import { registerFormBodies } from './kernel/ui/forms.ts';
 import type { WorkRunner } from './kernel/work.ts';
 import {
+  CSRF_FIELD,
   createUnconfiguredIdentity,
+  csrfTokenFor,
   type IdentityProvider,
+  PERMISSIONS,
+  type Permission,
+  readSessionCookie,
   registerStaffRoutes,
+  requireStaff,
+  type StaffDeps,
+  verifyCsrf,
 } from './staff/contract.ts';
 import {
   listIncompleteTenancies,
@@ -72,8 +81,165 @@ export interface AppDeps {
   staffHostedDomain?: string | null;
 }
 
+/**
+ * What a route declares about who may reach it. **Slice 5.2**, and the inversion the slice exists
+ * for: before it, a route was open unless somebody remembered to guard it, and seven routes were
+ * open for four weeks because nobody had. Now a route is refused unless somebody declared a stance,
+ * and `public` is a word written next to a route rather than the absence of one.
+ */
+declare module 'fastify' {
+  interface FastifyInstance {
+    /** Every route this application registered and the stance it declared (slice 5.2). */
+    stances: RouteStance[];
+  }
+}
+
+export type Stance = Permission | 'public';
+
+/** One row of the table the boot check walked, kept so a test can assert on the real thing. */
+export interface RouteStance {
+  method: string;
+  url: string;
+  stance: Stance | undefined;
+  csrf?: 'in-body';
+}
+
+/**
+ * The two the root owns and serves itself: the liveness probe `infra/smoke.sh` asks, and the
+ * stylesheet and fonts every screen -- including the login screen, which is served to somebody with
+ * no session by definition -- loads before anybody has signed in. They are listed here, in the
+ * composition root, rather than declared in `src/kernel/`, because the stance vocabulary is this
+ * application's and the kernel is not allowed to know it (SPEC.md rule 9).
+ */
+const ROOT_PUBLIC = ['/health', '/ui/tokens.css', '/ui/fonts/:file'];
+
+function declaredStance(config: unknown): Stance | undefined {
+  const asked = (config as { staff?: unknown } | undefined)?.staff;
+  if (asked === 'public') return 'public';
+  if (
+    typeof asked === 'string' &&
+    (PERMISSIONS as readonly string[]).includes(asked)
+  ) {
+    return asked as Permission;
+  }
+  return undefined;
+}
+
 export function buildApp(deps: AppDeps): FastifyInstance {
   const app = Fastify({ logger: false });
+
+  const staffDeps: StaffDeps = {
+    pool: deps.pool,
+    clock: deps.clock ?? systemClock,
+    identity: deps.identity ?? createUnconfiguredIdentity(),
+    baseUrl: deps.staffBaseUrl,
+    hostedDomain: deps.staffHostedDomain ?? null,
+  };
+
+  // **The boot check. Slice 5.2, and it is the whole of the inversion.**
+  //
+  // A route that declares neither a permission nor `public` does not serve unguarded -- it stops
+  // the process from starting, with the method and the path in the message. The failure mode this
+  // replaces is the one this system actually had: a route added in a hurry, guarded by nobody,
+  // discovered by nobody, and shipped. A test asserting "every route is guarded" can only assert it
+  // about the routes that exist the day it is written; this asserts it about the next one.
+  //
+  // Registered before any route, because `onRoute` sees only what is registered after it.
+  //
+  // It also records the table it checked. `app.printRoutes()` shows paths and not config, so
+  // without this a test asserting "the public surface is exactly these" would have to keep its own
+  // copy of the list — which is the second copy this slice spent its whole design avoiding.
+  const stances: RouteStance[] = [];
+  app.addHook('onRoute', (route) => {
+    if (route.method !== 'HEAD') {
+      stances.push({
+        method: String(route.method),
+        url: route.url,
+        stance: ROOT_PUBLIC.includes(route.url)
+          ? 'public'
+          : declaredStance(route.config),
+        csrf: route.config?.csrf,
+      });
+    }
+    if (ROOT_PUBLIC.includes(route.url)) return;
+    // Fastify registers a HEAD beside every GET; it carries the GET's config and needs no second
+    // declaration.
+    if (route.method === 'HEAD') return;
+    if (declaredStance(route.config) === undefined) {
+      throw new Error(
+        `route ${String(route.method)} ${route.url} declares no staff stance: ` +
+          "add config: { staff: <permission> } or config: { staff: 'public' }",
+      );
+    }
+  });
+
+  // **The guard, and it is `requireStaff` -- one function, one call site.**
+  //
+  // `onRequest` rather than `preHandler`, because this hook runs before the body is parsed: an
+  // unauthenticated 20 MB upload is refused before a byte of it is read.
+  //
+  // A request that matched no route reaches here with no config, and is treated as guarded rather
+  // than as public. That is deliberate: answering 404 to an anonymous caller and a redirect to a
+  // signed-out one would tell a stranger which paths exist.
+  app.addHook('onRequest', async (request, reply) => {
+    const stance =
+      declaredStance(request.routeOptions?.config) ??
+      (ROOT_PUBLIC.includes(request.routeOptions?.url ?? '')
+        ? 'public'
+        : undefined);
+    // Derived here and nowhere else, so no screen computes it and none of them can compute it
+    // differently. A request with no session gets none, and a screen with no token renders no form
+    // that would need one.
+    const token = readSessionCookie(request.headers.cookie);
+    if (token !== null) request.csrf = csrfTokenFor(token);
+    if (stance === 'public') return;
+    try {
+      // `stance` is undefined only for an unmatched path, where any permission refuses equally.
+      request.staff = await requireStaff(
+        staffDeps,
+        request,
+        stance ?? 'estate.read',
+      );
+    } catch (error) {
+      // Not signed in is not a refusal: it is somebody who has not signed in, and it goes to the
+      // login screen. A session whose account lost its role is a refusal, and it is byte-identical
+      // to every other refusal this system makes (SPEC-staff.md).
+      if (error instanceof KernelError && error.code === 'not_found') {
+        return reply.code(303).header('location', '/staff/login').send();
+      }
+      throw error;
+    }
+  });
+
+  // **The CSRF token, checked wherever a session could be riding.**
+  //
+  // `preHandler`, because it needs the parsed body. The condition is the presence of a session
+  // cookie rather than the route's stance: a token defends a session's authority, so every unsafe
+  // method that could carry one is in scope -- `POST /staff/logout` included, which is `public`
+  // precisely so that an operator whose role was withdrawn can still sign out.
+  //
+  // `POST /documents` is the one exception and it is declared, not implicit: its body is a
+  // multipart stream, and reading the field here would consume the stream its handler needs. It
+  // carries `csrf: 'in-body'` and calls the same `verifyCsrf`.
+  app.addHook('preHandler', async (request) => {
+    if (request.method === 'GET' || request.method === 'HEAD') return;
+    const config = request.routeOptions?.config as
+      | { csrf?: unknown }
+      | undefined;
+    if (config?.csrf === 'in-body') return;
+    const token = readSessionCookie(request.headers.cookie);
+    if (token === null) return;
+    verifyCsrf(
+      token,
+      (request.body as Record<string, unknown> | undefined)?.[CSRF_FIELD],
+    );
+  });
+
+  // Slice 5.2. The session the guard resolved and the token derived from it, for the handlers that
+  // need to name the operator and the screens that render a form.
+  app.decorateRequest('staff', null);
+  app.decorateRequest('csrf', null);
+  app.decorate('stances', stances);
 
   // Fastify's own bodies never reach the wire: its 404 echoes the requested path back and its 500
   // carries the thrown message. Both render as SPEC.md's { code, message } instead. 1.3 wrote the
@@ -109,6 +275,17 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   // staff is the second module to, so it belongs to the root rather than to whichever module got
   // there first.
   registerFormBodies(app);
+  // **The root index, moved here at 5.2** from `src/estate/internal/views.ts`, where 2.6 put it and
+  // said it would stay only until a second *module* had a screen. Staff is that module. An index of
+  // screens is not estate's fact -- it is the one page in this system whose nav spans two modules
+  // and carries the way out.
+  app.get('/', { config: { staff: 'estate.read' } }, async (request, reply) => {
+    reply.header('content-type', 'text/html; charset=utf-8');
+    reply.header('cache-control', 'no-store');
+    reply.header('x-content-type-options', 'nosniff');
+    return renderIndexPage({ csrf: request.csrf ?? '' });
+  });
+
   registerEstateRoutes(app, {
     pool: deps.pool,
     clock: deps.clock ?? systemClock,
@@ -118,16 +295,9 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     listIncompleteTenancies,
     recordCompletenessException,
   });
-  // Slice 5.1. The staff routes are the only ones behind a session today; the seven that have
-  // served unauthenticated since week 1 go behind `requireStaff` at 5.2, which owns the CSRF token
-  // and the per-caller upload bound in the same change.
-  registerStaffRoutes(app, {
-    pool: deps.pool,
-    clock: deps.clock ?? systemClock,
-    identity: deps.identity ?? createUnconfiguredIdentity(),
-    baseUrl: deps.staffBaseUrl,
-    hostedDomain: deps.staffHostedDomain ?? null,
-  });
+  // Slice 5.1, and from 5.2 no longer the only routes behind a session: every route this
+  // application registers declares a stance above, and the hook calls `requireStaff` once.
+  registerStaffRoutes(app, staffDeps);
   registerDocumentRoutes(app, {
     pool: deps.pool,
     clock: deps.clock ?? systemClock,

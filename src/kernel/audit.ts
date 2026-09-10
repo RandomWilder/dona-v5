@@ -32,6 +32,33 @@ export type AuditOutcome =
 // happen. Nothing else changes -- this function only ever calls .query, which both types have.
 export type AuditTarget = Pool | PoolClient;
 
+/**
+ * How many times one actor did one thing since a moment. **Slice 5.2**, whose per-caller upload cap
+ * is its first caller.
+ *
+ * A cap needs a count, and the choice is between a new counter column and the log that already
+ * records exactly the event being counted. The column would be a second place the same fact lives,
+ * and it would drift the first time a write path forgot it; the log cannot drift, because the row
+ * being counted *is* the record of the thing happening. It costs an index-supported COUNT on a
+ * bounded window rather than a single-row read, which is the right price for not keeping two
+ * truths.
+ *
+ * **Both outcomes count.** The caller asks about attempts. A refusal still consumed the work the
+ * bound exists to bound, and counting only successes would let a caller hammer a route for free by
+ * being wrong on purpose.
+ */
+export async function countActions(
+  db: AuditTarget,
+  filter: { action: string; actorId: string; since: Date },
+): Promise<number> {
+  const { rows } = await db.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM audit_log
+      WHERE action = $1 AND actor_id = $2 AND at >= $3`,
+    [filter.action, filter.actorId, filter.since],
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
 export function createAuditLog(
   db: AuditTarget,
   clock: Clock = systemClock,

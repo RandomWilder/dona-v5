@@ -12,11 +12,13 @@ const codes: readonly ErrorCode[] = [
   'not_allowed',
   'conflict',
   'invalid',
+  // Slice 5.2, and the sixth: a per-caller cap refusal.
+  'too_many',
   'unavailable',
 ];
 
 describe('KernelError', () => {
-  it('renders all five SRS categories through the one shape', () => {
+  it('renders every category through the one shape', () => {
     for (const code of codes) {
       const body = toErrorBody(new KernelError(code, `${code} happened`));
       assert.deepEqual(body, { code, message: `${code} happened` });
@@ -64,6 +66,7 @@ describe('httpStatus', () => {
     assert.equal(httpStatus('not_allowed'), 403);
     assert.equal(httpStatus('not_found'), 404);
     assert.equal(httpStatus('conflict'), 409);
+    assert.equal(httpStatus('too_many'), 429);
     assert.equal(httpStatus('unavailable'), 503);
   });
 });

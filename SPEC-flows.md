@@ -129,7 +129,8 @@ OCR is slice 4.1's. A refused upload writes nothing — no row, no object — an
 **Declaring a *new draft* tenancy from the upload screen is A2's, not A1's.** Invariant 5 puts a human
 confirmation between a proposed party and a written `tenancy_party` row, and `upsertParty` needs a
 ת.ז. it can key on, so the "declared by the administrator" path 3.3 was planned with would have been
-an unauthenticated form collecting a name and an identity number before week 5's session exists. A2
+an unauthenticated form collecting a name and an identity number before a session existed — which
+it does from 5.1, and every route is behind it from 5.2. A2
 creates the draft from the lease it extracted, under the document that was already filed against the
 unit — which is the sequence step 5 of that flow describes anyway.
 
@@ -190,7 +191,7 @@ clears the queue the way an addendum that writes a `GUARANTOR` does. A second re
 pair is a no-op. It is not `tenancy.complete`.
 **Screen:** `GET /estate/incomplete` — each row shows what is missing and the TENANCY-linked
 document it was expected in (a `lease` type wins when both a lease and an addendum are linked).
-No party names, until week 5.
+No party names — a rule 5.2 kept rather than lifted when it put the screen behind a session.
 **Resolution:** the administrator uploads the addendum (A3), or records the exception.
 **Module:** tenancy owns the query and the exception write (`listIncompleteTenancies`,
 `recordCompletenessException`); the case lives in `tests/policy/` until week 6 stands up

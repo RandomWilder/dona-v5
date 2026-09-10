@@ -17,7 +17,12 @@ import { buildApp } from '../app.ts';
 import { fixedClock } from '../kernel/clock.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
 import type { GoogleClaims, IdentityProvider } from './contract.ts';
-import { addOperator, OAUTH_COOKIE, SESSION_COOKIE } from './contract.ts';
+import {
+  addOperator,
+  csrfTokenFor,
+  OAUTH_COOKIE,
+  SESSION_COOKIE,
+} from './contract.ts';
 
 const AT = new Date('2026-10-04T06:00:00.000Z');
 const DOMAIN = 'staff-routes.test';
@@ -170,11 +175,19 @@ describe('staff · signing in with Google', () => {
     assert.match(home.body, /ADMIN/);
     assert.match(home.body, /staff\.invite/);
 
-    // Sign-out is a row update, so the same cookie stops working immediately.
+    // Sign-out is a row update, so the same cookie stops working immediately. **From slice 5.2 it
+    // also needs the token**, and that is not ceremony: a cross-origin page that could sign an
+    // operator out at will is a denial of service on a console somebody is working in.
     const out = await app.inject({
       method: 'POST',
       url: '/staff/logout',
-      headers: { cookie: session as string },
+      headers: {
+        cookie: session as string,
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      payload: new URLSearchParams({
+        csrf: csrfTokenFor((session as string).split('=')[1] as string),
+      }).toString(),
     });
     assert.equal(out.statusCode, 303);
     const afterOut = await app.inject({
@@ -376,7 +389,11 @@ describe('staff · signing in with Google', () => {
           cookie,
           'content-type': 'application/x-www-form-urlencoded',
         },
-        payload: new URLSearchParams({ email, role }).toString(),
+        payload: new URLSearchParams({
+          email,
+          role,
+          csrf: csrfTokenFor(token),
+        }).toString(),
       });
 
     const first = await add(`Amit@${DOMAIN}`, 'VIEWER');

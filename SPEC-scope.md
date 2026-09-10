@@ -74,8 +74,10 @@ on a sixty-unit building: **29.68 ms and sixty audit rows the old way, 0.94 ms a
 the whole portfolio, and returns which of them are let and by how many residents. One query, one
 audit line, and the tenancy-active predicate stays in this file where guard two can see it.
 
-**It returns no name and no number**, and that is a rule and not an economy. `/estate` has no session
-until week 5, so what an unauthenticated screen may show about a household is a *state* and a
+**It returns no name and no number**, and that is a rule and not an economy. `/estate` went behind
+the session at 5.2, **and the rule did not lift with it** — 5.2 was the slice entitled to lift it
+and recorded a decision to keep it (SPEC.md). What a screen may show about a household is a *state*
+and a
 *count*; `resolvePartiesInUnit` remains the call for the unit screen, where the people are the
 subject and the session will exist.
 

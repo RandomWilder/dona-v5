@@ -150,8 +150,8 @@ export interface UnitHit {
  *
  * It returns `UnitHit` — the shape the search results already use — rather than a shape of its own,
  * because a unit and its building is one fact and two names for it would drift. **No party and no
- * date**: what an unauthenticated screen may say about a flat is where it is, which is the rule
- * every screen keeps until week 5.
+ * date**: what a screen may say about a flat is where it is, which is the rule
+ * every screen still keeps (SPEC.md, decided at 5.2).
  */
 export async function getUnit(db: Queryable, unitId: string): Promise<UnitHit> {
   const result = await db.query<UnitHit>(
@@ -226,9 +226,10 @@ const SEARCH_UNITS_SQL = `
 /**
  * **Search across the portfolio — buildings and units, and deliberately not people.**
  *
- * `/estate` has no session until week 5 (SPEC-estate.md), so a search that reached `party` would put
- * a real person behind an unauthenticated route the week the register arrives. Addresses and unit
- * numbers are not personal data; a name and a number are, and they are week 5's to expose.
+ * `/estate` went behind the session at 5.2, and this stayed true anyway: that slice was entitled to
+ * let a search reach `party` and recorded a decision not to (SPEC-estate.md). Addresses and unit
+ * numbers are not personal data; a name and a number are, and exposing them is still owed to a
+ * decision nobody has made.
  *
  * **A city matches buildings and not units, deliberately.** A city holds hundreds of apartments and
  * sixty arbitrary ones is a worse answer than the buildings that contain them, which are the way in.

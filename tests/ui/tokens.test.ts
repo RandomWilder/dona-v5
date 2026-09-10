@@ -26,7 +26,6 @@ import {
   renderBuildingsPage,
   renderExpiringPage,
   renderIncompletePage,
-  renderIndexPage,
   renderSearchPage,
   renderUnitPage,
 } from '../../src/estate/contract.ts';
@@ -40,6 +39,10 @@ import {
   renderTenancyWrittenPage,
   renderUploadPage,
 } from '../../src/evidence/contract.ts';
+// The root index is the composition root's screen from 5.2, not estate's. It is in this registry
+// under the same rule as every other screen: rendered here, asserted on the bytes.
+import { renderIndexPage } from '../../src/index-page.ts';
+import { CSRF_FIELD } from '../../src/kernel/ui/page.ts';
 import {
   renderLoginPage,
   renderStaffHomePage,
@@ -202,8 +205,12 @@ const lettings: UnitLetting[] = [
   },
 ];
 
+// A token shaped like the real one — 64 hex characters — so an assertion about the *shape* of what
+// a form carries is testing the shape a session actually produces.
+const CSRF = 'a1b2c3d4'.repeat(8);
+
 const SCREENS: Array<[string, () => string]> = [
-  ['estate · index', () => renderIndexPage()],
+  ['root · index', () => renderIndexPage({ csrf: CSRF })],
   [
     'estate · buildings',
     () =>
@@ -303,36 +310,52 @@ const SCREENS: Array<[string, () => string]> = [
   [
     'estate · incomplete tenancies',
     () =>
-      renderIncompletePage([
-        {
-          tenancy_id: '55555555-5555-4555-8555-555555555555',
-          unit_id: hit.unit_id,
-          unit_number: '12A',
-          building_id: building.building_id,
-          building_name: building.name,
-          city: building.city,
-          start_date: '2026-03-01',
-          end_date: '2027-02-28',
-          status: 'DRAFT',
-          missing: 'guarantor',
-          expected_document_id: filed.documentId,
-          expected_document_label: 'חוזה שכירות',
-        },
-      ]),
+      renderIncompletePage(
+        [
+          {
+            tenancy_id: '55555555-5555-4555-8555-555555555555',
+            unit_id: hit.unit_id,
+            unit_number: '12A',
+            building_id: building.building_id,
+            building_name: building.name,
+            city: building.city,
+            start_date: '2026-03-01',
+            end_date: '2027-02-28',
+            status: 'DRAFT',
+            missing: 'guarantor',
+            expected_document_id: filed.documentId,
+            expected_document_label: 'חוזה שכירות',
+          },
+        ],
+        CSRF,
+      ),
   ],
-  ['estate · incomplete tenancies, none', () => renderIncompletePage([])],
+  ['estate · incomplete tenancies, none', () => renderIncompletePage([], CSRF)],
   [
     'documents · upload',
-    () => renderUploadPage({ unit: hit, types: documentTypes, lettings }),
+    () =>
+      renderUploadPage({
+        csrf: CSRF,
+        unit: hit,
+        types: documentTypes,
+        lettings,
+      }),
   ],
   [
     'documents · upload, a flat with no letting on it',
-    () => renderUploadPage({ unit: hit, types: documentTypes, lettings: [] }),
+    () =>
+      renderUploadPage({
+        csrf: CSRF,
+        unit: hit,
+        types: documentTypes,
+        lettings: [],
+      }),
   ],
   [
     'documents · upload, refused',
     () =>
       renderUploadPage({
+        csrf: CSRF,
         unit: hit,
         types: documentTypes,
         lettings,
@@ -377,6 +400,7 @@ const SCREENS: Array<[string, () => string]> = [
     'documents · read overlay',
     () =>
       renderReadPage({
+        csrf: CSRF,
         documentId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
         buildingId: building.building_id,
         buildingName: building.name,
@@ -428,6 +452,7 @@ const SCREENS: Array<[string, () => string]> = [
     'documents · read overlay, no fields',
     () =>
       renderReadPage({
+        csrf: CSRF,
         documentId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
         buildingId: building.building_id,
         buildingName: building.name,
@@ -444,6 +469,7 @@ const SCREENS: Array<[string, () => string]> = [
     'documents · seed a protocol',
     () =>
       renderSeedPage({
+        csrf: CSRF,
         documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         labelHe: 'פרוטוקול מסירה',
         buildingId: building.building_id,
@@ -476,6 +502,7 @@ const SCREENS: Array<[string, () => string]> = [
     'documents · confirm a lease',
     () =>
       renderTenancyPage({
+        csrf: CSRF,
         documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         typeKey: 'lease',
         unit: hit,
@@ -512,6 +539,7 @@ const SCREENS: Array<[string, () => string]> = [
     'documents · confirm an addendum',
     () =>
       renderTenancyPage({
+        csrf: CSRF,
         documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         typeKey: 'lease_amendment',
         unit: hit,
@@ -552,6 +580,7 @@ const SCREENS: Array<[string, () => string]> = [
     'staff · home, an admin',
     () =>
       renderStaffHomePage({
+        csrf: CSRF,
         email: 'yael@example.test',
         role: 'ADMIN',
         permissions: [
@@ -570,6 +599,7 @@ const SCREENS: Array<[string, () => string]> = [
     'staff · home, an admin who just added an operator',
     () =>
       renderStaffHomePage({
+        csrf: CSRF,
         email: 'yael@example.test',
         role: 'ADMIN',
         permissions: ['estate.read', 'staff.invite'],
@@ -585,6 +615,7 @@ const SCREENS: Array<[string, () => string]> = [
     'staff · home, an admin who moved an existing role',
     () =>
       renderStaffHomePage({
+        csrf: CSRF,
         email: 'yael@example.test',
         role: 'ADMIN',
         permissions: ['estate.read', 'staff.invite'],
@@ -600,6 +631,7 @@ const SCREENS: Array<[string, () => string]> = [
     'staff · home, a viewer who may not invite',
     () =>
       renderStaffHomePage({
+        csrf: CSRF,
         email: 'dana@example.test',
         role: 'VIEWER',
         permissions: ['estate.read', 'documents.read'],
@@ -641,6 +673,44 @@ describe('shared UI tokens', () => {
       // all, so the stronger assertion is free — and an inline script is exactly how the next
       // screen would acquire a dependency nothing gates.
       assert.doesNotMatch(html, /<script/, name);
+    }
+  });
+
+  it('carries a CSRF token on every form that writes', () => {
+    // **Slice 5.2, and this is the assertion that catches the eighth form.** Seven screens in this
+    // system post; each of them was given the hidden input by hand, and a hand is exactly what
+    // forgets the next one. The rule is a property of the registry rather than of seven memories:
+    // if a rendered screen contains `<form method="post"`, that screen's bytes contain the field.
+    //
+    // It reads the field's name off `src/kernel/ui/page.ts` rather than spelling it, so renaming
+    // the input in one place cannot leave this guard asserting the old name and passing.
+    for (const [name, render] of SCREENS) {
+      const html = render();
+      if (
+        !html.includes('<form method="post"') &&
+        !/<form\s[^>]*method="post"/.test(html)
+      ) {
+        continue;
+      }
+      assert.match(
+        html,
+        new RegExp(`<input type="hidden" name="${CSRF_FIELD}" value="[^"]+"`),
+        `${name} posts a form and carries no ${CSRF_FIELD}`,
+      );
+    }
+  });
+
+  it('never renders a GET form carrying the token', () => {
+    // The search box is a GET form, and a token on it would land in the query string of every
+    // result URL somebody sends to somebody else — a session's anti-forgery value in a link, a
+    // referrer header and a log. One screen has one; asserting it over the registry is what keeps
+    // the next GET form from acquiring one by copy-paste.
+    for (const [name, render] of SCREENS) {
+      const html = render();
+      for (const form of html.match(/<form[\s\S]*?<\/form>/g) ?? []) {
+        if (/method="post"/.test(form)) continue;
+        assert.doesNotMatch(form, new RegExp(`name="${CSRF_FIELD}"`), name);
+      }
     }
   });
 
@@ -691,10 +761,13 @@ describe('shared UI tokens', () => {
   });
 
   it('shows a state and a count, and never a person', () => {
-    // The rule these screens are built to keep until week 5 gives them a session: an
-    // unauthenticated route may say a unit is let and by how many, and may not say by whom. The
-    // views cannot break it by accident, because nothing ever hands them a name — this asserts the
-    // property from the outside anyway, because that is what a rule is for.
+    // The rule these screens keep, **and kept after 5.2 put them behind a session**: a screen may
+    // say a unit is let and by how many, and may not say by whom. 5.2 was the slice entitled to
+    // lift it and declined — a session says who is asking, not what a household's name is for
+    // (SPEC.md). The views cannot break it by accident, because nothing ever hands them a name —
+    // this asserts the property from the outside anyway, because that is what a rule is for.
+    //
+    // The operator's own email is on the staff board and always was: this rule is about tenants.
     for (const [name, render] of SCREENS) {
       const html = render();
       assert.doesNotMatch(html, /05\d[- ]?\d/, name);
@@ -703,8 +776,8 @@ describe('shared UI tokens', () => {
   });
 
   it('shows a path and never a link to the bytes', () => {
-    // A signed URL is a bearer token for one object. Until week 5 there is no session to hang one
-    // on, so the panel renders the gs:// uri as text. The filed-document screen already kept the
+    // A signed URL is a bearer token for one object. The session to hang one on exists from 5.2 and
+    // **slice 5.4 is where the panel mints one**; until then it renders the gs:// uri as text. The filed-document screen already kept the
     // uri off the page entirely; the panel is allowed to name the path and still must not make it
     // clickable.
     const html = renderUnitPage(hit, 2, [filed]);
@@ -747,6 +820,7 @@ describe('shared UI tokens', () => {
       /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read"/,
     );
     const emptyRead = renderReadPage({
+      csrf: '',
       documentId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
       buildingId: building.building_id,
       buildingName: building.name,

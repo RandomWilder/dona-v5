@@ -14,7 +14,7 @@
 //
 // Every colour, face, radius and measure is a token; the CSS below is layout for these pages only.
 import { type Html, h } from '../../kernel/ui/html.ts';
-import { renderPage } from '../../kernel/ui/page.ts';
+import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import type { Permission, Role } from './roles.ts';
 
 const styles = h`<style>
@@ -138,6 +138,8 @@ export function renderLoginPage(screen: LoginScreen = {}): string {
 }
 
 export interface StaffHomeScreen {
+  /** The CSRF token for this session (slice 5.2). Both forms on this screen carry it. */
+  csrf: string;
   email: string;
   role: Role;
   permissions: readonly Permission[];
@@ -150,6 +152,7 @@ export interface StaffHomeScreen {
 export function renderStaffHomePage(screen: StaffHomeScreen): string {
   const invite = screen.mayInvite
     ? h`<form class="auth-card" method="post" action="/staff/operators">
+          ${csrfInput(screen.csrf)}
           <h2>הוספת משתמש</h2>
           <div class="field">
             <label for="invite-email">דואר אלקטרוני</label>
@@ -195,6 +198,7 @@ export function renderStaffHomePage(screen: StaffHomeScreen): string {
       ${issued}
       ${invite}
       <form method="post" action="/staff/logout">
+        ${csrfInput(screen.csrf)}
         <button type="submit">יציאה</button>
       </form>
     </div>`;

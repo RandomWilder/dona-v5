@@ -75,7 +75,6 @@ export {
   renderBuildingsPage,
   renderExpiringPage,
   renderIncompletePage,
-  renderIndexPage,
   renderSearchPage,
   renderUnitPage,
 } from './internal/views.ts';
