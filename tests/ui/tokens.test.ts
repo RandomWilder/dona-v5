@@ -766,7 +766,10 @@ describe('shared UI tokens', () => {
       if (name.startsWith('staff · login')) continue;
       const html = render();
       assert.match(html, /class="ops"/, name);
-      assert.match(html, /<aside class="ops-nav">/, name);
+      assert.match(html, /<aside class="ops-nav"/, name);
+      assert.match(html, /id="nav-toggle"/, name);
+      assert.match(html, /class="ops-menu"/, name);
+      assert.match(html, />תפריט</, name);
       assert.match(html, /href="\/estate"/, name);
       assert.match(html, /href="\/estate\/expiring"/, name);
       assert.match(html, /href="\/estate\/incomplete"/, name);
@@ -795,7 +798,9 @@ describe('shared UI tokens', () => {
       if (!name.startsWith('staff · login')) continue;
       const html = render();
       assert.doesNotMatch(html, /class="ops"/, name);
-      assert.doesNotMatch(html, /<aside class="ops-nav">/, name);
+      assert.doesNotMatch(html, /<aside class="ops-nav"/, name);
+      assert.doesNotMatch(html, /id="nav-toggle"/, name);
+      assert.doesNotMatch(html, /class="ops-menu"/, name);
       assert.doesNotMatch(html, /href="\/estate"/, name);
       assert.doesNotMatch(html, /href="\/estate\/search"/, name);
       assert.doesNotMatch(html, /action="\/staff\/logout"/, name);

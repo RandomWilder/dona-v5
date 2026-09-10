@@ -1479,6 +1479,15 @@ screens is not estate's fact.
   v5's. Unbuilt tabs stay 5.9. Not a card redesign. Kernel still learns no route.
 - **Deps:** 5.2b · **Size:** M
 
+### Slice 5.2d — Phone shell: the ops rail is a drawer below 840px
+- **Done when:** below 840px a signed-in screen shows a menu control, not the full rail; the
+  destinations and sign-out are in the drawer; login has neither. Desktop rail unchanged.
+- **Verify:** the token registry asserts the menu control; restart `npm run dev` and open the
+  drawer at 375px. No `<script>`.
+- **5.2c left the rail wrapping on a phone.** The drawer is the kernel shell's, so a new screen
+  inherits it. Unbuilt tabs stay 5.9. Not a card redesign.
+- **Deps:** 5.2c · **Size:** S
+
 ### Slice 5.3 — `national_id` is unreachable by any agent tool
 - **Done when:** a policy case in `tests/policy/` fails against a tool response shape carrying
   `national_id` and passes when it does not.

@@ -113,6 +113,10 @@
   --size-marker: 3px;
   --size-focus: 2px;
   --size-hairline: 1px;
+  --color-scrim: rgba(29, 31, 32, 0.45);
+  --z-nav-scrim: 20;
+  --z-nav-drawer: 30;
+  --z-nav-bar: 40;
 }
 
 *,
@@ -127,6 +131,9 @@ html {
   line-height: 1.45;
   color: var(--color-text);
   background: var(--color-bg);
+  overflow-x: clip;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -150,6 +157,16 @@ a {
   outline-offset: var(--size-focus);
 }
 
+img,
+video {
+  max-inline-size: 100%;
+  block-size: auto;
+}
+
+input[type="file"] {
+  max-inline-size: 100%;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -162,6 +179,7 @@ a {
   font-weight: 500;
   cursor: pointer;
   text-decoration: none;
+  touch-action: manipulation;
 }
 
 .btn:disabled {
@@ -274,6 +292,14 @@ textarea {
 .empty-state {
   color: var(--color-text-muted);
   font-size: var(--text-body);
+}
+
+@media (max-width: 839px) {
+  input:not([type="file"]):not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: var(--text-lg);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -219,9 +219,10 @@ bound a different quantity and an authenticated operator can still post a 200 MB
 - **Nothing personal is on the screen or in the response** — a unit number, a type and a date. The
   tenancy options are dates and a status, never a name, which is the rule every screen still keeps
   after 5.2 chose to keep it.
-- **No private nav** (slices 5.2b and 5.2c). Document screens receive the same signed-in ops
+- **No private nav** (slices 5.2b, 5.2c and 5.2d). Document screens receive the same signed-in ops
   rail the composition root injects everywhere else — buildings, expiring, incomplete, search,
-  staff, sign-out — mark the estate destination as current, and write none of their own.
+  staff, sign-out — mark the estate destination as current, and write none of their own. The phone
+  drawer is the kernel shell's, not a second menu on the document screens.
 - **Only tier-1 specimens are filed before the corpus arrives.** Real tenant documents are gated
   behind F6 and arrive at the pilot-preparation step of the method; that ordering is what keeps this
   window empty rather than merely supervised.

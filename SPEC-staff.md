@@ -13,9 +13,9 @@ piece of paper. Shared conventions live in [SPEC.md](SPEC.md) and are not repeat
   token derived from the session.
 - **Built:** slice 5.1 on Identity Platform, with a password form, a TOTP form and an invite flow.
   **Amended at slice 5.1b**, which deleted all three and made the credential Google's. The
-  `national_id` field guard is **5.3**. The signed-in chrome (slices **5.2b** and **5.2c**) is
-  the composition root's, not this module's: the staff home uses the ops rail; the login screen
-  does not.
+  `national_id` field guard is **5.3**. The signed-in chrome (slices **5.2b**, **5.2c** and **5.2d**)
+  is the composition root's, not this module's: the staff home uses the ops rail (a drawer below
+  840px); the login screen does not.
 
 ---
 
