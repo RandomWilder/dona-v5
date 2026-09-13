@@ -20,10 +20,12 @@
 // handed the data, not a discipline they remember.
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
+import type { BuildingStatus } from './plan.ts';
 import type {
   BuildingDetail,
   BuildingSummary,
   ExpiringLease,
+  ProjectOption,
   SearchResults,
   UnitHit,
   UnitRow,
@@ -92,6 +94,17 @@ const BUILDING_STATUS: Record<string, string> = {
   IN_CONSTRUCTION: 'בבנייה',
   EXITED: 'הסתיים',
 };
+
+/**
+ * The vocabulary the form offers, in the order it offers it (6.1). Typed as `BuildingStatus`, so
+ * the select and the CHECK constraint cannot drift apart without a typecheck failure — the reason
+ * `src/estate/internal/plan.ts` spells these as a union in the first place.
+ */
+const BUILDING_STATUSES: readonly BuildingStatus[] = [
+  'ACTIVE',
+  'IN_CONSTRUCTION',
+  'EXITED',
+];
 
 const CONDITION: Record<string, string> = {
   READY: 'מוכנה',
@@ -196,6 +209,19 @@ const styles = h`<style>
     padding: var(--space-3) 0;
     border-block-end: var(--size-hairline) solid var(--color-divider);
   }
+  /* Slice 6.1's form. Evidence's upload screen carries the same four class names in its own styles
+     block, which is the arrangement src/kernel/ui/page.ts describes rather than a copy that
+     drifted: the kernel owns the shell and the tokens, a module owns the layout of its own cards.
+     A third module wanting them is the moment they move down. */
+  .form-grid { display: grid; gap: var(--space-4); max-width: var(--size-shell-max); }
+  .form-row { display: grid; gap: var(--space-2); }
+  .form-row .hint, .form-note { color: var(--color-text-muted); font-size: var(--text-sm); margin: 0; }
+  .form-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: center; }
+  .form-pair {
+    display: grid;
+    gap: var(--space-4);
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  }
 </style>`;
 
 function page(title: string, body: Html, nav: Html): string {
@@ -235,6 +261,12 @@ export function renderBuildingsPage(
   buildings: BuildingSummary[],
   occupancy: OccupancyByBuilding,
   nav: Html,
+  /**
+   * Whether this viewer holds `estate.write` (slice 6.1). The link is rendered for nobody else:
+   * the refusal this system makes says `not_allowed` and nothing more, so an operator who followed
+   * it would learn nothing from it except that they had wasted the trip.
+   */
+  mayWrite = false,
 ): string {
   const units = buildings.reduce(
     (total, building) => total + Number(building.unit_count),
@@ -251,6 +283,13 @@ export function renderBuildingsPage(
         ${ltr(buildings.length)} בניינים · ${ltr(units)} יחידות דיור ·
         ${ltr(occupied)} מאוכלסות היום. שתי הספירות נגזרות בכל טעינה ואינן נשמרות.
       </p>
+      ${
+        mayWrite
+          ? h`<p class="form-actions">
+              <a class="btn btn-primary" href="/estate/buildings/new">בניין חדש</a>
+            </p>`
+          : h``
+      }
     </div>
     ${
       buildings.length === 0
@@ -272,6 +311,105 @@ export function renderBuildingsPage(
           </div>`
     }`;
   return page('דונה דום — בניינים', body, nav);
+}
+
+/**
+ * What the new-building form is handed. **Slice 6.1, flow A11.**
+ *
+ * `csrf` is required and has no default. 5.8 found the other arrangement the hard way: a default of
+ * `''` type-checks at every call site and renders a form that posts and is always refused, which is
+ * only discoverable by clicking the screen. A required parameter makes the route that forgets it
+ * fail to compile.
+ */
+export interface NewBuildingScreen {
+  nav: Html;
+  csrf: string;
+  projects: readonly ProjectOption[];
+}
+
+/**
+ * The screen an admin shapes the estate from.
+ *
+ * **No client-side idempotence and no "does this address exist" check.** `building.address_key` is
+ * UNIQUE and the importer upserts on it, so a double submit converges on one row whoever is
+ * writing. A check here would be a check the next writer does not make.
+ */
+export function renderNewBuildingPage(screen: NewBuildingScreen): string {
+  const body = h`
+    <div>
+      <a class="back" href="/estate">← בניינים</a>
+      <h1>בניין חדש</h1>
+      <p class="lede">
+        מפעיל מתייק נייר; מנהל מעצב את הנכס. המסך הזה פתוח למנהל בלבד.
+      </p>
+    </div>
+    <form class="form-grid" method="post" action="/estate/buildings">
+      ${csrfInput(screen.csrf)}
+      <div class="form-row">
+        <label for="name">שם הבניין</label>
+        <input id="name" name="name" type="text" maxlength="200" required />
+        <p class="hint">איך הצוות קורא לבניין. אינו חייב להיות זהה לכתובת.</p>
+      </div>
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="address_line">רחוב ומספר</label>
+          <input id="address_line" name="address_line" type="text" maxlength="200" required />
+        </div>
+        <div class="form-row">
+          <label for="city">עיר</label>
+          <input id="city" name="city" type="text" maxlength="120" required />
+        </div>
+      </div>
+      <p class="form-note">
+        הכתובת היא מה שמזהה בניין. אותה כתובת פעמיים מעדכנת את הבניין הקיים ואינה יוצרת בניין שני.
+      </p>
+      <div class="form-row">
+        <label for="project_code">פרויקט</label>
+        <select id="project_code" name="project_code">
+          <option value="">ללא פרויקט</option>
+          ${screen.projects.map(
+            (project) =>
+              h`<option value="${project.project_code}">${project.name} · ${ltr(
+                project.project_code,
+              )}</option>`,
+          )}
+        </select>
+        <p class="hint">
+          בניין יכול לעמוד ללא פרויקט. הרשימה היא הפרויקטים הקיימים; קוד מכרז חדש אינו נפתח כאן.
+        </p>
+      </div>
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="handover_date">תאריך מסירה</label>
+          <input id="handover_date" name="handover_date" type="date" required />
+          <p class="hint">פותח את תקופת הבדק.</p>
+        </div>
+        <div class="form-row">
+          <label for="warranty_end_date">תום תקופת הבדק</label>
+          <input id="warranty_end_date" name="warranty_end_date" type="date" />
+          <p class="hint">ריק — נגזר: תאריך המסירה ועוד שנתיים.</p>
+        </div>
+      </div>
+      <div class="form-row">
+        <label for="status">סטטוס</label>
+        <select id="status" name="status">
+          ${BUILDING_STATUSES.map(
+            (status) =>
+              h`<option value="${status}" ${
+                status === 'ACTIVE' ? h`selected` : h``
+              }>${label(BUILDING_STATUS, status)}</option>`,
+          )}
+        </select>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">יצירת בניין</button>
+        <a href="/estate">ביטול</a>
+      </div>
+    </form>
+    <p class="form-note">
+      הבניין נוצר ריק — בלי חללים ובלי דירות. הוספת דירה היא המסך הבא.
+    </p>`;
+  return page('דונה דום — בניין חדש', body, screen.nav);
 }
 
 // **R6, on a card.** Occupancy is derived on every load and stored nowhere -- there is no column to

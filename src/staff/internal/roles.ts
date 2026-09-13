@@ -14,6 +14,11 @@ export type Role = (typeof ROLES)[number];
 
 export const PERMISSIONS = [
   'estate.read',
+  // Slice 6.1, flow A11. **ADMIN only**, and the sentence it encodes is the division this console
+  // has had since 5.1 without a name for it: an operator files paper, an admin shapes the estate.
+  // Filing a lease against a flat that exists is `documents.write`; deciding that the flat exists
+  // is upstream of every isolation question that building will ever answer.
+  'estate.write',
   'documents.read',
   'documents.write',
   'tenancy.write',
@@ -33,6 +38,7 @@ export type Permission = (typeof PERMISSIONS)[number];
 const MATRIX: Readonly<Record<Role, readonly Permission[]>> = Object.freeze({
   ADMIN: Object.freeze([
     'estate.read',
+    'estate.write',
     'documents.read',
     'documents.write',
     'tenancy.write',

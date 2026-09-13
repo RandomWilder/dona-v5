@@ -168,6 +168,7 @@ Three roles, and the permission names are the vocabulary the rest of the console
 | | `ADMIN` | `OPERATOR` | `VIEWER` |
 |---|---|---|---|
 | `estate.read` | ✓ | ✓ | ✓ |
+| `estate.write` | ✓ | | |
 | `documents.read` | ✓ | ✓ | ✓ |
 | `documents.write` | ✓ | ✓ | |
 | `tenancy.write` | ✓ | ✓ | |
@@ -182,6 +183,17 @@ future guard for a word. It is read by `POST /staff/operators`.
 `settings.write` is read by `POST /settings/obligation-types` and `POST /settings/document-types`
 (slice 5.8). `GET /settings` stays `estate.read`, so an operator can see the catalogues; only an
 admin may write them.
+
+`estate.write` arrived at **slice 6.1** with the first reader it names — `GET /estate/buildings/new`
+and `POST /estate/buildings`, flow **A11** ([SPEC-flows.md](SPEC-flows.md)). It is ADMIN only, and
+the sentence it encodes is the division this console has had since 5.1 without a name for it: **an
+operator files paper, an admin shapes the estate.** Filing a lease against a flat that exists is
+`documents.write`; deciding that the flat exists is upstream of every isolation question that
+building will ever answer, so it sits with the role that edits the catalogues. **The `GET` carries
+it too, and not `estate.read`** — a form an operator may render and may not post is a door that
+answers `not_allowed` after they have typed an address into it, and the refusal this system makes
+says nothing more, so they would learn nothing from it. The buildings list links to the screen only
+for a role that holds the permission.
 
 `party.national_id.read` is here and unused, and that is on purpose: `SPEC.md`'s security default
 says `national_id` is **admin-only, unreachable by any agent tool, and access-logged**, and the

@@ -45,6 +45,10 @@ describe('the role matrix is code', () => {
     );
     assert.equal(can('VIEWER', 'documents.write'), false);
     assert.equal(can('OPERATOR', 'settings.write'), false);
+    // Slice 6.1, and the one line flow A11 rests on: an operator files paper against a flat that
+    // exists and does not decide that it exists.
+    assert.equal(can('OPERATOR', 'estate.write'), false);
+    assert.equal(can('VIEWER', 'estate.write'), false);
     assert.equal(can('OPERATOR', 'staff.invite'), false);
     assert.equal(can('OPERATOR', 'party.national_id.read'), false);
   });

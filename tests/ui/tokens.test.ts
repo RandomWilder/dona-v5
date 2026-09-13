@@ -29,6 +29,7 @@ import {
   renderBuildingsPage,
   renderExpiringPage,
   renderIncompletePage,
+  renderNewBuildingPage,
   renderSearchPage,
   renderUnitPage,
 } from '../../src/estate/contract.ts';
@@ -44,16 +45,12 @@ import {
 } from '../../src/evidence/contract.ts';
 import { renderIndexPage } from '../../src/index-page.ts';
 import { CSRF_FIELD } from '../../src/kernel/ui/page.ts';
-import { renderA9Mockup, renderSettingsPage } from '../../src/settings-page.ts';
+import { renderSettingsPage } from '../../src/settings-page.ts';
 import {
   renderLoginPage,
   renderStaffHomePage,
 } from '../../src/staff/contract.ts';
-import {
-  CALLS_STUB,
-  renderIaMockup,
-  renderStubPage,
-} from '../../src/stub-page.ts';
+import { CALLS_STUB, renderStubPage } from '../../src/stub-page.ts';
 import type { UnitLetting } from '../../src/tenancy/contract.ts';
 
 const building: BuildingSummary = {
@@ -239,6 +236,39 @@ const SCREENS: Array<[string, () => string]> = [
       ),
   ],
   ['estate · buildings, empty', () => renderBuildingsPage([], new Map(), NAV)],
+  [
+    // Slice 6.1: the same screen for a role that may create a building. The link is the only
+    // difference, and the registry is where it is asserted rather than in a second copy of a guard.
+    'estate · buildings, admin',
+    () =>
+      renderBuildingsPage(
+        [building],
+        new Map([[building.building_id, 40]]),
+        NAV,
+        true,
+      ),
+  ],
+  [
+    'estate · new building',
+    () =>
+      renderNewBuildingPage({
+        nav: NAV,
+        csrf: CSRF,
+        projects: [
+          {
+            project_id: '33333333-3333-4333-8333-333333333333',
+            name: 'מכרז שוהם',
+            project_code: 'DL-2024-SHOHAM',
+            tender_ref: null,
+            status: 'ACTIVE',
+          },
+        ],
+      }),
+  ],
+  [
+    'estate · new building, no projects',
+    () => renderNewBuildingPage({ nav: NAV, csrf: CSRF, projects: [] }),
+  ],
   ['estate · one building', () => renderBuildingPage(detail, occupancy, NAV)],
   [
     'estate · one building, nothing let',
@@ -759,8 +789,6 @@ const SCREENS: Array<[string, () => string]> = [
         documents: [],
       }),
   ],
-  ['root · ia mockup', () => renderIaMockup(CSRF)],
-  ['root · a9 mockup', () => renderA9Mockup(CSRF)],
 ];
 
 describe('shared UI tokens', () => {
@@ -880,17 +908,25 @@ describe('shared UI tokens', () => {
     const calls = renderStubPage({ csrf: CSRF }, CALLS_STUB, 'wired');
     assert.match(calls, /data-state="wired"/);
     assert.match(calls, /שבוע 7 · סלייס 7.2/);
-    const painted = renderIaMockup(CSRF);
-    assert.match(painted, /data-state="painted"/);
   });
 
+  // Asserted over the **wired** settings screens in the registry. It was asserted against the
+  // painted A9 variant until 6.1, which put the only copy of a live guard on a mockup — and a
+  // mockup is deleted the day its slice closes (scripts/guards.ts, guard four). The rule it
+  // carries is the settings screen's: the role matrix is code, and `asset_type` is guarded
+  // (SPEC.md rule 8), so neither may ever grow a card here.
   it('keeps asset kinds and the role matrix off the settings screen', () => {
-    const html = renderA9Mockup(CSRF);
-    assert.match(html, /data-state="painted"/);
-    assert.doesNotMatch(html, /asset_type/);
-    assert.doesNotMatch(html, /ADMIN/);
-    assert.doesNotMatch(html, /VIEWER/);
-    assert.doesNotMatch(html, /staff\.invite/);
+    const screens = SCREENS.filter(([name]) =>
+      name.startsWith('root · settings'),
+    );
+    assert.ok(screens.length > 0, 'no settings screen in the registry');
+    for (const [name, render] of screens) {
+      const html = render();
+      assert.doesNotMatch(html, /asset_type/, name);
+      assert.doesNotMatch(html, /ADMIN/, name);
+      assert.doesNotMatch(html, /VIEWER/, name);
+      assert.doesNotMatch(html, /staff\.invite/, name);
+    }
   });
 
   it('keeps the login screen without that chrome', () => {

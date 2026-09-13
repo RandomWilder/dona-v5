@@ -11,6 +11,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import { signedInChrome } from './chrome.ts';
+import { renderMockup } from './dev-mockups.ts';
 import { registerEstateRoutes } from './estate/contract.ts';
 import {
   listDocumentTypes,
@@ -38,7 +39,6 @@ import type { WorkRunner } from './kernel/work.ts';
 import {
   parseDocumentTypeForm,
   parseObligationTypeForm,
-  renderA9Mockup,
   renderSettingsPage,
 } from './settings-page.ts';
 import {
@@ -57,7 +57,7 @@ import {
   type StaffDeps,
   verifyCsrf,
 } from './staff/contract.ts';
-import { CALLS_STUB, renderIaMockup, renderStubPage } from './stub-page.ts';
+import { CALLS_STUB, renderStubPage } from './stub-page.ts';
 import {
   expireDueTenancies,
   listIncompleteTenancies,
@@ -381,20 +381,23 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     },
   );
 
+  // Slice 6.1: the flow is read off `mockups/<flow>.html` rather than named in a condition, so the
+  // file guard four scans is the file the director clicks and no paint can hide in TypeScript.
   if (deps.devMockups === true) {
     app.get(
       '/dev/mockups/:flow',
       { config: { staff: 'estate.read' } },
       async (request, reply) => {
         const flow = (request.params as { flow: string }).flow;
-        if (flow !== 'ia' && flow !== 'a9') {
-          const error = new KernelError('not_found', 'route not found');
+        try {
+          const painted = renderMockup(flow, csrfFrom(request));
+          stubHeaders(reply);
+          return painted;
+        } catch (error) {
+          if (!(error instanceof KernelError)) throw error;
           reply.code(httpStatus(error.code));
           return toErrorBody(error);
         }
-        stubHeaders(reply);
-        const csrf = csrfFrom(request);
-        return flow === 'a9' ? renderA9Mockup(csrf) : renderIaMockup(csrf);
       },
     );
   }

@@ -13,10 +13,19 @@ import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import type { ChromeDest } from '../../chrome.ts';
 import type { Clock } from '../../kernel/clock.ts';
+import { KernelError } from '../../kernel/errors.ts';
 import type { Html } from '../../kernel/ui/html.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
 import { resolveOccupiedUnits } from '../../scope/contract.ts';
-import { csrfFrom } from '../../staff/contract.ts';
+import { can, csrfFrom } from '../../staff/contract.ts';
+import { addCalendarYears, WARRANTY_YEARS } from './assets.ts';
+import { importEstate } from './importer.ts';
+import type {
+  BuildingPlan,
+  BuildingStatus,
+  ProjectPlan,
+  ProjectStatus,
+} from './plan.ts';
 import {
   countUnitsByBuilding,
   EXPIRING_WINDOW_DAYS,
@@ -24,6 +33,8 @@ import {
   getUnit,
   listBuildings,
   listExpiringLeases,
+  listProjects,
+  type ProjectOption,
   searchEstate,
 } from './read-model.ts';
 import {
@@ -37,6 +48,7 @@ import {
   renderBuildingsPage,
   renderExpiringPage,
   renderIncompletePage,
+  renderNewBuildingPage,
   renderSearchPage,
   renderUnitPage,
   type TenancyEventView,
@@ -118,6 +130,107 @@ function html(reply: { header: (k: string, v: string) => unknown }): void {
 const READ = { config: { staff: 'estate.read' } } as const;
 const WRITE = { config: { staff: 'tenancy.write' } } as const;
 
+/**
+ * **Slice 6.1, flow A11.** ADMIN only ([SPEC-staff.md](SPEC-staff.md)): an operator files paper, an
+ * admin shapes the estate.
+ *
+ * **The `GET` carries it too, and deliberately not `estate.read`.** A form an operator may render
+ * and may not post is a door that answers `not_allowed` after they have typed an address into it —
+ * and the refusal says nothing more, by design, so they would learn nothing from it.
+ *
+ * **No `csrf: 'in-body'`**, which `tasks/todo.md` specified for this slice. That flag is not "the
+ * token travels in the body" — it is an exemption from the composition root's CSRF `preHandler`,
+ * and it exists for one reason: `POST /documents` is a multipart stream that the hook cannot read
+ * without consuming it. This body is urlencoded, the hook parses it, and `src/guard.test.ts`
+ * asserts the exempt list is exactly one route so the exemption cannot spread.
+ */
+const ESTATE_WRITE = { config: { staff: 'estate.write' } } as const;
+
+/** The form's own vocabularies, checked at the edge against the CHECK constraints they mirror. */
+const STATUSES: readonly BuildingStatus[] = [
+  'ACTIVE',
+  'IN_CONSTRUCTION',
+  'EXITED',
+];
+
+function buildingStatus(value: unknown): BuildingStatus {
+  const status = requireText(value, 'status', 32);
+  if (!(STATUSES as readonly string[]).includes(status)) {
+    throw new KernelError('invalid', 'status is not a building status');
+  }
+  return status as BuildingStatus;
+}
+
+/**
+ * The project the form named, rebuilt **from the row** rather than from the post.
+ *
+ * `project.project_code` is a natural key under `ON CONFLICT … DO UPDATE`, so a name arriving from
+ * the form would rename an existing project on a typo — silently, because an import correcting a
+ * typo is exactly what `DO UPDATE` is there for. The form chooses among rows; it does not invent
+ * one. A code that names no row is `invalid` and not a new project.
+ */
+function chosenProject(
+  value: unknown,
+  projects: readonly ProjectOption[],
+): ProjectPlan | null {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return null;
+  }
+  const code = requireText(value, 'project_code', 64);
+  const row = projects.find((project) => project.project_code === code);
+  if (row === undefined) {
+    throw new KernelError('invalid', 'project_code names no project');
+  }
+  return {
+    name: row.name,
+    projectCode: row.project_code,
+    tenderRef: row.tender_ref,
+    status: row.status as ProjectStatus,
+  };
+}
+
+/**
+ * One `BuildingPlan`, zero spaces, zero units. `validateBuildingSpaces` iterates both, so the empty
+ * building needs no special case in the importer — which is why A11 needs no estate command of its
+ * own.
+ *
+ * **A blank תקופת הבדק is derived, not required**: handover plus `WARRANTY_YEARS`, through 3.5's
+ * own `addCalendarYears`, which also refuses a non-ISO date with `invalid` and is therefore the
+ * handover field's edge validation as well.
+ */
+function buildingFromForm(
+  body: unknown,
+  projects: readonly ProjectOption[],
+): { plan: BuildingPlan; projects: ProjectPlan[] } {
+  const form = (body ?? {}) as Record<string, unknown>;
+  const project = chosenProject(form.project_code, projects);
+  const handoverDate = requireText(form.handover_date, 'handover_date', 10);
+  const declaredEnd = form.warranty_end_date;
+  const warrantyEndDate =
+    declaredEnd === undefined ||
+    declaredEnd === null ||
+    String(declaredEnd).trim() === ''
+      ? addCalendarYears(handoverDate, WARRANTY_YEARS)
+      : requireText(declaredEnd, 'warranty_end_date', 10);
+  return {
+    plan: {
+      name: requireText(form.name, 'name', 200),
+      addressLine: requireText(form.address_line, 'address_line', 200),
+      city: requireText(form.city, 'city', 120),
+      projectCode: project === null ? null : project.projectCode,
+      // Not a date library and not a regex of its own: `addCalendarYears` already rejects anything
+      // that is not `YYYY-MM-DD`, and running it over both dates is what makes the derived branch
+      // and the declared branch validate identically.
+      handoverDate: addCalendarYears(handoverDate, 0),
+      warrantyEndDate: addCalendarYears(warrantyEndDate, 0),
+      status: buildingStatus(form.status),
+      spaces: [],
+      units: [],
+    },
+    projects: project === null ? [] : [project],
+  };
+}
+
 export function registerEstateRoutes(
   app: FastifyInstance,
   deps: EstateDeps,
@@ -145,7 +258,12 @@ export function registerEstateRoutes(
     );
     html(reply);
     const nav = deps.chrome(csrfFrom(request), 'estate');
-    return renderBuildingsPage(buildings, byBuilding, nav);
+    return renderBuildingsPage(
+      buildings,
+      byBuilding,
+      nav,
+      can(request.staff?.role ?? null, 'estate.write'),
+    );
   });
 
   app.get('/estate/search', READ, async (request, reply) => {
@@ -206,6 +324,33 @@ export function registerEstateRoutes(
       return reply.redirect('/estate/incomplete');
     },
   );
+
+  // Written above `/estate/buildings/:buildingId` for a reader, not for the router: Fastify's
+  // find-my-way gives a static segment priority over a parametric one whatever the registration
+  // order, which is what stops `new` from arriving at `validId` as a malformed building id. The
+  // acceptance suite asserts the 200 rather than trusting either fact.
+  app.get('/estate/buildings/new', ESTATE_WRITE, async (request, reply) => {
+    const projects = await listProjects(deps.pool);
+    const csrf = csrfFrom(request);
+    html(reply);
+    return renderNewBuildingPage({
+      nav: deps.chrome(csrf, 'estate'),
+      csrf,
+      projects,
+    });
+  });
+
+  app.post('/estate/buildings', ESTATE_WRITE, async (request, reply) => {
+    // Read first: the plan is rebuilt from the chosen row, so the form's `project_code` is checked
+    // against what exists rather than trusted.
+    const projects = await listProjects(deps.pool);
+    const { plan, projects: named } = buildingFromForm(request.body, projects);
+    // **`importEstate`, not a new estate command.** Idempotence is `building.address_key`'s: the
+    // same address posted twice updates the row and returns the id already there, so a double
+    // submit converges for this form and for every other writer.
+    await importEstate(deps.pool, { projects: named, buildings: [plan] });
+    return reply.code(303).header('location', '/estate').send();
+  });
 
   app.get('/estate/buildings/:buildingId', READ, async (request, reply) => {
     const { buildingId } = request.params as { buildingId: string };

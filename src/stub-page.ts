@@ -42,19 +42,3 @@ export const CALLS_STUB: StubDest = {
   title: 'קריאות',
   owner: 'שבוע 7 · סלייס 7.2',
 };
-
-export function renderIaMockup(csrf: string): string {
-  const body = h`
-    <div data-state="painted">
-      <h1>יעדי הדלפק</h1>
-      <p class="lede">שבעה יעדים. מה שעוד לא נבנה נושא את השבוע והסלייס שמחזיקים אותו.</p>
-      <p>קריאות — ${CALLS_STUB.owner}</p>
-      <p>הגדרות — שני קטלוגים.</p>
-    </div>`;
-  return renderPage({
-    title: 'יעדי הדלפק — דונה דום',
-    styles,
-    nav: signedInChrome(csrf, 'index'),
-    body,
-  });
-}

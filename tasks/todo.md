@@ -92,13 +92,20 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
 
 ## Slices
 
-- [ ] **6.1 — `estate.write`, and an admin creates a building.**
+- [x] **6.1 — `estate.write`, and an admin creates a building.** Closed 13 Sep — [evidence/6.1.md](evidence/6.1.md).
       Flow **A11**, written into `SPEC-flows.md` before the code — that file's own rule is that a
       slice serving no flow gets cut on sight, and there has never been a flow for setting up an
       estate. `estate.write` joins `PERMISSIONS` in `src/staff/internal/roles.ts` and goes to
       **ADMIN only**: an operator files paper, an admin shapes the estate. `GET
-      /estate/buildings/new` + `POST /estate/buildings`, stance `{ staff: 'estate.write', csrf:
-      'in-body' }`, body through `src/kernel/ui/forms.ts`. **The write is `importEstate`** with one
+      /estate/buildings/new` + `POST /estate/buildings`, stance `{ staff: 'estate.write' }`, body
+      through `src/kernel/ui/forms.ts`. **`csrf: 'in-body'` struck at 6.1, before the code was
+      written**: in this repository that flag is not *the token rides in the body*, it is an
+      **exemption** from the composition root's CSRF `preHandler`, held by `POST /documents` alone
+      because a multipart stream cannot be read there without consuming it. `src/guard.test.ts`
+      asserts the exempt list is exactly that one route so the exemption cannot spread, and a
+      urlencoded body is verified by the hook already. **The `GET` carries `estate.write` too** — a
+      form an operator may render and may not post is a door that answers `not_allowed` after they
+      have typed an address into it. **The write is `importEstate`** with one
       `BuildingPlan`, zero spaces, zero units and an optional `ProjectPlan` —
       `validateBuildingSpaces` already accepts that shape. **No new estate command.**
       **Done when:** an ADMIN creates a building from the screen and it appears on `/estate`; an
@@ -109,6 +116,12 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       `npm run dev` and click it on `:3000`.
       **Mockup first:** `mockups/building-new.html` at `/dev/mockups/building-new`.
       **Plan mode. Deps:** 5.8 · **M**
+      **Raised and closed inside 6.1:** `/dev/mockups/:flow` named two flows in a condition and
+      rendered two TypeScript paints whose slices had already closed, so guard four sat idle over an
+      empty `mockups/` and could never have seen them. The route reads the file now
+      (`src/dev-mockups.ts`), both TS paints are deleted, and the one live guard riding on the a9
+      paint — no `asset_type` and no role matrix on the settings screen — moved onto the wired
+      screens in the registry.
 
 - [ ] **6.2 — An apartment, its spaces, and the bays it implies.**
       `GET /estate/buildings/:buildingId/units/new` + `POST`, same stance, reusing **`upsertUnitRow`**
