@@ -30,6 +30,7 @@ import {
   renderExpiringPage,
   renderIncompletePage,
   renderNewBuildingPage,
+  renderNewUnitPage,
   renderSearchPage,
   renderUnitPage,
 } from '../../src/estate/contract.ts';
@@ -270,6 +271,16 @@ const SCREENS: Array<[string, () => string]> = [
     () => renderNewBuildingPage({ nav: NAV, csrf: CSRF, projects: [] }),
   ],
   ['estate · one building', () => renderBuildingPage(detail, occupancy, NAV)],
+  [
+    // Slice 6.2: the same screen for a role that may add an apartment. The door is the only
+    // difference, and the registry is where it is asserted rather than in a second guard.
+    'estate · one building, admin',
+    () => renderBuildingPage(detail, occupancy, NAV, [], true),
+  ],
+  [
+    'estate · new apartment',
+    () => renderNewUnitPage({ nav: NAV, csrf: CSRF, building }),
+  ],
   [
     'estate · one building, nothing let',
     () => renderBuildingPage(detail, new Map(), NAV),

@@ -15,16 +15,18 @@ import type { ChromeDest } from '../../chrome.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { Html } from '../../kernel/ui/html.ts';
-import { requireText, validId } from '../../kernel/validate.ts';
+import { optionalText, requireText, validId } from '../../kernel/validate.ts';
 import { resolveOccupiedUnits } from '../../scope/contract.ts';
 import { can, csrfFrom } from '../../staff/contract.ts';
 import { addCalendarYears, WARRANTY_YEARS } from './assets.ts';
-import { importEstate } from './importer.ts';
+import { importEstate, upsertUnitRow } from './importer.ts';
 import type {
   BuildingPlan,
   BuildingStatus,
+  ConditionStatus,
   ProjectPlan,
   ProjectStatus,
+  UnitRowSpec,
 } from './plan.ts';
 import {
   countUnitsByBuilding,
@@ -49,6 +51,7 @@ import {
   renderExpiringPage,
   renderIncompletePage,
   renderNewBuildingPage,
+  renderNewUnitPage,
   renderSearchPage,
   renderUnitPage,
   type TenancyEventView,
@@ -231,6 +234,106 @@ function buildingFromForm(
   };
 }
 
+/** The apartment form's own vocabulary, checked at the edge against the CHECK it mirrors (6.2). */
+const CONDITIONS: readonly ConditionStatus[] = [
+  'READY',
+  'RENOVATION',
+  'WITHHELD',
+];
+
+function conditionStatus(value: unknown): ConditionStatus {
+  const status = requireText(value, 'condition_status', 32);
+  if (!(CONDITIONS as readonly string[]).includes(status)) {
+    throw new KernelError('invalid', 'condition_status is not a condition');
+  }
+  return status as ConditionStatus;
+}
+
+/**
+ * A non-negative number from a text field. Local rather than in `src/kernel/validate.ts` for the
+ * reason that file states: what lives there is the shape of a value, and `rooms` is a number this
+ * module's own column has an opinion about. A second module wanting it is what moves it down.
+ *
+ * `Number('')` is `0` and `Number('78,5')` is `NaN`; both are rejected here rather than reaching
+ * `numeric` as a cast error, which would surface as `unavailable` and name no field.
+ */
+function requireNumber(value: unknown, field: string, max: number): number {
+  const text = requireText(value, field, 16);
+  const parsed = Number(text);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > max) {
+    throw new KernelError('invalid', `${field} is not a number in range`);
+  }
+  return parsed;
+}
+
+function optionalNumber(
+  value: unknown,
+  field: string,
+  max: number,
+): number | null {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return null;
+  }
+  return requireNumber(value, field, max);
+}
+
+/** An input a form posts empty is an input nobody typed into. See `unitFromForm`'s `floor`. */
+function blankToNull(value: unknown): unknown {
+  return value === undefined || value === null || String(value).trim() === ''
+    ? null
+    : value;
+}
+
+/** A checkbox is present or absent; `src/settings-page.ts` reads its own the same way. */
+function checked(value: unknown): boolean {
+  return value === 'true' || value === 'on';
+}
+
+/**
+ * What one apartment posted from A13's screen is, minus the building it goes in.
+ *
+ * `floor` is named separately because it lives on Space and not on Unit, which is `UnitRowSpec`'s
+ * own shape and not a decision this form makes. A blank `warranty_end_date` is null and means *the
+ * building's date applies* (R14) — not *no warranty*.
+ */
+function unitFromForm(body: unknown): {
+  unit: UnitRowSpec['unit'];
+  floor: string | null;
+} {
+  const form = (body ?? {}) as Record<string, unknown>;
+  const unitNumber = requireText(form.unit_number, 'unit_number', 32);
+  const declaredEnd = form.warranty_end_date;
+  return {
+    unit: {
+      // **The `UNIT` space is named by the bare unit number**, which is what
+      // `src/register/internal/importer.ts` passes. Two writers spelling it two ways would be two
+      // apartments behind one door, because `space` is keyed (building_id, space_kind, name).
+      spaceName: unitNumber,
+      unitNumber,
+      rooms: requireNumber(form.rooms, 'rooms', 20),
+      areaSqm: optionalNumber(form.area_sqm, 'area_sqm', 10_000),
+      hasMamad: checked(form.has_mamad),
+      // 3.5's `addCalendarYears` with a zero offset, for 6.1's reason: it already refuses anything
+      // that is not `YYYY-MM-DD`, so the date is validated by the function that would consume it.
+      warrantyEndDate:
+        declaredEnd === undefined ||
+        declaredEnd === null ||
+        String(declaredEnd).trim() === ''
+          ? null
+          : addCalendarYears(
+              requireText(declaredEnd, 'warranty_end_date', 10),
+              0,
+            ),
+      conditionStatus: conditionStatus(form.condition_status),
+    },
+    // **A blank text input is absent, not empty.** `optionalText` answers null for a field a caller
+    // omitted and `invalid` for one it sent empty — which is right for an API and wrong for a form,
+    // where every input posts whether or not it was typed into. Floor is optional (a קרקע-less
+    // building has none to say), so the empty string is normalised before it gets there.
+    floor: optionalText(blankToNull(form.floor), 'floor', 32),
+  };
+}
+
 export function registerEstateRoutes(
   app: FastifyInstance,
   deps: EstateDeps,
@@ -352,6 +455,77 @@ export function registerEstateRoutes(
     return reply.code(303).header('location', '/estate').send();
   });
 
+  // **Slice 6.2, flow A13.** Same stance on both halves, and `new` is again a static segment
+  // sitting under a parametric one — find-my-way prefers the static whatever the registration
+  // order, and the acceptance suite asserts the 200 rather than trusting that.
+  app.get<{ Params: { buildingId: string } }>(
+    '/estate/buildings/:buildingId/units/new',
+    ESTATE_WRITE,
+    async (request, reply) => {
+      const { building } = await getBuilding(
+        deps.pool,
+        validId(request.params.buildingId, 'buildingId'),
+      );
+      const csrf = csrfFrom(request);
+      html(reply);
+      return renderNewUnitPage({
+        nav: deps.chrome(csrf, 'estate'),
+        csrf,
+        building,
+      });
+    },
+  );
+
+  app.post<{ Params: { buildingId: string } }>(
+    '/estate/buildings/:buildingId/units',
+    ESTATE_WRITE,
+    async (request, reply) => {
+      const buildingId = validId(request.params.buildingId, 'buildingId');
+      // Edge first, then the read: a form this route was never going to accept should not cost a
+      // query, and `getBuilding` is what turns an id that is not there into `not_found`.
+      const { unit, floor } = unitFromForm(request.body);
+      const { building } = await getBuilding(deps.pool, buildingId);
+      // **The building is rebuilt from its own row.** `upsertUnitRow` upserts the building it is
+      // handed and `DO UPDATE` sets `project_id` from it, so a building assembled from the form
+      // would unlink the project while adding a flat (SPEC-flows.md A13). `project` is null
+      // because the project already exists: `upsertBuilding` resolves it by code.
+      const spec: UnitRowSpec = {
+        project: null,
+        building: {
+          name: building.name,
+          addressLine: building.address_line,
+          city: building.city,
+          projectCode: building.project_code,
+          handoverDate: building.handover_date,
+          warrantyEndDate: building.warranty_end_date,
+          status: building.status as BuildingStatus,
+        },
+        unit,
+        floor,
+      };
+      // One flat is four statements — a `UNIT` space, two bays and the unit — and handed a `Pool`
+      // each would be its own transaction. A failure between them would leave a `UNIT` space with
+      // no unit on it: legal in this schema (a lobby is one) and visible on the building page as a
+      // דירות count with no card. The second module to need this moves
+      // `src/evidence/internal/promote.ts`'s `inTransaction` down to the kernel.
+      const client = await deps.pool.connect();
+      try {
+        await client.query('BEGIN');
+        await upsertUnitRow(client, spec);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+      return reply
+        .code(303)
+        .header('location', `/estate/buildings/${buildingId}`)
+        .send();
+    },
+  );
+
   app.get('/estate/buildings/:buildingId', READ, async (request, reply) => {
     const { buildingId } = request.params as { buildingId: string };
     // Validated at the edge, before it reaches a query: a malformed id is `invalid` and a
@@ -380,6 +554,9 @@ export function registerEstateRoutes(
       occupancy,
       deps.chrome(csrfFrom(request), 'estate'),
       documents,
+      // Slice 6.2: the door to A13's screen, rendered for a viewer who may walk through it and for
+      // nobody else — the buildings list's rule, one level down.
+      can(request.staff?.role ?? null, 'estate.write'),
     );
   });
 

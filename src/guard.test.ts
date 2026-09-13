@@ -153,6 +153,9 @@ describe('every route in the application', () => {
       // operator may fill in and may not submit teaches them nothing the refusal would explain.
       'GET /estate/buildings/new',
       'POST /estate/buildings',
+      // Slice 6.2, flow A13. Both again, for the same reason.
+      'GET /estate/buildings/:buildingId/units/new',
+      'POST /estate/buildings/:buildingId/units',
     ]) {
       const stance = declared.find(([name]) => name === url)?.[1];
       assert.ok(stance !== undefined, `${url} is not registered at all`);
@@ -198,6 +201,7 @@ describe('a request with no session', () => {
         '/estate/expiring',
         '/estate/incomplete',
         '/estate/units/11111111-1111-4111-8111-111111111111',
+        '/estate/buildings/11111111-1111-4111-8111-111111111111/units/new',
         '/documents/new?unit=11111111-1111-4111-8111-111111111111',
         '/documents/11111111-1111-4111-8111-111111111111/read',
         '/documents/11111111-1111-4111-8111-111111111111/seed',

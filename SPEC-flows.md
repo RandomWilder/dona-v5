@@ -285,7 +285,13 @@ and this absence is half of what they found. A11 is the correction; A12 is the o
 
 **Screen:** name, street and number, city, an optional project, the handover date, the end of
 תקופת הבדק, and a status. Nothing else — a building is created **empty**, with no spaces and no
-units, and A12's apartment screen is what fills it.
+units, and **A13**'s apartment screen is what fills it.
+
+> This sentence said *A12's apartment screen* when 6.1 wrote it, and A12 is the document-first
+> intake in both [tasks/roadmap.md](tasks/roadmap.md) and [tasks/todo.md](tasks/todo.md), where the
+> number was assigned before either flow was written. Corrected at 6.2 in favour of the two planning
+> files rather than against them: the apartment screen is **A13**. A flow number is an identifier
+> and not a sequence — A7–A10 are deferred and A11 was already out of order.
 
 **Writes:** one `building` row, and the `project` row it names if it names one. **Through
 `importEstate` with a one-building plan, zero spaces and zero units.** No new estate command: the
@@ -319,6 +325,59 @@ building it creates. `building.handover_date` and `warranty_end_date` are entere
 **superseded by A6** when the building handover protocol arrives: A6 reads them off the paper and
 this screen is the placeholder standing until it does — the same standing week 2's imported מסירה
 dates have.
+
+### A13 — An administrator adds an apartment
+
+**Trigger:** a building exists and a flat in it does not. A11 creates a building empty, so this is
+the flow that makes it a building with apartments in it; it is also the path for the flat a register
+import never carried, because the export was taken before the unit was split or sold.
+
+**Screen:** reached from the building page, so **the building is the URL and is never typed**. It
+asks for the unit number, the floor, the rooms, the area, whether there is a ממ״ד, the condition,
+and an optional end of תקופת הבדק for the flat itself (R14, when a unit was handed over separately).
+Nothing about the building appears on it, because nothing about the building is this screen's to
+change.
+
+**Writes:** one `UNIT` space, one `unit` row, and **the two bays the apartment implies** — a
+`PARKING` space `חניה {unit_number}` and a `STORAGE` space `מחסן {unit_number}`, assigned on the
+unit. That is slice 4.6's convention and this flow does not invent a second one: the bays are
+placeholders with a name and no facts, so a handover protocol has a space to land a gate motor on
+([SPEC-estate.md](SPEC-estate.md)). Three spaces and one unit, for one apartment.
+
+**Through `upsertUnitRow`, and there is no new estate command.** That function is the register's own
+per-row primitive (slice 2.4), and it already does exactly these four upserts in exactly this order.
+A screen that wrote its own SQL would be the second copy of the natural keys
+[SPEC-estate.md](SPEC-estate.md) exists to prevent — and the first thing it would drift on is the
+name of the `UNIT` space.
+
+**The `UNIT` space is named by the bare `unit_number`, because that is what the register names it.**
+`space` is keyed `(building_id, space_kind, name)`, so the screen and the bulk importer converge on
+one row for one flat only while they spell that name identically. `דירה 12A` from a form and `12A`
+from a CSV are two apartments behind one door, and the first thing that would notice is a lease
+filed against whichever of them the operator did not click.
+
+**The building is rebuilt from its own row, exactly as A11 rebuilds the project from the project's.**
+`upsertUnitRow` upserts the building it is handed, and `ON CONFLICT (address_key) DO UPDATE` sets
+`project_id = EXCLUDED.project_id` — so a screen that posted a building with no project code would
+**silently unlink the building from its project** as a side effect of adding an apartment. The route
+reads the building it was given an id for and hands back that row's own name, address, city, project
+code, dates and status. The upsert rewrites the building as itself.
+
+**Re-posting a unit number updates the flat, never a second one.** R2 makes a unit's identity its
+space's, so the space's natural key is the whole of it. A corrected floor or a corrected area is
+`DO UPDATE` doing what it is there for.
+
+**The permission is `estate.write` and it carries on the `GET` too**, for the reason A11 states: a
+form an operator may render and may not post teaches them nothing, because the refusal says
+`not_allowed` and nothing more.
+
+**Bulk stays `npm run import:register`.** A register is a file somebody prepares and a screen is one
+flat at a time; the two paths share the primitive and do not share an entry point. No second bulk
+path is built here.
+
+**What A13 does not do.** No asset, no tenancy, no document, and nothing to the building but the
+rewrite of its own values. The occupancy chip on the new flat reads פנויה because occupancy is
+derived from tenancy dates and there are none (R6).
 
 ## Open
 

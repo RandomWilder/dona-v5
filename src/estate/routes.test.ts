@@ -675,3 +675,426 @@ describe('estate · A11, an administrator creates a building', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// **Slice 6.2 — flow A13.** An admin adds an apartment to a building, which nobody could do until
+// this slice either: A11 creates a building empty and `npm run import:register` was the only thing
+// in this system that had ever written a `unit` row.
+//
+// Its own city, its own project and its own cleanup, for the reason the suites above state: these
+// routes commit.
+// ---------------------------------------------------------------------------------------------
+
+const A13_DOMAIN = 'estate-a13.test';
+const A13_CITY = 'עיר A13';
+const A13_ADDRESS = 'רחוב A13 9';
+const A13_PROJECT = 'TEST-A13';
+const A13_UNIT = '8';
+
+const a13Plan: EstatePlan = {
+  projects: [
+    {
+      name: 'מכרז A13',
+      projectCode: A13_PROJECT,
+      tenderRef: null,
+      status: 'ACTIVE',
+    },
+  ],
+  buildings: [
+    {
+      name: 'בניין A13',
+      addressLine: A13_ADDRESS,
+      city: A13_CITY,
+      projectCode: A13_PROJECT,
+      handoverDate: '2025-03-01',
+      warrantyEndDate: '2027-03-01',
+      status: 'ACTIVE',
+      spaces: [],
+      units: [],
+    },
+  ],
+};
+
+function a13Form(overrides: Record<string, string> = {}): string {
+  const fields: Record<string, string> = {
+    unit_number: A13_UNIT,
+    floor: '2',
+    rooms: '3.5',
+    area_sqm: '78.5',
+    has_mamad: 'on',
+    warranty_end_date: '',
+    condition_status: 'READY',
+    ...overrides,
+  };
+  return new URLSearchParams(fields).toString();
+}
+
+async function a13Cleanup(pool: {
+  query: (text: string, values?: unknown[]) => Promise<unknown>;
+}): Promise<void> {
+  for (const statement of [
+    `DELETE FROM unit WHERE unit_id IN (
+       SELECT space_id FROM space s
+       JOIN building b ON b.building_id = s.building_id
+       WHERE b.city = $1)`,
+    `DELETE FROM space WHERE building_id IN (
+       SELECT building_id FROM building WHERE city = $1)`,
+    'DELETE FROM building WHERE city = $1',
+  ]) {
+    await pool.query(statement, [A13_CITY]).catch(() => {});
+  }
+  await pool
+    .query('DELETE FROM project WHERE project_code = $1', [A13_PROJECT])
+    .catch(() => {});
+}
+
+/** The building A13 fills, created the way A11 creates one: empty. */
+async function a13Building(pool: {
+  query: (text: string, values?: unknown[]) => Promise<unknown>;
+}): Promise<string> {
+  await importEstate(pool as never, a13Plan);
+  const found = (await pool.query(
+    'SELECT building_id FROM building WHERE city = $1',
+    [A13_CITY],
+  )) as { rows: Array<{ building_id: string }> };
+  return found.rows[0]?.building_id ?? '';
+}
+
+describe('estate · A13, an administrator adds an apartment', () => {
+  it('writes one flat, its three spaces and no second building, and the same number twice is still one flat', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({ pool, version: '9.9.9-test' });
+    await signOutAll(pool, A13_DOMAIN);
+    await a13Cleanup(pool);
+    const admin = await signIn(pool, systemClock, {
+      email: `admin@${A13_DOMAIN}`,
+      role: 'ADMIN',
+    });
+    const client = asOperator(app, admin);
+    try {
+      const buildingId = await a13Building(pool);
+      const projectBefore = await pool.query<{ project_id: string | null }>(
+        'SELECT project_id FROM building WHERE building_id = $1',
+        [buildingId],
+      );
+
+      // The form, with a token in it and the building it will write into named on it.
+      const form = await client.inject({
+        method: 'GET',
+        url: `/estate/buildings/${buildingId}/units/new`,
+      });
+      assert.equal(form.statusCode, 200);
+      assert.match(
+        form.body,
+        new RegExp(`action="/estate/buildings/${buildingId}/units"`),
+      );
+      assert.match(form.body, new RegExp(`value="${admin.csrf}"`));
+      assert.match(form.body, /בניין A13/);
+
+      const created = await client.inject({
+        method: 'POST',
+        url: `/estate/buildings/${buildingId}/units`,
+        headers: FORM,
+        payload: a13Form(),
+      });
+      assert.equal(created.statusCode, 303);
+      assert.equal(created.headers.location, `/estate/buildings/${buildingId}`);
+
+      // **One flat and three spaces.** The `UNIT` space is named by the bare unit number, which is
+      // what `src/register/internal/importer.ts` passes — two writers spelling it two ways would be
+      // two apartments behind one door (SPEC-flows.md A13).
+      const spaces = await pool.query<{ space_kind: string; name: string }>(
+        `SELECT space_kind, name FROM space WHERE building_id = $1
+          ORDER BY space_kind`,
+        [buildingId],
+      );
+      assert.deepEqual(
+        spaces.rows.map((row) => `${row.space_kind} ${row.name}`),
+        [
+          `PARKING חניה ${A13_UNIT}`,
+          `STORAGE מחסן ${A13_UNIT}`,
+          `UNIT ${A13_UNIT}`,
+        ],
+      );
+      const units = await pool.query<{
+        unit_id: string;
+        rooms: string;
+        area_sqm: string;
+        has_mamad: boolean;
+        parking_space_id: string | null;
+        storage_space_id: string | null;
+        warranty_end_date: string | null;
+      }>(
+        `SELECT u.unit_id, u.rooms::text, u.area_sqm::text, u.has_mamad,
+                u.parking_space_id, u.storage_space_id,
+                u.warranty_end_date::text
+           FROM unit u JOIN space s ON s.space_id = u.unit_id
+          WHERE s.building_id = $1`,
+        [buildingId],
+      );
+      assert.equal(units.rowCount, 1);
+      assert.equal(units.rows[0]?.rooms, '3.5');
+      assert.equal(units.rows[0]?.area_sqm, '78.5');
+      assert.equal(units.rows[0]?.has_mamad, true);
+      // The bays are assigned, not merely written (D3, 4.6's convention).
+      assert.ok(units.rows[0]?.parking_space_id);
+      assert.ok(units.rows[0]?.storage_space_id);
+      // Blank means *the building's date applies* (R14), not *no warranty*.
+      assert.equal(units.rows[0]?.warranty_end_date, null);
+
+      // **The building was rewritten as itself, and its project survived.** `upsertUnitRow` upserts
+      // the building it is handed, and `DO UPDATE` sets project_id from the row it is given — so a
+      // route passing the form's idea of a building would unlink the project while adding a flat.
+      const projectAfter = await pool.query<{
+        project_id: string | null;
+        name: string;
+      }>('SELECT project_id, name FROM building WHERE building_id = $1', [
+        buildingId,
+      ]);
+      assert.equal(
+        projectAfter.rows[0]?.project_id,
+        projectBefore.rows[0]?.project_id,
+      );
+      assert.equal(projectAfter.rows[0]?.name, 'בניין A13');
+      const buildings = await pool.query(
+        'SELECT 1 FROM building WHERE city = $1',
+        [A13_CITY],
+      );
+      assert.equal(buildings.rowCount, 1, 'a second building was written');
+
+      // It is on the building page, with its space count and its occupancy chip — the acceptance
+      // bar's own wording. Nothing is let, so the chip says פנויה (R6, derived on every load).
+      const page = await client.inject({
+        method: 'GET',
+        url: `/estate/buildings/${buildingId}`,
+      });
+      assert.equal(page.statusCode, 200);
+      assert.match(
+        page.body,
+        new RegExp(`דירה <span dir="ltr">${A13_UNIT}</span>`),
+      );
+      assert.match(page.body, /פנויה/);
+      assert.match(page.body, /חניות · <span dir="ltr">1<\/span>/);
+      assert.match(page.body, /מחסנים · <span dir="ltr">1<\/span>/);
+      // And an admin is offered the door. An operator is not — asserted in the refusal case below.
+      assert.match(
+        page.body,
+        new RegExp(`href="/estate/buildings/${buildingId}/units/new"`),
+      );
+
+      // **The same unit number posted twice updates the flat.** R2 makes a unit's identity its
+      // space's, so `space (building_id, space_kind, name)` is the whole of the key: a corrected
+      // floor and a corrected room count land on the row that is already there.
+      const again = await client.inject({
+        method: 'POST',
+        url: `/estate/buildings/${buildingId}/units`,
+        headers: FORM,
+        payload: a13Form({ rooms: '4', floor: '3', area_sqm: '' }),
+      });
+      assert.equal(again.statusCode, 303);
+      const after = await pool.query<{
+        unit_id: string;
+        rooms: string;
+        area_sqm: string | null;
+        floor: string | null;
+      }>(
+        `SELECT u.unit_id, u.rooms::text, u.area_sqm::text, s.floor
+           FROM unit u JOIN space s ON s.space_id = u.unit_id
+          WHERE s.building_id = $1`,
+        [buildingId],
+      );
+      assert.equal(after.rowCount, 1, 'a second flat was written');
+      assert.equal(after.rows[0]?.unit_id, units.rows[0]?.unit_id);
+      assert.equal(after.rows[0]?.rooms, '4');
+      assert.equal(after.rows[0]?.floor, '3');
+      assert.equal(after.rows[0]?.area_sqm, null);
+      const spacesAfter = await pool.query(
+        'SELECT 1 FROM space WHERE building_id = $1',
+        [buildingId],
+      );
+      assert.equal(spacesAfter.rowCount, 3, 'the bays were written twice');
+
+      // **Every optional field left blank, which is what a form posts for a field nobody typed
+      // into.** Found by reading this slice's own diff: `optionalText` answers `invalid` for an
+      // empty string and null only for an absent key, which is right for a caller and wrong for a
+      // form, where an untouched input still arrives as `''`.
+      const sparse = await client.inject({
+        method: 'POST',
+        url: `/estate/buildings/${buildingId}/units`,
+        headers: FORM,
+        payload: new URLSearchParams({
+          unit_number: '9',
+          floor: '',
+          rooms: '3',
+          area_sqm: '',
+          warranty_end_date: '',
+          condition_status: 'READY',
+        }).toString(),
+      });
+      assert.equal(sparse.statusCode, 303);
+      const sparseRow = await pool.query<{
+        floor: string | null;
+        area_sqm: string | null;
+        has_mamad: boolean;
+        warranty_end_date: string | null;
+      }>(
+        `SELECT s.floor, u.area_sqm::text, u.has_mamad,
+                u.warranty_end_date::text
+           FROM unit u JOIN space s ON s.space_id = u.unit_id
+          WHERE s.building_id = $1 AND u.unit_number = '9'`,
+        [buildingId],
+      );
+      assert.equal(sparseRow.rowCount, 1);
+      assert.equal(sparseRow.rows[0]?.floor, null);
+      assert.equal(sparseRow.rows[0]?.area_sqm, null);
+      // An unchecked checkbox posts nothing at all, and ממ״ד is false rather than missing.
+      assert.equal(sparseRow.rows[0]?.has_mamad, false);
+      assert.equal(sparseRow.rows[0]?.warranty_end_date, null);
+    } finally {
+      await a13Cleanup(pool);
+      await signOutAll(pool, A13_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('refuses an OPERATOR with not_allowed and nothing more, and writes nothing', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({ pool, version: '9.9.9-test' });
+    await signOutAll(pool, A13_DOMAIN);
+    await a13Cleanup(pool);
+    const operator = await signIn(pool, systemClock, {
+      email: `ops@${A13_DOMAIN}`,
+      role: 'OPERATOR',
+    });
+    const client = asOperator(app, operator);
+    try {
+      const buildingId = await a13Building(pool);
+      // Red first, the way 6.1 proved its own: with `estate.write` temporarily granted to OPERATOR
+      // in `src/staff/internal/roles.ts`, this answered 303 and this assertion failed. What refuses
+      // is the matrix line and not a missing route.
+      const refused = await client.inject({
+        method: 'POST',
+        url: `/estate/buildings/${buildingId}/units`,
+        headers: FORM,
+        payload: a13Form(),
+      });
+      assert.equal(refused.statusCode, 403);
+      assert.deepEqual(refused.json(), {
+        code: 'not_allowed',
+        message: 'not_allowed',
+      });
+      const units = await pool.query(
+        `SELECT 1 FROM unit u JOIN space s ON s.space_id = u.unit_id
+          WHERE s.building_id = $1`,
+        [buildingId],
+      );
+      assert.equal(units.rowCount, 0);
+      const spaces = await pool.query(
+        'SELECT 1 FROM space WHERE building_id = $1',
+        [buildingId],
+      );
+      assert.equal(spaces.rowCount, 0, 'a refused post wrote a bay');
+
+      // The form is refused too, and the building page does not offer the door.
+      const form = await client.inject({
+        method: 'GET',
+        url: `/estate/buildings/${buildingId}/units/new`,
+      });
+      assert.equal(form.statusCode, 403);
+      const page = await client.inject({
+        method: 'GET',
+        url: `/estate/buildings/${buildingId}`,
+      });
+      assert.equal(page.statusCode, 200);
+      assert.doesNotMatch(
+        page.body,
+        new RegExp(`href="/estate/buildings/${buildingId}/units/new"`),
+      );
+    } finally {
+      await a13Cleanup(pool);
+      await signOutAll(pool, A13_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('rejects at the edge what the schema would have rejected later, and writes nothing', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({ pool, version: '9.9.9-test' });
+    await signOutAll(pool, A13_DOMAIN);
+    await a13Cleanup(pool);
+    const admin = await signIn(pool, systemClock, {
+      email: `admin@${A13_DOMAIN}`,
+      role: 'ADMIN',
+    });
+    const client = asOperator(app, admin);
+    try {
+      const buildingId = await a13Building(pool);
+      for (const [label, payload] of [
+        ['unit_number', a13Form({ unit_number: '   ' })],
+        ['rooms', a13Form({ rooms: 'שלוש וחצי' })],
+        ['rooms, negative', a13Form({ rooms: '-3' })],
+        ['area', a13Form({ area_sqm: '78,5' })],
+        ['condition', a13Form({ condition_status: 'PALACE' })],
+        ['warranty', a13Form({ warranty_end_date: '01/03/2027' })],
+      ] as Array<[string, string]>) {
+        const response = await client.inject({
+          method: 'POST',
+          url: `/estate/buildings/${buildingId}/units`,
+          headers: FORM,
+          payload,
+        });
+        assert.equal(response.statusCode, 400, label);
+        assert.equal(response.json().code, 'invalid', label);
+      }
+      const units = await pool.query(
+        `SELECT 1 FROM unit u JOIN space s ON s.space_id = u.unit_id
+          WHERE s.building_id = $1`,
+        [buildingId],
+      );
+      assert.equal(units.rowCount, 0, 'a rejected form wrote a flat');
+      const spaces = await pool.query(
+        'SELECT 1 FROM space WHERE building_id = $1',
+        [buildingId],
+      );
+      assert.equal(spaces.rowCount, 0, 'a rejected form wrote a bay');
+
+      // A building id that is not one is `invalid`; one that is well formed and absent is
+      // `not_found`. Neither says which, and the flat is written into neither.
+      const malformed = await client.inject({
+        method: 'POST',
+        url: '/estate/buildings/not-an-id/units',
+        headers: FORM,
+        payload: a13Form(),
+      });
+      assert.equal(malformed.statusCode, 400);
+      assert.equal(malformed.json().code, 'invalid');
+      const absent = await client.inject({
+        method: 'POST',
+        url: `/estate/buildings/${newId()}/units`,
+        headers: FORM,
+        payload: a13Form(),
+      });
+      assert.equal(absent.statusCode, 404);
+      assert.equal(absent.json().code, 'not_found');
+    } finally {
+      await a13Cleanup(pool);
+      await signOutAll(pool, A13_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+});
