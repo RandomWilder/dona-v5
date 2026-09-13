@@ -317,12 +317,20 @@ export function guardPiiComments(root: string): GuardResult {
 // ---------------------------------------------------------------------------------------------
 
 export const MOCKUPS_DIR = 'mockups';
+// The slice each painted flow belongs to. **Renumbered on 13 Sep 2026** with the weeks that moved
+// when week 6 became the two core journeys (tasks/roadmap.md § "What week 6 displaces"): the
+// responsibility matrix went 6.6 → 7.6 and the ticket console 7.2 → 8.2. Both were unbuilt, so no
+// evidence file names the old number — but this map is live code and a stale entry here would fail
+// a guard against the wrong slice, which is the quietest way for a guard to stop meaning anything.
 export const MOCKUP_OWNERS: Record<string, string> = {
   ia: '5.3',
   changelog: '5.5',
   a9: '5.8',
-  responsibility: '6.6',
-  ticket: '7.2',
+  'building-new': '6.1',
+  'unit-new': '6.2',
+  'document-intake': '6.3',
+  responsibility: '7.6',
+  ticket: '8.2',
 };
 
 export function guardMockups(root: string): GuardResult {
