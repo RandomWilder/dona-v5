@@ -160,6 +160,18 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   attempt to cross it.
 - `national_id` (ת.ז. / ח.פ.) is **admin-only, unreachable by any agent tool, and access-logged**. It
   never appears in the response shape of an agent tool; the policy suite asserts this.
+- **From slice 6.4 the identifier also exists on the capture path, and the rule above did not lapse —
+  it acquired a second subject.** The `lease` document type declares `tenant_id_number` and
+  `guarantor_id_number`, so a ת.ז. printed on a lease is read and stored as an `extracted_field` row.
+  What holds the line is not that the value is absent but three mechanisms that are each testable:
+  **`party.national_id.read`**, which only ADMIN holds, is required to see it and every read path
+  **withholds it by default**; **the isolation join** (`src/scope/`) never carried the column and does
+  not carry the row either; and **every disclosure writes an `audit_log` line** naming who asked and
+  which document — never the value, because PII never reaches a log. A declared field on a governed
+  catalogue is the named exception to ADR-0004 decision 2's masking, argued in
+  [ADR-0006](docs/decisions/ADR-0006-the-extractor-may-read-a-declared-identifier.md). **No
+  `field_promotion` target exists for either field**: the value becomes `party.national_id` through a
+  human confirming a household, which is an act and not a promotion.
 - **The staff credential is Google's; the session is ours** (slice 5.1, amended at 5.1b —
   `SPEC-staff.md`, ADR-0005). No password hash and no second-factor secret exist in this schema.
   **What this system asserts is an allowlist and not a factor**: only an email that already has a

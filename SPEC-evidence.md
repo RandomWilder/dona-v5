@@ -87,6 +87,24 @@ sheet existed.
   (`extracted_field.value`) because a bare `value` would fire on `config_settings`.
 - **A missing required field is a result, not an error.** No row. The same for an unconfigured
   extractor or a timed-out call: the file stays, HTTP stays 200, zero extracted rows.
+- **A declared identifier is withheld by default. Slice 6.4.** The `lease` type declares
+  `tenant_id_number` and `guarantor_id_number`, so `extracted_field.value` now also holds a ת.ז.
+  Three rules hold that, and they are the module's and not a screen's:
+  - **`IDENTIFIER_FIELD_KEYS` is the named set**, in `internal/extract.ts`. A field key is an
+    identifier because it is on that list, never because a value looked like nine digits — a shape
+    test would fire on a contract number and miss a hyphenated ת.ז., and week 5's `/05\d/` incident is
+    what a shape test costs when it is wrong: a duplicated one read the CSRF token's own hex and
+    failed 4 runs in 20.
+  - **Withheld by default on every read path.** `renderReadPage` takes a required
+    `mayReadIdentifiers` stance; false drops the rows and their page outlines and prints **a count**
+    instead — a state and a count, never the value, which is the rule this console has kept since
+    5.2. Only `party.national_id.read` sets it true, and only ADMIN holds that.
+  - **Disclosure writes `evidence.read_identifier`** — actor, role, document and the field keys, never
+    the value (SPEC.md: PII never in logs). Withholding is not a read and writes nothing.
+  **No `field_promotion` target for either field**, deliberately: the identifier becomes
+  `party.national_id` when a human confirms a household (A2), which is an act and not a promotion.
+  `listExtractedFields` keeps returning every row, because it is this module's internal truth — what
+  is gated is the response shape, and that is where the gate is.
 - **Re-extract replaces unstamped rows only.** A row with `promoted_at` set is a promotion that
   already became business truth; deleting it would erase the stamp. The database refuses that
   DELETE. Extract deletes rows where `promoted_at IS NULL`, then inserts. Adding a field to the
@@ -308,9 +326,15 @@ argument is that the bound is on what reached intake and not on what survived it
 intake has already cost a read and possibly an OCR call.
 
 **OCR runs on this path when there is no text layer**, and only when a processor is configured — a
-scan whose address nobody can read resolves to zero candidates rather than to a 503. It is read a
-second time inside `fileDocument` when that call files an `unverified` document, which is a known
-cost of leaving `fileDocument` alone and is carried rather than hidden.
+scan whose address nobody can read resolves to zero candidates rather than to a 503.
+
+**It runs once, from slice 6.4.** Until then the same scan was read twice — once here for the place
+reader and once inside `fileDocument`, whose own verdict comes back `unverified` on a page with no
+text layer — because 6.3 promised to leave that function alone. The fix is not a wider `fileDocument`
+but a request that carries what has already been paid for: `IntakeRequest.readPages` hands over the
+pages this route already read off these same bytes, `native` from pdfjs and `ocr` when the call was
+spent, and `fileDocument` uses them in place of its own reads. A caller that passes nothing gets the
+behaviour that was always there, which is what the seeding and importer paths do.
 
 ## What this module exports, and what it refuses
 
@@ -432,6 +456,13 @@ is `invalid`: no tenancy, no party, no new link. This is the content check 3.3 d
 
 **Idempotent confirm.** A lease that already has a `TENANCY` / `EVIDENCE` link returns
 `alreadyEstablished` and creates no second household.
+
+**Captured identifiers are not on that screen, and not in its shape. Slice 6.4.** A lease now
+declares `tenant_id_number` and `guarantor_id_number`, and `proposeLeaseTenancy` is a screen shape:
+it carries the names it always carried and no identifier, so the confirm page cannot leak one whoever
+is looking at it. The value is in `extracted_field` and reachable by an ADMIN on the read screen with
+an audit line. **Slice 6.5 is where a resolution reads it** — server-side, to rank which letting this
+lease belongs to — and it opens that deliberately rather than inheriting it here.
 
 **The confirm screen may show captured names.** That is the exception the confirmation step exists
 for. It still does not query `party`. Every other screen still shows no tenant's name — 5.2 was
