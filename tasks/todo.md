@@ -27,7 +27,11 @@
 > **Plan mode is mandatory** for 6.1 (role matrix + two modules), 6.3, 6.4 and 6.5.
 >
 > **One slice = one session, planning to local click.** The director runs each 6.x slice in its own
-> session. Nothing merges to staging until every 6.x slice is closed; then one deploy.
+> session. ~~Nothing merges to staging until every 6.x slice is closed; then one deploy.~~
+> **Corrected at 6.3:** each slice merges to `main` on its own and staging deploys itself off the
+> CI result (`deploy.yml`, pipeline §5) — which is what 6.1 and 6.2 already did, so the sentence
+> above was describing a batch nobody was running. Staging is current after every closed slice; the
+> Thursday demo still runs off it.
 >
 > One slice = one focused session, half a day or less. **Done when** is the acceptance bar; **Verify**
 > is the check that proves it — no self-certification. The standing bar every slice also clears is
