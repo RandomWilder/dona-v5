@@ -6,6 +6,10 @@
   leave the decision unadopted
 - **Context slice:** 1.1 — re-adopted by reference, not re-argued
 - **Original:** `docs/decisions/ADR-0004-personal-data-reaches-the-model-provider.md` in `RandomWilder/dona-v3`
+- **Amended by:** [ADR-0006](ADR-0006-the-extractor-may-read-a-declared-identifier.md), 2026-09-13,
+  slice 6.4 — **decision 2 only**. Masking binds the embedder and any model call whose output can reach
+  a tenant; a field *declared* on the document-type catalogue is the named exception. Decisions 1, 3
+  and 4 are untouched.
 
 ## The decision
 

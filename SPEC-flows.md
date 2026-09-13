@@ -154,6 +154,17 @@ unit — which is the sequence step 5 of that flow describes anyway.
    first.
 3. **Guarantors are frequently absent from the lease itself** and are added later by addendum.
    Extraction returning zero guarantors is a correct result and produces no error.
+
+   **Extraction also returns a declared identifier for each named person, where the lease prints one**
+   (slice 6.4): `tenant_id_number` and `guarantor_id_number` are declared on the `lease` type, so a
+   ת.ז. on the page is read and stored the way every other captured value is. **Zero identifiers is a
+   correct result**, on exactly the standing a missing guarantor has above — an invented lease, an older
+   form and a badly scanned page all produce it, and none of them is an error or a retry. The value is
+   **withheld from every read path by default** and shown only to a role holding
+   `party.national_id.read`, with an `audit_log` line per disclosure; it is not on this flow's confirm
+   screen at all, and it has no `field_promotion` target, because it becomes `party.national_id` only
+   when a human confirms a household. The exception this rests on is
+   [ADR-0006](docs/decisions/ADR-0006-the-extractor-may-read-a-declared-identifier.md).
 4. **Role is confirmed by a human before any `tenancy_party` row is written.** This is invariant 5
    applied where it matters most: `is_service_contact` is forced false for `GUARANTOR` by a database
    constraint, and the isolation join carries `AND tp.is_service_contact` as its fourth hop, so a role

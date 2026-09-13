@@ -214,8 +214,10 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       amending **ADR-0004 decision 2** so masking applies to the embedder and to any model call whose
       output can reach a tenant, with a *declared* field on a governed catalogue as the named
       exception; `SPEC-evidence.md`; and `SPEC-flows.md` A2.
-      **Without ADR-0006, slice 8.1 masks the value this slice exists to capture**, and 8.1 is
-      hard-bounded by week 10.
+      **Without ADR-0006, slice 9.1 masks the value this slice exists to capture**, and 9.1 is
+      hard-bounded by week 10. *(Corrected at 6.4: this entry said 8.1 twice. The displacement at the
+      top of this file renumbered redaction 8.1 → 9.1 and `roadmap.md` already says 9.1; 8.1 is now
+      ServiceCall. The number, not the sentence, was the stale half.)*
       Then the code: `tenant_id_number` and `guarantor_id_number` join the `lease` type in
       `src/evidence/fixtures/document-types.ts` as **seed rows, not a migration** — A8's open half
       used for real for the third time. **No `field_promotion` target for either**: the value reaches
