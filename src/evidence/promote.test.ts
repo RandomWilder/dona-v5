@@ -309,11 +309,13 @@ describe('evidence · promote an extracted field', () => {
       labelHe: 'חוזה שכירות',
       fileHash: 'e'.repeat(64),
       source: 'pdfjs',
+      mayReadIdentifiers: false,
       page: null,
       image: null,
       extracted: [
         {
           extractedFieldId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+          fieldKey: 'start_date',
           labelHe: 'תחילת תקופת השכירות',
           value: '2026-03-01',
           page: 1,
@@ -324,6 +326,7 @@ describe('evidence · promote an extracted field', () => {
         },
         {
           extractedFieldId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+          fieldKey: 'apartment_number',
           labelHe: 'מספר הדירה',
           value: '12',
           page: 1,
@@ -354,6 +357,7 @@ describe('evidence · promote an extracted field', () => {
       labelHe: 'חוזה שכירות',
       fileHash: 'e'.repeat(64),
       source: 'ocr',
+      mayReadIdentifiers: false,
       page: {
         number: 1,
         width: 100,
@@ -375,6 +379,7 @@ describe('evidence · promote an extracted field', () => {
       extracted: [
         {
           extractedFieldId: fieldId,
+          fieldKey: 'start_date',
           labelHe: 'תחילת תקופת השכירות',
           value: '2026-03-01',
           page: 1,
@@ -385,6 +390,7 @@ describe('evidence · promote an extracted field', () => {
         },
         {
           extractedFieldId: otherId,
+          fieldKey: 'end_date',
           labelHe: 'סיום',
           value: '2027-02-28',
           page: 2,

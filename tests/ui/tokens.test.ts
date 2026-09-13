@@ -226,6 +226,83 @@ const NAV_EXPIRING = signedInChrome(CSRF, 'expiring');
 const NAV_INCOMPLETE = signedInChrome(CSRF, 'incomplete');
 const NAV_STAFF = signedInChrome(CSRF, 'staff');
 
+/**
+ * **The read overlay at a stance. Slice 6.4.**
+ *
+ * One screen, two roles, and the registry is where the difference is asserted — 6.1, 6.2 and 6.3
+ * each did the same with their admin doors rather than writing a second guard. The captured rows are
+ * an apartment number, which everybody may see, and a ת.ז., which only a holder of
+ * `party.national_id.read` may. The identifier fixture is deliberately a value that matches no
+ * assertion this file already makes: `312345678` carries no `05` run and no `+972`, so a failure
+ * here is this rule failing and never another one firing on the same digits.
+ */
+const READ_IDENTIFIER = '312345678';
+
+function readOverlay(mayReadIdentifiers: boolean): string {
+  return renderReadPage({
+    nav: NAV,
+    csrf: CSRF,
+    documentId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    buildingId: building.building_id,
+    buildingName: building.name,
+    unitId: hit.unit_id,
+    typeKey: 'lease',
+    labelHe: 'חוזה שכירות',
+    fileHash: 'e'.repeat(64),
+    source: 'ocr',
+    mayReadIdentifiers,
+    page: {
+      number: 1,
+      width: 100,
+      height: 200,
+      items: [
+        {
+          text: 'דירה',
+          x: 10,
+          y: 40,
+          width: 30,
+          height: 20,
+          rightToLeft: true,
+          endsLine: false,
+          confidence: 0.91,
+        },
+      ],
+    },
+    image: {
+      pageNumber: 1,
+      mimeType: 'image/png',
+      bytes: Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64',
+      ),
+    },
+    extracted: [
+      {
+        extractedFieldId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+        fieldKey: 'apartment_number',
+        labelHe: 'מספר הדירה',
+        value: '14',
+        page: 1,
+        bbox: { x: 10, y: 40, width: 30, height: 20 },
+        confidence: 0.91,
+        promotionTarget: null,
+        promotedTo: null,
+      },
+      {
+        extractedFieldId: 'ffffffff-ffff-4fff-8fff-fffffffffffe',
+        fieldKey: 'tenant_id_number',
+        labelHe: 'ת.ז. השוכר',
+        value: READ_IDENTIFIER,
+        page: 1,
+        bbox: { x: 10, y: 80, width: 40, height: 20 },
+        confidence: 0.88,
+        promotionTarget: null,
+        promotedTo: null,
+      },
+    ],
+  });
+}
+
 const SCREENS: Array<[string, () => string]> = [
   ['root · index', () => renderIndexPage({ csrf: CSRF })],
   [
@@ -545,58 +622,12 @@ const SCREENS: Array<[string, () => string]> = [
         documentId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
       }),
   ],
+  ['documents · read overlay', () => readOverlay(false)],
   [
-    'documents · read overlay',
-    () =>
-      renderReadPage({
-        nav: NAV,
-        csrf: CSRF,
-        documentId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
-        buildingId: building.building_id,
-        buildingName: building.name,
-        unitId: hit.unit_id,
-        typeKey: 'lease',
-        labelHe: 'חוזה שכירות',
-        fileHash: 'e'.repeat(64),
-        source: 'ocr',
-        page: {
-          number: 1,
-          width: 100,
-          height: 200,
-          items: [
-            {
-              text: 'שכירות',
-              x: 10,
-              y: 40,
-              width: 30,
-              height: 20,
-              rightToLeft: true,
-              endsLine: false,
-              confidence: 0.91,
-            },
-          ],
-        },
-        image: {
-          pageNumber: 1,
-          mimeType: 'image/png',
-          bytes: Buffer.from(
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-            'base64',
-          ),
-        },
-        extracted: [
-          {
-            extractedFieldId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
-            labelHe: 'מספר הדירה',
-            value: '14',
-            page: 1,
-            bbox: { x: 10, y: 40, width: 30, height: 20 },
-            confidence: 0.91,
-            promotionTarget: null,
-            promotedTo: null,
-          },
-        ],
-      }),
+    // The same screen for a role that holds `party.national_id.read`. ADMIN only, and the only
+    // stance at which a captured ת.ז. is on a page in this console.
+    'documents · read overlay, may read identifiers',
+    () => readOverlay(true),
   ],
   [
     'documents · read overlay, no fields',
@@ -612,6 +643,7 @@ const SCREENS: Array<[string, () => string]> = [
         labelHe: 'חוזה שכירות',
         fileHash: 'e'.repeat(64),
         source: 'ocr',
+        mayReadIdentifiers: false,
         page: null,
         image: null,
       }),
@@ -1064,6 +1096,25 @@ describe('shared UI tokens', () => {
     }
   });
 
+  it('withholds a captured identifier, and says how many it withheld', () => {
+    // **Slice 6.4, and the refusal this slice was required to write red first.** The same screen,
+    // the same captured rows, two stances. A viewer without `party.national_id.read` does not
+    // receive the value — not hidden by CSS, not in a title attribute, not anywhere in the bytes —
+    // and is told a count instead, because *the lease named a ת.ז.* and *the lease named none* are
+    // different facts and an operator has to be able to tell them apart.
+    const withheld = readOverlay(false);
+    assert.doesNotMatch(withheld, new RegExp(READ_IDENTIFIER));
+    assert.doesNotMatch(withheld, /ת\.ז\. השוכר/);
+    assert.match(withheld, /נקרא שדה מזהה אחד ואינו מוצג/);
+    // The rest of the reading is untouched: withholding one row is not hiding the page.
+    assert.match(withheld, /מספר הדירה/);
+
+    const disclosed = readOverlay(true);
+    assert.match(disclosed, new RegExp(READ_IDENTIFIER));
+    assert.match(disclosed, /ת\.ז\. השוכר/);
+    assert.doesNotMatch(disclosed, /שדה מזהה אחד ואינו מוצג/);
+  });
+
   it('serves a signed read on the panel, never a gs:// href', () => {
     // A signed URL is a bearer token for one object. Slice 5.4 mints one on the panel.
     // Search still does not. The filed-document screen keeps the uri off the page entirely.
@@ -1125,6 +1176,7 @@ describe('shared UI tokens', () => {
       labelHe: 'חוזה שכירות',
       fileHash: 'e'.repeat(64),
       source: 'ocr',
+      mayReadIdentifiers: false,
       page: null,
       image: null,
     });

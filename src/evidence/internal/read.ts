@@ -111,11 +111,14 @@ export async function ocrAfterFile(
     typeKey: string;
     verificationTerms: string[] | null;
     subjectId: string;
+    /**
+     * **Pages the caller already OCR'd off these same bytes. Slice 6.4.** When present, the call is
+     * not made a second time and everything below is unchanged — same verdict, same promotion, same
+     * pages handed back for extraction. Absent is every caller but A12's intake route.
+     */
+    ocrPages?: PdfPage[];
   },
 ): Promise<{ verification: Verification; pages: PdfPage[] } | null> {
-  if (!ocrConfigured(deps.ocr) || !deps.ocrVersion) {
-    return null;
-  }
   if (input.pdfPages.length > onlineOcrPageLimit) {
     return null;
   }
@@ -124,13 +127,14 @@ export async function ocrAfterFile(
     return null;
   }
   try {
-    const result = await deps.ocr.pages(
-      input.bytes,
-      documentContentTypes[input.extension],
-      deps.ocrVersion,
-    );
+    // **The reading, however it was obtained.** Inside the same `try` the call was always in, so a
+    // reader that throws still lands in the same catch and a miss is still not a 503.
+    const pages = input.ocrPages ?? (await ocrReading(deps, input));
+    if (!pages) {
+      return null;
+    }
     const next = verifyDeclaredType(
-      documentText(result.pages),
+      documentText(pages),
       input.verificationTerms,
     );
     if (next.verdict !== 'verified') {
@@ -139,7 +143,7 @@ export async function ocrAfterFile(
           next.verdict === 'refused'
             ? { verdict: 'unverified', missingTerms: [] }
             : next,
-        pages: result.pages,
+        pages,
       };
     }
     await promoteVerified(
@@ -148,13 +152,32 @@ export async function ocrAfterFile(
       input.typeKey,
       input.subjectId,
     );
-    return { verification: next, pages: result.pages };
+    return { verification: next, pages };
   } catch (error) {
     if (error instanceof KernelError && error.code === 'unavailable') {
       return null;
     }
     return null;
   }
+}
+
+/**
+ * One OCR call, or none when no processor is configured. Split out at 6.4 so the reused-pages branch
+ * above reads as one expression and the narrowing this call needs is done once, here.
+ */
+async function ocrReading(
+  deps: { ocr?: OcrText; ocrVersion?: string },
+  input: { bytes: Buffer; extension: keyof typeof documentContentTypes },
+): Promise<PdfPage[] | null> {
+  if (!ocrConfigured(deps.ocr) || !deps.ocrVersion) {
+    return null;
+  }
+  const result = await deps.ocr.pages(
+    input.bytes,
+    documentContentTypes[input.extension],
+    deps.ocrVersion,
+  );
+  return result.pages;
 }
 
 export interface SweepReport {

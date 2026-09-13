@@ -93,6 +93,21 @@ export interface IntakeRequest {
   validFrom?: string | null;
   validTo?: string | null;
   /**
+   * **Pages this caller has already read off these same bytes. Slice 6.4, carried from 6.3.**
+   *
+   * A12's intake route reads the document before this function is called — it has to, because the
+   * address on the page is what tells it which flat to file against — and until 6.4 this function
+   * then read the same bytes again: a second pdfjs parse always, and for a scan a second Document AI
+   * call, one page image at a time, for a verdict the caller already had the words for.
+   *
+   * The fix 6.3 named is this and not a wider `fileDocument`: the request carries what was paid for.
+   * `native` is what pdfjs returned (empty for a non-pdf, and a zero-item page list for a scan, which
+   * is a real reading and not a miss); `ocr` is present only when the caller actually spent that
+   * call. **Absent is the ordinary case** — the unit-first screen, the seeding paths and the importer
+   * pass nothing and get exactly the behaviour they always had.
+   */
+  readPages?: { native: PdfPage[]; ocr?: PdfPage[] };
+  /**
    * The operator filing this, from the session. Slice 5.2 put it on the audit line for the
    * per-caller cap; slice 5.4 also writes it to `document.uploaded_by`. Optional, because the
    * seeding and importer paths that call this function have no session and never will.
@@ -142,7 +157,8 @@ export async function fileDocument(
   }
 
   const pdfPages: PdfPage[] =
-    extension === 'pdf' ? await deps.pdf.pages(request.bytes) : [];
+    request.readPages?.native ??
+    (extension === 'pdf' ? await deps.pdf.pages(request.bytes) : []);
   let pagesForExtract = pdfPages;
   let verification = verifyDeclaredType(
     extension === 'pdf' ? documentText(pdfPages) : null,
@@ -241,6 +257,9 @@ export async function fileDocument(
       typeKey: type.typeKey,
       verificationTerms: type.verificationTerms,
       subjectId: request.place.id,
+      // The caller's OCR pages, when it already spent that call. Everything downstream of the read —
+      // the verdict, the promotion to `verified`, the pages extraction runs over — is unchanged.
+      ocrPages: request.readPages?.ocr,
     });
     if (after) {
       verification = after.verification;

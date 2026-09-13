@@ -64,7 +64,10 @@ rule lapsing because a document screen arrived.
 
 - [ ] **`national_id` never in an agent tool's response shape.** Was → week 9. **Now 6.4 and 6.6**,
       because this is the week ת.ז. starts existing. `party.national_id.read` gets its first reader
-      in 6.4, three weeks earlier than the roadmap assigned it.
+      in 6.4, three weeks earlier than the roadmap assigned it. **6.4's half is done** — the
+      permission has a reader, the read path withholds by default and every disclosure writes
+      `evidence.read_identifier`. **6.6 still owns the guards**, and now owns one more thing than it
+      did: the case names `extracted_field` as well as `party.national_id`.
 - [ ] **Staging `staff:add` for a second operator, and the 5.6 clock-end click on staging.** Owed
       since 5.7. **Closes at 6.7**, which is the first slice back on staging.
 - [ ] **`config_settings` / secret-name editor, and `DocumentTypeField` on the settings screen.**
@@ -205,7 +208,7 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       `fileDocument`. The CSS half of the 6.2 carry has **not** tripped: `.check` and the four form
       classes are still two files each — **a third occurrence moves them to `tokens.css`**.
 
-- [ ] **6.4 — ת.ז. on the capture path — the spec edit, then the field.**
+- [x] **6.4 — ת.ז. on the capture path — the spec edit, then the field.** Closed 13 Sep — [evidence/6.4.md](evidence/6.4.md).
       **The spec edit is proposed and merged before the code edit.** Four documents move: `SPEC.md`'s
       security defaults (ת.ז. stays admin-only, unreachable by any agent tool and access-logged —
       what changes is that it now *exists* as an `ExtractedField` row, and what holds the line
@@ -226,11 +229,32 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       correct result; an OPERATOR sees the value nowhere; every read of it writes an `audit_log` line.
       **Verify:** the OPERATOR refusal red first; the audit line asserted by count, not by eyeball.
       **Plan mode. Deps:** 6.3 · **M**
-      **Carried in from 6.3:** a scanned lease is OCR'd **twice** on the intake path — pass the pages
-      `POST /documents/intake` already read into the request `fileDocument` is given, rather than
-      widening `fileDocument`. And the CSS carry rides on unchanged: `.check` plus `.form-grid` /
-      `.form-row` / `.hint` / `.form-actions` are two files each, and **a third occurrence of either
-      moves them to `tokens.css`**.
+      **Carried in from 6.3, and discharged:** the scan is OCR'd **once** now —
+      `IntakeRequest.readPages` hands `fileDocument` the pages the intake route already read off the
+      same bytes, proved by a call-counting spy (`ocrCalls === 1`). The CSS carry rides on unchanged:
+      `.check` plus `.form-grid` / `.form-row` / `.hint` / `.form-actions` are two files each, and
+      **a third occurrence of either moves them to `tokens.css`**.
+      **Raised and closed inside 6.4:**
+      • **`main` was red for weather at the start of the session.** `src/evidence/routes.test.ts`
+      asserted `doesNotMatch(body, /503/)` against a page that prints a freshly generated document
+      id — week 5's `/05\d/` defect again, in a suite that had merged green. The status code already
+      proves the request was not a 503; the body assertion is `/unavailable/` now, which is a word no
+      identifier can be.
+      • **`docs/decisions/README.md` listed ADR-0004 as `proposed`**, which its own body stopped being
+      on 6 Sep. Corrected with the reason, in the spec half.
+      • **The declaration's version window is live, not decorative.** The new suite clocked at the
+      file's 7 Sep read a catalogue that declares these fields from the 13th and extracted nothing,
+      which is R18 working and cost one run to see.
+      **Raised → 6.5, 6.6 and 6.7:**
+      • **6.5** — the identifier is **not** in `proposeLeaseTenancy`'s screen shape, so A2's confirm
+      page cannot leak one. 6.5 opens it server-side for its identifier-overlap ranking, with its own
+      audit line.
+      • **6.6** — `extracted_field` is a second home for an identifier, so the policy case names the
+      **table** and not only `party.national_id`; and `tests/ui/tokens.test.ts` now has a second
+      deliberate exception, `documents · read overlay, may read identifiers`, which 6.6's
+      identifier-run assertion must name beside the lease confirm screen.
+      • **6.7** — **`npm run seed:doctypes` must run against staging** before the demo, or the lease
+      type there declares no identifier and the walk shows nothing.
 
 - [ ] **6.5 — Which tenancy is this? Propose, confirm, write.**
       `proposeLeaseTenancy` grows a resolution over `listUnitTenancies` — candidates ranked by
@@ -270,6 +294,10 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       shows the letting and its change log. Then a **second** invented lease for the same person in a
       different flat: one party, two tenancies, and the console says so.
       **Carried in from 5.7:** the staging `staff:add` and the 5.6 clock-end click happen here.
+      **Carried in from 6.4:** **`npm run seed:doctypes` runs against staging first.** The two
+      identifier fields are seed rows in no workflow, so staging's `lease` type declares no ת.ז.
+      until somebody runs it, and the second half of the demo — one party, two tenancies — reads as
+      broken rather than as unseeded.
       **Done when:** the whole walk is done by clicking, with no seed and no SQL.
       **Verify:** live on staging, both halves in one sitting.
       **Deps:** 6.6 · **M**

@@ -32,11 +32,12 @@ import { KernelError } from '../../kernel/errors.ts';
 import type { Extractor } from '../../kernel/extraction.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
 import { createUnconfiguredOcr, type OcrText } from '../../kernel/ocr.ts';
-import type { PdfText } from '../../kernel/pdf.ts';
+import type { PdfPage, PdfText } from '../../kernel/pdf.ts';
 import type { Html } from '../../kernel/ui/html.ts';
 import { validId } from '../../kernel/validate.ts';
 import {
   CSRF_FIELD,
+  can,
   csrfFrom,
   readSessionCookie,
   verifyCsrf,
@@ -61,7 +62,11 @@ function pageIndex(asked: unknown, pageCount: number): number {
 import type { WorkRunner } from '../../kernel/work.ts';
 import { listUnitTenancies, type TenancyRole } from '../../tenancy/contract.ts';
 import { documentTypeByKey, listDocumentTypes } from './catalogue.ts';
-import { listExtractedFields } from './extract.ts';
+import {
+  type ExtractedRow,
+  isIdentifierField,
+  listExtractedFields,
+} from './extract.ts';
 import { fileDocument } from './intake.ts';
 import { confirmLeaseTenancy, proposeLeaseTenancy } from './lease.ts';
 import { readPlace, resolvePlace } from './place.ts';
@@ -200,6 +205,58 @@ function requireOperatorEmail(request: FastifyRequest): string {
     throw new KernelError('not_allowed', 'not_allowed');
   }
   return email;
+}
+
+/**
+ * **Whether this viewer may see a captured ת.ז. Slice 6.4.**
+ *
+ * The matrix is the answer and this is the only place that asks it: `party.national_id.read` has been
+ * in `PERMISSIONS` unused since 5.1, held by ADMIN alone, waiting for the week the identifier started
+ * existing. A role this system does not recognise, and a request the guard somehow let through
+ * without one, both arrive here as `null` and both answer false — `can` fails closed on a null role
+ * and that is the behaviour wanted here, not merely tolerated.
+ */
+function mayReadIdentifiers(request: FastifyRequest): boolean {
+  return can(request.staff?.role ?? null, 'party.national_id.read');
+}
+
+/**
+ * **The access log the security default has always promised. Slice 6.4.**
+ *
+ * `SPEC.md` says `national_id` is admin-only *and access-logged*, and until this slice there was
+ * nothing to log because there was nothing to read. One line per disclosure, naming who asked, what
+ * they hold and which document — and **never the value**, nor any part of it, because PII never
+ * reaches a log and a line carrying a digit of it would defeat the thing it exists to record.
+ *
+ * **Withholding is not a read and writes nothing.** An operator opening this screen did not see an
+ * identifier, so a line saying they did would make the count useless for the only question anyone
+ * will ever ask it: who has seen this household's ת.ז.
+ */
+async function logIdentifierRead(
+  deps: DocumentDeps,
+  request: FastifyRequest,
+  input: { documentId: string; typeKey: string; rows: readonly ExtractedRow[] },
+): Promise<void> {
+  const disclosed = input.rows.filter((row) => isIdentifierField(row.fieldKey));
+  if (disclosed.length === 0) {
+    return;
+  }
+  await createAuditLog(deps.pool, deps.clock).write(
+    {
+      actorKind: 'staff',
+      actorId: request.staff?.staffAccountId,
+      actorRole: request.staff?.role ?? undefined,
+      action: 'evidence.read_identifier',
+      subjectId: input.documentId,
+      inputs: {
+        documentId: input.documentId,
+        typeKey: input.typeKey,
+        fieldKeys: [...new Set(disclosed.map((row) => row.fieldKey))].sort(),
+        count: disclosed.length,
+      },
+    },
+    { outcome: 'ok' },
+  );
 }
 
 function html(reply: { header: (k: string, v: string) => unknown }): void {
@@ -408,10 +465,15 @@ export function registerDocumentRoutes(
     const chosen = fields.unit ? validId(fields.unit, 'unit') : null;
 
     let unit: UnitHit;
+    // What the reader read off these bytes, kept so `fileDocument` need not read them again (6.4).
+    // Undefined on the short-circuit below, where nothing was read because nothing needed to be.
+    let readPages: { native: PdfPage[]; ocr?: PdfPage[] } | undefined;
     if (chosen) {
       unit = await getUnit(deps.pool, chosen);
     } else {
-      const reading = readPlace(await intakeText(deps, bytes, extension));
+      const read = await intakeText(deps, bytes, extension);
+      readPages = { native: read.native, ocr: read.ocr };
+      const reading = readPlace(read.text);
       const resolved = await resolvePlace(deps.pool, reading);
       if (!resolved.unit) {
         // **The refusal, audited.** The log is this system's record of attempts (5.2), and an
@@ -463,6 +525,7 @@ export function registerDocumentRoutes(
       // it always was.
       tenancyId: null,
       filedBy: operator,
+      readPages,
     });
 
     html(reply);
@@ -527,6 +590,16 @@ export function registerDocumentRoutes(
         [documentId],
       );
       const extracted = await listExtractedFields(deps.pool, documentId);
+      // The stance, once, before either branch renders — and the line written only when the viewer
+      // holds the permission *and* the document actually carried an identifier.
+      const identifiers = mayReadIdentifiers(request);
+      if (identifiers) {
+        await logIdentifierRead(deps, request, {
+          documentId,
+          typeKey: read.typeKey,
+          rows: extracted,
+        });
+      }
       const link = subject.rows[0];
       const asked = (request.query as { page?: string }).page;
       const at = pageIndex(asked, read.pages.length);
@@ -552,6 +625,7 @@ export function registerDocumentRoutes(
           page,
           image,
           extracted,
+          mayReadIdentifiers: identifiers,
         });
       }
       if (link?.entity_type === 'BUILDING') {
@@ -570,6 +644,7 @@ export function registerDocumentRoutes(
           page,
           image,
           extracted,
+          mayReadIdentifiers: identifiers,
         });
       }
       throw new KernelError('not_found', 'document not found');
@@ -816,14 +891,17 @@ function placeFor(
 }
 
 /**
- * The text A12's reader reads, and **the known cost of this slice**.
+ * The text A12's reader reads, **and the pages it was read from**.
  *
  * A pdf with a text layer is parsed and that is the end of it. A scan has none, so OCR is the only
- * way to a printed address — and `fileDocument` will OCR the same bytes again a moment later when
- * its own verdict comes back `unverified`, because 6.3 promised to leave that function alone. Two
- * calls for one scanned lease, recorded with its number in `tasks/evidence/6.3.md` and carried to
- * 6.4 as *pass the pre-read pages into the intake request* rather than solved here by widening a
- * function this slice said it would not touch.
+ * way to a printed address.
+ *
+ * **6.3's known cost, paid off here.** Until 6.4 this function returned a bare string and threw the
+ * pages away, so `fileDocument` read the same bytes again a moment later — a second pdfjs parse
+ * always, and for a scan a second Document AI call, because its own verdict on a page with no text
+ * layer comes back `unverified`. Returning what was read, and handing it over in `readPages`, is the
+ * fix 6.3 named: the request carries what has been paid for, and `fileDocument` is widened by one
+ * optional field rather than by a new responsibility.
  *
  * **An unconfigured OCR is not an error.** It is the ordinary local state, and it reads as a
  * document that names no place: the screen then asks, which is the same screen a genuinely
@@ -833,15 +911,13 @@ async function intakeText(
   deps: DocumentDeps,
   bytes: Buffer,
   extension: keyof typeof documentContentTypes,
-): Promise<string> {
-  if (extension === 'pdf') {
-    const pages = await deps.pdf.pages(bytes);
-    if (pages.some((page) => page.items.length > 0)) {
-      return documentText(pages);
-    }
+): Promise<{ text: string; native: PdfPage[]; ocr?: PdfPage[] }> {
+  const native = extension === 'pdf' ? await deps.pdf.pages(bytes) : [];
+  if (native.some((page) => page.items.length > 0)) {
+    return { text: documentText(native), native };
   }
   if (!ocrConfigured(deps.ocr)) {
-    return '';
+    return { text: '', native };
   }
   const ocrVersion = (await readOcrSettings(createSettings(deps.pool)))
     .processorVersion;
@@ -851,11 +927,11 @@ async function intakeText(
       documentContentTypes[extension],
       ocrVersion,
     );
-    return documentText(result.pages);
+    return { text: documentText(result.pages), native, ocr: result.pages };
   } catch {
     // A reader that cannot read is a screen that asks. It is never a 503: the operator can still
     // choose the flat, and the document is still fileable.
-    return '';
+    return { text: '', native };
   }
 }
 

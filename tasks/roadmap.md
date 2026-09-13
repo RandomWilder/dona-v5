@@ -1662,9 +1662,22 @@ for real for the third time. No `field_promotion` target for either.
 - **`party.national_id.read` gets its first reader here**, three weeks before the week 9 that was
   holding it. The permission has sat in the matrix unused since 5.1 for exactly this.
 - **Plan mode. Deps:** 6.3 · **Size:** M
-- **Carried in from 6.3:** pass the pages `POST /documents/intake` already read into the request
-  `fileDocument` is given, so a scan is not OCR'd twice; and `.check` plus the four form classes are
-  two files each still — a **third occurrence moves them to `tokens.css`**.
+- **Carried in from 6.3, discharged:** `IntakeRequest.readPages` hands `fileDocument` the pages the
+  intake route already read off the same bytes, so a scan is OCR'd **once** — proved by a
+  call-counting spy. The CSS carry rides on: `.check` plus the four form classes, two files each, and
+  a **third occurrence moves them to `tokens.css`**.
+- **Closed 13 Sep** — `tasks/evidence/6.4.md`. Two PRs, spec first: ADR-0006 amending ADR-0004
+  decision 2, then two seed rows on the `lease` type at `effective_from` 2026-09-13 and no migration.
+  The read screen takes a **required** `mayReadIdentifiers`; an OPERATOR gets a count where the value
+  would be, an ADMIN gets the value and an `evidence.read_identifier` line. No `field_promotion`
+  target for either field.
+- **Raised and closed inside 6.4:** `main` was red for weather — a `/503/` body assertion reading a
+  freshly generated document id, which is week 5's `/05\d/` defect in a suite that had merged green;
+  and `docs/decisions/README.md` still called ADR-0004 `proposed`, which its own body stopped being on
+  6 Sep.
+- **Raised → 6.5 · 6.6 · 6.7:** the identifier stays out of `proposeLeaseTenancy`'s shape, so 6.5
+  opens it deliberately; 6.6's policy case names `extracted_field` and its registry assertion names a
+  second deliberate exception; 6.7 runs `seed:doctypes` against staging before the demo.
 
 ### Slice 6.5 — Which tenancy is this? Propose, confirm, write
 `proposeLeaseTenancy` grows a resolution over `listUnitTenancies`, ranked by identifier overlap then
