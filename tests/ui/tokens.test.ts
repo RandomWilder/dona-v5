@@ -44,6 +44,7 @@ import {
 } from '../../src/evidence/contract.ts';
 import { renderIndexPage } from '../../src/index-page.ts';
 import { CSRF_FIELD } from '../../src/kernel/ui/page.ts';
+import { renderA9Mockup, renderSettingsPage } from '../../src/settings-page.ts';
 import {
   renderLoginPage,
   renderStaffHomePage,
@@ -52,7 +53,6 @@ import {
   CALLS_STUB,
   renderIaMockup,
   renderStubPage,
-  SETTINGS_STUB,
 } from '../../src/stub-page.ts';
 import type { UnitLetting } from '../../src/tenancy/contract.ts';
 
@@ -719,10 +719,48 @@ const SCREENS: Array<[string, () => string]> = [
     () => renderStubPage({ csrf: CSRF }, CALLS_STUB, 'wired'),
   ],
   [
-    'root · settings stub',
-    () => renderStubPage({ csrf: CSRF }, SETTINGS_STUB, 'wired'),
+    'root · settings, admin',
+    () =>
+      renderSettingsPage({
+        csrf: CSRF,
+        mayWrite: true,
+        state: 'wired',
+        obligations: [
+          {
+            obligationTypeId: '11111111-1111-4111-8111-111111111111',
+            code: 'ARNONA',
+            labelHe: 'ארנונה',
+            labelEn: null,
+            defaultResponsibleParty: 'TENANT',
+            requiresEvidence: true,
+            isActive: true,
+          },
+        ],
+        documents: [
+          {
+            documentTypeId: '22222222-2222-4222-8222-222222222222',
+            typeKey: 'lease',
+            labelHe: 'חוזה שכירות',
+            labelEn: null,
+            verificationTerms: ['שכירות'],
+            isActive: true,
+          },
+        ],
+      }),
+  ],
+  [
+    'root · settings, viewer',
+    () =>
+      renderSettingsPage({
+        csrf: CSRF,
+        mayWrite: false,
+        state: 'wired',
+        obligations: [],
+        documents: [],
+      }),
   ],
   ['root · ia mockup', () => renderIaMockup(CSRF)],
+  ['root · a9 mockup', () => renderA9Mockup(CSRF)],
 ];
 
 describe('shared UI tokens', () => {
@@ -842,10 +880,17 @@ describe('shared UI tokens', () => {
     const calls = renderStubPage({ csrf: CSRF }, CALLS_STUB, 'wired');
     assert.match(calls, /data-state="wired"/);
     assert.match(calls, /שבוע 7 · סלייס 7.2/);
-    const settings = renderStubPage({ csrf: CSRF }, SETTINGS_STUB, 'wired');
-    assert.match(settings, /שבוע 5 · סלייס 5.8/);
     const painted = renderIaMockup(CSRF);
     assert.match(painted, /data-state="painted"/);
+  });
+
+  it('keeps asset kinds and the role matrix off the settings screen', () => {
+    const html = renderA9Mockup(CSRF);
+    assert.match(html, /data-state="painted"/);
+    assert.doesNotMatch(html, /asset_type/);
+    assert.doesNotMatch(html, /ADMIN/);
+    assert.doesNotMatch(html, /VIEWER/);
+    assert.doesNotMatch(html, /staff\.invite/);
   });
 
   it('keeps the login screen without that chrome', () => {
@@ -1082,6 +1127,26 @@ describe('shared UI tokens', () => {
       html,
       /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"/,
     );
+    const closed = renderUnitPage(
+      hit,
+      2,
+      [filed],
+      NAV,
+      [],
+      [
+        {
+          field: 'status',
+          old_value: 'ACTIVE',
+          new_value: 'ENDED',
+          actor: 'system',
+          source_document_id: null,
+        },
+      ],
+    );
+    assert.match(closed, /יומן שינויים/);
+    assert.match(closed, /ACTIVE → ENDED/);
+    assert.match(closed, /system/);
+    assert.doesNotMatch(closed, />מסמך</);
     const empty = renderUnitPage(hit, 2, [filed], NAV);
     assert.doesNotMatch(empty, /יומן שינויים/);
   });

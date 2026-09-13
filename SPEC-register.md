@@ -105,7 +105,7 @@ The importer needs to look a profile up idempotently, and the export names it by
 profiles are in force is week 5's** and is a different question from what identifies one.
 
 **A lease naming no profile is a reject with its line number, not a defaulted row.**
-`tenancy.terms_profile_id` is NOT NULL precisely so the question cannot be hidden until week 6, when
+`tenancy.terms_profile_id` is NOT NULL precisely so the question cannot be hidden until the policy week, when
 the responsibility matrix keys on it ([SPEC-tenancy.md](SPEC-tenancy.md)). Defaulting to `standard`
 here would have answered a question the client has not been asked.
 

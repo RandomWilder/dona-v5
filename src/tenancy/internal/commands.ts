@@ -4,6 +4,7 @@
 // reason parties has none either: **who is in a unit today is computed by `src/scope/` from these
 // dates, on every load** (foundation rule 1, R6). A query here that answered it would be the second
 // copy of the isolation join, and guard two exists because that is how the constraint dies.
+import type { Pool } from 'pg';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
@@ -273,4 +274,57 @@ export async function applyPromotedField(
       spec.extractedFieldId,
     ],
   );
+}
+
+function isPool(db: Queryable): db is Pool {
+  return 'totalCount' in db;
+}
+
+async function expireDueOn(db: Queryable, at: Date): Promise<void> {
+  const today = at.toISOString().slice(0, 10);
+  const closed = await db.query<{ tenancy_id: string }>(
+    `UPDATE tenancy
+        SET status = 'ENDED'
+      WHERE status = 'ACTIVE'
+        AND end_date < $1::date
+      RETURNING tenancy_id`,
+    [today],
+  );
+  for (const row of closed.rows) {
+    await db.query(
+      `INSERT INTO tenancy_event (
+         tenancy_event_id, tenancy_id, at, actor, kind, field,
+         old_value, new_value, source_document_id, extracted_field_id
+       ) VALUES ($1, $2, $3, 'system', 'terminated', 'status',
+                 'ACTIVE', 'ENDED', NULL, NULL)`,
+      [newId(), row.tenancy_id, at],
+    );
+  }
+}
+
+/**
+ * Close ACTIVE tenancies whose contractual end_date is already before the clock's UTC day.
+ *
+ * Isolation still counts the last day (`end_date >= today`). The day after is when the row
+ * becomes ENDED and a `terminated` event is appended with no document. Idempotent.
+ */
+export async function expireDueTenancies(
+  db: Queryable,
+  at: Date,
+): Promise<void> {
+  if (isPool(db)) {
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      await expireDueOn(client, at);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    return;
+  }
+  await expireDueOn(db, at);
 }

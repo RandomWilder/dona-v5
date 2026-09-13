@@ -1,427 +1,223 @@
-# Week 5 · Sun 4 – Thu 8 Oct 2026 — Paper becomes truth
+# Week 6 · Sun 11 – Thu 15 Oct 2026 — The two core journeys
 
-> **Started 9 Sep 2026**, the day week 4 closed, rather than on the planned 4 Oct. The dates in
-> [roadmap.md](roadmap.md) are never rewritten; the gap between them and the evidence files is the
-> measurement of how the project ran. After four weeks the project is running roughly three and a
-> half calendar weeks ahead of its plan.
+> **Started 13 Sep 2026**, the day week 5 closed ([evidence/week-5.md](evidence/week-5.md)), rather
+> than on the planned 11 Oct. The dates in [roadmap.md](roadmap.md) are never rewritten; the gap
+> between them and the evidence files is the measurement of how the project ran. The project enters
+> this week roughly three and a half calendar weeks ahead of its plan.
 >
-> **M1 was reached 9 Sep on five of six boxes** ([evidence/week-4.md](evidence/week-4.md)). The open
-> one — the three success numbers agreed with the client — is the director's and blocks **M3**, not
-> this week.
+> **This week is not the one the roadmap decomposed.** The roadmap's week 6 is `src/policy/` and the
+> responsibility matrix. The director paused the rollout on 13 Sep to check the foundation was on its
+> way to the flows that matter, and it was not: **there is no way for anybody to create a building**,
+> and the upload flow demands a unit before it will accept a document. Both are now this week.
+> `src/policy/` and everything behind it are displaced, their unbuilt slices renumbered 6.x → 7.x,
+> 7.x → 8.x, 8.x → 9.x and their **week numbers removed** — which week each runs in is the
+> director's. See [roadmap.md](roadmap.md) § "What week 6 displaces", where the consequence for
+> **M2** is flagged and not decided here.
 >
-> **Demo kind, declared Sunday 9 Sep: SOFTWARE — and the roadmap says *Real data*, deliberately not
-> rewritten.** We have no real data to demo. The 1,500-unit register is **generated** (2.5 travelled
-> to pilot preparation with **F3**) and every document filed is a **tier-1 authored specimen** (the
-> corpus waits on **F6**). An amendment against a generated unit is a working amendment, not real
-> data, and calling it real data is precisely the claim this project exists to refuse. **If F3 burns
-> before Wednesday's freeze the kind is upgradeable**; until then the honest declaration is Software.
+> **Demo kind (Thu): SOFTWARE.** Still no real data. Every lease put through this week is one the
+> director invented to look like a real one, which is the point: the flow is proved against paper
+> shaped like the real thing while F6 still gates the real thing.
 >
-> **Week demo (Thu):** an amendment arrives for a unit; the tenancy updates; the change log shows old
-> → new, who approved it, and which document caused it. Then a tenancy ends because a date passed,
-> with no document at all. **And it is all behind a login, which it has never been before.**
-> **Freeze:** Wednesday. The last merge that reaches staging lands Wednesday.
+> **Week demo (Thu):** an admin creates a building, adds an apartment, and drops an invented lease
+> onto a screen that asks for no unit. The system reads the address off the paper, finds the flat,
+> pulls out the dates, the names and the ת.ז., and proposes a tenancy. Confirm, and the unit page
+> shows it. Then a second lease for the same person in a different flat: **one party, two tenancies.**
+> **Freeze:** Wednesday.
 >
-> **Plan mode is mandatory** for **5.6** (a migration relaxing a live CHECK) and **5.7** (two new
-> entities). 5.1–5.5 are closed.
+> **Plan mode is mandatory** for 6.1 (role matrix + two modules), 6.3, 6.4 and 6.5.
+>
+> **One slice = one session, planning to local click.** The director runs each 6.x slice in its own
+> session. Nothing merges to staging until every 6.x slice is closed; then one deploy.
 >
 > One slice = one focused session, half a day or less. **Done when** is the acceptance bar; **Verify**
 > is the check that proves it — no self-certification. The standing bar every slice also clears is
 > the Definition of Done in [plan.md](plan.md).
 
-**Where a new session starts: 5.6.** 5.5 is closed. Then **5.7 → 5.8**.
-Week 6 runs **6.1 → 6.6** in order. The old 5.3 (`national_id` in an agent tool) waits on week 9.
+**Where a new session starts: 6.1.** Week 5 is closed and merged.
 An unbuilt flow is painted in the live shell (`mockups/<flow>.html`, `/dev/mockups/<flow>` on a
 `-dev` process) before it is wired; a guard fails if that file and the slice's evidence both exist.
 
-**No slice this week depends on any fuse.** Walked 9 Sep. Week 6 is the first week a fuse touches,
-and it touches its *sizing* rather than its ability to start.
+**No slice this week depends on any fuse.** F6 still gates tier 2 and nothing here needs it: the
+leases are invented, which is what makes that true.
 
 ---
 
 ## The one sentence that must survive this week
 
-~~**Seven routes have been served unauthenticated since week 1**~~ — **closed 10 Sep by 5.2**
-([evidence/5.2.md](evidence/5.2.md)). Every route in the application is behind the session, every
-write route carries a CSRF token derived from it, and an undeclared route now stops the process from
-starting rather than serving. The corpus stays gated behind **F6** — that was always the other half,
-and it is unchanged by this.
+**Every screen shows a state and a count and never a tenant's name.** Kept at 5.2, 5.4, 5.5, 5.6 and
+5.8 — five slices that were each entitled to lift it and each wrote down that they had not.
 
-**What replaces it as the sentence to keep:** *every screen shows a state and a count and never a
-tenant's name.* 5.2 kept it; **5.4 kept it a second time**; **5.5 kept it a third** on the unit
-change log (dates, operator email, document — never who lives there).
+**This week is the sixth and it is the hardest**, because 6.4 puts a ת.ז. on the capture path and
+6.5 shows a household's names on a confirm screen. The ruling this week has to write down, either
+way: **a confirm screen showing what the document in the operator's hand says is not the same act as
+putting a household on a list.** If that distinction holds, it belongs in `SPEC.md` in 6.6's words. If
+it does not, the rule is lifted deliberately and that is recorded too. What is not allowed is the
+rule lapsing because a document screen arrived.
 
 ---
 
-## Carried in from week 4 — every item, with the slice that closes it
+## Carried in from week 5 — every item, with the slice that closes it
 
-- [x] **Session, CSRF, and a cap on upload *count*. CLOSED 10 Sep by 5.2**, all three in one change.
-      22 routes declare a stance and 7 are `public`; the token is `sha256('csrf:' + session token)`
-      and is held in no column; the cap is **50 filed documents per operator per rolling 24h**,
-      counted off `audit_log`, refused attempts included. `too_many` → 429 is the sixth `ErrorCode`.
-- [x] **`uploaded_by`, signed URLs, and `superseded_by` re-asked.** CLOSED 10 Sep by **5.4**.
-      Nullable `uploaded_by` on every HTTP filing; panel mints a 15-minute V4 URL; search does not.
-      `superseded_by` still omitted: 6 mapping rows, 2 targets, 0 live stamps. Never-a-name **kept**
-      again. HTTP provenance is the operator's email (snapshot), not a typed field.
-- [ ] **`national_id` never in an agent tool's response shape.** → **week 9**, numbered when that week
-      is decomposed. No agent exists yet that could reach it. `party.national_id.read` stays in the
-      matrix with no reader until then; silence does not delete it.
-- [x] **Cross-tenancy party identity.** CLOSED 11 Sep by **5.5**. A2 step 5 kept. 2,871 identified
-      parties, 0 nameless, 0 nameless same-name groups. 303 identified name collisions are the
-      generator's pool, already keyed.
-- [ ] **Clock-driven `TenancyEvent` kinds; Obligation and ObligationType (E9, E10).** → **5.6**,
-      **5.7**.
-- [ ] **The A9 settings screen** — the catalogue has been dynamic since week 3 and the hand on it has
-      been a seed. → **5.8**.
-- [x] **The root index moved from `src/estate/` to the composition root. CLOSED 10 Sep by 5.2** —
-      `src/index-page.ts`, registered by `src/app.ts`. It is the one screen whose nav names both
-      modules' routes and carries the sign-out form.
-- [x] **4.5 — the accuracy number. CUT and travelling**, not this week's. It goes to pilot
-      preparation with **F6**, bounded by **week 12**; the same treatment 2.5 took with F3 and 3.4
-      with F4. Recorded in full at [roadmap.md](roadmap.md) § 4.5 and
-      [evidence/week-4.md](evidence/week-4.md).
-- [x] **The UI-pass decision. DECIDED: no** at M1, **amended at 5.2b** to a chrome pass, **at
-      5.2c** to v3's ops sidebar on the live destinations only, **and at 5.2d** to that rail as a
-      phone drawer — still not a card redesign. Unbuilt tabs and the rest of the parked comments
-      wait on **M2**. The unbuilt destinations themselves are **5.3**.
-- [~] **2.5 — import the real register.** Pilot preparation, with **F3**.
-- [~] **3.4 and A10 — Drive ingestion and the bulk review queue.** Pilot preparation, with **F4**.
-
-## Also this week
-
-- [ ] **Walk [fuses.md](fuses.md).** Walked 9 Sep at week 4's close; no fuse changed state. Walk
-      again before Thursday's demo. **Ask F1 specifically on 18 Sep**, when its burn window opens and
-      silence stops being the expected state.
-- [ ] **F6 — the ask is now four questions, not three acts.** Settle the **signing entity** first (it
-      decides what goes on the OpenAI form) · execute OpenAI's DPA · confirm Google Cloud's is in
-      force and file the record · review and publish the notice
-      ([../docs/data-subject-notice.draft.md](../docs/data-subject-notice.draft.md)). If the accounts
-      stay ours, a **Dona Dom ↔ us DPA** is owed and is written nowhere. Handed to the director 9 Sep
-      in English and Hebrew. **Blocks 4.5 and nothing in this week.**
-- [ ] **Answer one question out of the notice draft: how it reaches a tenant.** Owed before **week
-      9** — it is the only item in the draft with an engineering consequence.
-- [ ] **Ask at Thursday's demo, for week 6: are the Shoham buildings still inside תקופת הבדק?** Open
-      question 4. It decides whether **6.3** demos a live ternary responsibility case or a synthetic
-      one. Either is a correct slice; only one is a good demo.
-- [ ] **The three success numbers agreed with the client** — the open M1 box. Director's. Blocks the
-      **M3 go/no-go**, which is the decision those numbers exist to make.
+- [ ] **`national_id` never in an agent tool's response shape.** Was → week 9. **Now 6.4 and 6.6**,
+      because this is the week ת.ז. starts existing. `party.national_id.read` gets its first reader
+      in 6.4, three weeks earlier than the roadmap assigned it.
+- [ ] **Staging `staff:add` for a second operator, and the 5.6 clock-end click on staging.** Owed
+      since 5.7. **Closes at 6.7**, which is the first slice back on staging.
+- [ ] **`config_settings` / secret-name editor, and `DocumentTypeField` on the settings screen.**
+      Carried from 5.8. Not this week: 6.4 adds fields through the seed, which is the path A8
+      specifies, and a screen for it earns its own slice when a second person needs one.
+- [ ] **`work.ts` and its unearned durability claim.** Still after the console walk-through slice.
+- [ ] **Walk [fuses.md](fuses.md)** before Thursday's demo. **Ask F1 specifically on 18 Sep.**
+- [ ] **F6 — four questions, not three acts.** Settle the signing entity · execute OpenAI's DPA ·
+      confirm Google Cloud's and file the record · review and publish the notice. **Blocks tier 2 and
+      nothing in this week.** 6.4 makes it sharper, not looser: the extractor will now be asked to
+      return an identifier, so the DPA covers a category it did not before.
+- [ ] **Answer one question out of the notice draft: how it reaches a tenant.** Owed before week 9.
+- [ ] **The three success numbers agreed with the client** — the open M1 box. Director's. Blocks M3.
+- [ ] **Director's call: does week 6 displacing `src/policy/` move M2?** Written up in
+      [roadmap.md](roadmap.md). Month two is five weeks if it does. Not decided by an agent.
 - [ ] **Director's call:** whether the published Data Model's `Document` card is republished.
-      Flagged, not owned.
-- [ ] **Raised at 5.1, amended at 5.1b, owned at week 12: staging and prod share one identity
-      configuration**, because they share one GCP project — so a staging operator is a prod
-      operator. 5.1b changes what the shared thing *is*, not that it is shared: an OAuth client and
-      a consent screen rather than an Identity Platform tenant. Prod answers 503 by design until the
-      first pilot tag, so this is a known window rather than an open one. Decided **once**, beside
-      the prod restart and the F7 organisation move, as either a client per environment or a second
-      project. `release.yml` mounts no `prod-google-oauth-*` today and gains both in the same pass.
-- [ ] **Raised at 5.1b, owned at week 12 beside the entry above: the consent screen stays in
-      `Testing`, so every operator is also a row in Google's test-user list.** Publishing the app
-      is blocked on the Branding page, which requires an application home page, a privacy policy
-      URL, a terms-of-service URL and an authorised domain — and the project has no domain of its
-      own; `run.app` is a public suffix and cannot be claimed. Testing costs nothing operationally:
-      `access_type=online` means no refresh token, so the seven-day testing expiry never applies,
-      and our own session is 12h regardless. The cost is a second list saying what `staff_account`
-      already says, capped at 100 lifetime users, and an unverified-app interstitial the operator
-      clicks through. Decided **once**, with the domain — which is also what the client-facing URL
-      needs. Until then `staff:add` has an undocumented second half: add the address as a test user
-      too.
-- [x] **Raised at 5.1, owner the director: an invite is a printed URL because there is no mail
-      transport. RETIRED at 5.1b** — there is no invite and no URL. An admin adds an operator's
-      email and role, the operator signs in with Google, and no message ever had to reach them. The
-      mail-transport ADR-0004 naming is not owed by anything in the plan today; when a slice needs
-      to *send* something it is that slice's, and week 8 no longer carries it.
-- [x] **DONE 10 Sep 2026. Left standing in GCP by 5.1b, the director's — and 5.1c found it was four
-      acts, not two.** All four ran: the secret and both keys removed, `identitytoolkit` disabled.
-      Staging signed in again afterwards and smoke returned `ok:true` with `db:up`, which is what
-      proves nothing still read them. Original entry follows.
-      Unread by any revision since the 5.1b deploy: `staging-identity-api-key` in Secret Manager,
-      the `dona identity (staging)` API key `8eec9e86-710e-45ed-8725-3528ffa404b3`, **and a
-      `Browser key (auto created by Firebase)` `5ee51088-a00c-4a27-9ebf-82ffa656ff51`** that
-      `initializeAuth` created at slice 1.5 and nothing has read since — it was not in the 5.1b
-      list because nothing looked for what the vendor created on its own. Plus
-      `gcloud services disable identitytoolkit.googleapis.com`, which `infra/bootstrap.sh` no longer
-      enables, so the live project and a fresh bootstrap have drifted. `apikeys.googleapis.com`
-      stays: it manages keys rather than being a vendor, and with no keys left it costs nothing.
-      **These are the director's because `.claude/hooks/guard-bash.mjs:20` refuses a `gcloud`
-      command containing `delete`, and that refusal was not worked around.** An unused credential
-      nobody rotates is exactly what slice 1.5 argued against.
-- [ ] **Raised at 5.1c, flagged to the director rather than owned: the bash guard reads the command
-      that is typed, not what it runs.** `.claude/hooks/guard-bash.mjs:20` blocked the four `gcloud`
-      deletions above; in the same session `./infra/staff-add.sh` removed its own Cloud Run job from
-      inside itself and was not blocked, because the hook saw only the script's name. This is
-      recorded rather than fixed, because it looks like the design and not a hole: the guard is a
-      fuse against a typo or a half-considered one-liner, and a script in the repo has been read,
-      reviewed and merged, which a typed command has not. Making the hook read script bodies would
-      refuse `infra/rollback.sh` and `infra/corpus-delete.sh` too, both of which exist to remove
-      things on purpose. **If the director wants the stronger rule, it is theirs to say so**, and it
-      is a change to how much the agent is trusted rather than a bug fix.
-- [ ] **Take delivery of the real document corpus** — after F6. Arrival and removal dates go on
-      [fuses.md](fuses.md) the day it lands, and the removal is **run by hand on the day** rather
-      than trusted to the lifecycle rule, which is the backstop and not the record.
+- [ ] **Staging and prod share one identity configuration**, and **the consent screen stays in
+      `Testing`.** Both owned at week 12, beside the prod restart and the F7 organisation move.
+- [ ] **The bash guard reads the command that is typed, not what it runs.** Raised at 5.1c, flagged
+      rather than fixed. If the director wants the stronger rule it is theirs to say so.
+- [ ] **Take delivery of the real document corpus** — after F6.
 
-**Carried in and already owned elsewhere:** policy cases 4 and 5 — **6.4** / **6.5**. The emergency
-bypass — **7.5**. Redaction at the provider boundary (ADR-0004 decision 2, **hard-bounded by week
-10**) — **8.1**. `run.admin` per service and the docs-bucket `legacyObjectOwner` delete — **8.4**.
-Node-20 action bumps and `release.yml`'s size line — **8.3**. `tenant_visible` — week 9. Prod PITR,
-`environment: production` protection rules and the `party_contact` btree — week 12.
+**Carried in and already owned elsewhere:** the emergency bypass, redaction at the provider boundary
+(**rewritten by 6.4's ADR-0006 — re-read it before building it**), `run.admin` per service and the
+docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PITR and the
+`party_contact` btree. All in [roadmap.md](roadmap.md) under the weeks that hold them.
 
 ---
 
 ## Slices
 
-- [x] **5.0-cut — Delete the speculative kernel while the migrations are still editable.**
-      **Closed 10 Sep 2026** ([evidence/5.0-cut.md](evidence/5.0-cut.md)) — `events.ts` and
-      `idempotency.ts` deleted with their suites, `outbox` and `idempotency_keys` squashed out of
-      `0002_kernel_durability.sql`. **−176 production lines, −220 test lines, 29 → 27 tables**, all
-      gates green, 50 policy cases untouched. Three further deletions the re-plan asked for were
-      **disproved and not done** — `kernel/embeddings.ts`, the `vector` extension and
-      `resolvePartiesInUnit` all have live callers in `evals/` and `scripts/`; the numbers and the
-      greps are in the evidence file. Taken ahead of 5.2 because a migration is only editable while
-      no environment holds real data (`docs/from-v3.md`), and F3 closes that window.
-      **Opened → 5.1b:** local *and staging* still carry both dead tables, because the migration
-      ledger is by filename with no checksum — an edited migration does not re-run anywhere it has
-      already run. Rebuilding local needs a `DROP SCHEMA` the bash guard refuses and rebuilding
-      staging is a hand-run against a live environment, so **5.1b's `0022_` drops them where they
-      stand**, which is the one mechanism that reaches both.
-      **Carried → post-7.2:** `work.ts` left standing, its durability claim still unearned.
+- [ ] **6.1 — `estate.write`, and an admin creates a building.**
+      Flow **A11**, written into `SPEC-flows.md` before the code — that file's own rule is that a
+      slice serving no flow gets cut on sight, and there has never been a flow for setting up an
+      estate. `estate.write` joins `PERMISSIONS` in `src/staff/internal/roles.ts` and goes to
+      **ADMIN only**: an operator files paper, an admin shapes the estate. `GET
+      /estate/buildings/new` + `POST /estate/buildings`, stance `{ staff: 'estate.write', csrf:
+      'in-body' }`, body through `src/kernel/ui/forms.ts`. **The write is `importEstate`** with one
+      `BuildingPlan`, zero spaces, zero units and an optional `ProjectPlan` —
+      `validateBuildingSpaces` already accepts that shape. **No new estate command.**
+      **Done when:** an ADMIN creates a building from the screen and it appears on `/estate`; an
+      OPERATOR posting the same form is refused with `not_allowed` and nothing more; the same address
+      posted twice leaves one row, because `building.address_key` says so.
+      **Verify:** the OPERATOR refusal written **red first**; the screen appended to
+      `tests/ui/tokens.test.ts`'s `SCREENS` registry, never a second copy of the guard; restart
+      `npm run dev` and click it on `:3000`.
+      **Mockup first:** `mockups/building-new.html` at `/dev/mockups/building-new`.
+      **Plan mode. Deps:** 5.8 · **M**
 
-- [x] **5.1 — Staff identity, the session, and the role matrix in code.** **Closed 9 Sep 2026**
-      ([evidence/5.1.md](evidence/5.1.md)) — 481 code + 41 hooks + 50 policy, 0 failed; the
-      no-plaintext-token policy case red against a deliberately wrong `0021_` before it was green;
-      the `-- pii` guard fired on `staff_account.display_name` and then passed. **MFA enforcement was
-      proved against the live Identity Platform** — after enrolment the same password returns
-      `mfa_required` and no token — and that run found two defects the fake could not have
-      (`x-goog-user-project` on the admin call, `displayName` on enrolment), both now pinned as
-      tests. `bootstrap.sh`'s config step was silently failing on a wrong enum name and now reads
-      the config back and exits 1 if it did not take. Staging serves `dc45dff` on revision
-      `dona-staging-00056-kvp` with `identity: identity-platform:dona-v5` on its boot line;
-      `/staff/login` answers 200 with no script and `/staff` redirects without a cookie.
-      **What remains is a human signing in on the staging URL as themselves**, which is the
-      director's. **Amended at 5.1b:** the two commands the 5.1 evidence names are gone with the
-      invite — there is no URL to open, no password to set and no authenticator to enrol. What is
-      needed instead is one `staff_account` row on the staging database, after which the sign-in is
-      the same single link the local click-through proved. **Written at 5.1c**, by
-      `./infra/staff-add.sh staging <email> ADMIN` — execution `dona-staging-staff-add-lq6v8`,
-      `staff:add: added · wilder.netboost@gmail.com · ADMIN`, exit 0. 5.1b had carried "how does a
-      row reach the staging database" to 5.9 as an open question; it was never open, because
-      `.github/workflows/deploy.yml:72` had been answering it for migrations since slice 1.6. So
-      **all that remains here is the click**, on
-      `https://dona-staging-r44j24yuaa-zf.a.run.app/staff/login` — **and the director clicked it on
-      10 Sep 2026, landing on `/staff` as ADMIN against revision `06ec20c`. The step 5.1 opened and
-      5.1b carried is closed**, in `tasks/evidence/5.1.md`.
-      *Original entry:* Identity Platform with
-      **enforced MFA**, an invite flow, and `src/staff/` — the admin edge, not a domain module; it
-      owns none of E1–E16. **The role matrix is code, not a config row**, a deliberate exception to
-      *policies are data*: an access-control matrix a database write could widen is a
-      privilege-escalation path wearing the clothes of a setting. Sessions store `token_hash` and
-      never the token. The refusal says `not_allowed` and nothing more.
-      **Done when:** a named operator signs in with a second factor and holds a session; an account
-      with no role is refused with `not_allowed` and no other detail; and no token value exists
-      anywhere in the database.
-      **Verify:** sign in on staging with MFA *enforced*, not offered; a test asserts the stored hash
-      is not the cookie; a role-less account is refused on every route with the same message.
-      **Owed by 1.5:** `infra/bootstrap.sh` deliberately creates no staff seed secrets — a generated
-      credential nothing reads and no rotation flow owns is worse than an absent one. This slice
-      creates in Secret Manager exactly what its mechanism needs, and `bootstrap.sh` gains those
-      lines here.
-      **Plan mode. Deps:** none · **L**
+- [ ] **6.2 — An apartment, its spaces, and the bays it implies.**
+      `GET /estate/buildings/:buildingId/units/new` + `POST`, same stance, reusing **`upsertUnitRow`**
+      — the register's own per-row primitive, already idempotent on `space_natural_key` and R2's
+      shared key. Parking and storage follow 4.6's convention (`חניה {unit}` / `מחסן {unit}`), so a
+      handover protocol has a space to land on later. **Bulk stays `npm run import:register`**; no
+      second bulk path is built.
+      **Done when:** an apartment added from the screen appears on the building page with its space
+      count and its occupancy chip; the same `unit_number` posted twice updates rather than
+      duplicates.
+      **Verify:** re-post and diff row counts; `:3000` click through building → new apartment →
+      building.
+      **Mockup first:** `mockups/unit-new.html`.
+      **Deps:** 6.1 · **M**
 
-- [x] **5.1b — The credential is Google's, and the TOTP machinery goes.** **Closed 10 Sep**
-      ([evidence/5.1b.md](evidence/5.1b.md)). Ticked here at 5.2b: the evidence was already written
-      and the director had signed in on staging; the week list had not caught up. Slice 5.1 is closed; this
-      **amends** it rather than reopening it, which is why it carries a letter. Move 1 of the 10 Sep
-      re-plan: the director's own worked example was the admin login, and the instinct — *more
-      machinery than the job needs* — was right. The correct simplification is not a hand-rolled
-      password (that is `docs/from-v3.md` gap 1, the thing v3 failed at) but the opposite direction:
-      **delegate the whole credential and delete our screens.** Our password form, our TOTP form,
-      the invite URL, the enrolment screen and the base32 secret an operator hand-types are replaced
-      by **one link → Google → our session** — a server-side OIDC authorization-code flow, one
-      redirect, still not one line of client JavaScript. Identity Platform is **dropped entirely**,
-      not kept as a directory in front of Google. `google-auth-library` is already a dependency, so
-      no new one.
-      **The invite becomes a row and `staff_invite` is dropped.** An admin adds `email` + `role`;
-      that row *is* the authorisation, and first sign-in fills `idp_local_id`. No token, no expiry,
-      no acceptance URL.
-      **What is lost, stated plainly: the assertable second factor.** 5.1 refused any ID token
-      without `firebase.sign_in_second_factor`; whatever factor Google enforces, we cannot assert
-      it. What replaces it is narrower on the other axis — **only an email that already has a
-      `staff_account` row may sign in at all**, where before it was anyone Identity Platform knew.
-      The allowlist is what makes this safe without Workspace, which **retires open question 12 as a
-      blocker** rather than leaving auth waiting on it. `ADR-0005` is where that trade is written
-      down.
-      **Done when:** an operator added by `npm run staff:add` signs in through Google and holds a
-      session; an email with no row, an unverified email, a role-less account and a disabled account
-      are each refused with `not_allowed` and nothing more; a replayed or absent `state` is refused;
-      and `grep -rn "totp\|mfa\|otpauth" src/` returns nothing.
-      **Verify:** every refusal committed **red first**; `npm run migrate` leaves **26 tables** with
-      no `staff_invite`, no `outbox` and no `idempotency_keys`; and the sign-in is clicked on `:3000`
-      against the real Google client, not the fake — 5.1 found two defects the fake could not have.
-      **One manual step, the director's:** Google exposes no API for creating an OAuth 2.0 Web
-      client, so a human creates it and the consent screen once per project (~10 minutes) and
-      `bootstrap.sh` **documents** that rather than pretending to do it — `bootstrap.sh:222`'s own
-      lesson. The two secrets reach the system through `infra/set-secret.sh` and nowhere else.
-      **Carried in from 5.0-cut:** `0022_` drops `outbox` and `idempotency_keys` where they still
-      stand, and `assignRole` gets the first caller 5.0-cut said it was owed.
-      **Two of the re-plan's own instructions are corrected here**, in the shape 5.0-cut used:
-      squashing `staff_invite` out of `0021_` cannot work — staging applied `0021_` at the 5.1 deploy
-      and the ledger has no checksum, so the edit would reach nothing and leave staging with
-      `idp_local_id NOT NULL` and a first sign-in that fails on an INSERT. Hence a forward `0022_`,
-      and `0021_` left standing as the record of what every environment actually ran. And "25 tables
-      → 24" is **27 → 26**: 5.0-cut removed two tables, not three.
-      **Plan mode. Deps:** 5.1 · **M**
+- [ ] **6.3 — The document-first upload screen.**
+      Flow **A12**; A1 is amended rather than replaced. `GET /documents/new` **with no `unit`**
+      becomes the dedicated screen: choose the type, attach the file. **The unit-first entry from a
+      building page stays** — the place is already known there and the shortcut costs nothing.
+      `POST /documents/intake` reads the bytes in memory under the existing `LIMITS`, runs
+      `documentText` over pdf + OCR, and runs a **deterministic place reader** — the analogue of
+      `src/evidence/internal/protocol.ts`'s, which already pulls an apartment number out of text with
+      no model. Resolution is `building.address_key` exact first, then `searchEstate`-shaped
+      candidates. **Exactly one candidate** → the existing `fileDocument` runs against that place,
+      unchanged, and the chain continues into A1/A2 as it does today. **Zero or several** → the form
+      comes back with the candidates listed and the file input re-armed, **no row and no object**,
+      422 — 3.3's refusal shape reused.
+      **The structural call, recorded rather than discovered:** no staging store and no `UNFILED`
+      place kind. `PlaceKind` stays four values and the object path keeps naming a real place (3.2).
+      A6 settled the principle — nothing is held between propose and confirm.
+      **Done when:** a lease naming רקפת 12, דירה 12A files against that unit with no unit chosen by
+      hand; a lease naming an address not in the system writes no row and no object and offers a
+      search.
+      **Verify:** both paths on `:3000`; the "writes nothing" half proved by row counts and a bucket
+      listing, the way 3.3 proved its refusal.
+      **Mockup first:** `mockups/document-intake.html`.
+      **Plan mode. Deps:** 6.2 · **L**
 
-- [x] **5.2 — The screens go behind the session, and the write route gets a token that means
-      something. CLOSED 10 Sep** — [evidence/5.2.md](evidence/5.2.md). 487 code + 41 hooks + 50
-      policy, 0 failed. Two cases red first; a third was written because clicking `:3000` found a
-      screen serving an **empty** token that every gate had passed. **The never-a-name rule was
-      KEPT** and the wording tightened to *a tenant's name*; reconsidered at 5.4. Both halves in one change, plus the bound none of 3.3's bounds are: a **per-caller**
-      cap on upload *count*. The root index moves to the composition root.
-      **Done when:** none of the seven routes answers without a session; a POST with a valid session
-      and no token is refused; an authenticated caller is bounded on upload **count** as well as
-      size; and `src/estate/` no longer owns the root index.
-      **Verify:** unauthenticated GET on all five read routes refused; POST with session and no token
-      refused; the cap+1 upload from one session refused; week 5's screens **appended to
-      `tests/ui/tokens.test.ts`'s `SCREENS` registry** — never a second copy of the guard, which is
-      how a guard dies.
-      **This slice may lift the never-a-name rule.** Every screen shows a state and a count and never
-      a name. Behind a session a name may become lawful to show. **Lifting it is a decision this
-      slice records; keeping it is equally an answer.** What is not allowed is the rule lapsing
-      because a session arrived.
-      **Carried in from 5.1, amended by 5.1b, three things.** (1) **The CSRF token's scope is every
-      write route and not only `POST /documents`** — after 5.1b the staff module has exactly two:
-      `POST /staff/operators` and `POST /staff/logout`. The two new GETs, `/staff/auth/start` and
-      `/staff/auth/callback`, are deliberately **outside** the token's scope: they change no row of
-      ours, and `state` is the anti-forgery value that flow carries by construction. 5.1 built no
-      half of a token; what stands in for one until this slice is `SameSite=Lax` on the session
-      cookie, which is stated as the defence it is in `SPEC-staff.md`. (2) **The guard is
-      `requireStaff` from `src/staff/contract.ts`, called once per route and never re-implemented** —
-      the same rule `tests/ui/tokens.test.ts`'s `SCREENS` registry carries, for the same reason.
-      (3) **The staff screens are already in that registry** — two of them after 5.1b, where four
-      were deleted with the flow they belonged to; week 5's remaining screens append beside them.
-      **Plan mode. Deps:** 5.1 · **L**
+- [ ] **6.4 — ת.ז. on the capture path — the spec edit, then the field.**
+      **The spec edit is proposed and merged before the code edit.** Four documents move: `SPEC.md`'s
+      security defaults (ת.ז. stays admin-only, unreachable by any agent tool and access-logged —
+      what changes is that it now *exists* as an `ExtractedField` row, and what holds the line
+      instead is `party.national_id.read`, the isolation join that never exposed the column, and
+      6.6's two guards); **`docs/decisions/ADR-0006-the-extractor-may-read-a-declared-identifier.md`**,
+      amending **ADR-0004 decision 2** so masking applies to the embedder and to any model call whose
+      output can reach a tenant, with a *declared* field on a governed catalogue as the named
+      exception; `SPEC-evidence.md`; and `SPEC-flows.md` A2.
+      **Without ADR-0006, slice 8.1 masks the value this slice exists to capture**, and 8.1 is
+      hard-bounded by week 10.
+      Then the code: `tenant_id_number` and `guarantor_id_number` join the `lease` type in
+      `src/evidence/fixtures/document-types.ts` as **seed rows, not a migration** — A8's open half
+      used for real for the third time. **No `field_promotion` target for either**: the value reaches
+      `party.national_id` through 6.5's confirm step, which is a human act and not a promotion.
+      **Done when:** lease extraction returns a ת.ז. for each named person, and zero is still a
+      correct result; an OPERATOR sees the value nowhere; every read of it writes an `audit_log` line.
+      **Verify:** the OPERATOR refusal red first; the audit line asserted by count, not by eyeball.
+      **Plan mode. Deps:** 6.3 · **M**
 
-- [x] **5.2b — One chrome on every signed-in screen.** The session arrived at 5.2 and each module
-      kept writing its own bar: the index had staff and sign-out; estate had search and neither;
-      evidence had three links and no search; staff home had no chrome at all. Sign-out existed on
-      two screens. **This slice does not redesign cards** and is not the remaining-destinations slice.
-      **Done when:** every authenticated screen carries the same bar — buildings, expiring,
-      incomplete, search, staff, sign-out — and the login screen carries none of it.
-      **Verify:** `tests/ui/tokens.test.ts` asserts the chrome over the signed-in registry and its
-      absence on login; restart `npm run dev` and sign out from a **non-index** screen.
-      **The M1 “no UI-pass” call is reversed only this far** — chrome and shared controls, so an
-      operator can leave any screen. Remaining destinations are **5.3**. Reconsidered again at M2.
-      **Plan mode. Deps:** 5.2 · **M**
+- [ ] **6.5 — Which tenancy is this? Propose, confirm, write.**
+      `proposeLeaseTenancy` grows a resolution over `listUnitTenancies` — candidates ranked by
+      identifier overlap first, then date overlap. It proposes *attach to this letting* or *create a
+      new draft*, and **a human confirms**; invariant 5 is unchanged. `confirmLeaseTenancy` gains the
+      **attach** branch, which it has never had — today it creates or no-ops. `upsertParty` (keyed on
+      `national_id_key`) replaces `createParty` wherever an identifier was captured; `createParty`
+      stays for the lease that names none, which is the case its comment was written for.
+      **`SPEC-flows.md` A2 step 5 is amended, not reversed.** Matching a **name** across tenancies
+      stays forbidden — 5.5 measured 303 identified people sharing a full name, which is the number
+      that says why. Matching an **identifier** is the governed path, and is the reason the rule was
+      written about names in the first place.
+      **Done when:** two leases for the same ת.ז. in two flats produce **one** party and two
+      tenancies; a second lease on the same unit and dates offers the existing letting rather than a
+      second one; a lease naming no identifier still writes a party and a draft.
+      **Verify:** all three cases on `:3000` with invented leases; party count asserted before and
+      after.
+      **Plan mode. Deps:** 6.4 · **L**
 
-- [x] **5.2c — v3's ops shell on v5's live URLs.** 5.2b put one bar on every signed-in screen; it
-      was still a top bar, so the console did not look like the temp admin v3 already had. **This
-      slice does not add unbuilt tabs** and is not a card redesign.
-      **Done when:** every authenticated screen is the ops sidebar (buildings, expiring, incomplete,
-      search, staff, sign-out in the footer); the current destination is marked; login has no rail.
-      **Verify:** the token registry asserts `.ops`, the live hrefs, one `aria-current` except on
-      the index, and login without any of it; restart `npm run dev` and sign out from a **non-index**
-      screen. No push until the director approves localhost.
-      **Plan mode. Deps:** 5.2b · **M**
+- [ ] **6.6 — The guards, and the number that says ת.ז. did not leak.**
+      **Policy case, red first:** no identifier-shaped run in the response shape of anything
+      `src/scope/` serves, and none in the copy sent to the embedder. `tests/policy/` is the gate and
+      not an eval — SPEC.md's "never test a deterministic constraint through the agent".
+      `tests/ui/tokens.test.ts` gains an identifier-shaped-run assertion across `SCREENS`, beside the
+      phone and `+972` assertions it already carries, with the lease confirm screen named as the one
+      deliberate exception and the exception argued in the test's own comment. **Assert it over the
+      registry and never over a live response** — week 5 closed on exactly that mistake, where a
+      duplicated `/05\d/` read the CSRF token's own hex and failed 4 runs in 20.
+      **The never-a-name rule is reconsidered a sixth time and written down either way.**
+      **Done when:** both guards fail against a deliberate violation and pass after.
+      **Deps:** 6.5 · **M**
 
-- [x] **5.2d — Phone shell: the ops rail is a drawer below 840px.** CLOSED 10 Sep. 5.2c left the
-      rail wrapping into a second header on a phone. The drawer lives in the kernel page shell so
-      every later signed-in screen inherits it. Still no `<script>`: open state is a checkbox.
-      **Done when:** below 840px a signed-in screen shows a menu control, not the full rail; the
-      destinations and sign-out are in the drawer; tapping the scrim or סגירה closes it; login has
-      neither. Desktop rail unchanged. Fields on a phone are 16px so iOS does not zoom.
-      **Verify:** token registry asserts the menu control on signed-in screens and its absence on
-      login; restarted `npm run dev`; 375px drawer open/close; 1280px rail unchanged. Login card at
-      375px is 317px and does not overflow.
-      [evidence/5.2d.md](evidence/5.2d.md)
-      **Plan mode. Deps:** 5.2c · **S**
-
-- [x] **5.3 — The rest of the ops destinations.** CLOSED 10 Sep. What the 10 Sep re-plan called 5.9; the number is
-      5.3 because we take the next integer. The rail already has the live screens. This slice adds
-      **קריאות** (`/calls`, owned by 7.2) and **הגדרות** (`/settings`, stub until 5.8). An unbuilt
-      tab is one line naming the week and slice that owns it. Kernel still learns no route. Seven
-      destinations: buildings, expiring, incomplete, search, staff, calls, settings.
-      **Done when:** every signed-in screen's rail names those seven; `/calls` and `/settings` each
-      render the owner line; login has none of it.
-      **Verify:** token registry asserts the new hrefs and the stub line; `/dev/mockups/ia` exists
-      only on a `-dev` process; restart `npm run dev` and click the new destinations.
-      **Deps:** 5.2d · **S**
-      [evidence/5.3.md](evidence/5.3.md)
-
-- [x] **5.4 — What the session unlocks in evidence: `uploaded_by`, signed URLs, and the supersession
-      question re-asked.** CLOSED 10 Sep — [evidence/5.4.md](evidence/5.4.md). 500 code + 41 hooks +
-      54 policy, 0 failed. `0024_` nullable `uploaded_by`. Panel mints a 15-minute V4 URL; search
-      does not. `superseded_by` still omitted (6 mappings, 2 targets, 0 live stamps). Never-a-name
-      **kept**. HTTP `promoted_by` / `confirmed_by` / incomplete actor = operator email.
-      **Carried → 5.5:** if portfolio promotion finds a case this ruling does not cover, 5.5 owns
-      the column. **Closed at 5.5 still omitted** (same 6 / 2 / 0).
-      **Director:** restart `npm run dev` (it does not watch); re-run `infra/bootstrap.sh staging`
-      for `serviceAccountTokenCreator` before a staging click can open a file.
-      **Deps:** 5.1, 5.2 · **M**
-
-- [x] **5.5 — Promotion at scale, and the amendment that changes a real unit.** CLOSED 11 Sep —
-      [evidence/5.5.md](evidence/5.5.md). 502 code + 41 hooks + 54 policy, 0 failed. Unit change
-      log: old → new, operator email, document. A2 step 5 **kept** (0 nameless duplicates).
-      `superseded_by` still omitted (6 mappings, 2 targets, 0 stamps). Never-a-name **kept**.
-      **Deps:** 5.4 · **M**
-
-- [ ] **5.6 — A tenancy ends because a date passed, with no document at all.** `0019_tenancy_event.sql`
-      makes `source_document_id` NOT NULL for `amended`, because a promotion that changed a value
-      without naming the paper is the exact claim this system refuses. `terminated` has no paper by
-      construction. **The column relaxes for that kind only, by CHECK, never by dropping the
-      constraint.** `at` comes from the injected clock; no `DEFAULT now()`, which is what makes this
-      demonstrable in a room rather than merely true in November.
-      **Done when:** advancing the injected clock past an `ACTIVE` tenancy's `end_date` terminates it
-      and appends `terminated` with a null document — **and an `amended` event with a null document
-      is still rejected by the database**.
-      **Verify:** both directions in one test. The demo runs off the injected clock, on staging, with
-      the date said out loud.
-      **Plan mode. Deps:** 5.5 · **M**
-
-- [ ] **5.7 — Obligation and ObligationType — E9 and E10.** The last two entities month one deferred.
-      `ObligationType` is admin-managed, **deactivated never deleted**, with `responsible_party`
-      **copied onto the obligation at creation** so editing the catalogue cannot rewrite history —
-      foundation rule 8, the same shape as `FieldPromotion`'s snapshot of who approved a copy.
-      **Done when:** an obligation carries its own `responsible_party`, and editing or deactivating
-      its type afterwards changes nothing the obligation says.
-      **Verify:** create, edit the type, read the obligation back unchanged; a DELETE on a type is
-      refused.
-      **Plan mode. Deps:** 5.6 · **M**
-
-- [ ] **5.8 — The settings screen — A9, delivered.** A9 has been true of the mechanism since week 3
-      and false of the hand on it. **One screen, one pattern, both catalogues** — `ObligationType`
-      and `DocumentType` — and `asset_type` deliberately absent, because the asset register's kinds
-      are estate's and not a setting. Inherits ADR-0003's question of **who may change a reference**:
-      pointing production at a different secret is a privileged act even when the value never
-      appears.
-      **Done when:** an `ObligationType` and a `DocumentType` are each added through the screen with
-      no release and no migration, by an operator whose role permits it; and `asset_type` is not on
-      it.
-      **Carried in from 5.1: and neither is the role matrix.** Two catalogues, and never a third card
-      for who may do what — an access-control matrix a database write could widen is a
-      privilege-escalation path wearing the clothes of a setting (`SPEC-staff.md`). The permission
-      this screen guards with is `settings.write`, which exists from 5.1.
-      **Carried in from 5.2: the route→permission mapping is a first cut and nothing tests that it
-      is the *intended* one.** 22 routes each declare a permission or `public`, and the boot check
-      proves every route declares *something* — it cannot prove `/documents/:id/promote` should ask
-      for `tenancy.write` rather than `documents.write`. This is the first slice with an operator
-      looking at the matrix, so it is the slice that reads the mapping back and says whether it is
-      the one meant. **The public list is 7 and is asserted exactly** in `src/guard.test.ts`; a
-      change to it is a decision, not a diff.
-      **Verify:** add one of each on staging; a role without the permission is refused with
-      `not_allowed`; grep the screen for `asset_type` and find nothing; the route→permission mapping
-      is read back against the matrix on screen and either confirmed or corrected in writing.
-      **Deps:** 5.1, 5.7 · **M**
+- [ ] **6.7 — The journey, end to end, on staging.**
+      The demo slice, and the first time this week's work leaves localhost. Create a building → add an
+      apartment → upload an invented lease from the document screen → the system finds the unit,
+      extracts the fields and the ת.ז., proposes a new tenancy → confirm the roles → the unit page
+      shows the letting and its change log. Then a **second** invented lease for the same person in a
+      different flat: one party, two tenancies, and the console says so.
+      **Carried in from 5.7:** the staging `staff:add` and the 5.6 clock-end click happen here.
+      **Done when:** the whole walk is done by clicking, with no seed and no SQL.
+      **Verify:** live on staging, both halves in one sitting.
+      **Deps:** 6.6 · **M**
 
 ---
 
----
+## Week-6 cut line
 
-## What the 10 Sep re-plan became
+If the week runs hot, cut in this order: **6.2**'s implied parking and storage bays (an apartment
+without them is still an apartment, and 4.6's convention can be applied later by the importer); then
+the `guarantor_id_number` half of **6.4**, because a guarantor is frequently absent from the lease
+anyway and A2 step 3 already says zero of them is a correct result.
 
-Move 0 is **5.0-cut**, closed. Move 1 is **5.1b**, closed. Move 2's destinations are **5.3**, not
-5.9. Move 3 is not a slice: mockup-first and the evidence cap live in [CLAUDE.md](../CLAUDE.md) and
-`scripts/guards.ts`. Move 4's skip list is **retired**: 5.4–5.8 stay this week, in order; week 6
-is 6.1–6.6; 7.1 still depends on 6.6. **5.9 is never used.**
-
-The `national_id` policy case that used to be 5.3 waits on **week 9**.
-
-**M2 is at the end of week 8**, not this week. Its boxes: the console usable on its own · all five
-policy cases green, each red first · weeks 9–12 decomposed before week 9's Monday.
+**Do not cut 6.4's spec edit, 6.6, or 6.7.** The first is what makes the rest lawful to build, the
+second is the only thing standing between a captured ת.ז. and a screen, and the third is the only
+slice that proves any of it outside localhost.

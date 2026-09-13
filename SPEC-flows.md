@@ -200,7 +200,7 @@ kept again.
 **Resolution:** the administrator uploads the addendum (A3), or records the exception. The exception
 row's `actor` is the signed-in operator (slice 5.4), not a typed name and not the word `console`.
 **Module:** tenancy owns the query and the exception write (`listIncompleteTenancies`,
-`recordCompletenessException`); the case lives in `tests/policy/` until week 6 stands up
+`recordCompletenessException`); the case lives in `tests/policy/` until the policy week stands up
 `src/policy/`; estate owns the queue screen, with those commands injected at the composition root
 so estate does not import tenancy.
 

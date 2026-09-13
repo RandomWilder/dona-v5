@@ -31,6 +31,9 @@ workbook a specification rather than a description.
   for it. `verification_terms` holds the marker terms a document of this type is expected to contain
   and is read by slice 3.3's guard and by nothing else — it is nullable, so a type with no terms is
   unguarded rather than unfileable.
+  **Slice 5.8** is the hand on this catalogue: the composition-root settings screen lists every
+  type (inactive included) and posts through `upsertDocumentType`. Field declarations stay a seed;
+  this screen does not version `DocumentTypeField`.
 - **`document_type_field`** — E16. What a type declares, in one version. Unique on
   `(document_type_id, field_key, effective_from)`: redeclaring a field is a **new row**, never an
   edit, and closing a declaration sets `effective_to` without touching what the old row said.

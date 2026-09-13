@@ -76,6 +76,7 @@ export interface EstateDeps {
     db: Pool,
     unitId: string,
   ) => Promise<readonly TenancyEventView[]>;
+  expireDueTenancies: (db: Pool, at: Date) => Promise<void>;
   listIncompleteTenancies: (
     db: Pool,
   ) => Promise<readonly IncompleteTenancyRow[]>;
@@ -254,6 +255,7 @@ export function registerEstateRoutes(
       deps.pool,
       unit.unit_id,
     );
+    await deps.expireDueTenancies(deps.pool, deps.clock.now());
     const events = await deps.listTenancyEvents(deps.pool, unit.unit_id);
     html(reply);
     return renderUnitPage(

@@ -305,7 +305,7 @@ application cannot destroy a signed contract, and that holds twice**: `ObjectSto
 and the runtime account has `objectViewer` + `objectCreator` and not `objectAdmin`. From 5.4 it does
 have `signRead`: a fifteen-minute V4 URL, signed with IAM `signBlob` (the runtime account may sign
 as itself; still not `objectAdmin`). A human with
-project editor still can, which is 1.5's observation and is now **slice 8.4** — the IAM pass in the
+project editor still can, which is 1.5's observation and is now **slice 9.4** — the IAM pass in the
 week whose demo is trying to break isolation. 3.2 measured the window that stands between such a
 human and a loss: versioning plus an explicit seven-day soft-delete leaves a recoverable noncurrent
 version, so the true sentence is *removed with seven days to undo it*, not *destroyed*.
@@ -323,7 +323,8 @@ Every route in this application declares its own stance — a permission, or the
 an `onRoute` hook refuses to start the process if one declares neither, so the default is deny and
 an open route is open because somebody wrote it down. The root index moved from `src/estate/` to the
 composition root in the same slice, because an index of screens stopped being one module's fact the
-week a second module had one. **Slice 5.2b put one chrome on every signed-in screen**, and **5.2c
+week a second module had one. **Slice 5.8 put the settings screen beside that index**, because the
+two catalogues it edits belong to two modules and a third module may not own either. **Slice 5.2b put one chrome on every signed-in screen**, and **5.2c
 gave that chrome v3's ops sidebar** rather than a top bar. **5.2d put that rail behind a menu control below 840px**, in the kernel
 shell so every later screen inherits it, still with no `<script>`. **Slice 5.3 added the remaining destinations** — קריאות and הגדרות — as stubs that name the week and slice that own them. The login screen stays without that rail. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
 physical side or a `<script>`, and from 2.6 also on a phone number or an E.164 prefix: what a screen
