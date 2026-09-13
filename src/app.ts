@@ -13,11 +13,13 @@ import type { Pool } from 'pg';
 import { signedInChrome } from './chrome.ts';
 import { registerEstateRoutes } from './estate/contract.ts';
 import {
+  listDocumentTypes,
   listLinkedDocuments,
   listPromotedFieldsForUnit,
   registerDocumentRoutes,
   searchDocuments,
   signLinkedDocuments,
+  upsertDocumentType,
 } from './evidence/contract.ts';
 import { renderIndexPage } from './index-page.ts';
 import { type Clock, systemClock } from './kernel/clock.ts';
@@ -34,29 +36,35 @@ import { registerUiAssets } from './kernel/ui/assets.ts';
 import { registerFormBodies } from './kernel/ui/forms.ts';
 import type { WorkRunner } from './kernel/work.ts';
 import {
+  parseDocumentTypeForm,
+  parseObligationTypeForm,
+  renderA9Mockup,
+  renderSettingsPage,
+} from './settings-page.ts';
+import {
   CSRF_FIELD,
+  can,
   createUnconfiguredIdentity,
   csrfFrom,
   csrfTokenFor,
   type IdentityProvider,
   PERMISSIONS,
   type Permission,
+  type Role,
   readSessionCookie,
   registerStaffRoutes,
   requireStaff,
   type StaffDeps,
   verifyCsrf,
 } from './staff/contract.ts';
+import { CALLS_STUB, renderIaMockup, renderStubPage } from './stub-page.ts';
 import {
-  CALLS_STUB,
-  renderIaMockup,
-  renderStubPage,
-  SETTINGS_STUB,
-} from './stub-page.ts';
-import {
+  expireDueTenancies,
   listIncompleteTenancies,
+  listObligationTypes,
   listTenancyEvents,
   recordCompletenessException,
+  upsertObligationType,
 } from './tenancy/contract.ts';
 
 export interface AppDeps {
@@ -318,16 +326,58 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       return renderStubPage({ csrf: csrfFrom(request) }, CALLS_STUB, 'wired');
     },
   );
-  app.get(
-    '/settings',
-    { config: { staff: 'estate.read' } },
+
+  const SETTINGS_READ = { config: { staff: 'estate.read' } } as const;
+  const SETTINGS_WRITE = { config: { staff: 'settings.write' } } as const;
+
+  const settingsPage = async (
+    request: { staff?: { role: Role | null } | null; csrf?: string | null },
+    reply: { header: (name: string, value: string) => unknown },
+    saved?: 'obligation' | 'document',
+  ) => {
+    stubHeaders(reply);
+    const role = request.staff?.role ?? null;
+    return renderSettingsPage({
+      csrf: csrfFrom(request),
+      mayWrite: can(role, 'settings.write'),
+      state: 'wired',
+      obligations: await listObligationTypes(deps.pool),
+      documents: await listDocumentTypes(deps.pool, { activeOnly: false }),
+      saved,
+    });
+  };
+
+  app.get('/settings', SETTINGS_READ, async (request, reply) => {
+    const saved = (request.query as { saved?: string }).saved;
+    return settingsPage(
+      request,
+      reply,
+      saved === 'obligation' || saved === 'document' ? saved : undefined,
+    );
+  });
+  app.post(
+    '/settings/obligation-types',
+    SETTINGS_WRITE,
     async (request, reply) => {
-      stubHeaders(reply);
-      return renderStubPage(
-        { csrf: csrfFrom(request) },
-        SETTINGS_STUB,
-        'wired',
+      await upsertObligationType(
+        deps.pool,
+        parseObligationTypeForm(request.body),
       );
+      return reply
+        .code(303)
+        .header('location', '/settings?saved=obligation')
+        .send();
+    },
+  );
+  app.post(
+    '/settings/document-types',
+    SETTINGS_WRITE,
+    async (request, reply) => {
+      await upsertDocumentType(deps.pool, parseDocumentTypeForm(request.body));
+      return reply
+        .code(303)
+        .header('location', '/settings?saved=document')
+        .send();
     },
   );
 
@@ -337,13 +387,14 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       { config: { staff: 'estate.read' } },
       async (request, reply) => {
         const flow = (request.params as { flow: string }).flow;
-        if (flow !== 'ia') {
+        if (flow !== 'ia' && flow !== 'a9') {
           const error = new KernelError('not_found', 'route not found');
           reply.code(httpStatus(error.code));
           return toErrorBody(error);
         }
         stubHeaders(reply);
-        return renderIaMockup(csrfFrom(request));
+        const csrf = csrfFrom(request);
+        return flow === 'a9' ? renderA9Mockup(csrf) : renderIaMockup(csrf);
       },
     );
   }
@@ -366,6 +417,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     searchDocuments,
     listPromotedFieldsForUnit,
     listTenancyEvents,
+    expireDueTenancies,
     listIncompleteTenancies,
     recordCompletenessException,
   });

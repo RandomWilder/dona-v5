@@ -91,10 +91,10 @@ export function renderIndexPage(screen: IndexScreen): string {
         </a>
       </article>
       <article class="row-card">
-        ${marker('is-alert')}
+        ${marker('is-ok')}
         <a class="card-link" href="/settings">
           <p class="card-title"><span>הגדרות</span></p>
-          <p class="lede">שבוע 5 · סלייס 5.8</p>
+          <p class="lede">סוגי התחייבות וסוגי מסמך. בלי שחרור ובלי מיגרציה.</p>
         </a>
       </article>
     </div>`;

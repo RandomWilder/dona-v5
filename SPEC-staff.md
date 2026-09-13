@@ -179,6 +179,10 @@ Three roles, and the permission names are the vocabulary the rest of the console
 authority — *may add an operator* — and renaming a permission is a schema-shaped change to every
 future guard for a word. It is read by `POST /staff/operators`.
 
+`settings.write` is read by `POST /settings/obligation-types` and `POST /settings/document-types`
+(slice 5.8). `GET /settings` stays `estate.read`, so an operator can see the catalogues; only an
+admin may write them.
+
 `party.national_id.read` is here and unused, and that is on purpose: `SPEC.md`'s security default
 says `national_id` is **admin-only, unreachable by any agent tool, and access-logged**, and the
 "admin-only" half needs a permission to name before **5.3** can write the policy case that enforces
@@ -236,7 +240,8 @@ the only somewhere available is the table this module is forbidden to put a toke
 
 **The scope is every write route in the application**, not this module's alone: `POST /documents`,
 `POST /documents/:id/promote`, `POST /documents/:id/seed`, `POST /documents/:id/tenancy`,
-`POST /estate/incomplete/:tenancyId/exception`, `POST /staff/operators` and `POST /staff/logout`.
+`POST /estate/incomplete/:tenancyId/exception`, `POST /staff/operators`, `POST /staff/logout`,
+`POST /settings/obligation-types` and `POST /settings/document-types`.
 Enforcement is one `preHandler` hook in the composition root, which is why the list above is a
 consequence of the method rather than a list anybody maintains.
 

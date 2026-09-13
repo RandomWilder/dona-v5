@@ -655,7 +655,7 @@ describe('tenancy_event — append-only promotion log', () => {
     }
   });
 
-  it('refuses update and delete, and an amended row without a document', async (t) => {
+  it('accepts terminated without paper and still refuses amended without paper', async (t) => {
     const pool = await migratedPoolOrNull();
     if (!pool) {
       t.skip(skipReason);
@@ -679,15 +679,13 @@ describe('tenancy_event — append-only promotion log', () => {
             [newId(), tenancyId, new Date('2026-09-07T09:00:00.000Z')],
           ),
         );
-        await rejects(db, CHECK_VIOLATION, () =>
-          db.query(
-            `INSERT INTO tenancy_event (
-               tenancy_event_id, tenancy_id, at, actor, kind, field,
-               old_value, new_value, source_document_id, extracted_field_id
-             ) VALUES ($1, $2, $3, 'אסף', 'terminated', 'status',
-                       'ACTIVE', 'ENDED', NULL, NULL)`,
-            [newId(), tenancyId, new Date('2026-09-07T09:00:00.000Z')],
-          ),
+        await db.query(
+          `INSERT INTO tenancy_event (
+             tenancy_event_id, tenancy_id, at, actor, kind, field,
+             old_value, new_value, source_document_id, extracted_field_id
+           ) VALUES ($1, $2, $3, 'system', 'terminated', 'status',
+                     'ACTIVE', 'ENDED', NULL, NULL)`,
+          [newId(), tenancyId, new Date('2026-09-07T09:00:00.000Z')],
         );
         const typeId = newId();
         const documentId = newId();
@@ -708,6 +706,21 @@ describe('tenancy_event — append-only promotion log', () => {
             `hash-${documentId}`,
             new Date('2026-09-07T09:00:00.000Z'),
           ],
+        );
+        await rejects(db, CHECK_VIOLATION, () =>
+          db.query(
+            `INSERT INTO tenancy_event (
+               tenancy_event_id, tenancy_id, at, actor, kind, field,
+               old_value, new_value, source_document_id, extracted_field_id
+             ) VALUES ($1, $2, $3, 'system', 'terminated', 'status',
+                       'ACTIVE', 'ENDED', $4, NULL)`,
+            [
+              newId(),
+              tenancyId,
+              new Date('2026-09-07T09:00:00.000Z'),
+              documentId,
+            ],
+          ),
         );
         const eventId = newId();
         await db.query(
@@ -761,6 +774,210 @@ describe('tenancy_completeness_exception — A4 exception row, not a status', ()
               AND column_name = 'at'`,
         );
         assert.equal(defaults.rows[0]?.column_default, null);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+});
+
+// ------------------------------------------------------------------------------------------------
+// E9 / E10 — Obligation and ObligationType. Slice 5.7, `0026_obligation.sql`.
+// ------------------------------------------------------------------------------------------------
+
+const TYPE_COLUMNS = [
+  'obligation_type_id',
+  'code',
+  'label_he',
+  'label_en',
+  'default_responsible_party',
+  'requires_evidence',
+  'is_active',
+];
+
+const OBLIGATION_COLUMNS = [
+  'obligation_id',
+  'tenancy_id',
+  'obligation_type_id',
+  'responsible_party',
+  'valid_from',
+  'valid_to',
+  'evidence_document_id',
+];
+
+async function insertType(
+  db: PoolClient,
+  spec: {
+    code?: string;
+    responsible?: string;
+    requiresEvidence?: boolean;
+    active?: boolean;
+  } = {},
+): Promise<string> {
+  const id = newId();
+  await db.query(
+    `INSERT INTO obligation_type (
+       obligation_type_id, code, label_he, label_en,
+       default_responsible_party, requires_evidence, is_active
+     ) VALUES ($1, $2, 'ארנונה', NULL, $3, $4, $5)`,
+    [
+      id,
+      spec.code ?? `oblt-${id.slice(0, 8)}`,
+      spec.responsible ?? 'TENANT',
+      spec.requiresEvidence ?? true,
+      spec.active ?? true,
+    ],
+  );
+  return id;
+}
+
+describe('tenancy · ObligationType and Obligation', () => {
+  it('the columns are the workbook’s E9 and E10, with no status and no DEFAULT now()', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const types = await db.query<{ column_name: string }>(
+          `SELECT column_name FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'obligation_type'
+            ORDER BY ordinal_position`,
+        );
+        assert.deepEqual(
+          types.rows.map((row) => row.column_name),
+          TYPE_COLUMNS,
+        );
+        const obligations = await db.query<{ column_name: string }>(
+          `SELECT column_name FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'obligation'
+            ORDER BY ordinal_position`,
+        );
+        assert.deepEqual(
+          obligations.rows.map((row) => row.column_name),
+          OBLIGATION_COLUMNS,
+        );
+        const money = await db.query(
+          `SELECT table_name, column_name FROM information_schema.columns
+             WHERE table_schema = 'public'
+               AND table_name IN ('obligation', 'obligation_type')
+               AND (column_name ~ '(rent|deposit|balance|amount|price|fee|payment)'
+                    OR data_type = 'money')`,
+        );
+        assert.deepEqual(money.rows, []);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('refuses a DELETE of a type even with no children', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const typeId = await insertType(db);
+        await rejects(db, RESTRICT_VIOLATION, () =>
+          db.query(
+            'DELETE FROM obligation_type WHERE obligation_type_id = $1',
+            [typeId],
+          ),
+        );
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('copies nothing from the type on a later edit — the row already holds responsible_party', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const estate = await seedEstate(db);
+        const tenancyId = await seedTenancy(db, {
+          ...estate,
+          from: '2026-01-01',
+          to: '2027-01-01',
+        });
+        const typeId = await insertType(db, { responsible: 'TENANT' });
+        const obligationId = newId();
+        await db.query(
+          `INSERT INTO obligation (
+             obligation_id, tenancy_id, obligation_type_id, responsible_party,
+             valid_from, valid_to, evidence_document_id
+           ) VALUES ($1, $2, $3, 'TENANT', NULL, NULL, NULL)`,
+          [obligationId, tenancyId, typeId],
+        );
+        await db.query(
+          `UPDATE obligation_type
+              SET default_responsible_party = 'OPERATOR', is_active = false
+            WHERE obligation_type_id = $1`,
+          [typeId],
+        );
+        const row = await db.query<{ responsible_party: string }>(
+          'SELECT responsible_party FROM obligation WHERE obligation_id = $1',
+          [obligationId],
+        );
+        assert.equal(row.rows[0]?.responsible_party, 'TENANT');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('refuses an unknown responsible_party and an inverted period', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const estate = await seedEstate(db);
+        const tenancyId = await seedTenancy(db, {
+          ...estate,
+          from: '2026-01-01',
+          to: '2027-01-01',
+        });
+        await rejects(db, CHECK_VIOLATION, () =>
+          insertType(db, { responsible: 'CONTRACTOR' }),
+        );
+        const typeId = await insertType(db);
+        await rejects(db, CHECK_VIOLATION, () =>
+          db.query(
+            `INSERT INTO obligation (
+               obligation_id, tenancy_id, obligation_type_id, responsible_party,
+               valid_from, valid_to, evidence_document_id
+             ) VALUES ($1, $2, $3, 'LANDLORD', NULL, NULL, NULL)`,
+            [newId(), tenancyId, typeId],
+          ),
+        );
+        await rejects(db, CHECK_VIOLATION, () =>
+          db.query(
+            `INSERT INTO obligation (
+               obligation_id, tenancy_id, obligation_type_id, responsible_party,
+               valid_from, valid_to, evidence_document_id
+             ) VALUES ($1, $2, $3, 'TENANT', '2027-01-01', '2026-01-01', NULL)`,
+            [newId(), tenancyId, typeId],
+          ),
+        );
+        await rejects(db, FOREIGN_KEY_VIOLATION, () =>
+          db.query(
+            `INSERT INTO obligation (
+               obligation_id, tenancy_id, obligation_type_id, responsible_party,
+               valid_from, valid_to, evidence_document_id
+             ) VALUES ($1, $2, $3, 'TENANT', NULL, NULL, $4)`,
+            [newId(), tenancyId, typeId, newId()],
+          ),
+        );
       });
     } finally {
       await pool.end();

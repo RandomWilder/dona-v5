@@ -14,7 +14,7 @@ export interface TenancyEventRow {
   field: string;
   old_value: string | null;
   new_value: string;
-  source_document_id: string;
+  source_document_id: string | null;
 }
 
 function asIso(value: Date | string): string {
@@ -22,7 +22,7 @@ function asIso(value: Date | string): string {
 }
 
 /**
- * Every amendment on every letting of this unit, oldest first.
+ * Every event on every letting of this unit, oldest first.
  *
  * Order is `at`, then id — the verify bar is old → new, actor, document, in order. A second
  * letting on the same flat is still this unit's log.
@@ -40,7 +40,7 @@ export async function listTenancyEvents(
     field: string;
     old_value: string | null;
     new_value: string;
-    source_document_id: string;
+    source_document_id: string | null;
   }>(
     `SELECT e.tenancy_event_id,
             e.tenancy_id,

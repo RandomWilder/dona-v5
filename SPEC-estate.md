@@ -257,12 +257,15 @@ added**: that same header, the occupancy chip, the upload link, and the document
 adds the **promoted values** on that page: each stamped date is a link through to its pixels on the
 read overlay. **Slice 5.5 adds the change log** — old → new, the operator email, the source
 document — from `listTenancyEvents`, injected the same way. Empty is legal. Never a tenant's name.
+**Slice 5.6:** a clock-driven end is `ACTIVE → ENDED`, actor `system`, and no document link. The
+unit page calls `expireDueTenancies` (injected from tenancy) against the clock before it reads the
+log, so opening the sheet is what closes a lease whose date has passed — not a hidden job.
 The workbook's other unit-sheet panels (tenancy, obligations, assets) wait.
 
 **The documents listed on these screens are injected, not imported.** `EstateDeps` carries
 `listLinkedDocuments`, `searchDocuments` and (from 4.4) `listPromotedFieldsForUnit` from evidence's
-contract, and from 5.5 `listTenancyEvents` from tenancy's, wired in `app.ts`. Estate renders the
-cards; evidence and tenancy own the SQL. Building-level paper stays on the building page; unit
+contract, and from 5.5 `listTenancyEvents` from tenancy's, and from 5.6 `expireDueTenancies`, wired in
+`app.ts`. Estate renders the cards; evidence and tenancy own the SQL. Building-level paper stays on the building page; unit
 paper stays on the unit page. Promoted values never come from an estate query of `extracted_field`.
 The change log never comes from an estate query of `tenancy_event`.
 

@@ -8,8 +8,7 @@ import { defaultOcrProcessorVersion } from './ocr.ts';
 // id and its width are the first, and this is the smallest thing that honours
 // the rule.
 //
-// No admin screen. That half of rule 4 is week 5's `catalog`; until then a row
-// is changed by hand, which is the honest state rather than a hidden one.
+// No admin screen on this table. Slice 5.8 delivered the two catalogues, not these rows.
 
 export interface Settings {
   text(key: string, fallback: string): Promise<string>;

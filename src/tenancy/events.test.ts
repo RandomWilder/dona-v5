@@ -2,13 +2,14 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { PoolClient } from 'pg';
+import { fixedClock } from '../kernel/clock.ts';
 import { newId } from '../kernel/ids.ts';
 import {
   inRolledBackTransaction,
   migratedPoolOrNull,
   skipReason,
 } from '../kernel/pg-support.ts';
-import { listTenancyEvents } from './contract.ts';
+import { expireDueTenancies, listTenancyEvents } from './contract.ts';
 
 async function seedUnit(db: PoolClient): Promise<{
   unitId: string;
@@ -102,6 +103,49 @@ describe('tenancy · listTenancyEvents', () => {
         assert.equal(log[1]?.old_value, '2028-01-17');
         assert.equal(log[1]?.new_value, '2029-01-17');
         assert.equal((await listTenancyEvents(db, other.unitId)).length, 0);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('closes an ACTIVE tenancy when the clock passes end_date, with no document', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const seeded = await seedUnit(db);
+        const clock = fixedClock(new Date('2028-01-17T12:00:00.000Z'));
+        await expireDueTenancies(db, clock.now());
+        const stillActive = await db.query<{ status: string }>(
+          `SELECT status FROM tenancy WHERE tenancy_id = $1`,
+          [seeded.tenancyId],
+        );
+        assert.equal(stillActive.rows[0]?.status, 'ACTIVE');
+        assert.equal((await listTenancyEvents(db, seeded.unitId)).length, 0);
+
+        clock.advance(24 * 60 * 60 * 1000);
+        await expireDueTenancies(db, clock.now());
+        const ended = await db.query<{ status: string }>(
+          `SELECT status FROM tenancy WHERE tenancy_id = $1`,
+          [seeded.tenancyId],
+        );
+        assert.equal(ended.rows[0]?.status, 'ENDED');
+        const log = await listTenancyEvents(db, seeded.unitId);
+        assert.equal(log.length, 1);
+        assert.equal(log[0]?.kind, 'terminated');
+        assert.equal(log[0]?.field, 'status');
+        assert.equal(log[0]?.old_value, 'ACTIVE');
+        assert.equal(log[0]?.new_value, 'ENDED');
+        assert.equal(log[0]?.actor, 'system');
+        assert.equal(log[0]?.source_document_id, null);
+        assert.equal(log[0]?.at, clock.now().toISOString());
+
+        await expireDueTenancies(db, clock.now());
+        assert.equal((await listTenancyEvents(db, seeded.unitId)).length, 1);
       });
     } finally {
       await pool.end();

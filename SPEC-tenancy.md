@@ -10,8 +10,8 @@ workbook disagree, the workbook is right and this file is a bug.
 - **Depends on:** estate, parties.
 - **Built:** week 2, slice 2.2 — Tenancy and TenancyParty; `terms_profile`'s natural key and the
   module's three write commands at slice 2.4. `TenancyEvent` lands at slice 4.3 with promotion.
-  Slice 4.8 adds the completeness query and `tenancy_completeness_exception` (A4). Obligation and
-  ObligationType remain week 5's, with clock-driven event kinds.
+  Slice 4.8 adds the completeness query and `tenancy_completeness_exception` (A4). Slice 5.6 adds the
+  clock-driven `terminated` kind. Slice 5.7 lands Obligation and ObligationType (E9, E10).
 
 ## The shape, and why it is this one
 
@@ -129,19 +129,43 @@ by tripping the guard rather than by anticipating it.
   **A lease naming no profile is a reject with its line number, not a defaulted row**
   ([SPEC-register.md](SPEC-register.md)) — defaulting to `standard` would have answered a question
   the client has not been asked, which is exactly what the NOT NULL exists to prevent.
-- **Obligation and ObligationType** — E9 and E10 — are week 5's. `ObligationType` will be an
-  admin-managed catalogue, deactivated never deleted, with `responsible_party` copied onto the
-  obligation at creation so editing the catalogue cannot rewrite history (foundation rule 8).
-- **`TenancyEvent` (slice 4.3, `src/kernel/migrations/0019_tenancy_event.sql`).** The row is
-  mutable; the log is not. Every promotion that copies an extracted date onto `start_date` or
-  `end_date` appends `(field, old → new, actor, source_document_id, extracted_field_id)` with
-  `kind = 'amended'`. `source_document_id` is NOT NULL for that kind. Clock-driven kinds
-  (`terminated` with a null document) are week 5's and will relax the column. UPDATE and DELETE are
-  rejected (`restrict_violation`). `at` comes from the injected clock; there is no `DEFAULT now()`.
-  `actor` is `-- pii`. Register `upsertTenancy` does **not** write events — isolation dates from the
-  import stay legal without a document. `applyPromotedField` is the fourth write command: parse a
-  DATE, update the named column, append the event. A collision on `(unit_id, start_date)` is
-  `conflict`.
+- **Obligation and ObligationType (slice 5.7, `src/kernel/migrations/0026_obligation.sql`).**
+  E9 and E10 from the workbook. An obligation attaches to a **tenancy**, never a unit (R10). Status
+  is derived on read and is never a column. There is no amount column, here or ever (foundation
+  rule 2). `responsible_party` is copied from the type at creation and then lives on the obligation
+  row, so a later edit or deactivation of the catalogue cannot rewrite a dispute's record
+  (foundation rule 8). The create command does not take an override. `ObligationType` is
+  deactivated, never deleted: a `BEFORE DELETE` trigger raises `restrict_violation` even when no
+  obligation points at the row. There is no delete on the contract. The five seed codes
+  (`ARNONA · CONTENTS_INSURANCE · BANK_GUARANTEE · UTILITY_ACCOUNT · HOUSE_COMMITTEE`) are data
+  (`npm run seed:obligation-types`), not this migration — the same open-catalogue move as
+  `document_type`. **Slice 5.8** is that screen: `listObligationTypes` returns every row, inactive
+  included, ordered by code, and the composition-root form posts through `upsertObligationType`.
+  A sixth code costs no migration. The obligations strip on a unit is month two.
+
+  Derived `status` (`SATISFIED · EXPIRING · EXPIRED · MISSING`), from the injected clock's UTC day
+  and a 60-day window matching the expiring-leases list: `MISSING` when the type
+  `requires_evidence` and `evidence_document_id` is null; else `EXPIRED` when `valid_to` is
+  strictly before today; else `EXPIRING` when `valid_to` is within 60 days inclusive; else
+  `SATISFIED`. `evidence_document_id` is a nullable FK to `document` in kernel DDL; this module
+  still does not import `src/evidence/internal/`.
+- **`TenancyEvent` (slice 4.3, `src/kernel/migrations/0019_tenancy_event.sql`; clock kind at 5.6,
+  `0025_tenancy_event_terminated.sql`).** The row is mutable; the log is not. Every promotion that
+  copies an extracted date onto `start_date` or `end_date` appends
+  `(field, old → new, actor, source_document_id, extracted_field_id)` with `kind = 'amended'`.
+  `source_document_id` is NOT NULL for that kind (`amended_names_its_document`) and that constraint
+  is never dropped. `kind` is `amended | terminated`. A clock-driven end is `terminated`:
+  `source_document_id` and `extracted_field_id` are both null
+  (`terminated_has_no_document`). UPDATE and DELETE are rejected (`restrict_violation`). `at` comes
+  from the injected clock; there is no `DEFAULT now()`. `actor` is `-- pii`; a clock end snapshots
+  `system`, not an operator. Register `upsertTenancy` does **not** write events — isolation dates
+  from the import stay legal without a document. `applyPromotedField` is the fourth write command:
+  parse a DATE, update the named column, append the event. A collision on `(unit_id, start_date)` is
+  `conflict`. `expireDueTenancies(db, at)` is the fifth: every `ACTIVE` tenancy whose `end_date` is
+  strictly before the clock's UTC day becomes `ENDED` and appends `terminated` with
+  `field = status`, `ACTIVE → ENDED`. The last day of the lease still counts (isolation's
+  `end_date >= today`); the day after is when the clock closes it. A second call is a no-op. Natural
+  end is `ENDED`, never `TERMINATED_EARLY`.
 - **No read model, and from 3.3 exactly one list plus one lookup.** `contract.ts` exists from 2.4
   and exports the register importer's three write commands — `upsertTermsProfile`, `upsertTenancy` and
   `upsertTenancyParty` — plus `applyPromotedField` from 4.3. `listUnitTenancies` joins them at 3.3.
@@ -158,9 +182,13 @@ by tripping the guard rather than by anticipating it.
   portfolio question (S1 / A4), not "who is in this unit today". It takes no phone number, returns
   no party and no name, and carries neither isolation predicate. Completeness is a query over saved
   rows plus an exception table — never a NOT NULL on `tenancy_party` and never a status column on
-  `tenancy`. Slice 5.5 adds `listTenancyEvents`: every `amended` row on every letting of one unit,
+  `tenancy`. Slice 5.6 exports `expireDueTenancies` beside them.   Slice 5.7 exports
+  `upsertObligationType`, `createObligation`, `getObligation` and `listObligationsForTenancy`.
+  Slice 5.8 adds `listObligationTypes`.
+  Slice 5.5 adds
+  `listTenancyEvents`: every event row on every letting of one unit,
   oldest first, `unit_id` in, field / old → new / actor / source document out, **no party and no
-  name**. An empty list is a register-only letting. The line this module does not cross is the one
+  name**. An empty list is a register-only letting. A `terminated` row carries a null document. The line this module does not cross is the one
   that matters: **who is in a unit today is `src/scope/`'s answer and never this module's**, which
   is foundation rule 1 expressed as a module boundary. `listUnitTenancies` answers *which lettings
   does this flat have* — every status, ordered by date — for an administrator choosing which one a
@@ -186,6 +214,17 @@ by tripping the guard rather than by anticipating it.
   holds 144 rows of 1,674 and only an `ACTIVE` row pays for it on write.
   `tenancy_party (party_id)` also exists, because the composite primary key `(tenancy_id, party_id)`
   does not serve the isolation join's third hop.
+
+## Tables — `src/kernel/migrations/0026_obligation.sql`
+
+Workbook E9 and E10. No `DEFAULT now()`. No status column. No amount.
+
+| Table | Columns |
+|---|---|
+| `obligation_type` | `obligation_type_id` PK · `code` unique · `label_he` · `label_en?` · `default_responsible_party` · `requires_evidence` · `is_active` |
+| `obligation` | `obligation_id` PK · `tenancy_id` FK · `obligation_type_id` FK · `responsible_party` · `valid_from?` · `valid_to?` · `evidence_document_id?` FK → document |
+
+Vocabularies: `responsible_party` and `default_responsible_party` = `TENANT · OPERATOR`.
 
 ## Open
 

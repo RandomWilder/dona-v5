@@ -71,7 +71,7 @@ export interface TenancyEventView {
   old_value: string | null;
   new_value: string;
   actor: string;
-  source_document_id: string;
+  source_document_id: string | null;
 }
 
 export interface DocumentSearchHit extends FiledDocumentView {
@@ -123,6 +123,7 @@ const VERDICT_CHIP: Record<FiledDocumentView['verificationVerdict'], string> = {
 const EVENT_FIELD: Record<string, string> = {
   start_date: 'תחילת השכירות',
   end_date: 'סיום השכירות',
+  status: 'סטטוס',
 };
 
 // Hebrew for a value the schema allows and this table does not translate. A vocabulary gains a
@@ -440,11 +441,13 @@ function changeLogPanel(events: readonly TenancyEventView[]): Html {
     <ol class="change-log">${events.map((event) => {
       const field = label(EVENT_FIELD, event.field);
       const oldValue = event.old_value ?? '—';
+      const paper = event.source_document_id
+        ? h` · <a href="/documents/${event.source_document_id}">מסמך</a>`
+        : h``;
       return h`<li>
         ${field}
         <span dir="ltr">${oldValue} → ${event.new_value}</span>
-        · <span dir="ltr">${event.actor}</span>
-        · <a href="/documents/${event.source_document_id}">מסמך</a>
+        · <span dir="ltr">${event.actor}</span>${paper}
       </li>`;
     })}</ol>
   </section>`;

@@ -5,6 +5,11 @@
 > [pipeline.md](../docs/pipeline.md) §8. Decisions, risks and open questions are in
 > [plan.md](plan.md).
 >
+> **Week 6 was inserted on 13 Sep 2026** — the two core journeys — and weeks 6, 7 and 8 each moved
+> down one slot, with their unbuilt slices renumbered. The month-two table below is the plan of
+> record and was **not** rewritten to make room: its rows 6, 7 and 8 are now weeks 7, 8 and 9.
+> The map, and the M2 question it raises, are in § "What week 6 displaces".
+>
 > **Weeks 1–8 are at slice level with acceptance criteria. Weeks 9–16 are at week level** — each
 > monthly gate hands the next month its detail, which is what M1–M4 are for. Weeks 5–8 gained theirs
 > at the M1 checkpoint on **9 Sep 2026**; the month-two table below them is the plan of record and
@@ -1549,66 +1554,179 @@ convenience of a join.
   Change log on the unit. `superseded_by` still omitted.
 
 ### Slice 5.6 — A tenancy ends because a date passed, with no document at all
-Clock-driven `TenancyEvent` kinds. `0019_tenancy_event.sql` makes `source_document_id` NOT NULL for
-`amended`, because a promotion that changed a value without naming the paper is exactly the claim
-this system exists to refuse. `terminated` has no paper by construction — the lease ran out — so the
-column relaxes **for that kind only, by CHECK, and never by dropping the constraint**. `at` comes
-from the injected clock and there is no `DEFAULT now()`, which is what makes this demonstrable in a
-room rather than only true in November.
-- **Done when:** advancing the injected clock past an `ACTIVE` tenancy's `end_date` terminates it and
-  appends `terminated` with a null document — and an `amended` event with a null document is still
-  rejected by the database.
-- **Verify:** both directions in one test. The demo runs off the injected clock, on staging, with the
-  date said out loud.
-- **Deps:** 5.5 · **Size:** M
+**Closed 11 Sep** — [evidence/5.6.md](evidence/5.6.md). `0025_` kind `terminated`; amended still
+names paper. Clock last-day inclusive.
 
 ### Slice 5.7 — Obligation and ObligationType — E9 and E10
-The last two entities month one deferred. `ObligationType` is an admin-managed catalogue,
-**deactivated never deleted**, with `responsible_party` **copied onto the obligation at creation** so
-that editing the catalogue cannot rewrite history — foundation rule 8, and the same shape as
-`FieldPromotion`'s snapshot of who approved a copy.
-- **Done when:** an obligation carries its own `responsible_party`, and editing or deactivating its
-  type afterwards changes nothing the obligation says.
-- **Verify:** create, edit the type, read the obligation back unchanged; a DELETE on a type is
-  refused.
-- **Deps:** 5.6 · **Size:** M
+**Closed 12 Sep** — [evidence/5.7.md](evidence/5.7.md). `0026_` E9/E10. `responsible_party` copied
+at create; type DELETE `23001`; seed is data. Settings screen is 5.8. Staging clock-end click
+still owed after 5.6 merge.
 
 ### Slice 5.8 — The settings screen — A9, delivered
-A9 has been true of the mechanism since week 3 and false of the hand on it: types are rows added with
-no release, and *we* have been adding them by seed. This is the screen. **One screen, one pattern,
-both catalogues** — `ObligationType` and `DocumentType` — and `asset_type` deliberately absent,
-because the asset register's kinds are estate's and not a setting. It inherits
-[ADR-0003](../docs/decisions/ADR-0003-api-keys-stay-in-secret-manager.md)'s question of **who may
-change a reference**: pointing production at a different secret is a privileged act even when the
-value never appears.
-- **Done when:** an `ObligationType` and a `DocumentType` are each added through the screen with no
-  release and no migration, by an operator whose role permits it; and `asset_type` is not on it.
-- **Verify:** add one of each on staging; a role without the permission is refused with
-  `not_allowed`; grep the screen for `asset_type` and find nothing.
-- **Carried in from 5.1: and never a third card for the role matrix.** Two catalogues, and who may
-  do what is code — a matrix a database write could widen is a privilege-escalation path wearing the
-  clothes of a setting. The permission this screen guards with is `settings.write`, which exists
-  from 5.1.
-- **Deps:** 5.1, 5.7 · **Size:** M
+**Closed 12 Sep** — [evidence/5.8.md](evidence/5.8.md). Composition root. Two catalogues, two POSTs
+under `settings.write`. GET `/settings` stays `estate.read`. OPERATOR refused `not_allowed`. No
+`asset_type`, no role-matrix card. Route map confirmed (promote stays `tenancy.write`; public list
+still 7). Secret-name editor and field schema carried. Staging add and 5.6 clock-end click still
+owed after merge.
 
 ---
 
-## Week 6 · Sun 11 – Thu 15 Oct — Who pays for this, and why
+## Week 6 · Sun 11 – Thu 15 Oct — The two core journeys
 
-> **Decomposed 9 Sep 2026**, from the week-6 row above.
+> **Inserted 13 Sep 2026**, after the director paused the rollout to check the foundation was on its
+> way to the flows that matter. It was not, and the gap was structural rather than partial: **no
+> route in this application creates a building**, and the upload flow demands a unit before it will
+> accept a document. Both are this week. The week that was here moves to week 7.
+
+**Demo kind:** Software · **You show:** an admin creates a building, adds an apartment, and drops an
+invented lease onto a screen that asks for no unit. The system reads the address off the paper, finds
+the flat, pulls out the dates, the names and the ת.ז., and proposes a tenancy. Then a second lease
+for the same person in a different flat: **one party, two tenancies. Depends on:** W5.
+
+> **The estate has only ever been populated by scripts.** `npm run seed` and `npm run import:register`
+> are in no workflow, on purpose, and there is no `estate.write` permission in the role matrix.
+> `SPEC-flows.md` names A1–A6, T1 and S1 and none of them is *an administrator sets up a building* —
+> which is precisely why it was never built, because that file's rule is that a slice serving no flow
+> gets cut on sight. **The flow is written before the code**, as **A11**, and the document-first
+> intake as **A12**.
+
+### Slice 6.1 — `estate.write`, and an admin creates a building
+Flow **A11**. `estate.write` joins `PERMISSIONS` and goes to **ADMIN only** — an operator files
+paper, an admin shapes the estate. `GET /estate/buildings/new` + `POST /estate/buildings`. The write
+is `importEstate` with one `BuildingPlan`, zero spaces, zero units and an optional `ProjectPlan`;
+`validateBuildingSpaces` already accepts that shape, so **no new estate command is written**.
+- **Done when:** an ADMIN creates a building from the screen and it appears on `/estate`; an OPERATOR
+  is refused with `not_allowed` and nothing more; the same address posted twice leaves one row.
+- **Verify:** the OPERATOR refusal red first; the screen appended to `tests/ui/tokens.test.ts`'s
+  `SCREENS` registry; clicked on a restarted `npm run dev`.
+- **Plan mode. Deps:** 5.8 · **Size:** M
+
+### Slice 6.2 — An apartment, its spaces, and the bays it implies
+`GET /estate/buildings/:buildingId/units/new` + `POST`, reusing `upsertUnitRow` — the register's own
+per-row primitive, already idempotent. Parking and storage follow 4.6's convention. **Bulk stays the
+register importer**; no second bulk path is built.
+- **Done when:** an apartment added from the screen appears on the building page with its space count;
+  the same `unit_number` posted twice updates rather than duplicates.
+- **Verify:** re-post and diff row counts; clicked on `:3000`.
+- **Deps:** 6.1 · **Size:** M
+
+### Slice 6.3 — The document-first upload screen
+Flow **A12**; A1 is amended rather than replaced. `GET /documents/new` with no `unit` becomes the
+dedicated screen. `POST /documents/intake` reads the bytes under the existing `LIMITS`, runs
+`documentText` over pdf + OCR, and runs a **deterministic place reader** — the analogue of the
+protocol reader A6 already built. One candidate files through the existing `fileDocument` unchanged;
+zero or several returns the form with candidates and the file input re-armed, **no row and no
+object**, 422. **The unit-first entry from a building page stays.**
+- **The structural call:** no staging store and no `UNFILED` place kind. `PlaceKind` stays four values
+  and the object path keeps naming a real place (3.2).
+- **Done when:** a lease naming an address in the system files against that flat with no unit chosen
+  by hand; one naming an address that is not writes no row and no object.
+- **Verify:** both paths on `:3000`; the refusal proved by row counts and a bucket listing, as 3.3 did.
+- **Plan mode. Deps:** 6.2 · **Size:** L
+
+### Slice 6.4 — ת.ז. on the capture path — the spec edit, then the field
+**The spec edit is merged before the code edit.** `SPEC.md`'s security defaults, `SPEC-evidence.md`,
+`SPEC-flows.md` A2, and **ADR-0006 amending ADR-0004 decision 2**: masking of identifier-shaped runs
+applies to the embedder and to any model call whose output can reach a tenant, with a *declared*
+field on a governed catalogue as the named exception. **Without it, slice 9.1 masks the value this
+slice exists to capture**, and 9.1 is hard-bounded by week 10. Then `tenant_id_number` and
+`guarantor_id_number` join the `lease` type as **seed rows, not a migration** — A8's open half used
+for real for the third time. No `field_promotion` target for either.
+- **Done when:** lease extraction returns a ת.ז. per named person and zero is still correct; an
+  OPERATOR sees it nowhere; every read writes an `audit_log` line.
+- **Verify:** the refusal red first; the audit line asserted by count.
+- **`party.national_id.read` gets its first reader here**, three weeks before the week 9 that was
+  holding it. The permission has sat in the matrix unused since 5.1 for exactly this.
+- **Plan mode. Deps:** 6.3 · **Size:** M
+
+### Slice 6.5 — Which tenancy is this? Propose, confirm, write
+`proposeLeaseTenancy` grows a resolution over `listUnitTenancies`, ranked by identifier overlap then
+date overlap, proposing *attach* or *create a new draft*; a human confirms, invariant 5 unchanged.
+`confirmLeaseTenancy` gains the **attach** branch it has never had. `upsertParty` replaces
+`createParty` wherever an identifier was captured.
+- **`SPEC-flows.md` A2 step 5 is amended, not reversed.** Matching a **name** stays forbidden — 5.5
+  measured 303 identified people sharing one. Matching an **identifier** is the governed path, and is
+  the reason the rule was written about names in the first place.
+- **Done when:** two leases for the same ת.ז. in two flats produce one party and two tenancies; a
+  second lease on the same unit and dates offers the existing letting; a lease naming no identifier
+  still writes a party and a draft.
+- **Verify:** all three on `:3000` with invented leases; party count before and after.
+- **Plan mode. Deps:** 6.4 · **Size:** L
+
+### Slice 6.6 — The guards, and the number that says ת.ז. did not leak
+A policy case red first — no identifier-shaped run in anything `src/scope/` serves, none in the copy
+sent to the embedder. `tests/ui/tokens.test.ts` gains an identifier-shaped-run assertion across
+`SCREENS`, with the lease confirm screen as the one named exception. **Asserted over the registry and
+never over a live response** — week 5 closed on exactly that mistake.
+- **Done when:** both guards fail against a deliberate violation and pass after.
+- **The never-a-name rule is reconsidered a sixth time and written down either way.**
+- **Deps:** 6.5 · **Size:** M
+
+### Slice 6.7 — The journey, end to end, on staging
+The demo slice, and the first time this week's work leaves localhost. Building → apartment → invented
+lease → resolved flat → extracted fields and ת.ז. → proposed tenancy → confirm → the unit page shows
+it. Then a second lease for the same person elsewhere: one party, two tenancies.
+- **Done when:** the whole walk is done by clicking, with no seed and no SQL.
+- **Verify:** live on staging, both halves in one sitting.
+- **Carried in from 5.7:** the staging `staff:add` and the 5.6 clock-end click happen here.
+- **Deps:** 6.6 · **Size:** M
+
+---
+
+## What week 6 displaces — **the director's, and not decided here**
+
+Inserting a week into month two pushes every slice-level week down one slot. The **planned dates
+above are unchanged and never will be**; what moved is which slices sit in which week:
+
+| Was | Is | Content |
+|---|---|---|
+| 6.1–6.6 | **7.1–7.6** | `src/policy/`, the responsibility matrix |
+| 7.1–7.6 | **8.1–8.6** | ServiceCall, the state machine, the console |
+| 8.1–8.5 | **9.1–9.5** | Redaction, the isolation attack — **and M2** |
+
+**Every one of those slices was unbuilt when it was renumbered**, on 13 Sep 2026, so no evidence file
+names a number that moved. Closed evidence files that point *forward* at an old number — `work.ts`
+"post-7.2", now 8.2 — are left exactly as written, because an evidence file is history and history is
+not edited; this table is the map.
+
+**What is not an agent's to decide, and is flagged rather than absorbed:**
+
+1. **M2 now falls at the end of week 9, not week 8**, and month two becomes five weeks while month
+   three becomes three. **M2 is on the published Rollout Cadence**, which
+   [docs/README.md](../docs/README.md) makes the authority on schedule and which this file is
+   forbidden to renegotiate. Either the cadence is republished, or M2 keeps its week and one of the
+   three displaced weeks is compressed. **Director's.**
+2. **9.1's deadline did not move with it.** Redaction at the provider boundary is hard-bounded by
+   **week 10** by ADR-0004, and that is a date the project does not control. It has one week of slack
+   left, not two.
+3. **The calendar table at the top of this file still marks M2 on the week-8 row**, and it is
+   left exactly as it is — that table is the plan, and the plan is never rewritten here. It
+   disagreeing with the week-9 heading below is the visible form of decision 1, not an
+   oversight.
+4. **The project is running roughly three and a half calendar weeks ahead of plan**
+   ([evidence/week-4.md](evidence/week-4.md)), so the *calendar* absorbs this week at no cost. The
+   question above is about the published milestone's week number, not about the date.
+
+---
+
+## Week 7 · Sun 18 – Thu 22 Oct — Who pays for this, and why
+
+> **Decomposed 9 Sep 2026**, from the week-6 row above. **Displaced to week 7 on 13 Sep 2026** by
+> the two core journeys — see week 6 below. The slices renumbered 6.x → 7.x on that date, before any
+> of them had been built, so no evidence file names a number that moved.
 
 **Demo kind:** Software · **You show:** pick a category and a unit; get tenant / operator /
 contractor with the clause and the policy version behind it. Then edit the table live and watch the
-answer change. **Depends on:** W5, 3.5 · **Sized by** open question 2, which 5's header note now
+answer change. **Depends on:** W5, 3.5 — and it now *runs after* W6 · **Sized by** open question 2, which 5's header note now
 places behind **F3**.
 
 > **`src/policy/` starts here and not before.** 4.8's completeness case lives in the policy *suite*
 > and does not start the module ([SPEC-policy.md](../SPEC-policy.md)); it moves into the module this
 > week. **Policy cases 4 and 5 are written and go green here**, with the tables that make them
-> possible. Week 8's row lists them too, and that is sequence rather than duplication: week 6 writes
-> them, week 8 attacks them.
+> possible. Week 9's row lists them too, and that is sequence rather than duplication: this week
+> writes them, week 9 attacks them.
 
-### Slice 6.1 — `src/policy/`, and the responsibility matrix as versioned rows
+### Slice 7.1 — `src/policy/`, and the responsibility matrix as versioned rows
 **Responsibility is ternary** — tenant / operator / contractor — because of תקופת הבדק, and a binary
 model of it is wrong in a way that is expensive to discover later. Rules supersede by
 `effective_from` and **never overwrite**, which is the same shape as `valid_from`/`valid_to` on a
@@ -1620,7 +1738,7 @@ is still there.
   and the resolver picks by date.
 - **Deps:** 5.8 · **Size:** L
 
-### Slice 6.2 — Resolution, with the version that decided it
+### Slice 7.2 — Resolution, with the version that decided it
 A category and a unit yield a party, the clause behind it, and a **snapshotted `policy_version_id`**.
 **Re-resolving after the policy changes must still return what the snapshot says** — the same rule as
 `FieldPromotion`'s promoter and `ObligationType`'s `responsible_party`, for the third time in three
@@ -1629,9 +1747,9 @@ weeks, because it is the same rule.
   that resolution answers.
 - **Verify:** resolve, change the matrix, re-read the stored resolution; the answer is the old one
   and it names why.
-- **Deps:** 6.1 · **Size:** M
+- **Deps:** 7.1 · **Size:** M
 
-### Slice 6.3 — `asset_in_warranty`, and the third leg of the ternary
+### Slice 7.3 — `asset_in_warranty`, and the third leg of the ternary
 Fed by week 3's asset register (3.5), seeded from handover protocols. This is what makes
 responsibility ternary rather than a table with two columns.
 - **Done when:** an asset inside its warranty period moves responsibility to the contractor, from
@@ -1640,74 +1758,75 @@ responsibility ternary rather than a table with two columns.
 - **Director's, and it decides the demo:** **open question 4** — are the Shoham buildings still
   inside תקופת הבדק ([plan.md](plan.md))? A live case is a much better demo than a synthetic one,
   and either is a correct slice. Asked at week 5's demo so week 6 knows which it is showing.
-- **Deps:** 6.2, 3.5 · **Size:** M
+- **Deps:** 7.2, 3.5 · **Size:** M
 
-### Slice 6.4 — Policy case 4, red first — `UNIT` is the only space kind that can ever be the tenant's
+### Slice 7.4 — Policy case 4, red first — `UNIT` is the only space kind that can ever be the tenant's
 - **Done when:** the case fails against a resolver that will answer for a `COMMON` or `SERVICE`
   space, and passes when it will not.
 - **Verify:** committed red, then green.
 - **Owed by 1.7.** The pending mechanism has existed since week 1 precisely so this could be written
   before its table did.
-- **Deps:** 6.2 · **Size:** S
+- **Deps:** 7.2 · **Size:** S
 
-### Slice 6.5 — Policy case 5, red first — a live warranty moves responsibility, and the snapshot still answers
+### Slice 7.5 — Policy case 5, red first — a live warranty moves responsibility, and the snapshot still answers
 - **Done when:** the case covers both halves — the warranty changes the answer, and a resolution
   taken before a policy change still returns the old answer afterwards.
 - **Verify:** committed red, then green.
 - **Owed by 1.7.**
-- **Deps:** 6.3 · **Size:** S
+- **Deps:** 7.3 · **Size:** S
 
-### Slice 6.6 — The matrix, edited live
+### Slice 7.6 — The matrix, edited live
 The half of the demo that lands in the room, built on 5.8's screen pattern rather than a second one.
 - **Done when:** the matrix is edited in front of the client and the resolved answer changes, while a
   resolution taken thirty seconds earlier still reads the same.
 - **Verify:** demonstrated live on staging, both halves in one sitting.
-- **Deps:** 6.5, 5.8 · **Size:** M
+- **Deps:** 7.5, 5.8 · **Size:** M
 
 ---
 
-## Week 7 · Sun 18 – Thu 22 Oct — A ticket, start to finish, by hand
+## Week 8 · Sun 25 – Thu 29 Oct — A ticket, start to finish, by hand
 
-> **Decomposed 9 Sep 2026**, from the week-7 row above.
+> **Decomposed 9 Sep 2026**, from the week-7 row above. **Displaced to week 8 on 13 Sep 2026**,
+> with its slices renumbered 7.x → 8.x before any was built.
 
 **Demo kind:** Software · **You show:** walk the canonical states in the console — NEW · IDENTIFIED ·
 TRIAGED · RESPONSIBILITY SET · WINDOWS COLLECTED · OFFERED · SCHEDULED · CLOSED — plus the three
-exits. The SLA clock runs and the escalation fires. **No WhatsApp, no agent. Depends on:** W6.
+exits. The SLA clock runs and the escalation fires. **No WhatsApp, no agent. Depends on:** W7.
 
 > **The agent arrives in month three without changing any of this**, which is the whole point of
 > building it agent-free. And **R5's six-week band opens here**: `WINDOWS COLLECTED → OFFERED` is
 > roughly seventy percent of the engineering and it photographs badly, so it runs underneath weeks
-> 7–12 and gets a standing *what's underneath* line in every demo rather than a week of its own.
+> 8–12 and gets a standing *what's underneath* line in every demo rather than a week of its own.
 
-### Slice 7.1 — ServiceCall, Visit, and the state machine
+### Slice 8.1 — ServiceCall, Visit, and the state machine
 Eight canonical states and three exits. **The machine is deterministic and no model decides a
 transition** — in month three the agent will propose and this machine will still decide.
 - **Done when:** every legal transition is a row the code checks, and an illegal one is refused by
   the database rather than by a branch.
 - **Verify:** attempt each illegal transition; each is refused. The three exits are reachable.
-- **Deps:** 6.6 · **Size:** L
+- **Deps:** 7.6 · **Size:** L
 
-### Slice 7.2 — The console: walk it by hand
+### Slice 8.2 — The console: walk it by hand
 - **Done when:** one call goes NEW → CLOSED entirely by clicking, with no seed and no SQL.
 - **Verify:** done live on staging, in front of the room.
-- **Deps:** 7.1 · **Size:** M
+- **Deps:** 8.1 · **Size:** M
 
-### Slice 7.3 — SLA policies and timers, off the injected clock
+### Slice 8.3 — SLA policies and timers, off the injected clock
 Thresholds are policy rows (week 6's module), not constants. `at` comes from the injected clock and
 there is no `DEFAULT now()` — the same rule as `tenancy_event`, and for the same reason: a clock a
 test cannot move is a demo nobody can give.
 - **Done when:** advancing the clock breaches an SLA and the breach is visible without waiting.
 - **Verify:** the demo runs on an advanced clock, and the threshold that fired is read from a policy
   row.
-- **Deps:** 7.1, 6.1 · **Size:** M
+- **Deps:** 8.1, 7.1 · **Size:** M
 
-### Slice 7.4 — Escalation
+### Slice 8.4 — Escalation
 - **Done when:** a breached SLA escalates by rule, to a named recipient, and the escalation is on the
   audit trail.
 - **Verify:** watched firing in the demo; the trail read back afterwards.
-- **Deps:** 7.3 · **Size:** M
+- **Deps:** 8.3 · **Size:** M
 
-### Slice 7.5 — The emergency bypass, live and tested
+### Slice 8.5 — The emergency bypass, live and tested
 An emergency category routes to the duty phone **with no model call in between**. It is a **policy
 row plus a routing rule**, never a priority label — a label is something a model can get wrong and a
 route is not.
@@ -1716,29 +1835,31 @@ route is not.
 - **Verify:** committed red, then green, in `tests/policy/`. Deterministic, therefore never an eval.
 - **Owed by 1.7, and dated by week 10** — this must exist before the agent takes its first real
   tenant message, which is why it is built in a week with no agent in it.
-- **Deps:** 7.4 · **Size:** M
+- **Deps:** 8.4 · **Size:** M
 
-### Slice 7.6 — The negotiation engine's first stones
+### Slice 8.6 — The negotiation engine's first stones
 `WINDOWS COLLECTED → OFFERED` becomes an explicit two-sided asynchronous state with **no counterparty
 channel yet** — the provider side arrives at week 11. What lands here is the state, the timers it
 needs, and the shape that six weeks of work will fill.
 - **Done when:** a call can sit in `WINDOWS COLLECTED` with an offer outstanding, a timeout pending
   and no second party reachable, and nothing in the machine assumes anyone is online.
 - **Verify:** named on the demo's *what's underneath* line, with what exists and what does not.
-- **Deps:** 7.1 · **Size:** M
+- **Deps:** 8.1 · **Size:** M
 
 ---
 
-## Week 8 · Sun 25 – Thu 29 Oct — Try to break tenant isolation, live → **M2**
+## Week 9 · Sun 1 – Thu 5 Nov — Try to break tenant isolation, live → **M2**
 
 > **Decomposed 9 Sep 2026**, from the week-8 row above. **One item was added that the row does not
-> carry** — see 8.1.
+> carry** — see 9.1. **Displaced to week 9 on 13 Sep 2026**, with its slices renumbered 8.x → 9.x
+> before any was built. **M2 moves with it, and whether that is acceptable is the director's** —
+> see "What week 6 displaces" below.
 
 **Demo kind:** Evidence · **You show:** query as one tenant's phone and try to reach another tenant's
 documents, unit and history — through the console, through the API, and by asking the model. Every
-path returns nothing. **Depends on:** W7.
+path returns nothing. **Depends on:** W8.
 
-> **8.1 is not in the row above, and it is the largest thing in month two.** Redaction at the
+> **9.1 is not in the row above, and it is the largest thing in month two.** Redaction at the
 > provider boundary is decision 2 of
 > [ADR-0004](../docs/decisions/ADR-0004-personal-data-reaches-the-model-provider.md), which left it
 > as "its own slice in month one or riding with 4.2" and said it **must land before week 10**. Month
@@ -1747,7 +1868,7 @@ path returns nothing. **Depends on:** W7.
 > asks the model to break isolation. **It goes first in the week, not last**, because it is the only
 > item in month two with a deadline the project does not control.
 
-### Slice 8.1 — Redaction at the provider boundary
+### Slice 9.1 — Redaction at the provider boundary
 An identifier-shaped run is masked in the copy sent to the embedder and the extractor, and **never in
 the copy stored**. Measured on a real contract at v3, 19 of 211 indexed chunks mentioned ת״ז inside
 numbered annex clauses; excluding the cover page removes the densest chunk and not the category.
@@ -1761,14 +1882,14 @@ is a claim the eval suite makes rather than a claim this file makes.
 - **Dated externally by week 10.** If it slips it slips into week 9 and no further, and that is a
   fact for the asks slide the day it looks likely rather than the day it happens.
 
-### Slice 8.2 — Audit on every scoped read
+### Slice 9.2 — Audit on every scoped read
 - **Done when:** no read that crosses `src/scope/` completes without an audit line naming who asked
   and what for.
 - **Verify:** a contract test that a scoped read with auditing disabled fails rather than proceeds
   quietly.
 - **Deps:** 7.6 · **Size:** M
 
-### Slice 8.3 — Workflow hygiene
+### Slice 9.3 — Workflow hygiene
 Bump the four Node-20 GitHub actions — `checkout@v4`, `setup-node@v4`,
 `google-github-actions/auth@v2`, `setup-gcloud@v2` — which every run has been annotating as
 deprecated since week 1. In the same pass, `release.yml` gains the `docker image inspect` size line
@@ -1779,7 +1900,7 @@ deprecated since week 1. In the same pass, `release.yml` gains the `docker image
 - **Owed by 1.6 and 1.10.**
 - **Deps:** none · **Size:** S
 
-### Slice 8.4 — The IAM pass
+### Slice 9.4 — The IAM pass
 Two bindings, one pass, in the week whose demo is trying to break isolation. **`run.admin` is bound
 per service**: the deploy accounts hold it at *project* level because scoping it per service was
 impossible before a service existed, and the services exist now. **The docs buckets' legacy
@@ -1800,16 +1921,16 @@ its size.
 - **Owed by 1.5, raised again and given an owner at 3.2.** Two files still schedule these in week 6
   — `SPEC.md` and `infra/bootstrap.sh` — against five that say week 8; both are corrected to point
   here.
-- **Deps:** 8.3 · **Size:** M
+- **Deps:** 9.3 · **Size:** M
 
-### Slice 8.5 — The attack — three paths, and every one returns nothing
+### Slice 9.5 — The attack — three paths, and every one returns nothing
 The demo. Policy cases 4 and 5 have been green since week 6; this week attacks them rather than
 writes them.
 - **Done when:** as one tenant's phone, another tenant's documents, unit and history are unreachable
   through the console, through the API, and by asking the model — and `national_id` is unreachable by
   any agent tool (5.3, attacked here).
 - **Verify:** performed live, all three paths, in front of the room, off staging.
-- **Deps:** 8.1, 8.2, 8.4, 6.5 · **Size:** M
+- **Deps:** 9.1, 9.2, 9.4, 6.5 · **Size:** M
 
 ---
 
