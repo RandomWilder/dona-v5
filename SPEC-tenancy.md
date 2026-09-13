@@ -119,9 +119,9 @@ by tripping the guard rather than by anticipating it.
   exists. Which maintenance annex governs a lease is what Q4 — the responsibility decision — keys on,
   so it may not be nullable and quietly absent. E1 `project` landed the same way at 1.9: identity
   now, fields when we know what they must carry. **Open question 2 — how many profiles are in force —
-  is week 5's, and the responsibility matrix that reads them is week 6's.** Until then the table
+  is week 5's, and the responsibility matrix that reads them is the policy week's.** Until then the table
   holds a name, and the importer has to say which profile each lease is on, which is a question for
-  the client that a nullable column would have hidden until week 6.
+  the client that a nullable column would have hidden until the policy week.
 
   **Its natural key is `UNIQUE (name)`, chosen at 2.4** in `0009_import_natural_keys.sql`. The
   importer needs to look a profile up idempotently and a register names one by its name; *how many*
@@ -231,7 +231,7 @@ Vocabularies: `responsible_party` and `default_responsible_party` = `TENANT · O
 - **Which `terms_profile` a real lease is on.** 2.4 settled how one is *identified* — by name — and
   left this open, because it is a fact about the client's leases and not about the schema. The
   register format requires the column, so an export that does not carry it is a question raised at
-  import time rather than a gap discovered at week 6 by a matrix with no input. **2.5's.**
+  import time rather than a gap discovered by a matrix with no input. **2.5's.**
 - **What the overlap constraint does to the real register.** A register with sloppy dates will have
   rows rejected at 2.5. That is the intended direction — a reject with a line number rather than two
   households in one apartment — but the count is a fact about the client's data and is recorded when

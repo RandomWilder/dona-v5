@@ -9,8 +9,10 @@
 > responsibility matrix. The director paused the rollout on 13 Sep to check the foundation was on its
 > way to the flows that matter, and it was not: **there is no way for anybody to create a building**,
 > and the upload flow demands a unit before it will accept a document. Both are now this week.
-> `src/policy/` moves to the next week — see [roadmap.md](roadmap.md) § "What week 6 displaces",
-> where the consequence for **M2** is flagged to the director and not decided here.
+> `src/policy/` and everything behind it are displaced, their unbuilt slices renumbered 6.x → 7.x,
+> 7.x → 8.x, 8.x → 9.x and their **week numbers removed** — which week each runs in is the
+> director's. See [roadmap.md](roadmap.md) § "What week 6 displaces", where the consequence for
+> **M2** is flagged and not decided here.
 >
 > **Demo kind (Thu): SOFTWARE.** Still no real data. Every lease put through this week is one the
 > director invented to look like a real one, which is the point: the flow is proved against paper

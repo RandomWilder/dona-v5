@@ -5,10 +5,10 @@
 > [pipeline.md](../docs/pipeline.md) §8. Decisions, risks and open questions are in
 > [plan.md](plan.md).
 >
-> **Week 6 was inserted on 13 Sep 2026** — the two core journeys — and weeks 6, 7 and 8 each moved
-> down one slot, with their unbuilt slices renumbered. The month-two table below is the plan of
-> record and was **not** rewritten to make room: its rows 6, 7 and 8 are now weeks 7, 8 and 9.
-> The map, and the M2 question it raises, are in § "What week 6 displaces".
+> **Week 6 was inserted on 13 Sep 2026** — the two core journeys — and the three sections that used
+> to be weeks 6, 7 and 8 had their unbuilt slices renumbered and their week numbers **removed**,
+> because which week each runs in is the director's. No table here was rewritten to make room. The
+> map, and the M2 question it raises, are in § "What week 6 displaces".
 >
 > **Weeks 1–8 are at slice level with acceptance criteria. Weeks 9–16 are at week level** — each
 > monthly gate hands the next month its detail, which is what M1–M4 are for. Weeks 5–8 gained theirs
@@ -1675,11 +1675,45 @@ it. Then a second lease for the same person elsewhere: one party, two tenancies.
 
 ## What week 6 displaces — **the director's, and not decided here**
 
-Inserting a week into month two pushes every slice-level week down one slot. The **planned dates
-above are unchanged and never will be**; what moved is which slices sit in which week:
+Inserting a week into month two pushes everything after it along. **The slices were renumbered; the
+weeks were not**, and the three sections below carry no week number at all, because which week they
+run in is the decision this section exists to hand over rather than to take.
 
 | Was | Is | Content |
 |---|---|---|
+| 6.1–6.6 | **7.1–7.6** | `src/policy/`, the responsibility matrix |
+| 7.1–7.6 | **8.1–8.6** | ServiceCall, the state machine, the console |
+| 8.1–8.5 | **9.1–9.5** | Redaction, the isolation attack — **and M2** |
+
+**Every one of those slices was unbuilt when it was renumbered**, on 13 Sep 2026, so no evidence file
+names a number that moved. Closed evidence files that point *forward* at an old number — `work.ts`
+"post-7.2", now 8.2 — are left exactly as written, because an evidence file is history and history is
+not edited; this table is the map.
+
+**The calendar table and the month tables are untouched.** They are the plan, and the plan is never
+rewritten here. Month three's weeks 9–12 still mean what they have always meant — the channel week,
+the tenant agent, the switchboard, the pilot — so every reference to "week 9" in a spec still points
+where it did yesterday. **Nothing in this repository now has two meanings**, which is the property
+that was worth more than a tidy sequence of week numbers.
+
+**What is not an agent's to decide, and is flagged rather than absorbed:**
+
+1. **Month two now holds five weeks of work in four slots, and M2 sits at the end of the last of
+   them.** **M2 is on the published Rollout Cadence**, which [docs/README.md](../docs/README.md)
+   makes the authority on schedule and which this file is forbidden to renegotiate. Either the
+   cadence is republished with a seventeenth week, or M2 keeps its slot and one of the three
+   displaced sections is compressed into another. **Director's, and it is the only thing blocking
+   those three sections from having week numbers again.**
+2. **9.1's deadline did not move with it.** Redaction at the provider boundary is hard-bounded by
+   **week 10** by ADR-0004, and that is a date the project does not control. Whatever slot the
+   isolation section lands in has to leave 9.1 before that bound; it has roughly one week of slack,
+   not two.
+3. **The project is running roughly three and a half calendar weeks ahead of plan**
+   ([evidence/week-4.md](evidence/week-4.md)), so the *calendar* absorbs this week at no cost. The
+   question above is about a published milestone's week number, not about a date. Nothing in week 6
+   waits on the answer.
+
+---|---|---|
 | 6.1–6.6 | **7.1–7.6** | `src/policy/`, the responsibility matrix |
 | 7.1–7.6 | **8.1–8.6** | ServiceCall, the state machine, the console |
 | 8.1–8.5 | **9.1–9.5** | Redaction, the isolation attack — **and M2** |
@@ -1709,22 +1743,23 @@ not edited; this table is the map.
 
 ---
 
-## Week 7 · Sun 18 – Thu 22 Oct — Who pays for this, and why
+## Displaced · Who pays for this, and why — slices 7.1–7.6
 
-> **Decomposed 9 Sep 2026**, from the week-6 row above. **Displaced to week 7 on 13 Sep 2026** by
-> the two core journeys — see week 6 below. The slices renumbered 6.x → 7.x on that date, before any
-> of them had been built, so no evidence file names a number that moved.
+> **Decomposed 9 Sep 2026**, from the week-6 row above. **Displaced on 13 Sep 2026** by the two core
+> journeys — see week 6 above. The slices renumbered 6.x → 7.x on that date, before any of them had
+> been built, so no evidence file names a number that moved. **Which week it runs in is not written
+> here, because it is the director's** — see § "What week 6 displaces".
 
 **Demo kind:** Software · **You show:** pick a category and a unit; get tenant / operator /
 contractor with the clause and the policy version behind it. Then edit the table live and watch the
-answer change. **Depends on:** W5, 3.5 — and it now *runs after* W6 · **Sized by** open question 2, which 5's header note now
+answer change. **Depends on:** W5, 3.5 — and it now *runs after* week 6 · **Sized by** open question 2, which 5's header note now
 places behind **F3**.
 
 > **`src/policy/` starts here and not before.** 4.8's completeness case lives in the policy *suite*
 > and does not start the module ([SPEC-policy.md](../SPEC-policy.md)); it moves into the module this
 > week. **Policy cases 4 and 5 are written and go green here**, with the tables that make them
-> possible. Week 9's row lists them too, and that is sequence rather than duplication: this week
-> writes them, week 9 attacks them.
+> possible. The isolation week's row lists them too, and that is sequence rather than duplication:
+> the policy week writes them, the isolation week attacks them.
 
 ### Slice 7.1 — `src/policy/`, and the responsibility matrix as versioned rows
 **Responsibility is ternary** — tenant / operator / contractor — because of תקופת הבדק, and a binary
@@ -1784,19 +1819,20 @@ The half of the demo that lands in the room, built on 5.8's screen pattern rathe
 
 ---
 
-## Week 8 · Sun 25 – Thu 29 Oct — A ticket, start to finish, by hand
+## Displaced · A ticket, start to finish, by hand — slices 8.1–8.6
 
-> **Decomposed 9 Sep 2026**, from the week-7 row above. **Displaced to week 8 on 13 Sep 2026**,
-> with its slices renumbered 7.x → 8.x before any was built.
+> **Decomposed 9 Sep 2026**, from the week-7 row above. **Displaced on 13 Sep 2026**, with its slices
+> renumbered 7.x → 8.x before any was built. Its week is the director's.
 
 **Demo kind:** Software · **You show:** walk the canonical states in the console — NEW · IDENTIFIED ·
 TRIAGED · RESPONSIBILITY SET · WINDOWS COLLECTED · OFFERED · SCHEDULED · CLOSED — plus the three
-exits. The SLA clock runs and the escalation fires. **No WhatsApp, no agent. Depends on:** W7.
+exits. The SLA clock runs and the escalation fires. **No WhatsApp, no agent. Depends on:** the
+policy week.
 
 > **The agent arrives in month three without changing any of this**, which is the whole point of
 > building it agent-free. And **R5's six-week band opens here**: `WINDOWS COLLECTED → OFFERED` is
-> roughly seventy percent of the engineering and it photographs badly, so it runs underneath weeks
-> 8–12 and gets a standing *what's underneath* line in every demo rather than a week of its own.
+> roughly seventy percent of the engineering and it photographs badly, so it runs underneath every
+> week from the ticket week to the pilot and gets a standing *what's underneath* line in every demo rather than a week of its own.
 
 ### Slice 8.1 — ServiceCall, Visit, and the state machine
 Eight canonical states and three exits. **The machine is deterministic and no model decides a
@@ -1848,16 +1884,16 @@ needs, and the shape that six weeks of work will fill.
 
 ---
 
-## Week 9 · Sun 1 – Thu 5 Nov — Try to break tenant isolation, live → **M2**
+## Displaced · Try to break tenant isolation, live → **M2** — slices 9.1–9.5
 
 > **Decomposed 9 Sep 2026**, from the week-8 row above. **One item was added that the row does not
-> carry** — see 9.1. **Displaced to week 9 on 13 Sep 2026**, with its slices renumbered 8.x → 9.x
-> before any was built. **M2 moves with it, and whether that is acceptable is the director's** —
-> see "What week 6 displaces" below.
+> carry** — see 9.1. **Displaced on 13 Sep 2026**, with its slices renumbered 8.x → 9.x
+> before any was built. **M2 moves with it, and both its week and M2's are the director's** — see
+> § "What week 6 displaces" above.
 
 **Demo kind:** Evidence · **You show:** query as one tenant's phone and try to reach another tenant's
 documents, unit and history — through the console, through the API, and by asking the model. Every
-path returns nothing. **Depends on:** W8.
+path returns nothing. **Depends on:** the ticket week.
 
 > **9.1 is not in the row above, and it is the largest thing in month two.** Redaction at the
 > provider boundary is decision 2 of
