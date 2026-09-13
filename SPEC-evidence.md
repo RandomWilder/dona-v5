@@ -487,9 +487,13 @@ has a second branch.
 
 **How a name gets its identifier, and why it is all-or-nothing. Slice 6.5.** The *i*-th `tenant_name`
 pairs with the *i*-th `tenant_id_number` in the order `proposeLeaseTenancy` already sorts people by
-(page, then box, then id), **and only when the two counts are equal**. Equal counts → each party is
-written with `upsertParty` and its identifier. Unequal → **nobody is paired**, every person on the
-lease is written with `createParty` and no identifier, and the screen says which of the two happened.
+(page, then box, then id), **and only when those two counts are equal**. Equal counts → each party in
+that family is written with `upsertParty` and its identifier. Unequal → **nobody in that family is
+paired**, each of its people is written with `createParty` and no identifier, and the screen says per
+person which of the two happened. **`tenant_*` and `guarantor_*` are counted independently**: a
+guarantor is frequently absent and frequently printed without a ת.ז. when present (A2 step 3), so one
+unpaired ערב must not discard two correctly paired tenants — there was no pairing in that family to
+get wrong.
 The reason the rule cannot half-succeed is directly below: the operator is not shown the value, so a
 ת.ז. bound to the wrong name is an error nobody can see. **Two people on one lease resolving to the
 same party is `invalid`** — it would otherwise be one party silently overwriting its own role through

@@ -185,13 +185,17 @@ unit — which is the sequence step 5 of that flow describes anyway.
    that command was added for (SPEC-parties.md). The 303 above is exactly why the two cases are
    separated rather than merged: a name is a guess and an identifier is a declaration.
 
-   **The pairing of a name to an identifier is ordinal, and it is all-or-nothing.** The *i*-th
-   `tenant_name` pairs with the *i*-th `tenant_id_number` in the document order the proposal already
-   sorts by, **only when the two counts are equal**; unequal counts pair nobody and every person on
-   that lease is written with no identifier. A half-succeeding rule would attach a household's ת.ז.
-   to the wrong person, and the operator cannot catch it by looking, because step 3 keeps the value
-   off this screen. **Two people on one lease resolving to the same identifier is a refusal**, not a
-   role quietly overwritten on one party.
+   **The pairing of a name to an identifier is ordinal, and it is all-or-nothing within a field
+   family.** The *i*-th `tenant_name` pairs with the *i*-th `tenant_id_number` in the document order
+   the proposal already sorts by, **only when those two counts are equal**; unequal counts pair
+   nobody in that family and every one of its people is written with no identifier. A
+   half-succeeding rule would attach a household's ת.ז. to the wrong person, and the operator cannot
+   catch it by looking, because step 3 keeps the value off this screen. **The two families are
+   independent**, because step 3 above is the reason: a guarantor is frequently absent from the lease
+   and frequently printed without an identifier when present, so one unpaired ערב must not throw away
+   two correctly paired tenants — there is no pairing inside the guarantor family to have got wrong.
+   **Two people on one lease resolving to the same identifier is a refusal**, not a role quietly
+   overwritten on one party.
 6. **Which letting — proposed, then confirmed.** The unit's lettings come from `listUnitTenancies`
    (every status, no day predicate, no party and no name) and are **ranked by identifier overlap
    first, then by the number of days the lease's own term overlaps theirs**. Overlap is a **count**:
