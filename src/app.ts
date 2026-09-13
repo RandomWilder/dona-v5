@@ -307,7 +307,10 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     reply.header('content-type', 'text/html; charset=utf-8');
     reply.header('cache-control', 'no-store');
     reply.header('x-content-type-options', 'nosniff');
-    return renderIndexPage({ csrf: csrfFrom(request) });
+    return renderIndexPage({
+      csrf: csrfFrom(request),
+      mayFile: can(request.staff?.role ?? null, 'documents.write'),
+    });
   });
 
   const stubHeaders = (reply: {

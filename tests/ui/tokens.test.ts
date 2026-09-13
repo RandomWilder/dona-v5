@@ -37,6 +37,7 @@ import {
 import type { DocumentTypeRow } from '../../src/evidence/contract.ts';
 import {
   renderFiledPage,
+  renderIntakePage,
   renderReadPage,
   renderSeededPage,
   renderSeedPage,
@@ -227,6 +228,12 @@ const NAV_STAFF = signedInChrome(CSRF, 'staff');
 
 const SCREENS: Array<[string, () => string]> = [
   ['root · index', () => renderIndexPage({ csrf: CSRF })],
+  [
+    // Slice 6.3: the same index for a role that may file a document. The door is the only
+    // difference, and the registry is where it is asserted rather than in a second guard.
+    'root · index, may file',
+    () => renderIndexPage({ csrf: CSRF, mayFile: true }),
+  ],
   [
     'estate · buildings',
     () =>
@@ -472,6 +479,42 @@ const SCREENS: Array<[string, () => string]> = [
             missingTerms: ['המושכר', 'תקופת השכירות'],
           },
         },
+      }),
+  ],
+  [
+    // Slice 6.3, flow A12. The screen that asks for no flat.
+    'documents · intake',
+    () => renderIntakePage({ nav: NAV, csrf: CSRF, types: documentTypes }),
+  ],
+  [
+    'documents · intake, several flats answer to the address',
+    () =>
+      renderIntakePage({
+        nav: NAV,
+        csrf: CSRF,
+        types: documentTypes,
+        declaredTypeKey: 'lease',
+        reading: {
+          addressLine: 'רקפת 12',
+          city: 'שוהם',
+          apartmentNumber: '12A',
+        },
+        candidates: [hit],
+        // Slice 6.3: the list was cut, and the screen says how many there were.
+        total: 72,
+        query: 'רקפת 12',
+      }),
+  ],
+  [
+    'documents · intake, the page names no place we hold',
+    () =>
+      renderIntakePage({
+        nav: NAV,
+        csrf: CSRF,
+        types: documentTypes,
+        declaredTypeKey: 'lease',
+        reading: { addressLine: null, city: null, apartmentNumber: null },
+        candidates: [],
       }),
   ],
   [

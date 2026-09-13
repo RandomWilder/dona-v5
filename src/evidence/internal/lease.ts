@@ -3,10 +3,10 @@
 //
 // The confirm page recomputes from extracted_field plus the unit — no staging table. Capture is
 // already immutable. Estate, parties and tenancy write through their contracts.
-import type { Pool } from 'pg';
 import { getUnit, type UnitHit } from '../../estate/contract.ts';
 import type { AuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
+import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
 import { createParty } from '../../parties/contract.ts';
@@ -69,35 +69,6 @@ export interface ConfirmLeaseResult {
   tenancyId: string;
   alreadyEstablished: boolean;
   partiesWritten: number;
-}
-
-function asPool(db: Queryable): Pool | null {
-  if ('connect' in db && !('release' in db)) {
-    return db as Pool;
-  }
-  return null;
-}
-
-async function inTransaction<T>(
-  db: Queryable,
-  work: (db: Queryable) => Promise<T>,
-): Promise<T> {
-  const pool = asPool(db);
-  if (!pool) {
-    return work(db);
-  }
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const result = await work(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => {});
-    throw error;
-  } finally {
-    client.release();
-  }
 }
 
 function foldPlace(value: string): string {

@@ -13,6 +13,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import type { ChromeDest } from '../../chrome.ts';
 import type { Clock } from '../../kernel/clock.ts';
+import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { Html } from '../../kernel/ui/html.ts';
 import { optionalText, requireText, validId } from '../../kernel/validate.ts';
@@ -506,19 +507,10 @@ export function registerEstateRoutes(
       // One flat is four statements — a `UNIT` space, two bays and the unit — and handed a `Pool`
       // each would be its own transaction. A failure between them would leave a `UNIT` space with
       // no unit on it: legal in this schema (a lobby is one) and visible on the building page as a
-      // דירות count with no card. The second module to need this moves
-      // `src/evidence/internal/promote.ts`'s `inTransaction` down to the kernel.
-      const client = await deps.pool.connect();
-      try {
-        await client.query('BEGIN');
-        await upsertUnitRow(client, spec);
-        await client.query('COMMIT');
-      } catch (error) {
-        await client.query('ROLLBACK').catch(() => {});
-        throw error;
-      } finally {
-        client.release();
-      }
+      // דירות count with no card. **Slice 6.3 took the third writer down to the kernel**, which is
+      // the move 6.2 wrote here as a condition: this is `src/kernel/db.ts`'s `inTransaction` now,
+      // and the `BEGIN`/`ROLLBACK` pair is written once for the whole application.
+      await inTransaction(deps.pool, (db) => upsertUnitRow(db, spec));
       return reply
         .code(303)
         .header('location', `/estate/buildings/${buildingId}`)

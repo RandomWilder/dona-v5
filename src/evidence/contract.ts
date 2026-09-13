@@ -138,6 +138,7 @@ export type { Verification, VerificationVerdict } from './internal/verify.ts';
 export { documentText, verifyDeclaredType } from './internal/verify.ts';
 export type {
   FiledScreen,
+  IntakeScreen,
   ReadScreen,
   SeededScreen,
   SeedScreen,
@@ -147,6 +148,7 @@ export type {
 } from './internal/views.ts';
 export {
   renderFiledPage,
+  renderIntakePage,
   renderReadPage,
   renderSeededPage,
   renderSeedPage,

@@ -2,9 +2,9 @@
 //
 // Capture stays a row. Becoming business truth requires a FieldPromotion mapping, a TENANCY
 // link, and a named promoter. The database refuses a stamp written without dona.promoting.
-import type { Pool } from 'pg';
 import type { AuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
+import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
 import {
@@ -34,35 +34,6 @@ const TARGET_FIELD: Record<string, PromotedTenancyField> = {
   'tenancy.start_date': 'start_date',
   'tenancy.end_date': 'end_date',
 };
-
-function asPool(db: Queryable): Pool | null {
-  if ('connect' in db && !('release' in db)) {
-    return db as Pool;
-  }
-  return null;
-}
-
-async function inTransaction<T>(
-  db: Queryable,
-  work: (db: Queryable) => Promise<T>,
-): Promise<T> {
-  const pool = asPool(db);
-  if (!pool) {
-    return work(db);
-  }
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const result = await work(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => {});
-    throw error;
-  } finally {
-    client.release();
-  }
-}
 
 export async function promoteExtractedField(
   deps: PromoteDeps,

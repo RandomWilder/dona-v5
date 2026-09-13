@@ -1634,6 +1634,19 @@ object**, 422. **The unit-first entry from a building page stays.**
   writer moves it to `src/kernel/`**; `.check` and the four form classes are in two files each and a
   **third occurrence moves them to `tokens.css`**.
 - **Plan mode. Deps:** 6.2 · **Size:** L
+- **Closed 13 Sep** — `tasks/evidence/6.3.md`. Mockup painted, clicked and commented on; the
+  director's question — does a document attach to a tenancy or to an apartment? — answered in the
+  model that already existed: the path names a **place** and `document_link` carries the meaning,
+  `TENANCY` included. The flat is the anchor; a lease goes on to create the tenancy it supports, at
+  A2's confirm screen, so `tenancyId` is null on this path and the screen says so.
+- **Raised and closed inside 6.3:** the 6.2 `inTransaction` carry had already tripped — **three**
+  copies, not two — so it moved to `src/kernel/db.ts`; a candidate list cut at **12** with the real
+  count printed (a lease naming `דירה 999` at a 72-flat address offered 72 radio buttons); and
+  `src/evidence/routes.test.ts` now deletes its own bucket's documents on the way out, because a
+  hash read back with no `ORDER BY` made one leaked row into a leak per run.
+- **Raised → 6.4:** a scanned lease is OCR'd twice — once for the reader, once inside `fileDocument`
+  — and the fix is to pass the pre-read pages into the intake request. The CSS half of the 6.2 carry
+  has **not** tripped and rides on unchanged.
 
 ### Slice 6.4 — ת.ז. on the capture path — the spec edit, then the field
 **The spec edit is merged before the code edit.** `SPEC.md`'s security defaults, `SPEC-evidence.md`,
@@ -1649,6 +1662,9 @@ for real for the third time. No `field_promotion` target for either.
 - **`party.national_id.read` gets its first reader here**, three weeks before the week 9 that was
   holding it. The permission has sat in the matrix unused since 5.1 for exactly this.
 - **Plan mode. Deps:** 6.3 · **Size:** M
+- **Carried in from 6.3:** pass the pages `POST /documents/intake` already read into the request
+  `fileDocument` is given, so a scan is not OCR'd twice; and `.check` plus the four form classes are
+  two files each still — a **third occurrence moves them to `tokens.css`**.
 
 ### Slice 6.5 — Which tenancy is this? Propose, confirm, write
 `proposeLeaseTenancy` grows a resolution over `listUnitTenancies`, ranked by identifier overlap then
