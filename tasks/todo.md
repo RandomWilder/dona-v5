@@ -175,8 +175,31 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       writer moves it to `src/kernel/`**; `.check` and the four form classes are each in two files —
       **a third occurrence moves them to `tokens.css`**. **A12 is this slice's number**, confirmed
       at 6.2 against A11's stale sentence.
-      **Mockup first:** `mockups/document-intake.html`.
+      **Mockup first:** `mockups/document-intake.html` — painted, clicked and commented on by the
+      director on 13 Sep, who ruled on the question it was painted to ask (below). Deleted when
+      `tasks/evidence/6.3.md` was written, as guard four requires.
       **Plan mode. Deps:** 6.2 · **L**
+      **Raised and closed inside 6.3:**
+      • **The director's ruling on what a document attaches to.** The paint read as though the flat
+      were the destination. It is the **anchor**: the object path names a place (`PlaceKind`, four
+      values) and the meaning is `document_link`, which already carries `TENANCY`. A lease creates
+      the tenancy it then supports, at A2's confirm screen — so a tenancy cannot be chosen at the
+      door, and `tenancyId` stays null on this path. The screen says so above the button now.
+      • **The 6.2 carry, discharged and worse than recorded:** `inTransaction` existed **three**
+      times, not twice (`promote.ts`, `lease.ts` byte-identical, inline in estate's routes). The rule
+      had already tripped → `src/kernel/db.ts`, all three call sites rewired, four kernel cases.
+      • **A candidate list cut at twelve**, found by clicking: `רקפת 12, דירה 999` matched a building
+      and no flat in it, and the screen came back with **72** radio buttons. `CANDIDATE_LIMIT`, the
+      real count printed beside the list, `SEARCH_LIMIT`'s own sentence.
+      • **Test residue in the developer's own database**, found the same way: a case in
+      `src/evidence/routes.test.ts` reads its hash back with `rows[0]` and no `ORDER BY`, so once one
+      run leaks a document every later run leaks another. The suite now deletes everything in its own
+      bucket on the way out, which is exact and self-healing.
+      **Raised → 6.4:** a scanned lease pays for OCR **twice** — once in intake for the reader, once
+      inside `fileDocument` when the verdict is `unverified` — because 6.3 promised not to touch
+      `fileDocument`. The fix is **pass the pre-read pages into the intake request**, not a wider
+      `fileDocument`. The CSS half of the 6.2 carry has **not** tripped: `.check` and the four form
+      classes are still two files each — **a third occurrence moves them to `tokens.css`**.
 
 - [ ] **6.4 — ת.ז. on the capture path — the spec edit, then the field.**
       **The spec edit is proposed and merged before the code edit.** Four documents move: `SPEC.md`'s
@@ -197,6 +220,11 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       correct result; an OPERATOR sees the value nowhere; every read of it writes an `audit_log` line.
       **Verify:** the OPERATOR refusal red first; the audit line asserted by count, not by eyeball.
       **Plan mode. Deps:** 6.3 · **M**
+      **Carried in from 6.3:** a scanned lease is OCR'd **twice** on the intake path — pass the pages
+      `POST /documents/intake` already read into the request `fileDocument` is given, rather than
+      widening `fileDocument`. And the CSS carry rides on unchanged: `.check` plus `.form-grid` /
+      `.form-row` / `.hint` / `.form-actions` are two files each, and **a third occurrence of either
+      moves them to `tokens.css`**.
 
 - [ ] **6.5 — Which tenancy is this? Propose, confirm, write.**
       `proposeLeaseTenancy` grows a resolution over `listUnitTenancies` — candidates ranked by

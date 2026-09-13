@@ -202,6 +202,57 @@ export async function getUnit(db: Queryable, unitId: string): Promise<UnitHit> {
   return unit;
 }
 
+/**
+ * `building.address_key`, computed here for a lookup. **Slice 6.3, flow A12.**
+ *
+ * The column itself is `GENERATED ALWAYS` (`0005_estate_natural_keys.sql`) and nothing writes it —
+ * so this is not a second writer, it is the only way to *ask* for a row by the key the database
+ * already keeps. It lives here, next to the read that uses it, because the expression it mirrors is
+ * estate's: `lower(btrim(collapse(city)) || '|' || btrim(collapse(address_line)))`. A copy of this
+ * three modules away is how the two spellings of one address start disagreeing.
+ */
+export function addressKeyOf(city: string, addressLine: string): string {
+  const collapse = (value: string) => value.replace(/\s+/g, ' ').trim();
+  return `${collapse(city)}|${collapse(addressLine)}`.toLowerCase();
+}
+
+const UNITS_AT_ADDRESS_SQL = `
+  SELECT u.unit_id,
+         u.unit_number,
+         b.building_id,
+         b.name AS building_name,
+         b.address_line,
+         b.city
+  FROM unit u
+  JOIN space s ON s.space_id = u.unit_id
+  JOIN building b ON b.building_id = s.building_id
+  WHERE b.address_key = ANY($1::text[])
+  ORDER BY b.city, b.address_line,
+           NULLIF(regexp_replace(u.unit_number, '\\D', '', 'g'), '')::int NULLS LAST,
+           u.unit_number`;
+
+/**
+ * Every unit at an address, looked up by the natural key rather than by a pattern. **Slice 6.3.**
+ *
+ * Several keys, one `=` each: a building's `address_line` may carry the word `רחוב` or not, and the
+ * caller that read an address off a document knows which spellings it is asking about. That is the
+ * whole reason this is not a `LIKE` — A12 files a document without a human only on an exact key
+ * match, so the fuzzy half of the question is answered by `searchEstate` and shown as candidates
+ * rather than acted on.
+ */
+export async function findUnitsAtAddress(
+  db: Queryable,
+  addressKeys: readonly string[],
+): Promise<UnitHit[]> {
+  if (addressKeys.length === 0) {
+    return [];
+  }
+  const result = await db.query<UnitHit>(UNITS_AT_ADDRESS_SQL, [
+    [...addressKeys],
+  ]);
+  return result.rows;
+}
+
 export interface SearchResults {
   buildings: BuildingSummary[];
   units: UnitHit[];

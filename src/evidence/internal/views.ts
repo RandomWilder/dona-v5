@@ -18,6 +18,7 @@ import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import type { UnitLetting } from '../../tenancy/contract.ts';
 import type { DocumentTypeRow } from './catalogue.ts';
 import type { ProposedPerson } from './lease.ts';
+import { CANDIDATE_LIMIT, type PlaceReading } from './place.ts';
 import { documentExtensions } from './storage-path.ts';
 import type { Verification } from './verify.ts';
 
@@ -50,6 +51,12 @@ const styles = h`<style>
      64-character digest, which in two columns wraps into a block nobody can read a line of. */
   .notice .facts { grid-template-columns: 1fr; }
   .terms { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0 0; padding: 0; list-style: none; }
+  /* Slice 6.3. A list of flats the reader could not choose between, each one a radio the operator
+     chooses with. The min-height is the touch target; the input opts out of the field sizing the
+     stylesheet gives every other input, because a radio is not a field. */
+  .candidates { display: grid; gap: var(--space-2); margin: var(--space-3) 0 0; padding: 0; list-style: none; }
+  .candidate { display: flex; gap: var(--space-2); align-items: baseline; min-height: var(--size-touch); }
+  .candidate input { width: auto; min-height: 0; }
   .digest { word-break: break-all; }
   .page-read {
     position: relative;
@@ -180,6 +187,180 @@ export function renderUploadPage(screen: UploadScreen): string {
     body,
     screen.nav,
   );
+}
+
+/**
+ * The document-first screen. **Slice 6.3, flow A12.**
+ *
+ * The unit-first screen above is reached from a flat and therefore knows which flat it is filing
+ * against; this one is reached from the index and knows nothing, because the answer is printed on
+ * the paper. So it asks for two things — a type and a file — and the address on the page is what
+ * chooses the flat.
+ *
+ * **The flat is the anchor and not the destination**, and the screen says so: a lease filed here
+ * goes on to the tenancy it defines (A2), and the hint under the button is where an operator reads
+ * that before they press it rather than after.
+ *
+ * The second state is a refusal, and everything about it is arranged around one sentence: *nothing
+ * was written*. No row, no object, no held bytes — so the file input comes back armed and empty,
+ * because there is nothing on the server to attach a choice to.
+ */
+export interface IntakeScreen {
+  nav: Html;
+  csrf: string;
+  types: DocumentTypeRow[];
+  /** The declared type of a refused attempt, so the form comes back with it still chosen. */
+  declaredTypeKey?: string;
+  /** Present on a refusal only: what the reader read off the page. Nulls inside it are ordinary. */
+  reading?: PlaceReading;
+  /** Whatever the operator might have meant. Empty is an answer too — the search box below. */
+  candidates?: UnitHit[];
+  /**
+   * How many there really were. Larger than `candidates.length` means the list was cut at
+   * `CANDIDATE_LIMIT`, and the screen says so rather than showing a fraction of the answer as if it
+   * were the answer.
+   */
+  total?: number;
+  /** A search the operator typed into the box, echoed back into it. */
+  query?: string;
+}
+
+/**
+ * What the reader read, in the operator's words.
+ *
+ * **This is the one place a document's own text reaches a screen in this module**, and it is bounded
+ * to three values a deterministic reader captured: a street, a town, a flat number. A refusal an
+ * operator cannot act on is a refusal they will work around, and "we could not place it" without
+ * saying what was read is exactly that refusal. No name, no date, no line of the lease.
+ */
+function placeRead(reading: PlaceReading): Html {
+  if (!reading.addressLine) {
+    return h`<p class="lede">
+      לא נקראה כתובת מן הדף, ולכן <strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום.
+      בחרו את הדירה שאליה הנייר שייך, או חפשו אותה, וצרפו את הקובץ שוב.
+    </p>`;
+  }
+  return h`<p class="lede">
+    נקראה הכתובת ${ltr(reading.addressLine)}${
+      reading.city ? h`, ${reading.city}` : h``
+    }${
+      reading.apartmentNumber ? h` · דירה ${ltr(reading.apartmentNumber)}` : h``
+    }.
+    לא נמצאה במערכת דירה אחת שמתאימה לה, ולכן <strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום.
+    בחרו את הדירה שאליה הנייר שייך, או חפשו אותה, וצרפו את הקובץ שוב.
+  </p>`;
+}
+
+export function renderIntakePage(screen: IntakeScreen): string {
+  const candidates = screen.candidates ?? [];
+  const refused = screen.reading !== undefined;
+  const body = h`
+    <div>
+      <a class="back" href="/">← ראשי</a>
+      <h1>הוספת מסמך</h1>
+      <p class="lede">
+        בחרו את סוג המסמך וצרפו את הקובץ. הדירה שאליה שייך הנייר תזוהה מתוך הכתובת שעליו —
+        הדירה היא העוגן, לא סוף הדרך: חוזה שכירות ממשיך מכאן אל השכירות שהוא עצמו מגדיר.
+      </p>
+    </div>
+    ${
+      refused
+        ? h`<section class="notice">
+            <h2>${
+              candidates.length > 1
+                ? h`נמצאה יותר מדירה אחת`
+                : h`לא זוהתה דירה אחת`
+            }</h2>
+            ${placeRead(screen.reading as PlaceReading)}
+          </section>`
+        : h``
+    }
+    <form class="form-grid" method="post" action="/documents/intake" enctype="multipart/form-data">
+      ${csrfInput(screen.csrf)}
+      <div class="form-row">
+        <label for="type">סוג המסמך</label>
+        <select id="type" name="type" required>
+          ${screen.types.map(
+            (type) =>
+              h`<option value="${type.typeKey}" ${
+                type.typeKey === screen.declaredTypeKey ? h`selected` : h``
+              }>${type.labelHe}</option>`,
+          )}
+        </select>
+        <p class="hint">הסוג מוצהר ואינו מזוהה אוטומטית. המערכת בודקת שהקובץ אכן נראה כמו הסוג שנבחר.</p>
+      </div>
+      ${
+        candidates.length > 0
+          ? h`<div class="form-row">
+              <span>הדירה</span>
+              <ul class="candidates">
+                ${candidates.map(
+                  (unit) =>
+                    h`<li class="candidate">
+                      <input type="radio" id="u-${unit.unit_id}" name="unit" value="${unit.unit_id}" required />
+                      <label for="u-${unit.unit_id}">דירה ${ltr(
+                        unit.unit_number,
+                      )} · ${unit.building_name} · ${unit.address_line}, ${
+                        unit.city
+                      }</label>
+                    </li>`,
+                )}
+              </ul>
+              ${
+                (screen.total ?? candidates.length) > candidates.length
+                  ? h`<p class="hint">
+                      בכתובת הזו ${ltr(screen.total ?? 0)} דירות. מוצגות ${ltr(
+                        CANDIDATE_LIMIT,
+                      )} הראשונות — אם הדירה אינה ביניהן, חפשו אותה למטה.
+                    </p>`
+                  : h``
+              }
+              <p class="hint">
+                דירה שנבחרה כאן נלקחת כפי שהיא, והכתובת שעל הדף אינה נקראת שוב.
+              </p>
+            </div>`
+          : h``
+      }
+      <div class="form-row">
+        <label for="file">הקובץ</label>
+        <input id="file" name="file" type="file" required
+          accept="${documentExtensions.map((ext) => `.${ext}`).join(',')}" />
+        <p class="hint">
+          ${
+            refused
+              ? h`עד 20MB. הקובץ אינו נשמר בין הניסיונות, ולכן יש לצרף אותו שוב.`
+              : h`עד 20MB. סוג הקובץ נקבע מתוכנו ולא משמו, ושם הקובץ אינו נשמר.`
+          }
+        </p>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">${
+          candidates.length > 0 ? h`תיוק לדירה שנבחרה` : h`קריאת הכתובת ותיוק`
+        }</button>
+        <a href="/">ביטול</a>
+      </div>
+      <p class="hint">
+        מה קורה אחרי התיוק: חוזה שכירות ממשיך למסך אישור השכירות, שבו התקופה והצדדים נקראים מתוך
+        המסמך ונקשרים אליו. מסמך שאינו חוזה נשאר מתויק לדירה בלבד.
+      </p>
+    </form>
+    ${
+      refused
+        ? h`<form class="form-grid" method="get" action="/documents/new">
+            <div class="form-row">
+              <label for="q">חיפוש דירה אחרת</label>
+              <input class="field" id="q" name="q" type="search" value="${
+                screen.query ?? ''
+              }" />
+              <p class="hint">חיפוש לפי כתובת, שם בניין או מספר דירה — אותו חיפוש של מסך הנכסים.</p>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-secondary" type="submit">חיפוש</button>
+            </div>
+          </form>`
+        : h``
+    }`;
+  return shell('דונה דום — הוספת מסמך', body, screen.nav);
 }
 
 export interface FiledScreen {

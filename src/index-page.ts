@@ -20,6 +20,15 @@ import { renderPage } from './kernel/ui/page.ts';
 export interface IndexScreen {
   /** The token every form in this system carries from 5.2. The sign-out form is this screen's one. */
   csrf: string;
+  /**
+   * Whether this role may file a document — `documents.write`. **Slice 6.3, flow A12.**
+   *
+   * A door a VIEWER cannot walk through is not shown to them, which is 6.1's and 6.2's rule for
+   * their own cards and is not itself the control: the route refuses on its own stance whatever
+   * this says. Optional, so a caller that has not been taught about roles gets the screen a viewer
+   * gets rather than the one an operator does.
+   */
+  mayFile?: boolean;
 }
 
 const styles = h`<style>
@@ -69,6 +78,17 @@ export function renderIndexPage(screen: IndexScreen): string {
           <p class="lede">טיוטות וחוזים פעילים שחסר בהם ערב, על המסמך שהיה אמור לשאת אותו.</p>
         </a>
       </article>
+      ${
+        screen.mayFile
+          ? h`<article class="row-card">
+              ${marker('is-ok')}
+              <a class="card-link" href="/documents/new">
+                <p class="card-title"><span>הוספת מסמך</span></p>
+                <p class="lede">סוג וקובץ. הדירה מזוהה מתוך הכתובת שעל הנייר.</p>
+              </a>
+            </article>`
+          : h``
+      }
       <article class="row-card">
         ${marker('is-ok')}
         <a class="card-link" href="/estate/search">

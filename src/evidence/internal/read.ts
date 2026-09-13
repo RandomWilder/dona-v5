@@ -50,7 +50,12 @@ export interface DocumentRead {
   source: 'pdfjs' | 'ocr' | 'none';
 }
 
-function ocrConfigured(ocr: OcrText | undefined): ocr is OcrText {
+/**
+ * Whether an OCR call would reach anything. **Exported at 6.3** so the intake route can ask before
+ * it spends one: an unconfigured OCR is a stand-in that answers `unconfigured` rather than a null,
+ * and a caller that did not ask would pay a round trip to be told so.
+ */
+export function ocrConfigured(ocr: OcrText | undefined): ocr is OcrText {
   return ocr != null && ocr.describe() !== 'unconfigured';
 }
 

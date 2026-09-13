@@ -48,8 +48,10 @@ export type {
   UnitRow,
 } from './internal/read-model.ts';
 export {
+  addressKeyOf,
   countUnitsByBuilding,
   EXPIRING_WINDOW_DAYS,
+  findUnitsAtAddress,
   getBuilding,
   getUnit,
   listBuildings,

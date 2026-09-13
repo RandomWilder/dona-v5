@@ -126,6 +126,13 @@ in the file's text; a file with no text layer is filed as `unverified` rather th
 OCR is slice 4.1's. A refused upload writes nothing — no row, no object — and is recorded as an
 `audit_log` line instead of as a `state`.
 
+**Amended at 6.3: the unit is no longer the way in, it is one of two.** `GET /documents/new` with a
+`unit` is this flow unchanged — reached from a building page, where the place is already known and the
+shortcut costs nothing. The same path with **no** `unit` is **A12**, which reads the place off the
+paper. Both end in the same `fileDocument` call against the same `UNIT` place, so everything below
+this line — the guard, the refusal that writes nothing, the audit line, the bounds and the per-caller
+cap — is true of both entries and is stated once.
+
 **Declaring a *new draft* tenancy from the upload screen is A2's, not A1's.** Invariant 5 puts a human
 confirmation between a proposed party and a written `tenancy_party` row, and `upsertParty` needs a
 ת.ז. it can key on, so the "declared by the administrator" path 3.3 was planned with would have been
@@ -378,6 +385,55 @@ path is built here.
 **What A13 does not do.** No asset, no tenancy, no document, and nothing to the building but the
 rewrite of its own values. The occupancy chip on the new flat reads פנויה because occupancy is
 derived from tenancy dates and there are none (R6).
+
+### A12 — A document finds its own place
+
+**Trigger:** an operator holds a file and knows what it is, and does not know — or does not want to
+have to go and find — which of 1,500 flats it belongs to.
+
+**Why it is a flow at all, and why it is written down at 6.3.** A1 has asked for the unit first since
+3.3, and the unit was in the URL because the screen was reached from a building page. That was
+correct while every document arrived beside a flat somebody was already looking at, and it stopped
+being correct the moment the console had to serve an operations team: paper arrives in a pile, and
+**the address is printed on it**. This is the other half of what the director found on 13 Sep 2026;
+A11 is the first half. A1 is amended rather than replaced — the unit-first entry stays.
+
+**Screen:** choose the type, attach the file. **No unit.** The type is still declared and never
+detected (invariant 6): what this flow reads off the paper is *where*, not *what*.
+
+**Sequence:** read → resolve → file.
+
+1. The bytes are read once, in memory, under the bounds A1 already set — one file, 20 MB, four kinds
+   sniffed from the bytes. The text is `documentText` over the pdf reader, and OCR only when there is
+   no text layer and an OCR processor is configured.
+2. **A deterministic place reader** runs over that text — the analogue of A6's protocol reader, and
+   deliberately the same kind of thing: no model, no `ExtractedField`, a pure function over a string.
+   It returns an address, a city and an apartment number, or nulls.
+3. **Resolution is exact or it is a question.** `building.address_key` — the generated, normalised key
+   A11 leans on — is looked up for the city and street the reader read; the apartment number then
+   narrows that building's units through the same `apartmentMatches` fold A2 uses for its cross-check.
+   **Exactly one unit** and the document is filed against it, through the unchanged `fileDocument`, and
+   the chain continues into A1 and A2 exactly as it does when a human picked the flat.
+4. **Zero or several is a refusal, and the refusal writes nothing** — no `document` row, no
+   `document_link`, no object. The form comes back with what was read, the candidates a
+   `searchEstate`-shaped lookup found, a search box, and the file input re-armed. Picking a candidate
+   and re-attaching the file is the second post, and it files against the unit that was chosen.
+
+**Only an exact key match files without a human.** A near match is not a weaker version of a match
+here: this application cannot delete what it writes (slice 3.2), so a document filed against the
+wrong flat is permanent, and the cost of asking is one click. The reader is therefore allowed to
+fail — it fails into the candidate list, which is a screen an operator can act on, and never into a
+guess.
+
+**Nothing is held between the read and the file.** There is no staging store, no `UNFILED` place kind
+and no fifth `PlaceKind`: the object path names a real place (slice 3.2) and A6 already settled the
+principle for the deterministic case. The price is that a refused intake asks for the file again,
+which is the same price A1's wrong-file refusal has always charged.
+
+**What A12 does not do.** It does not classify — the type is declared. It does not create a building
+or a unit: an address that is in nobody's portfolio is a refusal with a search box, and creating the
+building is A11's act and an admin's. It does not propose a tenancy; a filed lease with no tenancy
+link still redirects into A2, which is where a human confirms.
 
 ## Open
 

@@ -573,6 +573,23 @@ describe('evidence · the upload route', () => {
           .query('DELETE FROM document WHERE file_hash = $1', [hash])
           .catch(() => {});
       }
+      // **Everything this suite's bucket holds, whoever left it.** Found at 6.3, by running this
+      // file against a developer's own database several times in one afternoon: a case that reads
+      // back its hash with `rows[0]` and no ORDER BY picks an arbitrary row once a previous run has
+      // leaked one, pushes *that* hash, and leaves its own document behind — so one leak becomes a
+      // leak per run. `BUCKET` is this suite's alone, so deleting by it is exact and self-healing.
+      await pool
+        .query(
+          `DELETE FROM document_link WHERE document_id IN
+             (SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
+          [`gs://${BUCKET}/%`],
+        )
+        .catch(() => {});
+      await pool
+        .query('DELETE FROM document WHERE storage_uri LIKE $1', [
+          `gs://${BUCKET}/%`,
+        ])
+        .catch(() => {});
       await signOutAll(pool, STAFF_DOMAIN);
       if (unitId) {
         await pool
@@ -787,6 +804,397 @@ describe('evidence · A3 addendum upload redirects to confirm', () => {
         PROJECT_A3,
       ]);
       await app.close();
+      await pool.end();
+    }
+  });
+});
+
+/**
+ * **A12 — the document finds its own place. Slice 6.3.**
+ *
+ * The acceptance bar is two sentences from `tasks/todo.md`, and both are asserted here: a lease
+ * naming רקפת 12, דירה 12A files against that flat *with no unit chosen by hand*; a lease naming an
+ * address this system does not hold **writes no row and no object** and offers a search.
+ *
+ * The second half is the one worth the machinery. "Nothing was written" is not provable by the
+ * absence of a screen, so it is proved by counting: document rows before and after, and every call
+ * to `put` on the store, through a spy that wraps the memory one. A refusal that had written the
+ * object and skipped the row would pass a body assertion and fail this.
+ */
+describe('evidence · A12 a document finds its own place', () => {
+  it('files with no unit chosen, and writes nothing when the address is not ours', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const CITY_A12 = 'עיר קליטה';
+    const ADDRESS_A12 = 'רקפת 12';
+    const PROJECT_A12 = 'TEST-INTAKE';
+    // The header a lease carries, in the anchors SPEC-evidence.md prints. Everything after it is
+    // the specimen, which names no place at all — so what the reader reads is what this line says.
+    const leasing = (address: string) =>
+      `כתובת המושכר: ${address}\n${specimen('lease-standard.md')}`;
+
+    // **The put counter.** A spy around the store rather than a second store, so what is under test
+    // is the real path: the route writes the object through this and the count is the proof that on
+    // a refusal it did not.
+    const objects = createMemoryStore();
+    let puts = 0;
+    const counted = {
+      ...objects,
+      put: async (path: string, bytes: Buffer, contentType: string) => {
+        puts += 1;
+        return objects.put(path, bytes, contentType);
+      },
+    };
+    const appFor = (text: string) =>
+      buildApp({
+        pool,
+        version: '9.9.9-test',
+        clock: fixedClock(AT),
+        objects: counted,
+        pdf: createFakePdfText([text]),
+        bucket: BUCKET,
+      });
+    const here = appFor(leasing(`${ADDRESS_A12}, ${CITY_A12}, דירה 12A`));
+    const elsewhere = appFor(leasing('אלמוג 5, עיר שאיננה, דירה 3'));
+    const ambiguous = appFor(leasing(`${ADDRESS_A12}, ${CITY_A12}, דירה 9`));
+    const apps = [here, elsewhere, ambiguous];
+    const hashes: string[] = [];
+    let unitA = '';
+    let unitB = '';
+    let viewer: SignedIn | null = null;
+
+    const documentsHere = async (): Promise<number> => {
+      const rows = await pool.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM document_link WHERE entity_id = ANY($1::uuid[])`,
+        [[unitA, unitB]],
+      );
+      return Number(rows.rows[0]?.n ?? '0');
+    };
+
+    try {
+      await signOutAll(pool, STAFF_DOMAIN);
+      who = await signIn(pool, fixedClock(AT), {
+        email: `ops@${STAFF_DOMAIN}`,
+      });
+      await applyDocumentTypeCatalogue(pool, seedDocumentTypes);
+      await importEstate(pool, {
+        projects: [
+          {
+            name: 'מכרז קליטה',
+            projectCode: PROJECT_A12,
+            tenderRef: null,
+            status: 'ACTIVE',
+          },
+        ],
+        buildings: [
+          {
+            name: 'בניין רקפת 12',
+            addressLine: ADDRESS_A12,
+            city: CITY_A12,
+            projectCode: PROJECT_A12,
+            handoverDate: '2025-03-01',
+            warrantyEndDate: '2027-03-01',
+            status: 'ACTIVE',
+            spaces: [
+              { kind: 'UNIT', name: 'דירה 12A', floor: '1', accessNote: null },
+              { kind: 'UNIT', name: 'דירה 12B', floor: '1', accessNote: null },
+            ],
+            units: [
+              {
+                spaceName: 'דירה 12A',
+                unitNumber: '12A',
+                rooms: 3,
+                areaSqm: 70,
+                hasMamad: false,
+                parkingSpaceName: null,
+                storageSpaceName: null,
+                warrantyEndDate: null,
+                conditionStatus: 'READY',
+              },
+              {
+                spaceName: 'דירה 12B',
+                unitNumber: '12B',
+                rooms: 3,
+                areaSqm: 70,
+                hasMamad: false,
+                parkingSpaceName: null,
+                storageSpaceName: null,
+                warrantyEndDate: null,
+                conditionStatus: 'READY',
+              },
+            ],
+          },
+        ],
+      });
+      const found = await pool.query<{ unit_id: string; unit_number: string }>(
+        `SELECT u.unit_id, u.unit_number FROM unit u
+           JOIN space s ON s.space_id = u.unit_id
+           JOIN building b ON b.building_id = s.building_id
+          WHERE b.city = $1 AND b.address_line = $2
+          ORDER BY u.unit_number`,
+        [CITY_A12, ADDRESS_A12],
+      );
+      unitA =
+        found.rows.find((row) => row.unit_number === '12A')?.unit_id ?? '';
+      unitB =
+        found.rows.find((row) => row.unit_number === '12B')?.unit_id ?? '';
+      assert.ok(unitA);
+      assert.ok(unitB);
+
+      await t.test(
+        'the screen asks for a type and a file, and no flat',
+        async () => {
+          const response = await as(here).inject({
+            method: 'GET',
+            url: '/documents/new',
+          });
+          assert.equal(response.statusCode, 200);
+          assert.match(response.body, /הוספת מסמך/);
+          assert.match(response.body, /action="\/documents\/intake"/);
+          assert.match(response.body, /value="lease"/);
+          assert.doesNotMatch(response.body, /name="unit"/);
+        },
+      );
+
+      await t.test(
+        'a lease naming רקפת 12 דירה 12A files against 12A',
+        async () => {
+          const before = await documentsHere();
+          const response = await as(here).inject({
+            method: 'POST',
+            url: '/documents/intake',
+            ...upload(
+              { type: 'lease' },
+              { filename: 'שכירות לוי.pdf', bytes: pdfBytes('a12 one') },
+            ),
+          });
+          assert.equal(response.statusCode, 302, response.body.slice(0, 400));
+          assert.match(
+            response.headers.location ?? '',
+            /\/documents\/[0-9a-f-]{36}\/tenancy$/,
+          );
+          assert.equal((await documentsHere()) - before, 1);
+          const rows = await pool.query<{
+            file_hash: string;
+            storage_uri: string;
+          }>(
+            `SELECT d.file_hash, d.storage_uri FROM document d
+             JOIN document_link l ON l.document_id = d.document_id
+            WHERE l.entity_id = $1
+            ORDER BY d.ingested_at DESC LIMIT 1`,
+            [unitA],
+          );
+          const filed = rows.rows[0];
+          assert.ok(filed, 'the lease filed against 12A and not against 12B');
+          hashes.push(filed.file_hash);
+          assert.match(
+            filed.storage_uri,
+            new RegExp(
+              `^gs://${BUCKET}/unit/${unitA}/lease/[0-9a-f]{64}\\.pdf$`,
+            ),
+          );
+          // The filename carried a household name. It reached neither the path nor the screen.
+          assert.doesNotMatch(filed.storage_uri, /לוי/);
+        },
+      );
+
+      await t.test(
+        'an address in no building writes no row and no object, and offers a search',
+        async () => {
+          const before = await documentsHere();
+          const documentsBefore = await pool.query<{ n: string }>(
+            'SELECT count(*)::text AS n FROM document',
+          );
+          const putsBefore = puts;
+          const response = await as(elsewhere).inject({
+            method: 'POST',
+            url: '/documents/intake',
+            ...upload(
+              { type: 'lease' },
+              { filename: 'unknown.pdf', bytes: pdfBytes('a12 elsewhere') },
+            ),
+          });
+          assert.equal(response.statusCode, 422, response.body.slice(0, 400));
+          // What was read, said back — so the refusal is one an operator can act on.
+          assert.match(response.body, /אלמוג 5/);
+          assert.match(response.body, /לא נשמר דבר/);
+          assert.match(response.body, /חיפוש דירה אחרת/);
+          assert.match(response.body, /type="file"/);
+
+          assert.equal(await documentsHere(), before);
+          const documentsAfter = await pool.query<{ n: string }>(
+            'SELECT count(*)::text AS n FROM document',
+          );
+          assert.equal(documentsAfter.rows[0]?.n, documentsBefore.rows[0]?.n);
+          assert.equal(puts, putsBefore, 'no object was written');
+
+          // The attempt is on the record, and counts against the day's cap.
+          const audited = await pool.query<{ n: string }>(
+            `SELECT count(*)::text AS n FROM audit_log
+              WHERE action = 'evidence.intake_unresolved' AND actor_id = $1`,
+            [who.staffAccountId],
+          );
+          assert.equal(audited.rows[0]?.n, '1');
+        },
+      );
+
+      await t.test(
+        'two flats at the address and neither is the one named — both are offered, nothing is written',
+        async () => {
+          const before = await documentsHere();
+          const putsBefore = puts;
+          const response = await as(ambiguous).inject({
+            method: 'POST',
+            url: '/documents/intake',
+            ...upload(
+              { type: 'lease' },
+              { filename: 'nine.pdf', bytes: pdfBytes('a12 ambiguous') },
+            ),
+          });
+          assert.equal(response.statusCode, 422, response.body.slice(0, 400));
+          assert.match(response.body, new RegExp(`value="${unitA}"`));
+          assert.match(response.body, new RegExp(`value="${unitB}"`));
+          assert.equal(await documentsHere(), before);
+          assert.equal(puts, putsBefore);
+        },
+      );
+
+      await t.test(
+        'a candidate posted back files against it, unread',
+        async () => {
+          const before = await documentsHere();
+          const response = await as(ambiguous).inject({
+            method: 'POST',
+            url: '/documents/intake',
+            ...upload(
+              { type: 'lease', unit: unitB },
+              { filename: 'nine.pdf', bytes: pdfBytes('a12 chosen') },
+            ),
+          });
+          assert.equal(response.statusCode, 302, response.body.slice(0, 400));
+          assert.equal((await documentsHere()) - before, 1);
+          const rows = await pool.query<{ file_hash: string }>(
+            `SELECT d.file_hash FROM document d
+             JOIN document_link l ON l.document_id = d.document_id
+            WHERE l.entity_id = $1
+            ORDER BY d.ingested_at DESC LIMIT 1`,
+            [unitB],
+          );
+          const filed = rows.rows[0];
+          assert.ok(filed, 'the chosen flat is the one it filed against');
+          hashes.push(filed.file_hash);
+        },
+      );
+
+      await t.test('a VIEWER is refused, and files nothing', async () => {
+        viewer = await signIn(pool, fixedClock(AT), {
+          email: `viewer@${STAFF_DOMAIN}`,
+          role: 'VIEWER',
+        });
+        const before = await documentsHere();
+        const putsBefore = puts;
+        const body = upload(
+          { csrf: viewer.csrf, type: 'lease' },
+          { filename: 'viewer.pdf', bytes: pdfBytes('a12 viewer') },
+        );
+        const response = await here.inject({
+          method: 'POST',
+          url: '/documents/intake',
+          ...body,
+          headers: { ...body.headers, cookie: viewer.cookie },
+        });
+        assert.equal(response.statusCode, 403);
+        assert.equal(response.json().code, 'not_allowed');
+        assert.equal(await documentsHere(), before);
+        assert.equal(puts, putsBefore);
+      });
+
+      await t.test(
+        'a post with no token is refused, and files nothing',
+        async () => {
+          const before = await documentsHere();
+          const putsBefore = puts;
+          const response = await as(here).inject({
+            method: 'POST',
+            url: '/documents/intake',
+            ...upload(
+              { csrf: '', type: 'lease' },
+              { filename: 'forged.pdf', bytes: pdfBytes('a12 forged') },
+            ),
+          });
+          assert.equal(response.statusCode, 403);
+          assert.equal(response.json().code, 'not_allowed');
+          assert.equal(await documentsHere(), before);
+          assert.equal(puts, putsBefore);
+        },
+      );
+    } finally {
+      // **Before the accounts go.** An unresolved intake names no subject — there is no entity it
+      // is about, which is the whole of what it records — so it is cleaned up by the operator who
+      // made it, and `signOutAll` below is what takes that operator away.
+      await pool
+        .query(
+          `DELETE FROM audit_log
+            WHERE action = 'evidence.intake_unresolved' AND actor_id = $1`,
+          [who.staffAccountId],
+        )
+        .catch(() => {});
+      await signOutAll(pool, STAFF_DOMAIN);
+      for (const hash of hashes) {
+        await pool.query(
+          `DELETE FROM extracted_field WHERE document_id IN
+             (SELECT document_id FROM document WHERE file_hash = $1)`,
+          [hash],
+        );
+        await pool.query(
+          `DELETE FROM document_link WHERE document_id IN
+             (SELECT document_id FROM document WHERE file_hash = $1)`,
+          [hash],
+        );
+        await pool.query('DELETE FROM document WHERE file_hash = $1', [hash]);
+      }
+      for (const unitId of [unitA, unitB].filter(Boolean)) {
+        await pool.query(
+          `DELETE FROM tenancy_event WHERE tenancy_id IN
+             (SELECT tenancy_id FROM tenancy WHERE unit_id = $1)`,
+          [unitId],
+        );
+        await pool.query(
+          `DELETE FROM tenancy_party WHERE tenancy_id IN
+             (SELECT tenancy_id FROM tenancy WHERE unit_id = $1)`,
+          [unitId],
+        );
+        await pool.query('DELETE FROM tenancy WHERE unit_id = $1', [unitId]);
+        await pool.query(
+          `DELETE FROM audit_log WHERE action LIKE 'evidence.%' AND subject_id = $1`,
+          [unitId],
+        );
+      }
+      await pool.query(
+        `DELETE FROM unit WHERE unit_id IN (
+           SELECT space_id FROM space s
+           JOIN building b ON b.building_id = s.building_id
+           WHERE b.city = $1 AND b.address_line = $2)`,
+        [CITY_A12, ADDRESS_A12],
+      );
+      await pool.query(
+        `DELETE FROM space WHERE building_id IN (
+           SELECT building_id FROM building WHERE city = $1 AND address_line = $2)`,
+        [CITY_A12, ADDRESS_A12],
+      );
+      await pool.query(
+        'DELETE FROM building WHERE city = $1 AND address_line = $2',
+        [CITY_A12, ADDRESS_A12],
+      );
+      await pool.query('DELETE FROM project WHERE project_code = $1', [
+        PROJECT_A12,
+      ]);
+      for (const app of apps) {
+        await app.close();
+      }
       await pool.end();
     }
   });

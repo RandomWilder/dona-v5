@@ -238,6 +238,80 @@ instead (name only, no identity match). Filing a `lease` with no tenancy link re
 handover protocol precedes every tenancy its flat will ever have, so a document with no tenancy link
 is an ordinary case and not a gap.
 
+### Filing without a unit — flow A12 (slice 6.3)
+
+`GET /documents/new` **with no `unit`** is a screen of its own: the type, the file, and no flat. The
+same path **with** a `unit` is 3.3's screen, unchanged, reached from a building page. The post behind
+the new screen is `POST /documents/intake`, and everything it does before it knows where the document
+goes is the order 3.3 fixed, with one step inserted in front of it: **read the text → read the place →
+resolve the place → then `fileDocument`, unchanged.**
+
+**The reader is deterministic, and its anchors are printed here because somebody has to write a lease
+that matches them.** It is a pure function over the flattened text (`src/evidence/internal/place.ts`),
+the exact analogue of A6's protocol reader, and it reads three things:
+
+- **the street and number** — after `כתובת המושכר:`, `כתובת הנכס:`, `כתובת הדירה:`, a bare `כתובת:`,
+  or a `רחוב` that starts the address. `רקפת 12` and `רחוב רקפת 12` are the same address to it.
+- **the city** — whatever follows the address's comma, up to the next comma, full stop or semicolon.
+  So `כתובת המושכר: רקפת 12, שוהם.` reads as street `רקפת 12` and city `שוהם`.
+- **the apartment number** — `דירה 12`, `דירה מס׳ 12`, `דירה מספר 12A`. The same shape 3.5's reader
+  uses, because it is the same sentence on a different form.
+
+Anything it cannot find is null, and null is not an error: it is the refusal below, which is a screen.
+
+**Resolution is exact, and a near miss is a question rather than a guess.** The reader's city and
+street are folded into `building.address_key`'s own normalisation — `addressKeyOf` in
+`src/estate/`, beside the generated column that defines it — and looked up. Because a building's
+`address_line` may or may not carry the word `רחוב`, the lookup carries the two or three spellings of
+one address as **keys**, matched with `=`; it never falls back to a `LIKE`. The apartment number then
+narrows that building's units through `apartmentMatches`, which A2 already trusts for its cross-check.
+
+- **Exactly one unit** → `fileDocument` runs against `{ kind: 'UNIT', id }`, unchanged, and the
+  redirects into A6 and A2 fire exactly as they do from the unit-first screen.
+- **Zero or several** → **422, and nothing is written**: no `document` row, no `document_link`, no
+  object in the bucket. The form comes back with what the reader read, the candidates a
+  `searchEstate` over the street found, a search box for the operator's own term, and the file input
+  re-armed. A candidate re-posted with the file is an ordinary filing against a unit a human chose.
+
+**A candidate list is cut at twelve, and says how long it was.** A lease naming an address this
+system holds and an apartment number it does not — `רקפת 12, דירה 999` — matches a building and no
+flat in it, and every flat in that building is then a correct candidate. On the demo estate that is
+seventy-two radio buttons, which is a correct answer nobody can use. So the list is `CANDIDATE_LIMIT`
+long and the screen prints the real count beside it, the same sentence the estate search makes at
+`SEARCH_LIMIT` — and the way past it is the search box already on the page. The number is a reading
+aid and never a filter: the cap is applied to what is offered, never to what is looked up, so it
+cannot turn "several candidates" into "exactly one".
+
+**The flat is the anchor of the filing and not the end of it.** A12 files a document against a place
+and never against a letting: `tenancyId` is null on this path, because *which* tenancy a lease
+belongs to is a fact the lease itself states, and the screen that reads it is A2's confirm page —
+which this route redirects a verified lease to. Invariant 1 is kept where it always was, and the
+screen says as much above the button rather than leaving an operator to discover it.
+
+**Why nothing is held.** The bytes are not stashed between the refusal and the second post, and there
+is no staging store, no `UNFILED` place kind and no fifth `PlaceKind` value. The object path names a
+real place (slice 3.2) and A6 settled the principle for the deterministic case: the cost is that the
+operator re-attaches the file, which is what 3.3's wrong-file refusal has always cost.
+
+**The second `csrf: 'in-body'` route, and the reason it is exactly two.** That flag is an exemption
+from the composition root's CSRF `preHandler`, and the exemption is one sentence: *this body is a
+multipart stream and a hook that read the token would consume the stream the handler must parse*.
+That is true of `POST /documents/intake` for the same reason it is true of `POST /documents` and of
+nothing else in this system. `src/guard.test.ts` names both routes, so a third exemption fails the
+suite rather than passing quietly.
+
+**A refused resolution is on the audit log and counts against the cap.** `evidence.intake_unresolved`
+carries the declared type, the sniffed extension, the byte count, the file hash and how many
+candidates were offered — and no filename, no city, no street and no document text, which is the
+same line 3.3 draws. The per-operator bound counts it beside `evidence.file_document`, because 5.2's
+argument is that the bound is on what reached intake and not on what survived it: an unresolved
+intake has already cost a read and possibly an OCR call.
+
+**OCR runs on this path when there is no text layer**, and only when a processor is configured — a
+scan whose address nobody can read resolves to zero candidates rather than to a 503. It is read a
+second time inside `fileDocument` when that call files an `unverified` document, which is a known
+cost of leaving `fileDocument` alone and is carried rather than hidden.
+
 ## What this module exports, and what it refuses
 
 `src/evidence/contract.ts` is the whole public surface; nothing outside the module imports
