@@ -270,6 +270,56 @@ function `npm run seed:doctypes` calls, which is A8's open half used for real.
 is estate's table and a document module that updated `building.handover_date` would be writing
 through the wall.
 
+### A11 — An administrator creates a building
+
+**Trigger:** a building enters the portfolio before any of its paper does — a tender is won, a
+handover is scheduled, an address exists and nothing else about it is known yet.
+
+**Why it is a flow at all, and why it is written down at 6.1 and not at 1.11.** Every building in
+this system arrived through `npm run import:register` or through a committed fixture. That was
+correct while the substrate was mock data by design ([docs/pipeline.md](docs/pipeline.md) principle
+5), and it stopped being correct the moment the console had to serve an operations team: an import
+is a file somebody prepares, and **there was no way for anybody to create a building**. The director
+paused the rollout on 13 Sep 2026 to check the foundation was on its way to the flows that matter,
+and this absence is half of what they found. A11 is the correction; A12 is the other half.
+
+**Screen:** name, street and number, city, an optional project, the handover date, the end of
+תקופת הבדק, and a status. Nothing else — a building is created **empty**, with no spaces and no
+units, and A12's apartment screen is what fills it.
+
+**Writes:** one `building` row, and the `project` row it names if it names one. **Through
+`importEstate` with a one-building plan, zero spaces and zero units.** No new estate command: the
+importer is already the one place a building is written, it already validates a plan at the edge,
+and a second write path would be the second copy of the natural keys that
+[SPEC-estate.md](SPEC-estate.md) exists to prevent. `validateBuildingSpaces` accepts empty `spaces`
+and `units` without a special case, because it iterates them.
+
+**The permission is `estate.write`, and it is ADMIN only.** This is the division the console has
+had since 5.1 without a name for it: **an operator files paper, an admin shapes the estate.** Filing
+a lease against a flat that exists is `documents.write` and is an operator's ordinary day; deciding
+that a flat exists is a different act, it is upstream of every isolation question the building will
+ever answer, and it belongs to the same role that edits the catalogues (`settings.write`).
+
+**Re-posting an address is an update, never a second building.** `building.address_key` is
+`UNIQUE` and generated from `city` and `address_line` with casing and whitespace normalised
+([SPEC-estate.md](SPEC-estate.md)), and the importer's `ON CONFLICT … DO UPDATE` returns the id
+already there. So a double submit, a back-button re-post and a typo corrected on a second attempt
+all converge on one row, and **the screen enforces nothing** — the guarantee is the schema's, which
+is where it survives a second writer.
+
+**A project is chosen, not invented.** The form offers the projects that exist plus *no project*
+(R15's ordinary case). `validatePlan` requires a building's `projectCode` to name a project the plan
+carries, so the plan is rebuilt from the selected row's own values and the upsert rewrites the
+project as itself. A free-text tender code would rename an existing project on a typo, silently,
+because `project.project_code` is the natural key and `DO UPDATE` is what makes an import idempotent.
+Creating a project earns its own slice on the day somebody needs one.
+
+**What A11 does not do.** It writes no space, no unit, no asset and no date onto anything but the
+building it creates. `building.handover_date` and `warranty_end_date` are entered here and are
+**superseded by A6** when the building handover protocol arrives: A6 reads them off the paper and
+this screen is the placeholder standing until it does — the same standing week 2's imported מסירה
+dates have.
+
 ## Open
 
 - **Which three to five document types open the concept work.** The catalogue seeds eight; the working

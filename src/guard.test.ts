@@ -15,10 +15,13 @@
 //   3. **The token.** A POST with a valid session and no token is refused, and so is a POST
 //      carrying a token minted for a different session.
 import assert from 'node:assert/strict';
+import { rmSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, it } from 'node:test';
 import Fastify from 'fastify';
 import { Pool } from 'pg';
 import { buildApp } from './app.ts';
+import { MOCKUPS_DIR, renderMockup } from './dev-mockups.ts';
 import { fixedClock } from './kernel/clock.ts';
 import { migratedPoolOrNull, skipReason } from './kernel/pg-support.ts';
 import {
@@ -146,6 +149,10 @@ describe('every route in the application', () => {
       'GET /calls',
       'GET /settings',
       'POST /documents',
+      // Slice 6.1, flow A11. Both, because the form is as admin-only as the post: a screen an
+      // operator may fill in and may not submit teaches them nothing the refusal would explain.
+      'GET /estate/buildings/new',
+      'POST /estate/buildings',
     ]) {
       const stance = declared.find(([name]) => name === url)?.[1];
       assert.ok(stance !== undefined, `${url} is not registered at all`);
@@ -482,5 +489,47 @@ describe('dev mockups', () => {
     assert.equal(anon.headers.location, '/staff/login');
     await app.close();
     await pool.end();
+  });
+
+  // **Slice 6.1.** The flow is a file under `mockups/` and no longer a name in a condition, so the
+  // segment reaches the filesystem and is the only request-supplied value that does. Asserted on
+  // the renderer rather than through the route, because a painted file is deleted the day its
+  // slice closes and a test that needed one would go red at exactly the moment the guard is right.
+  it('answers not_found for a flow that is not painted, and says nothing more', () => {
+    assert.throws(
+      () => renderMockup('building-new-that-is-not-painted', 'csrf'),
+      /not found/,
+    );
+  });
+
+  it('refuses a segment that could leave the mockups directory', () => {
+    for (const flow of [
+      '../package',
+      '..%2fpackage',
+      '/etc/passwd',
+      'a/../../package',
+      'Building-New',
+      '',
+    ]) {
+      assert.throws(() => renderMockup(flow, 'csrf'), /not found/, flow);
+    }
+  });
+
+  it('renders a painted body inside the live shell', (t) => {
+    // An unregistered flow name on purpose: leaked by a crash, it fails guard four loudly with
+    // "no owner slice registered" rather than sitting in the directory unnoticed.
+    const probe = path.join(MOCKUPS_DIR, 'zz-render-probe.html');
+    writeFileSync(
+      probe,
+      '<div data-state="painted"><h1>צבע</h1></div>',
+      'utf8',
+    );
+    t.after(() => rmSync(probe, { force: true }));
+    const html = renderMockup('zz-render-probe', 'token-abc');
+    assert.match(html, /<html lang="he" dir="rtl">/);
+    assert.match(html, /class="ops"/);
+    assert.match(html, /data-state="painted"/);
+    assert.match(html, /<h1>צבע<\/h1>/);
+    assert.match(html, /<link rel="stylesheet" href="\/ui\/tokens.css" \/>/);
   });
 });

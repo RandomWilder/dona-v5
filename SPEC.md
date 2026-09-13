@@ -348,6 +348,20 @@ register at 1,500 units** loaded through the real importer (`npm run seed:regist
 the week-2 query timings come from. Real data arrives through the same importer at the pilot-
 preparation step of the method.
 
+**Slice 6.1 gave estate its own first write route and this system its seventh permission.** `GET
+/estate/buildings/new` and `POST /estate/buildings` are flow **A11** ([SPEC-flows.md](SPEC-flows.md))
+and both declare `estate.write`, which is **ADMIN only** — an operator files paper, an admin shapes
+the estate. Until then every building arrived through `npm run import:register` or a fixture and
+nobody could create one, which is half of what the director found on 13 Sep when they paused the
+rollout to check the foundation was on its way to the flows that matter. **The write is
+`importEstate` with a one-building plan, zero spaces and zero units**, and not a new estate command:
+the importer is already the only writer of a building, and `building.address_key` plus `ON CONFLICT
+… DO UPDATE` is what makes the same address posted twice one row — the guarantee is the schema's, so
+it holds for a second writer and not only for this form. The same slice made `/dev/mockups/:flow`
+read `mockups/<flow>.html` off disk instead of naming two flows in a condition: the fourth grep
+guard scans that directory so a paint cannot outlive its slice, and it had been idle over an empty
+directory while two closed slices' paint sat in `src/` where it could not see it.
+
 **3.3 added the first write route**: `GET /documents/new` and
 `POST /documents`, flow A1, reached from a unit on the building page. The bounds it carries are
 stated in [SPEC-evidence.md](SPEC-evidence.md) and applied in

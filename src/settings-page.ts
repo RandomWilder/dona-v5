@@ -175,40 +175,6 @@ export function renderSettingsPage(screen: SettingsScreen): string {
   });
 }
 
-const PAINTED_OBLIGATIONS: ObligationTypeRow[] = [
-  {
-    obligationTypeId: '11111111-1111-4111-8111-111111111111',
-    code: 'ARNONA',
-    labelHe: 'ארנונה',
-    labelEn: 'Municipal tax',
-    defaultResponsibleParty: 'TENANT',
-    requiresEvidence: true,
-    isActive: true,
-  },
-];
-
-const PAINTED_DOCUMENTS: DocumentTypeRow[] = [
-  {
-    documentTypeId: '22222222-2222-4222-8222-222222222222',
-    typeKey: 'lease',
-    labelHe: 'חוזה שכירות',
-    labelEn: 'Lease',
-    verificationTerms: ['שכירות'],
-    isActive: true,
-  },
-];
-
-/** Painted A9 mockup. Same chrome and cards as the wired screen; sample rows, not a query. */
-export function renderA9Mockup(csrf: string): string {
-  return renderSettingsPage({
-    csrf,
-    mayWrite: true,
-    state: 'painted',
-    obligations: PAINTED_OBLIGATIONS,
-    documents: PAINTED_DOCUMENTS,
-  });
-}
-
 type Form = Record<string, string | undefined>;
 
 function field(body: unknown, name: string, max: number): string {

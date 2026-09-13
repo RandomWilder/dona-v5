@@ -16,7 +16,9 @@ workbook is right and this file is a bug.
   `GET /estate/incomplete`, the A4 queue: a derived list of document-backed drafts and live
   lettings missing an ערב. The query and the exception write live in tenancy; estate renders them
   through `EstateDeps`, the same injection `listLinkedDocuments` already uses, so this module
-  still does not import tenancy.
+  still does not import tenancy. **Slice 6.1 added this module's first write route** — `GET
+  /estate/buildings/new` and `POST /estate/buildings`, flow A11, behind the new `estate.write`
+  permission — and it writes through `importEstate` rather than through a command of its own.
 
 ## The shape, and why it is this one
 
@@ -134,7 +136,7 @@ lower-cased with runs of whitespace collapsed, because address text arrives from
 inconsistent spacing and casing and normalising it in the database means every writer gets it. Nothing
 writes it and nothing reads it but the constraint; `address_line` and `city` remain the facts.
 
-## The surface — six routes, `src/estate/internal/views.ts`
+## The surface — six reads and, from 6.1, two writes, `src/estate/internal/views.ts`
 
 `GET /estate` lists the buildings; `GET /estate/buildings/:buildingId` shows one building, its spaces
 by kind and its units. Slice 2.6 added three more: `GET /` is an index of the screens,
@@ -239,6 +241,40 @@ tenant documents remain gated behind F6.
 `/documents/:id/tenancy` (flow A2). Search hits the overlay, not only the unit, and never a signed
 URL. Building-level paper still lists only on the building page; unit paper still lists only
 on the unit page — the building screen is not a tenancy draft.
+
+### The first estate write — `GET /estate/buildings/new` and `POST /estate/buildings` (6.1)
+
+Flow **A11** ([SPEC-flows.md](SPEC-flows.md)), and this module's first write route. Both declare
+`estate.write`, which is ADMIN only ([SPEC-staff.md](SPEC-staff.md)): an operator files paper, an
+admin shapes the estate. Until this slice every building in the system arrived through
+`npm run import:register` or a committed fixture, and there was no way for anybody to create one.
+
+**The write is `importEstate`, and there is no new estate command.** The POST builds a one-building
+plan — zero spaces, zero units, and the `ProjectPlan` of the project it names if it names one — and
+hands it to the importer. `validateBuildingSpaces` iterates `spaces` and `units`, so the empty plan
+needs no special case, and the importer is already the only place in this system that writes a
+building. A second write path would be a second copy of the natural keys this file spends a section
+on, and the first thing it would drift on is `address_key`.
+
+**Idempotence is the schema's, not the screen's.** `building.address_key` is `UNIQUE`, and the
+importer's `ON CONFLICT (address_key) DO UPDATE … RETURNING` hands back the id already there. So a
+double submit, a back-button re-post and a corrected typo all converge on one row — and the form
+performs no check of its own, because a check in a form is a check a second writer does not make.
+
+**The project is chosen from the ones that exist, never typed.** `listProjects` fills the select and
+the plan is rebuilt from the chosen row's own `name`, `tender_ref` and `status`, so the upsert
+rewrites the project as itself. `project_code` is a natural key under `DO UPDATE`: a free-text code
+would rename an existing project on a typo, silently. "ללא פרויקט" is the default and R15's ordinary
+case. Creating a project is its own slice on the day somebody needs one.
+
+**A blank תקופת הבדק is derived rather than required**: handover plus `WARRANTY_YEARS`, through
+`addCalendarYears`, which is 3.5's constant and 3.5's function rather than arithmetic re-typed into a
+form. That function already refuses a non-ISO date with `invalid`, which is the handover field's
+edge validation.
+
+The POST replies `303` to `/estate`. `importEstate` returns a report and no ids — a plan-shaped
+caller already knows its own shape — and the buildings list is where a new building is looked for
+anyway.
 
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
 `GET`/`POST /documents/new`, reached from a unit row on the building page. It went behind the session

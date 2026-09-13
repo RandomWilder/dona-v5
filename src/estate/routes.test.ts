@@ -446,3 +446,232 @@ describe('estate · the routes', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// **Slice 6.1 — flow A11.** An admin creates a building from a screen, which nobody could do until
+// this slice: every building in this system arrived through `npm run import:register` or a fixture.
+//
+// Its own city and address, and its own cleanup, for the reason the suite above states: these
+// routes commit, so a test that truncated `building` would wipe a developer's seed.
+// ---------------------------------------------------------------------------------------------
+
+const A11_DOMAIN = 'estate-a11.test';
+const A11_CITY = 'עיר A11';
+const A11_ADDRESS = 'רחוב A11 7';
+const A11_PROJECT = 'TEST-A11';
+const FORM = { 'content-type': 'application/x-www-form-urlencoded' };
+
+function a11Form(overrides: Record<string, string> = {}): string {
+  const fields: Record<string, string> = {
+    name: 'בניין A11',
+    address_line: A11_ADDRESS,
+    city: A11_CITY,
+    project_code: '',
+    handover_date: '2025-03-01',
+    warranty_end_date: '',
+    status: 'ACTIVE',
+    ...overrides,
+  };
+  return new URLSearchParams(fields).toString();
+}
+
+async function a11Cleanup(pool: {
+  query: (text: string, values?: unknown[]) => Promise<unknown>;
+}): Promise<void> {
+  await pool
+    .query('DELETE FROM building WHERE city = $1', [A11_CITY])
+    .catch(() => {});
+  await pool
+    .query('DELETE FROM project WHERE project_code = $1', [A11_PROJECT])
+    .catch(() => {});
+}
+
+describe('estate · A11, an administrator creates a building', () => {
+  it('creates one building from the screen, and the same address twice is still one', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({ pool, version: '9.9.9-test' });
+    await signOutAll(pool, A11_DOMAIN);
+    await a11Cleanup(pool);
+    const admin = await signIn(pool, systemClock, {
+      email: `admin@${A11_DOMAIN}`,
+      role: 'ADMIN',
+    });
+    const client = asOperator(app, admin);
+    try {
+      // The form, with a token in it and the project select filled from what exists.
+      const form = await client.inject({
+        method: 'GET',
+        url: '/estate/buildings/new',
+      });
+      assert.equal(form.statusCode, 200);
+      assert.match(form.body, /action="\/estate\/buildings"/);
+      assert.match(form.body, new RegExp(`value="${admin.csrf}"`));
+      assert.match(form.body, /ללא פרויקט/);
+
+      const created = await client.inject({
+        method: 'POST',
+        url: '/estate/buildings',
+        headers: FORM,
+        payload: a11Form(),
+      });
+      assert.equal(created.statusCode, 303);
+      assert.equal(created.headers.location, '/estate');
+
+      const first = await pool.query<{ building_id: string }>(
+        'SELECT building_id FROM building WHERE city = $1',
+        [A11_CITY],
+      );
+      assert.equal(first.rowCount, 1);
+
+      // It is on `/estate`, which is the acceptance bar's own wording.
+      const list = await client.inject({ method: 'GET', url: '/estate' });
+      assert.equal(list.statusCode, 200);
+      assert.match(list.body, /בניין A11/);
+      // And an admin is offered the door. An operator is not — asserted in the refusal case below.
+      assert.match(list.body, /href="\/estate\/buildings\/new"/);
+
+      // **The same address posted twice leaves one row**, and the id does not move.
+      // `building.address_key` is what says so: UNIQUE, generated with casing and whitespace
+      // normalised, upserted with ON CONFLICT DO UPDATE. So the second post is written with a
+      // different name and different spacing and still lands on the first row.
+      const again = await client.inject({
+        method: 'POST',
+        url: '/estate/buildings',
+        headers: FORM,
+        payload: a11Form({
+          name: 'בניין A11 — שם מתוקן',
+          address_line: `  ${A11_ADDRESS}  `,
+        }),
+      });
+      assert.equal(again.statusCode, 303);
+      const second = await pool.query<{ building_id: string; name: string }>(
+        'SELECT building_id, name FROM building WHERE city = $1',
+        [A11_CITY],
+      );
+      assert.equal(second.rowCount, 1, 'a second building was written');
+      assert.equal(second.rows[0]?.building_id, first.rows[0]?.building_id);
+      // DO UPDATE rather than DO NOTHING: a corrected typo corrects the row (SPEC-estate.md).
+      assert.equal(second.rows[0]?.name, 'בניין A11 — שם מתוקן');
+
+      // **The blank תקופת הבדק was derived**, not left null: handover plus WARRANTY_YEARS.
+      const dates = await pool.query<{
+        handover_date: string;
+        warranty_end_date: string;
+      }>(
+        `SELECT handover_date::text, warranty_end_date::text
+         FROM building WHERE city = $1`,
+        [A11_CITY],
+      );
+      assert.equal(dates.rows[0]?.handover_date, '2025-03-01');
+      assert.equal(dates.rows[0]?.warranty_end_date, '2027-03-01');
+    } finally {
+      await a11Cleanup(pool);
+      await signOutAll(pool, A11_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('refuses an OPERATOR with not_allowed and nothing more, and writes nothing', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({ pool, version: '9.9.9-test' });
+    await signOutAll(pool, A11_DOMAIN);
+    await a11Cleanup(pool);
+    const operator = await signIn(pool, systemClock, {
+      email: `ops@${A11_DOMAIN}`,
+      role: 'OPERATOR',
+    });
+    const client = asOperator(app, operator);
+    try {
+      // **Red first, and red for the right reason.** Written against a registered route with
+      // `estate.write` temporarily granted to OPERATOR in `src/staff/internal/roles.ts`, where it
+      // answered 303 and this assertion failed. A case written against an unregistered route would
+      // only ever have proved a 404. What refuses here is the matrix line, and nothing else.
+      const refused = await client.inject({
+        method: 'POST',
+        url: '/estate/buildings',
+        headers: FORM,
+        payload: a11Form(),
+      });
+      assert.equal(refused.statusCode, 403);
+      assert.deepEqual(refused.json(), {
+        code: 'not_allowed',
+        message: 'not_allowed',
+      });
+
+      // Nothing was written. The refusal is a stance, not a rollback.
+      const rows = await pool.query('SELECT 1 FROM building WHERE city = $1', [
+        A11_CITY,
+      ]);
+      assert.equal(rows.rowCount, 0);
+
+      // The form itself is refused too, and not served read-only: a screen an operator may fill in
+      // and may not post teaches them nothing, because the refusal says nothing more.
+      const form = await client.inject({
+        method: 'GET',
+        url: '/estate/buildings/new',
+      });
+      assert.equal(form.statusCode, 403);
+
+      // And the buildings list does not offer the door.
+      const list = await client.inject({ method: 'GET', url: '/estate' });
+      assert.equal(list.statusCode, 200);
+      assert.doesNotMatch(list.body, /href="\/estate\/buildings\/new"/);
+    } finally {
+      await a11Cleanup(pool);
+      await signOutAll(pool, A11_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('rejects a status and a project code the schema would have rejected later', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({ pool, version: '9.9.9-test' });
+    await signOutAll(pool, A11_DOMAIN);
+    await a11Cleanup(pool);
+    const admin = await signIn(pool, systemClock, {
+      email: `admin@${A11_DOMAIN}`,
+      role: 'ADMIN',
+    });
+    const client = asOperator(app, admin);
+    try {
+      for (const [label, payload] of [
+        ['status', a11Form({ status: 'DEMOLISHED' })],
+        ['project', a11Form({ project_code: 'NO-SUCH-TENDER' })],
+        ['handover', a11Form({ handover_date: '01/03/2025' })],
+        ['name', a11Form({ name: '   ' })],
+      ] as Array<[string, string]>) {
+        const response = await client.inject({
+          method: 'POST',
+          url: '/estate/buildings',
+          headers: FORM,
+          payload,
+        });
+        assert.equal(response.statusCode, 400, label);
+        assert.equal(response.json().code, 'invalid', label);
+      }
+      const rows = await pool.query('SELECT 1 FROM building WHERE city = $1', [
+        A11_CITY,
+      ]);
+      assert.equal(rows.rowCount, 0, 'a rejected form wrote a building');
+    } finally {
+      await a11Cleanup(pool);
+      await signOutAll(pool, A11_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+});

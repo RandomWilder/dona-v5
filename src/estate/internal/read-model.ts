@@ -27,6 +27,22 @@ export interface BuildingSummary {
   space_count: string;
 }
 
+/**
+ * A project, as the building form offers it. **Slice 6.1, flow A11.**
+ *
+ * Every column `ProjectPlan` needs, because the plan handed to `importEstate` is rebuilt from the
+ * row rather than from the form: `project.project_code` is a natural key under `ON CONFLICT … DO
+ * UPDATE`, so a free-text code would rename an existing project on a typo, silently. The form
+ * chooses; it does not invent.
+ */
+export interface ProjectOption {
+  project_id: string;
+  name: string;
+  project_code: string;
+  tender_ref: string | null;
+  status: string;
+}
+
 export interface SpaceKindCount {
   space_kind: string;
   n: string;
@@ -76,6 +92,16 @@ export const LIST_BUILDINGS_SQL = `
 
 export async function listBuildings(db: Queryable): Promise<BuildingSummary[]> {
   const result = await db.query<BuildingSummary>(LIST_BUILDINGS_SQL);
+  return result.rows;
+}
+
+/** The projects a new building may be attached to (6.1). Ordered the way the select reads. */
+export async function listProjects(db: Queryable): Promise<ProjectOption[]> {
+  const result = await db.query<ProjectOption>(
+    `SELECT project_id, name, project_code, tender_ref, status
+     FROM project
+     ORDER BY name, project_code`,
+  );
   return result.rows;
 }
 
