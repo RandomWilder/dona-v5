@@ -1602,13 +1602,21 @@ is `importEstate` with one `BuildingPlan`, zero spaces, zero units and an option
 - **Plan mode. Deps:** 5.8 · **Size:** M
 
 ### Slice 6.2 — An apartment, its spaces, and the bays it implies
+Flow **A13** — *not* A12, which is 6.3's below; `SPEC-flows.md`'s A11 called the apartment screen
+A12 before either was written and was corrected at 6.2.
 `GET /estate/buildings/:buildingId/units/new` + `POST`, reusing `upsertUnitRow` — the register's own
 per-row primitive, already idempotent. Parking and storage follow 4.6's convention. **Bulk stays the
 register importer**; no second bulk path is built.
 - **Done when:** an apartment added from the screen appears on the building page with its space count;
   the same `unit_number` posted twice updates rather than duplicates.
 - **Verify:** re-post and diff row counts; clicked on `:3000`.
-- **Deps:** 6.1 · **Size:** M
+- **The `UNIT` space is named by the bare `unit_number`**, as the register importer names it, and the
+  building handed to `upsertUnitRow` is **rebuilt from its own row** — `DO UPDATE` sets `project_id`
+  from it, so a form-shaped building would unlink the project while adding a flat.
+- **Deps:** 6.1 · **Size:** M · **Closed 13 Sep 2026** ([evidence/6.2.md](evidence/6.2.md)), mockup
+  waived by the director. Raised → 6.3: `inTransaction` written twice (a third moves it to the
+  kernel) and `.check` beside the four form classes in two files each (a third moves them to
+  `tokens.css`).
 
 ### Slice 6.3 — The document-first upload screen
 Flow **A12**; A1 is amended rather than replaced. `GET /documents/new` with no `unit` becomes the
@@ -1622,6 +1630,9 @@ object**, 422. **The unit-first entry from a building page stays.**
 - **Done when:** a lease naming an address in the system files against that flat with no unit chosen
   by hand; one naming an address that is not writes no row and no object.
 - **Verify:** both paths on `:3000`; the refusal proved by row counts and a bucket listing, as 3.3 did.
+- **Carried in from 6.2**, because this slice writes: `inTransaction` exists twice and a **third
+  writer moves it to `src/kernel/`**; `.check` and the four form classes are in two files each and a
+  **third occurrence moves them to `tokens.css`**.
 - **Plan mode. Deps:** 6.2 · **Size:** L
 
 ### Slice 6.4 — ת.ז. on the capture path — the spec edit, then the field

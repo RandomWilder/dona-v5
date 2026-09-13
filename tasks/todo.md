@@ -123,7 +123,10 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       paint — no `asset_type` and no role matrix on the settings screen — moved onto the wired
       screens in the registry.
 
-- [ ] **6.2 — An apartment, its spaces, and the bays it implies.**
+- [x] **6.2 — An apartment, its spaces, and the bays it implies.** Closed 13 Sep — [evidence/6.2.md](evidence/6.2.md).
+      Flow **A13**, written into `SPEC-flows.md` before the code. **Not A12:** that number is 6.3's
+      in this file and in `roadmap.md`, and A11's prose calling it "A12's apartment screen" was the
+      stale half — corrected there rather than here.
       `GET /estate/buildings/:buildingId/units/new` + `POST`, same stance, reusing **`upsertUnitRow`**
       — the register's own per-row primitive, already idempotent on `space_natural_key` and R2's
       shared key. Parking and storage follow 4.6's convention (`חניה {unit}` / `מחסן {unit}`), so a
@@ -134,8 +137,18 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       duplicates.
       **Verify:** re-post and diff row counts; `:3000` click through building → new apartment →
       building.
-      **Mockup first:** `mockups/unit-new.html`.
+      **Mockup first:** `mockups/unit-new.html` — **waived by the director on 13 Sep**, on the plan
+      as written. Never painted, so guard four stayed idle.
       **Deps:** 6.1 · **M**
+      **Raised and closed inside 6.2:** the `UNIT` space is named by the **bare `unit_number`**, the
+      way `src/register/internal/importer.ts` names it, or a screen and an import would write two
+      apartments behind one door. The building handed to `upsertUnitRow` is **rebuilt from its own
+      row**, because `DO UPDATE` sets `project_id` from it and a form-shaped building would unlink
+      the project while adding a flat — proved red. The POST opens its own transaction.
+      **Raised → 6.3:** `inTransaction` is now written twice (`src/evidence/internal/promote.ts` and
+      inline in estate's routes) — **a third writer moves it to `src/kernel/`**; and `.check` joins
+      `.form-grid` / `.form-row` / `.hint` / `.form-actions` in the two-module state, so **a third
+      occurrence of either moves to `tokens.css`**.
 
 - [ ] **6.3 — The document-first upload screen.**
       Flow **A12**; A1 is amended rather than replaced. `GET /documents/new` **with no `unit`**
@@ -157,6 +170,11 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       search.
       **Verify:** both paths on `:3000`; the "writes nothing" half proved by row counts and a bucket
       listing, the way 3.3 proved its refusal.
+      **Carried in from 6.2, and this slice writes, so both land here:** `inTransaction` exists twice
+      (`src/evidence/internal/promote.ts`, inline in `src/estate/internal/routes.ts`) — **a third
+      writer moves it to `src/kernel/`**; `.check` and the four form classes are each in two files —
+      **a third occurrence moves them to `tokens.css`**. **A12 is this slice's number**, confirmed
+      at 6.2 against A11's stale sentence.
       **Mockup first:** `mockups/document-intake.html`.
       **Plan mode. Deps:** 6.2 · **L**
 

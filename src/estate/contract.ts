@@ -68,6 +68,7 @@ export type {
   FiledDocumentView,
   IncompleteTenancyRow,
   NewBuildingScreen,
+  NewUnitScreen,
   OccupancyByBuilding,
   OccupancyByUnit,
   PromotedFieldView,
@@ -80,6 +81,7 @@ export {
   renderExpiringPage,
   renderIncompletePage,
   renderNewBuildingPage,
+  renderNewUnitPage,
   renderSearchPage,
   renderUnitPage,
 } from './internal/views.ts';

@@ -20,7 +20,7 @@
 // handed the data, not a discipline they remember.
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
-import type { BuildingStatus } from './plan.ts';
+import type { BuildingStatus, ConditionStatus } from './plan.ts';
 import type {
   BuildingDetail,
   BuildingSummary,
@@ -111,6 +111,17 @@ const CONDITION: Record<string, string> = {
   RENOVATION: 'בשיפוץ',
   WITHHELD: 'מוקפאת',
 };
+
+/**
+ * The vocabulary the apartment form offers, in the order it offers it (6.2). Typed as
+ * `ConditionStatus` for the reason `BUILDING_STATUSES` is typed as `BuildingStatus`: the select and
+ * the CHECK constraint cannot drift apart without a typecheck failure.
+ */
+const CONDITION_STATUSES: readonly ConditionStatus[] = [
+  'READY',
+  'RENOVATION',
+  'WITHHELD',
+];
 
 const SPACE_KIND: Record<string, string> = {
   UNIT: 'דירות',
@@ -222,6 +233,11 @@ const styles = h`<style>
     gap: var(--space-4);
     grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
   }
+  /* Slice 6.2's one checkbox. The same two rules src/settings-page.ts carries, under the same
+     name, which is the arrangement above rather than a copy that drifted: the third occurrence is
+     what moves it to the token sheet. */
+  .check { display: flex; gap: var(--space-2); align-items: center; min-height: var(--size-touch); }
+  .check input { width: auto; min-height: 0; }
 </style>`;
 
 function page(title: string, body: Html, nav: Html): string {
@@ -412,6 +428,99 @@ export function renderNewBuildingPage(screen: NewBuildingScreen): string {
   return page('דונה דום — בניין חדש', body, screen.nav);
 }
 
+/**
+ * What the new-apartment form is handed. **Slice 6.2, flow A13.**
+ *
+ * The building is a row and not an id: the screen says which building it is writing into, and the
+ * route has already read that row anyway — it is what the write is rebuilt from (SPEC-estate.md).
+ * `csrf` is required and has no default, for the reason `NewBuildingScreen` states.
+ */
+export interface NewUnitScreen {
+  nav: Html;
+  csrf: string;
+  building: BuildingSummary;
+}
+
+/**
+ * The screen that fills a building A11 created empty.
+ *
+ * **It asks nothing about the building.** Everything the write needs about it is read from the row,
+ * because `upsertUnitRow` upserts a building and a form's idea of one would unlink it from its
+ * project on the way past (SPEC-flows.md A13).
+ *
+ * **And it checks nothing about the flat.** `space (building_id, space_kind, name)` is the natural
+ * key and the upsert converges on it, so the same unit number posted twice is a correction and not
+ * a duplicate — a check here would be a check `npm run import:register` does not make.
+ */
+export function renderNewUnitPage(screen: NewUnitScreen): string {
+  const { building } = screen;
+  const body = h`
+    <div>
+      <a class="back" href="/estate/buildings/${building.building_id}">← ${building.name}</a>
+      <h1>דירה חדשה</h1>
+      <p class="lede">${building.name} · ${building.address_line}, ${building.city}</p>
+    </div>
+    <form class="form-grid" method="post" action="/estate/buildings/${building.building_id}/units">
+      ${csrfInput(screen.csrf)}
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="unit_number">מספר דירה</label>
+          <input id="unit_number" name="unit_number" type="text" maxlength="32" required />
+          <p class="hint">כפי שרשום על הדלת ובחוזה. ‏12A הוא מספר דירה תקין.</p>
+        </div>
+        <div class="form-row">
+          <label for="floor">קומה</label>
+          <input id="floor" name="floor" type="text" maxlength="32" />
+          <p class="hint">טקסט ולא מספר: קרקע, מרתף וגג אינם מספרים.</p>
+        </div>
+      </div>
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="rooms">חדרים</label>
+          <input id="rooms" name="rooms" type="number" step="0.5" min="0" max="20" required />
+        </div>
+        <div class="form-row">
+          <label for="area_sqm">שטח במ״ר</label>
+          <input id="area_sqm" name="area_sqm" type="number" step="0.1" min="0" />
+          <p class="hint">ריק — טרם נמדד.</p>
+        </div>
+      </div>
+      <div class="form-row">
+        <label for="condition_status">מצב הדירה</label>
+        <select id="condition_status" name="condition_status">
+          ${CONDITION_STATUSES.map(
+            (status) =>
+              h`<option value="${status}" ${
+                status === 'READY' ? h`selected` : h``
+              }>${label(CONDITION, status)}</option>`,
+          )}
+        </select>
+        <p class="hint">מצב הדירה אינו אכלוס: דירה מוכנה יכולה להיות מאוכלסת או פנויה.</p>
+      </div>
+      <label class="check" for="has_mamad">
+        <input id="has_mamad" name="has_mamad" type="checkbox" value="true" />
+        יש ממ״ד
+      </label>
+      <div class="form-row">
+        <label for="warranty_end_date">תום תקופת הבדק לדירה</label>
+        <input id="warranty_end_date" name="warranty_end_date" type="date" />
+        <p class="hint">
+          ריק — תקופת הבדק של הבניין (${ltr(building.warranty_end_date)}) חלה גם על הדירה. מלאו רק
+          אם הדירה נמסרה בנפרד.
+        </p>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">הוספת דירה</button>
+        <a href="/estate/buildings/${building.building_id}">ביטול</a>
+      </div>
+    </form>
+    <p class="form-note">
+      עם הדירה נכתבים גם חניה ומחסן על שמה, כמקומות ריקים — כדי שלפרוטוקול מסירה יהיה על מה לנחות.
+      אותו מספר דירה פעמיים מעדכן את הדירה הקיימת ואינו יוצר דירה שנייה.
+    </p>`;
+  return page(`דונה דום — דירה חדשה`, body, screen.nav);
+}
+
 // **R6, on a card.** Occupancy is derived on every load and stored nowhere -- there is no column to
 // read and no count to drift, which is the foundation rule made visible in the same way the unit
 // total on the buildings list makes it visible. The number is residents and not parties: a guarantor
@@ -521,6 +630,12 @@ export function renderBuildingPage(
   occupancy: OccupancyByUnit,
   nav: Html,
   documents: readonly FiledDocumentView[] = [],
+  /**
+   * Whether this viewer holds `estate.write` (slice 6.2). The buildings list's rule, one level
+   * down: the door is rendered for nobody else, because the refusal behind it says `not_allowed`
+   * and nothing more.
+   */
+  mayWrite = false,
 ): string {
   const { building, kinds, units } = detail;
   const let_ = units.filter((unit) => occupancy.has(unit.unit_id)).length;
@@ -544,6 +659,13 @@ export function renderBuildingPage(
     <section>
       <h2>יחידות דיור · ${ltr(units.length)}</h2>
       <p class="lede">${ltr(let_)} מאוכלסות היום, ${ltr(units.length - let_)} פנויות. נגזר בכל טעינה ואינו נשמר.</p>
+      ${
+        mayWrite
+          ? h`<p class="form-actions">
+              <a class="btn btn-primary" href="/estate/buildings/${building.building_id}/units/new">דירה חדשה</a>
+            </p>`
+          : h``
+      }
       ${
         units.length === 0
           ? h`<p class="empty-state">אין יחידות דיור בבניין זה.</p>`

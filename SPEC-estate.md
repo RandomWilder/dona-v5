@@ -19,6 +19,9 @@ workbook is right and this file is a bug.
   still does not import tenancy. **Slice 6.1 added this module's first write route** — `GET
   /estate/buildings/new` and `POST /estate/buildings`, flow A11, behind the new `estate.write`
   permission — and it writes through `importEstate` rather than through a command of its own.
+  **Slice 6.2 added the second**, flow A13: `GET /estate/buildings/:buildingId/units/new` and
+  `POST /estate/buildings/:buildingId/units`, which fills a building A11 created empty and writes
+  through `upsertUnitRow` — the register's own per-row primitive, which now has a second caller.
 
 ## The shape, and why it is this one
 
@@ -276,6 +279,43 @@ The POST replies `303` to `/estate`. `importEstate` returns a report and no ids 
 caller already knows its own shape — and the buildings list is where a new building is looked for
 anyway.
 
+### The second — `GET /estate/buildings/:buildingId/units/new` and `POST …/units` (6.2)
+
+Flow **A13** ([SPEC-flows.md](SPEC-flows.md)), the same `estate.write` stance on both halves, and
+the screen that makes a building A11 created empty into a building with apartments in it. The
+building page carries the door, and only for a viewer who holds the permission — the same rule the
+buildings list keeps for `בניין חדש`.
+
+**The write is `upsertUnitRow`, and there is no new estate command.** One `UNIT` space, one `unit`,
+and the `PARKING` and `STORAGE` placeholders 4.6 implies, in that order, in the function the
+register importer has called since 2.4. What it does not do is decide names: the `UNIT` space is
+named by the **bare `unit_number`**, which is what `src/register/internal/importer.ts` passes, and
+the bays are `חניה {unit_number}` and `מחסן {unit_number}`, which are the function's own. Two
+writers spelling that name two ways would be two apartments behind one door, and `space` is keyed
+`(building_id, space_kind, name)`, so the key is the only thing stopping it.
+
+**The building is rebuilt from its own row.** `upsertUnitRow` takes a building, not a building id —
+it is written for a flat file whose rows repeat their building — and its upsert sets
+`project_id = EXCLUDED.project_id`. A route that passed the form's idea of a building would
+therefore **unlink the building from its project** while adding an apartment to it. So the route
+reads the building it was handed an id for and hands back that row's own values, and the upsert
+rewrites the building as itself. It is A11's rule about the project, one level up: *rebuilt from the
+row, never from the post*.
+
+**Idempotence is the natural key's, and the form checks nothing.** The same `unit_number` posted
+twice updates the flat — R2 makes the unit's identity its space's, so there is no second key to
+disagree — and the screen performs no "does this flat exist" lookup, because a check in a form is a
+check the register importer does not make.
+
+`rooms` and `area_sqm` are validated at the edge as non-negative numbers and `rooms` is required:
+the workbook's Israeli convention is 3, 3.5, 4, and `numeric` would otherwise accept whatever a
+`text` input carried until Postgres refused it as `unavailable`. The unit-level `warranty_end_date`
+is optional and blank means *the building's date applies* (R14) rather than *no warranty*.
+
+The POST replies `303` to the building page, which is where the space count, the unit card and the
+פנויה chip are — the acceptance bar's own wording, and the three things the write should have
+changed.
+
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
 `GET`/`POST /documents/new`, reached from a unit row on the building page. It went behind the session
 at 5.2 with everything else, and its bounds are stated in full by
@@ -334,6 +374,12 @@ needs a call that upserts one project, one building, one `UNIT` space and one un
 shape. It is the identical four upserts, extracted rather than copied: one function per table, called
 by both entry points. The register writes no estate SQL of its own, which is what keeps the table's
 rules in the module that owns them.
+
+**Slice 6.2 gave it a second caller** — A13's apartment screen — which is the test of whether it was
+extracted rather than copied: the screen adds one flat with a floor and an optional warranty date and
+needs no statement of its own. The register still passes a project to upsert; the screen passes
+`null` and names the building's existing `project_code`, because the project is already there and
+the code is all `upsertBuilding` resolves it by.
 
 **Slice 4.6 also upserts a `PARKING` space `חניה {unit_number}` and a `STORAGE` space `מחסן
 {unit_number}` and assigns them on the unit.** The register file still has no bay columns; these

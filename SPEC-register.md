@@ -224,3 +224,9 @@ had thought of. Every fixture profile now carries the suffix its cities do.
   `STORAGE` space named from the apartment number and assigns them, as placeholders, so A6 has a bay.
   A building whose real bay count is known still arrives as an estate plan (D3). What a *real*
   export's bay column would look like is 2.5's, with the export in hand.
+- **`upsertUnitRow` stopped being this module's alone at 6.2.** Flow A13's apartment screen calls it
+  too, and it writes the `UNIT` space under the **bare `unit_number`** because that is what
+  `writeRow` passes. The two writers converge on one flat only while they agree on that name, so a
+  change to it here is a change to the screen — and to every flat either path has already written,
+  since `space` is keyed `(building_id, space_kind, name)`. Bulk is still this file's; one flat at a
+  time is the screen's; neither grows a second entry point into the other.
