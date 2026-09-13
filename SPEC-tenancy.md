@@ -166,7 +166,8 @@ by tripping the guard rather than by anticipating it.
   `field = status`, `ACTIVE → ENDED`. The last day of the lease still counts (isolation's
   `end_date >= today`); the day after is when the clock closes it. A second call is a no-op. Natural
   end is `ENDED`, never `TERMINATED_EARLY`.
-- **No read model, and from 3.3 exactly one list plus one lookup.** `contract.ts` exists from 2.4
+- **No read model, and from 3.3 exactly one list plus one lookup.** *(Slice 6.5 adds a second list,
+  `countIdentifierOverlap`, described at the end of this bullet.)* `contract.ts` exists from 2.4
   and exports the register importer's three write commands — `upsertTermsProfile`, `upsertTenancy` and
   `upsertTenancyParty` — plus `applyPromotedField` from 4.3. `listUnitTenancies` joins them at 3.3.
   Slice 4.6 added `findTermsProfileByName`: A2 must hang a draft on a profile that already exists and
@@ -197,6 +198,22 @@ by tripping the guard rather than by anticipating it.
   nothing decides what anybody may see from its result. A query here that answered "who is in this
   unit today" would be the second copy of the join, and guard two exists because that is how the
   constraint dies.
+
+  **Slice 6.5 adds `countIdentifierOverlap`, and it is the narrowest read in this module.** A2 has to
+  rank a flat's lettings so an operator with a lease in their hand can be shown which one it probably
+  belongs to, and the useful signal is *does this letting already hold one of the people this lease
+  names* — asked of a **declared identifier** and never of a name (SPEC-flows.md A2 step 5). It takes
+  a `unit_id` and a list of identifiers read off the paper, and it returns **`tenancy_id` → a count**.
+  What leaves it is the count: **no party, no name, no identifier, no key and no row**. The
+  identifiers are normalised by `party_national_id_key()` — the same fold `party.national_id_key` is
+  generated with, written once in SQL rather than a second time in TypeScript — and are compared
+  inside the statement, so the probe never round-trips either. It carries **no temporal predicate of
+  any kind**: date overlap is the caller's arithmetic over the dates `listUnitTenancies` already
+  returns, because the predicate that would express it in SQL is guard two's and belongs to
+  `src/scope/`. It is not the isolation join and cannot become one: it takes no phone number, it
+  answers about a flat and not about a person, and its answer is a number. **Reading it is a read of
+  an identifier and the caller writes `evidence.match_identifier` for it** (SPEC.md, Security
+  defaults); this module writes no audit line, because it does not know who asked.
 - **`tenancy_completeness_exception` (slice 4.8, `src/kernel/migrations/0020_tenancy_completeness.sql`).**
   `(tenancy_id, rule)` unique. `rule` is `guarantor` today. `at` comes from the injected clock; no
   `DEFAULT now()`. `actor` is `-- pii`, same standing as `tenancy_event.actor` until week 5 has

@@ -154,6 +154,25 @@ constraint already rejected.
   There is still no screen over this module and no query on its contract; `src/scope/` answers who
   is reachable, and 2.6's grid reads estate. Evidence calls this after a human confirms the role,
   and never matches a name across tenancies.
+
+  **Slice 6.5 narrows `createParty` to the case its comment was written for.** 6.4 put a declared
+  ת.ז. on the capture path, so a lease no longer *often* names none — it names one when the paper
+  prints one. Where it does, A2 writes the party through **`upsertParty`**, keyed on
+  `national_id_key`, and one person signing two leases in two flats is one party with two tenancies.
+  Where it does not, `createParty` is still the command, still always an insert, and two calls with
+  the same name are still two people. Nothing about matching a **name** changed, and 5.5's 303 shared
+  full names are still the reason. What changed is that the identifier this module has always keyed
+  on now has a second source besides the register: a human confirming a household at A2's screen.
+
+  **The normalisation still lives in the database, and now has a name.** Slice 6.5 adds
+  `party_national_id_key(party_kind, national_id)`, an `IMMUTABLE` function holding the same fold the
+  generated column below is written with, because A2's resolution has to normalise an identifier read
+  off a document *before* any party row exists to compare it to. The generated column is not
+  rewritten — one expression, two callers, and a schema test asserts the function and the column agree
+  on every stored row and on the awkward literals (a hyphen, spaces, a dropped leading zero, a
+  passport, a `COMPANY`). A second copy of the fold in TypeScript is the thing this avoids: a
+  normaliser in two places is one that drifts, which is the reason already written above
+  `upsertPartyContact`.
 - **No btree on `(channel, value)`, and 2.6 answered that with a measurement rather than deferring
   it again.** 2.1's reasoning was right on the facts: the lookup is served today by
   `contact_value_resolves_to_one_party`, which is a **GiST** index, and GiST is slower than btree at
