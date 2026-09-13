@@ -15,6 +15,29 @@ import type { Queryable } from './types.ts';
 
 export const EXTRACT_WORK_KIND = 'evidence.extract_document';
 
+/**
+ * **The field keys that hold an identifier. Slice 6.4.**
+ *
+ * A field key is on this list because somebody declared it on the catalogue, **never because a value
+ * looked like nine digits**. A shape test is the wrong instrument twice over: it fires on the
+ * contract number, the phone number and the bank account a lease prints beside a name, and it misses
+ * a ת.ז. written with a hyphen or a leading zero stripped by a spreadsheet. Week 5 closed on exactly
+ * that class of mistake — a duplicated `/05\d/` read the CSRF token's own hex and failed 4 runs in
+ * 20 — and the lesson was that a guard reading shapes guards the weather.
+ *
+ * Adding a key here is the whole act of declaring a new field sensitive, and it is a diff a reviewer
+ * reads. SPEC-evidence.md, and ADR-0006 for why a declared field may be captured at all.
+ */
+export const IDENTIFIER_FIELD_KEYS: ReadonlySet<string> = new Set([
+  'tenant_id_number',
+  'guarantor_id_number',
+]);
+
+/** Whether this field key holds an identifier, and so is withheld unless the viewer may read it. */
+export function isIdentifierField(fieldKey: string): boolean {
+  return IDENTIFIER_FIELD_KEYS.has(fieldKey);
+}
+
 /** Mapping instructions. A change here is a prompt change and runs the golden set. */
 export const EXTRACT_INSTRUCTIONS =
   'Fill the declared fields from the numbered words. Return word_ids that support each value. Never invent coordinates. On a Hebrew lease, בניין מספר belongs in address; דירה מספר is apartment_number only. Do not swap them. Ignore חניה and parking numbers. Address is street, building number and city — not the flat number as the house number. DATE values are ISO YYYY-MM-DD only, never Hebrew month names and never dd/mm/yyyy.';

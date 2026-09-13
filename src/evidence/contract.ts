@@ -50,6 +50,8 @@ export {
   EXTRACT_INSTRUCTIONS,
   EXTRACT_WORK_KIND,
   extractFiledDocument,
+  IDENTIFIER_FIELD_KEYS,
+  isIdentifierField,
   listExtractedFields,
   listPromotedFieldsForUnit,
   numberWords,

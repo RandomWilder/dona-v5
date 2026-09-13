@@ -8,6 +8,12 @@
 // and a status. Slice 4.6's confirm screen shows captured names so a human can confirm each role;
 // it still does not query `party`. `tests/ui/tokens.test.ts` asserts the rest from the outside.
 //
+// **Slice 6.4 adds the second exception, and bounded it before it added it.** The read screen may
+// print a captured ת.ז., and only to a viewer holding `party.national_id.read` — `mayReadIdentifiers`
+// on `ReadScreen` is that stance, it is required rather than defaulted, and a viewer without it gets
+// a count in place of the rows. The registry renders this screen at both stances, so the refusal is
+// asserted where every other role difference in this console is.
+//
 // **No client JavaScript, here as everywhere.** The type list is a `<select>` the server filled from
 // the catalogue, the file input is a file input, and the page works with scripting switched off.
 import type { UnitHit } from '../../estate/contract.ts';
@@ -17,6 +23,7 @@ import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import type { UnitLetting } from '../../tenancy/contract.ts';
 import type { DocumentTypeRow } from './catalogue.ts';
+import { isIdentifierField } from './extract.ts';
 import type { ProposedPerson } from './lease.ts';
 import { CANDIDATE_LIMIT, type PlaceReading } from './place.ts';
 import { documentExtensions } from './storage-path.ts';
@@ -559,8 +566,18 @@ export interface ReadScreen {
   source: 'pdfjs' | 'ocr' | 'none';
   page: PdfPage | null;
   image: OcrPageImage | null;
+  /**
+   * **Whether this viewer may see a captured identifier. Slice 6.4, and it is required on purpose.**
+   *
+   * Only `party.national_id.read` sets it true, and only ADMIN holds that. It is a field rather than
+   * a default because a default is a thing a caller can fail to think about: a new screen that
+   * rendered this view would inherit `false` silently and nobody would know which way it had failed.
+   * Required, it costs one line and a decision at every call site, and there is exactly one.
+   */
+  mayReadIdentifiers: boolean;
   extracted?: ReadonlyArray<{
     extractedFieldId: string;
+    fieldKey: string;
     labelHe: string;
     value: string;
     page: number;
@@ -595,10 +612,52 @@ function boxPercents(
   return `inset-inline-start:${String(inlineStart)}%;inset-block-start:${String(blockStart)}%;inline-size:${String(inlineSize)}%;block-size:${String(blockSize)}%`;
 }
 
-function extractedSection(screen: ReadScreen) {
+/**
+ * The captured rows this viewer may see. **Withheld is the default**: a viewer without
+ * `party.national_id.read` never receives the value, not even to have it hidden by CSS, because a
+ * page is a response and a response that carries it has disclosed it.
+ */
+function visibleRows(screen: ReadScreen) {
   const rows = screen.extracted ?? [];
+  return screen.mayReadIdentifiers
+    ? rows
+    : rows.filter((row) => !isIdentifierField(row.fieldKey));
+}
+
+/** How many identifier rows were read and are not being shown. */
+function withheldCount(screen: ReadScreen): number {
+  if (screen.mayReadIdentifiers) {
+    return 0;
+  }
+  return (screen.extracted ?? []).filter((row) =>
+    isIdentifierField(row.fieldKey),
+  ).length;
+}
+
+/**
+ * **A state and a count, never the value.** The sentence this console has kept since 5.2, applied to
+ * the first value it was ever written for. An operator has to be able to tell *the lease was read
+ * and it named a ת.ז.* from *the lease was read and it named none* — the second is a reason to look
+ * at the paper again and the first is not — and a count says which without saying what.
+ */
+function withheldLine(count: number): Html {
+  if (count === 0) {
+    return h``;
+  }
+  if (count === 1) {
+    return h`<p class="lede">נקרא שדה מזהה אחד ואינו מוצג בהרשאה זו.</p>`;
+  }
+  if (count === 2) {
+    return h`<p class="lede">נקראו שני שדות מזהה ואינם מוצגים בהרשאה זו.</p>`;
+  }
+  return h`<p class="lede">נקראו ${ltr(count)} שדות מזהה ואינם מוצגים בהרשאה זו.</p>`;
+}
+
+function extractedSection(screen: ReadScreen) {
+  const rows = visibleRows(screen);
+  const withheld = withheldLine(withheldCount(screen));
   if (rows.length === 0) {
-    return h`<p class="lede">לא נקראו שדות מהמסמך. אין מה לקדם עד שהקריאה תשלים.</p>`;
+    return h`<p class="lede">לא נקראו שדות מהמסמך. אין מה לקדם עד שהקריאה תשלים.</p>${withheld}`;
   }
   const promotable = rows.filter(
     (row) => row.promotionTarget && !row.promotedTo,
@@ -615,6 +674,7 @@ function extractedSection(screen: ReadScreen) {
               : h` · נקרא בלבד`
         }</dd></div>`,
     )}</dl>
+    ${withheld}
     ${
       promotable.length > 0
         ? h`<form method="post" action="/documents/${screen.documentId}/promote" enctype="multipart/form-data">
@@ -641,7 +701,7 @@ export function renderReadPage(screen: ReadScreen): string {
       : [];
   const fieldBoxes =
     page && page.width > 0 && page.height > 0
-      ? (screen.extracted ?? [])
+      ? visibleRows(screen)
           .filter((row) => row.page === page.number)
           .map(
             (row) =>

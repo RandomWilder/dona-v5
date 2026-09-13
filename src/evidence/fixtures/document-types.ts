@@ -20,6 +20,11 @@
 // is the open half working, and its fields are appended as a new `effective_from` row when the
 // concept work reaches it. **Not one of them is a money field, and there is no MONEY value type.**
 //
+// **Slice 6.4 appended two identifier fields to `lease`**, which is the first time this file added a
+// field somebody would otherwise have reached for a migration to add — and the reason it is lawful is
+// a decision on file and not a preference: ADR-0006 names a *declared* field on a governed catalogue
+// as the exception to ADR-0004 decision 2's masking. Still no money field, and still no MONEY type.
+//
 // **`verificationTerms` is the only input slice 3.3's guard has.** The terms are the fixed printed
 // language of the form — the phrasing that is on every copy regardless of who signed it — taken from
 // the tier-1 specimens in docs/corpus/, which are authored to the published forms' structure. A term
@@ -42,6 +47,8 @@ export interface SeedDocumentType {
 // corrected declaration is a new row at a new date, never an edit to this one (R18).
 const SCHEMA_V1 = '2026-09-07';
 const SCHEMA_V2 = '2026-09-08';
+// Slice 6.4. The day ת.ז. started existing on the capture path.
+const SCHEMA_V3 = '2026-09-13';
 const ISO_DATE_HINT = 'YYYY-MM-DD. Not Hebrew month names and not dd/mm/yyyy.';
 
 function field(
@@ -120,6 +127,38 @@ export const seedDocumentTypes: SeedDocumentType[] = [
       ),
       field('tenant_name', 'שם השוכר', 'TEXT', true, 'השוכר'),
       field('guarantor_name', 'שם הערב', 'TEXT', false, 'ערב'),
+      // **Slice 6.4, and the first identifier this catalogue ever declared.** Two seed rows and no
+      // migration — A8's open half used for real for the third time, and the third is the one that
+      // proves the bar, because it is the first time the field being added is one somebody would
+      // have reached for a migration to add.
+      //
+      // **Both optional, and that is 6.5's third acceptance case written into the schema**: a lease
+      // naming no identifier still writes a party and a draft. `true` here would declare the
+      // opposite. A missing required field is a result rather than an error either way
+      // (SPEC-flows.md A2), so `isRequired` is a declaration and never a refusal — which is exactly
+      // why the declaration has to say the true thing.
+      //
+      // **The guidance is in the hint and not in `EXTRACT_INSTRUCTIONS`.** The hint is governed data
+      // versioned by `effective_from` (R18); the instructions are one prompt every type pays for.
+      // Each hint names what the value is *not*, because that is where this field goes wrong: a
+      // lease prints a contract number, a phone number and a bank account on the same page, and all
+      // three are runs of digits near a name.
+      field(
+        'tenant_id_number',
+        'ת.ז. השוכר',
+        'TEXT',
+        false,
+        'תעודת זהות של השוכר. ספרות בלבד, ללא מקפים. לא מספר חוזה, לא מספר טלפון ולא מספר חשבון בנק.',
+        { from: SCHEMA_V3 },
+      ),
+      field(
+        'guarantor_id_number',
+        'ת.ז. הערב',
+        'TEXT',
+        false,
+        'תעודת זהות של הערב. ספרות בלבד, ללא מקפים. לא ת.ז. של השוכר.',
+        { from: SCHEMA_V3 },
+      ),
     ],
   },
   {
@@ -198,9 +237,17 @@ export const seedDocumentTypes: SeedDocumentType[] = [
       isActive: true,
     },
     // **No fields, and this is the one type where that is a rule rather than a schedule.**
-    // `national_id` is admin-only, unreachable by any agent tool and access-logged (SPEC.md), and a
-    // declared `id_number` field would put it on the capture path, where it is citable and
-    // searchable by design. If this type ever declares fields, the policy suite decides which.
+    // `national_id` is admin-only, unreachable by any agent tool and access-logged (SPEC.md).
+    //
+    // **Re-read at 6.4, which put a ת.ז. on the lease, and left unchanged.** The sentence this
+    // comment used to make — a declared identifier field would put the value on the capture path —
+    // is now true of `lease` and deliberately so (ADR-0006: a declared field on a governed catalogue
+    // is the named exception). It is still not true here, because the two cases are not alike. A
+    // lease names an identifier *about* a household the document establishes, one field among ten,
+    // withheld by default and read by an ADMIN with a log line. A תעודת זהות is a document whose
+    // entire content is the identifier and the family page behind it: declaring fields on it would
+    // not capture a fact, it would transcribe a national ID card into a searchable table. If this
+    // type ever declares fields, the policy suite decides which.
     fields: [],
   },
   {

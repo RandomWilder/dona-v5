@@ -23,6 +23,7 @@ import type { EstatePlan } from '../estate/contract.ts';
 import { importEstate } from '../estate/contract.ts';
 import { fixedClock } from '../kernel/clock.ts';
 import { KernelError } from '../kernel/errors.ts';
+import { createFakeExtractor } from '../kernel/extraction.ts';
 import { createMemoryStore } from '../kernel/objects.ts';
 import { createFakeOcrText, type OcrText } from '../kernel/ocr.ts';
 import { createFakePdfText } from '../kernel/pdf.ts';
@@ -366,7 +367,12 @@ describe('evidence · the upload route', () => {
           assert.equal(response.statusCode, 200);
           assert.match(response.body, /המסמך נשמר/);
           assert.match(response.body, /אינו נושא שכבת טקסט/);
-          assert.doesNotMatch(response.body, /503/);
+          // **`/503/` until 6.4, and it failed for weather.** This page prints a freshly generated
+          // document id, and a hex id containing `503` turned a green suite red at random — the
+          // same defect week 5 closed on, where a duplicated `/05\d/` read the CSRF token's own
+          // hex. The status code above is what proves it was not a 503; what this line adds is that
+          // the body is not the degraded shape, and `unavailable` is a word no identifier can be.
+          assert.doesNotMatch(response.body, /unavailable/);
           const rows = await pool.query<{
             file_hash: string;
             document_id: string;
@@ -1195,6 +1201,291 @@ describe('evidence · A12 a document finds its own place', () => {
       for (const app of apps) {
         await app.close();
       }
+      await pool.end();
+    }
+  });
+});
+
+/**
+ * **Slice 6.4.** The first identifier this system ever captures, and the three things that have to be
+ * true about it before it may exist: an OPERATOR sees it nowhere, an ADMIN's read of it is on the
+ * audit log, and a lease that names none is not an error.
+ *
+ * It drives the A12 intake route on a **scan**, which is also where 6.3's carry is paid: the route
+ * reads the page to find the flat and `fileDocument` used to read the same bytes again for its own
+ * verdict. The OCR spy counts what actually left, the way 6.3's put spy counted what was written.
+ */
+describe('evidence · a captured ת.ז., withheld unless the viewer may read it', () => {
+  it('withholds from an OPERATOR, logs an ADMIN, and OCRs the scan once', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const CITY_ID = 'עיר מזהה';
+    const ADDRESS_ID = 'רקפת 64';
+    const PROJECT_ID = 'TEST-IDNUM';
+    const STAFF_ID_DOMAIN = 'evidence-identifier.test';
+    // A value that matches no other assertion in this repository: no `05` run, no `+972`. A fixture
+    // that collided with one of those would fail for the wrong rule and be believed anyway.
+    const ID_VALUE = '312345678';
+    // **A clock on or after the declaration's `effective_from`, and this is not a detail.** The two
+    // identifier fields open at `SCHEMA_V3 = '2026-09-13'`, so the suite's own `AT` of 7 Sep reads a
+    // catalogue that does not declare them yet and extraction correctly returns nothing. R18's
+    // versioning working is what that is, and it cost one confused run to see it.
+    const AT_ID = new Date('2026-09-13T09:00:00.000Z');
+    const leaseText = `כתובת המושכר: ${ADDRESS_ID}, ${CITY_ID}, דירה 64A\n${specimen(
+      'lease-standard.md',
+    )}`;
+
+    // **The OCR counter**, around the real reader the route uses. Two calls for one scan was the
+    // measured cost carried out of 6.3; this is the number that says it is one.
+    let ocrCalls = 0;
+    const reader = createFakeOcrText([leaseText]);
+    const countedOcr: OcrText = {
+      describe: () => reader.describe(),
+      pages: async (bytes, mimeType, version) => {
+        ocrCalls += 1;
+        return reader.pages(bytes, mimeType, version);
+      },
+    };
+    const withId = [
+      { field_key: 'start_date', value: '2026-03-01', word_ids: [0] },
+      { field_key: 'end_date', value: '2027-02-28', word_ids: [1] },
+      { field_key: 'apartment_number', value: '64A', word_ids: [2] },
+      {
+        field_key: 'address',
+        value: `${ADDRESS_ID} ${CITY_ID}`,
+        word_ids: [3],
+      },
+      { field_key: 'tenant_name', value: 'יעל כהן', word_ids: [4] },
+      { field_key: 'tenant_id_number', value: ID_VALUE, word_ids: [5] },
+    ];
+    let findings = withId;
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      clock: fixedClock(AT_ID),
+      objects: createMemoryStore(),
+      // No text layer, so the page is a scan and OCR is the only way to its address.
+      pdf: createFakePdfText([]),
+      ocr: countedOcr,
+      extractor: createFakeExtractor(() => ({ findings })),
+      bucket: BUCKET,
+    });
+    const hashes: string[] = [];
+    let operator: SignedIn | null = null;
+    let admin: SignedIn | null = null;
+
+    const reads = async (): Promise<number> => {
+      const rows = await pool.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM audit_log
+          WHERE action = 'evidence.read_identifier'`,
+      );
+      return Number(rows.rows[0]?.n ?? '0');
+    };
+
+    const fileScan = async (marker: string): Promise<string> => {
+      const body = upload(
+        { csrf: (admin as SignedIn).csrf, type: 'lease' },
+        { filename: 'scan.png', bytes: pngBytes(marker) },
+      );
+      const response = await app.inject({
+        method: 'POST',
+        url: '/documents/intake',
+        ...body,
+        headers: { ...body.headers, cookie: (admin as SignedIn).cookie },
+      });
+      assert.equal(response.statusCode, 302, response.body.slice(0, 400));
+      const documentId =
+        String(response.headers.location ?? '').match(
+          /\/documents\/([0-9a-f-]{36})\/tenancy$/,
+        )?.[1] ?? '';
+      assert.ok(documentId, 'a verified lease goes to its confirm screen');
+      const row = await pool.query<{ file_hash: string }>(
+        'SELECT file_hash FROM document WHERE document_id = $1',
+        [documentId],
+      );
+      const hash = row.rows[0]?.file_hash;
+      assert.ok(hash);
+      hashes.push(hash);
+      return documentId;
+    };
+
+    try {
+      await signOutAll(pool, STAFF_ID_DOMAIN);
+      await applyDocumentTypeCatalogue(pool, seedDocumentTypes);
+      admin = await signIn(pool, fixedClock(AT_ID), {
+        email: `admin@${STAFF_ID_DOMAIN}`,
+        role: 'ADMIN',
+      });
+      operator = await signIn(pool, fixedClock(AT_ID), {
+        email: `ops@${STAFF_ID_DOMAIN}`,
+        role: 'OPERATOR',
+      });
+      await importEstate(pool, {
+        projects: [
+          {
+            name: 'מכרז מזהה',
+            projectCode: PROJECT_ID,
+            tenderRef: null,
+            status: 'ACTIVE',
+          },
+        ],
+        buildings: [
+          {
+            name: 'בניין מזהה',
+            addressLine: ADDRESS_ID,
+            city: CITY_ID,
+            projectCode: PROJECT_ID,
+            handoverDate: '2025-03-01',
+            warrantyEndDate: '2027-03-01',
+            status: 'ACTIVE',
+            spaces: [
+              { kind: 'UNIT', name: 'דירה 64A', floor: '1', accessNote: null },
+            ],
+            units: [
+              {
+                spaceName: 'דירה 64A',
+                unitNumber: '64A',
+                rooms: 3,
+                areaSqm: 70,
+                hasMamad: true,
+                parkingSpaceName: null,
+                storageSpaceName: null,
+                warrantyEndDate: null,
+                conditionStatus: 'READY',
+              },
+            ],
+          },
+        ],
+      } satisfies EstatePlan);
+
+      const documentId = await fileScan('idnum-lease');
+
+      await t.test('the scan is OCR’d once, not twice', () => {
+        // 6.3's carry, discharged. The route reads the page to find the flat and hands those pages
+        // to `fileDocument` in `readPages`, so the `unverified` branch inside it reuses the reading
+        // instead of buying a second one.
+        assert.equal(ocrCalls, 1);
+      });
+
+      await t.test(
+        'an ADMIN sees the value, and the read is logged',
+        async () => {
+          const before = await reads();
+          const response = await asOperator(app, admin as SignedIn).inject({
+            method: 'GET',
+            url: `/documents/${documentId}/read`,
+          });
+          assert.equal(response.statusCode, 200, response.body.slice(0, 400));
+          assert.match(response.body, new RegExp(ID_VALUE));
+          assert.match(response.body, /ת\.ז\. השוכר/);
+          assert.equal(await reads(), before + 1);
+        },
+      );
+
+      await t.test(
+        'an OPERATOR sees a count, and nothing is logged',
+        async () => {
+          const before = await reads();
+          const response = await asOperator(app, operator as SignedIn).inject({
+            method: 'GET',
+            url: `/documents/${documentId}/read`,
+          });
+          assert.equal(response.statusCode, 200, response.body.slice(0, 400));
+          assert.doesNotMatch(response.body, new RegExp(ID_VALUE));
+          assert.doesNotMatch(response.body, /ת\.ז\. השוכר/);
+          assert.match(response.body, /נקרא שדה מזהה אחד ואינו מוצג/);
+          // The rest of the reading is still there: one row is withheld, the page is not.
+          assert.match(response.body, /מספר הדירה/);
+          // **Withholding is not a read.** A line here would make the count useless for the only
+          // question it will ever be asked: who has seen this household's ת.ז.
+          assert.equal(await reads(), before);
+        },
+      );
+
+      await t.test('neither field may be promoted', async () => {
+        // SPEC-evidence.md: the value becomes `party.national_id` when a human confirms a
+        // household (6.5), which is an act and not a promotion. A mapping row here would make it
+        // one button.
+        const rows = await pool.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM field_promotion p
+             JOIN document_type_field f
+               ON f.document_type_field_id = p.document_type_field_id
+            WHERE f.field_key = ANY($1::text[])`,
+          [['tenant_id_number', 'guarantor_id_number']],
+        );
+        assert.equal(rows.rows[0]?.n, '0');
+      });
+
+      await t.test(
+        'a lease naming no identifier is a correct result',
+        async () => {
+          findings = withId.filter(
+            (finding) => finding.field_key !== 'tenant_id_number',
+          );
+          const second = await fileScan('idnum-lease-without');
+          const before = await reads();
+          const response = await asOperator(app, admin as SignedIn).inject({
+            method: 'GET',
+            url: `/documents/${second}/read`,
+          });
+          assert.equal(response.statusCode, 200, response.body.slice(0, 400));
+          assert.doesNotMatch(response.body, /ת\.ז\./);
+          assert.doesNotMatch(response.body, /שדה מזהה/);
+          // Nothing was disclosed because nothing was captured, so nothing is logged.
+          assert.equal(await reads(), before);
+        },
+      );
+    } finally {
+      await signOutAll(pool, STAFF_ID_DOMAIN);
+      for (const hash of hashes) {
+        await pool.query(
+          `DELETE FROM audit_log WHERE action = 'evidence.read_identifier'
+            AND subject_id IN (
+              SELECT document_id::text FROM document WHERE file_hash = $1)`,
+          [hash],
+        );
+        await pool.query(
+          `DELETE FROM extracted_field WHERE document_id IN
+             (SELECT document_id FROM document WHERE file_hash = $1)`,
+          [hash],
+        );
+        await pool.query(
+          `DELETE FROM document_link WHERE document_id IN
+             (SELECT document_id FROM document WHERE file_hash = $1)`,
+          [hash],
+        );
+        await pool.query('DELETE FROM document WHERE file_hash = $1', [hash]);
+      }
+      await pool.query(
+        `DELETE FROM audit_log WHERE action LIKE 'evidence.%' AND subject_id IN (
+           SELECT s.space_id::text FROM space s
+           JOIN building b ON b.building_id = s.building_id
+           WHERE b.city = $1 AND b.address_line = $2)`,
+        [CITY_ID, ADDRESS_ID],
+      );
+      await pool.query(
+        `DELETE FROM unit WHERE unit_id IN (
+           SELECT space_id FROM space s
+           JOIN building b ON b.building_id = s.building_id
+           WHERE b.city = $1 AND b.address_line = $2)`,
+        [CITY_ID, ADDRESS_ID],
+      );
+      await pool.query(
+        `DELETE FROM space WHERE building_id IN (
+           SELECT building_id FROM building WHERE city = $1 AND address_line = $2)`,
+        [CITY_ID, ADDRESS_ID],
+      );
+      await pool.query(
+        'DELETE FROM building WHERE city = $1 AND address_line = $2',
+        [CITY_ID, ADDRESS_ID],
+      );
+      await pool.query('DELETE FROM project WHERE project_code = $1', [
+        PROJECT_ID,
+      ]);
+      await app.close();
       await pool.end();
     }
   });
