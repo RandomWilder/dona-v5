@@ -37,7 +37,9 @@
 > is the check that proves it — no self-certification. The standing bar every slice also clears is
 > the Definition of Done in [plan.md](plan.md).
 
-**Where a new session starts: 6.1.** Week 5 is closed and merged.
+**Where a new session starts: 6.8**, then 6.9, then 6.10 — one slice per session, in that order,
+because 6.9 and 6.10 both depend on 6.8. 6.1–6.7 are closed and merged, and the week-6 demo has been
+given; the three remaining slices are what that demo wrote (§ "What the week-6 demo found").
 An unbuilt flow is painted in the live shell (`mockups/<flow>.html`, `/dev/mockups/<flow>` on a
 `-dev` process) before it is wired; a guard fails if that file and the slice's evidence both exist.
 
@@ -420,18 +422,166 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       • **A confirmed lease leaves its flat reading as vacant** — `0 מאוכלסות היום, 3 פנויות` after
       two leases — because a confirm writes `DRAFT`. The same A5 gap, on the demo screen.
 
-- [ ] **6.8 — The line the reader was promised.**
-      `documentText` flattens a page's words with a space and only ever emits a newline between
-      pages, while A12's place reader — and the spec that documents it — is written against text
-      where "a line break is where a field ends". Both OCR and pdfjs already know the lines; this is
-      thrown away and then depended upon. **Carries the 5.6 clock-end click no further:** that item
-      now belongs to the A5-screen slice and is written there, not here.
-      **Done when:** a scanned lease whose address line ends in no punctuation resolves its flat, and
-      the case that proves it was **red first** against today's code.
-      **Verify:** the staging walk's original lease-1, unedited, filed on `:3000`.
-      **Plan mode** — `src/kernel/ocr.ts` and `src/kernel/pdf.ts`. **Spec edit first:**
-      SPEC-evidence.md's A12 anchors and `place.ts`'s own comment describe a reader nobody has.
-      **Deps:** 6.7 · **M**
+---
+
+## What the week-6 demo found — 14 Sep 2026, and it owns 6.8, 6.9 and 6.10
+
+The demo was given on staging at 11:26 local. The director created a building and a flat, then
+uploaded a **lease scanned on a phone** — a fabricated lease, invented names and ת.ז., printed on a
+real standard form, filled in **by hand in pen**, CamScanner, 5 pages, 15.6 MB. The system refused it
+four times and then told him the address did not match. The request log, GCS and the file itself say
+why, and the four defects below are what this week's remaining slices are for. None of them is the
+defect the room thought it was watching.
+
+- **The demo used the wrong door, and A12 was invisible.** `POST /documents/intake` — flow A12, the
+  document-first path — ran **three times successfully at 06:25–06:28 UTC**, two hours before the
+  demo, each one a `302` straight into `/documents/:id/tenancy`. The demo itself, 08:26–08:40, is
+  **six `POST /documents` and zero `/documents/intake`**: the unit-first door, because the walk opened
+  by creating a flat and the only button on a unit page is `הוספת מסמך → /documents/new?unit=…`
+  (`src/estate/internal/views.ts:621`). **`src/chrome.ts` has seven destinations and none of them is
+  documents** — A12's only entrance is one card on the index (`src/index-page.ts:85`). The flow the
+  management team asked for after the demo is the flow that was already built at 6.3 and was not
+  shown. → **6.9**.
+- **OCR is gated on emptiness, not on failure, so Document AI was never called.**
+  `src/evidence/internal/read.ts:125-128` returns `null` the moment the native text layer has any
+  text at all, and `src/evidence/internal/intake.ts:187` returns on a `refused` verdict *before* OCR
+  is considered. A `refused` verdict requires **non-empty** text (`verify.ts:96-99`), so the phone
+  scan's own CamScanner text layer beat the good reader. Latency proves it: **0.43–1.31 s** for the
+  four refusals, against **7.07–7.40 s** for the one file with no text layer, which is a real
+  Document AI call. → **6.8**.
+- **The type's terms are calibrated to one specimen.**
+  `src/evidence/fixtures/document-types.ts:79` requires **all three** of
+  `חוזה שכירות` · `המושכר` · `תקופת השכירות`. The demo's paper is titled **`הסכם שכירות`** and says
+  **`הדירה`** throughout; only `תקופת השכירות` is present. Two of three absent, so the refusal was
+  correct behaviour and wrong calibration. Both vocabularies are standard in an Israeli lease. →
+  **6.8**.
+- **A second filing of the same bytes silently re-anchored the screen to another flat.** The bucket's
+  last write is 06:28:19; **nothing was stored at 08:36 or 08:40**. `ON CONFLICT (file_hash) DO
+  UPDATE` (`src/evidence/internal/documents.ts:81`) returned the document filed on **8 Sep**,
+  `01a07f58-507e-7038-a4d7-09c2bc99f43b`, against unit `01a07769-77bf-726c-8727-78c57b64d8ba`. The
+  new `SUBJECT` link was added, but `unitIdOf` (`src/evidence/internal/lease.ts:296`) takes `LIMIT 1`
+  with **no `ORDER BY`**, so `proposeLeaseTenancy` compared the lease to a flat created a week
+  earlier and `views.ts:916` printed the mismatch. **The sentence was true of the wrong apartment.**
+  That document now carries `SUBJECT` links to three flats. → **6.10**.
+
+**Two latent items the same reading surfaced**, both owned by 6.8: `onlineOcrPageLimit = 15`
+(`src/kernel/ocr.ts:51`) silently disables OCR for a longer scan, and real leases exceed it; and an
+OCR failure is swallowed by `read.ts`'s `catch { return null }`, which is indistinguishable from a
+successful read that found nothing.
+
+**The director's two rulings, taken on 14 Sep after the demo and binding on 6.9:**
+- **A12 may create.** `SPEC-flows.md`'s *"It does not create a building or a unit… creating the
+  building is A11's act and an admin's"* is overruled: an address in nobody's portfolio offers the
+  admin the building and the flat, prefilled from what was read.
+- **Confirm-before-file was considered and rejected.** It would need the bytes held between two
+  requests — a staging store, which 3.2, A6 and A12 all refuse, and which a browser's file input
+  cannot avoid. **The indication comes after the exact match files**, on a receipt that leads with
+  what was read and where it landed. `PlaceKind` stays four values.
+
+**Still the director's, and in none of these three slices:** there is no party route, so a tenant
+cannot be searched for and "one party, two tenancies" is shown on no screen. 6.7 raised it; a
+household screen is a product decision. It is the other half of the room's feedback and it is
+week 7's if the director wants it.
+
+---
+
+- [ ] **6.8 — The reader reads a scan.**
+      Three defects in one path, and they have to move together: the reader cannot be reached, and
+      when it is reached the guard it feeds refuses the paper on vocabulary. **(a)** `documentText`
+      (`src/evidence/internal/verify.ts:47`) flattens a page's words with a space and emits a newline
+      only between pages, while A12's place reader — and the spec documenting it — is written against
+      text where a line break ends a field; both OCR and pdfjs already know the lines and this throws
+      them away and then depends on them. **(b)** OCR runs only when a PDF has no text layer
+      (`read.ts:125-128`) and never after a refusal (`intake.ts:187`), so any phone-scanner text layer
+      permanently outranks Document AI. **(c)** `verification_terms` are three all-required strings
+      from one specimen. **Carries the 5.6 clock-end click no further:** that item belongs to the
+      A5-screen slice and is written there.
+      **Done when:**
+      • the demo's own phone scan — 5 pages, CamScanner text layer, `הסכם שכירות`, handwritten —
+      files through `/documents/intake` on `:3000` and **resolves its flat**, and every case that
+      proves it was **red first** against today's code;
+      • OCR runs when the declared type's terms are **absent**, not only when the page is empty, and
+      a call-counting spy shows it ran **once** — 6.4's `ocrCalls === 1` bar is not relaxed;
+      • a lease titled `הסכם שכירות` saying `הדירה` verifies, and a file carrying none of the type's
+      vocabulary still refuses and still writes nothing — the refusal is not traded away for the
+      match;
+      • a scanned address line ending in **no punctuation** resolves its flat — 6.7's original bar,
+      unchanged;
+      • a PDF longer than `onlineOcrPageLimit` is refused **with a sentence that says so**, rather
+      than filed as though it had been read;
+      • an OCR **failure** is distinguishable from an OCR **miss** in the audit line, asserted by
+      count.
+      **Verify:** the demo file, unedited, and 6.7's original lease-1, unedited, both on `:3000` after
+      a `npm run dev` restart. The page-limit and OCR-failure cases asserted by count, never by
+      eyeball.
+      **Spec edit first:** `SPEC-evidence.md`'s A12 anchors and the verification section — terms
+      become sets and OCR runs on a failed guard, which is a behaviour change and belongs in the file
+      before the code. `src/evidence/internal/place.ts`'s own comment describes a reader nobody has.
+      **Plan mode** — `src/kernel/pdf.ts`, `src/kernel/ocr.ts` and `src/evidence/` is two modules and
+      the kernel.
+      **Deps:** 6.7 · **L**
+
+- [ ] **6.9 — The document tab, and a refusal that offers to create.**
+      Flow **A12** gains its entrance and its two missing screens. **The tab:** `ChromeDest` and one
+      `item()` in `src/chrome.ts` — seven destinations become eight, and the index card at
+      `src/index-page.ts:85` stops being A12's only door. **The create offer:** the 422 screen carries
+      `reading.addressLine` / `city` / `apartmentNumber` into A11's and A13's forms as prefill, and
+      returns to intake with the new unit preselected and the file input re-armed — the same
+      re-attach price A12 has always charged, because nothing is held. **The indication:** the filed
+      receipt and the lease confirm screen lead with what was read and where it landed.
+      **The role split is the interesting half:** `estate.write` is ADMIN-only and `documents.write`
+      is an OPERATOR's, so an operator meets today's screen — the candidate list and the search box —
+      and an admin meets the create buttons. A door an operator may see and may not walk through is
+      6.1's refusal-after-typing, and this slice does not build one.
+      **Done when:**
+      • a documents destination is in the side nav on every signed-in screen, and the walk reaches the
+      upload screen **without going through a building**;
+      • an ADMIN whose lease names an address in nobody's portfolio creates the building **and** the
+      flat from the refusal screen, with the read address already in the fields, and files that same
+      lease without retyping an address;
+      • an OPERATOR on the identical refusal sees the search box and **no create control** — written
+      **red first**;
+      • the filed receipt names what was read (address, city, apartment number) and the flat it
+      anchored to, and the lease confirm screen says **which fields were not read** separately from
+      **which did not match** — one sentence per cause, where `views.ts:915-917` today fires one
+      sentence for four;
+      • nothing is held between the read and the file: no staging store, no fifth `PlaceKind`, and a
+      refused intake still writes **no row and no object**, proved by row counts and a bucket listing
+      the way 3.3 proved its refusal.
+      **Verify:** both stances on `:3000` after a `npm run dev` restart; the OPERATOR refusal red
+      first; every new or changed screen appended to `tests/ui/tokens.test.ts`'s `SCREENS` registry,
+      never a second copy of a guard.
+      **Mockup first:** `mockups/document-intake.html` again, at `/dev/mockups/document-intake` — the
+      refusal-with-create screen is the one to paint, and guard four requires the file be deleted when
+      `tasks/evidence/6.9.md` is written.
+      **Spec edit first:** `SPEC-flows.md` A12 — the "does not create" sentence is struck on the
+      director's ruling of 14 Sep and replaced by the role split; A11 and A13 gain prefill.
+      **Plan mode** — `src/evidence/` and `src/estate/` is two modules.
+      **Carried in, still riding:** `.check` and `.form-grid` / `.form-row` / `.hint` /
+      `.form-actions` are two files each since 6.2, and **a third occurrence of either moves them to
+      `tokens.css`**. This slice writes screens and is the likeliest to trip it.
+      **Deps:** 6.8 · **L**
+
+- [ ] **6.10 — A dedupe names its anchor.**
+      The same bytes are one document forever — `ON CONFLICT (file_hash) DO UPDATE`, which is correct
+      and stays. What is not correct is that filing them a second time against a different flat looks
+      like success, adds a second `SUBJECT` `document_link`, and then lets `unitIdOf`'s unordered
+      `LIMIT 1` (`src/evidence/internal/lease.ts:296`) pick which of them the confirm screen is about.
+      That is what produced the demo's *"the address does not match"* about a flat the director had
+      never opened.
+      **Done when:**
+      • re-filing bytes already on file against a **different** flat either refuses with a sentence
+      naming the flat the document is already anchored to, or anchors the confirm screen to the flat
+      it was **just** filed to — **the ruling written down either way**, in the spec, before the code;
+      • `unitIdOf` is deterministic, proved by a case with two `SUBJECT` links that was **red first** —
+      today it returns either row and the suite cannot tell;
+      • the demo's exact sequence replays: one file, two flats, and the confirm screen names the one
+      the operator is standing in.
+      **Verify:** on `:3000` with the demo file; `document_link` row counts before and after, so the
+      second link is proved present or proved refused rather than assumed.
+      **Spec edit first:** `SPEC-evidence.md` on what a second filing of the same bytes means — A1
+      says one document and a second link, and says nothing about which one a screen is then about.
+      **Deps:** 6.8 · **S** · no plan mode: one module, one query, one sentence.
 
 ---
 

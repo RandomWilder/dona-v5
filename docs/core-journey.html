@@ -1,0 +1,1175 @@
+<title>Dona Dom Core Journey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Hebrew:wght@400;600&display=swap">
+
+<style>
+  :root {
+    --paper:      #F1F2EF;
+    --surface:    #FBFCF9;
+    --surface-2:  #E7EAE4;
+    --ink:        #17222E;
+    --ink-2:      #4C5964;
+    --ink-3:      #7B858D;
+    --rule:       #C8CFC7;
+    --rule-soft:  #DDE1DA;
+    --structure:  #2F5D7C;
+    --signal:     #BF4A22;
+    --good:       #40704F;
+    --warn:       #97690C;
+    --grid:       rgba(23,34,46,.045);
+    --shadow:     0 1px 2px rgba(23,34,46,.05);
+    --bubble-in:  #E7EAE4;
+    --bubble-out: #DCE6DE;
+
+    --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --font-body: "IBM Plex Sans", "IBM Plex Sans Hebrew", system-ui, -apple-system, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --font-he: "IBM Plex Sans Hebrew", "IBM Plex Sans", system-ui, sans-serif;
+
+    --measure: 66ch;
+    --sheet: 960px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:     #121821;
+      --surface:   #19212C;
+      --surface-2: #222C38;
+      --ink:       #E2E7E3;
+      --ink-2:     #A5B0B8;
+      --ink-3:     #79858E;
+      --rule:      #2F3B47;
+      --rule-soft: #26313C;
+      --structure: #7BADD0;
+      --signal:    #EA7F52;
+      --good:      #79B78C;
+      --warn:      #D6A644;
+      --grid:      rgba(226,231,227,.045);
+      --shadow:    0 1px 2px rgba(0,0,0,.3);
+      --bubble-in: #242E3A;
+      --bubble-out:#26362E;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:     #121821;
+    --surface:   #19212C;
+    --surface-2: #222C38;
+    --ink:       #E2E7E3;
+    --ink-2:     #A5B0B8;
+    --ink-3:     #79858E;
+    --rule:      #2F3B47;
+    --rule-soft: #26313C;
+    --structure: #7BADD0;
+    --signal:    #EA7F52;
+    --good:      #79B78C;
+    --warn:      #D6A644;
+    --grid:      rgba(226,231,227,.045);
+    --shadow:    0 1px 2px rgba(0,0,0,.3);
+    --bubble-in: #242E3A;
+    --bubble-out:#26362E;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      repeating-linear-gradient(to right, var(--grid) 0 1px, transparent 1px 28px),
+      repeating-linear-gradient(to bottom, var(--grid) 0 1px, transparent 1px 28px);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet { max-width: var(--sheet); margin: 0 auto; padding-block: 0 88px; padding-inline: 24px; }
+
+  .titleblock { border-bottom: 2px solid var(--ink); padding: 22px 0 20px; margin-bottom: 40px; }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--structure); margin: 0 0 14px;
+  }
+  h1 {
+    font-family: var(--font-display); font-weight: 700;
+    font-size: clamp(2rem, 5.2vw, 3.1rem); line-height: 1.04;
+    letter-spacing: -.026em; margin: 0; text-wrap: balance;
+  }
+  .titleblock .lede { margin: 18px 0 0; max-width: 60ch; color: var(--ink-2); font-size: 1.05rem; }
+  .facts {
+    display: flex; flex-wrap: wrap; gap: 6px 26px; margin-top: 22px;
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3);
+  }
+  .facts b { color: var(--ink-2); font-weight: 500; }
+
+  section { margin: 0 0 58px; }
+  .sechead { border-top: 1px solid var(--rule); padding-top: 18px; margin-bottom: 22px; }
+  .secnum {
+    font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .13em;
+    color: var(--structure); display: block; margin-bottom: 9px;
+  }
+  h2 {
+    font-family: var(--font-display); font-weight: 600; font-size: 1.45rem;
+    letter-spacing: -.018em; margin: 0; text-wrap: balance;
+  }
+  .sechead .sub { margin: 8px 0 0; color: var(--ink-2); font-size: .95rem; max-width: var(--measure); }
+  h3 { font-family: var(--font-display); font-weight: 600; font-size: 1rem; margin: 0 0 6px; letter-spacing: -.006em; }
+  p { max-width: var(--measure); }
+  strong { font-weight: 600; }
+  code, .m { font-family: var(--font-mono); font-size: .87em; }
+  .he { font-family: var(--font-he); direction: rtl; unicode-bidi: isolate; }
+
+  /* language toggle — a checkbox and two rules, no script */
+  /* fixed, not absolute: focusing it must not scroll the page back to the top */
+  .langinput { position: fixed; top: 0; inset-inline-start: 0; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip-path: inset(50%); }
+  .langbar {
+    position: sticky; top: 0; z-index: 5; display: flex; justify-content: flex-end;
+    padding-block: 12px 10px; background: var(--paper);
+  }
+  .langbtn {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+    border: 1px solid var(--rule); background: var(--surface); color: var(--ink-2);
+    padding: 6px 15px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+  }
+  .langbtn::before { content: ""; width: 7px; height: 7px; background: var(--structure); flex: none; }
+  .langbtn:hover { border-color: var(--structure); color: var(--structure); }
+  .langinput:focus-visible ~ .langbar .langbtn { outline: 2px solid var(--structure); outline-offset: 2px; }
+
+  /* who decides — the spine of the document */
+  .tag {
+    font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .1em;
+    text-transform: uppercase; font-weight: 600; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .tag::before { content: ""; width: 7px; height: 7px; flex: none; }
+  .tag.rule::before   { background: var(--structure); }
+  .tag.model::before  { background: var(--signal); border-radius: 50%; }
+  .tag.human::before  { background: var(--ink-3); transform: rotate(45deg); }
+  .tag.rule   { color: var(--structure); }
+  .tag.model  { color: var(--signal); }
+  .tag.human  { color: var(--ink-2); }
+
+  .legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; background: var(--rule); border: 1px solid var(--rule); margin: 0 0 30px; }
+  .legend > div { background: var(--surface); padding: 14px 16px; }
+  .legend p { margin: 6px 0 0; font-size: .86rem; color: var(--ink-2); max-width: none; }
+
+  figure { margin: 0 0 8px; background: var(--surface); border: 1px solid var(--rule); box-shadow: var(--shadow); }
+  .figbody { overflow-x: auto; padding: 22px 20px 10px; }
+  figure svg { display: block; width: 100%; min-width: 620px; height: auto; color: var(--ink); }
+  figcaption { border-top: 1px solid var(--rule-soft); padding: 13px 20px 15px; font-size: .87rem; color: var(--ink-2); }
+  figcaption b { color: var(--ink); font-weight: 600; }
+
+  .n-box { fill: var(--surface); stroke: currentColor; stroke-width: 1.2; }
+  .n-rule { fill: var(--surface); stroke: var(--structure); stroke-width: 1.5; }
+  .n-model { fill: var(--surface); stroke: var(--signal); stroke-width: 1.5; stroke-dasharray: 5 3.5; }
+  .n-label { font-family: var(--font-display); font-weight: 600; font-size: 11.5px; fill: currentColor; }
+  .n-label.st { fill: var(--structure); }
+  .n-label.sg { fill: var(--signal); }
+  .n-sub { font-family: var(--font-mono); font-size: 9.5px; fill: currentColor; opacity: .6; letter-spacing: .04em; }
+  .e-line { stroke: currentColor; stroke-width: 1.2; fill: none; opacity: .55; }
+  .e-line.sg { stroke: var(--signal); opacity: 1; stroke-width: 1.5; }
+  .e-line.dash { stroke-dasharray: 4 4; }
+  .band { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; fill: currentColor; opacity: .55; }
+
+  /* stages */
+  .stage {
+    display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+    gap: 2px; background: var(--rule); border: 1px solid var(--rule);
+    margin-bottom: 2px;
+  }
+  .stage > div { background: var(--surface); padding: 18px 20px 20px; }
+  .stage .said { display: flex; flex-direction: column; gap: 10px; }
+  .stagehead { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+  .stagehead .idx {
+    font-family: var(--font-mono); font-size: 11px; color: var(--structure); font-weight: 600;
+    letter-spacing: .08em;
+  }
+  .stagehead h3 { margin: 0; }
+  .stage .did p { margin: 0; font-size: .92rem; color: var(--ink-2); max-width: none; }
+  .stage .did p + p { margin-top: 9px; }
+  .stage .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--rule-soft); align-items: center; }
+  .state {
+    font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--ink-2); background: var(--surface-2); padding: 3px 7px; white-space: nowrap;
+  }
+  .when { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-inline-start: auto; }
+  .when.live { color: var(--good); font-weight: 600; }
+
+  /* chat */
+  .thread { display: flex; flex-direction: column; gap: 7px; direction: rtl; }
+  .whose {
+    font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--ink-3); display: flex; justify-content: space-between; gap: 10px;
+    border-bottom: 1px solid var(--rule-soft); padding-bottom: 7px; margin-bottom: 3px;
+  }
+  .whose .he { font-family: var(--font-he); font-size: 10.5px; letter-spacing: 0; }
+  .bub {
+    font-family: var(--font-he); direction: rtl; unicode-bidi: isolate;
+    font-size: .91rem; line-height: 1.5; padding: 8px 11px; max-width: 88%;
+    border: 1px solid var(--rule-soft);
+  }
+  .bub.in  { background: var(--bubble-in); align-self: flex-start; border-start-start-radius: 0; }
+  .bub.out { background: var(--bubble-out); align-self: flex-end; border-start-end-radius: 0; }
+  .bub .t { display: block; direction: ltr; text-align: start; font-family: var(--font-mono); font-size: 9px; color: var(--ink-3); margin-top: 4px; }
+  .sys {
+    align-self: stretch; text-align: center; font-family: var(--font-mono);
+    font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3);
+    padding: 5px 0; border-block: 1px solid var(--rule-soft);
+  }
+  .sys.he { font-family: var(--font-he); letter-spacing: 0; }
+
+  /* console mock */
+  .screen { border: 1px solid var(--rule); background: var(--surface); box-shadow: var(--shadow); }
+  .screen .bar {
+    display: flex; justify-content: space-between; gap: 12px; align-items: center;
+    border-bottom: 1px solid var(--rule); padding: 8px 12px;
+    font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .08em; color: var(--ink-3);
+  }
+  .screen .bar .he { letter-spacing: 0; font-size: 10.5px; }
+  .screen .body { padding: 14px 14px 16px; direction: rtl; font-family: var(--font-he); }
+  .screen h4 { font-family: var(--font-he); font-weight: 600; font-size: .98rem; margin: 0 0 10px; display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .screen h4 .count { font-family: var(--font-mono); font-size: 10px; color: var(--signal); direction: ltr; }
+  .fields { display: grid; gap: 1px; background: var(--rule-soft); border: 1px solid var(--rule-soft); }
+  .fields > div { background: var(--surface); display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: baseline; padding: 7px 10px; font-size: .88rem; }
+  .fields .v { font-weight: 600; }
+  .fields .c { font-family: var(--font-mono); font-size: 10px; color: var(--ink-3); direction: ltr; font-variant-numeric: tabular-nums; }
+  .fields .withheld { color: var(--ink-3); font-weight: 400; font-size: .84rem; }
+  .pick { margin-top: 12px; display: grid; gap: 1px; background: var(--rule-soft); border: 1px solid var(--rule-soft); }
+  .pick > label { background: var(--surface); padding: 8px 10px; font-size: .88rem; display: flex; gap: 9px; align-items: baseline; cursor: pointer; }
+  .pick > label.sel { background: var(--surface-2); }
+  .pick .why { font-family: var(--font-mono); font-size: 10px; color: var(--structure); margin-inline-start: auto; direction: ltr; }
+  .pick input { accent-color: var(--structure); margin: 0; }
+  .btnrow { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    font-family: var(--font-he); font-size: .88rem; font-weight: 600; padding: 7px 16px;
+    border: 1px solid var(--structure); background: var(--structure); color: var(--surface);
+  }
+  .btn.ghost { background: transparent; color: var(--ink-2); border-color: var(--rule); }
+
+  /* escalation console */
+  .console { display: grid; grid-template-columns: 132px minmax(0,1fr); direction: rtl; }
+  .rail {
+    border-inline-end: 1px solid var(--rule); background: var(--surface-2);
+    padding: 12px 8px; display: grid; gap: 1px; align-content: start;
+    font-family: var(--font-he); font-size: .84rem;
+  }
+  .rail span { padding: 5px 8px; color: var(--ink-2); }
+  .rail span.on { background: var(--surface); color: var(--ink); font-weight: 600; }
+  .console .pane { padding: 13px 14px 16px; font-family: var(--font-he); }
+  .queue { display: grid; gap: 1px; background: var(--rule-soft); border: 1px solid var(--rule-soft); }
+  .queue > div {
+    background: var(--surface); display: grid;
+    grid-template-columns: 52px minmax(0,1.5fr) minmax(0,1.2fr) 92px;
+    gap: 10px; padding: 8px 10px; align-items: baseline; font-size: .85rem;
+  }
+  .queue .hd { background: var(--surface-2); font-size: .76rem; color: var(--ink-3); }
+  .queue .sel { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--structure); }
+  .queue .id { font-family: var(--font-mono); font-size: 10px; direction: ltr; color: var(--structure); }
+  .queue .cause { color: var(--signal); }
+  .queue .clock { font-family: var(--font-mono); font-size: 10px; direction: ltr; font-variant-numeric: tabular-nums; color: var(--ink-3); }
+  .queue .clock.over { color: var(--signal); font-weight: 600; }
+  .queue .clock.done { color: var(--good); }
+  .detail { margin-top: 14px; border: 1px solid var(--rule-soft); background: var(--surface); padding: 12px 13px 14px; }
+  .detail .dh { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-bottom: 10px; }
+  .detail .dh b { font-size: .92rem; }
+  .detail .dh .id { font-family: var(--font-mono); font-size: 10px; direction: ltr; color: var(--structure); }
+  .drows { display: grid; gap: 1px; background: var(--rule-soft); border: 1px solid var(--rule-soft); }
+  .drows > div { background: var(--surface); display: grid; grid-template-columns: 96px minmax(0,1fr); gap: 12px; padding: 7px 10px; font-size: .85rem; }
+  .drows .k { color: var(--ink-3); font-size: .79rem; }
+  .drows .v b { font-weight: 600; }
+  .drows .v .m { font-size: .78rem; color: var(--ink-3); direction: ltr; unicode-bidi: isolate; }
+
+  /* state machine strip */
+  .machine { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; margin-bottom: 18px; }
+  .st {
+    border: 1px solid var(--rule); background: var(--surface); padding: 9px 12px;
+    display: grid; gap: 2px; flex: 1 1 130px; min-width: 0;
+  }
+  .st .n { font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; color: var(--ink-3); }
+  .st .l { font-family: var(--font-display); font-weight: 600; font-size: .82rem; letter-spacing: -.01em; }
+  .st.hard { border-color: var(--signal); border-width: 1.5px; }
+  .st.hard .l { color: var(--signal); }
+  .st.end { border-color: var(--good); }
+  .st.end .l { color: var(--good); }
+  .exits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; background: var(--rule); border: 1px solid var(--rule); }
+  .exits > div { background: var(--surface); padding: 13px 15px; }
+  .exits p { margin: 4px 0 0; font-size: .87rem; color: var(--ink-2); max-width: none; }
+  .exits .l { font-family: var(--font-display); font-weight: 600; font-size: .92rem; }
+
+  /* rules */
+  .rules { display: grid; gap: 2px; background: var(--rule); border: 1px solid var(--rule); }
+  .rules > div { background: var(--surface); padding: 15px 18px; display: grid; grid-template-columns: 230px 1fr; gap: 4px 20px; align-items: baseline; }
+  .rules h3 { margin: 0; color: var(--signal); }
+  .rules p { margin: 0; font-size: .9rem; color: var(--ink-2); max-width: none; }
+
+  /* status */
+  .status { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; background: var(--rule); border: 1px solid var(--rule); margin-bottom: 26px; }
+  .status > div { background: var(--surface); padding: 16px 18px; }
+  .status .hdr { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; }
+  .status .now .hdr { color: var(--good); }
+  .status .next .hdr { color: var(--structure); }
+  .status .later .hdr { color: var(--ink-3); }
+  .status ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+  .status li { font-size: .89rem; color: var(--ink-2); padding-inline-start: 15px; position: relative; }
+  .status li::before { content: ""; position: absolute; inset-inline-start: 0; top: .62em; width: 7px; height: 1.5px; background: var(--ink-3); }
+  .status li b { color: var(--ink); font-weight: 600; }
+
+  .numbers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; background: var(--rule); border: 1px solid var(--rule); }
+  .numbers > div { background: var(--surface); padding: 16px 18px; }
+  .numbers .k { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; color: var(--structure); }
+  .numbers .l { font-family: var(--font-display); font-weight: 600; font-size: .98rem; margin: 6px 0 4px; text-wrap: balance; }
+  .numbers p { margin: 0; font-size: .86rem; color: var(--ink-2); max-width: none; }
+
+  .note { border-inline-start: 3px solid var(--signal); background: var(--surface); padding: 15px 18px; margin: 22px 0 0; box-shadow: var(--shadow); }
+  .note.blue { border-inline-start-color: var(--structure); }
+  .note p { margin: 0; max-width: none; font-size: .93rem; }
+
+  footer {
+    border-top: 2px solid var(--ink); margin-top: 18px; padding-top: 16px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink-3);
+    display: flex; flex-wrap: wrap; gap: 8px 26px; justify-content: space-between;
+  }
+
+  @media (max-width: 760px) {
+    .stage, .legend, .exits, .status, .numbers, .rules > div, .console { grid-template-columns: 1fr; }
+    .rail { display: none; }
+    .queue > div { grid-template-columns: 46px minmax(0,1fr); }
+    .queue .cause, .queue .clock { grid-column: 2; }
+    .queue .hd { display: none; }
+    .drows > div { grid-template-columns: 1fr; gap: 2px; }
+    .screen .body { padding: 12px; }
+  }
+
+  /* ——— the two rules that do the translating ——— */
+  #lang:not(:checked) ~ .he-t,
+  #lang:not(:checked) ~ * .he-t { display: none; }
+  #lang:checked ~ .en-t,
+  #lang:checked ~ * .en-t { display: none; }
+  #lang:checked ~ * { direction: rtl; }
+
+  .he-t { font-family: var(--font-he); direction: rtl; unicode-bidi: isolate; letter-spacing: normal; }
+  .he-t .m, .he-t [dir="ltr"] { unicode-bidi: isolate; }
+  text.he-t { font-family: var(--font-he); }
+  .st .l.he-t { font-size: .86rem; }
+  h1.he-t { font-size: clamp(1.9rem, 5vw, 2.9rem); line-height: 1.16; }
+</style>
+
+<div class="sheet">
+
+  <input type="checkbox" id="lang" class="langinput">
+
+  <div class="langbar">
+    <label class="langbtn" for="lang"><span class="en-t">עברית</span><span class="he-t">English</span></label>
+  </div>
+
+  <header class="titleblock">
+    <p class="eyebrow en-t">Dona Dom · tenant service platform · walkthrough</p>
+    <p class="eyebrow he-t">דונה דום · מערכת שירות לדיירים · סקירה</p>
+    <h1 class="en-t">The core journey, end to end</h1>
+    <h1 class="he-t">המסע המרכזי, מקצה לקצה</h1>
+    <p class="lede en-t">A tenant reports a fault on WhatsApp. The system identifies them, tries to fix it
+      in the thread, decides who pays, and books the tradesman — with the office watching only the
+      exceptions. This sheet walks that journey screen by screen, and marks what already runs.</p>
+    <p class="lede he-t">דיירת מדווחת על תקלה בוואטסאפ. המערכת מזהה אותה, מנסה לפתור בתוך השיחה עצמה,
+      קובעת מי אחראי ומזמינה את בעל המקצוע — והמשרד רואה רק את החריגים. הדף הזה עובר על המסע הזה
+      מסך אחר מסך, ומסמן מה כבר עובד.</p>
+    <div class="facts">
+      <span class="en-t"><b>~1,500</b> apartments</span>
+      <span class="he-t"><b>~1,500</b> דירות</span>
+      <span class="en-t"><b>דירה להשכיר</b> long-term rental tenders</span>
+      <span class="he-t">מכרזי <b>דירה להשכיר</b></span>
+      <span class="en-t">WhatsApp on <b>both ends</b></span>
+      <span class="he-t">וואטסאפ <b>בשני הקצוות</b></span>
+      <span class="en-t">pilot live <b>week 12</b></span>
+      <span class="he-t">פיילוט חי <b>בשבוע 12</b></span>
+      <span class="en-t">north star: <b>calls closed with no human in them</b></span>
+      <span class="he-t">מדד־על: <b>קריאות שנסגרות בלי מגע אדם</b></span>
+    </div>
+  </header>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum en-t">01 — THE SHAPE OF IT</span>
+      <span class="secnum he-t">01 — המבנה</span>
+      <h2 class="en-t">Three machines, and only one of them is a model</h2>
+      <h2 class="he-t">שלושה מנגנונים, ורק אחד מהם הוא מודל</h2>
+      <p class="sub en-t">Who decides what is the whole design. Every stage below carries one of these three
+        marks.</p>
+      <p class="sub he-t">מי מחליט מה — זה כל התכנון. כל שלב בהמשך נושא אחד משלושת הסימנים האלה.</p>
+    </div>
+
+    <div class="legend">
+      <div>
+        <span class="tag rule en-t">Rules · deterministic</span>
+        <span class="tag rule he-t">כללים · דטרמיניסטי</span>
+        <p class="en-t">SQL and versioned policy rows. Identification, responsibility, the call's states, the
+          emergency route. Inspectable and defensible a year later.</p>
+        <p class="he-t">שאילתות SQL ושורות מדיניות מגורסות. זיהוי, אחריות, מצבי הקריאה וניתוב חירום.
+          ניתנים לבדיקה ולהגנה גם בעוד שנה.</p>
+      </div>
+      <div>
+        <span class="tag model en-t">Agent · the model</span>
+        <span class="tag model he-t">הסוכן · המודל</span>
+        <p class="en-t">Reads, writes and asks. It triages, answers from documents, and negotiates times. It
+          never decides who pays and never moves a call's state.</p>
+        <p class="he-t">קורא, כותב ושואל. מבצע טריאז', עונה מתוך מסמכים ומתאם מועדים. לעולם אינו קובע
+          מי אחראי ואינו מזיז מצב של קריאה.</p>
+      </div>
+      <div>
+        <span class="tag human en-t">Office · a person</span>
+        <span class="tag human he-t">המשרד · אדם</span>
+        <p class="en-t">Supervises exceptions and confirms anything a wrong answer would make
+          permanent. Not in the routine path at all.</p>
+        <p class="he-t">מפקח על החריגים ומאשר כל דבר שתשובה שגויה בו היא בלתי הפיכה. אינו נמצא כלל
+          במסלול השגרתי.</p>
+      </div>
+    </div>
+
+    <figure>
+      <div class="figbody">
+        <svg viewBox="0 0 720 336" role="img" aria-label="Tenant WhatsApp on the left, tradesman WhatsApp on the right, with identification, the agent and the call state machine between them; the responsibility matrix and the office console above; the emergency bypass running underneath, straight from the tenant to the duty phone.">
+          <rect class="n-box" x="4" y="104" width="92" height="44" rx="2"/>
+          <text class="n-label en-t" x="50" y="122" text-anchor="middle">Tenant</text>
+          <text class="n-label he-t" x="50" y="122" text-anchor="middle">דייר</text>
+          <text class="n-sub en-t" x="50" y="137" text-anchor="middle">WhatsApp</text>
+          <text class="n-sub he-t" x="50" y="137" text-anchor="middle">וואטסאפ</text>
+
+          <rect class="n-rule" x="126" y="98" width="136" height="56" rx="2"/>
+          <text class="n-label st en-t" x="194" y="119" text-anchor="middle">Identify</text>
+          <text class="n-label st he-t" x="194" y="119" text-anchor="middle">זיהוי</text>
+          <text class="n-sub en-t" x="194" y="133" text-anchor="middle">phone → apartment</text>
+          <text class="n-sub he-t" x="194" y="133" text-anchor="middle">טלפון ← דירה</text>
+          <text class="n-sub en-t" x="194" y="145" text-anchor="middle">before any model call</text>
+          <text class="n-sub he-t" x="194" y="145" text-anchor="middle">לפני כל פניית מודל</text>
+
+          <rect class="n-model" x="292" y="90" width="130" height="72" rx="2"/>
+          <text class="n-label sg en-t" x="357" y="112" text-anchor="middle">Agent</text>
+          <text class="n-label sg he-t" x="357" y="112" text-anchor="middle">הסוכן</text>
+          <text class="n-sub en-t" x="357" y="127" text-anchor="middle">triage · first fix</text>
+          <text class="n-sub he-t" x="357" y="127" text-anchor="middle">טריאז' · עזרה ראשונה</text>
+          <text class="n-sub en-t" x="357" y="139" text-anchor="middle">their own lease</text>
+          <text class="n-sub he-t" x="357" y="139" text-anchor="middle">החוזה שלו בלבד</text>
+          <text class="n-sub en-t" x="357" y="151" text-anchor="middle">windows · offers</text>
+          <text class="n-sub he-t" x="357" y="151" text-anchor="middle">חלונות · הצעות</text>
+
+          <rect class="n-rule" x="272" y="14" width="170" height="46" rx="2"/>
+          <text class="n-label st en-t" x="357" y="34" text-anchor="middle">Who pays</text>
+          <text class="n-label st he-t" x="357" y="34" text-anchor="middle">מי אחראי</text>
+          <text class="n-sub en-t" x="357" y="49" text-anchor="middle">tenant / operator / contractor</text>
+          <text class="n-sub he-t" x="357" y="49" text-anchor="middle">שוכר / מפעיל / קבלן</text>
+
+          <rect class="n-rule" x="452" y="98" width="126" height="56" rx="2"/>
+          <text class="n-label st en-t" x="515" y="119" text-anchor="middle">The call</text>
+          <text class="n-label st he-t" x="515" y="119" text-anchor="middle">הקריאה</text>
+          <text class="n-sub en-t" x="515" y="133" text-anchor="middle">8 states · 3 exits</text>
+          <text class="n-sub he-t" x="515" y="133" text-anchor="middle">8 מצבים · 3 יציאות</text>
+          <text class="n-sub en-t" x="515" y="145" text-anchor="middle">SLA clock</text>
+          <text class="n-sub he-t" x="515" y="145" text-anchor="middle">שעון SLA</text>
+
+          <rect class="n-box" x="452" y="14" width="126" height="46" rx="2"/>
+          <text class="n-label en-t" x="515" y="34" text-anchor="middle">Office console</text>
+          <text class="n-label he-t" x="515" y="34" text-anchor="middle">מסך המשרד</text>
+          <text class="n-sub en-t" x="515" y="49" text-anchor="middle">exceptions only</text>
+          <text class="n-sub he-t" x="515" y="49" text-anchor="middle">חריגים בלבד</text>
+
+          <rect class="n-box" x="612" y="104" width="104" height="44" rx="2"/>
+          <text class="n-label en-t" x="664" y="122" text-anchor="middle">Tradesman</text>
+          <text class="n-label he-t" x="664" y="122" text-anchor="middle">בעל מקצוע</text>
+          <text class="n-sub en-t" x="664" y="137" text-anchor="middle">WhatsApp</text>
+          <text class="n-sub he-t" x="664" y="137" text-anchor="middle">וואטסאפ</text>
+
+          <rect class="n-box" x="612" y="266" width="104" height="44" rx="2"/>
+          <text class="n-label en-t" x="664" y="284" text-anchor="middle">Duty phone</text>
+          <text class="n-label he-t" x="664" y="284" text-anchor="middle">טלפון תורן</text>
+          <text class="n-sub en-t" x="664" y="299" text-anchor="middle">a person, 02:00</text>
+          <text class="n-sub he-t" x="664" y="299" text-anchor="middle">אדם, 02:00</text>
+
+          <path class="e-line" d="M96 126 H126"/>
+          <path class="e-line" d="M262 126 H292"/>
+          <path class="e-line" d="M422 126 H452"/>
+          <path class="e-line" d="M578 126 H612"/>
+          <path class="e-line dash" d="M357 90 V60"/>
+          <path class="e-line dash" d="M515 98 V60"/>
+
+          <path class="e-line dash" d="M612 148 V190 H96 V148"/>
+          <text class="band en-t" x="250" y="207">RETURN PATH · EVERY ANSWER GOES BACK DOWN THE SAME THREAD</text>
+          <text class="band he-t" x="250" y="207">מסלול חזרה · כל תשובה חוזרת באותה שיחה</text>
+
+          <path class="e-line sg" d="M50 148 V288 H612"/>
+          <text class="band en-t" x="170" y="281" fill="var(--signal)" opacity="1">EMERGENCY · NO MODEL CALL IN BETWEEN</text>
+          <text class="band he-t" x="170" y="281" fill="var(--signal)" opacity="1">חירום · בלי שום פניית מודל בדרך</text>
+        </svg>
+      </div>
+      <figcaption>
+        <span class="en-t"><b>The agent is a client, not a brain.</b> It can only act through documented
+        commands, and every call it makes is audited. Identification happens in SQL before it is
+        handed anything; responsibility is read from versioned rows, never inferred; and an emergency
+        never reaches it at all.</span>
+        <span class="he-t"><b>הסוכן הוא לקוח, לא מוח.</b> הוא פועל רק דרך פקודות מתועדות, וכל קריאה שלו
+        נרשמת ביומן. הזיהוי מתבצע ב־SQL לפני שמוסרים לו משהו; האחריות נקראת משורות מגורסות ולעולם
+        אינה מנוחשת; וקריאת חירום אינה מגיעה אליו כלל.</span>
+      </figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum en-t">02 — THE JOURNEY</span>
+      <span class="secnum he-t">02 — המסע</span>
+      <h2 class="en-t">A tenant reports a leak</h2>
+      <h2 class="he-t">דיירת מדווחת על נזילה</h2>
+      <p class="sub en-t">Left: what the two people actually see on their phones. Right: what the system
+        did, and which of the three did it.</p>
+      <p class="sub he-t">בצד אחד: מה ששני האנשים באמת רואים בטלפון. בצד השני: מה שהמערכת עשתה,
+        ומי מבין השלושה עשה זאת.</p>
+    </div>
+
+    <div class="stage">
+      <div class="said">
+        <div class="whose">
+          <span class="en-t">Tenant · <span class="he">רונית</span></span>
+          <span class="he-t">שוכרת · רונית</span>
+          <span class="en-t">Tue 18:42</span>
+          <span class="he-t">שלישי 18:42</span>
+        </div>
+        <div class="thread">
+          <div class="bub out">שלום, יש נזילה מתחת לכיור במטבח. מטפטף כל הזמן.<span class="t">18:42</span></div>
+          <div class="bub in">שלום רונית. זיהיתי אותך — רקפת 12, שוהם, דירה 14.<span class="t">18:42</span></div>
+        </div>
+      </div>
+      <div class="did">
+        <div class="stagehead">
+          <span class="idx">01</span>
+          <h3 class="en-t">The number resolves to one apartment</h3>
+          <h3 class="he-t">המספר מוביל לדירה אחת</h3>
+        </div>
+        <p class="en-t">Phone number → contact valid today → person → an active tenancy → the unit. Five hops in
+          one SQL query, run <em>before</em> the message is shown to any model.</p>
+        <p class="he-t">מספר טלפון ← איש קשר בתוקף היום ← אדם ← שכירות פעילה ← הדירה. חמישה צעדים
+          בשאילתה אחת, שרצה <em>לפני</em> שההודעה מוצגת לאיזשהו מודל.</p>
+        <p class="en-t">It resolves to exactly one apartment or to nothing. A guarantor resolves to nothing. A
+          tenant whose lease starts next month resolves to nothing.</p>
+        <p class="he-t">התוצאה היא דירה אחת בדיוק, או כלום. ערב מוביל לכלום. שוכר שהחוזה שלו מתחיל
+          בחודש הבא מוביל לכלום.</p>
+        <div class="meta">
+          <span class="tag rule en-t">Rules</span><span class="tag rule he-t">כללים</span>
+          <span class="state en-t">state: identified</span><span class="state he-t">מצב: זוהה</span>
+          <span class="when en-t">week 9</span><span class="when he-t">שבוע 9</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="said">
+        <div class="whose">
+          <span class="en-t">Tenant · <span class="he">רונית</span></span>
+          <span class="he-t">שוכרת · רונית</span>
+          <span class="en-t">Tue 18:43</span>
+          <span class="he-t">שלישי 18:43</span>
+        </div>
+        <div class="thread">
+          <div class="bub in">לפני שאני קובע טכנאי — מתחת לכיור יש ברז ניתוק קטן על הצינור. אפשר לסגור אותו ולראות אם הטפטוף נפסק?<span class="t">18:43</span></div>
+          <div class="bub out">סגרתי. עדיין מטפטף.<span class="t">18:51</span></div>
+        </div>
+      </div>
+      <div class="did">
+        <div class="stagehead">
+          <span class="idx">02</span>
+          <h3 class="en-t">First assistance, in the thread</h3>
+          <h3 class="he-t">עזרה ראשונה, בתוך השיחה</h3>
+        </div>
+        <p class="en-t">The agent triages and tries the fix first, answering from this tenant's own lease and the
+          shared knowledge base — never from another tenant's documents.</p>
+        <p class="he-t">הסוכן מבצע טריאז' ומנסה קודם את הפתרון הפשוט, מתוך החוזה של הדיירת הזו ומאגר
+          הידע המשותף — לעולם לא ממסמכים של דייר אחר.</p>
+        <p class="en-t"><strong>Most calls should end here.</strong> Closed with no human involved is the number
+          the pilot is measured on.</p>
+        <p class="he-t"><strong>רוב הקריאות אמורות להסתיים כאן.</strong> שיעור הקריאות שנסגרות בלי מגע
+          אדם הוא המדד שהפיילוט נמדד בו.</p>
+        <div class="meta">
+          <span class="tag model en-t">Agent</span><span class="tag model he-t">הסוכן</span>
+          <span class="state en-t">state: triaged</span><span class="state he-t">מצב: טריאז'</span>
+          <span class="when en-t">week 10</span><span class="when he-t">שבוע 10</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="said">
+        <div class="whose">
+          <span class="en-t">Tenant · <span class="he">רונית</span></span>
+          <span class="he-t">שוכרת · רונית</span>
+          <span class="en-t">Tue 18:52</span>
+          <span class="he-t">שלישי 18:52</span>
+        </div>
+        <div class="thread">
+          <div class="bub in">מובן. הטיפול הזה באחריות מפעיל הנכס — אין עלות מצידך. אני מזמין אינסטלטור. מתי נוח שיגיע?<span class="t">18:52</span></div>
+          <div class="bub out">מחר אחרי 16:00, או חמישי בבוקר.<span class="t">18:55</span></div>
+        </div>
+      </div>
+      <div class="did">
+        <div class="stagehead">
+          <span class="idx">03</span>
+          <h3 class="en-t">Who pays is looked up, not decided</h3>
+          <h3 class="he-t">מי אחראי — נשלף, לא הוחלט</h3>
+        </div>
+        <p class="en-t">A category and an apartment go into the responsibility matrix; out comes
+          <strong>tenant</strong>, <strong>operator</strong> or <strong>contractor</strong>, the
+          clause behind it, and the version of the rules that answered. Inside תקופת הבדק the answer
+          is the contractor — which is why two options were never enough.</p>
+        <p class="he-t">קטגוריה ודירה נכנסות למטריצת האחריות; חוזרים <strong>שוכר</strong>,
+          <strong>מפעיל</strong> או <strong>קבלן</strong>, הסעיף שמאחורי התשובה, והגרסה של הכללים
+          שענתה. בתוך תקופת הבדק התשובה היא הקבלן — ולכן שתי אפשרויות מעולם לא הספיקו.</p>
+        <p class="en-t">The answer is stamped onto the call. Editing the matrix tomorrow does not change what this
+          call was told today.</p>
+        <p class="he-t">התשובה נחתמת על הקריאה. עריכה של המטריצה מחר אינה משנה את מה שנאמר לקריאה
+          הזו היום.</p>
+        <div class="meta">
+          <span class="tag rule en-t">Rules</span><span class="tag rule he-t">כללים</span>
+          <span class="state en-t">responsibility set</span><span class="state he-t">מצב: נקבעה אחריות</span>
+          <span class="when en-t">next</span><span class="when he-t">בהמשך</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="said">
+        <div class="whose">
+          <span class="en-t">Plumber · <span class="he">מוטי</span></span>
+          <span class="he-t">אינסטלטור · מוטי</span>
+          <span class="en-t">Tue 18:57</span>
+          <span class="he-t">שלישי 18:57</span>
+        </div>
+        <div class="thread">
+          <div class="bub in">מוטי שלום, קריאה חדשה — נזילה מתחת לכיור. רקפת 12 שוהם, דירה 14. חלונות אפשריים: מחר 16:00–20:00, חמישי 08:00–12:00.<span class="t">18:57</span></div>
+          <div class="bub out">מחר לא מסתדר לי. חמישי ב-9 אני שם.<span class="t">19:20</span></div>
+        </div>
+      </div>
+      <div class="did">
+        <div class="stagehead">
+          <span class="idx">04</span>
+          <h3 class="en-t">The other side of the switchboard</h3>
+          <h3 class="he-t">הצד השני של המרכזייה</h3>
+        </div>
+        <p class="en-t">The tradesman gets his own WhatsApp thread, bound to the same call. He installs nothing and
+          logs into nothing.</p>
+        <p class="he-t">בעל המקצוע מקבל שיחת וואטסאפ משלו, שקשורה לאותה קריאה. הוא לא מתקין אפליקציה
+          ולא מתחבר לשום מערכת.</p>
+        <p class="en-t">Two people who are never online at once, negotiating a time: <strong>this is where most of
+          the engineering is</strong>, and it is the part that photographs badly. Timeouts, retries,
+          a second provider when the first goes quiet.</p>
+        <p class="he-t">שני אנשים שאף פעם אינם מחוברים באותו רגע, מתאמים מועד: <strong>כאן נמצא רוב
+          הפיתוח</strong>, וזה החלק שנראה הכי פחות מרשים במצגת. פסקי זמן, ניסיונות חוזרים, וספק חלופי
+          כשהראשון משתתק.</p>
+        <div class="meta">
+          <span class="tag model en-t">Agent</span><span class="tag model he-t">הסוכן</span>
+          <span class="state en-t">windows collected</span><span class="state he-t">מצב: נאספו חלונות</span>
+          <span class="when en-t">week 11</span><span class="when he-t">שבוע 11</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="said">
+        <div class="whose">
+          <span class="en-t">Tenant · <span class="he">רונית</span></span>
+          <span class="he-t">שוכרת · רונית</span>
+          <span class="en-t">Tue 19:21</span>
+          <span class="he-t">שלישי 19:21</span>
+        </div>
+        <div class="thread">
+          <div class="bub in">מוטי יכול חמישי ב-09:00. מאשרת?<span class="t">19:21</span></div>
+          <div class="bub out">כן, מאשרת.<span class="t">19:24</span></div>
+          <div class="bub in">נקבע. מוטי יגיע חמישי 09:00. אשלח תזכורת בערב שלפני.<span class="t">19:24</span></div>
+          <div class="sys en-t">visit booked · 42 minutes from first message</div>
+          <div class="sys he he-t">הביקור נקבע · 42 דקות מההודעה הראשונה</div>
+        </div>
+      </div>
+      <div class="did">
+        <div class="stagehead">
+          <span class="idx">05</span>
+          <h3 class="en-t">Offered, accepted, booked</h3>
+          <h3 class="he-t">הוצע, אושר, נקבע</h3>
+        </div>
+        <p class="en-t">The agent proposes; the state machine records. The call moves
+          <span class="m">OFFERED → SCHEDULED</span> because a rule says the transition is legal, not
+          because a model judged the conversation went well.</p>
+        <p class="he-t">הסוכן מציע; מכונת המצבים רושמת. הקריאה עוברת
+          <span class="m" dir="ltr">OFFERED → SCHEDULED</span> כי כלל קובע שהמעבר חוקי, ולא כי מודל
+          התרשם שהשיחה הלכה טוב.</p>
+        <p class="en-t">After the visit the call closes, and the whole thread — both sides — stays on the record
+          behind it.</p>
+        <p class="he-t">אחרי הביקור הקריאה נסגרת, וכל השיחה — משני הצדדים — נשארת ברשומה שמאחוריה.</p>
+        <div class="meta">
+          <span class="tag rule en-t">Rules</span><span class="tag rule he-t">כללים</span>
+          <span class="state en-t">scheduled → closed</span><span class="state he-t">מצב: נקבע ← נסגר</span>
+          <span class="when en-t">week 11</span><span class="when he-t">שבוע 11</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="said">
+        <div class="whose">
+          <span class="en-t">Tenant · <span class="he">עומר</span></span>
+          <span class="he-t">שוכר · עומר</span>
+          <span class="en-t">Sat 02:14</span>
+          <span class="he-t">שבת 02:14</span>
+        </div>
+        <div class="thread">
+          <div class="bub out">התפוצץ צינור, כל הבית מוצף!!<span class="t">02:14</span></div>
+          <div class="sys en-t">routed to duty phone · no model call</div>
+          <div class="sys he he-t">נותב לטלפון התורן · בלי פניית מודל</div>
+          <div class="bub in">הקריאה הועברה עכשיו לתורן. הוא חוזר אליך תוך דקות.<span class="t">02:14</span></div>
+        </div>
+      </div>
+      <div class="did">
+        <div class="stagehead">
+          <span class="idx en-t">ALT</span><span class="idx he-t">חריג</span>
+          <h3 class="en-t">The exception: an emergency at 02:00</h3>
+          <h3 class="he-t">החריג: קריאת חירום ב־02:00</h3>
+        </div>
+        <p class="en-t">An emergency category is a policy row plus a routing rule — it reaches the duty phone with
+          <strong>no model call in between</strong>, and the acknowledgement is fixed text, not
+          generated.</p>
+        <p class="he-t">קטגוריית חירום היא שורת מדיניות בתוספת כלל ניתוב — היא מגיעה לטלפון התורן
+          <strong>בלי שום פניית מודל בדרך</strong>, וההודעה לדייר היא נוסח קבוע ולא טקסט שנוצר.</p>
+        <p class="en-t">Built in a week that has no agent in it, and live before the agent takes its first real
+          message. A priority label is something a model can get wrong; a route is not.</p>
+        <p class="he-t">נבנה בשבוע שאין בו סוכן כלל, והוא חי לפני שהסוכן מקבל את ההודעה האמיתית
+          הראשונה שלו. תווית דחיפות היא משהו שמודל יכול לטעות בו; ניתוב הוא לא.</p>
+        <div class="meta">
+          <span class="tag rule en-t">Rules</span><span class="tag rule he-t">כללים</span>
+          <span class="tag human en-t">Office</span><span class="tag human he-t">המשרד</span>
+          <span class="when en-t">next</span><span class="when he-t">בהמשך</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum en-t">03 — THE CALL'S STATES</span>
+      <span class="secnum he-t">03 — מצבי הקריאה</span>
+      <h2 class="en-t">Eight states, three ways out, no model anywhere in them</h2>
+      <h2 class="he-t">שמונה מצבים, שלוש דרכי יציאה, ואין בהם מודל בשום מקום</h2>
+      <p class="sub en-t">The machine is walked by hand from the console first. The agent arrives later and
+        changes none of it — it proposes, and the machine still decides.</p>
+      <p class="sub he-t">את המכונה מפעילים קודם ביד, מהמסך של המשרד. הסוכן מגיע אחר כך ואינו משנה
+        בה דבר — הוא מציע, והמכונה עדיין מחליטה.</p>
+    </div>
+
+    <div class="machine">
+      <div class="st"><span class="n">01</span><span class="l en-t">New</span><span class="l he-t">חדשה</span></div>
+      <div class="st"><span class="n">02</span><span class="l en-t">Identified</span><span class="l he-t">זוהתה</span></div>
+      <div class="st"><span class="n">03</span><span class="l en-t">Triaged</span><span class="l he-t">טריאז'</span></div>
+      <div class="st"><span class="n">04</span><span class="l en-t">Responsibility set</span><span class="l he-t">נקבעה אחריות</span></div>
+      <div class="st hard"><span class="n">05</span><span class="l en-t">Windows collected</span><span class="l he-t">נאספו חלונות</span></div>
+      <div class="st hard"><span class="n">06</span><span class="l en-t">Offered</span><span class="l he-t">הוצע מועד</span></div>
+      <div class="st"><span class="n">07</span><span class="l en-t">Scheduled</span><span class="l he-t">נקבע ביקור</span></div>
+      <div class="st end"><span class="n">08</span><span class="l en-t">Closed</span><span class="l he-t">נסגרה</span></div>
+    </div>
+
+    <div class="exits">
+      <div>
+        <span class="l en-t">Resolved in the thread</span>
+        <span class="l he-t">נפתרה בשיחה</span>
+        <p class="en-t">The tenant's problem went away without a visit. The best outcome and the one being counted.</p>
+        <p class="he-t">הבעיה של הדייר נעלמה בלי ביקור. התוצאה הטובה ביותר, וזו שנספרת.</p>
+      </div>
+      <div>
+        <span class="l en-t">Escalated to the office</span>
+        <span class="l he-t">הוסלמה למשרד</span>
+        <p class="en-t">The agent could not answer, the provider went silent, or an SLA breached. Escalations are
+          counted by cause, not as one rate.</p>
+        <p class="he-t">הסוכן לא ידע לענות, הספק השתתק, או שנחרג יעד SLA. הסלמות נספרות לפי סיבה,
+          ולא כשיעור אחד.</p>
+      </div>
+      <div>
+        <span class="l en-t">Emergency bypass</span>
+        <span class="l he-t">עקיפת חירום</span>
+        <p class="en-t">Never reached the agent. Counted as a success when it reaches a human fast.</p>
+        <p class="he-t">לא הגיעה לסוכן כלל. נחשבת הצלחה כשהיא מגיעה לאדם מהר.</p>
+      </div>
+    </div>
+
+    <div class="note">
+      <p class="en-t">The two states outlined in orange are the expensive ones. <strong>Roughly seventy percent of
+        the engineering lives between <span class="m">WINDOWS COLLECTED</span> and
+        <span class="m">OFFERED</span></strong> — two people, neither online, no delivery guarantee.
+        It runs underneath every week from here to the pilot rather than getting a demo of its own.</p>
+      <p class="he-t">שני המצבים המסומנים בכתום הם היקרים. <strong>כשבעים אחוז מהפיתוח נמצא בין
+        <span class="m" dir="ltr">WINDOWS COLLECTED</span> ל־<span class="m" dir="ltr">OFFERED</span></strong>
+        — שני אנשים, אף אחד מהם אינו מחובר, ואין שום ערובה למסירה. זה רץ מתחת לכל שבוע מכאן ועד
+        הפיילוט, במקום לקבל הדגמה משלו.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum en-t">04 — WHEN IT ESCALATES</span>
+      <span class="secnum he-t">04 — כשקריאה מוסלמת</span>
+      <h2 class="en-t">What the office sees</h2>
+      <h2 class="he-t">מה שהמשרד רואה</h2>
+      <p class="sub en-t">The office is not in the routine path. This screen opens when a call has already
+        failed to close by itself — and everything the agent tried is already on the record.</p>
+      <p class="sub he-t">המשרד אינו במסלול השגרתי. המסך הזה נפתח רק כשקריאה כבר לא נסגרה מעצמה —
+        וכל מה שהסוכן ניסה כבר רשום.</p>
+    </div>
+
+    <div class="screen">
+      <div class="bar">
+        <span class="he">דונה דום · קריאות · הסלמות</span>
+        <span>staging</span>
+      </div>
+      <div class="console">
+        <div class="rail">
+          <span>בניינים</span>
+          <span>חוזים מסתיימים</span>
+          <span>חוזים לא שלמים</span>
+          <span>חיפוש</span>
+          <span class="on">קריאות</span>
+          <span>צוות</span>
+          <span>הגדרות</span>
+        </div>
+        <div class="pane">
+          <h4><span>תור ההסלמות</span><span class="count">4 open · 1 breached</span></h4>
+          <div class="queue">
+            <div class="hd"><span>קריאה</span><span>דירה וקטגוריה</span><span>סיבת ההסלמה</span><span>שעון SLA</span></div>
+            <div class="sel">
+              <span class="id">#1043</span>
+              <span>רקפת 12, שוהם · דירה 14 · אינסטלציה</span>
+              <span class="cause">הספק לא הגיב 36 שעות</span>
+              <span class="clock over">+04:12</span>
+            </div>
+            <div>
+              <span class="id">#1051</span>
+              <span>נרקיס 45, כפר סבא · דירה 3 · חשמל</span>
+              <span class="cause">הסוכן לא ידע לענות</span>
+              <span class="clock">01:20</span>
+            </div>
+            <div>
+              <span class="id">#1052</span>
+              <span>הדס 8, אשדוד · דירה 22 · מיזוג</span>
+              <span class="cause">פער במדיניות — אין כלל תואם</span>
+              <span class="clock">06:40</span>
+            </div>
+            <div>
+              <span class="id">#1055</span>
+              <span>אלון 3, לוד · דירה 9 · נזילה</span>
+              <span class="cause">עקיפת חירום — נמסר לתורן 02:14</span>
+              <span class="clock done">נסגרה</span>
+            </div>
+          </div>
+
+          <div class="detail">
+            <div class="dh"><b>נזילה מתחת לכיור · רקפת 12, דירה 14</b><span class="id">#1043 · policy v4</span></div>
+            <div class="drows">
+              <div><span class="k">מצב</span><span class="v"><b>הוצע מועד</b> — 2 הצעות, אין מענה מהספק</span></div>
+              <div><span class="k">אחריות</span><span class="v"><b>מפעיל הנכס</b> · סעיף 7.2 · <span class="m">policy v4 · 2026-09-01</span></span></div>
+              <div><span class="k">מה נוסה</span><span class="v">ברז ניתוק — לא עזר · נאספו חלונות 18:55 · נשלח לספק 18:57 · תזכורת 20:40 · אין מענה</span></div>
+              <div><span class="k">השוכרת</span><span class="v">עודכנה 19:30 · ממתינה לשיבוץ</span></div>
+              <div><span class="k">יומן</span><span class="v">14 רשומות · כל פנייה של הסוכן וכל קריאה לנתונים</span></div>
+            </div>
+            <div class="btnrow">
+              <button class="btn" type="button">שיבוץ ספק חלופי</button>
+              <button class="btn ghost" type="button">לקחת לטיפול ידני</button>
+              <button class="btn ghost" type="button">להחזיר לסוכן</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="exits" style="margin-top:2px">
+      <div>
+        <span class="l en-t">Only the exceptions, with their cause</span>
+        <span class="l he-t">רק החריגים, עם הסיבה שלהם</span>
+        <p class="en-t">This is not a list of open calls. It is the calls that broke a rule — the agent could not
+          answer, the provider went silent, an SLA breached, the policy had no answer. Each row
+          carries its cause, because one undifferentiated escalation rate hides silent failure.</p>
+        <p class="he-t">זו אינה רשימת הקריאות הפתוחות. אלו הקריאות ששברו כלל — הסוכן לא ידע לענות,
+          הספק השתתק, נחרג יעד SLA, או שלמדיניות לא הייתה תשובה. כל שורה נושאת את הסיבה שלה, כי
+          שיעור הסלמה אחד ולא מפולח מסתיר כישלון שקט.</p>
+      </div>
+      <div>
+        <span class="l en-t">What the agent did is already written down</span>
+        <span class="l he-t">מה שהסוכן עשה כבר כתוב</span>
+        <p class="en-t">Opening a call shows what was tried and when, the responsibility answer with the clause and
+          the policy version that gave it, and an audit line for every data read. Nothing has to be
+          reconstructed from a conversation.</p>
+        <p class="he-t">פתיחת קריאה מציגה מה נוסה ומתי, את תשובת האחריות עם הסעיף וגרסת המדיניות
+          שנתנה אותה, ושורת יומן לכל קריאה לנתונים. אין צורך לשחזר שום דבר מתוך שיחה.</p>
+      </div>
+      <div>
+        <span class="l en-t">Taking it over breaks nothing</span>
+        <span class="l he-t">לקיחה לטיפול ידני לא שוברת כלום</span>
+        <p class="en-t">A person moves the same state machine the agent was moving, and the tenant's thread keeps
+          running where it was. Handing it back is the same act in reverse.</p>
+        <p class="he-t">אדם מזיז את אותה מכונת מצבים שהסוכן הזיז, והשיחה עם הדיירת ממשיכה מאותה
+          נקודה. החזרה לסוכן היא אותה פעולה בכיוון ההפוך.</p>
+      </div>
+    </div>
+
+    <div class="note blue">
+      <p class="en-t">The escalation queue is <strong>week 8's, and it is built before the agent exists</strong>
+        — the console has to be a product on its own, walked by hand, or there is nothing for the
+        agent to be measured against.</p>
+      <p class="he-t">תור ההסלמות שייך ל<strong>שבוע 8, והוא נבנה לפני שקיים סוכן</strong> — המסך של
+        המשרד חייב להיות מוצר בפני עצמו, שמפעילים ביד, אחרת אין מול מה למדוד את הסוכן.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum en-t">05 — WHAT MAKES IT ANSWERABLE</span>
+      <span class="secnum he-t">05 — מה שמאפשר לענות</span>
+      <h2 class="en-t">Paper becomes the record — and this part already runs</h2>
+      <h2 class="he-t">הנייר הופך לרשומה — והחלק הזה כבר עובד</h2>
+      <p class="sub en-t">The agent can only answer from documents that were filed against the right
+        apartment. That intake is what has been built so far, and it was walked on staging by clicking.</p>
+      <p class="sub he-t">הסוכן יכול לענות רק ממסמכים שתויקו מול הדירה הנכונה. הקליטה הזו היא מה
+        שנבנה עד כה, והיא נבדקה על סביבת ההרצה בלחיצות בלבד.</p>
+    </div>
+
+    <div class="stage">
+      <div class="said">
+        <div class="screen">
+          <div class="bar"><span class="he">דונה דום · הגשת מסמך</span><span>staging</span></div>
+          <div class="body">
+            <h4><span>חוזה שכירות · נקרא מהמסמך</span></h4>
+            <div class="fields">
+              <div><span>כתובת</span><span class="v">נרקיס 45, כפר סבא</span><span class="c">90%</span></div>
+              <div><span>מספר דירה</span><span class="v">3</span><span class="c">91%</span></div>
+              <div><span>תחילת השכירות</span><span class="v">2026-08-15</span><span class="c">96%</span></div>
+              <div><span>סיום השכירות</span><span class="v">2027-08-15</span><span class="c">96%</span></div>
+              <div><span>שם השוכר</span><span class="v">—</span><span class="c">92%</span></div>
+              <div><span>ת.ז. שוכר</span><span class="withheld">נקרא ואינו מוצג בהרשאה זו</span><span class="c">77%</span></div>
+            </div>
+            <div class="pick">
+              <label class="sel" for="let-existing"><input type="radio" id="let-existing" name="letting" checked><span>השכרה קיימת · 2026-08-15 → 2027-08-15</span><span class="why">ת.ז. match: 1</span></label>
+              <label for="let-new"><input type="radio" id="let-new" name="letting"><span>השכרה חדשה (טיוטה)</span><span class="why">default</span></label>
+            </div>
+            <div class="btnrow">
+              <button class="btn" type="button">אישור</button>
+              <button class="btn ghost" type="button">ביטול</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="did">
+        <div class="stagehead">
+          <span class="idx">A</span>
+          <h3 class="en-t">Drop a lease. It finds its own apartment.</h3>
+          <h3 class="he-t">גוררים חוזה. הוא מוצא את הדירה שלו.</h3>
+        </div>
+        <p class="en-t">No unit is chosen by hand. The address printed on the paper is read, matched against the
+          portfolio, and the flat is resolved — or the upload is refused and offers candidates. A
+          near match is never a guess: this system cannot delete what it files.</p>
+        <p class="he-t">לא בוחרים דירה ביד. הכתובת שמודפסת על הנייר נקראת, מושווית לפורטפוליו, והדירה
+          נמצאת — או שההעלאה נדחית ומוצעים מועמדים. התאמה קרובה לעולם אינה ניחוש: המערכת הזו אינה
+          יכולה למחוק את מה שתייקה.</p>
+        <p class="en-t">Then the fields come out with a confidence and a link back to the pixels they came from.
+          A ת.ז. is captured and <strong>withheld from the operator who filed it</strong>; the screen
+          says an identifier was read and shows a match count, never a digit.</p>
+        <p class="he-t">אחר כך השדות יוצאים עם רמת ביטחון וקישור לפיקסלים שמהם נקראו. ת.ז. נקלטת
+          <strong>ומוסתרת מהפקיד שתייק את המסמך</strong>; המסך אומר שנקרא שדה מזהה ומציג מספר
+          התאמות, אף פעם לא ספרה.</p>
+        <p class="en-t"><strong>A person confirms before anything is written.</strong> The same identity in two
+          different flats is one household and two tenancies — matched on a declared identifier,
+          never on a name.</p>
+        <p class="he-t"><strong>אדם מאשר לפני שנכתב משהו.</strong> אותה זהות בשתי דירות היא משק בית
+          אחד ושתי שכירויות — לפי מזהה מוצהר, אף פעם לא לפי שם.</p>
+        <div class="meta">
+          <span class="tag model en-t">Agent</span><span class="tag model he-t">הסוכן</span>
+          <span class="tag human en-t">Office</span><span class="tag human he-t">המשרד</span>
+          <span class="when live en-t">running on staging</span>
+          <span class="when live he-t">רץ על סביבת ההרצה</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="note blue">
+      <p class="en-t">Proved on 14 Sep by clicking, with no seed and no SQL: a building created, three flats added,
+        four invented leases filed from a screen that asks for no apartment. Extraction as served —
+        address 90%, apartment 91%, dates 96%, tenant name 92%, ת.ז. 77%; zero guarantor identifiers,
+        which is the correct answer for paper that names none. A second lease for the same person in
+        another flat produced <strong>one household, two tenancies</strong>.</p>
+      <p class="he-t">הוכח ב־14 בספטמבר בלחיצות בלבד, בלי זריעת נתונים ובלי SQL: בניין נוצר, שלוש
+        דירות נוספו, וארבעה חוזים מומצאים תויקו ממסך שאינו שואל לאיזו דירה. תוצאות החילוץ כפי שהוגשו —
+        כתובת 90%, דירה 91%, תאריכים 96%, שם שוכר 92%, ת.ז. 77%; אפס מזהי ערבים, שזו התשובה הנכונה
+        לנייר שאינו נוקב באף אחד. חוזה שני לאותו אדם בדירה אחרת הפיק <strong>משק בית אחד ושתי
+        שכירויות</strong>.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum en-t">06 — THE LINES THAT DO NOT MOVE</span>
+      <span class="secnum he-t">06 — הקווים שאינם זזים</span>
+      <h2 class="en-t">Five things the system will not do</h2>
+      <h2 class="he-t">חמישה דברים שהמערכת לא תעשה</h2>
+      <p class="sub en-t">Each is enforced by the database or by a test that blocks a release — not by an
+        instruction to the model.</p>
+      <p class="sub he-t">כל אחד מהם נאכף על ידי מסד הנתונים או על ידי בדיקה שחוסמת שחרור גרסה —
+        ולא על ידי הוראה למודל.</p>
+    </div>
+
+    <div class="rules">
+      <div>
+        <h3 class="en-t">One tenant, one scope</h3>
+        <h3 class="he-t">דייר אחד, תחום אחד</h3>
+        <p class="en-t">A tenant only ever receives what comes from their own documents and the shared knowledge
+          base. The scope is a query, not a field on a row — so a model that misbehaves cannot widen
+          a boundary it never held.</p>
+        <p class="he-t">דייר מקבל אך ורק את מה שנגזר מהמסמכים שלו עצמו וממאגר הידע המשותף. התחום הוא
+          שאילתה ולא שדה בשורה — ולכן מודל שמתנהג לא כשורה אינו יכול להרחיב גבול שמעולם לא היה בידיו.</p>
+      </div>
+      <div>
+        <h3 class="en-t">Money never reaches the agent</h3>
+        <h3 class="he-t">כסף לא מגיע לסוכן</h3>
+        <p class="en-t">No price and no balance is ever said to a tenant. A question about money is answered by a
+          handoff, never by an estimate. Financials stay in the ERP behind read-only keys.</p>
+        <p class="he-t">שום מחיר ושום יתרה לא נאמרים לדייר, אף פעם. שאלה על כסף נענית בהעברה לאדם,
+          לעולם לא בהערכה. הנתונים הכספיים נשארים ב־ERP מאחורי מפתחות לקריאה בלבד.</p>
+      </div>
+      <div>
+        <h3 class="en-t">No model in a decision that can be disputed</h3>
+        <h3 class="he-t">אין מודל בהחלטה שאפשר להתווכח עליה</h3>
+        <p class="en-t">Responsibility and the call's states are versioned rules. A dispute a year from now asks
+          what the rules said then, and the answer is still there.</p>
+        <p class="he-t">האחריות ומצבי הקריאה הם כללים מגורסים. מחלוקת בעוד שנה שואלת מה הכללים אמרו
+          אז, והתשובה עדיין שם.</p>
+      </div>
+      <div>
+        <h3 class="en-t">An emergency never reaches the agent</h3>
+        <h3 class="he-t">קריאת חירום לא מגיעה לסוכן</h3>
+        <p class="en-t">A route, not a label. It is live before the agent takes its first real message.</p>
+        <p class="he-t">ניתוב, לא תווית. הוא חי לפני שהסוכן מקבל את ההודעה האמיתית הראשונה שלו.</p>
+      </div>
+      <div>
+        <h3 class="en-t">A guarantor is never served</h3>
+        <h3 class="he-t">ערב לא מקבל שירות</h3>
+        <p class="en-t">ערב is a signatory, not a customer. The database refuses to make one a service contact —
+          there is no toggle to get it wrong.</p>
+        <p class="he-t">ערב הוא חתום על מסמך, לא לקוח. מסד הנתונים מסרב להפוך ערב לאיש קשר לשירות —
+          אין מתג שאפשר לטעות בו.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <span class="secnum en-t">07 — WHERE THIS IS</span>
+      <span class="secnum he-t">07 — איפה זה עומד</span>
+      <h2 class="en-t">Built, next, and the numbers it will be judged on</h2>
+      <h2 class="he-t">מה נבנה, מה בהמשך, והמספרים שלפיהם זה יישפט</h2>
+    </div>
+
+    <div class="status">
+      <div class="now">
+        <div class="hdr en-t">Running · weeks 1–6</div>
+        <div class="hdr he-t">עובד · שבועות 1–6</div>
+        <ul class="en-t">
+          <li><b>1,572 apartments</b> across five cities, browsable and searchable</li>
+          <li><b>Identification in SQL</b>, with every attempt to cross it tested</li>
+          <li><b>Documents filed</b> against a flat, read, and checked against the form they claim to be</li>
+          <li><b>Leases become tenancies</b> — extracted, proposed, confirmed by a person</li>
+          <li><b>The office console</b>, behind sign-in, on phone and desktop</li>
+        </ul>
+        <ul class="he-t">
+          <li><b>1,572 דירות</b> בחמש ערים, לעיון ולחיפוש</li>
+          <li><b>זיהוי ב־SQL</b>, כשכל ניסיון לחצות אותו נבדק</li>
+          <li><b>מסמכים מתויקים</b> מול דירה, נקראים ונבדקים מול הטופס שהם מצהירים שהם</li>
+          <li><b>חוזים הופכים לשכירויות</b> — חילוץ, הצעה, ואישור של אדם</li>
+          <li><b>המסך של המשרד</b>, מאחורי התחברות, בנייד ובמחשב</li>
+        </ul>
+      </div>
+      <div class="next">
+        <div class="hdr en-t">Next</div>
+        <div class="hdr he-t">בהמשך</div>
+        <ul class="en-t">
+          <li><b>Who pays</b> — the responsibility matrix as versioned rows, edited live</li>
+          <li><b>The call</b> — states, SLA clocks, escalation queue, the emergency bypass</li>
+          <li><b>The attack</b> — trying to break tenant isolation, in front of the room</li>
+        </ul>
+        <ul class="he-t">
+          <li><b>מי אחראי</b> — מטריצת האחריות כשורות מגורסות, נערכת בשידור חי</li>
+          <li><b>הקריאה</b> — מצבים, שעוני SLA, תור הסלמות ועקיפת החירום</li>
+          <li><b>התקיפה</b> — ניסיון לשבור את בידוד הדיירים, מול החדר</li>
+        </ul>
+      </div>
+      <div class="later">
+        <div class="hdr en-t">Month three · the agent</div>
+        <div class="hdr he-t">חודש שלישי · הסוכן</div>
+        <ul class="en-t">
+          <li><b>Week 9</b> — message the number from your own phone; it knows your unit</li>
+          <li><b>Week 10</b> — it triages a fault in plain Hebrew and answers from your lease</li>
+          <li><b>Week 11</b> — both sides of the switchboard, two phones on the table</li>
+          <li><b>Week 12</b> — pilot: one 72-unit building, real tenants, real tradesmen</li>
+        </ul>
+        <ul class="he-t">
+          <li><b>שבוע 9</b> — שולחים הודעה מהטלפון שלכם; המערכת יודעת מי אתם ובאיזו דירה</li>
+          <li><b>שבוע 10</b> — טריאז' של תקלה בעברית פשוטה, ותשובה מתוך החוזה שלכם</li>
+          <li><b>שבוע 11</b> — שני צידי המרכזייה, שני טלפונים על השולחן</li>
+          <li><b>שבוע 12</b> — פיילוט: בניין אחד של 72 דירות, דיירים אמיתיים ובעלי מקצוע אמיתיים</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="numbers">
+      <div>
+        <span class="k en-t">MEASURE 01 · HEADLINE</span>
+        <span class="k he-t">מדד 01 · הראשי</span>
+        <p class="l en-t">Share of calls closed with no human involvement</p>
+        <p class="l he-t">שיעור הקריאות שנסגרות בלי מגע אדם</p>
+        <p class="en-t">Over calls that entered the agent. Emergency bypasses are excluded — they are a success
+          when they <em>do</em> reach a person.</p>
+        <p class="he-t">מתוך הקריאות שהגיעו לסוכן. עקיפות חירום אינן נספרות — הן הצלחה דווקא כשהן
+          <em>כן</em> מגיעות לאדם.</p>
+      </div>
+      <div>
+        <span class="k en-t">MEASURE 02</span>
+        <span class="k he-t">מדד 02</span>
+        <p class="l en-t">First message to a booked slot — median and p90</p>
+        <p class="l he-t">מההודעה הראשונה ועד מועד שנקבע — חציון ו־p90</p>
+        <p class="en-t">p90 matters more: the tail is where the provider went quiet. A response-time metric would
+          measure the easy half.</p>
+        <p class="he-t">ה־p90 חשוב יותר: הזנב הוא המקום שבו הספק השתתק. מדד של זמן תגובה היה מודד
+          את החצי הקל.</p>
+      </div>
+      <div>
+        <span class="k en-t">MEASURE 03</span>
+        <span class="k he-t">מדד 03</span>
+        <p class="l en-t">Escalations per 100 calls, split by cause</p>
+        <p class="l he-t">הסלמות לכל 100 קריאות, מפולחות לפי סיבה</p>
+        <p class="en-t">Agent could not answer · provider went silent · policy gap · emergency. A single low rate
+          hides silent failure.</p>
+        <p class="he-t">הסוכן לא ידע לענות · הספק השתתק · פער במדיניות · חירום. שיעור נמוך אחד מסתיר
+          כישלון שקט.</p>
+      </div>
+    </div>
+
+    <div class="note">
+      <p class="en-t">Two stop conditions sit beside those numbers and are never traded against them:
+        <strong>zero tenant-isolation breaches</strong> — one halts the pilot rather than lowering a
+        score — and <strong>zero tenant-facing prices or balances</strong>.</p>
+      <p class="he-t">לצד המספרים האלה עומדים שני תנאי עצירה, שלעולם אינם נסחרים מולם:
+        <strong>אפס פרצות בבידוד דיירים</strong> — פרצה אחת עוצרת את הפיילוט ולא מורידה ציון —
+        ו<strong>אפס מחירים או יתרות מול דייר</strong>.</p>
+    </div>
+  </section>
+
+  <footer>
+    <span class="en-t">Dona Dom · core journey walkthrough</span>
+    <span class="he-t">דונה דום · סקירת המסע המרכזי</span>
+    <span class="en-t">Hebrew threads are illustrative; the apartments, confidences and staging results are real</span>
+    <span class="he-t">השיחות להמחשה; הדירות, רמות הביטחון ותוצאות ההרצה אמיתיות</span>
+    <span class="en-t">14 Sep 2026</span>
+    <span class="he-t">14 בספטמבר 2026</span>
+  </footer>
+
+</div>

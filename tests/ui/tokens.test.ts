@@ -583,7 +583,9 @@ const SCREENS: Array<[string, () => string]> = [
           type: documentTypes[0] as DocumentTypeRow,
           verification: {
             verdict: 'refused',
-            missingTerms: ['המושכר', 'תקופת השכירות'],
+            // A requirement with two declared spellings and one with a single spelling, because
+            // both shapes are on the catalogue from 6.8 and the screen has to print each of them.
+            missingTerms: ['המושכר|הדירה', 'תקופת השכירות'],
           },
         },
       }),

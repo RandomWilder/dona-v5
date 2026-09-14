@@ -111,6 +111,53 @@ describe('policy · a declared type is checked against the file before it is fil
     }
   });
 
+  it('accepts a requirement written in either of its declared spellings', () => {
+    // **Slice 6.8.** A requirement may carry more than one spelling, separated by `|`, because a
+    // standard Israeli lease is headed either חוזה שכירות or הסכם שכירות and calls the flat either
+    // המושכר or הדירה. The week-6 demo's paper used the second of each and was refused: correct
+    // behaviour, wrong calibration.
+    //
+    // The document here is built out of the catalogue's own declarations rather than taken from the
+    // corpus, and that is the point — what is under test is the *declaration*, not a form. Every
+    // seeded type is walked and every spelling of every requirement is exercised, so a type that
+    // declares an alternative nobody's guard honours fails here. The corpus keeps its own job in
+    // the matrix above: a widened type that started matching a foreign specimen fails there.
+    for (const seed of seedDocumentTypes) {
+      const terms = seed.type.verificationTerms ?? [];
+      const widest = Math.max(
+        0,
+        ...terms.map((term) => term.split('|').length),
+      );
+      for (let spelling = 0; spelling < widest; spelling += 1) {
+        const text = terms
+          .map((term) => {
+            const spellings = term.split('|');
+            return spellings[Math.min(spelling, spellings.length - 1)];
+          })
+          .join(' ובנוסף ');
+        const result = verifyDeclaredType(text, terms);
+        assert.equal(
+          result.verdict,
+          'verified',
+          `${seed.type.typeKey}, spelling ${spelling + 1}: ${result.missingTerms.join(', ')}`,
+        );
+      }
+    }
+  });
+
+  it('still requires every requirement, whichever spelling satisfied the others', () => {
+    // The half that is not a loosening. `|` widens one requirement; it does not make any-term
+    // filing lawful. A lease that is headed הסכם שכירות and says הדירה and never names a term of
+    // letting is still not a lease as far as the guard is concerned, and the missing requirement
+    // is named as printed so the screen can show both spellings of it.
+    const result = verifyDeclaredType(
+      'הסכם שכירות שנחתם בין הצדדים בדבר הדירה שברחוב נרקיס 45',
+      termsFor('lease'),
+    );
+    assert.equal(result.verdict, 'refused');
+    assert.deepEqual(result.missingTerms, ['תקופת השכירות']);
+  });
+
   it('files a document it cannot read rather than refusing it, and says so', () => {
     // A scan and a photograph carry no text layer, and OCR is slice 4.1's. Refusing them would
     // refuse most real leases; filing them silently would make `verified` mean nothing. The third

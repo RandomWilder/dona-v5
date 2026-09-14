@@ -32,6 +32,10 @@ export interface Verification {
    * A refusal an operator cannot act on is a refusal they will work around. These are the form's own
    * printed words and never anything the document itself says, so they are safe to render and safe
    * to put on the audit line; the document's text is neither and appears in neither.
+   *
+   * **A requirement is named as declared, spellings and all** (6.8) — `המושכר|הדירה` is one missing
+   * thing and not two, and the screen is what decides how to print the alternatives. Splitting it
+   * here would tell an operator that two words are missing when either would have done.
    */
   missingTerms: string[];
 }
@@ -88,13 +92,31 @@ function normalise(value: string): string {
 }
 
 /**
+ * One requirement's spellings. Slice 6.8.
+ *
+ * A `verification_terms` element is one requirement, and `|` separates the spellings that satisfy
+ * it. It is a delimiter inside the existing `text[]` rather than a second column, so a type still
+ * arrives as a seed row and the settings editor — one requirement per line — is unchanged.
+ */
+const SPELLING = '|';
+
+/**
  * Does this file look like the type it was declared as?
  *
- * **Every declared term must be present.** The terms are the fixed printed language of the form —
+ * **Every declared requirement must be met.** The terms are the fixed printed language of the form —
  * the phrasing on every copy regardless of who signed it — so requiring all of them has no threshold
- * to tune and no weather in it. One matching term is not enough, and the corpus is where that is
- * visible rather than arguable: the standard lease says ארנונה in the clause about who pays the
+ * to tune and no weather in it. One matching requirement is not enough, and the corpus is where that
+ * is visible rather than arguable: the standard lease says ארנונה in the clause about who pays the
  * utilities, so an any-term rule would file a lease into the ארנונה slot without a murmur.
+ *
+ * **A requirement may have more than one spelling, and any of them meets it (6.8).** That is not the
+ * any-term rule arriving by the back door: it widens *one* requirement across the words a form uses
+ * for the same thing — חוזה שכירות or הסכם שכירות, המושכר or הדירה — and leaves the rule that every
+ * requirement must be met exactly where it was. The week-6 demo is what wrote this: a lease printed
+ * with the second of each vocabulary was refused four times, which was correct behaviour against a
+ * declaration calibrated to one specimen. The guard against a type widened until it matches anything
+ * is `tests/policy/document-verification.test.ts`, where every tier-1 specimen must still be refused
+ * in every slot that is not its own.
  *
  * A false refusal is a seed row somebody edits (A8, no migration and no release). A false accept is
  * a document in the wrong flat's folder that nothing else this week would catch.
@@ -111,7 +133,10 @@ export function verifyDeclaredType(
     return { verdict: 'unverified', missingTerms: [] };
   }
   const missingTerms = terms.filter(
-    (term) => !haystack.includes(normalise(term)),
+    (term) =>
+      !term
+        .split(SPELLING)
+        .some((spelling) => haystack.includes(normalise(spelling))),
   );
   return {
     verdict: missingTerms.length === 0 ? 'verified' : 'refused',

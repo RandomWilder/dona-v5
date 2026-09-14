@@ -104,6 +104,10 @@ function unitLine(unit: UnitHit): Html {
  * It names the terms that were not found, because a refusal an operator cannot act on is a refusal
  * they will work around — and those terms are the form's own printed words, never anything the
  * document they just tried to file says. Nothing from inside the file reaches this page.
+ *
+ * **One chip per requirement, spellings and all (6.8).** `המושכר|הדירה` is one thing that was not
+ * found and either spelling would have met it, so it is one chip reading `המושכר או הדירה` — two
+ * chips would tell an operator that two words are missing and send them looking for both.
  */
 function refusal(type: DocumentTypeRow, verification: Verification): Html {
   return h`<section class="notice">
@@ -113,7 +117,9 @@ function refusal(type: DocumentTypeRow, verification: Verification): Html {
       או בחרו סוג מסמך אחר.
     </p>
     <ul class="terms">
-      ${verification.missingTerms.map((term) => h`<li class="chip">${term}</li>`)}
+      ${verification.missingTerms.map(
+        (term) => h`<li class="chip">${term.split('|').join(' או ')}</li>`,
+      )}
     </ul>
   </section>`;
 }
