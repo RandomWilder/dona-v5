@@ -489,7 +489,7 @@ week 7's if the director wants it.
 
 ---
 
-- [ ] **6.8 — The reader reads a scan.**
+- [x] **6.8 — The reader reads a scan.** Closed 14 Sep — [evidence/6.8.md](evidence/6.8.md).
       Three defects in one path, and they have to move together: the reader cannot be reached, and
       when it is reached the guard it feeds refuses the paper on vocabulary. **(a)** `documentText`
       (`src/evidence/internal/verify.ts:47`) flattens a page's words with a space and emits a newline
