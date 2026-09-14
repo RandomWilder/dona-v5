@@ -172,6 +172,16 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   [ADR-0006](docs/decisions/ADR-0006-the-extractor-may-read-a-declared-identifier.md). **No
   `field_promotion` target exists for either field**: the value becomes `party.national_id` through a
   human confirming a household, which is an act and not a promotion.
+- **From slice 6.5 a machine also compares the identifier, and that is a read too.** A2's resolution
+  ranks a flat's lettings by how many people on each already carry an identifier the lease declares.
+  The comparison happens **inside one SQL statement** and what comes back is a count, so no value and
+  no `national_id_key` reaches application memory or any screen; the confirm page shows *whether* an
+  identifier was read and *how many* people it matched, and never a digit. It writes its own line,
+  **`evidence.match_identifier`** — actor, role, document, probe count, match count, never the value —
+  and it is deliberately not `evidence.read_identifier`, which means a person saw one. Conflating the
+  two would ruin the only question either count is ever asked: **who has seen this household's ת.ז.**
+  The human act at the end of that screen is what writes the value onto `party.national_id`, through
+  `upsertParty` and its natural key, which is how one person in two flats becomes one party.
 - **The staff credential is Google's; the session is ours** (slice 5.1, amended at 5.1b —
   `SPEC-staff.md`, ADR-0005). No password hash and no second-factor secret exist in this schema.
   **What this system asserts is an allowlist and not a factor**: only an email that already has a

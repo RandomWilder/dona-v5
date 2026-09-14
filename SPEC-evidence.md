@@ -250,9 +250,11 @@ bound a different quantity and an authenticated operator can still post a 200 MB
   window empty rather than merely supervised.
 
 **Declaring a *new draft* tenancy at upload is slice 4.6, flow A2.** A draft is never an empty shell —
-unit, dates and at least one tenant — and `upsertParty` requires a ת.ז., so A2 calls `createParty`
-instead (name only, no identity match). Filing a `lease` with no tenancy link redirects to
-`/documents/:id/tenancy`. Upload to an existing letting stays 3.3 plus 4.3's per-field promote. A
+unit, dates and at least one tenant — and `upsertParty` requires a ת.ז., which at 4.6 a lease had no
+way to carry, so A2 called `createParty` instead (name only, no identity match). **Amended at 6.5:**
+6.4 gave the lease a declared identifier, so A2 calls `upsertParty` where one was captured and
+`createParty` where none was — a name is still never matched, and an identifier now is. Filing a
+`lease` with no tenancy link redirects to `/documents/:id/tenancy`. Upload to an existing letting stays 3.3 plus 4.3's per-field promote. A
 handover protocol precedes every tenancy its flat will ever have, so a document with no tenancy link
 is an ordinary case and not a gap.
 
@@ -441,8 +443,8 @@ confirm page **recomputes from those rows plus `getUnit`**. There is no staging 
 
 **Evidence orchestrates; it does not write estate, party or tenancy SQL.** After the administrator
 confirms each proposed person's role and selects an existing `terms_profile` from the list tenancy
-already holds, evidence calls `createParty`, `upsertTenancy`, `upsertTenancyParty` and
-`promoteExtractedField`. The name is never typed and never invented: an empty list shows that fact
+already holds, evidence calls `createParty` or `upsertParty`, `upsertTenancy`, `upsertTenancyParty`
+and `promoteExtractedField`. The name is never typed and never invented: an empty list shows that fact
 and withholds the write. Dates become truth through FieldPromotion (the CHECK is still dates only).
 Names do not get a promotion target: party provenance is a `PARTY` / `SIGNATORY` link and the
 `evidence.confirm_lease` audit line.
@@ -457,12 +459,61 @@ is `invalid`: no tenancy, no party, no new link. This is the content check 3.3 d
 **Idempotent confirm.** A lease that already has a `TENANCY` / `EVIDENCE` link returns
 `alreadyEstablished` and creates no second household.
 
+**Which letting, and the attach branch. Slice 6.5.** Until 6.5 this flow could only *create*: a
+second lease on a unit and a start date it already held died on `conflict — that unit already has a
+lease starting on this date`, with nothing an operator could do from the screen. `proposeLeaseTenancy`
+now carries the unit's lettings from `listUnitTenancies` as **candidates**, and `confirmLeaseTenancy`
+has a second branch.
+
+- **Ranking.** Identifier overlap first — `countIdentifierOverlap` returns `tenancy_id` → **a count**
+  of how many people already on that letting carry an identifier this lease declares — then the
+  number of days the lease's term overlaps the letting's, computed **in TypeScript over the dates
+  the list already returns**, because the SQL that would express it is guard two's predicate and
+  belongs to `src/scope/`.
+- **What is proposed.** A **new draft** by default. An existing letting is pre-selected only when
+  this lease's `start_date` equals that letting's — the case that used to be a dead end. Overlap
+  ranks the list and never decides it: the same household renewing on new dates is a new letting.
+  **A human picks either way**, which is invariant 5 and is unchanged.
+- **What attach writes.** The `TENANCY` / `EVIDENCE` link and the confirmed `tenancy_party` rows.
+  **Not `upsertTenancy`**, so `start_date`, `end_date`, `status` and `terms_profile_id` are untouched
+  and no `terms_profile` is asked for. A lease attached to the wrong letting must not be able to
+  rewrite that letting's term; moving a captured date onto a column stays per-field promotion from
+  the read screen, one field and one operator at a time. The audit line is `evidence.attach_lease`.
+  A second attach of the same document is a no-op, the same `alreadyEstablished` the create branch
+  returns.
+- **The letting must be on this unit.** A `tenancy_id` posted from the form is checked against the
+  unit the document is filed on before anything is written; anything else is `invalid` and writes
+  nothing, on the same standing as the address cross-check above.
+
+**How a name gets its identifier, and why it is all-or-nothing. Slice 6.5.** The *i*-th `tenant_name`
+pairs with the *i*-th `tenant_id_number` in the order `proposeLeaseTenancy` already sorts people by
+(page, then box, then id), **and only when those two counts are equal**. Equal counts → each party in
+that family is written with `upsertParty` and its identifier. Unequal → **nobody in that family is
+paired**, each of its people is written with `createParty` and no identifier, and the screen says per
+person which of the two happened. **`tenant_*` and `guarantor_*` are counted independently**: a
+guarantor is frequently absent and frequently printed without a ת.ז. when present (A2 step 3), so one
+unpaired ערב must not discard two correctly paired tenants — there was no pairing in that family to
+get wrong.
+The reason the rule cannot half-succeed is directly below: the operator is not shown the value, so a
+ת.ז. bound to the wrong name is an error nobody can see. **Two people on one lease resolving to the
+same party is `invalid`** — it would otherwise be one party silently overwriting its own role through
+`tenancy_party`'s `(tenancy_id, party_id)` key. **The refusal happens before anything is written**,
+through `countDistinctIdentifiers`, so it holds whoever owns the transaction — including a caller
+that already had one open, where `inTransaction` passes the client through and there is no savepoint
+to roll back to.
+
 **Captured identifiers are not on that screen, and not in its shape. Slice 6.4.** A lease now
 declares `tenant_id_number` and `guarantor_id_number`, and `proposeLeaseTenancy` is a screen shape:
 it carries the names it always carried and no identifier, so the confirm page cannot leak one whoever
 is looking at it. The value is in `extracted_field` and reachable by an ADMIN on the read screen with
-an audit line. **Slice 6.5 is where a resolution reads it** — server-side, to rank which letting this
-lease belongs to — and it opens that deliberately rather than inheriting it here.
+an audit line. **Slice 6.5 read it and kept it off the screen.** The resolution above compares
+identifiers **inside one SQL statement** and returns a count, so no value and no key reaches this
+module's memory, let alone its HTML. What the screen gained is two facts and no digits: per person,
+*whether* an identifier was read; per candidate letting, *how many* people it matched. The comparison
+is still a read of `national_id_key` and writes **`evidence.match_identifier`** — actor, role,
+document, probe count and match count, never a value. It is deliberately **not**
+`evidence.read_identifier`: that line means a person saw a ת.ז., and this one means a machine
+compared one. A count that conflated the two would be useless for the only question anybody asks it.
 
 **The confirm screen may show captured names.** That is the exception the confirmation step exists
 for. It still does not query `party`. Every other screen still shows no tenant's name — 5.2 was

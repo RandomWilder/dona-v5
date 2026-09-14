@@ -170,16 +170,60 @@ unit — which is the sequence step 5 of that flow describes anyway.
    constraint, and the isolation join carries `AND tp.is_service_contact` as its fourth hop, so a role
    the model guessed wrong is an isolation defect and not a data-entry defect. The model proposes the
    role; the administrator accepts it.
-5. Parties named on the lease are **created under the tenancy the document was uploaded to.** No
-   attempt is made to match a name against the global party register. **Closed at 5.5:** the
-   generated portfolio held **2,871** identified parties and **0** with no identifier. Nameless
-   same-name groups: **0**. Identified people sharing a full name: **303** names covering every
-   generated person — the fixture's name pool, already keyed by `national_id_key`, not a person
-   appearing twice without an identifier. Matching a name is a privacy decision; that count does
-   not provoke a join. A2 still inserts.
-6. The written tenancy is `DRAFT` and carries per-field provenance back to the lease.
-7. **A2 runs only when the lease has no `TENANCY` link yet.** Binding to an existing letting is A1
-   plus per-field promotion. Confirm recomputes from captured fields; a second confirm is a no-op.
+5. Parties named on the lease are **created under the tenancy the document was uploaded to**, and
+   **a name is never matched across tenancies**. **Closed at 5.5:** the generated portfolio held
+   **2,871** identified parties and **0** with no identifier. Nameless same-name groups: **0**.
+   Identified people sharing a full name: **303** names covering every generated person — the
+   fixture's name pool, already keyed by `national_id_key`, not a person appearing twice without an
+   identifier. Matching a name is a privacy decision; that count does not provoke a join.
+
+   **Amended at 6.5: matching a *declared identifier* is the governed path, and it is the reason the
+   rule above was written about names in the first place.** Where the lease printed a ת.ז. and step 3
+   captured it, the party is written through `upsertParty`, whose natural key is `national_id_key` —
+   so one person signing two leases in two flats is **one** party and two tenancies. Where the lease
+   printed none, the party is written through `createParty`, always an insert, which is the case
+   that command was added for (SPEC-parties.md). The 303 above is exactly why the two cases are
+   separated rather than merged: a name is a guess and an identifier is a declaration.
+
+   **The pairing of a name to an identifier is ordinal, and it is all-or-nothing within a field
+   family.** The *i*-th `tenant_name` pairs with the *i*-th `tenant_id_number` in the document order
+   the proposal already sorts by, **only when those two counts are equal**; unequal counts pair
+   nobody in that family and every one of its people is written with no identifier. A
+   half-succeeding rule would attach a household's ת.ז. to the wrong person, and the operator cannot
+   catch it by looking, because step 3 keeps the value off this screen. **The two families are
+   independent**, because step 3 above is the reason: a guarantor is frequently absent from the lease
+   and frequently printed without an identifier when present, so one unpaired ערב must not throw away
+   two correctly paired tenants — there is no pairing inside the guarantor family to have got wrong.
+   **Two people on one lease resolving to the same identifier is a refusal**, not a role quietly
+   overwritten on one party.
+6. **Which letting — proposed, then confirmed.** The unit's lettings come from `listUnitTenancies`
+   (every status, no day predicate, no party and no name) and are **ranked by identifier overlap
+   first, then by the number of days the lease's own term overlaps theirs**. Overlap is a **count**:
+   how many people already on that letting carry one of this lease's identifiers. No value, no key
+   and no name leaves the query, and the screen shows the count and never a digit of an identifier.
+   **The comparison is a read of `national_id_key` and writes an `audit_log` line** —
+   `evidence.match_identifier`, naming who asked and how many probes matched, never the value. It is
+   not a disclosure and is not `evidence.read_identifier`; nobody saw anything.
+
+   **The default is *a new letting*, and an existing one is pre-selected only when this lease starts
+   on the same day as one of them.** The same household renewing on new dates is a new letting, so
+   identifier overlap ranks the list and never decides it. **A human picks**, and may pick any
+   letting on the list or a new draft — invariant 5 unchanged.
+
+   **Date overlap is computed outside SQL.** `start_date <= x AND end_date >= y` is the isolation
+   join's tenancy predicate, which `src/scope/` alone may write (guard two); rephrasing it elsewhere
+   to get past the guard is the move the guard exists to forbid. The list already carries both dates
+   as text, so the arithmetic is ordinary code with its own cases.
+7. The written tenancy is `DRAFT` and carries per-field provenance back to the lease.
+8. **Attaching to an existing letting is A2's branch from 6.5, and it writes no dates.** Before 6.5
+   this flow could only create, and a second lease on a unit and start date it already held died on
+   a conflict with nothing a human could do about it. Confirming an attach writes the document's
+   `TENANCY` link and the confirmed `tenancy_party` rows, and touches **neither `start_date` nor
+   `end_date` nor `status` nor `terms_profile_id`** — a lease filed against the wrong letting must
+   not be able to rewrite that letting's term. Moving a captured value onto a column is per-field
+   promotion from the read overlay, deliberate and one field at a time, which is what "A1 plus
+   per-field promotion" meant. Confirm recomputes from captured fields; a second confirm is a no-op,
+   on both branches.
 
 **Cross-check:** the address and apartment number extracted from the document are asserted against the
 unit the tenancy hangs on. This catches the error the type guard cannot — the right kind of document
@@ -458,6 +502,9 @@ link still redirects into A2, which is where a human confirms.
 - **The completeness vocabulary.** **Closed for the first rule at 4.8:** it is a derived query, rule
   id `guarantor`, exception a separate row. Materialised state waits until a second rule joins and
   the list of missing things is no longer one label.
-- **Cross-tenancy party identity.** **Closed at 5.5.** A2 step 5 stands: no name match across
-  tenancies. The count that provoked the ruling is in that step. A matcher waits on a nameless
-  duplicate that this portfolio does not have.
+- **Cross-tenancy party identity.** **Closed at 5.5, and settled the other half at 6.5.** A2 step 5
+  stands where it was written: **no name match across tenancies**, and the count that provoked that
+  ruling is in the step. What 6.5 added is the case 5.5 could not reach — a **declared** identifier,
+  captured from the lease under 6.4's catalogue, keys `upsertParty` and makes one person in two flats
+  one party. A matcher over names still waits on a nameless duplicate that this portfolio does not
+  have, and 5.5's 303 shared full names say why it will keep waiting.
