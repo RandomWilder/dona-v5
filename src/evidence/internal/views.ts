@@ -17,7 +17,13 @@
 // **No client JavaScript, here as everywhere.** The type list is a `<select>` the server filled from
 // the catalogue, the file input is a file input, and the page works with scripting switched off.
 import type { UnitHit } from '../../estate/contract.ts';
-import { type OcrPageImage, onlineOcrPageLimit } from '../../kernel/ocr.ts';
+import { type OcrPageImage, onlineOcrByteLimit } from '../../kernel/ocr.ts';
+
+/** A byte count in the unit the sentence is written in. One decimal, because 14.9 is a size. */
+function megabytes(bytes: number): string {
+  return (bytes / (1024 * 1024)).toFixed(1);
+}
+
 import type { PdfPage } from '../../kernel/pdf.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
@@ -115,12 +121,13 @@ function refusal(
   verification: Verification,
   reason: IntakeRefusal = 'terms',
 ): Html {
-  if (reason === 'too_many_pages') {
+  if (reason === 'too_large') {
     return h`<section class="notice">
-      <h2>הקובץ ארוך מכדי שנקרא אותו</h2>
+      <h2>הקובץ גדול מכדי שנקרא אותו</h2>
       <p class="lede">
-        הקורא מטפל בעד ${String(onlineOcrPageLimit)} עמודים בפנייה אחת, ולכן לא נקרא דבר
-        ו<strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום. סרקו את המסמך לקובץ קצר יותר ונסו שוב.
+        הקורא מקבל עד ${megabytes(onlineOcrByteLimit)} מ״ב בפנייה אחת, ולכן לא נקרא דבר
+        ו<strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום. סרקו את המסמך ברזולוציה נמוכה יותר ונסו
+        שוב.
       </p>
     </section>`;
   }
@@ -264,13 +271,17 @@ export interface IntakeScreen {
   /** A search the operator typed into the box, echoed back into it. */
   query?: string;
   /**
-   * **The file was longer than the reader takes in one call, and this is how long. Slice 6.8.**
+   * **The file was larger than the reader carries in one call, and this is how large. Slice 6.8.**
    *
    * A different refusal from the one above and it gets its own sentence: nothing was read off this
    * file at all, so there is no address, no candidate list and nothing for the operator to choose
    * between. Offering one here would be asking a question built on no reading.
+   *
+   * Not a page count: a *long* document is read in part (its first `onlineOcrPageLimit` pages) and
+   * files normally. It is size that makes a file unreadable outright, because the bound is on the
+   * request and the whole file rides in every one of them.
    */
-  tooManyPages?: number;
+  tooLargeBytes?: number;
 }
 
 /**
@@ -303,15 +314,15 @@ export function renderIntakePage(screen: IntakeScreen): string {
   const candidates = screen.candidates ?? [];
   const refused = screen.reading !== undefined;
   const tooLong =
-    screen.tooManyPages === undefined
+    screen.tooLargeBytes === undefined
       ? h``
       : h`<section class="notice">
-          <h2>הקובץ ארוך מכדי שנקרא אותו</h2>
+          <h2>הקובץ גדול מכדי שנקרא אותו</h2>
           <p class="lede">
-            בקובץ ${String(screen.tooManyPages)} עמודים, והקורא מטפל בעד
-            ${String(onlineOcrPageLimit)} עמודים בפנייה אחת. לכן לא נקרא דבר ו<strong>לא נשמר
-            דבר</strong> — לא הקובץ ולא רישום. סרקו את המסמך לקובץ קצר יותר, או צרפו אותו מדף הדירה
-            שאליה הוא שייך.
+            גודל הקובץ ${megabytes(screen.tooLargeBytes)} מ״ב, והקורא מקבל עד
+            ${megabytes(onlineOcrByteLimit)} מ״ב בפנייה אחת. לכן לא נקרא דבר ו<strong>לא נשמר
+            דבר</strong> — לא הקובץ ולא רישום. סרקו את המסמך ברזולוציה נמוכה יותר, או צרפו אותו מדף
+            הדירה שאליה הוא שייך.
           </p>
         </section>`;
   const body = h`

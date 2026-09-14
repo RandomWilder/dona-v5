@@ -31,6 +31,17 @@ export interface OcrText {
     bytes: Buffer,
     mimeType: string,
     processorVersion: string,
+    /**
+     * **Which pages, 1-based, when not all of them. Slice 6.8.**
+     *
+     * The online processor takes `onlineOcrPageLimit` pages per call, and until 6.8 a longer
+     * document was simply not sent — so the week-6 demo's 38-page lease was never read at all and
+     * the row was filed as though somebody had looked. `individualPageSelector` is the way through,
+     * and it was measured before it was written: that same file, pages 1-15 selected, came back
+     * `200` with fifteen pages in 36.4 seconds. Absent means the whole document, which is every
+     * caller inside the limit.
+     */
+    pages?: readonly number[],
   ): Promise<OcrResult>;
   describe(): string;
 }
@@ -45,10 +56,35 @@ export interface DocumentAiOcrOptions {
   endpoint?: string;
 }
 
-export const defaultOcrTimeoutMs = 20_000;
+/**
+ * **Ninety seconds, raised from twenty at 6.8, and the number came off a stopwatch.**
+ *
+ * Twenty was set at 4.1 when every file under test was a few hundred kilobytes. The week-6 demo's
+ * lease is 15.6 MB, which is 19.8 MB once base64'd, and most of a call that size is spent putting
+ * the bytes on the wire before the processor starts: 33.2s measured for three pages of it and 36.4s
+ * for fifteen. At twenty the upload path timed out and recorded a reader that failed, which is a
+ * false answer rather than a slow one. The Cloud Run service sets no `--timeout`, so its own bound
+ * is the 300s default and this sits well inside it.
+ */
+export const defaultOcrTimeoutMs = 90_000;
 export const defaultOcrLocation = 'eu';
 export const defaultOcrProcessorVersion = 'pretrained-ocr-v2.1-2024-08-07';
 export const onlineOcrPageLimit = 15;
+
+/**
+ * **The largest file the online call will carry. Slice 6.8.**
+ *
+ * Document AI bounds the *request*, not the document, at 20 MiB — and a raw document arrives base64
+ * encoded, which is four bytes for every three. So the ceiling on the file itself is three quarters
+ * of that, and a document above it cannot be read online at any page count: selecting fifteen pages
+ * does not make the request smaller, because the whole file is still what gets sent.
+ *
+ * The demo's 15.6 MB lease encodes to 19.8 MB and goes through with a little room to spare, which is
+ * the measurement this constant is set from. `LIMITS.fileSize` on the upload route is 20 MiB, so
+ * there is a band between the two where a file is storable and not readable — and that band is a
+ * refusal with a sentence rather than a row that claims to have been read.
+ */
+export const onlineOcrByteLimit = 15 * 1024 * 1024;
 
 const ocrScope = 'https://www.googleapis.com/auth/cloud-platform';
 
@@ -102,7 +138,7 @@ export function createDocumentAiOcr(options: DocumentAiOcrOptions): OcrText {
     });
 
   return {
-    async pages(bytes, mimeType, processorVersion) {
+    async pages(bytes, mimeType, processorVersion, pages) {
       const name = `projects/${project}/locations/${location}/processors/${processorId}/processorVersions/${processorVersion}`;
       const url = `${host}/v1/${name}:process`;
       let response: Response;
@@ -122,6 +158,11 @@ export function createDocumentAiOcr(options: DocumentAiOcrOptions): OcrText {
             },
             processOptions: {
               ocrConfig: { hints: { languageHints: ['iw'] } },
+              // Absent for a document inside the limit, so the ordinary call is the call it always
+              // was. Present only when the caller has chosen, which it does for a long document.
+              ...(pages && pages.length > 0
+                ? { individualPageSelector: { pages: [...pages] } }
+                : {}),
             },
           }),
           signal: AbortSignal.timeout(timeoutMs),
@@ -166,18 +207,30 @@ export function createFakeOcrText(
   confidence = 1,
 ): OcrText {
   return {
-    async pages(_bytes, _mimeType) {
+    async pages(_bytes, _mimeType, _version, selected) {
+      // **The selection the real reader takes, honoured here too (6.8).** A fake that ignored it
+      // would let a caller select pages and be tested against a reply containing all of them,
+      // which is the shape of mistake this slice exists to correct.
+      const wanted = pages
+        .map((text, index) => ({ text, number: index + 1 }))
+        .filter(
+          (page) =>
+            !selected ||
+            selected.length === 0 ||
+            selected.includes(page.number),
+        );
       return {
-        pages: pages.map((text, index) => ({
-          number: index + 1,
+        pages: wanted.map((page) => ({
+          // The document's own page number, so a citation still names the page a human counts to.
+          number: page.number,
           width: 595,
           height: 842,
           // The pdfjs fake's own fixture shape, with a score on every word — one function, because
           // a second copy is a second place a line break can be forgotten (slice 6.8).
-          items: fakeItems(text, confidence),
+          items: fakeItems(page.text, confidence),
         })),
-        images: pages.map((_, index) => ({
-          pageNumber: index + 1,
+        images: wanted.map((page) => ({
+          pageNumber: page.number,
           mimeType: 'image/png',
           bytes: fakePagePng,
         })),

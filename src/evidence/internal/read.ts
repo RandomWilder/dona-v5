@@ -7,6 +7,7 @@ import type { ObjectStore } from '../../kernel/objects.ts';
 import {
   type OcrPageImage,
   type OcrText,
+  onlineOcrByteLimit,
   onlineOcrPageLimit,
 } from '../../kernel/ocr.ts';
 import type { PdfPage, PdfText } from '../../kernel/pdf.ts';
@@ -106,12 +107,21 @@ export type OcrOutcome =
   | 'not_needed'
   /** The call was made and answered. Whether it *found* the terms is the verdict's business. */
   | 'ok'
+  /**
+   * The call was made for **the first `onlineOcrPageLimit` pages of a longer document**, and
+   * answered. The verdict is taken on those pages, and `pagesRead` says how many of how many.
+   */
+  | 'partial'
   /** No processor is configured. The ordinary local state, and never an error. */
   | 'unconfigured'
   /** The call was made and failed, timed out, or was refused. */
   | 'failed'
-  /** Too long for the online processor, so the call was not made. A refusal, from 6.8. */
-  | 'too_many_pages';
+  /**
+   * The file is larger than the online call carries, so no call was made and none could be — the
+   * bound is on the request and the whole file rides in every one of them. A refusal, because a row
+   * written on no reading claims a verdict about a document nobody has seen a page of.
+   */
+  | 'too_large';
 
 export interface DocumentReading {
   /** The reading that won, as text — what the verdict was taken on and what A12's reader reads. */
@@ -124,6 +134,12 @@ export interface DocumentReading {
   pages: PdfPage[];
   verification: Verification;
   ocrOutcome: OcrOutcome;
+  /**
+   * How many pages the processor was given, when it was given fewer than the document has. Slice
+   * 6.8, and it goes on the audit line: *verified* on a partial reading is a different claim from
+   * *verified*, and the difference has to be somewhere a person can count.
+   */
+  pagesRead?: number;
 }
 
 /**
@@ -183,21 +199,32 @@ export async function readForVerdict(
     // nobody could get text out of - which is what `unverified` has always meant.
     return reading;
   }
-  if (native.length > onlineOcrPageLimit) {
-    // The call is declined rather than attempted, and the caller refuses rather than filing a
-    // document it has not read. Before 6.8 this returned quietly and the row went in `unverified`.
-    return { ...reading, ocrOutcome: 'too_many_pages' };
+  if (input.bytes.length > onlineOcrByteLimit) {
+    // **No call, and no call is possible.** The bound is on the request and the whole file rides in
+    // every request, so selecting fewer pages would not make this one fit. A refusal, because the
+    // alternative is a row carrying a verdict about a document nobody has read a page of.
+    return { ...reading, ocrOutcome: 'too_large' };
   }
+  // **A long document is read in part rather than not at all. Slice 6.8.** The online processor
+  // takes `onlineOcrPageLimit` pages, and the demo's lease is 38 - so until this slice it was never
+  // sent, and the row was filed as though somebody had looked at it. The first pages are also the
+  // ones that answer both questions being asked here: a lease says what it is in its heading and
+  // where it is in its opening clause. `pagesRead` carries how partial the reading was.
+  const selected =
+    native.length > onlineOcrPageLimit
+      ? Array.from({ length: onlineOcrPageLimit }, (_, at) => at + 1)
+      : undefined;
   let pages: PdfPage[];
   try {
     const result = await deps.ocr.pages(
       input.bytes,
       documentContentTypes[input.extension],
       deps.ocrVersion,
+      selected,
     );
     pages = result.pages;
   } catch {
-    // A miss must never become a 503 on an upload - the bound is 20 seconds and the operator can
+    // A miss must never become a 503 on an upload - the bound is 90 seconds and the operator can
     // still file. What is new is that the log says which of the two this was.
     return { ...reading, ocrOutcome: 'failed' };
   }
@@ -208,7 +235,8 @@ export async function readForVerdict(
     ocr: pages,
     pages: pages.length > 0 ? pages : native,
     verification: verifyDeclaredType(text || null, input.verificationTerms),
-    ocrOutcome: 'ok',
+    ocrOutcome: selected ? 'partial' : 'ok',
+    ...(selected ? { pagesRead: selected.length } : {}),
   };
 }
 

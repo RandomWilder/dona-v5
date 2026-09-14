@@ -220,11 +220,22 @@ nothing outside it writes a document row.
   failed the type's own guard. **The consequence is deliberate** — a scan whose OCR text does not
   carry the type's vocabulary is now *refused* rather than filed as `unverified`. `unverified` means
   nobody could read it; it does not mean nobody has checked.
-- **`too_many_pages` is a refusal and never a stored verdict (slice 6.8).** `onlineOcrPageLimit` is
-  15 and real leases exceed it. Until 6.8 a longer scan was filed as though it had been read; now,
-  when OCR is *needed* and the file is too long for the online call, the upload is refused with a
-  sentence that says so. The `document.verification_verdict` CHECK therefore still holds three
-  values: nothing carrying this outcome reaches a row.
+- **A long document is read in part, and a large one is refused (slice 6.8).** `onlineOcrPageLimit`
+  is 15 and real leases exceed it — the week-6 demo's is 38 pages — and until 6.8 a longer scan was
+  simply not sent, then filed as though it had been read. It is read in part now: the call carries
+  `individualPageSelector` for the first fifteen pages, which is where a lease says what it is and
+  where it belongs. **`pagesRead` goes on the audit line beside the page count**, because *verified*
+  on a partial reading is a different claim from *verified* and the difference has to be somewhere a
+  person can count. *(Measured before it was written: the demo's own file, pages 1–15 selected, came
+  back `200` with fifteen pages in 36.4 seconds.)*
+- **`too_large` is a refusal and never a stored verdict (slice 6.8).** The bound Document AI sets is
+  on the **request**, and the whole file rides in every request base64-encoded, so a file above
+  `onlineOcrByteLimit` cannot be read at any page count. Selecting fewer pages does not make it fit.
+  An upload above that ceiling is refused with a sentence saying so, rather than filed on a reading
+  that never happened. The upload route's own `LIMITS.fileSize` is larger, so there is a band where a
+  file is storable and unreadable, and that band is the refusal. The
+  `document.verification_verdict` CHECK still holds three values: nothing carrying this outcome
+  reaches a row.
 
 ### A refused upload leaves no row — the question slice 3.1 left open
 
@@ -383,8 +394,9 @@ intake has already cost a read and possibly an OCR call.
 **OCR runs on this path when the native text layer does not satisfy the declared type**, and only
 when a processor is configured — a scan whose address nobody can read resolves to zero candidates
 rather than to a 503. Until 6.8 the condition was *no text layer at all*, which is why the demo's
-CamScanner layer was never overruled. A file too long for the online call is refused with the
-page-limit sentence rather than offered a candidate list it could never have narrowed.
+CamScanner layer was never overruled. A document longer than the online call takes has its first
+pages read; a file larger than the call carries is refused with the size sentence rather than offered
+a candidate list it could never have narrowed.
 
 **It runs once, from slice 6.4.** Until then the same scan was read twice — once here for the place
 reader and once inside `fileDocument`, whose own verdict comes back `unverified` on a page with no
@@ -634,9 +646,9 @@ and 4.1 does not invent one.
 
 **Two readers, one page shape.** A native PDF with a text layer is pdfjs (confidence `null`). A
 scan, a photograph, or a PDF whose pages came back empty is Document AI (confidence set, boxes from
-the OCR engine). Images skip pdfjs. More than 15 pages is not sent online: on the sweep the row stays
-`unverified`, and **on the upload path, from 6.8, the file is refused with the page-limit sentence**
-rather than filed as though it had been read. The overlay (`GET /documents/:id/read`) draws those boxes on the page image the
+the OCR engine). Images skip pdfjs. More than 15 pages is not sent whole: on the sweep the row stays
+`unverified`, and **on the upload path, from 6.8, the first fifteen pages are selected and read**
+rather than the file being filed as though it had been read. The overlay (`GET /documents/:id/read`) draws those boxes on the page image the
 processor already returned — logical CSS, specimens. **From 6.6 a word box carries its word only
 for a viewer holding `party.national_id.read`**; below it the boxes are geometry and nothing
 else. **Which page** is a query

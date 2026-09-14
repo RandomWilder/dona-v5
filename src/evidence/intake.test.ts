@@ -23,6 +23,7 @@ import {
   createFakeOcrText,
   defaultOcrProcessorVersion,
   type OcrText,
+  onlineOcrByteLimit,
   onlineOcrPageLimit,
 } from '../kernel/ocr.ts';
 import { createFakePdfText } from '../kernel/pdf.ts';
@@ -512,14 +513,70 @@ describe('evidence · filing a declared document', () => {
       );
 
       await t.test(
-        'refuses a scan too long for the online reader, with a sentence that says so',
+        'reads the first pages of a document longer than the online reader takes',
         async () => {
           await inRolledBackTransaction(pool, async (db) => {
             await applyDocumentTypeCatalogue(db, seedDocumentTypes);
-            // `onlineOcrPageLimit` is 15 and real leases exceed it. Until 6.8 a longer scan was
-            // filed as though it had been read — the OCR call was declined and the row went in
-            // `unverified`, which is the verdict for a file nobody *could* read rather than one
-            // nobody looked at. It is a refusal now, and the call is not spent.
+            // **The week-6 demo's own file, as a shape. Slice 6.8.** It is 38 pages and the online
+            // processor takes 15, so until this slice it was never sent at all and the row was
+            // filed as though somebody had looked at it. `individualPageSelector` is the way
+            // through — measured against the live processor before it was written: that file,
+            // pages 1-15, came back 200 with fifteen pages in 36.4s.
+            //
+            // The paper's own words are on page 1, which is why reading the front of a document
+            // answers both questions being asked: what kind of document is this, and where does it
+            // belong. `pagesRead` is what keeps `verified` honest about how much was read.
+            const unitId = newId();
+            let asked: readonly number[] | undefined;
+            const reader = createFakeOcrText([
+              specimen('lease-standard.md'),
+              ...Array.from(
+                { length: onlineOcrPageLimit + 5 },
+                (_, at) => `נספח ${at + 1}`,
+              ),
+            ]);
+            const ocr: OcrText = {
+              describe: () => 'fake',
+              pages: async (bytes, mime, version, pages) => {
+                asked = pages;
+                return reader.pages(bytes, mime, version, pages);
+              },
+            };
+            const long = Array.from(
+              { length: onlineOcrPageLimit + 6 },
+              (_, at) => `עמוד ${at + 1} של סריקה ארוכה ללא שכבת טקסט שמישה`,
+            );
+            const result = await fileDocument(deps(db, long, { ocr }), {
+              bytes: pdfBytes('a long phone scan'),
+              typeKey: 'lease',
+              place: { kind: 'UNIT', id: unitId },
+              tenancyId: null,
+            });
+            assert.equal(result.filed, true);
+            if (!result.filed) return;
+            assert.equal(result.verification.verdict, 'verified');
+            assert.deepEqual(
+              asked,
+              Array.from({ length: onlineOcrPageLimit }, (_, at) => at + 1),
+              'the first fifteen pages, by their own numbers',
+            );
+            const lines = await auditLines(db, unitId);
+            assert.equal(lines[0]?.inputs.ocr, 'partial');
+            assert.equal(lines[0]?.inputs.pages, onlineOcrPageLimit + 6);
+            assert.equal(lines[0]?.inputs.pagesRead, onlineOcrPageLimit);
+          });
+        },
+      );
+
+      await t.test(
+        'refuses a file too large for the reader to carry, with a sentence that says so',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+            // Size, not length. The bound is on the *request* and the whole file rides in every
+            // one of them, so selecting fewer pages does not make a large file fit — there is no
+            // reading to be had at any page count. Filing it would write a verdict about a document
+            // nobody has seen a page of, so it is refused and nothing is written.
             const unitId = newId();
             let called = 0;
             const ocr: OcrText = {
@@ -529,27 +586,28 @@ describe('evidence · filing a declared document', () => {
               },
               describe: () => 'fake',
             };
-            const long = Array.from(
-              { length: onlineOcrPageLimit + 1 },
-              (_, at) => `עמוד ${at + 1} של חוזה סרוק`,
-            );
             const objects = countingStore();
-            const wired = deps(db, long, { ocr, objects });
-            const result = await fileDocument(wired, {
-              bytes: pdfBytes('a very long scan'),
-              typeKey: 'lease',
-              place: { kind: 'UNIT', id: unitId },
-              tenancyId: null,
-            });
+            const huge = Buffer.concat([
+              pdfBytes('a huge scan'),
+              Buffer.alloc(onlineOcrByteLimit, 0x20),
+            ]);
+            const result = await fileDocument(
+              deps(db, ['סריקה ללא מילות הטופס'], { ocr, objects }),
+              {
+                bytes: huge,
+                typeKey: 'lease',
+                place: { kind: 'UNIT', id: unitId },
+                tenancyId: null,
+              },
+            );
             assert.equal(result.filed, false);
             if (result.filed) return;
-            assert.equal(result.refusal, 'too_many_pages');
-            assert.equal(called, 0);
+            assert.equal(result.refusal, 'too_large');
+            assert.equal(called, 0, 'the call was declined, not attempted');
             assert.equal(await documentCount(db, unitId), 0);
             assert.equal(objects.puts, 0, 'no object was written');
             const lines = await auditLines(db, unitId);
-            assert.equal(lines[0]?.inputs.ocr, 'too_many_pages');
-            assert.equal(lines[0]?.inputs.pages, onlineOcrPageLimit + 1);
+            assert.equal(lines[0]?.inputs.ocr, 'too_large');
           });
         },
       );

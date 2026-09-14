@@ -100,6 +100,63 @@ describe('ocr', () => {
     assert.equal(ocr.describe(), 'documentai:eu/abc123');
   });
 
+  it('asks for only the pages it was given, and asks for all of them otherwise', async () => {
+    // **Slice 6.8.** The online processor takes 15 pages per call, and until this slice a longer
+    // document was simply not sent — the week-6 demo's lease is 38 pages, so it was never read at
+    // all. `individualPageSelector` is the way through and it was measured before it was written:
+    // the same 38-page file, pages 1-15 selected, came back 200 with 15 pages in 36.4s.
+    const fetcher = fakeFetch(() => processReply({ text: '', pages: [] }));
+    const ocr = createDocumentAiOcr({
+      project: 'dona-v5',
+      location: 'eu',
+      processorId: 'abc123',
+      fetchImpl: fetcher.impl,
+      token: async () => 'ya29.test',
+    });
+    await ocr.pages(
+      Buffer.from('%PDF-1.4'),
+      'application/pdf',
+      defaultOcrProcessorVersion,
+      [1, 2, 3],
+    );
+    await ocr.pages(
+      Buffer.from('%PDF-1.4'),
+      'application/pdf',
+      defaultOcrProcessorVersion,
+    );
+    const selected = fetcher.calls[0]?.body.processOptions as {
+      individualPageSelector?: { pages: number[] };
+    };
+    assert.deepEqual(selected.individualPageSelector?.pages, [1, 2, 3]);
+    const whole = fetcher.calls[1]?.body.processOptions as {
+      individualPageSelector?: { pages: number[] };
+    };
+    assert.equal(
+      whole.individualPageSelector,
+      undefined,
+      'a document within the limit is sent whole, with no selector at all',
+    );
+  });
+
+  it('gives the fake reader the same page selection the real one takes', async () => {
+    const result = await createFakeOcrText(['one', 'two', 'three']).pages(
+      Buffer.from('x'),
+      'application/pdf',
+      'unused',
+      [1, 3],
+    );
+    assert.deepEqual(
+      result.pages.map((page) => page.items[0]?.text),
+      ['one', 'three'],
+    );
+    // The page numbers are the document's own, so a citation still names the page a human would
+    // count to — selecting pages does not renumber them.
+    assert.deepEqual(
+      result.pages.map((page) => page.number),
+      [1, 3],
+    );
+  });
+
   it('gives up on a call that does not answer, naming the bound', async () => {
     const ocr = createDocumentAiOcr({
       project: 'dona-v5',

@@ -482,11 +482,11 @@ export function registerDocumentRoutes(
         extension,
         type.verificationTerms,
       );
-      if (read.ocrOutcome === 'too_many_pages') {
-        // **Refused at the door, and before the place reader runs. Slice 6.8.** This file is longer
-        // than the online processor takes in one call, so nothing was read off it — and a candidate
-        // list built on no reading is a question the operator cannot answer. The sentence names the
-        // cause instead, which is 6.9's one-cause-one-sentence bar arriving early because it costs
+      if (read.ocrOutcome === 'too_large') {
+        // **Refused at the door, and before the place reader runs. Slice 6.8.** This file is larger
+        // than the online call carries, so nothing was read off it — and a candidate list built on
+        // no reading is a question the operator cannot answer. The sentence names the cause
+        // instead, which is 6.9's one-cause-one-sentence bar arriving early because it costs
         // nothing here.
         await createAuditLog(deps.pool, deps.clock).write(
           {
@@ -513,7 +513,7 @@ export function registerDocumentRoutes(
           csrf: csrfFrom(request),
           types: await listDocumentTypes(deps.pool),
           declaredTypeKey: type.typeKey,
-          tooManyPages: read.native.length,
+          tooLargeBytes: bytes.length,
         });
       }
       const reading = readPlace(read.text);

@@ -28,7 +28,7 @@ import { createMemoryStore } from '../kernel/objects.ts';
 import {
   createFakeOcrText,
   type OcrText,
-  onlineOcrPageLimit,
+  onlineOcrByteLimit,
 } from '../kernel/ocr.ts';
 import { createFakePdfText } from '../kernel/pdf.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
@@ -1108,13 +1108,15 @@ describe('evidence · A12 a document finds its own place', () => {
       );
 
       await t.test(
-        'a scan too long for the reader is refused with a sentence, and files nothing',
+        'a file too large for the reader is refused with a sentence, and files nothing',
         async () => {
-          // **Slice 6.8, and it was red first.** `onlineOcrPageLimit` is 15 and real leases exceed
-          // it. Until 6.8 the OCR call was silently declined and the row went in `unverified` — a
-          // verdict that means *nobody could read this*, used for a file nobody looked at. It is a
-          // refusal now, on a screen that says how long the file was and why that mattered, and the
-          // call is not spent finding out.
+          // **Slice 6.8, and it was red first.** A file above `onlineOcrByteLimit` cannot be read
+          // online at any page count: the bound is on the request and the whole file rides in every
+          // one of them. Until 6.8 the row went in `unverified` — a verdict that means *nobody
+          // could read this*, used for a file nobody looked at. It is a refusal now, on a screen
+          // that says how large the file was and why that mattered, and the call is not spent
+          // finding out. (A *long* file is a different thing and is read in part: see
+          // `intake.test.ts`.)
           const before = await documentsHere();
           const putsBefore = puts;
           let calls = 0;
@@ -1123,12 +1125,7 @@ describe('evidence · A12 a document finds its own place', () => {
             version: '9.9.9-test',
             clock: fixedClock(AT),
             objects: counted,
-            pdf: createFakePdfText(
-              Array.from(
-                { length: onlineOcrPageLimit + 1 },
-                (_, at) => `עמוד ${at + 1} של סריקה ארוכה`,
-              ),
-            ),
+            pdf: createFakePdfText(['סריקה גדולה ללא מילות הטופס']),
             ocr: {
               describe: () => 'fake',
               pages: async () => {
@@ -1143,12 +1140,17 @@ describe('evidence · A12 a document finds its own place', () => {
             url: '/documents/intake',
             ...upload(
               { csrf: (who as SignedIn).csrf, type: 'lease' },
-              { filename: 'long.pdf', bytes: pdfBytes('a12 long scan') },
+              {
+                filename: 'huge.pdf',
+                bytes: Buffer.concat([
+                  pdfBytes('a12 huge scan'),
+                  Buffer.alloc(onlineOcrByteLimit, 0x20),
+                ]),
+              },
             ),
           });
           assert.equal(response.statusCode, 422);
-          assert.match(response.body, /ארוך מכדי/);
-          assert.match(response.body, new RegExp(`${onlineOcrPageLimit + 1}`));
+          assert.match(response.body, /גדול מכדי/);
           // No candidate list: nothing was read off this file, so there is nothing to choose
           // between and offering a choice would be a question built on no reading.
           assert.doesNotMatch(response.body, /נקראה הכתובת/);

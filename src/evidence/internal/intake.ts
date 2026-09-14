@@ -117,7 +117,7 @@ export interface IntakeRequest {
  * different sentences to say: *this is not that kind of document*, and *this is too long for us to
  * have read it*. A refusal an operator cannot act on is a refusal they will work around.
  */
-export type IntakeRefusal = 'terms' | 'too_many_pages';
+export type IntakeRefusal = 'terms' | 'too_large';
 
 export type IntakeResult =
   | {
@@ -197,18 +197,23 @@ export async function fileDocument(
       // reader that found nothing and a file nobody tried to read were one absent row until now.
       ocr: reading.ocrOutcome,
       pages: reading.native.length,
+      // Present only on a partial reading, and it is the number that keeps `verified` honest: the
+      // verdict was taken on this many of the pages above, not on all of them.
+      ...(reading.pagesRead === undefined
+        ? {}
+        : { pagesRead: reading.pagesRead }),
     },
   };
 
-  if (reading.ocrOutcome === 'too_many_pages') {
-    // Refused rather than filed. The system knows it did not finish reading this file, and a row
-    // written on that reading would carry a verdict about a document nobody has seen the whole of.
+  if (reading.ocrOutcome === 'too_large') {
+    // Refused rather than filed. Nothing was read off this file and nothing could be, so a row
+    // would carry a verdict about a document nobody has seen a page of.
     await deps.audit.write(line, {
       outcome: 'error',
       code: 'invalid',
-      message: 'the file is longer than the reader will take in one call',
+      message: 'the file is larger than the reader will take in one call',
     });
-    return { filed: false, verification, refusal: 'too_many_pages' };
+    return { filed: false, verification, refusal: 'too_large' };
   }
 
   if (verification.verdict === 'refused') {
