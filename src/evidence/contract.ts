@@ -10,6 +10,22 @@
 // type is a row about paper, not about anybody. They exist because slice 3.3's guard and slice 4.2's
 // extraction must read the catalogue **at run time** — A8.
 
+// **Slice 7.3.** The approval stamp — the verb 4.3 did not have. `READ_QUALITY_THRESHOLD` and
+// `isFlagged` are on the contract because `tests/policy/read-quality.test.ts` is their gate, and the
+// policy suite reads contracts and never internals.
+export type {
+  ApproveDeps,
+  ApproveResult,
+  ApproveSpec,
+  ApproveUnflaggedResult,
+  ApproveUnflaggedSpec,
+} from './internal/approve.ts';
+export {
+  approveExtractedField,
+  approveUnflagged,
+  isFlagged,
+  READ_QUALITY_THRESHOLD,
+} from './internal/approve.ts';
 export type {
   DeclarationResult,
   DocumentTypeFieldRow,
@@ -167,6 +183,7 @@ export type { Verification, VerificationVerdict } from './internal/verify.ts';
 export { documentText, verifyDeclaredType } from './internal/verify.ts';
 export type {
   DocumentsScreen,
+  FieldsScreen,
   FiledScreen,
   IntakeScreen,
   ReadScreen,
@@ -178,6 +195,7 @@ export type {
 } from './internal/views.ts';
 export {
   renderDocumentsPage,
+  renderFieldsPage,
   renderFiledPage,
   renderIntakePage,
   renderReadPage,

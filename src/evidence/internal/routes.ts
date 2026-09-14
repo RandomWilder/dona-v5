@@ -22,7 +22,7 @@ import {
   WARRANTY_YEARS,
 } from '../../estate/contract.ts';
 import { countActions, createAuditLog } from '../../kernel/audit.ts';
-import { type Clock, today } from '../../kernel/clock.ts';
+import { type Clock, dayIn, today } from '../../kernel/clock.ts';
 import {
   createSettings,
   readExtractionSettings,
@@ -61,6 +61,7 @@ function pageIndex(asked: unknown, pageCount: number): number {
 
 import type { WorkRunner } from '../../kernel/work.ts';
 import { listUnitTenancies, type TenancyRole } from '../../tenancy/contract.ts';
+import { approveExtractedField, approveUnflagged } from './approve.ts';
 import {
   declareDocumentTypeField,
   documentTypeByKey,
@@ -71,7 +72,7 @@ import {
   listDocumentTypes,
   retireDocumentTypeField,
 } from './catalogue.ts';
-import { anchorOf } from './documents.ts';
+import { anchorOf, getFiledDocument } from './documents.ts';
 import {
   type ExtractedRow,
   isIdentifierField,
@@ -98,9 +99,10 @@ import {
   documentFileHash,
   sniffExtension,
 } from './storage-path.ts';
-import type { AnchoredPlace, SeedScreen } from './views.ts';
+import type { AnchoredPlace, FieldsScreen, SeedScreen } from './views.ts';
 import {
   renderDocumentsPage,
+  renderFieldsPage,
   renderFiledPage,
   renderIntakePage,
   renderReadPage,
@@ -376,6 +378,40 @@ async function logIdentifierRead(
   );
 }
 
+/**
+ * **Which day's declaration these readings were taken against. Slice 7.3.**
+ *
+ * The day the extraction ran, and never today: a field declared this morning is not something last
+ * month's lease failed to carry, and a ledger that listed it as unread would send somebody to look
+ * at paper for a line that was not being looked for when it was read. `extracted_at` is the only
+ * record of that day, so the latest one on the document is the answer; a document with no readings
+ * falls back to today, which is the day somebody would re-run the extraction on.
+ */
+async function declarationDay(
+  deps: DocumentDeps,
+  documentId: string,
+  rows: readonly ExtractedRow[],
+): Promise<string> {
+  if (rows.length === 0) {
+    return today(deps.clock);
+  }
+  const result = await deps.pool.query<{ at: Date }>(
+    'SELECT max(extracted_at) AS at FROM extracted_field WHERE document_id = $1',
+    [documentId],
+  );
+  const at = result.rows[0]?.at;
+  return at ? dayIn(at, deps.clock.zone) : today(deps.clock);
+}
+
+/** `?saved=<n>` — a count the redirect carried back, bounded at the edge like every other input. */
+function savedCount(request: FastifyRequest): number | null {
+  const raw = (request.query as { saved?: string }).saved;
+  if (raw === undefined || !/^[0-9]{1,3}$/.test(raw)) {
+    return null;
+  }
+  return Number(raw);
+}
+
 function html(reply: { header: (k: string, v: string) => unknown }): void {
   reply.header('content-type', 'text/html; charset=utf-8');
   reply.header('cache-control', 'no-cache');
@@ -405,6 +441,20 @@ const INTAKE = {
   config: { staff: 'documents.write', csrf: 'in-body' },
 } as const;
 const CONFIRM = { config: { staff: 'tenancy.write' } } as const;
+/**
+ * **Slice 7.3.** Signing a reading writes nothing outside this module — no typed column, no tenancy
+ * — so the stance is `documents.write` and not `tenancy.write`. An OPERATOR files the paper and an
+ * OPERATOR says whether it was read correctly; that is the same hand and the same day's work.
+ */
+const APPROVE = { config: { staff: 'documents.write' } } as const;
+/**
+ * **The first route in this system that declares `party.national_id.read`.** Until 7.3 the
+ * permission was consulted inside a handler to decide what a page printed (6.4). Revealing one
+ * captured ת.ז. is an act rather than a rendering decision, so the gate moves to the door: a viewer
+ * without the permission is refused by the composition root and never reaches a handler holding the
+ * value.
+ */
+const REVEAL = { config: { staff: 'party.national_id.read' } } as const;
 // **Slice 7.2.** `settings.write`, ADMIN only, and already the hand on the `DocumentType`
 // catalogue since 5.8 — so `src/staff/internal/roles.ts` does not change. A permission with one
 // reader adds vocabulary without adding a boundary, and the matrix stays code.
@@ -1025,6 +1075,168 @@ export function registerDocumentRoutes(
         });
       }
       throw new KernelError('not_found', 'document not found');
+    },
+  );
+
+  // **The approval ledger. Slice 7.3, flow A15.**
+  //
+  // `/documents/:id/read` answers *where on the page did this come from*. This answers *is it
+  // right?* — the question the week-6 demo could watch a value arrive and had no way to act on.
+  //
+  // **It reads no bytes.** The paint drew a page count and a reader line; both cost a pdf parse or
+  // an OCR call per view, and the screen that already pays for them is one link away. Everything
+  // here comes out of three tables.
+  const fieldsScreen = async (
+    request: FastifyRequest,
+    documentId: string,
+    extra: { revealed?: string; saved?: number },
+  ): Promise<FieldsScreen> => {
+    const filed = await getFiledDocument(deps.pool, documentId);
+    const anchor = await anchorOf(deps.pool, documentId);
+    const rows = await listExtractedFields(deps.pool, documentId);
+    const on = await declarationDay(deps, documentId, rows);
+    const declared = await documentTypeFields(deps.pool, filed.typeKey, on);
+    // A declaration with no reading is a row that says so. *The lease names no guarantor* and *the
+    // reader missed the guarantor* look identical on a screen that shows only what was found, and
+    // the first is a valid lease while the second is a reason to look at the paper again.
+    const unread = declared.filter(
+      (field) =>
+        !rows.some(
+          (row) => row.documentTypeFieldId === field.documentTypeFieldId,
+        ),
+    );
+    const common = {
+      nav: chromeOf(deps, request),
+      csrf: csrfFrom(request),
+      documentId,
+      labelHe: filed.labelHe,
+      on,
+      rows,
+      unread,
+      mayReadIdentifiers: mayReadIdentifiers(request),
+      mayApprove: can(request.staff?.role ?? null, 'documents.write'),
+      ...extra,
+    };
+    if (anchor.kind === 'UNIT') {
+      const unit = await getUnit(deps.pool, anchor.id);
+      return {
+        ...common,
+        buildingId: unit.building_id,
+        buildingName: unit.building_name,
+        unitId: unit.unit_id,
+      };
+    }
+    if (anchor.kind === 'BUILDING') {
+      const detail = await getBuilding(deps.pool, anchor.id);
+      return {
+        ...common,
+        buildingId: detail.building.building_id,
+        buildingName: detail.building.name,
+        unitId: null,
+      };
+    }
+    throw new KernelError('not_found', 'document not found');
+  };
+
+  app.get<{ Params: { documentId: string } }>(
+    '/documents/:documentId/fields',
+    READ,
+    async (request, reply) => {
+      const documentId = validId(request.params.documentId, 'document');
+      html(reply);
+      return renderFieldsPage(
+        await fieldsScreen(request, documentId, {
+          ...(savedCount(request) === null
+            ? {}
+            : { saved: savedCount(request) as number }),
+        }),
+      );
+    },
+  );
+
+  // **Signing, one row or the unflagged rest.** One route and one form action rather than two
+  // routes, because they are one act at two scales and the refusals are identical.
+  //
+  // **A redirect, not a render.** A refresh must not re-post an approval — and a second post of the
+  // same row answers `conflict` by design, which would greet a reader who pressed reload with a 409
+  // on a page that had worked.
+  app.post<{ Params: { documentId: string } }>(
+    '/documents/:documentId/fields/approve',
+    APPROVE,
+    async (request, reply) => {
+      const documentId = validId(request.params.documentId, 'document');
+      const fields = formBody(request);
+      const approvedBy = requireOperatorEmail(request);
+      const approveDeps = {
+        db: deps.pool,
+        audit: createAuditLog(deps.pool, deps.clock),
+        clock: deps.clock,
+      };
+      let approved = 1;
+      if (fields.action === 'unflagged') {
+        const result = await approveUnflagged(approveDeps, {
+          documentId,
+          approvedBy,
+        });
+        approved = result.approved;
+      } else {
+        await approveExtractedField(approveDeps, {
+          extractedFieldId: validId(
+            fields.extracted_field_id ?? '',
+            'extracted field',
+          ),
+          ...(fields.approved_value === undefined
+            ? {}
+            : { approvedValue: fields.approved_value }),
+          approvedBy,
+          mayReadIdentifiers: mayReadIdentifiers(request),
+        });
+      }
+      return reply.redirect(
+        `/documents/${documentId}/fields?saved=${String(approved)}`,
+      );
+    },
+  );
+
+  // **One identifier, asked for by name. Slice 7.3, and 6.4's rule kept at a finer grain.**
+  //
+  // The read overlay logs a disclosure when an ADMIN opens it, which makes that line a record of who
+  // opened a page. Here the line records what it says: somebody asked for *this* ת.ז. and was shown
+  // it. It **renders rather than redirects** — a redirect would put the revealed row's id in a URL,
+  // in history and in a referrer, and a refresh would re-log a disclosure that happened once.
+  app.post<{ Params: { documentId: string } }>(
+    '/documents/:documentId/fields/reveal',
+    REVEAL,
+    async (request, reply) => {
+      const documentId = validId(request.params.documentId, 'document');
+      const fields = formBody(request);
+      const extractedFieldId = validId(
+        fields.extracted_field_id ?? '',
+        'extracted field',
+      );
+      const rows = await listExtractedFields(deps.pool, documentId);
+      const row = rows.find(
+        (candidate) => candidate.extractedFieldId === extractedFieldId,
+      );
+      if (!row) {
+        throw new KernelError('not_found', 'extracted field not found');
+      }
+      // Only an identifier is withheld, so only an identifier can be revealed — and a request
+      // naming an ordinary row would otherwise write a disclosure line for a value that was on the
+      // page already, which makes the log lie in the direction that matters.
+      if (!isIdentifierField(row.fieldKey)) {
+        throw new KernelError('invalid', 'that reading is not withheld');
+      }
+      const filed = await getFiledDocument(deps.pool, documentId);
+      await logIdentifierRead(deps, request, {
+        documentId,
+        typeKey: filed.typeKey,
+        rows: [row],
+      });
+      html(reply);
+      return renderFieldsPage(
+        await fieldsScreen(request, documentId, { revealed: extractedFieldId }),
+      );
     },
   );
 

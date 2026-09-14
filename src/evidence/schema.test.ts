@@ -756,6 +756,11 @@ describe('extracted_field — one value, one declaration (A8 open half)', () => 
     'promoted_to',
     'promoted_by',
     'promoted_at',
+    // Slice 7.3. The approval stamp — what a person affirmed, who signed it and when. `value` above
+    // is what the reader produced and is never overwritten by any of these.
+    'approved_value',
+    'approved_by',
+    'approved_at',
   ];
 
   async function seedField(
@@ -890,6 +895,140 @@ describe('extracted_field — one value, one declaration (A8 open half)', () => 
           [newId(), documentId, fieldId, INGESTED_AT],
         ),
       );
+    });
+  });
+
+  // -------------------------------------------------------------------------------------------
+  // Slice 7.3 — the approval stamp, and the three things the database refuses about it.
+  //
+  // Every rejection below was red first against 0028 with the constraint or the trigger removed;
+  // the SQLSTATEs are in tasks/evidence/7.3.md. The last assertion is the slice's whole point, and
+  // it is a claim about a column that did *not* move: an edited approval leaves `value` exactly as
+  // the reader produced it, because the difference between the two is the accuracy dataset.
+  // -------------------------------------------------------------------------------------------
+
+  async function seedReading(
+    db: PoolClient,
+    name: string,
+  ): Promise<{ extractedFieldId: string; documentId: string }> {
+    const documentTypeId = await seedType(db, { name });
+    const fieldId = await seedField(db, documentTypeId, 'tenant_name');
+    const documentId = await seedDocument(
+      db,
+      documentTypeId,
+      `${BLOCK}-${name}-hash`,
+    );
+    const extractedFieldId = newId();
+    await db.query(
+      `INSERT INTO extracted_field (
+         extracted_field_id, document_id, document_type_field_id, value,
+         page, bbox, confidence, model, extracted_at
+       ) VALUES ($1, $2, $3, 'אבי כהן', 1,
+                 '{"x":1,"y":2,"width":3,"height":4}', 0.96, 'fake', $4)`,
+      [extractedFieldId, documentId, fieldId, INGESTED_AT],
+    );
+    return { extractedFieldId, documentId };
+  }
+
+  it('refuses a half-written approval stamp', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const { extractedFieldId } = await seedReading(db, 'approve-check');
+      await db.query("SELECT set_config('dona.approving', 'on', true)");
+      // A value with nobody's name on it, and a name with no moment. Neither is a state this table
+      // has: an approval is one act and its three columns arrive together or not at all.
+      await rejects(db, CHECK_VIOLATION, () =>
+        db.query(
+          `UPDATE extracted_field SET approved_value = 'אבי כהן'
+            WHERE extracted_field_id = $1`,
+          [extractedFieldId],
+        ),
+      );
+      await rejects(db, CHECK_VIOLATION, () =>
+        db.query(
+          `UPDATE extracted_field SET approved_by = 'אסף', approved_at = $2
+            WHERE extracted_field_id = $1`,
+          [extractedFieldId, INGESTED_AT],
+        ),
+      );
+    });
+  });
+
+  it('refuses an approval written outside the approve path, and a delete of an approved row', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const { extractedFieldId, documentId } = await seedReading(
+        db,
+        'approve-stamp',
+      );
+
+      await rejects(db, RESTRICT_VIOLATION, () =>
+        db.query(
+          `UPDATE extracted_field
+              SET approved_value = 'אבי כהן', approved_by = 'אסף', approved_at = $2
+            WHERE extracted_field_id = $1`,
+          [extractedFieldId, INGESTED_AT],
+        ),
+      );
+      await rejects(db, RESTRICT_VIOLATION, () =>
+        db.query(
+          `INSERT INTO extracted_field (
+             extracted_field_id, document_id, document_type_field_id, value,
+             page, bbox, confidence, model, extracted_at,
+             approved_value, approved_by, approved_at
+           ) SELECT $1, document_id, document_type_field_id, value,
+                    page, bbox, confidence, model, extracted_at,
+                    'אבי כהן', 'אסף', $3
+               FROM extracted_field WHERE extracted_field_id = $2`,
+          [newId(), extractedFieldId, INGESTED_AT],
+        ),
+      );
+
+      await db.query("SELECT set_config('dona.approving', 'on', true)");
+      await db.query(
+        `UPDATE extracted_field
+            SET approved_value = 'אבי לוי', approved_by = 'אסף', approved_at = $2
+          WHERE extracted_field_id = $1`,
+        [extractedFieldId, INGESTED_AT],
+      );
+      await db.query("SELECT set_config('dona.approving', 'off', true)");
+
+      // A promoted row is undeletable because the stamp is business truth. An approved row is
+      // undeletable because the stamp is a person's word, and re-reading the page does not unsay it
+      // — which is also why `extractFiledDocument` now spares it.
+      await rejects(db, RESTRICT_VIOLATION, () =>
+        db.query('DELETE FROM extracted_field WHERE extracted_field_id = $1', [
+          extractedFieldId,
+        ]),
+      );
+      // And re-extract's own predicate, which is the query that has to *mean* what the trigger
+      // enforces: it matches nothing here, so it succeeds and the approved row survives. A
+      // predicate that lost its `approved_at` half would raise the rejection above instead of
+      // passing this line, which is the failure worth catching in the same case.
+      await db.query(
+        `DELETE FROM extracted_field
+          WHERE document_id = $1 AND promoted_at IS NULL AND approved_at IS NULL`,
+        [documentId],
+      );
+      const left = await db.query<{ n: string }>(
+        'SELECT count(*)::text AS n FROM extracted_field WHERE document_id = $1',
+        [documentId],
+      );
+      assert.equal(
+        left.rows[0]?.n,
+        '1',
+        'the approved row survived re-extract',
+      );
+
+      // **The point of the slice.** The reader said אבי כהן, the person signed אבי לוי, and both
+      // are on the row. One column would have destroyed the measurement on this correction.
+      const row = await db.query<{ value: string; approved_value: string }>(
+        `SELECT value, approved_value FROM extracted_field
+          WHERE extracted_field_id = $1`,
+        [extractedFieldId],
+      );
+      assert.equal(row.rows[0]?.value, 'אבי כהן');
+      assert.equal(row.rows[0]?.approved_value, 'אבי לוי');
     });
   });
 });

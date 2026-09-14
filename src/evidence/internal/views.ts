@@ -28,12 +28,13 @@ import type { PdfPage } from '../../kernel/pdf.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import type { UnitLetting } from '../../tenancy/contract.ts';
+import { isFlagged } from './approve.ts';
 import {
   type DocumentTypeFieldRow,
   type DocumentTypeRow,
   FIELD_VALUE_TYPES,
 } from './catalogue.ts';
-import { isIdentifierField } from './extract.ts';
+import { type ExtractedRow, isIdentifierField } from './extract.ts';
 import type { IntakeRefusal } from './intake.ts';
 import type { ProposedPerson, TenancyCandidate } from './lease.ts';
 import { CANDIDATE_LIMIT, type PlaceReading } from './place.ts';
@@ -95,6 +96,12 @@ const styles = h`<style>
      these two carry the whole meaning of the screen. The colours are the sheet's, as everything
      here is. */
   .terms .chip { gap: var(--space-2); background: var(--color-surface); }
+  /* Slice 7.3. The read-quality cell borrows .grid-table .key for its face — a font-family typed
+     into a screen is what tokens.test.ts refuses — and adds only the state. The state is a word
+     before it is a colour everywhere else on this screen (the unmeasured row says so in Hebrew),
+     so this is emphasis on a number and never the whole meaning of a cell. */
+  .quality.is-low { color: var(--color-alert); font-weight: 600; }
+  .second { color: var(--color-text-muted); font-size: var(--text-xs); }
   .term-found { color: var(--color-ok); }
   .term-missing { color: var(--color-alert); }
   .term-state { font-weight: 600; }
@@ -910,6 +917,8 @@ export interface ReadScreen {
     confidence: number | null;
     promotionTarget: string | null;
     promotedTo: string | null;
+    /** Slice 7.3. A state, said in one word; the ledger is where it is acted on. */
+    approvedAt?: Date | null;
   }>;
 }
 
@@ -978,39 +987,29 @@ function withheldLine(count: number): Html {
   return h`<p class="lede">נקראו ${ltr(count)} שדות מזהה ואינם מוצגים בהרשאה זו.</p>`;
 }
 
+/**
+ * What was read, on the page that shows where it was read from.
+ *
+ * **Slice 7.3 took the `קדם` buttons out of here**, and did not replace them with a second set. This
+ * screen is the pixels: it answers *where did this come from*. Acting on a reading — signing it,
+ * correcting it, promoting it — is one screen and one link away, and having the same write in two
+ * places is how the two drift into disagreeing about which one is the flow.
+ */
 function extractedSection(screen: ReadScreen) {
   const rows = visibleRows(screen);
   const withheld = withheldLine(withheldCount(screen));
   if (rows.length === 0) {
-    return h`<p class="lede">לא נקראו שדות מהמסמך. אין מה לקדם עד שהקריאה תשלים.</p>${withheld}`;
+    return h`<p class="lede">לא נקראו שדות מהמסמך. אין מה לאשר עד שהקריאה תשלים.</p>${withheld}`;
   }
-  const promotable = rows.filter(
-    (row) => row.promotionTarget && !row.promotedTo,
-  );
   return h`
     <h2>מה שנקרא</h2>
     <dl class="facts">${rows.map(
       (row) =>
         h`<div><dt>${row.labelHe}</dt><dd><a href="${pixelsHref(screen.documentId, row.page, row.extractedFieldId)}">${row.value}</a>${confidenceLabel(row.confidence)}${
-          row.promotedTo
-            ? h` · קודם`
-            : row.promotionTarget
-              ? h``
-              : h` · נקרא בלבד`
+          row.approvedAt ? h` · אושר` : row.promotedTo ? h` · קודם` : h``
         }</dd></div>`,
     )}</dl>
-    ${withheld}
-    ${
-      promotable.length > 0
-        ? h`<form method="post" action="/documents/${screen.documentId}/promote">
-            ${csrfInput(screen.csrf)}
-            ${promotable.map(
-              (row) =>
-                h`<button class="btn" name="extracted_field_id" value="${row.extractedFieldId}">קדם · ${row.labelHe}</button>`,
-            )}
-          </form>`
-        : h``
-    }`;
+    ${withheld}`;
 }
 
 export function renderReadPage(screen: ReadScreen): string {
@@ -1077,6 +1076,14 @@ export function renderReadPage(screen: ReadScreen): string {
         : h`<p class="lede">אין דף להצגה.</p>`
     }
     <div class="form-actions">
+      ${
+        // **Slice 7.3.** The ledger is where a reading is signed, corrected or promoted. It is the
+        // primary control on this page for that reason: reading the pixels is what somebody does
+        // *before* they act, and the act is next door.
+        (screen.extracted ?? []).length > 0
+          ? h`<a class="btn btn-primary" href="/documents/${screen.documentId}/fields">אישור הקריאה</a>`
+          : h``
+      }
       ${
         screen.typeKey === 'lease'
           ? h`<a class="btn btn-secondary" href="/documents/${screen.documentId}/tenancy">אישור חוזה</a>`
@@ -1600,4 +1607,234 @@ function declarationForm(
       <span class="chip">אדמין בלבד</span>
     </div>
   </form>`;
+}
+
+/**
+ * **The approval ledger. Slice 7.3, flow A15, and the last screen of the paint.**
+ *
+ * `/documents/:id/read` answers *where on the page did this come from* and has done since 4.1. This
+ * answers the question nobody could act on: *is it right?* One row per captured value, the reading
+ * as the extractor left it, the read quality, and the control that signs it.
+ *
+ * **`value` is never overwritten**, so the edit control is an input pre-filled with the reading and
+ * a button that writes `approved_value` beside it. The difference between the two columns is the
+ * per-field accuracy dataset, and a screen that wrote back into `value` would destroy the
+ * measurement on the first correction — which is the whole reason the slice exists.
+ *
+ * **It takes no reading of the bytes.** The paint drew a page count and a reader line; both cost an
+ * OCR call or a pdf parse per view, and the screen that already pays for those is one link away.
+ * What is here comes out of `extracted_field`, `document_type_field` and `document`.
+ */
+export interface FieldsScreen {
+  nav: Html;
+  csrf: string;
+  documentId: string;
+  buildingId: string;
+  buildingName: string;
+  unitId: string | null;
+  /** The document type's Hebrew label. */
+  labelHe: string;
+  /**
+   * The day whose declaration these readings were taken against — the day the extraction ran, never
+   * today. A field declared this morning is not something last month's lease failed to carry.
+   */
+  on: string;
+  rows: readonly ExtractedRow[];
+  /** Declarations the reader found nothing for. A result, not an error (SPEC-evidence.md). */
+  unread: readonly DocumentTypeFieldRow[];
+  /** 6.4's stance. Required, not defaulted: one call site, one decision, stated. */
+  mayReadIdentifiers: boolean;
+  /** `documents.write`. A viewer who may not sign is shown the ledger and no controls. */
+  mayApprove: boolean;
+  /** The one row a viewer asked for by name, this request only. Never sticky, never a query param. */
+  revealed?: string;
+  /** How many rows the last press signed. */
+  saved?: number;
+}
+
+const MASK = '•••••••••';
+
+/**
+ * Whether the value on this row may be printed. **Withheld is the default** and a reveal is one
+ * row, this request only: a viewer holding `party.national_id.read` still has to ask, because a
+ * screen that printed every ת.ז. to every ADMIN who opened it would make the disclosure log a record
+ * of who opened a page rather than of who read an identifier.
+ */
+function shows(screen: FieldsScreen, row: ExtractedRow): boolean {
+  if (!isIdentifierField(row.fieldKey)) return true;
+  return screen.mayReadIdentifiers && screen.revealed === row.extractedFieldId;
+}
+
+/** The reading's quality, in the words the number can actually support. */
+function qualityCell(row: ExtractedRow): Html {
+  if (row.confidence === null) {
+    // Every word of a digitally-produced PDF arrives with no score at all (src/kernel/pdf.ts), so
+    // this is the ordinary case on a native lease and not an anomaly. It is flagged, and it says
+    // what it is instead of showing a number it does not have.
+    return h`<td class="muted">נקרא מטקסט, לא נמדד</td>`;
+  }
+  const percent = `${String(Math.round(row.confidence * 100))}%`;
+  return isFlagged(row.confidence)
+    ? h`<td class="key quality is-low">${ltr(percent)}</td>`
+    : h`<td class="key quality">${ltr(percent)}</td>`;
+}
+
+/**
+ * Flagged first, and among the flagged the unmeasured first — the rows a person has to look at, at
+ * the top of the page, which is the other half of `אישור כל מה שלא סומן` being safe to press.
+ * Signed rows fall to the bottom: they are the work already done.
+ */
+function ledgerOrder(rows: readonly ExtractedRow[]): ExtractedRow[] {
+  const rank = (row: ExtractedRow): number => {
+    if (row.approvedAt !== null) return 3;
+    if (row.confidence === null) return 0;
+    if (isFlagged(row.confidence) || isIdentifierField(row.fieldKey)) return 1;
+    return 2;
+  };
+  return [...rows].sort(
+    (a, b) =>
+      rank(a) - rank(b) ||
+      (a.confidence ?? 0) - (b.confidence ?? 0) ||
+      a.fieldKey.localeCompare(b.fieldKey),
+  );
+}
+
+function approveControl(screen: FieldsScreen, row: ExtractedRow): Html {
+  if (row.approvedAt !== null) {
+    return h`<td class="muted">אושר</td>`;
+  }
+  if (!screen.mayApprove) {
+    return h`<td class="muted">—</td>`;
+  }
+  if (isIdentifierField(row.fieldKey) && !shows(screen, row)) {
+    // A signature on a masked value is a false record, so the only control here is the one that
+    // ends the masking — and it is its own request, logged as a disclosure (6.4).
+    return h`<td class="row-actions">
+      <form method="post" action="/documents/${screen.documentId}/fields/reveal">
+        ${csrfInput(screen.csrf)}
+        <input type="hidden" name="extracted_field_id" value="${row.extractedFieldId}" />
+        <button class="btn btn-secondary mini" type="submit">גילוי</button>
+      </form>
+    </td>`;
+  }
+  return h`<td class="row-actions">
+    <form method="post" action="/documents/${screen.documentId}/fields/approve">
+      ${csrfInput(screen.csrf)}
+      <input type="hidden" name="extracted_field_id" value="${row.extractedFieldId}" />
+      <input class="mini" name="approved_value" value="${row.value}" maxlength="2000"
+             aria-label="הערך המאושר ל${row.labelHe}" />
+      <button class="btn btn-primary mini" type="submit">אישור</button>
+    </form>
+  </td>`;
+}
+
+function valueCell(screen: FieldsScreen, row: ExtractedRow): Html {
+  if (!shows(screen, row)) {
+    return h`<td class="key">${ltr(MASK)}</td>`;
+  }
+  const read = h`<a href="${pixelsHref(screen.documentId, row.page, row.extractedFieldId)}">${row.value}</a>`;
+  if (row.approvedValue === null || row.approvedValue === row.value) {
+    return h`<td>${read}</td>`;
+  }
+  // **The delta, on the screen it was created on.** Both values, because the point of the second
+  // column is that somebody can see what the reader got wrong.
+  return h`<td><span class="value">${row.approvedValue}</span>
+    <span class="second">· נקרא: ${read}</span></td>`;
+}
+
+export function renderFieldsPage(screen: FieldsScreen): string {
+  const back = screen.unitId
+    ? `/estate/units/${screen.unitId}`
+    : `/estate/buildings/${screen.buildingId}`;
+  const shown = screen.mayReadIdentifiers
+    ? screen.rows
+    : screen.rows.filter((row) => !isIdentifierField(row.fieldKey));
+  const withheld = screen.mayReadIdentifiers
+    ? 0
+    : screen.rows.length - shown.length;
+  const open = shown.filter((row) => row.approvedAt === null);
+  const unflagged = open.filter(
+    (row) => !isFlagged(row.confidence) && !isIdentifierField(row.fieldKey),
+  );
+  const promotable = shown.filter(
+    (row) => row.promotionTarget && !row.promotedTo,
+  );
+  const body = h`
+    <div>
+      <a class="back" href="${back}">← ${screen.unitId ? h`הדירה` : screen.buildingName}</a>
+      <h1>מה נקרא מן המסמך</h1>
+      <p class="lede">${screen.labelHe} · ההצהרה שתקפה ל־${ltr(screen.on)}</p>
+    </div>
+    ${
+      screen.saved === undefined
+        ? h``
+        : h`<p class="lede">${
+            screen.saved === 1
+              ? h`שורה אחת אושרה.`
+              : h`${ltr(screen.saved)} שורות אושרו.`
+          } הערך שנקרא נשמר כפי שהוא.</p>`
+    }
+    ${
+      shown.length === 0 && screen.unread.length === 0
+        ? h`<p class="lede">לא נקראו שדות מהמסמך ואין הצהרות לסוג הזה.</p>`
+        : h`<div class="table-wrap">
+      <table class="grid-table">
+        <thead>
+          <tr><th>שדה</th><th>ערך שנקרא</th><th>איכות הקריאה</th><th>פעולה</th></tr>
+        </thead>
+        <tbody>
+          ${ledgerOrder(shown).map(
+            (row) => h`<tr>
+            <td class="value">${row.labelHe}</td>
+            ${valueCell(screen, row)}
+            ${qualityCell(row)}
+            ${approveControl(screen, row)}
+          </tr>`,
+          )}
+          ${screen.unread.map(
+            (field) => h`<tr>
+            <td class="value muted">${field.labelHe}</td>
+            <td class="muted">לא נקרא${field.isRequired ? h`` : h` — שדה רשות`}</td>
+            <td class="muted">—</td>
+            <td class="muted">—</td>
+          </tr>`,
+          )}
+        </tbody>
+      </table>
+    </div>`
+    }
+    ${withheldLine(withheld)}
+    <div class="form-actions">
+      ${
+        screen.mayApprove && unflagged.length > 0
+          ? h`<form method="post" action="/documents/${screen.documentId}/fields/approve">
+            ${csrfInput(screen.csrf)}
+            <input type="hidden" name="action" value="unflagged" />
+            <button class="btn btn-primary" type="submit">אישור כל מה שלא סומן</button>
+          </form>`
+          : h``
+      }
+      <a class="btn btn-secondary" href="/documents/${screen.documentId}/read">מילים על הדף</a>
+      ${
+        open.length - unflagged.length > 0
+          ? h`<span class="chip">${ltr(open.length - unflagged.length)} שורות לבדיקה אישית</span>`
+          : h``
+      }
+    </div>
+    <p class="form-note">
+      «אישור» אינו «קידום». אישור אומר שהקריאה נכונה ונשמר על שורת המסמך; קידום מעתיק ערך לעמודה
+      מוקלדת של ההשכרה, ויש לו יעד רק לשני התאריכים. ערך שנקרא לעולם אינו נמחק — תיקון נכתב לצדו.
+    </p>
+    ${
+      promotable.length > 0
+        ? h`<form class="form-actions" method="post" action="/documents/${screen.documentId}/promote">
+          ${csrfInput(screen.csrf)}
+          ${promotable.map(
+            (row) =>
+              h`<button class="btn btn-secondary" name="extracted_field_id" value="${row.extractedFieldId}">קדם · ${row.labelHe}</button>`,
+          )}
+        </form>`
+        : h``
+    }`;
+  return shell('דונה דום — אישור קריאה', body, screen.nav);
 }

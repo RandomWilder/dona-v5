@@ -268,21 +268,22 @@ ending on the 15th, which the day before this slice would have read *מסתיי�
   table. Until there is, a second country is a row somebody inserts by hand. **Owner stays 5.8's open
   half** (the `config_settings` / secret-name editor), in the week-6 standing list below.
 
-## Slice 7.3 — The approval table
+## Slice 7.3 — The approval table — **closed 15 Sep 2026**
 
 Plan mode. **Migration 0028** — ~~0019~~, which is `0019_tenancy_event.sql` and has been since 5.5;
-corrected at 7.2, which counted them. This is the slice that deletes the paint.
+corrected at 7.2, which counted them. This is the slice that deletes the paint, and it did.
+Flow **A15**, written into `SPEC-flows.md` before the code. Evidence: [evidence/7.3.md](evidence/7.3.md).
 
-- [ ] **`GET /documents/:id/fields`** — the ledger from the paint. One row per `extracted_field`:
+- [x] **`GET /documents/:id/fields`** — the ledger from the paint. One row per `extracted_field`:
       field, read value, confidence, action. `/documents/:id/read` stays what it is
       (`מילים על הדף`, the pixel view); the two link to each other and the `קדם` buttons move here.
-- [ ] **0028 on `extracted_field`** — `approved_value text`, `approved_by text` (`-- pii`, a
+- [x] **0028 on `extracted_field`** — `approved_value text`, `approved_by text` (`-- pii`, a
       snapshot and not a staff FK, exactly as `promoted_by`), `approved_at timestamptz`. **`value` is
       never overwritten.** A trigger in the shape of `extracted_field_promotion_guard()` refuses an
       approval stamp written without `dona.approving` and refuses to delete an approved row.
-- [ ] **Approve ≠ promote, and both verbs survive.** Approving says *this reading is correct*;
+- [x] **Approve ≠ promote, and both verbs survive.** Approving says *this reading is correct*;
       promoting copies it onto a typed column and is still the two dates until 7.4.
-- [ ] **Primary control is `אישור כל מה שלא סומן`**, never approve-all, with the flagged rows sorted
+- [x] **Primary control is `אישור כל מה שלא סומן`**, never approve-all, with the flagged rows sorted
       up and a threshold below which a row must be touched individually. **80%, ruled 15 Sep** — and
       the ruling comes with a correction, because this bullet was about to build a control that reads
       as something it is not.
@@ -306,13 +307,24 @@ corrected at 7.2, which counted them. This is the slice that deletes the paint.
       • **A second signal is not this slice's.** The honest one — whether the words the model pointed
       at actually sit under the declared field's label on the page — is geometry the read overlay
       already has. Named, not built.
-- [ ] **ת.ז. masked, revealed under `party.national_id.read`**, the reveal a separate request that
+- [x] **ת.ז. masked, revealed under `party.national_id.read`**, the reveal a separate request that
       writes `evidence.read_identifier`. The value never ships to be hidden by CSS — 6.6.
-- [ ] **`tests/ui/tokens.test.ts`**: the **seventh** document-shaped screen under 6.6's ruling, with
+      **Sharpened inside the slice, against this bullet:** an identifier is **never in the bulk set,
+      at any stance**, not merely withheld from a viewer who may not read one. A ת.ז. does not reach
+      the screen until somebody asks for that row, so `אישור כל מה שלא סומן` would otherwise sign a
+      value the signer has not been shown — the same objection as approving a withheld row, at scale
+      and without anyone noticing. `POST …/fields/reveal` is **the first route in this system to
+      declare `party.national_id.read`** rather than consult it inside a handler, and it renders
+      rather than redirects: a redirect would put the revealed row's id in a URL, in history and in a
+      referrer, and a refresh would re-log a disclosure that happened once.
+- [x] **`tests/ui/tokens.test.ts`**: the **seventh** document-shaped screen under 6.6's ruling, with
       the justification written where the other six have theirs. ~~fifth~~ — 7.1 registered the
       fifth and 7.2 the sixth (`documents · the declaration, admin may edit`, the same screen at the
-      other role). Corrected inside 7.2, which is the slice that moved the number.
-- [ ] **Delete `mockups/document-intake.html`** and its `MOCKUP_OWNERS` entry — guard four. ~~Owner
+      other role). Corrected inside 7.2, which is the slice that moved the number. Registered at
+      **three** stances — masked, withheld, and one row revealed — and the third is the second entry
+      ever added to that suite's disclosure exemption, which SPEC-evidence.md rules before the array
+      does.
+- [x] **Delete `mockups/document-intake.html`** and its `MOCKUP_OWNERS` entry — guard four. ~~Owner
       moves `7.1` → `7.3` in `scripts/guards.ts`~~ — **done in 7.1**, which is where it had to
       happen: the owner's evidence file and the mockup cannot both exist, so 7.1 could not close
       with the owner still pointing at itself. The paint's last unwired screen is this one and the
@@ -322,7 +334,34 @@ corrected at 7.2, which counted them. This is the slice that deletes the paint.
 
 **Done when:** a filed lease shows its ten rows; approve-unflagged stamps the high-confidence ones;
 edit-and-approve writes `approved_value` and leaves `value` intact; a second approval of the same row
-is refused; an OPERATOR sees the ת.ז. rows as a count and no value; 0019 round-trips.
+is refused; an OPERATOR sees the ת.ז. rows as a count and no value; ~~0019~~ **0028** round-trips.
+**All six met.** On `:3000` the bulk control signed 4 of 8 and left the unmeasured row, the 71% row
+and both ת.ז. rows. 670 pass / 0 fail / 0 skipped, from 652.
+
+**What it answered, and what it raised.**
+
+- **The measurement exists.** `value` is what the reader produced and `approved_value` what a person
+  signed; the audit line says `edited` and carries neither. `SELECT field_key, value, approved_value`
+  is the dataset, and the evidence file has the first row of it.
+- **The read-quality predicate would have shipped broken and the policy case caught it.**
+  `(confidence ?? 1) < THRESHOLD` — a default of *fine* on an absent measurement — approved two of
+  three fixture rows instead of one, and the extra one was the row nobody had measured.
+- **The `קדם` buttons moved off the read overlay and were not replaced there.** Two screens writing
+  the same row is how the two drift into disagreeing about which one is the flow. `promote.test.ts`'s
+  4.3 case was rewritten to assert the new division rather than deleted.
+- **A promotion now copies `COALESCE(approved_value, value)`.** Copying the raw read after a person
+  corrected it would write a value nobody affirmed. **Whether an approval should be *required* first
+  is 7.4's**, and it is in that slice's bullets below.
+- **`הוספה ידנית` is not built**, and it is a ruling rather than a button: a row for a declaration
+  nothing was read for is an `extracted_field` with no page and no bbox, which `0017` forbids. In the
+  director's list below, default unbuilt.
+- **The overlay could not be clicked locally** — `object not found`, because `docs: memory` loses the
+  bytes of a document filed before a restart. Pre-existing and nobody's carry; recorded because it is
+  the design decision confirming itself, the ledger having been built to read no bytes.
+- **A test asserted the wrong page and passed.** The overlay-links-to-the-ledger case first read
+  `ledger.body`, which carries `/fields` in every form it draws. Found by clicking, fixed inside the
+  slice. **No owner needed** — it is written into the evidence file so the next person meets it as a
+  rule and not as a surprise.
 
 ## Slice 7.4 — Approve-to-where
 
@@ -340,12 +379,23 @@ a mapping in `applyPromotedField` and a policy case.
       have a home: the party rows 6.5's proposal writes.
 - [ ] So the honest scope is: decide which targets are genuinely *copies*, and build only those.
       **Opens with the two dates and adds nothing until ruled.**
+- [ ] **Carried in from 7.3: whether a promotion should require an approval first.** 7.3 made
+      `promoteExtractedField` *prefer* `approved_value` (`COALESCE(approved_value, value)`), which is
+      the cheap half and is done. Requiring one is the other half and belongs here, in the slice that
+      decides which targets are copies at all: a target that is genuinely a copy is also the one
+      where promoting an unsigned reading is hardest to defend.
 
 ## Left to the director — named, not blocking
 
 1. **The money field.** No money field and no `MONEY` value type, twice on purpose; 7.2's guard keeps
    it that way. *Default: stays refused.*
-2. **The low-confidence threshold.** The paint used 80% and flagged two rows of ten. *Default: 80%.*
+2. ~~**The low-confidence threshold.**~~ **Ruled 15 Sep and built at 7.3: 80%**, as
+   `READ_QUALITY_THRESHOLD` in `src/evidence/internal/approve.ts`, with `null` flagged rather than
+   passed. It is **a constant and not a `config_settings` row**, deliberately: a row with no editor
+   is a row somebody inserts by hand, and moving it there would add a second unreachable knob beside
+   `clock.zone`. **Owner of the knob stays 5.8's open half** (the `config_settings` / secret-name
+   editor), in the week-6 standing list below. What is open is only the number, and the number is
+   one edit and one evidence file.
 3. **7.4's targets**, and whether `address` becomes a cross-check rather than a promotion.
    *Default: 7.4 opens with the two dates and adds nothing.*
 4. ~~**A refusal screen for the declaration editor.**~~ **Ruled 15 Sep, and re-scoped rather than
@@ -368,7 +418,13 @@ a mapping in `applyPromotedField` and a policy case.
 6. **`city` is declarable from a screen now**, with no deploy — one of the three fields the paint
    deferred. The other two are money and stay refused. *Default: nobody declares it until a flow
    needs it.*
-7. **Whether a lease should be able to refuse its own annex.** Raised and measured by 7.1: it cannot,
+7. **`הוספה ידנית` — a value somebody types for a declaration the reader found nothing for.**
+   Raised by 7.3, which drew the row and declined the button. `0017` requires `page >= 1` and a
+   four-edged `bbox`, so a hand-typed value cannot be an `extracted_field` without either inventing
+   geometry or making it nullable — and the question under that is whether a value nobody read off a
+   page is evidence at all, or a fact about the flat that belongs in another module entirely.
+   *Default: it stays unbuilt and the row says `לא נקרא`.*
+8. **Whether a lease should be able to refuse its own annex.** Raised and measured by 7.1: it cannot,
    by construction, and the fix is either negation in `verification_terms` — a new grammar in the
    settings editor — or the third verb 7.4 already circles. *Default: the named pair stands and
    nothing is built.*
