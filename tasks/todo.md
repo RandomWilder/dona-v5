@@ -38,8 +38,9 @@
 > the Definition of Done in [plan.md](plan.md).
 
 **WEEK 6 IS CLOSED — 14 Sep 2026.** [evidence/week-6.md](evidence/week-6.md). Eleven slices, fifteen
-PRs (#74–#88), tip `b6b8605`, staging serving revision `dona-staging-00083-rp9` with
-`{"ok":true,"version":"b6b8605","db":"up"}`. The demo was given off staging and found four defects;
+PRs (#74–#88), **code tip `b6b8605`** on staging as `dona-staging-00083-rp9`, smoke green (this
+close's own docs-only merge then redeployed it as `0a1e05b`, byte-identical `src/` — the footnote is
+in the evidence file). The demo was given off staging and found four defects;
 6.8, 6.11, 6.9 and 6.10 closed all four on 14 Sep — 6.11 was added by 6.8's verify step and the
 director sequenced it ahead of 6.9, because it is the one defect that files a lease against a flat
 nobody chose. 6.1–6.7 were closed and merged before the demo. Both conditions
