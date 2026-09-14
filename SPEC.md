@@ -102,8 +102,13 @@ here:
   escape is `-- not-pii: <why>`, which is a sentence someone has to write and a reviewer can read;
   silence is not an option the guard offers. `space.access_note` is the convention's first use and
   says why it is marked before it has acquired the data rather than after.
-- **Time comes from the injected clock.** No `Date.now()` in logic and no `DEFAULT now()` in SQL: a
-  timestamp the tests cannot control is a test that fails on a Tuesday.
+- **Time comes from the injected clock, and so does the day.** No `Date.now()` in logic and no
+  `DEFAULT now()` in SQL: a timestamp the tests cannot control is a test that fails on a Tuesday.
+  **An instant is not a date** — turning one into the other needs a zone, so `today(clock)` in
+  `src/kernel/clock.ts` is the only place it happens, in the office's zone
+  (`config_settings.clock.zone`, default `Asia/Jerusalem`). Slice 7.2b, which found the whole system
+  deriving the UTC day: for the two or three hours after midnight that is the country's yesterday,
+  and one of the eleven call sites was the isolation join deciding who lives here.
 - **UI is self-contained HTML plus `/ui/tokens.css`, and nothing else.** No bundler, no framework.
   Hebrew is RTL through logical properties (`margin-inline-start`, never `margin-left`), so one
   stylesheet serves both directions. **From slice 5.2c, every signed-in screen carries the same
@@ -497,7 +502,8 @@ reports success (`infra/corpus-delete.sh`), and Cloud Audit Logs `DATA_READ`/`DA
 The application-level audit line over every scoped read **landed at 2.3**, in `src/scope/`, and it
 records what was reached and never what was asked: a subject, an action and a row count, because an
 Israeli mobile number has too little entropy for a hash of one to be one-way and PII never in logs is
-the other half of the same sentence (SPEC-scope.md). **Three grep guards now**, not two: `-- pii` on a person-shaped column joined them at 1.12,
+the other half of the same sentence (SPEC-scope.md). **Three grep guards now**, not two — five as of
+7.2b, which is the count `docs/pipeline.md` §6 keeps: `-- pii` on a person-shaped column joined them at 1.12,
 against zero violations, to fire on `0006_parties.sql` at 2.1. It did not fire, because the markers
 were written — but it could not have seen the column that most needed one. `party_contact.value`
 holds a phone number or an email address, and a bare `value` on the guard's list would fire on

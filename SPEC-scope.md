@@ -21,7 +21,14 @@ Shared conventions live in [SPEC.md](SPEC.md) and are not repeated here.
 
 `0008_occupancy_view.sql` creates `occupancy`: the five hops joined once, with the period columns
 carried as data. It contains **no temporal predicate, no status filter and no `CURRENT_DATE`**.
-`internal/isolation-join.ts` supplies the day and every rule about it.
+`internal/isolation-join.ts` supplies the temporal predicate and every rule about it.
+
+**The day itself comes from the kernel, from slice 7.2b.** The three resolvers take a `Clock` and
+not a `Date`, and ask `today(clock)` for the date they bind — because an instant does not know what
+day it is, and this module had been deriving the UTC day, which between midnight and 03:00 local is
+yesterday: a letting that starts today not yet active, one that ended yesterday still is. Scope owns
+*when a tenancy counts*; the kernel owns *what day it is*. A caller that could hand this module an
+instant could hand it the wrong one, which is why the parameter is the clock.
 
 Three things forced that split, and each of them on its own is enough:
 
@@ -53,12 +60,12 @@ guard working rather than an inconvenience.
 The workbook's ADMIN VIEWS sheet ends with a test: *if the model is right, these are all one query
 each*. Two of them are this module's.
 
-- **Q1 — who lives in unit 12 today?** `resolvePartiesInUnit(db, unitId, today)`. Every party on the
+- **Q1 — who lives in unit 12 today?** `resolvePartiesInUnit(db, unitId, clock)`. Every party on the
   tenancy that is active today, with their role, their language and how to reach them. It is Panel 1
   of the unit screen, and the contact hop is a LEFT JOIN so a tenant with no number on file still
   appears rather than vanishing.
 - **Q2 — this phone number just messaged us, which unit, if any?** `resolveUnitsByPhone(db, phone,
-  today)`. The isolation join, and the answer is frequently *none*, which is the point.
+  clock)`. The isolation join, and the answer is frequently *none*, which is the point.
 
 Both read `occupancy` and neither restates the join.
 
@@ -70,7 +77,7 @@ round trips **and a hundred audit rows for one page load**. An access log in whi
 indistinguishable from a hundred lookups is worse than useless in the review it is kept for. Measured
 on a sixty-unit building: **29.68 ms and sixty audit rows the old way, 0.94 ms and one the new one.**
 
-`resolveOccupiedUnits(db, unitIds, today)` takes the units a caller is about to draw, or `null` for
+`resolveOccupiedUnits(db, unitIds, clock)` takes the units a caller is about to draw, or `null` for
 the whole portfolio, and returns which of them are let and by how many residents. One query, one
 audit line, and the tenancy-active predicate stays in this file where guard two can see it.
 

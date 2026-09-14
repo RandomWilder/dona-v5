@@ -141,7 +141,7 @@ local:    biome + typecheck + focused tests            (hooks run these as you g
 CI:       typecheck · lint · unit + contract tests
           tests/policy/     ← REQUIRED · isolation · responsibility · state machine   (§6)
           evals/golden/     ← REQUIRED · grounding · refusal · isolation attempts     (§7)
-          two grep guards · race + timeout tests · dependency audit
+          five grep guards · race + timeout tests · dependency audit
    ↓ merge to main
 staging:  on workflow_run after CI succeeds → migrations → deploy → take traffic → smoke
    ↓ tag v*
@@ -216,9 +216,11 @@ without a model call**, as a policy row plus a routing rule, live before the fir
 change it was written for tested nothing. Write it against the missing constraint, watch it go red,
 then add the constraint.
 
-**Three grep guards in CI**, in the same spirit as the bash hook — cheap, blunt, and impossible to
+**Five grep guards in CI**, in the same spirit as the bash hook — cheap, blunt, and impossible to
 argue with at 2am. Two of them were §6's from commit one; the third arrived at slice 1.12, when the
-`-- pii` convention had been a sentence in `SPEC.md` for eleven days with nothing behind it:
+`-- pii` convention had been a sentence in `SPEC.md` for eleven days with nothing behind it. This
+section said *three* until slice 7.2b, by which point there were four — the count is corrected here
+along with the guard that made it five, and the drift is left visible rather than tidied away:
 
 - **No migration may introduce a `current_tenant` column.** `current_tenant` is a view, not a column.
   A grep over **`src/kernel/migrations/*.sql`** fails the build. The constraint is absolute, so the
@@ -243,7 +245,20 @@ argue with at 2am. Two of them were §6's from commit one; the third arrived at 
   it arrives. That is what *controls before data* means when it is a mechanism rather than an
   intention.
 
-**All three guards are steps of the `gate` job**, which is the required check on `main` — a guard
+- **A mockup does not outlive the slice that wired it.** §4's rule is that a flow is painted before
+  it is built; the failure mode is a paint left in `mockups/` after the screen exists, so that the
+  next person reads a two-week-old drawing as the design. `MOCKUP_OWNERS` names the slice that owns
+  each paint, and the guard fails when a mockup file and that slice's evidence file both exist. It is
+  the one guard allowed to scan nothing: no painted flow is the idle state.
+
+- **An instant becomes a date in one file.** `toISOString().slice(0, 10)` is the UTC day, and for the
+  two or three hours after midnight in Israel that is yesterday. Slice 7.2b found eleven call sites
+  deriving it, one of them the isolation join deciding who lives in a unit. A grep for that spelling —
+  and for `split('T')[0]` — outside `src/kernel/clock.ts` fails the build, so the fix cannot be undone
+  by somebody simplifying it back. The guard has **no exclusion list beyond the kernel file itself**,
+  which is why the two copies of date arithmetic were lifted into the kernel rather than excused.
+
+**All five guards are steps of the `gate` job**, which is the required check on `main` — a guard
 nothing requires is a guard nobody obeys. `npm run guards` runs them, and `scripts/guards.ts` is the
 file.
 
