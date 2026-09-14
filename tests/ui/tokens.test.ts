@@ -37,9 +37,11 @@ import {
 import type {
   DocumentTypeFieldRow,
   DocumentTypeRow,
+  ExtractedRow,
 } from '../../src/evidence/contract.ts';
 import {
   renderDocumentsPage,
+  renderFieldsPage,
   renderFiledPage,
   renderIntakePage,
   renderReadPage,
@@ -369,6 +371,114 @@ function readOverlay(mayReadIdentifiers: boolean): string {
   });
 }
 
+/**
+ * **Slice 7.3, the approval ledger.** The seventh document-shaped screen, registered at three
+ * stances the way 6.4's overlay is at two: what an ADMIN sees before they ask for the ת.ז., what an
+ * OPERATOR sees instead of it, and the one row a reveal discloses. The difference between the three
+ * is a permission and a request, and this registry is where every role difference in this console is
+ * asserted.
+ */
+const FIELDS_DOCUMENT = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+
+function reading(
+  extractedFieldId: string,
+  fieldKey: string,
+  labelHe: string,
+  value: string,
+  confidence: number | null,
+  over: Partial<ExtractedRow> = {},
+): ExtractedRow {
+  return {
+    extractedFieldId,
+    documentTypeFieldId: 'aaaaaaaa-0000-4000-8000-00000000000f',
+    fieldKey,
+    labelHe,
+    value,
+    page: 1,
+    bbox: { x: 10, y: 40, width: 30, height: 20 },
+    confidence,
+    model: 'gpt-test',
+    promotionTarget: null,
+    promotedTo: null,
+    promotedBy: null,
+    promotedAt: null,
+    approvedValue: null,
+    approvedBy: null,
+    approvedAt: null,
+    ...over,
+  };
+}
+
+function fieldsLedger(options: {
+  mayReadIdentifiers: boolean;
+  revealed?: string;
+  saved?: number;
+}): string {
+  const identifier = 'dddddddd-0000-4000-8000-000000000004';
+  return renderFieldsPage({
+    nav: NAV,
+    csrf: CSRF,
+    documentId: FIELDS_DOCUMENT,
+    buildingId: building.building_id,
+    buildingName: building.name,
+    unitId: hit.unit_id,
+    labelHe: 'חוזה שכירות',
+    on: '2026-09-14',
+    rows: [
+      reading(
+        'dddddddd-0000-4000-8000-000000000001',
+        'start_date',
+        'תחילת תקופת השכירות',
+        '2026-02-01',
+        0.96,
+        { promotionTarget: 'tenancy.start_date' },
+      ),
+      reading(
+        'dddddddd-0000-4000-8000-000000000002',
+        'tenant_name',
+        'שם השוכר',
+        TENANT_NAME,
+        0.71,
+      ),
+      // The ordinary case on a lease that was produced digitally rather than scanned: every word
+      // arrives with no score at all, so the row is flagged and says why.
+      reading(
+        'dddddddd-0000-4000-8000-000000000003',
+        'apartment_number',
+        'מספר הדירה',
+        '24',
+        null,
+      ),
+      reading(
+        identifier,
+        'tenant_id_number',
+        'ת.ז. השוכר',
+        READ_IDENTIFIER,
+        0.91,
+      ),
+      // Already signed, and corrected on the way: both values on the row, which is the whole reason
+      // the slice adds a column instead of an UPDATE.
+      reading(
+        'dddddddd-0000-4000-8000-000000000005',
+        'address',
+        'כתובת המושכר',
+        'הרב קוק 45',
+        0.9,
+        {
+          approvedValue: 'הרב קוק 54',
+          approvedBy: 'admin@example.test',
+          approvedAt: new Date('2026-09-15T09:00:00.000Z'),
+        },
+      ),
+    ],
+    unread: [documentTypeFields[1] as DocumentTypeFieldRow],
+    mayReadIdentifiers: options.mayReadIdentifiers,
+    mayApprove: true,
+    ...(options.revealed === undefined ? {} : { revealed: identifier }),
+    ...(options.saved === undefined ? {} : { saved: options.saved }),
+  });
+}
+
 const SCREENS: Array<[string, () => string]> = [
   // A role that may not file: no card, and from 6.9 no rail destination either.
   ['root · index, צופה', () => renderIndexPage({ csrf: CSRF, mayFile: false })],
@@ -659,6 +769,23 @@ const SCREENS: Array<[string, () => string]> = [
         on: '2026-09-14',
         mayWrite: false,
       }),
+  ],
+  [
+    'documents · field approval',
+    () => fieldsLedger({ mayReadIdentifiers: true }),
+  ],
+  [
+    // The same ledger at the stance that may not read a captured identifier: the row is not in the
+    // table at all and a count stands in its place — 6.4's rule, unchanged, on a screen that is also
+    // asking the viewer to sign what they can see.
+    'documents · field approval, identifiers withheld',
+    () => fieldsLedger({ mayReadIdentifiers: false, saved: 2 }),
+  ],
+  [
+    // One row, asked for by name. This is the only screen in the registry that discloses a ת.ז.
+    // besides 6.4's overlay, and the exemption list below says so.
+    'documents · field approval, one identifier revealed',
+    () => fieldsLedger({ mayReadIdentifiers: true, revealed: 'yes' }),
   ],
   [
     'documents · upload',
@@ -1871,6 +1998,10 @@ describe('shared UI tokens', () => {
     // decision about disclosure and belongs in SPEC.md before it belongs in this array.
     const MAY_READ_IDENTIFIERS = [
       'documents · read overlay, may read identifiers',
+      // **Slice 7.3.** The reveal, and the one place in this console where a ת.ז. reaches a page
+      // because somebody asked for that row rather than because they opened a screen. The ruling is
+      // in SPEC-evidence.md, "Approving an identifier", written before this line was.
+      'documents · field approval, one identifier revealed',
     ];
     let exercised = 0;
     for (const [name, render] of SCREENS) {
@@ -1900,6 +2031,13 @@ describe('shared UI tokens', () => {
     // screen in the registry is reached by browsing the estate, and a name on one of those is a
     // disclosure. Adding an entry here is a decision about disclosure and belongs in SPEC.md first.
     const ABOUT_ONE_DOCUMENT = [
+      // **Slice 7.3.** The ledger is the screen a person checks the machine's reading on, with the
+      // paper in their hand — the case SPEC.md's sixth reconsideration describes exactly. It is
+      // reached from one document, it is about that document, and it is neither queryable nor a
+      // list.
+      'documents · field approval',
+      'documents · field approval, identifiers withheld',
+      'documents · field approval, one identifier revealed',
       'documents · confirm a lease',
       'documents · confirm a lease, an identifier read and two lettings offered',
       'documents · confirm a lease, an existing letting pre-selected',
@@ -1946,6 +2084,49 @@ describe('shared UI tokens', () => {
     assert.match(disclosed, new RegExp(READ_IDENTIFIER));
     assert.match(disclosed, /ת\.ז\. השוכר/);
     assert.doesNotMatch(disclosed, /שדה מזהה אחד ואינו מוצג/);
+  });
+
+  it('masks a captured identifier on the ledger until one row is asked for', () => {
+    // **Slice 7.3.** Three claims, and the third is the one a screen gets wrong by being helpful:
+    // an approval is an attestation, so a row whose value is masked carries no control that signs
+    // it. The only control on it is the one that ends the masking.
+    const masked = fieldsLedger({ mayReadIdentifiers: true });
+    assert.doesNotMatch(masked, new RegExp(READ_IDENTIFIER));
+    assert.match(masked, /ת\.ז\. השוכר/);
+    assert.match(masked, /גילוי/);
+    // The approve control is an input pre-filled with the reading. On the masked row there is none,
+    // at 91% read quality — which is exactly the number that would have argued for one.
+    assert.doesNotMatch(masked, /name="approved_value" value="•/);
+
+    const revealed = fieldsLedger({
+      mayReadIdentifiers: true,
+      revealed: 'yes',
+    });
+    assert.match(revealed, new RegExp(READ_IDENTIFIER));
+    assert.doesNotMatch(revealed, /גילוי/);
+
+    // And the stance that may not read one: no row, a count, and the rest of the ledger untouched.
+    const withheld = fieldsLedger({ mayReadIdentifiers: false });
+    assert.doesNotMatch(withheld, new RegExp(READ_IDENTIFIER));
+    assert.doesNotMatch(withheld, /ת\.ז\. השוכר/);
+    assert.match(withheld, /נקרא שדה מזהה אחד ואינו מוצג/);
+    assert.match(withheld, /מספר הדירה/);
+  });
+
+  it('says what the read-quality number is, and never shows one it does not have', () => {
+    // `confidence` is the minimum OCR word confidence, so the column is `איכות הקריאה` and never
+    // `ביטחון` — and a native-text lease has no score at all, which the row says in words rather
+    // than rendering as a silent pass. The bulk control exists on this screen; it is `אישור כל מה
+    // שלא סומן` and a search for the approve-all wording it is not is part of the assertion.
+    const ledger = fieldsLedger({ mayReadIdentifiers: true });
+    assert.match(ledger, /איכות הקריאה/);
+    assert.doesNotMatch(ledger, /ביטחון/);
+    assert.match(ledger, /נקרא מטקסט, לא נמדד/);
+    assert.match(ledger, /אישור כל מה שלא סומן/);
+    assert.doesNotMatch(ledger, /אישור הכל/);
+    // The correction and the reading, both on the row. One column would have shown only the first.
+    assert.match(ledger, /הרב קוק 54/);
+    assert.match(ledger, /נקרא: <a[^>]*>הרב קוק 45/);
   });
 
   it('withholds the word off the paper too, and keeps the box it was in', () => {

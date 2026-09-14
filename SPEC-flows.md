@@ -604,6 +604,52 @@ a declared field is a capture target and never a typed column (foundation rule 8
 **Module:** evidence owns the command, the route and the screen. Staff owns the permission and
 decides nothing else.
 
+### A15 — An operator approves what was read
+
+**Trigger:** a document has been filed, proved to be the type it was declared as, and read. Rows
+exist in `extracted_field`. Nobody has yet said whether any of them is right.
+
+**Why it is a flow at all.** Since 4.2 a value has arrived and stayed exactly as the reader left it.
+The only stamp in the system is 4.3's **promotion**, which means something else — *this is now
+business truth on a typed column* — and reaches two targets. Four of the lease's eight declared
+fields have nowhere to be promoted to and were therefore unattestable: capturable, listed,
+searchable, and with no way for a person to say *yes, that is what the page says*. A15 splits the
+verb. **Approving is a stamp on the evidence row; promoting is still the copy onto a typed column.**
+
+1. **The operator opens `/documents/:id/fields`** — the ledger. One row per captured value: the
+   declared field, the value as read, the read quality, and the action. Declarations the reader
+   found nothing for appear too, as rows saying so, because *the lease names no guarantor* and *the
+   reader missed the guarantor* look identical on a screen that shows only what was found. The
+   declarations shown are the ones governing the **day the extraction ran**, never today's: a field
+   declared this morning is not something last month's lease failed to carry.
+2. **They approve a row, or they correct it and approve it.** `POST /documents/:id/fields/approve`,
+   under `documents.write`. `approved_value` is written either way — equal to `value` when the reader
+   was right — and **`value` is never overwritten**. The difference between the two columns is the
+   per-field accuracy dataset, and a single column would destroy it on the first correction.
+3. **A second approval of the same row is refused.** `conflict`. An approval is a person's signature
+   at a moment, not a field that can be edited; changing one is not in this flow and has no screen.
+4. **One control approves the rest — `אישור כל מה שלא סומן`, never approve-all.** Rows below the
+   read-quality threshold, rows with no read quality at all, and **every identifier row at every
+   stance** are flagged, sorted to the top, and must be touched individually. On a fourteen-page
+   lease with most rows above 90%, approve-all would be a reflex within a week and the measurement
+   would be worthless.
+5. **A ת.ז. is masked, and revealing one is its own request.** `POST /documents/:id/fields/reveal`
+   under `party.national_id.read` — ADMIN — writes `evidence.read_identifier` for that row and
+   renders the page with the value shown. A viewer without the permission never receives the value at
+   all (6.4: withheld, not hidden), and **may not approve the row either**: approving is an
+   attestation, and a stamp from somebody who was never shown the value is a false record in the one
+   dataset this flow exists to produce. A viewer who *may* read one still has to ask: the row is
+   flagged for everybody, so a ת.ז. is revealed and signed on its own or not at all.
+
+**What A15 does not do.** It does not promote — a promotion is still 4.3's command with 7.4's
+targets, and it now copies the approved value when one exists. It does not create a row for a
+declaration the reader found nothing for: an `extracted_field` with no page and no bbox is refused by
+`0017`, and whether a hand-typed value is evidence at all is a ruling and not a button. It does not
+change what the reader looks for — that is A14, one screen earlier.
+
+**Module:** evidence owns the columns, the command, the routes and the screen. Staff owns the two
+permissions and decides nothing else.
+
 ## Open
 
 - **Which three to five document types open the concept work.** The catalogue seeds eight; the working

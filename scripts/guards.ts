@@ -217,6 +217,12 @@ const PII_COLUMNS = new Set([
   'account_number',
   // Slice 4.3. The operator who signed an extracted value onto a typed column.
   'promoted_by',
+  // Slice 7.3. The operator who signed *the reading*, and the value they signed. `approved_value`
+  // holds whatever `extracted_field.value` holds -- a name, an address, a ת.ז. -- so it is on this
+  // list by its own name rather than qualified: unlike `value`, nothing else in this schema is
+  // called that, and the qualified set stays small on purpose.
+  'approved_by',
+  'approved_value',
 ]);
 
 // **Qualified names, for the columns a bare name cannot reach.** Slice 2.1 met the first one:
@@ -332,18 +338,12 @@ export const MOCKUP_OWNERS: Record<string, string> = {
   a9: '5.8',
   'building-new': '6.1',
   'unit-new': '6.2',
-  // **Repainted at 6.9, again at 7.1, and owned by 7.3.** A12's screen was painted for 6.3, that
-  // slice closed and the mockup went; 6.9 painted the same flow again for the refusal that offers
-  // to create, and closed. The third paint shows the declaration before the file and the fields
-  // after it. A flow is repainted whenever it gains a screen; the owner is always the slice that
-  // will wire it next.
-  //
-  // **The owner moved 7.1 → 7.3 inside 7.1, one slice earlier than `tasks/todo.md` said.** 7.1
-  // wires the declaration, the top half of the paint, and its evidence file is written the day it
-  // closes — at which point this guard sees a mockup whose owner already has evidence and fails,
-  // correctly. The paint's remaining unwired screen is the approval table, and the owner is
-  // whoever deletes the file: 7.3. The todo bullet was corrected in the same change.
-  'document-intake': '7.3',
+  // **`document-intake` was here and is gone. Slice 7.3 wired the last of it and deleted it**, which
+  // is what this guard exists to force: A12's flow was painted for 6.3, repainted at 6.9 for the
+  // refusal that offers to create, and repainted a third time at 7.1 to show the declaration before
+  // the file and the readings after it. 7.1 wired the declaration, 7.2 the editor, 7.3 the approval
+  // table — and the entry comes out with the file, because an owner pointing at a slice that has
+  // closed is a guard that cannot fire again.
 };
 
 export function guardMockups(root: string): GuardResult {

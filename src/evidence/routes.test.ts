@@ -22,6 +22,7 @@ import { buildApp } from '../app.ts';
 import type { EstatePlan } from '../estate/contract.ts';
 import { importEstate } from '../estate/contract.ts';
 import { fixedClock } from '../kernel/clock.ts';
+import { inTransaction } from '../kernel/db.ts';
 import { KernelError } from '../kernel/errors.ts';
 import { createFakeExtractor } from '../kernel/extraction.ts';
 import { createMemoryStore } from '../kernel/objects.ts';
@@ -2500,6 +2501,391 @@ describe('evidence · a declaration made after midnight (7.2b)', () => {
         ])
         .catch(() => {});
       await signOutAll(pool, OFFICE_DAY_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+});
+
+/**
+ * **Slice 7.3, flow A15 — the approval ledger, driven at both stances.**
+ *
+ * Every role refusal in this repository is asserted against the stance the composition root actually
+ * registered, which is 7.2's ruling and the reason these are route cases and not policy cases:
+ * `tests/policy/` builds no application, and a permission is a fact about a door.
+ *
+ * **Red first, by registering the wrong stance.** `POST /documents/:id/fields/reveal` was registered
+ * at `documents.read` and the OPERATOR case below answered 200 with the ת.ז. on the page; the output
+ * is in `tasks/evidence/7.3.md`. A stance is the only thing that refusal is about, so the only honest
+ * way to write it red is to register the one that lets the caller through.
+ */
+describe('evidence · the approval ledger, and who may sign what', () => {
+  it('shows, signs, withholds and refuses', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const CITY_AP = 'עיר אישור';
+    const ADDRESS_AP = 'האישור 7';
+    const PROJECT_AP = 'TEST-APPROVE';
+    const DOMAIN_AP = 'evidence-approve.test';
+    const ID_VALUE_AP = '312345679';
+    // On or after the identifier declarations' `effective_from` (2026-09-13), or the catalogue does
+    // not declare `tenant_id_number` yet and there is nothing to withhold. 6.4 paid for this once.
+    const AT_AP = new Date('2026-09-15T09:00:00.000Z');
+    const leaseText = `כתובת המושכר: ${ADDRESS_AP}, ${CITY_AP}, דירה 7\n${specimen(
+      'lease-standard.md',
+    )}`;
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      clock: fixedClock(AT_AP),
+      objects: createMemoryStore(),
+      pdf: createFakePdfText([leaseText]),
+      extractor: createFakeExtractor(() => ({
+        findings: [
+          { field_key: 'start_date', value: '2026-03-01', word_ids: [0] },
+          { field_key: 'end_date', value: '2027-02-28', word_ids: [1] },
+          { field_key: 'apartment_number', value: '7', word_ids: [2] },
+          {
+            field_key: 'address',
+            value: `${ADDRESS_AP} ${CITY_AP}`,
+            word_ids: [3],
+          },
+          { field_key: 'tenant_name', value: 'יעל כהן', word_ids: [4] },
+          { field_key: 'tenant_id_number', value: ID_VALUE_AP, word_ids: [5] },
+        ],
+      })),
+      bucket: BUCKET,
+    });
+    let admin: SignedIn | null = null;
+    let operator: SignedIn | null = null;
+    let documentId = '';
+
+    const reads = async (): Promise<number> => {
+      const rows = await pool.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM audit_log
+          WHERE action = 'evidence.read_identifier' AND subject_id = $1`,
+        [documentId],
+      );
+      return Number(rows.rows[0]?.n ?? '0');
+    };
+    const rowIdOf = async (fieldKey: string): Promise<string> => {
+      const rows = await pool.query<{ id: string }>(
+        `SELECT e.extracted_field_id AS id FROM extracted_field e
+           JOIN document_type_field f
+             ON f.document_type_field_id = e.document_type_field_id
+          WHERE e.document_id = $1 AND f.field_key = $2`,
+        [documentId, fieldKey],
+      );
+      const id = rows.rows[0]?.id;
+      assert.ok(id, `no reading for ${fieldKey}`);
+      return id;
+    };
+    const form = (fields: Record<string, string>): string =>
+      new URLSearchParams(fields).toString();
+    const post = (who: SignedIn, url: string, fields: Record<string, string>) =>
+      asOperator(app as never, who).inject({
+        method: 'POST',
+        url,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form(fields),
+      } as never) as unknown as ReturnType<typeof app.inject>;
+
+    try {
+      await signOutAll(pool, DOMAIN_AP);
+      await applyDocumentTypeCatalogue(pool, seedDocumentTypes);
+      admin = await signIn(pool, fixedClock(AT_AP), {
+        email: `admin@${DOMAIN_AP}`,
+        role: 'ADMIN',
+      });
+      operator = await signIn(pool, fixedClock(AT_AP), {
+        email: `ops@${DOMAIN_AP}`,
+        role: 'OPERATOR',
+      });
+      await importEstate(pool, {
+        projects: [
+          {
+            name: 'מכרז אישור',
+            projectCode: PROJECT_AP,
+            tenderRef: null,
+            status: 'ACTIVE',
+          },
+        ],
+        buildings: [
+          {
+            name: 'בניין אישור',
+            addressLine: ADDRESS_AP,
+            city: CITY_AP,
+            projectCode: PROJECT_AP,
+            handoverDate: '2025-03-01',
+            warrantyEndDate: '2027-03-01',
+            status: 'ACTIVE',
+            spaces: [
+              { kind: 'UNIT', name: 'דירה 7', floor: '1', accessNote: null },
+            ],
+            units: [
+              {
+                spaceName: 'דירה 7',
+                unitNumber: '7',
+                rooms: 3,
+                areaSqm: 70,
+                hasMamad: true,
+                parkingSpaceName: null,
+                storageSpaceName: null,
+                warrantyEndDate: null,
+                conditionStatus: 'READY',
+              },
+            ],
+          },
+        ],
+      } satisfies EstatePlan);
+
+      const body = upload(
+        { csrf: (admin as SignedIn).csrf, type: 'lease' },
+        { filename: 'lease.pdf', bytes: pdfBytes('approve-ledger') },
+      );
+      const filed = await app.inject({
+        method: 'POST',
+        url: '/documents/intake',
+        ...body,
+        headers: { ...body.headers, cookie: (admin as SignedIn).cookie },
+      });
+      assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
+      documentId =
+        String(filed.headers.location ?? '').match(
+          /\/documents\/([0-9a-f-]{36})\/tenancy$/,
+        )?.[1] ?? '';
+      assert.ok(documentId, 'a verified lease goes to its confirm screen');
+
+      await t.test(
+        'an OPERATOR reads the ledger and is told a count',
+        async () => {
+          const response = await asOperator(app, operator as SignedIn).inject({
+            method: 'GET',
+            url: `/documents/${documentId}/fields`,
+          });
+          assert.equal(response.statusCode, 200, response.body.slice(0, 400));
+          assert.match(response.body, /איכות הקריאה/);
+          assert.match(response.body, /מספר הדירה/);
+          assert.doesNotMatch(response.body, new RegExp(ID_VALUE_AP));
+          assert.match(response.body, /נקרא שדה מזהה אחד ואינו מוצג/);
+          // Opening a ledger is not a disclosure, so it writes no line — the same rule 6.4 wrote for
+          // the overlay, kept at the finer grain 7.3 introduces.
+          assert.equal(await reads(), 0);
+        },
+      );
+
+      await t.test(
+        'an OPERATOR may not reveal, and may not sign what is hidden',
+        async () => {
+          const revealed = await post(
+            operator as SignedIn,
+            `/documents/${documentId}/fields/reveal`,
+            { extracted_field_id: await rowIdOf('tenant_id_number') },
+          );
+          assert.equal(revealed.statusCode, 403, revealed.body.slice(0, 200));
+          assert.doesNotMatch(revealed.body, new RegExp(ID_VALUE_AP));
+
+          // And the command refuses too, at a route the operator *may* post to: the gate is not only
+          // on the door that discloses. A screen that simply omitted the button would be a control
+          // and not a rule.
+          const signed = await post(
+            operator as SignedIn,
+            `/documents/${documentId}/fields/approve`,
+            {
+              extracted_field_id: await rowIdOf('tenant_id_number'),
+              approved_value: '999999999',
+            },
+          );
+          assert.equal(signed.statusCode, 403, signed.body.slice(0, 200));
+          const row = await pool.query<{ n: string }>(
+            `SELECT count(*)::text AS n FROM extracted_field
+            WHERE document_id = $1 AND approved_at IS NOT NULL`,
+            [documentId],
+          );
+          assert.equal(row.rows[0]?.n, '0');
+          assert.equal(await reads(), 0);
+        },
+      );
+
+      await t.test(
+        'an OPERATOR signs the unflagged rows, and the ת.ז. is not among them',
+        async () => {
+          const response = await post(
+            operator as SignedIn,
+            `/documents/${documentId}/fields/approve`,
+            { action: 'unflagged' },
+          );
+          assert.equal(response.statusCode, 302, response.body.slice(0, 200));
+          assert.match(
+            String(response.headers.location ?? ''),
+            /\/documents\/[0-9a-f-]{36}\/fields\?saved=\d+$/,
+          );
+          const identifier = await pool.query<{ approved_at: Date | null }>(
+            `SELECT e.approved_at FROM extracted_field e
+             JOIN document_type_field f
+               ON f.document_type_field_id = e.document_type_field_id
+            WHERE e.document_id = $1 AND f.field_key = 'tenant_id_number'`,
+            [documentId],
+          );
+          assert.equal(identifier.rows[0]?.approved_at, null);
+        },
+      );
+
+      await t.test(
+        'a correction is written beside the reading, and signed once',
+        async () => {
+          const nameRow = await rowIdOf('tenant_name');
+          // The fake reader gives every word 0.9, so `tenant_name` was signed by the press above.
+          // Undo that one stamp to drive the single-row path — the trigger is what makes this a
+          // deliberate act rather than an UPDATE somebody could write by accident.
+          await inTransaction(pool, async (db) => {
+            await db.query("SELECT set_config('dona.approving', 'on', true)");
+            await db.query(
+              `UPDATE extracted_field
+                SET approved_value = NULL, approved_by = NULL, approved_at = NULL
+              WHERE extracted_field_id = $1`,
+              [nameRow],
+            );
+          });
+
+          const first = await post(
+            operator as SignedIn,
+            `/documents/${documentId}/fields/approve`,
+            { extracted_field_id: nameRow, approved_value: 'יעל לוי' },
+          );
+          assert.equal(first.statusCode, 302, first.body.slice(0, 200));
+          const row = await pool.query<{
+            value: string;
+            approved_value: string;
+          }>(
+            `SELECT value, approved_value FROM extracted_field
+            WHERE extracted_field_id = $1`,
+            [nameRow],
+          );
+          assert.equal(row.rows[0]?.value, 'יעל כהן');
+          assert.equal(row.rows[0]?.approved_value, 'יעל לוי');
+
+          const second = await post(
+            operator as SignedIn,
+            `/documents/${documentId}/fields/approve`,
+            { extracted_field_id: nameRow, approved_value: 'יעל לוי' },
+          );
+          assert.equal(second.statusCode, 409, second.body.slice(0, 200));
+        },
+      );
+
+      await t.test(
+        'an ADMIN reveals one row, and the disclosure is logged',
+        async () => {
+          const before = await reads();
+          const response = await post(
+            admin as SignedIn,
+            `/documents/${documentId}/fields/reveal`,
+            { extracted_field_id: await rowIdOf('tenant_id_number') },
+          );
+          assert.equal(response.statusCode, 200, response.body.slice(0, 400));
+          assert.match(response.body, new RegExp(ID_VALUE_AP));
+          assert.equal(await reads(), before + 1);
+
+          // **One row, and only that row.** A reveal that disclosed the page would make the line a
+          // record of who opened a screen, which is what 6.4's overlay log already is and what 7.3's
+          // finer door exists to improve on.
+          const ordinary = await post(
+            admin as SignedIn,
+            `/documents/${documentId}/fields/reveal`,
+            { extracted_field_id: await rowIdOf('apartment_number') },
+          );
+          assert.equal(ordinary.statusCode, 400, ordinary.body.slice(0, 200));
+          assert.equal(await reads(), before + 1);
+        },
+      );
+
+      await t.test(
+        'the ledger links to the pixels, and the pixels no longer write',
+        async () => {
+          const ledger = await asOperator(app, operator as SignedIn).inject({
+            method: 'GET',
+            url: `/documents/${documentId}/fields`,
+          });
+          assert.match(
+            ledger.body,
+            new RegExp(`/documents/${documentId}/read`),
+          );
+          const pixels = await asOperator(app, operator as SignedIn).inject({
+            method: 'GET',
+            url: `/documents/${documentId}/read`,
+          });
+          assert.equal(pixels.statusCode, 200, pixels.body.slice(0, 400));
+          // 7.3 moved the promote control to the ledger. Two screens writing the same row is how the
+          // two drift into disagreeing about which one is the flow.
+          assert.doesNotMatch(
+            pixels.body,
+            /action="\/documents\/[0-9a-f-]+\/promote"/,
+          );
+          // And it carries the door to where that write went. Asserted on the **overlay** and not
+          // on the ledger, which links to itself in every form it draws — the first draft of this
+          // line read `ledger.body` and was true of any page carrying a form.
+          assert.match(
+            pixels.body,
+            new RegExp(`/documents/${documentId}/fields`),
+          );
+        },
+      );
+    } finally {
+      await signOutAll(pool, DOMAIN_AP);
+      // An approved row is undeletable by design, so the teardown unsigns before it deletes —
+      // through the same flag the command uses, which is the trigger doing its job on the way out.
+      await inTransaction(pool, async (db) => {
+        await db.query("SELECT set_config('dona.approving', 'on', true)");
+        await db.query(
+          `UPDATE extracted_field
+              SET approved_value = NULL, approved_by = NULL, approved_at = NULL
+            WHERE document_id IN (SELECT document_id FROM document
+                                   WHERE storage_uri LIKE $1)`,
+          [`gs://${BUCKET}/%`],
+        );
+      });
+      if (documentId) {
+        await pool.query(
+          `DELETE FROM audit_log WHERE subject_id = $1
+             AND action IN ('evidence.read_identifier', 'evidence.approve_field')`,
+          [documentId],
+        );
+        await pool.query(
+          `DELETE FROM audit_log WHERE inputs->>'documentId' = $1`,
+          [documentId],
+        );
+        await pool.query('DELETE FROM extracted_field WHERE document_id = $1', [
+          documentId,
+        ]);
+        await pool.query('DELETE FROM document_link WHERE document_id = $1', [
+          documentId,
+        ]);
+        await pool.query('DELETE FROM document WHERE document_id = $1', [
+          documentId,
+        ]);
+      }
+      await pool.query(
+        `DELETE FROM unit WHERE unit_id IN (
+           SELECT space_id FROM space WHERE building_id IN (
+             SELECT building_id FROM building WHERE city = $1 AND address_line = $2))`,
+        [CITY_AP, ADDRESS_AP],
+      );
+      await pool.query(
+        `DELETE FROM space WHERE building_id IN (
+           SELECT building_id FROM building WHERE city = $1 AND address_line = $2)`,
+        [CITY_AP, ADDRESS_AP],
+      );
+      await pool.query(
+        'DELETE FROM building WHERE city = $1 AND address_line = $2',
+        [CITY_AP, ADDRESS_AP],
+      );
+      await pool.query('DELETE FROM project WHERE project_code = $1', [
+        PROJECT_AP,
+      ]);
       await app.close();
       await pool.end();
     }

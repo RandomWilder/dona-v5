@@ -74,6 +74,14 @@ export interface ExtractedRow {
   promotedTo: string | null;
   promotedBy: string | null;
   promotedAt: Date | null;
+  /**
+   * **Slice 7.3.** The approval stamp. `value` above is what the reader produced and this is what a
+   * person affirmed; the difference between them is the accuracy dataset, so they are two fields and
+   * never one. Null until somebody signs the reading.
+   */
+  approvedValue: string | null;
+  approvedBy: string | null;
+  approvedAt: Date | null;
 }
 
 export interface ExtractDeps {
@@ -269,8 +277,13 @@ export async function extractFiledDocument(
     throw error;
   }
 
+  // **An approved row is spared too, from 7.3.** 4.2's rule was *replace unstamped rows only* and
+  // the stamp it meant was the promotion. An approval is a person's attestation that a reading is
+  // correct, and re-reading the page does not unsay it — the trigger in 0028 refuses the DELETE, and
+  // this is the query meaning what the trigger enforces rather than discovering it at run time.
   await deps.db.query(
-    'DELETE FROM extracted_field WHERE document_id = $1 AND promoted_at IS NULL',
+    `DELETE FROM extracted_field
+      WHERE document_id = $1 AND promoted_at IS NULL AND approved_at IS NULL`,
     [input.documentId],
   );
 
@@ -353,10 +366,14 @@ export async function listExtractedFields(
     promoted_to: string | null;
     promoted_by: string | null;
     promoted_at: Date | null;
+    approved_value: string | null;
+    approved_by: string | null;
+    approved_at: Date | null;
   }>(
     `SELECT e.extracted_field_id, e.document_type_field_id, f.field_key, f.label_he,
             e.value, e.page, e.bbox, e.confidence, e.model,
-            p.target AS promotion_target, e.promoted_to, e.promoted_by, e.promoted_at
+            p.target AS promotion_target, e.promoted_to, e.promoted_by, e.promoted_at,
+            e.approved_value, e.approved_by, e.approved_at
        FROM extracted_field e
        JOIN document_type_field f
          ON f.document_type_field_id = e.document_type_field_id
@@ -380,6 +397,9 @@ export async function listExtractedFields(
     promotedTo: row.promoted_to,
     promotedBy: row.promoted_by,
     promotedAt: row.promoted_at,
+    approvedValue: row.approved_value,
+    approvedBy: row.approved_by,
+    approvedAt: row.approved_at,
   }));
 }
 

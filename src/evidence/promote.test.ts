@@ -20,7 +20,7 @@ import {
   upsertTenancy,
   upsertTermsProfile,
 } from '../tenancy/contract.ts';
-import type { IntakeDeps } from './contract.ts';
+import type { ExtractedRow, IntakeDeps } from './contract.ts';
 import {
   applyDocumentTypeCatalogue,
   extractFiledDocument,
@@ -29,6 +29,7 @@ import {
   listPromotedFieldsForUnit,
   numberWords,
   promoteExtractedField,
+  renderFieldsPage,
   renderReadPage,
 } from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
@@ -85,6 +86,46 @@ async function insertUnit(db: PoolClient): Promise<string> {
   );
   return unitId;
 }
+
+/** Two readings: one with a mapping, one without. Slice 4.3's pair, still the pair. */
+const READINGS: ExtractedRow[] = [
+  {
+    extractedFieldId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    documentTypeFieldId: 'aaaaaaaa-0000-4000-8000-000000000001',
+    fieldKey: 'start_date',
+    labelHe: 'תחילת תקופת השכירות',
+    value: '2026-03-01',
+    page: 1,
+    bbox: { x: 10, y: 20, width: 40, height: 12 },
+    confidence: null,
+    model: 'gpt-test',
+    promotionTarget: 'tenancy.start_date',
+    promotedTo: null,
+    promotedBy: null,
+    promotedAt: null,
+    approvedValue: null,
+    approvedBy: null,
+    approvedAt: null,
+  },
+  {
+    extractedFieldId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    documentTypeFieldId: 'aaaaaaaa-0000-4000-8000-000000000002',
+    fieldKey: 'apartment_number',
+    labelHe: 'מספר הדירה',
+    value: '12',
+    page: 1,
+    bbox: { x: 10, y: 40, width: 20, height: 12 },
+    confidence: null,
+    model: 'gpt-test',
+    promotionTarget: null,
+    promotedTo: null,
+    promotedBy: null,
+    promotedAt: null,
+    approvedValue: null,
+    approvedBy: null,
+    approvedAt: null,
+  },
+];
 
 describe('evidence · promote an extracted field', () => {
   it('copies a mapped date, stamps the row, and refuses an unmapped field', async (t) => {
@@ -297,8 +338,13 @@ describe('evidence · promote an extracted field', () => {
     }
   });
 
-  it('shows unmapped values as capture-only and a promote control for mapped ones', () => {
-    const html = renderReadPage({
+  it('sends promotion to the ledger, and leaves the pixels a reading', () => {
+    // **Slice 7.3 moved the `קדם` control off this page.** It was here from 4.3, beside the values
+    // it promoted; the approval ledger is now the screen where a reading is signed, corrected or
+    // promoted, and two screens writing the same row is how the two drift into disagreeing about
+    // which one is the flow. The overlay keeps what it was always for — where on the page did this
+    // come from — and carries the link.
+    const read = renderReadPage({
       nav: NAV,
       csrf: '',
       documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -312,35 +358,34 @@ describe('evidence · promote an extracted field', () => {
       mayReadIdentifiers: false,
       page: null,
       image: null,
-      extracted: [
-        {
-          extractedFieldId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
-          fieldKey: 'start_date',
-          labelHe: 'תחילת תקופת השכירות',
-          value: '2026-03-01',
-          page: 1,
-          bbox: { x: 10, y: 20, width: 40, height: 12 },
-          confidence: null,
-          promotionTarget: 'tenancy.start_date',
-          promotedTo: null,
-        },
-        {
-          extractedFieldId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
-          fieldKey: 'apartment_number',
-          labelHe: 'מספר הדירה',
-          value: '12',
-          page: 1,
-          bbox: { x: 10, y: 40, width: 20, height: 12 },
-          confidence: null,
-          promotionTarget: null,
-          promotedTo: null,
-        },
-      ],
+      extracted: READINGS,
     });
-    assert.match(html, /נקרא בלבד/);
-    assert.match(html, /קדם · תחילת תקופת השכירות/);
-    assert.doesNotMatch(html, /name="promoted_by"/);
-    assert.doesNotMatch(html, /קדם · מספר הדירה/);
+    assert.doesNotMatch(read, /action="[^"]*\/promote"/);
+    assert.doesNotMatch(read, /קדם · /);
+    assert.match(
+      read,
+      /\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/fields/,
+    );
+    assert.match(read, /תחילת תקופת השכירות/);
+
+    const ledger = renderFieldsPage({
+      nav: NAV,
+      csrf: '',
+      documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      buildingId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      buildingName: 'בניין',
+      unitId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      labelHe: 'חוזה שכירות',
+      on: '2026-09-15',
+      rows: READINGS,
+      unread: [],
+      mayReadIdentifiers: false,
+      mayApprove: true,
+    });
+    assert.match(ledger, /קדם · תחילת תקופת השכירות/);
+    // An unmapped field is capturable, listed, signable — and still has nowhere to be promoted to.
+    assert.doesNotMatch(ledger, /קדם · מספר הדירה/);
+    assert.doesNotMatch(ledger, /name="promoted_by"/);
   });
 
   it('links an extracted value to its pixels on that page', () => {

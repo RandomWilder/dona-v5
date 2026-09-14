@@ -125,7 +125,9 @@ sheet existed.
   is gated is the response shape, and that is where the gate is.
 - **Re-extract replaces unstamped rows only.** A row with `promoted_at` set is a promotion that
   already became business truth; deleting it would erase the stamp. The database refuses that
-  DELETE. Extract deletes rows where `promoted_at IS NULL`, then inserts. Adding a field to the
+  DELETE. **From 7.3 an approved row is spared on the same reasoning** — an approval is a person's
+  attestation and re-reading the page does not unsay it — so extract deletes rows where
+  `promoted_at IS NULL AND approved_at IS NULL`, then inserts. Adding a field to the
   type and re-running is still A8's open half: no migration, no code change.
 
 ## The object path convention (slice 3.2)
@@ -397,6 +399,21 @@ before a page is filed, which is the thing week 6's demo could not see anywhere.
 behind a gated rail is the door that answers `not_allowed` after somebody has already walked through
 it — 6.1's refusal-after-typing, which A11 refused to build for its own form. The permission names
 the act the tab is for: this is the filing tab's front page, not a reading of what is filed.
+
+### The approval ledger — `GET /documents/:id/fields` (slice 7.3)
+
+Flow **A15**, and the three routes it is made of — the ledger (`documents.read`), the signature
+(`POST …/fields/approve`, `documents.write`) and the reveal (`POST …/fields/reveal`,
+`party.national_id.read`, the first route in this system to *declare* that permission rather than
+consult it). What the stamp is, why `value` is never overwritten, what the read-quality number
+actually measures and why an identifier is never bulk-approved are all in **"Approval — the stamp
+that is not a promotion"** below, beside the columns they are about. Two facts belong here with the
+other routes: **the ledger reads no bytes** (the page count and reader line the paint drew cost an
+OCR call or a pdf parse per view, and `/documents/:id/read` is one link away and already pays for
+them), and **the declarations it lists are the ones governing the day the extraction ran**, never
+today's — a field declared this morning is not something last month's lease failed to carry. 7.3
+also **moved the `קדם` buttons off the read overlay**: two screens writing the same row is how the
+two drift into disagreeing about which one is the flow.
 
 ### The declaration becomes editable — `POST /documents/types/:typeKey/fields` (slice 7.2)
 
@@ -947,10 +964,94 @@ matrix could read cannot be added by seeding a catalogue field.
   document, and a non-empty promoter. It asks tenancy to apply the typed value (dates only, this
   slice), then stamps. An unmapped field (`apartment_number`, `address`, `tenant_name`,
   `guarantor_name`) is capturable, listed, searchable, and **incapable** of becoming business truth:
-  the command returns `invalid` and the tenancy row does not move.
+  the command returns `invalid` and the tenancy row does not move. **From 7.3 those fields are
+  attestable even though they are not promotable** — the approval stamp is the verb that reaches
+  them — and a promotion copies `COALESCE(approved_value, value)`, because copying the raw read
+  after a person corrected it would write a value nobody affirmed.
 - **R9.** Nothing in `src/policy/`, `src/scope/` or `src/calls/` may mention `extracted_field`.
   Isolation, responsibility and the state machine read typed columns. A contract test scans those
   trees.
+
+## Approval — the stamp that is not a promotion (slice 7.3, `0028_extracted_field_approval.sql`)
+
+A promotion says *this value is now business truth on a typed column*. It reaches two targets and it
+moves another module's row. **An approval says something smaller and more useful: a person looked at
+what the reader produced and it is correct.** Every captured row can carry one, including the rows
+that will never have anywhere to be promoted to — `address`, `apartment_number`, `tenant_name`,
+`guarantor_name` — which until this slice were capturable, listed, searchable and unattestable.
+
+- **Three columns on `extracted_field`**: `approved_value` (`-- pii`), `approved_by` (`-- pii`, a
+  snapshot of the operator's email and never a staff FK, exactly as `promoted_by`), and
+  `approved_at`. A CHECK — `num_nonnulls(...) IN (0, 3)` — says a half-written stamp is not a state
+  this table has.
+- **`value` is never overwritten, and that is the whole point of the slice.** What the reader
+  produced and what a person affirmed are two columns, and the difference between them *is* the
+  per-field accuracy dataset. One column would destroy the measurement on the first correction, and
+  the correction is the interesting event.
+- **`approved_value` is always written**, equal to `value` when the reader was right. A stamped row
+  then says what was affirmed without a join, and the delta is `approved_value <> value` rather than
+  a null-aware expression nobody will get right at a glance.
+- **The database is what refuses a stamp outside the command.** `extracted_field_approval_guard()`
+  is a second trigger beside 4.3's, not a rewrite of it: it rejects INSERT or UPDATE of the three
+  columns unless `dona.approving` is `on` for the transaction, and rejects DELETE of an approved row
+  — `restrict_violation`, the same class 0018 and `document_is_immutable` already use.
+- **Re-extract spares an approved row.** 4.2's rule was *replace unstamped rows only* and the stamp
+  it meant was the promotion. An approval is a person's attestation and deleting it would erase who
+  said so; the DELETE is now `promoted_at IS NULL AND approved_at IS NULL` and the trigger enforces
+  what the query intends.
+- **A promotion copies the approved value when there is one** — `COALESCE(approved_value, value)`.
+  Copying the raw read onto a typed column after a person corrected it would write a value nobody
+  affirmed. Whether an approval should be *required* before a promotion is 7.4's question, in the
+  slice that decides which targets are genuinely copies.
+
+### Read quality, and what the number actually is
+
+- **`extracted_field.confidence` is not the model's confidence in the field.** It is the **minimum
+  OCR word confidence** of the words the reader pointed at — `min()` over `MeasuredWord.confidence`
+  in `internal/extract.ts` — and the extraction schema deliberately refuses a model-supplied
+  `confidence` (`extract.test.ts` asserts the reply carries no such key). 90% means *Document AI read
+  these characters well*; it never means *this is the tenant's name rather than the landlord's*. A
+  crisp page misread with total legibility scores 99%. **The screen therefore calls it
+  `איכות הקריאה` and never `ביטחון`**, because a word that promises the second thing while measuring
+  the first is how a number gets trusted for what it cannot say.
+- **`READ_QUALITY_THRESHOLD` is 0.8**, ruled 15 Sep 2026 and roughly where Document AI's own guidance
+  puts human review. It is a constant in `internal/approve.ts` and not a `config_settings` row: a row
+  with no editor is a row somebody inserts by hand, and 5.8's open half already owns that debt.
+  The policy case reads the constant and never a copy of the number.
+- **`null` is not "confident".** `src/kernel/pdf.ts` gives every native-text word `confidence: null`
+  and the `min()` above turns any null into a null field, so **every field of every
+  digitally-produced lease has no confidence at all**. A threshold treating null as passing would let
+  one press of `אישור כל מה שלא סומן` approve an entire document on no signal whatsoever. Null is
+  flagged, sorts up with the low scores, and the row says *נקרא מטקסט, לא נמדד* rather than showing
+  a number it does not have.
+- **The primary control is `אישור כל מה שלא סומן`, never approve-all.** Eleven rows on a fourteen-page
+  lease, most of them above 90%: approve-all would become a reflex and the measurement would die the
+  day it shipped.
+- **A second signal is not this slice's.** The honest one — whether the words the model pointed at
+  sit under the declared field's label on the page — is geometry the read overlay already holds.
+  Named, not built.
+
+### Approving an identifier
+
+**Approving is an attestation, so a viewer who may not read the value may not approve it.** 6.4
+withholds `tenant_id_number` and `guarantor_id_number` from anybody without
+`party.national_id.read`; a stamp from such a viewer would record that a person checked a value they
+were never shown, which is a false record in the one dataset this slice exists to produce. The ledger
+shows such a viewer a count and no row, and `approveExtractedField` refuses the stamp — in the
+command and not only at the route, so the rule holds for every caller this module ever grows.
+
+**An identifier is never in the bulk set, at any stance.** A ת.ז. does not reach the screen until
+somebody asks for it by name, so `אישור כל מה שלא סומן` would otherwise sign a value the signer has
+not been shown — the same objection as approving a withheld row, at scale and without anyone
+noticing. It is flagged for everybody, and it is revealed and signed one at a time. **90% read
+quality is not an argument against this**: the number measures how legibly the characters were
+scanned, which is exactly the thing that says nothing about whether those digits are the tenant's.
+
+**The reveal is one row and one request.** `POST /documents/:id/fields/reveal`, gated on
+`party.national_id.read` — the first route in this system to declare that permission rather than
+consult it — writes `evidence.read_identifier` for that row and renders the page with it shown. It
+**renders rather than redirects**: a redirect would put the revealed row's id in a URL, in history
+and in a referrer, and a refresh would re-log a disclosure that did not happen twice.
 
 ## Provenance viewer (slice 4.4)
 

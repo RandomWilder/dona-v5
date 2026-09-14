@@ -50,7 +50,13 @@ export async function promoteExtractedField(
       promoted_to: string | null;
       target: string | null;
     }>(
-      `SELECT e.extracted_field_id, e.document_id, e.value, e.promoted_to, p.target
+      `SELECT e.extracted_field_id, e.document_id,
+              -- **Slice 7.3.** The approved value when a person corrected the reading, and the
+              -- reading itself otherwise. Copying the raw read onto a typed column after somebody
+              -- corrected it would write a value nobody affirmed. Whether an approval should be
+              -- *required* before a promotion is 7.4's question.
+              COALESCE(e.approved_value, e.value) AS value,
+              e.promoted_to, p.target
          FROM extracted_field e
          LEFT JOIN field_promotion p
            ON p.document_type_field_id = e.document_type_field_id
