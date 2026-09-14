@@ -339,6 +339,41 @@ export interface NewBuildingScreen {
   nav: Html;
   csrf: string;
   projects: readonly ProjectOption[];
+  /**
+   * **What A12's refusal read off the paper. Slice 6.9.**
+   *
+   * Defaults in inputs and nothing more: the admin reads them against the document in their hand
+   * and edits whatever is wrong, and the post is A11's own, through A11's own validation. A reading
+   * that was wrong therefore costs a correction rather than a building.
+   *
+   * `carry` is what survives the two forms so A13 and then A12 can be reached without retyping an
+   * address — a unit number, a document type and the marker that says *come back to intake*. It is
+   * rendered as hidden inputs, which is the only state this walk has: **the bytes are not held.**
+   */
+  prefill?: {
+    name?: string;
+    addressLine?: string;
+    city?: string;
+  };
+  carry?: { unitNumber?: string; typeKey?: string; next?: string };
+}
+
+/** The hidden inputs that carry A12's walk through a form that knows nothing about it. Slice 6.9. */
+function carried(carry: NewBuildingScreen['carry']): Html {
+  if (!carry?.next) {
+    return h``;
+  }
+  return h`<input type="hidden" name="next" value="${carry.next}" />
+    ${
+      carry.unitNumber
+        ? h`<input type="hidden" name="unit_number" value="${carry.unitNumber}" />`
+        : h``
+    }
+    ${
+      carry.typeKey
+        ? h`<input type="hidden" name="type" value="${carry.typeKey}" />`
+        : h``
+    }`;
 }
 
 /**
@@ -357,21 +392,33 @@ export function renderNewBuildingPage(screen: NewBuildingScreen): string {
         מפעיל מתייק נייר; מנהל מעצב את הנכס. המסך הזה פתוח למנהל בלבד.
       </p>
     </div>
+    ${
+      screen.carry?.next
+        ? h`<p class="form-note">
+            <strong>מתוך תיוק מסמך.</strong> הכתובת שלמטה נקראה מן המסמך. בדקו אותה מול הנייר
+            ותקנו אם צריך — אחרי יצירת הבניין נמשיך לדירה, ומשם חזרה לתיוק.
+          </p>`
+        : h``
+    }
     <form class="form-grid" method="post" action="/estate/buildings">
       ${csrfInput(screen.csrf)}
+      ${carried(screen.carry)}
       <div class="form-row">
         <label for="name">שם הבניין</label>
-        <input id="name" name="name" type="text" maxlength="200" required />
+        <input id="name" name="name" type="text" maxlength="200" required
+          value="${screen.prefill?.name ?? ''}" />
         <p class="hint">איך הצוות קורא לבניין. אינו חייב להיות זהה לכתובת.</p>
       </div>
       <div class="form-pair">
         <div class="form-row">
           <label for="address_line">רחוב ומספר</label>
-          <input id="address_line" name="address_line" type="text" maxlength="200" required />
+          <input id="address_line" name="address_line" type="text" maxlength="200" required
+            value="${screen.prefill?.addressLine ?? ''}" />
         </div>
         <div class="form-row">
           <label for="city">עיר</label>
-          <input id="city" name="city" type="text" maxlength="120" required />
+          <input id="city" name="city" type="text" maxlength="120" required
+            value="${screen.prefill?.city ?? ''}" />
         </div>
       </div>
       <p class="form-note">
@@ -437,6 +484,9 @@ export interface NewUnitScreen {
   nav: Html;
   csrf: string;
   building: BuildingSummary;
+  /** The flat number A12's reader read, as a default. Slice 6.9 — `NewBuildingScreen` says why. */
+  prefill?: { unitNumber?: string };
+  carry?: { typeKey?: string; next?: string };
 }
 
 /**
@@ -458,12 +508,31 @@ export function renderNewUnitPage(screen: NewUnitScreen): string {
       <h1>דירה חדשה</h1>
       <p class="lede">${building.name} · ${building.address_line}, ${building.city}</p>
     </div>
+    ${
+      screen.carry?.next
+        ? h`<p class="form-note">
+            <strong>מתוך תיוק מסמך.</strong> מספר הדירה שלמטה נקרא מן המסמך. בדקו אותו מול הנייר
+            ותקנו אם צריך — אחרי יצירת הדירה נחזור לתיוק, והדירה תהיה מסומנת.
+          </p>`
+        : h``
+    }
     <form class="form-grid" method="post" action="/estate/buildings/${building.building_id}/units">
       ${csrfInput(screen.csrf)}
+      ${
+        screen.carry?.next
+          ? h`<input type="hidden" name="next" value="${screen.carry.next}" />
+            ${
+              screen.carry.typeKey
+                ? h`<input type="hidden" name="type" value="${screen.carry.typeKey}" />`
+                : h``
+            }`
+          : h``
+      }
       <div class="form-pair">
         <div class="form-row">
           <label for="unit_number">מספר דירה</label>
-          <input id="unit_number" name="unit_number" type="text" maxlength="32" required />
+          <input id="unit_number" name="unit_number" type="text" maxlength="32" required
+            value="${screen.prefill?.unitNumber ?? ''}" />
           <p class="hint">כפי שרשום על הדלת ובחוזה. ‏12A הוא מספר דירה תקין.</p>
         </div>
         <div class="form-row">

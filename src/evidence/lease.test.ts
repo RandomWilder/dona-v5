@@ -31,7 +31,7 @@ import {
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const AT = new Date('2026-09-08T09:00:00.000Z');
-const NAV = signedInChrome('x'.repeat(64), 'estate');
+const NAV = signedInChrome('x'.repeat(64), 'documents', true);
 const BUCKET = 'dona-v5-test-docs';
 const MARKERS = 'חוזה שכירות המושכר תקופת השכירות השוכר';
 // The fake page is one word per `word_id`, and a finding whose word_id is past the end is dropped
@@ -328,6 +328,12 @@ describe('evidence · confirm screen lists terms profiles', () => {
     matchesUnit: true,
     alreadyEstablished: false,
     boundToTenancy: false,
+    crossCheck: {
+      addressRead: true,
+      apartmentRead: true,
+      addressFits: true,
+      apartmentFits: true,
+    },
     candidates: [],
     proposedTenancyId: null,
     identifiersRead: 0,

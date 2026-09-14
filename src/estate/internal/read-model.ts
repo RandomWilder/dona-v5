@@ -253,6 +253,34 @@ export async function findUnitsAtAddress(
   return result.rows;
 }
 
+/**
+ * The building at an address, by the same keys and the same `=` the unit lookup uses. **Slice 6.9.**
+ *
+ * A12 asked only for the *units* at an address, so a building this system holds and has no flats in
+ * yet was indistinguishable from an address it has never heard of — both came back as an empty list
+ * and fell through to the street search. Those are the two cases the create offer has to choose
+ * between: **add the flat to this building**, or **create the building and the flat**. One row, and
+ * it reaches the screen and never the filing — resolution is still exactly-one-unit or a question.
+ */
+export async function findBuildingAtAddress(
+  db: Queryable,
+  addressKeys: readonly string[],
+): Promise<BuildingSummary | null> {
+  if (addressKeys.length === 0) {
+    return null;
+  }
+  const result = await db.query<BuildingSummary>(
+    `SELECT ${BUILDING_COLUMNS}
+       FROM building b
+       LEFT JOIN project p ON p.project_id = b.project_id
+      WHERE b.address_key = ANY($1::text[])
+      ORDER BY b.city, b.address_line
+      LIMIT 1`,
+    [[...addressKeys]],
+  );
+  return result.rows[0] ?? null;
+}
+
 export interface SearchResults {
   buildings: BuildingSummary[];
   units: UnitHit[];

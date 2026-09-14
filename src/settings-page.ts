@@ -24,6 +24,8 @@ import type {
 export interface SettingsScreen {
   csrf: string;
   mayWrite: boolean;
+  /** Whether this role may file a document — the rail's one gated destination (slice 6.9). */
+  mayFile: boolean;
   state: 'wired' | 'painted';
   obligations: readonly ObligationTypeRow[];
   documents: readonly DocumentTypeRow[];
@@ -168,7 +170,7 @@ export function renderSettingsPage(screen: SettingsScreen): string {
   return renderPage({
     title: 'הגדרות — דונה דום',
     styles,
-    nav: signedInChrome(screen.csrf, 'settings'),
+    nav: signedInChrome(screen.csrf, 'settings', screen.mayFile),
     body,
   });
 }

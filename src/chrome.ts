@@ -14,6 +14,11 @@ import { CSRF_FIELD } from './kernel/ui/page.ts';
 export type ChromeDest =
   | 'index'
   | 'estate'
+  // **Slice 6.9.** A12 was built at 6.3 and had one door — a card on the index — so the week-6 demo
+  // walked from a building page, never passed the root again, and filed six documents through A1's
+  // unit-first screen without once reaching the flow the room had asked for. A flow's entrance is
+  // part of the flow.
+  | 'documents'
   | 'expiring'
   | 'incomplete'
   | 'search'
@@ -36,9 +41,38 @@ function item(
   return h`<a class="nav-item" href="${href}" data-dest="${dest}" ${mark} title="${label}">${icon(drawing)}<span class="nav-label">${label}</span></a>`;
 }
 
-export function signedInChrome(csrf: string, dest: ChromeDest): Html {
+/**
+ * The rail. **`mayFile` is required and has no default. Slice 6.9.**
+ *
+ * It is the one destination here that is gated, and the gate is `documents.write`: a VIEWER holds
+ * `estate.read` and `documents.read` and nothing else, so an ungated tab would be a door that
+ * answers `not_allowed` after somebody walked through it — which is exactly the refusal-after-typing
+ * A11 refused to build for its own form. A required parameter rather than an optional one for 5.8's
+ * reason: a default type-checks at every call site and renders the wrong rail, and the only way to
+ * find that is by clicking.
+ *
+ * **The other six are ungated and three of them should not be** — `settings` is `settings.write` and
+ * ADMIN-only, `staff` and `calls` are their own question. That is older than this slice and is not
+ * widened by it; it is written up in `tasks/evidence/6.9.md` for the director.
+ */
+export function signedInChrome(
+  csrf: string,
+  dest: ChromeDest,
+  mayFile: boolean,
+): Html {
   return h`<nav aria-label="יעדי דלפק">
     ${item('estate', '/estate', 'בניינים', dest, h`<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18" /><path d="M6 12h12" /><path d="M6 16h12" /><path d="M10 6h.01" /><path d="M14 6h.01" />`)}
+    ${
+      mayFile
+        ? item(
+            'documents',
+            '/documents/new',
+            'תיוק מסמך',
+            dest,
+            h`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M12 18v-6" /><path d="m9 15 3-3 3 3" />`,
+          )
+        : h``
+    }
     ${item('expiring', '/estate/expiring', 'חוזים מסתיימים', dest, h`<path d="M3 21h18" /><path d="M7 21V10" /><path d="M12 21V4" /><path d="M17 21v-7" />`)}
     ${item('incomplete', '/estate/incomplete', 'חוזים לא שלמים', dest, h`<path d="m9 12 2 2 4-4" /><circle cx="12" cy="12" r="9" />`)}
     ${item('search', '/estate/search', 'חיפוש', dest, h`<circle cx="11" cy="11" r="7" /><path d="m20 20-3-3" />`)}

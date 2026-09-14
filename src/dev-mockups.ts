@@ -53,7 +53,10 @@ export function renderMockup(flow: string, csrf: string): string {
   }
   return renderPage({
     title: `${flow} — הדמיה — דונה דום`,
-    nav: signedInChrome(csrf, 'index'),
+    // The rail a paint is reviewed in shows every destination, this slice's included: a mockup is
+    // read by the director, who is an ADMIN, and a paint that hid a tab would be a paint of a
+    // screen nobody has.
+    nav: signedInChrome(csrf, 'index', true),
     body: new Html(painted),
   });
 }

@@ -28,6 +28,7 @@ describe('evidence · reading the place off a document', () => {
       addressLine: 'רקפת 12',
       city: 'שוהם',
       apartmentNumber: '12A',
+      annexDeferral: false,
     });
   });
 
@@ -39,6 +40,7 @@ describe('evidence · reading the place off a document', () => {
       addressLine: 'המסמכים 3',
       city: 'עיר מסמכים',
       apartmentNumber: '4',
+      annexDeferral: false,
     });
   });
 
@@ -117,6 +119,7 @@ describe('evidence · reading the place off a document', () => {
       addressLine: null,
       city: null,
       apartmentNumber: null,
+      annexDeferral: false,
     });
   });
 
@@ -135,6 +138,7 @@ describe('evidence · reading the place off a document', () => {
         addressLine: 'רקפת  12',
         city: ' שוהם ',
         apartmentNumber: null,
+        annexDeferral: false,
       }),
       ['שוהם|רקפת 12', 'שוהם|רחוב רקפת 12'],
     );
@@ -157,6 +161,7 @@ describe('evidence · reading the place off a document', () => {
       addressLine: 'רקפת 12',
       city: 'שוהם',
       apartmentNumber: '999',
+      annexDeferral: false,
     });
     assert.equal(resolved.unit, null);
     assert.equal(resolved.candidates?.length, CANDIDATE_LIMIT);
@@ -175,6 +180,7 @@ describe('evidence · reading the place off a document', () => {
       addressLine: null,
       city: null,
       apartmentNumber: null,
+      annexDeferral: false,
     });
   });
 
@@ -239,12 +245,16 @@ describe('evidence · reading the place off a document', () => {
     assert.ok(apartmentMatches('206-7', '206-7'));
   });
 
-  it('places nothing off a body that defers to an annex, and that is the ruling', () => {
+  it('places nothing off a body that defers to an annex, and says so', () => {
     // **A12 does not read an annex** (SPEC-evidence.md, slice 6.11). The annex sits past the pages
     // the online OCR call reads and the byte bound is on the request carrying the whole file, so no
     // page selection can reach it; and a גוש/חלקה identification has nothing to resolve against,
     // the estate being keyed on an address. Green before 6.11 as well — it is written down so that
     // a later reader cannot be taught to guess a flat out of a parcel number.
+    //
+    // **What 6.9 adds is the marker**, and only the marker: a lease that named its property
+    // perfectly well, in a נספח, produced the same `לא נקראה כתובת` a blank page produces, and one
+    // of those is a correct answer while the other is a broken scan.
     const reading = readPlace(
       "המושכר: הדירה שפרטיה ותיאורה כמפורט בנספח א' לחוזה זה, גוש 80031 חלקות 43, 46, מגרש 212א",
     );
@@ -252,6 +262,29 @@ describe('evidence · reading the place off a document', () => {
       addressLine: null,
       city: null,
       apartmentNumber: null,
+      annexDeferral: true,
     });
+  });
+
+  it('does not call an ordinary lease a deferral, and never lets the marker place a flat', async () => {
+    // The other direction, which is the one that matters: the marker is a **display fact**. A lease
+    // that names its address does not carry it, and a body that does carry it resolves exactly as
+    // it did before — `resolvePlace` never reads the field, so a marker that fired wrongly could
+    // change a sentence and could never change a filing.
+    const ordinary = readPlace('כתובת המושכר: רקפת 12, שוהם. דירה 12A.');
+    assert.equal(ordinary.annexDeferral, false);
+
+    const deferring = readPlace(
+      "המושכר: הדירה שפרטיה ותיאורה כמפורט בנספח א', גוש 80031 חלקות 43",
+    );
+    assert.equal(deferring.annexDeferral, true);
+    const db = { query: async () => ({ rows: [] }) };
+    const resolved = await resolvePlace(db as never, deferring);
+    assert.equal(resolved.unit, null);
+    assert.deepEqual(resolved.candidates, []);
+    assert.equal(resolved.total, 0);
+    // And with no address there is no building to offer either, which is what makes the refusal
+    // screen's annex sentence the only thing this reading changes.
+    assert.equal(resolved.building, null);
   });
 });

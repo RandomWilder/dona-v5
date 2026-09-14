@@ -71,6 +71,10 @@ const styles = h`<style>
   .candidates { display: grid; gap: var(--space-2); margin: var(--space-3) 0 0; padding: 0; list-style: none; }
   .candidate { display: flex; gap: var(--space-2); align-items: baseline; min-height: var(--size-touch); }
   .candidate input { width: auto; min-height: 0; }
+  /* Slice 6.9. One sentence per cause, stacked, so four different answers do not read as one
+     paragraph an operator skims. */
+  .read-facts { display: grid; gap: var(--space-1); margin: var(--space-3) 0 0; }
+  .read-facts p { margin: 0; }
   .digest { word-break: break-all; }
   .page-read {
     position: relative;
@@ -282,6 +286,68 @@ export interface IntakeScreen {
    * request and the whole file rides in every one of them.
    */
   tooLargeBytes?: number;
+  /**
+   * **Whether this viewer may shape the estate — `estate.write`, which is ADMIN's. Slice 6.9.**
+   *
+   * The create offer is the only thing on this screen that differs by role, and it differs because
+   * `documents.write` and `estate.write` are two different acts (A11): an operator files paper, an
+   * admin decides a flat exists. A door an operator may see and may not walk through is 6.1's
+   * refusal-after-typing, so an operator is shown the candidate list and the search box and no
+   * create control at all — not a disabled one.
+   */
+  mayCreate?: boolean;
+  /**
+   * The building this reading's address matched, when it matched one. **Slice 6.9.**
+   *
+   * Present → the building is in the portfolio and the flat is not, so what is offered is the flat.
+   * Absent → the address is in nobody's portfolio and what is offered is the building, then the flat.
+   */
+  building?: { building_id: string; name: string } | null;
+  /**
+   * The flat an admin has just created, coming back from A13. **Slice 6.9.**
+   *
+   * It is a pre-checked candidate and not a filing: nothing was held while the estate was being
+   * shaped, so the file is attached again here and the post that follows is the ordinary
+   * candidate-chosen one A12 has had since 6.3.
+   */
+  chosenUnitId?: string;
+}
+
+/**
+ * The link out of a refusal and into A11 or A13, carrying what was read. **Slice 6.9.**
+ *
+ * Everything in it is a **default for an input**, never a write: the admin reads it against the
+ * paper in their hand and edits what is wrong. `next=intake` is what brings them back here with the
+ * new flat as the anchor, and it is the only piece of state that survives the two forms — the bytes
+ * do not, which is what *nothing is held* means and is why the file input comes back armed.
+ *
+ * *(`next` and not `then`: Biome refuses an object literal with a `then` property, because a
+ * thenable is what `await` mistakes for a promise. The rule is blunt here and the name is free.)*
+ */
+function createHref(
+  screen: IntakeScreen,
+  reading: PlaceReading,
+): string | null {
+  if (!reading.addressLine) {
+    // Nothing was read, so there is nothing to prefill and nothing for the admin to check a
+    // prefilled value against. A11's own screen is one click away on its own terms.
+    return null;
+  }
+  const carried = new URLSearchParams({ next: 'intake' });
+  if (screen.declaredTypeKey) {
+    carried.set('type', screen.declaredTypeKey);
+  }
+  if (reading.apartmentNumber) {
+    carried.set('unit_number', reading.apartmentNumber);
+  }
+  if (screen.building) {
+    return `/estate/buildings/${screen.building.building_id}/units/new?${carried}`;
+  }
+  carried.set('address_line', reading.addressLine);
+  if (reading.city) {
+    carried.set('city', reading.city);
+  }
+  return `/estate/buildings/new?${carried}`;
 }
 
 /**
@@ -292,22 +358,74 @@ export interface IntakeScreen {
  * operator cannot act on is a refusal they will work around, and "we could not place it" without
  * saying what was read is exactly that refusal. No name, no date, no line of the lease.
  */
-function placeRead(reading: PlaceReading): Html {
-  if (!reading.addressLine) {
-    return h`<p class="lede">
-      לא נקראה כתובת מן הדף, ולכן <strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום.
+function placeRead(screen: IntakeScreen, reading: PlaceReading): Html {
+  const address = reading.addressLine
+    ? h`<p>
+        נקראה הכתובת ${ltr(reading.addressLine)}${
+          reading.city ? h`, ${reading.city}` : h``
+        }.
+        ${
+          screen.building
+            ? h`הבניין נמצא בתיק, והדירה לא.`
+            : h`הכתובת הזו אינה בתיק — לא הבניין ולא הדירה.`
+        }
+      </p>`
+    : reading.annexDeferral
+      ? h`<p>
+          המסמך מפנה את פרטי הנכס לנספח, ו<strong>הנספח אינו נקרא</strong> — זו החלטה ולא תקלה.
+          לכן לא נקראה כתובת מגוף המסמך.
+        </p>`
+      : h`<p>לא נקראה כתובת מן הדף.</p>`;
+  // **The apartment number gets its own sentence, and says where it may have come from. Slice 6.9,
+  // raised by 6.11.** `APARTMENT` runs over the whole text, so a lease naming only a party's own
+  // flat returns a number with no address — harmless to the filing, because with no address there
+  // is nothing to resolve, and misleading on a screen that prints the number as though the document
+  // had said it about the property.
+  const apartment = reading.apartmentNumber
+    ? reading.addressLine
+      ? h`<p>נקרא מספר דירה ${ltr(reading.apartmentNumber)}.</p>`
+      : h`<p>
+          נקרא מספר דירה ${ltr(reading.apartmentNumber)}, אך ללא כתובת — ייתכן שנקרא משורה של אחד
+          הצדדים ולא מתיאור הנכס.
+        </p>`
+    : h`<p>לא נקרא מספר דירה.</p>`;
+  return h`<div class="read-facts">${address}${apartment}</div>
+    <p class="lede">
+      <strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום.
       בחרו את הדירה שאליה הנייר שייך, או חפשו אותה, וצרפו את הקובץ שוב.
     </p>`;
+}
+
+/**
+ * The create offer, and it is the only thing on this screen that depends on who is looking.
+ *
+ * **Slice 6.9, on the director's ruling of 14 Sep 2026.** A12 refused to create from 6.3 until here,
+ * and the week-6 demo is what struck that: an operator standing at this refusal with the right paper
+ * had nowhere to go. Creating is still A11's act and an admin's — it is offered from here.
+ *
+ * An operator gets nothing rather than a disabled control: a door they may see and may not walk
+ * through is 6.1's refusal-after-typing, and the search box beside it is a question they *can*
+ * answer.
+ */
+function createOffer(screen: IntakeScreen, reading: PlaceReading): Html {
+  if (!screen.mayCreate) {
+    return h``;
   }
-  return h`<p class="lede">
-    נקראה הכתובת ${ltr(reading.addressLine)}${
-      reading.city ? h`, ${reading.city}` : h``
-    }${
-      reading.apartmentNumber ? h` · דירה ${ltr(reading.apartmentNumber)}` : h``
-    }.
-    לא נמצאה במערכת דירה אחת שמתאימה לה, ולכן <strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום.
-    בחרו את הדירה שאליה הנייר שייך, או חפשו אותה, וצרפו את הקובץ שוב.
-  </p>`;
+  const href = createHref(screen, reading);
+  if (!href) {
+    return h``;
+  }
+  return h`<div class="form-actions">
+      <a class="btn ${screen.building ? h`btn-secondary` : h`btn-primary`}" href="${href}">${
+        screen.building
+          ? h`הוספת הדירה לבניין ${screen.building.name}`
+          : h`יצירת הבניין והדירה`
+      }</a>
+    </div>
+    <p class="hint">
+      מה שנקרא מהמסמך יופיע כברירת מחדל בטופס וניתן לתקן אותו. אחרי יצירת הדירה נחזור לכאן, הדירה
+      תהיה מסומנת, ויהיה צורך לצרף את הקובץ שוב — שום דבר אינו נשמר בין הניסיונות.
+    </p>`;
 }
 
 export function renderIntakePage(screen: IntakeScreen): string {
@@ -341,9 +459,23 @@ export function renderIntakePage(screen: IntakeScreen): string {
             <h2>${
               candidates.length > 1
                 ? h`נמצאה יותר מדירה אחת`
-                : h`לא זוהתה דירה אחת`
+                : (screen.reading as PlaceReading).addressLine === null &&
+                    (screen.reading as PlaceReading).annexDeferral
+                  ? h`הנכס מתואר בנספח`
+                  : h`לא זוהתה דירה אחת`
             }</h2>
-            ${placeRead(screen.reading as PlaceReading)}
+            ${placeRead(screen, screen.reading as PlaceReading)}
+            ${createOffer(screen, screen.reading as PlaceReading)}
+          </section>`
+        : h``
+    }
+    ${
+      screen.chosenUnitId
+        ? h`<section class="notice">
+            <h2>הדירה נוצרה</h2>
+            <p class="lede">
+              הדירה מסומנת למטה. צרפו את הקובץ שוב — הוא לא נשמר בין הניסיונות — ותייקו.
+            </p>
           </section>`
         : h``
     }
@@ -369,7 +501,10 @@ export function renderIntakePage(screen: IntakeScreen): string {
                 ${candidates.map(
                   (unit) =>
                     h`<li class="candidate">
-                      <input type="radio" id="u-${unit.unit_id}" name="unit" value="${unit.unit_id}" required />
+                      <input type="radio" id="u-${unit.unit_id}" name="unit" value="${unit.unit_id}" required ${
+                        // Slice 6.9: the flat an admin has just created, coming back from A13.
+                        screen.chosenUnitId === unit.unit_id ? h`checked` : h``
+                      } />
                       <label for="u-${unit.unit_id}">דירה ${ltr(
                         unit.unit_number,
                       )} · ${unit.building_name} · ${unit.address_line}, ${
@@ -445,6 +580,18 @@ export interface FiledScreen {
   verification: Verification;
   fileHash: string;
   documentId?: string;
+  /**
+   * **What the reader read, on the one path where nobody chose. Slice 6.9.**
+   *
+   * This screen was written for A1, where a human had already picked the flat and the only
+   * interesting fact was the verdict. A12 places a document on its own, so the receipt is the only
+   * place an operator can check that it placed it right — the director's ruling of 14 Sep: the
+   * indication comes *after* the exact match files, because nothing is held before it.
+   *
+   * Absent on A1 and on A12's candidate branch, where the flat was chosen by hand and printing a
+   * reading would print one that was never taken.
+   */
+  reading?: PlaceReading;
 }
 
 /**
@@ -468,6 +615,29 @@ export function renderFiledPage(screen: FiledScreen): string {
     </div>
     <section class="notice">
       <h2>${type.labelHe}</h2>
+      ${
+        screen.reading
+          ? h`<div class="read-facts">
+              <p>
+                נקרא מן המסמך: ${
+                  screen.reading.addressLine
+                    ? h`${ltr(screen.reading.addressLine)}${
+                        screen.reading.city ? h`, ${screen.reading.city}` : h``
+                      }`
+                    : h`ללא כתובת`
+                }${
+                  screen.reading.apartmentNumber
+                    ? h` · דירה ${ltr(screen.reading.apartmentNumber)}`
+                    : h``
+                }.
+              </p>
+              <p>
+                תויק לדירה ${ltr(unit.unit_number)} ב${unit.building_name}, ${unit.address_line},
+                ${unit.city}.
+              </p>
+            </div>`
+          : h``
+      }
       <dl class="facts">
         <div><dt>שיוך</dt><dd>${
           screen.boundToTenancy ? h`הדירה והחוזה` : h`הדירה`
@@ -869,6 +1039,16 @@ export interface TenancyScreen {
   candidates: readonly TenancyCandidate[];
   /** Pre-selected. `null` is *a new letting*, and it is the default. */
   proposedTenancyId: string | null;
+  /**
+   * **What the cross-check actually found. Slice 6.9.** Four facts, four sentences: `matchesUnit`
+   * still decides whether this screen may write, and this decides what it says about why it may not.
+   */
+  crossCheck: {
+    addressRead: boolean;
+    apartmentRead: boolean;
+    addressFits: boolean;
+    apartmentFits: boolean;
+  };
   identifiersRead: number;
   identifiersPaired: number;
 }
@@ -978,7 +1158,27 @@ export function renderTenancyPage(screen: TenancyScreen): string {
       </dl>
       ${
         !isAmendment && !screen.matchesUnit
-          ? h`<p class="lede">הכתובת או מספר הדירה במסמך אינם תואמים את הדירה שאליה הוגש. לא נכתוב שוכרים.</p>`
+          ? h`<div class="read-facts">
+              ${
+                // **One sentence per cause. Slice 6.9.** `views.ts` fired one sentence for four
+                // facts until here, and *the address or the apartment number do not match* is true
+                // of a scan that read neither — which sends an operator to compare two values the
+                // page is printing as `לא נמצא`.
+                screen.crossCheck.addressRead
+                  ? screen.crossCheck.addressFits
+                    ? h``
+                    : h`<p>הכתובת שנקראה מהמסמך אינה הכתובת של הדירה שאליה הוגש.</p>`
+                  : h`<p>לא נקראה כתובת מן המסמך.</p>`
+              }
+              ${
+                screen.crossCheck.apartmentRead
+                  ? screen.crossCheck.apartmentFits
+                    ? h``
+                    : h`<p>מספר הדירה שנקרא מהמסמך אינו מספר הדירה שאליה הוגש.</p>`
+                  : h`<p>לא נקרא מספר דירה מן המסמך.</p>`
+              }
+              <p class="lede"><strong>לא נכתוב שוכרים.</strong></p>
+            </div>`
           : h``
       }
     </section>

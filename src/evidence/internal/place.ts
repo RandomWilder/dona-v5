@@ -11,6 +11,8 @@
 // reads stop being about the same thing.
 import {
   addressKeyOf,
+  type BuildingSummary,
+  findBuildingAtAddress,
   findUnitsAtAddress,
   searchEstate,
   type UnitHit,
@@ -23,6 +25,18 @@ export interface PlaceReading {
   addressLine: string | null;
   city: string | null;
   apartmentNumber: string | null;
+  /**
+   * **The body says the property is described somewhere this flow does not read. Slice 6.9.**
+   *
+   * 6.11 ruled the annex out and left the screen unable to say so: a lease that named its property
+   * perfectly well, in `נספח א׳`, produced the same `לא נקראה כתובת` a blank page produces, and one
+   * of those is a correct answer while the other is a broken scan. They ask the operator for
+   * different things, so they get different sentences (SPEC-flows.md A12).
+   *
+   * **A display fact and never a resolution input.** `resolvePlace` does not read it, so a marker
+   * that fires wrongly changes a sentence on a refusal screen and can never change what is filed.
+   */
+  annexDeferral: boolean;
 }
 
 // **Tier one: the property's own label.** `כתובת המושכר:` and its two siblings name the property and
@@ -66,6 +80,19 @@ const APARTMENT =
 
 const LEADING_STREET = /^(?:רחוב|רח['׳])\s+/;
 
+// **Slice 6.9.** The body handing its property description to an annex, in the two spellings the
+// real project lease and the published standard form both use. Literal and narrow for `PARTY_LINE`'s
+// reason: a marker that guesses is a screen that tells an operator the wrong story about why their
+// lease would not file.
+const ANNEX_DEFERRAL =
+  /(?:כמפורט|מפורט(?:ים|ות)?|כמתואר|המתואר)\s+בנספח|בנספח\s+[א-ת]\s*['׳״"]/;
+
+// A parcel identification standing in for an address. On its own it is not a deferral — a lease may
+// print גוש and חלקה beside a perfectly readable street — so it counts only where no address was
+// read, which is exactly the case the screen has to explain.
+const PARCEL = /גוש\s*\d/;
+const PARCEL_LOT = /חלק(?:ה|ות)\s*\d/;
+
 /**
  * What the paper says about where it belongs. Nulls are ordinary: they are the candidate list on the
  * screen, never an error.
@@ -104,6 +131,9 @@ export function readPlace(text: string): PlaceReading {
     addressLine: addressLine || null,
     city,
     apartmentNumber: apartment?.[1] ?? null,
+    annexDeferral:
+      ANNEX_DEFERRAL.test(haystack) ||
+      (!addressLine && PARCEL.test(haystack) && PARCEL_LOT.test(haystack)),
   };
 }
 
@@ -184,13 +214,28 @@ export const CANDIDATE_LIMIT = 12;
 
 export type PlaceResolution =
   /** Exactly one flat at that address answers to that apartment number. A12 files against it. */
-  | { unit: UnitHit; candidates?: undefined; total?: undefined }
+  | {
+      unit: UnitHit;
+      candidates?: undefined;
+      total?: undefined;
+      building?: undefined;
+    }
   /**
    * Nothing exact. Whatever the operator might have meant, for them to choose from — capped at
    * `CANDIDATE_LIMIT`, with `total` saying how many there really were so the screen can say it
    * rather than quietly show a twelfth of the answer.
+   *
+   * **`building` from 6.9**: the building whose `address_key` the reading matched, when one did.
+   * Null means this address is in nobody's portfolio, and the difference is the whole of the create
+   * offer — *add the flat to this building* against *create the building and the flat*. It says
+   * nothing about what may be filed: that is still exactly-one-unit or this refusal.
    */
-  | { unit: null; candidates: UnitHit[]; total: number };
+  | {
+      unit: null;
+      candidates: UnitHit[];
+      total: number;
+      building: BuildingSummary | null;
+    };
 
 /**
  * The reading, resolved against the estate — exact first, and a question after that.
@@ -203,7 +248,8 @@ export async function resolvePlace(
   db: Queryable,
   reading: PlaceReading,
 ): Promise<PlaceResolution> {
-  const atAddress = await findUnitsAtAddress(db, addressKeysFor(reading));
+  const keys = addressKeysFor(reading);
+  const atAddress = await findUnitsAtAddress(db, keys);
   const narrowed = reading.apartmentNumber
     ? atAddress.filter((unit) =>
         apartmentMatches(reading.apartmentNumber as string, unit.unit_number),
@@ -213,23 +259,31 @@ export async function resolvePlace(
   if (one) {
     return { unit: one };
   }
+  // **Asked once, and only on the way to a refusal. Slice 6.9.** The exact-match branch above has
+  // already returned, so this costs a query on the path that was about to render a screen anyway
+  // and nothing at all on the path that files.
+  const building = await findBuildingAtAddress(db, keys);
   if (narrowed.length > 1) {
-    return offer(narrowed);
+    return offer(narrowed, building);
   }
   if (atAddress.length > 0) {
-    return offer(atAddress);
+    return offer(atAddress, building);
   }
   if (reading.addressLine) {
     const found = await searchEstate(db, reading.addressLine);
-    return offer(found.units);
+    return offer(found.units, building);
   }
-  return offer([]);
+  return offer([], building);
 }
 
-function offer(units: UnitHit[]): PlaceResolution {
+function offer(
+  units: UnitHit[],
+  building: BuildingSummary | null,
+): PlaceResolution {
   return {
     unit: null,
     candidates: units.slice(0, CANDIDATE_LIMIT),
     total: units.length,
+    building,
   };
 }

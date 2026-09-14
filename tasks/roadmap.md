@@ -1790,6 +1790,12 @@ operator keeps the candidate list and the search box.
 - **Spec edit first:** SPEC-flows.md A12's "does not create" sentence is struck and replaced by the
   role split; A11 and A13 gain prefill. **Plan mode** — two modules.
 - **Deps:** 6.8 · **Size:** L
+- **Closed 14 Sep 2026** — [tasks/evidence/6.9.md](evidence/6.9.md). Both stances on one request:
+  ADMIN 1 create link, OPERATOR **0**, both 422, both 0 rows and 0 objects, the OPERATOR half written
+  red first. The walk clicked end to end with no address retyped. **Three items carried out of it:**
+  the rail's other six destinations are ungated and whether they should be is the director's; the CSS
+  carry rides on to 6.10 untripped; and the apartment number is still read from anywhere in the text,
+  which stays with the corpus (F6).
 
 ### Slice 6.10 — A dedupe names its anchor
 The same bytes are one document forever, which is correct and stays. Filing them a second time against

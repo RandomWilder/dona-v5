@@ -51,6 +51,7 @@ export {
   addressKeyOf,
   countUnitsByBuilding,
   EXPIRING_WINDOW_DAYS,
+  findBuildingAtAddress,
   findUnitsAtAddress,
   getBuilding,
   getUnit,

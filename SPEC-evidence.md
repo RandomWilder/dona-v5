@@ -354,6 +354,15 @@ Hebrew letter to its left — which keeps `ברחוב` and drops `מרחוב` �
 line carries an identity marker before it (`ת.ז`, `ת"ז`, `תעודת זהות`, `ח.פ`, `המתגורר`) is skipped
 for the next match; where there is no other, **the reading is null**.
 
+**A12 does not read an annex, and from slice 6.9 it can say which document deferred to one.** 6.11
+ruled the annex out and left the screen unable to tell an operator that it had: a lease that named its
+property perfectly well, in a נספח, produced the same `לא נקראה כתובת` as a blank page. So the reader
+returns a fourth value beside the three above — **a deferral marker**, true when the body says
+`כמפורט בנספח` or identifies the property by `גוש` and `חלקה` where no address was read. It is
+literal and narrow for `PARTY_LINE`'s reason, and it is **a display fact and never a resolution
+input**: `resolvePlace` does not read it, so a marker that is wrong changes a sentence and never a
+filing. The ruling it reports is unchanged, and is this:
+
 **A12 does not read an annex, and says so rather than guessing.** The real project lease describes the
 flat as `כמפורט בנספח א'` and identifies the property in the body by `גוש`, `חלקה` and `מגרש`; the
 published standard form defers the same way (`docs/corpus/lease-standard.md`), so this is the shape of
@@ -388,6 +397,26 @@ narrows that building's units through `apartmentMatches`, which A2 already trust
   object in the bucket. The form comes back with what the reader read, the candidates a
   `searchEstate` over the street found, a search box for the operator's own term, and the file input
   re-armed. A candidate re-posted with the file is an ordinary filing against a unit a human chose.
+
+**The resolution says which building it matched, not only which units. Slice 6.9.** An address whose
+key matches a building holding no flats used to fall through to the street search, so the screen could
+not tell *the building is here and the flat is not* from *nothing here at all* — and those are the two
+cases the create offer has to choose between. `findBuildingAtAddress` answers it with the same keys and
+the same `=` the unit lookup uses, and the answer reaches the screen and never the filing: resolution
+is still exactly-one-unit-or-a-question.
+
+**What the screen does with a refusal is [SPEC-flows.md](SPEC-flows.md) A12's** — four causes, four
+sentences, and the create offer to a role holding `estate.write`. What belongs here is the one bound
+that offer does not relax: **an exact key match is still the only thing that files without a human.**
+Creating a building from the refusal is a second request, posted by an admin, through A11's own
+validation; the document is filed on a third. Nothing in the create path shortens the read → resolve →
+file order, and nothing holds the bytes across any of it.
+
+**The receipt names what was read and where it landed.** `renderFiledPage` was written for A1, where a
+human had already chosen the flat and the only interesting fact was the verdict. On A12 nobody chose:
+so the receipt leads with the address, the town and the apartment number the reader read, and the flat
+the document is now anchored to. On the candidate branch there is no reading — the operator picked —
+and it says that instead, because printing a reading there would be printing one that was never taken.
 
 **A candidate list is cut at twelve, and says how long it was.** A lease naming an address this
 system holds and an apartment number it does not — `רקפת 12, דירה 999` — matches a building and no
@@ -561,6 +590,15 @@ parties. No name is matched against the global party register.
 
 **Cross-check.** Extracted `apartment_number` and `address` are asserted against the unit. A mismatch
 is `invalid`: no tenancy, no party, no new link. This is the content check 3.3 deferred.
+
+**And the screen says which of its four facts failed. Slice 6.9.** The cross-check is a conjunction of
+four — the address was read, the apartment number was read, the address matches the unit, the number
+matches it — and until 6.9 all four printed *the address or the apartment number in the document do not
+match the flat it was filed against*, which is true of a scan that read nothing and of a lease filed
+against the wrong flat, and asks the operator for two different things. The proposal returns the four
+facts; `matchesUnit` stays their conjunction, so what *writes* is unchanged and only what is *said*
+is four sentences instead of one. **A field that was not read is not a mismatch** — that distinction
+is the whole point, and it is the same one A12's refusal screen draws.
 
 **Idempotent confirm.** A lease that already has a `TENANCY` / `EVIDENCE` link returns
 `alreadyEstablished` and creates no second household.

@@ -37,10 +37,10 @@
 > is the check that proves it — no self-certification. The standing bar every slice also clears is
 > the Definition of Done in [plan.md](plan.md).
 
-**Where a new session starts: 6.9**, then 6.10 — one slice per session, in that order. **6.8 and
-6.11 are closed**: 6.11 was added by 6.8's verify step and the director sequenced it first, ahead of
-6.9, because it is the one defect that files a lease against a flat nobody chose. 6.1–6.7 are closed
-and merged, and the week-6 demo has been given; the remaining slices are what that demo wrote
+**Where a new session starts: 6.10**, and it is the last of the week's slices. **6.8, 6.9 and 6.11
+are closed**: 6.11 was added by 6.8's verify step and the director sequenced it first, ahead of 6.9,
+because it is the one defect that files a lease against a flat nobody chose. 6.1–6.7 are closed and
+merged, and the week-6 demo has been given; the remaining slice is what that demo wrote
 (§ "What the week-6 demo found").
 An unbuilt flow is painted in the live shell (`mockups/<flow>.html`, `/dev/mockups/<flow>` on a
 `-dev` process) before it is wired; a guard fails if that file and the slice's evidence both exist.
@@ -101,6 +101,12 @@ rule lapsing because a document screen arrived.
 - [ ] **Director's call:** whether the published Data Model's `Document` card is republished.
 - [ ] **Staging and prod share one identity configuration**, and **the consent screen stays in
       `Testing`.** Both owned at week 12, beside the prod restart and the F7 organisation move.
+- [ ] **The rail's other six destinations are ungated.** Raised at 6.9, which gated the seventh.
+      `settings` is `settings.write` and ADMIN-only and a VIEWER is shown it; `staff` and `calls` are
+      their own question. 6.9 gated `documents` because A11's rule says a door an operator may see
+      and may not walk through is a refusal after they have already walked — the other six are older
+      than this slice and were not widened by it. **Whether the rail hides what a role cannot reach,
+      or shows everything and lets the route refuse, is a ruling and the director's.**
 - [ ] **The bash guard reads the command that is typed, not what it runs.** Raised at 5.1c, flagged
       rather than fixed. If the director wants the stronger rule it is theirs to say so. **Bit for
       the first time at 6.7**, in the other direction: writing a *file* whose text contained
@@ -563,7 +569,7 @@ week 7's if the director wants it.
       filed this lease against the wrong flat and said nothing. Not patched here: the fix needs the
       real corpus and a ruling on whether an annex is read, which is a slice and not an edit.
 
-- [ ] **6.9 — The document tab, and a refusal that offers to create.**
+- [x] **6.9 — The document tab, and a refusal that offers to create.** Closed 14 Sep — [evidence/6.9.md](evidence/6.9.md).
       Flow **A12** gains its entrance and its two missing screens. **The tab:** `ChromeDest` and one
       `item()` in `src/chrome.ts` — seven destinations become eight, and the index card at
       `src/index-page.ts:85` stops being A12's only door. **The create offer:** the 422 screen carries
@@ -605,10 +611,31 @@ week 7's if the director wants it.
       and reads today as a failure, which is exactly what one-sentence-per-cause is for. And the
       refusal screen prints an apartment number that may have been read off a party line, so it says
       **which field was read**, not only what was not.
-      **Carried in, still riding:** `.check` and `.form-grid` / `.form-row` / `.hint` /
-      `.form-actions` are two files each since 6.2, and **a third occurrence of either moves them to
-      `tokens.css`**. This slice writes screens and is the likeliest to trip it.
+      **Carried in, and discharged as *not tripped*:** `.check` turned out to be in `tokens.css`
+      already; `.form-grid` / `.form-row` / `.hint` / `.form-actions` are still **two files each**,
+      because this slice wrote its screens in exactly those two files. **The rule rides on to 6.10.**
       **Deps:** 6.8 · **L**
+      **Raised and closed inside 6.9:**
+      • **The nav item is gated and the other six are not.** `signedInChrome` takes `mayFile` and it
+      is **required, not defaulted** — 5.8's argument one level up, since a default renders the whole
+      console's navigation for a viewer and is only ever found by clicking. Four test files and three
+      module dep types failed to compile, which is the parameter working.
+      • **`MOCKUP_OWNERS` is live code and was stale by design.** It said `document-intake: 6.3`, and
+      a **repaint** of a flow whose first slice has closed fails guard four against a two-week-old
+      evidence file rather than against the paint on disk. Moved to `6.9`: the owner is always the
+      slice that will wire the flow next.
+      • **`matchesUnit` was decomposed and kept.** `crossCheck` returns the four facts the confirm
+      screen needs and `matchesUnit` is written as their conjunction rather than beside them — two
+      independent expressions of one rule is how a screen and a write stop agreeing.
+      • **The annex marker is a display fact.** `readPlace` returns it, `resolvePlace` does not read
+      it, and a case asserts the resolution is unchanged either way — so a marker that fires wrongly
+      can change a sentence and can never change a filing.
+      • **The developer database was left as it was found**, 12 documents before and after. The first
+      week-6 slice to leave no residue, and only because nothing this one wrote was stamped by the
+      promotion guard — 6.5's and 6.6's residue is still there and still the director's.
+      **Raised → 6.10:** the CSS carry above. **Raised → the director:** the ungated rail, in the
+      carried-in list. **Raised → the corpus item (F6):** the apartment number is still read from
+      anywhere in the text; 6.9 says on the screen where it may have come from and does not stop it.
 
 - [x] **6.11 — The anchors meet the form the operator actually uses.** Closed 14 Sep — [evidence/6.11.md](evidence/6.11.md).
       Flow **A12**, and it is raised by 6.8's verify step against the demo's own paper. The reader's
@@ -676,6 +703,13 @@ week 7's if the director wants it.
       the operator is standing in.
       **Verify:** on `:3000` with the demo file; `document_link` row counts before and after, so the
       second link is proved present or proved refused rather than assumed.
+      **Carried in from 6.9, still riding:** `.form-grid` / `.form-row` / `.hint` / `.form-actions`
+      are **two files each** (`src/estate/internal/views.ts`, `src/evidence/internal/views.ts`) and a
+      third occurrence moves them to `tokens.css`. `.check` is already there and is closed.
+      **Carried in from 6.9, and it is this slice's own screen:** the confirm page now says which
+      fields were not read separately from which did not match, and **which flat it is about is still
+      `unitIdOf`'s unordered `LIMIT 1`** — so a sentence that is finally precise can still be precise
+      about the wrong apartment.
       **Spec edit first:** `SPEC-evidence.md` on what a second filing of the same bytes means — A1
       says one document and a second link, and says nothing about which one a screen is then about.
       **Deps:** 6.8 · **S** · no plan mode: one module, one query, one sentence.
