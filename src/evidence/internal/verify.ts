@@ -12,7 +12,7 @@
 // arrives with its own guard. A `Record<TypeKey, string[]>` here would make A8 true of the catalogue
 // and false of the first thing that consumes it — every new type shipping unguarded until the next
 // release.
-import type { PdfPage } from '../../kernel/pdf.ts';
+import { type PdfPage, pageLines } from '../../kernel/pdf.ts';
 
 export type VerificationVerdict =
   // Every declared term is in the text.
@@ -43,10 +43,23 @@ export interface Verification {
  * traceable to a place on a page (week 4). This flattens them, which is all a term check needs and
  * deliberately all it gets: the geometry is 4.1's and 4.2's, and a guard that reasoned about layout
  * would be a second, weaker extractor standing beside the real one.
+ *
+ * **It flattens to lines and not to one string, from slice 6.8.** A line break is not layout: it is
+ * the reader's own statement about where one field stopped, and on a form that is what ends a value.
+ * This function put a newline only *between pages*, so A12's address reader — written against
+ * exactly that clause, and careful to preserve newlines — never received one, and a scanned address
+ * with no full stop after the town read the city as everything printed after it. `pageLines` is the
+ * fold and `endsLine` is the reader's flag; nothing here decides where a line ends.
+ *
+ * The guard above is unaffected either way: `normalise` removes all whitespace before matching.
  */
 export function documentText(pages: readonly PdfPage[]): string {
   return pages
-    .map((page) => page.items.map((item) => item.text).join(' '))
+    .map((page) =>
+      pageLines(page)
+        .map((line) => line.map((item) => item.text).join(' '))
+        .join('\n'),
+    )
     .join('\n');
 }
 

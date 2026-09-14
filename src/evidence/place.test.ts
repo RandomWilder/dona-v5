@@ -9,12 +9,14 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { UnitHit } from '../estate/contract.ts';
+import { createFakePdfText } from '../kernel/pdf.ts';
 import {
   addressKeysFor,
   CANDIDATE_LIMIT,
   readPlace,
   resolvePlace,
 } from './internal/place.ts';
+import { documentText } from './internal/verify.ts';
 
 describe('evidence · reading the place off a document', () => {
   it('reads the labelled address, the city and the apartment', () => {
@@ -51,6 +53,59 @@ describe('evidence · reading the place off a document', () => {
     assert.equal(reading.addressLine, 'רקפת 12');
     assert.equal(reading.city, 'שוהם');
     assert.equal(reading.apartmentNumber, '7');
+  });
+
+  it('stops the city at the line end, which is the reading the demo scan never got', async () => {
+    // **The week-6 demo, as a case. Slice 6.8, and it was red before it.** A lease scanned on a
+    // phone printed its address with no full stop after the town, and the city came back as
+    // `כפר סבא דירה מספר 3 המשכיר` — every word to the next punctuation mark, because there was
+    // none. The refusal that followed was correct and wrote nothing, and it was about the wrong
+    // question.
+    //
+    // The case runs through `documentText` rather than over a hand-written string, because that is
+    // where the defect was: `readPlace` has preserved newlines since 6.3 and was never given any.
+    const pages = await createFakePdfText([
+      'הסכם שכירות\nכתובת המושכר: נרקיס 45, כפר סבא\nדירה מספר 3\nהמשכיר: אבי לוי',
+    ]).pages(Buffer.from('x'));
+    const reading = readPlace(documentText(pages));
+    assert.equal(reading.addressLine, 'נרקיס 45');
+    assert.equal(reading.city, 'כפר סבא');
+    assert.equal(reading.apartmentNumber, '3');
+  });
+
+  it('reads the wrong city off the same words with the line breaks taken out', () => {
+    // The other half of the case above, and the reason it is written down: the reader did not
+    // change in 6.8 and does not need to. Flatten the lines — which is exactly what `documentText`
+    // did until 6.8 — and the same paper reads the same way it read on staging.
+    const flattened =
+      'הסכם שכירות כתובת המושכר: נרקיס 45, כפר סבא דירה מספר 3 המשכיר: אבי לוי';
+    assert.equal(readPlace(flattened).city, 'כפר סבא דירה מספר 3 המשכיר');
+  });
+
+  it('resolves a flat off an address line that ends in no punctuation at all', async () => {
+    // 6.7's original bar, unchanged and now provable: the line end is the terminator, so the paper
+    // needs no full stop and no comma after the town.
+    const pages = await createFakePdfText([
+      'כתובת המושכר: נרקיס 45, כפר סבא\nדירה 3',
+    ]).pages(Buffer.from('x'));
+    const reading = readPlace(documentText(pages));
+    // Asserted here and not only through the resolution: the fake database below answers every
+    // query with the same row, so a reading that got the city wrong would still resolve the flat
+    // and this case would pass while proving nothing.
+    assert.equal(reading.city, 'כפר סבא');
+    const units: UnitHit[] = [
+      {
+        unit_id: 'unit-3',
+        unit_number: '3',
+        building_id: 'building',
+        building_name: 'נרקיס 45',
+        address_line: 'נרקיס 45',
+        city: 'כפר סבא',
+      },
+    ];
+    const db = { query: async () => ({ rows: units }) };
+    const resolved = await resolvePlace(db as never, reading);
+    assert.equal(resolved.unit?.unit_number, '3');
   });
 
   it('returns nulls for a document that names no place, and nulls are not an error', () => {
