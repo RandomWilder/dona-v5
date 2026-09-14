@@ -207,8 +207,10 @@ corrected at 7.2, which counted them. This is the slice that deletes the paint.
       otherwise.**
 - [ ] **ת.ז. masked, revealed under `party.national_id.read`**, the reveal a separate request that
       writes `evidence.read_identifier`. The value never ships to be hidden by CSS — 6.6.
-- [ ] **`tests/ui/tokens.test.ts`**: the fifth document-shaped screen under 6.6's ruling, with the
-      justification written where the other four have theirs.
+- [ ] **`tests/ui/tokens.test.ts`**: the **seventh** document-shaped screen under 6.6's ruling, with
+      the justification written where the other six have theirs. ~~fifth~~ — 7.1 registered the
+      fifth and 7.2 the sixth (`documents · the declaration, admin may edit`, the same screen at the
+      other role). Corrected inside 7.2, which is the slice that moved the number.
 - [ ] **Delete `mockups/document-intake.html`** and its `MOCKUP_OWNERS` entry — guard four. ~~Owner
       moves `7.1` → `7.3` in `scripts/guards.ts`~~ — **done in 7.1**, which is where it had to
       happen: the owner's evidence file and the mockup cannot both exist, so 7.1 could not close
