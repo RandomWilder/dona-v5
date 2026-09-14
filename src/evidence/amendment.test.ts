@@ -38,6 +38,14 @@ const LEASE_MARKERS = 'חוזה שכירות המושכר תקופת השכיר�
 const AMEND_MARKERS = 'נספח לחוזה השכירות';
 const ADDRESS = 'רקפת 12';
 
+/** Slice 6.5: the proposal writes an audit line now, so it takes the deps the confirm always did. */
+const READ_BY = 'ops@example.test';
+const leaseDeps = (db: PoolClient) => ({
+  db,
+  audit: createAuditLog(db, fixedClock(AT)),
+  clock: fixedClock(AT),
+});
+
 const pdfBytes = (marker: string): Buffer =>
   Buffer.from(`%PDF-1.4\n% ${marker}\n`, 'latin1');
 
@@ -52,7 +60,12 @@ async function insertUnit(
     `INSERT INTO building (building_id, name, address_line, city,
                            handover_date, warranty_end_date, status)
      VALUES ($1, 'amend-building', $2, $3, '2020-01-01', '2022-01-01', 'ACTIVE')`,
-    [buildingId, addressLine, `Shoham-${buildingId.slice(0, 8)}`],
+    // **The tail, not the head.** Ids here are UUIDv7, so the first eight hex characters are a
+    // 48-bit millisecond timestamp: two buildings created in the same millisecond share them. This
+    // token has to be unique because `building_address_unique` is on `(city, address_line)`, and
+    // 6.5 is the first slice to put two buildings at one address in one tick — it failed 23505 on
+    // the way in. The last twelve characters are the random half.
+    [buildingId, addressLine, `Shoham-${buildingId.slice(24)}`],
   );
   await db.query(
     `INSERT INTO space (space_id, building_id, space_kind, name)
@@ -86,7 +99,7 @@ function intake(
 
 async function fileLease(db: PoolClient, unitId: string): Promise<string> {
   const filed = await fileDocument(intake(db, LEASE_MARKERS, matchingLease), {
-    bytes: pdfBytes(`lease-${unitId.slice(0, 8)}`),
+    bytes: pdfBytes(`lease-${unitId.slice(24)}`),
     typeKey: 'lease',
     place: { kind: 'UNIT', id: unitId },
     tenancyId: null,
@@ -130,10 +143,13 @@ async function confirmLease(
   db: PoolClient,
   unitId: string,
 ): Promise<{ documentId: string; tenancyId: string }> {
-  const profile = `a3-${unitId.slice(0, 8)}`;
+  const profile = `a3-${unitId.slice(24)}`;
   await upsertTermsProfile(db, profile);
   const documentId = await fileLease(db, unitId);
-  const proposed = await proposeLeaseTenancy(db, documentId);
+  const proposed = await proposeLeaseTenancy(leaseDeps(db), {
+    documentId,
+    readBy: READ_BY,
+  });
   const roles = Object.fromEntries(
     proposed.people.map((person) => [
       person.extractedFieldId,
@@ -177,7 +193,10 @@ describe('evidence · flow A3 completes a tenancy from an addendum', () => {
           [{ field_key: 'guarantor_name', value: 'רותם ערב', word_ids: [0] }],
           'a3-guarantor',
         );
-        const proposed = await proposeLeaseTenancy(db, documentId);
+        const proposed = await proposeLeaseTenancy(leaseDeps(db), {
+          documentId,
+          readBy: READ_BY,
+        });
         assert.equal(proposed.typeKey, 'lease_amendment');
         assert.equal(proposed.people.length, 1);
         assert.equal(proposed.people[0]?.proposedRole, 'GUARANTOR');
@@ -331,7 +350,10 @@ describe('evidence · flow A3 completes a tenancy from an addendum', () => {
           [{ field_key: 'guarantor_name', value: 'רותם ערב', word_ids: [0] }],
           'a3-unbound',
         );
-        const proposed = await proposeLeaseTenancy(db, documentId);
+        const proposed = await proposeLeaseTenancy(leaseDeps(db), {
+          documentId,
+          readBy: READ_BY,
+        });
         await assert.rejects(
           () =>
             confirmLeaseTenancy(
@@ -393,12 +415,17 @@ describe('evidence · addendum confirm screen', () => {
           fieldKey: 'guarantor_name',
           value: 'רותם',
           proposedRole: 'GUARANTOR',
+          hasIdentifier: false,
         },
       ],
       matchesUnit: true,
       alreadyEstablished: false,
       boundToTenancy: true,
       termsProfileNames: [],
+      candidates: [],
+      proposedTenancyId: null,
+      identifiersRead: 0,
+      identifiersPaired: 0,
     });
     assert.match(html, /אישור נספח/);
     assert.match(html, /אישור וכתיבה/);

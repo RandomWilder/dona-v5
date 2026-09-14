@@ -656,7 +656,7 @@ export function registerDocumentRoutes(
     CONFIRM,
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
-      const fields = await readFields(request);
+      const fields = formBody(request);
       await promoteExtractedField(
         {
           db: deps.pool,
@@ -680,6 +680,15 @@ export function registerDocumentRoutes(
     objects: deps.objects,
     pdf: deps.pdf,
     bucket: deps.bucket,
+  });
+
+  // Slice 6.5: the proposal writes an audit line of its own now — `evidence.match_identifier`, when
+  // the lease declared an identifier for the resolution to compare — so it takes the same deps the
+  // confirm has always taken, rather than a bare pool.
+  const leaseDeps = () => ({
+    db: deps.pool,
+    audit: createAuditLog(deps.pool, deps.clock),
+    clock: deps.clock,
   });
 
   app.get<{ Params: { documentId: string } }>(
@@ -732,7 +741,10 @@ export function registerDocumentRoutes(
     READ,
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
-      const proposed = await proposeLeaseTenancy(deps.pool, documentId);
+      const proposed = await proposeLeaseTenancy(leaseDeps(), {
+        documentId,
+        readBy: requireOperatorEmail(request),
+      });
       html(reply);
       return renderTenancyPage({
         ...proposed,
@@ -747,36 +759,45 @@ export function registerDocumentRoutes(
     CONFIRM,
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
-      const fields = await readFields(request);
+      const fields = formBody(request);
       const roles: Record<string, TenancyRole> = {};
       for (const [name, value] of Object.entries(fields)) {
         if (name.startsWith('role-')) {
           roles[name.slice(5)] = value as TenancyRole;
         }
       }
-      const confirmed = await confirmLeaseTenancy(
-        {
-          db: deps.pool,
-          audit: createAuditLog(deps.pool, deps.clock),
-          clock: deps.clock,
-        },
-        {
-          documentId,
-          termsProfileName: fields.terms_profile ?? '',
-          confirmedBy: requireOperatorEmail(request),
-          roles,
-        },
+      // `attach_tenancy` is the radio group on the confirm screen. Empty, absent or the literal
+      // `new` is *a new letting*, which is what this flow did and all it could do before 6.5.
+      const attach = fields.attach_tenancy ?? '';
+      const confirmedBy = requireOperatorEmail(request);
+      const confirmed = await confirmLeaseTenancy(leaseDeps(), {
+        documentId,
+        termsProfileName: fields.terms_profile ?? '',
+        confirmedBy,
+        roles,
+        attachTenancyId: attach === '' || attach === 'new' ? null : attach,
+      });
+      const proposed = await proposeLeaseTenancy(leaseDeps(), {
+        documentId,
+        readBy: confirmedBy,
+      });
+      // Slice 6.5: on an attach the dates belong to the letting, not to the paper. Showing the
+      // document's own would read as though attaching had rewritten the term — which is the one
+      // thing that branch is built not to do.
+      const bound = proposed.candidates.find(
+        (candidate) => candidate.tenancyId === confirmed.tenancyId,
       );
-      const proposed = await proposeLeaseTenancy(deps.pool, documentId);
       html(reply);
       return renderTenancyWrittenPage({
         nav: chromeOf(deps, request),
         unit: proposed.unit,
         typeKey: proposed.typeKey,
-        startDate: proposed.startDate ?? '',
-        endDate: proposed.endDate ?? '',
+        startDate:
+          (confirmed.attached ? bound?.startDate : proposed.startDate) ?? '',
+        endDate: (confirmed.attached ? bound?.endDate : proposed.endDate) ?? '',
         partiesWritten: confirmed.partiesWritten,
         alreadyEstablished: confirmed.alreadyEstablished,
+        attached: confirmed.attached,
       });
     },
   );
@@ -785,6 +806,33 @@ export function registerDocumentRoutes(
 interface Upload {
   fields: Record<string, string>;
   bytes: Buffer;
+}
+
+/**
+ * **A form that carries no file is an ordinary form. Slice 6.5, found by clicking.**
+ *
+ * Two of this module's forms posted `multipart/form-data` and carried nothing but text — the lease
+ * confirm from 4.6 and the promote button from 4.3. That was harmless until **5.2**, which put the
+ * CSRF check in a `preHandler` reading `request.body`: a multipart body leaves that undefined, so
+ * both buttons answered **403** in a browser from the day the token landed. Nothing caught it,
+ * because the suite calls these handlers rather than posting to them, and `csrf: 'in-body'` — the
+ * one exemption — is held by the two routes whose bodies really are streams.
+ *
+ * The fix is not a third exemption. It is that these bodies were never streams: the composition
+ * root's `registerFormBodies` parser has handled urlencoded since 5.1, so dropping the `enctype`
+ * from the two forms puts them back inside the check rather than around it.
+ */
+function formBody(request: FastifyRequest): Record<string, string> {
+  const body = request.body;
+  if (body === null || typeof body !== 'object') {
+    throw new KernelError('invalid', 'that form carried no fields');
+  }
+  return Object.fromEntries(
+    Object.entries(body as Record<string, unknown>).map(([name, value]) => [
+      name,
+      String(value),
+    ]),
+  );
 }
 
 /**

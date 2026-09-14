@@ -37,7 +37,10 @@ export {
 export type { TenancyEventRow } from './internal/events.ts';
 export { listTenancyEvents } from './internal/events.ts';
 export type { UnitLetting } from './internal/lettings.ts';
-export { listUnitTenancies } from './internal/lettings.ts';
+export {
+  countIdentifierOverlap,
+  listUnitTenancies,
+} from './internal/lettings.ts';
 export type {
   ObligationRow,
   ObligationSpec,

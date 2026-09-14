@@ -236,8 +236,6 @@ const styles = h`<style>
   /* Slice 6.2's one checkbox. The same two rules src/settings-page.ts carries, under the same
      name, which is the arrangement above rather than a copy that drifted: the third occurrence is
      what moves it to the token sheet. */
-  .check { display: flex; gap: var(--space-2); align-items: center; min-height: var(--size-touch); }
-  .check input { width: auto; min-height: 0; }
 </style>`;
 
 function page(title: string, body: Html, nav: Html): string {

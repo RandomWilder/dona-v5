@@ -722,7 +722,7 @@ describe('evidence · A3 addendum upload redirects to confirm', () => {
       assert.ok(unitId);
       const profile = await upsertTermsProfile(
         pool,
-        `a3-http-${unitId.slice(0, 8)}`,
+        `a3-http-${unitId.slice(24)}`,
       );
       const tenancy = await upsertTenancy(pool, {
         unitId,
@@ -789,6 +789,14 @@ describe('evidence · A3 addendum upload redirects to confirm', () => {
           `DELETE FROM audit_log WHERE action LIKE 'evidence.%' AND subject_id = $1`,
           [unitId],
         );
+        // **Slice 6.5, found by clicking.** This case writes a `terms_profile` through the pool and
+        // never removed it, so every run since 4.7 left one behind: **121** of them by the time
+        // A2's confirm screen put the annex list in front of a person. It is 6.3's leak in a second
+        // table — one run leaks one row, and nothing says so until a select box is a hundred deep.
+        // The tenancy that pointed at it went one statement ago, so this is safe and exact.
+        await pool.query('DELETE FROM terms_profile WHERE name = $1', [
+          `a3-http-${unitId.slice(24)}`,
+        ]);
       }
       await pool.query(
         `DELETE FROM unit WHERE unit_id IN (

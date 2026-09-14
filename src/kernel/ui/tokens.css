@@ -294,6 +294,25 @@ textarea {
   font-size: var(--text-body);
 }
 
+/*
+ * A checkbox or a radio beside its own label. Written in src/settings-page.ts at 5.8 and in
+ * estate's views at 6.1, and the standing rule from 6.2 is that a third occurrence moves the class
+ * here rather than into a fourth file. Slice 6.5's confirm screen is that third occurrence: the
+ * radio group that asks which letting a lease belongs to. `min-height` is the touch target the rest
+ * of this layer holds to; the input drops it again because a 44px checkbox is not a checkbox.
+ */
+.check {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: var(--size-touch);
+}
+
+.check input {
+  width: auto;
+  min-height: 0;
+}
+
 @media (max-width: 839px) {
   input:not([type="file"]):not([type="checkbox"]):not([type="radio"]),
   select,

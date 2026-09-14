@@ -62,7 +62,9 @@ rule lapsing because a document screen arrived.
 
 ## Carried in from week 5 — every item, with the slice that closes it
 
-- [ ] **`national_id` never in an agent tool's response shape.** Was → week 9. **Now 6.4 and 6.6**,
+- [ ] **`national_id` never in an agent tool's response shape.** **6.6 now also owns the read
+      overlay's word boxes**, where 6.5 found an OPERATOR can read a ת.ז. off the document's own
+      rendered line. Was → week 9. **Now 6.4 and 6.6**,
       because this is the week ת.ז. starts existing. `party.national_id.read` gets its first reader
       in 6.4, three weeks earlier than the roadmap assigned it. **6.4's half is done** — the
       permission has a reader, the read path withholds by default and every disclosure writes
@@ -256,7 +258,7 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       • **6.7** — **`npm run seed:doctypes` must run against staging** before the demo, or the lease
       type there declares no identifier and the walk shows nothing.
 
-- [ ] **6.5 — Which tenancy is this? Propose, confirm, write.**
+- [x] **6.5 — Which tenancy is this? Propose, confirm, write.** Closed 14 Sep — [evidence/6.5.md](evidence/6.5.md).
       `proposeLeaseTenancy` grows a resolution over `listUnitTenancies` — candidates ranked by
       identifier overlap first, then date overlap. It proposes *attach to this letting* or *create a
       new draft*, and **a human confirms**; invariant 5 is unchanged. `confirmLeaseTenancy` gains the
@@ -273,18 +275,57 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       **Verify:** all three cases on `:3000` with invented leases; party count asserted before and
       after.
       **Plan mode. Deps:** 6.4 · **L**
+      **Raised and closed inside 6.5:**
+      • **The lease confirm button answered 403 in a browser, and had since 5.2.** Two text-only
+      forms posted `multipart/form-data` — the lease confirm (4.6) and the promote button (4.3) —
+      and 5.2's CSRF `preHandler` reads `request.body`, which a multipart body leaves undefined. The
+      suite never saw it because it calls those handlers rather than posting to them. Fixed by
+      dropping the `enctype`, not by a third `csrf: 'in-body'` exemption: those bodies were never
+      streams. **The guard is the class and lives on the registry** — a form declares that enctype
+      only when it contains a file input.
+      • **121 orphan `terms_profile` rows** in the developer database, one per run of one
+      `routes.test.ts` case since 4.7, found because the annex select box was 125 options deep. 6.3's
+      leak in a second table; the case cleans up after itself now.
+      • **A UUIDv7's first eight characters are a timestamp, not randomness** — `id.slice(0, 8)` as a
+      uniqueness token collided on `building_address_unique`. Twelve test files use the random tail.
+      A hard-coded ת.ז. in a fixture fails on somebody else's row for the same reason; derived now.
+      • **Date overlap is computed in TypeScript, never SQL** — the predicate that expresses it is
+      guard two's, and writing it out *in a comment* turned the guard red on the first run.
+      **Raised → 6.6:**
+      • **An OPERATOR can read a ת.ז. off the read overlay's word boxes.** The captured-row gate
+      works exactly as 6.4 claims — admin **1** hit, operator **0** — but the page-image overlay
+      renders the document's own line in a `title` attribute and there both stances score **1**.
+      6.4's "withheld from every read path" does not cover the document's own text. **6.6 rules:
+      withhold the overlay below `party.national_id.read`, or lift the rule deliberately and say so.**
+      • **The exception list is one entry, not two.** `LeaseProposal` has no field for an identifier,
+      so the lease confirm screen cannot leak one and `documents · read overlay, may read
+      identifiers` stays the only deliberate exception — correcting what 6.4's carry predicted.
+      **Raised → the director:** the walk's local residue is still in the developer database.
+      `extracted_field`'s promotion guard refuses both the delete and the unstamp (4.3, working), and
+      disabling a trigger to get past it is not an agent's call.
 
 - [ ] **6.6 — The guards, and the number that says ת.ז. did not leak.**
       **Policy case, red first:** no identifier-shaped run in the response shape of anything
       `src/scope/` serves, and none in the copy sent to the embedder. `tests/policy/` is the gate and
       not an eval — SPEC.md's "never test a deterministic constraint through the agent".
       `tests/ui/tokens.test.ts` gains an identifier-shaped-run assertion across `SCREENS`, beside the
-      phone and `+972` assertions it already carries, with the lease confirm screen named as the one
-      deliberate exception and the exception argued in the test's own comment. **Assert it over the
+      phone and `+972` assertions it already carries, with **`documents · read overlay, may read
+      identifiers` as the one deliberate exception** — corrected at 6.5, which expected to add the
+      lease confirm screen beside it and did not need to: the identifier is not in
+      `LeaseProposal`, so that screen carries a boolean and a count and no value. **Assert it over the
       registry and never over a live response** — week 5 closed on exactly that mistake, where a
       duplicated `/05\d/` read the CSRF token's own hex and failed 4 runs in 20.
       **The never-a-name rule is reconsidered a sixth time and written down either way.**
-      **Done when:** both guards fail against a deliberate violation and pass after.
+      **Carried in from 6.5, and it is this slice's largest item:** **an OPERATOR can read a ת.ז. off
+      the read overlay's word boxes.** The captured-row gate does what 6.4 claims — admin 1 hit,
+      operator 0 — but the page-image overlay puts the document's own printed line in a `title`
+      attribute, and there both stances score 1. Rule either way: withhold the overlay below
+      `party.national_id.read`, or lift it deliberately and record why. **A registry assertion will
+      not catch this one** — the overlay's words come from the document, not from a fixture — so it
+      needs its own case over a rendered page with known words, which is the exception week 5's
+      lesson allows when the value under test is one the test itself put there.
+      **Done when:** both guards fail against a deliberate violation and pass after, and the overlay
+      question is answered in writing.
       **Deps:** 6.5 · **M**
 
 - [ ] **6.7 — The journey, end to end, on staging.**

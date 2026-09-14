@@ -161,3 +161,35 @@ export async function upsertPartyContact(
   }
   return { id: row.contact_id, inserted: row.inserted };
 }
+
+/**
+ * **How many distinct people a list of identifiers names. Slice 6.5.**
+ *
+ * A lease naming two people and printing one ת.ז. twice is an extraction error, and writing it
+ * would put one party under two roles on one letting — `tenancy_party`'s key is
+ * `(tenancy_id, party_id)`, so the second row would quietly overwrite the first and the household
+ * would come out one member short of the paper. A2 refuses instead.
+ *
+ * The comparison cannot be done on the strings: `312345678` and `312-345-678` are two strings and
+ * one person, which is the entire reason `national_id_key` exists. So the fold does it, in the
+ * database, in one statement — `party_national_id_key` is `0027`'s and is the same expression the
+ * column is generated with.
+ *
+ * **What comes back is a number.** No key and no value leaves this function, which is the standing
+ * every read of an identifier has (SPEC.md, Security defaults). It reads no table, so it is not the
+ * read model this module still does not have: it asks what a value *would* key on, not who exists.
+ */
+export async function countDistinctIdentifiers(
+  db: Queryable,
+  values: readonly string[],
+): Promise<number> {
+  if (values.length === 0) {
+    return 0;
+  }
+  const result = await db.query<{ n: string }>(
+    `SELECT count(DISTINCT party_national_id_key('PERSON', value))::text AS n
+       FROM unnest($1::text[]) AS value`,
+    [[...values]],
+  );
+  return Number(result.rows[0]?.n ?? '0');
+}

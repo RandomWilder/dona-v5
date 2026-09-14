@@ -36,7 +36,7 @@ async function insertBuilding(db: PoolClient): Promise<string> {
     `INSERT INTO building (building_id, name, address_line, city,
                            handover_date, warranty_end_date, status)
      VALUES ($1, 'x', $2, 'Shoham', '2024-03-01', '2026-03-01', 'ACTIVE')`,
-    [buildingId, `Asset ${buildingId.slice(0, 8)}`],
+    [buildingId, `Asset ${buildingId.slice(24)}`],
   );
   return buildingId;
 }

@@ -26,7 +26,7 @@ describe('settings · catalogues', () => {
       t.skip(skipReason);
       return;
     }
-    const suffix = newId().slice(0, 8);
+    const suffix = newId().slice(24);
     const obCode = `TEST_OB_${suffix}`;
     const typeKey = `test_dt_${suffix}`;
     const app = buildApp({ pool, version: '9.9.9-test' });

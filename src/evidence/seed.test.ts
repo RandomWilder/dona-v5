@@ -44,7 +44,7 @@ async function insertUnit(db: PoolClient): Promise<{
     `INSERT INTO building (building_id, name, address_line, city,
                            handover_date, warranty_end_date, status)
      VALUES ($1, 'seed-building', $2, 'Shoham', '2020-01-01', '2022-01-01', 'ACTIVE')`,
-    [buildingId, `Seed ${buildingId.slice(0, 8)}`],
+    [buildingId, `Seed ${buildingId.slice(24)}`],
   );
   await db.query(
     `INSERT INTO space (space_id, building_id, space_kind, name)

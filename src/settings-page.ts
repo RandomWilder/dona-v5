@@ -42,8 +42,6 @@ const styles = h`<style>
     padding: var(--space-4) var(--space-5);
   }
   .settings-form h2, .type-card h2 { margin: 0; }
-  .check { display: flex; gap: var(--space-2); align-items: center; min-height: var(--size-touch); }
-  .check input { width: auto; min-height: 0; }
 </style>`;
 
 const PARTY_HE: Record<ResponsibleParty, string> = {

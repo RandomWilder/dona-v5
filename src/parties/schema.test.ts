@@ -527,6 +527,89 @@ describe('parties · a party is identified by its national_id, normalised', () =
   });
 });
 
+/**
+ * **Slice 6.5. The fold is callable now, and this is what keeps the two spellings of it honest.**
+ *
+ * `0027_party_national_id_key.sql` names the expression `0009` generates the column with, because
+ * A2's resolution has to normalise an identifier read off a document before a party row exists for
+ * the database to have generated anything from. Two definitions that agree are only safe while
+ * something checks that they agree, so this is the check — over every row actually in `party`, which
+ * is the half a literal cannot cover, and over the literals that are awkward on purpose, which is
+ * the half a table of 2,871 generated people does not happen to contain.
+ */
+describe('parties · the named fold and the generated column are one fold', () => {
+  it('agrees on every stored row and on every awkward literal', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      // Every row in the table, not a sample: a disagreement on one person is two people.
+      await t.test('every row in party', async () => {
+        await inRolledBackTransaction(pool, async (db) => {
+          const disagree = await db.query<{ n: string }>(
+            `SELECT count(*)::text AS n FROM party
+            WHERE party_national_id_key(party_kind::text, national_id)
+                  IS DISTINCT FROM national_id_key`,
+          );
+          assert.equal(disagree.rows[0]?.n, '0');
+          // And the guard on the guard: a query that scanned nothing proves nothing.
+          const rows = await db.query<{ n: string }>(
+            `SELECT count(*)::text AS n FROM party`,
+          );
+          assert.notEqual(rows.rows[0]?.n, '0');
+        });
+      });
+
+      await t.test(
+        'the literals a register and a document produce',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            for (const spelling of SAME_PERSON_SPELLINGS) {
+              const folded = await db.query<{ folded_key: string | null }>(
+                `SELECT party_national_id_key('PERSON', $1) AS folded_key`,
+                [spelling],
+              );
+              assert.equal(
+                folded.rows[0]?.folded_key,
+                'PERSON:042938271',
+                spelling,
+              );
+            }
+            const cases: Array<[string, string | null, string | null]> = [
+              // A ת.ז. and a ח.פ. are different registries on the same nine digits.
+              ['COMPANY', '042938271', 'COMPANY:042938271'],
+              // A dot, which a lease prints and the register does not.
+              ['PERSON', '042.938.271', 'PERSON:042938271'],
+              // A passport is normalised for case and separators and never padded — padding it would
+              // be inventing a fact about a registry we do not read.
+              ['PERSON', 'X-1234 56', 'PERSON:x123456'],
+              // Ten digits is not a ת.ז. and is left alone rather than truncated.
+              ['PERSON', '0429382710', 'PERSON:0429382710'],
+              // No identifier is no key, which is what lets a party have none at all.
+              ['PERSON', null, null],
+            ];
+            for (const [kind, value, expected] of cases) {
+              const folded = await db.query<{ folded_key: string | null }>(
+                `SELECT party_national_id_key($1, $2) AS folded_key`,
+                [kind, value],
+              );
+              assert.equal(
+                folded.rows[0]?.folded_key,
+                expected,
+                `${kind} ${value}`,
+              );
+            }
+          });
+        },
+      );
+    } finally {
+      await pool.end();
+    }
+  });
+});
+
 describe('parties · a contact row is identified by party, channel, value and start', () => {
   it('is what lets the importer upsert a contact at all', async (t) => {
     const pool = await migratedPoolOrNull();
