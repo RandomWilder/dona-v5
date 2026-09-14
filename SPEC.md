@@ -182,6 +182,32 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   two would ruin the only question either count is ever asked: **who has seen this household's ת.ז.**
   The human act at the end of that screen is what writes the value onto `party.national_id`, through
   `upsertParty` and its natural key, which is how one person in two flats becomes one party.
+- **From slice 6.6 the line is drawn between what this system captured and what the paper printed,
+  and it is drawn because 6.5 found an OPERATOR reading a ת.ז. off the read overlay.** The rule is
+  **captured is governed; printed is the document.** `party.national_id.read` governs this system's
+  own copy of an identifier — the `extracted_field` row, `party.national_id`, and **the transcript we
+  make of the paper** — and it does not govern the paper. Two consequences, both testable:
+  **the word-box transcript on `/documents/:id/read` is withheld below the permission, on every
+  document type.** The `title` attribute holding an OCR word is not the paper; it is our
+  transcription of it, as text, in our own response — sweepable, loggable, copy-pasteable and
+  reachable by anything that later consumes a rendered page. It is withheld wholesale rather than
+  masked word by word, because a run split across OCR tokens (`312`, `345`, `678`) matches no pattern
+  applied to one token, and because gating on the type's catalogue declaration would be the wrong
+  proxy: a declaration governs what is *captured*, not what a page happens to print. An operator
+  keeps the page image, the word-box geometry, every non-identifier captured row with its value and
+  confidence, and the promote buttons; what they lose is a hover tooltip.
+  **The page image is not withheld, and that is deliberate.** The same role already holds a
+  fifteen-minute signed read of the document's bytes (5.4), so withholding a picture of the page
+  would claim a control this system does not have — and a control that is believed and absent is
+  worse than one that was never claimed. Whoever may open a document may read what is printed on it.
+  **Two guards hold all of it**, and neither runs through the agent: `tests/policy/identifier.test.ts`
+  asserts that nothing `src/scope/` serves carries an identifier-shaped run, with a party that has a
+  `national_id` and a document that has an `extracted_field` identifier row seeded so the case has
+  something to fail on; and `tests/ui/tokens.test.ts` asserts the same over every screen in its
+  registry, with `documents · read overlay, may read identifiers` as the **one** deliberate
+  exception. The pattern both read is `IDENTIFIER_RUN` in `src/kernel/identifier.ts`, one spelling,
+  boundary-anchored so a UUID, a file hash, a base64 data URI and an ISO date cannot fire it —
+  week 5 closed on the opposite mistake, a `/05\d/` that read a CSRF token's own hex.
 - **The staff credential is Google's; the session is ours** (slice 5.1, amended at 5.1b —
   `SPEC-staff.md`, ADR-0005). No password hash and no second-factor secret exist in this schema.
   **What this system asserts is an allowlist and not a factor**: only an email that already has a
@@ -369,6 +395,21 @@ screens are ours and designed for coverage — the Shoham plan from 1.11 and, fr
 register at 1,500 units** loaded through the real importer (`npm run seed:register`), which is where
 the week-2 query timings come from. Real data arrives through the same importer at the pilot-
 preparation step of the method.
+
+**Slice 6.6 reconsidered the rule a sixth time and kept it, and this time wrote down the boundary it
+turns on** — because week 6 was the week that tested it: 6.4 put a ת.ז. on the capture path and 6.5
+put a household's names on a confirm screen. **A confirm screen showing what the document in the
+operator's hand says is not the same act as putting a household on a list.** A screen that is *about
+one document* — reached from that document, not reachable by browsing, not queryable, not a list —
+may transcribe what the document says, the names on it included, because the operator is holding the
+paper and the screen is how they check the machine read it correctly. A screen reached by browsing
+the estate may not: no chip, no search result, no list, no export, no count that resolves to one
+person. **A transcription is not a disclosure; a register is.** What was not allowed, and did not
+happen, is the rule lapsing quietly because a document screen arrived — the five earlier slices
+entitled to lift it (5.2, 5.4, 5.5, 5.6, 5.8) each wrote down that they had not, and this one names
+the line instead of adding a sixth silence. `tests/ui/tokens.test.ts` holds it: the person names in
+its fixtures may appear only on the document-shaped screens its registry names, and a name rendered
+anywhere else fails the build.
 
 **Slice 6.1 gave estate its own first write route and this system its seventh permission.** `GET
 /estate/buildings/new` and `POST /estate/buildings` are flow **A11** ([SPEC-flows.md](SPEC-flows.md))

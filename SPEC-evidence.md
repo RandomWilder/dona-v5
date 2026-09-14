@@ -101,6 +101,24 @@ sheet existed.
     5.2. Only `party.national_id.read` sets it true, and only ADMIN holds that.
   - **Disclosure writes `evidence.read_identifier`** — actor, role, document and the field keys, never
     the value (SPEC.md: PII never in logs). Withholding is not a read and writes nothing.
+  - **The word-box transcript is withheld too. Slice 6.6**, which is where the rule acquired its
+    third subject and its sharpest sentence: **captured is governed; printed is the document.** The
+    overlay draws one `<span class="word-box">` per measured word and carried the word's own text in
+    a `title` attribute for every viewer, so a ת.ז. printed on the lease was readable by an OPERATOR
+    on the same page whose captured row was correctly withheld — found by clicking at 6.5, where the
+    captured-row gate scored admin **1** / operator **0** and the overlay scored **1** for both. The
+    `title` is our transcription of the paper, in text, in our own response, and it is rendered only
+    when `mayReadIdentifiers` is true. Withheld **wholesale rather than word by word**: a run split
+    across OCR tokens (`312`, `345`, `678`) matches no pattern applied to one token, and the type's
+    catalogue declaration is the wrong gate because a declaration governs what is *captured*, not
+    what a page happens to print. The geometry stays at both stances — the boxes still show where
+    words were found, which is what `מילים על הדף` is for.
+  - **The page image is not withheld, and that is the boundary.** The same viewer already holds a
+    fifteen-minute signed read of the document's bytes (5.4), so withholding a picture of the page
+    would claim a control this system does not have. Whoever may open a document may read what is
+    printed on it. What the permission governs is this system's own copy — the row, the transcript,
+    `party.national_id` — and saying so plainly is worth more than a control that is believed and
+    absent.
   **No `field_promotion` target for either field**, deliberately: the identifier becomes
   `party.national_id` when a human confirms a household (A2), which is an act and not a promotion.
   `listExtractedFields` keeps returning every row, because it is this module's internal truth — what
@@ -565,7 +583,9 @@ and 4.1 does not invent one.
 scan, a photograph, or a PDF whose pages came back empty is Document AI (confidence set, boxes from
 the OCR engine). Images skip pdfjs. More than 15 pages is not sent online; the row stays
 `unverified`. The overlay (`GET /documents/:id/read`) draws those boxes on the page image the
-processor already returned — logical CSS, specimens. **Which page** is a query
+processor already returned — logical CSS, specimens. **From 6.6 a word box carries its word only
+for a viewer holding `party.national_id.read`**; below it the boxes are geometry and nothing
+else. **Which page** is a query
 (`?page=`, 1-based, matching the stored field). Clicking a promoted value is 4.4's.
 
 `sweepUnverified` walks already-filed `unverified` rows the same way. It is how week 3's backlog is
