@@ -19,6 +19,7 @@ export type {
 } from './internal/catalogue.ts';
 export {
   documentTypeByKey,
+  documentTypeFieldCounts,
   documentTypeFields,
   listDocumentTypes,
   upsertDocumentType,
@@ -150,6 +151,7 @@ export type { Queryable } from './internal/types.ts';
 export type { Verification, VerificationVerdict } from './internal/verify.ts';
 export { documentText, verifyDeclaredType } from './internal/verify.ts';
 export type {
+  DocumentsScreen,
   FiledScreen,
   IntakeScreen,
   ReadScreen,
@@ -160,6 +162,7 @@ export type {
   UploadScreen,
 } from './internal/views.ts';
 export {
+  renderDocumentsPage,
   renderFiledPage,
   renderIntakePage,
   renderReadPage,

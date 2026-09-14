@@ -230,6 +230,54 @@ textarea {
   line-height: 1.2;
 }
 
+/* A table of declared rows — slice 7.1's document schema, and 7.3's approval ledger after it. It
+   is here rather than in the module that drew it first for .facts's reason and one more: the key
+   column is the mono face, and a face named inside a screen is what tokens.test.ts exists to
+   refuse. .table-wrap is the scroll container; a table wider than the viewport scrolls inside it
+   rather than widening the page, which is the other half of the .form-grid fix carried from the
+   7.1 paint review. */
+.grid-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-base);
+}
+
+.grid-table th,
+.grid-table td {
+  text-align: start;
+  padding: var(--space-3);
+  border-block-end: var(--size-hairline) solid var(--color-divider-soft);
+  vertical-align: baseline;
+}
+
+.grid-table th {
+  color: var(--color-text-muted);
+  font-weight: 500;
+  font-size: var(--text-sm);
+}
+
+.grid-table tbody tr:last-child td {
+  border-block-end: 0;
+}
+
+.grid-table .key {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.grid-table .value {
+  font-weight: 500;
+}
+
+.grid-table .muted {
+  color: var(--color-text-muted);
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
 /* A list of label-and-value pairs. Estate's cards from 1.11 and, from 3.3, the sentence a filed
    document leaves behind — a shared shape, so it lives here beside .chip rather than in whichever
    module happened to draw it first. A module that needs a narrower measure overrides the columns

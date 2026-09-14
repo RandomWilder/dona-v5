@@ -34,8 +34,12 @@ import {
   renderSearchPage,
   renderUnitPage,
 } from '../../src/estate/contract.ts';
-import type { DocumentTypeRow } from '../../src/evidence/contract.ts';
+import type {
+  DocumentTypeFieldRow,
+  DocumentTypeRow,
+} from '../../src/evidence/contract.ts';
 import {
+  renderDocumentsPage,
   renderFiledPage,
   renderIntakePage,
   renderReadPage,
@@ -184,6 +188,33 @@ const expiring: ExpiringLease[] = [
 // that is not rendered here is a screen nothing checks. Both of its answers are registered —
 // a refusal is a different page from the empty form, and the refusal is the one that renders text
 // the catalogue supplied.
+// **Slice 7.1.** One declaration per shape the landing has to print: a required field with a hint,
+// an optional one, and a field whose declaration opens on a different day from the others — which
+// is what makes the single version chip turn into a per-row column. R18's `effective_from` is the
+// version, so a table mixing two of them is an ordinary table and not an error state.
+const documentTypeFields: DocumentTypeFieldRow[] = [
+  {
+    documentTypeFieldId: 'aaaaaaaa-0000-4000-8000-000000000001',
+    fieldKey: 'address',
+    labelHe: 'כתובת המושכר',
+    valueType: 'TEXT',
+    isRequired: true,
+    extractionHint: 'כתובת הנכס המושכר, לא כתובת של אחד הצדדים',
+    effectiveFrom: '2026-09-07',
+    effectiveTo: null,
+  },
+  {
+    documentTypeFieldId: 'aaaaaaaa-0000-4000-8000-000000000002',
+    fieldKey: 'guarantor_name',
+    labelHe: 'שם הערב',
+    valueType: 'TEXT',
+    isRequired: false,
+    extractionHint: null,
+    effectiveFrom: '2026-09-07',
+    effectiveTo: null,
+  },
+];
+
 const documentTypes: DocumentTypeRow[] = [
   {
     documentTypeId: '88888888-8888-4888-8888-888888888888',
@@ -580,6 +611,33 @@ const SCREENS: Array<[string, () => string]> = [
     () => renderIncompletePage([], CSRF, NAV_INCOMPLETE),
   ],
   [
+    // **Slice 7.1, the tab's landing.** The fifth document-shaped screen, registered here under
+    // 6.6's rule: rendered, and asserted on the bytes that reach the wire.
+    'documents · the declaration',
+    () =>
+      renderDocumentsPage({
+        nav: NAV,
+        types: documentTypes,
+        chosen: documentTypes[0] as DocumentTypeRow,
+        fields: documentTypeFields,
+        on: '2026-09-14',
+      }),
+  ],
+  [
+    // A type the catalogue carries and nobody has declared a field for. It files and it is
+    // searchable and nothing is read off it — the open half working, and a state the screen has to
+    // say out loud rather than render as an empty table.
+    'documents · the declaration, a type with no fields',
+    () =>
+      renderDocumentsPage({
+        nav: NAV,
+        types: documentTypes,
+        chosen: documentTypes[1] as DocumentTypeRow,
+        fields: [],
+        on: '2026-09-14',
+      }),
+  ],
+  [
     'documents · upload',
     () =>
       renderUploadPage({
@@ -619,6 +677,10 @@ const SCREENS: Array<[string, () => string]> = [
             // A requirement with two declared spellings and one with a single spelling, because
             // both shapes are on the catalogue from 6.8 and the screen has to print each of them.
             missingTerms: ['המושכר|הדירה', 'תקופת השכירות'],
+            // **Slice 7.1.** The mixed refusal: the title requirement was found and the two body
+            // requirements were not, which is the case the director's comment was about — a screen
+            // that printed only the failures said two where three had been checked.
+            matchedTerms: ['חוזה שכירות|הסכם שכירות'],
           },
         },
       }),
@@ -637,7 +699,11 @@ const SCREENS: Array<[string, () => string]> = [
         declaredTypeKey: 'lease',
         refused: {
           type: documentTypes[0] as DocumentTypeRow,
-          verification: { verdict: 'verified', missingTerms: [] },
+          verification: {
+            verdict: 'verified',
+            missingTerms: [],
+            matchedTerms: [],
+          },
           reason: 'anchored',
           anchoredTo: {
             href: '/estate/units/01a09f1e-0000-7000-8000-00000000000b',
@@ -682,7 +748,11 @@ const SCREENS: Array<[string, () => string]> = [
         declaredTypeKey: 'lease',
         refused: {
           type: documentTypes[0] as DocumentTypeRow,
-          verification: { verdict: 'unverified', missingTerms: [] },
+          verification: {
+            verdict: 'unverified',
+            missingTerms: [],
+            matchedTerms: [],
+          },
           reason: 'too_large',
         },
       }),
@@ -833,7 +903,11 @@ const SCREENS: Array<[string, () => string]> = [
         type: documentTypes[0] as DocumentTypeRow,
         inserted: true,
         boundToTenancy: true,
-        verification: { verdict: 'verified', missingTerms: [] },
+        verification: {
+          verdict: 'verified',
+          missingTerms: [],
+          matchedTerms: [],
+        },
         fileHash: 'c'.repeat(64),
         documentId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       }),
@@ -849,7 +923,11 @@ const SCREENS: Array<[string, () => string]> = [
         type: documentTypes[0] as DocumentTypeRow,
         inserted: true,
         boundToTenancy: false,
-        verification: { verdict: 'verified', missingTerms: [] },
+        verification: {
+          verdict: 'verified',
+          missingTerms: [],
+          matchedTerms: [],
+        },
         fileHash: 'e'.repeat(64),
         documentId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
         reading: {
@@ -869,7 +947,11 @@ const SCREENS: Array<[string, () => string]> = [
         type: documentTypes[1] as DocumentTypeRow,
         inserted: false,
         boundToTenancy: false,
-        verification: { verdict: 'unverified', missingTerms: [] },
+        verification: {
+          verdict: 'unverified',
+          missingTerms: [],
+          matchedTerms: [],
+        },
         fileHash: 'd'.repeat(64),
         documentId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
       }),
@@ -1499,8 +1581,11 @@ describe('shared UI tokens', () => {
         assert.doesNotMatch(html, /data-dest="documents"/, name);
       } else {
         assert.match(html, /data-dest="documents"/, name);
-        assert.match(html, /href="\/documents\/new"/, name);
-        assert.match(html, />תיוק מסמך</, name);
+        // **Slice 7.1 repointed it.** The rail item was the filing form; it is the tab now, and
+        // the form is a control on the tab's landing. Asserted on the exact href because the old
+        // one is still a route and a rail that drifted back to it would otherwise pass.
+        assert.match(html, /href="\/documents"/, name);
+        assert.match(html, />מסמכים</, name);
       }
       assert.match(html, /action="\/staff\/logout"/, name);
       assert.match(html, />יציאה</, name);

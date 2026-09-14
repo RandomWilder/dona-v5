@@ -146,6 +146,8 @@ describe('every route in the application', () => {
       'GET /estate/search',
       'GET /estate/expiring',
       'GET /documents/new',
+      // Slice 7.1. The tab's landing, gated as the rail item that reaches it.
+      'GET /documents',
       'GET /calls',
       'GET /settings',
       'POST /documents',

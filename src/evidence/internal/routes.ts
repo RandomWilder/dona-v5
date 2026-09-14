@@ -61,7 +61,12 @@ function pageIndex(asked: unknown, pageCount: number): number {
 
 import type { WorkRunner } from '../../kernel/work.ts';
 import { listUnitTenancies, type TenancyRole } from '../../tenancy/contract.ts';
-import { documentTypeByKey, listDocumentTypes } from './catalogue.ts';
+import {
+  documentTypeByKey,
+  documentTypeFieldCounts,
+  documentTypeFields,
+  listDocumentTypes,
+} from './catalogue.ts';
 import { anchorOf } from './documents.ts';
 import {
   type ExtractedRow,
@@ -91,6 +96,7 @@ import {
 } from './storage-path.ts';
 import type { AnchoredPlace, SeedScreen } from './views.ts';
 import {
+  renderDocumentsPage,
   renderFiledPage,
   renderIntakePage,
   renderReadPage,
@@ -330,6 +336,56 @@ export function registerDocumentRoutes(
   deps: DocumentDeps,
 ): void {
   app.register(multipart, { limits: LIMITS });
+
+  // **The tab's landing. Slice 7.1.**
+  //
+  // What the reader will look for on the page, before anybody chooses a file — the catalogue and,
+  // for the chosen type, the declarations governing today. Both are read at run time, which is A8
+  // and the only reason this screen can be honest about a schema that is data.
+  //
+  // **The day is a parameter and never `CURRENT_DATE`**, for the reason every date in this system
+  // is one (`SPEC.md`): a query the tests cannot pin fails on a Tuesday. It comes off `deps.clock`
+  // like every other date this module writes.
+  //
+  // **`NEW`, the same `documents.write` the rail item carries.** An ungated landing behind a gated
+  // tab is the door that answers `not_allowed` after somebody walked through it — 6.1's
+  // refusal-after-typing, which A11 declined to build for its own form.
+  app.get('/documents', NEW, async (request, reply) => {
+    const asked = (request.query as { type?: string }).type ?? '';
+    const types = await listDocumentTypes(deps.pool);
+    // An unknown key falls back rather than 404ing: the parameter is a picker's state and not an
+    // address, and a retired type reaching this screen from a stale bookmark is a page that should
+    // still show something true.
+    const on = deps.clock.now().toISOString().slice(0, 10);
+    // **The default is the most-declared type, and clicking the screen is what wrote this rule.**
+    // The catalogue comes back ordered by `type_key`, so the first row is `arnona` — which declares
+    // no fields, and made the tab's own landing the emptiest page in the console. "The first one
+    // that declares anything" is no better: that is `building_handover_protocol` with one field,
+    // which is alphabetical accident wearing a reason.
+    //
+    // So the rule is the type the system knows the most about, which today is the lease with eight.
+    // **No type key is compiled in here and none may be** — which type leads is a fact about the
+    // data and has to stay one (A8), so it is read out of the same declarations the screen prints.
+    // Ties and an empty catalogue both fall back to the catalogue's own order.
+    const counts = await documentTypeFieldCounts(deps.pool, on);
+    const chosen =
+      types.find((type) => type.typeKey === asked) ??
+      [...types].sort(
+        (a, b) => (counts.get(b.typeKey) ?? 0) - (counts.get(a.typeKey) ?? 0),
+      )[0] ??
+      null;
+    const fields = chosen
+      ? await documentTypeFields(deps.pool, chosen.typeKey, on)
+      : [];
+    html(reply);
+    return renderDocumentsPage({
+      nav: chromeOf(deps, request),
+      types,
+      chosen,
+      fields,
+      on,
+    });
+  });
 
   // The screen, and from 6.3 there are two of them behind one URL.
   //

@@ -180,7 +180,23 @@ export const seedDocumentTypes: SeedDocumentType[] = [
       typeKey: 'lease_amendment',
       labelHe: 'נספח לחוזה שכירות',
       labelEn: 'Lease amendment',
-      verificationTerms: ['נספח', 'לחוזה השכירות'],
+      // **Corrected at 7.1, and it took the first specimen to see it.** The declaration was
+      // `['נספח', 'לחוזה השכירות']` and it was wrong in both directions at once. `נספח` alone is
+      // every annex there is — a bank guarantee is headed נספח הערבות — and `לחוזה השכירות` matched
+      // the guarantee's `של חוזה השכירות`, because the guard strips whitespace before matching and
+      // the `ל` was borrowed from the end of the previous word. That trade is taken deliberately
+      // (`verify.ts`, `normalise`) and this is the first time it has cost anything: the price of a
+      // term that begins with a one-letter prefix is that the letter before it can supply it.
+      // Meanwhile the real נספח is titled `נספח לחוזה שכירות`, indefinite, as the published form is
+      // — so the declaration refused the document it exists for and accepted one it does not.
+      //
+      // What replaces it is the annex's own title as **one** requirement with its spellings (6.8's
+      // encoding): an annex names the document it amends, and that is the sentence no other paper in
+      // the corpus writes. `תקופת השכירות` stays beside it, because a title alone is a one-term rule.
+      verificationTerms: [
+        'נספח לחוזה שכירות|נספח להסכם שכירות|נספח לחוזה השכירות|נספח להסכם השכירות',
+        'תקופת השכירות',
+      ],
       isActive: true,
     },
     // Flow A3. The same path as A2 with no special case: an addendum contributes values to the

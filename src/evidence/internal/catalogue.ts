@@ -231,6 +231,32 @@ export async function documentTypeByKey(
 }
 
 /**
+ * How many fields each type declares **on a given day**. Slice 7.1.
+ *
+ * One query rather than one per type, because the documents tab needs every type's count to decide
+ * which declaration to open on and a landing page that walks the catalogue row by row is the N+1 a
+ * console notices first. The date is a parameter for the same reason it is one above.
+ *
+ * A type with no declaration is absent from the map rather than present as zero — the caller asks
+ * "which types declare something", and a zero row would answer a different question.
+ */
+export async function documentTypeFieldCounts(
+  db: Queryable,
+  on: string,
+): Promise<Map<string, number>> {
+  const result = await db.query<{ type_key: string; n: string }>(
+    `SELECT t.type_key, count(*)::text AS n
+       FROM document_type_field f
+       JOIN document_type t ON t.document_type_id = f.document_type_id
+      WHERE f.effective_from <= $1::date
+        AND (f.effective_to IS NULL OR f.effective_to >= $1::date)
+      GROUP BY t.type_key`,
+    [on],
+  );
+  return new Map(result.rows.map((row) => [row.type_key, Number(row.n)]));
+}
+
+/**
  * The field declarations governing a type **on a given day**.
  *
  * The date is a parameter and never `CURRENT_DATE`, for the reason every date in this system is:

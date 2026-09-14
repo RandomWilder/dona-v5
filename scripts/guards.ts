@@ -329,13 +329,18 @@ export const MOCKUP_OWNERS: Record<string, string> = {
   a9: '5.8',
   'building-new': '6.1',
   'unit-new': '6.2',
-  // **Repainted at 6.9, and again at 7.1.** A12's screen was painted for 6.3, that slice closed and
-  // the mockup went; 6.9 painted the same flow again for the refusal that offers to create, and
-  // closed. 7.1 is the third paint and the first that shows the *declaration* before the file and
-  // the *fields* after it. Left at 6.9 this guard would fail against an evidence file written
-  // yesterday and say nothing about the paint actually on disk. A flow is repainted whenever it
-  // gains a screen; the owner is always the slice that will wire it next.
-  'document-intake': '7.1',
+  // **Repainted at 6.9, again at 7.1, and owned by 7.3.** A12's screen was painted for 6.3, that
+  // slice closed and the mockup went; 6.9 painted the same flow again for the refusal that offers
+  // to create, and closed. The third paint shows the declaration before the file and the fields
+  // after it. A flow is repainted whenever it gains a screen; the owner is always the slice that
+  // will wire it next.
+  //
+  // **The owner moved 7.1 → 7.3 inside 7.1, one slice earlier than `tasks/todo.md` said.** 7.1
+  // wires the declaration, the top half of the paint, and its evidence file is written the day it
+  // closes — at which point this guard sees a mockup whose owner already has evidence and fails,
+  // correctly. The paint's remaining unwired screen is the approval table, and the owner is
+  // whoever deletes the file: 7.3. The todo bullet was corrected in the same change.
+  'document-intake': '7.3',
 };
 
 export function guardMockups(root: string): GuardResult {

@@ -33,9 +33,13 @@ import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const AT = new Date('2026-09-08T12:00:00.000Z');
 const NAV = signedInChrome('x'.repeat(64), 'documents', true);
-const BUCKET = 'dona-v5-test-docs';
+const BUCKET = 'dona-v5-test-amendment';
 const LEASE_MARKERS = 'חוזה שכירות המושכר תקופת השכירות השוכר';
-const AMEND_MARKERS = 'נספח לחוזה השכירות';
+// **Widened at 7.1, with the declaration it is a fixture for.** The נספח declaration was
+// corrected from `['נספח', 'לחוזה השכירות']` — which accepted a bank guarantee and refused a
+// real annex — to the annex's own title plus `תקופת השכירות`. A fixture calibrated to the old
+// declaration is the week-6 defect in miniature, so it says what a נספח says.
+const AMEND_MARKERS = 'נספח לחוזה השכירות תקופת השכירות';
 const ADDRESS = 'רקפת 12';
 
 /** Slice 6.5: the proposal writes an audit line now, so it takes the deps the confirm always did. */

@@ -12,6 +12,7 @@ follows and where that form is published, so what is ours and what is the state'
 | File | Form it follows | `clause_source` |
 |---|---|---|
 | [lease-standard.md](lease-standard.md) | חוזה שכירות אחיד — דירה להשכיר | `lease` |
+| [lease-amendment.md](lease-amendment.md) | נספח לחוזה השכירות האחיד — הארכת תקופה | `lease` |
 | [handover-protocol.md](handover-protocol.md) | פרוטוקול מסירה (דירה) | `lease` |
 | [building-handover-protocol.md](building-handover-protocol.md) | פרוטוקול מסירת בניין | `lease` |
 | [bank-guarantee.md](bank-guarantee.md) | ערבות בנקאית אוטונומית | `lease` |

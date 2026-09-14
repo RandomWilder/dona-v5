@@ -68,34 +68,57 @@ constraint on `(document_id, document_type_field_id)`.
 
 ---
 
-## Slice 7.1 — The tab, the declaration, and an honest refusal
+## Slice 7.1 — The tab, the declaration, and an honest refusal — **closed 14 Sep 2026**
 
 No migration, no write path. Read-only screens and one corpus file.
+Evidence: [evidence/7.1.md](evidence/7.1.md).
 
-- [ ] **`GET /documents`** — the tab's landing. Type picker (`listDocumentTypes`) and, for the chosen
+- [x] **`GET /documents`** — the tab's landing. Type picker (`listDocumentTypes`) and, for the chosen
       type, the declaration the reader will look for (`documentTypeFields`): key, value type,
       required, extraction hint, and a `גרסה <effective_from>` chip. Closed rows
       (`effective_to IS NOT NULL`) are not shown.
-- [ ] **The rail points at it.** `src/chrome.ts`: `/documents/new` → `/documents`, label
+- [x] **The rail points at it.** `src/chrome.ts`: `/documents/new` → `/documents`, label
       `תיוק מסמך` → `מסמכים`. `ChromeDest` already has `documents` (6.9) and does not change. The
       landing carries the same `documents.write` gate the rail item does — an ungated landing is the
       door that answers `not_allowed` after somebody walked through it, which is what A11 refused to
       build.
-- [ ] **The refusal names every requirement, not only the failures.** `Verification` gains
+- [x] **The refusal names every requirement, not only the failures.** `Verification` gains
       `matchedTerms` beside `missingTerms`; `refusal()` prints all of them with found / not-found.
       `missingTerms` keeps its meaning, so nothing downstream moves. **This is the director's
       comment, closed.**
-- [ ] **`docs/corpus/lease-amendment.md`** — the missing tier-1 specimen, authored to the published
+- [x] **`docs/corpus/lease-amendment.md`** — the missing tier-1 specimen, authored to the published
       form's structure. **Never a real tenant document.** Registered in `SPECIMEN_TYPES`, removed
       from `NO_SPECIMEN_YET`.
-- [ ] **The measurement**, `tests/policy/document-verification.test.ts`: evaluate a *candidate* lease
+- [x] **The measurement**, `tests/policy/document-verification.test.ts`: evaluate a *candidate* lease
       declaration of `['חוזה שכירות|הסכם שכירות']` alone against every specimen and assert which
       cross-verify. **Red first** — the expectation is that the נספח verifies as a lease, and that
       failure is the answer to the comment. If it stays green, the replacement is adopted here.
 
 **Done when:** the rail reaches `/documents`; the declaration renders out of the database; a refused
 upload names all three requirements and which of them was found; the cross-verify case has printed
-its result and the director has the number.
+its result and the director has the number. **All four met.**
+
+**What it answered, and what it raised.**
+
+- **The replacement is refused, on evidence.** The title-only candidate and the live declaration
+  verify the same two specimens and refuse the same six — indistinguishable on this corpus. 6.8's
+  body terms stay, and the reason is now a number rather than an opinion. *The director's comment is
+  closed.*
+- **`lease_amendment`'s declaration was wrong in both directions and is corrected in the seed** —
+  it verified `bank-guarantee.md` and refused a real נספח. Any wording worth keeping still goes
+  through `/settings` first (5.8); this one went to the seed because a re-seed is what reads it.
+- **A lease cannot refuse its own annex**, and no choice of terms changes that: the annex's
+  vocabulary is a superset of the lease's and the term language has no negation. One named pair in
+  `tests/policy/document-verification.test.ts`. **Open, and it belongs to the director:** whether
+  separating them is worth a third verb — 7.4 already has one (`verify`) waiting on the same kind of
+  question — or whether declared-type-plus-operator is simply where this stops.
+- **The guard-four owner moved `7.1` → `7.3` inside 7.1, not in 7.3.** Writing `evidence/7.1.md`
+  while the mockup's owner was `7.1` fails the guard, so the move could not wait for the slice that
+  deletes the paint. 7.3's bullet below is corrected to match.
+- **The test isolation defect the slice tripped over**, fixed here rather than carried: eight
+  evidence suites shared one bucket string and each teardown deleted by it. See the evidence file.
+- **Gate two did not run in full locally** — the corpus cases need `OPENAI_API_KEY`. CI is where the
+  new specimen is actually exercised, and a skip there is a failure.
 
 ## Slice 7.2 — The declaration becomes editable (ADMIN)
 
@@ -143,10 +166,13 @@ Plan mode. **Migration 0019.** This is the slice that deletes the paint.
       writes `evidence.read_identifier`. The value never ships to be hidden by CSS — 6.6.
 - [ ] **`tests/ui/tokens.test.ts`**: the fifth document-shaped screen under 6.6's ruling, with the
       justification written where the other four have theirs.
-- [ ] **Delete `mockups/document-intake.html`** and its `MOCKUP_OWNERS` entry — guard four. **Owner
-      moves `7.1` → `7.3` in `scripts/guards.ts`**, because the paint's last unwired screen is this
-      one and the owner is whoever deletes it.
-- [ ] **Fix `.form-grid` for real** — the carried item below lands here.
+- [ ] **Delete `mockups/document-intake.html`** and its `MOCKUP_OWNERS` entry — guard four. ~~Owner
+      moves `7.1` → `7.3` in `scripts/guards.ts`~~ — **done in 7.1**, which is where it had to
+      happen: the owner's evidence file and the mockup cannot both exist, so 7.1 could not close
+      with the owner still pointing at itself. The paint's last unwired screen is this one and the
+      owner is whoever deletes it.
+- ~~**Fix `.form-grid` for real**~~ — **closed in 7.1**, which turned out to be the slice that
+      first puts a table on a wired `.form-grid`. Measured at 478px in the evidence file.
 
 **Done when:** a filed lease shows its ten rows; approve-unflagged stamps the high-confidence ones;
 edit-and-approve writes `approved_value` and leaves `value` intact; a second approval of the same row
@@ -176,10 +202,17 @@ a mapping in `applyPromotedField` and a policy case.
 2. **The low-confidence threshold.** The paint used 80% and flagged two rows of ten. *Default: 80%.*
 3. **7.4's targets**, and whether `address` becomes a cross-check rather than a promotion.
    *Default: 7.4 opens with the two dates and adds nothing.*
+4. **Whether a lease should be able to refuse its own annex.** Raised and measured by 7.1: it cannot,
+   by construction, and the fix is either negation in `verification_terms` — a new grammar in the
+   settings editor — or the third verb 7.4 already circles. *Default: the named pair stands and
+   nothing is built.*
 
 ## Carried
 
-- [ ] **`.form-grid` floors its implicit column at its widest item's min-content.** Found by
+- [x] **`.form-grid` floors its implicit column at its widest item's min-content.** **Closed in
+      7.1**, not 7.3: `GET /documents` is the first wired `.form-grid` holding a table, so the slice
+      that inherits the bug turned out to be this one. `grid-template-columns: minmax(0, 1fr)` is on
+      the real screen now, and the table scrolls inside `.table-wrap` rather than widening the page. Found by
       clicking this paint at 478px: one `.notice` holding a table made the whole page, headings
       included, 567px wide and scrolled the body sideways. Fixed *inside the paint* with
       `grid-template-columns: minmax(0, 1fr)` scoped under `.paint`, deliberately not in

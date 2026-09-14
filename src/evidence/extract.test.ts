@@ -32,7 +32,7 @@ import {
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const AT = new Date('2026-09-07T09:00:00.000Z');
-const BUCKET = 'dona-v5-test-docs';
+const BUCKET = 'dona-v5-test-extract';
 const pdfBytes = (marker: string): Buffer =>
   Buffer.from(`%PDF-1.4\n% ${marker}\n`, 'latin1');
 
