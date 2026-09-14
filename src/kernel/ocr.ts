@@ -1,6 +1,6 @@
 import { GoogleAuth } from 'google-auth-library';
 import { KernelError } from './errors.ts';
-import type { PdfPage, PdfTextItem } from './pdf.ts';
+import { fakeItems, type PdfPage, type PdfTextItem } from './pdf.ts';
 
 // Bytes in, positioned items out. Infrastructure on the footing pdf.ts and
 // objects.ts stand on: the shape of a call and no business logic. It does not
@@ -172,19 +172,9 @@ export function createFakeOcrText(
           number: index + 1,
           width: 595,
           height: 842,
-          items: text
-            .split(/\s+/)
-            .filter((word) => word.length > 0)
-            .map((word, at) => ({
-              text: word,
-              x: 0,
-              y: at,
-              width: word.length,
-              height: 12,
-              rightToLeft: true,
-              endsLine: false,
-              confidence,
-            })),
+          // The pdfjs fake's own fixture shape, with a score on every word — one function, because
+          // a second copy is a second place a line break can be forgotten (slice 6.8).
+          items: fakeItems(text, confidence),
         })),
         images: pages.map((_, index) => ({
           pageNumber: index + 1,
@@ -220,10 +210,17 @@ export function readOcrDocument(
     const number = source.pageNumber ?? pages.length + 1;
     const width = source.dimension?.width ?? 1;
     const height = source.dimension?.height ?? 1;
-    const layouts = (source.tokens?.length ? source.tokens : source.lines)?.map(
+    // **Tokens, or the lines themselves when the reply carried no tokens.** In the second case every
+    // item *is* a line and ends one, which is what `tokensAreLines` says below.
+    const tokensAreLines = !source.tokens?.length;
+    const layouts = (tokensAreLines ? source.lines : source.tokens)?.map(
       (entry) => entry.layout,
     );
+    // Where the processor says each line runs from and to. Empty when the tokens are the lines, or
+    // when the reply carried none — and then nothing is claimed about where a line ends (slice 6.8).
+    const lines = tokensAreLines ? [] : rangesOf(source.lines);
     const items: PdfTextItem[] = [];
+    const lineOf: number[] = [];
     for (const layout of layouts ?? []) {
       if (!layout) {
         continue;
@@ -233,15 +230,17 @@ export function readOcrDocument(
         continue;
       }
       const box = boxOf(layout, width, height);
+      lineOf.push(lineIndexOf(lines, layout));
       items.push({
         text: word,
         ...box,
         rightToLeft: true,
-        endsLine: false,
+        endsLine: tokensAreLines,
         confidence:
           typeof layout.confidence === 'number' ? layout.confidence : null,
       });
     }
+    markLineEnds(items, lineOf, lines.length > 0);
     pages.push({ number, width, height, items });
     if (source.image?.content) {
       images.push({
@@ -252,6 +251,75 @@ export function readOcrDocument(
     }
   }
   return { pages, images };
+}
+
+/**
+ * Where each line the processor found runs from and to, in the document's own text. Slice 6.8.
+ *
+ * Document AI hands back `lines` beside `tokens` and this adapter used to drop them, so every item
+ * came back `endsLine: false` and the only consumer of a page's text joined it all with spaces. On a
+ * form a line break is where a field ends (SPEC-evidence.md, A12's anchors), and the week-6 demo is
+ * where its absence showed.
+ */
+function rangesOf(lines: ProcessorPage['lines']): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  for (const line of lines ?? []) {
+    const span = spanOf(line.layout);
+    if (span) {
+      ranges.push(span);
+    }
+  }
+  return ranges.sort((a, b) => a[0] - b[0]);
+}
+
+/**
+ * Which of those lines a token belongs to, **by text-anchor range and never by geometry**.
+ *
+ * The processor has already decided what a line is; a second opinion taken off the bounding boxes is
+ * what drifts away from the first. `-1` is a token the line list does not cover, and it ends no line
+ * rather than being guessed at.
+ */
+function lineIndexOf(lines: Array<[number, number]>, layout: Layout): number {
+  const span = spanOf(layout);
+  if (!span) {
+    return -1;
+  }
+  return lines.findIndex(([from, to]) => span[0] >= from && span[0] < to);
+}
+
+/**
+ * The last token of each line ends it — decided by where the *next* token sits rather than by
+ * reaching an offset, because whether a line's own segment includes its trailing newline is the
+ * processor's business and not something a caller should have to know.
+ */
+function markLineEnds(
+  items: PdfTextItem[],
+  lineOf: number[],
+  known: boolean,
+): void {
+  if (!known) {
+    return;
+  }
+  items.forEach((item, at) => {
+    const next = lineOf[at + 1];
+    item.endsLine = next === undefined || next !== lineOf[at];
+  });
+}
+
+function spanOf(layout: Layout | undefined): [number, number] | null {
+  const segments = layout?.textAnchor?.textSegments ?? [];
+  let first: number | null = null;
+  let last: number | null = null;
+  for (const segment of segments) {
+    const from = Number(segment.startIndex ?? 0);
+    const to = Number(segment.endIndex ?? Number.NaN);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) {
+      continue;
+    }
+    first = first === null || from < first ? from : first;
+    last = last === null || to > last ? to : last;
+  }
+  return first === null || last === null ? null : [first, last];
 }
 
 function textOf(documentText: string, layout: Layout): string {

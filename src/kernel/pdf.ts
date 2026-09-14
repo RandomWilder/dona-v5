@@ -65,6 +65,36 @@ export interface PdfTextOptions {
 export const defaultPdfTimeoutMs = 8_000;
 
 /**
+ * A page's items, folded into the lines the reader marked. Slice 6.8.
+ *
+ * `endsLine` has been on every item since week 3 and until 6.8 nothing read it: the only consumer of
+ * a page's text joined the whole page with spaces, and A12's address reader — specified against text
+ * where a line break ends a field — was handed a string that had never contained one. What saved it
+ * was punctuation, until the first scan that printed its address without a full stop and read the
+ * city as everything that followed.
+ *
+ * **The line comes from the reader and is never inferred from the boxes.** pdfjs knows it (`hasEOL`)
+ * and Document AI knows it (`lines` beside `tokens`), so a y-clustering fold here would be a third
+ * opinion that drifts away from both. A page whose reader marked no line at all is one line, which
+ * is exactly the string the pre-6.8 join produced.
+ */
+export function pageLines(page: PdfPage): PdfTextItem[][] {
+  const lines: PdfTextItem[][] = [];
+  let current: PdfTextItem[] = [];
+  for (const item of page.items) {
+    current.push(item);
+    if (item.endsLine) {
+      lines.push(current);
+      current = [];
+    }
+  }
+  if (current.length > 0) {
+    lines.push(current);
+  }
+  return lines;
+}
+
+/**
  * Resolves with empty pages when `read` has not settled in time.
  *
  * A later rejection from `read` is swallowed: the caller already moved on, and
@@ -193,6 +223,11 @@ async function readPdfjsPages(bytes: Buffer): Promise<PdfPage[]> {
 // because that is what a real text layer hands back and a caller that only ever saw whole pages
 // would be tested against a document shape that does not occur. A term that wraps across a line is
 // the case slice 3.3's guard exists to survive.
+//
+// **From 6.8 a newline in the page string is a line end**, for exactly the same reason. A suite that
+// could not express a line break was testing every reader against a document shape that does not
+// occur either — which is how a reader specified against line structure survived three slices
+// without anybody noticing it never received any.
 export function createFakePdfText(pages: readonly string[]): PdfText {
   return {
     async pages(_bytes) {
@@ -200,23 +235,40 @@ export function createFakePdfText(pages: readonly string[]): PdfText {
         number: index + 1,
         width: 595,
         height: 842,
-        items: text
-          .split(/\s+/)
-          .filter((word) => word.length > 0)
-          .map((word, at) => ({
-            text: word,
-            x: 0,
-            y: at,
-            width: word.length,
-            height: 12,
-            rightToLeft: true,
-            endsLine: false,
-            confidence: null,
-          })),
+        items: fakeItems(text, null),
       }));
     },
     describe: () => 'fake',
   };
+}
+
+/**
+ * One page of a fake reading: words, in lines, with the confidence that reader would report.
+ *
+ * Shared with `createFakeOcrText`, which is the same fixture shape with a score on every word — and
+ * a second copy of it is a second place a line break can be forgotten.
+ */
+export function fakeItems(
+  text: string,
+  confidence: number | null,
+): PdfTextItem[] {
+  const items: PdfTextItem[] = [];
+  for (const line of text.split('\n')) {
+    const words = line.split(/\s+/).filter((word) => word.length > 0);
+    words.forEach((word, at) => {
+      items.push({
+        text: word,
+        x: 0,
+        y: items.length,
+        width: word.length,
+        height: 12,
+        rightToLeft: true,
+        endsLine: at === words.length - 1,
+        confidence,
+      });
+    });
+  }
+  return items;
 }
 
 function readItems(items: PdfjsItem[], pageHeight: number): PdfTextItem[] {
