@@ -838,7 +838,7 @@ function formBody(request: FastifyRequest): Record<string, string> {
 /**
  * The multipart body, read once and bounded.
  *
- * `@fastify/multipart` is the one runtime dependency this slice added, and the reason is that an
+ * `@fastify/multipart` is the one runtime dependency slice 3.3 added, and the reason is that an
  * HTML file input posts `multipart/form-data` and hand-writing a parser for a boundary-delimited
  * stream of untrusted input is precisely the work a maintained plugin exists to save. It is
  * Fastify's own, over busboy.
@@ -846,24 +846,11 @@ function formBody(request: FastifyRequest): Record<string, string> {
  * Parts are iterated rather than taken from `request.file()`, because that helper's `fields` carry
  * only what arrived *before* the file and would silently depend on the order of inputs in the form.
  * A second file is drained and discarded rather than ignored: an unread part stalls the request.
+ *
+ * **`readFields`, its fieldless twin, went at 6.5**, with the two forms that had no business being
+ * multipart. What is left is the two routes whose bodies really are streams, and they are exactly
+ * the two the composition root exempts from the CSRF `preHandler`.
  */
-async function readFields(request: {
-  parts: () => AsyncIterableIterator<
-    | { type: 'field'; fieldname: string; value: unknown }
-    | { type: 'file'; toBuffer: () => Promise<Buffer> }
-  >;
-}): Promise<Record<string, string>> {
-  const fields: Record<string, string> = {};
-  for await (const part of request.parts()) {
-    if (part.type === 'file') {
-      await part.toBuffer();
-      continue;
-    }
-    fields[part.fieldname] = String(part.value);
-  }
-  return fields;
-}
-
 async function readUpload(request: {
   parts: () => AsyncIterableIterator<
     | { type: 'field'; fieldname: string; value: unknown }
