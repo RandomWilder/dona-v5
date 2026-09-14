@@ -537,6 +537,18 @@ export function registerDocumentRoutes(
               bytes: bytes.length,
               fileHash: documentFileHash(bytes),
               candidates: resolved.candidates.length,
+              // **What became of the reader. Slice 6.8, added after the first click.** 6.8 put the
+              // OCR outcome on `evidence.file_document` and forgot this line — and this is the one
+              // A12 writes when it cannot place a document, which is exactly the case where
+              // somebody asks afterwards whether the reader ran at all. Without it, an OCR that
+              // failed and an OCR that read a page naming an address nobody holds are one row.
+              // Still no address, no city and no document text: that is on the operator's screen,
+              // and a log is not where a document's words go.
+              ocr: read.ocrOutcome,
+              pages: read.native.length,
+              ...(read.pagesRead === undefined
+                ? {}
+                : { pagesRead: read.pagesRead }),
             },
           },
           { outcome: 'ok' },

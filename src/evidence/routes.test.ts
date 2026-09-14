@@ -1050,12 +1050,25 @@ describe('evidence · A12 a document finds its own place', () => {
           assert.equal(puts, putsBefore, 'no object was written');
 
           // The attempt is on the record, and counts against the day's cap.
-          const audited = await pool.query<{ n: string }>(
-            `SELECT count(*)::text AS n FROM audit_log
+          const audited = await pool.query<{
+            n: string;
+            inputs: Record<string, unknown>;
+          }>(
+            `SELECT count(*) OVER ()::text AS n, inputs FROM audit_log
               WHERE action = 'evidence.intake_unresolved' AND actor_id = $1`,
             [who.staffAccountId],
           );
           assert.equal(audited.rows[0]?.n, '1');
+          // **And what became of the reader is on it too. Slice 6.8, found by clicking.** 6.8 put
+          // the OCR outcome on `evidence.file_document` and not here, and this is the line A12
+          // writes when it cannot place a document — which is precisely the case where somebody
+          // asks afterwards whether the reader ran at all. Without it, an OCR that failed and an
+          // OCR that read a page naming an address nobody holds are the same row.
+          // `not_needed` here, and that is the assertion doing its job: this fixture's own text
+          // layer carries the lease's terms, so no call was owed. What the line could not say
+          // before is the difference between that and a reader that broke.
+          assert.equal(audited.rows[0]?.inputs.ocr, 'not_needed');
+          assert.equal(audited.rows[0]?.inputs.pages, 1);
         },
       );
 
