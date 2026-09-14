@@ -119,7 +119,7 @@ describe('policy · a tenancy without a guarantor is incomplete, not illegal', (
           const leaseId = await linkTenancyDocument(
             db,
             missing.tenancyId,
-            `lease-48-${missing.tenancyId.slice(0, 8)}`,
+            `lease-48-${missing.tenancyId.slice(24)}`,
             'חוזה שכירות',
           );
 
@@ -134,7 +134,7 @@ describe('policy · a tenancy without a guarantor is incomplete, not illegal', (
           await linkTenancyDocument(
             db,
             withGuarantor.tenancyId,
-            `lease-48g-${withGuarantor.tenancyId.slice(0, 8)}`,
+            `lease-48g-${withGuarantor.tenancyId.slice(24)}`,
             'חוזה שכירות',
           );
           const guarantorId = newId();
@@ -199,7 +199,7 @@ describe('policy · a tenancy without a guarantor is incomplete, not illegal', (
           await linkTenancyDocument(
             db,
             occupancy.tenancyId,
-            `lease-48e-${occupancy.tenancyId.slice(0, 8)}`,
+            `lease-48e-${occupancy.tenancyId.slice(24)}`,
             'חוזה שכירות',
           );
           const before = await listIncompleteTenancies(db);

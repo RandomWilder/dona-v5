@@ -20,10 +20,13 @@ import type { IntakeDeps } from './contract.ts';
 import {
   applyDocumentTypeCatalogue,
   confirmLeaseTenancy,
+  dayOverlap,
   fileDocument,
   listExtractedFields,
   proposeLeaseTenancy,
+  rankCandidates,
   renderTenancyPage,
+  type TenancyCandidate,
 } from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
@@ -31,7 +34,19 @@ const AT = new Date('2026-09-08T09:00:00.000Z');
 const NAV = signedInChrome('x'.repeat(64), 'estate');
 const BUCKET = 'dona-v5-test-docs';
 const MARKERS = 'חוזה שכירות המושכר תקופת השכירות השוכר';
+// The fake page is one word per `word_id`, and a finding whose word_id is past the end is dropped
+// on the floor rather than erroring. 6.5's leases name four people, so the page has to be long
+// enough to carry them — this filler is the difference between a pairing case and a silent zero.
+const PAGE_WORDS = `${MARKERS} ${'מילה '.repeat(24).trim()}`;
 const ADDRESS = 'רקפת 12';
+
+/** Slice 6.5: the proposal writes an audit line now, so it takes the deps the confirm always did. */
+const READ_BY = 'ops@example.test';
+const leaseDeps = (db: PoolClient) => ({
+  db,
+  audit: createAuditLog(db, fixedClock(AT)),
+  clock: fixedClock(AT),
+});
 
 const pdfBytes = (marker: string): Buffer =>
   Buffer.from(`%PDF-1.4\n% ${marker}\n`, 'latin1');
@@ -47,7 +62,12 @@ async function insertUnit(
     `INSERT INTO building (building_id, name, address_line, city,
                            handover_date, warranty_end_date, status)
      VALUES ($1, 'lease-building', $2, $3, '2020-01-01', '2022-01-01', 'ACTIVE')`,
-    [buildingId, addressLine, `Shoham-${buildingId.slice(0, 8)}`],
+    // **The tail, not the head.** Ids here are UUIDv7, so the first eight hex characters are a
+    // 48-bit millisecond timestamp: two buildings created in the same millisecond share them. This
+    // token has to be unique because `building_address_unique` is on `(city, address_line)`, and
+    // 6.5 is the first slice to put two buildings at one address in one tick — it failed 23505 on
+    // the way in. The last twelve characters are the random half.
+    [buildingId, addressLine, `Shoham-${buildingId.slice(24)}`],
   );
   await db.query(
     `INSERT INTO space (space_id, building_id, space_kind, name)
@@ -67,15 +87,19 @@ async function fileLease(
   unitId: string,
   findings: Array<{ field_key: string; value: string; word_ids: number[] }>,
   marker: string,
+  // Slice 6.5. The identifier fields are declared from 13 Sep (6.4's seed rows), and R18's version
+  // window is live rather than decorative: a case clocked before that date reads a catalogue that
+  // does not declare them and extracts nothing. 6.4 paid one confused run to learn that.
+  at: Date = AT,
 ) {
   const extractor = createFakeExtractor(() => ({ findings }));
   const filed = await fileDocument(
     {
       db,
       objects: createMemoryStore(),
-      pdf: createFakePdfText([MARKERS]),
-      audit: createAuditLog(db, fixedClock(AT)),
-      clock: fixedClock(AT),
+      pdf: createFakePdfText([PAGE_WORDS]),
+      audit: createAuditLog(db, fixedClock(at)),
+      clock: fixedClock(at),
       bucket: BUCKET,
       extractor,
       extractModel: 'gpt-test',
@@ -114,20 +138,23 @@ describe('evidence · flow A2 confirms a lease into a draft tenancy', () => {
       await inRolledBackTransaction(pool, async (db) => {
         await applyDocumentTypeCatalogue(db, seedDocumentTypes);
         const unitId = await insertUnit(db, '12', ADDRESS);
-        await upsertTermsProfile(db, `a2-${unitId.slice(0, 8)}`);
+        await upsertTermsProfile(db, `a2-${unitId.slice(24)}`);
         const documentId = await fileLease(
           db,
           unitId,
           matchingFindings,
           'a2-two',
         );
-        const proposed = await proposeLeaseTenancy(db, documentId);
+        const proposed = await proposeLeaseTenancy(leaseDeps(db), {
+          documentId,
+          readBy: READ_BY,
+        });
         assert.equal(proposed.matchesUnit, true);
         assert.equal(proposed.people.length, 2);
         assert.equal(proposed.people[0]?.proposedRole, 'PRIMARY_TENANT');
         assert.equal(proposed.people[1]?.proposedRole, 'CO_TENANT');
         assert.ok(
-          proposed.termsProfileNames.includes(`a2-${unitId.slice(0, 8)}`),
+          proposed.termsProfileNames.includes(`a2-${unitId.slice(24)}`),
         );
 
         const roles = Object.fromEntries(
@@ -143,7 +170,7 @@ describe('evidence · flow A2 confirms a lease into a draft tenancy', () => {
         };
         const confirmed = await confirmLeaseTenancy(deps, {
           documentId,
-          termsProfileName: `a2-${unitId.slice(0, 8)}`,
+          termsProfileName: `a2-${unitId.slice(24)}`,
           confirmedBy: 'אסף',
           roles,
         });
@@ -181,7 +208,7 @@ describe('evidence · flow A2 confirms a lease into a draft tenancy', () => {
 
         const again = await confirmLeaseTenancy(deps, {
           documentId,
-          termsProfileName: `a2-${unitId.slice(0, 8)}`,
+          termsProfileName: `a2-${unitId.slice(24)}`,
           confirmedBy: 'אסף',
           roles,
         });
@@ -208,7 +235,7 @@ describe('evidence · flow A2 confirms a lease into a draft tenancy', () => {
       await inRolledBackTransaction(pool, async (db) => {
         await applyDocumentTypeCatalogue(db, seedDocumentTypes);
         const unitId = await insertUnit(db, '12', ADDRESS);
-        await upsertTermsProfile(db, `a2-miss-${unitId.slice(0, 8)}`);
+        await upsertTermsProfile(db, `a2-miss-${unitId.slice(24)}`);
         const documentId = await fileLease(
           db,
           unitId,
@@ -224,7 +251,10 @@ describe('evidence · flow A2 confirms a lease into a draft tenancy', () => {
           ],
           'a2-wrong',
         );
-        const proposed = await proposeLeaseTenancy(db, documentId);
+        const proposed = await proposeLeaseTenancy(leaseDeps(db), {
+          documentId,
+          readBy: READ_BY,
+        });
         assert.equal(proposed.matchesUnit, false);
         const roles = Object.fromEntries(
           proposed.people.map((person) => [
@@ -242,7 +272,7 @@ describe('evidence · flow A2 confirms a lease into a draft tenancy', () => {
               },
               {
                 documentId,
-                termsProfileName: `a2-miss-${unitId.slice(0, 8)}`,
+                termsProfileName: `a2-miss-${unitId.slice(24)}`,
                 confirmedBy: 'אסף',
                 roles,
               },
@@ -292,11 +322,16 @@ describe('evidence · confirm screen lists terms profiles', () => {
         fieldKey: 'tenant_name' as const,
         value: 'יעל',
         proposedRole: 'PRIMARY_TENANT' as const,
+        hasIdentifier: false,
       },
     ],
     matchesUnit: true,
     alreadyEstablished: false,
     boundToTenancy: false,
+    candidates: [],
+    proposedTenancyId: null,
+    identifiersRead: 0,
+    identifiersPaired: 0,
   };
 
   it('is a select of existing names, not a typed field', () => {
@@ -321,5 +356,519 @@ describe('evidence · confirm screen lists terms profiles', () => {
     assert.match(html, /אין נספח תחזוקה במערכת/);
     assert.doesNotMatch(html, /אישור וכתיבה/);
     assert.doesNotMatch(html, /<select name="terms_profile"/);
+  });
+});
+
+// -------------------------------------------------------------------------------------------
+// Slice 6.5 — which letting, and one person rather than two.
+//
+// Clocked at **13 Sep**, not at this file's own 8 Sep: `tenant_id_number` and `guarantor_id_number`
+// are declared from the 13th (6.4's seed rows) and R18's version window is live, so an earlier
+// clock reads a catalogue that declares neither and extracts nothing. 6.4 paid a run to learn that;
+// this comment is the receipt.
+// -------------------------------------------------------------------------------------------
+
+const AT_ID = new Date('2026-09-13T09:00:00.000Z');
+
+/**
+ * **A ת.ז. no other run is holding.**
+ *
+ * `party_natural_key` is a UNIQUE index, so a fixture that hard-codes an identifier fails the moment
+ * anything else in the database already holds it — which is what happened here, against rows a walk
+ * on `:3000` had left behind. Nine digits off a fresh UUIDv7's random half are unique per run and
+ * still fold the way a real one does.
+ */
+function idNumber(): string {
+  return newId().replace(/\D/g, '').slice(-9).padStart(9, '1');
+}
+
+const idDeps = (db: PoolClient) => ({
+  db,
+  audit: createAuditLog(db, fixedClock(AT_ID)),
+  clock: fixedClock(AT_ID),
+});
+
+const leaseFindings = (over: {
+  unitNumber: string;
+  address: string;
+  startDate?: string;
+  endDate?: string;
+  tenants?: string[];
+  tenantIds?: string[];
+  guarantors?: string[];
+  guarantorIds?: string[];
+}): Array<{ field_key: string; value: string; word_ids: number[] }> => {
+  const findings = [
+    {
+      field_key: 'start_date',
+      value: over.startDate ?? '2026-03-01',
+      word_ids: [0],
+    },
+    {
+      field_key: 'end_date',
+      value: over.endDate ?? '2027-02-28',
+      word_ids: [1],
+    },
+    { field_key: 'apartment_number', value: over.unitNumber, word_ids: [2] },
+    { field_key: 'address', value: `${over.address} שוהם`, word_ids: [3] },
+  ];
+  let word = 4;
+  for (const [key, values] of [
+    ['tenant_name', over.tenants ?? ['יעל כהן']],
+    ['tenant_id_number', over.tenantIds ?? []],
+    ['guarantor_name', over.guarantors ?? []],
+    ['guarantor_id_number', over.guarantorIds ?? []],
+  ] as const) {
+    for (const value of values) {
+      findings.push({ field_key: key, value, word_ids: [word] });
+      word += 1;
+    }
+  }
+  return findings;
+};
+
+async function partyCount(db: PoolClient): Promise<number> {
+  const rows = await db.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM party`,
+  );
+  return Number(rows.rows[0]?.n ?? '0');
+}
+
+async function confirm(
+  db: PoolClient,
+  documentId: string,
+  profile: string,
+  extra: { attachTenancyId?: string | null } = {},
+) {
+  const proposed = await proposeLeaseTenancy(idDeps(db), {
+    documentId,
+    readBy: READ_BY,
+  });
+  return {
+    proposed,
+    result: await confirmLeaseTenancy(idDeps(db), {
+      documentId,
+      termsProfileName: profile,
+      confirmedBy: READ_BY,
+      roles: Object.fromEntries(
+        proposed.people.map((person) => [
+          person.extractedFieldId,
+          person.proposedRole,
+        ]),
+      ),
+      ...extra,
+    }),
+  };
+}
+
+describe('evidence · flow A2 resolves which letting a lease belongs to', () => {
+  // **The first acceptance case.** The same ת.ז. on two leases in two flats. Before 6.5 this was
+  // two parties, because every party a lease wrote went through `createParty`.
+  it('one identifier in two flats is one party and two tenancies', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const first = await insertUnit(db, '12', ADDRESS);
+        const second = await insertUnit(db, '19', 'כלנית 4');
+        const profile = `a2id-${first.slice(24)}`;
+        await upsertTermsProfile(db, profile);
+
+        const yael = idNumber();
+        const before = await partyCount(db);
+        const oneDoc = await fileLease(
+          db,
+          first,
+          leaseFindings({
+            unitNumber: '12',
+            address: ADDRESS,
+            tenantIds: [yael],
+          }),
+          '65-flat-one',
+          AT_ID,
+        );
+        const one = await confirm(db, oneDoc, profile);
+        assert.equal(one.proposed.identifiersRead, 1);
+        assert.equal(one.proposed.identifiersPaired, 1);
+        assert.equal(one.proposed.people[0]?.hasIdentifier, true);
+        assert.equal(one.result.partiesWritten, 1);
+
+        // The second flat, the same person, and the ת.ז. written with the separators a person
+        // types — so the match is the database's fold and not string equality.
+        const twoDoc = await fileLease(
+          db,
+          second,
+          leaseFindings({
+            unitNumber: '19',
+            address: 'כלנית 4',
+            startDate: '2026-06-01',
+            endDate: '2027-05-31',
+            // The separators a person types, so the match is the database's fold and not equality.
+            tenantIds: [
+              `${yael.slice(0, 3)}-${yael.slice(3, 6)}-${yael.slice(6)}`,
+            ],
+          }),
+          '65-flat-two',
+          AT_ID,
+        );
+        const two = await confirm(db, twoDoc, profile);
+        assert.equal(two.result.partiesWritten, 1);
+        assert.notEqual(two.result.tenancyId, one.result.tenancyId);
+
+        // **One party, two tenancies.** The count is the assertion, not the ids.
+        assert.equal(await partyCount(db), before + 1);
+        const households = await db.query<{ n: string }>(
+          `SELECT count(DISTINCT tp.party_id)::text AS n
+             FROM tenancy_party tp
+            WHERE tp.tenancy_id = ANY($1::uuid[])`,
+          [[one.result.tenancyId, two.result.tenancyId]],
+        );
+        assert.equal(households.rows[0]?.n, '1');
+        // Scoped to this household: the developer's own database holds 2,871 parties from the
+        // generated register, and a count over the whole table measures the fixture.
+        const identified = await db.query<{ n: string }>(
+          `SELECT count(DISTINCT p.party_id)::text AS n
+             FROM party p
+             JOIN tenancy_party tp ON tp.party_id = p.party_id
+            WHERE tp.tenancy_id = ANY($1::uuid[]) AND p.national_id IS NOT NULL`,
+          [[one.result.tenancyId, two.result.tenancyId]],
+        );
+        assert.equal(identified.rows[0]?.n, '1');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  // **The second acceptance case.** A second lease on the unit and start date a letting already
+  // holds. Before 6.5 this died on `conflict` and there was nothing an operator could do.
+  it('offers the existing letting on an equal start date, and attaching writes no dates', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const unitId = await insertUnit(db, '12', ADDRESS);
+        const profile = `a2att-${unitId.slice(24)}`;
+        await upsertTermsProfile(db, profile);
+        const yael = idNumber();
+        const dan = idNumber();
+        const firstDoc = await fileLease(
+          db,
+          unitId,
+          leaseFindings({
+            unitNumber: '12',
+            address: ADDRESS,
+            tenantIds: [yael],
+          }),
+          '65-attach-one',
+          AT_ID,
+        );
+        const first = await confirm(db, firstDoc, profile);
+
+        // The same household, the same flat, the same start date — a copy of the paper, or the
+        // countersigned one arriving second.
+        const secondDoc = await fileLease(
+          db,
+          unitId,
+          leaseFindings({
+            unitNumber: '12',
+            address: ADDRESS,
+            // The letting's end date must not move, so this paper says something different.
+            endDate: '2027-06-30',
+            tenants: ['יעל כהן', 'דן לוי'],
+            tenantIds: [yael, dan],
+          }),
+          '65-attach-two',
+          AT_ID,
+        );
+        const proposed = await proposeLeaseTenancy(idDeps(db), {
+          documentId: secondDoc,
+          readBy: READ_BY,
+        });
+        // The existing letting is offered, pre-selected, and ranked on the identifier it shares.
+        assert.equal(proposed.proposedTenancyId, first.result.tenancyId);
+        assert.equal(proposed.candidates.length, 1);
+        assert.equal(proposed.candidates[0]?.identifierMatches, 1);
+        assert.ok((proposed.candidates[0]?.dayOverlap ?? 0) > 300);
+
+        const lettingsBefore = await db.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM tenancy WHERE unit_id = $1`,
+          [unitId],
+        );
+        const attached = await confirmLeaseTenancy(idDeps(db), {
+          documentId: secondDoc,
+          termsProfileName: '',
+          confirmedBy: READ_BY,
+          roles: Object.fromEntries(
+            proposed.people.map((person) => [
+              person.extractedFieldId,
+              person.proposedRole,
+            ]),
+          ),
+          attachTenancyId: first.result.tenancyId,
+        });
+        assert.equal(attached.attached, true);
+        assert.equal(attached.tenancyId, first.result.tenancyId);
+
+        // **No second letting, and no annex was asked for.**
+        const lettingsAfter = await db.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM tenancy WHERE unit_id = $1`,
+          [unitId],
+        );
+        assert.equal(lettingsAfter.rows[0]?.n, lettingsBefore.rows[0]?.n);
+
+        // **And no dates.** The letting still ends when its own paper said, not when this one does.
+        const term = await db.query<{ end_date: string; status: string }>(
+          `SELECT end_date::text, status FROM tenancy WHERE tenancy_id = $1`,
+          [first.result.tenancyId],
+        );
+        assert.equal(term.rows[0]?.end_date, '2027-02-28');
+        assert.equal(term.rows[0]?.status, 'DRAFT');
+
+        // The second tenant came in under the letting that was already there.
+        const people = await db.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM tenancy_party WHERE tenancy_id = $1`,
+          [first.result.tenancyId],
+        );
+        assert.equal(people.rows[0]?.n, '2');
+
+        // A second attach of the same document is a no-op, the way a second create is.
+        const again = await confirmLeaseTenancy(idDeps(db), {
+          documentId: secondDoc,
+          termsProfileName: '',
+          confirmedBy: READ_BY,
+          roles: {},
+          attachTenancyId: first.result.tenancyId,
+        });
+        assert.equal(again.alreadyEstablished, true);
+        assert.equal(again.partiesWritten, 0);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  // **The third acceptance case**, and it is the one that must not regress: A2 step 3 says zero
+  // identifiers is a correct result, and an invented lease, an older form and a bad scan all
+  // produce it.
+  it('a lease naming no identifier still writes a party and a draft', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const unitId = await insertUnit(db, '12', ADDRESS);
+        const profile = `a2none-${unitId.slice(24)}`;
+        await upsertTermsProfile(db, profile);
+        const documentId = await fileLease(
+          db,
+          unitId,
+          leaseFindings({ unitNumber: '12', address: ADDRESS }),
+          '65-no-id',
+          AT_ID,
+        );
+        const { proposed, result } = await confirm(db, documentId, profile);
+        assert.equal(proposed.identifiersRead, 0);
+        assert.equal(proposed.people[0]?.hasIdentifier, false);
+        assert.equal(result.partiesWritten, 1);
+        assert.equal(result.attached, false);
+
+        const party = await db.query<{ national_id: string | null }>(
+          `SELECT p.national_id FROM party p
+             JOIN tenancy_party tp ON tp.party_id = p.party_id
+            WHERE tp.tenancy_id = $1`,
+          [result.tenancyId],
+        );
+        assert.equal(party.rows.length, 1);
+        assert.equal(party.rows[0]?.national_id, null);
+
+        // Nothing was compared, so nothing was logged. Withholding is not a read, and neither is
+        // having nothing to read.
+        const matched = await db.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM audit_log
+            WHERE action = 'evidence.match_identifier' AND subject_id = $1`,
+          [documentId],
+        );
+        assert.equal(matched.rows[0]?.n, '0');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('pairs nobody when the counts disagree, and refuses two people who are one', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const unitId = await insertUnit(db, '12', ADDRESS);
+        const profile = `a2pair-${unitId.slice(24)}`;
+        await upsertTermsProfile(db, profile);
+
+        // Two names and one identifier. Which of them it belongs to is not knowable, and the
+        // operator is not shown the value, so nobody gets it.
+        const yael = idNumber();
+        const dan = idNumber();
+        const lopsided = await fileLease(
+          db,
+          unitId,
+          leaseFindings({
+            unitNumber: '12',
+            address: ADDRESS,
+            tenants: ['יעל כהן', 'דן לוי'],
+            tenantIds: [yael],
+          }),
+          '65-lopsided',
+          AT_ID,
+        );
+        const proposed = await proposeLeaseTenancy(idDeps(db), {
+          documentId: lopsided,
+          readBy: READ_BY,
+        });
+        assert.equal(proposed.identifiersRead, 1);
+        assert.equal(proposed.identifiersPaired, 0);
+        assert.deepEqual(
+          proposed.people.map((person) => person.hasIdentifier),
+          [false, false],
+        );
+        // No probe, so no comparison and no audit line — the read never happened.
+        const matched = await db.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM audit_log
+            WHERE action = 'evidence.match_identifier' AND subject_id = $1`,
+          [lopsided],
+        );
+        assert.equal(matched.rows[0]?.n, '0');
+
+        const written = await confirm(db, lopsided, profile);
+        assert.equal(written.result.partiesWritten, 2);
+        const identified = await db.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM party p
+             JOIN tenancy_party tp ON tp.party_id = p.party_id
+            WHERE tp.tenancy_id = $1 AND p.national_id IS NOT NULL`,
+          [written.result.tenancyId],
+        );
+        assert.equal(identified.rows[0]?.n, '0');
+
+        // A guarantor with no identifier does not discard the tenants' — the families are counted
+        // on their own, which is A2 step 5's amendment and the ordinary shape of a real lease.
+        const other = await insertUnit(db, '20', 'כלנית 4');
+        const mixed = await fileLease(
+          db,
+          other,
+          leaseFindings({
+            unitNumber: '20',
+            address: 'כלנית 4',
+            tenants: ['יעל כהן', 'דן לוי'],
+            tenantIds: [yael, dan],
+            guarantors: ['רותם ערב'],
+          }),
+          '65-mixed',
+          AT_ID,
+        );
+        const mixedProposal = await proposeLeaseTenancy(idDeps(db), {
+          documentId: mixed,
+          readBy: READ_BY,
+        });
+        assert.deepEqual(
+          mixedProposal.people.map((person) => person.hasIdentifier),
+          [true, true, false],
+        );
+
+        // Two people, one identifier printed twice — a refusal, not one party silently holding
+        // two roles through `(tenancy_id, party_id)`.
+        const third = await insertUnit(db, '21', 'כלנית 4');
+        const doubled = await fileLease(
+          db,
+          third,
+          leaseFindings({
+            unitNumber: '21',
+            address: 'כלנית 4',
+            tenants: ['יעל כהן', 'דן לוי'],
+            // One person printed twice, the second time with the separators. Two strings, one ת.ז.
+            tenantIds: [
+              yael,
+              `${yael.slice(0, 3)}-${yael.slice(3, 6)}-${yael.slice(6)}`,
+            ],
+          }),
+          '65-doubled',
+          AT_ID,
+        );
+        const before = await partyCount(db);
+        await assert.rejects(
+          () => confirm(db, doubled, profile),
+          (error: KernelError) => {
+            assert.equal(error.code, 'invalid');
+            assert.match(error.message, /one person/);
+            return true;
+          },
+        );
+        assert.equal(await partyCount(db), before);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+});
+
+describe('evidence · ranking a flat’s lettings is arithmetic, not SQL', () => {
+  it('counts both endpoints, and nothing at all without dates', () => {
+    const letting = { start_date: '2026-01-01', end_date: '2026-12-31' };
+    // One day shared is one day, not zero: the last day of a lease is a day of it, which is the
+    // same convention the isolation window keeps.
+    assert.equal(
+      dayOverlap({ startDate: '2026-12-31', endDate: '2027-06-30' }, letting),
+      1,
+    );
+    assert.equal(
+      dayOverlap({ startDate: '2027-01-01', endDate: '2027-06-30' }, letting),
+      0,
+    );
+    assert.equal(
+      dayOverlap({ startDate: '2026-01-01', endDate: '2026-12-31' }, letting),
+      365,
+    );
+    // Extraction returning no date is a correct result, and it must not rank a letting to the top.
+    assert.equal(dayOverlap({ startDate: null, endDate: null }, letting), 0);
+    assert.equal(
+      dayOverlap({ startDate: '2026-01-01', endDate: null }, letting),
+      0,
+    );
+  });
+
+  it('puts identifier overlap first, then days, then the newest letting', () => {
+    const at = (over: Partial<TenancyCandidate>): TenancyCandidate => ({
+      tenancyId: '00000000-0000-4000-8000-000000000000',
+      startDate: '2020-01-01',
+      endDate: '2021-01-01',
+      status: 'ENDED',
+      identifierMatches: 0,
+      dayOverlap: 0,
+      ...over,
+    });
+    const ranked = rankCandidates([
+      at({ tenancyId: 'c', dayOverlap: 400, startDate: '2025-01-01' }),
+      at({ tenancyId: 'a', identifierMatches: 1, dayOverlap: 1 }),
+      at({ tenancyId: 'd', dayOverlap: 400, startDate: '2019-01-01' }),
+      at({ tenancyId: 'b', identifierMatches: 2 }),
+    ]);
+    assert.deepEqual(
+      ranked.map((candidate) => candidate.tenancyId),
+      ['b', 'a', 'c', 'd'],
+    );
   });
 });

@@ -68,7 +68,7 @@ describe('tenancy · obligation commands', () => {
     try {
       await inRolledBackTransaction(pool, async (db) => {
         const tenancyId = await seedTenancy(db);
-        const code = `INS-${newId().slice(0, 8)}`;
+        const code = `INS-${newId().slice(24)}`;
         const type = await upsertObligationType(db, {
           code,
           labelHe: 'ביטוח',
@@ -116,7 +116,7 @@ describe('tenancy · obligation commands', () => {
       await inRolledBackTransaction(pool, async (db) => {
         const catalogue = seedObligationTypes.map((row) => ({
           ...row,
-          code: `${row.code}-${newId().slice(0, 8)}`,
+          code: `${row.code}-${newId().slice(24)}`,
         }));
         const first = await applyObligationTypeCatalogue(db, catalogue);
         assert.equal(first.types.created, 5);
@@ -138,7 +138,7 @@ describe('tenancy · obligation commands', () => {
     }
     try {
       await inRolledBackTransaction(pool, async (db) => {
-        const suffix = newId().slice(0, 8);
+        const suffix = newId().slice(24);
         const active = await upsertObligationType(db, {
           code: `Z-ON-${suffix}`,
           labelHe: 'פעיל',

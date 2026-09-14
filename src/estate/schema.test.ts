@@ -605,7 +605,7 @@ describe('estate · Asset and the Provider stub', () => {
           await db.query(
             `INSERT INTO provider (provider_id, name, provider_kind)
              VALUES ($1, $2, 'DEVELOPER_WARRANTY')`,
-            [providerId, `provider-${providerId.slice(0, 8)}`],
+            [providerId, `provider-${providerId.slice(24)}`],
           );
           await db.query(
             `INSERT INTO asset (asset_id, space_id, asset_class, asset_type,

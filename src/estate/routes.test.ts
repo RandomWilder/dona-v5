@@ -264,7 +264,7 @@ describe('estate · the routes', () => {
             `INSERT INTO document_type (
                document_type_id, type_key, label_he, label_en, verification_terms, is_active
              ) VALUES ($1, $2, 'חוזה שכירות', NULL, NULL, true)`,
-            [typeId, `lease-routes-48-${typeId.slice(0, 8)}`],
+            [typeId, `lease-routes-48-${typeId.slice(24)}`],
           );
           await pool.query(
             `INSERT INTO document (

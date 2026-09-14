@@ -702,12 +702,122 @@ const SCREENS: Array<[string, () => string]> = [
             fieldKey: 'tenant_name',
             value: 'יעל כהן',
             proposedRole: 'PRIMARY_TENANT',
+            hasIdentifier: false,
           },
         ],
         matchesUnit: true,
         alreadyEstablished: false,
         boundToTenancy: false,
         termsProfileNames: ['נספח תחזוקה — תקן'],
+        candidates: [],
+        proposedTenancyId: null,
+        identifiersRead: 0,
+        identifiersPaired: 0,
+      }),
+  ],
+  [
+    // **Slice 6.5, and the stance 6.6 must not find an identifier on.** A ת.ז. *was* read off this
+    // lease and paired to this person, and what the screen says about it is a sentence and a count.
+    // The value is not in `TenancyScreen` at all, so this entry cannot leak one however it is
+    // rendered — which is 6.4's ruling kept structurally rather than by care. A flat with two
+    // lettings, one of which already holds this person, is the ranking it is here to show.
+    'documents · confirm a lease, an identifier read and two lettings offered',
+    () =>
+      renderTenancyPage({
+        nav: NAV,
+        csrf: CSRF,
+        documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        typeKey: 'lease',
+        unit: hit,
+        startDate: '2026-03-01',
+        endDate: '2027-02-28',
+        apartmentNumber: '12A',
+        address: 'רקפת 12',
+        people: [
+          {
+            extractedFieldId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            fieldKey: 'tenant_name',
+            value: 'יעל כהן',
+            proposedRole: 'PRIMARY_TENANT',
+            hasIdentifier: true,
+          },
+          {
+            extractedFieldId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1',
+            fieldKey: 'guarantor_name',
+            value: 'רותם ערב',
+            proposedRole: 'GUARANTOR',
+            hasIdentifier: false,
+          },
+        ],
+        matchesUnit: true,
+        alreadyEstablished: false,
+        boundToTenancy: false,
+        termsProfileNames: ['נספח תחזוקה — תקן'],
+        candidates: [
+          {
+            tenancyId: '55555555-5555-4555-8555-555555555555',
+            startDate: '2024-03-01',
+            endDate: '2026-02-28',
+            status: 'ENDED',
+            identifierMatches: 1,
+            dayOverlap: 0,
+          },
+          {
+            tenancyId: '66666666-6666-4666-8666-666666666666',
+            startDate: '2022-03-01',
+            endDate: '2024-02-29',
+            status: 'ENDED',
+            identifierMatches: 0,
+            dayOverlap: 0,
+          },
+        ],
+        proposedTenancyId: null,
+        identifiersRead: 1,
+        identifiersPaired: 1,
+      }),
+  ],
+  [
+    // The same screen with a letting pre-selected: this lease starts on the day one of them does,
+    // which is the case that was a dead end before 6.5 — `(unit_id, start_date)` is
+    // `upsertTenancy`'s key, so creating was a conflict and attaching did not exist.
+    'documents · confirm a lease, an existing letting pre-selected',
+    () =>
+      renderTenancyPage({
+        nav: NAV,
+        csrf: CSRF,
+        documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        typeKey: 'lease',
+        unit: hit,
+        startDate: '2026-03-01',
+        endDate: '2027-02-28',
+        apartmentNumber: '12A',
+        address: 'רקפת 12',
+        people: [
+          {
+            extractedFieldId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            fieldKey: 'tenant_name',
+            value: 'יעל כהן',
+            proposedRole: 'PRIMARY_TENANT',
+            hasIdentifier: true,
+          },
+        ],
+        matchesUnit: true,
+        alreadyEstablished: false,
+        boundToTenancy: false,
+        termsProfileNames: ['נספח תחזוקה — תקן'],
+        candidates: [
+          {
+            tenancyId: '55555555-5555-4555-8555-555555555555',
+            startDate: '2026-03-01',
+            endDate: '2027-02-28',
+            status: 'DRAFT',
+            identifierMatches: 1,
+            dayOverlap: 365,
+          },
+        ],
+        proposedTenancyId: '55555555-5555-4555-8555-555555555555',
+        identifiersRead: 1,
+        identifiersPaired: 1,
       }),
   ],
   [
@@ -720,6 +830,21 @@ const SCREENS: Array<[string, () => string]> = [
         endDate: '2027-02-28',
         partiesWritten: 2,
         alreadyEstablished: false,
+      }),
+  ],
+  [
+    // Slice 6.5. The dates on this page are the letting's own, and the page says so: attaching
+    // writes the link and the people and never a date.
+    'documents · lease attached to an existing letting',
+    () =>
+      renderTenancyWrittenPage({
+        nav: NAV,
+        unit: hit,
+        startDate: '2026-03-01',
+        endDate: '2027-02-28',
+        partiesWritten: 2,
+        alreadyEstablished: false,
+        attached: true,
       }),
   ],
   [
@@ -741,12 +866,17 @@ const SCREENS: Array<[string, () => string]> = [
             fieldKey: 'guarantor_name',
             value: 'רותם ערב',
             proposedRole: 'GUARANTOR',
+            hasIdentifier: false,
           },
         ],
         matchesUnit: true,
         alreadyEstablished: false,
         boundToTenancy: true,
         termsProfileNames: [],
+        candidates: [],
+        proposedTenancyId: null,
+        identifiersRead: 0,
+        identifiersPaired: 0,
       }),
   ],
   // Slice 5.1's screens, **four of them deleted at 5.1b with the flow they belonged to**. Appended
@@ -876,6 +1006,40 @@ const SCREENS: Array<[string, () => string]> = [
       }),
   ],
 ];
+
+/**
+ * **Slice 6.5, found by clicking and then made impossible to repeat.**
+ *
+ * Two forms in this console posted `multipart/form-data` and carried nothing but text — the lease
+ * confirm from 4.6 and the promote button from 4.3. Harmless until **5.2** put the CSRF check in a
+ * `preHandler` that reads `request.body`, which a multipart body leaves undefined: both buttons
+ * answered **403** in a browser from the day the token landed, and nothing noticed, because the
+ * suite called those handlers rather than posting to them.
+ *
+ * The rule is the registry's, not a second copy of a route guard, and it is the whole class rather
+ * than the two instances: a form declares that enctype **only** when it carries a file. The one
+ * exemption the composition root grants — `csrf: 'in-body'` — is held by the two routes whose
+ * bodies really are streams, and those are exactly the two forms with a file input in them.
+ */
+describe('a form is multipart only when it carries a file', () => {
+  it('holds across every screen in the registry', () => {
+    let forms = 0;
+    for (const [name, render] of SCREENS) {
+      const html = render();
+      for (const form of html.match(/<form\b[\s\S]*?<\/form>/g) ?? []) {
+        forms += 1;
+        if (!/enctype="multipart\/form-data"/.test(form)) continue;
+        assert.match(
+          form,
+          /<input[^>]+type="file"/,
+          `${name}: a multipart form with no file input posts a body the CSRF preHandler cannot read`,
+        );
+      }
+    }
+    // A rule that scanned nothing passes forever and reads like diligence (scripts/guards.ts).
+    assert.ok(forms > 10, `only ${forms} forms scanned`);
+  });
+});
 
 describe('shared UI tokens', () => {
   it('is the only place a colour, a face, or a physical side is named', () => {

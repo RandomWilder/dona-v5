@@ -70,12 +70,16 @@ export type {
   LeaseDeps,
   LeaseProposal,
   ProposedPerson,
+  ProposeLeaseSpec,
+  TenancyCandidate,
 } from './internal/lease.ts';
 export {
   addressMatches,
   apartmentMatches,
   confirmLeaseTenancy,
+  dayOverlap,
   proposeLeaseTenancy,
+  rankCandidates,
 } from './internal/lease.ts';
 export type {
   DocumentHit,

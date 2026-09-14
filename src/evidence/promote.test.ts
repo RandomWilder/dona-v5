@@ -71,7 +71,7 @@ async function insertUnit(db: PoolClient): Promise<string> {
     `INSERT INTO building (building_id, name, address_line, city,
                            handover_date, warranty_end_date, status)
      VALUES ($1, 'promo-building', $2, 'Shoham', '2020-01-01', '2022-01-01', 'ACTIVE')`,
-    [buildingId, `Promo ${buildingId.slice(0, 8)}`],
+    [buildingId, `Promo ${buildingId.slice(24)}`],
   );
   await db.query(
     `INSERT INTO space (space_id, building_id, space_kind, name)
@@ -105,7 +105,7 @@ describe('evidence · promote an extracted field', () => {
         const unitId = await insertUnit(db);
         const profile = await upsertTermsProfile(
           db,
-          `promo-${unitId.slice(0, 8)}`,
+          `promo-${unitId.slice(24)}`,
         );
         const tenancy = await upsertTenancy(db, {
           unitId,

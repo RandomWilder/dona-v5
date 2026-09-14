@@ -24,7 +24,7 @@ import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import type { UnitLetting } from '../../tenancy/contract.ts';
 import type { DocumentTypeRow } from './catalogue.ts';
 import { isIdentifierField } from './extract.ts';
-import type { ProposedPerson } from './lease.ts';
+import type { ProposedPerson, TenancyCandidate } from './lease.ts';
 import { CANDIDATE_LIMIT, type PlaceReading } from './place.ts';
 import { documentExtensions } from './storage-path.ts';
 import type { Verification } from './verify.ts';
@@ -677,7 +677,7 @@ function extractedSection(screen: ReadScreen) {
     ${withheld}
     ${
       promotable.length > 0
-        ? h`<form method="post" action="/documents/${screen.documentId}/promote" enctype="multipart/form-data">
+        ? h`<form method="post" action="/documents/${screen.documentId}/promote">
             ${csrfInput(screen.csrf)}
             ${promotable.map(
               (row) =>
@@ -781,6 +781,17 @@ export interface TenancyScreen {
   alreadyEstablished: boolean;
   boundToTenancy: boolean;
   termsProfileNames: readonly string[];
+  /**
+   * **Slice 6.5. Which letting, offered rather than assumed.** Every letting on the flat, ranked by
+   * identifier overlap and then by days shared. `identifierMatches` is a **count** — the value it
+   * was counted from never reaches this file, which is 6.4's ruling kept structurally rather than
+   * by care.
+   */
+  candidates: readonly TenancyCandidate[];
+  /** Pre-selected. `null` is *a new letting*, and it is the default. */
+  proposedTenancyId: string | null;
+  identifiersRead: number;
+  identifiersPaired: number;
 }
 
 export function renderTenancyPage(screen: TenancyScreen): string {
@@ -798,19 +809,68 @@ export function renderTenancyPage(screen: TenancyScreen): string {
           )}
         </select>
       </label>
+      ${
+        // Slice 6.5. Whether a ת.ז. was paired to this person, and never the ת.ז. It says which of
+        // upsertParty and createParty is about to run, which is the difference between one person
+        // in two flats and two people — and it is a state, which is what this console shows.
+        person.hasIdentifier
+          ? h`<p class="hint">ת.ז. נקראה מהמסמך ותשויך לאדם הזה. הערך עצמו אינו מוצג כאן.</p>`
+          : h`<p class="hint">לא שויכה ת.ז. לאדם הזה.</p>`
+      }
     </div>`,
   );
+  // **Slice 6.5 splits what used to be one condition.** Creating a letting needs dates, a tenant
+  // and an annex; attaching to one that already exists needs none of the three, because it writes
+  // none of them. A flat with no letting on it is the case this screen has always had, and it is
+  // unchanged: no candidates, no radio group, the annex still required.
+  const open = !isAmendment && screen.matchesUnit && !screen.alreadyEstablished;
+  const canCreate =
+    open &&
+    screen.startDate !== null &&
+    screen.endDate !== null &&
+    screen.people.some((person) => person.fieldKey === 'tenant_name') &&
+    screen.termsProfileNames.length > 0;
+  const canAttach = open && screen.candidates.length > 0;
   const canWrite = isAmendment
     ? screen.boundToTenancy && !screen.alreadyEstablished
-    : screen.matchesUnit &&
-      !screen.alreadyEstablished &&
-      screen.startDate !== null &&
-      screen.endDate !== null &&
-      screen.people.some((person) => person.fieldKey === 'tenant_name') &&
-      screen.termsProfileNames.length > 0;
+    : canCreate || canAttach;
   const profileOptions = screen.termsProfileNames.map(
     (name) => h`<option value="${name}">${name}</option>`,
   );
+  const selected = screen.proposedTenancyId;
+  const lettingChoice = h`<fieldset class="form-row">
+      <legend>לאיזו השכרה שייך המסמך</legend>
+      ${
+        canCreate
+          ? h`<label class="check">
+              <input type="radio" name="attach_tenancy" value="new"${
+                selected === null ? h` checked` : h``
+              }>
+              <span>השכרה חדשה</span>
+            </label>`
+          : h``
+      }
+      ${screen.candidates.map(
+        (candidate) => h`<label class="check">
+          <input type="radio" name="attach_tenancy" value="${candidate.tenancyId}"${
+            selected === candidate.tenancyId ? h` checked` : h``
+          }>
+          <span>${ltr(candidate.startDate)} — ${ltr(candidate.endDate)} · ${label(
+            TENANCY_STATUS,
+            candidate.status,
+          )}${
+            candidate.identifierMatches > 0
+              ? h` · התאמה לפי ת.ז.: ${String(candidate.identifierMatches)}`
+              : h``
+          }</span>
+        </label>`,
+      )}
+      ${
+        selected === null
+          ? h`<p class="hint">אין השכרה שמתחילה בתאריך שבמסמך, ולכן ברירת המחדל היא השכרה חדשה.</p>`
+          : h`<p class="hint">קיימת השכרה שמתחילה בדיוק בתאריך שבמסמך, והיא נבחרה מראש. צירוף למסמך קיים אינו משנה תאריכים.</p>`
+      }
+    </fieldset>`;
   const body = h`
     <div>
       <a class="back" href="${back}">← דירה ${ltr(screen.unit.unit_number)}</a>
@@ -845,19 +905,29 @@ export function renderTenancyPage(screen: TenancyScreen): string {
     </section>
     ${
       canWrite
-        ? h`<form class="form-grid" method="post" action="/documents/${screen.documentId}/tenancy" enctype="multipart/form-data">
+        ? h`<form class="form-grid" method="post" action="/documents/${screen.documentId}/tenancy">
             ${csrfInput(screen.csrf)}
+            ${canAttach ? lettingChoice : h``}
             ${people}
             ${
-              isAmendment
+              isAmendment || !canCreate
                 ? h``
                 : h`<div class="form-row">
               <label>נספח תחזוקה
-                <select name="terms_profile" required>
+                <select name="terms_profile"${canAttach ? h`` : h` required`}>
                   <option value="">בחרו נספח</option>
                   ${profileOptions}
                 </select>
               </label>
+              ${
+                // The annex belongs to a *new* letting and to nothing else, so it stops being a
+                // required field the moment an existing letting is on offer: the browser validates
+                // `required` whatever the radio says, and forcing a choice nobody will use is how a
+                // screen teaches people to pick anything.
+                canAttach
+                  ? h`<p class="hint">נדרש רק עבור השכרה חדשה.</p>`
+                  : h``
+              }
             </div>`
             }
             <div class="form-actions">
@@ -866,10 +936,7 @@ export function renderTenancyPage(screen: TenancyScreen): string {
             </div>
           </form>`
         : h`${
-            !isAmendment &&
-            screen.matchesUnit &&
-            !screen.alreadyEstablished &&
-            screen.termsProfileNames.length === 0
+            open && screen.termsProfileNames.length === 0
               ? h`<p class="lede">אין נספח תחזוקה במערכת. לא נכתוב השכרה עד שייובא הפנקס.</p>`
               : h``
           }
@@ -890,6 +957,8 @@ export interface TenancyWrittenScreen {
   endDate: string;
   partiesWritten: number;
   alreadyEstablished: boolean;
+  /** Slice 6.5: whether the paper was bound to a letting that already existed. */
+  attached?: boolean;
 }
 
 export function renderTenancyWrittenPage(screen: TenancyWrittenScreen): string {
@@ -898,7 +967,13 @@ export function renderTenancyWrittenPage(screen: TenancyWrittenScreen): string {
   const body = h`
     <div>
       <a class="back" href="${back}">← דירה ${ltr(screen.unit.unit_number)}</a>
-      <h1>${isAmendment ? h`הנספח נרשם` : h`החוזה נרשם כטיוטה`}</h1>
+      <h1>${
+        isAmendment
+          ? h`הנספח נרשם`
+          : screen.attached
+            ? h`החוזה צורף להשכרה קיימת`
+            : h`החוזה נרשם כטיוטה`
+      }</h1>
     </div>
     <section class="notice">
       <dl class="facts">
@@ -919,10 +994,24 @@ export function renderTenancyWrittenPage(screen: TenancyWrittenScreen): string {
             : h`<p class="lede">מסמך זה כבר הקים השכרה. לא נוסף בית שני.</p>`
           : h``
       }
+      ${
+        // Slice 6.5. Attaching writes the link and the people and nothing else — the dates on the
+        // screen above are the letting's own, not the ones read off this paper. Saying so here is
+        // what stops somebody reading the page as though the document had rewritten the term.
+        screen.attached && !isAmendment
+          ? h`<p class="lede">התאריכים שלמעלה הם של ההשכרה הקיימת ולא השתנו. העברת ערך מהמסמך לעמודה נעשית בנפרד, שדה אחר שדה, ממסך המסמך.</p>`
+          : h``
+      }
     </section>
     <div class="form-actions">
       <a class="btn btn-secondary" href="/documents/new?unit=${screen.unit.unit_id}">הוספת מסמך נוסף</a>
       <a href="${back}">חזרה לדירה</a>
     </div>`;
-  return shell('דונה דום — החוזה נרשם', body, screen.nav);
+  return shell(
+    screen.attached && !isAmendment
+      ? 'דונה דום — החוזה צורף'
+      : 'דונה דום — החוזה נרשם',
+    body,
+    screen.nav,
+  );
 }

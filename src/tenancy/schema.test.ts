@@ -596,7 +596,7 @@ describe('tenancy · a terms profile is identified by its name', () => {
 
       await t.test('listTermsProfiles returns names that exist', async () => {
         await inRolledBackTransaction(pool, async (db) => {
-          const name = `נספח רשימה — ${newId().slice(0, 8)}`;
+          const name = `נספח רשימה — ${newId().slice(24)}`;
           await db.query(
             `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)`,
             [newId(), name],
@@ -693,7 +693,7 @@ describe('tenancy_event — append-only promotion log', () => {
           `INSERT INTO document_type (
              document_type_id, type_key, label_he, label_en, verification_terms, is_active
            ) VALUES ($1, $2, 'חוזה', NULL, NULL, true)`,
-          [typeId, `t43-event-${typeId.slice(0, 8)}`],
+          [typeId, `t43-event-${typeId.slice(24)}`],
         );
         await db.query(
           `INSERT INTO document (
@@ -822,7 +822,7 @@ async function insertType(
      ) VALUES ($1, $2, 'ארנונה', NULL, $3, $4, $5)`,
     [
       id,
-      spec.code ?? `oblt-${id.slice(0, 8)}`,
+      spec.code ?? `oblt-${id.slice(24)}`,
       spec.responsible ?? 'TENANT',
       spec.requiresEvidence ?? true,
       spec.active ?? true,
