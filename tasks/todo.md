@@ -188,6 +188,47 @@ is what makes it runnable with no `OPENAI_API_KEY`; the rest clicked on `:3000`.
   reached a third file, but **7.1 fixed `.form-grid` in evidence's copy and not estate's**, so the
   two now disagree: the trigger becomes "the copies disagree" and the owner is 7.3.
 
+## Slice 7.2b — The day the system is having — **ahead of 7.3**
+
+Plan mode — kernel, and it touches `src/scope/`. **No migration.** Opened 15 Sep 2026 by the
+director's ruling on the item 7.2 raised.
+
+**What 7.2 found, and what counting the call sites found after it.** 7.2's verify click ran at 00:02
+IDT and the declaration was stamped `2026-09-14`, because every date in this system is derived as
+`clock.now().toISOString().slice(0, 10)` — the **UTC** day. Israel is UTC+2/+3, so for two or three
+hours every night the system's "today" is the country's yesterday. As a stamp on a schema row that is
+a cosmetic annoyance. It is not only a stamp:
+
+- **`src/scope/internal/isolation-join.ts:187`** feeds that day to `TENANCY_ACTIVE_TODAY`. Foundation
+  rule 1's join asks about **yesterday** between midnight and 03:00: a letting that starts today is
+  not yet active, and one that ended yesterday still is. This is the scope, computed in the wrong
+  zone, and the scope is the one thing this product cannot get wrong.
+- **`src/tenancy/internal/status.ts:40`** — `utcDay`, already honestly named — dates the obligation
+  state machine, which SPEC.md rule 3 says is inspectable, versioned and defensible in a dispute.
+- Nine others, including `extract.ts:157` (which declaration governed this reading) and
+  `read-model.ts` (occupancy).
+
+- [ ] **`today(clock)` in `src/kernel/clock.ts`**, formatting in a configured zone that defaults to
+      `Asia/Jerusalem`, through `Intl.DateTimeFormat` with `en-CA` — no dependency, and the zone is a
+      `config_settings` row rather than a literal, because a second country is a row and not a
+      release (rule 8's own argument).
+- [ ] **Every call site that asks *what day is it now* moves to it.** `addUtcDays` in `status.ts`
+      **stays exactly as it is**: arithmetic on a midnight-UTC anchor over a date-only string is
+      correct and zone-free, and the bug is only in deriving the day from an instant. Saying which is
+      which is most of this slice.
+- [ ] **A policy case, red first, in `tests/policy/`.** At `2026-09-15T00:30:00+03:00` the isolation
+      join resolves the tenancy that starts on the 15th and not the one that ended on the 14th. It
+      belongs in the policy suite because it is a claim about the scope, and the scope is never
+      tested through the agent.
+- [ ] **A kernel case** that the same instant is `2026-09-15` in Jerusalem and `2026-09-14` in UTC,
+      so the fix cannot be undone by somebody "simplifying" it back to `toISOString`.
+
+**Done when:** an instant between midnight and 03:00 IDT resolves the same tenancy the office would;
+`utcDay` has no callers left that meant *today*; the full suite is green with the clock fixed at
+00:30 IDT.
+**Verify:** the policy case red first, with the wrong tenancy named in the failure. Then `:3000` with
+`TZ` unchanged and the declaration stamped the day the calendar says.
+
 ## Slice 7.3 — The approval table
 
 Plan mode. **Migration 0028** — ~~0019~~, which is `0019_tenancy_event.sql` and has been since 5.5;
@@ -202,9 +243,30 @@ corrected at 7.2, which counted them. This is the slice that deletes the paint.
       approval stamp written without `dona.approving` and refuses to delete an approved row.
 - [ ] **Approve ≠ promote, and both verbs survive.** Approving says *this reading is correct*;
       promoting copies it onto a typed column and is still the two dates until 7.4.
-- [ ] **Primary control is `אישור כל מה שלא סומן`**, never approve-all, with the low-confidence rows
-      sorted up and a threshold below which a row must be touched individually. **80% unless ruled
-      otherwise.**
+- [ ] **Primary control is `אישור כל מה שלא סומן`**, never approve-all, with the flagged rows sorted
+      up and a threshold below which a row must be touched individually. **80%, ruled 15 Sep** — and
+      the ruling comes with a correction, because this bullet was about to build a control that reads
+      as something it is not.
+      • **`extracted_field.confidence` is not the model's confidence in the field. It is the
+      *minimum OCR word confidence* of the words the reader pointed at** —
+      `src/evidence/internal/extract.ts:303`, `min()` over `MeasuredWord.confidence`, and the
+      extraction schema **deliberately refuses a model-supplied `confidence`**
+      (`extract.test.ts`: `assert.equal(blob.includes('"confidence"'), false)`). So 90% means
+      *Document AI read these characters well*, never *this is the tenant's name rather than the
+      landlord's*. A crisp page misread with total legibility scores 99%. 80% is a sound cut **on
+      that number** — it is roughly where Document AI's own guidance puts human review — and it is
+      kept. What changes is what the screen calls it: **`איכות הקריאה`**, never `ביטחון`.
+      • **`null` is not "confident", and this is the half that would have shipped broken.**
+      `src/kernel/pdf.ts:308` gives every native-text word `confidence: null`, and the `min()` above
+      turns any null into a null field — so **every field of every digitally-produced lease has no
+      confidence at all**, and a threshold that treats null as passing would let
+      `אישור כל מה שלא סומן` approve an entire document on no signal whatsoever. **Null sorts up with
+      the low ones and is flagged**, and the row says *נקרא מטקסט, לא נמדד* rather than showing a
+      number it does not have. A red-first case asserts a null-confidence row is never in the
+      unflagged set.
+      • **A second signal is not this slice's.** The honest one — whether the words the model pointed
+      at actually sit under the declared field's label on the page — is geometry the read overlay
+      already has. Named, not built.
 - [ ] **ת.ז. masked, revealed under `party.national_id.read`**, the reveal a separate request that
       writes `evidence.read_identifier`. The value never ships to be hidden by CSS — 6.6.
 - [ ] **`tests/ui/tokens.test.ts`**: the **seventh** document-shaped screen under 6.6's ruling, with
@@ -247,14 +309,23 @@ a mapping in `applyPromotedField` and a policy case.
 2. **The low-confidence threshold.** The paint used 80% and flagged two rows of ten. *Default: 80%.*
 3. **7.4's targets**, and whether `address` becomes a cross-check rather than a promotion.
    *Default: 7.4 opens with the two dates and adds nothing.*
-4. **A refusal screen for the declaration editor.** Raised at 7.2, which gave it the JSON error body
-   every other form post in this console returns — including the money refusal, which is the one an
-   administrator will actually meet. One refusal shape per route is the reason; that it is the one
-   refusal in this system somebody reads as a *sentence* is the argument against.
-   *Default: nothing is built.*
-5. **The day is UTC.** Raised at 7.2: for three hours a night the administrator's calendar and the
-   catalogue's `effective_from` disagree, and the twice-in-one-day conflict can be stepped around.
-   A zone on the clock is a kernel change. *Default: nothing is built.*
+4. ~~**A refusal screen for the declaration editor.**~~ **Ruled 15 Sep, and re-scoped rather than
+   built.** A bespoke screen on one route would be the seventh form in this console and the only one
+   that does not dead-end — which is not a fix, it is an inconsistency. **Every form post in this
+   system loses what the administrator typed**: `settings`, `estate`, `staff` and now `documents`
+   all throw a `KernelError` into one `setErrorHandler` that answers JSON. That is **one change at
+   the composition root** — an HTML-accepting request that posted a form gets its form back with the
+   message in it — and it is a slice, not a bullet. Named in the carried list below. *Until then:
+   JSON, as now.*
+5. ~~**The day is UTC.**~~ **Ruled 15 Sep: it is fixed, in the kernel, and it is bigger than 7.2
+   found.** 7.2 raised it as a stamped declaration reading `2026-09-14` at 00:02 IDT. Counting the
+   call sites found eleven, and one of them is
+   **`src/scope/internal/isolation-join.ts:187`** — foundation rule 1's own *Tenancy (active today)*
+   predicate. **For three hours every night this system asks the isolation join about yesterday**: a
+   letting that starts today is not yet active, and one that ended yesterday still is. `tenancy`'s
+   state machine derives its day the same way (`status.ts:40`, a function already honestly called
+   `utcDay`). This is a correctness bug in the two things SPEC.md says are never decided by a model,
+   and it gets cheaper to fix now than after real tenant data. **New slice, below, ahead of 7.3.**
 6. **`city` is declarable from a screen now**, with no deploy — one of the three fields the paint
    deferred. The other two are money and stay refused. *Default: nobody declares it until a flow
    needs it.*
@@ -435,6 +506,15 @@ rule lapsing because a document screen arrived.
       happened by a route the rule does not name. **The trigger is now "the copies disagree" rather
       than "there are three", and the owner is 7.3** — the next slice to put a table on a
       `.form-grid`. `.check` is already in `tokens.css` and is closed.
+- [ ] **Every form post in this console dead-ends into JSON.** Raised at 7.2 as a refusal screen for
+      the declaration editor and **ruled on 15 Sep as the console-wide gap it actually is**: seven
+      forms — `settings` ×2, `estate` ×2, `staff`, `documents/intake`, `documents/types/:key/fields`
+      — throw into one `setErrorHandler` (`src/app.ts:278`) that answers `{code, message}`, so an
+      administrator who typed a declaration and named a money field gets a JSON page and a back
+      button onto an empty form. **The fix is one change at the composition root**, not seven
+      bespoke screens: a request that accepts HTML and posted a form gets its form back with the
+      message in it and its values still in the inputs. `POST /documents/intake` already does this by
+      hand at 422 (6.3) and is the shape to generalise. **Unowned**, and it wants a slice.
 - [ ] **The bash guard reads the command that is typed, not what it runs.** Raised at 5.1c, flagged
       rather than fixed. If the director wants the stronger rule it is theirs to say so. **Bit for
       the first time at 6.7**, in the other direction: writing a *file* whose text contained
