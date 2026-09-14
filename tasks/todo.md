@@ -72,8 +72,15 @@ rule lapsing because a document screen arrived.
       permission has a reader, the read path withholds by default and every disclosure writes
       `evidence.read_identifier`. **6.6 still owns the guards**, and now owns one more thing than it
       did: the case names `extracted_field` as well as `party.national_id`.
-- [ ] **Staging `staff:add` for a second operator, and the 5.6 clock-end click on staging.** Owed
-      since 5.7. **Closes at 6.7**, which is the first slice back on staging.
+- [x] **Staging `staff:add` for a second operator.** Owed since 5.7, **closed at 6.7** —
+      `infra/staff-add.sh staging asaf.wilder@roseberry.media OPERATOR`, through the new
+      `infra/run-job.sh` ([evidence/6.7.md](evidence/6.7.md)).
+- [ ] **The 5.6 clock-end click.** Carried 5.6 → 5.7 → 5.8 → 6.7, and **6.7 found it is not a click
+      at all**: no route writes `status: 'ACTIVE'`, only the fixtures do, so A5 is a flow with no
+      screen and `expireDueTenancies` can only move a row nothing can create. The register generator
+      ends every ACTIVE tenancy in the future by construction — 7 rows, earliest end 2027-07-14.
+      **Re-owned by whichever slice gives A5 a screen**, and written into that slice when the
+      director places it. Not carried forward again as a click.
 - [ ] **`config_settings` / secret-name editor, and `DocumentTypeField` on the settings screen.**
       Carried from 5.8. Not this week: 6.4 adds fields through the seed, which is the path A8
       specifies, and a screen for it earns its own slice when a second person needs one.
@@ -91,7 +98,11 @@ rule lapsing because a document screen arrived.
 - [ ] **Staging and prod share one identity configuration**, and **the consent screen stays in
       `Testing`.** Both owned at week 12, beside the prod restart and the F7 organisation move.
 - [ ] **The bash guard reads the command that is typed, not what it runs.** Raised at 5.1c, flagged
-      rather than fixed. If the director wants the stronger rule it is theirs to say so.
+      rather than fixed. If the director wants the stronger rule it is theirs to say so. **Bit for
+      the first time at 6.7**, in the other direction: writing a *file* whose text contained
+      `gcloud run jobs delete` was refused as a destructive command, and the file was written with
+      another tool. The guard is currently both too broad and too narrow, which is the argument for
+      deciding it rather than leaving it.
 - [ ] **Take delivery of the real document corpus** — after F6.
 
 **Carried in and already owned elsewhere:** the emergency bypass, redaction at the provider boundary
@@ -354,7 +365,7 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       and is unchanged — the promotion guard refuses both the delete and the unstamp, and disabling a
       trigger to get past it is not an agent's call.
 
-- [ ] **6.7 — The journey, end to end, on staging.**
+- [x] **6.7 — The journey, end to end, on staging.** Closed 14 Sep — [evidence/6.7.md](evidence/6.7.md).
       The demo slice, and the first time this week's work leaves localhost. Create a building → add an
       apartment → upload an invented lease from the document screen → the system finds the unit,
       extracts the fields and the ת.ז., proposes a new tenancy → confirm the roles → the unit page
@@ -371,6 +382,56 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       **Done when:** the whole walk is done by clicking, with no seed and no SQL.
       **Verify:** live on staging, both halves in one sitting.
       **Deps:** 6.6 · **M**
+      **Raised and closed inside 6.7:**
+      • **`seed:doctypes` and `staff:add` needed a way to reach a deployed database**, and
+      `staff-add.sh` already held the shape. The gcloud flags are written once in
+      `infra/run-job.sh` now, with `infra/seed-doctypes.sh` as the second caller — a second literal
+      copy of the secret-mounting flags is the thing that drifts, and it drifts silently. The job's
+      own output is read back out of Cloud Logging, because `fields — created 2, updated 20` is the
+      record and `Done.` is not. Both callers were run for real.
+      • **Staging's `lease` type declared no ת.ז. until this slice** — `2 created` is 6.4's carry
+      proving itself.
+      • **The first real extraction in the project's life.** Address 90%, apartment 91%, dates 96%,
+      name 92%, **ת.ז. 77%**, guarantor id **0** — zero being the correct result for paper naming no
+      guarantor.
+      • **6.6's guards have a staging half now.** ADMIN 162 word boxes / 2 carrying a run / 3 runs in
+      raw HTML; OPERATOR 8 / **0** / **0**, withheld line shown, `מספר הדירה` shown. Wholesale, as
+      6.6 ruled. The lease confirm page carried **0** runs while printing `התאמה לפי ת.ז.: 1`.
+      • **The bash guard blocked writing a file rather than running one** — 5.1c's open item, biting
+      on a heredoc containing a `gcloud` delete. Still the director's.
+      **Raised → 6.8:**
+      • **A12's address reader has never seen a line break in production.** `documentText`
+      (`src/evidence/internal/verify.ts:47`) joins a page's words with a space and puts a newline only
+      between pages, so the clause `place.ts` and SPEC-evidence.md both lean on describes text this
+      system cannot produce. Punctuation is what has always saved it — the spec's own example is
+      `רקפת 12, שוהם.` — and the first scan without a full stop read the city as
+      `כפר סבא דירה מספר 3 המשכיר`. The refusal was correct and wrote nothing. Kernel, plan mode.
+      • **The 5.6 clock-end click moves to whichever slice gives A5 a screen.** It has been carried
+      since 5.6 as a click, and it is not one: **no route writes `status: 'ACTIVE'`**, only the
+      fixtures do, and the register generator ends every ACTIVE tenancy in the future by construction
+      (7 rows, earliest end 2027-07-14). It cannot close until A5 exists.
+      **Raised → the director:**
+      • **"One party, two tenancies" is true in the database and on no screen.** There is no party
+      route — eight GET routes, none rendering a person — so the week's demo sentence can be asserted
+      and not shown. The nearest proof is 6.5's attach branch, which is why the walk filed a fourth
+      lease. A household screen is a product decision, not an agent's.
+      • **The audit trail is unreadable outside SQL.** `evidence.read_identifier` was counted in
+      psql at 6.6 and cannot be counted on staging at all.
+      • **A confirmed lease leaves its flat reading as vacant** — `0 מאוכלסות היום, 3 פנויות` after
+      two leases — because a confirm writes `DRAFT`. The same A5 gap, on the demo screen.
+
+- [ ] **6.8 — The line the reader was promised.**
+      `documentText` flattens a page's words with a space and only ever emits a newline between
+      pages, while A12's place reader — and the spec that documents it — is written against text
+      where "a line break is where a field ends". Both OCR and pdfjs already know the lines; this is
+      thrown away and then depended upon. **Carries the 5.6 clock-end click no further:** that item
+      now belongs to the A5-screen slice and is written there, not here.
+      **Done when:** a scanned lease whose address line ends in no punctuation resolves its flat, and
+      the case that proves it was **red first** against today's code.
+      **Verify:** the staging walk's original lease-1, unedited, filed on `:3000`.
+      **Plan mode** — `src/kernel/ocr.ts` and `src/kernel/pdf.ts`. **Spec edit first:**
+      SPEC-evidence.md's A12 anchors and `place.ts`'s own comment describe a reader nobody has.
+      **Deps:** 6.7 · **M**
 
 ---
 
