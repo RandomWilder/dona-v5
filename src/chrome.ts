@@ -66,8 +66,12 @@ export function signedInChrome(
       mayFile
         ? item(
             'documents',
-            '/documents/new',
-            'תיוק מסמך',
+            // **Slice 7.1 moved this from `/documents/new` and renamed it.** The rail item was the
+            // filing form itself, so the tab had no front page and the declaration the reader works
+            // from was reachable from nowhere. It is a tab now: `מסמכים` is where the type and its
+            // schema are read, and the filing form is a control on it.
+            '/documents',
+            'מסמכים',
             dest,
             h`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M12 18v-6" /><path d="m9 15 3-3 3 3" />`,
           )

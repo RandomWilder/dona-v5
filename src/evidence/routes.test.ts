@@ -39,7 +39,13 @@ import { seedDocumentTypes } from './fixtures/document-types.ts';
 const CITY = 'עיר מסמכים';
 const ADDRESS = 'רחוב המסמכים 3';
 const PROJECT_CODE = 'TEST-DOCS';
-const BUCKET = 'dona-v5-test-docs';
+// **One bucket per suite, from 7.1.** This was `'dona-v5-test-docs'` in all eight evidence
+// suites, while each suite's teardown deletes documents by `storage_uri LIKE 'gs://<BUCKET>/%'`
+// — so every suite's cleanup deleted every other suite's rows, and `node --test` runs them at
+// the same time. The failures that produced were real assertions on rows another process had
+// just removed, and they moved from run to run, which is why they read as flakes. The comment
+// on that teardown already claimed the bucket was this suite's alone; now it is.
+const BUCKET = 'dona-v5-test-routes';
 const AT = new Date('2026-09-07T09:00:00.000Z');
 
 const plan: EstatePlan = {
@@ -208,6 +214,39 @@ describe('evidence · the upload route', () => {
       unitId = found.rows[0]?.unit_id ?? '';
       assert.ok(unitId);
 
+      await t.test(
+        'the tab lands on a declaration, read out of the database',
+        async () => {
+          // **Slice 7.1.** The landing, and the three things it must get right: it is gated, it
+          // shows a declaration rather than the alphabetically-first type's empty table, and every
+          // row on it came from `document_type_field` rather than from a constant.
+          const response = await as(lease).inject({
+            method: 'GET',
+            url: '/documents',
+          });
+          assert.equal(response.statusCode, 200);
+          assert.match(response.body, /מה ייקרא מן הדף/);
+          // `arnona` sorts first on `type_key` and declares no fields; the default is the first
+          // type that declares one, which is the defect clicking the screen found.
+          assert.match(response.body, /<option value="lease" selected>/);
+          assert.match(response.body, />address</);
+          assert.match(response.body, />start_date</);
+          // A closed declaration is not on the screen. `address` was redeclared at 6.11, so the
+          // 2026-09-07 row is closed and its hint — the one the new row replaced — must not show.
+          assert.ok(!response.body.includes('רחוב ומספר, עיר'));
+          // And the picker is the catalogue, not a list written into the view.
+          assert.match(response.body, /value="handover_protocol"/);
+
+          const empty = await as(lease).inject({
+            method: 'GET',
+            url: '/documents?type=arnona',
+          });
+          assert.equal(empty.statusCode, 200);
+          assert.match(empty.body, /אין עדיין שדות מוצהרים/);
+          assert.ok(!empty.body.includes('<table'));
+        },
+      );
+
       await t.test('the screen offers the catalogue and the flat', async () => {
         const response = await as(lease).inject({
           method: 'GET',
@@ -321,9 +360,18 @@ describe('evidence · the upload route', () => {
           // 422 and not 400: the request was well formed and the file was wrong.
           assert.equal(response.statusCode, 422);
           assert.match(response.body, /אינו נראה כמו/);
-          // The form comes back with what was chosen still chosen, and names what was missing.
+          // The form comes back with what was chosen still chosen, and names every requirement
+          // that was checked — **slice 7.1**, the director's comment. An ארנונה bill carries none
+          // of the lease's three, so all three come back as `לא נמצא` and none as `נמצא`; the
+          // mixed case, where the title matched and a body term did not, is asserted on the
+          // renderer in tests/ui/tokens.test.ts, which is where the screen's own bytes are read.
           assert.match(response.body, /value="lease" selected/);
-          assert.match(response.body, /class="chip"/);
+          assert.match(response.body, /class="chip term-missing"/);
+          assert.equal(
+            response.body.match(/class="chip term-missing"/g)?.length,
+            3,
+          );
+          assert.ok(!response.body.includes('class="chip term-found"'));
           const count = await pool.query<{ n: string }>(
             `SELECT count(*)::text AS n FROM document_link WHERE entity_id = $1`,
             [unitId],
@@ -673,7 +721,7 @@ describe('evidence · A3 addendum upload redirects to confirm', () => {
       version: '9.9.9-test',
       clock: fixedClock(AT),
       objects,
-      pdf: createFakePdfText(['נספח לחוזה השכירות']),
+      pdf: createFakePdfText(['נספח לחוזה השכירות תקופת השכירות']),
       bucket: BUCKET,
     });
     let unitId = '';

@@ -35,7 +35,7 @@ import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const AT = new Date('2026-09-07T09:00:00.000Z');
 const NAV = signedInChrome('x'.repeat(64), 'documents', true);
-const BUCKET = 'dona-v5-test-docs';
+const BUCKET = 'dona-v5-test-promote';
 const MARKERS = 'חוזה שכירות המושכר תקופת השכירות השוכר';
 
 const pdfBytes = (marker: string): Buffer =>

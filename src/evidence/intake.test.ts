@@ -40,7 +40,7 @@ import {
 } from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
-const BUCKET = 'dona-v5-test-docs';
+const BUCKET = 'dona-v5-test-intake';
 const AT = new Date('2026-09-07T09:00:00.000Z');
 
 const specimen = (file: string): string => {

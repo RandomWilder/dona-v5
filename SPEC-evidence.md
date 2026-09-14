@@ -211,6 +211,16 @@ nothing outside it writes a document row.
   requirement — is unchanged. **The guard against widening a type too far is
   `tests/policy/document-verification.test.ts`**, which requires every tier-1 specimen to be refused
   in every slot that is not its own.
+- **A refusal names every requirement that was checked, not only the ones that failed (slice 7.1).**
+  `Verification` carries `matchedTerms` beside `missingTerms`, and the screen prints both with their
+  found / not-found state. The rule is auditability rather than helpfulness: a lease declares three
+  requirements, and a refusal that printed two of them told the person reading it that two things
+  were looked for. They cannot tell a declaration that is wrong from a file that is wrong without
+  seeing the whole of what was asked. `missingTerms` keeps its meaning exactly — it is still the
+  refusal's cause and still what the audit line records — so nothing downstream moves. Both lists
+  are the *form's* own printed words, never anything the document says, which is what makes them
+  safe to render at all. The director's comment on `mockups/document-intake.html` is what found
+  this, and it found it in the screen rather than in the declaration it was aimed at.
 - **Three verdicts, not two.** `verified` · `refused` · `unverified`, plus `unguarded` for a type with
   no terms. **`unverified` is a file this system could get no text out of** — a photograph, a scan
   with no processor configured, a PDF whose text reader hit its bound — and it is **filed**, because
@@ -368,6 +378,24 @@ way to carry, so A2 called `createParty` instead (name only, no identity match).
 `lease` with no tenancy link redirects to `/documents/:id/tenancy`. Upload to an existing letting stays 3.3 plus 4.3's per-field promote. A
 handover protocol precedes every tenancy its flat will ever have, so a document with no tenancy link
 is an ordinary case and not a gap.
+
+### The documents tab — `GET /documents` (slice 7.1)
+
+The rail's `מסמכים` destination, and the tab's landing. It reads the catalogue and shows **the
+declaration a reader will look for before anybody chooses a file**: the type picker
+(`listDocumentTypes`), and for the chosen type every current field declaration
+(`documentTypeFields`) — key, label, value type, required, extraction hint — under a
+`גרסה <effective_from>` chip. Closed declarations (`effective_to IS NOT NULL`) are not shown, which
+is the date parameter doing its job and not a filter written here.
+
+**It is read-only and it writes nothing.** The declaration becomes editable at 7.2 and the approval
+table arrives at 7.3; this screen exists so that what the system will read off a page is legible
+before a page is filed, which is the thing week 6's demo could not see anywhere.
+
+**It carries `documents.write`, the same gate as the rail item that reaches it.** An ungated landing
+behind a gated rail is the door that answers `not_allowed` after somebody has already walked through
+it — 6.1's refusal-after-typing, which A11 refused to build for its own form. The permission names
+the act the tab is for: this is the filing tab's front page, not a reading of what is filed.
 
 ### Filing without a unit — flow A12 (slice 6.3)
 

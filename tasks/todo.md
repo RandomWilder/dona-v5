@@ -1,3 +1,230 @@
+# The new track — UI-first, from the document intake
+
+> **Opened 14 Sep 2026, the day week 6 closed.** The plan that was going to run next is archived:
+> [archive/displaced-slices.md](archive/displaced-slices.md), seventeen unbuilt slices, 7.1–9.5.
+> Not deleted, and the debts inside it are still debts — they are named at that file's head and in
+> the carried list below. **The slice sequence restarts at 7.1**, which is a different 7.1.
+>
+> **Why the plan stopped.** Week 6's demo found four defects that eleven green slices and a full CI
+> gate had not. The director's reading: the weak link is not the engineering, it is the flow
+> descriptions the engineering is built from — written in week 1, before the vision they encode had
+> settled. So the flows get rebuilt one screen at a time, starting where the data enters, because
+> everything downstream is a function of what lands in `extracted_field`.
+>
+> **No week number, on purpose.** [roadmap.md](roadmap.md)'s calendar and month tables are untouched,
+> as they always are. What the remaining weeks *mean* has not changed; which slices deliver them has.
+>
+> **The pipeline does not change.** Plan mode, both gates, mockup-before-wiring, the carry rule, one
+> slice per session, `deploy.yml` off the CI result. That is the part that is working and it is not
+> what is being rethought. The one standing change: **mockup-first is the default here, not the
+> exception** — every slice in this track paints before it wires.
+
+## The paint, reviewed — 14 Sep 2026
+
+`mockups/document-intake.html` was reviewed and accepted. The director declined the click-on-`:3000`
+step ("the idea is clear; the mockup gets the flow across") and raised **one functional comment**,
+on step 3.
+
+> The phrases searched for are `המושכר או הדירה` and `תקופת השכירות`. Add, or even replace these two
+> with, `הסכם שכירות` — normally what a lease has in its title.
+
+**`הסכם שכירות` is already declared, and has been since 6.8.** `src/evidence/fixtures/document-types.ts`:
+`['חוזה שכירות|הסכם שכירות', 'המושכר|הדירה', 'תקופת השכירות']`, where `|` separates the spellings of
+**one** requirement and every requirement must still be met.
+
+**The comment nevertheless found a real defect, in the screen rather than the declaration.**
+`refusal()` in `src/evidence/internal/views.ts` prints `verification.missingTerms` and nothing else.
+The title requirement was *found*, so it never appeared — and a refusal that shows only its failures
+cannot be audited by the person reading it. Three requirements were checked and the screen named two.
+Fixed in 7.1 below.
+
+**On replacing the two body terms with the title alone — not taken here, and measured instead.**
+`תקופת השכירות` is what separates a lease from an ארנונה bill, an insurance certificate or a handover
+protocol, and `tests/policy/document-verification.test.ts` exists to refuse every specimen in every
+slot that is not its own — a title-only rule is the any-term rule that case was written to prevent
+(6.8's own argument, third paragraph). The sharper reason is a gap rather than an opinion:
+`lease_amendment` is titled `נספח לחוזה שכירות` and **the corpus has no specimen for it**
+(`NO_SPECIMEN_YET`), so the change cannot be measured against the one type most likely to collide.
+7.1 writes that specimen and runs the comparison; if nothing cross-verifies, the replacement is
+adopted on evidence in the same slice. Separately: **the terms are already editable without a deploy**
+at `/settings` (5.8, one requirement per line, `|` for spellings), so any wording can be tried today —
+a wording worth keeping also goes into the seed, which is what a re-seed reads.
+
+**How the paint's seven rulings landed.**
+
+| # | The question | Ruled |
+|---|---|---|
+| 1 | Schema editable at runtime | Yes — **7.2**. No migration: `document_type_field` and `upsertDocumentTypeField` already carry it |
+| 2 | The boundary | Held. `verificationTerms` stay code + policy matrix; extraction fields open. Refusal deterministic, extraction configurable |
+| 3 | `city`, `rent_amount`, `security_deposit` | **Deferred to the director.** No money field and no `MONEY` value type, twice on purpose. 7.2 adds a guard so the editor cannot create one by the back door |
+| 4 | Approve, to where | **Split the verb.** Approve is a stamp on `extracted_field` (**7.3**); promote stays the copy onto a typed column and its `CHECK` widens in **7.4**, target by target |
+| 5 | Read value vs approved value | Two columns. `value` is never overwritten — the delta *is* the dataset. Threshold 80% unless the director says otherwise |
+| 6 | ת.ז. | The existing rule, honoured from the first row. Masked, governed reveal, `evidence.read_identifier` |
+| 7 | Derived name | A label, never a key. 6.10 already ruled identity |
+
+**Not needed — already works.** "Renter 2" is not a new field. Two tenants on one lease are two rows
+of the same declaration; `0017_extracted_field.sql` says so and deliberately declines the unique
+constraint on `(document_id, document_type_field_id)`.
+
+---
+
+## Slice 7.1 — The tab, the declaration, and an honest refusal — **closed 14 Sep 2026**
+
+No migration, no write path. Read-only screens and one corpus file.
+Evidence: [evidence/7.1.md](evidence/7.1.md).
+
+- [x] **`GET /documents`** — the tab's landing. Type picker (`listDocumentTypes`) and, for the chosen
+      type, the declaration the reader will look for (`documentTypeFields`): key, value type,
+      required, extraction hint, and a `גרסה <effective_from>` chip. Closed rows
+      (`effective_to IS NOT NULL`) are not shown.
+- [x] **The rail points at it.** `src/chrome.ts`: `/documents/new` → `/documents`, label
+      `תיוק מסמך` → `מסמכים`. `ChromeDest` already has `documents` (6.9) and does not change. The
+      landing carries the same `documents.write` gate the rail item does — an ungated landing is the
+      door that answers `not_allowed` after somebody walked through it, which is what A11 refused to
+      build.
+- [x] **The refusal names every requirement, not only the failures.** `Verification` gains
+      `matchedTerms` beside `missingTerms`; `refusal()` prints all of them with found / not-found.
+      `missingTerms` keeps its meaning, so nothing downstream moves. **This is the director's
+      comment, closed.**
+- [x] **`docs/corpus/lease-amendment.md`** — the missing tier-1 specimen, authored to the published
+      form's structure. **Never a real tenant document.** Registered in `SPECIMEN_TYPES`, removed
+      from `NO_SPECIMEN_YET`.
+- [x] **The measurement**, `tests/policy/document-verification.test.ts`: evaluate a *candidate* lease
+      declaration of `['חוזה שכירות|הסכם שכירות']` alone against every specimen and assert which
+      cross-verify. **Red first** — the expectation is that the נספח verifies as a lease, and that
+      failure is the answer to the comment. If it stays green, the replacement is adopted here.
+
+**Done when:** the rail reaches `/documents`; the declaration renders out of the database; a refused
+upload names all three requirements and which of them was found; the cross-verify case has printed
+its result and the director has the number. **All four met.**
+
+**What it answered, and what it raised.**
+
+- **The replacement is refused, on evidence.** The title-only candidate and the live declaration
+  verify the same two specimens and refuse the same six — indistinguishable on this corpus. 6.8's
+  body terms stay, and the reason is now a number rather than an opinion. *The director's comment is
+  closed.*
+- **`lease_amendment`'s declaration was wrong in both directions and is corrected in the seed** —
+  it verified `bank-guarantee.md` and refused a real נספח. Any wording worth keeping still goes
+  through `/settings` first (5.8); this one went to the seed because a re-seed is what reads it.
+- **A lease cannot refuse its own annex**, and no choice of terms changes that: the annex's
+  vocabulary is a superset of the lease's and the term language has no negation. One named pair in
+  `tests/policy/document-verification.test.ts`. **Open, and it belongs to the director:** whether
+  separating them is worth a third verb — 7.4 already has one (`verify`) waiting on the same kind of
+  question — or whether declared-type-plus-operator is simply where this stops.
+- **The guard-four owner moved `7.1` → `7.3` inside 7.1, not in 7.3.** Writing `evidence/7.1.md`
+  while the mockup's owner was `7.1` fails the guard, so the move could not wait for the slice that
+  deletes the paint. 7.3's bullet below is corrected to match.
+- **The test isolation defect the slice tripped over**, fixed here rather than carried: eight
+  evidence suites shared one bucket string and each teardown deleted by it. See the evidence file.
+- **Gate two did not run in full locally** — the corpus cases need `OPENAI_API_KEY`. CI is where the
+  new specimen is actually exercised, and a skip there is a failure.
+
+## Slice 7.2 — The declaration becomes editable (ADMIN)
+
+Plan mode — policy layer, two modules. **No migration.**
+
+- [ ] **`POST /documents/types/:typeKey/fields`** — add or correct one declaration. A correction is
+      **R18 new-row**: close the current row at `effective_to = <clock date>` and insert a new row at
+      `effective_from = <clock date>`, one transaction. Never an `UPDATE` of what a row said. The
+      natural key makes twice-in-one-day a conflict, which is correct and earns its own sentence.
+- [ ] **Permission: reuse `settings.write`.** ADMIN-only, and already the hand on the `DocumentType`
+      catalogue since 5.8. A permission with one reader adds vocabulary without adding a boundary,
+      and `roles.ts` stays untouched — which is the point: the matrix is code.
+- [ ] **The money loophole, and the reason this slice needs a guard of its own.** `0011` says it:
+      "No MONEY member … no amount is ever a column on a business record." That holds today *because
+      the schema is source code*. The moment an admin may declare a field, they may declare
+      `rent_amount` as `NUMBER`, and READ ME rule 3 stops being enforceable. The editor refuses a
+      declaration whose `field_key` or `label_he` carries the money vocabulary — `amount`, `rent`,
+      `deposit`, `price`, `fee`, `payment`, `שכר דירה`, `סכום`, `פיקדון`, `תשלום`, `דמי` — with a
+      **red-first** policy case and a refusal sentence naming the rule. Adding money stays a deploy
+      and a diff, which is what `roles.ts` says an irreversible widening should cost.
+- [ ] Two policy cases: an OPERATOR posting a declaration is refused; a money declaration is refused.
+      `src/evidence/schema.test.ts`: a correction leaves two rows and the old one still says what it
+      said.
+
+**Done when:** an ADMIN adds a field, a lease is re-filed, and the new field is extracted against the
+new declaration; an OPERATOR is refused; a money declaration is refused; the superseded row is intact.
+
+## Slice 7.3 — The approval table
+
+Plan mode. **Migration 0019.** This is the slice that deletes the paint.
+
+- [ ] **`GET /documents/:id/fields`** — the ledger from the paint. One row per `extracted_field`:
+      field, read value, confidence, action. `/documents/:id/read` stays what it is
+      (`מילים על הדף`, the pixel view); the two link to each other and the `קדם` buttons move here.
+- [ ] **0019 on `extracted_field`** — `approved_value text`, `approved_by text` (`-- pii`, a
+      snapshot and not a staff FK, exactly as `promoted_by`), `approved_at timestamptz`. **`value` is
+      never overwritten.** A trigger in the shape of `extracted_field_promotion_guard()` refuses an
+      approval stamp written without `dona.approving` and refuses to delete an approved row.
+- [ ] **Approve ≠ promote, and both verbs survive.** Approving says *this reading is correct*;
+      promoting copies it onto a typed column and is still the two dates until 7.4.
+- [ ] **Primary control is `אישור כל מה שלא סומן`**, never approve-all, with the low-confidence rows
+      sorted up and a threshold below which a row must be touched individually. **80% unless ruled
+      otherwise.**
+- [ ] **ת.ז. masked, revealed under `party.national_id.read`**, the reveal a separate request that
+      writes `evidence.read_identifier`. The value never ships to be hidden by CSS — 6.6.
+- [ ] **`tests/ui/tokens.test.ts`**: the fifth document-shaped screen under 6.6's ruling, with the
+      justification written where the other four have theirs.
+- [ ] **Delete `mockups/document-intake.html`** and its `MOCKUP_OWNERS` entry — guard four. ~~Owner
+      moves `7.1` → `7.3` in `scripts/guards.ts`~~ — **done in 7.1**, which is where it had to
+      happen: the owner's evidence file and the mockup cannot both exist, so 7.1 could not close
+      with the owner still pointing at itself. The paint's last unwired screen is this one and the
+      owner is whoever deletes it.
+- ~~**Fix `.form-grid` for real**~~ — **closed in 7.1**, which turned out to be the slice that
+      first puts a table on a wired `.form-grid`. Measured at 478px in the evidence file.
+
+**Done when:** a filed lease shows its ten rows; approve-unflagged stamps the high-confidence ones;
+edit-and-approve writes `approved_value` and leaves `value` intact; a second approval of the same row
+is refused; an OPERATOR sees the ת.ז. rows as a count and no value; 0019 round-trips.
+
+## Slice 7.4 — Approve-to-where
+
+Plan mode. **Migration 0020**, and the only slice in this track that touches tenancy's typed columns.
+
+`field_promotion.target`'s `CHECK` is `('tenancy.start_date','tenancy.end_date')` (0018) and
+`TARGET_FIELD` in `src/evidence/internal/promote.ts` mirrors it. Widen it target by target, each with
+a mapping in `applyPromotedField` and a policy case.
+
+- [ ] **The finding that makes this the director's and not the agent's:** `address` and
+      `apartment_number` are already facts about the *unit*, and A11 says only an ADMIN shapes those.
+      Promoting them would not write a new fact — it would **assert the document against the flat it
+      was filed under**, where disagreement is a defect to surface and not a value to copy. That is a
+      third verb (`verify`), and probably its own slice. `tenant_name` and `tenant_id_number` already
+      have a home: the party rows 6.5's proposal writes.
+- [ ] So the honest scope is: decide which targets are genuinely *copies*, and build only those.
+      **Opens with the two dates and adds nothing until ruled.**
+
+## Left to the director — named, not blocking
+
+1. **The money field.** No money field and no `MONEY` value type, twice on purpose; 7.2's guard keeps
+   it that way. *Default: stays refused.*
+2. **The low-confidence threshold.** The paint used 80% and flagged two rows of ten. *Default: 80%.*
+3. **7.4's targets**, and whether `address` becomes a cross-check rather than a promotion.
+   *Default: 7.4 opens with the two dates and adds nothing.*
+4. **Whether a lease should be able to refuse its own annex.** Raised and measured by 7.1: it cannot,
+   by construction, and the fix is either negation in `verification_terms` — a new grammar in the
+   settings editor — or the third verb 7.4 already circles. *Default: the named pair stands and
+   nothing is built.*
+
+## Carried
+
+- [x] **`.form-grid` floors its implicit column at its widest item's min-content.** **Closed in
+      7.1**, not 7.3: `GET /documents` is the first wired `.form-grid` holding a table, so the slice
+      that inherits the bug turned out to be this one. `grid-template-columns: minmax(0, 1fr)` is on
+      the real screen now, and the table scrolls inside `.table-wrap` rather than widening the page. Found by
+      clicking this paint at 478px: one `.notice` holding a table made the whole page, headings
+      included, 567px wide and scrolled the body sideways. Fixed *inside the paint* with
+      `grid-template-columns: minmax(0, 1fr)` scoped under `.paint`, deliberately not in
+      `src/evidence/internal/views.ts` — no wired `.form-grid` holds a table today, so nothing is
+      broken yet. **The slice that puts these tables on a real screen inherits the bug**, and that
+      is the slice that fixes it for real.
+- [x] **`roadmap.md` § "What week 6 displaces" was in the file twice** — a 27-line stale copy from
+      `bda380e`, starting at a `---|---|---|` with no header row above it, so it rendered as
+      garbage and contradicted the live copy on M2. Deleted 14 Sep. Nothing referenced it.
+
+---
+
 # Week 6 · Sun 11 – Thu 15 Oct 2026 — The two core journeys
 
 > **Started 13 Sep 2026**, the day week 5 closed ([evidence/week-5.md](evidence/week-5.md)), rather

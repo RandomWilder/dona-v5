@@ -28,7 +28,7 @@ import type { PdfPage } from '../../kernel/pdf.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import type { UnitLetting } from '../../tenancy/contract.ts';
-import type { DocumentTypeRow } from './catalogue.ts';
+import type { DocumentTypeFieldRow, DocumentTypeRow } from './catalogue.ts';
 import { isIdentifierField } from './extract.ts';
 import type { IntakeRefusal } from './intake.ts';
 import type { ProposedPerson, TenancyCandidate } from './lease.ts';
@@ -50,7 +50,17 @@ const ltr = (value: string | number): Html =>
   h`<span dir="ltr">${value}</span>`;
 
 const styles = h`<style>
-  .form-grid { display: grid; gap: var(--space-4); max-width: var(--size-shell-max); }
+  /* minmax(0, 1fr) and not the default auto, from slice 7.1. Carried from the paint review: an
+     implicit grid column floors at its widest item's min-content, so one .notice holding a table
+     made the whole page — headings included — wider than the viewport and scrolled the body
+     sideways at 478px. The paint fixed it inside itself and left the real screen alone because no
+     wired .form-grid held a table. GET /documents is the first that does. */
+  .form-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); max-width: var(--size-shell-max); }
+  .form-note { color: var(--color-text-muted); font-size: var(--text-sm); margin: var(--space-3) 0 0; }
+  /* .grid-table and .table-wrap are in the token sheet beside .facts, not here: the key column
+     names a *face*, and tests/ui/tokens.test.ts refuses a font-family typed into a screen. That
+     guard is the reason the block moved rather than a preference — a shared shape that carries a
+     face belongs to the sheet, which is what .facts has said since 3.3. Slice 7.1. */
   .form-row { display: grid; gap: var(--space-2); }
   .form-row .hint { color: var(--color-text-muted); font-size: var(--text-sm); margin: 0; }
   .form-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: center; }
@@ -65,6 +75,15 @@ const styles = h`<style>
      64-character digest, which in two columns wraps into a block nobody can read a line of. */
   .notice .facts { grid-template-columns: 1fr; }
   .terms { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0 0; padding: 0; list-style: none; }
+  /* Slice 7.1. Every requirement is printed and the chip says which state it is in. The state is a
+     word before it is a colour — נמצא / לא נמצא — because a refusal that separated its two
+     halves by hue alone would be unreadable to anyone who cannot tell these two hues apart, and
+     these two carry the whole meaning of the screen. The colours are the sheet's, as everything
+     here is. */
+  .terms .chip { gap: var(--space-2); background: var(--color-surface); }
+  .term-found { color: var(--color-ok); }
+  .term-missing { color: var(--color-alert); }
+  .term-state { font-weight: 600; }
   /* Slice 6.3. A list of flats the reader could not choose between, each one a radio the operator
      chooses with. The min-height is the touch target; the input opts out of the field sizing the
      stylesheet gives every other input, because a radio is not a field. */
@@ -119,6 +138,14 @@ function unitLine(unit: UnitHit): Html {
  * **One chip per requirement, spellings and all (6.8).** `המושכר|הדירה` is one thing that was not
  * found and either spelling would have met it, so it is one chip reading `המושכר או הדירה` — two
  * chips would tell an operator that two words are missing and send them looking for both.
+ *
+ * **Every requirement is printed, found and not found alike (7.1).** Until this slice the screen
+ * printed `missingTerms` and stopped, so a lease that declares three requirements and failed one
+ * produced a refusal naming two — and a reader with two chips in front of them cannot tell how many
+ * things were checked, which is the difference between *this file is the wrong type* and *this
+ * declaration is wrong*. Three chips, each carrying its own state, and the chip is what says which.
+ * The found ones are as safe to render as the missing ones and for the same reason: both are the
+ * form's language and neither is the document's.
  */
 /**
  * The flat (or building) a document is already anchored to, said in words the operator can act on.
@@ -175,16 +202,22 @@ function refusal(
       </p>
     </section>`;
   }
+  const requirement = (term: string, found: boolean): Html =>
+    h`<li class="chip ${found ? h`term-found` : h`term-missing`}">
+      <span class="term-state">${found ? h`נמצא` : h`לא נמצא`}</span>
+      <span>${term.split('|').join(' או ')}</span>
+    </li>`;
+  const checked =
+    verification.matchedTerms.length + verification.missingTerms.length;
   return h`<section class="notice">
     <h2>הקובץ אינו נראה כמו ${type.labelHe}</h2>
     <p class="lede">
-      לא נמצאו בקובץ הביטויים הקבועים של טופס מסוג זה, ולכן הוא לא נשמר. בדקו שנבחר הקובץ הנכון,
-      או בחרו סוג מסמך אחר.
+      טופס מסוג זה נבדק מול ${checked} ביטויים קבועים, ולא כולם נמצאו בקובץ — ולכן הוא לא נשמר.
+      בדקו שנבחר הקובץ הנכון, או בחרו סוג מסמך אחר. להלן כל הביטויים שנבדקו:
     </p>
     <ul class="terms">
-      ${verification.missingTerms.map(
-        (term) => h`<li class="chip">${term.split('|').join(' או ')}</li>`,
-      )}
+      ${verification.missingTerms.map((term) => requirement(term, false))}
+      ${verification.matchedTerms.map((term) => requirement(term, true))}
     </ul>
   </section>`;
 }
@@ -1336,4 +1369,120 @@ export function renderTenancyWrittenPage(screen: TenancyWrittenScreen): string {
     body,
     screen.nav,
   );
+}
+
+/**
+ * **The documents tab's landing. Slice 7.1, and the first screen of the new track.**
+ *
+ * It answers one question before anybody chooses a file: *what will this system look for on the
+ * page?* The declaration has existed in the database since 3.1 and has been read at run time by the
+ * extractor since 4.2, and until now there was nowhere to see it — so the week-6 demo could watch a
+ * value arrive and could not check what had been asked for. Everything here is read out of
+ * `document_type` and `document_type_field`; nothing is compiled in, which is A8 and the reason the
+ * screen is worth having at all.
+ *
+ * **The version chip is the honest part.** `effective_from` on a declaration row *is* the version
+ * (R18), so a reader who wants to know why a January value looks wrong against a March schema is
+ * told, on the screen, which day's declaration they are looking at. Closed rows are not shown: the
+ * route asks for the declarations governing today and the catalogue's date parameter does the rest.
+ *
+ * **Read-only, on purpose and only for now.** The `עריכה` control the paint drew is 7.2's and is not
+ * here; the approval table is 7.3's. A control that did nothing would teach an operator that this
+ * screen lies.
+ */
+export interface DocumentsScreen {
+  nav: Html;
+  types: DocumentTypeRow[];
+  /** The type whose declaration is on the page. Null when the catalogue is empty. */
+  chosen: DocumentTypeRow | null;
+  /** The declarations governing `on`, already filtered by the catalogue's date parameter. */
+  fields: DocumentTypeFieldRow[];
+  /** The day the declaration was asked for — never `CURRENT_DATE`, for SPEC.md's reason. */
+  on: string;
+}
+
+export function renderDocumentsPage(screen: DocumentsScreen): string {
+  const { chosen, fields } = screen;
+  // One chip for the whole table when every row is the same version, which is the ordinary case;
+  // a per-row date when they differ, because then the single chip would be a lie about some of
+  // them. A schema corrected field by field is exactly how R18 says this table grows.
+  const versions = [...new Set(fields.map((field) => field.effectiveFrom))];
+  const oneVersion = versions.length === 1 ? versions[0] : null;
+  const body = h`
+    <div>
+      <h1>מסמכים</h1>
+      <p class="lede">
+        מה המערכת מחפשת על הדף, לפי סוג המסמך. ההצהרה נקראת מן המסד בכל בקשה — היא נתון ולא קוד.
+      </p>
+    </div>
+    <form class="form-grid" method="get" action="/documents">
+      <div class="form-row">
+        <label for="type">סוג המסמך</label>
+        <select id="type" name="type">
+          ${screen.types.map(
+            (type) =>
+              h`<option value="${type.typeKey}" ${
+                type.typeKey === chosen?.typeKey ? h`selected` : h``
+              }>${type.labelHe}</option>`,
+          )}
+        </select>
+        <p class="hint">הסוג מוצהר בעת התיוק ואינו מזוהה אוטומטית.</p>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="submit">הצגה</button>
+      </div>
+    </form>
+    ${
+      chosen === null
+        ? h`<section class="notice"><h2>אין סוגי מסמכים בקטלוג</h2>
+            <p class="lede">הקטלוג נזרע מ־<code dir="ltr">npm run seed:doctypes</code>.</p>
+          </section>`
+        : h`<section class="notice">
+      <h2>
+        מה ייקרא מן הדף
+        ${oneVersion ? h`<span class="chip">גרסה ${ltr(oneVersion)}</span>` : h``}
+      </h2>
+      <p class="lede">
+        ${
+          fields.length === 0
+            ? h`לסוג זה אין עדיין שדות מוצהרים. הוא נשמר ונמצא בחיפוש, ולא נקרא ממנו ערך.`
+            : h`${ltr(String(fields.length))} שדות מוצהרים ל${chosen.labelHe}. הקורא מחפש את אלה ואת אלה בלבד; מה שאינו כאן אינו נשמר.`
+        }
+      </p>
+      ${
+        fields.length === 0
+          ? h``
+          : h`<div class="table-wrap">
+        <table class="grid-table">
+          <thead>
+            <tr>
+              <th>שדה</th><th>מפתח</th><th>סוג ערך</th><th>חובה</th><th>רמז לקורא</th>
+              ${oneVersion ? h`` : h`<th>גרסה</th>`}
+            </tr>
+          </thead>
+          <tbody>
+            ${fields.map(
+              (field) => h`<tr>
+              <td class="value">${field.labelHe}</td>
+              <td class="key" dir="ltr">${field.fieldKey}</td>
+              <td class="key" dir="ltr">${field.valueType}</td>
+              <td ${field.isRequired ? h`` : h`class="muted"`}>${field.isRequired ? h`חובה` : h`רשות`}</td>
+              <td class="muted">${field.extractionHint ?? h`—`}</td>
+              ${oneVersion ? h`` : h`<td class="key" dir="ltr">${field.effectiveFrom}</td>`}
+            </tr>`,
+            )}
+          </tbody>
+        </table>
+      </div>`
+      }
+      <p class="form-note">
+        ההצהרה המוצגת היא זו שתקפה ל־${ltr(screen.on)}. הצהרה שנסגרה אינה מוצגת כאן, והערכים שנקראו
+        תחתיה נשארים מוסברים לפיה.
+      </p>
+    </section>`
+    }
+    <div class="form-actions">
+      <a class="btn btn-primary" href="/documents/new">תיוק מסמך</a>
+    </div>`;
+  return shell('דונה דום — מסמכים', body, screen.nav);
 }

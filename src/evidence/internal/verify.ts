@@ -38,6 +38,21 @@ export interface Verification {
    * here would tell an operator that two words are missing when either would have done.
    */
   missingTerms: string[];
+  /**
+   * What was looked for **and found** — the other half of the same sentence. **Slice 7.1.**
+   *
+   * A lease declares three requirements and the screen printed the ones that failed, so a refusal
+   * that had checked three named two. The person reading it cannot tell a declaration that is wrong
+   * from a file that is wrong without seeing the whole of what was asked: *the title was found, the
+   * term of letting was not* is actionable, *the term of letting was not found* is a puzzle. The
+   * director's comment on `mockups/document-intake.html` is what found this, and it found it here
+   * rather than in the declaration it was aimed at.
+   *
+   * Empty on every verdict where nothing was checked (`unverified`, `unguarded`) and on those only,
+   * exactly as `missingTerms` is. Together with `missingTerms` it is a partition of the declared
+   * requirements, named as declared — spellings and all, for the reason above.
+   */
+  matchedTerms: string[];
 }
 
 /**
@@ -126,20 +141,21 @@ export function verifyDeclaredType(
   terms: readonly string[] | null,
 ): Verification {
   if (!terms || terms.length === 0) {
-    return { verdict: 'unguarded', missingTerms: [] };
+    return { verdict: 'unguarded', missingTerms: [], matchedTerms: [] };
   }
   const haystack = text === null ? '' : normalise(text);
   if (haystack === '') {
-    return { verdict: 'unverified', missingTerms: [] };
+    return { verdict: 'unverified', missingTerms: [], matchedTerms: [] };
   }
-  const missingTerms = terms.filter(
-    (term) =>
-      !term
-        .split(SPELLING)
-        .some((spelling) => haystack.includes(normalise(spelling))),
-  );
+  const found = (term: string): boolean =>
+    term
+      .split(SPELLING)
+      .some((spelling) => haystack.includes(normalise(spelling)));
+  const missingTerms = terms.filter((term) => !found(term));
+  const matchedTerms = terms.filter(found);
   return {
     verdict: missingTerms.length === 0 ? 'verified' : 'refused',
     missingTerms,
+    matchedTerms,
   };
 }

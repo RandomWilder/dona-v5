@@ -29,7 +29,7 @@ const CITY = 'עיר התקרה';
 const ADDRESS = 'רחוב התקרה 1';
 const PROJECT_CODE = 'TEST-CAP';
 const STAFF_DOMAIN = 'evidence-cap.test';
-const BUCKET = 'dona-v5-test-docs';
+const BUCKET = 'dona-v5-test-cap';
 const BOUNDARY = '----donadomcap';
 
 /** A specimen that passes the lease type's verification guard, so the cap is the only refusal. */

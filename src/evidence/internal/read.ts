@@ -87,7 +87,11 @@ export async function readFiledDocument(
         ? verification
         : {
             verdict: filed.verificationVerdict,
+            // Both lists empty, and that is the truth of this branch rather than a filler: the
+            // stored verdict is being re-stated from the row, not re-derived, so nothing was
+            // checked on this read and neither list has anything to say. Slice 7.1.
             missingTerms: [],
+            matchedTerms: [],
           },
     pages: read.pages,
     images: read.images,
