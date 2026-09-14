@@ -95,6 +95,11 @@ merge as `deploy.yml` specifies, health verified at the close itself:
 smoke ok — .../health → {"ok":true,"version":"b6b8605","db":"up"}
 ```
 
+**`b6b8605` is the last commit that changed `src/`, and it is the number this week is measured at.**
+Merging this file redeployed staging as `0a1e05b` / `dona-staging-00084-g97`, smoke green — a
+docs-only revision serving byte-identical application code. Every week close does this to itself,
+which is why the code tip is the figure recorded and the close deploy is the footnote.
+
 **Staging keeps the walk's rows deliberately.** A cleaned staging means demoing an empty console.
 
 ## What this week says to the client, and what it must not imply
