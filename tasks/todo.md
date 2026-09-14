@@ -37,13 +37,15 @@
 > is the check that proves it — no self-certification. The standing bar every slice also clears is
 > the Definition of Done in [plan.md](plan.md).
 
-**Every 6.x slice is closed.** 6.8, 6.9, 6.11 and 6.10 all landed on 14 Sep: 6.11 was added by 6.8's
-verify step and the director sequenced it first, ahead of 6.9, because it is the one defect that files
-a lease against a flat nobody chose; 6.10 closed the week with the fourth of the demo's defects.
-6.1–6.7 were closed and merged before the demo. **What is left of week 6 is its close** —
-`tasks/evidence/week-6.md`, what was demoed and where, and everything carried forward — and that is
-the director's to call, not an agent's ([CLAUDE.md](../CLAUDE.md): a week closes when its slices close
-**and** its demo has been given).
+**WEEK 6 IS CLOSED — 14 Sep 2026.** [evidence/week-6.md](evidence/week-6.md). Eleven slices, fifteen
+PRs (#74–#88), tip `b6b8605`, staging serving revision `dona-staging-00083-rp9` with
+`{"ok":true,"version":"b6b8605","db":"up"}`. The demo was given off staging and found four defects;
+6.8, 6.11, 6.9 and 6.10 closed all four on 14 Sep — 6.11 was added by 6.8's verify step and the
+director sequenced it ahead of 6.9, because it is the one defect that files a lease against a flat
+nobody chose. 6.1–6.7 were closed and merged before the demo. Both conditions
+[CLAUDE.md](../CLAUDE.md) names are met: the slices closed **and** the demo was given, so **week 7
+starts today** rather than on a Thursday. Everything this week raised and did not close is in the
+carried list below, each with an owner.
 An unbuilt flow is painted in the live shell (`mockups/<flow>.html`, `/dev/mockups/<flow>` on a
 `-dev` process) before it is wired; a guard fails if that file and the slice's evidence both exist.
 
@@ -120,7 +122,20 @@ rule lapsing because a document screen arrived.
       cap's own teardown, and `routes.test.ts` losing its filed document mid-run — and **both passed
       on a re-run, which is the problem**: a suite that fails only sometimes teaches everyone to
       re-run. The fix is a bucket per suite, or a cleanup scoped the way routes' own is (by hash).
-      A test-harness slice, and small.
+      A test-harness slice, and small. **The same root cause, raised separately at 6.8:** the
+      after-write hook went **5 red on a clean green tree and twice green on a re-run**, because it
+      runs `src/evidence/*.test.ts` in parallel against one developer database and is not
+      `npm run test:code`. One slice owns both halves — suite isolation, in the fixtures and in the
+      hook.
+- [ ] **`.env` still points at the staging OCR processor.** Left wired at 6.8 because 6.9 and 6.11
+      both wanted it, and unchanged at 6.11. `.env.bak-6.8` is the backup. **Every local upload spends
+      a Document AI call until it is removed**, which is a real bill against a developer machine and
+      not a tidiness item. Whoever opens the next slice that uploads locally either removes it or
+      writes down that they kept it.
+- [ ] **6.5's `extracted_field` residue in the developer database.** Raised at 6.5, restated at 6.6,
+      6.7 and 6.8, and **promoted here to the standing list because it has outlived four slices**.
+      The promotion guard refuses both the delete and the unstamp (4.3, working as designed), and
+      disabling a trigger to get past it is not an agent's call. **Director's.**
 - [ ] **A document's *tenancy* link is stable but arbitrary.** Raised at 6.10, beside the anchor.
       `tenancyLinkOf` and `promote.ts` order by `entity_id`, so they never reshuffle — but no rule
       says a document has one letting, and if one ever has two the lowest id wins for no reason.
