@@ -51,6 +51,14 @@ const LEADING_STREET = /^(?:רחוב|רח['׳])\s+/;
  * so `רקפת  12` and `רקפת 12` are the same address to a reader and two to a regex. **Newlines
  * survive that collapse**, because on a form a line break is where a field ends: flattening them
  * too makes `שוהם` on one line and `דירה 12A` on the next read as a town called `שוהם דירה 12A`.
+ *
+ * **Which is exactly what happened, and until slice 6.8 this comment described a reader nobody had.**
+ * `documentText` joined a page's words with a space and put a newline only between pages, so the
+ * line breaks this function preserves so carefully were never in the string it was given. Punctuation
+ * carried it: the spec's worked example is `רקפת 12, שוהם.` and the full stop is what stops the city.
+ * The first scan on staging that printed its address without one read the city as
+ * `כפר סבא דירה מספר 3 המשכיר`. 6.8 fixed the text rather than this reader — both pdfjs and Document
+ * AI already know where a line ends — so nothing below changed and the sentence above became true.
  */
 export function readPlace(text: string): PlaceReading {
   const haystack = text.replace(/[^\S\n]+/g, ' ').replace(/ ?\n+ ?/g, '\n');

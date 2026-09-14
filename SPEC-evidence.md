@@ -191,16 +191,40 @@ nothing outside it writes a document row.
 - **The guard reads the catalogue.** `document_type.verification_terms` is its only input, so a type
   added as a seed row arrives with its own guard and a type nobody wrote terms for is unguarded
   rather than unfileable (A8, and slice 3.0's call). There is no `Record<TypeKey, string[]>` anywhere.
-- **Every declared term must be present**, and the rule is that strict because the terms are the
+- **Every declared requirement must be met**, and the rule is that strict because the terms are the
   fixed printed language of the form rather than anything a particular household's copy says. One
   matching term is not enough and the corpus shows why: the standard lease says ארנונה in the clause
   about utilities, so *any-term* filing would accept a lease into the ארנונה slot. The comparison is
   over whitespace-collapsed text, because a PDF breaks a term across two runs whenever the line wraps.
+- **A requirement may have more than one spelling, and `|` separates them (slice 6.8).** One element
+  of `verification_terms` is one requirement; `חוזה שכירות|הסכם שכירות` is satisfied by either. This
+  is not a loosening of the rule above — every requirement must still be met — it is the admission
+  that a standard Israeli lease is headed either way and calls the flat either המושכר or הדירה. The
+  week-6 demo's paper said `הסכם שכירות` and `הדירה` throughout and was refused for it: correct
+  behaviour, wrong calibration. The encoding is a delimiter inside the existing `text[]` element and
+  not a new column, so a type is still added as a seed row and the settings editor — one line per
+  requirement — is unchanged. **The guard against widening a type too far is
+  `tests/policy/document-verification.test.ts`**, which requires every tier-1 specimen to be refused
+  in every slot that is not its own.
 - **Three verdicts, not two.** `verified` · `refused` · `unverified`, plus `unguarded` for a type with
-  no terms. **`unverified` is a file with no text layer** — a photograph, a scan, or a PDF whose
-  text reader hit its bound — and it is **filed**, because refusing it would refuse most real leases.
-  Slice 4.1 then reads it. A verdict of `unverified` filed silently would make `verified` mean
-  nothing, so the verdict is on the audit line either way.
+  no terms. **`unverified` is a file this system could get no text out of** — a photograph, a scan
+  with no processor configured, a PDF whose text reader hit its bound — and it is **filed**, because
+  refusing it would refuse most real leases. Slice 4.1 then reads it. A verdict of `unverified` filed
+  silently would make `verified` mean nothing, so the verdict is on the audit line either way.
+- **The verdict is taken on the best reading available, and the reading happens once, before anything
+  is written (slice 6.8).** Until 6.8 OCR ran only when a PDF had *no* text layer, so a phone
+  scanner's own text layer permanently outranked Document AI — the demo's scan was refused in under a
+  second while the one file with no text layer took seven. Now the native layer is read first, and
+  **OCR is spent whenever the native reading does not satisfy the declared type**, not only when the
+  page is empty. When it is spent, its pages win: OCR is only ever reached because the native reading
+  failed the type's own guard. **The consequence is deliberate** — a scan whose OCR text does not
+  carry the type's vocabulary is now *refused* rather than filed as `unverified`. `unverified` means
+  nobody could read it; it does not mean nobody has checked.
+- **`too_many_pages` is a refusal and never a stored verdict (slice 6.8).** `onlineOcrPageLimit` is
+  15 and real leases exceed it. Until 6.8 a longer scan was filed as though it had been read; now,
+  when OCR is *needed* and the file is too long for the online call, the upload is refused with a
+  sentence that says so. The `document.verification_verdict` CHECK therefore still holds three
+  values: nothing carrying this outcome reaches a row.
 
 ### A refused upload leaves no row — the question slice 3.1 left open
 
@@ -285,17 +309,28 @@ goes is the order 3.3 fixed, with one step inserted in front of it: **read the t
 resolve the place → then `fileDocument`, unchanged.**
 
 **The reader is deterministic, and its anchors are printed here because somebody has to write a lease
-that matches them.** It is a pure function over the flattened text (`src/evidence/internal/place.ts`),
+that matches them.** It is a pure function over the document's text (`src/evidence/internal/place.ts`),
 the exact analogue of A6's protocol reader, and it reads three things:
 
 - **the street and number** — after `כתובת המושכר:`, `כתובת הנכס:`, `כתובת הדירה:`, a bare `כתובת:`,
   or a `רחוב` that starts the address. `רקפת 12` and `רחוב רקפת 12` are the same address to it.
-- **the city** — whatever follows the address's comma, up to the next comma, full stop or semicolon.
-  So `כתובת המושכר: רקפת 12, שוהם.` reads as street `רקפת 12` and city `שוהם`.
+- **the city** — whatever follows the address's comma, up to the next comma, full stop, semicolon
+  **or line end**. So `כתובת המושכר: רקפת 12, שוהם.` reads as street `רקפת 12` and city `שוהם`.
 - **the apartment number** — `דירה 12`, `דירה מס׳ 12`, `דירה מספר 12A`. The same shape 3.5's reader
   uses, because it is the same sentence on a different form.
 
 Anything it cannot find is null, and null is not an error: it is the refusal below, which is a screen.
+
+**On a form a line break is where a field ends, and from slice 6.8 the line break actually arrives.**
+The reader was written against that clause from the day it shipped, and `documentText` could not
+produce it: it joined a page's words with a space and emitted a newline only *between* pages. What
+saved it was punctuation — the worked example above is `רקפת 12, שוהם.` and the full stop is what
+stops the city — so the first scan that printed its address without one read the city as
+`כפר סבא דירה מספר 3 המשכיר` (the week-6 demo, and the refusal that followed was correct and wrote
+nothing). Both readers already know where a line ends: pdfjs sets `endsLine`, and Document AI returns
+`lines` beside `tokens`. `src/kernel/pdf.ts` and `src/kernel/ocr.ts` carry that through and
+`documentText` joins by line. **The line structure comes from the reader and is never inferred from
+geometry** — a y-clustering line detector standing beside two real ones is the thing that drifts.
 
 **Resolution is exact, and a near miss is a question rather than a guess.** The reader's city and
 street are folded into `building.address_key`'s own normalisation — `addressKeyOf` in
@@ -345,8 +380,11 @@ same line 3.3 draws. The per-operator bound counts it beside `evidence.file_docu
 argument is that the bound is on what reached intake and not on what survived it: an unresolved
 intake has already cost a read and possibly an OCR call.
 
-**OCR runs on this path when there is no text layer**, and only when a processor is configured — a
-scan whose address nobody can read resolves to zero candidates rather than to a 503.
+**OCR runs on this path when the native text layer does not satisfy the declared type**, and only
+when a processor is configured — a scan whose address nobody can read resolves to zero candidates
+rather than to a 503. Until 6.8 the condition was *no text layer at all*, which is why the demo's
+CamScanner layer was never overruled. A file too long for the online call is refused with the
+page-limit sentence rather than offered a candidate list it could never have narrowed.
 
 **It runs once, from slice 6.4.** Until then the same scan was read twice — once here for the place
 reader and once inside `fileDocument`, whose own verdict comes back `unverified` on a page with no
@@ -573,6 +611,15 @@ OCR text. The OCR step is after the write because a refused upload still writes 
 a scan that OCR cannot finish must not become a 503 on the upload: the bound is 20 seconds, a miss
 leaves the row `unverified`, and the HTTP response is the filed page.
 
+**Slice 6.8 moved the upload's own OCR in front of the write, and this section is now about rows that
+are already on file.** The order above was written when the *only* OCR on the upload path ran after
+the row existed, and its reason — a refused upload writes nothing — is what made a second reader
+after the write look necessary. It is not: a reading taken before the write is still a reading taken
+before anything is written, and the refusal is then made on it. So `fileDocument` reads once, up
+front, and the after-the-fact promotion is `readFiledDocument` and `sweepUnverified` — the backlog
+path, for the documents filed before a processor existed. A miss on the upload still leaves the row
+`unverified` and still never becomes a 503; the bound is still 20 seconds.
+
 **The sweep only promotes `unverified` → `verified`.** The CHECK on `document.verification_verdict`
 is `verified | unverified | unguarded`. Terms found after OCR update the column and write a second
 audit line (`evidence.read_document`). Terms still missing leave `unverified` — the file is already
@@ -581,8 +628,9 @@ and 4.1 does not invent one.
 
 **Two readers, one page shape.** A native PDF with a text layer is pdfjs (confidence `null`). A
 scan, a photograph, or a PDF whose pages came back empty is Document AI (confidence set, boxes from
-the OCR engine). Images skip pdfjs. More than 15 pages is not sent online; the row stays
-`unverified`. The overlay (`GET /documents/:id/read`) draws those boxes on the page image the
+the OCR engine). Images skip pdfjs. More than 15 pages is not sent online: on the sweep the row stays
+`unverified`, and **on the upload path, from 6.8, the file is refused with the page-limit sentence**
+rather than filed as though it had been read. The overlay (`GET /documents/:id/read`) draws those boxes on the page image the
 processor already returned — logical CSS, specimens. **From 6.6 a word box carries its word only
 for a viewer holding `party.national_id.read`**; below it the boxes are geometry and nothing
 else. **Which page** is a query
