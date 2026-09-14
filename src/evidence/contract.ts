@@ -11,17 +11,22 @@
 // extraction must read the catalogue **at run time** — A8.
 
 export type {
+  DeclarationResult,
   DocumentTypeFieldRow,
   DocumentTypeFieldSpec,
   DocumentTypeRow,
   DocumentTypeSpec,
+  FieldDeclaration,
   FieldValueType,
 } from './internal/catalogue.ts';
 export {
+  declareDocumentTypeField,
   documentTypeByKey,
   documentTypeFieldCounts,
   documentTypeFields,
+  FIELD_VALUE_TYPES,
   listDocumentTypes,
+  retireDocumentTypeField,
   upsertDocumentType,
   upsertDocumentTypeField,
 } from './internal/catalogue.ts';
@@ -96,6 +101,16 @@ export {
   searchDocuments,
   signLinkedDocuments,
 } from './internal/list.ts';
+// **Slice 7.2.** The money vocabulary is on the contract because `tests/policy/money-field.test.ts`
+// is its second reader, and a guard whose gate carries a second copy of the list goes green the day
+// somebody shortens the real one.
+export type { MoneyMatch } from './internal/money.ts';
+export {
+  MONEY_KEY_TOKENS,
+  MONEY_LABEL_TERMS,
+  moneyRefusal,
+  namesMoney,
+} from './internal/money.ts';
 export type {
   PromoteDeps,
   PromoteResult,

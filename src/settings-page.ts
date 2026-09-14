@@ -6,8 +6,13 @@
 // `asset_type` (estate's kinds are not a setting). Secret names wait; `settings.write` is who may
 // change a reference when that editor arrives.
 //
-// Type rows only. A field schema is still a seed. Natural key is the upsert identity: posting an
-// existing `code` or `type_key` is an edit, never a second row.
+// Type rows only. Natural key is the upsert identity: posting an existing `code` or `type_key` is an
+// edit, never a second row.
+//
+// **A field schema was a seed until slice 7.2 and is now a row an ADMIN writes** — at `/documents`,
+// flow A14, under this same `settings.write`. Deliberately not a third card here: a declaration is
+// read beside the screen that shows what the reader looks for, and this screen is the catalogue's
+// index rather than a place any of it is worked on.
 
 import { signedInChrome } from './chrome.ts';
 import type { DocumentTypeRow, DocumentTypeSpec } from './evidence/contract.ts';
@@ -99,7 +104,7 @@ function documentForm(csrf: string): Html {
   return h`<form class="settings-form" method="post" action="/settings/document-types">
     ${csrfInput(csrf)}
     <h2>סוג מסמך חדש</h2>
-    <p class="lede">מפתח קיים מעדכן את השורה. שדות לחילוץ נשארים בזרע.</p>
+    <p class="lede">מפתח קיים מעדכן את השורה. שדות לחילוץ נערכים במסך <a href="/documents">מסמכים</a>.</p>
     <div class="field">
       <label for="dt-key">מפתח</label>
       <input id="dt-key" name="type_key" type="text" dir="ltr" required maxlength="64" />

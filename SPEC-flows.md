@@ -561,6 +561,49 @@ refilled and a staging store is what 3.2, A6 and the director's ruling of 14 Sep
 price is the one A12 has always charged — attach the file a second time — and it is the same price a
 candidate chosen off the list charges.
 
+### A14 — An administrator declares a field
+
+**Trigger:** the system is asked to read something off a page that it does not currently look for —
+a city on its own, a clause the office has started to care about, a field somebody mis-declared and
+has to correct.
+
+**Why it is a flow at all.** Foundation rule 8 says a document type is a row and a field is a row,
+and that new ones cost no migration and no deploy. Half of it has been true since 3.1: a **type** is
+a row, edited at `/settings` under `settings.write`. The other half has never been true. A **field**
+has cost `src/evidence/fixtures/document-types.ts`, a commit, a review and a
+`npm run seed:doctypes` — a deploy wearing a seed's clothes, run three times (3.1, 3.5, 6.4) by
+somebody editing source code to say what a reader should look for. A8's open half was open on one
+side only, and this flow closes it.
+
+1. **The administrator opens `/documents`** and picks a type. The screen already shows the
+   declaration governing today (slice 7.1): key, label, value type, required, hint, version.
+2. **They declare a field, or correct one, or retire one.** `POST /documents/types/:typeKey/fields`,
+   under `settings.write` — **ADMIN only**, the same hand that has held the `DocumentType` catalogue
+   since 5.8. No new permission: a permission with one reader adds vocabulary without adding a
+   boundary, and the role matrix stays code (SPEC-staff.md).
+3. **A correction is a new row and never an edit.** R18. In one transaction the live row is closed
+   at the day *before* today and the new declaration opens today, so a value extracted last month
+   still points at the row that governed it and that row still says what it said. **Declaring the
+   same field twice in one day is a conflict**, not a second correction: the declaration being
+   superseded has governed no extraction on any other day, so there is nothing to supersede.
+4. **Retiring a field closes the row and inserts nothing.** The catalogue's rule is deactivate,
+   never delete (A9), and a field is no different — `extracted_field` rows point at the closed
+   declaration and stay explicable by it.
+5. **No money field, and the refusal names the rule.** The moment an administrator may declare a
+   field they may declare `rent_amount` as `NUMBER`, and foundation rule 2 stops being enforceable
+   by the schema. The editor refuses a declaration whose key or label carries the money vocabulary.
+   **Adding money to this system stays a migration, a `value_type` member, a diff and a review** —
+   the price `src/staff/internal/roles.ts` says an irreversible widening should cost.
+
+**What A14 does not do.** It does not touch `verification_terms` — what proves *that this is a
+lease* stays in the type row under A9's editor and under the policy suite, while what is read *after*
+the document has been proved is what opens here. **Refusal stays deterministic; extraction becomes
+configurable**, which is the boundary the paint's second ruling drew. It does not promote anything:
+a declared field is a capture target and never a typed column (foundation rule 8, invariant 3).
+
+**Module:** evidence owns the command, the route and the screen. Staff owns the permission and
+decides nothing else.
+
 ## Open
 
 - **Which three to five document types open the concept work.** The catalogue seeds eight; the working

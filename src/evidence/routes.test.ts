@@ -2042,3 +2042,367 @@ describe('evidence · A12 offers to create, to an admin', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// **The declaration editor, driven the way an administrator drives it.** Slice 7.2, flow A14.
+//
+// Foundation rule 8 says a field is a row and costs no deploy. Everything below is that claim
+// posted through a real form: the write, the correction, the retire, and the two refusals the slice
+// exists to make — a role that may not declare, and a declaration that names money.
+//
+// **The role refusal is here and not in `tests/policy/`.** `tests/policy/` builds no application —
+// its cases are SQL and pure functions — and every role refusal in this repository is asserted at
+// the route, against the stance the composition root actually registered
+// (`src/estate/routes.test.ts`, `src/staff/routes.test.ts`, `src/settings.test.ts`). The money
+// refusal *is* a policy case, because it is a constraint no model and no role may decide, and it
+// is in `tests/policy/money-field.test.ts` with the vocabulary it reads.
+//
+// **It was red first.** The route was registered with `documents.write` — which an OPERATOR holds —
+// and this suite's refusal case failed with 303 before the stance became `settings.write`. The
+// output is in `tasks/evidence/7.2.md`.
+// ---------------------------------------------------------------------------------------------
+const DECLARE_DOMAIN = 'evidence-declare.test';
+const DECLARE_TYPE = 'a14_editor_type';
+
+describe('evidence · an administrator declares a field (7.2, A14)', () => {
+  it('declares, corrects, retires — and refuses a role and a money field', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    // Two days, because a correction is a new row at a new date and one clock cannot show that.
+    const DAY_ONE = new Date('2026-09-20T06:00:00.000Z');
+    const DAY_TWO = new Date('2026-09-21T06:00:00.000Z');
+    const appOn = (at: Date) =>
+      buildApp({
+        pool,
+        version: '9.9.9-test',
+        clock: fixedClock(at),
+        objects: createMemoryStore(),
+        pdf: createFakePdfText(['']),
+        bucket: BUCKET,
+      });
+    const dayOne = appOn(DAY_ONE);
+    const dayTwo = appOn(DAY_TWO);
+
+    /** Every declaration of the suite's field, oldest first — the rows, not the screen's view. */
+    const rows = async (): Promise<
+      {
+        label_he: string;
+        effective_from: string;
+        effective_to: string | null;
+      }[]
+    > => {
+      const result = await pool.query<{
+        label_he: string;
+        effective_from: string;
+        effective_to: string | null;
+      }>(
+        `SELECT f.label_he,
+                to_char(f.effective_from, 'YYYY-MM-DD') AS effective_from,
+                to_char(f.effective_to, 'YYYY-MM-DD') AS effective_to
+           FROM document_type_field f
+           JOIN document_type t ON t.document_type_id = f.document_type_id
+          WHERE t.type_key = $1
+          ORDER BY f.effective_from`,
+        [DECLARE_TYPE],
+      );
+      return result.rows;
+    };
+    const post = (
+      app: ReturnType<typeof buildApp>,
+      session: SignedIn,
+      form: Record<string, string>,
+    ) =>
+      app.inject({
+        method: 'POST',
+        url: `/documents/types/${DECLARE_TYPE}/fields`,
+        payload: new URLSearchParams({
+          csrf: session.csrf,
+          ...form,
+        }).toString(),
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          cookie: session.cookie,
+        },
+      });
+
+    // **A session per day, and this cost a run to find.** `SESSION_ABSOLUTE_MS` is twelve hours
+    // (5.1), so a session minted on the 20th is expired on the 21st and the guard answers a 303
+    // redirect to sign-in — which reads exactly like a route that accepted the post. Every refusal
+    // below was "passing" as a 303 until each day got its own. `signIn` upserts the account on its
+    // email, so these are two sessions of **one** operator and the audit count at the end is still
+    // one actor's.
+    const admins: Record<string, SignedIn> = {};
+    let operator: SignedIn | null = null;
+    const adminOn = async (at: Date): Promise<SignedIn> => {
+      const key = at.toISOString();
+      const held = admins[key];
+      if (held) return held;
+      const fresh = await signIn(pool, fixedClock(at), {
+        email: `admin@${DECLARE_DOMAIN}`,
+        role: 'ADMIN',
+      });
+      admins[key] = fresh;
+      return fresh;
+    };
+    let admin: SignedIn | null = null;
+    let adminTwo: SignedIn | null = null;
+    try {
+      await signOutAll(pool, DECLARE_DOMAIN);
+      admin = await adminOn(DAY_ONE);
+      adminTwo = await adminOn(DAY_TWO);
+      operator = await signIn(pool, fixedClock(DAY_TWO), {
+        email: `ops@${DECLARE_DOMAIN}`,
+        role: 'OPERATOR',
+      });
+      await pool.query(
+        `INSERT INTO document_type (document_type_id, type_key, label_he, label_en,
+                                    verification_terms, is_active)
+         VALUES (gen_random_uuid(), $1, 'סוג לעורך', null, null, true)
+         ON CONFLICT (type_key) DO NOTHING`,
+        [DECLARE_TYPE],
+      );
+      await pool.query(
+        `DELETE FROM document_type_field WHERE document_type_id =
+           (SELECT document_type_id FROM document_type WHERE type_key = $1)`,
+        [DECLARE_TYPE],
+      );
+
+      await t.test(
+        'an ADMIN declares a field, and the screen shows it',
+        async () => {
+          const declared = await post(dayOne, admin as SignedIn, {
+            action: 'declare',
+            field_key: 'city',
+            label_he: 'עיר',
+            value_type: 'TEXT',
+            extraction_hint: 'עיר בלבד, לא הרחוב',
+          });
+          assert.equal(declared.statusCode, 303);
+          assert.match(
+            String(declared.headers.location),
+            /\/documents\?type=a14_editor_type&saved=declared/,
+          );
+          const screen = await dayOne.inject({
+            method: 'GET',
+            url: `/documents?type=${DECLARE_TYPE}`,
+            headers: { cookie: (admin as SignedIn).cookie },
+          });
+          assert.equal(screen.statusCode, 200);
+          assert.match(screen.body, /city/);
+          assert.match(screen.body, /עיר בלבד, לא הרחוב/);
+          // The editor is on the page for this role, which is the other half of the refusal below.
+          assert.match(screen.body, /אדמין בלבד/);
+          assert.equal((await rows()).length, 1);
+        },
+      );
+
+      await t.test(
+        'the same field again on the same day is a conflict',
+        async () => {
+          const again = await post(dayOne, admin as SignedIn, {
+            action: 'declare',
+            field_key: 'city',
+            label_he: 'עיר אחרת',
+            value_type: 'TEXT',
+          });
+          assert.equal(again.statusCode, 409);
+          assert.equal(again.json().code, 'conflict');
+          const only = await rows();
+          assert.equal(only.length, 1);
+          assert.equal(
+            only[0]?.label_he,
+            'עיר',
+            'the first declaration is untouched',
+          );
+        },
+      );
+
+      await t.test(
+        'a correction the next day leaves two rows, and the old one still says what it said',
+        async () => {
+          const corrected = await post(dayTwo, adminTwo as SignedIn, {
+            action: 'declare',
+            field_key: 'city',
+            label_he: 'עיר המושכר',
+            value_type: 'TEXT',
+            is_required: 'true',
+            extraction_hint: 'עיר בלבד, לא הרחוב ולא המיקוד',
+          });
+          assert.equal(corrected.statusCode, 303);
+          const both = await rows();
+          assert.equal(
+            both.length,
+            2,
+            'a correction is a new row, never an edit',
+          );
+          assert.equal(both[0]?.label_he, 'עיר');
+          assert.equal(both[0]?.effective_from, '2026-09-20');
+          // Closed the day *before* the successor opens, or both would govern the 21st.
+          assert.equal(both[0]?.effective_to, '2026-09-20');
+          assert.equal(both[1]?.label_he, 'עיר המושכר');
+          assert.equal(both[1]?.effective_from, '2026-09-21');
+          assert.equal(both[1]?.effective_to, null);
+
+          const screen = await dayTwo.inject({
+            method: 'GET',
+            url: `/documents?type=${DECLARE_TYPE}`,
+            headers: { cookie: (adminTwo as SignedIn).cookie },
+          });
+          // One row on the screen, not two: the superseded declaration is closed, and a closed
+          // declaration is not shown (7.1's rule, and the date parameter doing its job).
+          assert.equal(screen.body.split('>city<').length - 1, 1);
+          assert.match(screen.body, /עיר המושכר/);
+        },
+      );
+
+      await t.test(
+        'a money declaration is refused, and writes nothing',
+        async () => {
+          const before = (await rows()).length;
+          for (const money of [
+            { field_key: 'rent_amount', label_he: 'נתון נוסף' },
+            { field_key: 'extra_1', label_he: 'סכום הפיקדון' },
+          ]) {
+            const refused = await post(dayTwo, adminTwo as SignedIn, {
+              action: 'declare',
+              value_type: 'NUMBER',
+              ...money,
+            });
+            assert.equal(
+              refused.statusCode,
+              400,
+              `${money.field_key}: ${refused.body.slice(0, 200)}`,
+            );
+            assert.equal(refused.json().code, 'invalid');
+            // The sentence names the rule, which is what an administrator needs in order to know
+            // this is a decision and not a validation quirk.
+            assert.match(refused.json().message, /may not name money/);
+            assert.match(refused.json().message, /Foundation rule 2/);
+          }
+          assert.equal((await rows()).length, before);
+        },
+      );
+
+      await t.test('an OPERATOR is refused, and writes nothing', async () => {
+        const before = (await rows()).length;
+        const refused = await post(dayTwo, operator as SignedIn, {
+          action: 'declare',
+          field_key: 'floor_area',
+          label_he: 'שטח',
+          value_type: 'NUMBER',
+        });
+        assert.equal(refused.statusCode, 403);
+        assert.equal(refused.json().code, 'not_allowed');
+        assert.equal(refused.json().message, 'not_allowed');
+        assert.equal((await rows()).length, before, 'nothing was declared');
+        // And the form is not on their page at all, which is why there is no refusal screen.
+        const screen = await dayTwo.inject({
+          method: 'GET',
+          url: `/documents?type=${DECLARE_TYPE}`,
+          headers: { cookie: (operator as SignedIn).cookie },
+        });
+        assert.equal(screen.statusCode, 200);
+        assert.doesNotMatch(screen.body, /אדמין בלבד/);
+        assert.doesNotMatch(screen.body, /הוצאה משימוש/);
+      });
+
+      await t.test(
+        'a post with no token is refused, and writes nothing',
+        async () => {
+          const before = (await rows()).length;
+          const refused = await dayTwo.inject({
+            method: 'POST',
+            url: `/documents/types/${DECLARE_TYPE}/fields`,
+            payload: new URLSearchParams({
+              csrf: '',
+              action: 'declare',
+              field_key: 'forged',
+              label_he: 'מזויף',
+              value_type: 'TEXT',
+            }).toString(),
+            headers: {
+              'content-type': 'application/x-www-form-urlencoded',
+              cookie: (adminTwo as SignedIn).cookie,
+            },
+          });
+          assert.equal(refused.statusCode, 403);
+          assert.equal(refused.json().code, 'not_allowed');
+          assert.equal((await rows()).length, before);
+        },
+      );
+
+      await t.test('retiring closes the row and deletes nothing', async () => {
+        const retired = await post(dayTwo, adminTwo as SignedIn, {
+          action: 'retire',
+          field_key: 'city',
+        });
+        // The live declaration opened today, so retiring it today would invert its own window.
+        assert.equal(retired.statusCode, 409);
+        const DAY_THREE = new Date('2026-09-22T06:00:00.000Z');
+        const nextDay = appOn(DAY_THREE);
+        const adminThree = await adminOn(DAY_THREE);
+        const gone = await post(nextDay, adminThree, {
+          action: 'retire',
+          field_key: 'city',
+        });
+        assert.equal(gone.statusCode, 303);
+        const kept = await rows();
+        assert.equal(kept.length, 2, 'deactivate, never delete');
+        assert.equal(kept[1]?.effective_to, '2026-09-21');
+        const screen = await nextDay.inject({
+          method: 'GET',
+          url: `/documents?type=${DECLARE_TYPE}`,
+          headers: { cookie: adminThree.cookie },
+        });
+        assert.doesNotMatch(screen.body, />city</);
+        await nextDay.close();
+      });
+
+      await t.test('every declaration left an audit line', async () => {
+        const { rows: lines } = await pool.query<{ action: string; n: string }>(
+          `SELECT action, count(*)::text AS n FROM audit_log
+            WHERE actor_id = $1 AND action IN ('evidence.declare_field', 'evidence.retire_field')
+            GROUP BY action ORDER BY action`,
+          [(admin as SignedIn).staffAccountId],
+        );
+        // Two declares that succeeded plus one that conflicted plus two money refusals; one retire
+        // that conflicted plus one that closed the row. `audit.around` records both outcomes.
+        assert.equal(
+          lines.find((line) => line.action === 'evidence.declare_field')?.n,
+          '5',
+        );
+        assert.equal(
+          lines.find((line) => line.action === 'evidence.retire_field')?.n,
+          '2',
+        );
+      });
+    } finally {
+      for (const account of [admin, operator]) {
+        if (account) {
+          await pool
+            .query(`DELETE FROM audit_log WHERE actor_id = $1`, [
+              account.staffAccountId,
+            ])
+            .catch(() => {});
+        }
+      }
+      await pool
+        .query(
+          `DELETE FROM document_type_field WHERE document_type_id =
+             (SELECT document_type_id FROM document_type WHERE type_key = $1)`,
+          [DECLARE_TYPE],
+        )
+        .catch(() => {});
+      await pool
+        .query(`DELETE FROM document_type WHERE type_key = $1`, [DECLARE_TYPE])
+        .catch(() => {});
+      await signOutAll(pool, DECLARE_DOMAIN);
+      await dayOne.close();
+      await dayTwo.close();
+      await pool.end();
+    }
+  });
+});

@@ -120,18 +120,23 @@ its result and the director has the number. **All four met.**
 - **Gate two did not run in full locally** — the corpus cases need `OPENAI_API_KEY`. CI is where the
   new specimen is actually exercised, and a skip there is a failure.
 
-## Slice 7.2 — The declaration becomes editable (ADMIN)
+## Slice 7.2 — The declaration becomes editable (ADMIN) — **closed 15 Sep 2026**
 
-Plan mode — policy layer, two modules. **No migration.**
+Plan mode — policy layer, two modules. No migration. Flow **A14**, written into `SPEC-flows.md`
+before the code. Evidence: [evidence/7.2.md](evidence/7.2.md).
 
-- [ ] **`POST /documents/types/:typeKey/fields`** — add or correct one declaration. A correction is
-      **R18 new-row**: close the current row at `effective_to = <clock date>` and insert a new row at
-      `effective_from = <clock date>`, one transaction. Never an `UPDATE` of what a row said. The
-      natural key makes twice-in-one-day a conflict, which is correct and earns its own sentence.
-- [ ] **Permission: reuse `settings.write`.** ADMIN-only, and already the hand on the `DocumentType`
+- [x] **`POST /documents/types/:typeKey/fields`** — add or correct one declaration. A correction is
+      **R18 new-row**: close the current row and insert a new row at `effective_from = <clock date>`,
+      one transaction. Never an `UPDATE` of what a row said. The natural key makes twice-in-one-day a
+      conflict, which is correct and earns its own sentence. ~~close the current row at
+      `effective_to = <clock date>`~~ — **wrong, and corrected inside 7.2 rather than implemented:**
+      `documentTypeFields` is inclusive at both ends, so closing at the same day the successor opens
+      leaves **two live rows for one field today**. The close is **the day before**, which is what
+      the seed and `schema.test.ts` have always done.
+- [x] **Permission: reuse `settings.write`.** ADMIN-only, and already the hand on the `DocumentType`
       catalogue since 5.8. A permission with one reader adds vocabulary without adding a boundary,
       and `roles.ts` stays untouched — which is the point: the matrix is code.
-- [ ] **The money loophole, and the reason this slice needs a guard of its own.** `0011` says it:
+- [x] **The money loophole, and the reason this slice needs a guard of its own.** `0011` says it:
       "No MONEY member … no amount is ever a column on a business record." That holds today *because
       the schema is source code*. The moment an admin may declare a field, they may declare
       `rent_amount` as `NUMBER`, and READ ME rule 3 stops being enforceable. The editor refuses a
@@ -139,21 +144,59 @@ Plan mode — policy layer, two modules. **No migration.**
       `deposit`, `price`, `fee`, `payment`, `שכר דירה`, `סכום`, `פיקדון`, `תשלום`, `דמי` — with a
       **red-first** policy case and a refusal sentence naming the rule. Adding money stays a deploy
       and a diff, which is what `roles.ts` says an irreversible widening should cost.
-- [ ] Two policy cases: an OPERATOR posting a declaration is refused; a money declaration is refused.
-      `src/evidence/schema.test.ts`: a correction leaves two rows and the old one still says what it
-      said.
+      `src/evidence/internal/money.ts` holds the vocabulary and the policy case reads **it**, never a
+      copy, so a shortened list is a red build.
+- [x] **Retire, added to the scope and named here so it can be struck.** The bullets said add or
+      correct. A correction keys on `field_key`, so a mis-typed key cannot be corrected — only
+      declared again beside its own mistake, forever — and an editor whose first typo is permanent is
+      a trap. `retireDocumentTypeField` closes the row and inserts nothing: deactivate, never delete,
+      which is the rule `upsertDocumentType` already states one level up.
+- [x] The money case is a policy case, in `tests/policy/money-field.test.ts`, **red first**. **The
+      OPERATOR refusal is a route case and not a policy case**, against this bullet's original
+      wording: `tests/policy/` builds no application, and every role refusal in this repository is
+      asserted against the stance the composition root actually registered. It was red first too —
+      registered at `documents.write`, which an OPERATOR holds. `src/evidence/schema.test.ts`: a
+      correction leaves two rows and the old one still says what it said.
 
 **Done when:** an ADMIN adds a field, a lease is re-filed, and the new field is extracted against the
 new declaration; an OPERATOR is refused; a money declaration is refused; the superseded row is intact.
+**All four met** — the extraction half in `src/evidence/extract.test.ts` on the fake extractor, which
+is what makes it runnable with no `OPENAI_API_KEY`; the rest clicked on `:3000`.
+
+**What it answered, and what it raised.**
+
+- **Foundation rule 8 is true of both halves for the first time.** A field was a commit and a
+  `seed:doctypes` until today, paid three times (3.1, 3.5, 6.4).
+- **A refusal case can pass as a 303, and four of them were.** `SESSION_ABSOLUTE_MS` is twelve hours
+  (5.1) and this is the first route suite in the repository that spans two days: the session minted
+  on day one was expired on day two, so the guard answered a redirect to sign-in — which is
+  indistinguishable from a route that accepted the post unless the case asserts the status. Fixed
+  inside the slice (a session per day, one account). **No other suite spans two days today**, so
+  nothing is owed; the day one does, this is the trap.
+- **The day is UTC and the office is not. Open, and it is the module's convention rather than this
+  route's.** `deps.clock.now().toISOString().slice(0, 10)` is what every date here uses; the verify
+  click ran at 00:02 IDT and the declaration was stamped `2026-09-14`. For three hours a night an
+  administrator's "today" and the catalogue's disagree — which also means the twice-in-one-day
+  conflict can be stepped around by declaring at 00:30 and again at 03:30. **A clock with a zone is
+  a kernel change and a migration's worth of thought**; the director places it.
+- **Refusals are the JSON error body, including the money one.** One refusal shape per route, as
+  `settings`, `estate` and `staff` all do. A refusal *screen* for this editor is not built. Named
+  below; default is to leave it.
+- **Two standing carries moved, both in the week-6 list below where they have always lived.**
+  `.env`'s `DOCUMENT_AI_*` are **removed** — 7.2 uploads nothing locally, so that item's "remove it
+  or write down that you kept it" was not a choice. And the four form classes have still never
+  reached a third file, but **7.1 fixed `.form-grid` in evidence's copy and not estate's**, so the
+  two now disagree: the trigger becomes "the copies disagree" and the owner is 7.3.
 
 ## Slice 7.3 — The approval table
 
-Plan mode. **Migration 0019.** This is the slice that deletes the paint.
+Plan mode. **Migration 0028** — ~~0019~~, which is `0019_tenancy_event.sql` and has been since 5.5;
+corrected at 7.2, which counted them. This is the slice that deletes the paint.
 
 - [ ] **`GET /documents/:id/fields`** — the ledger from the paint. One row per `extracted_field`:
       field, read value, confidence, action. `/documents/:id/read` stays what it is
       (`מילים על הדף`, the pixel view); the two link to each other and the `קדם` buttons move here.
-- [ ] **0019 on `extracted_field`** — `approved_value text`, `approved_by text` (`-- pii`, a
+- [ ] **0028 on `extracted_field`** — `approved_value text`, `approved_by text` (`-- pii`, a
       snapshot and not a staff FK, exactly as `promoted_by`), `approved_at timestamptz`. **`value` is
       never overwritten.** A trigger in the shape of `extracted_field_promotion_guard()` refuses an
       approval stamp written without `dona.approving` and refuses to delete an approved row.
@@ -202,7 +245,18 @@ a mapping in `applyPromotedField` and a policy case.
 2. **The low-confidence threshold.** The paint used 80% and flagged two rows of ten. *Default: 80%.*
 3. **7.4's targets**, and whether `address` becomes a cross-check rather than a promotion.
    *Default: 7.4 opens with the two dates and adds nothing.*
-4. **Whether a lease should be able to refuse its own annex.** Raised and measured by 7.1: it cannot,
+4. **A refusal screen for the declaration editor.** Raised at 7.2, which gave it the JSON error body
+   every other form post in this console returns — including the money refusal, which is the one an
+   administrator will actually meet. One refusal shape per route is the reason; that it is the one
+   refusal in this system somebody reads as a *sentence* is the argument against.
+   *Default: nothing is built.*
+5. **The day is UTC.** Raised at 7.2: for three hours a night the administrator's calendar and the
+   catalogue's `effective_from` disagree, and the twice-in-one-day conflict can be stepped around.
+   A zone on the clock is a kernel change. *Default: nothing is built.*
+6. **`city` is declarable from a screen now**, with no deploy — one of the three fields the paint
+   deferred. The other two are money and stay refused. *Default: nobody declares it until a flow
+   needs it.*
+7. **Whether a lease should be able to refuse its own annex.** Raised and measured by 7.1: it cannot,
    by construction, and the fix is either negation in `verification_terms` — a new grammar in the
    settings editor — or the third verb 7.4 already circles. *Default: the named pair stands and
    nothing is built.*
@@ -317,9 +371,11 @@ rule lapsing because a document screen arrived.
       ends every ACTIVE tenancy in the future by construction — 7 rows, earliest end 2027-07-14.
       **Re-owned by whichever slice gives A5 a screen**, and written into that slice when the
       director places it. Not carried forward again as a click.
-- [ ] **`config_settings` / secret-name editor, and `DocumentTypeField` on the settings screen.**
-      Carried from 5.8. Not this week: 6.4 adds fields through the seed, which is the path A8
-      specifies, and a screen for it earns its own slice when a second person needs one.
+- [ ] **`config_settings` / secret-name editor.** ~~and `DocumentTypeField` on the settings screen~~
+      — **that half closed at 7.2**, and deliberately not on the settings screen: the declaration is
+      edited at `/documents`, beside the table showing what the reader looks for, under the same
+      `settings.write`. `src/settings-page.ts` says so and points there. The `config_settings` /
+      secret-name editor half is still open and still unowned.
 - [ ] **`work.ts` and its unearned durability claim.** Still after the console walk-through slice.
 - [ ] **Walk [fuses.md](fuses.md)** before Thursday's demo. **Ask F1 specifically on 18 Sep.**
 - [ ] **F6 — four questions, not three acts.** Settle the signing entity · execute OpenAI's DPA ·
@@ -355,11 +411,12 @@ rule lapsing because a document screen arrived.
       runs `src/evidence/*.test.ts` in parallel against one developer database and is not
       `npm run test:code`. One slice owns both halves — suite isolation, in the fixtures and in the
       hook.
-- [ ] **`.env` still points at the staging OCR processor.** Left wired at 6.8 because 6.9 and 6.11
+- [x] **`.env` still points at the staging OCR processor.** Left wired at 6.8 because 6.9 and 6.11
       both wanted it, and unchanged at 6.11. `.env.bak-6.8` is the backup. **Every local upload spends
       a Document AI call until it is removed**, which is a real bill against a developer machine and
       not a tidiness item. Whoever opens the next slice that uploads locally either removes it or
-      writes down that they kept it.
+      writes down that they kept it. **Removed at 7.2**, which uploads nothing locally — so the
+      choice this item offered was not a choice, and `cp .env.bak-6.8 .env` is the way back.
 - [ ] **6.5's `extracted_field` residue in the developer database.** Raised at 6.5, restated at 6.6,
       6.7 and 6.8, and **promoted here to the standing list because it has outlived four slices**.
       The promotion guard refuses both the delete and the unstamp (4.3, working as designed), and
@@ -368,9 +425,14 @@ rule lapsing because a document screen arrived.
       `tenancyLinkOf` and `promote.ts` order by `entity_id`, so they never reshuffle — but no rule
       says a document has one letting, and if one ever has two the lowest id wins for no reason.
       6.10 ruled the *place*; the letting is a different question and A3 is where it would be asked.
-- [ ] **`.form-grid` / `.form-row` / `.hint` / `.form-actions` are two files each.** Carried 6.9 →
-      6.10 and **not tripped a second time** — 6.10 wrote no third file. A third occurrence moves them
-      to `tokens.css`. `.check` is already there and is closed. Rides into week 7.
+- [ ] **`.form-grid` / `.form-row` / `.hint` / `.form-actions` are two files each — and from 7.1 the
+      two copies *disagree*.** Carried 6.9 → 6.10 → 7.2, and a third file has still never been
+      written: 7.2's declaration editor went into `src/evidence/internal/views.ts`, which is already
+      one of the two. **But 7.1 fixed `.form-grid`'s `grid-template-columns: minmax(0, 1fr)` in
+      evidence's copy and not estate's**, so the failure this rule was written to prevent has
+      happened by a route the rule does not name. **The trigger is now "the copies disagree" rather
+      than "there are three", and the owner is 7.3** — the next slice to put a table on a
+      `.form-grid`. `.check` is already in `tokens.css` and is closed.
 - [ ] **The bash guard reads the command that is typed, not what it runs.** Raised at 5.1c, flagged
       rather than fixed. If the director wants the stronger rule it is theirs to say so. **Bit for
       the first time at 6.7**, in the other direction: writing a *file* whose text contained

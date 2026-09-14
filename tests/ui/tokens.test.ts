@@ -617,10 +617,31 @@ const SCREENS: Array<[string, () => string]> = [
     () =>
       renderDocumentsPage({
         nav: NAV,
+        csrf: CSRF,
         types: documentTypes,
         chosen: documentTypes[0] as DocumentTypeRow,
         fields: documentTypeFields,
         on: '2026-09-14',
+        mayWrite: false,
+      }),
+  ],
+  [
+    // **Slice 7.2, the same screen with the editor armed.** The sixth document-shaped screen, and
+    // it is registered separately rather than replacing the entry above because the difference
+    // between the two is a role: an OPERATOR reads the declaration and an ADMIN writes it, and the
+    // guards below assert *both* renderings — which is how every other role difference in this
+    // console is asserted (6.4's read overlay at two stances, 6.6's ruling).
+    'documents · the declaration, admin may edit',
+    () =>
+      renderDocumentsPage({
+        nav: NAV,
+        csrf: CSRF,
+        types: documentTypes,
+        chosen: documentTypes[0] as DocumentTypeRow,
+        fields: documentTypeFields,
+        on: '2026-09-14',
+        mayWrite: true,
+        saved: 'declared',
       }),
   ],
   [
@@ -631,10 +652,12 @@ const SCREENS: Array<[string, () => string]> = [
     () =>
       renderDocumentsPage({
         nav: NAV,
+        csrf: CSRF,
         types: documentTypes,
         chosen: documentTypes[1] as DocumentTypeRow,
         fields: [],
         on: '2026-09-14',
+        mayWrite: false,
       }),
   ],
   [
