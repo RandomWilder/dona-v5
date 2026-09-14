@@ -25,11 +25,29 @@ export interface PlaceReading {
   apartmentNumber: string | null;
 }
 
-// One label, four spellings of it, and a bare `רחוב` for the lease that writes the address into a
-// sentence instead of onto a line. `ברחוב` matches through the same needle: the prefixed ב stays
-// outside the capture, which is what makes it harmless.
-const ADDRESS =
-  /(?:כתובת(?:\s+(?:המושכר|הנכס|הדירה))?\s*:\s*|רחוב\s+)(?:רחוב\s+)?([^,.;:\n]{1,60}?\s+\d+[א-תA-Za-z]?)(?=[\s,.;:]|$)/;
+// **Tier one: the property's own label.** `כתובת המושכר:` and its two siblings name the property and
+// nothing else on the page, so this anchor is trusted wherever in the document it stands — the tier
+// decides and the position does not. That distinction is slice 6.11's, and it is not academic: every
+// standard form prints its parties above its property clause, so a reader that simply took the
+// leftmost address read a person's home on all of them.
+const PROPERTY_LABEL =
+  /כתובת\s+(?:המושכר|הנכס|הדירה)\s*:\s*(?:רחוב\s+)?([^,.;:\n]{1,60}?\s+\d+[א-תA-Za-z]?)(?=[\s,.;:]|$)/;
+
+// **Tier two: an address written into a sentence**, read only when tier one found nothing. A bare
+// `כתובת:` — which a parties block uses as readily as a property clause — or a street.
+//
+// **`(?<![א-ת])` is the first half of 6.11.** `רחוב` matches inside `מרחוב`, which is how a person's
+// residence is introduced on a standard form and never how a property is: on the week-6 demo's paper
+// this needle returned the landlord's own street, and the document was placed by it. The prefixed ב
+// of `ברחוב` stays — it is the property's own spelling in a sentence — and every other Hebrew letter
+// to the left of the needle disqualifies it.
+const LOOSE_ADDRESS =
+  /(?:(?<![א-ת])כתובת\s*:\s*|(?<![א-ת])ב?רחוב\s+)(?:רחוב\s+)?([^,.;:\n]{1,60}?\s+\d+[א-תA-Za-z]?)(?=[\s,.;:]|$)/g;
+
+// **The second half of 6.11: a party's address is never the property's.** A tier-two match whose own
+// line carries one of these before it is somebody's residence, not the flat being let. The list is
+// short and literal on purpose — a marker that guesses is a reader that skips the property clause.
+const PARTY_LINE = /ת\.\s?ז|ת["״']\s?ז|תעודת\s+זהות|ח\.\s?פ|המתגורר/;
 
 // The city is what follows the address's comma, and nothing else is trusted to be one: a lease
 // that writes `רקפת 12` and never names a town resolves to no city and therefore to no exact key,
@@ -37,9 +55,14 @@ const ADDRESS =
 const CITY_AFTER =
   /^[^\S\n]*[,–-][^\S\n]*([^,.;:\n]{2,40}?)[^\S\n]*(?=[,.;:\n]|$)/;
 
-// `דירה 12`, `דירה מס׳ 12`, `דירה מספר 12A`. The same sentence 3.5's reader already reads off a
-// handover protocol, which is why the shape is the same shape.
-const APARTMENT = /דירה\s*(?:מס['׳״"]?\s*|מספר\s*)?(\d+[א-תA-Za-z]?)/;
+// `דירה 12`, `דירה מס׳ 12`, `דירה מספר 12A`, `דירה מס ' 206-7`. The same sentence 3.5's reader
+// already reads off a handover protocol, which is why the shape is the same shape — widened at 6.11
+// by what the real form prints: a **hyphenated** number, and the space a scanner leaves before the
+// apostrophe. Both halves were needed for one flat: the spaced apostrophe defeated the `מס` branch
+// outright, and without the hyphen `206-7` would have read as `206`, which is a different flat.
+// No spaces around the hyphen, so `דירה 3 - 5 נפשות` is still one flat and not a range.
+const APARTMENT =
+  /דירה\s*(?:מס\s*['׳״"]?\s*|מספר\s*)?(\d+(?:[-–]\d+)?[א-תA-Za-z]?)/;
 
 const LEADING_STREET = /^(?:רחוב|רח['׳])\s+/;
 
@@ -59,24 +82,74 @@ const LEADING_STREET = /^(?:רחוב|רח['׳])\s+/;
  * The first scan on staging that printed its address without one read the city as
  * `כפר סבא דירה מספר 3 המשכיר`. 6.8 fixed the text rather than this reader — both pdfjs and Document
  * AI already know where a line ends — so nothing below changed and the sentence above became true.
+ *
+ * **Slice 6.11 changed what is below, and for the opposite reason.** 6.8 was the first time this
+ * reader reached a real project lease, and on it the function answered confidently and wrongly: the
+ * landlord's own street, through the bare `רחוב` needle inside `מרחוב`. A null here is a screen; a
+ * wrong address is a lease filed against a flat nobody chose. Hence two tiers, a needle that cannot
+ * be reached through a Hebrew prefix other than ב, and a line that names a person disqualifying the
+ * address printed on it.
  */
 export function readPlace(text: string): PlaceReading {
   const haystack = text.replace(/[^\S\n]+/g, ' ').replace(/ ?\n+ ?/g, '\n');
-  const address = ADDRESS.exec(haystack);
+  const address = propertyAddress(haystack);
   const addressLine =
-    address?.[1]?.replace(/\s+/g, ' ').trim().replace(LEADING_STREET, '') ??
+    address?.capture.replace(/\s+/g, ' ').trim().replace(LEADING_STREET, '') ??
     null;
-  let city: string | null = null;
-  if (address) {
-    const after = haystack.slice(address.index + address[0].length);
-    city = CITY_AFTER.exec(after)?.[1]?.trim() ?? null;
-  }
+  const city = address
+    ? (CITY_AFTER.exec(haystack.slice(address.end))?.[1]?.trim() ?? null)
+    : null;
   const apartment = APARTMENT.exec(haystack);
   return {
     addressLine: addressLine || null,
     city,
     apartmentNumber: apartment?.[1] ?? null,
   };
+}
+
+/** One accepted address: what it captured, and where it ended, which is where the city starts. */
+interface AddressMatch {
+  capture: string;
+  end: number;
+}
+
+/**
+ * The property's address, and never a party's.
+ *
+ * Tier one first, wherever it stands. Then the loose matches **in the order they are printed**,
+ * skipping each one that stands on a line naming a person — and where every one of them does, the
+ * answer is null. A null is the candidate list and the search box, which is a question an operator
+ * can answer; a wrong address is a lease filed against a flat nobody chose, and nothing downstream
+ * asks about it. That asymmetry is the whole of this slice.
+ */
+function propertyAddress(haystack: string): AddressMatch | null {
+  const labelled = PROPERTY_LABEL.exec(haystack);
+  if (labelled?.[1]) {
+    return { capture: labelled[1], end: labelled.index + labelled[0].length };
+  }
+  for (const loose of haystack.matchAll(LOOSE_ADDRESS)) {
+    if (
+      loose[1] &&
+      loose.index !== undefined &&
+      !onAPartyLine(haystack, loose.index)
+    ) {
+      return { capture: loose[1], end: loose.index + loose[0].length };
+    }
+  }
+  return null;
+}
+
+/**
+ * Whether the address at `at` is printed on a line that has already named a person.
+ *
+ * The line and not the paragraph: a party is identified on one line of a standard form — a name, an
+ * identifier, then a residence — and widening the window to the paragraph starts rejecting property
+ * clauses that merely stand near the parties block.
+ */
+function onAPartyLine(haystack: string, at: number): boolean {
+  return PARTY_LINE.test(
+    haystack.slice(haystack.lastIndexOf('\n', at) + 1, at),
+  );
 }
 
 /**

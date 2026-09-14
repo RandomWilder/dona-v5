@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { UnitHit } from '../estate/contract.ts';
 import { createFakePdfText } from '../kernel/pdf.ts';
+import { apartmentMatches } from './internal/lease.ts';
 import {
   addressKeysFor,
   CANDIDATE_LIMIT,
@@ -160,5 +161,97 @@ describe('evidence · reading the place off a document', () => {
     assert.equal(resolved.unit, null);
     assert.equal(resolved.candidates?.length, CANDIDATE_LIMIT);
     assert.equal(resolved.total, 72);
+  });
+
+  it('reads a party address as nothing at all, which is slice 6.11', () => {
+    // **The week-6 demo's own paper, and red before this slice.** `מרחוב` is how a person's
+    // residence is introduced on a standard form and never how a property is, and the bare `רחוב`
+    // needle matched inside it: the reader returned `דם המכבים 38`, which is the landlord's street.
+    // Nulls here are the candidate list and the search box, which is a question somebody can answer.
+    const reading = readPlace(
+      'המשכיר: אבי לוי ת.ז 012345678 מרחוב דם המכבים 38, מודיעין',
+    );
+    assert.deepEqual(reading, {
+      addressLine: null,
+      city: null,
+      apartmentNumber: null,
+    });
+  });
+
+  it('files nothing against the landlord own flat, which is the danger and not the null', async () => {
+    // **The half that matters, and the reason a null is not the defect.** The fake database answers
+    // every query with the same row, so a reading that kept the party's street — with a town after
+    // its comma, which is an ordinary lease — resolves to exactly one unit, and `fileDocument` runs
+    // against it with no screen in between. Red before 6.11: the unit came back.
+    const units: UnitHit[] = [
+      {
+        unit_id: 'unit-landlord',
+        unit_number: '7',
+        building_id: 'building',
+        building_name: 'דם המכבים 38',
+        address_line: 'דם המכבים 38',
+        city: 'מודיעין',
+      },
+    ];
+    const db = { query: async () => ({ rows: units }) };
+    const resolved = await resolvePlace(
+      db as never,
+      readPlace('המשכיר: אבי לוי ת.ז 012345678 מרחוב דם המכבים 38, מודיעין'),
+    );
+    assert.equal(resolved.unit, null);
+    assert.equal(resolved.candidates?.length, 0);
+  });
+
+  it('takes the labelled property address over a party one printed above it', () => {
+    // The tier decides and the position does not. Every standard form prints its parties first, so
+    // a leftmost-wins reader reads the wrong address on all of them — this one through `ברחוב`,
+    // which is a spelling 6.11 deliberately keeps.
+    const reading = readPlace(
+      'המשכיר: אבי לוי, ת.ז 012345678, ברחוב דם המכבים 38, מודיעין\nכתובת המושכר: נרקיס 45, כפר סבא\nדירה 3',
+    );
+    assert.equal(reading.addressLine, 'נרקיס 45');
+    assert.equal(reading.city, 'כפר סבא');
+    assert.equal(reading.apartmentNumber, '3');
+  });
+
+  it('skips a street that stands on a line naming a person, and reads the next one', () => {
+    // No label anywhere, which is the case tier two exists for: the first address on the page is a
+    // tenant's home and the second is the property. The identity marker on the line is what tells
+    // them apart, and `ברחוב` alone cannot.
+    const reading = readPlace(
+      'השוכרת: דנה כהן, ת.ז 023456789, המתגוררת ברחוב האלון 4, חיפה\nהמושכר הוא דירה 9 ברחוב נרקיס 45, כפר סבא',
+    );
+    assert.equal(reading.addressLine, 'נרקיס 45');
+    assert.equal(reading.city, 'כפר סבא');
+    assert.equal(reading.apartmentNumber, '9');
+  });
+
+  it('reads a hyphenated flat whole, apostrophe spaced the way the scan leaves it', () => {
+    // `דירה מס ' 206-7` on the demo's paper: the reader stopped at `206`, and a flat numbered 206 is
+    // a different flat. The space before the apostrophe defeated the `מס` branch outright, so what
+    // actually came back was null.
+    const reading = readPlace(
+      "פרטיה ותיאורה של הדירה מס ' 206-7 כמפורט בנספח א'",
+    );
+    assert.equal(reading.apartmentNumber, '206-7');
+    // Asserted against the estate's own comparison rather than left to the screen: `foldPlace`
+    // drops the hyphen, so the number the reader now returns is one `apartmentMatches` can use.
+    assert.ok(apartmentMatches('206-7', '206-7'));
+  });
+
+  it('places nothing off a body that defers to an annex, and that is the ruling', () => {
+    // **A12 does not read an annex** (SPEC-evidence.md, slice 6.11). The annex sits past the pages
+    // the online OCR call reads and the byte bound is on the request carrying the whole file, so no
+    // page selection can reach it; and a גוש/חלקה identification has nothing to resolve against,
+    // the estate being keyed on an address. Green before 6.11 as well — it is written down so that
+    // a later reader cannot be taught to guess a flat out of a parcel number.
+    const reading = readPlace(
+      "המושכר: הדירה שפרטיה ותיאורה כמפורט בנספח א' לחוזה זה, גוש 80031 חלקות 43, 46, מגרש 212א",
+    );
+    assert.deepEqual(reading, {
+      addressLine: null,
+      city: null,
+      apartmentNumber: null,
+    });
   });
 });
