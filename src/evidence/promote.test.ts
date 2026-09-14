@@ -23,6 +23,7 @@ import {
 import type { ExtractedRow, IntakeDeps } from './contract.ts';
 import {
   applyDocumentTypeCatalogue,
+  approveExtractedField,
   extractFiledDocument,
   fileDocument,
   listExtractedFields,
@@ -245,6 +246,40 @@ describe('evidence · promote an extracted field', () => {
           (error: KernelError) => error.code === 'invalid',
         );
 
+        // **Slice 7.4: nothing reaches a typed column unsigned.** The reading is mapped, the
+        // document is bound to a letting and the promoter is named — everything 4.3 asked for — and
+        // it is still refused, because no person has said the reading is right. The rule's own case
+        // is `tests/policy/promotion-approval.test.ts`; here it is the step this flow now has.
+        await assert.rejects(
+          () =>
+            promoteExtractedField(
+              {
+                db,
+                audit: createAuditLog(db, fixedClock(AT)),
+                clock: fixedClock(AT),
+              },
+              {
+                extractedFieldId: start?.extractedFieldId ?? '',
+                promotedBy: 'אסף',
+              },
+            ),
+          (error: KernelError) =>
+            error.code === 'conflict' &&
+            error.message.includes('has not been approved'),
+        );
+        await approveExtractedField(
+          {
+            db,
+            audit: createAuditLog(db, fixedClock(AT)),
+            clock: fixedClock(AT),
+          },
+          {
+            extractedFieldId: start?.extractedFieldId ?? '',
+            approvedBy: 'אסף',
+            mayReadIdentifiers: false,
+          },
+        );
+
         const promoted = await promoteExtractedField(
           {
             db,
@@ -382,10 +417,38 @@ describe('evidence · promote an extracted field', () => {
       mayReadIdentifiers: false,
       mayApprove: true,
     });
-    assert.match(ledger, /קדם · תחילת תקופת השכירות/);
+    // **Slice 7.4: unsigned, so no button.** `READINGS` carries no approval stamp, and a promotion
+    // now requires one — a `קדם` whose only outcome is a refusal is not a control.
+    assert.doesNotMatch(ledger, /קדם · תחילת תקופת השכירות/);
+    assert.match(ledger, /קידום מחייב אישור תחילה/);
+
+    const signed = renderFieldsPage({
+      nav: NAV,
+      csrf: '',
+      documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      buildingId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      buildingName: 'בניין',
+      unitId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      labelHe: 'חוזה שכירות',
+      on: '2026-09-15',
+      rows: READINGS.map((row) =>
+        row.fieldKey === 'start_date'
+          ? {
+              ...row,
+              approvedValue: row.value,
+              approvedBy: 'אסף',
+              approvedAt: AT,
+            }
+          : row,
+      ),
+      unread: [],
+      mayReadIdentifiers: false,
+      mayApprove: true,
+    });
+    assert.match(signed, /קדם · תחילת תקופת השכירות/);
     // An unmapped field is capturable, listed, signable — and still has nowhere to be promoted to.
-    assert.doesNotMatch(ledger, /קדם · מספר הדירה/);
-    assert.doesNotMatch(ledger, /name="promoted_by"/);
+    assert.doesNotMatch(signed, /קדם · מספר הדירה/);
+    assert.doesNotMatch(signed, /name="promoted_by"/);
   });
 
   it('links an extracted value to its pixels on that page', () => {

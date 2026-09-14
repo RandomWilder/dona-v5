@@ -363,27 +363,72 @@ and both ת.ז. rows. 670 pass / 0 fail / 0 skipped, from 652.
   slice. **No owner needed** — it is written into the evidence file so the next person meets it as a
   rule and not as a surprise.
 
-## Slice 7.4 — Approve-to-where
+## Slice 7.4 — Approve-to-where — **closed 15 Sep 2026**
 
-Plan mode. **Migration 0020**, and the only slice in this track that touches tenancy's typed columns.
+Plan mode. **Migration 0029** — ~~0020~~, which is `0020_tenancy_completeness.sql` and has been since
+week 5; 7.3 made the same correction for `0019` → `0028`, and this is the second plan bullet to carry
+a migration number written before the migrations that took it. Evidence:
+[evidence/7.4.md](evidence/7.4.md).
 
 `field_promotion.target`'s `CHECK` is `('tenancy.start_date','tenancy.end_date')` (0018) and
-`TARGET_FIELD` in `src/evidence/internal/promote.ts` mirrors it. Widen it target by target, each with
-a mapping in `applyPromotedField` and a policy case.
+`TARGET_FIELD` in `src/evidence/internal/promote.ts` mirrors it. ~~Widen it target by target~~ —
+**it was widened by nothing, and the ruling is the deliverable**, below.
 
-- [ ] **The finding that makes this the director's and not the agent's:** `address` and
+- [x] **The finding that makes this the director's and not the agent's:** `address` and
       `apartment_number` are already facts about the *unit*, and A11 says only an ADMIN shapes those.
       Promoting them would not write a new fact — it would **assert the document against the flat it
       was filed under**, where disagreement is a defect to surface and not a value to copy. That is a
       third verb (`verify`), and probably its own slice. `tenant_name` and `tenant_id_number` already
-      have a home: the party rows 6.5's proposal writes.
-- [ ] So the honest scope is: decide which targets are genuinely *copies*, and build only those.
-      **Opens with the two dates and adds nothing until ruled.**
-- [ ] **Carried in from 7.3: whether a promotion should require an approval first.** 7.3 made
-      `promoteExtractedField` *prefer* `approved_value` (`COALESCE(approved_value, value)`), which is
-      the cheap half and is done. Requiring one is the other half and belongs here, in the slice that
-      decides which targets are copies at all: a target that is genuinely a copy is also the one
-      where promoting an unsigned reading is hardest to defend.
+      have a home: the party rows 6.5's proposal writes. **Stands, and it is now a table rather than a
+      paragraph**: SPEC-evidence.md § *Which declared fields are copies* gives every declared field a
+      row and a reason, including the two the bullet did not name — `lease_amendment.effective_date`
+      (no column to land on) and `handover_protocol.handover_date` (targets `unit.*`, a second table
+      and a different argument).
+- [x] So the honest scope is: decide which targets are genuinely *copies*, and build only those.
+      **Opened with the two dates and added nothing.** Three mappings are copies and all three were
+      already mapped; the CHECK, `TARGET_FIELD` and `applyPromotedField` are untouched. **A slice
+      whose schema half is a written ruling and no migration to the thing it was scoped to widen** —
+      recorded plainly, because the next reader will otherwise look for the diff that is not there.
+- [x] **Carried in from 7.3: whether a promotion should require an approval first.** ~~belongs here~~
+      — **ruled yes, and it is what this slice actually built.** 7.3 made `promoteExtractedField`
+      *prefer* `approved_value`; until today an unsigned reading could still reach
+      `tenancy.start_date` carrying an operator's name in `promoted_by`, which is a name that signed a
+      button rather than a value. Three layers now say it: the command (`conflict`), 0029's
+      `extracted_field_promotion_needs_approval()` — a **third** trigger beside 0018's and 0028's, on
+      0028's own argument for not rewriting its predecessor — and the ledger, which draws no `קדם` on
+      an unsigned row and says why in the note.
+- [x] **Scope added, named here so it can be struck: A2's and A3's confirm sign the dates they
+      promote.** The bullets above did not see it, and it is the half that decides whether the rule is
+      real: `confirmLeaseTenancy` and `confirmAmendment` promote **automatically**, with no approval
+      in existence at that moment. The alternative was an exemption for the path almost every
+      promotion in this system goes through — a rule about nothing. Those screens already *show* the
+      dates, so the confirm writes the stamp it has earned, as read, with `confirmed_by` as approver,
+      and leaves alone a row a person already signed on the ledger.
+- [x] **A defect found by reading, fixed here rather than carried.** `firstValue` in `lease.ts` read
+      `value` alone, so a date corrected and approved on A15's ledger was ignored by the proposal, by
+      the arithmetic that ranks the lettings, and by `upsertTenancy` — **which writes
+      `tenancy.start_date` directly, before any promotion runs.** 7.3 fixed the promotion's copy and
+      could not see the second door. Both read the signed value now.
+
+**Done when:** an unapproved reading cannot reach a typed column, from the command or around it; a
+signed one still can and copies what was signed; the confirm flows keep working without an exemption;
+the target ruling is written down per field. **All four met.** `npm test` **674 / 0 / 0**, from 670;
+`test:policy` **77**, from 74. **Verify:** the policy case red first (output in the evidence file),
+then `:3000` — `קדם · סיום תקופת השכירות` moved the letting to the value a person *signed* at 7.3 and
+not the one the reader produced, and a hand-posted promote of an unsigned row answered **409** rather
+than the 303 a refusal can hide behind (7.2).
+
+**What it answered, and what it raised.**
+
+- **`promote.ts` no longer contains a `COALESCE`.** A fallback that can no longer be taken is a claim
+  about what a command can do that has stopped being true.
+- **A row promoted before this slice is not re-examined**, in the command (the idempotent return runs
+  before the new refusal) and in the trigger (which fires only on a row *gaining* the stamp). A rule
+  can honestly only be about new promotions.
+- **The ledger never says a row was promoted** — `קודם` is printed on the read overlay only. Seen
+  while clicking a pre-7.4 document. Harmless, and in the evidence file so it is met as a fact.
+- **The third verb is now named in three places pointing at one unbuilt thing** — this slice,
+  SPEC-evidence.md, and 7.1's question about a lease refusing its own annex. Director's list below.
 
 ## Left to the director — named, not blocking
 
@@ -396,8 +441,13 @@ a mapping in `applyPromotedField` and a policy case.
    `clock.zone`. **Owner of the knob stays 5.8's open half** (the `config_settings` / secret-name
    editor), in the week-6 standing list below. What is open is only the number, and the number is
    one edit and one evidence file.
-3. **7.4's targets**, and whether `address` becomes a cross-check rather than a promotion.
-   *Default: 7.4 opens with the two dates and adds nothing.*
+3. ~~**7.4's targets**, and whether `address` becomes a cross-check rather than a promotion.~~
+   **Ruled at 7.4 and the default was taken on evidence rather than by expiry**: the two dates and
+   `new_end_date` are the only copies, the CHECK did not widen, and every declared field has a row
+   and a reason in SPEC-evidence.md. **What is still open is the cross-check itself** — `verify`, the
+   third verb: `address` and `apartment_number` asserted against the flat the document was filed
+   under, with the disagreement *shown* and never copied. It is the same shape as item 8 below.
+   *Default: unbuilt, and it is a slice rather than a bullet.*
 4. ~~**A refusal screen for the declaration editor.**~~ **Ruled 15 Sep, and re-scoped rather than
    built.** A bespoke screen on one route would be the seventh form in this console and the only one
    that does not dead-end — which is not a fix, it is an inconsistency. **Every form post in this
@@ -426,11 +476,18 @@ a mapping in `applyPromotedField` and a policy case.
    *Default: it stays unbuilt and the row says `לא נקרא`.*
 8. **Whether a lease should be able to refuse its own annex.** Raised and measured by 7.1: it cannot,
    by construction, and the fix is either negation in `verification_terms` — a new grammar in the
-   settings editor — or the third verb 7.4 already circles. *Default: the named pair stands and
-   nothing is built.*
+   settings editor — or the third verb 7.4 ~~already circles~~ **named and did not build** (item 3).
+   *Default: the named pair stands and nothing is built.*
 
 ## Carried
 
+- [ ] **The published data model is two slices behind the table it draws.**
+      `docs/data-model.html` and `docs/data-model-HE.html` list `ExtractedField` without
+      `approved_value`, `approved_by` and `approved_at` — 7.3's columns, and 7.4 added a rule that
+      reads them. They are Claude artifacts, so the fix is an edit to the local file plus a republish
+      to the same URL with the `Artifact` tool ([docs/README.md](../docs/README.md)). **No owner
+      slice yet**, and it is named here rather than in an evidence file so it cannot be closed by
+      being forgotten.
 - [x] **`.form-grid` floors its implicit column at its widest item's min-content.** **Closed in
       7.1**, not 7.3: `GET /documents` is the first wired `.form-grid` holding a table, so the slice
       that inherits the bug turned out to be this one. `grid-template-columns: minmax(0, 1fr)` is on

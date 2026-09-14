@@ -307,10 +307,16 @@ describe('evidence · flow A3 completes a tenancy from an addendum', () => {
           'tenancy.end_date',
         );
         const amendStamp = await listExtractedFields(db, documentId);
-        assert.equal(
-          amendStamp.find((row) => row.fieldKey === 'new_end_date')?.promotedTo,
-          'tenancy.end_date',
+        const newEnd = amendStamp.find(
+          (row) => row.fieldKey === 'new_end_date',
         );
+        assert.equal(newEnd?.promotedTo, 'tenancy.end_date');
+        // **Slice 7.4: A3's confirm signs the date it promotes**, on A2's argument and for the same
+        // reason — the screen shows `מועד סיום מעודכן` and the button is the person affirming it.
+        // A promotion without that stamp is refused by the command and by 0029's trigger.
+        assert.equal(newEnd?.approvedBy, 'אסף');
+        assert.equal(newEnd?.approvedValue, newEnd?.value);
+        assert.notEqual(newEnd?.approvedAt, null);
 
         const events = await db.query<{
           old_value: string;

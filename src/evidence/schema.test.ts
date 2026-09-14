@@ -1312,6 +1312,19 @@ describe('field_promotion — A8 governed half', () => {
         ),
       );
 
+      // **Slice 7.4.** 0029's trigger refuses this stamp on a row nobody signed, which is its own
+      // case in `tests/policy/promotion-approval.test.ts`. Here it is a precondition and not the
+      // subject: the row is approved first so that what the rest of this case proves stays 0018's
+      // rule — that `dona.promoting` is what separates the command from everybody else.
+      await db.query("SELECT set_config('dona.approving', 'on', true)");
+      await db.query(
+        `UPDATE extracted_field
+            SET approved_value = value, approved_by = 'אסף', approved_at = $2
+          WHERE extracted_field_id = $1`,
+        [extractedId, INGESTED_AT],
+      );
+      await db.query("SELECT set_config('dona.approving', 'off', true)");
+
       await db.query("SELECT set_config('dona.promoting', 'on', true)");
       await db.query(
         `UPDATE extracted_field

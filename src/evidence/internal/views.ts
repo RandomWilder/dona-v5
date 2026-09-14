@@ -1756,8 +1756,12 @@ export function renderFieldsPage(screen: FieldsScreen): string {
   const unflagged = open.filter(
     (row) => !isFlagged(row.confidence) && !isIdentifierField(row.fieldKey),
   );
+  // **Slice 7.4: a mapped row that nobody signed has no `קדם` button.** A promotion now requires
+  // the approval stamp (`promote.ts`, and the trigger in 0029), so a button that posted anyway
+  // would be a control whose only outcome is a refusal. The note below says so, because a missing
+  // control that explains itself is a rule and a missing control that does not is a bug report.
   const promotable = shown.filter(
-    (row) => row.promotionTarget && !row.promotedTo,
+    (row) => row.promotionTarget && !row.promotedTo && row.approvedAt !== null,
   );
   const body = h`
     <div>
@@ -1824,6 +1828,8 @@ export function renderFieldsPage(screen: FieldsScreen): string {
     <p class="form-note">
       «אישור» אינו «קידום». אישור אומר שהקריאה נכונה ונשמר על שורת המסמך; קידום מעתיק ערך לעמודה
       מוקלדת של ההשכרה, ויש לו יעד רק לשני התאריכים. ערך שנקרא לעולם אינו נמחק — תיקון נכתב לצדו.
+      <strong>קידום מחייב אישור תחילה</strong>, והערך שמועתק הוא הערך שאושר: שורה שלא נחתמה אינה
+      מוצגת כאן לקידום.
     </p>
     ${
       promotable.length > 0
