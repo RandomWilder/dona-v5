@@ -692,11 +692,25 @@ export function renderReadPage(screen: ReadScreen): string {
   const back = `/estate/buildings/${screen.buildingId}`;
   const page = screen.page;
   const image = screen.image;
+  // **The transcript is withheld below the permission. Slice 6.6**, ruling on what 6.5 found by
+  // clicking: the captured row for a ת.ז. was correctly withheld and the word box beside it carried
+  // the same digits in a `title` attribute at every stance, so an operator read it off the page the
+  // gate was protecting. A `title` holding an OCR word is not the paper — it is this system's
+  // transcription of the paper, as text, in its own response. The page image below these boxes *is*
+  // the paper and is not withheld: the same viewer already holds a fifteen-minute signed read of the
+  // bytes (5.4), so hiding a picture of the page would claim a control this system does not have.
+  //
+  // **Wholesale, not word by word, and on every type.** A run split across OCR tokens (`312`, `345`,
+  // `678`) matches no pattern applied to one token; and the type's catalogue declaration is the
+  // wrong gate, because a declaration governs what is *captured* and not what a page happens to
+  // print. The geometry stays at both stances — a box with no word still answers *where did it read
+  // something*, which is what `מילים על הדף` is for.
   const wordBoxes =
     page && page.width > 0 && page.height > 0
-      ? page.items.map(
-          (item) =>
-            h`<span class="word-box" style="${boxPercents(item, page)}" title="${item.text}"></span>`,
+      ? page.items.map((item) =>
+          screen.mayReadIdentifiers
+            ? h`<span class="word-box" style="${boxPercents(item, page)}" title="${item.text}"></span>`
+            : h`<span class="word-box" style="${boxPercents(item, page)}"></span>`,
         )
       : [];
   const fieldBoxes =

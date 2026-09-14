@@ -46,6 +46,7 @@ import {
   renderUploadPage,
 } from '../../src/evidence/contract.ts';
 import { renderIndexPage } from '../../src/index-page.ts';
+import { hasIdentifierRun } from '../../src/kernel/identifier.ts';
 import { CSRF_FIELD } from '../../src/kernel/ui/page.ts';
 import { renderSettingsPage } from '../../src/settings-page.ts';
 import {
@@ -238,6 +239,19 @@ const NAV_STAFF = signedInChrome(CSRF, 'staff');
  */
 const READ_IDENTIFIER = '312345678';
 
+/**
+ * **The two names the fixtures put on a lease. Slice 6.6.**
+ *
+ * Consts rather than five literals, because the rule they are about is asserted over the registry
+ * and an assertion cannot search for a string somebody has retyped. SPEC.md's sixth reconsideration
+ * of *a state and a count, never a tenant's name* is what these are here for: a screen **about one
+ * document** may transcribe what that document says, the names on it included, because the operator
+ * is holding the paper and the screen is how they check the machine read it. A screen reached by
+ * browsing the estate may not. A transcription is not a disclosure; a register is.
+ */
+const TENANT_NAME = 'יעל כהן';
+const GUARANTOR_NAME = 'רותם ערב';
+
 function readOverlay(mayReadIdentifiers: boolean): string {
   return renderReadPage({
     nav: NAV,
@@ -265,6 +279,22 @@ function readOverlay(mayReadIdentifiers: boolean): string {
           rightToLeft: true,
           endsLine: false,
           confidence: 0.91,
+        },
+        // **Slice 6.6, and the word this whole slice is about.** The page printed the ת.ז., so the
+        // reader measured it, so the overlay has a box for it — and until 6.6 that box carried the
+        // word in a `title` attribute at every stance. A word box is the one thing on this page
+        // whose text comes from the document rather than from a fixture, which is why 6.5 could not
+        // catch this with a registry assertion and why the case below renders a page whose words
+        // the test itself chose.
+        {
+          text: READ_IDENTIFIER,
+          x: 10,
+          y: 80,
+          width: 40,
+          height: 20,
+          rightToLeft: false,
+          endsLine: true,
+          confidence: 0.88,
         },
       ],
     },
@@ -700,7 +730,7 @@ const SCREENS: Array<[string, () => string]> = [
           {
             extractedFieldId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
             fieldKey: 'tenant_name',
-            value: 'יעל כהן',
+            value: TENANT_NAME,
             proposedRole: 'PRIMARY_TENANT',
             hasIdentifier: false,
           },
@@ -737,14 +767,14 @@ const SCREENS: Array<[string, () => string]> = [
           {
             extractedFieldId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
             fieldKey: 'tenant_name',
-            value: 'יעל כהן',
+            value: TENANT_NAME,
             proposedRole: 'PRIMARY_TENANT',
             hasIdentifier: true,
           },
           {
             extractedFieldId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1',
             fieldKey: 'guarantor_name',
-            value: 'רותם ערב',
+            value: GUARANTOR_NAME,
             proposedRole: 'GUARANTOR',
             hasIdentifier: false,
           },
@@ -796,7 +826,7 @@ const SCREENS: Array<[string, () => string]> = [
           {
             extractedFieldId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
             fieldKey: 'tenant_name',
-            value: 'יעל כהן',
+            value: TENANT_NAME,
             proposedRole: 'PRIMARY_TENANT',
             hasIdentifier: true,
           },
@@ -864,7 +894,7 @@ const SCREENS: Array<[string, () => string]> = [
           {
             extractedFieldId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
             fieldKey: 'guarantor_name',
-            value: 'רותם ערב',
+            value: GUARANTOR_NAME,
             proposedRole: 'GUARANTOR',
             hasIdentifier: false,
           },
@@ -1260,6 +1290,83 @@ describe('shared UI tokens', () => {
     }
   });
 
+  // **Slice 6.6. The guard the whole week's identifier work rests on**, and the one the carried-in
+  // row from week 5 — *`national_id` never in an agent tool's response shape* — has been waiting
+  // for since 5.2. It is deliberately the crudest possible statement of the rule: a screen either
+  // carries something shaped like a ת.ז. or it does not, and whether that run is a captured row, a
+  // word off the paper, a value somebody hard-coded into a template or a field added in six months'
+  // time is not a distinction this assertion has to make.
+  //
+  // **Over the registry, never over a live response.** Week 5 closed on exactly that mistake: a
+  // duplicated `/05\d/` read a live page's CSRF token hex and failed 4 runs in 20. Every screen
+  // here renders from constants in this file, so a hit is a fact about the screen and a pass is
+  // permanent — and `src/kernel/identifier.ts` carries the pattern's own test, including the four
+  // shapes this registry actually renders that an unanchored `\d{9}` would fire on.
+  it('carries no identifier-shaped run, on any screen but the one entitled to', () => {
+    // **One exception, and 6.5 corrected 6.4's prediction that there would be two.** The lease
+    // confirm screen was expected to need one; it does not, because `LeaseProposal` has no field
+    // for a value — that screen carries a sentence and a count. Adding a second entry here is a
+    // decision about disclosure and belongs in SPEC.md before it belongs in this array.
+    const MAY_READ_IDENTIFIERS = [
+      'documents · read overlay, may read identifiers',
+    ];
+    let exercised = 0;
+    for (const [name, render] of SCREENS) {
+      const html = render();
+      if (MAY_READ_IDENTIFIERS.includes(name)) {
+        // The exception is asserted from both sides: a screen listed here and carrying nothing is
+        // an exception nobody needs, and an unneeded exception is how the next one gets waved in.
+        assert.ok(
+          hasIdentifierRun(html),
+          `${name} is exempt and carries nothing`,
+        );
+        exercised += 1;
+        continue;
+      }
+      assert.equal(hasIdentifierRun(html), false, name);
+    }
+    assert.equal(exercised, MAY_READ_IDENTIFIERS.length);
+  });
+
+  // **Slice 6.6, and the sixth time this rule was reconsidered.** Week 6 is the week that tested it:
+  // 6.4 put a ת.ז. on the capture path and 6.5 put a household's names on a confirm screen. The
+  // ruling in SPEC.md is that **a confirm screen showing what the document in the operator's hand
+  // says is not the same act as putting a household on a list** — so the rule is kept, and the line
+  // it turns on is drawn here rather than left to the next screen's author.
+  it('transcribes a name only on a screen about one document', () => {
+    // Reached from one document, about that document, not queryable and not a list. Every other
+    // screen in the registry is reached by browsing the estate, and a name on one of those is a
+    // disclosure. Adding an entry here is a decision about disclosure and belongs in SPEC.md first.
+    const ABOUT_ONE_DOCUMENT = [
+      'documents · confirm a lease',
+      'documents · confirm a lease, an identifier read and two lettings offered',
+      'documents · confirm a lease, an existing letting pre-selected',
+      'documents · confirm an addendum',
+    ];
+    // **The two write receipts were on that list until this case was first run, and came off it.**
+    // `renderTenancyWrittenPage` says `partiesWritten` and not who: once the confirm is done the
+    // operator is no longer checking the paper, so the screen is already back to a state and a
+    // count. They fall through to the loop below like every other browsable screen, which is the
+    // assertion — the list is what this case had to be told, and everything else is proved.
+    let exercised = 0;
+    for (const [name, render] of SCREENS) {
+      const html = render();
+      const names = [TENANT_NAME, GUARANTOR_NAME].filter((person) =>
+        html.includes(person),
+      );
+      if (ABOUT_ONE_DOCUMENT.includes(name)) {
+        // Asserted from both sides, for the reason the exemption above is: a screen listed here
+        // and transcribing nothing is an entry nobody needs, and an unneeded entry is how the next
+        // one gets waved in.
+        assert.ok(names.length > 0, `${name} transcribes no name`);
+        exercised += 1;
+        continue;
+      }
+      assert.deepEqual(names, [], name);
+    }
+    assert.equal(exercised, ABOUT_ONE_DOCUMENT.length);
+  });
+
   it('withholds a captured identifier, and says how many it withheld', () => {
     // **Slice 6.4, and the refusal this slice was required to write red first.** The same screen,
     // the same captured rows, two stances. A viewer without `party.national_id.read` does not
@@ -1277,6 +1384,36 @@ describe('shared UI tokens', () => {
     assert.match(disclosed, new RegExp(READ_IDENTIFIER));
     assert.match(disclosed, /ת\.ז\. השוכר/);
     assert.doesNotMatch(disclosed, /שדה מזהה אחד ואינו מוצג/);
+  });
+
+  it('withholds the word off the paper too, and keeps the box it was in', () => {
+    // **Slice 6.6, and the defect 6.5 found by clicking.** 6.4's gate above withholds the captured
+    // *row*; this page also draws one span per measured word, and until now each carried the word's
+    // own text in a `title` attribute at every stance — so an operator whose captured row was
+    // correctly withheld could read the same ת.ז. off the box beside it.
+    //
+    // **This is the one case in this file that reads a value the document supplied rather than the
+    // registry**, and it is allowed for the reason week 5's lesson allows: the word under test is a
+    // word this test put on the page. A registry assertion cannot reach it, because the words come
+    // from the reader and not from a fixture the screen was handed.
+    //
+    // The ruling is in SPEC.md: **captured is governed, printed is the document.** The transcript is
+    // ours and is withheld; the page image is the paper and is not — the same viewer already holds a
+    // fifteen-minute signed read of the bytes from 5.4, so withholding a picture of the page would
+    // claim a control this system does not have.
+    const withheld = readOverlay(false);
+    assert.doesNotMatch(withheld, new RegExp(READ_IDENTIFIER));
+    // Narrow to the box: the ops rail has carried a `title` on every nav item since 5.2c, and a
+    // guard that reads the whole page for the attribute is a guard about the wrong element.
+    assert.doesNotMatch(withheld, /word-box[^>]*title=/);
+    // The geometry stays. A box with no word is still the answer to *where did it read something*,
+    // which is what this screen is called.
+    assert.match(withheld, /class="word-box"/);
+    assert.match(withheld, /<img alt="" src="data:image\/png;base64,/);
+
+    const disclosed = readOverlay(true);
+    assert.match(disclosed, new RegExp(`title="${READ_IDENTIFIER}"`));
+    assert.match(disclosed, /title="דירה"/);
   });
 
   it('serves a signed read on the panel, never a gs:// href', () => {

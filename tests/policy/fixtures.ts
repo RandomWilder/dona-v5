@@ -25,8 +25,10 @@ export const SEEDED_RELATIONS = [
   'tenancy_party',
   'tenancy_completeness_exception',
   'document_type',
+  'document_type_field',
   'document',
   'document_link',
+  'extracted_field',
 ] as const;
 
 export type TenancyStatus = 'DRAFT' | 'ACTIVE' | 'ENDED' | 'TERMINATED_EARLY';
@@ -49,6 +51,13 @@ export interface OccupancySpec {
   isServiceContact?: boolean;
   /** Reuse a unit across two seeds, which is what makes a *recycled* number recycled. */
   unitId?: string;
+  /**
+   * The party's ת.ז. **Slice 6.6**, and the reason it is here is that a guard with nothing to find
+   * is a guard that passed because it looked at nothing. Every case in this suite before 6.6 seeded
+   * a party with no identifier at all, so *no identifier reached the response* was true of a
+   * database that held none. The identifier case seeds one.
+   */
+  nationalId?: string;
 }
 
 export interface SeededOccupancy {
@@ -118,8 +127,9 @@ export async function seedOccupancy(
   const partyId = newId();
   const tenancyId = newId();
   await db.query(
-    `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', $2)`,
-    [partyId, `Tenant of ${unitNumber}`],
+    `INSERT INTO party (party_id, party_kind, full_name, national_id)
+     VALUES ($1, 'PERSON', $2, $3)`,
+    [partyId, `Tenant of ${unitNumber}`, spec.nationalId ?? null],
   );
   await db.query(
     `INSERT INTO party_contact (contact_id, party_id, channel, value, is_primary,
@@ -168,4 +178,64 @@ export async function seedOccupancy(
     ],
   );
   return { unitId, unitNumber, partyId, tenancyId };
+}
+
+/**
+ * One document of one type, declaring one identifier field and carrying one extracted value of it,
+ * linked to a unit. **Slice 6.6.** `extracted_field` is the identifier's second home — 6.4 put it
+ * there — so the guard that says nothing an agent is served carries one has to be run against a
+ * database where one exists in *both* homes, or it is asserting about an empty table.
+ *
+ * Deliberately minimal: this is not the evidence module's fixture and it writes no verdict, no
+ * promotion and no tenancy link. What it owes the case is a row on that table.
+ */
+export async function seedExtractedIdentifier(
+  db: Queryable,
+  unitId: string,
+  value: string,
+): Promise<{ documentId: string }> {
+  const typeId = newId();
+  const fieldId = newId();
+  const documentId = newId();
+  await db.query(
+    `INSERT INTO document_type (
+       document_type_id, type_key, label_he, label_en, verification_terms, is_active
+     ) VALUES ($1, $2, 'חוזה שכירות', NULL, NULL, true)`,
+    // The type key is per call: `document_type.type_key` is a natural key and two cases seeding
+    // `lease` in one transaction is a 23505 that says nothing about the rule under test.
+    [typeId, `lease-${documentId.slice(-12)}`],
+  );
+  await db.query(
+    `INSERT INTO document_type_field (
+       document_type_field_id, document_type_id, field_key, label_he, value_type,
+       is_required, effective_from
+     ) VALUES ($1, $2, 'tenant_id_number', 'ת.ז. השוכר', 'TEXT', false, '2026-01-01')`,
+    [fieldId, typeId],
+  );
+  await db.query(
+    `INSERT INTO document (
+       document_id, document_type_id, storage_uri, file_hash, ingested_at, verification_verdict
+     ) VALUES ($1, $2, $3, $4, $5, 'unguarded')`,
+    [
+      documentId,
+      typeId,
+      `gs://x/${documentId}.pdf`,
+      `hash-${documentId}`,
+      new Date('2026-09-14T12:00:00Z'),
+    ],
+  );
+  await db.query(
+    `INSERT INTO document_link (document_id, entity_type, entity_id, link_role)
+     VALUES ($1, 'UNIT', $2, 'SUBJECT')`,
+    [documentId, unitId],
+  );
+  await db.query(
+    `INSERT INTO extracted_field (
+       extracted_field_id, document_id, document_type_field_id, value, page, bbox,
+       confidence, model, extracted_at
+     ) VALUES ($1, $2, $3, $4, 1, '{"x":10,"y":80,"width":40,"height":20}'::jsonb,
+               0.88, 'fixture', $5)`,
+    [newId(), documentId, fieldId, value, new Date('2026-09-14T12:00:00Z')],
+  );
+  return { documentId };
 }
