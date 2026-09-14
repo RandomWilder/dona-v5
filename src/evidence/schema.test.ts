@@ -23,10 +23,12 @@ import {
 } from '../kernel/pg-support.ts';
 import {
   applyDocumentTypeCatalogue,
+  declareDocumentTypeField,
   documentTypeFields,
   ingestDocument,
   linkDocument,
   listDocumentTypes,
+  retireDocumentTypeField,
   upsertDocumentType,
   upsertDocumentTypeField,
 } from './contract.ts';
@@ -1189,6 +1191,279 @@ describe('field_promotion — A8 governed half', () => {
       await db.query(
         'DELETE FROM extracted_field WHERE document_id = $1 AND promoted_at IS NULL',
         [documentId],
+      );
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Slice 7.2 — the declaration an administrator writes, and what a correction leaves behind.
+//
+// R18's promise is that a value extracted in January is still explicable after the schema is
+// corrected in March. Until 7.2 the only writer was the seed, where the two dates are typed by hand
+// in `src/evidence/fixtures/document-types.ts` and a reviewer reads them. `declareDocumentTypeField`
+// computes them, so what the reviewer used to check is what this block checks.
+// ---------------------------------------------------------------------------------------------
+describe('E16 · a declaration written at run time (slice 7.2, flow A14)', () => {
+  let pool: Pool | null = null;
+  before(async () => {
+    pool = await migratedPoolOrNull();
+  });
+  after(async () => {
+    await pool?.end();
+  });
+
+  const YESTERDAY = '2026-09-19';
+  const ON = '2026-09-20';
+  const TOMORROW = '2026-09-21';
+
+  async function declared(
+    db: PoolClient,
+    key: string,
+  ): Promise<
+    {
+      field_key: string;
+      label_he: string;
+      effective_from: string;
+      effective_to: string | null;
+    }[]
+  > {
+    const { rows } = await db.query<{
+      field_key: string;
+      label_he: string;
+      effective_from: string;
+      effective_to: string | null;
+    }>(
+      `SELECT f.field_key, f.label_he,
+              to_char(f.effective_from, 'YYYY-MM-DD') AS effective_from,
+              to_char(f.effective_to, 'YYYY-MM-DD') AS effective_to
+         FROM document_type_field f
+         JOIN document_type t ON t.document_type_id = f.document_type_id
+        WHERE t.type_key = $1
+        ORDER BY f.effective_from`,
+      [key],
+    );
+    return rows;
+  }
+
+  it('declares a field with no migration and no seed', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const key = typeKey('declare');
+      await upsertDocumentType(db, {
+        typeKey: key,
+        labelHe: 'חוזה שכירות',
+        labelEn: null,
+        verificationTerms: null,
+        isActive: true,
+      });
+      const columns = await db.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM information_schema.columns
+          WHERE table_name = 'document_type_field'`,
+      );
+      const result = await declareDocumentTypeField(db, {
+        typeKey: key,
+        fieldKey: 'city',
+        labelHe: 'עיר',
+        valueType: 'TEXT',
+        isRequired: false,
+        extractionHint: 'עיר בלבד, לא הרחוב',
+        on: ON,
+      });
+      assert.notEqual(result.documentTypeFieldId, null);
+      assert.equal(
+        result.supersededId,
+        null,
+        'nothing was declared here before',
+      );
+
+      const governing = await documentTypeFields(db, key, ON);
+      assert.equal(governing.length, 1);
+      assert.equal(governing[0]?.fieldKey, 'city');
+      assert.equal(governing[0]?.effectiveFrom, ON);
+      // The acceptance bar 3.1 set for a *type*, now asserted for a field: the schema did not move.
+      const after = await db.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM information_schema.columns
+          WHERE table_name = 'document_type_field'`,
+      );
+      assert.equal(after.rows[0]?.n, columns.rows[0]?.n);
+      // And it governs nothing before the day it was declared.
+      assert.deepEqual(await documentTypeFields(db, key, YESTERDAY), []);
+    });
+  });
+
+  it('a correction leaves two rows, and the old one still says what it said', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const key = typeKey('correct');
+      await upsertDocumentType(db, {
+        typeKey: key,
+        labelHe: 'חוזה שכירות',
+        labelEn: null,
+        verificationTerms: null,
+        isActive: true,
+      });
+      await declareDocumentTypeField(db, {
+        typeKey: key,
+        fieldKey: 'city',
+        labelHe: 'עיר',
+        valueType: 'TEXT',
+        isRequired: false,
+        extractionHint: 'עיר',
+        on: YESTERDAY,
+      });
+      const corrected = await declareDocumentTypeField(db, {
+        typeKey: key,
+        fieldKey: 'city',
+        labelHe: 'עיר המושכר',
+        valueType: 'TEXT',
+        isRequired: true,
+        extractionHint: 'עיר בלבד, לא הרחוב ולא המיקוד',
+        on: ON,
+      });
+
+      const rows = await declared(db, key);
+      assert.equal(
+        rows.length,
+        2,
+        'a correction is a new row and never an edit',
+      );
+      // **The superseded row still says what it said.** This is the whole of R18: a value extracted
+      // yesterday points at this row, and reading it back has to explain that value.
+      assert.equal(rows[0]?.label_he, 'עיר');
+      assert.equal(rows[0]?.effective_from, YESTERDAY);
+      // **Closed at the day before the successor opens, not at the same day.** Both ends of
+      // `documentTypeFields`'s window are inclusive, so closing at `ON` would leave two live rows.
+      assert.equal(rows[0]?.effective_to, YESTERDAY);
+      assert.equal(corrected.supersededTo, YESTERDAY);
+      assert.equal(rows[1]?.label_he, 'עיר המושכר');
+      assert.equal(rows[1]?.effective_from, ON);
+      assert.equal(rows[1]?.effective_to, null);
+
+      // One declaration governs today, and the superseded one still governs yesterday.
+      const today = await documentTypeFields(db, key, ON);
+      assert.equal(today.length, 1, 'exactly one declaration governs a day');
+      assert.equal(today[0]?.labelHe, 'עיר המושכר');
+      assert.equal(today[0]?.isRequired, true);
+      const before = await documentTypeFields(db, key, YESTERDAY);
+      assert.equal(before.length, 1);
+      assert.equal(before[0]?.labelHe, 'עיר');
+      assert.equal(before[0]?.isRequired, false);
+    });
+  });
+
+  it('refuses the same field declared twice in one day, and leaves the first alone', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const key = typeKey('twice');
+      await upsertDocumentType(db, {
+        typeKey: key,
+        labelHe: 'חוזה שכירות',
+        labelEn: null,
+        verificationTerms: null,
+        isActive: true,
+      });
+      const spec = {
+        typeKey: key,
+        fieldKey: 'city',
+        valueType: 'TEXT' as const,
+        isRequired: false,
+        extractionHint: null,
+        on: ON,
+      };
+      await declareDocumentTypeField(db, { ...spec, labelHe: 'עיר' });
+      // The natural key is `(document_type_id, field_key, effective_from)` and the version CHECK
+      // refuses a row closed before it opens, so both constraints would fire — unreadably. The
+      // command refuses first and names the rule.
+      await assert.rejects(
+        () => declareDocumentTypeField(db, { ...spec, labelHe: 'עיר אחרת' }),
+        (error: unknown) => {
+          assert.equal((error as { code?: string }).code, 'conflict');
+          assert.match((error as Error).message, /nothing to supersede/);
+          return true;
+        },
+      );
+      const rows = await declared(db, key);
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0]?.label_he, 'עיר');
+      assert.equal(rows[0]?.effective_to, null);
+    });
+  });
+
+  it('retires a field: the row is closed, nothing is inserted, nothing is deleted', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const key = typeKey('retire');
+      await upsertDocumentType(db, {
+        typeKey: key,
+        labelHe: 'חוזה שכירות',
+        labelEn: null,
+        verificationTerms: null,
+        isActive: true,
+      });
+      await declareDocumentTypeField(db, {
+        typeKey: key,
+        fieldKey: 'city',
+        labelHe: 'עיר',
+        valueType: 'TEXT',
+        isRequired: false,
+        extractionHint: null,
+        on: YESTERDAY,
+      });
+      const retired = await retireDocumentTypeField(db, {
+        typeKey: key,
+        fieldKey: 'city',
+        on: ON,
+      });
+      assert.equal(
+        retired.documentTypeFieldId,
+        null,
+        'retiring inserts nothing',
+      );
+      assert.equal(retired.supersededTo, YESTERDAY);
+
+      const rows = await declared(db, key);
+      assert.equal(rows.length, 1, 'deactivate, never delete');
+      assert.equal(rows[0]?.effective_to, YESTERDAY);
+      assert.deepEqual(await documentTypeFields(db, key, ON), []);
+      // The declaration still explains what was read under it.
+      assert.equal((await documentTypeFields(db, key, YESTERDAY)).length, 1);
+
+      // Retiring what is not declared is `not_found` and not a silent no-op: an administrator who
+      // retired the wrong key has to be told.
+      await assert.rejects(
+        () =>
+          retireDocumentTypeField(db, {
+            typeKey: key,
+            fieldKey: 'city',
+            on: TOMORROW,
+          }),
+        (error: unknown) => {
+          assert.equal((error as { code?: string }).code, 'not_found');
+          return true;
+        },
+      );
+    });
+  });
+
+  it('refuses a declaration on a type that does not exist', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      await assert.rejects(
+        () =>
+          declareDocumentTypeField(db, {
+            typeKey: typeKey('absent'),
+            fieldKey: 'city',
+            labelHe: 'עיר',
+            valueType: 'TEXT',
+            isRequired: false,
+            extractionHint: null,
+            on: ON,
+          }),
+        (error: unknown) => {
+          assert.equal((error as { code?: string }).code, 'not_found');
+          return true;
+        },
       );
     });
   });

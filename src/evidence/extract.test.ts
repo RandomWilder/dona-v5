@@ -22,6 +22,7 @@ import {
 import type { IntakeDeps } from './contract.ts';
 import {
   applyDocumentTypeCatalogue,
+  declareDocumentTypeField,
   EXTRACT_INSTRUCTIONS,
   extractFiledDocument,
   fileDocument,
@@ -32,6 +33,9 @@ import {
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const AT = new Date('2026-09-07T09:00:00.000Z');
+// The same day, as the catalogue's date parameter reads it. Slice 7.2's case declares a field on
+// the day the document it is extracted from is filed, which is the case an administrator has.
+const TODAY = '2026-09-07';
 const BUCKET = 'dona-v5-test-extract';
 const pdfBytes = (marker: string): Buffer =>
   Buffer.from(`%PDF-1.4\n% ${marker}\n`, 'latin1');
@@ -158,6 +162,87 @@ describe('evidence · extract into the declared schema', () => {
           second.find((row) => row.fieldKey === 'notice_days')?.value,
           'got:notice_days',
         );
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  // **Slice 7.2.** The case above proves the mechanism through `upsertDocumentTypeField`, which is
+  // the seed's path — the one that costs a commit and a deploy. This proves the same thing through
+  // the path an administrator has from A14, and it is the acceptance bullet `tasks/todo.md` writes
+  // as *an ADMIN adds a field, a lease is re-filed, and the new field is extracted against the new
+  // declaration*. The fake extractor is what makes it runnable with no API key: what is under test
+  // is the target list handed to the model, not the model.
+  it('extracts a field an administrator declared at run time', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        // The declaration the screen would write, on the day the document is filed.
+        const declared = await declareDocumentTypeField(db, {
+          typeKey: 'lease',
+          fieldKey: 'city',
+          labelHe: 'עיר המושכר',
+          valueType: 'TEXT',
+          isRequired: false,
+          extractionHint: 'עיר בלבד, לא הרחוב',
+          on: TODAY,
+        });
+        let asked: string[] = [];
+        const extractor = createFakeExtractor((request) => {
+          const schema = request.schema as {
+            properties: {
+              findings: {
+                items: { properties: { field_key: { enum: string[] } } };
+              };
+            };
+          };
+          asked = schema.properties.findings.items.properties.field_key.enum;
+          return {
+            findings: [{ field_key: 'city', value: 'שוהם', word_ids: [0] }],
+          };
+        });
+        const filed = await fileDocument(
+          {
+            db,
+            objects: createMemoryStore(),
+            pdf: createFakePdfText(['חוזה שכירות המושכר תקופת השכירות השוכר']),
+            audit: createAuditLog(db, fixedClock(AT)),
+            clock: fixedClock(AT),
+            bucket: BUCKET,
+            extractor,
+            extractModel: 'gpt-test',
+          } satisfies IntakeDeps,
+          {
+            bytes: pdfBytes('extract-declared-at-runtime'),
+            typeKey: 'lease',
+            place: { kind: 'UNIT', id: newId() },
+            tenancyId: null,
+          },
+        );
+        assert.equal(filed.filed, true);
+        if (!filed.filed) return;
+        // **The declaration reached the model's target list**, which is the whole claim: the
+        // catalogue is read at run time and a field declared five seconds ago is one the reader
+        // looks for.
+        assert.ok(asked.includes('city'), `city not in [${asked.join(', ')}]`);
+
+        const rows = await listExtractedFields(db, filed.documentId);
+        const city = rows.find((row) => row.fieldKey === 'city');
+        assert.equal(city?.value, 'שוהם');
+        // And the value points at **the declaration that governed it** — the row the administrator
+        // wrote, not the type. That pointer is what makes R18's promise mean anything.
+        const pointer = await db.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM extracted_field
+            WHERE document_id = $1 AND document_type_field_id = $2`,
+          [filed.documentId, declared.documentTypeFieldId],
+        );
+        assert.equal(pointer.rows[0]?.n, '1');
       });
     } finally {
       await pool.end();

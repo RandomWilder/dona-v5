@@ -28,7 +28,11 @@ import type { PdfPage } from '../../kernel/pdf.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import type { UnitLetting } from '../../tenancy/contract.ts';
-import type { DocumentTypeFieldRow, DocumentTypeRow } from './catalogue.ts';
+import {
+  type DocumentTypeFieldRow,
+  type DocumentTypeRow,
+  FIELD_VALUE_TYPES,
+} from './catalogue.ts';
 import { isIdentifierField } from './extract.ts';
 import type { IntakeRefusal } from './intake.ts';
 import type { ProposedPerson, TenancyCandidate } from './lease.ts';
@@ -64,6 +68,16 @@ const styles = h`<style>
   .form-row { display: grid; gap: var(--space-2); }
   .form-row .hint { color: var(--color-text-muted); font-size: var(--text-sm); margin: 0; }
   .form-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: center; }
+  /* Slice 7.2, lifted from the paint's own block. One control per row, and it is a form rather
+     than a link because retiring a declaration is a write and a GET that writes is a GET a crawler
+     can fire. */
+  .row-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+  .row-actions form { display: contents; }
+  .mini {
+    min-height: var(--size-control-ops);
+    padding-inline: var(--space-3);
+    font-size: var(--text-sm);
+  }
   .notice {
     border: var(--size-hairline) solid var(--color-divider-soft);
     border-radius: var(--radius-3);
@@ -1392,6 +1406,7 @@ export function renderTenancyWrittenPage(screen: TenancyWrittenScreen): string {
  */
 export interface DocumentsScreen {
   nav: Html;
+  csrf: string;
   types: DocumentTypeRow[];
   /** The type whose declaration is on the page. Null when the catalogue is empty. */
   chosen: DocumentTypeRow | null;
@@ -1399,6 +1414,15 @@ export interface DocumentsScreen {
   fields: DocumentTypeFieldRow[];
   /** The day the declaration was asked for — never `CURRENT_DATE`, for SPEC.md's reason. */
   on: string;
+  /**
+   * **Slice 7.2.** Whether this viewer holds `settings.write` — ADMIN only. The editor is rendered
+   * only for a role that may post it, which is `/settings`'s shape and deliberately not 6.1's: the
+   * landing itself is `documents.write`, so an OPERATOR reads the declaration and is never shown a
+   * form that would refuse them after they typed into it.
+   */
+  mayWrite: boolean;
+  /** A declaration was just written, so the screen says so. */
+  saved?: 'declared' | 'retired';
 }
 
 export function renderDocumentsPage(screen: DocumentsScreen): string {
@@ -1415,6 +1439,15 @@ export function renderDocumentsPage(screen: DocumentsScreen): string {
         מה המערכת מחפשת על הדף, לפי סוג המסמך. ההצהרה נקראת מן המסד בכל בקשה — היא נתון ולא קוד.
       </p>
     </div>
+    ${
+      screen.saved === undefined
+        ? h``
+        : h`<p class="lede">${
+            screen.saved === 'declared'
+              ? h`ההצהרה נשמרה, ותקפה מהיום.`
+              : h`השדה הוצא משימוש. השורה נסגרה ולא נמחקה.`
+          }</p>`
+    }
     <form class="form-grid" method="get" action="/documents">
       <div class="form-row">
         <label for="type">סוג המסמך</label>
@@ -1458,6 +1491,7 @@ export function renderDocumentsPage(screen: DocumentsScreen): string {
             <tr>
               <th>שדה</th><th>מפתח</th><th>סוג ערך</th><th>חובה</th><th>רמז לקורא</th>
               ${oneVersion ? h`` : h`<th>גרסה</th>`}
+              ${screen.mayWrite ? h`<th></th>` : h``}
             </tr>
           </thead>
           <tbody>
@@ -1469,6 +1503,18 @@ export function renderDocumentsPage(screen: DocumentsScreen): string {
               <td ${field.isRequired ? h`` : h`class="muted"`}>${field.isRequired ? h`חובה` : h`רשות`}</td>
               <td class="muted">${field.extractionHint ?? h`—`}</td>
               ${oneVersion ? h`` : h`<td class="key" dir="ltr">${field.effectiveFrom}</td>`}
+              ${
+                screen.mayWrite
+                  ? h`<td class="row-actions">
+                <form method="post" action="/documents/types/${chosen.typeKey}/fields">
+                  ${csrfInput(screen.csrf)}
+                  <input type="hidden" name="action" value="retire" />
+                  <input type="hidden" name="field_key" value="${field.fieldKey}" />
+                  <button class="btn btn-secondary mini" type="submit">הוצאה משימוש</button>
+                </form>
+              </td>`
+                  : h``
+              }
             </tr>`,
             )}
           </tbody>
@@ -1479,10 +1525,79 @@ export function renderDocumentsPage(screen: DocumentsScreen): string {
         ההצהרה המוצגת היא זו שתקפה ל־${ltr(screen.on)}. הצהרה שנסגרה אינה מוצגת כאן, והערכים שנקראו
         תחתיה נשארים מוסברים לפיה.
       </p>
+      ${screen.mayWrite ? declarationForm(screen, chosen) : h``}
     </section>`
     }
     <div class="form-actions">
       <a class="btn btn-primary" href="/documents/new">תיוק מסמך</a>
     </div>`;
   return shell('דונה דום — מסמכים', body, screen.nav);
+}
+
+/**
+ * The editor. **Slice 7.2, flow A14**, and the paint's «הוספת שדה» button wired.
+ *
+ * **Rendered only for `settings.write`.** An OPERATOR reads the declaration above and is shown no
+ * form, which is why this screen needs no refusal state: the door an operator may not walk through
+ * is not drawn on their page at all (A11's rule, 6.1's argument).
+ *
+ * **One form for add and for correct**, because they are one act: an existing key supersedes the
+ * declaration governing today and a new one opens its first. The screen says so rather than making
+ * the administrator pick a verb, and the R18 consequence — the old row stays and still says what it
+ * said — is written under the button where somebody about to press it will read it.
+ *
+ * No value type is `MONEY` and the list is the `FieldValueType` union, so the `<select>` cannot
+ * offer one. The refusal behind it is the vocabulary guard, which is a different rule: a money field
+ * declared as `NUMBER` is the one the select cannot stop.
+ */
+function declarationForm(
+  screen: DocumentsScreen,
+  chosen: DocumentTypeRow,
+): Html {
+  return h`<form class="form-grid" method="post" action="/documents/types/${chosen.typeKey}/fields"
+        style="margin-block-start: var(--space-5)">
+    ${csrfInput(screen.csrf)}
+    <input type="hidden" name="action" value="declare" />
+    <h3>הצהרת שדה ל${chosen.labelHe}</h3>
+    <p class="hint">
+      מפתח שכבר מוצהר — הצהרה חדשה שמחליפה אותו מהיום. השורה הקודמת נסגרת אתמול ונשארת כפי שהיא,
+      וערכים שנקראו תחתיה נשארים מוסברים לפיה. אין מחיקה.
+    </p>
+    <div class="form-row">
+      <label for="field-key">מפתח</label>
+      <input id="field-key" name="field_key" type="text" dir="ltr" required maxlength="64"
+             pattern="[a-z][a-z0-9_]*" />
+      <p class="hint">אותיות לטיניות קטנות, ספרות וקו תחתון. זהו המפתח שהערך נשמר תחתיו ואינו משתנה.</p>
+    </div>
+    <div class="form-row">
+      <label for="field-label">שם בעברית</label>
+      <input id="field-label" name="label_he" type="text" required maxlength="120" />
+    </div>
+    <div class="form-row">
+      <label for="field-type">סוג ערך</label>
+      <select id="field-type" name="value_type" required>
+        ${FIELD_VALUE_TYPES.map(
+          (type) => h`<option value="${type}">${type}</option>`,
+        )}
+      </select>
+      <p class="hint">אין טיפוס כסף, ואין שדה כסף. סכום אינו אמת עסקית במערכת הזאת.</p>
+    </div>
+    <div class="form-row">
+      <label for="field-hint">רמז לקורא</label>
+      <textarea id="field-hint" name="extraction_hint" rows="2" maxlength="500"></textarea>
+      <p class="hint">הניסוח כפי שהוא מודפס על הטופס, ומה הערך <em>אינו</em>. נשמר בגרסה הזאת בלבד.</p>
+    </div>
+    <label class="check">
+      <input type="checkbox" name="is_required" value="true" />
+      שדה חובה
+    </label>
+    <p class="hint">
+      שדה חובה שלא נמצא על הדף הוא <strong>תוצאה</strong> ולא שגיאה — חוזה שאינו נוקב בערב הוא חוזה
+      תקין. הסימון מצהיר מה מצופה, ואינו מסרב לכלום.
+    </p>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">הצהרה</button>
+      <span class="chip">אדמין בלבד</span>
+    </div>
+  </form>`;
 }

@@ -34,7 +34,7 @@ import type { ObjectStore } from '../../kernel/objects.ts';
 import { createUnconfiguredOcr, type OcrText } from '../../kernel/ocr.ts';
 import type { PdfText } from '../../kernel/pdf.ts';
 import type { Html } from '../../kernel/ui/html.ts';
-import { validId } from '../../kernel/validate.ts';
+import { optionalText, requireText, validId } from '../../kernel/validate.ts';
 import {
   CSRF_FIELD,
   can,
@@ -62,10 +62,14 @@ function pageIndex(asked: unknown, pageCount: number): number {
 import type { WorkRunner } from '../../kernel/work.ts';
 import { listUnitTenancies, type TenancyRole } from '../../tenancy/contract.ts';
 import {
+  declareDocumentTypeField,
   documentTypeByKey,
   documentTypeFieldCounts,
   documentTypeFields,
+  FIELD_VALUE_TYPES,
+  type FieldValueType,
   listDocumentTypes,
+  retireDocumentTypeField,
 } from './catalogue.ts';
 import { anchorOf } from './documents.ts';
 import {
@@ -233,6 +237,77 @@ function declaredType(request: FastifyRequest): string {
   return String((request.query as { type?: string }).type ?? '').slice(0, 64);
 }
 
+/**
+ * The edge validators for the declaration editor. Slice 7.2.
+ *
+ * Every one of them refuses rather than coerces, which is SPEC.md's rule for an input at the edge.
+ * They are here rather than in `src/settings-page.ts` beside their twins because that file is the
+ * composition root's screen and this route belongs to this module — a shared parser would be the
+ * module edge `src/kernel/boundary.test.ts` polices, for four lines.
+ */
+type Form = Record<string, string | undefined>;
+
+/** `type_key` out of the path. A key is a key, never a sentence and never a wildcard. */
+const TYPE_KEY = /^[a-z][a-z0-9_]*$/;
+/**
+ * **`field_key` is the name a value is stored under and is never renamed**, so it is constrained
+ * harder than a label: lowercase ASCII, digits and underscores. That is also what makes the money
+ * guard's token match on it exact — `fee` cannot fire on a Hebrew label that happens to transliterate.
+ */
+const FIELD_KEY = /^[a-z][a-z0-9_]{0,62}[a-z0-9]$|^[a-z]$/;
+
+function declaredKey(raw: string): string {
+  const key = String(raw ?? '').slice(0, 64);
+  if (!TYPE_KEY.test(key)) {
+    throw new KernelError('invalid', 'typeKey is not a type key');
+  }
+  return key;
+}
+
+function fieldKeyOf(body: unknown): string {
+  const key = requireText(
+    (body as Form | undefined)?.field_key,
+    'field_key',
+    64,
+  );
+  if (!FIELD_KEY.test(key)) {
+    throw new KernelError(
+      'invalid',
+      'field_key is lowercase latin letters, digits and underscores, and starts with a letter',
+    );
+  }
+  return key;
+}
+
+function valueTypeOf(body: unknown): FieldValueType {
+  const raw = requireText(
+    (body as Form | undefined)?.value_type,
+    'value_type',
+    16,
+  );
+  // Against the catalogue's own array and never a list typed here, so this and the `CHECK` in
+  // `0011_evidence.sql` cannot disagree — and so there is no place to add MONEY by hand.
+  if (!(FIELD_VALUE_TYPES as readonly string[]).includes(raw)) {
+    throw new KernelError('invalid', 'value_type is not a declared value type');
+  }
+  return raw as FieldValueType;
+}
+
+function optionalTextOf(
+  body: unknown,
+  name: string,
+  max: number,
+): string | null {
+  const raw = (body as Form | undefined)?.[name];
+  if (raw === undefined || raw.trim() === '') return null;
+  return optionalText(raw, name, max);
+}
+
+function checked(body: unknown, name: string): boolean {
+  const raw = (body as Form | undefined)?.[name];
+  return raw === 'true' || raw === 'on';
+}
+
 function requireOperator(request: FastifyRequest): string {
   const id = request.staff?.staffAccountId;
   if (id === undefined) {
@@ -330,6 +405,15 @@ const INTAKE = {
   config: { staff: 'documents.write', csrf: 'in-body' },
 } as const;
 const CONFIRM = { config: { staff: 'tenancy.write' } } as const;
+// **Slice 7.2.** `settings.write`, ADMIN only, and already the hand on the `DocumentType`
+// catalogue since 5.8 — so `src/staff/internal/roles.ts` does not change. A permission with one
+// reader adds vocabulary without adding a boundary, and the matrix stays code.
+//
+// **Proved red at `documents.write`**, which an OPERATOR holds: the refusal case in
+// `routes.test.ts` answered 303 with the declaration written, and the output is in
+// `tasks/evidence/7.2.md`. A stance is the only thing that refusal is about, so the only honest
+// way to write it red is to register the wrong one.
+const DECLARE = { config: { staff: 'settings.write' } } as const;
 
 export function registerDocumentRoutes(
   app: FastifyInstance,
@@ -377,15 +461,118 @@ export function registerDocumentRoutes(
     const fields = chosen
       ? await documentTypeFields(deps.pool, chosen.typeKey, on)
       : [];
+    const saved = (request.query as { saved?: string }).saved;
     html(reply);
     return renderDocumentsPage({
       nav: chromeOf(deps, request),
+      csrf: csrfFrom(request),
       types,
       chosen,
       fields,
       on,
+      // **Slice 7.2.** `settings.write`, which is ADMIN only and has been the hand on the
+      // `DocumentType` catalogue since 5.8. The landing keeps `documents.write` above, so an
+      // OPERATOR reads this page and is simply not shown the editor.
+      mayWrite: can(request.staff?.role ?? null, 'settings.write'),
+      ...(saved === 'declared' || saved === 'retired' ? { saved } : {}),
     });
   });
+
+  // **The declaration an administrator writes. Slice 7.2, flow A14.**
+  //
+  // Foundation rule 8 says a document type is a row and a field is a row, and that new ones cost no
+  // migration and no deploy. The type half has been true since 3.1. This is the field half, and
+  // until now it cost a commit to `src/evidence/fixtures/document-types.ts` and a run of
+  // `npm run seed:doctypes` — a deploy wearing a seed's clothes, paid three times.
+  //
+  // **`settings.write`, and `src/staff/internal/roles.ts` does not change.** A permission with one
+  // reader adds vocabulary without adding a boundary, and the matrix stays code.
+  //
+  // **No `csrf: 'in-body'`.** That flag is an *exemption* from the composition root's CSRF
+  // preHandler, held by `POST /documents` alone because a multipart stream cannot be read there
+  // without consuming it (6.1's finding). This body is urlencoded and the preHandler reads it;
+  // `src/guard.test.ts` asserts the exempt list is still exactly one route.
+  app.post<{ Params: { typeKey: string } }>(
+    '/documents/types/:typeKey/fields',
+    DECLARE,
+    async (request, reply) => {
+      const typeKey = declaredKey(request.params.typeKey);
+      // The day, off the injected clock and never `CURRENT_DATE` — the same line `GET /documents`
+      // reads its declaration for, so the screen and the write agree about which day this is.
+      const on = deps.clock.now().toISOString().slice(0, 10);
+      const action = requireText(
+        (request.body as Form | undefined)?.action,
+        'action',
+        16,
+      );
+      const fieldKey = fieldKeyOf(request.body);
+      const audit = createAuditLog(deps.pool, deps.clock);
+      const actor = {
+        actorKind: 'staff' as const,
+        actorId: request.staff?.staffAccountId,
+        actorRole: request.staff?.role ?? undefined,
+      };
+      if (action === 'retire') {
+        // **The audit line is written around the work** and carries the refusal too: a declaration
+        // refused is the case somebody asks about afterwards, and `around` is what records both
+        // outcomes without the handler choosing which to log.
+        await audit.around(
+          {
+            ...actor,
+            action: 'evidence.retire_field',
+            inputs: { typeKey, fieldKey, on },
+          },
+          () => retireDocumentTypeField(deps.pool, { typeKey, fieldKey, on }),
+        );
+        return reply
+          .code(303)
+          .header(
+            'location',
+            `/documents?type=${encodeURIComponent(typeKey)}&saved=retired`,
+          )
+          .send();
+      }
+      if (action !== 'declare') {
+        throw new KernelError('invalid', 'action is not declare or retire');
+      }
+      const declaration = {
+        typeKey,
+        fieldKey,
+        labelHe: requireText(
+          (request.body as Form | undefined)?.label_he,
+          'label_he',
+          120,
+        ),
+        valueType: valueTypeOf(request.body),
+        isRequired: checked(request.body, 'is_required'),
+        extractionHint: optionalTextOf(request.body, 'extraction_hint', 500),
+        on,
+      };
+      await audit.around(
+        {
+          ...actor,
+          action: 'evidence.declare_field',
+          // The declaration, and never a document's text: a key, a value type, a flag and a day.
+          // The Hebrew label is the administrator's own words about a form and not about a person.
+          inputs: {
+            typeKey,
+            fieldKey,
+            valueType: declaration.valueType,
+            isRequired: declaration.isRequired,
+            on,
+          },
+        },
+        () => declareDocumentTypeField(deps.pool, declaration),
+      );
+      return reply
+        .code(303)
+        .header(
+          'location',
+          `/documents?type=${encodeURIComponent(typeKey)}&saved=declared`,
+        )
+        .send();
+    },
+  );
 
   // The screen, and from 6.3 there are two of them behind one URL.
   //
