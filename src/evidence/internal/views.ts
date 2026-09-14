@@ -120,11 +120,51 @@ function unitLine(unit: UnitHit): Html {
  * found and either spelling would have met it, so it is one chip reading `המושכר או הדירה` — two
  * chips would tell an operator that two words are missing and send them looking for both.
  */
+/**
+ * The flat (or building) a document is already anchored to, said in words the operator can act on.
+ * Slice 6.10 — the route resolves it, because naming a place is `src/estate/`'s data and this module
+ * renders what it is handed.
+ */
+export interface AnchoredPlace {
+  /** The place's own screen, so the refusal is a door and not a dead end. */
+  href: string;
+  /** Null for a building-level document — there is no flat to name. */
+  unitNumber: string | null;
+  buildingName: string;
+  addressLine: string;
+  city: string;
+}
+
+function anchoredLine(place: AnchoredPlace): Html {
+  return place.unitNumber === null
+    ? h`${place.buildingName} · ${place.addressLine}, ${place.city}`
+    : h`דירה ${ltr(place.unitNumber)} · ${place.buildingName} · ${place.addressLine}, ${place.city}`;
+}
+
 function refusal(
   type: DocumentTypeRow,
   verification: Verification,
   reason: IntakeRefusal = 'terms',
+  anchoredTo?: AnchoredPlace,
 ): Html {
+  if (reason === 'anchored') {
+    // **Slice 6.10.** Which flat, by name and as a link. *This file is already on file* is a
+    // sentence an operator cannot act on; *it is already filed against דירה 12B* is one they can,
+    // and it is usually the more useful fact than the upload they were attempting.
+    return h`<section class="notice">
+      <h2>הקובץ הזה כבר מתויק</h2>
+      <p class="lede">
+        אותם בתים בדיוק כבר שמורים במערכת, משויכים
+        ${
+          anchoredTo
+            ? h`אל <a href="${anchoredTo.href}">${anchoredLine(anchoredTo)}</a>`
+            : h`אל דירה אחרת`
+        }.
+        מסמך משויך למקום אחד בלבד — זה שהקובץ שלו נשמר תחתיו — ולכן <strong>לא נשמר דבר</strong>:
+        לא קובץ, לא רישום ולא שיוך נוסף. אם זה המסמך הנכון, הוא כבר במערכת.
+      </p>
+    </section>`;
+  }
   if (reason === 'too_large') {
     return h`<section class="notice">
       <h2>הקובץ גדול מכדי שנקרא אותו</h2>
@@ -165,6 +205,8 @@ export interface UploadScreen {
     verification: Verification;
     /** Why. Slice 6.8 — `too_many_pages` is a different sentence from a missing requirement. */
     reason?: IntakeRefusal;
+    /** Slice 6.10. Where these bytes already live, on the `anchored` refusal and nowhere else. */
+    anchoredTo?: AnchoredPlace;
   };
 }
 
@@ -182,6 +224,7 @@ export function renderUploadPage(screen: UploadScreen): string {
             screen.refused.type,
             screen.refused.verification,
             screen.refused.reason,
+            screen.refused.anchoredTo,
           )
         : h``
     }

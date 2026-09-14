@@ -1163,6 +1163,65 @@ describe('evidence · A12 a document finds its own place', () => {
       );
 
       await t.test(
+        'the same bytes against a second flat are refused, and the name the refusal gives is the first flat',
+        async () => {
+          // **Slice 6.10 — the week-6 demo's fourth defect, replayed at the route.** The demo filed
+          // one file twice: `ON CONFLICT (file_hash)` returned the document filed a week earlier,
+          // the second `SUBJECT` link went in, and the confirm screen then spoke about whichever
+          // flat the unordered `LIMIT 1` handed back — *"the address does not match"*, about an
+          // apartment the director had never opened. The bytes below are the ones filed against 12B
+          // in the case above.
+          const before = await documentsHere();
+          const putsBefore = puts;
+          const response = await as(ambiguous).inject({
+            method: 'POST',
+            url: '/documents/intake',
+            ...upload(
+              { type: 'lease', unit: unitA },
+              { filename: 'nine.pdf', bytes: pdfBytes('a12 chosen') },
+            ),
+          });
+          assert.equal(response.statusCode, 422, response.body.slice(0, 400));
+          // Which flat, by name. A refusal that only said *this is already on file* would send the
+          // operator looking for it (SPEC-evidence.md, 6.8's bar for a refusal).
+          assert.match(response.body, /<span dir="ltr">12B<\/span>/);
+          assert.match(response.body, /לא נשמר דבר/);
+
+          // Nothing moved: no second link, no object, and the document still anchored where it was.
+          assert.equal(await documentsHere(), before);
+          assert.equal(puts, putsBefore, 'no object was written');
+          const anchored = await pool.query<{ n: string }>(
+            `SELECT count(*)::text AS n FROM document_link l
+               JOIN document d ON d.document_id = l.document_id
+              WHERE d.file_hash = $1 AND l.entity_type = 'UNIT'`,
+            [documentFileHash(pdfBytes('a12 chosen'))],
+          );
+          assert.equal(anchored.rows[0]?.n, '1');
+        },
+      );
+
+      await t.test(
+        'and the confirm screen for those bytes is still about the flat they were filed against',
+        async () => {
+          const found = await pool.query<{ document_id: string }>(
+            'SELECT document_id FROM document WHERE file_hash = $1',
+            [documentFileHash(pdfBytes('a12 chosen'))],
+          );
+          const documentId = found.rows[0]?.document_id ?? '';
+          assert.ok(documentId);
+          const confirm = await as(ambiguous).inject({
+            method: 'GET',
+            url: `/documents/${documentId}/tenancy`,
+          });
+          assert.equal(confirm.statusCode, 200, confirm.body.slice(0, 400));
+          // The unit number rides in its own `dir="ltr"` span, so this is the screen's own markup
+          // and not a paraphrase of it.
+          assert.match(confirm.body, /<span dir="ltr">12B<\/span>/);
+          assert.doesNotMatch(confirm.body, /<span dir="ltr">12A<\/span>/);
+        },
+      );
+
+      await t.test(
         'a file too large for the reader is refused with a sentence, and files nothing',
         async () => {
           // **Slice 6.8, and it was red first.** A file above `onlineOcrByteLimit` cannot be read

@@ -624,6 +624,32 @@ const SCREENS: Array<[string, () => string]> = [
       }),
   ],
   [
+    // **Slice 6.10.** The third thing this screen refuses: bytes already on file, anchored to another
+    // flat. It is the only refusal that names a *place*, and the only one that is a link.
+    'documents · upload, refused — already filed against another flat',
+    () =>
+      renderUploadPage({
+        nav: NAV,
+        csrf: CSRF,
+        unit: hit,
+        types: documentTypes,
+        lettings,
+        declaredTypeKey: 'lease',
+        refused: {
+          type: documentTypes[0] as DocumentTypeRow,
+          verification: { verdict: 'verified', missingTerms: [] },
+          reason: 'anchored',
+          anchoredTo: {
+            href: '/estate/units/01a09f1e-0000-7000-8000-00000000000b',
+            unitNumber: '12B',
+            buildingName: 'בניין רקפת 12',
+            addressLine: 'רקפת 12',
+            city: 'שוהם',
+          },
+        },
+      }),
+  ],
+  [
     // Slice 6.3, flow A12. The screen that asks for no flat.
     'documents · intake',
     () => renderIntakePage({ nav: NAV, csrf: CSRF, types: documentTypes }),

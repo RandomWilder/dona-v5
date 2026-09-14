@@ -170,6 +170,11 @@ same bytes filed against a second place from writing a second copy. `ingestDocum
 `storage_uri` from its update path, so the first path filed stays authoritative whatever a later
 caller computes.
 
+**From 6.10 that lookup does one more thing**, and it is the same step rather than a new one: the
+path it finds *is* the document's anchor, so the same bytes offered against a second place are
+refused there — before the `put` and before the ingest, which is what makes *nothing was written* a
+property of the order rather than a promise (*The same bytes are one document, and one anchor*).
+
 ## Filing a document — flow A1 (slice 3.3)
 
 The administrator holds a file and knows what it is, so **the type is declared and never detected**
@@ -265,6 +270,59 @@ lands and needs it.
 chosen from the lettings that unit already has. This is [SPEC-flows.md](SPEC-flows.md) invariant 1's
 primary binding, and it stays a link rather than a path root because a tenancy is temporal and
 rooting the filing cabinet at it would scatter one flat's papers across its lettings.
+
+### The same bytes are one document, and one anchor — slice 6.10
+
+The same bytes are one document forever: `ingestDocument` conflicts on `file_hash` and returns the
+row already holding them. That is 3.1's rule and it stays. **What 6.10 decides is the question 3.1
+and A1 left open — which place that one document is *about* when it has been filed against two.**
+
+**A document's anchor is the place it was first filed against, and it is the place its own
+`storage_uri` names.** That value is written once and is immutable (`document_is_immutable`, slice
+3.1); the first path filed stays authoritative whatever a later caller computes (slice 3.2). So the
+anchor already exists, on the row, and is already unique — it was simply never the thing any screen
+read.
+
+**Filing bytes that are already on file against a *different* place is refused.** The refusal names
+the place the document is already anchored to. No `document` row is updated, no `document_link` is
+added, and no object is written — the same statement 3.3 makes about a caught upload, for a
+different cause. Filing them against the **same** place is unchanged: a no-op on the document row,
+plus whatever link the caller came to add.
+
+**Refused rather than re-anchored, and the ruling is the director's own of 14 Sep read one level
+down.** Four reasons, in the order they decided it:
+
+- A `SUBJECT` place link is the sentence *this document is about this flat*. Two of them are two
+  contradictory answers, and any rule that picks one — first, last, lowest id — is the system
+  guessing. Slice 6.11 settled the standing form of this: **a confident wrong anchor is the
+  dangerous failure and a refusal is the safe one**, because a null asks a question and a wrong
+  reading files a lease against a flat nobody chose.
+- Re-anchoring means the last filing wins, which silently rewrites what an earlier screen said about
+  an earlier flat. That is the week-6 demo's own defect with a different winner, not a fix for it.
+- The document's bytes live at a path under the first place. A second anchor makes the row claim a
+  flat its own `storage_uri` denies, and one of the two has to be wrong.
+- A refusal here is actionable, which is 6.8's bar for one: it names the flat, and the operator who
+  meant the other flat now knows this paper was already filed — usually the more useful fact than
+  the upload they were attempting.
+
+**R13 is untouched at the table.** One document still binds to many entities: a lease is `SUBJECT` of
+its unit, `EVIDENCE` of a letting and `SIGNATORY` of two parties, and `src/evidence/schema.test.ts`
+still proves it. What is unique is the **place**, and the guard lives in `fileDocument` — the flow —
+rather than in the DDL, because the table's generality is R13's and the anchor is A1's.
+
+**Which place a screen is about is read from `storage_uri` and no longer from `document_link`.**
+`anchorOf` is that read and both call sites use it — the lease confirm screen (`unitIdOf`) and
+`/documents/:id/read`, each of which took an unordered `LIMIT 1` over the links until here and could
+return either row. Deriving the anchor from the path is deterministic by construction rather than by
+an `ORDER BY`, and it is also **right for the rows already in the wild**: a document that collected
+several `SUBJECT` links before this rule existed resolves to the flat its bytes are filed under,
+which is the flat it is actually about. The parse takes no bucket, deliberately — *which flat is this
+about* does not depend on which bucket holds the copy. Reading the **bytes** still goes through
+`parseStorageUri` and still refuses a foreign bucket.
+
+**What this does not give anybody: a way to move an anchor.** A document filed against the wrong flat
+stays filed against it, and correcting one is a deliberate act with its own audit line and its own
+screen. Nothing needs it yet; the day something does, it is a slice and not an edit to this one.
 
 ### The first write route in this system, and what bounds it
 
@@ -488,7 +546,9 @@ OCR condition came to exist in the first place.
   `Record<TypeKey, …>` in TypeScript would make A8 true of the catalogue and false of everything that
   consumes it, because a type added as a row would ship unguarded until the next release.
 - **Ingest is idempotent on `file_hash`**, and linking is idempotent on the primary key. Filing the
-  same file against a second entity adds a link and never a document.
+  same file against a second entity adds a link and never a document — **and against a second
+  *place* is refused from 6.10**, which is the one entity a document has exactly one of (*The same
+  bytes are one document, and one anchor*, above).
 - **`ingested_at` comes from the injected clock**, never `DEFAULT now()`.
 - **A list of what is filed never mints a signed URL.** `listLinkedDocuments` and `searchDocuments`
   return the `gs://` path as text. The **documents panel** (unit page, building page) is where

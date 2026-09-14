@@ -37,11 +37,13 @@
 > is the check that proves it — no self-certification. The standing bar every slice also clears is
 > the Definition of Done in [plan.md](plan.md).
 
-**Where a new session starts: 6.10**, and it is the last of the week's slices. **6.8, 6.9 and 6.11
-are closed**: 6.11 was added by 6.8's verify step and the director sequenced it first, ahead of 6.9,
-because it is the one defect that files a lease against a flat nobody chose. 6.1–6.7 are closed and
-merged, and the week-6 demo has been given; the remaining slice is what that demo wrote
-(§ "What the week-6 demo found").
+**Every 6.x slice is closed.** 6.8, 6.9, 6.11 and 6.10 all landed on 14 Sep: 6.11 was added by 6.8's
+verify step and the director sequenced it first, ahead of 6.9, because it is the one defect that files
+a lease against a flat nobody chose; 6.10 closed the week with the fourth of the demo's defects.
+6.1–6.7 were closed and merged before the demo. **What is left of week 6 is its close** —
+`tasks/evidence/week-6.md`, what was demoed and where, and everything carried forward — and that is
+the director's to call, not an agent's ([CLAUDE.md](../CLAUDE.md): a week closes when its slices close
+**and** its demo has been given).
 An unbuilt flow is painted in the live shell (`mockups/<flow>.html`, `/dev/mockups/<flow>` on a
 `-dev` process) before it is wired; a guard fails if that file and the slice's evidence both exist.
 
@@ -107,6 +109,25 @@ rule lapsing because a document screen arrived.
       and may not walk through is a refusal after they have already walked — the other six are older
       than this slice and were not widened by it. **Whether the rail hides what a role cannot reach,
       or shows everything and lets the route refuse, is a ruling and the director's.**
+- [ ] **Nothing can move a document's anchor.** Raised at 6.10, and it is the price of that slice's
+      ruling stated out loud: a document filed against the wrong flat stays filed against it. The
+      operator is told which flat and can open it, so nobody is stuck — but correcting one is a
+      deliberate act with its own audit line and its own screen, and it does not exist. Nothing needs
+      it yet. **The day something does it is a slice, not an edit**, and the director places it.
+- [ ] **`cap.test.ts` deletes another suite's rows.** Raised at 6.10. Its teardown is
+      `storage_uri LIKE 'gs://dona-v5-test-docs/%'` and `routes.test.ts` commits under that same
+      bucket; `node --test` runs files concurrently. Seen twice in one session — an FK violation in
+      cap's own teardown, and `routes.test.ts` losing its filed document mid-run — and **both passed
+      on a re-run, which is the problem**: a suite that fails only sometimes teaches everyone to
+      re-run. The fix is a bucket per suite, or a cleanup scoped the way routes' own is (by hash).
+      A test-harness slice, and small.
+- [ ] **A document's *tenancy* link is stable but arbitrary.** Raised at 6.10, beside the anchor.
+      `tenancyLinkOf` and `promote.ts` order by `entity_id`, so they never reshuffle — but no rule
+      says a document has one letting, and if one ever has two the lowest id wins for no reason.
+      6.10 ruled the *place*; the letting is a different question and A3 is where it would be asked.
+- [ ] **`.form-grid` / `.form-row` / `.hint` / `.form-actions` are two files each.** Carried 6.9 →
+      6.10 and **not tripped a second time** — 6.10 wrote no third file. A third occurrence moves them
+      to `tokens.css`. `.check` is already there and is closed. Rides into week 7.
 - [ ] **The bash guard reads the command that is typed, not what it runs.** Raised at 5.1c, flagged
       rather than fixed. If the director wants the stronger rule it is theirs to say so. **Bit for
       the first time at 6.7**, in the other direction: writing a *file* whose text contained
@@ -686,7 +707,7 @@ week 7's if the director wants it.
       never been read against a second, and the demo file itself is not in this repo, so 6.11's live
       half is the director's click and not a fixture.
 
-- [ ] **6.10 — A dedupe names its anchor.**
+- [x] **6.10 — A dedupe names its anchor.** Closed 14 Sep — [evidence/6.10.md](evidence/6.10.md).
       The same bytes are one document forever — `ON CONFLICT (file_hash) DO UPDATE`, which is correct
       and stays. What is not correct is that filing them a second time against a different flat looks
       like success, adds a second `SUBJECT` `document_link`, and then lets `unitIdOf`'s unordered
@@ -713,6 +734,29 @@ week 7's if the director wants it.
       **Spec edit first:** `SPEC-evidence.md` on what a second filing of the same bytes means — A1
       says one document and a second link, and says nothing about which one a screen is then about.
       **Deps:** 6.8 · **S** · no plan mode: one module, one query, one sentence.
+      **The ruling, taken here and written into `SPEC-evidence.md` before the code: a document is
+      anchored to one place, and it is the place its own `storage_uri` names** — written once,
+      immutable since 3.1, and already unique. Re-filing the same bytes against a different flat is
+      **refused**, naming the flat they are anchored to; against the same flat it is what it always
+      was. **Refused rather than re-anchored** because re-anchoring makes the last filing win, which
+      is the demo's own defect with a different winner, and because 6.11's standing form says a
+      confident wrong anchor is the dangerous failure and a refusal the safe one. R13 is untouched at
+      the table: the guard is in `fileDocument`, and `schema.test.ts` still proves one document binds
+      to a letting and to two signatories.
+      **Raised and closed inside 6.10:**
+      • **It was two unordered `LIMIT 1`s, not one.** `/documents/:id/read` took the same query and
+      drew the page's back link and building name off whichever `SUBJECT` row came back. `anchorOf` is
+      one read and both callers use it — deterministic by construction rather than by an `ORDER BY`,
+      and **right for the rows already in the wild**, which resolve to the flat their bytes are filed
+      under rather than to an arbitrary one.
+      • **The 3.3-era case was inverted, not deleted.** *The same file against a second place is one
+      document with two links* has carried the fixture text `one lease, two flats claim it` since the
+      day it was written; two flats claiming one lease is a contradiction, not a binding.
+      • **The developer database was left as it was found**, 12 documents and 25 links, after a live
+      walk that went 302 → 422 → 422 through both doors.
+      **Raised → the carried list, and none of it is this ruling's:** nothing can move an anchor ·
+      `cap.test.ts` deletes another suite's rows · a document's *tenancy* link is stable but
+      arbitrary · the CSS carry rides on, untripped a second time.
 
 ---
 

@@ -878,3 +878,90 @@ describe('evidence · ranking a flat’s lettings is arithmetic, not SQL', () =>
     );
   });
 });
+
+/**
+ * **Slice 6.10.** The demo's document carries `SUBJECT` links to three flats, filed before the
+ * refusal above existed, and this is the question they leave behind: *which flat is the confirm
+ * screen about?*
+ *
+ * Until here the answer was `unitIdOf`'s unordered `LIMIT 1` — either row, and the suite could not
+ * tell which, because a small table hands back its physical order and the physical order happened to
+ * be the order the links went in. So each case below states the same expectation twice, once with
+ * the anchor's link written first and once with it written last. One of the two was red.
+ */
+describe('evidence · which flat a document is about, when it is linked to two', () => {
+  it('is the flat its bytes are filed under, whichever link comes back first', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+
+    const linked = async (
+      db: PoolClient,
+      documentId: string,
+      unitId: string,
+    ): Promise<void> => {
+      await db.query(
+        `INSERT INTO document_link (document_id, entity_type, entity_id, link_role)
+         VALUES ($1, 'UNIT', $2, 'SUBJECT')`,
+        [documentId, unitId],
+      );
+    };
+
+    await t.test('the anchor’s link written first', async () => {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const anchor = await insertUnit(db, '12', ADDRESS);
+        const other = await insertUnit(db, '206', 'דם המכבים 38');
+        const documentId = await fileLease(
+          db,
+          anchor,
+          matchingFindings,
+          '6.10 anchor first',
+        );
+        await linked(db, documentId, other);
+
+        const proposed = await proposeLeaseTenancy(leaseDeps(db), {
+          documentId,
+          readBy: READ_BY,
+        });
+        assert.equal(proposed.unit.unit_id, anchor);
+      });
+    });
+
+    await t.test('the anchor’s link written last', async () => {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const anchor = await insertUnit(db, '12', ADDRESS);
+        const other = await insertUnit(db, '206', 'דם המכבים 38');
+        const documentId = await fileLease(
+          db,
+          anchor,
+          matchingFindings,
+          '6.10 anchor last',
+        );
+        // The other flat's link first, then the anchor's again — which is the row order a document
+        // re-filed and re-linked over a week leaves behind, and the order that made the demo's
+        // confirm screen speak about a flat the director had never opened.
+        await db.query(
+          `DELETE FROM document_link
+            WHERE document_id = $1 AND entity_type = 'UNIT' AND entity_id = $2`,
+          [documentId, anchor],
+        );
+        await linked(db, documentId, other);
+        await linked(db, documentId, anchor);
+
+        const proposed = await proposeLeaseTenancy(leaseDeps(db), {
+          documentId,
+          readBy: READ_BY,
+        });
+        assert.equal(
+          proposed.unit.unit_id,
+          anchor,
+          'the flat the bytes are filed under, not the first link the table returns',
+        );
+      });
+    });
+  });
+});
