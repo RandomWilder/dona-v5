@@ -37,10 +37,11 @@
 > is the check that proves it — no self-certification. The standing bar every slice also clears is
 > the Definition of Done in [plan.md](plan.md).
 
-**Where a new session starts: 6.8**, then 6.9, then 6.10 — one slice per session, in that order,
-because 6.9 and 6.10 both depend on 6.8. **6.11 was added by 6.8's verify step** and is the
-director's to sequence: it is what the demo's own paper said when the reader finally reached it. 6.1–6.7 are closed and merged, and the week-6 demo has been
-given; the three remaining slices are what that demo wrote (§ "What the week-6 demo found").
+**Where a new session starts: 6.9**, then 6.10 — one slice per session, in that order. **6.8 and
+6.11 are closed**: 6.11 was added by 6.8's verify step and the director sequenced it first, ahead of
+6.9, because it is the one defect that files a lease against a flat nobody chose. 6.1–6.7 are closed
+and merged, and the week-6 demo has been given; the remaining slices are what that demo wrote
+(§ "What the week-6 demo found").
 An unbuilt flow is painted in the live shell (`mockups/<flow>.html`, `/dev/mockups/<flow>` on a
 `-dev` process) before it is wired; a guard fails if that file and the slice's evidence both exist.
 
@@ -106,7 +107,9 @@ rule lapsing because a document screen arrived.
       `gcloud run jobs delete` was refused as a destructive command, and the file was written with
       another tool. The guard is currently both too broad and too narrow, which is the argument for
       deciding it rather than leaving it.
-- [ ] **Take delivery of the real document corpus** — after F6.
+- [ ] **Take delivery of the real document corpus** — after F6. **Sharper at 6.11:** A12's anchors
+      have now been read against one real project lease and rewritten for it. A second form is what
+      says whether they are anchors or a second calibration to a single specimen.
 
 **Carried in and already owned elsewhere:** the emergency bypass, redaction at the provider boundary
 (**rewritten by 6.4's ADR-0006 — re-read it before building it**), `run.admin` per service and the
@@ -596,12 +599,18 @@ week 7's if the director wants it.
       **Spec edit first:** `SPEC-flows.md` A12 — the "does not create" sentence is struck on the
       director's ruling of 14 Sep and replaced by the role split; A11 and A13 gain prefill.
       **Plan mode** — `src/evidence/` and `src/estate/` is two modules.
+      **Carried in from 6.11:** a refusal has **four** causes and not three now — nothing read, an
+      address in nobody's portfolio, several candidates, and **the document defers to an annex**
+      (`כמפורט בנספח א'`, the property identified by `גוש`/`חלקה`). That last one is a correct answer
+      and reads today as a failure, which is exactly what one-sentence-per-cause is for. And the
+      refusal screen prints an apartment number that may have been read off a party line, so it says
+      **which field was read**, not only what was not.
       **Carried in, still riding:** `.check` and `.form-grid` / `.form-row` / `.hint` /
       `.form-actions` are two files each since 6.2, and **a third occurrence of either moves them to
       `tokens.css`**. This slice writes screens and is the likeliest to trip it.
       **Deps:** 6.8 · **L**
 
-- [ ] **6.11 — The anchors meet the form the operator actually uses.**
+- [x] **6.11 — The anchors meet the form the operator actually uses.** Closed 14 Sep — [evidence/6.11.md](evidence/6.11.md).
       Flow **A12**, and it is raised by 6.8's verify step against the demo's own paper. The reader's
       three anchors were written from `docs/corpus/lease-standard.md`, which is authored to the
       *published* חוזה שכירות אחיד. The form the operator files is a project lease and it differs in
@@ -628,6 +637,27 @@ week 7's if the director wants it.
       not.
       **Needs the corpus** (F6) to be finished properly, and the wrong-address half needs nothing.
       **Deps:** 6.8 · **M**
+      **Raised and closed inside 6.11:**
+      • **The wrong reading files, and the number that says so is 302.** The reader's own suite proves
+      a reading and a fake database proves a resolution; neither proves what the application does
+      with an upload. A route case posts a lease whose only address is the landlord's party line
+      against an estate holding that street: **302, filed against flat 12A**, before the reader
+      changed — a redirect into the confirm screen, no question asked anywhere. 422 now, 0 rows, 0
+      objects, and the landlord's street not echoed back as the property's.
+      • **The annex is ruled and not patched.** A12 does not read one, for three reasons written into
+      `SPEC-evidence.md`: it is past the pages the online call reads and the byte bound is on the
+      whole request (6.8), a `גוש`/`חלקה` has nothing to resolve against, and the *published* form
+      defers the same way — so this is the form and not the specimen.
+      • **An apartment number is still read off a party line.** `APARTMENT` runs over the whole text,
+      so a lease naming only the landlord's flat still returns `12A` with a null address. Harmless
+      where it stands — with no address there is nothing to resolve — and it is a number the refusal
+      screen prints, so **6.9 says which field was read and from where.**
+      **Raised → 6.9:** *the document defers to an annex* is one of the refusal screen's causes, and
+      6.9 is the slice that gives each cause its own sentence. The screen says `לא נקראה כתובת` today
+      for a document that named its property perfectly well, in an annex nobody may read.
+      **Raised → the corpus item (F6):** the anchors are honest about **one** real form now. They have
+      never been read against a second, and the demo file itself is not in this repo, so 6.11's live
+      half is the director's click and not a fixture.
 
 - [ ] **6.10 — A dedupe names its anchor.**
       The same bytes are one document forever — `ON CONFLICT (file_hash) DO UPDATE`, which is correct
