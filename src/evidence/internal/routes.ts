@@ -62,6 +62,7 @@ function pageIndex(asked: unknown, pageCount: number): number {
 import type { WorkRunner } from '../../kernel/work.ts';
 import { listUnitTenancies, type TenancyRole } from '../../tenancy/contract.ts';
 import { documentTypeByKey, listDocumentTypes } from './catalogue.ts';
+import { anchorOf } from './documents.ts';
 import {
   type ExtractedRow,
   isIdentifierField,
@@ -88,7 +89,7 @@ import {
   documentFileHash,
   sniffExtension,
 } from './storage-path.ts';
-import type { SeedScreen } from './views.ts';
+import type { AnchoredPlace, SeedScreen } from './views.ts';
 import {
   renderFiledPage,
   renderIntakePage,
@@ -451,7 +452,15 @@ export function registerDocumentRoutes(
         lettings,
         declaredTypeKey: type.typeKey,
         declaredTenancyId: tenancyId ?? undefined,
-        refused: { type, verification: result.verification },
+        refused: {
+          type,
+          verification: result.verification,
+          reason: result.refusal,
+          // Slice 6.10. Present only on `anchored`, where naming the flat is the whole refusal.
+          ...(result.anchoredTo
+            ? { anchoredTo: await anchorScreen(deps, result.anchoredTo) }
+            : {}),
+        },
       });
     }
     if (
@@ -658,6 +667,11 @@ export function registerDocumentRoutes(
           type,
           verification: result.verification,
           reason: result.refusal,
+          // Slice 6.10. The same cause, the same sentence, a different door — 6.8's precedent for
+          // the two upload routes sharing one refusal screen.
+          ...(result.anchoredTo
+            ? { anchoredTo: await anchorScreen(deps, result.anchoredTo) }
+            : {}),
         },
       });
     }
@@ -705,14 +719,11 @@ export function registerDocumentRoutes(
         },
         documentId,
       );
-      const subject = await deps.pool.query<{
-        entity_type: string;
-        entity_id: string;
-      }>(
-        `SELECT entity_type, entity_id FROM document_link
-          WHERE document_id = $1 AND link_role = 'SUBJECT' LIMIT 1`,
-        [documentId],
-      );
+      // **Slice 6.10.** This was the second unordered `LIMIT 1` over `document_link`'s `SUBJECT`
+      // rows, and on a document carrying two of them it drew the page's back link and its building
+      // name off whichever came back. One read for both call sites now, and it is the place the
+      // bytes are filed under.
+      const anchor = await anchorOf(deps.pool, documentId);
       const extracted = await listExtractedFields(deps.pool, documentId);
       // The stance, once, before either branch renders — and the line written only when the viewer
       // holds the permission *and* the document actually carried an identifier.
@@ -724,7 +735,6 @@ export function registerDocumentRoutes(
           rows: extracted,
         });
       }
-      const link = subject.rows[0];
       const asked = (request.query as { page?: string }).page;
       const at = pageIndex(asked, read.pages.length);
       const page = read.pages[at] ?? null;
@@ -733,8 +743,8 @@ export function registerDocumentRoutes(
           ? null
           : (read.images.find((img) => img.pageNumber === page.number) ?? null);
       html(reply);
-      if (link?.entity_type === 'UNIT') {
-        const unit = await getUnit(deps.pool, link.entity_id);
+      if (anchor.kind === 'UNIT') {
+        const unit = await getUnit(deps.pool, anchor.id);
         return renderReadPage({
           nav: chromeOf(deps, request),
           csrf: csrfFrom(request),
@@ -752,8 +762,8 @@ export function registerDocumentRoutes(
           mayReadIdentifiers: identifiers,
         });
       }
-      if (link?.entity_type === 'BUILDING') {
-        const detail = await getBuilding(deps.pool, link.entity_id);
+      if (anchor.kind === 'BUILDING') {
+        const detail = await getBuilding(deps.pool, anchor.id);
         return renderReadPage({
           nav: chromeOf(deps, request),
           csrf: csrfFrom(request),
@@ -1047,6 +1057,42 @@ function placeFor(
   return typeKey === 'building_handover_protocol'
     ? { kind: 'BUILDING', id: unit.building_id }
     : { kind: 'UNIT', id: unit.unit_id };
+}
+
+/**
+ * A place, in the words the refusal screen prints. Slice 6.10.
+ *
+ * `fileDocument` returns an anchor as a kind and an id — it deals in places, not in names — and this
+ * is where those become a flat somebody recognises and a door they can walk through. A `PROJECT` or
+ * a `SPACE` has no screen of its own, so it reads as *filed elsewhere*: the ruling is that the
+ * upload is refused, and how completely the refusal can describe the other place is a display
+ * question and not the rule.
+ */
+async function anchorScreen(
+  deps: DocumentDeps,
+  anchor: { kind: string; id: string },
+): Promise<AnchoredPlace | undefined> {
+  if (anchor.kind === 'UNIT') {
+    const unit = await getUnit(deps.pool, anchor.id);
+    return {
+      href: `/estate/units/${unit.unit_id}`,
+      unitNumber: unit.unit_number,
+      buildingName: unit.building_name,
+      addressLine: unit.address_line,
+      city: unit.city,
+    };
+  }
+  if (anchor.kind === 'BUILDING') {
+    const detail = await getBuilding(deps.pool, anchor.id);
+    return {
+      href: `/estate/buildings/${detail.building.building_id}`,
+      unitNumber: null,
+      buildingName: detail.building.name,
+      addressLine: detail.building.address_line,
+      city: detail.building.city,
+    };
+  }
+  return undefined;
 }
 
 /**

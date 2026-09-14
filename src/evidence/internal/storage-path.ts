@@ -200,6 +200,29 @@ export function parseStorageUri(
 }
 
 /**
+ * **The place a filed document is anchored to, read off its own `storage_uri`. Slice 6.10.**
+ *
+ * The path's second segment is the place the bytes were first filed under, and `storage_uri` is
+ * immutable after insert (`document_is_immutable`, slice 3.1) — so this value is written once and
+ * cannot drift. That is what makes it the anchor rather than `document_link`, which can hold several
+ * `SUBJECT` rows and has no order to choose between them (SPEC-evidence.md, *The same bytes are one
+ * document, and one anchor*).
+ *
+ * **No bucket is asked for, deliberately.** *Which flat is this document about* does not depend on
+ * which bucket holds the copy, and demanding one here would push the object store's configuration
+ * into the lease flow to answer a question about an apartment. Reading the **bytes** is the other
+ * question and still goes through `parseStorageUri`, which still refuses a foreign bucket.
+ */
+export function placeOfStorageUri(uri: string): Place {
+  const match = /^gs:\/\/[^/]+\/(.+)$/.exec(uri);
+  const path = match?.[1];
+  if (!path) {
+    throw new KernelError('invalid', 'storage uri is not a gs:// uri');
+  }
+  return parseObjectPath(path).place;
+}
+
+/**
  * The inverse of `documentObjectPath`, and the check that a path is one of ours.
  *
  * Used by `parseStorageUri` and by the tests that prove the round trip. It re-derives the place

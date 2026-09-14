@@ -251,8 +251,16 @@ describe('evidence · filing a declared document', () => {
       );
 
       await t.test(
-        'the same file against a second place is one document with two links',
+        'the same file against a second place is refused, and names the flat it is anchored to',
         async () => {
+          // **Slice 6.10, and this case is the inversion of 3.3's own.** It read *the same file
+          // against a second place is one document with two links*, and its fixture text has said
+          // `one lease, two flats claim it` since the day it was written. Two flats claiming one
+          // lease is not a binding, it is a contradiction: the week-6 demo filed a second `SUBJECT`
+          // link and the confirm screen then spoke about whichever of them the unordered `LIMIT 1`
+          // returned — a flat the director had never opened. R13 is untouched (a document still
+          // binds to a letting and to its signatories); the **place** is the one entity a document
+          // has exactly one of, and it is the place its own `storage_uri` names.
           await inRolledBackTransaction(pool, async (db) => {
             await applyDocumentTypeCatalogue(db, seedDocumentTypes);
             const first = newId();
@@ -266,6 +274,13 @@ describe('evidence · filing a declared document', () => {
               place: { kind: 'UNIT', id: first },
               tenancyId: null,
             });
+            assert.equal(one.filed, true);
+            if (!one.filed) return;
+            const rowBefore = await db.query<{ verification_verdict: string }>(
+              'SELECT verification_verdict FROM document WHERE document_id = $1',
+              [one.documentId],
+            );
+
             const two = await fileDocument(shared, {
               bytes,
               typeKey: 'lease',
@@ -273,27 +288,89 @@ describe('evidence · filing a declared document', () => {
               tenancyId: null,
             });
 
-            assert.equal(one.filed && two.filed, true);
-            if (!one.filed || !two.filed) return;
-            assert.equal(two.documentId, one.documentId);
-            assert.equal(two.inserted, false);
-            // **The lookup before the put is what this asserts.** The second filing computed a path
-            // under the second unit and did not write it: `ingestDocument` keeps the first
-            // `storage_uri`, so a second object would be unreferenced the moment it was created.
-            assert.equal(two.storageUri, one.storageUri);
-            assert.match(two.storageUri, new RegExp(`/unit/${first}/`));
-            await assert.rejects(
-              shared.objects.read(
-                `unit/${second}/lease/${two.storageUri.slice(-68)}`,
-              ),
-              /object not found/,
-            );
+            assert.equal(two.filed, false);
+            if (two.filed) return;
+            assert.equal(two.refusal, 'anchored');
+            // The sentence the screen needs: *which* flat, not merely that there is one.
+            assert.deepEqual(two.anchoredTo, { kind: 'UNIT', id: first });
 
+            // Nothing was written — the same statement 3.3 makes about a caught upload, for a
+            // different cause. No second link, no second object, and the document row untouched:
+            // the refusal is *before* `ingestDocument`, whose `DO UPDATE` would otherwise have
+            // rewritten the verdict and the type of a row this caller was refused.
             const links = await db.query<{ n: string }>(
               'SELECT count(*)::text AS n FROM document_link WHERE document_id = $1',
               [one.documentId],
             );
-            assert.equal(links.rows[0]?.n, '2');
+            assert.equal(links.rows[0]?.n, '1');
+            const rowAfter = await db.query<{ verification_verdict: string }>(
+              'SELECT verification_verdict FROM document WHERE document_id = $1',
+              [one.documentId],
+            );
+            assert.equal(
+              rowAfter.rows[0]?.verification_verdict,
+              rowBefore.rows[0]?.verification_verdict,
+            );
+            await assert.rejects(
+              shared.objects.read(
+                `unit/${second}/lease/${one.storageUri.slice(-68)}`,
+              ),
+              /object not found/,
+            );
+
+            // On the record, and it counts against the day's cap: the bound is on what reached
+            // intake, not on what survived it (SPEC-evidence.md).
+            const lines = await auditLines(db, second);
+            assert.equal(lines.length, 1);
+            assert.equal(lines[0]?.outcome, 'error');
+          });
+        },
+      );
+
+      await t.test(
+        'the same file against the same place is still one document and the link it came to add',
+        async () => {
+          // The other half of 6.10's ruling, and the half that keeps R13 true: a second filing
+          // against the flat the document is already anchored to is the ordinary case — a lease
+          // filed loose and then filed again against a letting — and it still adds its link.
+          await inRolledBackTransaction(pool, async (db) => {
+            await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+            const unitId = newId();
+            const tenancyId = newId();
+            const bytes = pdfBytes('one lease, one flat, filed twice');
+            const shared = deps(db, [specimen('lease-standard.md')]);
+
+            const one = await fileDocument(shared, {
+              bytes,
+              typeKey: 'lease',
+              place: { kind: 'UNIT', id: unitId },
+              tenancyId: null,
+            });
+            const two = await fileDocument(shared, {
+              bytes,
+              typeKey: 'lease',
+              place: { kind: 'UNIT', id: unitId },
+              tenancyId,
+            });
+
+            assert.equal(one.filed && two.filed, true);
+            if (!one.filed || !two.filed) return;
+            assert.equal(two.documentId, one.documentId);
+            assert.equal(two.inserted, false);
+            assert.equal(two.storageUri, one.storageUri);
+
+            const links = await db.query<{
+              entity_type: string;
+              entity_id: string;
+            }>(
+              `SELECT entity_type, entity_id FROM document_link
+                WHERE document_id = $1 ORDER BY entity_type`,
+              [one.documentId],
+            );
+            assert.deepEqual(
+              links.rows.map((link) => `${link.entity_type}:${link.entity_id}`),
+              [`TENANCY:${tenancyId}`, `UNIT:${unitId}`],
+            );
           });
         },
       );

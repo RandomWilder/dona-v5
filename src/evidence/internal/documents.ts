@@ -6,6 +6,7 @@
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
+import { type Place, placeOfStorageUri } from './storage-path.ts';
 import type { Queryable } from './types.ts';
 import type { VerificationVerdict } from './verify.ts';
 
@@ -139,6 +140,32 @@ export async function linkDocument(
     throw new KernelError('conflict', 'document link upsert returned no row');
   }
   return { id: spec.documentId, inserted };
+}
+
+/**
+ * **The place this document is about. Slice 6.10, and it is one read for two callers.**
+ *
+ * The lease confirm screen and `/documents/:id/read` each asked `document_link` for a `SUBJECT` row
+ * with an unordered `LIMIT 1`, which on a document carrying more than one of them returns either —
+ * the week-6 demo's *"the address does not match"*, about an apartment nobody had opened. The anchor
+ * is the place the bytes are filed under (`storage_uri`, immutable since insert), so there is one
+ * row to read and no order to choose (SPEC-evidence.md, *The same bytes are one document, and one
+ * anchor*). `fileDocument` refuses a second place, so nothing new diverges; this is also what makes
+ * the rows that already diverged resolve to the flat they are really about.
+ */
+export async function anchorOf(
+  db: Queryable,
+  documentId: string,
+): Promise<Place> {
+  const result = await db.query<{ storage_uri: string }>(
+    'SELECT storage_uri FROM document WHERE document_id = $1',
+    [documentId],
+  );
+  const uri = result.rows[0]?.storage_uri;
+  if (!uri) {
+    throw new KernelError('not_found', 'document not found');
+  }
+  return placeOfStorageUri(uri);
 }
 
 export interface FiledDocument {

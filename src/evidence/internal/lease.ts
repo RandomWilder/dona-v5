@@ -23,7 +23,7 @@ import {
   upsertTenancy,
   upsertTenancyParty,
 } from '../../tenancy/contract.ts';
-import { getFiledDocument, linkDocument } from './documents.ts';
+import { anchorOf, getFiledDocument, linkDocument } from './documents.ts';
 import { type ExtractedRow, listExtractedFields } from './extract.ts';
 import { promoteExtractedField } from './promote.ts';
 import type { Queryable } from './types.ts';
@@ -308,18 +308,21 @@ export function rankCandidates(
   );
 }
 
+/**
+ * **Which flat this lease is about. Slice 6.10.**
+ *
+ * This read was `document_link`'s `SUBJECT` rows with an unordered `LIMIT 1`, and on a document
+ * carrying two of them it returned either — the week-6 demo's confirm screen, comparing a lease to a
+ * flat created a week earlier and printing *the address does not match* about an apartment the
+ * director had never opened. It asks `anchorOf` now: the place the bytes are filed under, written
+ * once and immutable (SPEC-evidence.md, *The same bytes are one document, and one anchor*).
+ */
 async function unitIdOf(db: Queryable, documentId: string): Promise<string> {
-  const link = await db.query<{ entity_id: string }>(
-    `SELECT entity_id FROM document_link
-      WHERE document_id = $1 AND entity_type = 'UNIT' AND link_role = 'SUBJECT'
-      LIMIT 1`,
-    [documentId],
-  );
-  const unitId = link.rows[0]?.entity_id;
-  if (!unitId) {
+  const anchor = await anchorOf(db, documentId);
+  if (anchor.kind !== 'UNIT') {
     throw new KernelError('invalid', 'that document is not bound to a unit');
   }
-  return unitId;
+  return anchor.id;
 }
 
 async function tenancyLinkOf(

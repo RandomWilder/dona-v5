@@ -44,6 +44,7 @@ import {
   documentObjectPath,
   documentStorageUri,
   type Place,
+  placeOfStorageUri,
   sniffExtension,
 } from './storage-path.ts';
 import type { Queryable } from './types.ts';
@@ -117,13 +118,13 @@ export interface IntakeRequest {
  * different sentences to say: *this is not that kind of document*, and *this is too long for us to
  * have read it*. A refusal an operator cannot act on is a refusal they will work around.
  */
-export type IntakeRefusal = 'terms' | 'too_large';
+export type IntakeRefusal = 'terms' | 'too_large' | 'anchored';
 
 export type IntakeResult =
   | {
       filed: true;
       documentId: string;
-      /** False when these bytes were already on file: one document, a second link. */
+      /** False when these bytes were already on file, filed again against the place they anchor to. */
       inserted: boolean;
       storageUri: string;
       verification: Verification;
@@ -132,6 +133,12 @@ export type IntakeResult =
       filed: false;
       verification: Verification;
       refusal: IntakeRefusal;
+      /**
+       * The place these bytes are already anchored to. Present only on `anchored`, and it is the
+       * whole point of that refusal: the screen names the flat rather than saying *somewhere else*
+       * (SPEC-evidence.md, slice 6.10).
+       */
+      anchoredTo?: Place;
     };
 
 /**
@@ -226,6 +233,32 @@ export async function fileDocument(
   }
 
   const existing = await findDocumentByHash(deps.db, fileHash);
+
+  // **One document, one anchor. Slice 6.10.**
+  //
+  // The lookup that keeps a second object from being written is also the one that knows where these
+  // bytes already live, so the anchor check is that step and not a new one. A second *place* is
+  // refused here — before the `put` and before `ingestDocument`, whose `DO UPDATE` would otherwise
+  // rewrite the type and the verdict of a row this caller is being refused. A second *link* of any
+  // other kind is untouched: R13 is about a lease being evidence of a letting and signed by two
+  // parties, and none of those is a claim about which flat the paper is about.
+  if (existing) {
+    const anchor = placeOfStorageUri(existing.storageUri);
+    if (anchor.kind !== request.place.kind || anchor.id !== request.place.id) {
+      await deps.audit.write(line, {
+        outcome: 'error',
+        code: 'conflict',
+        message: 'these bytes are already filed against another place',
+      });
+      return {
+        filed: false,
+        verification,
+        refusal: 'anchored',
+        anchoredTo: anchor,
+      };
+    }
+  }
+
   let storageUri = existing?.storageUri ?? null;
   if (!storageUri) {
     const path = documentObjectPath({
