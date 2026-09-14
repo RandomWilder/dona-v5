@@ -388,7 +388,8 @@ declaration a reader will look for before anybody chooses a file**: the type pic
 `גרסה <effective_from>` chip. Closed declarations (`effective_to IS NOT NULL`) are not shown, which
 is the date parameter doing its job and not a filter written here.
 
-**It is read-only and it writes nothing.** The declaration becomes editable at 7.2 and the approval
+**It is read-only and it writes nothing.** The declaration becomes editable at 7.2 (the section
+below) and the approval
 table arrives at 7.3; this screen exists so that what the system will read off a page is legible
 before a page is filed, which is the thing week 6's demo could not see anywhere.
 
@@ -396,6 +397,73 @@ before a page is filed, which is the thing week 6's demo could not see anywhere.
 behind a gated rail is the door that answers `not_allowed` after somebody has already walked through
 it — 6.1's refusal-after-typing, which A11 refused to build for its own form. The permission names
 the act the tab is for: this is the filing tab's front page, not a reading of what is filed.
+
+### The declaration becomes editable — `POST /documents/types/:typeKey/fields` (slice 7.2)
+
+Flow **A14**. The tab's landing showed the declaration at 7.1 and wrote nothing; this is the write
+behind it, and it is what makes foundation rule 8 true of both halves — a type has been a row since
+3.1, and from here a **field** is a row too, with no migration, no seed and no deploy.
+
+**`declareDocumentTypeField` and `retireDocumentTypeField` are the commands, and
+`upsertDocumentTypeField` is untouched.** The upsert is the seed's idempotent re-apply — its
+`ON CONFLICT … DO UPDATE` is what lets `npm run seed:doctypes` run twice, and it is precisely the
+edit R18 forbids at run time. Two functions rather than one widened one: the seed re-states a
+declaration it already owns, and an administrator supersedes one.
+
+**A correction closes the live row at the day *before* today and opens the new one today**, both
+inside one transaction (`inTransaction`, `src/kernel/db.ts`). The day before, and not today, because
+`documentTypeFields` is inclusive at both ends — `effective_from <= on AND (effective_to IS NULL OR
+effective_to >= on)` — so closing at today would leave **two live rows for one field**: the screen
+would print the field twice and extraction would hand the model the same key twice. The seed has
+always used this convention (`2026-09-07` closed, `2026-09-08` opened) and so has
+`schema.test.ts`; the route now uses it too. The superseded row is never updated in any other
+respect, so a value extracted last month still points at a declaration that still says what it said.
+
+**Declaring the same field twice in one day is a `conflict`, and the refusal is the honest one.**
+The natural key is `(document_type_id, field_key, effective_from)`, so a second declaration today
+has nowhere to go — and closing today's row at yesterday would invert its own window against
+`document_type_field_version_is_ordered`. The command refuses before either constraint fires and
+says why: the declaration being superseded has governed no extraction on any other day, so there is
+nothing to supersede.
+
+**Retiring closes the row and inserts nothing.** The catalogue's rule is deactivate, never delete,
+and a field is no different: `extracted_field` rows point at the closed declaration and stay
+explicable by it. It is here rather than in a later slice because corrections key on `field_key` — a
+mis-typed key cannot be corrected, only declared again beside its own mistake, and an editor whose
+first typo is permanent is a trap.
+
+**The money guard, and why this route needs one nothing else in this module needs.**
+`0011_evidence.sql` says it: "No MONEY member … no amount is ever a column on a business record."
+That has held because the field list was source code. It is not source code any more, so the
+constraint moves into the command: a declaration whose `field_key` or `label_he` carries the money
+vocabulary is refused with a sentence naming foundation rule 2. The vocabulary lives in
+`src/evidence/internal/money.ts` and is read by the guard **and by the policy case**, so the test
+cannot drift from the thing it tests. Latin terms are matched token-wise on the snake_case key;
+Hebrew terms are matched as substrings, because Hebrew attaches its prefixes. It is deliberately
+blunt and it over-matches — `דמי` is inside `הדמיה` — which is the shape a guard takes in this
+repository (`docs/pipeline.md` §6): a refusal is a conversation with an administrator who can
+rename, and a leak is not.
+
+**The guard is on the run-time command and not on the seed.** Adding money for real stays a
+migration, a `value_type` member, a diff and a review — the price `roles.ts` says an irreversible
+widening should cost — and putting the vocabulary under `upsertDocumentTypeField` would make the
+rule stronger than it is written while leaving the `value_type` CHECK a second lock on a door with
+no key.
+
+**`settings.write`, and `roles.ts` does not change.** ADMIN only, and already the hand on the
+`DocumentType` catalogue since 5.8. A permission with one reader adds vocabulary without adding a
+boundary; the matrix stays code.
+
+**The form is on the screen only for a role that may post it**, which is `/settings`'s shape and not
+6.1's. `GET /documents` keeps `documents.write` — an OPERATOR reads the declaration and never sees
+the form, so the door that answers `not_allowed` after somebody has typed into it does not exist
+here. **Refusals are the JSON error body every other form post in this system returns**, including
+the money one: one refusal shape per route, and a refusal screen for this form is a decision nobody
+has asked for yet.
+
+**Every declaration writes an `audit_log` line** — `evidence.declare_field`, naming the type, the
+key, the value type and the day, and never a document's text. A schema change is the one write in
+this module that could not be reconstructed afterwards from the rows it left behind.
 
 ### Filing without a unit — flow A12 (slice 6.3)
 

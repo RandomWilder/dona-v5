@@ -331,7 +331,14 @@ adding a tenth through the same function `npm run seed:doctypes` calls and asser
 plus `inspection_certificate`, which the workbook has carried since 3 Sep — and slice 3.5 added
 `building_handover_protocol` as the tenth, a seed row and not a migration, which is A8's open half
 used for real rather than demonstrated in a test. Slice 3.3's verification guard reads its marker terms off the type row rather than out of TypeScript, so a
-type added as a row arrives with its own guard. **E12 still omits three columns the published
+type added as a row arrives with its own guard. **From slice 7.2 a *field* is a row an administrator
+writes too**, at `POST /documents/types/:typeKey/fields` under `settings.write` — so foundation rule
+8 is true of both halves for the first time. Until then a field cost a commit to
+`src/evidence/fixtures/document-types.ts` and a `npm run seed:doctypes`, which is a deploy wearing a
+seed's clothes, and it was paid three times (3.1, 3.5, 6.4). A correction is a new row at a new
+`effective_from` and never an edit (R18), and **no declaration may name money** — the vocabulary
+guard in `src/evidence/internal/money.ts` is what keeps foundation rule 2 enforceable now that the
+field list is data, and `tests/policy/` is where it is proved. **E12 still omits three columns the published
 Data Model's `Document` card carries** — `state`, `superseded_by` and `tenant_visible` — each for a
 reason recorded in [SPEC-evidence.md](SPEC-evidence.md) and `tasks/evidence/3.1.md`. **`uploaded_by`
 arrived at 5.4**: a nullable foreign key to `staff_account`, filled on every document filed through
