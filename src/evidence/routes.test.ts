@@ -25,7 +25,11 @@ import { fixedClock } from '../kernel/clock.ts';
 import { KernelError } from '../kernel/errors.ts';
 import { createFakeExtractor } from '../kernel/extraction.ts';
 import { createMemoryStore } from '../kernel/objects.ts';
-import { createFakeOcrText, type OcrText } from '../kernel/ocr.ts';
+import {
+  createFakeOcrText,
+  type OcrText,
+  onlineOcrPageLimit,
+} from '../kernel/ocr.ts';
 import { createFakePdfText } from '../kernel/pdf.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
 import { upsertTenancy, upsertTermsProfile } from '../tenancy/contract.ts';
@@ -1100,6 +1104,58 @@ describe('evidence · A12 a document finds its own place', () => {
           const filed = rows.rows[0];
           assert.ok(filed, 'the chosen flat is the one it filed against');
           hashes.push(filed.file_hash);
+        },
+      );
+
+      await t.test(
+        'a scan too long for the reader is refused with a sentence, and files nothing',
+        async () => {
+          // **Slice 6.8, and it was red first.** `onlineOcrPageLimit` is 15 and real leases exceed
+          // it. Until 6.8 the OCR call was silently declined and the row went in `unverified` — a
+          // verdict that means *nobody could read this*, used for a file nobody looked at. It is a
+          // refusal now, on a screen that says how long the file was and why that mattered, and the
+          // call is not spent finding out.
+          const before = await documentsHere();
+          const putsBefore = puts;
+          let calls = 0;
+          const long = buildApp({
+            pool,
+            version: '9.9.9-test',
+            clock: fixedClock(AT),
+            objects: counted,
+            pdf: createFakePdfText(
+              Array.from(
+                { length: onlineOcrPageLimit + 1 },
+                (_, at) => `עמוד ${at + 1} של סריקה ארוכה`,
+              ),
+            ),
+            ocr: {
+              describe: () => 'fake',
+              pages: async () => {
+                calls += 1;
+                return { pages: [], images: [] };
+              },
+            },
+            bucket: BUCKET,
+          });
+          const response = await as(long).inject({
+            method: 'POST',
+            url: '/documents/intake',
+            ...upload(
+              { csrf: (who as SignedIn).csrf, type: 'lease' },
+              { filename: 'long.pdf', bytes: pdfBytes('a12 long scan') },
+            ),
+          });
+          assert.equal(response.statusCode, 422);
+          assert.match(response.body, /ארוך מכדי/);
+          assert.match(response.body, new RegExp(`${onlineOcrPageLimit + 1}`));
+          // No candidate list: nothing was read off this file, so there is nothing to choose
+          // between and offering a choice would be a question built on no reading.
+          assert.doesNotMatch(response.body, /נקראה הכתובת/);
+          assert.equal(calls, 0, 'the call was declined, not attempted');
+          assert.equal(await documentsHere(), before);
+          assert.equal(puts, putsBefore, 'no object was written');
+          await long.close();
         },
       );
 

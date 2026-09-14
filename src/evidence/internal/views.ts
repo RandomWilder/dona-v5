@@ -17,13 +17,14 @@
 // **No client JavaScript, here as everywhere.** The type list is a `<select>` the server filled from
 // the catalogue, the file input is a file input, and the page works with scripting switched off.
 import type { UnitHit } from '../../estate/contract.ts';
-import type { OcrPageImage } from '../../kernel/ocr.ts';
+import { type OcrPageImage, onlineOcrPageLimit } from '../../kernel/ocr.ts';
 import type { PdfPage } from '../../kernel/pdf.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import type { UnitLetting } from '../../tenancy/contract.ts';
 import type { DocumentTypeRow } from './catalogue.ts';
 import { isIdentifierField } from './extract.ts';
+import type { IntakeRefusal } from './intake.ts';
 import type { ProposedPerson, TenancyCandidate } from './lease.ts';
 import { CANDIDATE_LIMIT, type PlaceReading } from './place.ts';
 import { documentExtensions } from './storage-path.ts';
@@ -109,7 +110,20 @@ function unitLine(unit: UnitHit): Html {
  * found and either spelling would have met it, so it is one chip reading `המושכר או הדירה` — two
  * chips would tell an operator that two words are missing and send them looking for both.
  */
-function refusal(type: DocumentTypeRow, verification: Verification): Html {
+function refusal(
+  type: DocumentTypeRow,
+  verification: Verification,
+  reason: IntakeRefusal = 'terms',
+): Html {
+  if (reason === 'too_many_pages') {
+    return h`<section class="notice">
+      <h2>הקובץ ארוך מכדי שנקרא אותו</h2>
+      <p class="lede">
+        הקורא מטפל בעד ${String(onlineOcrPageLimit)} עמודים בפנייה אחת, ולכן לא נקרא דבר
+        ו<strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום. סרקו את המסמך לקובץ קצר יותר ונסו שוב.
+      </p>
+    </section>`;
+  }
   return h`<section class="notice">
     <h2>הקובץ אינו נראה כמו ${type.labelHe}</h2>
     <p class="lede">
@@ -135,7 +149,12 @@ export interface UploadScreen {
   /** The declared type of a refused attempt, so the form comes back with it still chosen. */
   declaredTypeKey?: string;
   declaredTenancyId?: string;
-  refused?: { type: DocumentTypeRow; verification: Verification };
+  refused?: {
+    type: DocumentTypeRow;
+    verification: Verification;
+    /** Why. Slice 6.8 — `too_many_pages` is a different sentence from a missing requirement. */
+    reason?: IntakeRefusal;
+  };
 }
 
 export function renderUploadPage(screen: UploadScreen): string {
@@ -146,7 +165,15 @@ export function renderUploadPage(screen: UploadScreen): string {
       <h1>הוספת מסמך</h1>
       ${unitLine(unit)}
     </div>
-    ${screen.refused ? refusal(screen.refused.type, screen.refused.verification) : h``}
+    ${
+      screen.refused
+        ? refusal(
+            screen.refused.type,
+            screen.refused.verification,
+            screen.refused.reason,
+          )
+        : h``
+    }
     <form class="form-grid" method="post" action="/documents" enctype="multipart/form-data">
       ${csrfInput(screen.csrf)}
       <input type="hidden" name="unit" value="${unit.unit_id}" />
@@ -236,6 +263,14 @@ export interface IntakeScreen {
   total?: number;
   /** A search the operator typed into the box, echoed back into it. */
   query?: string;
+  /**
+   * **The file was longer than the reader takes in one call, and this is how long. Slice 6.8.**
+   *
+   * A different refusal from the one above and it gets its own sentence: nothing was read off this
+   * file at all, so there is no address, no candidate list and nothing for the operator to choose
+   * between. Offering one here would be asking a question built on no reading.
+   */
+  tooManyPages?: number;
 }
 
 /**
@@ -267,6 +302,18 @@ function placeRead(reading: PlaceReading): Html {
 export function renderIntakePage(screen: IntakeScreen): string {
   const candidates = screen.candidates ?? [];
   const refused = screen.reading !== undefined;
+  const tooLong =
+    screen.tooManyPages === undefined
+      ? h``
+      : h`<section class="notice">
+          <h2>הקובץ ארוך מכדי שנקרא אותו</h2>
+          <p class="lede">
+            בקובץ ${String(screen.tooManyPages)} עמודים, והקורא מטפל בעד
+            ${String(onlineOcrPageLimit)} עמודים בפנייה אחת. לכן לא נקרא דבר ו<strong>לא נשמר
+            דבר</strong> — לא הקובץ ולא רישום. סרקו את המסמך לקובץ קצר יותר, או צרפו אותו מדף הדירה
+            שאליה הוא שייך.
+          </p>
+        </section>`;
   const body = h`
     <div>
       <a class="back" href="/">← ראשי</a>
@@ -276,6 +323,7 @@ export function renderIntakePage(screen: IntakeScreen): string {
         הדירה היא העוגן, לא סוף הדרך: חוזה שכירות ממשיך מכאן אל השכירות שהוא עצמו מגדיר.
       </p>
     </div>
+    ${tooLong}
     ${
       refused
         ? h`<section class="notice">

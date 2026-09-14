@@ -389,10 +389,16 @@ page-limit sentence rather than offered a candidate list it could never have nar
 **It runs once, from slice 6.4.** Until then the same scan was read twice — once here for the place
 reader and once inside `fileDocument`, whose own verdict comes back `unverified` on a page with no
 text layer — because 6.3 promised to leave that function alone. The fix is not a wider `fileDocument`
-but a request that carries what has already been paid for: `IntakeRequest.readPages` hands over the
-pages this route already read off these same bytes, `native` from pdfjs and `ocr` when the call was
-spent, and `fileDocument` uses them in place of its own reads. A caller that passes nothing gets the
-behaviour that was always there, which is what the seeding and importer paths do.
+but a request that carries what has already been paid for: `IntakeRequest.reading` hands over what
+this route already read off these same bytes, and `fileDocument` uses it in place of its own read. A
+caller that passes nothing gets the behaviour that was always there, which is what the seeding and
+importer paths do.
+
+**From 6.8 it carries the verdict as well as the pages**, because there is now one function that
+decides whether OCR is spent, reads, and takes the verdict on whichever reading won
+(`readForVerdict`). Handing over only the pages would have left this route and `fileDocument` each
+taking the same verdict on the same words by the same rule, which is how the two copies of the wrong
+OCR condition came to exist in the first place.
 
 ## What this module exports, and what it refuses
 

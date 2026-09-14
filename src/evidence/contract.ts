@@ -60,6 +60,7 @@ export {
 } from './internal/extract.ts';
 export type {
   IntakeDeps,
+  IntakeRefusal,
   IntakeRequest,
   IntakeResult,
 } from './internal/intake.ts';
@@ -102,10 +103,16 @@ export type {
 export { promoteExtractedField } from './internal/promote.ts';
 export type { HandoverProposal, ProposedAsset } from './internal/protocol.ts';
 export { isProtocolType, readHandoverProposal } from './internal/protocol.ts';
-export type { DocumentRead, ReadDeps, SweepReport } from './internal/read.ts';
+export type {
+  DocumentRead,
+  DocumentReading,
+  OcrOutcome,
+  ReadDeps,
+  SweepReport,
+} from './internal/read.ts';
 export {
-  ocrAfterFile,
   readFiledDocument,
+  readForVerdict,
   sweepUnverified,
 } from './internal/read.ts';
 export type { DocumentDeps } from './internal/routes.ts';

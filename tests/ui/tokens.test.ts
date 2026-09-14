@@ -596,6 +596,38 @@ const SCREENS: Array<[string, () => string]> = [
     () => renderIntakePage({ nav: NAV, csrf: CSRF, types: documentTypes }),
   ],
   [
+    // Slice 6.8. The other refusal this screen has: nothing was read at all, because the file is
+    // longer than the reader takes in one call. No candidate list, because there is no reading to
+    // build one from.
+    'documents · intake, too long to read',
+    () =>
+      renderIntakePage({
+        nav: NAV,
+        csrf: CSRF,
+        types: documentTypes,
+        declaredTypeKey: 'lease',
+        tooManyPages: 22,
+      }),
+  ],
+  [
+    // Slice 6.8, on the unit-first screen: the same cause, the same sentence, a different door.
+    'documents · upload, refused for length',
+    () =>
+      renderUploadPage({
+        nav: NAV,
+        csrf: CSRF,
+        unit: hit,
+        types: documentTypes,
+        lettings,
+        declaredTypeKey: 'lease',
+        refused: {
+          type: documentTypes[0] as DocumentTypeRow,
+          verification: { verdict: 'unverified', missingTerms: [] },
+          reason: 'too_many_pages',
+        },
+      }),
+  ],
+  [
     'documents · intake, several flats answer to the address',
     () =>
       renderIntakePage({

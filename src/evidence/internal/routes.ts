@@ -32,7 +32,7 @@ import { KernelError } from '../../kernel/errors.ts';
 import type { Extractor } from '../../kernel/extraction.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
 import { createUnconfiguredOcr, type OcrText } from '../../kernel/ocr.ts';
-import type { PdfPage, PdfText } from '../../kernel/pdf.ts';
+import type { PdfText } from '../../kernel/pdf.ts';
 import type { Html } from '../../kernel/ui/html.ts';
 import { validId } from '../../kernel/validate.ts';
 import {
@@ -72,18 +72,22 @@ import { confirmLeaseTenancy, proposeLeaseTenancy } from './lease.ts';
 import { readPlace, resolvePlace } from './place.ts';
 import { promoteExtractedField } from './promote.ts';
 import { isProtocolType } from './protocol.ts';
-import { ocrConfigured, readFiledDocument } from './read.ts';
+import {
+  type DocumentReading,
+  ocrConfigured,
+  readFiledDocument,
+  readForVerdict,
+} from './read.ts';
 import {
   confirmProtocol,
   type ProtocolProposal,
   proposeProtocol,
 } from './seed.ts';
 import {
-  documentContentTypes,
+  type documentContentTypes,
   documentFileHash,
   sniffExtension,
 } from './storage-path.ts';
-import { documentText } from './verify.ts';
 import type { SeedScreen } from './views.ts';
 import {
   renderFiledPage,
@@ -465,14 +469,53 @@ export function registerDocumentRoutes(
     const chosen = fields.unit ? validId(fields.unit, 'unit') : null;
 
     let unit: UnitHit;
-    // What the reader read off these bytes, kept so `fileDocument` need not read them again (6.4).
-    // Undefined on the short-circuit below, where nothing was read because nothing needed to be.
-    let readPages: { native: PdfPage[]; ocr?: PdfPage[] } | undefined;
+    // What the reader read off these bytes, kept so `fileDocument` need not read them again (6.4,
+    // widened at 6.8 to carry the verdict it was taken with). Undefined on the short-circuit below,
+    // where nothing was read because nothing needed to be.
+    let read: DocumentReading | undefined;
     if (chosen) {
       unit = await getUnit(deps.pool, chosen);
     } else {
-      const read = await intakeText(deps, bytes, extension);
-      readPages = { native: read.native, ocr: read.ocr };
+      read = await intakeReading(
+        deps,
+        bytes,
+        extension,
+        type.verificationTerms,
+      );
+      if (read.ocrOutcome === 'too_many_pages') {
+        // **Refused at the door, and before the place reader runs. Slice 6.8.** This file is longer
+        // than the online processor takes in one call, so nothing was read off it — and a candidate
+        // list built on no reading is a question the operator cannot answer. The sentence names the
+        // cause instead, which is 6.9's one-cause-one-sentence bar arriving early because it costs
+        // nothing here.
+        await createAuditLog(deps.pool, deps.clock).write(
+          {
+            actorKind: 'staff',
+            actorId: operator,
+            actorRole: request.staff?.role ?? undefined,
+            action: 'evidence.intake_unresolved',
+            inputs: {
+              typeKey: type.typeKey,
+              extension,
+              bytes: bytes.length,
+              fileHash: documentFileHash(bytes),
+              candidates: 0,
+              ocr: read.ocrOutcome,
+              pages: read.native.length,
+            },
+          },
+          { outcome: 'ok' },
+        );
+        html(reply);
+        reply.code(422);
+        return renderIntakePage({
+          nav: chromeOf(deps, request),
+          csrf: csrfFrom(request),
+          types: await listDocumentTypes(deps.pool),
+          declaredTypeKey: type.typeKey,
+          tooManyPages: read.native.length,
+        });
+      }
       const reading = readPlace(read.text);
       const resolved = await resolvePlace(deps.pool, reading);
       if (!resolved.unit) {
@@ -525,7 +568,7 @@ export function registerDocumentRoutes(
       // it always was.
       tenancyId: null,
       filedBy: operator,
-      readPages,
+      reading: read,
     });
 
     html(reply);
@@ -538,7 +581,11 @@ export function registerDocumentRoutes(
         types: await listDocumentTypes(deps.pool),
         lettings: await listUnitTenancies(deps.pool, unit.unit_id),
         declaredTypeKey: type.typeKey,
-        refused: { type, verification: result.verification },
+        refused: {
+          type,
+          verification: result.verification,
+          reason: result.refusal,
+        },
       });
     }
     if (result.verification.verdict === 'verified') {
@@ -926,48 +973,36 @@ function placeFor(
 }
 
 /**
- * The text A12's reader reads, **and the pages it was read from**.
+ * The reading A12's place reader reads, **and the verdict it was taken with**.
  *
- * A pdf with a text layer is parsed and that is the end of it. A scan has none, so OCR is the only
- * way to a printed address.
+ * **6.3's known cost, paid off at 6.4; 6.8's defect, paid off here.** Until 6.4 this function
+ * returned a bare string and threw the pages away, so `fileDocument` read the same bytes again a
+ * moment later. Until 6.8 it also carried its own copy of the wrong condition — OCR only when a PDF
+ * had no text layer at all — which is why the week-6 demo's phone scan was never given to Document
+ * AI even once: CamScanner had left a text layer, and a text layer was the end of the question.
  *
- * **6.3's known cost, paid off here.** Until 6.4 this function returned a bare string and threw the
- * pages away, so `fileDocument` read the same bytes again a moment later — a second pdfjs parse
- * always, and for a scan a second Document AI call, because its own verdict on a page with no text
- * layer comes back `unverified`. Returning what was read, and handing it over in `readPages`, is the
- * fix 6.3 named: the request carries what has been paid for, and `fileDocument` is widened by one
- * optional field rather than by a new responsibility.
+ * There is one function that decides this now (`readForVerdict`), and this one is a thin call to it
+ * that supplies the processor version the settings row holds. The declared type's terms are the
+ * condition, so a scan whose own layer does not look like the type it was declared as is worth the
+ * call — which is the whole of defect (b).
  *
  * **An unconfigured OCR is not an error.** It is the ordinary local state, and it reads as a
  * document that names no place: the screen then asks, which is the same screen a genuinely
  * unplaceable lease gets.
  */
-async function intakeText(
+async function intakeReading(
   deps: DocumentDeps,
   bytes: Buffer,
   extension: keyof typeof documentContentTypes,
-): Promise<{ text: string; native: PdfPage[]; ocr?: PdfPage[] }> {
-  const native = extension === 'pdf' ? await deps.pdf.pages(bytes) : [];
-  if (native.some((page) => page.items.length > 0)) {
-    return { text: documentText(native), native };
-  }
-  if (!ocrConfigured(deps.ocr)) {
-    return { text: '', native };
-  }
-  const ocrVersion = (await readOcrSettings(createSettings(deps.pool)))
-    .processorVersion;
-  try {
-    const result = await deps.ocr.pages(
-      bytes,
-      documentContentTypes[extension],
-      ocrVersion,
-    );
-    return { text: documentText(result.pages), native, ocr: result.pages };
-  } catch {
-    // A reader that cannot read is a screen that asks. It is never a 503: the operator can still
-    // choose the flat, and the document is still fileable.
-    return { text: '', native };
-  }
+  verificationTerms: string[] | null,
+): Promise<DocumentReading> {
+  const ocrVersion = ocrConfigured(deps.ocr)
+    ? (await readOcrSettings(createSettings(deps.pool))).processorVersion
+    : undefined;
+  return readForVerdict(
+    { pdf: deps.pdf, ocr: deps.ocr, ocrVersion },
+    { bytes, extension, verificationTerms },
+  );
 }
 
 /**

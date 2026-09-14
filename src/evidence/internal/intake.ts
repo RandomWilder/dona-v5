@@ -37,7 +37,7 @@ import {
   numberWords,
   parseMeasuredWords,
 } from './extract.ts';
-import { ocrAfterFile } from './read.ts';
+import { type DocumentReading, readForVerdict } from './read.ts';
 import {
   documentContentTypes,
   documentFileHash,
@@ -47,11 +47,7 @@ import {
   sniffExtension,
 } from './storage-path.ts';
 import type { Queryable } from './types.ts';
-import {
-  documentText,
-  type Verification,
-  verifyDeclaredType,
-} from './verify.ts';
+import type { Verification } from './verify.ts';
 
 export interface IntakeDeps {
   db: Queryable;
@@ -93,7 +89,7 @@ export interface IntakeRequest {
   validFrom?: string | null;
   validTo?: string | null;
   /**
-   * **Pages this caller has already read off these same bytes. Slice 6.4, carried from 6.3.**
+   * **The reading this caller has already taken off these same bytes. Slice 6.4, widened at 6.8.**
    *
    * A12's intake route reads the document before this function is called — it has to, because the
    * address on the page is what tells it which flat to file against — and until 6.4 this function
@@ -101,12 +97,13 @@ export interface IntakeRequest {
    * call, one page image at a time, for a verdict the caller already had the words for.
    *
    * The fix 6.3 named is this and not a wider `fileDocument`: the request carries what was paid for.
-   * `native` is what pdfjs returned (empty for a non-pdf, and a zero-item page list for a scan, which
-   * is a real reading and not a miss); `ocr` is present only when the caller actually spent that
-   * call. **Absent is the ordinary case** — the unit-first screen, the seeding paths and the importer
-   * pass nothing and get exactly the behaviour they always had.
+   * **From 6.8 it carries the whole reading** — the pages, the verdict taken on them and what became
+   * of the OCR call — because there is now one function that decides all three (`readForVerdict`)
+   * and a caller that had already run it would otherwise hand over the pages and make this one take
+   * the verdict again, on the same words, by the same rule. **Absent is the ordinary case**: the
+   * unit-first screen, the seeding paths and the importer pass nothing and this function reads.
    */
-  readPages?: { native: PdfPage[]; ocr?: PdfPage[] };
+  reading?: DocumentReading;
   /**
    * The operator filing this, from the session. Slice 5.2 put it on the audit line for the
    * per-caller cap; slice 5.4 also writes it to `document.uploaded_by`. Optional, because the
@@ -114,6 +111,13 @@ export interface IntakeRequest {
    */
   filedBy?: string;
 }
+
+/**
+ * Why an upload was refused. Slice 6.8, and it is two rather than one because the screen has two
+ * different sentences to say: *this is not that kind of document*, and *this is too long for us to
+ * have read it*. A refusal an operator cannot act on is a refusal they will work around.
+ */
+export type IntakeRefusal = 'terms' | 'too_many_pages';
 
 export type IntakeResult =
   | {
@@ -124,7 +128,11 @@ export type IntakeResult =
       storageUri: string;
       verification: Verification;
     }
-  | { filed: false; verification: Verification };
+  | {
+      filed: false;
+      verification: Verification;
+      refusal: IntakeRefusal;
+    };
 
 /**
  * Files a document, or refuses it.
@@ -156,14 +164,18 @@ export async function fileDocument(
     throw new KernelError('invalid', 'that document type is retired');
   }
 
-  const pdfPages: PdfPage[] =
-    request.readPages?.native ??
-    (extension === 'pdf' ? await deps.pdf.pages(request.bytes) : []);
-  let pagesForExtract = pdfPages;
-  let verification = verifyDeclaredType(
-    extension === 'pdf' ? documentText(pdfPages) : null,
-    type.verificationTerms,
-  );
+  // **One reading, before anything is written. Slice 6.8.** The verdict, the OCR decision and the
+  // pages extraction will run over all come out of the same call, and the caller that already made
+  // it hands the result over rather than paying for it twice.
+  const reading =
+    request.reading ??
+    (await readForVerdict(deps, {
+      bytes: request.bytes,
+      extension,
+      verificationTerms: type.verificationTerms,
+    }));
+  const pagesForExtract = reading.pages;
+  const verification = reading.verification;
 
   const line = {
     actorKind: 'staff' as const,
@@ -181,8 +193,23 @@ export async function fileDocument(
       bytes: request.bytes.length,
       verdict: verification.verdict,
       missingTerms: verification.missingTerms,
+      // What became of the OCR call, and how long the file was. Slice 6.8: a reader that broke, a
+      // reader that found nothing and a file nobody tried to read were one absent row until now.
+      ocr: reading.ocrOutcome,
+      pages: reading.native.length,
     },
   };
+
+  if (reading.ocrOutcome === 'too_many_pages') {
+    // Refused rather than filed. The system knows it did not finish reading this file, and a row
+    // written on that reading would carry a verdict about a document nobody has seen the whole of.
+    await deps.audit.write(line, {
+      outcome: 'error',
+      code: 'invalid',
+      message: 'the file is longer than the reader will take in one call',
+    });
+    return { filed: false, verification, refusal: 'too_many_pages' };
+  }
 
   if (verification.verdict === 'refused') {
     await deps.audit.write(line, {
@@ -190,7 +217,7 @@ export async function fileDocument(
       code: 'invalid',
       message: 'the file does not carry the declared type’s terms',
     });
-    return { filed: false, verification };
+    return { filed: false, verification, refusal: 'terms' };
   }
 
   const existing = await findDocumentByHash(deps.db, fileHash);
@@ -247,27 +274,6 @@ export async function fileDocument(
     { ...line, inputs: { ...line.inputs, documentId: filed.id } },
     { outcome: 'ok' },
   );
-
-  if (verification.verdict === 'unverified') {
-    const after = await ocrAfterFile(deps, {
-      bytes: request.bytes,
-      extension,
-      pdfPages,
-      documentId: filed.id,
-      typeKey: type.typeKey,
-      verificationTerms: type.verificationTerms,
-      subjectId: request.place.id,
-      // The caller's OCR pages, when it already spent that call. Everything downstream of the read —
-      // the verdict, the promotion to `verified`, the pages extraction runs over — is unchanged.
-      ocrPages: request.readPages?.ocr,
-    });
-    if (after) {
-      verification = after.verification;
-      if (after.pages.some((page) => page.items.length > 0)) {
-        pagesForExtract = after.pages;
-      }
-    }
-  }
 
   await extractAfterFile(deps, filed.id, pagesForExtract);
 
