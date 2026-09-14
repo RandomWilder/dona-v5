@@ -18,11 +18,13 @@ import { createAuditLog } from '../kernel/audit.ts';
 import { fixedClock } from '../kernel/clock.ts';
 import { KernelError } from '../kernel/errors.ts';
 import { newId } from '../kernel/ids.ts';
-import { createMemoryStore } from '../kernel/objects.ts';
+import { createMemoryStore, type ObjectStore } from '../kernel/objects.ts';
 import {
   createFakeOcrText,
   defaultOcrProcessorVersion,
   type OcrText,
+  onlineOcrByteLimit,
+  onlineOcrPageLimit,
 } from '../kernel/ocr.ts';
 import { createFakePdfText } from '../kernel/pdf.ts';
 import {
@@ -57,14 +59,32 @@ const PNG = Buffer.concat([
   Buffer.from('a photograph of a page'),
 ]);
 
+/**
+ * A store that counts what was put into it. `ObjectStore` has no `list` and deliberately no
+ * `delete` (slice 3.2), so "no object was written" is proved the way `routes.test.ts` proves it:
+ * by the number of puts across the call.
+ */
+function countingStore(): ObjectStore & { puts: number } {
+  const inner = createMemoryStore();
+  const counted = {
+    ...inner,
+    puts: 0,
+    async put(path: string, bytes: Buffer, contentType: string) {
+      counted.puts += 1;
+      return inner.put(path, bytes, contentType);
+    },
+  };
+  return counted;
+}
+
 function deps(
   db: PoolClient,
   text: string[],
-  extra: { ocr?: OcrText } = {},
+  extra: { ocr?: OcrText; objects?: ObjectStore } = {},
 ): IntakeDeps {
   return {
     db,
-    objects: createMemoryStore(),
+    objects: extra.objects ?? createMemoryStore(),
     pdf: createFakePdfText(text),
     ocr: extra.ocr,
     ocrVersion: extra.ocr ? defaultOcrProcessorVersion : undefined,
@@ -303,7 +323,7 @@ describe('evidence · filing a declared document', () => {
       );
 
       await t.test(
-        'OCRs a photograph after filing and promotes it to verified',
+        'OCRs a photograph before filing it, and the row goes in verified',
         async () => {
           await inRolledBackTransaction(pool, async (db) => {
             await applyDocumentTypeCatalogue(db, seedDocumentTypes);
@@ -325,17 +345,24 @@ describe('evidence · filing a declared document', () => {
               [result.documentId],
             );
             assert.equal(row.rows[0]?.verification_verdict, 'verified');
+            // **Changed deliberately at 6.8, and this is the assertion that says so.** The row used
+            // to go in `unverified` and be promoted a moment later by a second reader, with an
+            // `evidence.read_document` line recording the move. The reason for that order was that
+            // a refused upload must write nothing — but a reading taken *before* the write satisfies
+            // that too, and then there is one verdict rather than two and one line rather than two.
             const filed = await auditLines(db, unitId);
-            assert.equal(filed[0]?.inputs.verdict, 'unverified');
-            const read = await db.query<{
-              action: string;
-              inputs: Record<string, unknown>;
-            }>(
-              `SELECT action, inputs FROM audit_log
+            assert.equal(filed[0]?.inputs.verdict, 'verified');
+            assert.equal(filed[0]?.inputs.ocr, 'ok');
+            const promoted = await db.query<{ n: string }>(
+              `SELECT count(*)::text AS n FROM audit_log
                 WHERE action = 'evidence.read_document' AND subject_id = $1`,
               [unitId],
             );
-            assert.equal(read.rows[0]?.inputs.verdict, 'verified');
+            assert.equal(
+              promoted.rows[0]?.n,
+              '0',
+              'nothing was promoted, because nothing was filed unread',
+            );
           });
         },
       );
@@ -394,6 +421,255 @@ describe('evidence · filing a declared document', () => {
             if (!result.filed) return;
             assert.equal(result.verification.verdict, 'verified');
             assert.equal(called, 0);
+          });
+        },
+      );
+
+      await t.test(
+        'OCRs a scan whose own text layer does not carry the type’s terms',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+            // **Slice 6.8, and this is the week-6 demo.** The file was a lease scanned on a phone,
+            // and CamScanner had left a text layer of its own on it. OCR ran only when a PDF had
+            // *no* text layer, so that layer permanently outranked Document AI: the demo's four
+            // refusals took 0.43–1.31s each, against 7.07–7.40s for the one file with no layer,
+            // which is the difference between a decision and a call.
+            //
+            // The condition is now the declared type's terms rather than emptiness, and the reading
+            // happens once, before anything is written.
+            const unitId = newId();
+            let called = 0;
+            const ocr: OcrText = {
+              async pages(...args) {
+                called += 1;
+                return createFakeOcrText([specimen('lease-standard.md')]).pages(
+                  ...args,
+                );
+              },
+              describe: () => 'fake',
+            };
+            const result = await fileDocument(
+              deps(db, ['הסכם שכירות סרוק בטלפון ואין בו את מילות הטופס'], {
+                ocr,
+              }),
+              {
+                bytes: pdfBytes('phone scan with a text layer'),
+                typeKey: 'lease',
+                place: { kind: 'UNIT', id: unitId },
+                tenancyId: null,
+              },
+            );
+            assert.equal(result.filed, true);
+            if (!result.filed) return;
+            assert.equal(result.verification.verdict, 'verified');
+            // Once. 6.4's bar is not relaxed by moving the call earlier.
+            assert.equal(called, 1);
+            const row = await db.query<{ verification_verdict: string }>(
+              'SELECT verification_verdict FROM document WHERE document_id = $1',
+              [result.documentId],
+            );
+            // Written `verified` at once, rather than written `unverified` and promoted after. The
+            // reading was taken before anything was written, which is what the old order existed
+            // to guarantee and did not need a second reader to achieve.
+            assert.equal(row.rows[0]?.verification_verdict, 'verified');
+            const lines = await auditLines(db, unitId);
+            assert.equal(lines[0]?.inputs.verdict, 'verified');
+            assert.equal(lines[0]?.inputs.ocr, 'ok');
+          });
+        },
+      );
+
+      await t.test(
+        'refuses a file carrying none of the vocabulary, even after OCR, and writes nothing',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+            // The half that is not traded away for the match. OCR is spent, the better reading is
+            // taken, and the file is still not a lease — so it is refused and nothing is written:
+            // no row, no object. 3.3's proof shape, on the path 6.8 rearranged.
+            const unitId = newId();
+            const objects = countingStore();
+            const wired = deps(db, ['חשבון ארנונה למחזיק בנכס'], {
+              objects,
+              ocr: createFakeOcrText([specimen('arnona-bill.md')]),
+            });
+            const result = await fileDocument(wired, {
+              bytes: pdfBytes('an arnona bill scanned'),
+              typeKey: 'lease',
+              place: { kind: 'UNIT', id: unitId },
+              tenancyId: null,
+            });
+            assert.equal(result.filed, false);
+            if (result.filed) return;
+            assert.equal(result.verification.verdict, 'refused');
+            assert.equal(await documentCount(db, unitId), 0);
+            assert.equal(objects.puts, 0, 'no object was written');
+            const lines = await auditLines(db, unitId);
+            assert.equal(lines[0]?.outcome, 'error');
+            assert.equal(lines[0]?.inputs.ocr, 'ok');
+          });
+        },
+      );
+
+      await t.test(
+        'reads the first pages of a document longer than the online reader takes',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+            // **The week-6 demo's own file, as a shape. Slice 6.8.** It is 38 pages and the online
+            // processor takes 15, so until this slice it was never sent at all and the row was
+            // filed as though somebody had looked at it. `individualPageSelector` is the way
+            // through — measured against the live processor before it was written: that file,
+            // pages 1-15, came back 200 with fifteen pages in 36.4s.
+            //
+            // The paper's own words are on page 1, which is why reading the front of a document
+            // answers both questions being asked: what kind of document is this, and where does it
+            // belong. `pagesRead` is what keeps `verified` honest about how much was read.
+            const unitId = newId();
+            let asked: readonly number[] | undefined;
+            const reader = createFakeOcrText([
+              specimen('lease-standard.md'),
+              ...Array.from(
+                { length: onlineOcrPageLimit + 5 },
+                (_, at) => `נספח ${at + 1}`,
+              ),
+            ]);
+            const ocr: OcrText = {
+              describe: () => 'fake',
+              pages: async (bytes, mime, version, pages) => {
+                asked = pages;
+                return reader.pages(bytes, mime, version, pages);
+              },
+            };
+            const long = Array.from(
+              { length: onlineOcrPageLimit + 6 },
+              (_, at) => `עמוד ${at + 1} של סריקה ארוכה ללא שכבת טקסט שמישה`,
+            );
+            const result = await fileDocument(deps(db, long, { ocr }), {
+              bytes: pdfBytes('a long phone scan'),
+              typeKey: 'lease',
+              place: { kind: 'UNIT', id: unitId },
+              tenancyId: null,
+            });
+            assert.equal(result.filed, true);
+            if (!result.filed) return;
+            assert.equal(result.verification.verdict, 'verified');
+            assert.deepEqual(
+              asked,
+              Array.from({ length: onlineOcrPageLimit }, (_, at) => at + 1),
+              'the first fifteen pages, by their own numbers',
+            );
+            const lines = await auditLines(db, unitId);
+            assert.equal(lines[0]?.inputs.ocr, 'partial');
+            assert.equal(lines[0]?.inputs.pages, onlineOcrPageLimit + 6);
+            assert.equal(lines[0]?.inputs.pagesRead, onlineOcrPageLimit);
+          });
+        },
+      );
+
+      await t.test(
+        'refuses a file too large for the reader to carry, with a sentence that says so',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+            // Size, not length. The bound is on the *request* and the whole file rides in every
+            // one of them, so selecting fewer pages does not make a large file fit — there is no
+            // reading to be had at any page count. Filing it would write a verdict about a document
+            // nobody has seen a page of, so it is refused and nothing is written.
+            const unitId = newId();
+            let called = 0;
+            const ocr: OcrText = {
+              async pages() {
+                called += 1;
+                return { pages: [], images: [] };
+              },
+              describe: () => 'fake',
+            };
+            const objects = countingStore();
+            const huge = Buffer.concat([
+              pdfBytes('a huge scan'),
+              Buffer.alloc(onlineOcrByteLimit, 0x20),
+            ]);
+            const result = await fileDocument(
+              deps(db, ['סריקה ללא מילות הטופס'], { ocr, objects }),
+              {
+                bytes: huge,
+                typeKey: 'lease',
+                place: { kind: 'UNIT', id: unitId },
+                tenancyId: null,
+              },
+            );
+            assert.equal(result.filed, false);
+            if (result.filed) return;
+            assert.equal(result.refusal, 'too_large');
+            assert.equal(called, 0, 'the call was declined, not attempted');
+            assert.equal(await documentCount(db, unitId), 0);
+            assert.equal(objects.puts, 0, 'no object was written');
+            const lines = await auditLines(db, unitId);
+            assert.equal(lines[0]?.inputs.ocr, 'too_large');
+          });
+        },
+      );
+
+      await t.test(
+        'tells an OCR failure from an OCR miss, by count on the audit line',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+            // `catch { return null }` made a reader that broke look exactly like a reader that
+            // found nothing, and both looked like a file with no text layer. Three different facts,
+            // one row in the log. They are three values now, asserted by count rather than by
+            // reading a page.
+            const broken: OcrText = {
+              async pages() {
+                throw new KernelError('unavailable', 'the ocr call timed out', {
+                  timeoutMs: 20_000,
+                });
+              },
+              describe: () => 'fake',
+            };
+            const places = {
+              failed: newId(),
+              miss: newId(),
+              unconfigured: newId(),
+            };
+            await fileDocument(deps(db, [], { ocr: broken }), {
+              bytes: PNG,
+              typeKey: 'lease',
+              place: { kind: 'UNIT', id: places.failed },
+              tenancyId: null,
+            });
+            await fileDocument(deps(db, [], { ocr: createFakeOcrText([]) }), {
+              bytes: PNG,
+              typeKey: 'lease',
+              place: { kind: 'UNIT', id: places.miss },
+              tenancyId: null,
+            });
+            await fileDocument(deps(db, []), {
+              bytes: PNG,
+              typeKey: 'lease',
+              place: { kind: 'UNIT', id: places.unconfigured },
+              tenancyId: null,
+            });
+            const outcome = async (placeId: string): Promise<unknown> =>
+              (await auditLines(db, placeId))[0]?.inputs.ocr;
+            assert.equal(await outcome(places.failed), 'failed');
+            assert.equal(await outcome(places.miss), 'ok');
+            assert.equal(await outcome(places.unconfigured), 'unconfigured');
+            // All three are still filed and all three are still `unverified`: the difference is
+            // what the log can tell an operator afterwards, not what the screen does now.
+            const verdicts = await Promise.all(
+              Object.values(places).map(
+                async (placeId) =>
+                  (await auditLines(db, placeId))[0]?.inputs.verdict,
+              ),
+            );
+            assert.deepEqual(verdicts, [
+              'unverified',
+              'unverified',
+              'unverified',
+            ]);
           });
         },
       );

@@ -1719,7 +1719,8 @@ it. Then a second lease for the same person elsewhere: one party, two tenancies.
   - **A12's address reader has never seen a line break in production.** `documentText` joins a
     page's words with a space and emits a newline only between pages, so the structure `place.ts`
     and SPEC-evidence.md are both written against never arrives; punctuation after the city is what
-    has always saved it. → **6.8**, kernel, plan mode, spec edit first.
+    has always saved it. → **6.8**, kernel, plan mode, spec edit first. *(Closed; and the same
+    sentence turned out to be true of the anchors as well as the text → 6.11.)*
   - **The 5.6 clock-end click is not a click.** No route writes `status: 'ACTIVE'` — only the
     fixtures — so A5 is a flow with no screen, and the register generator ends every ACTIVE tenancy
     in the future by construction. → **re-owned by the slice that gives A5 a screen**, which sits in
@@ -1729,16 +1730,94 @@ it. Then a second lease for the same person elsewhere: one party, two tenancies.
     because a household screen is a product decision. The same gap makes the audit trail unreadable
     outside SQL, and makes a confirmed lease's flat still read as vacant.
 
-### Slice 6.8 — The line the reader was promised
-`documentText` flattens a page's words and only ever emits a newline between pages, while A12's place
-reader is specified against text where a line break ends a field. Both OCR and pdfjs already know the
-lines; this throws them away and then depends on them.
-- **Done when:** a scanned lease whose address line ends in no punctuation resolves its flat, proved
-  by a case that was **red first**.
-- **Verify:** 6.7's original unedited lease, filed on `:3000`.
-- **Spec edit first:** SPEC-evidence.md's A12 anchors and `place.ts`'s comment describe a reader
-  nobody has. **Plan mode** — `src/kernel/ocr.ts`, `src/kernel/pdf.ts`.
-- **Deps:** 6.7 · **Size:** M
+### The week-6 demo, 14 Sep 2026 — what it found, and the three slices it wrote
+The demo was given on staging and it refused a phone-scanned lease four times, then reported an
+address mismatch. The request log, the bucket and the file itself say the cause was four defects,
+none of them the one the room was watching. **6.8 was rewritten and 6.9 and 6.10 were added**; the
+full reconstruction, with the timings and the line numbers, is in
+[todo.md](todo.md) § "What the week-6 demo found".
+
+- **A12 was invisible and the demo used the other door.** `POST /documents/intake` ran three times
+  successfully two hours before the demo; the demo is six `POST /documents` and zero intakes, because
+  `src/chrome.ts` has no documents destination and a unit page's only button is the unit-first one.
+- **OCR is gated on an empty page rather than on a failed guard**, so a phone scanner's own text layer
+  permanently outranks Document AI — 0.43–1.31 s refusals against 7.07–7.40 s for the one file that
+  reached the processor.
+- **The lease type's three terms come from one specimen** — the demo's paper says `הסכם שכירות` and
+  `הדירה`, and both vocabularies are standard.
+- **A second filing of the same bytes re-anchored the confirm screen to a flat from 8 Sep**, through
+  an unordered `LIMIT 1`.
+
+**Two rulings the director took that day, and 6.9 is bound by both:** A12 **may** create a building
+and a flat from its refusal, overruling A12's own "does not create" sentence; and
+**confirm-before-file is rejected** — it needs the bytes held between two requests, which 3.2, A6 and
+A12 all refuse, so the indication comes after the exact match files. `PlaceKind` stays four values.
+
+**Still the director's:** there is no party route, so a tenant cannot be searched for and "one party,
+two tenancies" is shown on no screen. 6.7 raised it, these three slices do not close it, and a
+household screen is a product decision.
+
+### Slice 6.8 — The reader reads a scan
+Three defects in one path, moving together: `documentText` flattens a page's words and emits a newline
+only between pages, while A12's place reader is specified against text where a line break ends a
+field; OCR is unreachable whenever a text layer exists or a guard has already refused; and
+`verification_terms` are three all-required strings taken from one specimen.
+- **Done when:** the demo's own phone scan resolves its flat on `:3000`, red first; OCR runs when the
+  declared terms are **absent** and still runs exactly **once**; `הסכם שכירות`/`הדירה` verifies while
+  a file carrying none of the vocabulary still refuses and still writes nothing; an address line
+  ending in no punctuation resolves; a PDF past `onlineOcrPageLimit` is refused with a sentence rather
+  than filed unread; an OCR failure is distinguishable from an OCR miss in the audit line.
+- **Verify:** the demo file and 6.7's lease-1, both unedited, on `:3000`.
+- **Spec edit first:** SPEC-evidence.md's A12 anchors and verification section; `place.ts`'s comment
+  describes a reader nobody has. **Plan mode** — `src/kernel/pdf.ts`, `src/kernel/ocr.ts`,
+  `src/evidence/`.
+- **Deps:** 6.7 · **Size:** L
+
+### Slice 6.9 — The document tab, and a refusal that offers to create
+A12 gains its entrance and its two missing screens: a documents destination in `src/chrome.ts`; a 422
+screen that carries what was read into A11's and A13's forms as prefill and comes back with the new
+unit preselected; and a receipt that leads with what was read and where it landed. `estate.write` is
+ADMIN-only and `documents.write` is an OPERATOR's, so the create controls are an admin's and the
+operator keeps the candidate list and the search box.
+- **Done when:** the walk reaches the upload screen without going through a building; an ADMIN creates
+  the building and the flat from the refusal and files the same lease without retyping an address; an
+  OPERATOR sees no create control, red first; the receipt names what was read and the flat it anchored
+  to, and the confirm screen says which fields were **not read** separately from which did **not
+  match**; a refused intake still writes no row and no object, proved by row counts and a bucket
+  listing.
+- **Verify:** both stances on `:3000`; every screen on the `SCREENS` registry.
+- **Mockup first:** `mockups/document-intake.html`, the refusal-with-create screen.
+- **Spec edit first:** SPEC-flows.md A12's "does not create" sentence is struck and replaced by the
+  role split; A11 and A13 gain prefill. **Plan mode** — two modules.
+- **Deps:** 6.8 · **Size:** L
+
+### Slice 6.10 — A dedupe names its anchor
+The same bytes are one document forever, which is correct and stays. Filing them a second time against
+a different flat looking like success, and then an unordered `LIMIT 1` choosing which flat the confirm
+screen is about, is not.
+- **Done when:** a second filing either refuses with a sentence naming the flat the document is already
+  anchored to, or anchors the screen to the flat just filed to — **ruled in the spec either way**;
+  `unitIdOf` is deterministic, proved by a two-link case that was red first; the demo's sequence
+  replays and names the right flat.
+- **Verify:** `:3000` with the demo file; `document_link` row counts before and after.
+- **Spec edit first:** SPEC-evidence.md on what a second filing of the same bytes means for a screen.
+- **Deps:** 6.8 · **Size:** S · no plan mode
+
+### Slice 6.11 — The anchors meet the form the operator actually uses
+**Added by 6.8's verify step, which is the first time the reader ever reached a real project lease.**
+A12's three anchors were written from the tier-1 specimen, which follows the published
+חוזה שכירות אחיד. The form the operator files differs in three measured ways: `רחוב` matches inside
+`מרחוב` and returned **a party's own address** as the property's; the flat is a hyphenated number
+inside a sentence (`דירה מס ' 206-7`) that `APARTMENT` cannot read; and the flat's address is in
+`נספח א'` rather than the body, past the pages an online call reads. The first of those is the one
+that matters — a null reading asks a question, a wrong reading files a lease against a flat nobody
+chose.
+- **Done when:** a party's address is never returned as the property's, **written red first**; a
+  hyphenated unit number reads whole; and the annex question is ruled in the spec before the code.
+- **Verify:** the demo file on `:3000`, and a second real form when the corpus arrives.
+- **Spec edit first:** SPEC-evidence.md's A12 anchors — the section's own rule is that they are
+  printed there because somebody has to write a lease that matches them.
+- **Deps:** 6.8 · **Size:** M · the wrong-address half needs no corpus; the annex half wants F6.
 
 ---
 

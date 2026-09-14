@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { KernelError } from './errors.ts';
-import { boundPages, createPdfjsText } from './pdf.ts';
+import {
+  boundPages,
+  createFakePdfText,
+  createPdfjsText,
+  type PdfTextItem,
+  pageLines,
+} from './pdf.ts';
 import { type SampleRun, samplePdf } from './pdf-sample.ts';
 
 // The adapter is exercised against a PDF built by `samplePdf`, byte by byte,
@@ -15,6 +21,22 @@ import { type SampleRun, samplePdf } from './pdf-sample.ts';
 // coordinates -- so the flip the adapter performs is visible in the assertion.
 function textAt(x: number, bottomUpY: number, text: string): SampleRun {
   return { x, y: bottomUpY, text };
+}
+
+// One item of a page that was never a PDF, for the line fold below. Positions are zero on purpose:
+// a line is decided by `endsLine` and by nothing else, and a fixture carrying plausible coordinates
+// would let a geometry-based fold pass this suite.
+function item(text: string, endsLine: boolean): PdfTextItem {
+  return {
+    text,
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    rightToLeft: true,
+    endsLine,
+    confidence: null,
+  };
 }
 
 describe('pdf text', () => {
@@ -80,6 +102,64 @@ describe('pdf text', () => {
 
   it('says which reader is running', () => {
     assert.equal(createPdfjsText().describe(), 'pdfjs');
+  });
+
+  it('folds a page into the lines the reader already marked', () => {
+    // **Slice 6.8.** `endsLine` has been on every item since week 3 and nothing read it, so
+    // `documentText` joined a whole page with spaces and A12's address reader — written against
+    // text where a line break ends a field — never saw one. This is the fold, and it is the only
+    // place a line is decided: the flag comes from the reader, never from the boxes.
+    const items = [
+      item('רקפת', false),
+      item('12,', false),
+      item('שוהם', true),
+      item('דירה', false),
+      item('3', true),
+    ];
+    assert.deepEqual(
+      pageLines({ number: 1, width: 595, height: 842, items }).map((line) =>
+        line.map((one) => one.text),
+      ),
+      [
+        ['רקפת', '12,', 'שוהם'],
+        ['דירה', '3'],
+      ],
+    );
+  });
+
+  it('keeps a page whose reader marked no line at all as one line', () => {
+    // An image-only OCR reply, or a text layer with no EOL runs in it. One line is what a page with
+    // no line structure is, and it is exactly the string the pre-6.8 join produced — so a reader
+    // that knows nothing about lines loses nothing.
+    const items = [item('רקפת', false), item('12', false)];
+    assert.deepEqual(
+      pageLines({ number: 1, width: 595, height: 842, items }).length,
+      1,
+    );
+    assert.deepEqual(
+      pageLines({ number: 1, width: 1, height: 1, items: [] }),
+      [],
+    );
+  });
+
+  it('gives the fake reader the line breaks a caller writes into a page', async () => {
+    // The fake splits on whitespace because that is what a real text layer hands back (week 3). It
+    // now honours a newline as a line end for the same reason: a suite that could not express a
+    // line break would be testing the reader against a document shape that does not occur, which
+    // is precisely how 6.8's defect survived three slices that read documents.
+    const pages = await createFakePdfText(['רקפת 12, שוהם\nדירה 3']).pages(
+      Buffer.from('x'),
+    );
+    assert.deepEqual(
+      (pages[0]?.items ?? []).map((one) => [one.text, one.endsLine]),
+      [
+        ['רקפת', false],
+        ['12,', false],
+        ['שוהם', true],
+        ['דירה', false],
+        ['3', true],
+      ],
+    );
   });
 
   it('returns no pages when the reader has not finished in time, rather than hanging', async () => {

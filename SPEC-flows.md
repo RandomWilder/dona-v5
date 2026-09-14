@@ -459,8 +459,10 @@ detected (invariant 6): what this flow reads off the paper is *where*, not *what
 **Sequence:** read → resolve → file.
 
 1. The bytes are read once, in memory, under the bounds A1 already set — one file, 20 MB, four kinds
-   sniffed from the bytes. The text is `documentText` over the pdf reader, and OCR only when there is
-   no text layer and an OCR processor is configured.
+   sniffed from the bytes. The text is `documentText` over the pdf reader, and **OCR whenever that
+   text does not satisfy the declared type's terms** and an OCR processor is configured (slice 6.8;
+   until then it was *no text layer at all*, and a phone scanner's own layer therefore outranked
+   Document AI). A file too long for the online call is refused with a sentence that says so.
 2. **A deterministic place reader** runs over that text — the analogue of A6's protocol reader, and
    deliberately the same kind of thing: no model, no `ExtractedField`, a pure function over a string.
    It returns an address, a city and an apartment number, or nulls.

@@ -583,7 +583,9 @@ const SCREENS: Array<[string, () => string]> = [
           type: documentTypes[0] as DocumentTypeRow,
           verification: {
             verdict: 'refused',
-            missingTerms: ['המושכר', 'תקופת השכירות'],
+            // A requirement with two declared spellings and one with a single spelling, because
+            // both shapes are on the catalogue from 6.8 and the screen has to print each of them.
+            missingTerms: ['המושכר|הדירה', 'תקופת השכירות'],
           },
         },
       }),
@@ -592,6 +594,39 @@ const SCREENS: Array<[string, () => string]> = [
     // Slice 6.3, flow A12. The screen that asks for no flat.
     'documents · intake',
     () => renderIntakePage({ nav: NAV, csrf: CSRF, types: documentTypes }),
+  ],
+  [
+    // Slice 6.8. The other refusal this screen has: nothing was read at all, because the file is
+    // larger than the reader carries in one call. No candidate list, because there is no reading to
+    // build one from. A *long* document is read in part and files normally; it is size that makes
+    // one unreadable outright.
+    'documents · intake, too large to read',
+    () =>
+      renderIntakePage({
+        nav: NAV,
+        csrf: CSRF,
+        types: documentTypes,
+        declaredTypeKey: 'lease',
+        tooLargeBytes: 17_825_792,
+      }),
+  ],
+  [
+    // Slice 6.8, on the unit-first screen: the same cause, the same sentence, a different door.
+    'documents · upload, refused for size',
+    () =>
+      renderUploadPage({
+        nav: NAV,
+        csrf: CSRF,
+        unit: hit,
+        types: documentTypes,
+        lettings,
+        declaredTypeKey: 'lease',
+        refused: {
+          type: documentTypes[0] as DocumentTypeRow,
+          verification: { verdict: 'unverified', missingTerms: [] },
+          reason: 'too_large',
+        },
+      }),
   ],
   [
     'documents · intake, several flats answer to the address',

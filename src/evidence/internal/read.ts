@@ -3,11 +3,11 @@
 // appear, and never turn a miss into a 503.
 import type { AuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
-import { KernelError } from '../../kernel/errors.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
 import {
   type OcrPageImage,
   type OcrText,
+  onlineOcrByteLimit,
   onlineOcrPageLimit,
 } from '../../kernel/ocr.ts';
 import type { PdfPage, PdfText } from '../../kernel/pdf.ts';
@@ -95,89 +95,149 @@ export async function readFiledDocument(
   };
 }
 
-export async function ocrAfterFile(
+/**
+ * What happened to the OCR call this reading did or did not make. Slice 6.8.
+ *
+ * `catch { return null }` made a reader that broke indistinguishable from a reader that found
+ * nothing, and both indistinguishable from a file nobody tried to read — three different facts and
+ * one absent row in the log. They are five values now, and every one of them reaches the audit line.
+ */
+export type OcrOutcome =
+  /** The native reading already satisfied the declared type. No call was needed. */
+  | 'not_needed'
+  /** The call was made and answered. Whether it *found* the terms is the verdict's business. */
+  | 'ok'
+  /**
+   * The call was made for **the first `onlineOcrPageLimit` pages of a longer document**, and
+   * answered. The verdict is taken on those pages, and `pagesRead` says how many of how many.
+   */
+  | 'partial'
+  /** No processor is configured. The ordinary local state, and never an error. */
+  | 'unconfigured'
+  /** The call was made and failed, timed out, or was refused. */
+  | 'failed'
+  /**
+   * The file is larger than the online call carries, so no call was made and none could be — the
+   * bound is on the request and the whole file rides in every one of them. A refusal, because a row
+   * written on no reading claims a verdict about a document nobody has seen a page of.
+   */
+  | 'too_large';
+
+export interface DocumentReading {
+  /** The reading that won, as text — what the verdict was taken on and what A12's reader reads. */
+  text: string;
+  /** What pdfjs returned. Empty for a file that is not a PDF, which is a reading and not a miss. */
+  native: PdfPage[];
+  /** What the processor returned, when a call was spent and answered. */
+  ocr?: PdfPage[];
+  /** The pages downstream extraction runs over: the OCR pages when there are any, else the native. */
+  pages: PdfPage[];
+  verification: Verification;
+  ocrOutcome: OcrOutcome;
+  /**
+   * How many pages the processor was given, when it was given fewer than the document has. Slice
+   * 6.8, and it goes on the audit line: *verified* on a partial reading is a different claim from
+   * *verified*, and the difference has to be somewhere a person can count.
+   */
+  pagesRead?: number;
+}
+
+/**
+ * Read a document once, and take the verdict on the best reading available. Slice 6.8.
+ *
+ * **This is the only place that decides whether OCR is spent**, and until 6.8 there were two, both
+ * asking the wrong question. `ocrAfterFile` here and `intakeText` in the routes both ran OCR only
+ * when a PDF had *no text layer at all*, so a phone scanner's own layer permanently outranked
+ * Document AI: the week-6 demo's refusals came back in 0.43-1.31s, against 7.07-7.40s for the one
+ * file that had no layer, which is the difference between a decision and a call. And `fileDocument`
+ * returned on a `refused` verdict before OCR was considered at all, so the better reader was never
+ * reached for the case it exists to serve.
+ *
+ * The condition is the **declared type's terms**. A native reading that satisfies them is the end of
+ * it; anything else is worth the call. When the call is spent and answers, **its pages win** - OCR
+ * is only ever reached because the native reading failed the type's own guard, so preferring the
+ * layer that just failed would be preferring the reader that lost.
+ *
+ * **It runs before anything is written.** The old order put OCR after the row because a refused
+ * upload must write nothing, but a reading taken before the write is still a reading taken before
+ * anything is written, and the refusal is then made on it. The after-the-fact path stays for the
+ * rows already on file: `readFiledDocument` and `sweepUnverified`, which is the week-3 backlog.
+ */
+export async function readForVerdict(
   deps: {
+    pdf: PdfText;
     ocr?: OcrText;
     ocrVersion?: string;
-    db: Queryable;
-    audit: AuditLog;
-    clock: Clock;
   },
   input: {
     bytes: Buffer;
     extension: keyof typeof documentContentTypes;
-    pdfPages: PdfPage[];
-    documentId: string;
-    typeKey: string;
     verificationTerms: string[] | null;
-    subjectId: string;
-    /**
-     * **Pages the caller already OCR'd off these same bytes. Slice 6.4.** When present, the call is
-     * not made a second time and everything below is unchanged — same verdict, same promotion, same
-     * pages handed back for extraction. Absent is every caller but A12's intake route.
-     */
-    ocrPages?: PdfPage[];
   },
-): Promise<{ verification: Verification; pages: PdfPage[] } | null> {
-  if (input.pdfPages.length > onlineOcrPageLimit) {
-    return null;
-  }
-  const nativeHasText = input.pdfPages.some((page) => page.items.length > 0);
-  if (input.extension === 'pdf' && nativeHasText) {
-    return null;
-  }
-  try {
-    // **The reading, however it was obtained.** Inside the same `try` the call was always in, so a
-    // reader that throws still lands in the same catch and a miss is still not a 503.
-    const pages = input.ocrPages ?? (await ocrReading(deps, input));
-    if (!pages) {
-      return null;
-    }
-    const next = verifyDeclaredType(
-      documentText(pages),
-      input.verificationTerms,
-    );
-    if (next.verdict !== 'verified') {
-      return {
-        verification:
-          next.verdict === 'refused'
-            ? { verdict: 'unverified', missingTerms: [] }
-            : next,
-        pages,
-      };
-    }
-    await promoteVerified(
-      deps,
-      input.documentId,
-      input.typeKey,
-      input.subjectId,
-    );
-    return { verification: next, pages };
-  } catch (error) {
-    if (error instanceof KernelError && error.code === 'unavailable') {
-      return null;
-    }
-    return null;
-  }
-}
-
-/**
- * One OCR call, or none when no processor is configured. Split out at 6.4 so the reused-pages branch
- * above reads as one expression and the narrowing this call needs is done once, here.
- */
-async function ocrReading(
-  deps: { ocr?: OcrText; ocrVersion?: string },
-  input: { bytes: Buffer; extension: keyof typeof documentContentTypes },
-): Promise<PdfPage[] | null> {
-  if (!ocrConfigured(deps.ocr) || !deps.ocrVersion) {
-    return null;
-  }
-  const result = await deps.ocr.pages(
-    input.bytes,
-    documentContentTypes[input.extension],
-    deps.ocrVersion,
+): Promise<DocumentReading> {
+  const native =
+    input.extension === 'pdf' ? await deps.pdf.pages(input.bytes) : [];
+  const nativeText = input.extension === 'pdf' ? documentText(native) : null;
+  const verification = verifyDeclaredType(
+    nativeText || null,
+    input.verificationTerms,
   );
-  return result.pages;
+  const settled =
+    verification.verdict === 'verified' || verification.verdict === 'unguarded';
+  const reading: DocumentReading = {
+    text: nativeText ?? '',
+    native,
+    pages: native,
+    verification,
+    ocrOutcome: settled ? 'not_needed' : 'unconfigured',
+  };
+  if (settled) {
+    return reading;
+  }
+  if (!ocrConfigured(deps.ocr) || !deps.ocrVersion) {
+    // Not an error and not a refusal. It is the ordinary local state, and it reads as a document
+    // nobody could get text out of - which is what `unverified` has always meant.
+    return reading;
+  }
+  if (input.bytes.length > onlineOcrByteLimit) {
+    // **No call, and no call is possible.** The bound is on the request and the whole file rides in
+    // every request, so selecting fewer pages would not make this one fit. A refusal, because the
+    // alternative is a row carrying a verdict about a document nobody has read a page of.
+    return { ...reading, ocrOutcome: 'too_large' };
+  }
+  // **A long document is read in part rather than not at all. Slice 6.8.** The online processor
+  // takes `onlineOcrPageLimit` pages, and the demo's lease is 38 - so until this slice it was never
+  // sent, and the row was filed as though somebody had looked at it. The first pages are also the
+  // ones that answer both questions being asked here: a lease says what it is in its heading and
+  // where it is in its opening clause. `pagesRead` carries how partial the reading was.
+  const selected =
+    native.length > onlineOcrPageLimit
+      ? Array.from({ length: onlineOcrPageLimit }, (_, at) => at + 1)
+      : undefined;
+  let pages: PdfPage[];
+  try {
+    const result = await deps.ocr.pages(
+      input.bytes,
+      documentContentTypes[input.extension],
+      deps.ocrVersion,
+      selected,
+    );
+    pages = result.pages;
+  } catch {
+    // A miss must never become a 503 on an upload - the bound is 90 seconds and the operator can
+    // still file. What is new is that the log says which of the two this was.
+    return { ...reading, ocrOutcome: 'failed' };
+  }
+  const text = documentText(pages);
+  return {
+    text,
+    native,
+    ocr: pages,
+    pages: pages.length > 0 ? pages : native,
+    verification: verifyDeclaredType(text || null, input.verificationTerms),
+    ocrOutcome: selected ? 'partial' : 'ok',
+    ...(selected ? { pagesRead: selected.length } : {}),
+  };
 }
 
 export interface SweepReport {

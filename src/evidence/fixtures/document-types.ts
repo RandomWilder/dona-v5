@@ -76,7 +76,21 @@ export const seedDocumentTypes: SeedDocumentType[] = [
       typeKey: 'lease',
       labelHe: 'חוזה שכירות',
       labelEn: 'Lease',
-      verificationTerms: ['חוזה שכירות', 'המושכר', 'תקופת השכירות'],
+      // **Three requirements, and two of them have two spellings. Slice 6.8.** `|` separates the
+      // spellings of one requirement; every requirement must still be met. These were three bare
+      // strings calibrated to one specimen, and the week-6 demo brought a lease headed
+      // `הסכם שכירות` that said `הדירה` throughout — two of the three absent, so the file was
+      // refused four times. Both vocabularies are standard in an Israeli lease: the published
+      // חוזה שכירות אחיד uses the first of each and a great many private forms use the second.
+      //
+      // `תקופת השכירות` keeps one spelling on purpose. It is the term that separates a lease from
+      // everything else that says הסכם and הדירה — an ארנונה bill, an insurance certificate, a
+      // handover protocol — and widening it is what would turn the guard into a formality.
+      verificationTerms: [
+        'חוזה שכירות|הסכם שכירות',
+        'המושכר|הדירה',
+        'תקופת השכירות',
+      ],
       isActive: true,
     },
     // Flow A2's proposal is built out of these: unit, dates, and the tenants named on the lease.

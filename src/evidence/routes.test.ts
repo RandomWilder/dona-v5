@@ -25,7 +25,11 @@ import { fixedClock } from '../kernel/clock.ts';
 import { KernelError } from '../kernel/errors.ts';
 import { createFakeExtractor } from '../kernel/extraction.ts';
 import { createMemoryStore } from '../kernel/objects.ts';
-import { createFakeOcrText, type OcrText } from '../kernel/ocr.ts';
+import {
+  createFakeOcrText,
+  type OcrText,
+  onlineOcrByteLimit,
+} from '../kernel/ocr.ts';
 import { createFakePdfText } from '../kernel/pdf.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
 import { upsertTenancy, upsertTermsProfile } from '../tenancy/contract.ts';
@@ -1046,12 +1050,25 @@ describe('evidence · A12 a document finds its own place', () => {
           assert.equal(puts, putsBefore, 'no object was written');
 
           // The attempt is on the record, and counts against the day's cap.
-          const audited = await pool.query<{ n: string }>(
-            `SELECT count(*)::text AS n FROM audit_log
+          const audited = await pool.query<{
+            n: string;
+            inputs: Record<string, unknown>;
+          }>(
+            `SELECT count(*) OVER ()::text AS n, inputs FROM audit_log
               WHERE action = 'evidence.intake_unresolved' AND actor_id = $1`,
             [who.staffAccountId],
           );
           assert.equal(audited.rows[0]?.n, '1');
+          // **And what became of the reader is on it too. Slice 6.8, found by clicking.** 6.8 put
+          // the OCR outcome on `evidence.file_document` and not here, and this is the line A12
+          // writes when it cannot place a document — which is precisely the case where somebody
+          // asks afterwards whether the reader ran at all. Without it, an OCR that failed and an
+          // OCR that read a page naming an address nobody holds are the same row.
+          // `not_needed` here, and that is the assertion doing its job: this fixture's own text
+          // layer carries the lease's terms, so no call was owed. What the line could not say
+          // before is the difference between that and a reader that broke.
+          assert.equal(audited.rows[0]?.inputs.ocr, 'not_needed');
+          assert.equal(audited.rows[0]?.inputs.pages, 1);
         },
       );
 
@@ -1100,6 +1117,60 @@ describe('evidence · A12 a document finds its own place', () => {
           const filed = rows.rows[0];
           assert.ok(filed, 'the chosen flat is the one it filed against');
           hashes.push(filed.file_hash);
+        },
+      );
+
+      await t.test(
+        'a file too large for the reader is refused with a sentence, and files nothing',
+        async () => {
+          // **Slice 6.8, and it was red first.** A file above `onlineOcrByteLimit` cannot be read
+          // online at any page count: the bound is on the request and the whole file rides in every
+          // one of them. Until 6.8 the row went in `unverified` — a verdict that means *nobody
+          // could read this*, used for a file nobody looked at. It is a refusal now, on a screen
+          // that says how large the file was and why that mattered, and the call is not spent
+          // finding out. (A *long* file is a different thing and is read in part: see
+          // `intake.test.ts`.)
+          const before = await documentsHere();
+          const putsBefore = puts;
+          let calls = 0;
+          const long = buildApp({
+            pool,
+            version: '9.9.9-test',
+            clock: fixedClock(AT),
+            objects: counted,
+            pdf: createFakePdfText(['סריקה גדולה ללא מילות הטופס']),
+            ocr: {
+              describe: () => 'fake',
+              pages: async () => {
+                calls += 1;
+                return { pages: [], images: [] };
+              },
+            },
+            bucket: BUCKET,
+          });
+          const response = await as(long).inject({
+            method: 'POST',
+            url: '/documents/intake',
+            ...upload(
+              { csrf: (who as SignedIn).csrf, type: 'lease' },
+              {
+                filename: 'huge.pdf',
+                bytes: Buffer.concat([
+                  pdfBytes('a12 huge scan'),
+                  Buffer.alloc(onlineOcrByteLimit, 0x20),
+                ]),
+              },
+            ),
+          });
+          assert.equal(response.statusCode, 422);
+          assert.match(response.body, /גדול מכדי/);
+          // No candidate list: nothing was read off this file, so there is nothing to choose
+          // between and offering a choice would be a question built on no reading.
+          assert.doesNotMatch(response.body, /נקראה הכתובת/);
+          assert.equal(calls, 0, 'the call was declined, not attempted');
+          assert.equal(await documentsHere(), before);
+          assert.equal(puts, putsBefore, 'no object was written');
+          await long.close();
         },
       );
 

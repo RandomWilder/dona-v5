@@ -43,6 +43,13 @@ design. The publish step wraps them. Don't add them.
 
 ## Not one of the four
 
+**[core-journey.html](core-journey.html)** — the stakeholder walkthrough, published at
+https://claude.ai/code/artifact/2f4ccf91-c8bc-4cd0-9040-fd69895d4fb8 and written for the week-6 demo
+room: the tenant journey as WhatsApp threads, with each stage marked *rules* / *agent* / *office* and
+each marked with the week it lands. **It is a presentation surface and not an authority** — it
+defers to all four above, the way the Brief does, and it states what is built as of its date rather
+than what the system is. Edit the local file and republish to the same URL, like the four.
+
 **[data-subject-notice.draft.md](data-subject-notice.draft.md)** — the notice Israel's Protection of
 Privacy Law §11 requires, drafted so that fuse **F6**'s second half has a reviewer rather than an
 author. It is **a draft, unpublished, and not legal advice**; it is written by an agent, filled in

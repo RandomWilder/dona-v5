@@ -113,7 +113,7 @@ function documentForm(csrf: string): Html {
     <div class="field">
       <label for="dt-terms">מילות אימות</label>
       <textarea id="dt-terms" name="verification_terms" rows="3" maxlength="2000"></textarea>
-      <p class="lede">שורה לכל מונח. ריק — סוג בלי שומר.</p>
+      <p class="lede">שורה לכל דרישה; קו אנכי (|) מפריד בין ניסוחים חלופיים של אותה דרישה. ריק — סוג בלי שומר.</p>
     </div>
     <label class="check">
       <input type="checkbox" name="is_active" value="true" checked />

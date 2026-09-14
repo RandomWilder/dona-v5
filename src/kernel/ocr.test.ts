@@ -100,6 +100,63 @@ describe('ocr', () => {
     assert.equal(ocr.describe(), 'documentai:eu/abc123');
   });
 
+  it('asks for only the pages it was given, and asks for all of them otherwise', async () => {
+    // **Slice 6.8.** The online processor takes 15 pages per call, and until this slice a longer
+    // document was simply not sent — the week-6 demo's lease is 38 pages, so it was never read at
+    // all. `individualPageSelector` is the way through and it was measured before it was written:
+    // the same 38-page file, pages 1-15 selected, came back 200 with 15 pages in 36.4s.
+    const fetcher = fakeFetch(() => processReply({ text: '', pages: [] }));
+    const ocr = createDocumentAiOcr({
+      project: 'dona-v5',
+      location: 'eu',
+      processorId: 'abc123',
+      fetchImpl: fetcher.impl,
+      token: async () => 'ya29.test',
+    });
+    await ocr.pages(
+      Buffer.from('%PDF-1.4'),
+      'application/pdf',
+      defaultOcrProcessorVersion,
+      [1, 2, 3],
+    );
+    await ocr.pages(
+      Buffer.from('%PDF-1.4'),
+      'application/pdf',
+      defaultOcrProcessorVersion,
+    );
+    const selected = fetcher.calls[0]?.body.processOptions as {
+      individualPageSelector?: { pages: number[] };
+    };
+    assert.deepEqual(selected.individualPageSelector?.pages, [1, 2, 3]);
+    const whole = fetcher.calls[1]?.body.processOptions as {
+      individualPageSelector?: { pages: number[] };
+    };
+    assert.equal(
+      whole.individualPageSelector,
+      undefined,
+      'a document within the limit is sent whole, with no selector at all',
+    );
+  });
+
+  it('gives the fake reader the same page selection the real one takes', async () => {
+    const result = await createFakeOcrText(['one', 'two', 'three']).pages(
+      Buffer.from('x'),
+      'application/pdf',
+      'unused',
+      [1, 3],
+    );
+    assert.deepEqual(
+      result.pages.map((page) => page.items[0]?.text),
+      ['one', 'three'],
+    );
+    // The page numbers are the document's own, so a citation still names the page a human would
+    // count to — selecting pages does not renumber them.
+    assert.deepEqual(
+      result.pages.map((page) => page.number),
+      [1, 3],
+    );
+  });
+
   it('gives up on a call that does not answer, naming the bound', async () => {
     const ocr = createDocumentAiOcr({
       project: 'dona-v5',
@@ -180,6 +237,114 @@ describe('ocr', () => {
     assert.equal(result.pages[0]?.items[0]?.text, 'hello');
     assert.equal(result.images[0]?.pageNumber, 2);
     assert.equal(result.images[0]?.bytes.toString(), 'img');
+  });
+
+  it('ends a line where the processor says one ends, not where a box happens to sit', () => {
+    // **Slice 6.8.** Document AI returns `lines` beside `tokens` and the adapter discarded them, so
+    // every token came back `endsLine: false` and `documentText` joined a whole page with spaces.
+    // On a form a line break is where a field ends — A12's address reader is written against that
+    // clause — and the week-6 demo is where the absence showed: an address printed without a full
+    // stop read the city as everything that followed it.
+    //
+    // The mapping is by text-anchor range and never by geometry: the processor has already decided
+    // what a line is, and a second opinion taken off the boxes is what drifts away from the first.
+    const result = readOcrDocument({
+      text: 'רקפת 12, שוהם\nדירה 3',
+      pages: [
+        {
+          pageNumber: 1,
+          dimension: { width: 100, height: 100 },
+          tokens: [
+            {
+              layout: {
+                textAnchor: { textSegments: [{ startIndex: 0, endIndex: 4 }] },
+              },
+            },
+            {
+              layout: {
+                textAnchor: { textSegments: [{ startIndex: 5, endIndex: 8 }] },
+              },
+            },
+            {
+              layout: {
+                textAnchor: {
+                  textSegments: [{ startIndex: 9, endIndex: 13 }],
+                },
+              },
+            },
+            {
+              layout: {
+                textAnchor: {
+                  textSegments: [{ startIndex: 14, endIndex: 18 }],
+                },
+              },
+            },
+            {
+              layout: {
+                textAnchor: {
+                  textSegments: [{ startIndex: 19, endIndex: 20 }],
+                },
+              },
+            },
+          ],
+          lines: [
+            {
+              layout: {
+                textAnchor: { textSegments: [{ startIndex: 0, endIndex: 13 }] },
+              },
+            },
+            {
+              layout: {
+                textAnchor: {
+                  textSegments: [{ startIndex: 14, endIndex: 20 }],
+                },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    assert.deepEqual(
+      result.pages[0]?.items.map((item) => [item.text, item.endsLine]),
+      [
+        ['רקפת', false],
+        ['12,', false],
+        ['שוהם', true],
+        ['דירה', false],
+        ['3', true],
+      ],
+    );
+  });
+
+  it('leaves every token unbroken when the processor returned no lines at all', () => {
+    // The adapter's own fallback, and it is the pre-6.8 behaviour rather than a guess: with no
+    // lines to map, nothing is claimed about where one ends. A reader that invented a break here
+    // would be the geometry detector this slice refused to write.
+    const result = readOcrDocument({
+      text: 'רקפת 12',
+      pages: [
+        {
+          pageNumber: 1,
+          dimension: { width: 100, height: 100 },
+          tokens: [
+            {
+              layout: {
+                textAnchor: { textSegments: [{ startIndex: 0, endIndex: 4 }] },
+              },
+            },
+            {
+              layout: {
+                textAnchor: { textSegments: [{ startIndex: 5, endIndex: 7 }] },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    assert.deepEqual(
+      result.pages[0]?.items.map((item) => item.endsLine),
+      [false, false],
+    );
   });
 
   it('throws rather than returning empty pages when nothing is configured', async () => {
