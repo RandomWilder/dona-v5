@@ -11,6 +11,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { PoolClient } from 'pg';
+import { fixedClock } from '../kernel/clock.ts';
 import {
   inRolledBackTransaction,
   migratedPoolOrNull,
@@ -168,7 +169,7 @@ describe('register · the file runs twice', () => {
               resolveUnitsByPhone(
                 db,
                 '058-201-0005',
-                new Date(`${on}T00:00:00Z`),
+                fixedClock(new Date(`${on}T00:00:00Z`)),
                 {
                   actor: ACTOR,
                 },
@@ -221,7 +222,7 @@ describe('register · the file runs twice', () => {
           const reached = await resolveUnitsByPhone(
             db,
             '0582010003',
-            new Date('2026-01-01T00:00:00Z'),
+            fixedClock(new Date('2026-01-01T00:00:00Z')),
             { actor: ACTOR },
           );
           assert.deepEqual(reached, []);

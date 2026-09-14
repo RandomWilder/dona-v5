@@ -188,10 +188,10 @@ is what makes it runnable with no `OPENAI_API_KEY`; the rest clicked on `:3000`.
   reached a third file, but **7.1 fixed `.form-grid` in evidence's copy and not estate's**, so the
   two now disagree: the trigger becomes "the copies disagree" and the owner is 7.3.
 
-## Slice 7.2b — The day the system is having — **ahead of 7.3**
+## Slice 7.2b — The day the system is having — **ahead of 7.3** · **closed 15 Sep 2026**
 
 Plan mode — kernel, and it touches `src/scope/`. **No migration.** Opened 15 Sep 2026 by the
-director's ruling on the item 7.2 raised.
+director's ruling on the item 7.2 raised. Evidence: `tasks/evidence/7.2b.md`.
 
 **What 7.2 found, and what counting the call sites found after it.** 7.2's verify click ran at 00:02
 IDT and the declaration was stamped `2026-09-14`, because every date in this system is derived as
@@ -205,29 +205,68 @@ a cosmetic annoyance. It is not only a stamp:
   zone, and the scope is the one thing this product cannot get wrong.
 - **`src/tenancy/internal/status.ts:40`** — `utcDay`, already honestly named — dates the obligation
   state machine, which SPEC.md rule 3 says is inspectable, versioned and defensible in a dispute.
-- Nine others, including `extract.ts:157` (which declaration governed this reading) and
-  `read-model.ts` (occupancy).
+- ~~Nine others~~ **Ten others**, including `extract.ts:157` (which declaration governed this
+  reading) and `read-model.ts` (occupancy). **The count was one short, and the slice counted it:
+  fourteen occurrences in ten files** — twelve asking *what day is it now*, two doing date
+  arithmetic. `grep` found thirteen and missed `src/register/fixtures/generate.ts`, whose `shift`
+  the formatter had broken across two lines; the guard below collapses whitespace and found it.
 
-- [ ] **`today(clock)` in `src/kernel/clock.ts`**, formatting in a configured zone that defaults to
+- [x] **`today(clock)` in `src/kernel/clock.ts`**, formatting in a configured zone that defaults to
       `Asia/Jerusalem`, through `Intl.DateTimeFormat` with `en-CA` — no dependency, and the zone is a
       `config_settings` row rather than a literal, because a second country is a row and not a
-      release (rule 8's own argument).
-- [ ] **Every call site that asks *what day is it now* moves to it.** `addUtcDays` in `status.ts`
-      **stays exactly as it is**: arithmetic on a midnight-UTC anchor over a date-only string is
-      correct and zone-free, and the bug is only in deriving the day from an instant. Saying which is
-      which is most of this slice.
-- [ ] **A policy case, red first, in `tests/policy/`.** At `2026-09-15T00:30:00+03:00` the isolation
-      join resolves the tenancy that starts on the 15th and not the one that ended on the 14th. It
-      belongs in the policy suite because it is a claim about the scope, and the scope is never
-      tested through the agent.
-- [ ] **A kernel case** that the same instant is `2026-09-15` in Jerusalem and `2026-09-14` in UTC,
-      so the fix cannot be undone by somebody "simplifying" it back to `toISOString`.
+      release (rule 8's own argument). Delivered as `today(clock)` · `dayIn(at, zone)` ·
+      `zonedClock(zone)`, with `Clock.zone` on the clock itself: a caller that can pass an instant
+      can pass the wrong one, so the zone travels with the thing that knows what time it is. The row
+      is `clock.zone`, read in `src/serve.ts` and printed on the boot line — `clock: Asia/Jerusalem`,
+      beside `docs:` and `identity:`. No migration seeds it: `settings.text()` falls back, so the row
+      exists only once somebody means to change it.
+- [x] **Every call site that asks *what day is it now* moves to it.** Twelve did. `addUtcDays`
+      **behaves exactly as it did** — but it **moved**, and that is a deviation from this bullet as
+      written, recorded rather than quietly taken: it is now `addDays` in `src/kernel/clock.ts`, and
+      `shift` in `src/register/fixtures/generate.ts` was the same six lines and collapsed into it.
+      The reason is the guard below, which has no exclusion list beyond the kernel file — writing
+      two module file names into a guard's exemptions is how a guard dies (`scripts/guards.ts`
+      says so of guard two), so lifting the arithmetic was cheaper than excusing it. The signature
+      change everywhere is `Date` → `Clock`, in `src/scope/`, `src/estate/`, `src/tenancy/` and
+      their contracts. Saying which call site was which was most of this slice, and each of the
+      fourteen is classified in the evidence file.
+- [x] **A policy case, red first, in `tests/policy/`.** In `tests/policy/isolation.test.ts` beside
+      POLICY CASE 1, because it is the same claim at a boundary hour. A handover: the outgoing lease
+      ends on the 14th, the incoming starts on the 15th, asked at `2026-09-14T21:30:00Z`. Red first,
+      and the failure named the leaked party id — output in the evidence file.
+- [x] **A kernel case** that the same instant is `2026-09-15` in Jerusalem and `2026-09-14` in UTC,
+      so the fix cannot be undone by somebody "simplifying" it back to `toISOString`. Written, **plus
+      a winter case** — a fix that adds three hours passes the summer case and is wrong for half the
+      year, in the direction nobody checks.
+- [x] **Scope added, named so it can be struck: guard five, `no-utc-day`.** A test says the answer is
+      right today; a guard says nobody may write the wrong question again, which is what this bullet
+      asked for and a test cannot give. `toISOString().slice(0, 10)` and `split('T')[0]` fail the
+      build outside `src/kernel/clock.ts`. Cases in `tests/policy/guards.test.ts` — the violating
+      fixture is **the real `clock.ts`, relocated**, guard two's idiom. `docs/pipeline.md` §6 said
+      *three* grep guards when there were four; corrected to five there, with a bullet each for
+      guard four and guard five.
 
 **Done when:** an instant between midnight and 03:00 IDT resolves the same tenancy the office would;
 `utcDay` has no callers left that meant *today*; the full suite is green with the clock fixed at
-00:30 IDT.
+00:30 IDT. ✔ — `utcDay` is deleted, not merely uncalled. 652 pass / 0 fail / 0 skipped, from 640.
 **Verify:** the policy case red first, with the wrong tenancy named in the failure. Then `:3000` with
-`TZ` unchanged and the declaration stamped the day the calendar says.
+`TZ` unchanged and the declaration stamped the day the calendar says. ✔ — and the click landed
+**inside the broken window**: 00:32 Jerusalem, 21:32 UTC on the 14th. `/documents` declared `city`
+and the row says `effective_from = 2026-09-15`; `/estate/expiring` said *מסתיים היום* for leases
+ending on the 15th, which the day before this slice would have read *מסתיים מחר*.
+
+**Carried, and owned.**
+- **The guards read comments and string literals as readily as code**, which is stated as a virtue in
+  `scripts/guards.ts` and bit twice in this slice: a comment quoting the tenancy-active predicate
+  failed guard two, and a test fixture spelling the UTC-day expression failed guard five over its own
+  test. Both were rewritten rather than exempted. **No owner needed** — it is the design working, and
+  it is written into the evidence file so the next person meets it as a rule and not as a surprise.
+- **`ScopeOptions.clock` is gone.** Nothing ever set it, and with a `Clock` in the positional
+  parameter it was a second clock beside the real one. The audit line takes its time from the same
+  clock the day comes from. Closed here.
+- **No `config_settings` row is seeded for `clock.zone`**, and there is still no admin screen on that
+  table. Until there is, a second country is a row somebody inserts by hand. **Owner stays 5.8's open
+  half** (the `config_settings` / secret-name editor), in the week-6 standing list below.
 
 ## Slice 7.3 — The approval table
 

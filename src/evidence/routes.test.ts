@@ -2406,3 +2406,102 @@ describe('evidence · an administrator declares a field (7.2, A14)', () => {
     }
   });
 });
+
+const OFFICE_DAY_DOMAIN = 'evidence-office-day.test';
+const OFFICE_DAY_TYPE = 'b7_2b_office_day_type';
+
+// 7.2b, and this is the defect exactly as 7.2 met it: the verify click ran at 00:02 IDT and the
+// declaration was stamped with the previous date. The route's `on` is the whole of the fix here, so
+// the case drives the real HTTP path and reads the row, rather than asserting about `today(clock)`
+// twice (`src/kernel/clock.test.ts` has that half).
+//
+// **A schema row stamped a day early is the cosmetic end of this.** The same derivation was the
+// isolation join's, where it decides which of two people lives in a unit — that case is in
+// `tests/policy/isolation.test.ts`, because the scope is never tested through a route.
+describe('evidence · a declaration made after midnight (7.2b)', () => {
+  it('is stamped the day the office is having, not the UTC day', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    // 00:30 on the 22nd in Jerusalem. In UTC it is still the 21st, which is what the row used to say.
+    const AFTER_MIDNIGHT = new Date('2026-09-21T21:30:00.000Z');
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      clock: fixedClock(AFTER_MIDNIGHT),
+      objects: createMemoryStore(),
+      pdf: createFakePdfText(['']),
+      bucket: BUCKET,
+    });
+    let admin: SignedIn | null = null;
+    try {
+      await signOutAll(pool, OFFICE_DAY_DOMAIN);
+      admin = await signIn(pool, fixedClock(AFTER_MIDNIGHT), {
+        email: `admin@${OFFICE_DAY_DOMAIN}`,
+        role: 'ADMIN',
+      });
+      await pool.query(
+        `INSERT INTO document_type (document_type_id, type_key, label_he, label_en,
+                                    verification_terms, is_active)
+         VALUES (gen_random_uuid(), $1, 'סוג אחרי חצות', null, null, true)
+         ON CONFLICT (type_key) DO NOTHING`,
+        [OFFICE_DAY_TYPE],
+      );
+
+      const declared = await app.inject({
+        method: 'POST',
+        url: `/documents/types/${OFFICE_DAY_TYPE}/fields`,
+        payload: new URLSearchParams({
+          csrf: admin.csrf,
+          action: 'declare',
+          field_key: 'district',
+          label_he: 'מחוז',
+          value_type: 'TEXT',
+        }).toString(),
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          cookie: admin.cookie,
+        },
+      });
+      assert.equal(declared.statusCode, 303);
+
+      const stamped = await pool.query<{ effective_from: string }>(
+        `SELECT to_char(f.effective_from, 'YYYY-MM-DD') AS effective_from
+           FROM document_type_field f
+           JOIN document_type t ON t.document_type_id = f.document_type_id
+          WHERE t.type_key = $1 AND f.field_key = 'district'`,
+        [OFFICE_DAY_TYPE],
+      );
+      assert.equal(
+        stamped.rows[0]?.effective_from,
+        '2026-09-22',
+        'the declaration is dated the day the calendar on the wall says',
+      );
+    } finally {
+      if (admin) {
+        await pool
+          .query(`DELETE FROM audit_log WHERE actor_id = $1`, [
+            admin.staffAccountId,
+          ])
+          .catch(() => {});
+      }
+      await pool
+        .query(
+          `DELETE FROM document_type_field WHERE document_type_id =
+             (SELECT document_type_id FROM document_type WHERE type_key = $1)`,
+          [OFFICE_DAY_TYPE],
+        )
+        .catch(() => {});
+      await pool
+        .query(`DELETE FROM document_type WHERE type_key = $1`, [
+          OFFICE_DAY_TYPE,
+        ])
+        .catch(() => {});
+      await signOutAll(pool, OFFICE_DAY_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+});

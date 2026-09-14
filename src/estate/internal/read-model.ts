@@ -10,6 +10,7 @@
 // JS Date at local midnight, and a handover date that moves a day when the server changes timezone
 // is a bug that only appears in production. `numeric` already arrives as a string, and stays one:
 // `3.5` and `4` are what the workbook means, and a float round-trip is how `4` becomes `4.0000001`.
+import { type Clock, today } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { Queryable } from './plan.ts';
 
@@ -406,16 +407,17 @@ const EXPIRING_LEASES_SQL = `
  * second — and the moment this query needed "active on a given day" it would have to ask
  * `src/scope/` for it, which is the guard working rather than a line to walk up to.
  *
- * `today` is a parameter and never `CURRENT_DATE`: SPEC.md's clock rule, and a screen that changes
- * its answer at midnight is not a screen a test can pin.
+ * The day is a parameter and never `CURRENT_DATE`: SPEC.md's clock rule, and a screen that changes
+ * its answer at midnight is not a screen a test can pin. **A clock and not an instant, from 7.2b** —
+ * which midnight it changes at is the office's, and an instant does not carry that.
  */
 export async function listExpiringLeases(
   db: Queryable,
-  today: Date,
+  clock: Clock,
   days: number = EXPIRING_WINDOW_DAYS,
 ): Promise<ExpiringLease[]> {
   const result = await db.query<ExpiringLease>(EXPIRING_LEASES_SQL, [
-    today.toISOString().slice(0, 10),
+    today(clock),
     days,
   ]);
   return result.rows;
@@ -472,16 +474,17 @@ const OVERDUE_INSPECTIONS_SQL = `
 
 /**
  * **Q3 — what is overdue for inspection in this building.** One query, because every asset hangs
- * on exactly one space (R3). `today` is a parameter and never `CURRENT_DATE`.
+ * on exactly one space (R3). The day is a parameter and never `CURRENT_DATE`, and comes off the
+ * clock in the office's zone (7.2b).
  */
 export async function listOverdueInspections(
   db: Queryable,
   buildingId: string,
-  today: Date,
+  clock: Clock,
 ): Promise<OverdueInspection[]> {
   const result = await db.query<OverdueInspection>(OVERDUE_INSPECTIONS_SQL, [
     buildingId,
-    today.toISOString().slice(0, 10),
+    today(clock),
   ]);
   return result.rows;
 }

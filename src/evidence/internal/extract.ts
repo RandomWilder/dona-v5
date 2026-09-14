@@ -4,7 +4,7 @@
 // handed numbered words without boxes and returns field_key + word_ids. Geometry is joined
 // here. A bbox in the model reply is ignored.
 import type { AuditLog } from '../../kernel/audit.ts';
-import type { Clock } from '../../kernel/clock.ts';
+import { type Clock, today } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { Extractor, JsonSchema } from '../../kernel/extraction.ts';
 import { newId } from '../../kernel/ids.ts';
@@ -153,10 +153,6 @@ function asIsoDate(value: string): string | null {
   return trimmed;
 }
 
-function onDate(clock: Clock): string {
-  return clock.now().toISOString().slice(0, 10);
-}
-
 function findingsSchema(fieldKeys: readonly string[]): JsonSchema {
   return {
     type: 'object',
@@ -227,7 +223,7 @@ export async function extractFiledDocument(
   const fields = await documentTypeFields(
     deps.db,
     filed.typeKey,
-    onDate(deps.clock),
+    today(deps.clock),
   );
   if (
     fields.length === 0 ||

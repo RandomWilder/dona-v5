@@ -2,10 +2,11 @@
 //
 // upsertObligationType has no delete, here or on the contract. createObligation copies
 // default_responsible_party onto the row and does not take an override.
+import { type Clock, today as dayOf } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
-import { type ObligationStatus, obligationStatus, utcDay } from './status.ts';
+import { type ObligationStatus, obligationStatus } from './status.ts';
 import type { Queryable } from './types.ts';
 
 export type ResponsibleParty = 'TENANT' | 'OPERATOR';
@@ -215,7 +216,7 @@ const SELECT_OBLIGATION = `
 export async function getObligation(
   db: Queryable,
   obligationId: string,
-  at: Date,
+  clock: Clock,
 ): Promise<ObligationRow | null> {
   const result = await db.query<ObligationQueryRow>(
     `${SELECT_OBLIGATION} WHERE o.obligation_id = $1`,
@@ -223,19 +224,19 @@ export async function getObligation(
   );
   const row = result.rows[0];
   if (!row) return null;
-  return toRow(row, utcDay(at));
+  return toRow(row, dayOf(clock));
 }
 
 export async function listObligationsForTenancy(
   db: Queryable,
   tenancyId: string,
-  at: Date,
+  clock: Clock,
 ): Promise<ObligationRow[]> {
   const result = await db.query<ObligationQueryRow>(
     `${SELECT_OBLIGATION} WHERE o.tenancy_id = $1 ORDER BY o.obligation_id`,
     [tenancyId],
   );
-  const today = utcDay(at);
+  const today = dayOf(clock);
   return result.rows.map((row) => toRow(row, today));
 }
 

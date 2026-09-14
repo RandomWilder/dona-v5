@@ -119,7 +119,7 @@ describe('tenancy · listTenancyEvents', () => {
       await inRolledBackTransaction(pool, async (db) => {
         const seeded = await seedUnit(db);
         const clock = fixedClock(new Date('2028-01-17T12:00:00.000Z'));
-        await expireDueTenancies(db, clock.now());
+        await expireDueTenancies(db, clock);
         const stillActive = await db.query<{ status: string }>(
           `SELECT status FROM tenancy WHERE tenancy_id = $1`,
           [seeded.tenancyId],
@@ -128,7 +128,7 @@ describe('tenancy · listTenancyEvents', () => {
         assert.equal((await listTenancyEvents(db, seeded.unitId)).length, 0);
 
         clock.advance(24 * 60 * 60 * 1000);
-        await expireDueTenancies(db, clock.now());
+        await expireDueTenancies(db, clock);
         const ended = await db.query<{ status: string }>(
           `SELECT status FROM tenancy WHERE tenancy_id = $1`,
           [seeded.tenancyId],
@@ -144,7 +144,7 @@ describe('tenancy · listTenancyEvents', () => {
         assert.equal(log[0]?.source_document_id, null);
         assert.equal(log[0]?.at, clock.now().toISOString());
 
-        await expireDueTenancies(db, clock.now());
+        await expireDueTenancies(db, clock);
         assert.equal((await listTenancyEvents(db, seeded.unitId)).length, 1);
       });
     } finally {

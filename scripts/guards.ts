@@ -3,6 +3,9 @@
 // Two of them are §6's own — no `current_tenant` column, and the isolation join in one file. The
 // third is slice 1.12's: `-- pii` had been a sentence in SPEC.md since 1.1 with nothing behind it,
 // and the slice whose whole thesis is *controls before data* is the one that owes it a mechanism.
+// The fourth keeps a paint from outliving the slice that wired it. The fifth is 7.2b's: an instant
+// becomes a date in one file, because eleven places were deriving the UTC day and one of them was
+// the isolation join.
 //
 // They run as a step of the `gate` job, which is a **required** check on `main` with
 // `enforce_admins: true` — so a guard that fires blocks every merge, including an admin's. That is
@@ -380,6 +383,64 @@ export function guardMockups(root: string): GuardResult {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Guard five — an instant becomes a date in exactly one file. Slice 7.2b.
+//
+// `toISOString().slice(0, 10)` is the **UTC** day. Israel is UTC+2 in winter and UTC+3 in summer, so
+// for the two or three hours after midnight that expression answers with the country's yesterday.
+// 7.2 found it as a wrong stamp on a schema row; counting the call sites found eleven of them, and
+// one was `src/scope/internal/isolation-join.ts` binding that day to the tenancy-active predicate —
+// the scope, computed in the wrong zone, which is the one thing this product may not get wrong.
+//
+// So the constraint is absolute and the guard is too: only `src/kernel/clock.ts` may turn an instant
+// into a date, through `today(clock)` and `dayIn(at, zone)`. Both spellings are matched, because
+// `split('T')[0]` is the same expression with a different haircut and a guard that catches one of
+// them teaches people the other.
+//
+// **The exclusion list is one file, and it is meant to stay one file.** Two places held date
+// arithmetic that is genuinely zone-free — `addUtcDays` in tenancy, `shift` in the register
+// fixtures — and the honest move was to lift both into `addDays` in the kernel rather than to write
+// their names here. An exclusion list that grows is how a guard dies (guard two says so above).
+// ---------------------------------------------------------------------------------------------
+
+export const DAY_HOME = path.join('src', 'kernel', 'clock.ts');
+const UTC_DAY: ReadonlyArray<{ name: string; pattern: RegExp }> = [
+  {
+    name: 'toISOString().slice(0, 10)',
+    pattern: /toISOString\s*\(\s*\)\s*\.\s*slice\s*\(\s*0\s*,\s*10\s*\)/,
+  },
+  {
+    name: "toISOString().split('T')[0]",
+    pattern:
+      /toISOString\s*\(\s*\)\s*\.\s*split\s*\(\s*['"`]T['"`]\s*\)\s*\[\s*0\s*\]/,
+  },
+];
+
+export function guardUtcDay(root: string): GuardResult {
+  const violations: Violation[] = [];
+  let scanned = 0;
+  for (const file of walk(root)) {
+    if (file === SELF || file === DAY_HOME) continue;
+    scanned += 1;
+    // Collapsed for the same reason guard two collapses: a formatter may break the expression
+    // across lines, and a guard that only matches one layout matches the copy nobody made.
+    const text = readFileSync(path.join(root, file), 'utf8').replace(
+      /\s+/g,
+      ' ',
+    );
+    for (const { name, pattern } of UTC_DAY) {
+      if (pattern.test(text)) {
+        violations.push({
+          guard: 'no-utc-day',
+          file,
+          detail: `${name} is the UTC day; ask ${DAY_HOME} for today(clock)`,
+        });
+      }
+    }
+  }
+  return { guard: 'no-utc-day', scanned, violations };
+}
+
+// ---------------------------------------------------------------------------------------------
 
 export function runGuards(root: string): GuardResult[] {
   return [
@@ -387,6 +448,7 @@ export function runGuards(root: string): GuardResult[] {
     guardScopeJoin(root),
     guardPiiComments(root),
     guardMockups(root),
+    guardUtcDay(root),
   ];
 }
 

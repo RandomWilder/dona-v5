@@ -29,6 +29,7 @@ import {
   MEASURED_QUERIES as EVIDENCE_QUERIES,
   searchDocuments,
 } from '../src/evidence/contract.ts';
+import { systemClock, today } from '../src/kernel/clock.ts';
 import { createPool } from '../src/kernel/db.ts';
 import {
   ISOLATION_JOIN_SQL,
@@ -38,7 +39,9 @@ import {
 } from '../src/scope/contract.ts';
 
 const RUNS = Number(process.env.MEASURE_RUNS ?? 25);
-const today = new Date();
+// The clock the measured calls take, from slice 7.2b — a benchmark that asked in a different zone
+// from the application would not be measuring the query the application runs.
+const clock = systemClock;
 
 interface Timing {
   name: string;
@@ -170,17 +173,17 @@ async function main(pool: Pool): Promise<void> {
       });
     }
     await time('estate · Q5, leases ending in 60 days', async () => {
-      const rows = await listExpiringLeases(db, today);
+      const rows = await listExpiringLeases(db, clock);
       return rows.length;
     });
 
     // --- the occupancy chip, both shapes ------------------------------------------------------
     await time('scope · occupied units, one building (batched)', async () => {
-      const rows = await resolveOccupiedUnits(db, unitIds, today);
+      const rows = await resolveOccupiedUnits(db, unitIds, clock);
       return rows.length;
     });
     await time('scope · occupied units, whole portfolio', async () => {
-      const rows = await resolveOccupiedUnits(db, null, today);
+      const rows = await resolveOccupiedUnits(db, null, clock);
       return rows.length;
     });
     await time(
@@ -193,7 +196,7 @@ async function main(pool: Pool): Promise<void> {
       async () => {
         let rows = 0;
         for (const unitId of unitIds) {
-          rows += (await resolvePartiesInUnit(db, unitId, today)).length;
+          rows += (await resolvePartiesInUnit(db, unitId, clock)).length;
         }
         return rows;
       },
@@ -202,15 +205,12 @@ async function main(pool: Pool): Promise<void> {
 
     // --- the isolation join, which is the hottest query once the agent is live ------------------
     await time('scope · Q2 join alone (no audit line)', async () => {
-      const rows = await db.query(ISOLATION_JOIN_SQL, [
-        number,
-        today.toISOString().slice(0, 10),
-      ]);
+      const rows = await db.query(ISOLATION_JOIN_SQL, [number, today(clock)]);
       return rows.rowCount ?? 0;
     });
     await time(
       'scope · resolveUnitsByPhone (join + audit line)',
-      async () => (await resolveUnitsByPhone(db, number, today)).length,
+      async () => (await resolveUnitsByPhone(db, number, clock)).length,
       5,
     );
 
@@ -225,7 +225,7 @@ async function main(pool: Pool): Promise<void> {
     }
 
     console.log('\nplans');
-    const day = today.toISOString().slice(0, 10);
+    const day = today(clock);
     await explain(
       db,
       'estate · Q5 — the tenancy (end_date) question',

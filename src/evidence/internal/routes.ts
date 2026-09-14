@@ -22,7 +22,7 @@ import {
   WARRANTY_YEARS,
 } from '../../estate/contract.ts';
 import { countActions, createAuditLog } from '../../kernel/audit.ts';
-import type { Clock } from '../../kernel/clock.ts';
+import { type Clock, today } from '../../kernel/clock.ts';
 import {
   createSettings,
   readExtractionSettings,
@@ -440,7 +440,7 @@ export function registerDocumentRoutes(
     // An unknown key falls back rather than 404ing: the parameter is a picker's state and not an
     // address, and a retired type reaching this screen from a stale bookmark is a page that should
     // still show something true.
-    const on = deps.clock.now().toISOString().slice(0, 10);
+    const on = today(deps.clock);
     // **The default is the most-declared type, and clicking the screen is what wrote this rule.**
     // The catalogue comes back ordered by `type_key`, so the first row is `arnona` — which declares
     // no fields, and made the tab's own landing the emptiest page in the console. "The first one
@@ -499,7 +499,7 @@ export function registerDocumentRoutes(
       const typeKey = declaredKey(request.params.typeKey);
       // The day, off the injected clock and never `CURRENT_DATE` — the same line `GET /documents`
       // reads its declaration for, so the screen and the write agree about which day this is.
-      const on = deps.clock.now().toISOString().slice(0, 10);
+      const on = today(deps.clock);
       const action = requireText(
         (request.body as Form | undefined)?.action,
         'action',

@@ -95,7 +95,7 @@ export interface EstateDeps {
     db: Pool,
     unitId: string,
   ) => Promise<readonly TenancyEventView[]>;
-  expireDueTenancies: (db: Pool, at: Date) => Promise<void>;
+  expireDueTenancies: (db: Pool, clock: Clock) => Promise<void>;
   listIncompleteTenancies: (
     db: Pool,
   ) => Promise<readonly IncompleteTenancyRow[]>;
@@ -448,11 +448,7 @@ export function registerEstateRoutes(
     // units are let today, because deciding when a tenancy counts is what only that module may do;
     // estate says which building they are in, because that is its own structure. One query each,
     // rather than one per building — and one audit line, rather than one per card.
-    const occupied = await resolveOccupiedUnits(
-      deps.pool,
-      null,
-      deps.clock.now(),
-    );
+    const occupied = await resolveOccupiedUnits(deps.pool, null, deps.clock);
     const byBuilding: OccupancyByBuilding = await countUnitsByBuilding(
       deps.pool,
       occupied.map((unit) => unit.unit_id),
@@ -493,7 +489,7 @@ export function registerEstateRoutes(
   });
 
   app.get('/estate/expiring', READ, async (request, reply) => {
-    const leases = await listExpiringLeases(deps.pool, deps.clock.now());
+    const leases = await listExpiringLeases(deps.pool, deps.clock);
     html(reply);
     return renderExpiringPage(
       leases,
@@ -682,7 +678,7 @@ export function registerEstateRoutes(
     const occupied = await resolveOccupiedUnits(
       deps.pool,
       detail.units.map((unit) => unit.unit_id),
-      deps.clock.now(),
+      deps.clock,
     );
     const occupancy: OccupancyByUnit = new Map(
       occupied.map((unit) => [unit.unit_id, unit.occupants]),
@@ -710,7 +706,7 @@ export function registerEstateRoutes(
     const occupied = await resolveOccupiedUnits(
       deps.pool,
       [unit.unit_id],
-      deps.clock.now(),
+      deps.clock,
     );
     const documents = await deps.listLinkedDocuments(
       deps.pool,
@@ -721,7 +717,7 @@ export function registerEstateRoutes(
       deps.pool,
       unit.unit_id,
     );
-    await deps.expireDueTenancies(deps.pool, deps.clock.now());
+    await deps.expireDueTenancies(deps.pool, deps.clock);
     const events = await deps.listTenancyEvents(deps.pool, unit.unit_id);
     html(reply);
     return renderUnitPage(
