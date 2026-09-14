@@ -32,7 +32,7 @@ import {
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const AT = new Date('2026-09-08T12:00:00.000Z');
-const NAV = signedInChrome('x'.repeat(64), 'estate');
+const NAV = signedInChrome('x'.repeat(64), 'documents', true);
 const BUCKET = 'dona-v5-test-docs';
 const LEASE_MARKERS = 'חוזה שכירות המושכר תקופת השכירות השוכר';
 const AMEND_MARKERS = 'נספח לחוזה השכירות';
@@ -405,6 +405,12 @@ describe('evidence · addendum confirm screen', () => {
       documentId: '33333333-3333-4333-8333-333333333333',
       typeKey: 'lease_amendment',
       unit,
+      crossCheck: {
+        addressRead: true,
+        apartmentRead: true,
+        addressFits: true,
+        apartmentFits: true,
+      },
       startDate: null,
       endDate: '2028-02-28',
       apartmentNumber: null,

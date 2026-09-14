@@ -326,7 +326,14 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     { config: { staff: 'estate.read' } },
     async (request, reply) => {
       stubHeaders(reply);
-      return renderStubPage({ csrf: csrfFrom(request) }, CALLS_STUB, 'wired');
+      return renderStubPage(
+        {
+          csrf: csrfFrom(request),
+          mayFile: can(request.staff?.role ?? null, 'documents.write'),
+        },
+        CALLS_STUB,
+        'wired',
+      );
     },
   );
 
@@ -343,6 +350,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     return renderSettingsPage({
       csrf: csrfFrom(request),
       mayWrite: can(role, 'settings.write'),
+      mayFile: can(role, 'documents.write'),
       state: 'wired',
       obligations: await listObligationTypes(deps.pool),
       documents: await listDocumentTypes(deps.pool, { activeOnly: false }),

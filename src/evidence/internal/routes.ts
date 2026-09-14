@@ -111,7 +111,11 @@ export interface DocumentDeps {
   /** The bucket `storage_uri` names. The memory store's stand-in locally (slice 3.2). */
   bucket: string;
   /** Slice 5.2b. Built at the composition root. */
-  chrome: (csrf: string, dest: ChromeDest) => Html;
+  /**
+   * Slice 5.2b, and **`mayFile` from 6.9**: the rail's documents destination is gated on
+   * `documents.write`, so the caller passes the stance rather than the rail guessing it.
+   */
+  chrome: (csrf: string, dest: ChromeDest, mayFile: boolean) => Html;
 }
 
 /**
@@ -192,7 +196,34 @@ function sessionTokenOf(request: FastifyRequest): string {
  * than an unauthenticated request — and it fails closed instead of filing a document under nobody.
  */
 function chromeOf(deps: DocumentDeps, request: FastifyRequest): Html {
-  return deps.chrome(csrfFrom(request), 'estate');
+  // **`'documents'` from 6.9, and `'estate'` before it.** These are this module's screens, so the
+  // rail marks its own destination on them rather than marking the one next door — which is what a
+  // reader following the bar back from a filed document saw until 6.9: the estate tab lit up, on a
+  // page that is not estate's.
+  return deps.chrome(
+    csrfFrom(request),
+    'documents',
+    can(request.staff?.role ?? null, 'documents.write'),
+  );
+}
+
+/**
+ * Whether this viewer may shape the estate — `estate.write`, ADMIN's. **Slice 6.9.**
+ *
+ * Read once per refusal and used only to decide whether the create offer is rendered. The routes it
+ * leads to declare `estate.write` themselves, so this is what keeps an operator from being shown a
+ * door they cannot walk through, and never what keeps them out of it.
+ */
+function mayShapeTheEstate(request: FastifyRequest): boolean {
+  return can(request.staff?.role ?? null, 'estate.write');
+}
+
+/**
+ * A document type carried back from A11 or A13, so the screen comes back with it still chosen.
+ * Bounded at the edge like every other query value; a key naming no type simply selects nothing.
+ */
+function declaredType(request: FastifyRequest): string {
+  return String((request.query as { type?: string }).type ?? '').slice(0, 64);
 }
 
 function requireOperator(request: FastifyRequest): string {
@@ -313,15 +344,30 @@ export function registerDocumentRoutes(
     const asked = (request.query as { unit?: string; q?: string }).unit ?? '';
     if (asked === '') {
       const query = (request.query as { q?: string }).q ?? '';
-      const [types, found] = await Promise.all([
+      // **The way back from A13. Slice 6.9.** An admin who has just created the flat this document
+      // belongs to returns here with it as a pre-checked candidate — not to A1's unit-first screen,
+      // which offers a tenancy binding at the door that 6.3's ruling forbids on this path. Nothing
+      // was held while the estate was being shaped, so the file input comes back armed and empty.
+      const anchor = (request.query as { anchor?: string }).anchor ?? '';
+      const declared = declaredType(request);
+      const [types, found, anchored] = await Promise.all([
         listDocumentTypes(deps.pool),
         query ? searchEstate(deps.pool, query) : null,
+        anchor ? getUnit(deps.pool, validId(anchor, 'unit')) : null,
       ]);
       html(reply);
       return renderIntakePage({
         nav: chromeOf(deps, request),
         csrf: csrfFrom(request),
         types,
+        ...(declared ? { declaredTypeKey: declared } : {}),
+        ...(anchored
+          ? {
+              candidates: [anchored],
+              total: 1,
+              chosenUnitId: anchored.unit_id,
+            }
+          : {}),
         // A search is a refusal still being answered, so the screen stays in the state that offered
         // it: what was read is unknown here, and the reading it prints is the empty one.
         ...(found
@@ -330,10 +376,13 @@ export function registerDocumentRoutes(
                 addressLine: null,
                 city: null,
                 apartmentNumber: null,
+                annexDeferral: false,
               },
               candidates: found.units,
               total: found.units.length,
               query,
+              mayCreate: mayShapeTheEstate(request),
+              building: null,
             }
           : {}),
       });
@@ -566,6 +615,18 @@ export function registerDocumentRoutes(
           candidates: resolved.candidates,
           total: resolved.total,
           query: reading.addressLine ?? '',
+          // **Slice 6.9.** `estate.write` and not `documents.write`: an operator files paper and an
+          // admin decides a flat exists (A11). The route this offer leads to asks for the same
+          // permission on its own stance, so this decides what is *shown* and never what is allowed.
+          mayCreate: mayShapeTheEstate(request),
+          // Which offer. A building the address matched is *add the flat*; none is *create the
+          // building and the flat*.
+          building: resolved.building
+            ? {
+                building_id: resolved.building.building_id,
+                name: resolved.building.name,
+              }
+            : null,
         });
       }
       unit = resolved.unit;
@@ -617,6 +678,10 @@ export function registerDocumentRoutes(
       verification: result.verification,
       fileHash: fileHashOf(result.storageUri),
       documentId: result.documentId,
+      // **Slice 6.9.** Nobody chose this flat on the reading branch, so the receipt says what was
+      // read and where it landed. `undefined` on the short-circuit, where the operator picked a
+      // candidate and no reading was ever taken.
+      ...(read ? { reading: readPlace(read.text) } : {}),
     });
   });
 

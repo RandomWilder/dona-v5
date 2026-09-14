@@ -328,7 +328,12 @@ export const MOCKUP_OWNERS: Record<string, string> = {
   a9: '5.8',
   'building-new': '6.1',
   'unit-new': '6.2',
-  'document-intake': '6.3',
+  // **Repainted at 6.9 and re-owned with it.** A12's refusal screen was painted for 6.3, that
+  // slice closed, and the mockup went. 6.9 paints the *same flow* again — the refusal that offers
+  // to create — so the owner moves: left at 6.3 this guard would fail against an evidence file
+  // written two weeks ago and say nothing about the paint actually on disk. A flow is repainted
+  // whenever it gains a screen; the owner is always the slice that will wire it next.
+  'document-intake': '6.9',
   responsibility: '7.6',
   ticket: '8.2',
 };

@@ -65,8 +65,11 @@ export interface StaffDeps {
   baseUrl?: string;
   /** The Workspace domain to require, when Dona Dom's answer is known. Null means the allowlist is the only fence. */
   hostedDomain?: string | null;
-  /** Slice 5.2b. Built at the composition root. Login screens do not receive it. */
-  chrome: (csrf: string, dest: ChromeDest) => Html;
+  /**
+   * Slice 5.2b. Built at the composition root. Login screens do not receive it. **`mayFile` from
+   * 6.9**: the rail's documents destination is gated on `documents.write`.
+   */
+  chrome: (csrf: string, dest: ChromeDest, mayFile: boolean) => Html;
 }
 
 function html(reply: FastifyReply): void {
@@ -313,7 +316,11 @@ export function registerStaffRoutes(
       const role = session.role as Role;
       const csrf = csrfFrom(request);
       return renderStaffHomePage({
-        nav: deps.chrome(csrf, 'staff'),
+        nav: deps.chrome(
+          csrf,
+          'staff',
+          can(request.staff?.role ?? null, 'documents.write'),
+        ),
         csrf,
         email: session.email,
         role,
@@ -345,7 +352,11 @@ export function registerStaffRoutes(
       const role = session.role as Role;
       const csrf = csrfFrom(request);
       return renderStaffHomePage({
-        nav: deps.chrome(csrf, 'staff'),
+        nav: deps.chrome(
+          csrf,
+          'staff',
+          can(request.staff?.role ?? null, 'documents.write'),
+        ),
         csrf,
         email: session.email,
         role,

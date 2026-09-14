@@ -221,11 +221,16 @@ const lettings: UnitLetting[] = [
 // A token shaped like the real one — 64 hex characters — so an assertion about the *shape* of what
 // a form carries is testing the shape a session actually produces.
 const CSRF = 'a1b2c3d4'.repeat(8);
-const NAV = signedInChrome(CSRF, 'estate');
-const NAV_SEARCH = signedInChrome(CSRF, 'search');
-const NAV_EXPIRING = signedInChrome(CSRF, 'expiring');
-const NAV_INCOMPLETE = signedInChrome(CSRF, 'incomplete');
-const NAV_STAFF = signedInChrome(CSRF, 'staff');
+// **Every one of these is a rail for a role that may file. Slice 6.9.** The rail's documents
+// destination is the one gated item on it, so a nav built with `false` is a different screen and is
+// registered as one — `root · index, צופה` and `root · settings, viewer` below are where the
+// registry holds that variant.
+const NAV = signedInChrome(CSRF, 'estate', true);
+const NAV_SEARCH = signedInChrome(CSRF, 'search', true);
+const NAV_EXPIRING = signedInChrome(CSRF, 'expiring', true);
+const NAV_INCOMPLETE = signedInChrome(CSRF, 'incomplete', true);
+const NAV_STAFF = signedInChrome(CSRF, 'staff', true);
+const NAV_DOCUMENTS = signedInChrome(CSRF, 'documents', true);
 
 /**
  * **The read overlay at a stance. Slice 6.4.**
@@ -334,7 +339,8 @@ function readOverlay(mayReadIdentifiers: boolean): string {
 }
 
 const SCREENS: Array<[string, () => string]> = [
-  ['root · index', () => renderIndexPage({ csrf: CSRF })],
+  // A role that may not file: no card, and from 6.9 no rail destination either.
+  ['root · index, צופה', () => renderIndexPage({ csrf: CSRF, mayFile: false })],
   [
     // Slice 6.3: the same index for a role that may file a document. The door is the only
     // difference, and the registry is where it is asserted rather than in a second guard.
@@ -384,6 +390,20 @@ const SCREENS: Array<[string, () => string]> = [
     'estate · new building, no projects',
     () => renderNewBuildingPage({ nav: NAV, csrf: CSRF, projects: [] }),
   ],
+  [
+    // Slice 6.9: A11 reached from A12's refusal, with what the place reader read already in the
+    // fields. Prefill is a default in an input and never a write — the admin still posts this form,
+    // through this form's own validation.
+    'estate · new building, prefilled from a document',
+    () =>
+      renderNewBuildingPage({
+        nav: NAV,
+        csrf: CSRF,
+        projects: [],
+        prefill: { name: 'דקל 9', addressLine: 'דקל 9', city: 'כפר סבא' },
+        carry: { unitNumber: '14', typeKey: 'lease', next: 'intake' },
+      }),
+  ],
   ['estate · one building', () => renderBuildingPage(detail, occupancy, NAV)],
   [
     // Slice 6.2: the same screen for a role that may add an apartment. The door is the only
@@ -402,6 +422,19 @@ const SCREENS: Array<[string, () => string]> = [
   [
     'estate · one building, with a protocol',
     () => renderBuildingPage(detail, occupancy, NAV, [unverified]),
+  ],
+  [
+    // Slice 6.9: A13 reached from A12's refusal — the commoner of the two, because the reader finds
+    // the building far more often than it finds the flat.
+    'estate · new unit, prefilled from a document',
+    () =>
+      renderNewUnitPage({
+        nav: NAV,
+        csrf: CSRF,
+        building,
+        prefill: { unitNumber: '14' },
+        carry: { typeKey: 'lease', next: 'intake' },
+      }),
   ],
   ['estate · one unit', () => renderUnitPage(hit, 2, [filed], NAV)],
   [
@@ -640,11 +673,112 @@ const SCREENS: Array<[string, () => string]> = [
           addressLine: 'רקפת 12',
           city: 'שוהם',
           apartmentNumber: '12A',
+          annexDeferral: false,
         },
         candidates: [hit],
         // Slice 6.3: the list was cut, and the screen says how many there were.
         total: 72,
         query: 'רקפת 12',
+      }),
+  ],
+  [
+    // **Slice 6.9, and the reason the role split is in the registry and not in a second guard.**
+    // The same refusal to an ADMIN and to an OPERATOR: one is offered the building and the flat,
+    // the other the search box and nothing else.
+    'documents · intake, an address in nobody portfolio, admin',
+    () =>
+      renderIntakePage({
+        nav: NAV_DOCUMENTS,
+        csrf: CSRF,
+        types: documentTypes,
+        declaredTypeKey: 'lease',
+        reading: {
+          addressLine: 'דקל 9',
+          city: 'כפר סבא',
+          apartmentNumber: '14',
+          annexDeferral: false,
+        },
+        candidates: [],
+        total: 0,
+        mayCreate: true,
+        building: null,
+      }),
+  ],
+  [
+    'documents · intake, an address in nobody portfolio, operator',
+    () =>
+      renderIntakePage({
+        nav: NAV_DOCUMENTS,
+        csrf: CSRF,
+        types: documentTypes,
+        declaredTypeKey: 'lease',
+        reading: {
+          addressLine: 'דקל 9',
+          city: 'כפר סבא',
+          apartmentNumber: '14',
+          annexDeferral: false,
+        },
+        candidates: [],
+        total: 0,
+        mayCreate: false,
+        building: null,
+      }),
+  ],
+  [
+    // The building is held and the flat is not: the offer narrows to the flat.
+    'documents · intake, the building is ours and the flat is not, admin',
+    () =>
+      renderIntakePage({
+        nav: NAV_DOCUMENTS,
+        csrf: CSRF,
+        types: documentTypes,
+        declaredTypeKey: 'lease',
+        reading: {
+          addressLine: 'רקפת 12',
+          city: 'שוהם',
+          apartmentNumber: '999',
+          annexDeferral: false,
+        },
+        candidates: [hit],
+        total: 1,
+        mayCreate: true,
+        building: { building_id: building.building_id, name: building.name },
+      }),
+  ],
+  [
+    // **The fourth cause, carried in from 6.11.** A correct answer that read as a failure until
+    // 6.9: the body named its property in a נספח, which A12 rules it does not read.
+    'documents · intake, the document defers to an annex',
+    () =>
+      renderIntakePage({
+        nav: NAV_DOCUMENTS,
+        csrf: CSRF,
+        types: documentTypes,
+        declaredTypeKey: 'lease',
+        reading: {
+          addressLine: null,
+          city: null,
+          apartmentNumber: '206-7',
+          annexDeferral: true,
+        },
+        candidates: [],
+        total: 0,
+        mayCreate: true,
+        building: null,
+      }),
+  ],
+  [
+    // Slice 6.9: back from A13 with the new flat pre-checked, and the file to attach again.
+    'documents · intake, anchored on a flat just created',
+    () =>
+      renderIntakePage({
+        nav: NAV_DOCUMENTS,
+        csrf: CSRF,
+        types: documentTypes,
+        declaredTypeKey: 'lease',
+        candidates: [hit],
+        total: 1,
+        chosenUnitId: hit.unit_id,
       }),
   ],
   [
@@ -655,7 +789,12 @@ const SCREENS: Array<[string, () => string]> = [
         csrf: CSRF,
         types: documentTypes,
         declaredTypeKey: 'lease',
-        reading: { addressLine: null, city: null, apartmentNumber: null },
+        reading: {
+          addressLine: null,
+          city: null,
+          apartmentNumber: null,
+          annexDeferral: false,
+        },
         candidates: [],
       }),
   ],
@@ -671,6 +810,28 @@ const SCREENS: Array<[string, () => string]> = [
         verification: { verdict: 'verified', missingTerms: [] },
         fileHash: 'c'.repeat(64),
         documentId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      }),
+  ],
+  [
+    // Slice 6.9: A12's own receipt. Nobody chose this flat, so the page says what was read and
+    // where it landed — the director's ruling of 14 Sep, the indication after the match files.
+    'documents · filed, and it says what it read',
+    () =>
+      renderFiledPage({
+        nav: NAV_DOCUMENTS,
+        unit: hit,
+        type: documentTypes[0] as DocumentTypeRow,
+        inserted: true,
+        boundToTenancy: false,
+        verification: { verdict: 'verified', missingTerms: [] },
+        fileHash: 'e'.repeat(64),
+        documentId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        reading: {
+          addressLine: 'רקפת 12',
+          city: 'שוהם',
+          apartmentNumber: '12A',
+          annexDeferral: false,
+        },
       }),
   ],
   [
@@ -775,6 +936,12 @@ const SCREENS: Array<[string, () => string]> = [
         boundToTenancy: false,
         termsProfileNames: ['נספח תחזוקה — תקן'],
         candidates: [],
+        crossCheck: {
+          addressRead: true,
+          apartmentRead: true,
+          addressFits: true,
+          apartmentFits: true,
+        },
         proposedTenancyId: null,
         identifiersRead: 0,
         identifiersPaired: 0,
@@ -836,6 +1003,12 @@ const SCREENS: Array<[string, () => string]> = [
             dayOverlap: 0,
           },
         ],
+        crossCheck: {
+          addressRead: true,
+          apartmentRead: true,
+          addressFits: true,
+          apartmentFits: true,
+        },
         proposedTenancyId: null,
         identifiersRead: 1,
         identifiersPaired: 1,
@@ -880,9 +1053,80 @@ const SCREENS: Array<[string, () => string]> = [
             dayOverlap: 365,
           },
         ],
+        crossCheck: {
+          addressRead: true,
+          apartmentRead: true,
+          addressFits: true,
+          apartmentFits: true,
+        },
         proposedTenancyId: '55555555-5555-4555-8555-555555555555',
         identifiersRead: 1,
         identifiersPaired: 1,
+      }),
+  ],
+  [
+    // **Slice 6.9. The cross-check that read nothing.** `views.ts` fired one sentence for four
+    // facts until here — *the address or the apartment number do not match* — which is true of this
+    // screen and sends an operator to compare two values the page prints as `לא נמצא`.
+    'documents · confirm a lease, neither field was read',
+    () =>
+      renderTenancyPage({
+        nav: NAV_DOCUMENTS,
+        csrf: CSRF,
+        documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        typeKey: 'lease',
+        unit: hit,
+        startDate: '2026-03-01',
+        endDate: '2027-02-28',
+        apartmentNumber: null,
+        address: null,
+        people: [],
+        matchesUnit: false,
+        crossCheck: {
+          addressRead: false,
+          apartmentRead: false,
+          addressFits: false,
+          apartmentFits: false,
+        },
+        alreadyEstablished: false,
+        boundToTenancy: false,
+        termsProfileNames: ['נספח תחזוקה — תקן'],
+        candidates: [],
+        proposedTenancyId: null,
+        identifiersRead: 0,
+        identifiersPaired: 0,
+      }),
+  ],
+  [
+    // The other half of the same split: both fields were read and neither is this flat's. A
+    // different problem, and a different sentence.
+    'documents · confirm a lease, both fields read and neither matches',
+    () =>
+      renderTenancyPage({
+        nav: NAV_DOCUMENTS,
+        csrf: CSRF,
+        documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        typeKey: 'lease',
+        unit: hit,
+        startDate: '2026-03-01',
+        endDate: '2027-02-28',
+        apartmentNumber: '77',
+        address: 'דקל 9',
+        people: [],
+        matchesUnit: false,
+        crossCheck: {
+          addressRead: true,
+          apartmentRead: true,
+          addressFits: false,
+          apartmentFits: false,
+        },
+        alreadyEstablished: false,
+        boundToTenancy: false,
+        termsProfileNames: ['נספח תחזוקה — תקן'],
+        candidates: [],
+        proposedTenancyId: null,
+        identifiersRead: 0,
+        identifiersPaired: 0,
       }),
   ],
   [
@@ -939,6 +1183,12 @@ const SCREENS: Array<[string, () => string]> = [
         boundToTenancy: true,
         termsProfileNames: [],
         candidates: [],
+        crossCheck: {
+          addressRead: true,
+          apartmentRead: true,
+          addressFits: true,
+          apartmentFits: true,
+        },
         proposedTenancyId: null,
         identifiersRead: 0,
         identifiersPaired: 0,
@@ -1027,7 +1277,7 @@ const SCREENS: Array<[string, () => string]> = [
   ],
   [
     'root · calls stub',
-    () => renderStubPage({ csrf: CSRF }, CALLS_STUB, 'wired'),
+    () => renderStubPage({ csrf: CSRF, mayFile: true }, CALLS_STUB, 'wired'),
   ],
   [
     'root · settings, admin',
@@ -1035,6 +1285,7 @@ const SCREENS: Array<[string, () => string]> = [
       renderSettingsPage({
         csrf: CSRF,
         mayWrite: true,
+        mayFile: true,
         state: 'wired',
         obligations: [
           {
@@ -1065,6 +1316,7 @@ const SCREENS: Array<[string, () => string]> = [
       renderSettingsPage({
         csrf: CSRF,
         mayWrite: false,
+        mayFile: false,
         state: 'wired',
         obligations: [],
         documents: [],
@@ -1180,6 +1432,19 @@ describe('shared UI tokens', () => {
     }
   });
 
+  /**
+   * **The two screens in the registry whose rail is a viewer's. Slice 6.9.**
+   *
+   * `documents` is the one gated destination on the bar — `documents.write`, which a VIEWER does
+   * not hold — so a rail built without it is a different screen and is registered as one. Named
+   * explicitly rather than matched by a pattern, so a screen added next month is asserted to carry
+   * the destination unless somebody says in this list that it does not.
+   */
+  const VIEWER_RAIL = new Set([
+    'root · index, צופה',
+    'root · settings, viewer',
+  ]);
+
   it('puts the same chrome on every signed-in screen', () => {
     // Slice 5.2c: one ops rail, built once, injected. A screen that invents its own list is how
     // the bar drifts — staff without a way out, evidence without search, the index as the only
@@ -1201,6 +1466,16 @@ describe('shared UI tokens', () => {
       assert.match(html, /href="\/settings"/, name);
       assert.match(html, />קריאות</, name);
       assert.match(html, />הגדרות</, name);
+      // **Slice 6.9.** A12 had one door, on the index, and the week-6 demo never walked past the
+      // index again — six documents filed through the unit-first screen and none through A12.
+      // Gated, and the gate is asserted in both directions.
+      if (VIEWER_RAIL.has(name)) {
+        assert.doesNotMatch(html, /data-dest="documents"/, name);
+      } else {
+        assert.match(html, /data-dest="documents"/, name);
+        assert.match(html, /href="\/documents\/new"/, name);
+        assert.match(html, />תיוק מסמך</, name);
+      }
       assert.match(html, /action="\/staff\/logout"/, name);
       assert.match(html, />יציאה</, name);
       assert.match(
@@ -1219,8 +1494,125 @@ describe('shared UI tokens', () => {
     }
   });
 
+  /**
+   * **Slice 6.9. Four causes, four sentences, and never the wrong one.**
+   *
+   * The refusal screen and the lease confirm screen each answered four different facts with one
+   * sentence, and the four ask an operator for four different things: attach a better scan, choose
+   * a flat, create one, or accept that the document named its property in an annex. Asserted over
+   * the registry in **both directions** — a sentence that is right on one screen and also printed
+   * on the other three is the defect this replaces, in a new costume.
+   */
+  it('gives each refusal cause its own sentence, and only its own', () => {
+    const NOT_READ = /לא נקראה כתובת/;
+    const ANNEX = /מפנה את פרטי הנכס לנספח/;
+    const NOT_OURS = /אינה בתיק/;
+    const BUILDING_ONLY = /הבניין נמצא בתיק, והדירה לא/;
+    const screen = (name: string) => {
+      const found = SCREENS.find(([label]) => label === name);
+      assert.ok(found, name);
+      return found[1]();
+    };
+
+    const nothing = screen(
+      'documents · intake, the page names no place we hold',
+    );
+    assert.match(nothing, NOT_READ);
+    assert.doesNotMatch(nothing, ANNEX);
+    assert.doesNotMatch(nothing, NOT_OURS);
+    assert.doesNotMatch(nothing, BUILDING_ONLY);
+
+    const annex = screen('documents · intake, the document defers to an annex');
+    assert.match(annex, ANNEX);
+    assert.doesNotMatch(annex, NOT_OURS);
+    assert.doesNotMatch(annex, BUILDING_ONLY);
+    // And it says the apartment number may have come from a party's line — 6.11's open half, which
+    // is exactly the reading this screen is printing.
+    assert.match(annex, /משורה של אחד\s+הצדדים/);
+
+    const elsewhere = screen(
+      'documents · intake, an address in nobody portfolio, admin',
+    );
+    assert.match(elsewhere, NOT_OURS);
+    assert.doesNotMatch(elsewhere, NOT_READ);
+    assert.doesNotMatch(elsewhere, ANNEX);
+    assert.doesNotMatch(elsewhere, BUILDING_ONLY);
+
+    const partial = screen(
+      'documents · intake, the building is ours and the flat is not, admin',
+    );
+    assert.match(partial, BUILDING_ONLY);
+    assert.doesNotMatch(partial, NOT_OURS);
+    assert.doesNotMatch(partial, NOT_READ);
+  });
+
+  /**
+   * **The create offer is an admin's, and an operator is shown nothing rather than a dead control.**
+   * `estate.write` is ADMIN-only (A11); a door an operator may see and may not walk through is the
+   * refusal-after-typing 6.1 refused to build.
+   */
+  it('offers to create only to a role that may shape the estate', () => {
+    const admin = SCREENS.find(
+      ([name]) =>
+        name === 'documents · intake, an address in nobody portfolio, admin',
+    )?.[1]();
+    const operator = SCREENS.find(
+      ([name]) =>
+        name === 'documents · intake, an address in nobody portfolio, operator',
+    )?.[1]();
+    assert.ok(admin && operator);
+    assert.match(admin, /\/estate\/buildings\/new\?/);
+    assert.match(admin, /יצירת הבניין והדירה/);
+    // The reading rides in the link as a default for the form, and the walk's marker with it.
+    assert.match(admin, /address_line=/);
+    assert.match(admin, /next=intake/);
+    assert.doesNotMatch(operator, /\/estate\/buildings\/new\?/);
+    assert.doesNotMatch(operator, /יצירת/);
+    // Both are still offered the question they can answer.
+    for (const html of [admin, operator]) {
+      assert.match(html, /חיפוש דירה אחרת/);
+      assert.match(html, /type="file"/);
+    }
+  });
+
+  /**
+   * The same split one screen later. `matchesUnit` still decides what may be *written*; these four
+   * decide what is *said*, and **a field that was not read is not a mismatch**.
+   */
+  it('tells an unread field from a field that does not match, on the confirm screen', () => {
+    const unread = SCREENS.find(
+      ([name]) =>
+        name === 'documents · confirm a lease, neither field was read',
+    )?.[1]();
+    const mismatched = SCREENS.find(
+      ([name]) =>
+        name ===
+        'documents · confirm a lease, both fields read and neither matches',
+    )?.[1]();
+    assert.ok(unread && mismatched);
+    assert.match(unread, /לא נקראה כתובת מן המסמך/);
+    assert.match(unread, /לא נקרא מספר דירה מן המסמך/);
+    assert.doesNotMatch(unread, /אינה הכתובת של הדירה/);
+    assert.doesNotMatch(unread, /אינו מספר הדירה/);
+
+    assert.match(mismatched, /אינה הכתובת של הדירה/);
+    assert.match(mismatched, /אינו מספר הדירה/);
+    assert.doesNotMatch(mismatched, /לא נקראה כתובת מן המסמך/);
+    assert.doesNotMatch(mismatched, /לא נקרא מספר דירה מן המסמך/);
+
+    // Neither writes, which is the half 6.9 did not touch.
+    for (const html of [unread, mismatched]) {
+      assert.match(html, /לא נכתוב שוכרים/);
+      assert.doesNotMatch(html, /אישור וכתיבה/);
+    }
+  });
+
   it('names the owner on an unbuilt destination', () => {
-    const calls = renderStubPage({ csrf: CSRF }, CALLS_STUB, 'wired');
+    const calls = renderStubPage(
+      { csrf: CSRF, mayFile: true },
+      CALLS_STUB,
+      'wired',
+    );
     assert.match(calls, /data-state="wired"/);
     assert.match(calls, /שבוע 7 · סלייס 7.2/);
   });
@@ -1256,6 +1648,7 @@ describe('shared UI tokens', () => {
       assert.doesNotMatch(html, /href="\/calls"/, name);
       assert.doesNotMatch(html, /href="\/settings"/, name);
       assert.doesNotMatch(html, /href="\/estate\/search"/, name);
+      assert.doesNotMatch(html, /href="\/documents\/new"/, name);
       assert.doesNotMatch(html, /action="\/staff\/logout"/, name);
       assert.doesNotMatch(html, />יציאה</, name);
     }

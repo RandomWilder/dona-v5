@@ -20,7 +20,7 @@ const styles = h`<style>
 </style>`;
 
 export function renderStubPage(
-  screen: { csrf: string },
+  screen: { csrf: string; mayFile: boolean },
   stub: StubDest,
   state: 'wired' | 'painted',
 ): string {
@@ -32,7 +32,7 @@ export function renderStubPage(
   return renderPage({
     title: `${stub.title} — דונה דום`,
     styles,
-    nav: signedInChrome(screen.csrf, stub.dest),
+    nav: signedInChrome(screen.csrf, stub.dest, screen.mayFile),
     body,
   });
 }

@@ -9,7 +9,7 @@
 // is where staff auth lands (tasks/roadmap.md); until then the rule these routes keep is that no
 // party name and no contact value reaches a response. The occupancy chip is a state and a count,
 // search never touches `party`, and Q5 shows a unit and a date.
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import type { ChromeDest } from '../../chrome.ts';
 import type { Clock } from '../../kernel/clock.ts';
@@ -30,8 +30,10 @@ import type {
   UnitRowSpec,
 } from './plan.ts';
 import {
+  addressKeyOf,
   countUnitsByBuilding,
   EXPIRING_WINDOW_DAYS,
+  findBuildingAtAddress,
   getBuilding,
   getUnit,
   listBuildings,
@@ -64,9 +66,10 @@ export interface EstateDeps {
   clock: Clock;
   /**
    * Slice 5.2b. Built at the composition root, because this module may not name staff's routes
-   * and the kernel may not name anyone's.
+   * and the kernel may not name anyone's. **`mayFile` from 6.9**: the rail's documents destination
+   * is gated on `documents.write`, so the caller passes the stance rather than the rail guessing it.
    */
-  chrome: (csrf: string, dest: ChromeDest) => Html;
+  chrome: (csrf: string, dest: ChromeDest, mayFile: boolean) => Html;
   /**
    * Slice 3.6 / 4.4. Injected from evidence so this module never imports it — evidence already
    * imports estate, and the other direction would be a cycle. Structural: the composition root
@@ -110,6 +113,100 @@ export interface EstateDeps {
 
 /** What a search box may be sent before it stops being a search box. */
 const MAX_TERM = 80;
+
+/**
+ * **A12's walk, carried through A11 and A13. Slice 6.9.**
+ *
+ * A refusal on the document screen offers an admin the building and the flat, prefilled from what
+ * the place reader read; these two forms are where that offer lands, and `next=intake` is what
+ * brings the admin back to A12 with the new flat as the document's anchor.
+ *
+ * **It is the only state the walk has.** The bytes are not held — no staging store, no fifth
+ * `PlaceKind` ([SPEC-flows.md](SPEC-flows.md) A12) — so the file is attached again at the end, and
+ * everything else here is a *default in an input* that the admin reads against the paper and edits.
+ * Nothing about A11's or A13's writes changes; a value that arrives wrong costs a correction.
+ *
+ * Bounded at the edge like every other request value, and `INTAKE` is a literal rather than a URL:
+ * a redirect target taken from a query string is an open redirect, and this one can only ever be
+ * this application's own document screen.
+ */
+const INTAKE = 'intake';
+
+interface IntakeCarry {
+  next?: string;
+  typeKey?: string;
+  unitNumber?: string;
+}
+
+/** Reads the carry off a query string. Absent, or anything but the literal, is *no walk*. */
+function carryFromQuery(request: FastifyRequest): IntakeCarry {
+  const query = request.query as {
+    next?: string;
+    type?: string;
+    unit_number?: string;
+  };
+  if (query.next !== INTAKE) {
+    return {};
+  }
+  return {
+    next: INTAKE,
+    ...(query.type
+      ? { typeKey: optionalText(query.type, 'type', 64) ?? undefined }
+      : {}),
+    ...(query.unit_number
+      ? {
+          unitNumber:
+            optionalText(query.unit_number, 'unit_number', 32) ?? undefined,
+        }
+      : {}),
+  };
+}
+
+/** The same carry off a posted body, where it rides as hidden inputs. */
+function carryFromBody(body: unknown): IntakeCarry {
+  const form = (body ?? {}) as Record<string, unknown>;
+  if (form.next !== INTAKE) {
+    return {};
+  }
+  return {
+    next: INTAKE,
+    ...(form.type
+      ? { typeKey: optionalText(form.type, 'type', 64) ?? undefined }
+      : {}),
+    ...(form.unit_number
+      ? {
+          unitNumber:
+            optionalText(form.unit_number, 'unit_number', 32) ?? undefined,
+        }
+      : {}),
+  };
+}
+
+/** The query string the next step in the walk is reached with. Empty when there is no walk. */
+function carryQuery(carry: IntakeCarry): string {
+  if (!carry.next) {
+    return '';
+  }
+  const params = new URLSearchParams({ next: INTAKE });
+  if (carry.typeKey) {
+    params.set('type', carry.typeKey);
+  }
+  if (carry.unitNumber) {
+    params.set('unit_number', carry.unitNumber);
+  }
+  return `?${params}`;
+}
+
+/**
+ * Whether this viewer may file a document, for the rail and for nothing else. **Slice 6.9.**
+ *
+ * Estate's screens have to answer a question about evidence's door because the rail is one bar
+ * across the whole console, and the alternative — a rail that guesses, or one that is built per
+ * module — is how a console grows two navigations. It is `can` and not a second matrix.
+ */
+function mayFile(request: FastifyRequest): boolean {
+  return can(request.staff?.role ?? null, 'documents.write');
+}
 
 function html(reply: { header: (k: string, v: string) => unknown }): void {
   reply.header('content-type', 'text/html; charset=utf-8');
@@ -361,7 +458,7 @@ export function registerEstateRoutes(
       occupied.map((unit) => unit.unit_id),
     );
     html(reply);
-    const nav = deps.chrome(csrfFrom(request), 'estate');
+    const nav = deps.chrome(csrfFrom(request), 'estate', mayFile(request));
     return renderBuildingsPage(
       buildings,
       byBuilding,
@@ -391,7 +488,7 @@ export function registerEstateRoutes(
         documents: documents.documents,
         truncated: estate.truncated || documents.truncated,
       },
-      deps.chrome(csrfFrom(request), 'search'),
+      deps.chrome(csrfFrom(request), 'search', mayFile(request)),
     );
   });
 
@@ -401,7 +498,7 @@ export function registerEstateRoutes(
     return renderExpiringPage(
       leases,
       EXPIRING_WINDOW_DAYS,
-      deps.chrome(csrfFrom(request), 'expiring'),
+      deps.chrome(csrfFrom(request), 'expiring', mayFile(request)),
     );
   });
 
@@ -409,7 +506,11 @@ export function registerEstateRoutes(
     const rows = await deps.listIncompleteTenancies(deps.pool);
     const csrf = csrfFrom(request);
     html(reply);
-    return renderIncompletePage(rows, csrf, deps.chrome(csrf, 'incomplete'));
+    return renderIncompletePage(
+      rows,
+      csrf,
+      deps.chrome(csrf, 'incomplete', mayFile(request)),
+    );
   });
 
   app.post<{ Params: { tenancyId: string } }>(
@@ -436,11 +537,25 @@ export function registerEstateRoutes(
   app.get('/estate/buildings/new', ESTATE_WRITE, async (request, reply) => {
     const projects = await listProjects(deps.pool);
     const csrf = csrfFrom(request);
+    const query = request.query as { address_line?: string; city?: string };
+    const carry = carryFromQuery(request);
+    const addressLine =
+      optionalText(blankToNull(query.address_line), 'address_line', 200) ??
+      undefined;
+    const city =
+      optionalText(blankToNull(query.city), 'city', 120) ?? undefined;
     html(reply);
     return renderNewBuildingPage({
-      nav: deps.chrome(csrf, 'estate'),
+      nav: deps.chrome(csrf, 'estate', mayFile(request)),
       csrf,
       projects,
+      // **Slice 6.9.** The name defaults to the street, because A12 read a street and never a
+      // building's name — and a required field left empty is a form an admin fills in twice.
+      prefill: {
+        ...(addressLine ? { addressLine, name: addressLine } : {}),
+        ...(city ? { city } : {}),
+      },
+      carry,
     });
   });
 
@@ -453,6 +568,25 @@ export function registerEstateRoutes(
     // same address posted twice updates the row and returns the id already there, so a double
     // submit converges for this form and for every other writer.
     await importEstate(deps.pool, { projects: named, buildings: [plan] });
+    // **The walk on, when this form was opened from A12's refusal. Slice 6.9.** `importEstate`
+    // reports counts and not ids, so the building it just upserted is read back by the natural key
+    // it is keyed on — the same `address_key` and the same `=` A12's own resolution uses. A read,
+    // not a second write path: 6.1's ruling that the importer is the one writer is unchanged.
+    const carry = carryFromBody(request.body);
+    if (carry.next) {
+      const created = await findBuildingAtAddress(deps.pool, [
+        addressKeyOf(plan.city, plan.addressLine),
+      ]);
+      if (created) {
+        return reply
+          .code(303)
+          .header(
+            'location',
+            `/estate/buildings/${created.building_id}/units/new${carryQuery(carry)}`,
+          )
+          .send();
+      }
+    }
     return reply.code(303).header('location', '/estate').send();
   });
 
@@ -468,11 +602,14 @@ export function registerEstateRoutes(
         validId(request.params.buildingId, 'buildingId'),
       );
       const csrf = csrfFrom(request);
+      const carry = carryFromQuery(request);
       html(reply);
       return renderNewUnitPage({
-        nav: deps.chrome(csrf, 'estate'),
+        nav: deps.chrome(csrf, 'estate', mayFile(request)),
         csrf,
         building,
+        prefill: carry.unitNumber ? { unitNumber: carry.unitNumber } : {},
+        carry,
       });
     },
   );
@@ -510,7 +647,22 @@ export function registerEstateRoutes(
       // דירות count with no card. **Slice 6.3 took the third writer down to the kernel**, which is
       // the move 6.2 wrote here as a condition: this is `src/kernel/db.ts`'s `inTransaction` now,
       // and the `BEGIN`/`ROLLBACK` pair is written once for the whole application.
-      await inTransaction(deps.pool, (db) => upsertUnitRow(db, spec));
+      const written = await inTransaction(deps.pool, (db) =>
+        upsertUnitRow(db, spec),
+      );
+      // Back to A12 with the new flat as the document's anchor. Slice 6.9: `upsertUnitRow` already
+      // returns the id, so there is nothing to look up and nothing to guess.
+      const carry = carryFromBody(request.body);
+      if (carry.next) {
+        const back = new URLSearchParams({ anchor: written.unitId });
+        if (carry.typeKey) {
+          back.set('type', carry.typeKey);
+        }
+        return reply
+          .code(303)
+          .header('location', `/documents/new?${back}`)
+          .send();
+      }
       return reply
         .code(303)
         .header('location', `/estate/buildings/${buildingId}`)
@@ -544,7 +696,7 @@ export function registerEstateRoutes(
     return renderBuildingPage(
       detail,
       occupancy,
-      deps.chrome(csrfFrom(request), 'estate'),
+      deps.chrome(csrfFrom(request), 'estate', mayFile(request)),
       documents,
       // Slice 6.2: the door to A13's screen, rendered for a viewer who may walk through it and for
       // nobody else — the buildings list's rule, one level down.
@@ -576,7 +728,7 @@ export function registerEstateRoutes(
       unit,
       occupied[0]?.occupants,
       documents,
-      deps.chrome(csrfFrom(request), 'estate'),
+      deps.chrome(csrfFrom(request), 'estate', mayFile(request)),
       promoted,
       events,
     );

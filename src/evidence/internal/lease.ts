@@ -83,6 +83,21 @@ export interface LeaseProposal {
   address: string | null;
   people: ProposedPerson[];
   matchesUnit: boolean;
+  /**
+   * **The four facts `matchesUnit` is the conjunction of. Slice 6.9.**
+   *
+   * Until 6.9 the screen had one sentence for all four, and it was true of a scan that read nothing
+   * and of a lease filed against the wrong flat — two different problems asking an operator for two
+   * different things. `matchesUnit` is unchanged and still decides what is *written*; these decide
+   * only what is *said*. **A field that was not read is not a mismatch**, which is the distinction
+   * the one sentence could not draw.
+   */
+  crossCheck: {
+    addressRead: boolean;
+    apartmentRead: boolean;
+    addressFits: boolean;
+    apartmentFits: boolean;
+  };
   alreadyEstablished: boolean;
   boundToTenancy: boolean;
   /** Existing annex names. Empty means confirm cannot write — never a default insert. */
@@ -413,6 +428,14 @@ export async function proposeLeaseTenancy(
       address: null,
       people: household.people,
       matchesUnit: true,
+      // An addendum carries neither field — A3 chose the letting, so there is nothing to cross-check
+      // and nothing for the screen to say about one (SPEC-evidence.md).
+      crossCheck: {
+        addressRead: true,
+        apartmentRead: true,
+        addressFits: true,
+        apartmentFits: true,
+      },
       alreadyEstablished: await amendmentAlreadyConfirmed(db, filed.documentId),
       boundToTenancy,
       termsProfileNames: [],
@@ -424,11 +447,22 @@ export async function proposeLeaseTenancy(
   }
   const apartmentNumber = firstValue(rows, 'apartment_number');
   const address = firstValue(rows, 'address');
+  const crossCheck = {
+    addressRead: address !== null,
+    apartmentRead: apartmentNumber !== null,
+    addressFits: address !== null && addressMatches(address, unit.address_line),
+    apartmentFits:
+      apartmentNumber !== null &&
+      apartmentMatches(apartmentNumber, unit.unit_number),
+  };
+  // Unchanged, and deliberately written as the conjunction of the four above rather than beside
+  // them: one of these is the rule and the others are its explanation, and two independent
+  // expressions of the same rule is how a screen and a write stop agreeing.
   const matchesUnit =
-    apartmentNumber !== null &&
-    address !== null &&
-    apartmentMatches(apartmentNumber, unit.unit_number) &&
-    addressMatches(address, unit.address_line);
+    crossCheck.addressRead &&
+    crossCheck.apartmentRead &&
+    crossCheck.addressFits &&
+    crossCheck.apartmentFits;
   const startDate = firstValue(rows, 'start_date');
   const endDate = firstValue(rows, 'end_date');
 
@@ -470,6 +504,7 @@ export async function proposeLeaseTenancy(
     address,
     people: household.people,
     matchesUnit,
+    crossCheck,
     alreadyEstablished: boundToTenancy,
     boundToTenancy,
     termsProfileNames: await listTermsProfiles(db),

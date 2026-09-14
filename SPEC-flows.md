@@ -388,6 +388,17 @@ building it creates. `building.handover_date` and `warranty_end_date` are entere
 this screen is the placeholder standing until it does — the same standing week 2's imported מסירה
 dates have.
 
+**A11 is also reached from A12's refusal, prefilled. Slice 6.9.** An operator holding a lease for an
+address in nobody's portfolio used to be told only that it could not be placed. From 6.9 the refusal
+offers this screen to a role holding `estate.write`, with the street, the number and the town the
+place reader read already in the fields. **Prefill is a default in an input and never a write:** the
+admin reads it against the paper in their hand, edits whatever is wrong, and posts the same form with
+the same validation — this flow's writes and its idempotence are untouched, and a reading that was
+wrong costs a correction rather than a building. The form carries the flat number and the document
+type it was opened with, so A13 and then A12 can be reached without the operator retyping an address;
+what A11 returns to is [A13](#a13--an-administrator-adds-an-apartment), because a building with no
+flats is not yet somewhere a lease can be filed.
+
 ### A13 — An administrator adds an apartment
 
 **Trigger:** a building exists and a flat in it does not. A11 creates a building empty, so this is
@@ -441,6 +452,15 @@ path is built here.
 rewrite of its own values. The occupancy chip on the new flat reads פנויה because occupancy is
 derived from tenancy dates and there are none (R6).
 
+**A13 is also reached from A12's refusal, prefilled, and it is the more common of the two. Slice
+6.9.** The reader finds the building far more often than it finds the flat — a lease naming an
+address this system holds and an apartment number it does not is a building match with no unit in it
+— so the refusal offers **the flat alone** in that case and the building form only when the address
+matched no building at all. The unit number the reader read is a default in the input, on A11's
+terms: editable, validated by the same `unitFromForm`, and idempotent on `space_natural_key` whatever
+it is corrected to. When this screen was opened from A12 it returns there with the new flat as the
+document's anchor, which is the only thing A12 was missing.
+
 ### A12 — A document finds its own place
 
 **Trigger:** an operator holds a file and knows what it is, and does not know — or does not want to
@@ -455,6 +475,13 @@ A11 is the first half. A1 is amended rather than replaced — the unit-first ent
 
 **Screen:** choose the type, attach the file. **No unit.** The type is still declared and never
 detected (invariant 6): what this flow reads off the paper is *where*, not *what*.
+
+**And it has a door in the rail. Slice 6.9.** From 6.3 to 6.9 this flow's only entrance was one card
+on the index, so the only way to reach it from anywhere else was to go back to the root — and the
+week-6 demo, walking from a building page, never saw it: six posts through A1's unit-first door and
+none through this one, for a flow that had been working for two hours. A destination in
+`src/chrome.ts` is therefore part of the flow and not decoration. **It is shown to a role holding
+`documents.write`** and to nobody else, for A11's reason: the screen behind it refuses a VIEWER.
 
 **Sequence:** read → resolve → file.
 
@@ -475,6 +502,45 @@ detected (invariant 6): what this flow reads off the paper is *where*, not *what
    `document_link`, no object. The form comes back with what was read, the candidates a
    `searchEstate`-shaped lookup found, a search box, and the file input re-armed. Picking a candidate
    and re-attaching the file is the second post, and it files against the unit that was chosen.
+5. **The filing says what it read and where it landed.** A12 places a document without anybody
+   choosing a flat, so the receipt is the only place an operator can check that it chose the right
+   one: it names the address, the town and the apartment number the reader read, and the flat the
+   document was anchored to. A verified lease redirects past that receipt into A2, which is why A2's
+   confirm screen carries the same account of what was read — see *A refusal has four causes* below.
+
+**A12 may create, and that is a ruling of 14 Sep 2026.** This section said, from 6.3 until 6.9, that
+A12 *does not create a building or a unit: an address that is in nobody's portfolio is a refusal with
+a search box, and creating the building is A11's act and an admin's.* The week-6 demo is what struck
+it: the second half of that sentence is still true and the first half was a dead end, because the
+operator standing at the refusal with the right paper in their hand had nowhere to go. **Creating is
+still A11's act and an admin's — it is now offered from here.**
+
+**The role split is the whole of it.** `estate.write` is ADMIN-only (A11) and `documents.write` is an
+operator's ordinary day, so the same refusal is two screens: an **ADMIN** is offered the building and
+the flat, prefilled from the reading; an **OPERATOR** is offered the candidate list and the search
+box and no create control at all. A door an operator may see and may not walk through is the
+refusal-after-typing A11 refused to build, and this flow does not build one either. What is offered
+depends on what was matched: the **flat alone** when the address found a building, the **building and
+then the flat** when it found none.
+
+**A refusal has four causes and gets four sentences. Slice 6.9, raised by 6.11.** One sentence per
+cause, because the four ask the operator for four different things:
+
+- **nothing was read** — no address on the page the reader could reach. Attach a different scan, or
+  choose the flat by hand.
+- **the document defers to an annex** — the body says `כמפורט בנספח` and identifies the property by
+  `גוש`/`חלקה`. **This is a correct answer and not a failure** ([SPEC-evidence.md](SPEC-evidence.md)
+  says why the annex is not chased); until 6.9 it read as *no address was read*, which sent people
+  looking for a broken reader.
+- **the address is in nobody's portfolio** — read, resolved against nothing. This is the create
+  offer's case.
+- **several flats answer** — the address matched and the apartment number did not narrow it to one.
+
+**And it says which field it read, not only which it did not.** A reading can be half right: 6.11
+left an apartment number that is still read from anywhere in the text, so a lease naming only a
+party's own flat returns a number with no address. Printing *דירה 12A* beside *no address was read*
+without saying where that number may have come from is how a refusal talks an operator into the
+wrong flat.
 
 **Only an exact key match files without a human.** A near match is not a weaker version of a match
 here: this application cannot delete what it writes (slice 3.2), so a document filed against the
@@ -487,10 +553,13 @@ and no fifth `PlaceKind`: the object path names a real place (slice 3.2) and A6 
 principle for the deterministic case. The price is that a refused intake asks for the file again,
 which is the same price A1's wrong-file refusal has always charged.
 
-**What A12 does not do.** It does not classify — the type is declared. It does not create a building
-or a unit: an address that is in nobody's portfolio is a refusal with a search box, and creating the
-building is A11's act and an admin's. It does not propose a tenancy; a filed lease with no tenancy
-link still redirects into A2, which is where a human confirms.
+**What A12 does not do.** It does not classify — the type is declared. It does not propose a tenancy;
+a filed lease with no tenancy link still redirects into A2, which is where a human confirms. **And it
+holds nothing while an admin creates a place for it:** the create offer is a link out of the refusal
+and back, and the file is attached again on the return, because a browser's file input cannot be
+refilled and a staging store is what 3.2, A6 and the director's ruling of 14 Sep all refuse. The
+price is the one A12 has always charged — attach the file a second time — and it is the same price a
+candidate chosen off the list charges.
 
 ## Open
 

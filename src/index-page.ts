@@ -25,10 +25,14 @@ export interface IndexScreen {
    *
    * A door a VIEWER cannot walk through is not shown to them, which is 6.1's and 6.2's rule for
    * their own cards and is not itself the control: the route refuses on its own stance whatever
-   * this says. Optional, so a caller that has not been taught about roles gets the screen a viewer
-   * gets rather than the one an operator does.
+   * this says.
+   *
+   * **Required from 6.9, where it was optional before.** It now decides the rail's documents
+   * destination as well as this page's card, so a caller that forgot it would render the whole
+   * console's navigation for a viewer — 5.8's argument about a defaulted `csrf`, one level up: a
+   * default type-checks everywhere and is only ever found by clicking.
    */
-  mayFile?: boolean;
+  mayFile: boolean;
 }
 
 const styles = h`<style>
@@ -121,7 +125,7 @@ export function renderIndexPage(screen: IndexScreen): string {
   return renderPage({
     title: 'דונה דום — ניהול נכסים',
     styles,
-    nav: signedInChrome(screen.csrf, 'index'),
+    nav: signedInChrome(screen.csrf, 'index', screen.mayFile),
     body,
   });
 }

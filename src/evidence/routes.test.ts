@@ -113,7 +113,13 @@ function upload(
   // The token rides in the body, as a part, because this body is the multipart stream the route
   // parses itself (SPEC-evidence.md). It is first, before the file, which is the order an HTML form
   // sends a hidden input that is written above the file input.
-  for (const [name, value] of Object.entries({ csrf: who.csrf, ...fields })) {
+  // `who` is this file's default session and `fields.csrf` overrides it — 6.9's suite signs in
+  // as two roles of its own and hands the token in, so the default is read defensively rather
+  // than assumed to have been assigned by a suite that may have skipped.
+  for (const [name, value] of Object.entries({
+    csrf: who?.csrf ?? '',
+    ...fields,
+  })) {
     parts.push(
       Buffer.from(
         `--${BOUNDARY}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
@@ -1601,6 +1607,330 @@ describe('evidence · a captured ת.ז., withheld unless the viewer may read it'
         PROJECT_ID,
       ]);
       await app.close();
+      await pool.end();
+    }
+  });
+});
+
+/**
+ * **Slice 6.9, flow A12. The refusal that offers to create.**
+ *
+ * Until this slice an operator holding the right paper for an address in nobody's portfolio was
+ * told only that it could not be placed — a correct answer and a dead end, which is what the
+ * week-6 demo walked into. The director's ruling of 14 Sep overrules A12's *does not create*:
+ * **creating is still an admin's act, and it is offered from here.**
+ *
+ * Two stances against the identical request, because that is the whole of the design: `estate.write`
+ * is ADMIN-only and `documents.write` is an operator's ordinary day, so the same 422 is two screens.
+ * A door an operator may see and may not walk through is the refusal-after-typing A11 refused to
+ * build, and this suite is what says this slice did not build one either.
+ */
+describe('evidence · A12 offers to create, to an admin', () => {
+  it('walks refusal → building → flat → filed, and shows an operator none of it', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const DOMAIN_69 = 'evidence-create.test';
+    const CITY_69 = 'עיר היצירה';
+    const HELD = 'אורן 7';
+    const UNHELD = 'דקל 9';
+    const PROJECT_69 = 'TEST-CREATE';
+    const leasing = (address: string) =>
+      `כתובת המושכר: ${address}\n${specimen('lease-standard.md')}`;
+
+    const objects = createMemoryStore();
+    let puts = 0;
+    const counted = {
+      ...objects,
+      put: async (path: string, bytes: Buffer, contentType: string) => {
+        puts += 1;
+        return objects.put(path, bytes, contentType);
+      },
+    };
+    const appFor = (text: string) =>
+      buildApp({
+        pool,
+        version: '9.9.9-test',
+        clock: fixedClock(AT),
+        objects: counted,
+        pdf: createFakePdfText([text]),
+        bucket: BUCKET,
+      });
+    // An address this estate does not hold at all — no building, no flat. The create offer's case.
+    const unheld = appFor(leasing(`${UNHELD}, ${CITY_69}, דירה 4`));
+    // The building is held and the flat is not: 6.3's `רקפת 12, דירה 999`, which is the commoner of
+    // the two and gets the narrower offer.
+    const flatOnly = appFor(leasing(`${HELD}, ${CITY_69}, דירה 12`));
+    const apps = [unheld, flatOnly];
+    let admin: SignedIn | null = null;
+    let operator: SignedIn | null = null;
+    const hashes: string[] = [];
+    let createdUnitId = '';
+
+    const documentCount = async (): Promise<string> =>
+      (
+        await pool.query<{ n: string }>(
+          'SELECT count(*)::text AS n FROM document',
+        )
+      ).rows[0]?.n ?? '0';
+
+    try {
+      await signOutAll(pool, DOMAIN_69);
+      await applyDocumentTypeCatalogue(pool, seedDocumentTypes);
+      admin = await signIn(pool, fixedClock(AT), {
+        email: `admin@${DOMAIN_69}`,
+        role: 'ADMIN',
+      });
+      operator = await signIn(pool, fixedClock(AT), {
+        email: `ops@${DOMAIN_69}`,
+        role: 'OPERATOR',
+      });
+      await importEstate(pool, {
+        projects: [
+          {
+            name: 'מכרז יצירה',
+            projectCode: PROJECT_69,
+            tenderRef: null,
+            status: 'ACTIVE',
+          },
+        ],
+        buildings: [
+          {
+            name: 'בניין אורן 7',
+            addressLine: HELD,
+            city: CITY_69,
+            projectCode: PROJECT_69,
+            handoverDate: '2025-03-01',
+            warrantyEndDate: '2027-03-01',
+            status: 'ACTIVE',
+            spaces: [
+              { kind: 'UNIT', name: 'דירה 3', floor: '1', accessNote: null },
+            ],
+            units: [
+              {
+                spaceName: 'דירה 3',
+                unitNumber: '3',
+                rooms: 3,
+                areaSqm: 70,
+                hasMamad: false,
+                parkingSpaceName: null,
+                storageSpaceName: null,
+                warrantyEndDate: null,
+                conditionStatus: 'READY',
+              },
+            ],
+          },
+        ],
+      });
+
+      // The file's own `as`, but bound to a session this suite signed in rather than to the
+      // module-level one: two stances against one request is the whole design here.
+      const asRole = <T extends { inject: (o: never) => unknown }>(
+        app: T,
+        actor: SignedIn,
+      ): T => asOperator(app as never, actor) as unknown as T;
+
+      const refuse = async (app: (typeof apps)[number], who: SignedIn) =>
+        asRole(app, who).inject({
+          method: 'POST',
+          url: '/documents/intake',
+          ...upload(
+            { type: 'lease', csrf: who.csrf },
+            { filename: 'create.pdf', bytes: pdfBytes(`6.9 ${who.email}`) },
+          ),
+        } as never);
+
+      await t.test(
+        'an OPERATOR sees the search box and no create control',
+        async () => {
+          const before = await documentCount();
+          const putsBefore = puts;
+          const response = await refuse(unheld, operator as SignedIn);
+          assert.equal(response.statusCode, 422, response.body.slice(0, 400));
+          assert.match(response.body, /חיפוש דירה אחרת/);
+          assert.doesNotMatch(response.body, /\/estate\/buildings\/new\?/);
+          assert.doesNotMatch(response.body, /יצירת הבניין והדירה/);
+          // And it wrote nothing, which the create offer must not change either.
+          assert.equal(await documentCount(), before);
+          assert.equal(puts, putsBefore, 'no object was written');
+        },
+      );
+
+      await t.test(
+        'an ADMIN is offered the building and the flat, prefilled',
+        async () => {
+          const before = await documentCount();
+          const putsBefore = puts;
+          const response = await refuse(unheld, admin as SignedIn);
+          assert.equal(response.statusCode, 422, response.body.slice(0, 400));
+          assert.match(response.body, /יצירת הבניין והדירה/);
+          assert.match(response.body, /\/estate\/buildings\/new\?/);
+          assert.match(response.body, /next=intake/);
+          assert.equal(await documentCount(), before);
+          assert.equal(puts, putsBefore, 'no object was written');
+        },
+      );
+
+      await t.test(
+        'the building is held and only the flat is offered',
+        async () => {
+          const response = await refuse(flatOnly, admin as SignedIn);
+          assert.equal(response.statusCode, 422, response.body.slice(0, 400));
+          assert.match(response.body, /\/units\/new\?/);
+          assert.doesNotMatch(response.body, /\/estate\/buildings\/new\?/);
+        },
+      );
+
+      await t.test(
+        'and the walk ends with that lease filed against the new flat',
+        async () => {
+          const who = admin as SignedIn;
+          const refusal = await refuse(unheld, who);
+          const href = /href="([^"]*\/estate\/buildings\/new\?[^"]*)"/.exec(
+            refusal.body,
+          )?.[1];
+          assert.ok(href, 'the refusal carried no building link');
+          const form = await asRole(unheld, who).inject({
+            method: 'GET',
+            url: href.replaceAll('&amp;', '&'),
+          });
+          assert.equal(form.statusCode, 200, form.body.slice(0, 400));
+          // The read address is already in the fields: this is the *no retyping* half of the bar.
+          assert.match(form.body, new RegExp(`value="${UNHELD}"`));
+          assert.match(form.body, new RegExp(`value="${CITY_69}"`));
+
+          const created = await asRole(unheld, who).inject({
+            method: 'POST',
+            url: '/estate/buildings',
+            payload: new URLSearchParams({
+              name: `בניין ${UNHELD}`,
+              address_line: UNHELD,
+              city: CITY_69,
+              project_code: '',
+              handover_date: '2025-05-01',
+              warranty_end_date: '',
+              status: 'ACTIVE',
+              unit_number: '4',
+              type: 'lease',
+              next: 'intake',
+            }).toString(),
+            headers: {
+              'content-type': 'application/x-www-form-urlencoded',
+            },
+          });
+          assert.equal(created.statusCode, 303, created.body.slice(0, 400));
+          const toUnit = created.headers.location ?? '';
+          assert.match(toUnit, /\/units\/new\?/);
+          assert.match(toUnit, /next=intake/);
+
+          const unitForm = await asRole(unheld, who).inject({
+            method: 'GET',
+            url: toUnit,
+          });
+          assert.equal(unitForm.statusCode, 200, unitForm.body.slice(0, 400));
+          assert.match(unitForm.body, /value="4"/);
+
+          const buildingId = /\/estate\/buildings\/([0-9a-f-]{36})\/units/.exec(
+            toUnit,
+          )?.[1];
+          assert.ok(buildingId);
+          const madeUnit = await asRole(unheld, who).inject({
+            method: 'POST',
+            url: `/estate/buildings/${buildingId}/units`,
+            payload: new URLSearchParams({
+              unit_number: '4',
+              floor: '1',
+              rooms: '3',
+              area_sqm: '',
+              condition_status: 'READY',
+              warranty_end_date: '',
+              type: 'lease',
+              next: 'intake',
+            }).toString(),
+            headers: {
+              'content-type': 'application/x-www-form-urlencoded',
+            },
+          });
+          assert.equal(madeUnit.statusCode, 303, madeUnit.body.slice(0, 400));
+          const back = madeUnit.headers.location ?? '';
+          assert.match(back, /^\/documents\/new\?anchor=[0-9a-f-]{36}/);
+          createdUnitId = /anchor=([0-9a-f-]{36})/.exec(back)?.[1] ?? '';
+          assert.ok(createdUnitId);
+
+          const anchored = await asRole(unheld, who).inject({
+            method: 'GET',
+            url: back,
+          });
+          assert.equal(anchored.statusCode, 200, anchored.body.slice(0, 400));
+          assert.match(anchored.body, new RegExp(`value="${createdUnitId}"`));
+          assert.match(anchored.body, /type="file"/);
+
+          const filed = await asRole(unheld, who).inject({
+            method: 'POST',
+            url: '/documents/intake',
+            ...upload(
+              { type: 'lease', unit: createdUnitId, csrf: who.csrf },
+              { filename: 'create.pdf', bytes: pdfBytes('6.9 filed') },
+            ),
+          });
+          assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
+          assert.match(
+            filed.headers.location ?? '',
+            /\/documents\/[0-9a-f-]{36}\/tenancy$/,
+          );
+          hashes.push(documentFileHash(pdfBytes('6.9 filed')));
+        },
+      );
+    } finally {
+      for (const actor of [admin, operator].filter(Boolean) as SignedIn[]) {
+        await pool
+          .query(
+            `DELETE FROM audit_log
+              WHERE action = 'evidence.intake_unresolved' AND actor_id = $1`,
+            [actor.staffAccountId],
+          )
+          .catch(() => {});
+      }
+      await signOutAll(pool, DOMAIN_69);
+      for (const hash of hashes) {
+        await pool.query(
+          `DELETE FROM extracted_field WHERE document_id IN
+             (SELECT document_id FROM document WHERE file_hash = $1)`,
+          [hash],
+        );
+        await pool.query(
+          `DELETE FROM document_link WHERE document_id IN
+             (SELECT document_id FROM document WHERE file_hash = $1)`,
+          [hash],
+        );
+        await pool.query('DELETE FROM document WHERE file_hash = $1', [hash]);
+      }
+      for (const address of [HELD, UNHELD]) {
+        await pool.query(
+          `DELETE FROM unit WHERE unit_id IN (
+             SELECT space_id FROM space s
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [CITY_69, address],
+        );
+        await pool.query(
+          `DELETE FROM space WHERE building_id IN (
+             SELECT building_id FROM building WHERE city = $1 AND address_line = $2)`,
+          [CITY_69, address],
+        );
+        await pool.query(
+          'DELETE FROM building WHERE city = $1 AND address_line = $2',
+          [CITY_69, address],
+        );
+      }
+      await pool.query('DELETE FROM project WHERE project_code = $1', [
+        PROJECT_69,
+      ]);
+      for (const app of apps) {
+        await app.close();
+      }
       await pool.end();
     }
   });
