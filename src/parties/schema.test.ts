@@ -548,17 +548,44 @@ describe('parties · the named fold and the generated column are one fold', () =
       // Every row in the table, not a sample: a disagreement on one person is two people.
       await t.test('every row in party', async () => {
         await inRolledBackTransaction(pool, async (db) => {
-          const disagree = await db.query<{ n: string }>(
-            `SELECT count(*)::text AS n FROM party
-            WHERE party_national_id_key(party_kind::text, national_id)
-                  IS DISTINCT FROM national_id_key`,
+          // **Rows this case put there, and then whatever else the database holds.** A developer's
+          // machine carries 2,871 generated parties and CI's carries none, so a comparison over
+          // "every row" proves nothing on a fresh database unless the case seeds the awkward shapes
+          // itself — which is the guard-on-the-guard from scripts/guards.ts, and the first version
+          // of this assertion got it backwards and turned CI red by demanding rows exist.
+          // A fresh eight digits per shape, because three of these shapes are *the same person* once
+          // folded — which is what the case above this one asserts, and what would make them
+          // un-insertable together here. `party_natural_key` is UNIQUE, and that is the fold working.
+          const base = (): string => newId().replace(/\D/g, '').slice(-8);
+          const [a, b, c, d, e] = [base(), base(), base(), base(), base()];
+          const shapes: ReadonlyArray<readonly [string, string | null]> = [
+            ['PERSON', `0${a}`], // the leading zero an export drops
+            ['PERSON', `${b.slice(0, 3)}-${b.slice(3)}`], // as a person writes it
+            ['PERSON', ` ${c} `], // as a cell with stray whitespace holds it
+            ['PERSON', `X-${d}`], // a passport, normalised but never padded
+            ['COMPANY', `1${e}`], // the other registry
+            ['PERSON', null], // no identifier, and so no key at all
+          ];
+          for (const [kind, nationalId] of shapes) {
+            await db.query(
+              `INSERT INTO party (party_id, party_kind, full_name, national_id, preferred_language)
+               VALUES ($1, $2, 'fold-case', $3, 'he')`,
+              [newId(), kind, nationalId],
+            );
+          }
+          const counted = await db.query<{ rows: string; disagree: string }>(
+            `SELECT count(*)::text AS rows,
+                    count(*) FILTER (
+                      WHERE party_national_id_key(party_kind::text, national_id)
+                            IS DISTINCT FROM national_id_key
+                    )::text AS disagree
+               FROM party`,
           );
-          assert.equal(disagree.rows[0]?.n, '0');
-          // And the guard on the guard: a query that scanned nothing proves nothing.
-          const rows = await db.query<{ n: string }>(
-            `SELECT count(*)::text AS n FROM party`,
+          assert.equal(counted.rows[0]?.disagree, '0');
+          assert.ok(
+            Number(counted.rows[0]?.rows ?? 0) >= shapes.length,
+            `scanned ${counted.rows[0]?.rows} rows`,
           );
-          assert.notEqual(rows.rows[0]?.n, '0');
         });
       });
 
