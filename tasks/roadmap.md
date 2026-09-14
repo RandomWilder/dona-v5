@@ -1710,6 +1710,35 @@ it. Then a second lease for the same person elsewhere: one party, two tenancies.
 - **Verify:** live on staging, both halves in one sitting.
 - **Carried in from 5.7:** the staging `staff:add` and the 5.6 clock-end click happen here.
 - **Deps:** 6.6 · **Size:** M
+- **Closed 14 Sep 2026** — [evidence/6.7.md](evidence/6.7.md). The walk ran: a building, three flats
+  and four invented leases, all by clicking, against the first live extractor this project has had.
+  `infra/run-job.sh` was written so a script may reach a deployed database once rather than twice;
+  `seed:doctypes` created the two identifier fields staging did not have. **The staging `staff:add`
+  closed. The clock-end click did not, and cannot** — see below.
+- **What it found, and what those findings own:**
+  - **A12's address reader has never seen a line break in production.** `documentText` joins a
+    page's words with a space and emits a newline only between pages, so the structure `place.ts`
+    and SPEC-evidence.md are both written against never arrives; punctuation after the city is what
+    has always saved it. → **6.8**, kernel, plan mode, spec edit first.
+  - **The 5.6 clock-end click is not a click.** No route writes `status: 'ACTIVE'` — only the
+    fixtures — so A5 is a flow with no screen, and the register generator ends every ACTIVE tenancy
+    in the future by construction. → **re-owned by the slice that gives A5 a screen**, which sits in
+    the displaced console block whose week is the director's. It is not carried forward again as a
+    click.
+  - **"One party, two tenancies" is shown on no screen** — there is no party route. → **director's**,
+    because a household screen is a product decision. The same gap makes the audit trail unreadable
+    outside SQL, and makes a confirmed lease's flat still read as vacant.
+
+### Slice 6.8 — The line the reader was promised
+`documentText` flattens a page's words and only ever emits a newline between pages, while A12's place
+reader is specified against text where a line break ends a field. Both OCR and pdfjs already know the
+lines; this throws them away and then depends on them.
+- **Done when:** a scanned lease whose address line ends in no punctuation resolves its flat, proved
+  by a case that was **red first**.
+- **Verify:** 6.7's original unedited lease, filed on `:3000`.
+- **Spec edit first:** SPEC-evidence.md's A12 anchors and `place.ts`'s comment describe a reader
+  nobody has. **Plan mode** — `src/kernel/ocr.ts`, `src/kernel/pdf.ts`.
+- **Deps:** 6.7 · **Size:** M
 
 ---
 
