@@ -21,6 +21,7 @@
 // `plan()` alone.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { fixedClock } from '../kernel/clock.ts';
 import { newId } from '../kernel/ids.ts';
 import {
   inRolledBackTransaction,
@@ -278,7 +279,7 @@ describe('estate · the portfolio-scale reads', () => {
                 'נספח — בדיקת מודל קריאה',
               ],
             );
-            const today = new Date('2026-09-06T00:00:00Z');
+            const today = fixedClock(new Date('2026-09-06T00:00:00Z'));
             for (const [unitId, end] of [
               [soon.unit_id, '2026-10-01'],
               [later.unit_id, '2027-10-01'],
@@ -327,7 +328,7 @@ describe('estate · the portfolio-scale reads', () => {
             const overdue = await listOverdueInspections(
               db,
               summary.building_id,
-              new Date('2026-09-07T00:00:00.000Z'),
+              fixedClock(new Date('2026-09-07T00:00:00.000Z')),
             );
             assert.equal(overdue.length, 1);
             assert.equal(overdue[0]?.asset_type, 'EXTINGUISHER');

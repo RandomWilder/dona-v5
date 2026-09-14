@@ -18,6 +18,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { PoolClient } from 'pg';
+import { fixedClock } from '../kernel/clock.ts';
 import { KernelError } from '../kernel/errors.ts';
 import { newId } from '../kernel/ids.ts';
 import {
@@ -33,7 +34,9 @@ import {
   resolveUnitsByPhone,
 } from './contract.ts';
 
-const TODAY = new Date('2026-09-06T00:00:00Z');
+// A clock and not an instant, from slice 7.2b: an instant does not know what day it is, and the
+// three resolvers now ask the kernel for the day in the office's zone.
+const TODAY = fixedClock(new Date('2026-09-06T00:00:00Z'));
 // **This suite's block is `0523…`**, and it is not decoration. `node --test` runs files in parallel
 // against one database, so two suites inserting one contact value on overlapping days each wait on
 // the other's speculative insertion — 2.4 met that as `40P01` and blocked its register fixtures, and

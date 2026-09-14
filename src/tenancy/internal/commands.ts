@@ -5,6 +5,7 @@
 // dates, on every load** (foundation rule 1, R6). A query here that answered it would be the second
 // copy of the isolation join, and guard two exists because that is how the constraint dies.
 import type { Pool } from 'pg';
+import { type Clock, today as dayOf } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
@@ -280,8 +281,12 @@ function isPool(db: Queryable): db is Pool {
   return 'totalCount' in db;
 }
 
-async function expireDueOn(db: Queryable, at: Date): Promise<void> {
-  const today = at.toISOString().slice(0, 10);
+async function expireDueOn(db: Queryable, clock: Clock): Promise<void> {
+  // Two different questions of the same clock: which day has ended (the office's, slice 7.2b) and
+  // what instant to stamp the event with. That is the argument for passing the clock rather than an
+  // instant — an instant cannot answer the first, and a date cannot answer the second.
+  const today = dayOf(clock);
+  const at = clock.now();
   const closed = await db.query<{ tenancy_id: string }>(
     `UPDATE tenancy
         SET status = 'ENDED'
@@ -303,20 +308,21 @@ async function expireDueOn(db: Queryable, at: Date): Promise<void> {
 }
 
 /**
- * Close ACTIVE tenancies whose contractual end_date is already before the clock's UTC day.
+ * Close ACTIVE tenancies whose contractual end_date is already before the clock's day, in the
+ * office's zone.
  *
  * Isolation still counts the last day (`end_date >= today`). The day after is when the row
  * becomes ENDED and a `terminated` event is appended with no document. Idempotent.
  */
 export async function expireDueTenancies(
   db: Queryable,
-  at: Date,
+  clock: Clock,
 ): Promise<void> {
   if (isPool(db)) {
     const client = await db.connect();
     try {
       await client.query('BEGIN');
-      await expireDueOn(client, at);
+      await expireDueOn(client, clock);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -326,5 +332,5 @@ export async function expireDueTenancies(
     }
     return;
   }
-  await expireDueOn(db, at);
+  await expireDueOn(db, clock);
 }

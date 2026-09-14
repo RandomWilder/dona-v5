@@ -10,6 +10,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
+import type { Clock } from '../kernel/clock.ts';
 import { fixedClock } from '../kernel/clock.ts';
 import { newId } from '../kernel/ids.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
@@ -29,7 +30,7 @@ const AT = new Date('2026-10-04T06:00:00.000Z');
 
 async function anAccount(
   pool: import('pg').Pool,
-  clock: { now: () => Date },
+  clock: Clock,
   role: string | null,
 ): Promise<string> {
   const id = newId(clock);

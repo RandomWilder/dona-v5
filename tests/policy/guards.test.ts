@@ -7,15 +7,24 @@
 // out by hand either — it is `ISOLATION_JOIN_SQL` itself, copied to a file outside src/scope/, which
 // is precisely the drift guard two exists to stop.
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
+  DAY_HOME,
   guardMigrations,
   guardMockups,
   guardPiiComments,
   guardScopeJoin,
+  guardUtcDay,
   MIGRATIONS_DIR,
   MOCKUPS_DIR,
 } from '../../scripts/guards.ts';
@@ -323,6 +332,64 @@ describe('guard · a mockup does not outlive its evidence', () => {
     const result = guardMockups(root);
     assert.equal(result.scanned, 0);
     assert.equal(result.allowEmpty, true);
+    assert.deepEqual(result.violations, []);
+  });
+});
+
+describe('guard · an instant becomes a date in one file', () => {
+  it('passes a tree that asks the kernel for the day', (t) => {
+    const root = fixture({
+      [path.join('src', 'scope', 'internal', 'isolation-join.ts')]:
+        "import { today } from '../../kernel/clock.ts';\nconst day = today(clock);\n",
+    });
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const result = guardUtcDay(root);
+    assert.equal(result.scanned, 1);
+    assert.deepEqual(result.violations, []);
+  });
+
+  // The violating file is **the real `src/kernel/clock.ts`, relocated** — guard two's idiom, for
+  // guard two's reason. A hand-written fixture proves the fixture; the one file in this repository
+  // that legitimately derives a day, moved somewhere it may not live, is precisely the drift this
+  // guard exists to stop, and it cannot go quietly stale when the kernel is edited.
+  it('trips on the kernel’s own day derivation, moved out of the kernel', (t) => {
+    const REPO = fileURLToPath(new URL('../../', import.meta.url));
+    const root = fixture({
+      [path.join('src', 'estate', 'internal', 'day.ts')]: readFileSync(
+        path.join(REPO, DAY_HOME),
+        'utf8',
+      ),
+    });
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const result = guardUtcDay(root);
+    assert.equal(result.violations.length, 1);
+    assert.match(result.violations[0]?.detail ?? '', /today\(clock\)/);
+  });
+
+  // The second spelling is the same expression with a different haircut. A guard that catches one of
+  // the two teaches people the other, which is worse than catching neither.
+  //
+  // **Assembled from two halves on purpose.** Written whole, the fixture string is a match *in this
+  // file*, and guard five would fail the build over its own test — the guards read comments and
+  // string literals as readily as code, which is stated as a virtue in `scripts/guards.ts` and is
+  // the same reason the case above relocates a real file instead of typing one out.
+  it('catches the other spelling of the same mistake', (t) => {
+    const root = fixture({
+      [path.join('src', 'tenancy', 'internal', 'status.ts')]:
+        `const day = at.toISOString()${".split('T')[0]"};\n`,
+    });
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    assert.equal(guardUtcDay(root).violations.length, 1);
+  });
+
+  it('allows the kernel file itself, which is the whole exception', (t) => {
+    const REPO = fileURLToPath(new URL('../../', import.meta.url));
+    const root = fixture({
+      [DAY_HOME]: readFileSync(path.join(REPO, DAY_HOME), 'utf8'),
+    });
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const result = guardUtcDay(root);
+    assert.equal(result.scanned, 0);
     assert.deepEqual(result.violations, []);
   });
 });

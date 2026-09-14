@@ -143,8 +143,9 @@ by tripping the guard rather than by anticipating it.
   included, ordered by code, and the composition-root form posts through `upsertObligationType`.
   A sixth code costs no migration. The obligations strip on a unit is month two.
 
-  Derived `status` (`SATISFIED · EXPIRING · EXPIRED · MISSING`), from the injected clock's UTC day
-  and a 60-day window matching the expiring-leases list: `MISSING` when the type
+  Derived `status` (`SATISFIED · EXPIRING · EXPIRED · MISSING`), from the injected clock's day — the
+  office's zone, `today(clock)`, never the UTC day (slice 7.2b) — and a 60-day window matching the
+  expiring-leases list: `MISSING` when the type
   `requires_evidence` and `evidence_document_id` is null; else `EXPIRED` when `valid_to` is
   strictly before today; else `EXPIRING` when `valid_to` is within 60 days inclusive; else
   `SATISFIED`. `evidence_document_id` is a nullable FK to `document` in kernel DDL; this module
@@ -161,8 +162,8 @@ by tripping the guard rather than by anticipating it.
   `system`, not an operator. Register `upsertTenancy` does **not** write events — isolation dates
   from the import stay legal without a document. `applyPromotedField` is the fourth write command:
   parse a DATE, update the named column, append the event. A collision on `(unit_id, start_date)` is
-  `conflict`. `expireDueTenancies(db, at)` is the fifth: every `ACTIVE` tenancy whose `end_date` is
-  strictly before the clock's UTC day becomes `ENDED` and appends `terminated` with
+  `conflict`. `expireDueTenancies(db, clock)` is the fifth: every `ACTIVE` tenancy whose `end_date` is
+  strictly before the clock's day in the office's zone becomes `ENDED` and appends `terminated` with
   `field = status`, `ACTIVE → ENDED`. The last day of the lease still counts (isolation's
   `end_date >= today`); the day after is when the clock closes it. A second call is a no-op. Natural
   end is `ENDED`, never `TERMINATED_EARLY`.

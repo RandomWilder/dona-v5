@@ -19,9 +19,26 @@ logic** — it is the shared machinery every module is built on.
   reach the wire. `httpStatus(code)` is the single place a status code is decided.
 - **Ids** — `newId(clock)` returns an RFC 9562 UUIDv7: a 48-bit millisecond timestamp then random
   bits, so ids sort by creation time and stay index-friendly as Postgres primary keys.
-- **Clock** — `Clock.now()`. Business logic never calls `Date.now()` or `new Date()`; it receives a
-  clock. `fixedClock(start)` is the test double and advances on demand. Time reaches SQL as a bound
-  parameter, never as `NOW()`.
+- **Clock** — `Clock.now()` and `Clock.zone`. Business logic never calls `Date.now()` or `new Date()`;
+  it receives a clock. `fixedClock(start, zone?)` is the test double and advances on demand. Time
+  reaches SQL as a bound parameter, never as `NOW()`.
+
+  **An instant does not know what day it is.** `now()` answers *when*; only a zone turns that into a
+  date, and until slice 7.2b every date in this system was `now().toISOString().slice(0, 10)` — the
+  UTC day, which in Israel is the country's yesterday for the two or three hours after midnight. So
+  `today(clock)` is the only way an instant becomes a day: `dayIn(at, zone)` underneath it, through
+  `Intl.DateTimeFormat('en-CA', { timeZone })`, which formats `YYYY-MM-DD` natively and needs no
+  dependency. The zone is `clock.zone`, a `config_settings` row (`clock.zone`) defaulting to
+  `Asia/Jerusalem`, because a second country is a row and not a release — foundation rule 8's own
+  argument. `zonedClock(zone)` validates the zone and raises `invalid` at boot rather than on a
+  tenant read, and a module function that needs the day takes a `Clock` rather than a `Date`: a
+  caller that can pass an instant can pass the wrong one.
+
+  `addDays(isoDate, days)` lives here too and is the opposite case — arithmetic on a midnight-UTC
+  anchor over a date-only string, which is zone-free and correct, and was written twice (tenancy's
+  `addUtcDays`, the register fixtures' `shift`) before it was written once. Guard five,
+  `no-utc-day`, allows `toISOString().slice(0, 10)` in `clock.ts` and nowhere else, so this file is
+  the only place in the repository where an instant becomes a date.
 
 ### Edge validation (`validate.ts`)
 

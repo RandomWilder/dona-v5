@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { PoolClient } from 'pg';
+import { fixedClock } from '../kernel/clock.ts';
 import { KernelError } from '../kernel/errors.ts';
 import { newId } from '../kernel/ids.ts';
 import {
@@ -92,7 +93,7 @@ describe('tenancy · obligation commands', () => {
           requiresEvidence: true,
           isActive: false,
         });
-        const at = new Date('2026-09-12T12:00:00.000Z');
+        const at = fixedClock(new Date('2026-09-12T12:00:00.000Z'));
         const row = await getObligation(db, created.id, at);
         assert.ok(row);
         assert.equal(row.responsibleParty, 'TENANT');
@@ -100,6 +101,59 @@ describe('tenancy · obligation commands', () => {
         const listed = await listObligationsForTenancy(db, tenancyId, at);
         assert.equal(listed.length, 1);
         assert.equal(listed[0]?.responsibleParty, 'TENANT');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  // Slice 7.2b. The state machine is dated from the clock, and it used to derive the UTC day — so
+  // for the two or three hours after midnight local an obligation that expired yesterday still read
+  // SATISFIED. SPEC.md rule 3 says this machine is inspectable, versioned and defensible in a
+  // dispute, and "defensible" is the word that makes an off-by-one-day status a real defect rather
+  // than a cosmetic one.
+  it('expires on the office’s day, at 00:30 local and not at 03:00', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const tenancyId = await seedTenancy(db);
+        const type = await upsertObligationType(db, {
+          code: `EXP-${newId().slice(24)}`,
+          labelHe: 'ביטוח',
+          labelEn: 'Insurance',
+          defaultResponsibleParty: 'TENANT',
+          // No evidence required, so MISSING cannot stand in for the answer and the case is about
+          // the dates and nothing else.
+          requiresEvidence: false,
+          isActive: true,
+        });
+        const created = await createObligation(db, {
+          tenancyId,
+          obligationTypeId: type.id,
+          validFrom: '2026-01-01',
+          validTo: '2026-09-14',
+          evidenceDocumentId: null,
+        });
+
+        // 00:30 on the 15th in Jerusalem, 21:30 on the 14th in UTC.
+        const afterMidnight = fixedClock(new Date('2026-09-14T21:30:00.000Z'));
+        const now = await getObligation(db, created.id, afterMidnight);
+        assert.equal(
+          now?.status,
+          'EXPIRED',
+          'the cover ran out yesterday and the office knows it at 00:30',
+        );
+
+        // The hour before, which is the 14th in both zones: still the last day of cover.
+        const beforeMidnight = fixedClock(new Date('2026-09-14T20:30:00.000Z'));
+        assert.equal(
+          (await getObligation(db, created.id, beforeMidnight))?.status,
+          'EXPIRING',
+        );
       });
     } finally {
       await pool.end();

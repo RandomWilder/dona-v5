@@ -16,7 +16,7 @@
 // working.
 import type { Pool, PoolClient } from 'pg';
 import { type ActorKind, createAuditLog } from '../../kernel/audit.ts';
-import type { Clock } from '../../kernel/clock.ts';
+import { type Clock, today } from '../../kernel/clock.ts';
 import { normalisePhone } from './phone.ts';
 
 // The view both questions read. A constant rather than a literal in two query strings: the name is
@@ -88,7 +88,6 @@ export interface ScopeActor {
 
 export interface ScopeOptions {
   actor?: ScopeActor;
-  clock?: Clock;
 }
 
 const SYSTEM: ScopeActor = { actorKind: 'system' };
@@ -184,9 +183,16 @@ export interface OccupiedUnit {
   occupants: number;
 }
 
-function day(today: Date): string {
-  return today.toISOString().slice(0, 10);
-}
+// **The three resolvers take a `Clock` and not a `Date`, from slice 7.2b.** This file used to format
+// the day itself, from the instant, in UTC — and both ends of the tenancy-active predicate are
+// inclusive, so between midnight and 03:00 local the join answered about yesterday: a letting that
+// starts today not yet active, one that ended yesterday still is. A handover at 00:30 put the
+// previous tenant in the new one's scope.
+//
+// The zone belongs to the clock (`src/kernel/clock.ts`), so `today(clock)` is the whole of the fix
+// here, and the parameter is the clock rather than an instant because a caller that can pass an
+// instant can pass the wrong one. What this module still owns is *when* a tenancy counts; what day
+// it is was never its question.
 
 // Every scoped read of tenant data is logged, not only every command (SPEC.md, Security defaults).
 // The line is written on the caller's own connection, so it is in the caller's transaction: an audit
@@ -211,13 +217,14 @@ function day(today: Date): string {
 // `matched: 0` and is logged, which is the case an access review actually asks about.
 async function audited<T>(
   db: Queryable,
+  clock: Clock,
   options: ScopeOptions,
   action: string,
   subjectId: string | null,
   read: () => Promise<T[]>,
 ): Promise<T[]> {
   const rows = await read();
-  await createAuditLog(db, options.clock).write(
+  await createAuditLog(db, clock).write(
     {
       ...(options.actor ?? SYSTEM),
       action,
@@ -236,37 +243,45 @@ async function audited<T>(
 export async function resolveUnitsByPhone(
   db: Queryable,
   phone: string,
-  today: Date,
+  clock: Clock,
   options: ScopeOptions = {},
 ): Promise<ScopedUnit[]> {
   // Validation at the edge, and the reason it is here rather than at each caller: a number stored in
   // one format and asked for in another resolves to nobody, and a scope of nothing is exactly what
   // correct isolation looks like. `normalisePhone` raises `invalid` rather than guessing.
   const value = normalisePhone(phone);
-  return audited(db, options, 'scope.resolve_by_phone', null, async () => {
-    const result = await db.query<ScopedUnit>(ISOLATION_JOIN_SQL, [
-      value,
-      day(today),
-    ]);
-    return result.rows;
-  });
+  return audited(
+    db,
+    clock,
+    options,
+    'scope.resolve_by_phone',
+    null,
+    async () => {
+      const result = await db.query<ScopedUnit>(ISOLATION_JOIN_SQL, [
+        value,
+        today(clock),
+      ]);
+      return result.rows;
+    },
+  );
 }
 
 export async function resolvePartiesInUnit(
   db: Queryable,
   unitId: string,
-  today: Date,
+  clock: Clock,
   options: ScopeOptions = {},
 ): Promise<OccupantRow[]> {
   return audited(
     db,
+    clock,
     options,
     'scope.resolve_unit_occupants',
     unitId,
     async () => {
       const result = await db.query<OccupantRow>(OCCUPANTS_SQL, [
         unitId,
-        day(today),
+        today(clock),
       ]);
       return result.rows;
     },
@@ -282,18 +297,19 @@ export async function resolvePartiesInUnit(
 export async function resolveOccupiedUnits(
   db: Queryable,
   unitIds: readonly string[] | null,
-  today: Date,
+  clock: Clock,
   options: ScopeOptions = {},
 ): Promise<OccupiedUnit[]> {
   return audited(
     db,
+    clock,
     options,
     'scope.resolve_occupied_units',
     null,
     async () => {
       const result = await db.query<OccupiedUnit>(OCCUPIED_UNITS_SQL, [
         unitIds === null ? null : [...unitIds],
-        day(today),
+        today(clock),
       ]);
       return result.rows;
     },

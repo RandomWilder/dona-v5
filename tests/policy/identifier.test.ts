@@ -20,6 +20,7 @@ import { glob, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { fixedClock } from '../../src/kernel/clock.ts';
 import { hasIdentifierRun } from '../../src/kernel/identifier.ts';
 import {
   ISOLATION_JOIN_SQL,
@@ -36,7 +37,7 @@ import {
   skipReason,
 } from './support.ts';
 
-const TODAY = new Date('2026-09-14T00:00:00Z');
+const TODAY = fixedClock(new Date('2026-09-14T00:00:00Z'));
 const TENANT_PHONE = '+972501112233';
 
 /**

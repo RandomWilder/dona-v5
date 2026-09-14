@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { DEFAULT_ZONE } from './clock.ts';
 import { KernelError } from './errors.ts';
 import { defaultOcrProcessorVersion } from './ocr.ts';
 
@@ -164,6 +165,29 @@ export async function readExtractionSettings(
     reasoningEffort:
       effort === 'omit' ? undefined : (effort as ReasoningEffort),
   };
+}
+
+export const clockSettingKeys = {
+  zone: 'clock.zone',
+} as const;
+
+export interface ClockSettings {
+  zone: string;
+}
+
+// **Which day the office is having.** Slice 7.2b, and it is a row for the reason rule 8 gives about
+// document types: a second country is a management decision, not a release. There is no migration
+// seeding it — `text()` falls back when the row is absent, and the fallback is the same
+// `Asia/Jerusalem` the kernel compiles in — so the row exists only once somebody means to change it.
+//
+// Read once, in `serve.ts`, and turned into the application's clock through `zonedClock`, which
+// raises `invalid` on a zone ICU does not know. That check belongs at boot: a zone nobody validated
+// would otherwise surface as a crash on a tenant read, hours after the row was edited.
+export async function readClockSettings(
+  settings: Settings,
+): Promise<ClockSettings> {
+  const zone = await settings.text(clockSettingKeys.zone, DEFAULT_ZONE);
+  return { zone };
 }
 
 export const ocrSettingKeys = {

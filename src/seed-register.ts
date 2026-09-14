@@ -12,6 +12,7 @@
 // **Fixture data, and nothing else, may reach an environment this way.** The people do not exist and
 // the identifiers are in a block reserved for this generator. A real register goes through
 // `import:register` with a file somebody chose (2.5).
+import { today as day, systemClock } from './kernel/clock.ts';
 import { createPool } from './kernel/db.ts';
 import { importRegister } from './register/contract.ts';
 import { generateRegister } from './register/fixtures/generate.ts';
@@ -27,7 +28,7 @@ if (!Number.isInteger(units) || units < 1) {
 const pool = createPool();
 
 try {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = day(systemClock);
   const { csv, summary } = generateRegister({ units, today, seed });
   const client = await pool.connect();
   try {

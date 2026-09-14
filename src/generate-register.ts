@@ -10,6 +10,7 @@
 // **The day is printed with the seed**, because both are needed to reproduce the file: "leases
 // ending in the next 60 days" is a question about a day, and a fixed one would answer it emptily.
 import { writeFile } from 'node:fs/promises';
+import { today as day, systemClock } from './kernel/clock.ts';
 import { generateRegister } from './register/fixtures/generate.ts';
 
 const units = Number(process.argv[2]);
@@ -24,7 +25,7 @@ if (!Number.isInteger(units) || units < 1 || !out) {
   process.exit(1);
 }
 
-const today = new Date().toISOString().slice(0, 10);
+const today = day(systemClock);
 const { csv, summary } = generateRegister({ units, today, seed });
 await writeFile(out, csv, 'utf8');
 

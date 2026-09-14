@@ -3,6 +3,8 @@
 // of it with --env-file-if-exists, neither of which overrides a variable already set in the shell —
 // which is why v3's hand-written .env loader (src/dev.ts) is not lifted.
 import { buildApp } from './app.ts';
+import { zonedClock } from './kernel/clock.ts';
+import { createSettings, readClockSettings } from './kernel/config.ts';
 import { createPool } from './kernel/db.ts';
 import { createConfiguredExtractor } from './kernel/extraction.ts';
 import { configuredBucket, createConfiguredStore } from './kernel/objects.ts';
@@ -35,6 +37,15 @@ const extractor = createConfiguredExtractor();
 // one that does, and `identity: unconfigured` on staging is as wrong as a `-dev` version string —
 // readable on the boot line rather than discovered by an operator failing to log in.
 const identity = createConfiguredIdentity();
+
+// **Which day the office is having (slice 7.2b).** A `config_settings` row, read here because this
+// is where the pool exists before the app does, and because a zone ICU does not know must fail the
+// boot rather than a tenant read hours later — `zonedClock` raises `invalid` on one. Absent row
+// means `Asia/Jerusalem`; a second country is then a row and not a release. Said out loud on the
+// boot line for the same reason `docs: memory` is: a revision running on the wrong zone answers
+// "who lives here" about the wrong day for three hours a night, and that must be readable rather
+// than discovered.
+const clock = zonedClock((await readClockSettings(createSettings(pool))).zone);
 const work = createWorkRunner(pool);
 work.start();
 
@@ -44,6 +55,7 @@ work.start();
 // rule the pool and the clock follow. Slice 3.3, which is the first slice with a route that writes.
 const app = buildApp({
   pool,
+  clock,
   version: process.env.VERSION ?? '0.0.0-dev',
   objects,
   pdf: createPdfjsText(),
@@ -65,3 +77,4 @@ console.log(`docs: ${objects.describe()}`);
 console.log(`ocr: ${ocr.describe()}`);
 console.log(`extract: ${extractor.describe()}`);
 console.log(`identity: ${identity.describe()}`);
+console.log(`clock: ${clock.zone}`);

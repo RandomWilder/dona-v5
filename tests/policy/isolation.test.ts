@@ -10,6 +10,7 @@
 // biting with no edit to this file.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { fixedClock } from '../../src/kernel/clock.ts';
 import { resolveUnitsByPhone } from '../../src/scope/contract.ts';
 import { seedOccupancy, seedUnit } from './fixtures.ts';
 import {
@@ -22,7 +23,7 @@ import {
 
 // A parameter, never CURRENT_DATE. SPEC.md's clock rule exists so a temporal predicate cannot fail
 // on a Tuesday.
-const TODAY = new Date('2026-09-05T00:00:00Z');
+const TODAY = fixedClock(new Date('2026-09-05T00:00:00Z'));
 const TENANT_PHONE = '+972501112233';
 const NEIGHBOUR_PHONE = '+972504445566';
 const NEXT_TENANT_PHONE = '+972507778899';
@@ -172,6 +173,91 @@ describe('policy · the five-hop isolation join', () => {
           assert.deepEqual(
             await resolveUnitsByPhone(db, TENANT_PHONE, TODAY),
             [],
+          );
+        }),
+      );
+    } finally {
+      await pool.end();
+    }
+  });
+});
+
+// POLICY CASE 1b — the join asks about the office's day, not the UTC day. Slice 7.2b.
+//
+// 7.2's verify click ran at 00:02 IDT and stamped a declaration with the previous date, because
+// every date in this system was derived from the instant in UTC. As a stamp that is cosmetic. This
+// is the same defect where it is not cosmetic: `TENANCY_ACTIVE_TODAY` bound to the UTC day, which
+// between midnight and 03:00 local is yesterday.
+//
+// A handover is the shape that makes it visible, and it is an ordinary one — the outgoing lease ends
+// on the 14th, the incoming one starts on the 15th, and **both ends of the tenancy-active predicate
+// are inclusive**, so the day the join is handed decides which of the two people lives here. At
+// 00:30 on the 15th the office would say the new tenant does. Asked in UTC, the join says the old
+// one still does and the new one does not yet: both halves wrong at once, and the wrong one is a
+// real person in someone else's scope.
+//
+// (The predicate is not quoted here on purpose. Guard two matches it in a comment as readily as in
+// SQL, and guard five does the same to the UTC-day expression — which is the guards working, not an
+// inconvenience.)
+//
+// The instant is `2026-09-14T21:30:00Z`, which is 00:30 on the 15th in Jerusalem. It is written as a
+// UTC instant on purpose: an instant is what a clock has, and the whole claim of this case is that
+// it does not know what day it is until someone names a zone.
+const HANDOVER = fixedClock(new Date('2026-09-14T21:30:00Z'));
+const OUTGOING_PHONE = '+972502223344';
+const INCOMING_PHONE = '+972503334455';
+
+describe('policy · the join asks about the office day', () => {
+  it('at 00:30 IDT resolves the tenancy that starts today, not the one that ended yesterday', async (t) => {
+    const pool = await policyPool();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await pendingUntilSchema(t, POLICY_RELATIONS, () =>
+        inRolledBackTransaction(pool, async (db) => {
+          const unitId = await seedUnit(db, '17');
+          // Ends on the 14th. The last day of a lease counts, so this tenancy is live right up to
+          // the end of the 14th and not one minute into the 15th.
+          const outgoing = await seedOccupancy(db, '17', {
+            phone: OUTGOING_PHONE,
+            contactFrom: '2025-09-01',
+            contactTo: null,
+            tenancyFrom: '2025-09-01',
+            tenancyTo: '2026-09-14',
+            unitId,
+          });
+          // Starts on the 15th, in the same unit, which is what a handover is.
+          const incoming = await seedOccupancy(db, '17', {
+            phone: INCOMING_PHONE,
+            contactFrom: '2026-09-15',
+            contactTo: null,
+            tenancyFrom: '2026-09-15',
+            tenancyTo: '2027-09-14',
+            unitId,
+          });
+
+          const departed = await resolveUnitsByPhone(
+            db,
+            OUTGOING_PHONE,
+            HANDOVER,
+          );
+          assert.deepEqual(
+            departed.map((row) => row.party_id),
+            [],
+            `the tenant whose lease ended yesterday resolves to nothing; scope leaked ${outgoing.partyId}`,
+          );
+
+          const arriving = await resolveUnitsByPhone(
+            db,
+            INCOMING_PHONE,
+            HANDOVER,
+          );
+          assert.deepEqual(
+            arriving.map((row) => row.party_id),
+            [incoming.partyId],
+            'the tenant whose lease starts today resolves to their own unit at 00:30 local',
           );
         }),
       );

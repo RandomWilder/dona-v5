@@ -14,6 +14,7 @@
 // The SQLSTATEs and the whole probe run are in tasks/evidence/2.2.md.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { fixedClock } from '../../src/kernel/clock.ts';
 import { newId } from '../../src/kernel/ids.ts';
 import { resolveUnitsByPhone } from '../../src/scope/contract.ts';
 import { seedOccupancy, seedUnit } from './fixtures.ts';
@@ -29,7 +30,7 @@ import {
 // a typo in a fixture reading as a constraint doing its job.
 const CHECK_VIOLATION = '23514';
 
-const TODAY = new Date('2026-09-05T00:00:00Z');
+const TODAY = fixedClock(new Date('2026-09-05T00:00:00Z'));
 // **Its own numbers, not isolation.test.ts's.** These two files run in parallel against one database
 // and both seed a tenant, so a shared contact value means each transaction waits on the other's
 // speculative insertion inside `contact_value_resolves_to_one_party` — `40P01`, in the required

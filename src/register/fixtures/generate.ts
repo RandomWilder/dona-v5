@@ -25,6 +25,11 @@
 // **`today` is a parameter and never a clock reading**, SPEC.md's rule, and here it has a second
 // job: seed *and* day are what make the file reproducible. "Leases ending in the next 60 days" is
 // meaningless against a fixed date, so the entry point supplies the day and prints it.
+// `shift` is the kernel's `addDays`, from slice 7.2b: these six lines existed here and in tenancy's
+// obligation status, and one of the two had to be the copy. Anchored at midnight UTC over a
+// date-only string, which is zone-free — a zone is only ever needed to derive a day from an instant,
+// and no instant is involved here.
+import { addDays as shift } from '../../kernel/clock.ts';
 import { REGISTER_COLUMNS } from '../internal/row.ts';
 
 export interface GeneratedRegisterOptions {
@@ -158,14 +163,6 @@ function rng(seed: number): () => number {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-const DAY_MS = 86_400_000;
-
-function shift(iso: string, days: number): string {
-  return new Date(new Date(`${iso}T00:00:00Z`).getTime() + days * DAY_MS)
-    .toISOString()
-    .slice(0, 10);
 }
 
 /** RFC 4180, the half a spreadsheet produces: quote when the field carries a comma or a quote. */

@@ -14,6 +14,7 @@
 // when they arrive (SPEC.md, Testing).
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { fixedClock } from '../../src/kernel/clock.ts';
 import { newId } from '../../src/kernel/ids.ts';
 import { resolveUnitsByPhone } from '../../src/scope/contract.ts';
 import { seedOccupancy } from './fixtures.ts';
@@ -25,7 +26,7 @@ import {
   skipReason,
 } from './support.ts';
 
-const TODAY = new Date('2026-09-05T00:00:00Z');
+const TODAY = fixedClock(new Date('2026-09-05T00:00:00Z'));
 // One number, two people, in that order.
 const RECYCLED_PHONE = '+972521234567';
 // The number the same tenant moved to, which is how a live tenancy keeps a live contact.
