@@ -317,25 +317,25 @@ export function guardPiiComments(root: string): GuardResult {
 // ---------------------------------------------------------------------------------------------
 
 export const MOCKUPS_DIR = 'mockups';
-// The slice each painted flow belongs to. **Renumbered on 13 Sep 2026** with the weeks that moved
-// when week 6 became the two core journeys (tasks/roadmap.md § "What week 6 displaces"): the
-// responsibility matrix went 6.6 → 7.6 and the ticket console 7.2 → 8.2. Both were unbuilt, so no
-// evidence file names the old number — but this map is live code and a stale entry here would fail
-// a guard against the wrong slice, which is the quietest way for a guard to stop meaning anything.
+// The slice each painted flow belongs to. **Two entries left on 14 Sep 2026** — `responsibility`
+// (was 7.6) and `ticket` (was 8.2). Neither flow was ever painted, and the slices that would have
+// painted them are archived: tasks/archive/displaced-slices.md. An owner pointing at a slice that
+// will not run is the stale entry this map's own history warns about, and a map that names flows
+// nobody will draw is a guard that has stopped meaning anything. They come back with their slices
+// if their slices come back.
 export const MOCKUP_OWNERS: Record<string, string> = {
   ia: '5.3',
   changelog: '5.5',
   a9: '5.8',
   'building-new': '6.1',
   'unit-new': '6.2',
-  // **Repainted at 6.9 and re-owned with it.** A12's refusal screen was painted for 6.3, that
-  // slice closed, and the mockup went. 6.9 paints the *same flow* again — the refusal that offers
-  // to create — so the owner moves: left at 6.3 this guard would fail against an evidence file
-  // written two weeks ago and say nothing about the paint actually on disk. A flow is repainted
-  // whenever it gains a screen; the owner is always the slice that will wire it next.
-  'document-intake': '6.9',
-  responsibility: '7.6',
-  ticket: '8.2',
+  // **Repainted at 6.9, and again at 7.1.** A12's screen was painted for 6.3, that slice closed and
+  // the mockup went; 6.9 painted the same flow again for the refusal that offers to create, and
+  // closed. 7.1 is the third paint and the first that shows the *declaration* before the file and
+  // the *fields* after it. Left at 6.9 this guard would fail against an evidence file written
+  // yesterday and say nothing about the paint actually on disk. A flow is repainted whenever it
+  // gains a screen; the owner is always the slice that will wire it next.
+  'document-intake': '7.1',
 };
 
 export function guardMockups(root: string): GuardResult {

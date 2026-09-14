@@ -1,3 +1,93 @@
+# The new track — UI-first, from the document intake
+
+> **Opened 14 Sep 2026, the day week 6 closed.** The plan that was going to run next is archived:
+> [archive/displaced-slices.md](archive/displaced-slices.md), seventeen unbuilt slices, 7.1–9.5.
+> Not deleted, and the debts inside it are still debts — they are named at that file's head and in
+> the carried list below. **The slice sequence restarts at 7.1**, which is a different 7.1.
+>
+> **Why the plan stopped.** Week 6's demo found four defects that eleven green slices and a full CI
+> gate had not. The director's reading: the weak link is not the engineering, it is the flow
+> descriptions the engineering is built from — written in week 1, before the vision they encode had
+> settled. So the flows get rebuilt one screen at a time, starting where the data enters, because
+> everything downstream is a function of what lands in `extracted_field`.
+>
+> **No week number, on purpose.** [roadmap.md](roadmap.md)'s calendar and month tables are untouched,
+> as they always are. What the remaining weeks *mean* has not changed; which slices deliver them has.
+>
+> **The pipeline does not change.** Plan mode, both gates, mockup-before-wiring, the carry rule, one
+> slice per session, `deploy.yml` off the CI result. That is the part that is working and it is not
+> what is being rethought. The one standing change: **mockup-first is the default here, not the
+> exception** — every slice in this track paints before it wires.
+
+## Slice 7.1 — The documents tab: the declaration before the file, the fields after it
+
+**Painted, not wired. Awaiting the director's click.** `mockups/document-intake.html`, served at
+`/dev/mockups/document-intake` on a `-dev` process (`npm run dev`, `:3000`). Third paint of this
+flow — 6.3 painted it, 6.9 repainted it, `MOCKUP_OWNERS` now says `7.1`.
+
+The drawn flow: admin picks a type → **the screen shows the schema the reader will look for** →
+admin uploads → the existing type check runs → the reader fills the schema → **each field carries
+approve, or edit-and-approve**.
+
+**Seven rulings the paint asks for, and none of them is a screen yet.** They are printed in the
+paint itself, in place, so the review and the decisions happen on the same page:
+
+1. **Schema editable at runtime** — today the eight lease fields are source code seeded into the
+   database. Making them data is a migration, a spec edit and plan mode.
+2. **The boundary.** What proves *this is a lease* (`verificationTerms`, three of them) stays in
+   code and under the policy matrix; what is read *after* that proof stays open to editing.
+   **Refusal deterministic, extraction configurable.** 6.8(c) is the argument: the policy matrix —
+   every specimen refused in every foreign slot — is the only guard against widening a type until it
+   matches anything, and a deterministic gate cannot defend a schema it does not know at test time.
+3. **Three fields in the diagram do not exist.** `city` (today `address` is one field holding
+   everything, though 6.11's *reader* already splits street from city at the anchor);
+   `rent_amount` and `security_deposit` — and **there is no money field in this catalogue and no
+   `MONEY` value type**, written there twice and on purpose. `NUMBER` is not the same thing.
+   **Adding money to this system is the director's.**
+4. **Approve, to where?** `promoted_to` / `promoted_by` / `promoted_at` already exist from 4.3, with
+   a trigger that refuses an unsigned stamp and refuses to delete a stamped row — that *is* "who
+   approved it and when". But `field_promotion.target` carries a `CHECK` with **two values**,
+   `tenancy.start_date` and `tenancy.end_date`. The two dates can be approved today; **address,
+   apartment number, name and ת.ז. have nowhere to be promoted to.** Either widen the `CHECK`
+   target by target (a migration each, which 0018 says was the deliberate cost), or add an
+   *approval* stamp distinct from *promotion*. The second is cheaper and yields the measurement;
+   the first is what actually feeds the system.
+5. **Read value and approved value are two columns, not one.** If edit-and-approve overwrites what
+   the model returned, the delta is lost — and that delta is the per-field accuracy dataset this
+   whole track exists to produce. Plus the risk the screen creates: ten rows mostly above 90% and
+   "approve all" becomes reflex, which kills the measurement on day one. Hence the primary control
+   is *approve everything not flagged* and the low-confidence rows sort up. **The threshold is a
+   decision.**
+6. **ת.ז. on this screen is a disclosure.** The diagram shows it in plain text. 6.4 and 6.6 already
+   rule: withheld by default, governed by `party.national_id.read`, every disclosure writes
+   `evidence.read_identifier`. Not an extension — the existing rule, honoured from the first row.
+7. **A derived document name is a label, never a key.** The diagram's
+   `{type}+{street}+{apartment}+{start}+{end}` is useful to read. Document identity is already
+   ruled: anchored to the place its own `storage_uri` names (6.10), deduped on `file_hash`. Two
+   identities that can disagree is the thing 6.10 was written to prevent. (The diagram says *end
+   type*; read as *end date*.)
+
+**Not needed — already works.** "Renter 2" is not a new field. Two tenants on one lease are two rows
+of the same declaration: `0017_extracted_field.sql` says so in a comment and deliberately puts no
+unique constraint on `(document_id, document_type_field_id)`. The paint shows it.
+
+**Done when:** the director has clicked the paint on `:3000` and each of the seven above is either
+ruled or explicitly deferred. **Then** 7.1 is re-scoped to what it wires, and the paint is deleted by
+the slice that wires it (guard four).
+
+- [ ] **`.form-grid` floors its implicit column at its widest item's min-content.** Found by
+      clicking this paint at 478px: one `.notice` holding a table made the whole page, headings
+      included, 567px wide and scrolled the body sideways. Fixed *inside the paint* with
+      `grid-template-columns: minmax(0, 1fr)` scoped under `.paint`, deliberately not in
+      `src/evidence/internal/views.ts` — no wired `.form-grid` holds a table today, so nothing is
+      broken yet. **The slice that puts these tables on a real screen inherits the bug**, and that
+      is the slice that fixes it for real.
+- [x] **`roadmap.md` § "What week 6 displaces" was in the file twice** — a 27-line stale copy from
+      `bda380e`, starting at a `---|---|---|` with no header row above it, so it rendered as
+      garbage and contradicted the live copy on M2. Deleted 14 Sep. Nothing referenced it.
+
+---
+
 # Week 6 · Sun 11 – Thu 15 Oct 2026 — The two core journeys
 
 > **Started 13 Sep 2026**, the day week 5 closed ([evidence/week-5.md](evidence/week-5.md)), rather
