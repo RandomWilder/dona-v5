@@ -38,7 +38,8 @@
 > the Definition of Done in [plan.md](plan.md).
 
 **Where a new session starts: 6.8**, then 6.9, then 6.10 — one slice per session, in that order,
-because 6.9 and 6.10 both depend on 6.8. 6.1–6.7 are closed and merged, and the week-6 demo has been
+because 6.9 and 6.10 both depend on 6.8. **6.11 was added by 6.8's verify step** and is the
+director's to sequence: it is what the demo's own paper said when the reader finally reached it. 6.1–6.7 are closed and merged, and the week-6 demo has been
 given; the three remaining slices are what that demo wrote (§ "What the week-6 demo found").
 An unbuilt flow is painted in the live shell (`mockups/<flow>.html`, `/dev/mockups/<flow>` on a
 `-dev` process) before it is wired; a guard fails if that file and the slice's evidence both exist.
@@ -449,7 +450,8 @@ defect the room thought it was watching.
   scan's own CamScanner text layer beat the good reader. Latency proves it: **0.43–1.31 s** for the
   four refusals, against **7.07–7.40 s** for the one file with no text layer, which is a real
   Document AI call. → **6.8**.
-- **The type's terms are calibrated to one specimen.**
+- **The type's terms are calibrated to one specimen.** *(Closed at 6.8 — and 6.8's verify step found
+  the same sentence is true of the **anchors** as well as the terms, which is 6.11.)*
   `src/evidence/fixtures/document-types.ts:79` requires **all three** of
   `חוזה שכירות` · `המושכר` · `תקופת השכירות`. The demo's paper is titled **`הסכם שכירות`** and says
   **`הדירה`** throughout; only `תקופת השכירות` is present. Two of three absent, so the refusal was
@@ -464,10 +466,12 @@ defect the room thought it was watching.
   earlier and `views.ts:916` printed the mismatch. **The sentence was true of the wrong apartment.**
   That document now carries `SUBJECT` links to three flats. → **6.10**.
 
-**Two latent items the same reading surfaced**, both owned by 6.8: `onlineOcrPageLimit = 15`
-(`src/kernel/ocr.ts:51`) silently disables OCR for a longer scan, and real leases exceed it; and an
-OCR failure is swallowed by `read.ts`'s `catch { return null }`, which is indistinguishable from a
-successful read that found nothing.
+**Two latent items the same reading surfaced**, both owned by 6.8 and **both closed there**:
+`onlineOcrPageLimit = 15` (`src/kernel/ocr.ts:51`) silently disabled OCR for a longer scan, and real
+leases exceed it — the demo's is 38 pages; and an OCR failure was swallowed by `read.ts`'s
+`catch { return null }`, indistinguishable from a successful read that found nothing. The first
+turned out not to need a refusal at all: `individualPageSelector` reads the front of a long document,
+measured at `200` in 36.4s for fifteen pages of the demo's file.
 
 **The director's two rulings, taken on 14 Sep after the demo and binding on 6.9:**
 - **A12 may create.** `SPEC-flows.md`'s *"It does not create a building or a unit… creating the
@@ -520,6 +524,41 @@ week 7's if the director wants it.
       **Plan mode** — `src/kernel/pdf.ts`, `src/kernel/ocr.ts` and `src/evidence/` is two modules and
       the kernel.
       **Deps:** 6.7 · **L**
+      **Raised and closed inside 6.8:**
+      • **The demo file is 38 pages, not 5**, and the write-up at 6.7 said five. The size is the
+      half that was right — 15,608,329 bytes is the 15.6 MB on record — and every page carries a
+      CamScanner text layer of **one run with zero line marks**, so `documentText` produced 38
+      "lines", one per page. Fix (a) does nothing for this file on its own; only Document AI emits
+      lines for it, which is the chain (a)+(b) was designed as.
+      • **`batchProcess` was asked for and is not needed**, and the probe is why. Document AI's
+      online `process` accepts `individualPageSelector` on a document longer than the online limit:
+      the demo file, pages 1–3, answered `200` in 33.2s; pages 1–15, `200` with fifteen pages in
+      36.4s. batchProcess takes its input only from GCS, so it would have required the bytes in a
+      bucket before any verdict — **a staging store, which 3.2, A6 and A12 all refuse and which the
+      director's own ruling of 14 Sep rejected**. The selector gets the same outcome with no staging
+      store, no new bucket, no async operation and no PDF splitter.
+      • **The page limit is no longer a refusal**; a byte ceiling is. `onlineOcrByteLimit` is three
+      quarters of Document AI's 20 MiB *request* bound, because the whole file rides in every request
+      base64-encoded and selecting fewer pages does not shrink it. `LIMITS.fileSize` is larger, so
+      there is a band where a file is storable and unreadable, and that band is the refusal.
+      • **The OCR bound went 20s → 90s**, off a stopwatch: most of a large call is the upload. At
+      twenty the demo file timed out and the log recorded a reader that had *failed*, which is a
+      false answer rather than a slow one.
+      • **The demo file now verifies.** Against the live staging processor, unedited: verdict
+      `verified`, 0 missing requirements, `partial` 15 of 38 pages, **874 lines** of text where its
+      own layer gave 38. It was refused four times on staging.
+      **Raised → 6.11, and it is the largest thing this slice found:**
+      • **A12's anchors were written from the tier-1 specimen and do not fit the real standard
+      form.** On the demo's own paper the reader returned
+      `{ addressLine: 'דם המכבים 38', city: null, apartmentNumber: null }` — and `דם המכבים 38,
+      מודיעין` is **a party's own address**, matched through the `רחוב` needle inside `מרחוב`. The
+      flat is `דירה מס ' 206-7`, a hyphenated number inside a sentence, which `APARTMENT` cannot
+      read (it stops at `206`, and the spaced apostrophe defeats the `מס` branch outright). And the
+      flat's address is **not in the body at all**: the form says the details are `כמפורט בנספח א'`
+      and identifies the property by `גוש 80031 חלקות 43, 46, מגרש 212א`. **The risk is not a null
+      reading, it is a confident wrong one** — on a portfolio holding that street, A12 would have
+      filed this lease against the wrong flat and said nothing. Not patched here: the fix needs the
+      real corpus and a ruling on whether an annex is read, which is a slice and not an edit.
 
 - [ ] **6.9 — The document tab, and a refusal that offers to create.**
       Flow **A12** gains its entrance and its two missing screens. **The tab:** `ChromeDest` and one
@@ -561,6 +600,34 @@ week 7's if the director wants it.
       `.form-actions` are two files each since 6.2, and **a third occurrence of either moves them to
       `tokens.css`**. This slice writes screens and is the likeliest to trip it.
       **Deps:** 6.8 · **L**
+
+- [ ] **6.11 — The anchors meet the form the operator actually uses.**
+      Flow **A12**, and it is raised by 6.8's verify step against the demo's own paper. The reader's
+      three anchors were written from `docs/corpus/lease-standard.md`, which is authored to the
+      *published* חוזה שכירות אחיד. The form the operator files is a project lease and it differs in
+      three ways that matter, every one of them measured:
+      • **A party's address is matched as the property's.** `רחוב` matches inside `מרחוב`, so
+      `מרחוב דם המכבים 38 מודיעין` — the signatory's own address — was returned as `addressLine`.
+      **This is the dangerous one**: a null reading asks a question, a wrong reading files a lease
+      against a flat nobody chose. It is not new at 6.8 and it has never been reachable before,
+      because until 6.8 no scan was read far enough to reach it.
+      • **The flat is a hyphenated number inside a sentence** — `דירה מס ' 206-7` — and `APARTMENT`
+      reads neither the hyphen nor the spaced apostrophe.
+      • **The flat's address is in נספח א׳ and not in the body.** The body says
+      `פרטיה ותיאורה … כמפורט בנספח א'` and identifies the property by `גוש 80031 חלקות 43, 46,
+      מגרש 212א`. On a 38-page file the annex is past the fifteen pages the online call reads, so
+      **no page selection of the front of the document can ever contain it**.
+      **Done when:** the reader distinguishes the property's address from a party's, or returns null
+      rather than a party's — **the wrong-address case written red first**; a hyphenated unit number
+      reads whole; and the ruling on annexes is written into `SPEC-evidence.md` before the code —
+      either A12 reads beyond the first pages when the body defers to an annex, or it says it cannot
+      place this document and offers the search, which is a correct answer and not a failure.
+      **Verify:** the demo file on `:3000`, and a second real form once the corpus arrives.
+      **Spec edit first:** `SPEC-evidence.md`'s A12 anchors — the section's own rule is that they are
+      printed there because somebody has to write a lease that matches them, and the real corpus does
+      not.
+      **Needs the corpus** (F6) to be finished properly, and the wrong-address half needs nothing.
+      **Deps:** 6.8 · **M**
 
 - [ ] **6.10 — A dedupe names its anchor.**
       The same bytes are one document forever — `ON CONFLICT (file_hash) DO UPDATE`, which is correct

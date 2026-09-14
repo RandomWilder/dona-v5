@@ -1719,7 +1719,8 @@ it. Then a second lease for the same person elsewhere: one party, two tenancies.
   - **A12's address reader has never seen a line break in production.** `documentText` joins a
     page's words with a space and emits a newline only between pages, so the structure `place.ts`
     and SPEC-evidence.md are both written against never arrives; punctuation after the city is what
-    has always saved it. → **6.8**, kernel, plan mode, spec edit first.
+    has always saved it. → **6.8**, kernel, plan mode, spec edit first. *(Closed; and the same
+    sentence turned out to be true of the anchors as well as the text → 6.11.)*
   - **The 5.6 clock-end click is not a click.** No route writes `status: 'ACTIVE'` — only the
     fixtures — so A5 is a flow with no screen, and the register generator ends every ACTIVE tenancy
     in the future by construction. → **re-owned by the slice that gives A5 a screen**, which sits in
@@ -1801,6 +1802,22 @@ screen is about, is not.
 - **Verify:** `:3000` with the demo file; `document_link` row counts before and after.
 - **Spec edit first:** SPEC-evidence.md on what a second filing of the same bytes means for a screen.
 - **Deps:** 6.8 · **Size:** S · no plan mode
+
+### Slice 6.11 — The anchors meet the form the operator actually uses
+**Added by 6.8's verify step, which is the first time the reader ever reached a real project lease.**
+A12's three anchors were written from the tier-1 specimen, which follows the published
+חוזה שכירות אחיד. The form the operator files differs in three measured ways: `רחוב` matches inside
+`מרחוב` and returned **a party's own address** as the property's; the flat is a hyphenated number
+inside a sentence (`דירה מס ' 206-7`) that `APARTMENT` cannot read; and the flat's address is in
+`נספח א'` rather than the body, past the pages an online call reads. The first of those is the one
+that matters — a null reading asks a question, a wrong reading files a lease against a flat nobody
+chose.
+- **Done when:** a party's address is never returned as the property's, **written red first**; a
+  hyphenated unit number reads whole; and the annex question is ruled in the spec before the code.
+- **Verify:** the demo file on `:3000`, and a second real form when the corpus arrives.
+- **Spec edit first:** SPEC-evidence.md's A12 anchors — the section's own rule is that they are
+  printed there because somebody has to write a lease that matches them.
+- **Deps:** 6.8 · **Size:** M · the wrong-address half needs no corpus; the annex half wants F6.
 
 ---
 
