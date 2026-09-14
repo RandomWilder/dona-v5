@@ -878,7 +878,14 @@ describe('evidence · A12 a document finds its own place', () => {
     const here = appFor(leasing(`${ADDRESS_A12}, ${CITY_A12}, דירה 12A`));
     const elsewhere = appFor(leasing('אלמוג 5, עיר שאיננה, דירה 3'));
     const ambiguous = appFor(leasing(`${ADDRESS_A12}, ${CITY_A12}, דירה 9`));
-    const apps = [here, elsewhere, ambiguous];
+    // **Slice 6.11.** No property label anywhere: the only address on this paper is the landlord's
+    // own, written the way every standard form writes one, and printed above the property clause.
+    const landlord = appFor(
+      `המשכיר: אבי לוי ת.ז 012345678 מרחוב ${ADDRESS_A12}, ${CITY_A12}, דירה 12A\n${specimen(
+        'lease-standard.md',
+      )}`,
+    );
+    const apps = [here, elsewhere, ambiguous, landlord];
     const hashes: string[] = [];
     let unitA = '';
     let unitB = '';
@@ -1069,6 +1076,35 @@ describe('evidence · A12 a document finds its own place', () => {
           // before is the difference between that and a reader that broke.
           assert.equal(audited.rows[0]?.inputs.ocr, 'not_needed');
           assert.equal(audited.rows[0]?.inputs.pages, 1);
+        },
+      );
+
+      await t.test(
+        'a landlord address is not the property, and files nothing against their flat',
+        async () => {
+          // **Slice 6.11, at the route and not only at the reader.** This paper carries no property
+          // label at all: its only address is the party line a standard form prints above the
+          // property clause, and `רחוב` matched inside `מרחוב`. **The identical request filed
+          // against 12A before this slice** — a flat nobody chose, on a document nobody questioned,
+          // and the screen that would have said so does not exist. A null is a question; this was
+          // an answer.
+          const before = await documentsHere();
+          const putsBefore = puts;
+          const response = await as(landlord).inject({
+            method: 'POST',
+            url: '/documents/intake',
+            ...upload(
+              { type: 'lease' },
+              { filename: 'landlord.pdf', bytes: pdfBytes('a12 landlord') },
+            ),
+          });
+          assert.equal(response.statusCode, 422, response.body.slice(0, 400));
+          // The landlord's street is not echoed back as the property's, because it was not read as
+          // one: the screen offers the search box instead.
+          assert.doesNotMatch(response.body, new RegExp(ADDRESS_A12));
+          assert.match(response.body, /חיפוש דירה אחרת/);
+          assert.equal(await documentsHere(), before);
+          assert.equal(puts, putsBefore, 'no object was written');
         },
       );
 

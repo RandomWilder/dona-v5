@@ -323,14 +323,46 @@ resolve the place → then `fileDocument`, unchanged.**
 that matches them.** It is a pure function over the document's text (`src/evidence/internal/place.ts`),
 the exact analogue of A6's protocol reader, and it reads three things:
 
-- **the street and number** — after `כתובת המושכר:`, `כתובת הנכס:`, `כתובת הדירה:`, a bare `כתובת:`,
-  or a `רחוב` that starts the address. `רקפת 12` and `רחוב רקפת 12` are the same address to it.
+- **the street and number, in two tiers.** **Tier one is the property's own label** —
+  `כתובת המושכר:`, `כתובת הנכס:`, `כתובת הדירה:` — and it is trusted wherever in the document it
+  stands, because a qualified label names the property and nothing else. **Tier two is an address
+  written into a sentence** — a bare `כתובת:`, or a `רחוב` / `ברחוב` that starts the address — and it
+  is read only when tier one found nothing and only when the line it stands on does not name a party.
+  `רקפת 12` and `רחוב רקפת 12` are the same address to it. **The tier decides, never the position:**
+  on a standard form the parties are printed above the property clause, so leftmost-wins reads the
+  wrong one.
 - **the city** — whatever follows the address's comma, up to the next comma, full stop, semicolon
-  **or line end**. So `כתובת המושכר: רקפת 12, שוהם.` reads as street `רקפת 12` and city `שוהם`.
-- **the apartment number** — `דירה 12`, `דירה מס׳ 12`, `דירה מספר 12A`. The same shape 3.5's reader
-  uses, because it is the same sentence on a different form.
+  **or line end**. So `כתובת המושכר: רקפת 12, שוהם.` reads as street `רקפת 12` and city `שוהם`. The
+  city is read from whichever address was accepted, so an address that was rejected takes its city
+  with it.
+- **the apartment number** — `דירה 12`, `דירה מס׳ 12`, `דירה מספר 12A`, `דירה מס ' 206-7`. The same
+  shape 3.5's reader uses, because it is the same sentence on a different form — widened at 6.11 for
+  a **hyphenated** number and for the space a scanner leaves before the apostrophe. The hyphen is not
+  a separator: `206-7` is one flat's number, and `foldPlace` drops it anyway when the number is
+  matched against a unit.
 
 Anything it cannot find is null, and null is not an error: it is the refusal below, which is a screen.
+
+**A party's address is not the property's, and telling them apart is the whole of slice 6.11.** Tier
+two's needle used to be a bare `רחוב`, which matches inside `מרחוב` — the word that introduces a
+person's residence on a standard form and never a property. On the week-6 demo's own paper the reader
+returned `דם המכבים 38`, which is the landlord's street. **A null reading asks a question; a wrong one
+files a lease against a flat nobody chose**, and this reading was one ordinary lease away from doing
+it: a party line with a town after its comma yields an exact `building.address_key`, one unit comes
+back, and nothing between the read and the filing asks anybody. So the needle is anchored against a
+Hebrew letter to its left — which keeps `ברחוב` and drops `מרחוב` — and a tier-two match whose own
+line carries an identity marker before it (`ת.ז`, `ת"ז`, `תעודת זהות`, `ח.פ`, `המתגורר`) is skipped
+for the next match; where there is no other, **the reading is null**.
+
+**A12 does not read an annex, and says so rather than guessing.** The real project lease describes the
+flat as `כמפורט בנספח א'` and identifies the property in the body by `גוש`, `חלקה` and `מגרש`; the
+published standard form defers the same way (`docs/corpus/lease-standard.md`), so this is the shape of
+the form and not one specimen's defect. Three reasons the annex is not chased: it sits past the pages
+the online OCR call reads, and because the byte bound is on the request carrying the whole file (6.8)
+**no selection of the front of a document can ever contain it**; a parcel identification has nothing
+to resolve against, the estate being keyed on `building.address_key` and holding no `גוש`; and the way
+through already exists — the candidate list, the search box, and A12's offer to create. **A document
+that says its address is somewhere else is one A12 cannot place, and saying so is a correct answer.**
 
 **On a form a line break is where a field ends, and from slice 6.8 the line break actually arrives.**
 The reader was written against that clause from the day it shipped, and `documentText` could not
