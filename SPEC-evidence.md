@@ -497,7 +497,10 @@ get wrong.
 The reason the rule cannot half-succeed is directly below: the operator is not shown the value, so a
 ת.ז. bound to the wrong name is an error nobody can see. **Two people on one lease resolving to the
 same party is `invalid`** — it would otherwise be one party silently overwriting its own role through
-`tenancy_party`'s `(tenancy_id, party_id)` key.
+`tenancy_party`'s `(tenancy_id, party_id)` key. **The refusal happens before anything is written**,
+through `countDistinctIdentifiers`, so it holds whoever owns the transaction — including a caller
+that already had one open, where `inTransaction` passes the client through and there is no savepoint
+to roll back to.
 
 **Captured identifiers are not on that screen, and not in its shape. Slice 6.4.** A lease now
 declares `tenant_id_number` and `guarantor_id_number`, and `proposeLeaseTenancy` is a screen shape:

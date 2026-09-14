@@ -164,6 +164,16 @@ constraint already rejected.
   full names are still the reason. What changed is that the identifier this module has always keyed
   on now has a second source besides the register: a human confirming a household at A2's screen.
 
+  **And one function that reads no table.** `countDistinctIdentifiers` answers *how many people do
+  these identifiers name*, which A2 asks before it writes anybody: a lease naming two people and
+  printing one ת.ז. twice would otherwise put one party under two roles on one letting, and
+  `tenancy_party`'s key is `(tenancy_id, party_id)`, so the second row overwrites the first and the
+  household comes out a member short of the paper. The comparison cannot be made on the strings —
+  `312345678` and `312-345-678` are two strings and one person, which is the whole reason
+  `national_id_key` exists — so the fold makes it, in one statement, and **a number comes back**.
+  This is not the read model this module still does not have: it reads no row and asks what a value
+  *would* key on, never who exists. Who is reachable on a number is still `src/scope/`'s answer.
+
   **The normalisation still lives in the database, and now has a name.** Slice 6.5 adds
   `party_national_id_key(party_kind, national_id)`, an `IMMUTABLE` function holding the same fold the
   generated column below is written with, because A2's resolution has to normalise an identifier read
