@@ -62,7 +62,9 @@ rule lapsing because a document screen arrived.
 
 ## Carried in from week 5 — every item, with the slice that closes it
 
-- [ ] **`national_id` never in an agent tool's response shape.** **6.6 now also owns the read
+- [x] **`national_id` never in an agent tool's response shape.** **Closed at 6.6**, and the read
+      overlay with it — the ruling is *captured is governed, printed is the document*
+      ([evidence/6.6.md](evidence/6.6.md)). **6.6 now also owns the read
       overlay's word boxes**, where 6.5 found an OPERATOR can read a ת.ז. off the document's own
       rendered line. Was → week 9. **Now 6.4 and 6.6**,
       because this is the week ת.ז. starts existing. `party.national_id.read` gets its first reader
@@ -304,7 +306,7 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       `extracted_field`'s promotion guard refuses both the delete and the unstamp (4.3, working), and
       disabling a trigger to get past it is not an agent's call.
 
-- [ ] **6.6 — The guards, and the number that says ת.ז. did not leak.**
+- [x] **6.6 — The guards, and the number that says ת.ז. did not leak.** Closed 14 Sep — [evidence/6.6.md](evidence/6.6.md).
       **Policy case, red first:** no identifier-shaped run in the response shape of anything
       `src/scope/` serves, and none in the copy sent to the embedder. `tests/policy/` is the gate and
       not an eval — SPEC.md's "never test a deterministic constraint through the agent".
@@ -327,6 +329,30 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       **Done when:** both guards fail against a deliberate violation and pass after, and the overlay
       question is answered in writing.
       **Deps:** 6.5 · **M**
+      **Raised and closed inside 6.6:**
+      • **Neither of 6.5's two options was taken, and that is the ruling.** Withholding the overlay
+      would have withheld the page image, which the same viewer can already read through 5.4's
+      signed URL — a control that is believed and absent. Lifting the rule would have given up a
+      real distinction. **Captured is governed; printed is the document**: the `title` attribute is
+      this system's transcription of the paper and is withheld; the picture of the page is the paper
+      and is not. Wholesale rather than per word (`312`, `345`, `678` as three OCR tokens defeat any
+      per-token pattern) and on every type rather than the types that declare the field (a
+      declaration governs what is *captured*, not what a page prints).
+      • **An unanchored `\d{9}` was the third repeat of week 5's `/05\d/`.** It fires on a
+      64-character hex digest about four times in five and on every UUID. `IDENTIFIER_RUN` in
+      `src/kernel/identifier.ts` is boundary-anchored and carries its own test — 2,000 UUIDs, 2,000
+      digests, 200 base64 page images, **0** false hits. One constant, read by both guards and
+      waiting for 9.1.
+      • **The two write receipts came off the never-a-name allowlist when the case was first run.**
+      `renderTenancyWrittenPage` says `partiesWritten` and not who, so the rule was already holding
+      one screen earlier than the line 6.6 drew.
+      **Raised → 6.7:**
+      • **Neither guard has a staging half.** Both read the screen registry and the rows the policy
+      suite seeds; nobody has grepped a staging page for an identifier. 6.7's walk files a lease with
+      a ת.ז. on it, so the grep costs one command there.
+      **Raised → the director:** 6.5's `extracted_field` residue is still in the developer database
+      and is unchanged — the promotion guard refuses both the delete and the unstamp, and disabling a
+      trigger to get past it is not an agent's call.
 
 - [ ] **6.7 — The journey, end to end, on staging.**
       The demo slice, and the first time this week's work leaves localhost. Create a building → add an
@@ -339,6 +365,9 @@ docs-bucket delete binding, the Node-20 action bumps, `tenant_visible`, prod PIT
       identifier fields are seed rows in no workflow, so staging's `lease` type declares no ת.ז.
       until somebody runs it, and the second half of the demo — one party, two tenancies — reads as
       broken rather than as unseeded.
+      **Carried in from 6.6:** **grep the staging page for an identifier-shaped run**, at both
+      stances, on the lease this walk files. Both of 6.6's guards read the registry and the policy
+      suite's own rows; neither has ever looked at a page staging served.
       **Done when:** the whole walk is done by clicking, with no seed and no SQL.
       **Verify:** live on staging, both halves in one sitting.
       **Deps:** 6.6 · **M**
