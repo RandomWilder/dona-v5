@@ -12,6 +12,10 @@ own** — 0005 decided at slice 5.1b against something this repository had alrea
 out, 0006 at slice 6.4 against a conflict that was visible in ADR-0004's own text before either half
 of it was built.
 
+**ADR-0008 is the first ADR that reverses a numbered foundation rule**, and it is a file rather than
+a spec edit for that reason: the rules are cited by number across this repository, and a rule that
+stops binding has to say where it went and why, or the next reader finds only an absence.
+
 **ADR-0004's status row said `proposed` until 6.4.** The ADR's own body moved it to `accepted` on
 6 Sep 2026 and set out why: a decision is accepted when it has been taken and is being followed, and
 an outstanding deliverable belongs on the fuse table. This table had not been updated to match, so
@@ -26,6 +30,7 @@ for a week the register and the decision disagreed about whether three of four d
 | [0005](ADR-0005-the-credential-is-google-s.md) | The staff credential is Google's; the allowlist replaces the assertable second factor | accepted |
 | [0006](ADR-0006-the-extractor-may-read-a-declared-identifier.md) | The extractor may read a **declared** identifier; masking binds the embedder and any tenant-facing model call | accepted |
 | [0007](ADR-0007-work-is-tracked-as-blocking-edges-not-a-calendar.md) | Work is tracked as blocking edges between tickets, not a calendar of slices and weeks | accepted |
+| [0008](ADR-0008-money-is-ordinary-data.md) | Money is ordinary data; **foundation rule 2 is retired in full** and its three enforcements are deleted | accepted — the four published documents still promise the retired rule |
 
 **A1–A10 in [archive/tasks-w1-7/plan.md](../../archive/tasks-w1-7/plan.md) are numbered as they will
 become ADRs.** They are decisions of record already; they become files here as the work that

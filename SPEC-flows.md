@@ -636,11 +636,12 @@ side only, and this flow closes it.
 4. **Retiring a field closes the row and inserts nothing.** The catalogue's rule is deactivate,
    never delete (A9), and a field is no different — `extracted_field` rows point at the closed
    declaration and stay explicable by it.
-5. **No money field, and the refusal names the rule.** The moment an administrator may declare a
-   field they may declare `rent_amount` as `NUMBER`, and foundation rule 2 stops being enforceable
-   by the schema. The editor refuses a declaration whose key or label carries the money vocabulary.
-   **Adding money to this system stays a migration, a `value_type` member, a diff and a review** —
-   the price `src/staff/internal/roles.ts` says an irreversible widening should cost.
+5. **A money field is an ordinary field**, from 15 Sep 2026. The editor refused a declaration whose
+   key or label carried a money vocabulary until foundation rule 2 was retired
+   ([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)); that guard is deleted and
+   nothing replaces it, so `rent_amount` as `NUMBER` is declared, versioned, audited and refused by
+   nothing. There is still no `MONEY` value type, because an amount is a `NUMBER` beside a `TEXT`
+   currency and does not need one.
 
 **What A14 does not do.** It does not touch `verification_terms` — what proves *that this is a
 lease* stays in the type row under A9's editor and under the policy suite, while what is read *after*

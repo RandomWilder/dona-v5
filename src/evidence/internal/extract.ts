@@ -9,6 +9,7 @@ import { KernelError } from '../../kernel/errors.ts';
 import type { Extractor, JsonSchema } from '../../kernel/extraction.ts';
 import { newId } from '../../kernel/ids.ts';
 import type { PdfPage } from '../../kernel/pdf.ts';
+import type { FieldValueType } from './catalogue.ts';
 import { documentTypeFields } from './catalogue.ts';
 import { getFiledDocument } from './documents.ts';
 import type { Queryable } from './types.ts';
@@ -161,6 +162,116 @@ function asIsoDate(value: string): string | null {
   return trimmed;
 }
 
+/**
+ * One printed number, with its separators and its grouping spaces, and **stopping at anything
+ * else**. A leading `.` or `,` is taken only when a digit follows it, so `.5` is a number and a
+ * sentence's full stop is not.
+ *
+ * It matches globally on purpose: what makes a finding safe is that there is exactly *one* of these
+ * in it, and that is a question only a global match can answer.
+ */
+const AMOUNT_RUN = /[.,]?\d[\d.,   ]*\d|[.,]?\d/g;
+/** The spaces a typed form groups thousands with: ordinary, non-breaking, thin. */
+const GROUPING_SPACE = /[   ]+/;
+
+/**
+ * **Capture for a NUMBER field: the number the paper printed, without the paper. Ticket #101.**
+ *
+ * `12,500 ₪`, `₪ 12 500`, `25.000` and `3,000.00` are four ways one lease prints one figure, and the
+ * store holds `12500`, `12500`, `25000` and `3000`. Separators, spaces and currency symbols are
+ * properties of the page; this is the same act `asIsoDate` performs above, on the other value type
+ * that has a printed form and a stored form.
+ *
+ * **Which separator is the decimal point is decided, not guessed at random.** A lease in this
+ * corpus may be typed by an Israeli office or by a European one, so both conventions turn up:
+ * - Both `.` and `,` present → the **last** one is the decimal point and the other groups thousands.
+ *   `3,000.00` is three thousand and `3.000,00` is the same three thousand.
+ * - One separator, appearing more than once → all of them group thousands. `1.234.567`.
+ * - One separator, appearing once → it groups thousands when exactly three digits follow it, and is
+ *   a decimal point otherwise. `25.000` is twenty-five thousand; `12.5` is twelve and a half.
+ *
+ * The one case this reads wrong is a genuine three-decimal value — `1.234` of something — which no
+ * currency on a lease has and which the alternative reading gets wrong far more often.
+ *
+ * **A zero fraction is dropped**, so `3,000.00` and `3000` are one value and not two, and a value
+ * with no digit left in it at all returns null — no row, exactly as a `DATE` that is not a calendar
+ * day. The currency is never inferred from the symbol stripped here: it is the field beside this one.
+ *
+ * **Two numbers in one finding is a refusal, and that is the sharpest rule here.** The first version
+ * of this function deleted every character that was not a digit or a separator and joined what was
+ * left, so `12,500 ₪ לחודש, סה"כ 150,000` — one span, two numbers, which is what a reader returns
+ * when it selects one word too many — became `12500150000`. A rent wrong by four orders of magnitude
+ * is worse than a rent that is missing, and a missing required field is already a result rather than
+ * an error (SPEC-flows.md A2). So the value must hold **exactly one** printed number, and a range
+ * (`1,000-2,000`) or a figure with a clause number beside it is refused rather than fused.
+ *
+ * **A space groups thousands and does nothing else.** `12 500` is twelve and a half thousand, so the
+ * groups after the first must be exactly three digits; `12 5` is refused rather than read as `125`,
+ * which would be the same invention in a smaller coat.
+ *
+ * **A minus sign is not read**, because it is stripped with the rest of the page furniture and no
+ * amount on a lease is negative. A dash *between* two figures is a range, and the one-number rule
+ * above refuses it — which is the case that would otherwise have mattered.
+ */
+export function asBareNumber(value: string): string | null {
+  const runs = value.match(AMOUNT_RUN) ?? [];
+  // Exactly one number, or nothing. Zero runs is a finding with no figure in it; two or more is a
+  // finding the reader over-selected, and picking one of them would be this function deciding a
+  // term of the contract.
+  if (runs.length !== 1) {
+    return null;
+  }
+  const groups = (runs[0] as string).split(GROUPING_SPACE);
+  if (groups.slice(1).some((group) => !/^\d{3}$/.test(group))) {
+    return null;
+  }
+  const printed = groups.join('');
+  const digits = printed.replace(/[.,]/g, '');
+  if (digits.length === 0) {
+    return null;
+  }
+  const dots = printed.split('.').length - 1;
+  const commas = printed.split(',').length - 1;
+  const last = Math.max(printed.lastIndexOf('.'), printed.lastIndexOf(','));
+  const trailing = printed.length - last - 1;
+  const decimalAt =
+    last >= 0 &&
+    ((dots > 0 && commas > 0) || (dots + commas === 1 && trailing !== 3))
+      ? last
+      : -1;
+  const whole =
+    decimalAt < 0 ? digits : printed.slice(0, decimalAt).replace(/[.,]/g, '');
+  const fraction =
+    decimalAt < 0
+      ? ''
+      : printed
+          .slice(decimalAt + 1)
+          .replace(/[.,]/g, '')
+          .replace(/0+$/, '');
+  // `007` is seven and `.5` is nought point five: a printed amount is trimmed at both ends.
+  const units = whole.replace(/^0+(?=\d)/, '') || '0';
+  const bare = fraction === '' ? units : `${units}.${fraction}`;
+  return Number.isFinite(Number(bare)) ? bare : null;
+}
+
+/**
+ * What a finding is stored as, given the declaration's value type.
+ *
+ * Two of the five have a printed form and a stored form — a DATE and a NUMBER — and null means the
+ * finding is dropped: no row, the same as any other missing value. TEXT, BOOLEAN and ENUM are held
+ * exactly as they were read, which is what makes `extracted_field.value` a reading rather than an
+ * interpretation. A currency is TEXT and lands here unchanged.
+ */
+function captureValue(valueType: FieldValueType, value: string): string | null {
+  if (valueType === 'DATE') {
+    return asIsoDate(value);
+  }
+  if (valueType === 'NUMBER') {
+    return asBareNumber(value);
+  }
+  return value;
+}
+
 function findingsSchema(fieldKeys: readonly string[]): JsonSchema {
   return {
     type: 'object',
@@ -293,8 +404,9 @@ export async function extractFiledDocument(
     if (!field || finding.value.trim().length === 0) {
       continue;
     }
-    const value =
-      field.valueType === 'DATE' ? asIsoDate(finding.value) : finding.value;
+    // Two value types have a printed form and a stored form: a DATE and, from ticket #101, a
+    // NUMBER. Everything else is stored as it was read.
+    const value = captureValue(field.valueType, finding.value);
     if (!value) {
       continue;
     }

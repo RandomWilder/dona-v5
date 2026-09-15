@@ -9,11 +9,11 @@ import {
   specimenRefs,
 } from './specimen-clauses.ts';
 
-// The tier-1 corpus is the substrate every gate runs against, and two of the
-// things `SPEC.md` says about it were comments in a fixture until this file
-// existed: it contains no sum of money, and it contains no real person. A
-// property asserted in a comment is a property that holds until somebody adds a
-// clause on a Tuesday.
+// The tier-1 corpus is the substrate every gate runs against, and what `SPEC.md`
+// says about it was a comment in a fixture until this file existed: it contains
+// no real person. A property asserted in a comment is a property that holds
+// until somebody adds a clause on a Tuesday. (It said *no sum of money* too,
+// until foundation rule 2 was retired — see the deleted case below.)
 //
 // The raw files are scanned rather than the parsed clauses, deliberately: a
 // phone number in a document's front matter or in the prose above the first
@@ -66,16 +66,13 @@ describe('the tier-1 corpus', () => {
     }
   });
 
-  // Foundation rule 2: no tenant-facing price and no balance, ever. A fixture
-  // is where a habit starts -- the rent clause says *when* rent is paid and the
-  // guarantee says what it secures, and neither says how much.
-  it('holds no sum of money anywhere', () => {
-    const money = /₪|ש"ח|ש״ח|שקל|NIS|\d{1,3}(?:,\d{3})+/;
-    for (const { name, text } of corpusFiles()) {
-      const line = text.split('\n').find((one) => money.test(one));
-      assert.equal(line, undefined, `${CORPUS_DIR}/${name}: ${line}`);
-    }
-  });
+  // **The sum-of-money case is deleted** with foundation rule 2
+  // (`docs/decisions/ADR-0008-money-is-ordinary-data.md`). It scanned every
+  // tier-1 file for ₪, ש"ח, שקל, NIS or a thousands-separated run and failed
+  // the build on a match. It cannot stay: the `lease` type now declares a rent
+  // and a deposit, and a specimen lease that may not print a rent is a
+  // specimen the fields cannot be measured against. The case below is the half
+  // of the sentence that was never about money.
 
   // "Containing no real person" is the sentence `SPEC.md` has carried since
   // 1.1. This is the part of it a machine can check.

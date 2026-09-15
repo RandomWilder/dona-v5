@@ -46,9 +46,14 @@ Vocabularies: `tenancy.status` = `DRAFT · ACTIVE · ENDED · TERMINATED_EARLY`;
 `PRIMARY_TENANT · CO_TENANT · GUARANTOR · OCCUPANT`, where GUARANTOR is ערב — on the lease, but not a
 resident.
 
-**No money.** No rent, no deposit, no balance, deliberately and permanently (foundation rule 2).
-Financials live in Priority behind read-only keys, and a column here would be the first place someone
-put an amount the agent could read.
+**No amount column here, and no test asserts that any more.** Foundation rule 2 is retired
+([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)) and the two
+`information_schema.columns` cases in `src/tenancy/schema.test.ts` that forbade a money-named column
+on `tenancy`, `tenancy_party`, `terms_profile`, `obligation` and `obligation_type` are deleted with
+it. The tables still carry no amount, because none of them needs one and the column list in the same
+suite is asserted exactly — an added column is a red build whatever it is named. **The rent on a
+lease lives where every other value read off a document lives**: `extracted_field`, under the
+`lease` type's declarations. **A balance is still Priority's** and this module writes none.
 
 **No `-- pii` marker on any column**, and that is a claim the guard checks rather than a claim this
 file makes: nothing here is person-shaped. The people are in `party`, reached through
@@ -131,8 +136,8 @@ by tripping the guard rather than by anticipating it.
   the client has not been asked, which is exactly what the NOT NULL exists to prevent.
 - **Obligation and ObligationType (slice 5.7, `src/kernel/migrations/0026_obligation.sql`).**
   E9 and E10 from the workbook. An obligation attaches to a **tenancy**, never a unit (R10). Status
-  is derived on read and is never a column. There is no amount column, here or ever (foundation
-  rule 2). `responsible_party` is copied from the type at creation and then lives on the obligation
+  is derived on read and is never a column. There is no amount column, because no ticket has asked
+  for one — not because a rule forbids it (ADR-0008). `responsible_party` is copied from the type at creation and then lives on the obligation
   row, so a later edit or deactivation of the catalogue cannot rewrite a dispute's record
   (foundation rule 8). The create command does not take an override. `ObligationType` is
   deactivated, never deleted: a `BEFORE DELETE` trigger raises `restrict_violation` even when no

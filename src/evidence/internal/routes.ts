@@ -253,8 +253,7 @@ type Form = Record<string, string | undefined>;
 const TYPE_KEY = /^[a-z][a-z0-9_]*$/;
 /**
  * **`field_key` is the name a value is stored under and is never renamed**, so it is constrained
- * harder than a label: lowercase ASCII, digits and underscores. That is also what makes the money
- * guard's token match on it exact — `fee` cannot fire on a Hebrew label that happens to transliterate.
+ * harder than a label: lowercase ASCII, digits and underscores.
  */
 const FIELD_KEY = /^[a-z][a-z0-9_]{0,62}[a-z0-9]$|^[a-z]$/;
 
@@ -288,7 +287,7 @@ function valueTypeOf(body: unknown): FieldValueType {
     16,
   );
   // Against the catalogue's own array and never a list typed here, so this and the `CHECK` in
-  // `0011_evidence.sql` cannot disagree — and so there is no place to add MONEY by hand.
+  // `0011_evidence.sql` cannot disagree — and so a value type cannot be added by hand at the route.
   if (!(FIELD_VALUE_TYPES as readonly string[]).includes(raw)) {
     throw new KernelError('invalid', 'value_type is not a declared value type');
   }

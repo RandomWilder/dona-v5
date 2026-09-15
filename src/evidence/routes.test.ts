@@ -2048,15 +2048,18 @@ describe('evidence · A12 offers to create, to an admin', () => {
 // **The declaration editor, driven the way an administrator drives it.** Slice 7.2, flow A14.
 //
 // Foundation rule 8 says a field is a row and costs no deploy. Everything below is that claim
-// posted through a real form: the write, the correction, the retire, and the two refusals the slice
-// exists to make — a role that may not declare, and a declaration that names money.
+// posted through a real form: the write, the correction, the retire, and the refusal the slice
+// exists to make — a role that may not declare.
 //
 // **The role refusal is here and not in `tests/policy/`.** `tests/policy/` builds no application —
 // its cases are SQL and pure functions — and every role refusal in this repository is asserted at
 // the route, against the stance the composition root actually registered
-// (`src/estate/routes.test.ts`, `src/staff/routes.test.ts`, `src/settings.test.ts`). The money
-// refusal *is* a policy case, because it is a constraint no model and no role may decide, and it
-// is in `tests/policy/money-field.test.ts` with the vocabulary it reads.
+// (`src/estate/routes.test.ts`, `src/staff/routes.test.ts`, `src/settings.test.ts`).
+//
+// **There was a second refusal here, and it is gone.** A declaration naming money was refused by a
+// vocabulary guard until 15 Sep 2026; foundation rule 2 is retired
+// (`docs/decisions/ADR-0008-money-is-ordinary-data.md`) and this suite's money case went with the
+// policy case that carried the vocabulary. Nothing replaces either.
 //
 // **It was red first.** The route was registered with `documents.write` — which an OPERATOR holds —
 // and this suite's refusal case failed with 303 before the stance became `settings.write`. The
@@ -2066,7 +2069,7 @@ const DECLARE_DOMAIN = 'evidence-declare.test';
 const DECLARE_TYPE = 'a14_editor_type';
 
 describe('evidence · an administrator declares a field (7.2, A14)', () => {
-  it('declares, corrects, retires — and refuses a role and a money field', async (t) => {
+  it('declares, corrects, retires — and refuses a role', async (t) => {
     const pool = await migratedPoolOrNull();
     if (!pool) {
       t.skip(skipReason);
@@ -2259,34 +2262,6 @@ describe('evidence · an administrator declares a field (7.2, A14)', () => {
         },
       );
 
-      await t.test(
-        'a money declaration is refused, and writes nothing',
-        async () => {
-          const before = (await rows()).length;
-          for (const money of [
-            { field_key: 'rent_amount', label_he: 'נתון נוסף' },
-            { field_key: 'extra_1', label_he: 'סכום הפיקדון' },
-          ]) {
-            const refused = await post(dayTwo, adminTwo as SignedIn, {
-              action: 'declare',
-              value_type: 'NUMBER',
-              ...money,
-            });
-            assert.equal(
-              refused.statusCode,
-              400,
-              `${money.field_key}: ${refused.body.slice(0, 200)}`,
-            );
-            assert.equal(refused.json().code, 'invalid');
-            // The sentence names the rule, which is what an administrator needs in order to know
-            // this is a decision and not a validation quirk.
-            assert.match(refused.json().message, /may not name money/);
-            assert.match(refused.json().message, /Foundation rule 2/);
-          }
-          assert.equal((await rows()).length, before);
-        },
-      );
-
       await t.test('an OPERATOR is refused, and writes nothing', async () => {
         const before = (await rows()).length;
         const refused = await post(dayTwo, operator as SignedIn, {
@@ -2369,11 +2344,12 @@ describe('evidence · an administrator declares a field (7.2, A14)', () => {
             GROUP BY action ORDER BY action`,
           [(admin as SignedIn).staffAccountId],
         );
-        // Two declares that succeeded plus one that conflicted plus two money refusals; one retire
-        // that conflicted plus one that closed the row. `audit.around` records both outcomes.
+        // Two declares that succeeded plus one that conflicted; one retire that conflicted plus one
+        // that closed the row. `audit.around` records both outcomes. It was five declares until the
+        // money refusals went with foundation rule 2 (ADR-0008).
         assert.equal(
           lines.find((line) => line.action === 'evidence.declare_field')?.n,
-          '5',
+          '3',
         );
         assert.equal(
           lines.find((line) => line.action === 'evidence.retire_field')?.n,

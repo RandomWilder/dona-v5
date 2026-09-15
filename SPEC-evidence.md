@@ -37,7 +37,9 @@ workbook a specification rather than a description.
 - **`document_type_field`** — E16. What a type declares, in one version. Unique on
   `(document_type_id, field_key, effective_from)`: redeclaring a field is a **new row**, never an
   edit, and closing a declaration sets `effective_to` without touching what the old row said.
-  `value_type` has no `MONEY` member and no money field is ever seeded (foundation rule 2).
+  `value_type` has no `MONEY` member, and it does not need one: an amount is a `NUMBER` beside a
+  `TEXT` currency, which is how `lease` declares its rent and its deposit from 15 Sep 2026
+  ([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md) retired foundation rule 2).
 - **`document`** — E12. One file, hashed at ingest. From 5.4 it also carries **`uploaded_by`**, a
   nullable FK to `staff_account`. `file_hash` is **unique**, which is what makes
   *the same file filed twice is one document with two links* a property of the database rather than a
@@ -83,6 +85,16 @@ sheet existed.
   The mapping instructions ask for ISO; a DATE finding that is not a real calendar day is dropped —
   no row, same as any other missing required field. Screens may later print dd/mm/yyyy; they do not
   store it.
+- **A NUMBER value is a bare number.** `12,500 ₪`, `12.500`, `₪ 12 500` and `12,500.00` are all the
+  paper's way of printing twelve and a half thousand; capture stores `12500`. Thousands separators,
+  spaces, currency symbols and a trailing `.00` are stripped, a decimal point that carries real
+  digits is kept, and a value with nothing numeric left in it is dropped — no row, the same as a
+  `DATE` that is not a calendar day. **The currency is a field of its own**, never inferred from the
+  symbol that was stripped: `lease` declares `rent_currency` beside `rent_amount` and
+  `deposit_currency` beside `deposit_amount`, because a lease may price the deposit in one currency
+  and the rent in another ([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)).
+  Each amount's hint names the amounts it is *not*, the way the two identifier hints do, because a
+  lease prints the rent, the deposit and a penalty rate on one page and all three are runs of digits.
 - **`value` is `-- pii`.** Names and addresses land here. Guard three matches a qualified name
   (`extracted_field.value`) because a bare `value` would fire on `config_settings`.
 - **A missing required field is a result, not an error.** No row. The same for an unconfigured
@@ -449,23 +461,16 @@ explicable by it. It is here rather than in a later slice because corrections ke
 mis-typed key cannot be corrected, only declared again beside its own mistake, and an editor whose
 first typo is permanent is a trap.
 
-**The money guard, and why this route needs one nothing else in this module needs.**
-`0011_evidence.sql` says it: "No MONEY member … no amount is ever a column on a business record."
-That has held because the field list was source code. It is not source code any more, so the
-constraint moves into the command: a declaration whose `field_key` or `label_he` carries the money
-vocabulary is refused with a sentence naming foundation rule 2. The vocabulary lives in
-`src/evidence/internal/money.ts` and is read by the guard **and by the policy case**, so the test
-cannot drift from the thing it tests. Latin terms are matched token-wise on the snake_case key;
-Hebrew terms are matched as substrings, because Hebrew attaches its prefixes. It is deliberately
-blunt and it over-matches — `דמי` is inside `הדמיה` — which is the shape a guard takes in this
-repository (`docs/pipeline.md` §6): a refusal is a conversation with an administrator who can
-rename, and a leak is not.
-
-**The guard is on the run-time command and not on the seed.** Adding money for real stays a
-migration, a `value_type` member, a diff and a review — the price `roles.ts` says an irreversible
-widening should cost — and putting the vocabulary under `upsertDocumentTypeField` would make the
-rule stronger than it is written while leaving the `value_type` CHECK a second lock on a door with
-no key.
+**There is no money guard on this route, and there was one until 15 Sep 2026.** A declaration whose
+`field_key` or `label_he` carried a money word — eight Latin tokens, eight Hebrew substrings, in
+`src/evidence/internal/money.ts` — was refused with a sentence naming foundation rule 2. That rule
+is retired ([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)) and the guard is deleted
+with it, along with its re-exports on the module contract and the policy case that read the same
+vocabulary. **Nothing replaces it.** A declaration naming an amount is an ordinary declaration:
+`settings.write`, a new row at a new `effective_from`, an audit line. The reason the guard is not
+kept in a weakened form is in the ADR — it could not tell a rent from a balance, because both are
+spelled with the same eight words, so it refused the honest case (`rent_amount`) and admitted the
+dishonest one (`extra_1`, labelled anything).
 
 **`settings.write`, and `roles.ts` does not change.** ADMIN only, and already the hand on the
 `DocumentType` catalogue since 5.8. A permission with one reader adds vocabulary without adding a
@@ -474,9 +479,9 @@ boundary; the matrix stays code.
 **The form is on the screen only for a role that may post it**, which is `/settings`'s shape and not
 6.1's. `GET /documents` keeps `documents.write` — an OPERATOR reads the declaration and never sees
 the form, so the door that answers `not_allowed` after somebody has typed into it does not exist
-here. **Refusals are the JSON error body every other form post in this system returns**, including
-the money one: one refusal shape per route, and a refusal screen for this form is a decision nobody
-has asked for yet.
+here. **Refusals are the JSON error body every other form post in this system returns** — the role,
+the forged token, the same-day redeclaration: one refusal shape per route, and a refusal screen for
+this form is a decision nobody has asked for yet.
 
 **Every declaration writes an `audit_log` line** — `evidence.declare_field`, naming the type, the
 key, the value type and the day, and never a document's text. A schema change is the one write in

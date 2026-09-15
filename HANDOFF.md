@@ -122,9 +122,15 @@ That is distributed systems, not prompting.
    tradesmen are very hard to move off their habits. The agent WhatsApps them with the call details
    and options; they approve, counter-propose, or reject in a normal chat.
 
-3. **Money never touches the agent.** Client's instruction. Decomposed into: *liability* (who pays —
-   v1, stated without a number), *ballpark cost* (internal, admin dashboard only, later), *payment*
-   (never — Priority ERP). Log `actual_cost` from day one so the ballpark feature builds itself.
+3. **Money never touches the agent.** Client's instruction, recorded 3 Sep 2026. Decomposed into:
+   *liability* (who pays — v1, stated without a number), *ballpark cost* (internal, admin dashboard
+   only, later), *payment* (never — Priority ERP). Log `actual_cost` from day one so the ballpark
+   feature builds itself.
+   **Superseded 15 Sep 2026 by [ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)**,
+   which retired foundation rule 2 so an administrator could capture the rent off a lease. This
+   entry stays because it is what the client said and why; the decomposition above is still the
+   right shape, and *payment (never — Priority ERP)* is still true. What changed is that an amount
+   printed on a document may now be read, held and shown.
 
 4. **Document type is declared, not detected.** The flow knows what it asked for ("upload the lease
    for unit 14"), so classification — the riskiest ingestion step — simply doesn't exist. What

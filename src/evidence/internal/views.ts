@@ -1553,9 +1553,10 @@ export function renderDocumentsPage(screen: DocumentsScreen): string {
  * the administrator pick a verb, and the R18 consequence — the old row stays and still says what it
  * said — is written under the button where somebody about to press it will read it.
  *
- * No value type is `MONEY` and the list is the `FieldValueType` union, so the `<select>` cannot
- * offer one. The refusal behind it is the vocabulary guard, which is a different rule: a money field
- * declared as `NUMBER` is the one the select cannot stop.
+ * The list is the `FieldValueType` union, so the `<select>` offers exactly what the `CHECK` accepts
+ * and no more. There is no `MONEY` member and an amount does not need one: it is declared as
+ * `NUMBER` with a `TEXT` currency beside it, which the form has offered all along and which
+ * ADR-0008 made lawful by retiring the guard that refused it.
  */
 function declarationForm(
   screen: DocumentsScreen,
@@ -1587,7 +1588,7 @@ function declarationForm(
           (type) => h`<option value="${type}">${type}</option>`,
         )}
       </select>
-      <p class="hint">אין טיפוס כסף, ואין שדה כסף. סכום אינו אמת עסקית במערכת הזאת.</p>
+      <p class="hint">סכום מוצהר כ־NUMBER, ולצידו שדה מטבע נפרד מסוג TEXT. אין טיפוס MONEY ואין צורך בו.</p>
     </div>
     <div class="form-row">
       <label for="field-hint">רמז לקורא</label>

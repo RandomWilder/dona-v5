@@ -79,8 +79,15 @@ be met. Editable at `/settings` without a deploy.
 **The register** — the register file format and the order its rows are written in. Owned by
 `src/register/` and nothing else.
 
-**Money never touches the agent.** No tenant-facing price, no balance, ever. A question about money
-is answered by refusal and handoff, never by an estimate.
+**Amount** — a number printed on a document, held as a `NUMBER` field beside a `TEXT` currency field
+that is its own. Ordinary data since 15 Sep 2026, when foundation rule 2 was retired
+([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)): an amount is read, captured,
+approved, promoted, retrieved, quoted and computed on like every other value on a contract. There is
+no `MONEY` value type and an amount is never a **balance**.
+
+**Balance** — a running figure for what somebody owes. **Priority's, not this platform's.** Nothing
+here writes one, no schema has a column for it, and that is a fact about what is built rather than a
+guard that forbids it.
 
 ## Shape
 

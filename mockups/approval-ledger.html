@@ -9,9 +9,11 @@
     2. Every value row carries the page it was read from, as a column. That is what replaces the
        word-box overlay #102 deletes: the administrator has the paper in front of them, and a page
        number is the cheap half of what the overlay was for.
-    3. Amounts are ordinary rows. Foundation rule 2 has not been retired yet — #101 does that — so
-       these four rows are paint and nothing more. They are here because the point of painting is to
-       see the screen the rule's removal produces before the rule is removed.
+    3. Amounts are ordinary rows, and since 15 Sep 2026 they are ordinary rows for real: #101 landed,
+       foundation rule 2 is retired (ADR-0008), and the `lease` type declares `rent_amount`,
+       `rent_currency`, `deposit_amount` and `deposit_currency`. These four rows were painted before
+       the rule came out — which was the point of painting them — and what they show is now what the
+       catalogue holds. Wiring them is #109's.
     4. **The name rows carry the role, and approving one is the role decision.** Director's ruling of
        15 Sep 2026, which deleted the confirm screen this paint used to sit beside. The field a name
        was read into — `tenant_name` or `guarantor_name` — is the role, so the ledger is the one

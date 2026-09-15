@@ -37,6 +37,12 @@ const AT = new Date('2026-09-07T09:00:00.000Z');
 // the day the document it is extracted from is filed, which is the case an administrator has.
 const TODAY = '2026-09-07';
 const BUCKET = 'dona-v5-test-extract';
+/** The marker value for each NUMBER field the `lease` type declares, plus the one this suite adds. */
+const NUMERIC_MARKERS: Record<string, string> = {
+  notice_days: '14',
+  rent_amount: '12500',
+  deposit_amount: '25000',
+};
 const pdfBytes = (marker: string): Buffer =>
   Buffer.from(`%PDF-1.4\n% ${marker}\n`, 'latin1');
 
@@ -86,7 +92,11 @@ describe('evidence · extract into the declared schema', () => {
           return {
             findings: keys.map((field_key) => ({
               field_key,
-              value: `got:${field_key}`,
+              // **A NUMBER declaration stores a bare number** (ticket #101), so `got:notice_days`
+              // is dropped at capture and this case would go green for the wrong reason. The
+              // marker for a numeric field is a number; every other `lease` field is TEXT or DATE
+              // and keeps the string marker (a DATE one is dropped, which is 4.2's own rule).
+              value: NUMERIC_MARKERS[field_key] ?? `got:${field_key}`,
               word_ids: [0],
             })),
           };
@@ -160,7 +170,7 @@ describe('evidence · extract into the declared schema', () => {
         );
         assert.equal(
           second.find((row) => row.fieldKey === 'notice_days')?.value,
-          'got:notice_days',
+          NUMERIC_MARKERS.notice_days,
         );
       });
     } finally {
@@ -512,6 +522,146 @@ describe('evidence · extract into the declared schema', () => {
         assert.equal(
           rows.find((row) => row.fieldKey === 'apartment_number')?.value,
           '08/09/2026',
+        );
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  // **Ticket #101.** The rent is a value like any other now that foundation rule 2 is retired
+  // (`docs/decisions/ADR-0008-money-is-ordinary-data.md`), and the thing that makes it *usable* is
+  // that capture keeps the number and drops the paper. `12,500 ₪` is a printed rent; `12500` is a
+  // rent. The currency is the field beside it and is never inferred from the symbol stripped here.
+  //
+  // The clock is after 2026-09-15 because that is the `effective_from` the four amount declarations
+  // open at, and a field is not live on a day before its declaration (R18).
+  it('captures a printed amount as a bare number, and its currency beside it', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const AFTER = new Date('2026-09-16T09:00:00.000Z');
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const words = wordsOf('12,500 ₪ 25.000 ש"ח USD 3,000.00');
+        const extractor = createFakeExtractor(() => ({
+          findings: [
+            // A thousands separator and a trailing currency sign, which is how every lease in the
+            // corpus prints the rent.
+            { field_key: 'rent_amount', value: '12,500 ₪', word_ids: [0, 1] },
+            { field_key: 'rent_currency', value: 'ILS', word_ids: [1] },
+            // A European separator on the same page. `25.000` is twenty-five thousand and not
+            // twenty-five, and the deposit is priced in a second currency on purpose.
+            {
+              field_key: 'deposit_amount',
+              value: '₪ 25.000',
+              word_ids: [2, 3],
+            },
+            { field_key: 'deposit_currency', value: 'USD', word_ids: [4] },
+          ],
+        }));
+        const filed = await fileDocument(
+          {
+            db,
+            objects: createMemoryStore(),
+            pdf: createFakePdfText(['חוזה שכירות המושכר תקופת השכירות השוכר']),
+            audit: createAuditLog(db, fixedClock(AFTER)),
+            clock: fixedClock(AFTER),
+            bucket: BUCKET,
+            extractor: createUnconfiguredExtractor(),
+          } satisfies IntakeDeps,
+          {
+            bytes: pdfBytes('extract-amount'),
+            typeKey: 'lease',
+            place: { kind: 'UNIT', id: newId() },
+            tenancyId: null,
+          },
+        );
+        assert.equal(filed.filed, true);
+        if (!filed.filed) return;
+        await extractFiledDocument(
+          {
+            db,
+            extractor,
+            audit: createAuditLog(db, fixedClock(AFTER)),
+            clock: fixedClock(AFTER),
+            model: 'gpt-test',
+          },
+          { documentId: filed.documentId, words },
+        );
+        const rows = await listExtractedFields(db, filed.documentId);
+        const captured = (fieldKey: string) =>
+          rows.find((row) => row.fieldKey === fieldKey)?.value;
+        assert.equal(captured('rent_amount'), '12500');
+        assert.equal(captured('deposit_amount'), '25000');
+        // The currency is text and is stored as it came: the symbol was stripped off the amount and
+        // is not what decides this.
+        assert.equal(captured('rent_currency'), 'ILS');
+        assert.equal(captured('deposit_currency'), 'USD');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  // A NUMBER finding with nothing numeric in it is dropped, which is what a DATE that is not a
+  // calendar day already does: no row, and a missing value is a result rather than an error.
+  it('drops a NUMBER finding that is not a number at all', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const AFTER = new Date('2026-09-16T09:00:00.000Z');
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const words = wordsOf('לפי סיכום בעל פה');
+        const extractor = createFakeExtractor(() => ({
+          findings: [
+            {
+              field_key: 'rent_amount',
+              value: 'לפי סיכום בעל פה',
+              word_ids: [0, 1, 2, 3],
+            },
+          ],
+        }));
+        const filed = await fileDocument(
+          {
+            db,
+            objects: createMemoryStore(),
+            pdf: createFakePdfText(['חוזה שכירות המושכר תקופת השכירות השוכר']),
+            audit: createAuditLog(db, fixedClock(AFTER)),
+            clock: fixedClock(AFTER),
+            bucket: BUCKET,
+            extractor: createUnconfiguredExtractor(),
+          } satisfies IntakeDeps,
+          {
+            bytes: pdfBytes('extract-amount-unreadable'),
+            typeKey: 'lease',
+            place: { kind: 'UNIT', id: newId() },
+            tenancyId: null,
+          },
+        );
+        assert.equal(filed.filed, true);
+        if (!filed.filed) return;
+        await extractFiledDocument(
+          {
+            db,
+            extractor,
+            audit: createAuditLog(db, fixedClock(AFTER)),
+            clock: fixedClock(AFTER),
+            model: 'gpt-test',
+          },
+          { documentId: filed.documentId, words },
+        );
+        const rows = await listExtractedFields(db, filed.documentId);
+        assert.equal(
+          rows.find((row) => row.fieldKey === 'rent_amount'),
+          undefined,
         );
       });
     } finally {

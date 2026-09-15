@@ -18,12 +18,16 @@
 // are certain, given flows A2 and A3, and handover_protocol is slice 3.5's source. The others carry
 // their guard terms and no fields yet: a type with no declaration is fileable and searchable, which
 // is the open half working, and its fields are appended as a new `effective_from` row when the
-// concept work reaches it. **Not one of them is a money field, and there is no MONEY value type.**
+// concept work reaches it. **Four of them are money fields, from 15 Sep 2026**, and there is still
+// no MONEY value type: an amount is a `NUMBER` beside a `TEXT` currency
+// (`docs/decisions/ADR-0008-money-is-ordinary-data.md`).
 //
 // **Slice 6.4 appended two identifier fields to `lease`**, which is the first time this file added a
 // field somebody would otherwise have reached for a migration to add — and the reason it is lawful is
 // a decision on file and not a preference: ADR-0006 names a *declared* field on a governed catalogue
-// as the exception to ADR-0004 decision 2's masking. Still no money field, and still no MONEY type.
+// as the exception to ADR-0004 decision 2's masking. **Slice 7.2's successor, ticket #101, appended
+// the four amount fields** — the second time a decision on file was what made the addition lawful
+// rather than a preference.
 //
 // **`verificationTerms` is the only input slice 3.3's guard has.** The terms are the fixed printed
 // language of the form — the phrasing that is on every copy regardless of who signed it — taken from
@@ -49,6 +53,9 @@ const SCHEMA_V1 = '2026-09-07';
 const SCHEMA_V2 = '2026-09-08';
 // Slice 6.4. The day ת.ז. started existing on the capture path.
 const SCHEMA_V3 = '2026-09-13';
+// The day money stopped being a refusal. ADR-0008 retired foundation rule 2; these are the first
+// four amount fields this catalogue has ever declared, and they are seed rows like every other.
+const SCHEMA_V4 = '2026-09-15';
 const ISO_DATE_HINT = 'YYYY-MM-DD. Not Hebrew month names and not dd/mm/yyyy.';
 
 function field(
@@ -173,6 +180,55 @@ export const seedDocumentTypes: SeedDocumentType[] = [
         'תעודת זהות של הערב. ספרות בלבד, ללא מקפים. לא ת.ז. של השוכר.',
         { from: SCHEMA_V3 },
       ),
+      // **The rent and the deposit. ADR-0008, and the first amounts this catalogue has declared.**
+      // Foundation rule 2 refused a declaration naming money until 15 Sep 2026; the rule is retired
+      // and the single most important number on a signed lease enters the system the way every
+      // other value on it does — four seed rows, no migration, no `MONEY` value type.
+      //
+      // **A currency per amount, not one per document.** A lease can price the deposit in dollars
+      // and the rent in shekels, and a single document-level currency would make that lease
+      // unrepresentable while looking correct. Two pairs, each free of the other.
+      //
+      // **The rent pair is required and the deposit pair is not**, and that is the true thing
+      // rather than the convenient one: a lease that does not price the rent is not a lease, and a
+      // lease that takes no deposit is ordinary. `isRequired` is a declaration and never a refusal
+      // (SPEC-flows.md A2) — a missing required field is a result — so it has to say what is so.
+      //
+      // **Each hint names the amounts it is not**, in the shape the two identifier hints above use
+      // and for the same reason: a lease prints the rent, the deposit, a ועד בית charge and a
+      // penalty rate on one page, and all of them are runs of digits near a currency sign.
+      field(
+        'rent_amount',
+        'דמי שכירות חודשיים',
+        'NUMBER',
+        true,
+        'דמי השכירות החודשיים. מספר בלבד, ללא פסיקים, ללא רווחים וללא סימן מטבע. לא סכום הפיקדון, לא דמי ועד בית, לא סכום הערבות הבנקאית ולא ריבית פיגורים.',
+        { from: SCHEMA_V4 },
+      ),
+      field(
+        'rent_currency',
+        'מטבע דמי השכירות',
+        'TEXT',
+        true,
+        'המטבע שבו נקובים דמי השכירות: ILS, USD או EUR. ₪ ו-ש"ח הם ILS. לא מטבע הפיקדון.',
+        { from: SCHEMA_V4 },
+      ),
+      field(
+        'deposit_amount',
+        'סכום הפיקדון',
+        'NUMBER',
+        false,
+        'סכום הפיקדון או הערבון שהשוכר מפקיד. מספר בלבד, ללא פסיקים, ללא רווחים וללא סימן מטבע. לא דמי השכירות החודשיים ולא סכום הערבות הבנקאית.',
+        { from: SCHEMA_V4 },
+      ),
+      field(
+        'deposit_currency',
+        'מטבע הפיקדון',
+        'TEXT',
+        false,
+        'המטבע שבו נקוב הפיקדון: ILS, USD או EUR. ₪ ו-ש"ח הם ILS. לא בהכרח המטבע של דמי השכירות.',
+        { from: SCHEMA_V4 },
+      ),
     ],
   },
   {
@@ -240,10 +296,9 @@ export const seedDocumentTypes: SeedDocumentType[] = [
       verificationTerms: ['ארנונה', 'המחזיק', 'הרשות המקומית'],
       isActive: true,
     },
-    // No amount, deliberately, and the bill is the document where the temptation is sharpest. READ
-    // ME rule 3 and foundation rule 2: an amount printed on a page is capturable in principle and is
-    // never business truth and never quoted to a tenant. `value_type` has no MONEY member to
-    // declare one with.
+    // No fields yet, and since ADR-0008 that is a schedule rather than a rule. The bill's amount is
+    // declarable the moment a ticket asks for it, the way `lease` declares its rent — four rows,
+    // no migration. Nothing has asked.
     fields: [],
   },
   {
@@ -293,9 +348,9 @@ export const seedDocumentTypes: SeedDocumentType[] = [
       verificationTerms: ['כתב ערבות', 'אוטונומית', 'בלתי מותנית'],
       isActive: true,
     },
-    // No amount here either — the specimen in docs/corpus/ says so in as many words, and for the
-    // same reason: the guaranteed sum is a commercial figure and rule 2 keeps it off the substrate
-    // the agent is measured against.
+    // No fields yet, for the same reason `arnona` has none: nothing has asked. The guaranteed sum
+    // was kept off this type by rule 2 and is now kept off it by nobody having a use for it
+    // (ADR-0008). When something does, it is a seed row.
     fields: [],
   },
   {

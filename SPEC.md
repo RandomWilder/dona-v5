@@ -23,9 +23,15 @@ around; the rest are what makes them enforceable.
    `phone → PartyContact (valid today) → Party → TenancyParty → Tenancy (active today) → Unit`.
    **The scope is a view, never a column.** No `current_tenant` column exists anywhere; a migration
    introducing one fails the build. A model that misbehaves cannot widen a scope it never held.
-2. **Money never touches the agent.** No tenant-facing price and no balance — ever, not just v1.
-   Financials stay in the Priority ERP behind read-only keys. A question about money is answered by
-   refusal and handoff, never by an estimate.
+2. ~~**Money never touches the agent.**~~ **Retired 15 Sep 2026 by
+   [ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md).** An amount printed on a document
+   is ordinary data: readable, capturable, approvable, promotable, retrievable, quotable and
+   computable, under the rules that govern every other value on a contract and no others. The
+   number is kept and the slot is not reused, because the rules are cited by number and renumbering
+   would rewrite every citation silently. What has *not* changed: the Priority ERP is still the
+   system of record for what anybody owes, this platform holds no balance and no ticket asks it to,
+   and **rule 3 below is untouched** — an amount is a model-derived value like any other and may not
+   decide anything.
 3. **No AI in the responsibility decision or the state machine.** Both are inspectable, versioned and
    defensible in a dispute a year later, and a dispute only ever asks about the past. Every resolved
    call snapshots the `policy_version_id` that decided it; rules supersede by `effective_from` and
@@ -276,8 +282,10 @@ Only one of them is ours, and it is the one no gate runs against.
    text is week 3's; and A7's real worry — no gate green because it was measured against a document
    we wrote to pass it — binds at the **week-4 accuracy number**, which A7 already assigns to tier 2.
    **Committed to the repo; the substrate every gate runs against.** What a tier-1 file may never
-   contain is asserted by a test rather than promised in a comment: no sum of money (rule 2), no
-   identifier-shaped run, no real person. The published PDFs themselves arrive with the Drive fuse at
+   contain is asserted by a test rather than promised in a comment: no identifier-shaped run, no real
+   person. **The sum-of-money case is deleted with rule 2**
+   ([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)) — a specimen lease that may not
+   print a rent is a specimen the capture path's own fields cannot be measured against. The published PDFs themselves arrive with the Drive fuse at
    week 3 and do not change what tier 1 is for (slice 1.12).
 2. **Real documents from Dona Dom** — they measure accuracy against scans, handwriting and
    signatures, and they do nothing else. They live in a dated bucket of their own with a lifecycle
@@ -341,9 +349,12 @@ writes too**, at `POST /documents/types/:typeKey/fields` under `settings.write` 
 8 is true of both halves for the first time. Until then a field cost a commit to
 `src/evidence/fixtures/document-types.ts` and a `npm run seed:doctypes`, which is a deploy wearing a
 seed's clothes, and it was paid three times (3.1, 3.5, 6.4). A correction is a new row at a new
-`effective_from` and never an edit (R18), and **no declaration may name money** — the vocabulary
-guard in `src/evidence/internal/money.ts` is what keeps foundation rule 2 enforceable now that the
-field list is data, and `tests/policy/` is where it is proved. **E12 still omits three columns the published
+`effective_from` and never an edit (R18). **A declaration may name money**, from 15 Sep 2026: the
+vocabulary guard that refused one is deleted with the rule it enforced
+([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)), and the `lease` type declares
+`rent_amount` · `rent_currency` · `deposit_amount` · `deposit_currency` as four seed rows at
+`2026-09-15` — no `MONEY` value type, no migration, and a currency paired with each amount because a
+lease can price the deposit in one currency and the rent in another. **E12 still omits three columns the published
 Data Model's `Document` card carries** — `state`, `superseded_by` and `tenant_visible` — each for a
 reason recorded in [SPEC-evidence.md](SPEC-evidence.md) and `tasks/evidence/3.1.md`. **`uploaded_by`
 arrived at 5.4**: a nullable foreign key to `staff_account`, filled on every document filed through
