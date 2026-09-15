@@ -127,7 +127,7 @@ and the attach branch — are now this ticket's to close rather than #100's to h
 
 ## Comment — 2026-09-15
 
-Built. Stamped lease reading writes the draft and lands on the tenancy page; unstamped name writes
+Closed: `8e44a29`. Stamped lease reading writes the draft and lands on the tenancy page; unstamped name writes
 no party. Roles from the field family. Annex: `נספח תחזוקה — תקן`, else the sole profile, else
 refuse. Attach gone — same unit and start date is `conflict`. Addendum still uses
 `/documents/:id/tenancy`. HTTP suite: upload → ledger → draft → refused activate (stated reason) →
