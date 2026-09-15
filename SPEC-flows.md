@@ -313,14 +313,41 @@ row's `actor` is the signed-in operator (slice 5.4), not a typed name and not th
 `src/policy/`; estate owns the queue screen, with those commands injected at the composition root
 so estate does not import tenancy.
 
-### A5 — A draft tenancy becomes active
+### A5 — A person activates a draft tenancy
 
-**Trigger:** the start date arrives, or the outgoing tenancy ends.
-**Writes:** the outgoing tenancy moves to `ENDED` or `TERMINATED_EARLY`; the draft moves to `ACTIVE`.
-**Enforcement:** the exclusion constraint. Promoting a draft that still overlaps a live tenancy is
-rejected by the database, so ordering is not something the application has to remember to check.
-**Effect on the agent:** the incoming household resolves through the isolation join from that day and
-not before; the outgoing household stops resolving on the day their tenancy ends.
+**Trigger:** an administrator invokes a command that says this letting is live. **Nothing activates
+on a clock.** A fully-approved tenancy whose lease starts in the future sits as a `DRAFT`; the gate
+reports the date it becomes activatable. Expiry remains clock-driven (`expireDueTenancies`): an
+`ACTIVE` row whose `end_date` is already before today becomes `ENDED`. Only the human act is
+activation.
+
+**The gate, not a status column.** One function returns **every requirement it checked, passes
+included**, so a screen, a queue and a test all read the same answer. The required documents are one
+stated constant, and adding a third is a one-line change:
+
+```
+REQUIRED_FOR_ACTIVATION = ['lease', 'handover_protocol']
+```
+
+A tenancy becomes `ACTIVE` only when a person invokes the command and all four facts hold: an
+approved lease on the letting; an approved handover protocol on the letting; today is not before the
+lease's start date; today is not after its end date. The lease is the only document that defines
+those dates (`tenancy.start_date` / `tenancy.end_date`). Each refusal names its own reason. A
+handover protocol is **per letting**: it records that the tenant accepted the flat after inspecting
+it, and it is bound with `entity_type = 'TENANCY'`.
+
+**Writes:** `DRAFT → ACTIVE`, and a `TenancyEvent` of kind `activated` naming who and when. No
+document on that event — the paper is already on the letting; the event records the human act.
+**Enforcement:** the gate first, then `one_active_tenancy_per_unit`. Promoting a draft that still
+overlaps a live tenancy is rejected by the database.
+**Effect on the agent:** the incoming household resolves through the isolation join from that day
+and not before.
+
+**After activation.** An expired tenancy is `ENDED` and is not reopened — the clock does not
+activate anything, and `activateTenancy` will not move an `ENDED` row. A required document whose
+`valid_to` has passed raises a **flag** and never moves `tenancy.status` — the status keeps
+meaning what it says while the lapse stays visible. Gate misses joining the incomplete-tenancy
+queue are #108's, not this flow's.
 
 ### T1 — A tenant asks a question
 

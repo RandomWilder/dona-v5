@@ -713,6 +713,29 @@ describe('tenancy_event — append-only promotion log', () => {
             ],
           ),
         );
+        await db.query(
+          `INSERT INTO tenancy_event (
+             tenancy_event_id, tenancy_id, at, actor, kind, field,
+             old_value, new_value, source_document_id, extracted_field_id
+           ) VALUES ($1, $2, $3, 'אסף', 'activated', 'status',
+                     'DRAFT', 'ACTIVE', NULL, NULL)`,
+          [newId(), tenancyId, new Date('2026-09-07T09:00:00.000Z')],
+        );
+        await rejects(db, CHECK_VIOLATION, () =>
+          db.query(
+            `INSERT INTO tenancy_event (
+               tenancy_event_id, tenancy_id, at, actor, kind, field,
+               old_value, new_value, source_document_id, extracted_field_id
+             ) VALUES ($1, $2, $3, 'אסף', 'activated', 'status',
+                       'DRAFT', 'ACTIVE', $4, NULL)`,
+            [
+              newId(),
+              tenancyId,
+              new Date('2026-09-07T09:00:00.000Z'),
+              documentId,
+            ],
+          ),
+        );
         const eventId = newId();
         await db.query(
           `INSERT INTO tenancy_event (

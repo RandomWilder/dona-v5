@@ -160,18 +160,22 @@ by tripping the guard rather than by anticipating it.
   copies an extracted date onto `start_date` or `end_date` appends
   `(field, old → new, actor, source_document_id, extracted_field_id)` with `kind = 'amended'`.
   `source_document_id` is NOT NULL for that kind (`amended_names_its_document`) and that constraint
-  is never dropped. `kind` is `amended | terminated`. A clock-driven end is `terminated`:
-  `source_document_id` and `extracted_field_id` are both null
-  (`terminated_has_no_document`). UPDATE and DELETE are rejected (`restrict_violation`). `at` comes
-  from the injected clock; there is no `DEFAULT now()`. `actor` is `-- pii`; a clock end snapshots
-  `system`, not an operator. Register `upsertTenancy` does **not** write events — isolation dates
-  from the import stay legal without a document. `applyPromotedField` is the fourth write command:
-  parse a DATE, update the named column, append the event. A collision on `(unit_id, start_date)` is
-  `conflict`. `expireDueTenancies(db, clock)` is the fifth: every `ACTIVE` tenancy whose `end_date` is
-  strictly before the clock's day in the office's zone becomes `ENDED` and appends `terminated` with
-  `field = status`, `ACTIVE → ENDED`. The last day of the lease still counts (isolation's
-  `end_date >= today`); the day after is when the clock closes it. A second call is a no-op. Natural
-  end is `ENDED`, never `TERMINATED_EARLY`.
+  is never dropped. `kind` is `amended | terminated | activated`. A clock-driven end is
+  `terminated`; a person making a draft live is `activated`. Both kinds carry a null
+  `source_document_id` and `extracted_field_id` (`terminated_has_no_document` for the clock
+  kind, `activated_has_no_document` for the person kind). UPDATE and DELETE are rejected
+  (`restrict_violation`). `at` comes from the injected clock; there is no `DEFAULT now()`. `actor`
+  is `-- pii`; a clock end snapshots `system`, not an operator. Register `upsertTenancy` does
+  **not** write events — isolation dates from the import stay legal without a document.
+  `applyPromotedField` is the fourth write command: parse a DATE, update the named column, append
+  the event. A collision on `(unit_id, start_date)` is `conflict`. `expireDueTenancies(db, clock)`
+  is the fifth: every `ACTIVE` tenancy whose `end_date` is strictly before the clock's day in the
+  office's zone becomes `ENDED` and appends `terminated` with `field = status`, `ACTIVE → ENDED`.
+  The last day of the lease still counts (isolation's `end_date >= today`); the day after is when
+  the clock closes it. A second call is a no-op. Natural end is `ENDED`, never
+  `TERMINATED_EARLY`. **The clock never writes `ACTIVE`.** A draft whose start date has arrived
+  stays a draft until a person activates it (A5, #106). `activateTenancy` is the sixth write
+  command.
 - **No read model, and from 3.3 exactly one list plus one lookup.** *(Slice 6.5 adds a second list,
   `countIdentifierOverlap`, described at the end of this bullet.)* `contract.ts` exists from 2.4
   and exports the register importer's three write commands — `upsertTermsProfile`, `upsertTenancy` and
@@ -189,9 +193,19 @@ by tripping the guard rather than by anticipating it.
   portfolio question (S1 / A4), not "who is in this unit today". It takes no phone number, returns
   no party and no name, and carries neither isolation predicate. Completeness is a query over saved
   rows plus an exception table — never a NOT NULL on `tenancy_party` and never a status column on
-  `tenancy`. Slice 5.6 exports `expireDueTenancies` beside them.   Slice 5.7 exports
+  `tenancy`. Slice 5.6 exports `expireDueTenancies` beside them. Slice 5.7 exports
   `upsertObligationType`, `createObligation`, `getObligation` and `listObligationsForTenancy`.
-  Slice 5.8 adds `listObligationTypes`.
+  Slice 5.8 adds `listObligationTypes`. #106 exports `activationGate` and `activateTenancy`.
+  `REQUIRED_FOR_ACTIVATION` is `['lease', 'handover_protocol']` — one constant, the only list. The
+  gate returns every check with its outcome, passes included: one row per required type (held and
+  approved on the letting, or not), `start_reached`, `within_term`. A fully-approved future
+  letting reports `activatableOn` as the lease start date. `activateTenancy` refuses unless every
+  check passed, the row is `DRAFT`, and the actor is a name. Evidence-side facts arrive through an
+  injected reader: **this module imports no evidence module**. An `ENDED` letting is not reopened
+  by the clock or by `activateTenancy`; the register may still write historical `tenancy_party`
+  rows onto an `ENDED` row because that is how a past household is loaded. A required document
+  whose `valid_to` is strictly before today, on an `ACTIVE` letting, is a flag on the gate and
+  never a status change.
   Slice 5.5 adds
   `listTenancyEvents`: every event row on every letting of one unit,
   oldest first, `unit_id` in, field / old → new / actor / source document out, **no party and no

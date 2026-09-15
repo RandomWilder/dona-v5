@@ -116,6 +116,7 @@ export type {
 } from './internal/list.ts';
 export {
   listLinkedDocuments,
+  listTenancyDocumentFacts,
   MEASURED_QUERIES,
   SEARCH_LIMIT,
   searchDocuments,

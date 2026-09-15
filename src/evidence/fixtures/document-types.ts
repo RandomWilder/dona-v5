@@ -355,6 +355,9 @@ export const seedDocumentTypes: SeedDocumentType[] = [
   },
   {
     type: {
+      // Per letting, not per upload: this is the paper that records the tenant accepted the
+      // flat after inspecting it (A5 / #106). Bound with entity_type = TENANCY. The building's
+      // protocol is a different act and stays on the building.
       typeKey: 'handover_protocol',
       labelHe: 'פרוטוקול מסירה',
       labelEn: 'Handover protocol',

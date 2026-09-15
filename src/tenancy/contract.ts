@@ -9,6 +9,20 @@
 // SPEC-tenancy.md sets out the difference, because the line between the two is the module boundary.
 
 export type {
+  ActivateTenancySpec,
+  ActivationCheck,
+  ActivationFlag,
+  ActivationGate,
+  RequiredActivationDocument,
+  TenancyDocumentFact,
+  TenancyDocumentsReader,
+} from './internal/activation.ts';
+export {
+  activateTenancy,
+  activationGate,
+  REQUIRED_FOR_ACTIVATION,
+} from './internal/activation.ts';
+export type {
   PromotedFieldSpec,
   PromotedTenancyField,
   TenancyPartySpec,
