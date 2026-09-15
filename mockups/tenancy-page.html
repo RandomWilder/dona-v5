@@ -3,8 +3,18 @@
   only one of the three that is a new screen rather than a redraw. There is no screen in this system
   today that shows a single tenancy.
 
-  What it states: the title, the status, the lease's dates, the documents it holds, what it is still
-  missing, what was checked and passed, and the activate button.
+  What it states: the title, the status, the lease's dates, the documents it holds, **what the lease
+  carried into the letting, read-only**, what it is still missing, what was checked and passed, and
+  the activate button.
+
+  **This screen absorbed the confirm screen, which is deleted.** Director's ruling of 15 Sep 2026.
+  The confirm screen asked three questions and none of them survived: *which flat* was decided before
+  the document was ever read (A1's operator picked it, or A12 resolved it off the paper); *which
+  letting* is not a question at all, because a lease **defines** a letting rather than attaching to
+  one; and *each party's role* is carried by the field a name was read into and is signed on the
+  approval ledger, one row at a time. What was left was a screen that reprinted approved values and
+  asked nothing — so this page prints them instead, read-only, with a link back to the ledger where
+  a correction is actually made.
 
   **The button is dark until the gate passes, and a dark button names every requirement the gate
   checked — not only the ones that failed.** That is why the four checks are printed as four rows
@@ -93,6 +103,16 @@
   .activate .reasons { color: var(--color-text-muted); font-size: var(--text-base); margin: 0; min-width: 0; flex: 1 1 18rem; }
   .arms { color: var(--color-text); font-weight: 500; }
   .missing { display: grid; gap: var(--space-1); margin: var(--space-3) 0 0; padding: 0; list-style: none; color: var(--color-alert); }
+
+  /* What the lease carried into the letting, read-only. It is read-only because it was approved one
+     screen ago, one row at a time, on a screen that had an edit box beside every value; reprinting
+     it with a second edit box would be a second place to change one fact. The link goes back to that
+     screen, which is where a correction is made. */
+  .carried { display: grid; gap: var(--space-2); margin: var(--space-3) 0 0; padding: 0; }
+  .carried > div { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: baseline; min-width: 0; }
+  .carried dt { color: var(--color-text-muted); font-size: var(--text-sm); min-inline-size: 9rem; margin: 0; }
+  .carried dd { margin: 0; min-width: 0; }
+  .carried .role { color: var(--color-text-muted); font-size: var(--text-xs); }
   .notice h4.second-heading { margin-block-start: var(--space-5); }
 </style>
 
@@ -102,8 +122,8 @@
     <div>
       <h1>הדמיה — דף ההשכרה</h1>
       <p class="lede">
-        גיליון #100, לא מחובר. המסך הראשון במערכת שמראה השכרה אחת. שלושה מצבים על דף אחד: חסום,
-        נדרך לתאריך, פתוח.
+        גיליון #100, לא מחובר. המסך הראשון במערכת שמראה השכרה אחת, והמסך שאליו מגיעים היישר מפנקס
+        האישור. שלושה מצבים על דף אחד: חסום, נדרך לתאריך, פתוח.
       </p>
     </div>
     <div class="paint-note">
@@ -112,6 +132,10 @@
         שהמסך, התור והמבחן יקראו תשובה אחת.</p>
       <p><strong>השעון לא מפעיל דבר.</strong> השכרה שהכול בה מאושר ושחוזה שלה מתחיל בעתיד היא טיוטה,
         והדף אומר את התאריך שבו הכפתור נדלק. מי שמפעיל הוא אדם.</p>
+      <p><strong>מסך האישור נמחק, והדף הזה ירש אותו.</strong> הכרעת המנהל מ־15 בספטמבר 2026. חוזה
+        <em>מגדיר</em> השכרה ואינו מצטרף לאחת; הדירה הוכרעה לפני הקריאה; והתפקיד נחתם בפנקס האישור,
+        בשורה שבה נקרא השם. מה שנשאר היה מסך שמדפיס ערכים מאושרים ואינו שואל דבר — ולכן הוא מודפס
+        כאן, לקריאה בלבד, עם קישור חזרה לפנקס שבו מתקנים.</p>
       <p><strong>הכרעה בפני המנהל.</strong> תאריך הדריכה מוצג בדף בלבד, או גם בתור ההשכרות החסרות
         (#108). הצבע מניח דף בלבד: התור מדווח על מה שחסר, ותאריך אינו חסר.</p>
     </div>
@@ -141,7 +165,7 @@
           </thead>
           <tbody>
             <tr>
-              <td class="value">חוזה שכירות</td>
+              <td class="value"><a href="#">חוזה שכירות</a></td>
               <td class="key"><span dir="ltr">2026-09-15</span></td>
               <td><span class="term-state term-found">אושר</span></td>
             </tr>
@@ -153,6 +177,31 @@
           </tbody>
         </table>
       </div>
+
+      <h4 class="second-heading">מה נשא החוזה אל ההשכרה</h4>
+      <p class="second">
+        אושר בפנקס האישור ב־<span dir="ltr">2026-09-15</span>.
+        <a href="#">הערכים שאושרו</a> — לקריאה בלבד. תיקון נעשה שם, לא כאן.
+      </p>
+      <dl class="carried">
+        <div>
+          <dt>תקופה</dt>
+          <dd><span dir="ltr">2026-11-01</span> — <span dir="ltr">2027-10-31</span></dd>
+        </div>
+        <div>
+          <dt>דירה</dt>
+          <dd>רקפת 12, שוהם · דירה 12A</dd>
+        </div>
+        <div>
+          <dt>שוכרים</dt>
+          <dd>דנה כהן <span class="role">· שוכר ראשי</span> · יואב כהן <span class="role">· שוכר נוסף</span></dd>
+        </div>
+        <div>
+          <dt>ערב</dt>
+          <dd>מרים לוי <span class="role">· אינו איש קשר לשירות</span></dd>
+        </div>
+      </dl>
+
       <h4 class="second-heading">מה חסר</h4>
       <ul class="missing">
         <li>פרוטוקול מסירה — לא הוגש</li>
@@ -223,7 +272,7 @@
           </thead>
           <tbody>
             <tr>
-              <td class="value">חוזה שכירות</td>
+              <td class="value"><a href="#">חוזה שכירות</a></td>
               <td class="key"><span dir="ltr">2026-09-15</span></td>
               <td><span class="term-state term-found">אושר</span></td>
             </tr>
@@ -235,6 +284,30 @@
           </tbody>
         </table>
       </div>
+      <h4 class="second-heading">מה נשא החוזה אל ההשכרה</h4>
+      <p class="second">
+        אושר בפנקס האישור ב־<span dir="ltr">2026-09-15</span>.
+        <a href="#">הערכים שאושרו</a> — לקריאה בלבד. תיקון נעשה שם, לא כאן.
+      </p>
+      <dl class="carried">
+        <div>
+          <dt>תקופה</dt>
+          <dd><span dir="ltr">2026-11-01</span> — <span dir="ltr">2027-10-31</span></dd>
+        </div>
+        <div>
+          <dt>דירה</dt>
+          <dd>רקפת 12, שוהם · דירה 12A</dd>
+        </div>
+        <div>
+          <dt>שוכרים</dt>
+          <dd>דנה כהן <span class="role">· שוכר ראשי</span> · יואב כהן <span class="role">· שוכר נוסף</span></dd>
+        </div>
+        <div>
+          <dt>ערב</dt>
+          <dd>מרים לוי <span class="role">· אינו איש קשר לשירות</span></dd>
+        </div>
+      </dl>
+
       <h4 class="second-heading">מה חסר</h4>
       <p class="lede">דבר. כל המסמכים הנדרשים הוגשו ואושרו; מה שנותר הוא התאריך.</p>
     </section>
@@ -297,7 +370,7 @@
           </thead>
           <tbody>
             <tr>
-              <td class="value">חוזה שכירות</td>
+              <td class="value"><a href="#">חוזה שכירות</a></td>
               <td class="key"><span dir="ltr">2026-08-20</span></td>
               <td><span class="term-state term-found">אושר</span></td>
             </tr>
@@ -309,6 +382,30 @@
           </tbody>
         </table>
       </div>
+      <h4 class="second-heading">מה נשא החוזה אל ההשכרה</h4>
+      <p class="second">
+        אושר בפנקס האישור ב־<span dir="ltr">2026-08-20</span>.
+        <a href="#">הערכים שאושרו</a> — לקריאה בלבד. תיקון נעשה שם, לא כאן.
+      </p>
+      <dl class="carried">
+        <div>
+          <dt>תקופה</dt>
+          <dd><span dir="ltr">2026-09-01</span> — <span dir="ltr">2027-08-31</span></dd>
+        </div>
+        <div>
+          <dt>דירה</dt>
+          <dd>רקפת 12, שוהם · דירה 12A</dd>
+        </div>
+        <div>
+          <dt>שוכרים</dt>
+          <dd>דנה כהן <span class="role">· שוכר ראשי</span> · יואב כהן <span class="role">· שוכר נוסף</span></dd>
+        </div>
+        <div>
+          <dt>ערב</dt>
+          <dd>מרים לוי <span class="role">· אינו איש קשר לשירות</span></dd>
+        </div>
+      </dl>
+
       <h4 class="second-heading">מה חסר</h4>
       <p class="lede">דבר. כל הדרישות להפעלה התקיימו.</p>
     </section>

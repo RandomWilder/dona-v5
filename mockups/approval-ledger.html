@@ -12,6 +12,11 @@
     3. Amounts are ordinary rows. Foundation rule 2 has not been retired yet — #101 does that — so
        these four rows are paint and nothing more. They are here because the point of painting is to
        see the screen the rule's removal produces before the rule is removed.
+    4. **The name rows carry the role, and approving one is the role decision.** Director's ruling of
+       15 Sep 2026, which deleted the confirm screen this paint used to sit beside. The field a name
+       was read into — `tenant_name` or `guarantor_name` — is the role, so the ledger is the one
+       place a person signs it. See the note under the table for what that settles and what it does
+       not.
 
   Nothing here is wired. Every value is invented. No real tenant document, no real identifier.
   The amber blocks are decisions, not screens.
@@ -34,6 +39,13 @@
   }
   .quality.is-low { color: var(--color-alert); font-weight: 600; }
   .second { color: var(--color-text-muted); font-size: var(--text-xs); }
+
+  /* The role, printed under the field name it comes from. It is not a control, because there is
+     nothing here to choose: `שם הערב` is GUARANTOR and `שם השוכר` is a tenant, and the operator
+     already chose between them when they approved the value in that row. A select here would be a
+     second way to say the same thing, and two ways to say one thing is how they come to disagree. */
+  .role { display: block; color: var(--color-text-muted); font-size: var(--text-xs); }
+  .role.is-guarantor { color: var(--color-alert); }
 
   /* The paint's own furniture. None of this ships as written. */
   .paint { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-8); }
@@ -94,13 +106,14 @@
       <h1>הדמיה — פנקס האישור</h1>
       <p class="lede">
         גיליון #100, לא מחובר. שרטוט מחדש של <span dir="ltr">/documents/:id/fields</span>: הטבלה
-        בראש הדף, ההסבר מקופל, לכל ערך מספר עמוד, והסכומים שורות רגילות ככל השאר.
+        בראש הדף, ההסבר מקופל, לכל ערך מספר עמוד, הסכומים שורות רגילות ככל השאר — והתפקיד של כל אדם
+        נחתם כאן, בשורה שלו.
       </p>
     </div>
     <div class="paint-note">
-      <p><strong>מה משתנה ביחס למסך שקיים היום.</strong> הטבלה כבר קיימת ונשארת. שלושה שינויים:
-        ההסבר יורד לתוך מקפל, נוסף טור <strong>עמוד</strong> לכל שורה, ונוספות ארבע שורות
-        סכום.</p>
+      <p><strong>מה משתנה ביחס למסך שקיים היום.</strong> הטבלה כבר קיימת ונשארת. ארבעה שינויים:
+        ההסבר יורד לתוך מקפל, נוסף טור <strong>עמוד</strong> לכל שורה, נוספות ארבע שורות סכום,
+        ושורת שם נושאת את התפקיד שהיא כותבת.</p>
       <p>שורות הסכום כאן הן <strong>צבע בלבד</strong>. כלל היסוד השני עדיין בתוקף, וגיליון #101 הוא
         שמבטל אותו. צובעים כדי לראות את המסך שהביטול מייצר לפני שמבטלים.</p>
       <p>טור העמוד מחליף את שכבת המילים על הדף, שגיליון #102 מוחק. מי שמאשר מחזיק את הנייר
@@ -172,12 +185,28 @@
             </td>
           </tr>
           <tr>
-            <td class="value">שם השוכר</td>
+            <td class="value">
+              שם השוכר
+              <span class="role">שוכר ראשי · הראשון שנקרא</span>
+            </td>
             <td>דנה כהן</td>
             <td class="key"><span dir="ltr">1</span></td>
             <td class="key quality"><span dir="ltr">96%</span></td>
             <td class="row-actions">
               <input class="mini" value="דנה כהן" aria-label="הערך המאושר לשם השוכר" />
+              <button class="btn btn-primary mini" type="button">אישור</button>
+            </td>
+          </tr>
+          <tr>
+            <td class="value">
+              שם השוכר
+              <span class="role">שוכר נוסף</span>
+            </td>
+            <td>יואב כהן</td>
+            <td class="key"><span dir="ltr">1</span></td>
+            <td class="key quality"><span dir="ltr">93%</span></td>
+            <td class="row-actions">
+              <input class="mini" value="יואב כהן" aria-label="הערך המאושר לשם השוכר הנוסף" />
               <button class="btn btn-primary mini" type="button">אישור</button>
             </td>
           </tr>
@@ -229,11 +258,17 @@
             <td class="muted">אושר</td>
           </tr>
           <tr>
-            <td class="value muted">שם הערב</td>
-            <td class="muted">לא נקרא — שדה רשות</td>
-            <td class="muted">—</td>
-            <td class="muted">—</td>
-            <td class="muted">—</td>
+            <td class="value">
+              שם הערב
+              <span class="role is-guarantor">ערב · אינו איש קשר לשירות</span>
+            </td>
+            <td>מרים לוי</td>
+            <td class="key"><span dir="ltr">4</span></td>
+            <td class="key quality"><span dir="ltr">90%</span></td>
+            <td class="row-actions">
+              <input class="mini" value="מרים לוי" aria-label="הערך המאושר לשם הערב" />
+              <button class="btn btn-primary mini" type="button">אישור</button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -274,6 +309,18 @@
       <p><strong>מה שירד מן המסך.</strong> הקישור מכל ערך אל «מילים על הדף» — במקומו מספר עמוד.
         גיליון #102 מוחק את השכבה עצמה, ולכן אין לאן לקשר. הקידום נשאר כפי שהוא: גיליון #100 משרטט
         מחדש את הטבלה ואת ההסבר, ולא נוגע בנתיב הקידום של 7.4.</p>
+    </div>
+
+    <div class="paint-note">
+      <p><strong>התפקיד נחתם כאן, ולא במסך נפרד.</strong> הכרעת המנהל מ־15 בספטמבר 2026. השדה שאליו
+        נקרא השם <em>הוא</em> התפקיד: «שם הערב» הוא ערב, «שם השוכר» הוא שוכר. מי שמאשר את השורה
+        הכריע, ואין מה לבחור פעם שנייה. מסך האישור שעמד כאן בעבר נמחק.</p>
+      <p><strong>מה זה קונה.</strong> ההפרדה היחידה שיש לה תוצאת בידוד היא ערב מול שוכר — ערב לעולם
+        אינו איש קשר לשירות, ומסד הנתונים <em>דוחה</em> את השורה ולא מתקן אותה בנימוס (כלל היסוד
+        השביעי). ההפרדה הזו נמצאת בשם השדה, ולכן היא נחתמת עם הערך.</p>
+      <p><strong>מה זה משאיר פתוח.</strong> «שוכר ראשי» מול «שוכר נוסף» אינו נקרא מן הנייר — הראשון
+        שנקרא הוא הראשי, וזו מוסכמה ולא קריאה. ל־<em>דייר</em> אין שדה בחוזה כלל. שתי אלה אינן
+        שאלות בידוד, ולכן אינן מקבלות פקד במסך הזה.</p>
     </div>
   </section>
 

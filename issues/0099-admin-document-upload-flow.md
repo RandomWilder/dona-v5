@@ -384,3 +384,23 @@ second mechanism.
 
 Migrated from GitHub issue #99, which is closed and points here. The tracker moved to local Markdown
 files on this date; see `docs/agents/issue-tracker.md` for the format and the reasoning.
+
+## Comment — 2026-09-15
+
+The director clicked #100's paint and ruled the confirm screen out of the flow. Three places in this
+epic are overtaken by that ruling, and are left standing above rather than rewritten, because the epic
+is the record of what was asked for and this comment is the record of what changed:
+
+- **Step 3, "Confirm and create"**, describes a second screen that fixes the flat, the letting and the
+  roles. There is no such screen. Creating the draft tenancy follows the approved reading directly,
+  and the administrator lands on the tenancy page (#107).
+- **Story 14** — confirming which flat and which letting — is answered before the reading, not after
+  it: the flat was picked at upload (A1) or resolved off the page (A12), and a lease **defines** a
+  letting rather than belonging to one.
+- **Story 15** — setting each party's role — is answered on the approval ledger. The role is carried
+  by the field the name was read into, and the operator's approval of that row is the human
+  confirmation invariant 5 requires.
+
+The reasoning and the director's four comments are in #100's closing comment; #110's body is rewritten
+to match. Nothing else in this epic changes: one reading, approve, create as draft, activate by a
+person, remains the shape.

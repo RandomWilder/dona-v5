@@ -170,6 +170,26 @@ unit — which is the sequence step 5 of that flow describes anyway.
    constraint, and the isolation join carries `AND tp.is_service_contact` as its fourth hop, so a role
    the model guessed wrong is an isolation defect and not a data-entry defect. The model proposes the
    role; the administrator accepts it.
+
+   **Where that acceptance happens is the approval ledger, and that is a ruling of 15 Sep 2026.**
+   Until this ruling the role was a select on a confirm screen that ran after the ledger. The
+   director's objection is that it was a second way to say one thing: the role is not read off the
+   page as a value of its own, it is carried by **which declared field the name was read into** —
+   `tenant_name` is a tenant, `guarantor_name` is a `GUARANTOR` — and the operator has already looked
+   at that row, seen the field it belongs to, and pressed approve on it. A control that re-asks is a
+   second place to change one fact, and two places to change one fact is how they come to disagree.
+   So: **the approval stamp on a name row is the human confirmation of that party's role**, and a
+   name row with no stamp writes no party. Nothing about invariant 5 is loosened — a person still
+   affirms before the row is written, and the affirmation is now attached to the evidence it is about
+   rather than to a summary of it. The screen prints the role under the field name as text, and marks
+   the guarantor as never a service contact, because that is the one distinction here with an
+   isolation consequence.
+
+   **What this does not settle, and the paint says so on the screen.** `PRIMARY_TENANT` versus
+   `CO_TENANT` is a convention — the first name read is primary — and not a reading; a lease does not
+   say which of two signatories is the principal. `OCCUPANT` has no declared field on a `lease` at
+   all, so no lease produces one. Neither distinction reaches the isolation join, so neither gets a
+   control; both are open for a later ruling.
 5. Parties named on the lease are **created under the tenancy the document was uploaded to**, and
    **a name is never matched across tenancies**. **Closed at 5.5:** the generated portfolio held
    **2,871** identified parties and **0** with no identifier. Nameless same-name groups: **0**.
@@ -214,6 +234,19 @@ unit — which is the sequence step 5 of that flow describes anyway.
    join's tenancy predicate, which `src/scope/` alone may write (guard two); rephrasing it elsewhere
    to get past the guard is the move the guard exists to forbid. The list already carries both dates
    as text, so the arithmetic is ordinary code with its own cases.
+
+   **This step is under a ruling of 15 Sep 2026 and is #110's to close.** The director's objection is
+   that asking which existing letting a lease belongs to is backwards: a tenancy is *the deciding
+   record of who is an active tenant in a flat*, and **a lease is what decides it**. A lease is not
+   attached to a letting; it defines one. The prompt is therefore gone from the flow — there is no
+   screen that opens with a list of candidate lettings and asks a person to choose. What the ruling
+   does **not** settle is the narrower case the branch was built for, which is not a prompt but a
+   conflict: a second lease arriving on a unit and a start date that unit already holds, which before
+   6.5 was a dead end with nothing an operator could do. Either that stays as conflict resolution
+   reached from the refusal, or it goes and the conflict becomes a refusal with a stated reason.
+   **#110 decides, states the decision here, and does not leave both alive.** Until it does, the
+   behaviour described above is what the code does and this paragraph is the warning that it is
+   provisional.
 7. The written tenancy is `DRAFT` and carries per-field provenance back to the lease.
 
    **The confirm signs the dates it promotes — slice 7.4.** From 7.4 a promotion requires an approval

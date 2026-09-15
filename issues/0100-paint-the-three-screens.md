@@ -1,13 +1,13 @@
 ---
 number: 100
 title: "Paint the three screens of the document-upload flow"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent: 99
 created: 2026-09-15
-closed:
+closed: 2026-09-15
 ---
 
 ## Parent
@@ -45,10 +45,11 @@ answered. The mockups are deleted by the tickets that wire each flow, not by thi
 - [x] Every mockup is Hebrew, right-to-left, uses design tokens, and contains no client-side script
 - [x] The approval ledger leads with a table and collapses its prose; every value row shows a page number
 - [x] The approval ledger shows amount rows alongside the other fields
-- [x] The confirm screen shows flat, letting and roles, and nothing more
+- [x] ~~The confirm screen shows flat, letting and roles, and nothing more~~ — the confirm screen is
+      deleted; see the closing comment
 - [x] The tenancy page shows title, status, dates, documents held, what is missing, what passed, and a dark activate button with stated reasons
 - [x] The tenancy page shows the date the button arms for a tenancy whose only blocker is its start date
-- [ ] The director has clicked all three and their comments are answered
+- [x] The director has clicked all three and their comments are answered
 - [x] No route, schema, command or production screen is changed by this ticket
 
 ## Blocked by
@@ -138,3 +139,79 @@ wired is the cheaper of the two mistakes.
 
 `assignee` stays empty. The claim rule in `docs/agents/issue-tracker.md` is a wayfinder-frontier rule
 and this is not a frontier claim; the work is done and what the ticket waits on is the director.
+
+## Comment — 2026-09-15
+
+The director clicked all three and commented on `confirm-tenancy`. Four comments, and they cost that
+screen its existence. It is deleted, the two survivors absorbed what it was for, and the director has
+approved both. This ticket closes.
+
+**The four comments, and what each of them settled.**
+
+1. **"A lease is not attached to a tenancy; a lease defines a tenancy."** The confirm screen's second
+   section asked which existing letting this lease belongs to. The director's objection is that the
+   question is backwards: a tenancy is *the deciding record of who is an active tenant in a flat*, and
+   a lease is what decides it. Looking for a letting to attach a lease to is looking for the answer
+   before reading the question. The section is gone from the paint. The narrower case that section was
+   built for — slice 6.5's attach branch, a second lease arriving on a unit and a start date it
+   already holds — is not settled by this ruling and is not deleted by it; it is named as an open
+   question in #110 below, because it is the ticket that either wires it or drops it.
+2. **"The confirm screen is redundant: the admin already approved the document's fields."** Accepted,
+   and it is the comment that killed the screen. The approval ledger already has an edit box and an
+   approve button beside every value, one row at a time. Reprinting those values on a second screen
+   with a second set of controls is a second place to change one fact, and two places to change one
+   fact is how they come to disagree. What the director asked the tenancy page to show instead — a
+   link to the approved reading, read-only, with the term, the flat and the parties, plus the fact
+   that a lease is now held and what is still missing for the letting to become active — the tenancy
+   page now shows, in all three of its states.
+3. **"Creation waits until the document is approved, never while pending."** Already the rule, on both
+   ends: A2 refuses to propose against an `unverified` file, and from slice 7.4 a promotion requires
+   an approval stamp on the reading. Nothing changed; it is recorded here because the director asked
+   the question and the answer being "already true" is itself worth a line.
+4. **"When there is no match, everything should still be stored."** A12 today refuses without writing,
+   and the director's instruction on being shown what reversing that costs was *ignore this for now,
+   let's not over complicate*. So: **parked, not accepted and not rejected.** A12's
+   refusal-writes-nothing stands exactly as `SPEC-flows.md` states it. The mitigation that already
+   exists is that A12's refusal offers creation to an ADMIN with the building, the number and the town
+   prefilled from the reading, so the operator's cost is one re-attach rather than retyping an
+   address. If the director reopens this it wants an ADR, not a comment.
+
+**What the redraw did.**
+
+`mockups/confirm-tenancy.html` is deleted and `/dev/mockups/confirm-tenancy` returns 404. No code
+changed for that: `src/dev-mockups.ts` reads the directory, which is why deleting a paint is deleting
+a file.
+
+`mockups/approval-ledger.html` now prints each party's role under the field name the value was read
+into, as text and not as a control. `שם השוכר` is a tenant and `שם הערב` is a guarantor, and the
+operator already chose between them when they approved the value in that row. The guarantor line
+carries `ערב · אינו איש קשר לשירות` in the alert token, because that is the one distinction on the
+screen with an isolation consequence behind it: foundation rule 7 is a database CHECK that *rejects*
+the row rather than correcting it politely. One tenant row became two, so that the two-signatory
+household the spec calls the normal case is the case the paint shows.
+
+`mockups/tenancy-page.html` absorbed the rest. A read-only `מה נשא החוזה אל ההשכרה` block —
+term, flat, tenants with their roles, guarantor — sits between the documents-held table and `מה חסר`
+in every state, above a line naming the date the ledger was approved and a link back to it that says
+in as many words that a correction is made there and not here. The document names in the held table
+are links to the same place.
+
+**What the ruling leaves open, marked on the screen and not silently.** `שוכר ראשי` versus
+`שוכר נוסף` is a convention — the first name read is primary — and not a reading; the lease does not
+say which of two signatories is the principal. And `דייר` (`OCCUPANT`) has no field on a lease at
+all, so no lease can produce one. Neither is an isolation question, so neither gets a control on this
+paint. If either should become one, it is a one-line change now and a schema conversation later.
+
+**Verification.** Both surviving paints clicked on a running local server at 1280 and at 375. No
+horizontal body scroll at either width on either; the ledger's table still scrolls inside its own
+`.table-wrap`. No `<script>`, one `<h1>` per page, roles computed at 11px in the muted and alert
+tokens rather than a typed colour. `npm run typecheck` clean, all four guards clean, `npm run
+test:code` 670 of 670.
+
+**What this closing hands to other tickets.** #110 is rewritten below the line this comment draws:
+its premise was a confirm screen that no longer exists. The three amber decisions from the first
+comment resolve as follows — the maintenance annex select is moot as a *confirm-screen* question and
+is now an open question on #110 as *where the annex goes*; the arming date on the page and not in the
+queue stands and #108 inherits it; the ledger's flexing edit box stands and #109 carries it into the
+wired screen. The two surviving mockups are deleted by #109 and #107 respectively as each flow is
+wired, never by this ticket.
