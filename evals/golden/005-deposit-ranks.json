@@ -1,0 +1,12 @@
+{
+  "id": "deposit-ranks",
+  "title": "A deposit question retrieves the clause that prints the figure",
+  "input": {
+    "message": "מה סכום הפיקדון או הערבות הבנקאית?"
+  },
+  "retrieval": {
+    "expectRef": "חוזה §12.1",
+    "rankAtMost": 8,
+    "note": "Ratchet landing-wide: the window is eight. Tightened to the measured rank once evals run against the real embedder on the day this case lands (#104)."
+  }
+}

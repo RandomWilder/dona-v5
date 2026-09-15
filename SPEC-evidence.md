@@ -7,7 +7,8 @@ this file and the workbook disagree, the workbook is right and this file is a bu
 - **Owns:** the paper, and every value that traces back to it. A **schema-driven ingestion engine, not
   a lease parser**: its inputs are a document, a declared type, and that type's field schema.
 - **Entities:** E12, E13, E15, E16 — Document · DocumentLink · DocumentType · DocumentTypeField ·
-  ExtractedField · FieldPromotion · **Passage** (#103).
+  ExtractedField · FieldPromotion · **Passage** (#103). Retrieval over that store takes a required
+  **Stance** (#104).
 - **Depends on:** estate, parties, tenancy.
 - **Builds:** week 3 (slices 3.1–3.3, 3.5's confirm screen, 3.6) and week 4 (OCR at 4.1, comprehension
   at 4.2, promotion at 4.3, A2's draft tenancy at 4.6, A3's addendum at 4.7). **The stub gained content at slice 3.1**, which
@@ -935,6 +936,18 @@ embedder is the same shape as an unconfigured extractor: the document is still f
 are written — documents without passages, including the pre-#103 archive, are #105's sweep.
 **Viewing a reading that has passages does not re-read the bytes.** `GET /documents/:id/read` paints
 stored passages when they exist; without them it still reads the file, which is the archive path.
+
+**#104 searches the passage store.** `searchPassages` takes a question, an embedder, and a required
+**stance** — administrator or tenant, never defaulted, so no caller retrieves without saying who is
+asking. Each hit carries the document, the page, the text, the document type, the flat the document
+is anchored to (the `UNIT` link, or the tenancy's unit when that is the only place-binding), and a
+distance. Distance orders the results and is never asserted on. The administrator stance returns
+identifiers as printed. The tenant stance masks identifier-shaped runs in the returned text and does
+not rewrite the stored passage. Masking is not a reveal: a reveal of a withheld identifier remains
+`POST /documents/:id/fields/reveal` and still writes `evidence.read_identifier`. There is no
+tenant-facing surface on this command yet. The page-sized chunk and this search are retrieval
+configuration, so rent and deposit questions enter the golden set, ranked against the corpus
+fixtures and ratcheted to the rank the day they land.
 
 `sweepUnverified` walks already-filed `unverified` rows the same way. It is how week 3's backlog is
 discharged; the count of verdicts that moved is recorded in the slice evidence, from the audit

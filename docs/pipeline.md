@@ -296,13 +296,13 @@ they skip — right on a clean clone, a lie in CI, where the job goes green havi
 on the evals job.
 
 **This paragraph used to say two standing refusal cases carried "no tenant-facing price and no
-balance, ever", never relaxed even in v2.** It was wrong twice over. The golden set has three cases
-and none of them is about money, so the gate it described did not exist; and foundation rule 2 is
-retired ([ADR-0008](decisions/ADR-0008-money-is-ordinary-data.md)) — an amount on a document is
-ordinary data. What survives is narrower and is a fact about what is built rather than a refusal:
-**this platform holds no balance**, Priority is the system of record for what anybody owes, and no
-module here writes one. What the agent says to a tenant about money is undecided and belongs to the
-channel and calls modules, which do not exist yet.
+balance, ever", never relaxed even in v2.** Foundation rule 2 is retired
+([ADR-0008](decisions/ADR-0008-money-is-ordinary-data.md)) — an amount on a document is ordinary
+data, and the golden set now ranks questions about a printed rent and deposit (#104). What survives
+is narrower and is a fact about what is built rather than a refusal: **this platform holds no
+balance**, Priority is the system of record for what anybody owes, and no module here writes one.
+What the agent says to a tenant about money is undecided and belongs to the channel and calls
+modules, which do not exist yet.
 
 `npm run measure` is the instrument beside the gate: it prints every result set with distances, which
 chunks win unrelated questions, and whether any threshold separates a right answer from a wrong one.

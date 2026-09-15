@@ -151,9 +151,12 @@ describe('policy · the copy sent to the embedder', () => {
       const source = await readFile(path.join(srcRoot, file), 'utf8');
       if (/embedder\.embed\(/.test(source)) callers.push(file);
     }
-    const expected = [`evidence${path.sep}internal${path.sep}passages.ts`];
+    const expected = [
+      `evidence${path.sep}internal${path.sep}passages.ts`,
+      `evidence${path.sep}internal${path.sep}search.ts`,
+    ];
     assert.deepEqual(
-      callers,
+      callers.sort(),
       expected,
       `${callers.join(', ')} also calls embedder.embed; add them here only if they embed the stored copy unmasked`,
     );
@@ -164,5 +167,14 @@ describe('policy · the copy sent to the embedder', () => {
     assert.equal(writer.includes('identifier.ts'), false);
     assert.match(writer, /pageText\(page\)/);
     assert.match(writer, /embedder\.embed\(bodies\)/);
+    const reader = await readFile(
+      path.join(srcRoot, expected[1] ?? ''),
+      'utf8',
+    );
+    assert.match(reader, /maskIdentifierRuns/);
+    assert.match(reader, /embedder\.embed\(\[question\]\)/);
+    assert.match(reader, /stance: RetrievalStance/);
+    assert.doesNotMatch(reader, /stance\?:/);
+    assert.doesNotMatch(reader, /stance\s*=\s*['"]/);
   });
 });

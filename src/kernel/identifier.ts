@@ -1,5 +1,5 @@
-// One spelling of *what an identifier looks like*, read by both of slice 6.6's guards and waiting
-// for slice 9.1's masking at the provider boundary. A second spelling of it is a second thing to
+// One spelling of *what an identifier looks like*, read by both of slice 6.6's guards and by
+// #104's tenant-stance mask on a retrieval read. A second spelling of it is a second thing to
 // keep in step, which is the reason `OCCUPANCY_VIEW` is a constant and not a literal in two queries.
 //
 // **This is a shape test, and a shape test is only ever a guard.** Nothing in this system decides
@@ -23,7 +23,18 @@
 export const IDENTIFIER_RUN =
   /(?<![0-9A-Za-z-])[0-9]{3}[- ]?[0-9]{3}[- ]?[0-9]{3}(?![0-9A-Za-z-])/;
 
+/** The same run the field ledger prints when a ת.ז. is withheld. */
+export const IDENTIFIER_MASK = '•••••••••';
+
 /** Whether this text carries a run that could be an identifier. */
 export function hasIdentifierRun(text: string): boolean {
   return IDENTIFIER_RUN.test(text);
+}
+
+/** Read-time masking. Does not decide that a value *is* an identifier — only that it looks like one. */
+export function maskIdentifierRuns(text: string): string {
+  return text.replaceAll(
+    new RegExp(IDENTIFIER_RUN.source, `${IDENTIFIER_RUN.flags}g`),
+    IDENTIFIER_MASK,
+  );
 }

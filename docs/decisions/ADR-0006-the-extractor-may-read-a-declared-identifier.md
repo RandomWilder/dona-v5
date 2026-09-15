@@ -82,5 +82,5 @@ copy is never masked. #99 / #103 made that copy a per-page passage whose embeddi
 the same text: one store, one embedding run. Masking before the embedder would both hide a tenant's
 own identifier from them at retrieval and corrupt the vector. Decision 1 still binds **tenant-facing
 model output** and the retrieval *read* (stance); it does not bind the write into
-`document_passage`. Slice 9.1's remaining work is the tenant-stance mask on the way out, not a
-second, masked index.
+`document_passage`. **#104 is that read:** the tenant stance masks identifier-shaped runs on the way
+out; the administrator stance does not. There is still no second, masked index.

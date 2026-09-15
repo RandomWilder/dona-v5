@@ -17,13 +17,8 @@
 // **No client JavaScript, here as everywhere.** The type list is a `<select>` the server filled from
 // the catalogue, the file input is a file input, and the page works with scripting switched off.
 import type { UnitHit } from '../../estate/contract.ts';
+import { IDENTIFIER_MASK } from '../../kernel/identifier.ts';
 import { onlineOcrByteLimit } from '../../kernel/ocr.ts';
-
-/** A byte count in the unit the sentence is written in. One decimal, because 14.9 is a size. */
-function megabytes(bytes: number): string {
-  return (bytes / (1024 * 1024)).toFixed(1);
-}
-
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import type { UnitLetting } from '../../tenancy/contract.ts';
@@ -39,6 +34,11 @@ import type { ProposedPerson, TenancyCandidate } from './lease.ts';
 import { CANDIDATE_LIMIT, type PlaceReading } from './place.ts';
 import { documentExtensions } from './storage-path.ts';
 import type { Verification } from './verify.ts';
+
+/** A byte count in the unit the sentence is written in. One decimal, because 14.9 is a size. */
+function megabytes(bytes: number): string {
+  return (bytes / (1024 * 1024)).toFixed(1);
+}
 
 const TENANCY_STATUS: Record<string, string> = {
   DRAFT: 'טיוטה',
@@ -1606,7 +1606,7 @@ export interface FieldsScreen {
   saved?: number;
 }
 
-const MASK = '•••••••••';
+const MASK = IDENTIFIER_MASK;
 
 /**
  * Whether the value on this row may be printed. **Withheld is the default** and a reveal is one

@@ -51,6 +51,7 @@ introducing one fails the build. Say "the scope", not "the tenant's permissions"
 | **DocumentType** | A row, not a code path. New types cost no migration. |
 | **DocumentTypeField** | A field declared on a type. Also a row. |
 | **Passage** | One page of a Document, as text. Written once, when the document is read; never re-derived from the bytes. Identifiers stay in the text. Masking is a read, not a write. |
+| **Stance** | Who is asking a retrieval question. Required on every search; there is no default. The administrator stance returns identifiers as printed. The tenant stance masks them in the returned text and leaves the stored passage unchanged. Distinct from a route's declared permission. |
 | **ExtractedField** | A value read out of a Document, citable the moment it is extracted. |
 | **Capture** | Getting a value into an `ExtractedField`. **Open** — cheap, ungoverned. |
 | **Approval** | A person signing a reading. A stamp on the `ExtractedField`. |

@@ -194,6 +194,8 @@ export const specimenRefs = {
   ownerRepairs: ref('חוזה §7.2'),
   tenantDamage: ref('חוזה §7.5'),
   commonParts: ref('חוזה §7.9'),
+  monthlyRent: ref('חוזה §10.3'),
+  depositGuarantee: ref('חוזה §12.1'),
   officeHours: ref('נוהל שירות §2'),
   reportFault: ref('נוהל שירות §3'),
 } as const;
