@@ -12,6 +12,7 @@
 //     catch — which is the guard working, not a line walked up to;
 //   - it returns dates and a status and **no party**, so nothing personal can reach the screen;
 //   - and nothing decides what anybody may *see* from its result. It fills a select box.
+import { KernelError } from '../../kernel/errors.ts';
 import type { Queryable } from './types.ts';
 
 export interface UnitLetting {
@@ -19,6 +20,22 @@ export interface UnitLetting {
   start_date: string;
   end_date: string;
   status: string;
+}
+
+/** One letting, for the tenancy sheet. Dates and a status. No party. #107. */
+export interface TenancyRow {
+  tenancy_id: string;
+  unit_id: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+}
+
+/** Who is on the letting, as ids and roles. The name lives in `party`. #107. */
+export interface TenancyPartyRow {
+  party_id: string;
+  role: string;
+  is_service_contact: boolean;
 }
 
 /**
@@ -45,6 +62,55 @@ export async function listUnitTenancies(
       WHERE unit_id = $1
       ORDER BY start_date DESC`,
     [unitId],
+  );
+  return result.rows;
+}
+
+/**
+ * One letting by id. Missing is `not_found`, same standing as `getUnit`.
+ */
+export async function getTenancy(
+  db: Queryable,
+  tenancyId: string,
+): Promise<TenancyRow> {
+  const result = await db.query<TenancyRow>(
+    `SELECT tenancy_id,
+            unit_id,
+            start_date::text AS start_date,
+            end_date::text AS end_date,
+            status
+       FROM tenancy
+      WHERE tenancy_id = $1`,
+    [tenancyId],
+  );
+  const row = result.rows[0];
+  if (!row) {
+    throw new KernelError('not_found', 'tenancy not found');
+  }
+  return row;
+}
+
+/**
+ * The household on one letting, as joins, not as people. Ordered so a title can take the
+ * primary tenant first without the screen sorting.
+ */
+export async function listTenancyParties(
+  db: Queryable,
+  tenancyId: string,
+): Promise<TenancyPartyRow[]> {
+  const result = await db.query<TenancyPartyRow>(
+    `SELECT party_id, role, is_service_contact
+       FROM tenancy_party
+      WHERE tenancy_id = $1
+      ORDER BY CASE role
+                 WHEN 'PRIMARY_TENANT' THEN 0
+                 WHEN 'CO_TENANT' THEN 1
+                 WHEN 'OCCUPANT' THEN 2
+                 WHEN 'GUARANTOR' THEN 3
+                 ELSE 4
+               END,
+               party_id`,
+    [tenancyId],
   );
   return result.rows;
 }

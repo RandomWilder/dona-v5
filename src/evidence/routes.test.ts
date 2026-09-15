@@ -22,7 +22,9 @@ import { buildApp } from '../app.ts';
 import type { EstatePlan } from '../estate/contract.ts';
 import { importEstate } from '../estate/contract.ts';
 import { fixedClock } from '../kernel/clock.ts';
+import { embeddingColumnDimensions } from '../kernel/config.ts';
 import { inTransaction } from '../kernel/db.ts';
+import { createFakeEmbedder } from '../kernel/embeddings.ts';
 import { KernelError } from '../kernel/errors.ts';
 import { createFakeExtractor } from '../kernel/extraction.ts';
 import { createMemoryStore } from '../kernel/objects.ts';
@@ -284,14 +286,14 @@ describe('evidence · the upload route', () => {
         assert.equal(response.statusCode, 302);
         assert.match(
           response.headers.location ?? '',
-          /\/documents\/[0-9a-f-]{36}\/tenancy$/,
+          /\/documents\/[0-9a-f-]{36}\/fields$/,
         );
         const confirm = await as(lease).inject({
           method: 'GET',
           url: String(response.headers.location),
         });
         assert.equal(confirm.statusCode, 200);
-        assert.match(confirm.body, /אישור חוזה/);
+        assert.match(confirm.body, /מה נקרא מן המסמך/);
         assert.doesNotMatch(confirm.body, /כהן/);
 
         const rows = await pool.query<{
@@ -332,7 +334,7 @@ describe('evidence · the upload route', () => {
           assert.match(unitPage.body, /X-Goog-Expires=/);
           assert.match(unitPage.body, /נמצאו כל הביטויים הקבועים של הטופס/);
           assert.match(unitPage.body, /\/documents\/[0-9a-f-]{36}\/read/);
-          assert.match(unitPage.body, /\/documents\/[0-9a-f-]{36}\/tenancy/);
+          assert.match(unitPage.body, /\/documents\/[0-9a-f-]{36}\/fields/);
           assert.doesNotMatch(unitPage.body, /href="gs:/);
           assert.doesNotMatch(unitPage.body, /gs:\/\/dona-v5-test-docs\//);
 
@@ -448,7 +450,7 @@ describe('evidence · the upload route', () => {
       );
 
       await t.test(
-        'GET /documents/:id/read draws word boxes for a native PDF',
+        'GET /documents/:id/read shows the page text, not word boxes',
         async () => {
           const rows = await pool.query<{ document_id: string }>(
             `SELECT d.document_id FROM document d
@@ -465,9 +467,9 @@ describe('evidence · the upload route', () => {
           });
           assert.equal(response.statusCode, 200);
           assert.match(response.body, /מילים על הדף/);
-          assert.match(response.body, /word-box/);
-          assert.match(response.body, /inset-inline-start/);
-          assert.doesNotMatch(response.body, /(?:^|[\s;{])left\s*:/);
+          assert.doesNotMatch(response.body, /word-box/);
+          assert.doesNotMatch(response.body, /field-box/);
+          assert.doesNotMatch(response.body, /<img /);
         },
       );
 
@@ -524,6 +526,65 @@ describe('evidence · the upload route', () => {
       );
 
       await t.test(
+        'GET /documents/:id/read a second time does not re-read the bytes',
+        async () => {
+          const bytes = pdfBytes(`stored-passages-${Date.now()}`);
+          hashes.push(documentFileHash(bytes));
+          let reads = 0;
+          const inner = createFakePdfText([
+            specimen('lease-standard.md'),
+            'PAGE-TWO-ONLY-WORD',
+          ]);
+          const stored = buildApp({
+            pool,
+            version: '9.9.9-test',
+            clock: fixedClock(AT),
+            objects,
+            pdf: {
+              pages: async (file) => {
+                reads += 1;
+                return inner.pages(file);
+              },
+              describe: () => inner.describe(),
+            },
+            embedder: createFakeEmbedder(embeddingColumnDimensions),
+            bucket: BUCKET,
+          });
+          extraApps.push(stored);
+          const posted = await as(stored).inject({
+            method: 'POST',
+            url: '/documents',
+            ...upload(
+              { unit: unitId, type: 'lease', tenancy: '' },
+              { filename: 'stored.pdf', bytes },
+            ),
+          });
+          assert.equal(posted.statusCode, 302, posted.body.slice(0, 400));
+          const afterUpload = reads;
+          assert.equal(afterUpload, 1);
+          const rows = await pool.query<{ document_id: string }>(
+            'SELECT document_id FROM document WHERE file_hash = $1',
+            [documentFileHash(bytes)],
+          );
+          const documentId = rows.rows[0]?.document_id ?? '';
+          assert.ok(documentId);
+          const first = await as(stored).inject({
+            method: 'GET',
+            url: `/documents/${documentId}/read`,
+          });
+          assert.equal(first.statusCode, 200, first.body.slice(0, 400));
+          assert.match(first.body, /הקריאה שנשמרה/);
+          const second = await as(stored).inject({
+            method: 'GET',
+            url: `/documents/${documentId}/read?page=2`,
+          });
+          assert.equal(second.statusCode, 200);
+          assert.match(second.body, /PAGE-TWO-ONLY-WORD/);
+          assert.equal(reads, afterUpload);
+        },
+      );
+
+      await t.test(
         'an OCR timeout still files the scan, HTTP 200 not 503',
         async () => {
           const app = buildApp({
@@ -559,7 +620,7 @@ describe('evidence · the upload route', () => {
       );
 
       await t.test(
-        'OCRs a scan on the same request and offers the overlay',
+        'OCRs a scan on the same request and offers the reading',
         async () => {
           const app = buildApp({
             pool,
@@ -596,14 +657,14 @@ describe('evidence · the upload route', () => {
           hashes.push(postedHash);
           const location = String(response.headers.location ?? '');
           const documentId =
-            location.match(/\/documents\/([0-9a-f-]{36})\/tenancy$/)?.[1] ?? '';
+            location.match(/\/documents\/([0-9a-f-]{36})\/fields$/)?.[1] ?? '';
           assert.ok(documentId);
           const overlay = await as(app).inject({
             method: 'GET',
             url: `/documents/${documentId}/read`,
           });
           assert.equal(overlay.statusCode, 200, overlay.body.slice(0, 400));
-          assert.match(overlay.body, /word-box/);
+          assert.doesNotMatch(overlay.body, /word-box/);
           assert.match(overlay.body, /קריאה אוטומטית/);
         },
       );
@@ -1054,7 +1115,7 @@ describe('evidence · A12 a document finds its own place', () => {
           assert.equal(response.statusCode, 302, response.body.slice(0, 400));
           assert.match(
             response.headers.location ?? '',
-            /\/documents\/[0-9a-f-]{36}\/tenancy$/,
+            /\/documents\/[0-9a-f-]{36}\/fields$/,
           );
           assert.equal((await documentsHere()) - before, 1);
           const rows = await pool.query<{
@@ -1262,11 +1323,14 @@ describe('evidence · A12 a document finds its own place', () => {
             method: 'GET',
             url: `/documents/${documentId}/tenancy`,
           });
-          assert.equal(confirm.statusCode, 200, confirm.body.slice(0, 400));
-          // The unit number rides in its own `dir="ltr"` span, so this is the screen's own markup
-          // and not a paraphrase of it.
-          assert.match(confirm.body, /<span dir="ltr">12B<\/span>/);
-          assert.doesNotMatch(confirm.body, /<span dir="ltr">12A<\/span>/);
+          assert.equal(confirm.statusCode, 302);
+          const ledger = await as(ambiguous).inject({
+            method: 'GET',
+            url: String(confirm.headers.location),
+          });
+          assert.equal(ledger.statusCode, 200, ledger.body.slice(0, 400));
+          assert.match(String(confirm.headers.location), /\/fields$/);
+          assert.match(ledger.body, /מה נקרא מן המסמך/);
         },
       );
 
@@ -1293,7 +1357,7 @@ describe('evidence · A12 a document finds its own place', () => {
               describe: () => 'fake',
               pages: async () => {
                 calls += 1;
-                return { pages: [], images: [] };
+                return { pages: [] };
               },
             },
             bucket: BUCKET,
@@ -1528,7 +1592,7 @@ describe('evidence · a captured ת.ז., withheld unless the viewer may read it'
       assert.equal(response.statusCode, 302, response.body.slice(0, 400));
       const documentId =
         String(response.headers.location ?? '').match(
-          /\/documents\/([0-9a-f-]{36})\/tenancy$/,
+          /\/documents\/([0-9a-f-]{36})\/fields$/,
         )?.[1] ?? '';
       assert.ok(documentId, 'a verified lease goes to its confirm screen');
       const row = await pool.query<{ file_hash: string }>(
@@ -1986,7 +2050,7 @@ describe('evidence · A12 offers to create, to an admin', () => {
           assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
           assert.match(
             filed.headers.location ?? '',
-            /\/documents\/[0-9a-f-]{36}\/tenancy$/,
+            /\/documents\/[0-9a-f-]{36}\/fields$/,
           );
           hashes.push(documentFileHash(pdfBytes('6.9 filed')));
         },
@@ -2048,15 +2112,18 @@ describe('evidence · A12 offers to create, to an admin', () => {
 // **The declaration editor, driven the way an administrator drives it.** Slice 7.2, flow A14.
 //
 // Foundation rule 8 says a field is a row and costs no deploy. Everything below is that claim
-// posted through a real form: the write, the correction, the retire, and the two refusals the slice
-// exists to make — a role that may not declare, and a declaration that names money.
+// posted through a real form: the write, the correction, the retire, and the refusal the slice
+// exists to make — a role that may not declare.
 //
 // **The role refusal is here and not in `tests/policy/`.** `tests/policy/` builds no application —
 // its cases are SQL and pure functions — and every role refusal in this repository is asserted at
 // the route, against the stance the composition root actually registered
-// (`src/estate/routes.test.ts`, `src/staff/routes.test.ts`, `src/settings.test.ts`). The money
-// refusal *is* a policy case, because it is a constraint no model and no role may decide, and it
-// is in `tests/policy/money-field.test.ts` with the vocabulary it reads.
+// (`src/estate/routes.test.ts`, `src/staff/routes.test.ts`, `src/settings.test.ts`).
+//
+// **There was a second refusal here, and it is gone.** A declaration naming money was refused by a
+// vocabulary guard until 15 Sep 2026; foundation rule 2 is retired
+// (`docs/decisions/ADR-0008-money-is-ordinary-data.md`) and this suite's money case went with the
+// policy case that carried the vocabulary. Nothing replaces either.
 //
 // **It was red first.** The route was registered with `documents.write` — which an OPERATOR holds —
 // and this suite's refusal case failed with 303 before the stance became `settings.write`. The
@@ -2066,7 +2133,7 @@ const DECLARE_DOMAIN = 'evidence-declare.test';
 const DECLARE_TYPE = 'a14_editor_type';
 
 describe('evidence · an administrator declares a field (7.2, A14)', () => {
-  it('declares, corrects, retires — and refuses a role and a money field', async (t) => {
+  it('declares, corrects, retires — and refuses a role', async (t) => {
     const pool = await migratedPoolOrNull();
     if (!pool) {
       t.skip(skipReason);
@@ -2259,34 +2326,6 @@ describe('evidence · an administrator declares a field (7.2, A14)', () => {
         },
       );
 
-      await t.test(
-        'a money declaration is refused, and writes nothing',
-        async () => {
-          const before = (await rows()).length;
-          for (const money of [
-            { field_key: 'rent_amount', label_he: 'נתון נוסף' },
-            { field_key: 'extra_1', label_he: 'סכום הפיקדון' },
-          ]) {
-            const refused = await post(dayTwo, adminTwo as SignedIn, {
-              action: 'declare',
-              value_type: 'NUMBER',
-              ...money,
-            });
-            assert.equal(
-              refused.statusCode,
-              400,
-              `${money.field_key}: ${refused.body.slice(0, 200)}`,
-            );
-            assert.equal(refused.json().code, 'invalid');
-            // The sentence names the rule, which is what an administrator needs in order to know
-            // this is a decision and not a validation quirk.
-            assert.match(refused.json().message, /may not name money/);
-            assert.match(refused.json().message, /Foundation rule 2/);
-          }
-          assert.equal((await rows()).length, before);
-        },
-      );
-
       await t.test('an OPERATOR is refused, and writes nothing', async () => {
         const before = (await rows()).length;
         const refused = await post(dayTwo, operator as SignedIn, {
@@ -2369,11 +2408,12 @@ describe('evidence · an administrator declares a field (7.2, A14)', () => {
             GROUP BY action ORDER BY action`,
           [(admin as SignedIn).staffAccountId],
         );
-        // Two declares that succeeded plus one that conflicted plus two money refusals; one retire
-        // that conflicted plus one that closed the row. `audit.around` records both outcomes.
+        // Two declares that succeeded plus one that conflicted; one retire that conflicted plus one
+        // that closed the row. `audit.around` records both outcomes. It was five declares until the
+        // money refusals went with foundation rule 2 (ADR-0008).
         assert.equal(
           lines.find((line) => line.action === 'evidence.declare_field')?.n,
-          '5',
+          '3',
         );
         assert.equal(
           lines.find((line) => line.action === 'evidence.retire_field')?.n,
@@ -2655,7 +2695,7 @@ describe('evidence · the approval ledger, and who may sign what', () => {
       assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
       documentId =
         String(filed.headers.location ?? '').match(
-          /\/documents\/([0-9a-f-]{36})\/tenancy$/,
+          /\/documents\/([0-9a-f-]{36})\/fields$/,
         )?.[1] ?? '';
       assert.ok(documentId, 'a verified lease goes to its confirm screen');
 

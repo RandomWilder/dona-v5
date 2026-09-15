@@ -133,6 +133,12 @@ paper. Both end in the same `fileDocument` call against the same `UNIT` place, s
 this line — the guard, the refusal that writes nothing, the audit line, the bounds and the per-caller
 cap — is true of both entries and is stated once.
 
+**Amended at #109: a verified lease does not go to the confirm screen.** Both doors, and the unit
+document list, enter one orchestrator. After `fileDocument` has filed and extracted, the operator
+lands on A15's ledger. The reading's quality verdict is on that screen and on the read screen. A
+file that is not the declared type is still refused at the door and still writes nothing. Creating
+the draft tenancy is A2 after the ledger, and is #110's.
+
 **Declaring a *new draft* tenancy from the upload screen is A2's, not A1's.** Invariant 5 puts a human
 confirmation between a proposed party and a written `tenancy_party` row, and `upsertParty` needs a
 ת.ז. it can key on, so the "declared by the administrator" path 3.3 was planned with would have been
@@ -144,7 +150,7 @@ unit — which is the sequence step 5 of that flow describes anyway.
 ### A2 — A lease establishes a tenancy
 
 **Trigger:** A1 completes for a document of type lease.
-**Sequence:** extract → propose → confirm → write.
+**Sequence:** extract → approve on the ledger → write a draft → the tenancy page.
 
 1. Extraction reads the lease against `DocumentTypeField` for that type and returns what it found,
    including what it did not find.
@@ -216,60 +222,21 @@ unit — which is the sequence step 5 of that flow describes anyway.
    two correctly paired tenants — there is no pairing inside the guarantor family to have got wrong.
    **Two people on one lease resolving to the same identifier is a refusal**, not a role quietly
    overwritten on one party.
-6. **Which letting — proposed, then confirmed.** The unit's lettings come from `listUnitTenancies`
-   (every status, no day predicate, no party and no name) and are **ranked by identifier overlap
-   first, then by the number of days the lease's own term overlaps theirs**. Overlap is a **count**:
-   how many people already on that letting carry one of this lease's identifiers. No value, no key
-   and no name leaves the query, and the screen shows the count and never a digit of an identifier.
-   **The comparison is a read of `national_id_key` and writes an `audit_log` line** —
-   `evidence.match_identifier`, naming who asked and how many probes matched, never the value. It is
-   not a disclosure and is not `evidence.read_identifier`; nobody saw anything.
+6. **A lease defines a letting. #110.** There is no list of candidate lettings and no attach. A
+   second lease on the same unit and start date is refused: `conflict`, and the sentence names that
+   unit already has a lease starting on this date. Adding evidence to a household that already exists
+   is filing against that letting. Identifier pairing at write is unchanged, including that it is
+   all-or-nothing inside a field family and that two people resolving to one identifier is a refusal.
 
-   **The default is *a new letting*, and an existing one is pre-selected only when this lease starts
-   on the same day as one of them.** The same household renewing on new dates is a new letting, so
-   identifier overlap ranks the list and never decides it. **A human picks**, and may pick any
-   letting on the list or a new draft — invariant 5 unchanged.
-
-   **Date overlap is computed outside SQL.** `start_date <= x AND end_date >= y` is the isolation
-   join's tenancy predicate, which `src/scope/` alone may write (guard two); rephrasing it elsewhere
-   to get past the guard is the move the guard exists to forbid. The list already carries both dates
-   as text, so the arithmetic is ordinary code with its own cases.
-
-   **This step is under a ruling of 15 Sep 2026 and is #110's to close.** The director's objection is
-   that asking which existing letting a lease belongs to is backwards: a tenancy is *the deciding
-   record of who is an active tenant in a flat*, and **a lease is what decides it**. A lease is not
-   attached to a letting; it defines one. The prompt is therefore gone from the flow — there is no
-   screen that opens with a list of candidate lettings and asks a person to choose. What the ruling
-   does **not** settle is the narrower case the branch was built for, which is not a prompt but a
-   conflict: a second lease arriving on a unit and a start date that unit already holds, which before
-   6.5 was a dead end with nothing an operator could do. Either that stays as conflict resolution
-   reached from the refusal, or it goes and the conflict becomes a refusal with a stated reason.
-   **#110 decides, states the decision here, and does not leave both alive.** Until it does, the
-   behaviour described above is what the code does and this paragraph is the warning that it is
-   provisional.
+   **The maintenance annex is the register's `נספח תחזוקה — תקן`**, or the sole profile if that name
+   is absent, or a refusal if the register is empty or ambiguous. It is not read off the lease,
+   because the forms in hand do not print it.
 7. The written tenancy is `DRAFT` and carries per-field provenance back to the lease.
 
-   **The confirm signs the dates it promotes — slice 7.4.** From 7.4 a promotion requires an approval
-   stamp on the reading (A15's verb, SPEC-evidence.md). This screen shows `תחילת השכירות` and
-   `סיום השכירות` as read, so pressing the button *is* a person affirming those two readings: the
-   confirm writes the approval for each date row it is about to promote, as read, with `confirmed_by`
-   as the approver, and leaves alone any row already signed on the ledger. The alternative was to
-   exempt this path from the rule, and since nearly every promotion in this system comes through it,
-   that would have been a rule about nothing.
-
-   **And it proposes what a person signed.** Where a date was corrected and approved on A15's ledger,
-   that corrected value — not the raw reading — is what this screen proposes, what the letting
-   arithmetic in step 6 compares, and what `upsertTenancy` writes. The raw reading stays on the
-   evidence row, as it always does.
-8. **Attaching to an existing letting is A2's branch from 6.5, and it writes no dates.** Before 6.5
-   this flow could only create, and a second lease on a unit and start date it already held died on
-   a conflict with nothing a human could do about it. Confirming an attach writes the document's
-   `TENANCY` link and the confirmed `tenancy_party` rows, and touches **neither `start_date` nor
-   `end_date` nor `status` nor `terms_profile_id`** — a lease filed against the wrong letting must
-   not be able to rewrite that letting's term. Moving a captured value onto a column is per-field
-   promotion from the read overlay, deliberate and one field at a time, which is what "A1 plus
-   per-field promotion" meant. Confirm recomputes from captured fields; a second confirm is a no-op,
-   on both branches.
+   **Dates are promoted from the approved reading.** From 7.4 a promotion requires an approval stamp.
+   The ledger is where those dates are signed; the write copies the signed value. A row already
+   signed is left alone. Where a date was corrected on the ledger, that corrected value is what
+   `upsertTenancy` writes. The raw reading stays on the evidence row.
 
 **Cross-check:** the address and apartment number extracted from the document are asserted against the
 unit the tenancy hangs on. This catches the error the type guard cannot — the right kind of document
@@ -296,9 +263,12 @@ A3 could never land. Zero guarantors remains a legal insert.
 **The query, not a status.** Completeness is derived on each load. The first rule id is `guarantor`.
 A tenancy is incomplete when it is `DRAFT` or `ACTIVE`, it has a `document_link` of
 `entity_type = 'TENANCY'` (the paper path A2/A3 writes; register lettings with no such link stay
-off the queue), it has zero `tenancy_party` rows with `role = 'GUARANTOR'`, and it has no exception
-row for that rule. What is missing is the rule id; the Hebrew on the screen is ערב. A second
-rule later is another predicate on the same query — not a column on `tenancy`.
+off the queue), and at least one named rule misses. The guarantor rule still misses when there is
+zero `tenancy_party` rows with `role = 'GUARANTOR'` and no exception row for that rule. **#108
+joins the activation gate's failures onto the same query**, as the gate's own rule ids — not as
+prose, not as a count, and not as a second list. A letting whose gate passes is not listed for the
+gate. What is missing is the rule id; the Hebrew on the screen is the same wording the tenancy
+page already uses for that id. Extra predicates are not a column on `tenancy`.
 **Exception:** a row in `tenancy_completeness_exception`, keyed `(tenancy_id, rule)`. Recording it
 clears the queue the way an addendum that writes a `GUARANTOR` does. A second record of the same
 pair is a no-op. It is not `tenancy.complete`.
@@ -313,14 +283,49 @@ row's `actor` is the signed-in operator (slice 5.4), not a typed name and not th
 `src/policy/`; estate owns the queue screen, with those commands injected at the composition root
 so estate does not import tenancy.
 
-### A5 — A draft tenancy becomes active
+### A5 — A person activates a draft tenancy
 
-**Trigger:** the start date arrives, or the outgoing tenancy ends.
-**Writes:** the outgoing tenancy moves to `ENDED` or `TERMINATED_EARLY`; the draft moves to `ACTIVE`.
-**Enforcement:** the exclusion constraint. Promoting a draft that still overlaps a live tenancy is
-rejected by the database, so ordering is not something the application has to remember to check.
-**Effect on the agent:** the incoming household resolves through the isolation join from that day and
-not before; the outgoing household stops resolving on the day their tenancy ends.
+**Trigger:** an administrator invokes a command that says this letting is live. **Nothing activates
+on a clock.** A fully-approved tenancy whose lease starts in the future sits as a `DRAFT`; the gate
+reports the date it becomes activatable. Expiry remains clock-driven (`expireDueTenancies`): an
+`ACTIVE` row whose `end_date` is already before today becomes `ENDED`. Only the human act is
+activation.
+
+**The gate, not a status column.** One function returns **every requirement it checked, passes
+included**, so a screen, a queue and a test all read the same answer. The required documents are one
+stated constant, and adding a third is a one-line change:
+
+```
+REQUIRED_FOR_ACTIVATION = ['lease', 'handover_protocol']
+```
+
+A tenancy becomes `ACTIVE` only when a person invokes the command and all four facts hold: an
+approved lease on the letting; an approved handover protocol on the letting; today is not before the
+lease's start date; today is not after its end date. The lease is the only document that defines
+those dates (`tenancy.start_date` / `tenancy.end_date`). Each refusal names its own reason. A
+handover protocol is **per letting**: it records that the tenant accepted the flat after inspecting
+it, and it is bound with `entity_type = 'TENANCY'`.
+
+**Screen:** `GET /estate/tenancies/:tenancyId` — one letting, reached by its identifier. Title
+(tenant name plus address and apartment number), status, the lease's dates, the documents it holds,
+what is missing, every gate check with its outcome, and the activate button. The page prints the
+gate's returned facts and re-derives none of the rules. The button is dark until `canActivate`; a
+dark button names every requirement the gate checked. When the only miss is the start date, the
+page states `activatableOn`. `POST /estate/tenancies/:tenancyId/activate` is the person command
+(`tenancy.write`); the clock never posts it.
+
+**Writes:** `DRAFT → ACTIVE`, and a `TenancyEvent` of kind `activated` naming who and when. No
+document on that event — the paper is already on the letting; the event records the human act.
+**Enforcement:** the gate first, then `one_active_tenancy_per_unit`. Promoting a draft that still
+overlaps a live tenancy is rejected by the database.
+**Effect on the agent:** the incoming household resolves through the isolation join from that day
+and not before.
+
+**After activation.** An expired tenancy is `ENDED` and is not reopened — the clock does not
+activate anything, and `activateTenancy` will not move an `ENDED` row. A required document whose
+`valid_to` has passed raises a **flag** and never moves `tenancy.status` — the status keeps
+meaning what it says while the lapse stays visible. Gate misses appear on A4's existing queue
+(#108), each as the gate's named rule.
 
 ### T1 — A tenant asks a question
 
@@ -636,11 +641,12 @@ side only, and this flow closes it.
 4. **Retiring a field closes the row and inserts nothing.** The catalogue's rule is deactivate,
    never delete (A9), and a field is no different — `extracted_field` rows point at the closed
    declaration and stay explicable by it.
-5. **No money field, and the refusal names the rule.** The moment an administrator may declare a
-   field they may declare `rent_amount` as `NUMBER`, and foundation rule 2 stops being enforceable
-   by the schema. The editor refuses a declaration whose key or label carries the money vocabulary.
-   **Adding money to this system stays a migration, a `value_type` member, a diff and a review** —
-   the price `src/staff/internal/roles.ts` says an irreversible widening should cost.
+5. **A money field is an ordinary field**, from 15 Sep 2026. The editor refused a declaration whose
+   key or label carried a money vocabulary until foundation rule 2 was retired
+   ([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)); that guard is deleted and
+   nothing replaces it, so `rent_amount` as `NUMBER` is declared, versioned, audited and refused by
+   nothing. There is still no `MONEY` value type, because an amount is a `NUMBER` beside a `TEXT`
+   currency and does not need one.
 
 **What A14 does not do.** It does not touch `verification_terms` — what proves *that this is a
 lease* stays in the type row under A9's editor and under the policy suite, while what is read *after*

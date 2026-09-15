@@ -50,6 +50,8 @@ introducing one fails the build. Say "the scope", not "the tenant's permissions"
 | **Document** | A file that arrived. |
 | **DocumentType** | A row, not a code path. New types cost no migration. |
 | **DocumentTypeField** | A field declared on a type. Also a row. |
+| **Passage** | One page of a Document, as text. Written once, when the document is read — at filing, or by the archive sweep for rows that have none. Never re-derived from the bytes after that. Identifiers stay in the text. Masking is a read, not a write. |
+| **Stance** | Who is asking a retrieval question. Required on every search; there is no default. The administrator stance returns identifiers as printed. The tenant stance masks them in the returned text and leaves the stored passage unchanged. Distinct from a route's declared permission. |
 | **ExtractedField** | A value read out of a Document, citable the moment it is extracted. |
 | **Capture** | Getting a value into an `ExtractedField`. **Open** — cheap, ungoverned. |
 | **Approval** | A person signing a reading. A stamp on the `ExtractedField`. |
@@ -79,8 +81,15 @@ be met. Editable at `/settings` without a deploy.
 **The register** — the register file format and the order its rows are written in. Owned by
 `src/register/` and nothing else.
 
-**Money never touches the agent.** No tenant-facing price, no balance, ever. A question about money
-is answered by refusal and handoff, never by an estimate.
+**Amount** — a number printed on a document, held as a `NUMBER` field beside a `TEXT` currency field
+that is its own. Ordinary data since 15 Sep 2026, when foundation rule 2 was retired
+([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)): an amount is read, captured,
+approved, promoted, retrieved, quoted and computed on like every other value on a contract. There is
+no `MONEY` value type and an amount is never a **balance**.
+
+**Balance** — a running figure for what somebody owes. **Priority's, not this platform's.** Nothing
+here writes one, no schema has a column for it, and that is a fact about what is built rather than a
+guard that forbids it.
 
 ## Shape
 

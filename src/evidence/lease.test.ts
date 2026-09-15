@@ -158,12 +158,7 @@ describe('evidence · flow A2 confirms a lease into a draft tenancy', () => {
           proposed.termsProfileNames.includes(`a2-${unitId.slice(24)}`),
         );
 
-        const roles = Object.fromEntries(
-          proposed.people.map((person) => [
-            person.extractedFieldId,
-            person.proposedRole,
-          ]),
-        );
+        await stampNames(db, documentId);
         const deps = {
           db,
           audit: createAuditLog(db, fixedClock(AT)),
@@ -173,7 +168,7 @@ describe('evidence · flow A2 confirms a lease into a draft tenancy', () => {
           documentId,
           termsProfileName: `a2-${unitId.slice(24)}`,
           confirmedBy: 'אסף',
-          roles,
+          roles: {},
         });
         assert.equal(confirmed.alreadyEstablished, false);
         assert.equal(confirmed.partiesWritten, 2);
@@ -207,28 +202,23 @@ describe('evidence · flow A2 confirms a lease into a draft tenancy', () => {
           'tenancy.start_date',
         );
 
-        // **Slice 7.4: the confirm signed what it promoted.** A promotion requires an approval, and
-        // nobody opened A15's ledger — this screen showed both dates and the operator pressed the
-        // button, so the confirm writes the stamp it earned rather than being exempted from the
-        // rule. `approved_value` equals the reading, because nothing was corrected.
+        // Dates are signed as they are promoted; names were signed on the ledger before the write.
         for (const fieldKey of ['start_date', 'end_date'] as const) {
           const row = stamped.find((field) => field.fieldKey === fieldKey);
           assert.equal(row?.approvedBy, 'אסף', `${fieldKey} was not signed`);
           assert.equal(row?.approvedValue, row?.value);
           assert.notEqual(row?.approvedAt, null);
         }
-        // And nothing else was signed on the way past: the confirm affirms the two dates it copies
-        // and says nothing about the name or the flat number it also read.
         assert.equal(
           stamped.filter((row) => row.approvedAt !== null).length,
-          2,
+          4,
         );
 
         const again = await confirmLeaseTenancy(deps, {
           documentId,
           termsProfileName: `a2-${unitId.slice(24)}`,
           confirmedBy: 'אסף',
-          roles,
+          roles: {},
         });
         assert.equal(again.alreadyEstablished, true);
         assert.equal(again.partiesWritten, 0);
@@ -289,16 +279,12 @@ describe('evidence · flow A2 confirms a lease into a draft tenancy', () => {
           'the screen proposed the raw reading over a signed correction',
         );
 
+        await stampNames(db, documentId);
         const confirmed = await confirmLeaseTenancy(leaseDeps(db), {
           documentId,
           termsProfileName: `a2c-${unitId.slice(24)}`,
           confirmedBy: 'אסף',
-          roles: Object.fromEntries(
-            proposed.people.map((person) => [
-              person.extractedFieldId,
-              person.proposedRole,
-            ]),
-          ),
+          roles: {},
         });
         const tenancy = await db.query<{ start_date: string }>(
           `SELECT start_date::text FROM tenancy WHERE tenancy_id = $1`,
@@ -535,12 +521,24 @@ async function partyCount(db: PoolClient): Promise<number> {
   return Number(rows.rows[0]?.n ?? '0');
 }
 
-async function confirm(
-  db: PoolClient,
-  documentId: string,
-  profile: string,
-  extra: { attachTenancyId?: string | null } = {},
-) {
+async function stampNames(db: PoolClient, documentId: string): Promise<void> {
+  const rows = await listExtractedFields(db, documentId);
+  for (const row of rows) {
+    if (
+      (row.fieldKey === 'tenant_name' || row.fieldKey === 'guarantor_name') &&
+      row.approvedAt === null
+    ) {
+      await approveExtractedField(idDeps(db), {
+        extractedFieldId: row.extractedFieldId,
+        approvedBy: READ_BY,
+        mayReadIdentifiers: true,
+      });
+    }
+  }
+}
+
+async function confirm(db: PoolClient, documentId: string, profile: string) {
+  await stampNames(db, documentId);
   const proposed = await proposeLeaseTenancy(idDeps(db), {
     documentId,
     readBy: READ_BY,
@@ -551,18 +549,12 @@ async function confirm(
       documentId,
       termsProfileName: profile,
       confirmedBy: READ_BY,
-      roles: Object.fromEntries(
-        proposed.people.map((person) => [
-          person.extractedFieldId,
-          person.proposedRole,
-        ]),
-      ),
-      ...extra,
+      roles: {},
     }),
   };
 }
 
-describe('evidence · flow A2 resolves which letting a lease belongs to', () => {
+describe('evidence · a lease defines a letting', () => {
   // **The first acceptance case.** The same ת.ז. on two leases in two flats. Before 6.5 this was
   // two parties, because every party a lease wrote went through `createParty`.
   it('one identifier in two flats is one party and two tenancies', async (t) => {
@@ -647,7 +639,7 @@ describe('evidence · flow A2 resolves which letting a lease belongs to', () => 
 
   // **The second acceptance case.** A second lease on the unit and start date a letting already
   // holds. Before 6.5 this died on `conflict` and there was nothing an operator could do.
-  it('offers the existing letting on an equal start date, and attaching writes no dates', async (t) => {
+  it('refuses a second lease on the same unit and start date', async (t) => {
     const pool = await migratedPoolOrNull();
     if (!pool) {
       t.skip(skipReason);
@@ -660,7 +652,6 @@ describe('evidence · flow A2 resolves which letting a lease belongs to', () => 
         const profile = `a2att-${unitId.slice(24)}`;
         await upsertTermsProfile(db, profile);
         const yael = idNumber();
-        const dan = idNumber();
         const firstDoc = await fileLease(
           db,
           unitId,
@@ -672,85 +663,39 @@ describe('evidence · flow A2 resolves which letting a lease belongs to', () => 
           '65-attach-one',
           AT_ID,
         );
-        const first = await confirm(db, firstDoc, profile);
+        await confirm(db, firstDoc, profile);
 
-        // The same household, the same flat, the same start date — a copy of the paper, or the
-        // countersigned one arriving second.
         const secondDoc = await fileLease(
           db,
           unitId,
           leaseFindings({
             unitNumber: '12',
             address: ADDRESS,
-            // The letting's end date must not move, so this paper says something different.
             endDate: '2027-06-30',
             tenants: ['יעל כהן', 'דן לוי'],
-            tenantIds: [yael, dan],
+            tenantIds: [yael, idNumber()],
           }),
           '65-attach-two',
           AT_ID,
         );
-        const proposed = await proposeLeaseTenancy(idDeps(db), {
-          documentId: secondDoc,
-          readBy: READ_BY,
-        });
-        // The existing letting is offered, pre-selected, and ranked on the identifier it shares.
-        assert.equal(proposed.proposedTenancyId, first.result.tenancyId);
-        assert.equal(proposed.candidates.length, 1);
-        assert.equal(proposed.candidates[0]?.identifierMatches, 1);
-        assert.ok((proposed.candidates[0]?.dayOverlap ?? 0) > 300);
-
-        const lettingsBefore = await db.query<{ n: string }>(
+        await stampNames(db, secondDoc);
+        await assert.rejects(
+          () =>
+            confirmLeaseTenancy(idDeps(db), {
+              documentId: secondDoc,
+              termsProfileName: profile,
+              confirmedBy: READ_BY,
+              roles: {},
+            }),
+          (error: KernelError) =>
+            error.code === 'conflict' &&
+            error.message.includes('already has a lease starting'),
+        );
+        const lettings = await db.query<{ n: string }>(
           `SELECT count(*)::text AS n FROM tenancy WHERE unit_id = $1`,
           [unitId],
         );
-        const attached = await confirmLeaseTenancy(idDeps(db), {
-          documentId: secondDoc,
-          termsProfileName: '',
-          confirmedBy: READ_BY,
-          roles: Object.fromEntries(
-            proposed.people.map((person) => [
-              person.extractedFieldId,
-              person.proposedRole,
-            ]),
-          ),
-          attachTenancyId: first.result.tenancyId,
-        });
-        assert.equal(attached.attached, true);
-        assert.equal(attached.tenancyId, first.result.tenancyId);
-
-        // **No second letting, and no annex was asked for.**
-        const lettingsAfter = await db.query<{ n: string }>(
-          `SELECT count(*)::text AS n FROM tenancy WHERE unit_id = $1`,
-          [unitId],
-        );
-        assert.equal(lettingsAfter.rows[0]?.n, lettingsBefore.rows[0]?.n);
-
-        // **And no dates.** The letting still ends when its own paper said, not when this one does.
-        const term = await db.query<{ end_date: string; status: string }>(
-          `SELECT end_date::text, status FROM tenancy WHERE tenancy_id = $1`,
-          [first.result.tenancyId],
-        );
-        assert.equal(term.rows[0]?.end_date, '2027-02-28');
-        assert.equal(term.rows[0]?.status, 'DRAFT');
-
-        // The second tenant came in under the letting that was already there.
-        const people = await db.query<{ n: string }>(
-          `SELECT count(*)::text AS n FROM tenancy_party WHERE tenancy_id = $1`,
-          [first.result.tenancyId],
-        );
-        assert.equal(people.rows[0]?.n, '2');
-
-        // A second attach of the same document is a no-op, the way a second create is.
-        const again = await confirmLeaseTenancy(idDeps(db), {
-          documentId: secondDoc,
-          termsProfileName: '',
-          confirmedBy: READ_BY,
-          roles: {},
-          attachTenancyId: first.result.tenancyId,
-        });
-        assert.equal(again.alreadyEstablished, true);
-        assert.equal(again.partiesWritten, 0);
+        assert.equal(lettings.rows[0]?.n, '1');
       });
     } finally {
       await pool.end();

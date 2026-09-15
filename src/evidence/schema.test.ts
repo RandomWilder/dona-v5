@@ -15,6 +15,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { Pool, PoolClient } from 'pg';
+import { embeddingColumnDimensions } from '../kernel/config.ts';
 import { newId } from '../kernel/ids.ts';
 import {
   inRolledBackTransaction,
@@ -343,21 +344,28 @@ describe('E16 · document_type_field — one version of a schema (A8, R18)', () 
     });
   });
 
-  it('has no MONEY value type, and refuses one', async (t) => {
+  it('refuses a value type outside the declared union', async (t) => {
     if (!pool) return t.skip(skipReason);
     await inRolledBackTransaction(pool, async (db) => {
-      const documentTypeId = await seedType(db, { name: 'money' });
-      // Foundation rule 2 and READ ME rule 3, asserted rather than commented. Capture being open
-      // means an amount on a page is capturable in principle; declaring a money *field* is how it
-      // would quietly become business truth, so the CHECK has no member to declare it with.
-      await rejects(db, CHECK_VIOLATION, () =>
-        db.query(
-          `INSERT INTO document_type_field (document_type_field_id, document_type_id, field_key,
-                                            label_he, value_type, is_required, effective_from)
-           VALUES ($1, $2, 'rent', 'דמי שכירות', 'MONEY', true, '2026-01-01')`,
-          [newId(), documentTypeId],
-        ),
-      );
+      const documentTypeId = await seedType(db, { name: 'value-type' });
+      // The CHECK is `FIELD_VALUE_TYPES` and nothing else, so a value type invented at the insert
+      // is refused by the database rather than discovered on a read.
+      //
+      // **`MONEY` is still one of the refused ones**, and it is named here rather than left to the
+      // general case because it is the member somebody reaches for first. It is absent for a
+      // different reason than it used to be: not because foundation rule 2 forbade an amount —
+      // ADR-0008 retired that — but because an amount is a `NUMBER` beside a `TEXT` currency and
+      // has never needed a member of its own. The union did not move when the rule went.
+      for (const invented of ['MONEY', 'DECIMAL']) {
+        await rejects(db, CHECK_VIOLATION, () =>
+          db.query(
+            `INSERT INTO document_type_field (document_type_field_id, document_type_id, field_key,
+                                              label_he, value_type, is_required, effective_from)
+             VALUES ($1, $2, 'rent_amount', 'דמי שכירות', $3, true, '2026-01-01')`,
+            [newId(), documentTypeId, invented],
+          ),
+        );
+      }
     });
   });
 
@@ -1073,12 +1081,49 @@ describe('the acceptance bar — a new type costs no DDL', () => {
       ),
       true,
     );
+  });
+
+  // **Ticket #101.** The four amount declarations, asserted as seed data rather than promised in the
+  // fixture's comment. A currency is paired with each amount and never shared between them, which is
+  // the whole reason there are four rows and not three
+  // (docs/decisions/ADR-0008-money-is-ordinary-data.md).
+  // No `pool` guard: this reads the seed fixture and touches no database, so gating it on Postgres
+  // would be a silent skip on a clean clone (AGENTS.md — a silent skip is a failure).
+  it('seeds a rent and a deposit on the lease, each with its own currency', () => {
+    const lease = seedDocumentTypes.find(
+      (entry) => entry.type.typeKey === 'lease',
+    );
+    const declared = new Map(
+      (lease?.fields ?? []).map((field) => [field.fieldKey, field]),
+    );
+    for (const [fieldKey, valueType] of [
+      ['rent_amount', 'NUMBER'],
+      ['rent_currency', 'TEXT'],
+      ['deposit_amount', 'NUMBER'],
+      ['deposit_currency', 'TEXT'],
+    ] as const) {
+      const field = declared.get(fieldKey);
+      assert.ok(field, `${fieldKey} is declared on the lease`);
+      assert.equal(field?.valueType, valueType);
+      assert.equal(field?.effectiveFrom, '2026-09-15');
+      assert.equal(field?.effectiveTo, null);
+    }
+    // Each amount's hint names the amount it is not, which is what stops the reader returning the
+    // deposit for the rent — the same instrument the two identifier hints use.
+    assert.match(
+      declared.get('rent_amount')?.extractionHint ?? '',
+      /לא סכום הפיקדון/,
+    );
+    assert.match(
+      declared.get('deposit_amount')?.extractionHint ?? '',
+      /לא דמי השכירות החודשיים/,
+    );
+    // No MONEY value type was added to carry them, so the union is untouched.
     assert.equal(
       seedDocumentTypes.some((entry) =>
         entry.fields.some((field) => field.valueType === ('MONEY' as never)),
       ),
       false,
-      'no money field is ever seeded',
     );
   });
 
@@ -1616,6 +1661,79 @@ describe('E16 · a declaration written at run time (slice 7.2, flow A14)', () =>
           assert.equal((error as { code?: string }).code, 'not_found');
           return true;
         },
+      );
+    });
+  });
+});
+
+describe('evidence · document_passage', () => {
+  const PASSAGE_COLUMNS = [
+    'document_passage_id',
+    'document_id',
+    'page',
+    'ordinal',
+    'body',
+    'embedding',
+  ];
+
+  it('has one row shape per page, at the welded embedding width, and no vector index', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const columns = await db.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'document_passage'
+          ORDER BY ordinal_position`,
+      );
+      assert.deepEqual(
+        columns.rows.map((row) => row.column_name),
+        PASSAGE_COLUMNS,
+      );
+      const width = await db.query<{ typ: string }>(
+        `SELECT format_type(a.atttypid, a.atttypmod) AS typ
+           FROM pg_attribute a
+           JOIN pg_class c ON c.oid = a.attrelid
+          WHERE c.relname = 'document_passage'
+            AND a.attname = 'embedding'
+            AND a.attnum > 0
+            AND NOT a.attisdropped`,
+      );
+      assert.equal(width.rows[0]?.typ, `vector(${embeddingColumnDimensions})`);
+      const vectorIndexes = await db.query<{ relname: string }>(
+        `SELECT ic.relname
+           FROM pg_index i
+           JOIN pg_class t ON t.oid = i.indrelid
+           JOIN pg_class ic ON ic.oid = i.indexrelid
+           JOIN pg_am am ON am.oid = ic.relam
+          WHERE t.relname = 'document_passage'
+            AND am.amname IN ('hnsw', 'ivfflat')`,
+      );
+      assert.deepEqual(vectorIndexes.rows, []);
+    });
+  });
+
+  it('refuses a second passage on the same page of one document', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const documentTypeId = await seedType(db, { name: 'passage-page' });
+      const documentId = await seedDocument(
+        db,
+        documentTypeId,
+        `${BLOCK}-passage-page-hash`,
+      );
+      const zeros = `[${Array(embeddingColumnDimensions).fill(0).join(',')}]`;
+      await db.query(
+        `INSERT INTO document_passage (
+           document_passage_id, document_id, page, ordinal, body, embedding
+         ) VALUES ($1, $2, 1, 0, 'first', $3::vector)`,
+        [newId(), documentId, zeros],
+      );
+      await rejects(db, UNIQUE_VIOLATION, () =>
+        db.query(
+          `INSERT INTO document_passage (
+             document_passage_id, document_id, page, ordinal, body, embedding
+           ) VALUES ($1, $2, 1, 1, 'second', $3::vector)`,
+          [newId(), documentId, zeros],
+        ),
       );
     });
   });

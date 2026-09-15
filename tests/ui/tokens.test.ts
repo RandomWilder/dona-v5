@@ -32,6 +32,7 @@ import {
   renderNewBuildingPage,
   renderNewUnitPage,
   renderSearchPage,
+  renderTenancyDetailPage,
   renderUnitPage,
 } from '../../src/estate/contract.ts';
 import type {
@@ -303,47 +304,7 @@ function readOverlay(mayReadIdentifiers: boolean): string {
     fileHash: 'e'.repeat(64),
     source: 'ocr',
     mayReadIdentifiers,
-    page: {
-      number: 1,
-      width: 100,
-      height: 200,
-      items: [
-        {
-          text: 'דירה',
-          x: 10,
-          y: 40,
-          width: 30,
-          height: 20,
-          rightToLeft: true,
-          endsLine: false,
-          confidence: 0.91,
-        },
-        // **Slice 6.6, and the word this whole slice is about.** The page printed the ת.ז., so the
-        // reader measured it, so the overlay has a box for it — and until 6.6 that box carried the
-        // word in a `title` attribute at every stance. A word box is the one thing on this page
-        // whose text comes from the document rather than from a fixture, which is why 6.5 could not
-        // catch this with a registry assertion and why the case below renders a page whose words
-        // the test itself chose.
-        {
-          text: READ_IDENTIFIER,
-          x: 10,
-          y: 80,
-          width: 40,
-          height: 20,
-          rightToLeft: false,
-          endsLine: true,
-          confidence: 0.88,
-        },
-      ],
-    },
-    image: {
-      pageNumber: 1,
-      mimeType: 'image/png',
-      bytes: Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-        'base64',
-      ),
-    },
+    pageText: `דירה ${READ_IDENTIFIER}`,
     extracted: [
       {
         extractedFieldId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
@@ -455,6 +416,22 @@ function fieldsLedger(options: {
         'ת.ז. השוכר',
         READ_IDENTIFIER,
         0.91,
+      ),
+      reading(
+        'dddddddd-0000-4000-8000-000000000006',
+        'rent_amount',
+        'דמי השכירות',
+        '5200',
+        0.92,
+        { page: 3 },
+      ),
+      reading(
+        'dddddddd-0000-4000-8000-000000000007',
+        'guarantor_name',
+        'שם הערב',
+        GUARANTOR_NAME,
+        0.9,
+        { page: 4 },
       ),
       // Already signed, and corrected on the way: both values on the row, which is the whole reason
       // the slice adds a column instead of an UPDATE.
@@ -578,6 +555,117 @@ const SCREENS: Array<[string, () => string]> = [
       }),
   ],
   ['estate · one unit', () => renderUnitPage(hit, 2, [filed], NAV)],
+  [
+    'estate · one tenancy, blocked',
+    () =>
+      renderTenancyDetailPage({
+        tenancyId: '55555555-5555-4555-8555-555555555555',
+        status: 'DRAFT',
+        startDate: '2026-11-01',
+        endDate: '2027-10-31',
+        unit: hit,
+        people: [
+          {
+            fullName: TENANT_NAME,
+            role: 'PRIMARY_TENANT',
+            isServiceContact: true,
+          },
+          {
+            fullName: GUARANTOR_NAME,
+            role: 'GUARANTOR',
+            isServiceContact: false,
+          },
+        ],
+        documents: [filed],
+        checks: [
+          { rule: 'lease', passed: true },
+          { rule: 'handover_protocol', passed: false },
+          { rule: 'start_reached', passed: false },
+          { rule: 'within_term', passed: true },
+        ],
+        canActivate: false,
+        activatableOn: null,
+        flags: [],
+        csrf: CSRF,
+        nav: NAV,
+      }),
+  ],
+  [
+    'estate · one tenancy, arms on a date',
+    () =>
+      renderTenancyDetailPage({
+        tenancyId: '55555555-5555-4555-8555-555555555555',
+        status: 'DRAFT',
+        startDate: '2026-11-01',
+        endDate: '2027-10-31',
+        unit: hit,
+        people: [
+          {
+            fullName: TENANT_NAME,
+            role: 'PRIMARY_TENANT',
+            isServiceContact: true,
+          },
+        ],
+        documents: [
+          filed,
+          {
+            ...filed,
+            documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab',
+            typeKey: 'handover_protocol',
+            labelHe: 'פרוטוקול מסירה',
+          },
+        ],
+        checks: [
+          { rule: 'lease', passed: true },
+          { rule: 'handover_protocol', passed: true },
+          { rule: 'start_reached', passed: false },
+          { rule: 'within_term', passed: true },
+        ],
+        canActivate: false,
+        activatableOn: '2026-11-01',
+        flags: [],
+        csrf: CSRF,
+        nav: NAV,
+      }),
+  ],
+  [
+    'estate · one tenancy, open',
+    () =>
+      renderTenancyDetailPage({
+        tenancyId: '55555555-5555-4555-8555-555555555555',
+        status: 'DRAFT',
+        startDate: '2026-09-01',
+        endDate: '2027-08-31',
+        unit: hit,
+        people: [
+          {
+            fullName: TENANT_NAME,
+            role: 'PRIMARY_TENANT',
+            isServiceContact: true,
+          },
+        ],
+        documents: [
+          filed,
+          {
+            ...filed,
+            documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab',
+            typeKey: 'handover_protocol',
+            labelHe: 'פרוטוקול מסירה',
+          },
+        ],
+        checks: [
+          { rule: 'lease', passed: true },
+          { rule: 'handover_protocol', passed: true },
+          { rule: 'start_reached', passed: true },
+          { rule: 'within_term', passed: true },
+        ],
+        canActivate: true,
+        activatableOn: null,
+        flags: [],
+        csrf: CSRF,
+        nav: NAV,
+      }),
+  ],
   [
     'estate · one unit, with a promoted date',
     () =>
@@ -1128,8 +1216,7 @@ const SCREENS: Array<[string, () => string]> = [
         fileHash: 'e'.repeat(64),
         source: 'ocr',
         mayReadIdentifiers: false,
-        page: null,
-        image: null,
+        pageText: null,
       }),
   ],
   [
@@ -2027,11 +2114,12 @@ describe('shared UI tokens', () => {
   // ruling in SPEC.md is that **a confirm screen showing what the document in the operator's hand
   // says is not the same act as putting a household on a list** — so the rule is kept, and the line
   // it turns on is drawn here rather than left to the next screen's author.
-  it('transcribes a name only on a screen about one document', () => {
-    // Reached from one document, about that document, not queryable and not a list. Every other
-    // screen in the registry is reached by browsing the estate, and a name on one of those is a
-    // disclosure. Adding an entry here is a decision about disclosure and belongs in SPEC.md first.
-    const ABOUT_ONE_DOCUMENT = [
+  it('transcribes a name only on a screen about one document or one letting', () => {
+    // Reached from one document or one letting, about that one thing, not queryable and not a list.
+    // Every other screen in the registry is reached by browsing the estate, and a name on one of
+    // those is a disclosure. Adding an entry here is a decision about disclosure and belongs in
+    // SPEC.md first.
+    const MAY_TRANSCRIBE_NAMES = [
       // **Slice 7.3.** The ledger is the screen a person checks the machine's reading on, with the
       // paper in their hand — the case SPEC.md's sixth reconsideration describes exactly. It is
       // reached from one document, it is about that document, and it is neither queryable nor a
@@ -2043,6 +2131,11 @@ describe('shared UI tokens', () => {
       'documents · confirm a lease, an identifier read and two lettings offered',
       'documents · confirm a lease, an existing letting pre-selected',
       'documents · confirm an addendum',
+      // **#107.** One letting, reached by its identifier. The title carries a name so an
+      // administrator can recognise it. Lists still do not.
+      'estate · one tenancy, blocked',
+      'estate · one tenancy, arms on a date',
+      'estate · one tenancy, open',
     ];
     // **The two write receipts were on that list until this case was first run, and came off it.**
     // `renderTenancyWrittenPage` says `partiesWritten` and not who: once the confirm is done the
@@ -2055,7 +2148,7 @@ describe('shared UI tokens', () => {
       const names = [TENANT_NAME, GUARANTOR_NAME].filter((person) =>
         html.includes(person),
       );
-      if (ABOUT_ONE_DOCUMENT.includes(name)) {
+      if (MAY_TRANSCRIBE_NAMES.includes(name)) {
         // Asserted from both sides, for the reason the exemption above is: a screen listed here
         // and transcribing nothing is an entry nobody needs, and an unneeded entry is how the next
         // one gets waved in.
@@ -2065,7 +2158,7 @@ describe('shared UI tokens', () => {
       }
       assert.deepEqual(names, [], name);
     }
-    assert.equal(exercised, ABOUT_ONE_DOCUMENT.length);
+    assert.equal(exercised, MAY_TRANSCRIBE_NAMES.length);
   });
 
   it('withholds a captured identifier, and says how many it withheld', () => {
@@ -2127,37 +2220,40 @@ describe('shared UI tokens', () => {
     assert.doesNotMatch(ledger, /אישור הכל/);
     // The correction and the reading, both on the row. One column would have shown only the first.
     assert.match(ledger, /הרב קוק 54/);
-    assert.match(ledger, /נקרא: <a[^>]*>הרב קוק 45/);
+    assert.match(ledger, /נקרא: הרב קוק 45/);
+    assert.match(ledger, /<th>עמוד<\/th>/);
+    assert.match(ledger, /שוכר ראשי/);
+    assert.match(ledger, /ערב · אינו איש קשר לשירות/);
+    assert.match(ledger, /דמי השכירות/);
+    assert.match(ledger, /<details class="prose-fold"/);
   });
 
-  it('withholds the word off the paper too, and keeps the box it was in', () => {
-    // **Slice 6.6, and the defect 6.5 found by clicking.** 6.4's gate above withholds the captured
-    // *row*; this page also draws one span per measured word, and until now each carried the word's
-    // own text in a `title` attribute at every stance — so an operator whose captured row was
-    // correctly withheld could read the same ת.ז. off the box beside it.
+  it('withholds the transcript of the paper, and names the page instead of drawing it', () => {
+    // **Slice 6.6, and the defect 6.5 found by clicking.** 6.4's gate withholds the captured row.
+    // Until #102 this page also drew one span per measured word, each carrying the word in a
+    // `title` — so an operator whose captured row was withheld could read the same ת.ז. off the box.
     //
     // **This is the one case in this file that reads a value the document supplied rather than the
     // registry**, and it is allowed for the reason week 5's lesson allows: the word under test is a
-    // word this test put on the page. A registry assertion cannot reach it, because the words come
-    // from the reader and not from a fixture the screen was handed.
+    // word this test put on the page.
     //
     // The ruling is in SPEC.md: **captured is governed, printed is the document.** The transcript is
-    // ours and is withheld; the page image is the paper and is not — the same viewer already holds a
-    // fifteen-minute signed read of the bytes from 5.4, so withholding a picture of the page would
-    // claim a control this system does not have.
+    // ours and is withheld. There is no page image. The page number beside the extracted value is
+    // how an administrator checks the paper they hold.
     const withheld = readOverlay(false);
     assert.doesNotMatch(withheld, new RegExp(READ_IDENTIFIER));
-    // Narrow to the box: the ops rail has carried a `title` on every nav item since 5.2c, and a
-    // guard that reads the whole page for the attribute is a guard about the wrong element.
-    assert.doesNotMatch(withheld, /word-box[^>]*title=/);
-    // The geometry stays. A box with no word is still the answer to *where did it read something*,
-    // which is what this screen is called.
-    assert.match(withheld, /class="word-box"/);
-    assert.match(withheld, /<img alt="" src="data:image\/png;base64,/);
+    assert.doesNotMatch(withheld, /word-box/);
+    assert.doesNotMatch(withheld, /field-box/);
+    assert.doesNotMatch(withheld, /<img /);
+    assert.doesNotMatch(withheld, /data:image\//);
+    assert.match(withheld, /עמוד/);
 
     const disclosed = readOverlay(true);
-    assert.match(disclosed, new RegExp(`title="${READ_IDENTIFIER}"`));
-    assert.match(disclosed, /title="דירה"/);
+    assert.match(disclosed, new RegExp(READ_IDENTIFIER));
+    assert.match(disclosed, /class="page-text"/);
+    assert.match(disclosed, /דירה/);
+    assert.doesNotMatch(disclosed, /word-box/);
+    assert.doesNotMatch(disclosed, /<img /);
   });
 
   it('serves a signed read on the panel, never a gs:// href', () => {
@@ -2175,7 +2271,7 @@ describe('shared UI tokens', () => {
     assert.doesNotMatch(buildingHtml, /href="gs:/);
   });
 
-  it('opens a listed document on the read overlay, and a lease on confirm', () => {
+  it('opens a listed document on the read overlay, and a lease on the ledger', () => {
     const html = renderUnitPage(hit, 2, [filed], NAV);
     assert.match(
       html,
@@ -2183,7 +2279,7 @@ describe('shared UI tokens', () => {
     );
     assert.match(
       html,
-      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/tenancy"/,
+      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/fields"/,
     );
     const search = renderSearchPage(
       'שכירות',
@@ -2222,13 +2318,12 @@ describe('shared UI tokens', () => {
       fileHash: 'e'.repeat(64),
       source: 'ocr',
       mayReadIdentifiers: false,
-      page: null,
-      image: null,
+      pageText: null,
     });
     assert.match(emptyRead, /לא נקראו שדות מהמסמך/);
     assert.match(
       emptyRead,
-      /href="\/documents\/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee\/tenancy"/,
+      /href="\/documents\/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee\/fields"/,
     );
   });
 
@@ -2245,7 +2340,7 @@ describe('shared UI tokens', () => {
     ]);
     assert.match(
       html,
-      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read\?page=1#f-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"/,
+      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read\?page=1"/,
     );
     assert.match(html, /91%/);
     assert.doesNotMatch(html, /href="gs:/);
@@ -2276,18 +2371,9 @@ describe('shared UI tokens', () => {
         confidence: 0.8,
       },
     ]);
-    assert.match(
-      three,
-      /aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read\?page=1#f-11111111/,
-    );
-    assert.match(
-      three,
-      /bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\/read\?page=2#f-22222222/,
-    );
-    assert.match(
-      three,
-      /cccccccc-cccc-4ccc-8ccc-cccccccccccc\/read\?page=1#f-33333333/,
-    );
+    assert.match(three, /aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read\?page=1"/);
+    assert.match(three, /bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\/read\?page=2"/);
+    assert.match(three, /cccccccc-cccc-4ccc-8ccc-cccccccccccc\/read\?page=1"/);
   });
 
   it('shows a unit change log as old to new, actor, and document, never a tenant name', () => {

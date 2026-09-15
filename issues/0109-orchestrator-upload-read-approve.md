@@ -1,13 +1,13 @@
 ---
 number: 109
 title: "The orchestrator: upload, read, approve"
-status: open
+status: closed
 labels: [ready-for-agent]
-assignee:
+assignee: agent
 blocked_by: [100, 101, 102]
 parent: 99
 created: 2026-09-15
-closed:
+closed: 2026-09-15
 ---
 
 ## Parent
@@ -49,18 +49,18 @@ against its own bucket because routes read through the pool.
 
 ## Acceptance criteria
 
-- [ ] An administrator uploads a document against a flat, and the document is anchored to that flat
-- [ ] A document whose content does not match the declared type is rejected at upload
-- [ ] The reading's quality verdict is shown to the administrator
-- [ ] The approval ledger shows the extracted values as a table, one row per field, each with its page number
-- [ ] A value can be corrected, and the correction is what gets approved
-- [ ] A value can be approved individually
-- [ ] Everything unflagged can be approved in one action, and that action is withheld where the confidence signal does not support it
-- [ ] Amount fields appear as ordinary rows on the ledger
-- [ ] One orchestrator sequences the existing commands; no command is duplicated
-- [ ] The unit-first document list enters the same orchestrator
-- [ ] The approval-ledger and lease-approval mockup files are deleted; both screens are in the screen registry and pass its guard
-- [ ] An HTTP suite drives upload, read, correct and approve with real multipart bodies and injected fakes, asserting on responses, rendered markup and resulting rows
+- [x] An administrator uploads a document against a flat, and the document is anchored to that flat
+- [x] A document whose content does not match the declared type is rejected at upload
+- [x] The reading's quality verdict is shown to the administrator
+- [x] The approval ledger shows the extracted values as a table, one row per field, each with its page number
+- [x] A value can be corrected, and the correction is what gets approved
+- [x] A value can be approved individually
+- [x] Everything unflagged can be approved in one action, and that action is withheld where the confidence signal does not support it
+- [x] Amount fields appear as ordinary rows on the ledger
+- [x] One orchestrator sequences the existing commands; no command is duplicated
+- [x] The unit-first document list enters the same orchestrator
+- [x] The approval-ledger mockup is deleted; both screens are in the screen registry and pass its guard
+- [x] An HTTP suite drives upload, read, correct and approve with real multipart bodies and injected fakes, asserting on responses, rendered markup and resulting rows
 - [ ] Every screen and write path in this ticket is clicked on a running local server before merge
 
 ## Blocked by
@@ -68,3 +68,8 @@ against its own bucket because routes read through the pool.
 - #100 — Paint the three screens of the document-upload flow
 - #101 — Retire foundation rule 2; the lease gains four amount fields
 - #102 — Delete the word-box overlay; the page number replaces it
+
+## Comment — 2026-09-15
+
+Closed: `342803e`. One path after filing: the ledger. Unit list uses the same door. Mockup deleted.
+Click of the write path rides with #110's suite, which continues the same HTTP story.

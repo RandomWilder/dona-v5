@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { createHash, webcrypto } from 'node:crypto';
 import { describe, it } from 'node:test';
-import { hasIdentifierRun } from './identifier.ts';
+import {
+  hasIdentifierRun,
+  IDENTIFIER_MASK,
+  maskIdentifierRuns,
+} from './identifier.ts';
 import { newId } from './ids.ts';
 
 // The four shapes an unanchored `\d{9}` fires on, and every one of them is already rendered by a
@@ -46,5 +50,13 @@ describe('the identifier shape', () => {
 
   it('does not fire on a longer run, which is not an identifier either', () => {
     assert.equal(hasIdentifierRun('1234567890123'), false);
+  });
+
+  it('masks a printed run and leaves the rest of the line', () => {
+    assert.equal(
+      maskIdentifierRuns('ת.ז. 312345678 של השוכר'),
+      `ת.ז. ${IDENTIFIER_MASK} של השוכר`,
+    );
+    assert.equal(maskIdentifierRuns('דמי שכירות 4,520'), 'דמי שכירות 4,520');
   });
 });

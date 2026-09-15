@@ -11,9 +11,11 @@
 // moves for a reason nobody can find. A clause renamed in `docs/corpus/` breaks
 // this import, at parse, in `npm test` -- not the gate at 2am.
 //
-// What a specimen file may never contain -- no sum of money, no real person --
-// is asserted in `specimen-clauses.test.ts` beside this, because "contains no
-// real person" is the kind of promise that has to be something CI reads.
+// What a specimen file may never contain -- no real person -- is asserted in
+// `specimen-clauses.test.ts` beside this, because "contains no real person" is
+// the kind of promise that has to be something CI reads. A sum of money was on
+// that list until ADR-0008 retired foundation rule 2; a specimen lease may now
+// print its rent, and the `lease` type declares fields to read it with.
 
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -192,6 +194,8 @@ export const specimenRefs = {
   ownerRepairs: ref('חוזה §7.2'),
   tenantDamage: ref('חוזה §7.5'),
   commonParts: ref('חוזה §7.9'),
+  monthlyRent: ref('חוזה §10.3'),
+  depositGuarantee: ref('חוזה §12.1'),
   officeHours: ref('נוהל שירות §2'),
   reportFault: ref('נוהל שירות §3'),
 } as const;

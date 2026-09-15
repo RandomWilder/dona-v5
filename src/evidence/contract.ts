@@ -68,7 +68,11 @@ export type {
   MeasuredWord,
   PromotedField,
 } from './internal/extract.ts';
+// `asBareNumber` is on the contract because `tests/policy/amount-capture.test.ts` is its gate and
+// the policy suite reads contracts, never internals. Which mark on a printed amount is the decimal
+// point is a decision no model makes (ticket #101, ADR-0008).
 export {
+  asBareNumber,
   EXTRACT_INSTRUCTIONS,
   EXTRACT_WORK_KIND,
   extractFiledDocument,
@@ -100,7 +104,9 @@ export {
   addressMatches,
   apartmentMatches,
   confirmLeaseTenancy,
+  DEFAULT_TERMS_PROFILE,
   dayOverlap,
+  establishApprovedLease,
   proposeLeaseTenancy,
   rankCandidates,
 } from './internal/lease.ts';
@@ -112,21 +118,19 @@ export type {
 } from './internal/list.ts';
 export {
   listLinkedDocuments,
+  listTenancyDocumentFacts,
   MEASURED_QUERIES,
   SEARCH_LIMIT,
   searchDocuments,
   signLinkedDocuments,
 } from './internal/list.ts';
-// **Slice 7.2.** The money vocabulary is on the contract because `tests/policy/money-field.test.ts`
-// is its second reader, and a guard whose gate carries a second copy of the list goes green the day
-// somebody shortens the real one.
-export type { MoneyMatch } from './internal/money.ts';
+export type { FilingContinuation } from './internal/orchestrate.ts';
 export {
-  MONEY_KEY_TOKENS,
-  MONEY_LABEL_TERMS,
-  moneyRefusal,
-  namesMoney,
-} from './internal/money.ts';
+  destinationAfterFiling,
+  unitDocumentAction,
+} from './internal/orchestrate.ts';
+export type { DocumentPassage } from './internal/passages.ts';
+export { listDocumentPassages } from './internal/passages.ts';
 export type {
   PromoteDeps,
   PromoteResult,
@@ -139,16 +143,21 @@ export type {
   DocumentRead,
   DocumentReading,
   OcrOutcome,
+  PassageSweepDeps,
+  PassageSweepReport,
   ReadDeps,
   SweepReport,
 } from './internal/read.ts';
 export {
   readFiledDocument,
   readForVerdict,
+  sweepMissingPassages,
   sweepUnverified,
 } from './internal/read.ts';
 export type { DocumentDeps } from './internal/routes.ts';
 export { registerDocumentRoutes } from './internal/routes.ts';
+export type { PassageHit, RetrievalStance } from './internal/search.ts';
+export { SEARCH_PASSAGE_LIMIT, searchPassages } from './internal/search.ts';
 export type { ProtocolProposal, SeedDeps } from './internal/seed.ts';
 export {
   confirmProtocol,
@@ -180,7 +189,10 @@ export type { Queryable } from './internal/types.ts';
 // The verification guard (slice 3.3). Exported because `tests/policy/document-verification.test.ts`
 // is its gate and the policy suite reads contracts, never internals.
 export type { Verification, VerificationVerdict } from './internal/verify.ts';
-export { documentText, verifyDeclaredType } from './internal/verify.ts';
+export {
+  documentText,
+  verifyDeclaredType,
+} from './internal/verify.ts';
 export type {
   DocumentsScreen,
   FieldsScreen,

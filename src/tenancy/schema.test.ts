@@ -509,21 +509,12 @@ describe('tenancy · the rest of the schema', () => {
         });
       });
 
-      // Foundation rule 2, asserted rather than promised: NO RENT, NO DEPOSIT, NO BALANCE. Money
-      // lives in Priority behind read-only keys, and the tenancy is where the first amount would be
-      // put by someone who thought it belonged with the lease.
-      await t.test('no column here holds money', async () => {
-        await inRolledBackTransaction(pool, async (db) => {
-          const money = await db.query(
-            `SELECT table_name, column_name FROM information_schema.columns
-             WHERE table_schema = 'public'
-               AND table_name IN ('tenancy', 'tenancy_party', 'terms_profile')
-               AND (column_name ~ '(rent|deposit|balance|amount|price|fee|payment)'
-                    OR data_type = 'money')`,
-          );
-          assert.deepEqual(money.rows, []);
-        });
-      });
+      // **There was a money case here, and it is deleted.** It asserted that no column on
+      // `tenancy`, `tenancy_party` or `terms_profile` was named for an amount, under foundation
+      // rule 2. That rule is retired (docs/decisions/ADR-0008-money-is-ordinary-data.md) and
+      // nothing replaces the case. These tables still carry no amount, and the `columnsOf`
+      // assertions directly above are what say so: they list every column exactly, so a column
+      // added here is a red build whatever it is named.
 
       // Foundation rule 1: the scope is a view, never a column. Guard one greps the migrations for
       // `current_tenant`; this asserts the shipped schema from the other side.
@@ -722,6 +713,29 @@ describe('tenancy_event — append-only promotion log', () => {
             ],
           ),
         );
+        await db.query(
+          `INSERT INTO tenancy_event (
+             tenancy_event_id, tenancy_id, at, actor, kind, field,
+             old_value, new_value, source_document_id, extracted_field_id
+           ) VALUES ($1, $2, $3, 'אסף', 'activated', 'status',
+                     'DRAFT', 'ACTIVE', NULL, NULL)`,
+          [newId(), tenancyId, new Date('2026-09-07T09:00:00.000Z')],
+        );
+        await rejects(db, CHECK_VIOLATION, () =>
+          db.query(
+            `INSERT INTO tenancy_event (
+               tenancy_event_id, tenancy_id, at, actor, kind, field,
+               old_value, new_value, source_document_id, extracted_field_id
+             ) VALUES ($1, $2, $3, 'אסף', 'activated', 'status',
+                       'DRAFT', 'ACTIVE', $4, NULL)`,
+            [
+              newId(),
+              tenancyId,
+              new Date('2026-09-07T09:00:00.000Z'),
+              documentId,
+            ],
+          ),
+        );
         const eventId = newId();
         await db.query(
           `INSERT INTO tenancy_event (
@@ -858,14 +872,9 @@ describe('tenancy · ObligationType and Obligation', () => {
           obligations.rows.map((row) => row.column_name),
           OBLIGATION_COLUMNS,
         );
-        const money = await db.query(
-          `SELECT table_name, column_name FROM information_schema.columns
-             WHERE table_schema = 'public'
-               AND table_name IN ('obligation', 'obligation_type')
-               AND (column_name ~ '(rent|deposit|balance|amount|price|fee|payment)'
-                    OR data_type = 'money')`,
-        );
-        assert.deepEqual(money.rows, []);
+        // The money case that stood here is deleted with foundation rule 2
+        // (docs/decisions/ADR-0008-money-is-ordinary-data.md). The two column lists asserted just
+        // above are exact, so an amount column arriving on either table is still a red build.
       });
     } finally {
       await pool.end();

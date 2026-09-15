@@ -15,10 +15,8 @@ import {
   upsertParty,
 } from '../../parties/contract.ts';
 import {
-  countIdentifierOverlap,
   findTermsProfileByName,
   listTermsProfiles,
-  listUnitTenancies,
   type TenancyRole,
   upsertTenancy,
   upsertTenancyParty,
@@ -101,6 +99,8 @@ export interface LeaseProposal {
   };
   alreadyEstablished: boolean;
   boundToTenancy: boolean;
+  /** Present once the paper is linked to a letting. */
+  linkedTenancyId?: string | null;
   /** Existing annex names. Empty means confirm cannot write — never a default insert. */
   termsProfileNames: string[];
   /** Every letting on this flat, ranked. Empty on an amendment, which is already bound. */
@@ -119,17 +119,14 @@ export interface ProposeLeaseSpec {
   readBy: string;
 }
 
+/** The annex a new draft takes when the lease does not print one. #110. */
+export const DEFAULT_TERMS_PROFILE = 'נספח תחזוקה — תקן';
+
 export interface ConfirmLeaseSpec {
   documentId: string;
-  termsProfileName: string;
+  termsProfileName?: string;
   confirmedBy: string;
   roles: Record<string, TenancyRole>;
-  /**
-   * **Which letting, from the form. Slice 6.5.** `null` or absent is *a new letting*, which is what
-   * this flow did and all it could do before 6.5. A `tenancy_id` is the attach branch, and it is
-   * checked against the unit the document is filed on before anything is written.
-   */
-  attachTenancyId?: string | null;
 }
 
 export interface ConfirmLeaseResult {
@@ -283,7 +280,7 @@ function householdOf(rows: readonly ExtractedRow[]): Household {
       people.push({
         extractedFieldId: row.extractedFieldId,
         fieldKey: nameKey,
-        value: row.value,
+        value: row.approvedValue ?? row.value,
         proposedRole: at === 0 ? firstRole : restRole,
         hasIdentifier: pairs,
       });
@@ -401,55 +398,6 @@ async function amendmentAlreadyConfirmed(
   return (done.rows[0]?.n ?? '0') !== '0';
 }
 
-/**
- * **The comparison wrote a line, and it is not the disclosure line. Slice 6.5.**
- *
- * `evidence.read_identifier` means a person saw a ת.ז. This means a machine compared one, inside a
- * statement that returned a count. Conflating the two would ruin the only question either is ever
- * asked — *who has seen this household's identifier* — so they are two actions, and both name who
- * asked and neither names the value (SPEC.md, Security defaults).
- *
- * A lease that declared none writes nothing: there was no read. That is 6.4's rule about
- * withholding, applied to the other end of the same column.
- */
-async function logIdentifierMatch(
-  deps: LeaseDeps,
-  input: {
-    documentId: string;
-    unitId: string;
-    readBy: string;
-    probes: number;
-    candidates: readonly TenancyCandidate[];
-  },
-): Promise<void> {
-  if (input.probes === 0) {
-    return;
-  }
-  const matched = input.candidates.filter(
-    (candidate) => candidate.identifierMatches > 0,
-  );
-  await deps.audit.write(
-    {
-      actorKind: 'staff',
-      actorId: input.readBy,
-      action: 'evidence.match_identifier',
-      subjectId: input.documentId,
-      inputs: {
-        documentId: input.documentId,
-        unitId: input.unitId,
-        probes: input.probes,
-        lettingsCompared: input.candidates.length,
-        lettingsMatched: matched.length,
-        partiesMatched: matched.reduce(
-          (total, candidate) => total + candidate.identifierMatches,
-          0,
-        ),
-      },
-    },
-    { outcome: 'ok' },
-  );
-}
-
 export async function proposeLeaseTenancy(
   deps: LeaseDeps,
   spec: ProposeLeaseSpec,
@@ -466,7 +414,8 @@ export async function proposeLeaseTenancy(
   const unit = await getUnit(db, unitId);
   const rows = await listExtractedFields(db, filed.documentId);
   const household = householdOf(rows);
-  const boundToTenancy = (await tenancyLinkOf(db, filed.documentId)) !== null;
+  const linkedTenancyId = await tenancyLinkOf(db, filed.documentId);
+  const boundToTenancy = linkedTenancyId !== null;
   if (filed.typeKey === 'lease_amendment') {
     // An addendum is already bound to a letting — there is nothing to resolve, and A3 says so.
     return {
@@ -489,6 +438,7 @@ export async function proposeLeaseTenancy(
       },
       alreadyEstablished: await amendmentAlreadyConfirmed(db, filed.documentId),
       boundToTenancy,
+      linkedTenancyId,
       termsProfileNames: [],
       candidates: [],
       proposedTenancyId: null,
@@ -517,34 +467,6 @@ export async function proposeLeaseTenancy(
   const startDate = firstValue(rows, 'start_date');
   const endDate = firstValue(rows, 'end_date');
 
-  const lettings = await listUnitTenancies(db, unitId);
-  const overlap = await countIdentifierOverlap(db, unitId, household.probes);
-  const candidates = rankCandidates(
-    lettings.map((letting) => ({
-      tenancyId: letting.tenancy_id,
-      startDate: letting.start_date,
-      endDate: letting.end_date,
-      status: letting.status,
-      identifierMatches: overlap.get(letting.tenancy_id) ?? 0,
-      dayOverlap: dayOverlap({ startDate, endDate }, letting),
-    })),
-  );
-  await logIdentifierMatch(deps, {
-    documentId: filed.documentId,
-    unitId,
-    readBy: spec.readBy,
-    probes: household.probes.length,
-    candidates,
-  });
-
-  // **A new letting is the default, and an existing one is pre-selected only on an equal start
-  // date.** Identifier overlap ranks the list and never decides it: the same household renewing on
-  // new dates is a new letting, not the old one. An equal start date is the case that could not be
-  // expressed at all before 6.5 — `upsertTenancy`'s key is `(unit_id, start_date)`, so creating was
-  // a conflict and attaching did not exist.
-  const sameStart = candidates.find(
-    (candidate) => startDate !== null && candidate.startDate === startDate,
-  );
   return {
     documentId: filed.documentId,
     typeKey: 'lease',
@@ -558,9 +480,10 @@ export async function proposeLeaseTenancy(
     crossCheck,
     alreadyEstablished: boundToTenancy,
     boundToTenancy,
+    linkedTenancyId,
     termsProfileNames: await listTermsProfiles(db),
-    candidates,
-    proposedTenancyId: sameStart?.tenancyId ?? null,
+    candidates: [],
+    proposedTenancyId: null,
     identifiersRead: household.read,
     identifiersPaired: household.paired,
   };
@@ -600,6 +523,8 @@ async function writeParties(
     documentId: string;
     household: Household;
     roles: Record<string, TenancyRole>;
+    /** When set, an unstamped name writes no party. Lease create; an addendum still posts roles. */
+    stamped?: ReadonlySet<string>;
   },
 ): Promise<number> {
   // **Checked before anything is written**, and folded by the database rather than compared as
@@ -619,6 +544,9 @@ async function writeParties(
   const seen = new Set<string>();
   let written = 0;
   for (const [at, person] of input.household.people.entries()) {
+    if (input.stamped && !input.stamped.has(person.extractedFieldId)) {
+      continue;
+    }
     const role = asRole(input.roles[person.extractedFieldId]);
     const identifier = input.household.identifiers[at] ?? null;
     const party =
@@ -659,78 +587,6 @@ async function writeParties(
     written += 1;
   }
   return written;
-}
-
-/**
- * **The attach branch. Slice 6.5, and A2 step 8.**
- *
- * Before this existed A2 could only create, so a second lease on a unit and a start date it already
- * held died on `conflict` with nothing an operator could do from the screen. Confirming an attach
- * writes the `TENANCY` / `EVIDENCE` link and the confirmed `tenancy_party` rows.
- *
- * **It writes no dates.** No `upsertTenancy`, so `start_date`, `end_date`, `status` and
- * `terms_profile_id` are untouched and no annex is asked for: a lease attached to the wrong letting
- * must not be able to rewrite that letting's term. Moving a captured date onto a column stays
- * per-field promotion from the read screen, one field and one operator at a time, which is what
- * "A1 plus per-field promotion" meant when step 7 was written in week 4.
- *
- * **The letting has to be on this unit.** `proposed.candidates` is every letting of the flat this
- * document is filed against, so membership of that list *is* the check — there is no second query
- * to disagree with the first.
- */
-async function confirmAttach(
-  deps: LeaseDeps,
-  db: Queryable,
-  spec: {
-    documentId: string;
-    confirmedBy: string;
-    roles: Record<string, TenancyRole>;
-    proposed: LeaseProposal;
-    household: Household;
-    attachTenancyId: string;
-  },
-): Promise<ConfirmLeaseResult> {
-  const tenancyId = validId(spec.attachTenancyId, 'tenancy');
-  const onThisUnit = spec.proposed.candidates.some(
-    (candidate) => candidate.tenancyId === tenancyId,
-  );
-  if (!onThisUnit) {
-    throw new KernelError('invalid', 'that letting is not on this apartment');
-  }
-  if (!spec.proposed.matchesUnit) {
-    throw new KernelError('invalid', 'the document does not match this unit');
-  }
-  for (const person of spec.household.people) {
-    asRole(spec.roles[person.extractedFieldId]);
-  }
-  await linkDocument(db, {
-    documentId: spec.documentId,
-    entityType: 'TENANCY',
-    entityId: tenancyId,
-    linkRole: 'EVIDENCE',
-  });
-  const partiesWritten = await writeParties(db, {
-    tenancyId,
-    documentId: spec.documentId,
-    household: spec.household,
-    roles: spec.roles,
-  });
-  await deps.audit.write(
-    {
-      actorKind: 'staff',
-      actorId: spec.confirmedBy,
-      action: 'evidence.attach_lease',
-      subjectId: spec.documentId,
-      inputs: { tenancyId, partiesWritten },
-    },
-    { outcome: 'ok' },
-  );
-  return {
-    tenancyId,
-    alreadyEstablished: false,
-    partiesWritten,
-    attached: true,
-  };
 }
 
 async function confirmAmendment(
@@ -805,6 +661,89 @@ async function confirmAmendment(
   };
 }
 
+function stampedNameIds(rows: readonly ExtractedRow[]): Set<string> {
+  return new Set(
+    rows
+      .filter(
+        (row) =>
+          (row.fieldKey === 'tenant_name' ||
+            row.fieldKey === 'guarantor_name') &&
+          row.approvedAt !== null,
+      )
+      .map((row) => row.extractedFieldId),
+  );
+}
+
+function rolesFromFieldFamily(
+  people: readonly ProposedPerson[],
+): Record<string, TenancyRole> {
+  return Object.fromEntries(
+    people.map((person) => [person.extractedFieldId, person.proposedRole]),
+  );
+}
+
+async function resolveTermsProfileName(
+  db: Queryable,
+  requested: string | undefined,
+): Promise<string> {
+  if (requested && requested.trim().length > 0) {
+    return requireText(requested, 'terms_profile', 200);
+  }
+  const names = await listTermsProfiles(db);
+  if (names.includes(DEFAULT_TERMS_PROFILE)) {
+    return DEFAULT_TERMS_PROFILE;
+  }
+  if (names.length === 1 && names[0]) {
+    return names[0];
+  }
+  throw new KernelError('invalid', 'that terms profile does not exist');
+}
+
+function readingIsReady(rows: readonly ExtractedRow[]): boolean {
+  const tenants = rows.filter((row) => row.fieldKey === 'tenant_name');
+  if (tenants.length === 0 || tenants.some((row) => row.approvedAt === null)) {
+    return false;
+  }
+  const guarantors = rows.filter((row) => row.fieldKey === 'guarantor_name');
+  if (guarantors.some((row) => row.approvedAt === null)) {
+    return false;
+  }
+  for (const key of ['start_date', 'end_date'] as const) {
+    const row = rows.find((field) => field.fieldKey === key);
+    if (!row || row.approvedAt === null) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * After the ledger is stamped, write the draft. Returns null when the reading is not ready yet.
+ */
+export async function establishApprovedLease(
+  deps: LeaseDeps,
+  spec: { documentId: string; confirmedBy: string },
+): Promise<string | null> {
+  const documentId = validId(spec.documentId, 'document');
+  const filed = await getFiledDocument(deps.db, documentId);
+  if (filed.typeKey !== 'lease') {
+    return null;
+  }
+  if ((await tenancyLinkOf(deps.db, documentId)) !== null) {
+    return null;
+  }
+  const rows = await listExtractedFields(deps.db, documentId);
+  if (!readingIsReady(rows)) {
+    return null;
+  }
+  const confirmed = await confirmLeaseTenancy(deps, {
+    documentId,
+    confirmedBy: spec.confirmedBy,
+    roles: {},
+  });
+  return confirmed.tenancyId;
+}
+
 export async function confirmLeaseTenancy(
   deps: LeaseDeps,
   spec: ConfirmLeaseSpec,
@@ -813,13 +752,12 @@ export async function confirmLeaseTenancy(
   const confirmedBy = requireText(spec.confirmedBy, 'confirmed_by', 200);
 
   return inTransaction(deps.db, async (db) => {
-    // The proposal is recomputed inside the transaction from the same captured rows the screen was
-    // rendered from — no staging table, which is A6's ruling and A2 inherits it.
     const proposed = await proposeLeaseTenancy(
       { ...deps, db },
       { documentId, readBy: confirmedBy },
     );
-    const household = householdOf(await listExtractedFields(db, documentId));
+    const rows = await listExtractedFields(db, documentId);
+    const household = householdOf(rows);
     if (proposed.typeKey === 'lease_amendment') {
       return confirmAmendment(deps, db, {
         documentId,
@@ -829,9 +767,6 @@ export async function confirmLeaseTenancy(
         household,
       });
     }
-    // **A second confirm is a no-op on both branches**, and the check comes before either of them
-    // asks for anything: an attach needs no annex, so requiring one here would refuse the branch
-    // that does not use it.
     const existing = await tenancyLinkOf(db, documentId);
     if (existing) {
       return {
@@ -841,20 +776,9 @@ export async function confirmLeaseTenancy(
         attached: false,
       };
     }
-    if (spec.attachTenancyId) {
-      return confirmAttach(deps, db, {
-        documentId,
-        confirmedBy,
-        roles: spec.roles,
-        proposed,
-        household,
-        attachTenancyId: spec.attachTenancyId,
-      });
-    }
-    const termsProfileName = requireText(
+    const termsProfileName = await resolveTermsProfileName(
+      db,
       spec.termsProfileName,
-      'terms_profile',
-      200,
     );
     if (!proposed.matchesUnit) {
       throw new KernelError('invalid', 'the document does not match this unit');
@@ -862,15 +786,16 @@ export async function confirmLeaseTenancy(
     if (!proposed.startDate || !proposed.endDate) {
       throw new KernelError('invalid', 'the lease is missing dates');
     }
+    const stamped = stampedNameIds(rows);
     const tenants = household.people.filter(
-      (person) => person.fieldKey === 'tenant_name',
+      (person) =>
+        person.fieldKey === 'tenant_name' &&
+        stamped.has(person.extractedFieldId),
     );
     if (tenants.length === 0) {
       throw new KernelError('invalid', 'the lease names no tenant');
     }
-    for (const person of household.people) {
-      asRole(spec.roles[person.extractedFieldId]);
-    }
+    const roles = rolesFromFieldFamily(household.people);
 
     const profileId = await findTermsProfileByName(db, termsProfileName);
     if (!profileId) {
@@ -905,7 +830,6 @@ export async function confirmLeaseTenancy(
       linkRole: 'EVIDENCE',
     });
 
-    const rows = await listExtractedFields(db, documentId);
     const promote = {
       db,
       audit: deps.audit,
@@ -922,7 +846,8 @@ export async function confirmLeaseTenancy(
       tenancyId: tenancy.id,
       documentId,
       household,
-      roles: spec.roles,
+      roles,
+      stamped,
     });
 
     await deps.audit.write(

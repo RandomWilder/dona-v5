@@ -77,6 +77,8 @@ export type {
   PromotedFieldView,
   SearchPageResults,
   TenancyEventView,
+  TenancyPersonView,
+  TenancySheet,
 } from './internal/views.ts';
 export {
   renderBuildingPage,
@@ -86,5 +88,6 @@ export {
   renderNewBuildingPage,
   renderNewUnitPage,
   renderSearchPage,
+  renderTenancyDetailPage,
   renderUnitPage,
 } from './internal/views.ts';

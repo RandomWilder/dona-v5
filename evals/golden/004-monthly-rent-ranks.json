@@ -1,0 +1,12 @@
+{
+  "id": "monthly-rent-ranks",
+  "title": "A monthly-rent question retrieves the clause that prints the figure",
+  "input": {
+    "message": "כמה דמי שכירות משלמים בחודש?"
+  },
+  "retrieval": {
+    "expectRef": "חוזה §10.3",
+    "rankAtMost": 8,
+    "note": "Ratchet landing-wide: the window is eight. Tightened to the measured rank once evals run against the real embedder on the day this case lands (#104)."
+  }
+}

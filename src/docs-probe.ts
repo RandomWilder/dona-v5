@@ -34,7 +34,7 @@ import { createConfiguredStore } from './kernel/objects.ts';
 // go and remove. The random half is all zeroes, which no `newId()` will ever produce: this is
 // visibly a probe and not a flat.
 const PROBE_PLACE = '019a0000-0000-7000-8000-000000000000';
-// No personal data, no money, nothing resembling a real document — the same bar every tier-1 file
+// No personal data, nothing resembling a real document — the same bar every tier-1 file
 // clears (SPEC.md, "The corpus, in three tiers").
 const PROBE_BYTES = Buffer.from(
   '%PDF-1.7\n% dona-v5 slice 3.2 storage probe\n',

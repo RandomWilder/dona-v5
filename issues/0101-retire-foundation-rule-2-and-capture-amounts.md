@@ -1,13 +1,13 @@
 ---
 number: 101
 title: "Retire foundation rule 2; the lease gains four amount fields"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent: 99
 created: 2026-09-15
-closed:
+closed: 2026-09-15
 ---
 
 ## Parent
@@ -48,16 +48,16 @@ spec and the glossary are edited in the same change as the code, per this repo's
 
 ## Acceptance criteria
 
-- [ ] A lease declaration naming money is accepted; no refusal path for money remains anywhere
-- [ ] The money vocabulary module is deleted, along with its re-exports on the module contract and its single enforcement call site
-- [ ] The money-field policy case, its route-level mirror, and the tenancy schema assertions forbidding money-named columns are deleted and not replaced
-- [ ] Rent amount, rent currency, deposit amount and deposit currency are seeded on the lease document type, each amount paired with its own currency
-- [ ] Each amount field carries an extraction hint excluding the amounts it is not
-- [ ] A printed amount with separators and a currency symbol is captured as a bare number plus a currency
-- [ ] No schema migration is added by this ticket
-- [ ] An ADR retiring the rule exists in the decisions directory, and the foundation rules, evidence spec and glossary are edited in the same change
-- [ ] Rule 3 remains stated and enforced; nothing in the change implies it was relaxed
-- [ ] Both required gates pass, with no silently skipped suite
+- [x] A lease declaration naming money is accepted; no refusal path for money remains anywhere
+- [x] The money vocabulary module is deleted, along with its re-exports on the module contract and its single enforcement call site
+- [x] The money-field policy case, its route-level mirror, and the tenancy schema assertions forbidding money-named columns are deleted and not replaced
+- [x] Rent amount, rent currency, deposit amount and deposit currency are seeded on the lease document type, each amount paired with its own currency
+- [x] Each amount field carries an extraction hint excluding the amounts it is not
+- [x] A printed amount with separators and a currency symbol is captured as a bare number plus a currency
+- [x] No schema migration is added by this ticket
+- [x] An ADR retiring the rule exists in the decisions directory, and the foundation rules, evidence spec and glossary are edited in the same change
+- [x] Rule 3 remains stated and enforced; nothing in the change implies it was relaxed
+- [x] Both required gates pass, with no silently skipped suite
 
 ## Blocked by
 

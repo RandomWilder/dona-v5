@@ -72,14 +72,14 @@ export interface Verification {
  *
  * The guard above is unaffected either way: `normalise` removes all whitespace before matching.
  */
-export function documentText(pages: readonly PdfPage[]): string {
-  return pages
-    .map((page) =>
-      pageLines(page)
-        .map((line) => line.map((item) => item.text).join(' '))
-        .join('\n'),
-    )
+export function pageText(page: PdfPage): string {
+  return pageLines(page)
+    .map((line) => line.map((item) => item.text).join(' '))
     .join('\n');
+}
+
+export function documentText(pages: readonly PdfPage[]): string {
+  return pages.map((page) => pageText(page)).join('\n');
 }
 
 /**

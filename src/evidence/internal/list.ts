@@ -5,6 +5,7 @@
 // `/estate/search` — same LIMIT, same LIKE-escape, never a fork of that screen.
 import { SEARCH_LIMIT as ESTATE_SEARCH_LIMIT } from '../../estate/contract.ts';
 import { type ObjectStore, SIGN_READ_TTL_MS } from '../../kernel/objects.ts';
+import type { TenancyDocumentFact } from '../../tenancy/contract.ts';
 import type { FiledVerdict, LinkEntityType } from './documents.ts';
 import { parseStorageUri } from './storage-path.ts';
 import type { Queryable } from './types.ts';
@@ -57,6 +58,25 @@ const LIST_SQL = `
       WHERE entity_type = $1 AND entity_id = $2
    )
    ORDER BY dt.label_he, d.ingested_at DESC`;
+
+/**
+ * What a letting holds, for the activation gate. #106.
+ *
+ * Bound to the tenancy, not the unit: a handover protocol is per letting. A document on the
+ * unit that was never confirmed onto this letting does not count. Linked is approved, for this
+ * reader — the human act that wrote the TENANCY link is the confirmation.
+ */
+export async function listTenancyDocumentFacts(
+  db: Queryable,
+  tenancyId: string,
+): Promise<TenancyDocumentFact[]> {
+  const linked = await listLinkedDocuments(db, 'TENANCY', tenancyId);
+  return linked.map((doc) => ({
+    typeKey: doc.typeKey,
+    approved: true,
+    validTo: doc.validTo,
+  }));
+}
 
 export async function listLinkedDocuments(
   db: Queryable,

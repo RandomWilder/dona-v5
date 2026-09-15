@@ -1,11 +1,15 @@
-// A4 — incomplete tenancies, derived. Slice 4.8.
-//
-// Not "who is in a unit today": that remains `src/scope/`. This answers S1 / A4 — which lettings
-// are missing an ערב — takes no phone, returns no party, and carries neither isolation predicate.
+// A4 — incomplete tenancies, derived. Slice 4.8. Gate misses join the same
+// query at #108: the rule ids are the activation gate's, never a second copy.
+import type { Clock } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
+import {
+  type ActivationCheck,
+  activationGate,
+  type TenancyDocumentsReader,
+} from './activation.ts';
 import type { Queryable } from './types.ts';
 
-export type CompletenessRule = 'guarantor';
+export type CompletenessRule = 'guarantor' | ActivationCheck['rule'];
 
 export interface IncompleteTenancy {
   tenancy_id: string;
@@ -30,7 +34,9 @@ export interface CompletenessExceptionSpec {
   at: Date;
 }
 
-const INCOMPLETE_SQL = `
+type QueuePlace = Omit<IncompleteTenancy, 'missing'>;
+
+const PLACE_SQL = `
 SELECT t.tenancy_id,
        t.unit_id,
        u.unit_number,
@@ -40,7 +46,6 @@ SELECT t.tenancy_id,
        t.start_date::text AS start_date,
        t.end_date::text AS end_date,
        t.status,
-       'guarantor'::text AS missing,
        d.document_id AS expected_document_id,
        d.label_he AS expected_document_label
   FROM tenancy t
@@ -57,7 +62,9 @@ SELECT t.tenancy_id,
      ORDER BY (dt.type_key = 'lease') DESC, doc.ingested_at ASC
      LIMIT 1
   ) d ON true
- WHERE t.status IN ('DRAFT', 'ACTIVE')
+ WHERE t.status IN ('DRAFT', 'ACTIVE')`;
+
+const GUARANTOR_SQL = `${PLACE_SQL}
    AND NOT EXISTS (
      SELECT 1 FROM tenancy_party tp
       WHERE tp.tenancy_id = t.tenancy_id AND tp.role = 'GUARANTOR'
@@ -65,14 +72,35 @@ SELECT t.tenancy_id,
    AND NOT EXISTS (
      SELECT 1 FROM tenancy_completeness_exception e
       WHERE e.tenancy_id = t.tenancy_id AND e.rule = 'guarantor'
-   )
- ORDER BY b.city, b.address_line, u.unit_number`;
+   )`;
+
+function byPlaceThenRule(a: IncompleteTenancy, b: IncompleteTenancy): number {
+  return (
+    a.city.localeCompare(b.city, 'he') ||
+    a.building_name.localeCompare(b.building_name, 'he') ||
+    a.unit_number.localeCompare(b.unit_number, 'he') ||
+    a.missing.localeCompare(b.missing)
+  );
+}
 
 export async function listIncompleteTenancies(
   db: Queryable,
+  clock: Clock,
+  documents: TenancyDocumentsReader,
 ): Promise<IncompleteTenancy[]> {
-  const result = await db.query<IncompleteTenancy>(INCOMPLETE_SQL);
-  return result.rows;
+  const guarantor = await db.query<QueuePlace>(GUARANTOR_SQL);
+  const places = await db.query<QueuePlace>(PLACE_SQL);
+  const rows: IncompleteTenancy[] = [
+    ...guarantor.rows.map((row) => ({ ...row, missing: 'guarantor' as const })),
+  ];
+  for (const place of places.rows) {
+    const gate = await activationGate(db, clock, place.tenancy_id, documents);
+    for (const check of gate.checks) {
+      if (check.passed) continue;
+      rows.push({ ...place, missing: check.rule });
+    }
+  }
+  return rows.sort(byPlaceThenRule);
 }
 
 const FOREIGN_KEY_VIOLATION = '23503';

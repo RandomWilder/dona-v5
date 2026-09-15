@@ -7,7 +7,8 @@ this file and the workbook disagree, the workbook is right and this file is a bu
 - **Owns:** the paper, and every value that traces back to it. A **schema-driven ingestion engine, not
   a lease parser**: its inputs are a document, a declared type, and that type's field schema.
 - **Entities:** E12, E13, E15, E16 — Document · DocumentLink · DocumentType · DocumentTypeField ·
-  ExtractedField · FieldPromotion.
+  ExtractedField · FieldPromotion · **Passage** (#103). Retrieval over that store takes a required
+  **Stance** (#104).
 - **Depends on:** estate, parties, tenancy.
 - **Builds:** week 3 (slices 3.1–3.3, 3.5's confirm screen, 3.6) and week 4 (OCR at 4.1, comprehension
   at 4.2, promotion at 4.3, A2's draft tenancy at 4.6, A3's addendum at 4.7). **The stub gained content at slice 3.1**, which
@@ -37,7 +38,9 @@ workbook a specification rather than a description.
 - **`document_type_field`** — E16. What a type declares, in one version. Unique on
   `(document_type_id, field_key, effective_from)`: redeclaring a field is a **new row**, never an
   edit, and closing a declaration sets `effective_to` without touching what the old row said.
-  `value_type` has no `MONEY` member and no money field is ever seeded (foundation rule 2).
+  `value_type` has no `MONEY` member, and it does not need one: an amount is a `NUMBER` beside a
+  `TEXT` currency, which is how `lease` declares its rent and its deposit from 15 Sep 2026
+  ([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md) retired foundation rule 2).
 - **`document`** — E12. One file, hashed at ingest. From 5.4 it also carries **`uploaded_by`**, a
   nullable FK to `staff_account`. `file_hash` is **unique**, which is what makes
   *the same file filed twice is one document with two links* a property of the database rather than a
@@ -83,6 +86,16 @@ sheet existed.
   The mapping instructions ask for ISO; a DATE finding that is not a real calendar day is dropped —
   no row, same as any other missing required field. Screens may later print dd/mm/yyyy; they do not
   store it.
+- **A NUMBER value is a bare number.** `12,500 ₪`, `12.500`, `₪ 12 500` and `12,500.00` are all the
+  paper's way of printing twelve and a half thousand; capture stores `12500`. Thousands separators,
+  spaces, currency symbols and a trailing `.00` are stripped, a decimal point that carries real
+  digits is kept, and a value with nothing numeric left in it is dropped — no row, the same as a
+  `DATE` that is not a calendar day. **The currency is a field of its own**, never inferred from the
+  symbol that was stripped: `lease` declares `rent_currency` beside `rent_amount` and
+  `deposit_currency` beside `deposit_amount`, because a lease may price the deposit in one currency
+  and the rent in another ([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)).
+  Each amount's hint names the amounts it is *not*, the way the two identifier hints do, because a
+  lease prints the rent, the deposit and a penalty rate on one page and all three are runs of digits.
 - **`value` is `-- pii`.** Names and addresses land here. Guard three matches a qualified name
   (`extracted_field.value`) because a bare `value` would fire on `config_settings`.
 - **A missing required field is a result, not an error.** No row. The same for an unconfigured
@@ -96,27 +109,27 @@ sheet existed.
     what a shape test costs when it is wrong: a duplicated one read the CSRF token's own hex and
     failed 4 runs in 20.
   - **Withheld by default on every read path.** `renderReadPage` takes a required
-    `mayReadIdentifiers` stance; false drops the rows and their page outlines and prints **a count**
+    `mayReadIdentifiers` stance; false drops the identifier rows and prints **a count**
     instead — a state and a count, never the value, which is the rule this console has kept since
     5.2. Only `party.national_id.read` sets it true, and only ADMIN holds that.
   - **Disclosure writes `evidence.read_identifier`** — actor, role, document and the field keys, never
     the value (SPEC.md: PII never in logs). Withholding is not a read and writes nothing.
-  - **The word-box transcript is withheld too. Slice 6.6**, which is where the rule acquired its
-    third subject and its sharpest sentence: **captured is governed; printed is the document.** The
-    overlay draws one `<span class="word-box">` per measured word and carried the word's own text in
-    a `title` attribute for every viewer, so a ת.ז. printed on the lease was readable by an OPERATOR
-    on the same page whose captured row was correctly withheld — found by clicking at 6.5, where the
-    captured-row gate scored admin **1** / operator **0** and the overlay scored **1** for both. The
-    `title` is our transcription of the paper, in text, in our own response, and it is rendered only
-    when `mayReadIdentifiers` is true. Withheld **wholesale rather than word by word**: a run split
+  - **The page transcript is withheld too. Slice 6.6, rewritten at #102.** The rule acquired its
+    third subject and its sharpest sentence: **captured is governed; printed is the document.** Until
+    #102 the overlay drew one `<span class="word-box">` per measured word and carried the word's own
+    text in a `title` attribute, so a ת.ז. printed on the lease was readable by an OPERATOR on the
+    same page whose captured row was correctly withheld — found by clicking at 6.5, where the
+    captured-row gate scored admin **1** / operator **0** and the overlay scored **1** for both.
+    **#102 deletes that overlay.** There is no page image, no word box and no field box. The
+    transcript is now the per-page text on `/documents/:id/read`, and it is rendered only when
+    `mayReadIdentifiers` is true. Withheld **wholesale rather than word by word**: a run split
     across OCR tokens (`312`, `345`, `678`) matches no pattern applied to one token, and the type's
     catalogue declaration is the wrong gate because a declaration governs what is *captured*, not
-    what a page happens to print. The geometry stays at both stances — the boxes still show where
-    words were found, which is what `מילים על הדף` is for.
-  - **The page image is not withheld, and that is the boundary.** The same viewer already holds a
-    fifteen-minute signed read of the document's bytes (5.4), so withholding a picture of the page
-    would claim a control this system does not have. Whoever may open a document may read what is
-    printed on it. What the permission governs is this system's own copy — the row, the transcript,
+    what a page happens to print. Each extracted value is labelled with the page it was read from,
+    which is how an administrator checks the paper they still hold.
+  - **There is no page image to withhold.** The same viewer already holds a fifteen-minute signed
+    read of the document's bytes (5.4). OCR runs in imageless mode and returns words, not pictures.
+    What the permission governs is this system's own copy — the row, the transcript,
     `party.national_id` — and saying so plainly is worth more than a control that is believed and
     absent.
   **No `field_promotion` target for either field**, deliberately: the identifier becomes
@@ -400,6 +413,36 @@ behind a gated rail is the door that answers `not_allowed` after somebody has al
 it — 6.1's refusal-after-typing, which A11 refused to build for its own form. The permission names
 the act the tab is for: this is the filing tab's front page, not a reading of what is filed.
 
+### One orchestrator, two doors — ticket #109
+
+The commands that file, extract and approve already exist (`fileDocument`, `extractFiledDocument`,
+`approveExtractedField`, `approveUnflagged`). What #109 adds is **the path through them**, not a
+second copy of any of them.
+
+`destinationAfterFiling` is that path. Both upload doors — unit-first `POST /documents` and A12
+`POST /documents/intake` — call `fileDocument` and then this function, so a verified lease lands on
+the approval ledger (`GET /documents/:id/fields`) rather than on the confirm screen that used to
+follow it. A protocol still goes to seed; an addendum still goes to its confirm; a refusal still
+writes nothing. The unit's document list is a second door into the same destinations, not a second
+mechanism: a lease there opens the ledger.
+
+**#110: creating the draft follows the approved reading, with no confirm screen.** After a lease
+reading is stamped — every extracted name row, and both dates — `establishApprovedLease` writes the
+draft tenancy on the unit the document was filed against and the operator lands on that letting's
+page. Roles come from the field family the name was read into; an unstamped name writes no party.
+`GET`/`POST /documents/:id/tenancy` remain for an addendum only; a lease hitting them is sent to
+the ledger, or to the letting if it already exists.
+
+**The maintenance annex is not read off the lease.** The published forms do not print which
+`terms_profile` governs the letting, so it is not a declared field. A new draft takes
+`נספח תחזוקה — תקן` when that name exists, otherwise the sole profile in the register, otherwise it
+refuses rather than invent a row. Changing the annex later is a tenancy-page write, not this path.
+
+**The attach branch is gone.** A lease defines a letting; a second lease on the same unit and start
+date is `conflict` with that reason, not a silent join onto the household that is already there.
+Filing a further copy against the existing letting remains the way to add evidence. Identifier
+pairing at write is unchanged.
+
 ### The approval ledger — `GET /documents/:id/fields` (slice 7.3)
 
 Flow **A15**, and the three routes it is made of — the ledger (`documents.read`), the signature
@@ -408,12 +451,19 @@ Flow **A15**, and the three routes it is made of — the ledger (`documents.read
 consult it). What the stamp is, why `value` is never overwritten, what the read-quality number
 actually measures and why an identifier is never bulk-approved are all in **"Approval — the stamp
 that is not a promotion"** below, beside the columns they are about. Two facts belong here with the
-other routes: **the ledger reads no bytes** (the page count and reader line the paint drew cost an
-OCR call or a pdf parse per view, and `/documents/:id/read` is one link away and already pays for
-them), and **the declarations it lists are the ones governing the day the extraction ran**, never
+other routes: **the ledger reads no bytes** (the page count and reader line the paint drew would
+have cost an OCR call or a pdf parse per view; from #103 `/documents/:id/read` paints stored
+passages and neither screen re-reads the file), and **the declarations it lists are the ones governing the day the extraction ran**, never
 today's — a field declared this morning is not something last month's lease failed to carry. 7.3
 also **moved the `קדם` buttons off the read overlay**: two screens writing the same row is how the
 two drift into disagreeing about which one is the flow.
+
+**#109 redraws the ledger from the #100 paint.** The table leads. Every value row carries the page
+it was read from. The reading's quality verdict sits in the head — `טובה` when at least one field
+was measured, `לא נמדדה` when every field arrived with no score, which is also when
+`אישור כל מה שלא סומן` is withheld. Explanation is behind a `<details>`. A name row prints the role
+the field carries (`tenant_name` is a tenant, `guarantor_name` is a guarantor who is never a service
+contact). Amounts are ordinary rows: after #101 they are.
 
 ### The declaration becomes editable — `POST /documents/types/:typeKey/fields` (slice 7.2)
 
@@ -449,23 +499,16 @@ explicable by it. It is here rather than in a later slice because corrections ke
 mis-typed key cannot be corrected, only declared again beside its own mistake, and an editor whose
 first typo is permanent is a trap.
 
-**The money guard, and why this route needs one nothing else in this module needs.**
-`0011_evidence.sql` says it: "No MONEY member … no amount is ever a column on a business record."
-That has held because the field list was source code. It is not source code any more, so the
-constraint moves into the command: a declaration whose `field_key` or `label_he` carries the money
-vocabulary is refused with a sentence naming foundation rule 2. The vocabulary lives in
-`src/evidence/internal/money.ts` and is read by the guard **and by the policy case**, so the test
-cannot drift from the thing it tests. Latin terms are matched token-wise on the snake_case key;
-Hebrew terms are matched as substrings, because Hebrew attaches its prefixes. It is deliberately
-blunt and it over-matches — `דמי` is inside `הדמיה` — which is the shape a guard takes in this
-repository (`docs/pipeline.md` §6): a refusal is a conversation with an administrator who can
-rename, and a leak is not.
-
-**The guard is on the run-time command and not on the seed.** Adding money for real stays a
-migration, a `value_type` member, a diff and a review — the price `roles.ts` says an irreversible
-widening should cost — and putting the vocabulary under `upsertDocumentTypeField` would make the
-rule stronger than it is written while leaving the `value_type` CHECK a second lock on a door with
-no key.
+**There is no money guard on this route, and there was one until 15 Sep 2026.** A declaration whose
+`field_key` or `label_he` carried a money word — eight Latin tokens, eight Hebrew substrings, in
+`src/evidence/internal/money.ts` — was refused with a sentence naming foundation rule 2. That rule
+is retired ([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)) and the guard is deleted
+with it, along with its re-exports on the module contract and the policy case that read the same
+vocabulary. **Nothing replaces it.** A declaration naming an amount is an ordinary declaration:
+`settings.write`, a new row at a new `effective_from`, an audit line. The reason the guard is not
+kept in a weakened form is in the ADR — it could not tell a rent from a balance, because both are
+spelled with the same eight words, so it refused the honest case (`rent_amount`) and admitted the
+dishonest one (`extra_1`, labelled anything).
 
 **`settings.write`, and `roles.ts` does not change.** ADMIN only, and already the hand on the
 `DocumentType` catalogue since 5.8. A permission with one reader adds vocabulary without adding a
@@ -474,9 +517,9 @@ boundary; the matrix stays code.
 **The form is on the screen only for a role that may post it**, which is `/settings`'s shape and not
 6.1's. `GET /documents` keeps `documents.write` — an OPERATOR reads the declaration and never sees
 the form, so the door that answers `not_allowed` after somebody has typed into it does not exist
-here. **Refusals are the JSON error body every other form post in this system returns**, including
-the money one: one refusal shape per route, and a refusal screen for this form is a decision nobody
-has asked for yet.
+here. **Refusals are the JSON error body every other form post in this system returns** — the role,
+the forged token, the same-day redeclaration: one refusal shape per route, and a refusal screen for
+this form is a decision nobody has asked for yet.
 
 **Every declaration writes an `audit_log` line** — `evidence.declare_field`, naming the type, the
 key, the value type and the day, and never a document's text. A schema change is the one write in
@@ -789,38 +832,11 @@ is the whole point, and it is the same one A12's refusal screen draws.
 **Idempotent confirm.** A lease that already has a `TENANCY` / `EVIDENCE` link returns
 `alreadyEstablished` and creates no second household.
 
-**Which letting, and the attach branch. Slice 6.5, and provisional from 15 Sep 2026.** The director
-ruled that a lease **defines** a letting rather than attaching to one, so the *prompt* below — a list
-of candidate lettings shown to a person to choose from — is gone with the confirm screen. The branch
-itself is reached from a conflict rather than from a prompt, and whether it survives in that shape is
-#110's to decide and to record here; see A2 step 6 in `SPEC-flows.md` for the ruling in full. What
-follows is what the code does today.
-
-Until 6.5 this flow could only *create*: a
-second lease on a unit and a start date it already held died on `conflict — that unit already has a
-lease starting on this date`, with nothing an operator could do from the screen. `proposeLeaseTenancy`
-now carries the unit's lettings from `listUnitTenancies` as **candidates**, and `confirmLeaseTenancy`
-has a second branch.
-
-- **Ranking.** Identifier overlap first — `countIdentifierOverlap` returns `tenancy_id` → **a count**
-  of how many people already on that letting carry an identifier this lease declares — then the
-  number of days the lease's term overlaps the letting's, computed **in TypeScript over the dates
-  the list already returns**, because the SQL that would express it is guard two's predicate and
-  belongs to `src/scope/`.
-- **What is proposed.** A **new draft** by default. An existing letting is pre-selected only when
-  this lease's `start_date` equals that letting's — the case that used to be a dead end. Overlap
-  ranks the list and never decides it: the same household renewing on new dates is a new letting.
-  **A human picks either way**, which is invariant 5 and is unchanged.
-- **What attach writes.** The `TENANCY` / `EVIDENCE` link and the confirmed `tenancy_party` rows.
-  **Not `upsertTenancy`**, so `start_date`, `end_date`, `status` and `terms_profile_id` are untouched
-  and no `terms_profile` is asked for. A lease attached to the wrong letting must not be able to
-  rewrite that letting's term; moving a captured date onto a column stays per-field promotion from
-  the read screen, one field and one operator at a time. The audit line is `evidence.attach_lease`.
-  A second attach of the same document is a no-op, the same `alreadyEstablished` the create branch
-  returns.
-- **The letting must be on this unit.** A `tenancy_id` posted from the form is checked against the
-  unit the document is filed on before anything is written; anything else is `invalid` and writes
-  nothing, on the same standing as the address cross-check above.
+**Which letting. Slice 6.5's attach branch is deleted at #110.** A lease **defines** a letting. A
+second lease on the same unit and start date is `conflict — that unit already has a lease starting
+on this date`. There is no prompt and no silent attach. A further copy of the paper is filed against
+the letting that already exists. `proposeLeaseTenancy` no longer ranks candidate lettings; an
+addendum is already bound and never was.
 
 **How a name gets its identifier, and why it is all-or-nothing. Slice 6.5.** The *i*-th `tenant_name`
 pairs with the *i*-th `tenant_id_number` in the order `proposeLeaseTenancy` already sorts people by
@@ -910,14 +926,48 @@ filed, and 3.3's refused-writes-nothing still holds at the door. `refused` is no
 and 4.1 does not invent one.
 
 **Two readers, one page shape.** A native PDF with a text layer is pdfjs (confidence `null`). A
-scan, a photograph, or a PDF whose pages came back empty is Document AI (confidence set, boxes from
-the OCR engine). Images skip pdfjs. More than 15 pages is not sent whole: on the sweep the row stays
-`unverified`, and **on the upload path, from 6.8, the first fifteen pages are selected and read**
-rather than the file being filed as though it had been read. The overlay (`GET /documents/:id/read`) draws those boxes on the page image the
-processor already returned — logical CSS, specimens. **From 6.6 a word box carries its word only
-for a viewer holding `party.national_id.read`**; below it the boxes are geometry and nothing
-else. **Which page** is a query
-(`?page=`, 1-based, matching the stored field). Clicking a promoted value is 4.4's.
+scan, a photograph, or a PDF whose pages came back empty is Document AI (confidence set, boxes used
+only while extracting so a field knows its page). Images skip pdfjs. More than 15 pages is not sent
+whole: on the sweep the row stays `unverified`, and **on the upload path, from 6.8, the first fifteen
+pages are selected and read** rather than the file being filed as though it had been read. **#102
+deleted the overlay.** `GET /documents/:id/read` shows the per-page text, the quality verdict, and
+the page number beside each extracted value — never a page image, never a word box, never a field
+box. The OCR request runs in imageless mode. **From 6.6 the transcript is shown only to a viewer
+holding `party.national_id.read`.** **Which page** is a query (`?page=`, 1-based, matching the stored
+field). Clicking a promoted value is 4.4's.
+
+**#103 keeps the reading.** `readForVerdict` remains the only decision point that chooses native text
+versus OCR. Its output fans out to three destinations: the verdict, the extracted fields, and one
+**passage** per page — document, page number, ordinal, the text as printed (identifiers included,
+unmasked), and an embedding at the welded dimension. Masking is a later read, never a write: masking
+here would both hide a tenant's own identifier from them and corrupt the vector. **No vector index**
+([ADR-0009](docs/decisions/ADR-0009-passage-embeddings-have-no-index-yet.md)). An unconfigured
+embedder is the same shape as an unconfigured extractor: the document is still filed and no passages
+are written — documents without passages, including the pre-#103 archive, are #105's sweep.
+**Viewing a reading that has passages does not re-read the bytes.** `GET /documents/:id/read` paints
+stored passages when they exist; without them it still reads the file, which is the archive path.
+
+**#104 searches the passage store.** `searchPassages` takes a question, an embedder, and a required
+**stance** — administrator or tenant, never defaulted, so no caller retrieves without saying who is
+asking. Each hit carries the document, the page, the text, the document type, the flat the document
+is anchored to (the `UNIT` link, or the tenancy's unit when that is the only place-binding), and a
+distance. Distance orders the results and is never asserted on. The administrator stance returns
+identifiers as printed. The tenant stance masks identifier-shaped runs in the returned text and does
+not rewrite the stored passage. Masking is not a reveal: a reveal of a withheld identifier remains
+`POST /documents/:id/fields/reveal` and still writes `evidence.read_identifier`. There is no
+tenant-facing surface on this command yet. The page-sized chunk and this search are retrieval
+configuration, so rent and deposit questions enter the golden set, ranked against the corpus
+fixtures and ratcheted to the rank the day they land.
+
+**#105 backfills the archive.** Documents holding no passages — filed before #103, or filed with an
+unconfigured embedder — are walked by `sweepMissingPassages` the way `sweepUnverified` walks
+`unverified` rows: one at a time, optional id filter, a report of examined / written / unchanged /
+failed, allowed to be zero. Each document is read through `readForVerdict` and written through
+`writeDocumentPassages`, so a backfilled document is searchable on the same terms as one filed today,
+and a second run over a swept corpus examines nothing. The write is already idempotent on a document
+that has passages, so re-running never duplicates a page. The entry point is `npm run passages:sweep`,
+wired into no workflow, the same standing as `ocr:sweep`: an unconfigured embedder prints NOT RUN
+rather than a measured zero.
 
 `sweepUnverified` walks already-filed `unverified` rows the same way. It is how week 3's backlog is
 discharged; the count of verdicts that moved is recorded in the slice evidence, from the audit
@@ -1107,8 +1157,8 @@ that will never have anywhere to be promoted to — `address`, `apartment_number
   lease, most of them above 90%: approve-all would become a reflex and the measurement would die the
   day it shipped.
 - **A second signal is not this slice's.** The honest one — whether the words the model pointed at
-  sit under the declared field's label on the page — is geometry the read overlay already holds.
-  Named, not built.
+  sit under the declared field's label on the page — is geometry extraction already holds while it
+  reads. Named, not built.
 
 ### Approving an identifier
 
@@ -1134,16 +1184,17 @@ and in a referrer, and a refresh would re-log a disclosure that did not happen t
 
 ## Provenance viewer (slice 4.4)
 
-A promoted value on the unit screen is a link to the pixels it came from. Capture stays a row;
+A promoted value on the unit screen is a link to the page it was read from. Capture stays a row;
 the click is an `href`, not a script.
 
 - **No client JavaScript.** The screens have never had any ([SPEC-estate.md](SPEC-estate.md)). The
-  link is `/documents/:id/read?page=N#f-<extracted_field_id>`. The overlay draws the field's stored
-  union box with that `id`; the browser's `:target` and `scroll-margin` do the rest. A hash is not
-  sent to the server, so the page number cannot live only in the fragment.
-- **The box is the field's, not every word.** Word boxes stay as 4.1's overlay. The highlighted
-  rectangle is `extracted_field.bbox` on that page. Confidence is shown next to the value (a percent
-  when Document AI scored the words; omitted when pdfjs stored `null`).
+  link is `/documents/:id/read?page=N`. **#102 deleted the overlay**, so there is no field box and
+  no hash to scroll to: the page number is the whole pointer. A query string is sent to the server,
+  which is why the page cannot live only in a fragment.
+- **The page is the field's, not a box on an image.** Confidence is shown next to the value (a percent
+  when Document AI scored the words; omitted when pdfjs stored `null`). Extraction still unions the
+  words a field was read from so household pairing keeps document order; that box is stored and is
+  never drawn.
 - **Estate does not query `extracted_field`.** `listPromotedFieldsForUnit` lives here and is
   injected the same way `listLinkedDocuments` already is, so the estate ↔ evidence cycle stays
   broken. The list is every stamped field on paper linked to that unit (the unit itself, or a

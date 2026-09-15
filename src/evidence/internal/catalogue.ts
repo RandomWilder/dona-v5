@@ -10,11 +10,12 @@ import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
-import { moneyRefusal, namesMoney } from './money.ts';
 import type { Queryable } from './types.ts';
 
 /**
- * The workbook's E16 `value_type`. **No MONEY member** — foundation rule 2, and READ ME rule 3.
+ * The workbook's E16 `value_type`. **No MONEY member**, and none is needed: an amount is a `NUMBER`
+ * beside a `TEXT` currency (docs/decisions/ADR-0008-money-is-ordinary-data.md). The five members
+ * were the union before foundation rule 2 was retired and are the union after it.
  *
  * **A runtime array from slice 7.2**, where it stopped being a type only: the declaration editor
  * fills a `<select>` from it and the route validates against it, and a second list typed into
@@ -451,18 +452,11 @@ export async function declareDocumentTypeField(
   db: Queryable,
   declaration: FieldDeclaration,
 ): Promise<DeclarationResult> {
-  // **Before the transaction, because it is not a question about the database.** The moment an
-  // administrator may declare a field they may declare `rent_amount` as `NUMBER`, and foundation
-  // rule 2 stops being enforceable by the schema — `value_type` has no MONEY member, and it does
-  // not need one for an amount to get in. `src/evidence/internal/money.ts` says why the vocabulary
-  // sits there and not under the seed; `tests/policy/money-field.test.ts` is the gate.
-  const money = namesMoney(declaration);
-  if (money) {
-    throw new KernelError('invalid', moneyRefusal(money), {
-      typeKey: declaration.typeKey,
-      fieldKey: declaration.fieldKey,
-    });
-  }
+  // **There is no vocabulary guard here, and there was one until 15 Sep 2026.** A declaration whose
+  // key or label named money was refused before the transaction opened, because foundation rule 2
+  // said no amount is ever held. That rule is retired in full
+  // (docs/decisions/ADR-0008-money-is-ordinary-data.md) and nothing replaces the guard: an amount is
+  // an ordinary value and `rent_amount` as `NUMBER` is an ordinary declaration.
   return inTransaction(db, async (tx) => {
     const documentTypeId = await typeIdOf(tx, declaration.typeKey);
     const live = await liveDeclaration(

@@ -17,14 +17,8 @@
 // **No client JavaScript, here as everywhere.** The type list is a `<select>` the server filled from
 // the catalogue, the file input is a file input, and the page works with scripting switched off.
 import type { UnitHit } from '../../estate/contract.ts';
-import { type OcrPageImage, onlineOcrByteLimit } from '../../kernel/ocr.ts';
-
-/** A byte count in the unit the sentence is written in. One decimal, because 14.9 is a size. */
-function megabytes(bytes: number): string {
-  return (bytes / (1024 * 1024)).toFixed(1);
-}
-
-import type { PdfPage } from '../../kernel/pdf.ts';
+import { IDENTIFIER_MASK } from '../../kernel/identifier.ts';
+import { onlineOcrByteLimit } from '../../kernel/ocr.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import type { UnitLetting } from '../../tenancy/contract.ts';
@@ -40,6 +34,11 @@ import type { ProposedPerson, TenancyCandidate } from './lease.ts';
 import { CANDIDATE_LIMIT, type PlaceReading } from './place.ts';
 import { documentExtensions } from './storage-path.ts';
 import type { Verification } from './verify.ts';
+
+/** A byte count in the unit the sentence is written in. One decimal, because 14.9 is a size. */
+function megabytes(bytes: number): string {
+  return (bytes / (1024 * 1024)).toFixed(1);
+}
 
 const TENANCY_STATUS: Record<string, string> = {
   DRAFT: 'טיוטה',
@@ -72,8 +71,9 @@ const styles = h`<style>
   /* Slice 7.2, lifted from the paint's own block. One control per row, and it is a form rather
      than a link because retiring a declaration is a write and a GET that writes is a GET a crawler
      can fire. */
-  .row-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+  .row-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
   .row-actions form { display: contents; }
+  .row-actions input { inline-size: auto; flex: 1 1 7rem; min-inline-size: 5rem; }
   .mini {
     min-height: var(--size-control-ops);
     padding-inline: var(--space-3);
@@ -102,6 +102,32 @@ const styles = h`<style>
      so this is emphasis on a number and never the whole meaning of a cell. */
   .quality.is-low { color: var(--color-alert); font-weight: 600; }
   .second { color: var(--color-text-muted); font-size: var(--text-xs); }
+  .role { display: block; color: var(--color-text-muted); font-size: var(--text-xs); }
+  .role.is-guarantor { color: var(--color-alert); }
+  .ledger-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+    align-items: center;
+    margin-block-start: var(--space-2);
+  }
+  .verdict { background: var(--color-surface); gap: var(--space-2); }
+  .verdict.is-low { color: var(--color-alert); }
+  .prose-fold {
+    border: var(--size-hairline) solid var(--color-divider-soft);
+    border-radius: var(--radius-3);
+    background: var(--color-surface);
+    padding: var(--space-3) var(--space-4);
+  }
+  .prose-fold > summary {
+    cursor: pointer;
+    min-height: var(--size-control-ops);
+    display: flex;
+    align-items: center;
+    color: var(--color-accent-ink);
+    font-size: var(--text-base);
+  }
+  .prose-fold p { color: var(--color-text-muted); font-size: var(--text-sm); margin: var(--space-3) 0 0; }
   .term-found { color: var(--color-ok); }
   .term-missing { color: var(--color-alert); }
   .term-state { font-weight: 600; }
@@ -116,26 +142,13 @@ const styles = h`<style>
   .read-facts { display: grid; gap: var(--space-1); margin: var(--space-3) 0 0; }
   .read-facts p { margin: 0; }
   .digest { word-break: break-all; }
-  .page-read {
-    position: relative;
-    inline-size: min(100%, 40rem);
+  .page-text {
+    white-space: pre-wrap;
+    margin: var(--space-3) 0 0;
+    padding: var(--space-3);
     background: var(--color-surface-card);
     border: var(--size-hairline) solid var(--color-divider-soft);
-  }
-  .page-read img { inline-size: 100%; block-size: auto; display: block; }
-  .word-box {
-    position: absolute;
-    outline: var(--size-hairline) solid var(--color-accent);
-    pointer-events: none;
-  }
-  .field-box {
-    position: absolute;
-    outline: var(--size-hairline) dashed var(--color-divider-soft);
-    scroll-margin-block-start: var(--space-8);
-    pointer-events: none;
-  }
-  .field-box:target {
-    outline: var(--size-focus) solid var(--color-accent);
+    font: inherit;
   }
 </style>`;
 
@@ -762,7 +775,7 @@ export function renderFiledPage(screen: FiledScreen): string {
       }
       ${
         screen.documentId && type.typeKey === 'lease'
-          ? h`<a class="btn btn-secondary" href="/documents/${screen.documentId}/tenancy">אישור חוזה</a>`
+          ? h`<a class="btn btn-secondary" href="/documents/${screen.documentId}/fields">אישור הקריאה</a>`
           : h``
       }
       ${
@@ -895,9 +908,8 @@ export interface ReadScreen {
   typeKey: string;
   labelHe: string;
   fileHash: string;
-  source: 'pdfjs' | 'ocr' | 'none';
-  page: PdfPage | null;
-  image: OcrPageImage | null;
+  source: 'pdfjs' | 'ocr' | 'none' | 'stored';
+  pageText: string | null;
   /**
    * **Whether this viewer may see a captured identifier. Slice 6.4, and it is required on purpose.**
    *
@@ -922,28 +934,38 @@ export interface ReadScreen {
   }>;
 }
 
-function fieldAnchor(extractedFieldId: string): string {
-  return `f-${extractedFieldId}`;
+function qualityVerdict(
+  rows: ReadonlyArray<{ confidence: number | null }>,
+): 'measured' | 'unmeasured' {
+  return rows.some((row) => row.confidence !== null)
+    ? 'measured'
+    : 'unmeasured';
 }
 
-function pixelsHref(documentId: string, page: number, fieldId: string): string {
-  return `/documents/${documentId}/read?page=${String(page)}#${fieldAnchor(fieldId)}`;
+function qualityVerdictChip(
+  rows: ReadonlyArray<{ confidence: number | null }>,
+): Html {
+  return qualityVerdict(rows) === 'measured'
+    ? h`<span class="chip verdict">איכות הקריאה: טובה</span>`
+    : h`<span class="chip verdict is-low">איכות הקריאה: לא נמדדה</span>`;
+}
+
+function pageHref(documentId: string, page: number): string {
+  return `/documents/${documentId}/read?page=${String(page)}`;
 }
 
 function confidenceLabel(confidence: number | null): Html {
-  if (confidence === null) return h``;
-  return h` · ${ltr(`${Math.round(confidence * 100)}%`)}`;
+  if (confidence === null) {
+    return h` · נקרא מטקסט, לא נמדד`;
+  }
+  const percent = `${String(Math.round(confidence * 100))}%`;
+  return isFlagged(confidence)
+    ? h` · <span class="quality is-low">${ltr(percent)}</span>`
+    : h` · ${ltr(percent)}`;
 }
 
-function boxPercents(
-  box: { x: number; y: number; width: number; height: number },
-  page: { width: number; height: number },
-): string {
-  const inlineStart = (box.x / page.width) * 100;
-  const blockStart = (box.y / page.height) * 100;
-  const inlineSize = (box.width / page.width) * 100;
-  const blockSize = (box.height / page.height) * 100;
-  return `inset-inline-start:${String(inlineStart)}%;inset-block-start:${String(blockStart)}%;inline-size:${String(inlineSize)}%;block-size:${String(blockSize)}%`;
+function pageLabel(page: number): Html {
+  return h` · עמוד ${ltr(page)}`;
 }
 
 /**
@@ -1005,7 +1027,7 @@ function extractedSection(screen: ReadScreen) {
     <h2>מה שנקרא</h2>
     <dl class="facts">${rows.map(
       (row) =>
-        h`<div><dt>${row.labelHe}</dt><dd><a href="${pixelsHref(screen.documentId, row.page, row.extractedFieldId)}">${row.value}</a>${confidenceLabel(row.confidence)}${
+        h`<div><dt>${row.labelHe}</dt><dd><a href="${pageHref(screen.documentId, row.page)}">${row.value}</a>${pageLabel(row.page)}${confidenceLabel(row.confidence)}${
           row.approvedAt ? h` · אושר` : row.promotedTo ? h` · קודם` : h``
         }</dd></div>`,
     )}</dl>
@@ -1014,44 +1036,25 @@ function extractedSection(screen: ReadScreen) {
 
 export function renderReadPage(screen: ReadScreen): string {
   const back = `/estate/buildings/${screen.buildingId}`;
-  const page = screen.page;
-  const image = screen.image;
-  // **The transcript is withheld below the permission. Slice 6.6**, ruling on what 6.5 found by
-  // clicking: the captured row for a ת.ז. was correctly withheld and the word box beside it carried
-  // the same digits in a `title` attribute at every stance, so an operator read it off the page the
-  // gate was protecting. A `title` holding an OCR word is not the paper — it is this system's
-  // transcription of the paper, as text, in its own response. The page image below these boxes *is*
-  // the paper and is not withheld: the same viewer already holds a fifteen-minute signed read of the
-  // bytes (5.4), so hiding a picture of the page would claim a control this system does not have.
-  //
-  // **Wholesale, not word by word, and on every type.** A run split across OCR tokens (`312`, `345`,
-  // `678`) matches no pattern applied to one token; and the type's catalogue declaration is the
-  // wrong gate, because a declaration governs what is *captured* and not what a page happens to
-  // print. The geometry stays at both stances — a box with no word still answers *where did it read
-  // something*, which is what `מילים על הדף` is for.
-  const wordBoxes =
-    page && page.width > 0 && page.height > 0
-      ? page.items.map((item) =>
-          screen.mayReadIdentifiers
-            ? h`<span class="word-box" style="${boxPercents(item, page)}" title="${item.text}"></span>`
-            : h`<span class="word-box" style="${boxPercents(item, page)}"></span>`,
-        )
-      : [];
-  const fieldBoxes =
-    page && page.width > 0 && page.height > 0
-      ? visibleRows(screen)
-          .filter((row) => row.page === page.number)
-          .map(
-            (row) =>
-              h`<span id="${fieldAnchor(row.extractedFieldId)}" class="field-box" style="${boxPercents(row.bbox, page)}"></span>`,
-          )
-      : [];
-  const boxes = [...wordBoxes, ...fieldBoxes];
+  // **The transcript is withheld below the permission. Slice 6.6, rewritten at #102.** 6.5 found an
+  // operator reading a ת.ז. off a word-box `title`. There is no overlay now. The per-page text is
+  // this system's transcription of the paper, so it is shown only when `mayReadIdentifiers` is true.
+  const transcript =
+    screen.pageText && screen.mayReadIdentifiers ? screen.pageText : '';
+  const pageBlock =
+    screen.pageText !== null
+      ? screen.mayReadIdentifiers
+        ? transcript.length > 0
+          ? h`<pre class="page-text">${transcript}</pre>`
+          : h`<p class="lede">אין טקסט בדף זה.</p>`
+        : h``
+      : h`<p class="lede">אין דף להצגה.</p>`;
   const body = h`
     <div>
       <a class="back" href="${back}">← ${screen.buildingName}</a>
       <h1>מילים על הדף</h1>
       <p class="lede">${screen.labelHe}${screen.unitId ? h`` : h` · הבניין`}</p>
+      <div class="ledger-head">${qualityVerdictChip(screen.extracted ?? [])}</div>
     </div>
     <section class="notice">
       <dl class="facts">
@@ -1060,33 +1063,22 @@ export function renderReadPage(screen: ReadScreen): string {
             ? h`קריאה אוטומטית`
             : screen.source === 'pdfjs'
               ? h`שכבת הטקסט שבקובץ`
-              : h`אין מילים לקריאה`
+              : screen.source === 'stored'
+                ? h`הקריאה שנשמרה`
+                : h`אין מילים לקריאה`
         }</dd></div>
         <div><dt>טביעת הקובץ</dt><dd class="digest">${ltr(screen.fileHash)}</dd></div>
       </dl>
       ${extractedSection(screen)}
     </section>
-    ${
-      page
-        ? h`<div class="page-read" dir="ltr" style="aspect-ratio:${String(page.width)}/${String(page.height)}">${
-            image
-              ? h`<img alt="" src="data:${image.mimeType};base64,${image.bytes.toString('base64')}" />`
-              : h``
-          }${boxes}</div>`
-        : h`<p class="lede">אין דף להצגה.</p>`
-    }
+    ${pageBlock}
     <div class="form-actions">
       ${
         // **Slice 7.3.** The ledger is where a reading is signed, corrected or promoted. It is the
         // primary control on this page for that reason: reading the pixels is what somebody does
         // *before* they act, and the act is next door.
-        (screen.extracted ?? []).length > 0
+        (screen.extracted ?? []).length > 0 || screen.typeKey === 'lease'
           ? h`<a class="btn btn-primary" href="/documents/${screen.documentId}/fields">אישור הקריאה</a>`
-          : h``
-      }
-      ${
-        screen.typeKey === 'lease'
-          ? h`<a class="btn btn-secondary" href="/documents/${screen.documentId}/tenancy">אישור חוזה</a>`
           : h``
       }
       ${
@@ -1553,9 +1545,10 @@ export function renderDocumentsPage(screen: DocumentsScreen): string {
  * the administrator pick a verb, and the R18 consequence — the old row stays and still says what it
  * said — is written under the button where somebody about to press it will read it.
  *
- * No value type is `MONEY` and the list is the `FieldValueType` union, so the `<select>` cannot
- * offer one. The refusal behind it is the vocabulary guard, which is a different rule: a money field
- * declared as `NUMBER` is the one the select cannot stop.
+ * The list is the `FieldValueType` union, so the `<select>` offers exactly what the `CHECK` accepts
+ * and no more. There is no `MONEY` member and an amount does not need one: it is declared as
+ * `NUMBER` with a `TEXT` currency beside it, which the form has offered all along and which
+ * ADR-0008 made lawful by retiring the guard that refused it.
  */
 function declarationForm(
   screen: DocumentsScreen,
@@ -1587,7 +1580,7 @@ function declarationForm(
           (type) => h`<option value="${type}">${type}</option>`,
         )}
       </select>
-      <p class="hint">אין טיפוס כסף, ואין שדה כסף. סכום אינו אמת עסקית במערכת הזאת.</p>
+      <p class="hint">סכום מוצהר כ־NUMBER, ולצידו שדה מטבע נפרד מסוג TEXT. אין טיפוס MONEY ואין צורך בו.</p>
     </div>
     <div class="form-row">
       <label for="field-hint">רמז לקורא</label>
@@ -1652,7 +1645,7 @@ export interface FieldsScreen {
   saved?: number;
 }
 
-const MASK = '•••••••••';
+const MASK = IDENTIFIER_MASK;
 
 /**
  * Whether the value on this row may be printed. **Withheld is the default** and a reveal is one
@@ -1699,6 +1692,24 @@ function ledgerOrder(rows: readonly ExtractedRow[]): ExtractedRow[] {
   );
 }
 
+function nameRole(row: ExtractedRow, rows: readonly ExtractedRow[]): Html {
+  if (row.fieldKey === 'guarantor_name') {
+    return h`<span class="role is-guarantor">ערב · אינו איש קשר לשירות</span>`;
+  }
+  if (row.fieldKey !== 'tenant_name') {
+    return h``;
+  }
+  const names = rows.filter(
+    (candidate) => candidate.fieldKey === 'tenant_name',
+  );
+  const at = names.findIndex(
+    (candidate) => candidate.extractedFieldId === row.extractedFieldId,
+  );
+  return at === 0
+    ? h`<span class="role">שוכר ראשי · הראשון שנקרא</span>`
+    : h`<span class="role">שוכר נוסף</span>`;
+}
+
 function approveControl(screen: FieldsScreen, row: ExtractedRow): Html {
   if (row.approvedAt !== null) {
     return h`<td class="muted">אושר</td>`;
@@ -1732,7 +1743,7 @@ function valueCell(screen: FieldsScreen, row: ExtractedRow): Html {
   if (!shows(screen, row)) {
     return h`<td class="key">${ltr(MASK)}</td>`;
   }
-  const read = h`<a href="${pixelsHref(screen.documentId, row.page, row.extractedFieldId)}">${row.value}</a>`;
+  const read = row.value;
   if (row.approvedValue === null || row.approvedValue === row.value) {
     return h`<td>${read}</td>`;
   }
@@ -1767,7 +1778,15 @@ export function renderFieldsPage(screen: FieldsScreen): string {
     <div>
       <a class="back" href="${back}">← ${screen.unitId ? h`הדירה` : screen.buildingName}</a>
       <h1>מה נקרא מן המסמך</h1>
-      <p class="lede">${screen.labelHe} · ההצהרה שתקפה ל־${ltr(screen.on)}</p>
+      <div class="ledger-head">
+        <span>${screen.labelHe} · ההצהרה שתקפה ל־${ltr(screen.on)}</span>
+        ${qualityVerdictChip(shown)}
+        ${
+          open.length - unflagged.length > 0
+            ? h`<span class="chip verdict is-low">${ltr(open.length - unflagged.length)} שורות לבדיקה אישית</span>`
+            : h``
+        }
+      </div>
     </div>
     ${
       screen.saved === undefined
@@ -1784,13 +1803,14 @@ export function renderFieldsPage(screen: FieldsScreen): string {
         : h`<div class="table-wrap">
       <table class="grid-table">
         <thead>
-          <tr><th>שדה</th><th>ערך שנקרא</th><th>איכות הקריאה</th><th>פעולה</th></tr>
+          <tr><th>שדה</th><th>ערך שנקרא</th><th>עמוד</th><th>איכות הקריאה</th><th>פעולה</th></tr>
         </thead>
         <tbody>
           ${ledgerOrder(shown).map(
             (row) => h`<tr>
-            <td class="value">${row.labelHe}</td>
+            <td class="value">${row.labelHe}${nameRole(row, screen.rows)}</td>
             ${valueCell(screen, row)}
+            <td class="key"><a href="${pageHref(screen.documentId, row.page)}">${ltr(row.page)}</a></td>
             ${qualityCell(row)}
             ${approveControl(screen, row)}
           </tr>`,
@@ -1799,6 +1819,7 @@ export function renderFieldsPage(screen: FieldsScreen): string {
             (field) => h`<tr>
             <td class="value muted">${field.labelHe}</td>
             <td class="muted">לא נקרא${field.isRequired ? h`` : h` — שדה רשות`}</td>
+            <td class="muted">—</td>
             <td class="muted">—</td>
             <td class="muted">—</td>
           </tr>`,
@@ -1825,12 +1846,15 @@ export function renderFieldsPage(screen: FieldsScreen): string {
           : h``
       }
     </div>
-    <p class="form-note">
+    <details class="prose-fold">
+      <summary>מה בדיוק עושה «אישור», ומה ההבדל בינו לבין «קידום»</summary>
+      <p>
       «אישור» אינו «קידום». אישור אומר שהקריאה נכונה ונשמר על שורת המסמך; קידום מעתיק ערך לעמודה
       מוקלדת של ההשכרה, ויש לו יעד רק לשני התאריכים. ערך שנקרא לעולם אינו נמחק — תיקון נכתב לצדו.
       <strong>קידום מחייב אישור תחילה</strong>, והערך שמועתק הוא הערך שאושר: שורה שלא נחתמה אינה
       מוצגת כאן לקידום.
-    </p>
+      </p>
+    </details>
     ${
       promotable.length > 0
         ? h`<form class="form-actions" method="post" action="/documents/${screen.documentId}/promote">

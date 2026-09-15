@@ -54,9 +54,11 @@ indexed.
 
 Asserted by `evals/fixtures/specimen-clauses.test.ts`, not promised in a comment:
 
-- **No sum of money.** Foundation rule 2 — no tenant-facing price and no balance, ever — and a
-  fixture is where a habit starts. The rent clause says *when* rent is paid; the guarantee says what
-  it secures. Neither says how much.
+- ~~**No sum of money.**~~ **Retired 15 Sep 2026 with foundation rule 2**
+  ([ADR-0008](../decisions/ADR-0008-money-is-ordinary-data.md)), and the case that asserted it is
+  deleted. A specimen lease may print its rent, and has to be able to: the `lease` type declares
+  `rent_amount` and `deposit_amount`, and a corpus that may not carry an amount is a corpus those
+  fields cannot be measured against.
 - **No real person.** No identifier-shaped run, no Israeli mobile-shaped number, no email address, no
   real party or address.
 - **Near neighbours on purpose.** Several clauses answer "who fixes what" (§7.2 owner wear-and-tear,

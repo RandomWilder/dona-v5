@@ -14,9 +14,10 @@ workbook is right and this file is a bug.
   same migration so R11 has a table to point at. Slice 3.6 added a thin unit page and grew search by
   a documents half; both list what is filed, never who signed it. Slice 4.8 added
   `GET /estate/incomplete`, the A4 queue: a derived list of document-backed drafts and live
-  lettings missing an ערב. The query and the exception write live in tenancy; estate renders them
-  through `EstateDeps`, the same injection `listLinkedDocuments` already uses, so this module
-  still does not import tenancy. **Slice 6.1 added this module's first write route** — `GET
+  lettings that miss a named completeness rule — the original ערב rule, and from #108 each
+  activation-gate miss under the gate's own identifier. The query and the exception write live in
+  tenancy; estate renders them through `EstateDeps`, the same injection `listLinkedDocuments`
+  already uses, so this module still does not import tenancy. There is no second queue. **Slice 6.1 added this module's first write route** — `GET
   /estate/buildings/new` and `POST /estate/buildings`, flow A11, behind the new `estate.write`
   permission — and it writes through `importEstate` rather than through a command of its own.
   **Slice 6.2 added the second**, flow A13: `GET /estate/buildings/:buildingId/units/new` and
@@ -145,6 +146,7 @@ writes it and nothing reads it but the constraint; `address_line` and `city` rem
 by kind and its units. Slice 2.6 added three more: `GET /` is an index of the screens,
 `GET /estate/search?q=` searches the portfolio, and `GET /estate/expiring` is Q5. Slice 3.6 added
 `GET /estate/units/:unitId` — a thin unit page, not the workbook's full unit sheet.
+`GET /estate/tenancies/:tenancyId` and `POST …/activate` — one letting (#107, flow A5).
 
 Server-rendered through the kernel's `h` template, which escapes every interpolation — so there is
 **no client JavaScript at all**, and no JSON API that would have to be scoped before the screens can
@@ -330,13 +332,24 @@ already uses — a unit number and the building it is in, and no party. Evidence
 the unit an upload is being filed against; a document screen inventing its own unit query would be
 the second copy estate exists to prevent. **`GET /estate/units/:unitId` is the thin unit page 3.6
 added**: that same header, the occupancy chip, the upload link, and the documents panel. Slice 4.4
-adds the **promoted values** on that page: each stamped date is a link through to its pixels on the
-read overlay. **Slice 5.5 adds the change log** — old → new, the operator email, the source
+adds the **promoted values** on that page: each stamped date is a link through to the page of the
+read screen it was read from. **Slice 5.5 adds the change log** — old → new, the operator email, the source
 document — from `listTenancyEvents`, injected the same way. Empty is legal. Never a tenant's name.
 **Slice 5.6:** a clock-driven end is `ACTIVE → ENDED`, actor `system`, and no document link. The
 unit page calls `expireDueTenancies` (injected from tenancy) against the clock before it reads the
 log, so opening the sheet is what closes a lease whose date has passed — not a hidden job.
 The workbook's other unit-sheet panels (tenancy, obligations, assets) wait.
+
+**`GET /estate/tenancies/:tenancyId` is A5's sheet (#107).** The first screen that shows one
+letting: the title an administrator recognises it by (tenant name, address, apartment number),
+status, the lease's dates, the documents bound to the letting, what the gate still misses, every
+check the gate returned, and the activate button. Estate renders; it does not own the gate. The
+composition root injects `getTenancy`, `listTenancyParties`, the party-name lookup, `activationGate`,
+`activateTenancy` and `listLinkedDocuments` for `TENANCY`. The page prints the gate's facts and does
+not re-evaluate the four rules. `POST /estate/tenancies/:tenancyId/activate` asks for `tenancy.write`,
+as the completeness exception already does. Party names appear on this screen with no new permission;
+a later gate does not redraw it. Search, the occupancy chip, the buildings list and the incomplete
+queue still carry no name.
 
 **The documents listed on these screens are injected, not imported.** `EstateDeps` carries
 `listLinkedDocuments`, `searchDocuments` and (from 4.4) `listPromotedFieldsForUnit` from evidence's
@@ -347,8 +360,9 @@ The change log never comes from an estate query of `tenancy_event`.
 
 **`GET /estate/incomplete` is A4's queue (slice 4.8).** Same standing as `/estate/expiring`: a
 portfolio operations list, a unit and a date and a missing-rule label, and no party. Completeness
-is tenancy's query; the POST that records an exception is tenancy's write; both are injected. The
-root index and the rail gain a fourth link. The index lived here until **5.2 moved it to
+is tenancy's query; the POST that records an exception is tenancy's write (guarantor only); both
+are injected. **#108:** each gate miss is a row on this same screen, labelled with the gate's
+rule, never a second list. The root index and the rail gain a fourth link. The index lived here until **5.2 moved it to
 `src/index-page.ts`**, on the schedule 2.6 set for it. **5.2b took the remaining private nav with
 it**; **5.2c did not give it back**. This module's screens receive the composition root's chrome.
 

@@ -97,6 +97,8 @@ describe('ocr', () => {
       ocrConfig: { hints: { languageHints: string[] } };
     };
     assert.deepEqual(options.ocrConfig.hints.languageHints, ['iw']);
+    assert.equal(call?.body.imagelessMode, true);
+    assert.equal('images' in result, false);
     assert.equal(ocr.describe(), 'documentai:eu/abc123');
   });
 
@@ -226,17 +228,12 @@ describe('ocr', () => {
               },
             },
           ],
-          image: {
-            content: Buffer.from('img').toString('base64'),
-            mimeType: 'image/png',
-          },
         },
       ],
     });
     assert.equal(result.pages[0]?.number, 2);
     assert.equal(result.pages[0]?.items[0]?.text, 'hello');
-    assert.equal(result.images[0]?.pageNumber, 2);
-    assert.equal(result.images[0]?.bytes.toString(), 'img');
+    assert.equal('images' in result, false);
   });
 
   it('ends a line where the processor says one ends, not where a box happens to sit', () => {
@@ -378,8 +375,6 @@ describe('ocr', () => {
         ['שכירות', 1],
       ],
     );
-    assert.equal(result.images[0]?.pageNumber, 1);
-    assert.equal(result.images[0]?.mimeType, 'image/png');
-    assert.ok((result.images[0]?.bytes.length ?? 0) > 0);
+    assert.equal('images' in result, false);
   });
 });

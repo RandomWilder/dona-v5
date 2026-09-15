@@ -1,13 +1,13 @@
 ---
 number: 99
 title: "Admin document-upload flow: one reading, approve, confirm, activate"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent:
 created: 2026-09-15
-closed:
+closed: 2026-09-15
 ---
 
 ## Problem Statement
@@ -404,3 +404,15 @@ is the record of what was asked for and this comment is the record of what chang
 The reasoning and the director's four comments are in #100's closing comment; #110's body is rewritten
 to match. Nothing else in this epic changes: one reading, approve, create as draft, activate by a
 person, remains the shape.
+
+## Comment — 2026-09-15
+
+Closed. Children #100–#110 are closed. The flow that landed is: upload and one reading, approve on
+the ledger, draft tenancy created from the stamped reading, tenancy page, activate by a person when
+the gate passes. Amounts are ordinary fields. Passages are kept. Mockups are deleted.
+
+Left standing, none of them part of the administrator upload path: the addendum still confirms on
+`/documents/:id/tenancy`; a TENANCY-linked required document counts as approved for the gate; passage
+search is a function with no staff ask screen; there is no rent-over-term calculator; the tenant
+surface is out of scope; the passage sweep is manual. Staging is the place to click the flow with a
+real lease.

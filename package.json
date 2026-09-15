@@ -29,6 +29,7 @@
     "staff:add": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/staff-add.ts",
     "docs:probe": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/docs-probe.ts",
     "ocr:sweep": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/ocr-sweep.ts",
+    "passages:sweep": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/passages-sweep.ts",
     "dev": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/serve.ts",
     "start": "node src/serve.ts"
   },

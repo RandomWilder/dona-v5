@@ -46,9 +46,14 @@ Vocabularies: `tenancy.status` = `DRAFT · ACTIVE · ENDED · TERMINATED_EARLY`;
 `PRIMARY_TENANT · CO_TENANT · GUARANTOR · OCCUPANT`, where GUARANTOR is ערב — on the lease, but not a
 resident.
 
-**No money.** No rent, no deposit, no balance, deliberately and permanently (foundation rule 2).
-Financials live in Priority behind read-only keys, and a column here would be the first place someone
-put an amount the agent could read.
+**No amount column here, and no test asserts that any more.** Foundation rule 2 is retired
+([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)) and the two
+`information_schema.columns` cases in `src/tenancy/schema.test.ts` that forbade a money-named column
+on `tenancy`, `tenancy_party`, `terms_profile`, `obligation` and `obligation_type` are deleted with
+it. The tables still carry no amount, because none of them needs one and the column list in the same
+suite is asserted exactly — an added column is a red build whatever it is named. **The rent on a
+lease lives where every other value read off a document lives**: `extracted_field`, under the
+`lease` type's declarations. **A balance is still Priority's** and this module writes none.
 
 **No `-- pii` marker on any column**, and that is a claim the guard checks rather than a claim this
 file makes: nothing here is person-shaped. The people are in `party`, reached through
@@ -128,11 +133,14 @@ by tripping the guard rather than by anticipating it.
   are in force is a different question from *what identifies one*, and only the second was owed here.
   **A lease naming no profile is a reject with its line number, not a defaulted row**
   ([SPEC-register.md](SPEC-register.md)) — defaulting to `standard` would have answered a question
-  the client has not been asked, which is exactly what the NOT NULL exists to prevent.
+  the client has not been asked, which is exactly what the NOT NULL exists to prevent. **The
+  administrator flow is different (#110):** the published leases do not print an annex name, so a
+  draft created from an approved reading takes `נספח תחזוקה — תקן` when that row exists, otherwise
+  the sole profile, otherwise it refuses. The register importer still has no default.
 - **Obligation and ObligationType (slice 5.7, `src/kernel/migrations/0026_obligation.sql`).**
   E9 and E10 from the workbook. An obligation attaches to a **tenancy**, never a unit (R10). Status
-  is derived on read and is never a column. There is no amount column, here or ever (foundation
-  rule 2). `responsible_party` is copied from the type at creation and then lives on the obligation
+  is derived on read and is never a column. There is no amount column, because no ticket has asked
+  for one — not because a rule forbids it (ADR-0008). `responsible_party` is copied from the type at creation and then lives on the obligation
   row, so a later edit or deactivation of the catalogue cannot rewrite a dispute's record
   (foundation rule 8). The create command does not take an override. `ObligationType` is
   deactivated, never deleted: a `BEFORE DELETE` trigger raises `restrict_violation` even when no
@@ -155,18 +163,22 @@ by tripping the guard rather than by anticipating it.
   copies an extracted date onto `start_date` or `end_date` appends
   `(field, old → new, actor, source_document_id, extracted_field_id)` with `kind = 'amended'`.
   `source_document_id` is NOT NULL for that kind (`amended_names_its_document`) and that constraint
-  is never dropped. `kind` is `amended | terminated`. A clock-driven end is `terminated`:
-  `source_document_id` and `extracted_field_id` are both null
-  (`terminated_has_no_document`). UPDATE and DELETE are rejected (`restrict_violation`). `at` comes
-  from the injected clock; there is no `DEFAULT now()`. `actor` is `-- pii`; a clock end snapshots
-  `system`, not an operator. Register `upsertTenancy` does **not** write events — isolation dates
-  from the import stay legal without a document. `applyPromotedField` is the fourth write command:
-  parse a DATE, update the named column, append the event. A collision on `(unit_id, start_date)` is
-  `conflict`. `expireDueTenancies(db, clock)` is the fifth: every `ACTIVE` tenancy whose `end_date` is
-  strictly before the clock's day in the office's zone becomes `ENDED` and appends `terminated` with
-  `field = status`, `ACTIVE → ENDED`. The last day of the lease still counts (isolation's
-  `end_date >= today`); the day after is when the clock closes it. A second call is a no-op. Natural
-  end is `ENDED`, never `TERMINATED_EARLY`.
+  is never dropped. `kind` is `amended | terminated | activated`. A clock-driven end is
+  `terminated`; a person making a draft live is `activated`. Both kinds carry a null
+  `source_document_id` and `extracted_field_id` (`terminated_has_no_document` for the clock
+  kind, `activated_has_no_document` for the person kind). UPDATE and DELETE are rejected
+  (`restrict_violation`). `at` comes from the injected clock; there is no `DEFAULT now()`. `actor`
+  is `-- pii`; a clock end snapshots `system`, not an operator. Register `upsertTenancy` does
+  **not** write events — isolation dates from the import stay legal without a document.
+  `applyPromotedField` is the fourth write command: parse a DATE, update the named column, append
+  the event. A collision on `(unit_id, start_date)` is `conflict`. `expireDueTenancies(db, clock)`
+  is the fifth: every `ACTIVE` tenancy whose `end_date` is strictly before the clock's day in the
+  office's zone becomes `ENDED` and appends `terminated` with `field = status`, `ACTIVE → ENDED`.
+  The last day of the lease still counts (isolation's `end_date >= today`); the day after is when
+  the clock closes it. A second call is a no-op. Natural end is `ENDED`, never
+  `TERMINATED_EARLY`. **The clock never writes `ACTIVE`.** A draft whose start date has arrived
+  stays a draft until a person activates it (A5, #106). `activateTenancy` is the sixth write
+  command.
 - **No read model, and from 3.3 exactly one list plus one lookup.** *(Slice 6.5 adds a second list,
   `countIdentifierOverlap`, described at the end of this bullet.)* `contract.ts` exists from 2.4
   and exports the register importer's three write commands — `upsertTermsProfile`, `upsertTenancy` and
@@ -184,9 +196,29 @@ by tripping the guard rather than by anticipating it.
   portfolio question (S1 / A4), not "who is in this unit today". It takes no phone number, returns
   no party and no name, and carries neither isolation predicate. Completeness is a query over saved
   rows plus an exception table — never a NOT NULL on `tenancy_party` and never a status column on
-  `tenancy`. Slice 5.6 exports `expireDueTenancies` beside them.   Slice 5.7 exports
+  `tenancy`. **#108:** the same query also surfaces every activation-gate miss as a named rule,
+  using the gate's own identifiers (`lease`, `handover_protocol`, `start_reached`, `within_term`)
+  and never a second copy of those predicates. The clock and the document reader are injected the
+  way the gate already takes them. A tenancy whose every gate check passed is not listed for the
+  gate; the guarantor rule remains its own row. Only misses appear. The exception table still
+  excepts `guarantor` only. Slice 5.6 exports `expireDueTenancies` beside them. Slice 5.7 exports
   `upsertObligationType`, `createObligation`, `getObligation` and `listObligationsForTenancy`.
-  Slice 5.8 adds `listObligationTypes`.
+  Slice 5.8 adds `listObligationTypes`. #106 exports `activationGate` and `activateTenancy`.
+  `REQUIRED_FOR_ACTIVATION` is `['lease', 'handover_protocol']` — one constant, the only list. The
+  gate returns every check with its outcome, passes included: one row per required type (held and
+  approved on the letting, or not), `start_reached`, `within_term`. A fully-approved future
+  letting reports `activatableOn` as the lease start date. `activateTenancy` refuses unless every
+  check passed, the row is `DRAFT`, and the actor is a name. Evidence-side facts arrive through an
+  injected reader: **this module imports no evidence module**.
+  **#107 adds `getTenancy` and `listTenancyParties`.** The sheet is estate's screen; these two
+  reads are what it is allowed to ask. `getTenancy` takes a `tenancy_id` and returns dates, status
+  and `unit_id` — no party and no name. `listTenancyParties` returns `party_id`, `role` and
+  `is_service_contact` for that letting, still no name. The composition root asks parties for the
+  names the title needs. Neither query carries a temporal predicate. An `ENDED` letting is not reopened
+  by the clock or by `activateTenancy`; the register may still write historical `tenancy_party`
+  rows onto an `ENDED` row because that is how a past household is loaded. A required document
+  whose `valid_to` is strictly before today, on an `ACTIVE` letting, is a flag on the gate and
+  never a status change.
   Slice 5.5 adds
   `listTenancyEvents`: every event row on every letting of one unit,
   oldest first, `unit_id` in, field / old → new / actor / source document out, **no party and no
@@ -216,7 +248,8 @@ by tripping the guard rather than by anticipating it.
   an identifier and the caller writes `evidence.match_identifier` for it** (SPEC.md, Security
   defaults); this module writes no audit line, because it does not know who asked.
 - **`tenancy_completeness_exception` (slice 4.8, `src/kernel/migrations/0020_tenancy_completeness.sql`).**
-  `(tenancy_id, rule)` unique. `rule` is `guarantor` today. `at` comes from the injected clock; no
+  `(tenancy_id, rule)` unique. `rule` is `guarantor` today — gate misses are not excepted; they
+  clear when the gate passes. `at` comes from the injected clock; no
   `DEFAULT now()`. `actor` is `-- pii`, same standing as `tenancy_event.actor` until week 5 has
   staff. `reason` is required text, validated at the POST. A second insert of the same pair is a
   no-op. There is no completeness column and no CHECK that a tenancy has a guarantor.

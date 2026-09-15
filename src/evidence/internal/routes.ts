@@ -28,6 +28,7 @@ import {
   readExtractionSettings,
   readOcrSettings,
 } from '../../kernel/config.ts';
+import type { Embedder } from '../../kernel/embeddings.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { Extractor } from '../../kernel/extraction.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
@@ -79,10 +80,15 @@ import {
   listExtractedFields,
 } from './extract.ts';
 import { fileDocument } from './intake.ts';
-import { confirmLeaseTenancy, proposeLeaseTenancy } from './lease.ts';
+import {
+  confirmLeaseTenancy,
+  establishApprovedLease,
+  proposeLeaseTenancy,
+} from './lease.ts';
+import { destinationAfterFiling } from './orchestrate.ts';
+import { listDocumentPassages } from './passages.ts';
 import { readPlace, resolvePlace } from './place.ts';
 import { promoteExtractedField } from './promote.ts';
-import { isProtocolType } from './protocol.ts';
 import {
   type DocumentReading,
   ocrConfigured,
@@ -99,6 +105,7 @@ import {
   documentFileHash,
   sniffExtension,
 } from './storage-path.ts';
+import { pageText as textOfPage } from './verify.ts';
 import type { AnchoredPlace, FieldsScreen, SeedScreen } from './views.ts';
 import {
   renderDocumentsPage,
@@ -119,6 +126,7 @@ export interface DocumentDeps {
   pdf: PdfText;
   ocr?: OcrText;
   extractor?: Extractor;
+  embedder?: Embedder;
   work?: WorkRunner;
   clock: Clock;
   /** The bucket `storage_uri` names. The memory store's stand-in locally (slice 3.2). */
@@ -253,8 +261,7 @@ type Form = Record<string, string | undefined>;
 const TYPE_KEY = /^[a-z][a-z0-9_]*$/;
 /**
  * **`field_key` is the name a value is stored under and is never renamed**, so it is constrained
- * harder than a label: lowercase ASCII, digits and underscores. That is also what makes the money
- * guard's token match on it exact — `fee` cannot fire on a Hebrew label that happens to transliterate.
+ * harder than a label: lowercase ASCII, digits and underscores.
  */
 const FIELD_KEY = /^[a-z][a-z0-9_]{0,62}[a-z0-9]$|^[a-z]$/;
 
@@ -288,7 +295,7 @@ function valueTypeOf(body: unknown): FieldValueType {
     16,
   );
   // Against the catalogue's own array and never a list typed here, so this and the `CHECK` in
-  // `0011_evidence.sql` cannot disagree — and so there is no place to add MONEY by hand.
+  // `0011_evidence.sql` cannot disagree — and so a value type cannot be added by hand at the route.
   if (!(FIELD_VALUE_TYPES as readonly string[]).includes(raw)) {
     throw new KernelError('invalid', 'value_type is not a declared value type');
   }
@@ -756,25 +763,14 @@ export function registerDocumentRoutes(
         },
       });
     }
-    if (
-      isProtocolType(type.typeKey) &&
-      result.verification.verdict === 'verified'
-    ) {
-      return reply.redirect(`/documents/${result.documentId}/seed`);
-    }
-    if (
-      type.typeKey === 'lease' &&
-      tenancyId === null &&
-      result.verification.verdict === 'verified'
-    ) {
-      return reply.redirect(`/documents/${result.documentId}/tenancy`);
-    }
-    if (
-      type.typeKey === 'lease_amendment' &&
-      tenancyId !== null &&
-      result.verification.verdict === 'verified'
-    ) {
-      return reply.redirect(`/documents/${result.documentId}/tenancy`);
+    const next = destinationAfterFiling({
+      documentId: result.documentId,
+      verdict: result.verification.verdict,
+      typeKey: type.typeKey,
+      tenancyId,
+    });
+    if (next) {
+      return reply.redirect(next);
     }
     return renderFiledPage({
       nav: chromeOf(deps, request),
@@ -968,13 +964,14 @@ export function registerDocumentRoutes(
         },
       });
     }
-    if (result.verification.verdict === 'verified') {
-      if (isProtocolType(type.typeKey)) {
-        return reply.redirect(`/documents/${result.documentId}/seed`);
-      }
-      if (type.typeKey === 'lease') {
-        return reply.redirect(`/documents/${result.documentId}/tenancy`);
-      }
+    const next = destinationAfterFiling({
+      documentId: result.documentId,
+      verdict: result.verification.verdict,
+      typeKey: type.typeKey,
+      tenancyId: null,
+    });
+    if (next) {
+      return reply.redirect(next);
     }
     return renderFiledPage({
       nav: chromeOf(deps, request),
@@ -997,21 +994,45 @@ export function registerDocumentRoutes(
     READ,
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
-      const ocrVersion = (await readOcrSettings(createSettings(deps.pool)))
-        .processorVersion;
-      const read = await readFiledDocument(
-        {
-          db: deps.pool,
-          objects: deps.objects,
-          pdf: deps.pdf,
-          ocr: deps.ocr ?? createUnconfiguredOcr(),
-          ocrVersion,
-          audit: createAuditLog(deps.pool, deps.clock),
-          clock: deps.clock,
-          bucket: deps.bucket,
-        },
-        documentId,
-      );
+      const passages = await listDocumentPassages(deps.pool, documentId);
+      const asked = (request.query as { page?: string }).page;
+      let typeKey: string;
+      let labelHe: string;
+      let fileHash: string;
+      let source: 'pdfjs' | 'ocr' | 'none' | 'stored';
+      let pageText: string | null;
+      if (passages.length > 0) {
+        const filed = await getFiledDocument(deps.pool, documentId);
+        typeKey = filed.typeKey;
+        labelHe = filed.labelHe;
+        fileHash = filed.fileHash;
+        source = 'stored';
+        const at = pageIndex(asked, passages.length);
+        pageText = passages[at]?.body ?? '';
+      } else {
+        const ocrVersion = (await readOcrSettings(createSettings(deps.pool)))
+          .processorVersion;
+        const read = await readFiledDocument(
+          {
+            db: deps.pool,
+            objects: deps.objects,
+            pdf: deps.pdf,
+            ocr: deps.ocr ?? createUnconfiguredOcr(),
+            ocrVersion,
+            audit: createAuditLog(deps.pool, deps.clock),
+            clock: deps.clock,
+            bucket: deps.bucket,
+          },
+          documentId,
+        );
+        typeKey = read.typeKey;
+        labelHe = read.labelHe;
+        fileHash = read.fileHash;
+        source = read.source;
+        const at = pageIndex(asked, read.pages.length);
+        const page = read.pages[at] ?? null;
+        pageText = page ? textOfPage(page) : null;
+      }
       // **Slice 6.10.** This was the second unordered `LIMIT 1` over `document_link`'s `SUBJECT`
       // rows, and on a document carrying two of them it drew the page's back link and its building
       // name off whichever came back. One read for both call sites now, and it is the place the
@@ -1024,17 +1045,10 @@ export function registerDocumentRoutes(
       if (identifiers) {
         await logIdentifierRead(deps, request, {
           documentId,
-          typeKey: read.typeKey,
+          typeKey,
           rows: extracted,
         });
       }
-      const asked = (request.query as { page?: string }).page;
-      const at = pageIndex(asked, read.pages.length);
-      const page = read.pages[at] ?? null;
-      const image =
-        page === null
-          ? null
-          : (read.images.find((img) => img.pageNumber === page.number) ?? null);
       html(reply);
       if (anchor.kind === 'UNIT') {
         const unit = await getUnit(deps.pool, anchor.id);
@@ -1045,12 +1059,11 @@ export function registerDocumentRoutes(
           buildingId: unit.building_id,
           buildingName: unit.building_name,
           unitId: unit.unit_id,
-          typeKey: read.typeKey,
-          labelHe: read.labelHe,
-          fileHash: read.fileHash,
-          source: read.source,
-          page,
-          image,
+          typeKey,
+          labelHe,
+          fileHash,
+          source,
+          pageText,
           extracted,
           mayReadIdentifiers: identifiers,
         });
@@ -1064,12 +1077,11 @@ export function registerDocumentRoutes(
           buildingId: detail.building.building_id,
           buildingName: detail.building.name,
           unitId: null,
-          typeKey: read.typeKey,
-          labelHe: read.labelHe,
-          fileHash: read.fileHash,
-          source: read.source,
-          page,
-          image,
+          typeKey,
+          labelHe,
+          fileHash,
+          source,
+          pageText,
           extracted,
           mayReadIdentifiers: identifiers,
         });
@@ -1191,6 +1203,13 @@ export function registerDocumentRoutes(
           approvedBy,
           mayReadIdentifiers: mayReadIdentifiers(request),
         });
+      }
+      const tenancyId = await establishApprovedLease(leaseDeps(), {
+        documentId,
+        confirmedBy: approvedBy,
+      });
+      if (tenancyId) {
+        return reply.redirect(`/estate/tenancies/${tenancyId}`);
       }
       return reply.redirect(
         `/documents/${documentId}/fields?saved=${String(approved)}`,
@@ -1334,6 +1353,13 @@ export function registerDocumentRoutes(
         documentId,
         readBy: requireOperatorEmail(request),
       });
+      if (proposed.typeKey === 'lease') {
+        return reply.redirect(
+          proposed.linkedTenancyId
+            ? `/estate/tenancies/${proposed.linkedTenancyId}`
+            : `/documents/${documentId}/fields`,
+        );
+      }
       html(reply);
       return renderTenancyPage({
         ...proposed,
@@ -1348,6 +1374,18 @@ export function registerDocumentRoutes(
     CONFIRM,
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
+      const confirmedBy = requireOperatorEmail(request);
+      const proposedFirst = await proposeLeaseTenancy(leaseDeps(), {
+        documentId,
+        readBy: confirmedBy,
+      });
+      if (proposedFirst.typeKey === 'lease') {
+        return reply.redirect(
+          proposedFirst.linkedTenancyId
+            ? `/estate/tenancies/${proposedFirst.linkedTenancyId}`
+            : `/documents/${documentId}/fields`,
+        );
+      }
       const fields = formBody(request);
       const roles: Record<string, TenancyRole> = {};
       for (const [name, value] of Object.entries(fields)) {
@@ -1355,16 +1393,11 @@ export function registerDocumentRoutes(
           roles[name.slice(5)] = value as TenancyRole;
         }
       }
-      // `attach_tenancy` is the radio group on the confirm screen. Empty, absent or the literal
-      // `new` is *a new letting*, which is what this flow did and all it could do before 6.5.
-      const attach = fields.attach_tenancy ?? '';
-      const confirmedBy = requireOperatorEmail(request);
       const confirmed = await confirmLeaseTenancy(leaseDeps(), {
         documentId,
         termsProfileName: fields.terms_profile ?? '',
         confirmedBy,
         roles,
-        attachTenancyId: attach === '' || attach === 'new' ? null : attach,
       });
       const proposed = await proposeLeaseTenancy(leaseDeps(), {
         documentId,
@@ -1492,6 +1525,7 @@ async function filingDeps(deps: DocumentDeps) {
     ocr: deps.ocr,
     ocrVersion: ocr.processorVersion,
     extractor: deps.extractor,
+    embedder: deps.embedder,
     extractModel: extraction.model,
     extractReasoningEffort: extraction.reasoningEffort,
     work: deps.work,

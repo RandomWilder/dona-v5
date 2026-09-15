@@ -1,13 +1,13 @@
 ---
 number: 106
 title: "The activation gate, and a tenancy a person activates"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent: 99
 created: 2026-09-15
-closed:
+closed: 2026-09-15
 ---
 
 ## Parent
@@ -60,20 +60,30 @@ Activation is recorded as an event: who made this tenancy live, and when.
 
 ## Acceptance criteria
 
-- [ ] The handover protocol document type is seeded, anchored per letting
-- [ ] A command activates a tenancy only when invoked by a person; no clock activates anything
-- [ ] Activation refuses without an approved lease, and names that reason
-- [ ] Activation refuses without an approved handover protocol, and names that reason
-- [ ] Activation refuses before the lease's start date and after its end date, each with its own reason
-- [ ] The gate returns every requirement it checked with its outcome, passes included
-- [ ] A fully-approved future tenancy reports the date it becomes activatable
-- [ ] The required set is one stated constant, and adding a document to it is a one-line change
-- [ ] Activation writes an event recording who activated and when
-- [ ] The tenancy module imports no evidence module; the readers are injected at the composition root
-- [ ] A policy case, written red first, asserts each refusal reason independently and the passing case, importing the required-set constant
-- [ ] An expired tenancy is ended and admits no new member; a document lapsing after activation raises a flag without changing status
-- [ ] Tenancy and flows specs are edited in the same change
+- [x] The handover protocol document type is seeded, anchored per letting
+- [x] A command activates a tenancy only when invoked by a person; no clock activates anything
+- [x] Activation refuses without an approved lease, and names that reason
+- [x] Activation refuses without an approved handover protocol, and names that reason
+- [x] Activation refuses before the lease's start date and after its end date, each with its own reason
+- [x] The gate returns every requirement it checked with its outcome, passes included
+- [x] A fully-approved future tenancy reports the date it becomes activatable
+- [x] The required set is one stated constant, and adding a document to it is a one-line change
+- [x] Activation writes an event recording who activated and when
+- [x] The tenancy module imports no evidence module; the readers are injected at the composition root
+- [x] A policy case, written red first, asserts each refusal reason independently and the passing case, importing the required-set constant
+- [x] An expired tenancy is ended and admits no new member; a document lapsing after activation raises a flag without changing status
+- [x] Tenancy and flows specs are edited in the same change
 
 ## Blocked by
 
 None (can start immediately).
+
+## Comment — 2026-09-15
+
+Closed: person command `activateTenancy`, gate returns every check including passes, policy case
+red-first against `REQUIRED_FOR_ACTIVATION`. Clock still only ends; it never writes `ACTIVE`. A
+TENANCY-linked document of a required type counts as approved. Lapse after activation is a flag on
+the gate, status unchanged. Register may still write historical parties onto `ENDED` rows — that
+is load, not a live reopen. No screen in this change; #107 wires the page and injects the reader
+at the composition root.
+

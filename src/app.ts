@@ -17,6 +17,7 @@ import {
   listDocumentTypes,
   listLinkedDocuments,
   listPromotedFieldsForUnit,
+  listTenancyDocumentFacts,
   registerDocumentRoutes,
   searchDocuments,
   signLinkedDocuments,
@@ -24,6 +25,7 @@ import {
 } from './evidence/contract.ts';
 import { renderIndexPage } from './index-page.ts';
 import { type Clock, systemClock } from './kernel/clock.ts';
+import type { Embedder } from './kernel/embeddings.ts';
 import { httpStatus, KernelError, toErrorBody } from './kernel/errors.ts';
 import type { Extractor } from './kernel/extraction.ts';
 import {
@@ -36,6 +38,7 @@ import { createPdfjsText, type PdfText } from './kernel/pdf.ts';
 import { registerUiAssets } from './kernel/ui/assets.ts';
 import { registerFormBodies } from './kernel/ui/forms.ts';
 import type { WorkRunner } from './kernel/work.ts';
+import { listPartyNames } from './parties/contract.ts';
 import {
   parseDocumentTypeForm,
   parseObligationTypeForm,
@@ -59,10 +62,14 @@ import {
 } from './staff/contract.ts';
 import { CALLS_STUB, renderStubPage } from './stub-page.ts';
 import {
+  activateTenancy,
+  activationGate,
   expireDueTenancies,
+  getTenancy,
   listIncompleteTenancies,
   listObligationTypes,
   listTenancyEvents,
+  listTenancyParties,
   recordCompletenessException,
   upsertObligationType,
 } from './tenancy/contract.ts';
@@ -83,6 +90,7 @@ export interface AppDeps {
   /** The OCR reader. Absent or unconfigured leaves scans unverified. */
   ocr?: OcrText;
   extractor?: Extractor;
+  embedder?: Embedder;
   work?: WorkRunner;
   /** The bucket a `storage_uri` names, which is not the same statement as which store is running. */
   bucket?: string;
@@ -432,8 +440,16 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     listPromotedFieldsForUnit,
     listTenancyEvents,
     expireDueTenancies,
-    listIncompleteTenancies,
+    listIncompleteTenancies: (db) =>
+      listIncompleteTenancies(db, clock, listTenancyDocumentFacts),
     recordCompletenessException,
+    getTenancy,
+    listTenancyParties,
+    listPartyNames,
+    activationGate: (db, tenancyId) =>
+      activationGate(db, clock, tenancyId, listTenancyDocumentFacts),
+    activateTenancy: (db, spec) =>
+      activateTenancy(db, clock, spec, listTenancyDocumentFacts),
   });
   // Slice 5.1, and from 5.2 no longer the only routes behind a session: every route this
   // application registers declares a stance above, and the hook calls `requireStaff` once.
@@ -445,6 +461,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     pdf: deps.pdf ?? createPdfjsText(),
     ocr: deps.ocr,
     extractor: deps.extractor,
+    embedder: deps.embedder,
     work: deps.work,
     bucket,
     chrome: signedInChrome,

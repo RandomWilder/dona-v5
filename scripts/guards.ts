@@ -240,6 +240,7 @@ const PII_COLUMNS = new Set([
 const PII_QUALIFIED_COLUMNS = new Set([
   'party_contact.value',
   'extracted_field.value',
+  'document_passage.body',
   'tenancy_event.actor',
 ]);
 

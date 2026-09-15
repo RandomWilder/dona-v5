@@ -1,13 +1,13 @@
 ---
 number: 108
 title: "Gate misses reach the incomplete-tenancy queue as named rules"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: [106]
 parent: 99
 created: 2026-09-15
-closed:
+closed: 2026-09-15
 ---
 
 ## Parent
@@ -29,14 +29,20 @@ Only misses appear. A tenancy whose gate passes is not incomplete and does not e
 
 ## Acceptance criteria
 
-- [ ] A draft tenancy missing an approved lease appears in the existing incomplete-tenancy queue, with a named rule saying so
-- [ ] A draft tenancy missing an approved handover protocol appears with its own named rule
-- [ ] A tenancy blocked only by its start date appears with the rule naming that, distinct from a missing document
-- [ ] Rule identifiers come from the activation gate; the queue holds no second copy of the rules
-- [ ] A tenancy whose gate passes does not appear in the queue
-- [ ] No second queue or list is introduced
-- [ ] The queue screen is clicked on a running local server before merge
+- [x] A draft tenancy missing an approved lease appears in the existing incomplete-tenancy queue, with a named rule saying so
+- [x] A draft tenancy missing an approved handover protocol appears with its own named rule
+- [x] A tenancy blocked only by its start date appears with the rule naming that, distinct from a missing document
+- [x] Rule identifiers come from the activation gate; the queue holds no second copy of the rules
+- [x] A tenancy whose gate passes does not appear in the queue
+- [x] No second queue or list is introduced
+- [x] The queue screen is clicked on a running local server before merge
 
 ## Blocked by
 
 - #106 — The activation gate, and a tenancy a person activates
+
+## Comment — 2026-09-15
+
+Closed: `39499d8`. Gate misses join `listIncompleteTenancies` as the gate's own rule ids. Queue
+clicked on `:3000` (session fetch; Google login blocked the browser tab). Exception write remains
+ערב only.

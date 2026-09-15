@@ -4,10 +4,25 @@
 // Write commands, two reads, the completeness query, the change log, the clock close, and from
 // 5.7 Obligation / ObligationType (`listObligationTypes` at 5.8 for the settings screen). Who is in a unit *today* is still `src/scope/`'s answer;
 // `listUnitTenancies` answers which lettings a flat has; `listIncompleteTenancies` answers which
-// of those are missing an ערב; `listTenancyEvents` answers what changed on those lettings. None
+// of those miss a named completeness rule (ערב, and from #108 each activation-gate miss);
+// `listTenancyEvents` answers what changed on those lettings. None
 // takes a phone.
 // SPEC-tenancy.md sets out the difference, because the line between the two is the module boundary.
 
+export type {
+  ActivateTenancySpec,
+  ActivationCheck,
+  ActivationFlag,
+  ActivationGate,
+  RequiredActivationDocument,
+  TenancyDocumentFact,
+  TenancyDocumentsReader,
+} from './internal/activation.ts';
+export {
+  activateTenancy,
+  activationGate,
+  REQUIRED_FOR_ACTIVATION,
+} from './internal/activation.ts';
 export type {
   PromotedFieldSpec,
   PromotedTenancyField,
@@ -36,9 +51,15 @@ export {
 } from './internal/completeness.ts';
 export type { TenancyEventRow } from './internal/events.ts';
 export { listTenancyEvents } from './internal/events.ts';
-export type { UnitLetting } from './internal/lettings.ts';
+export type {
+  TenancyPartyRow,
+  TenancyRow,
+  UnitLetting,
+} from './internal/lettings.ts';
 export {
   countIdentifierOverlap,
+  getTenancy,
+  listTenancyParties,
   listUnitTenancies,
 } from './internal/lettings.ts';
 export type {

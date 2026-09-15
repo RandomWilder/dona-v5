@@ -23,9 +23,15 @@ around; the rest are what makes them enforceable.
    `phone → PartyContact (valid today) → Party → TenancyParty → Tenancy (active today) → Unit`.
    **The scope is a view, never a column.** No `current_tenant` column exists anywhere; a migration
    introducing one fails the build. A model that misbehaves cannot widen a scope it never held.
-2. **Money never touches the agent.** No tenant-facing price and no balance — ever, not just v1.
-   Financials stay in the Priority ERP behind read-only keys. A question about money is answered by
-   refusal and handoff, never by an estimate.
+2. ~~**Money never touches the agent.**~~ **Retired 15 Sep 2026 by
+   [ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md).** An amount printed on a document
+   is ordinary data: readable, capturable, approvable, promotable, retrievable, quotable and
+   computable, under the rules that govern every other value on a contract and no others. The
+   number is kept and the slot is not reused, because the rules are cited by number and renumbering
+   would rewrite every citation silently. What has *not* changed: the Priority ERP is still the
+   system of record for what anybody owes, this platform holds no balance and no ticket asks it to,
+   and **rule 3 below is untouched** — an amount is a model-derived value like any other and may not
+   decide anything.
 3. **No AI in the responsibility decision or the state machine.** Both are inspectable, versioned and
    defensible in a dispute a year later, and a dispute only ever asks about the past. Every resolved
    call snapshots the `policy_version_id` that decided it; rules supersede by `effective_from` and
@@ -191,20 +197,22 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   and it is drawn because 6.5 found an OPERATOR reading a ת.ז. off the read overlay.** The rule is
   **captured is governed; printed is the document.** `party.national_id.read` governs this system's
   own copy of an identifier — the `extracted_field` row, `party.national_id`, and **the transcript we
-  make of the paper** — and it does not govern the paper. Two consequences, both testable:
-  **the word-box transcript on `/documents/:id/read` is withheld below the permission, on every
-  document type.** The `title` attribute holding an OCR word is not the paper; it is our
-  transcription of it, as text, in our own response — sweepable, loggable, copy-pasteable and
-  reachable by anything that later consumes a rendered page. It is withheld wholesale rather than
-  masked word by word, because a run split across OCR tokens (`312`, `345`, `678`) matches no pattern
-  applied to one token, and because gating on the type's catalogue declaration would be the wrong
-  proxy: a declaration governs what is *captured*, not what a page happens to print. An operator
-  keeps the page image, the word-box geometry, every non-identifier captured row with its value and
-  confidence, and the promote buttons; what they lose is a hover tooltip.
-  **The page image is not withheld, and that is deliberate.** The same role already holds a
-  fifteen-minute signed read of the document's bytes (5.4), so withholding a picture of the page
-  would claim a control this system does not have — and a control that is believed and absent is
-  worse than one that was never claimed. Whoever may open a document may read what is printed on it.
+  make of the paper** — and it does not govern the paper. **#102 deleted the word-box overlay**, so
+  the leak 6.5 found (a withheld identifier in a `title` on a word box) has no markup left to live
+  in. Two consequences, both still testable:
+  **the per-page transcript on `/documents/:id/read` is withheld below the permission, on every
+  document type.** That transcript is not the paper; it is our copy of it, as text, in our own
+  response — sweepable, loggable, copy-pasteable and reachable by anything that later consumes a
+  rendered page. It is withheld wholesale rather than masked word by word, because a run split
+  across OCR tokens (`312`, `345`, `678`) matches no pattern applied to one token, and because
+  gating on the type's catalogue declaration would be the wrong proxy: a declaration governs what
+  is *captured*, not what a page happens to print. An operator keeps every non-identifier captured
+  row with its value, page number and quality, and the link to the ledger; what they lose is the
+  page text.
+  **There is no page image on this screen.** Whoever may open a document may still take a
+  fifteen-minute signed read of the bytes (5.4). Hiding a picture of a page we no longer fetch
+  would claim nothing. The overlay's job — check a value against the paper — is the page number
+  beside each extracted value, because the administrator has the file in front of them.
   **Two guards hold all of it**, and neither runs through the agent: `tests/policy/identifier.test.ts`
   asserts that nothing `src/scope/` serves carries an identifier-shaped run, with a party that has a
   `national_id` and a document that has an `extracted_field` identifier row seeded so the case has
@@ -249,7 +257,7 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   | Third party | What it sees | From |
   |---|---|---|
   | **OpenAI** | Passage text sent for embedding, and document text sent for comprehension | Today, through the CI-only `OPENAI_API_KEY` — authored fixture text with no personal data in it. Tenant text from week 4. |
-  | **Google Cloud** | Whole page images (Document AI OCR, ADR-0002, processor location **`eu`** — Document AI does not serve `me-west1`); every stored document and row (Cloud Storage, Cloud SQL) as processor | Week 4 for OCR (slice 4.1); today for storage |
+  | **Google Cloud** | Document bytes for OCR (Document AI, ADR-0002, imageless mode, processor location **`eu`** — Document AI does not serve `me-west1`); every stored document and row (Cloud Storage, Cloud SQL) as processor | Week 4 for OCR (slice 4.1); today for storage |
   | **Meta — WhatsApp Cloud API** | Every message either end of a conversation sends | Week 9 |
   | **Twilio** | The OTP message and the mobile number it goes to, as the SMS fallback | Week 9 |
   | **Anthropic** | This repository, read by Claude Code as it is built | Today, **development-time only**. It never sees tenant text, and the mechanism that makes that true is that tier 2 never enters the repo — `.gitignore`, the bucket, and this rule, not an assurance. |
@@ -276,8 +284,10 @@ Only one of them is ours, and it is the one no gate runs against.
    text is week 3's; and A7's real worry — no gate green because it was measured against a document
    we wrote to pass it — binds at the **week-4 accuracy number**, which A7 already assigns to tier 2.
    **Committed to the repo; the substrate every gate runs against.** What a tier-1 file may never
-   contain is asserted by a test rather than promised in a comment: no sum of money (rule 2), no
-   identifier-shaped run, no real person. The published PDFs themselves arrive with the Drive fuse at
+   contain is asserted by a test rather than promised in a comment: no identifier-shaped run, no real
+   person. **The sum-of-money case is deleted with rule 2**
+   ([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)) — a specimen lease that may not
+   print a rent is a specimen the capture path's own fields cannot be measured against. The published PDFs themselves arrive with the Drive fuse at
    week 3 and do not change what tier 1 is for (slice 1.12).
 2. **Real documents from Dona Dom** — they measure accuracy against scans, handwriting and
    signatures, and they do nothing else. They live in a dated bucket of their own with a lifecycle
@@ -308,7 +318,9 @@ its NOT NULL foreign key needs a target for (2.2), `0008_occupancy_view.sql` is 
 view (2.3), `0009_import_natural_keys.sql` gives `party`, `party_contact` and `terms_profile`
 the keys the register importer needs to be run twice (2.4), `0010_scale_indexes.sql` carries the
 one index 2.6 measured its way to, `0011_evidence.sql` is the evidence plane — E15, E16, E12 and
-E13, the type catalogue before the document that points at it (3.1), `0012_assets.sql` is E14's
+E13, the type catalogue before the document that points at it (3.1), `0030_document_passage.sql`
+is one row per page of a filed document (the text as printed, plus the welded embedding; no
+vector index, [ADR-0009](docs/decisions/ADR-0009-passage-embeddings-have-no-index-yet.md)), `0012_assets.sql` is E14's
 three-column Provider stub plus E11 Asset (3.5), so R11 has a table to point at and Q3 and Q7 have
 a row to read, and `0013_asset_natural_key.sql` is the unique index `(space_id, asset_type)` that
 makes a re-import and a second A6 confirm the same fact stated twice. `0021_staff.sql` is the admin edge's own three
@@ -341,9 +353,12 @@ writes too**, at `POST /documents/types/:typeKey/fields` under `settings.write` 
 8 is true of both halves for the first time. Until then a field cost a commit to
 `src/evidence/fixtures/document-types.ts` and a `npm run seed:doctypes`, which is a deploy wearing a
 seed's clothes, and it was paid three times (3.1, 3.5, 6.4). A correction is a new row at a new
-`effective_from` and never an edit (R18), and **no declaration may name money** — the vocabulary
-guard in `src/evidence/internal/money.ts` is what keeps foundation rule 2 enforceable now that the
-field list is data, and `tests/policy/` is where it is proved. **E12 still omits three columns the published
+`effective_from` and never an edit (R18). **A declaration may name money**, from 15 Sep 2026: the
+vocabulary guard that refused one is deleted with the rule it enforced
+([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)), and the `lease` type declares
+`rent_amount` · `rent_currency` · `deposit_amount` · `deposit_currency` as four seed rows at
+`2026-09-15` — no `MONEY` value type, no migration, and a currency paired with each amount because a
+lease can price the deposit in one currency and the rent in another. **E12 still omits three columns the published
 Data Model's `Document` card carries** — `state`, `superseded_by` and `tenant_visible` — each for a
 reason recorded in [SPEC-evidence.md](SPEC-evidence.md) and `tasks/evidence/3.1.md`. **`uploaded_by`
 arrived at 5.4**: a nullable foreign key to `staff_account`, filled on every document filed through
@@ -420,8 +435,16 @@ person. **A transcription is not a disclosure; a register is.** What was not all
 happen, is the rule lapsing quietly because a document screen arrived — the five earlier slices
 entitled to lift it (5.2, 5.4, 5.5, 5.6, 5.8) each wrote down that they had not, and this one names
 the line instead of adding a sixth silence. `tests/ui/tokens.test.ts` holds it: the person names in
-its fixtures may appear only on the document-shaped screens its registry names, and a name rendered
+its fixtures may appear only on the screens its registry names, and a name rendered
 anywhere else fails the build.
+
+**#107 is the seventh writing, and it names a second shape rather than relaxing the first.** A
+tenancy page is about **one letting**, reached by that letting's identifier, not a list and not a
+search. The title that lets an administrator recognise it is the tenant's name plus the address and
+apartment number; the household is printed read-only because it was signed on the approval ledger.
+That is still not a register: `/estate`, search, the occupancy chip and the incomplete queue still
+carry a state and a count and never a name. A permission gate on those names is a later change that
+does not redraw the screen.
 
 **Slice 6.1 gave estate its own first write route and this system its seventh permission.** `GET
 /estate/buildings/new` and `POST /estate/buildings` are flow **A11** ([SPEC-flows.md](SPEC-flows.md))

@@ -22,10 +22,12 @@ import {
 import type { IntakeDeps } from './contract.ts';
 import {
   applyDocumentTypeCatalogue,
+  approveExtractedField,
   confirmLeaseTenancy,
   fileDocument,
   listExtractedFields,
   listPromotedFieldsForUnit,
+  listTenancyDocumentFacts,
   proposeLeaseTenancy,
   renderTenancyPage,
 } from './contract.ts';
@@ -150,16 +152,16 @@ async function confirmLease(
   const profile = `a3-${unitId.slice(24)}`;
   await upsertTermsProfile(db, profile);
   const documentId = await fileLease(db, unitId);
-  const proposed = await proposeLeaseTenancy(leaseDeps(db), {
-    documentId,
-    readBy: READ_BY,
-  });
-  const roles = Object.fromEntries(
-    proposed.people.map((person) => [
-      person.extractedFieldId,
-      person.proposedRole,
-    ]),
-  );
+  const rows = await listExtractedFields(db, documentId);
+  for (const row of rows) {
+    if (row.fieldKey === 'tenant_name' && row.approvedAt === null) {
+      await approveExtractedField(leaseDeps(db), {
+        extractedFieldId: row.extractedFieldId,
+        approvedBy: READ_BY,
+        mayReadIdentifiers: true,
+      });
+    }
+  }
   const confirmed = await confirmLeaseTenancy(
     {
       db,
@@ -170,7 +172,7 @@ async function confirmLease(
       documentId,
       termsProfileName: profile,
       confirmedBy: 'אסף',
-      roles,
+      roles: {},
     },
   );
   return { documentId, tenancyId: confirmed.tenancyId };
@@ -188,8 +190,17 @@ describe('evidence · flow A3 completes a tenancy from an addendum', () => {
         await applyDocumentTypeCatalogue(db, seedDocumentTypes);
         const unitId = await insertUnit(db, '12', ADDRESS);
         const { tenancyId } = await confirmLease(db, unitId);
-        const waiting = await listIncompleteTenancies(db);
-        assert.ok(waiting.some((row) => row.tenancy_id === tenancyId));
+        const waiting = await listIncompleteTenancies(
+          db,
+          fixedClock(AT),
+          listTenancyDocumentFacts,
+        );
+        assert.ok(
+          waiting.some(
+            (row) =>
+              row.tenancy_id === tenancyId && row.missing === 'guarantor',
+          ),
+        );
         const documentId = await fileAmendment(
           db,
           unitId,
@@ -234,8 +245,17 @@ describe('evidence · flow A3 completes a tenancy from an addendum', () => {
         assert.equal(guarantor.rows.length, 1);
         assert.equal(guarantor.rows[0]?.is_service_contact, false);
 
-        const cleared = await listIncompleteTenancies(db);
-        assert.ok(!cleared.some((row) => row.tenancy_id === tenancyId));
+        const cleared = await listIncompleteTenancies(
+          db,
+          fixedClock(AT),
+          listTenancyDocumentFacts,
+        );
+        assert.ok(
+          !cleared.some(
+            (row) =>
+              row.tenancy_id === tenancyId && row.missing === 'guarantor',
+          ),
+        );
 
         const again = await confirmLeaseTenancy(deps, {
           documentId,

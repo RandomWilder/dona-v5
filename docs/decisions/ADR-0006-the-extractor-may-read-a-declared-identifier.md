@@ -74,3 +74,13 @@ portfolio.
 - **Which other types may declare an identifier.** The `id` document type still declares no fields
   (`src/evidence/fixtures/document-types.ts`), and that remains a rule rather than a schedule: a type
   whose entire content is an identifier is a different question from a lease that names one.
+
+## Amendment — 2026-09-15 (#103)
+
+**The passage store embeds the stored copy, which is unmasked.** Decision 3 already said the stored
+copy is never masked. #99 / #103 made that copy a per-page passage whose embedding is computed from
+the same text: one store, one embedding run. Masking before the embedder would both hide a tenant's
+own identifier from them at retrieval and corrupt the vector. Decision 1 still binds **tenant-facing
+model output** and the retrieval *read* (stance); it does not bind the write into
+`document_passage`. **#104 is that read:** the tenant stance masks identifier-shaped runs on the way
+out; the administrator stance does not. There is still no second, masked index.

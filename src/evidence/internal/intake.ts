@@ -19,6 +19,7 @@
 import type { AuditLog } from '../../kernel/audit.ts';
 
 import type { Clock } from '../../kernel/clock.ts';
+import type { Embedder } from '../../kernel/embeddings.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { Extractor } from '../../kernel/extraction.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
@@ -37,6 +38,7 @@ import {
   numberWords,
   parseMeasuredWords,
 } from './extract.ts';
+import { embedderConfigured, writeDocumentPassages } from './passages.ts';
 import { type DocumentReading, readForVerdict } from './read.ts';
 import {
   documentContentTypes,
@@ -64,6 +66,8 @@ export interface IntakeDeps {
   extractor?: Extractor;
   extractModel?: string;
   extractReasoningEffort?: string;
+  /** The embedder passages are written through. Absent or unconfigured skips the store. */
+  embedder?: Embedder;
   work?: WorkRunner;
   audit: AuditLog;
   clock: Clock;
@@ -314,6 +318,14 @@ export async function fileDocument(
   );
 
   await extractAfterFile(deps, filed.id, pagesForExtract);
+  if (embedderConfigured(deps.embedder)) {
+    await writeDocumentPassages(
+      deps.db,
+      filed.id,
+      pagesForExtract,
+      deps.embedder,
+    );
+  }
 
   return {
     filed: true,

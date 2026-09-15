@@ -295,10 +295,14 @@ they skip — right on a clean clone, a lie in CI, where the job goes green havi
 `REQUIRE_POSTGRES=1` and `REQUIRE_EMBEDDINGS=1` turn the skip back into a failure, and both are set
 on the evals job.
 
-Two standing refusal cases carry a constraint that is never relaxed, not even in v2: **no
-tenant-facing price and no balance, ever.** A question about money is answered by refusal and
-handoff, never by an estimate — "around ₪400" against an ₪850 invoice is a broken promise, in
-writing, timestamped, on the client's behalf.
+**This paragraph used to say two standing refusal cases carried "no tenant-facing price and no
+balance, ever", never relaxed even in v2.** Foundation rule 2 is retired
+([ADR-0008](decisions/ADR-0008-money-is-ordinary-data.md)) — an amount on a document is ordinary
+data, and the golden set now ranks questions about a printed rent and deposit (#104). What survives
+is narrower and is a fact about what is built rather than a refusal: **this platform holds no
+balance**, Priority is the system of record for what anybody owes, and no module here writes one.
+What the agent says to a tenant about money is undecided and belongs to the channel and calls
+modules, which do not exist yet.
 
 `npm run measure` is the instrument beside the gate: it prints every result set with distances, which
 chunks win unrelated questions, and whether any threshold separates a right answer from a wrong one.

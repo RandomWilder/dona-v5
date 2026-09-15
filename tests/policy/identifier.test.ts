@@ -134,14 +134,11 @@ const srcRoot = path.resolve(
 );
 
 describe('policy · the copy sent to the embedder', () => {
-  it('does not exist yet, which is the only reason it is unmasked', async () => {
-    // ADR-0006 decision 1 binds masking to the embedder's copy and to any model call whose output
-    // can reach a tenant. **Slice 9.1 builds that**, hard-bounded by week 10; 6.6 owes the guard.
-    // What 6.6 can honestly assert today is that there is no such copy: `src/kernel/embeddings.ts`
-    // has no caller anywhere in `src/`, so no text this system holds has been swept into an index.
-    //
-    // This is not a guard that passes because it looked at nothing — it counts what it read, the
-    // way `src/kernel/boundary.test.ts` does, and a file list that shrinks to nothing fails.
+  it('embeds the stored passage as printed, identifiers included', async () => {
+    // ADR-0006 decision 1 used to mean "mask before the embedder". #103 / #99 reversed that for
+    // the passage store: one store, one embedding run, text as printed; tenant-stance masking is
+    // a later read. Decision 1 still binds tenant-facing model output. This case names the caller
+    // rather than asserting there is none.
     const files: string[] = [];
     for await (const entry of glob('**/*.ts', { cwd: srcRoot })) {
       files.push(entry);
@@ -152,14 +149,32 @@ describe('policy · the copy sent to the embedder', () => {
     for (const file of files) {
       if (file.startsWith(`kernel${path.sep}embeddings`)) continue;
       const source = await readFile(path.join(srcRoot, file), 'utf8');
-      if (/from\s+'[^']*embeddings\.ts'/.test(source)) callers.push(file);
+      if (/embedder\.embed\(/.test(source)) callers.push(file);
     }
+    const expected = [
+      `evidence${path.sep}internal${path.sep}passages.ts`,
+      `evidence${path.sep}internal${path.sep}search.ts`,
+    ];
     assert.deepEqual(
-      callers,
-      [],
-      `${callers.join(', ')} embeds. ADR-0006 decision 1: the copy sent to the embedder is masked ` +
-        'first. That is slice 9.1, and the slice that wires a caller rewrites this case to assert ' +
-        'the masking rather than the absence.',
+      callers.sort(),
+      expected,
+      `${callers.join(', ')} also calls embedder.embed; add them here only if they embed the stored copy unmasked`,
     );
+    const writer = await readFile(
+      path.join(srcRoot, expected[0] ?? ''),
+      'utf8',
+    );
+    assert.equal(writer.includes('identifier.ts'), false);
+    assert.match(writer, /pageText\(page\)/);
+    assert.match(writer, /embedder\.embed\(bodies\)/);
+    const reader = await readFile(
+      path.join(srcRoot, expected[1] ?? ''),
+      'utf8',
+    );
+    assert.match(reader, /maskIdentifierRuns/);
+    assert.match(reader, /embedder\.embed\(\[question\]\)/);
+    assert.match(reader, /stance: RetrievalStance/);
+    assert.doesNotMatch(reader, /stance\?:/);
+    assert.doesNotMatch(reader, /stance\s*=\s*['"]/);
   });
 });

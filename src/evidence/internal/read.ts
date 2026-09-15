@@ -3,9 +3,9 @@
 // appear, and never turn a miss into a 503.
 import type { AuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
+import type { Embedder } from '../../kernel/embeddings.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
 import {
-  type OcrPageImage,
   type OcrText,
   onlineOcrByteLimit,
   onlineOcrPageLimit,
@@ -13,9 +13,11 @@ import {
 import type { PdfPage, PdfText } from '../../kernel/pdf.ts';
 import {
   getFiledDocument,
+  listDocumentsWithoutPassages,
   listUnverifiedDocuments,
   updateVerificationVerdict,
 } from './documents.ts';
+import { writeDocumentPassages } from './passages.ts';
 import {
   documentContentTypes,
   parseStorageUri,
@@ -46,7 +48,6 @@ export interface DocumentRead {
   fileHash: string;
   verification: Verification;
   pages: PdfPage[];
-  images: OcrPageImage[];
   source: 'pdfjs' | 'ocr' | 'none';
 }
 
@@ -94,7 +95,6 @@ export async function readFiledDocument(
             matchedTerms: [],
           },
     pages: read.pages,
-    images: read.images,
     source: read.source,
   };
 }
@@ -281,23 +281,88 @@ export async function sweepUnverified(
   return report;
 }
 
+export interface PassageSweepDeps {
+  db: Queryable;
+  objects: ObjectStore;
+  pdf: PdfText;
+  ocr?: OcrText;
+  ocrVersion?: string;
+  embedder: Embedder;
+  bucket: string;
+}
+
+export interface PassageSweepReport {
+  examined: number;
+  written: number;
+  unchanged: number;
+  failed: number;
+}
+
+export async function sweepMissingPassages(
+  deps: PassageSweepDeps,
+  only?: { documentIds?: readonly string[] },
+): Promise<PassageSweepReport> {
+  const wanted = only?.documentIds ? new Set(only.documentIds) : null;
+  const rows = (await listDocumentsWithoutPassages(deps.db)).filter((row) =>
+    wanted ? wanted.has(row.documentId) : true,
+  );
+  const report: PassageSweepReport = {
+    examined: 0,
+    written: 0,
+    unchanged: 0,
+    failed: 0,
+  };
+  for (const row of rows) {
+    report.examined += 1;
+    try {
+      const { path } = parseStorageUri(row.storageUri, deps.bucket);
+      const object = await deps.objects.read(path);
+      const reading = await readForVerdict(
+        {
+          pdf: deps.pdf,
+          ocr: deps.ocr,
+          ocrVersion: deps.ocrVersion,
+        },
+        {
+          bytes: object.bytes,
+          extension: sniffExtension(object.bytes),
+          verificationTerms: row.verificationTerms,
+        },
+      );
+      if (reading.pages.length === 0) {
+        report.unchanged += 1;
+        continue;
+      }
+      await writeDocumentPassages(
+        deps.db,
+        row.documentId,
+        reading.pages,
+        deps.embedder,
+      );
+      report.written += 1;
+    } catch {
+      report.failed += 1;
+    }
+  }
+  return report;
+}
+
 async function readBytes(
   deps: Pick<ReadDeps, 'pdf' | 'ocr' | 'ocrVersion'>,
   bytes: Buffer,
 ): Promise<{
   pages: PdfPage[];
-  images: OcrPageImage[];
   source: DocumentRead['source'];
 }> {
   const extension = sniffExtension(bytes);
   if (extension === 'pdf') {
     const pages = await deps.pdf.pages(bytes);
     if (pages.some((page) => page.items.length > 0)) {
-      return { pages, images: [], source: 'pdfjs' };
+      return { pages, source: 'pdfjs' };
     }
   }
   if (!ocrConfigured(deps.ocr)) {
-    return { pages: [], images: [], source: 'none' };
+    return { pages: [], source: 'none' };
   }
   try {
     const result = await deps.ocr.pages(
@@ -305,9 +370,9 @@ async function readBytes(
       documentContentTypes[extension],
       deps.ocrVersion,
     );
-    return { pages: result.pages, images: result.images, source: 'ocr' };
+    return { pages: result.pages, source: 'ocr' };
   } catch {
-    return { pages: [], images: [], source: 'none' };
+    return { pages: [], source: 'none' };
   }
 }
 

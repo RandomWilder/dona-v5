@@ -41,8 +41,10 @@ import {
 // because of rows another run left behind -- the same discipline
 // tests/policy/'s rolled-back transactions have.
 //
-// Replaced, not extended, the day ingestion exists: point `search` at
-// `searchClauses` and this file's DDL goes away.
+// Replaced, not extended, the day the golden set grades `searchPassages` over
+// filed pages instead of these clause rows: point `retrieve` at that command
+// and this file's DDL goes away. Production search is already that command
+// (#104); ranking cases still need clause-sized refs, which pages are not.
 
 /** A hit, plus which corpus it came from -- what the grounder reads. */
 export interface CorpusHit extends RankedHit {
