@@ -306,7 +306,8 @@ It decides what a ranking change should *be*; `npm run evals` decides whether it
 
 ## 8. The loop
 
-**Per ticket.** The ticket comes off the tracker (`gh issue list --label ready-for-agent`), already
+**Per ticket.** The ticket comes off the tracker (an open file in `issues/` labelled
+`ready-for-agent`), already
 carrying acceptance criteria and its blocking edges. `/implement` drives steps 2–4.
 
 1. Read the ticket and its comments. Confirm every blocker is closed.

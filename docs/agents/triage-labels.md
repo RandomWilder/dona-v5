@@ -11,7 +11,9 @@ label strings used in this repo's issue tracker.
 | `ready-for-human`          | `ready-for-human`    | Requires human implementation            |
 | `wontfix`                  | `wontfix`            | Will not be actioned                     |
 
-The defaults are kept as-is: this repo had no label vocabulary of its own to collide with. The five
-labels were created on `RandomWilder/dona-v5` when the skills were adopted.
+The defaults are kept as-is: this repo had no label vocabulary of its own to collide with. A label is
+a string in an issue file's `labels` list — see `docs/agents/issue-tracker.md`. There is no label
+registry to create one in, so the five above are the whole vocabulary; adding a sixth means adding a
+row here first.
 
 Edit the right-hand column to match whatever vocabulary you actually use.

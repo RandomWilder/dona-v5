@@ -31,7 +31,9 @@ workflow, not alongside it.
 
 ### Issue tracker
 
-GitHub Issues on `RandomWilder/dona-v5`, via `gh`. See [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).
+Local Markdown files in [issues/](issues/), one per issue, committed with the work. See
+[docs/agents/issue-tracker.md](docs/agents/issue-tracker.md) for the format and why it is not GitHub
+Issues. Pull requests stay on GitHub.
 
 ### Triage labels
 

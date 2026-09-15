@@ -5,7 +5,7 @@
 >
 > **The body of this file is dated 3 Sep 2026 and was written before any code existed.** Its
 > decisions and reasoning still hold; its *status* claims do not. **For where the project actually
-> is, run `gh issue list`** — the open tickets and their blocking edges are the current state — then
+> is, read [issues/](issues/)** — the open tickets and their blocking edges are the current state — then
 > read [docs/fuses.md](docs/fuses.md) for what is waiting on someone else. The slice-and-week process
 > that ran from 6 to 15 Sep 2026 is archived at [archive/tasks-w1-7/](archive/tasks-w1-7/) and its
 > sixty-seven evidence files are the record of what was proved in that period

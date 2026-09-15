@@ -32,6 +32,7 @@
 - `.claude/hooks/` has teeth: destructive shell commands are blocked, and a write under
   `src/<module>/` runs that module's tests and reports the failures back.
 - Secrets only through `infra/set-secret.sh`; **real tenant documents never enter this repo**.
-- Now: `gh issue list` · Process: `docs/pipeline.md` · `CLAUDE.md` §Agent skills · Decisions:
+- Now: `issues/` (open = `grep -l 'status: open' issues/*.md`) · Process: `docs/pipeline.md` ·
+  `CLAUDE.md` §Agent skills · Decisions:
   `docs/decisions/` · What exists: `SPEC.md` Status. **`tasks/` is archived at
   `archive/tasks-w1-7/`** (ADR-0007) — code comments citing `tasks/evidence/<n>.md` resolve there.
