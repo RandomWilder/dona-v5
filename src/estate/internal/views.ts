@@ -1290,7 +1290,7 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
           <tbody>
             ${sheet.documents.map(
               (doc) => h`<tr>
-                <td class="value"><a href="/documents/${doc.documentId}/read">${doc.labelHe}</a></td>
+                <td class="value"><a href="/documents/${doc.documentId}/${doc.typeKey === 'lease' ? 'fields' : 'read'}">${doc.labelHe}</a></td>
                 <td class="key">${ltr(doc.ingestedAt)}</td>
                 <td><span class="term-state term-found">אושר</span></td>
               </tr>`,
@@ -1305,7 +1305,7 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
         ${
           lease
             ? h`אושר בפנקס האישור ב־${ltr(lease.ingestedAt)}.
-        <a href="/documents/${lease.documentId}/read">הערכים שאושרו</a> — לקריאה בלבד. תיקון נעשה שם, לא כאן.`
+        <a href="/documents/${lease.documentId}/fields">הערכים שאושרו</a> — לקריאה בלבד. תיקון נעשה שם, לא כאן.`
             : h`אין חוזה מקושר להשכרה הזו.`
         }
       </p>

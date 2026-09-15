@@ -104,7 +104,9 @@ export {
   addressMatches,
   apartmentMatches,
   confirmLeaseTenancy,
+  DEFAULT_TERMS_PROFILE,
   dayOverlap,
+  establishApprovedLease,
   proposeLeaseTenancy,
   rankCandidates,
 } from './internal/lease.ts';

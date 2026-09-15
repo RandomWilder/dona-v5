@@ -80,7 +80,11 @@ import {
   listExtractedFields,
 } from './extract.ts';
 import { fileDocument } from './intake.ts';
-import { confirmLeaseTenancy, proposeLeaseTenancy } from './lease.ts';
+import {
+  confirmLeaseTenancy,
+  establishApprovedLease,
+  proposeLeaseTenancy,
+} from './lease.ts';
 import { destinationAfterFiling } from './orchestrate.ts';
 import { listDocumentPassages } from './passages.ts';
 import { readPlace, resolvePlace } from './place.ts';
@@ -1200,6 +1204,13 @@ export function registerDocumentRoutes(
           mayReadIdentifiers: mayReadIdentifiers(request),
         });
       }
+      const tenancyId = await establishApprovedLease(leaseDeps(), {
+        documentId,
+        confirmedBy: approvedBy,
+      });
+      if (tenancyId) {
+        return reply.redirect(`/estate/tenancies/${tenancyId}`);
+      }
       return reply.redirect(
         `/documents/${documentId}/fields?saved=${String(approved)}`,
       );
@@ -1342,6 +1353,13 @@ export function registerDocumentRoutes(
         documentId,
         readBy: requireOperatorEmail(request),
       });
+      if (proposed.typeKey === 'lease') {
+        return reply.redirect(
+          proposed.linkedTenancyId
+            ? `/estate/tenancies/${proposed.linkedTenancyId}`
+            : `/documents/${documentId}/fields`,
+        );
+      }
       html(reply);
       return renderTenancyPage({
         ...proposed,
@@ -1356,6 +1374,18 @@ export function registerDocumentRoutes(
     CONFIRM,
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
+      const confirmedBy = requireOperatorEmail(request);
+      const proposedFirst = await proposeLeaseTenancy(leaseDeps(), {
+        documentId,
+        readBy: confirmedBy,
+      });
+      if (proposedFirst.typeKey === 'lease') {
+        return reply.redirect(
+          proposedFirst.linkedTenancyId
+            ? `/estate/tenancies/${proposedFirst.linkedTenancyId}`
+            : `/documents/${documentId}/fields`,
+        );
+      }
       const fields = formBody(request);
       const roles: Record<string, TenancyRole> = {};
       for (const [name, value] of Object.entries(fields)) {
@@ -1363,16 +1393,11 @@ export function registerDocumentRoutes(
           roles[name.slice(5)] = value as TenancyRole;
         }
       }
-      // `attach_tenancy` is the radio group on the confirm screen. Empty, absent or the literal
-      // `new` is *a new letting*, which is what this flow did and all it could do before 6.5.
-      const attach = fields.attach_tenancy ?? '';
-      const confirmedBy = requireOperatorEmail(request);
       const confirmed = await confirmLeaseTenancy(leaseDeps(), {
         documentId,
         termsProfileName: fields.terms_profile ?? '',
         confirmedBy,
         roles,
-        attachTenancyId: attach === '' || attach === 'new' ? null : attach,
       });
       const proposed = await proposeLeaseTenancy(leaseDeps(), {
         documentId,

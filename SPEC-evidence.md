@@ -426,8 +426,22 @@ follow it. A protocol still goes to seed; an addendum still goes to its confirm;
 writes nothing. The unit's document list is a second door into the same destinations, not a second
 mechanism: a lease there opens the ledger.
 
-Creating the draft tenancy from an approved reading is #110's, and the old `/documents/:id/tenancy`
-route stays until that ticket deletes it.
+**#110: creating the draft follows the approved reading, with no confirm screen.** After a lease
+reading is stamped — every extracted name row, and both dates — `establishApprovedLease` writes the
+draft tenancy on the unit the document was filed against and the operator lands on that letting's
+page. Roles come from the field family the name was read into; an unstamped name writes no party.
+`GET`/`POST /documents/:id/tenancy` remain for an addendum only; a lease hitting them is sent to
+the ledger, or to the letting if it already exists.
+
+**The maintenance annex is not read off the lease.** The published forms do not print which
+`terms_profile` governs the letting, so it is not a declared field. A new draft takes
+`נספח תחזוקה — תקן` when that name exists, otherwise the sole profile in the register, otherwise it
+refuses rather than invent a row. Changing the annex later is a tenancy-page write, not this path.
+
+**The attach branch is gone.** A lease defines a letting; a second lease on the same unit and start
+date is `conflict` with that reason, not a silent join onto the household that is already there.
+Filing a further copy against the existing letting remains the way to add evidence. Identifier
+pairing at write is unchanged.
 
 ### The approval ledger — `GET /documents/:id/fields` (slice 7.3)
 
@@ -818,38 +832,11 @@ is the whole point, and it is the same one A12's refusal screen draws.
 **Idempotent confirm.** A lease that already has a `TENANCY` / `EVIDENCE` link returns
 `alreadyEstablished` and creates no second household.
 
-**Which letting, and the attach branch. Slice 6.5, and provisional from 15 Sep 2026.** The director
-ruled that a lease **defines** a letting rather than attaching to one, so the *prompt* below — a list
-of candidate lettings shown to a person to choose from — is gone with the confirm screen. The branch
-itself is reached from a conflict rather than from a prompt, and whether it survives in that shape is
-#110's to decide and to record here; see A2 step 6 in `SPEC-flows.md` for the ruling in full. What
-follows is what the code does today.
-
-Until 6.5 this flow could only *create*: a
-second lease on a unit and a start date it already held died on `conflict — that unit already has a
-lease starting on this date`, with nothing an operator could do from the screen. `proposeLeaseTenancy`
-now carries the unit's lettings from `listUnitTenancies` as **candidates**, and `confirmLeaseTenancy`
-has a second branch.
-
-- **Ranking.** Identifier overlap first — `countIdentifierOverlap` returns `tenancy_id` → **a count**
-  of how many people already on that letting carry an identifier this lease declares — then the
-  number of days the lease's term overlaps the letting's, computed **in TypeScript over the dates
-  the list already returns**, because the SQL that would express it is guard two's predicate and
-  belongs to `src/scope/`.
-- **What is proposed.** A **new draft** by default. An existing letting is pre-selected only when
-  this lease's `start_date` equals that letting's — the case that used to be a dead end. Overlap
-  ranks the list and never decides it: the same household renewing on new dates is a new letting.
-  **A human picks either way**, which is invariant 5 and is unchanged.
-- **What attach writes.** The `TENANCY` / `EVIDENCE` link and the confirmed `tenancy_party` rows.
-  **Not `upsertTenancy`**, so `start_date`, `end_date`, `status` and `terms_profile_id` are untouched
-  and no `terms_profile` is asked for. A lease attached to the wrong letting must not be able to
-  rewrite that letting's term; moving a captured date onto a column stays per-field promotion from
-  the read screen, one field and one operator at a time. The audit line is `evidence.attach_lease`.
-  A second attach of the same document is a no-op, the same `alreadyEstablished` the create branch
-  returns.
-- **The letting must be on this unit.** A `tenancy_id` posted from the form is checked against the
-  unit the document is filed on before anything is written; anything else is `invalid` and writes
-  nothing, on the same standing as the address cross-check above.
+**Which letting. Slice 6.5's attach branch is deleted at #110.** A lease **defines** a letting. A
+second lease on the same unit and start date is `conflict — that unit already has a lease starting
+on this date`. There is no prompt and no silent attach. A further copy of the paper is filed against
+the letting that already exists. `proposeLeaseTenancy` no longer ranks candidate lettings; an
+addendum is already bound and never was.
 
 **How a name gets its identifier, and why it is all-or-nothing. Slice 6.5.** The *i*-th `tenant_name`
 pairs with the *i*-th `tenant_id_number` in the order `proposeLeaseTenancy` already sorts people by

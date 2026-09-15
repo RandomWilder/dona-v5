@@ -133,7 +133,10 @@ by tripping the guard rather than by anticipating it.
   are in force is a different question from *what identifies one*, and only the second was owed here.
   **A lease naming no profile is a reject with its line number, not a defaulted row**
   ([SPEC-register.md](SPEC-register.md)) — defaulting to `standard` would have answered a question
-  the client has not been asked, which is exactly what the NOT NULL exists to prevent.
+  the client has not been asked, which is exactly what the NOT NULL exists to prevent. **The
+  administrator flow is different (#110):** the published leases do not print an annex name, so a
+  draft created from an approved reading takes `נספח תחזוקה — תקן` when that row exists, otherwise
+  the sole profile, otherwise it refuses. The register importer still has no default.
 - **Obligation and ObligationType (slice 5.7, `src/kernel/migrations/0026_obligation.sql`).**
   E9 and E10 from the workbook. An obligation attaches to a **tenancy**, never a unit (R10). Status
   is derived on read and is never a column. There is no amount column, because no ticket has asked

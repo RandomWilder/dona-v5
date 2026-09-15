@@ -150,7 +150,7 @@ unit — which is the sequence step 5 of that flow describes anyway.
 ### A2 — A lease establishes a tenancy
 
 **Trigger:** A1 completes for a document of type lease.
-**Sequence:** extract → propose → confirm → write.
+**Sequence:** extract → approve on the ledger → write a draft → the tenancy page.
 
 1. Extraction reads the lease against `DocumentTypeField` for that type and returns what it found,
    including what it did not find.
@@ -222,60 +222,21 @@ unit — which is the sequence step 5 of that flow describes anyway.
    two correctly paired tenants — there is no pairing inside the guarantor family to have got wrong.
    **Two people on one lease resolving to the same identifier is a refusal**, not a role quietly
    overwritten on one party.
-6. **Which letting — proposed, then confirmed.** The unit's lettings come from `listUnitTenancies`
-   (every status, no day predicate, no party and no name) and are **ranked by identifier overlap
-   first, then by the number of days the lease's own term overlaps theirs**. Overlap is a **count**:
-   how many people already on that letting carry one of this lease's identifiers. No value, no key
-   and no name leaves the query, and the screen shows the count and never a digit of an identifier.
-   **The comparison is a read of `national_id_key` and writes an `audit_log` line** —
-   `evidence.match_identifier`, naming who asked and how many probes matched, never the value. It is
-   not a disclosure and is not `evidence.read_identifier`; nobody saw anything.
+6. **A lease defines a letting. #110.** There is no list of candidate lettings and no attach. A
+   second lease on the same unit and start date is refused: `conflict`, and the sentence names that
+   unit already has a lease starting on this date. Adding evidence to a household that already exists
+   is filing against that letting. Identifier pairing at write is unchanged, including that it is
+   all-or-nothing inside a field family and that two people resolving to one identifier is a refusal.
 
-   **The default is *a new letting*, and an existing one is pre-selected only when this lease starts
-   on the same day as one of them.** The same household renewing on new dates is a new letting, so
-   identifier overlap ranks the list and never decides it. **A human picks**, and may pick any
-   letting on the list or a new draft — invariant 5 unchanged.
-
-   **Date overlap is computed outside SQL.** `start_date <= x AND end_date >= y` is the isolation
-   join's tenancy predicate, which `src/scope/` alone may write (guard two); rephrasing it elsewhere
-   to get past the guard is the move the guard exists to forbid. The list already carries both dates
-   as text, so the arithmetic is ordinary code with its own cases.
-
-   **This step is under a ruling of 15 Sep 2026 and is #110's to close.** The director's objection is
-   that asking which existing letting a lease belongs to is backwards: a tenancy is *the deciding
-   record of who is an active tenant in a flat*, and **a lease is what decides it**. A lease is not
-   attached to a letting; it defines one. The prompt is therefore gone from the flow — there is no
-   screen that opens with a list of candidate lettings and asks a person to choose. What the ruling
-   does **not** settle is the narrower case the branch was built for, which is not a prompt but a
-   conflict: a second lease arriving on a unit and a start date that unit already holds, which before
-   6.5 was a dead end with nothing an operator could do. Either that stays as conflict resolution
-   reached from the refusal, or it goes and the conflict becomes a refusal with a stated reason.
-   **#110 decides, states the decision here, and does not leave both alive.** Until it does, the
-   behaviour described above is what the code does and this paragraph is the warning that it is
-   provisional.
+   **The maintenance annex is the register's `נספח תחזוקה — תקן`**, or the sole profile if that name
+   is absent, or a refusal if the register is empty or ambiguous. It is not read off the lease,
+   because the forms in hand do not print it.
 7. The written tenancy is `DRAFT` and carries per-field provenance back to the lease.
 
-   **The confirm signs the dates it promotes — slice 7.4.** From 7.4 a promotion requires an approval
-   stamp on the reading (A15's verb, SPEC-evidence.md). This screen shows `תחילת השכירות` and
-   `סיום השכירות` as read, so pressing the button *is* a person affirming those two readings: the
-   confirm writes the approval for each date row it is about to promote, as read, with `confirmed_by`
-   as the approver, and leaves alone any row already signed on the ledger. The alternative was to
-   exempt this path from the rule, and since nearly every promotion in this system comes through it,
-   that would have been a rule about nothing.
-
-   **And it proposes what a person signed.** Where a date was corrected and approved on A15's ledger,
-   that corrected value — not the raw reading — is what this screen proposes, what the letting
-   arithmetic in step 6 compares, and what `upsertTenancy` writes. The raw reading stays on the
-   evidence row, as it always does.
-8. **Attaching to an existing letting is A2's branch from 6.5, and it writes no dates.** Before 6.5
-   this flow could only create, and a second lease on a unit and start date it already held died on
-   a conflict with nothing a human could do about it. Confirming an attach writes the document's
-   `TENANCY` link and the confirmed `tenancy_party` rows, and touches **neither `start_date` nor
-   `end_date` nor `status` nor `terms_profile_id`** — a lease filed against the wrong letting must
-   not be able to rewrite that letting's term. Moving a captured value onto a column is per-field
-   promotion from the read overlay, deliberate and one field at a time, which is what "A1 plus
-   per-field promotion" meant. Confirm recomputes from captured fields; a second confirm is a no-op,
-   on both branches.
+   **Dates are promoted from the approved reading.** From 7.4 a promotion requires an approval stamp.
+   The ledger is where those dates are signed; the write copies the signed value. A row already
+   signed is left alone. Where a date was corrected on the ledger, that corrected value is what
+   `upsertTenancy` writes. The raw reading stays on the evidence row.
 
 **Cross-check:** the address and apartment number extracted from the document are asserted against the
 unit the tenancy hangs on. This catches the error the type guard cannot — the right kind of document

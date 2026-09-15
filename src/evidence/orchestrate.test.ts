@@ -21,9 +21,14 @@ import { fixedClock } from '../kernel/clock.ts';
 import { inTransaction } from '../kernel/db.ts';
 import { createFakeExtractor } from '../kernel/extraction.ts';
 import { createMemoryStore } from '../kernel/objects.ts';
-import { createFakePdfText } from '../kernel/pdf.ts';
+import { fakeItems } from '../kernel/pdf.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
-import { applyDocumentTypeCatalogue, unitDocumentAction } from './contract.ts';
+import { upsertTermsProfile } from '../tenancy/contract.ts';
+import {
+  applyDocumentTypeCatalogue,
+  DEFAULT_TERMS_PROFILE,
+  unitDocumentAction,
+} from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const CITY = 'עיר תזמור';
@@ -123,12 +128,29 @@ describe('evidence · upload, read, approve', () => {
       version: '9.9.9-test',
       clock: fixedClock(AT),
       objects: createMemoryStore(),
-      pdf: createFakePdfText([pageOne, pageTwo]),
+      pdf: {
+        async pages(bytes) {
+          const marker = bytes.toString('latin1');
+          const text = marker.includes('orch-protocol')
+            ? 'פרוטוקול מצב המושכר מונה מים מועד המסירה: 2026-03-01 דירה 9'
+            : `${pageOne}\n${pageTwo}`;
+          return [
+            {
+              number: 1,
+              width: 595,
+              height: 842,
+              items: fakeItems(text, null),
+            },
+          ];
+        },
+        describe: () => 'fake',
+      },
       extractor: createFakeExtractor(() => ({
         findings: [
           { field_key: 'address', value: `${ADDRESS} ${CITY}`, word_ids: [0] },
           { field_key: 'apartment_number', value: '9', word_ids: [0] },
-          { field_key: 'start_date', value: '2026-11-07', word_ids: [0] },
+          { field_key: 'start_date', value: '2026-01-07', word_ids: [0] },
+          { field_key: 'end_date', value: '2027-02-28', word_ids: [0] },
           { field_key: 'tenant_name', value: 'דנה כהן', word_ids: [0] },
           { field_key: 'rent_amount', value: '5200', word_ids: [0] },
           { field_key: 'rent_currency', value: 'ILS', word_ids: [0] },
@@ -155,16 +177,39 @@ describe('evidence · upload, read, approve', () => {
     const sweepDocs = async (): Promise<void> => {
       await inTransaction(pool, async (db) => {
         await db.query("SELECT set_config('dona.approving', 'on', true)");
+        await db.query("SELECT set_config('dona.promoting', 'on', true)");
         await db.query(
           `UPDATE extracted_field
-              SET approved_value = NULL, approved_by = NULL, approved_at = NULL
+              SET approved_value = NULL, approved_by = NULL, approved_at = NULL,
+                  promoted_to = NULL, promoted_by = NULL, promoted_at = NULL
             WHERE document_id IN (SELECT document_id FROM document
                                    WHERE storage_uri LIKE $1)`,
           [`gs://${BUCKET}/%`],
         );
       });
       await pool.query(
+        'ALTER TABLE tenancy_event DISABLE TRIGGER tenancy_event_is_append_only',
+      );
+      try {
+        await pool.query(
+          `DELETE FROM tenancy_event WHERE extracted_field_id IN (
+             SELECT extracted_field_id FROM extracted_field
+              WHERE document_id IN (SELECT document_id FROM document
+                                     WHERE storage_uri LIKE $1))`,
+          [`gs://${BUCKET}/%`],
+        );
+      } finally {
+        await pool.query(
+          'ALTER TABLE tenancy_event ENABLE TRIGGER tenancy_event_is_append_only',
+        );
+      }
+      await pool.query(
         `DELETE FROM extracted_field WHERE document_id IN
+           (SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
+        [`gs://${BUCKET}/%`],
+      );
+      await pool.query(
+        `DELETE FROM document_passage WHERE document_id IN
            (SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
         [`gs://${BUCKET}/%`],
       );
@@ -179,35 +224,65 @@ describe('evidence · upload, read, approve', () => {
     };
     const sweepPlace = async (): Promise<void> => {
       await pool.query(
-        `DELETE FROM unit WHERE unit_id IN (
+        'ALTER TABLE tenancy_event DISABLE TRIGGER tenancy_event_is_append_only',
+      );
+      try {
+        await pool.query(
+          `DELETE FROM tenancy_event WHERE tenancy_id IN (
+           SELECT tenancy_id FROM tenancy WHERE unit_id IN (
+             SELECT space_id FROM space WHERE building_id IN (
+               SELECT building_id FROM building WHERE city = $1 AND address_line = $2)))`,
+          [CITY, ADDRESS],
+        );
+        await pool.query(
+          `DELETE FROM tenancy_party WHERE tenancy_id IN (
+           SELECT tenancy_id FROM tenancy WHERE unit_id IN (
+             SELECT space_id FROM space WHERE building_id IN (
+               SELECT building_id FROM building WHERE city = $1 AND address_line = $2)))`,
+          [CITY, ADDRESS],
+        );
+        await pool.query(
+          `DELETE FROM tenancy WHERE unit_id IN (
            SELECT space_id FROM space WHERE building_id IN (
              SELECT building_id FROM building WHERE city = $1 AND address_line = $2))`,
-        [CITY, ADDRESS],
-      );
-      await pool.query(
-        `DELETE FROM space WHERE building_id IN (
+          [CITY, ADDRESS],
+        );
+        await pool.query(
+          `DELETE FROM unit WHERE unit_id IN (
+           SELECT space_id FROM space WHERE building_id IN (
+             SELECT building_id FROM building WHERE city = $1 AND address_line = $2))`,
+          [CITY, ADDRESS],
+        );
+        await pool.query(
+          `DELETE FROM space WHERE building_id IN (
            SELECT building_id FROM building WHERE city = $1 AND address_line = $2)`,
-        [CITY, ADDRESS],
-      );
-      await pool.query(
-        'DELETE FROM building WHERE city = $1 AND address_line = $2',
-        [CITY, ADDRESS],
-      );
-      await pool.query('DELETE FROM project WHERE project_code = $1', [
-        PROJECT,
-      ]);
+          [CITY, ADDRESS],
+        );
+        await pool.query(
+          'DELETE FROM building WHERE city = $1 AND address_line = $2',
+          [CITY, ADDRESS],
+        );
+        await pool.query('DELETE FROM project WHERE project_code = $1', [
+          PROJECT,
+        ]);
+      } finally {
+        await pool.query(
+          'ALTER TABLE tenancy_event ENABLE TRIGGER tenancy_event_is_append_only',
+        );
+      }
     };
 
     try {
       await signOutAll(pool, DOMAIN);
-      await sweepDocs();
       await sweepPlace();
+      await sweepDocs();
       await applyDocumentTypeCatalogue(pool, seedDocumentTypes);
       who = await signIn(pool, fixedClock(AT), {
         email: `ops@${DOMAIN}`,
         role: 'ADMIN',
       });
       await importEstate(pool, plan);
+      await upsertTermsProfile(pool, DEFAULT_TERMS_PROFILE);
       const found = await pool.query<{ unit_id: string }>(
         `SELECT u.unit_id FROM unit u
            JOIN space s ON s.space_id = u.unit_id
@@ -278,21 +353,21 @@ describe('evidence · upload, read, approve', () => {
       const corrected = await post(`/documents/${documentId}/fields/approve`, {
         csrf: who.csrf,
         extracted_field_id: startId,
-        approved_value: '2026-11-01',
+        approved_value: '2026-01-01',
       });
       assert.equal(corrected.statusCode, 302);
       const afterCorrect = await asOperator(app as never, who).inject({
         method: 'GET',
         url: String(corrected.headers.location),
       });
-      assert.match(afterCorrect.body, /2026-11-01/);
-      assert.match(afterCorrect.body, /נקרא: 2026-11-07/);
+      assert.match(afterCorrect.body, /2026-01-01/);
+      assert.match(afterCorrect.body, /נקרא: 2026-01-07/);
 
       const stamped = await pool.query<{ approved_value: string }>(
         'SELECT approved_value FROM extracted_field WHERE extracted_field_id = $1',
         [startId],
       );
-      assert.equal(stamped.rows[0]?.approved_value, '2026-11-01');
+      assert.equal(stamped.rows[0]?.approved_value, '2026-01-01');
 
       await pool.query(
         `UPDATE extracted_field e
@@ -333,6 +408,96 @@ describe('evidence · upload, read, approve', () => {
       );
       assert.equal(openNames.rows[0]?.n, '1');
 
+      const end = await pool.query<{ id: string }>(
+        `SELECT e.extracted_field_id AS id FROM extracted_field e
+           JOIN document_type_field f
+             ON f.document_type_field_id = e.document_type_field_id
+          WHERE e.document_id = $1 AND f.field_key = 'end_date'`,
+        [documentId],
+      );
+      const name = await pool.query<{ id: string }>(
+        `SELECT e.extracted_field_id AS id FROM extracted_field e
+           JOIN document_type_field f
+             ON f.document_type_field_id = e.document_type_field_id
+          WHERE e.document_id = $1 AND f.field_key = 'tenant_name'`,
+        [documentId],
+      );
+      await post(`/documents/${documentId}/fields/approve`, {
+        csrf: who.csrf,
+        extracted_field_id: end.rows[0]?.id ?? '',
+      });
+      const created = await post(`/documents/${documentId}/fields/approve`, {
+        csrf: who.csrf,
+        extracted_field_id: name.rows[0]?.id ?? '',
+      });
+      assert.equal(created.statusCode, 302);
+      const tenancyUrl = String(created.headers.location);
+      assert.match(tenancyUrl, /\/estate\/tenancies\/[0-9a-f-]{36}$/);
+      const tenancyId =
+        tenancyUrl.match(/\/estate\/tenancies\/([0-9a-f-]{36})$/)?.[1] ?? '';
+      assert.ok(tenancyId);
+
+      const sheet = await asOperator(app as never, who).inject({
+        method: 'GET',
+        url: tenancyUrl,
+      });
+      assert.equal(sheet.statusCode, 200);
+      assert.match(sheet.body, /דנה כהן/);
+      assert.match(sheet.body, /טיוטה/);
+      assert.match(sheet.body, new RegExp(`/documents/${documentId}/fields`));
+      assert.match(sheet.body, /שוכר ראשי/);
+      assert.match(sheet.body, /disabled/);
+      assert.match(sheet.body, /פרוטוקול מסירה — לא הוגש/);
+
+      const refused = await post(`/estate/tenancies/${tenancyId}/activate`, {
+        csrf: who.csrf,
+      });
+      assert.equal(refused.statusCode, 400);
+      assert.equal(refused.json().code, 'invalid');
+      assert.match(
+        JSON.stringify(refused.json()),
+        /this tenancy cannot be activated/,
+      );
+      assert.match(JSON.stringify(refused.json().details ?? {}), /handover/);
+
+      const protocol = await asOperator(app as never, who).inject({
+        method: 'POST',
+        url: '/documents',
+        ...upload(
+          {
+            csrf: who.csrf,
+            unit: unitId,
+            type: 'handover_protocol',
+            tenancy: tenancyId,
+          },
+          {
+            filename: 'protocol.pdf',
+            bytes: pdfBytes(`orch-protocol-${who.csrf}`),
+          },
+        ),
+      });
+      assert.equal(protocol.statusCode, 302, protocol.body.slice(0, 400));
+
+      const armed = await asOperator(app as never, who).inject({
+        method: 'GET',
+        url: tenancyUrl,
+      });
+      assert.match(
+        armed.body,
+        new RegExp(`action="/estate/tenancies/${tenancyId}/activate"`),
+      );
+      assert.doesNotMatch(armed.body, /disabled/);
+
+      const live = await post(`/estate/tenancies/${tenancyId}/activate`, {
+        csrf: who.csrf,
+      });
+      assert.equal(live.statusCode, 302);
+      const afterLive = await asOperator(app as never, who).inject({
+        method: 'GET',
+        url: String(live.headers.location),
+      });
+      assert.match(afterLive.body, /פעיל/);
+
       const unitPage = await asOperator(app as never, who).inject({
         method: 'GET',
         url: `/estate/units/${unitId}`,
@@ -343,8 +508,8 @@ describe('evidence · upload, read, approve', () => {
       );
     } finally {
       await signOutAll(pool, DOMAIN);
-      await sweepDocs();
       await sweepPlace();
+      await sweepDocs();
       await app.close();
       await pool.end();
     }

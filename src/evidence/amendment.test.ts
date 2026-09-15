@@ -22,6 +22,7 @@ import {
 import type { IntakeDeps } from './contract.ts';
 import {
   applyDocumentTypeCatalogue,
+  approveExtractedField,
   confirmLeaseTenancy,
   fileDocument,
   listExtractedFields,
@@ -151,16 +152,16 @@ async function confirmLease(
   const profile = `a3-${unitId.slice(24)}`;
   await upsertTermsProfile(db, profile);
   const documentId = await fileLease(db, unitId);
-  const proposed = await proposeLeaseTenancy(leaseDeps(db), {
-    documentId,
-    readBy: READ_BY,
-  });
-  const roles = Object.fromEntries(
-    proposed.people.map((person) => [
-      person.extractedFieldId,
-      person.proposedRole,
-    ]),
-  );
+  const rows = await listExtractedFields(db, documentId);
+  for (const row of rows) {
+    if (row.fieldKey === 'tenant_name' && row.approvedAt === null) {
+      await approveExtractedField(leaseDeps(db), {
+        extractedFieldId: row.extractedFieldId,
+        approvedBy: READ_BY,
+        mayReadIdentifiers: true,
+      });
+    }
+  }
   const confirmed = await confirmLeaseTenancy(
     {
       db,
@@ -171,7 +172,7 @@ async function confirmLease(
       documentId,
       termsProfileName: profile,
       confirmedBy: 'אסף',
-      roles,
+      roles: {},
     },
   );
   return { documentId, tenancyId: confirmed.tenancyId };

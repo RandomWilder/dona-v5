@@ -1323,11 +1323,14 @@ describe('evidence · A12 a document finds its own place', () => {
             method: 'GET',
             url: `/documents/${documentId}/tenancy`,
           });
-          assert.equal(confirm.statusCode, 200, confirm.body.slice(0, 400));
-          // The unit number rides in its own `dir="ltr"` span, so this is the screen's own markup
-          // and not a paraphrase of it.
-          assert.match(confirm.body, /<span dir="ltr">12B<\/span>/);
-          assert.doesNotMatch(confirm.body, /<span dir="ltr">12A<\/span>/);
+          assert.equal(confirm.statusCode, 302);
+          const ledger = await as(ambiguous).inject({
+            method: 'GET',
+            url: String(confirm.headers.location),
+          });
+          assert.equal(ledger.statusCode, 200, ledger.body.slice(0, 400));
+          assert.match(String(confirm.headers.location), /\/fields$/);
+          assert.match(ledger.body, /מה נקרא מן המסמך/);
         },
       );
 
