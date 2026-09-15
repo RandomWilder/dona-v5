@@ -416,3 +416,18 @@ Left standing, none of them part of the administrator upload path: the addendum 
 search is a function with no staff ask screen; there is no rent-over-term calculator; the tenant
 surface is out of scope; the passage sweep is manual. Staging is the place to click the flow with a
 real lease.
+
+## Comment — 2026-09-15
+
+Staging-verified on revision `dona-staging-00094-sdr` (`1dd43da`), after the director clicked the
+live flow with a real document. No 5xx. OCR, extract and embed were configured.
+
+The walk: staff sign-in; a new building and a new flat; a first intake that returned 422 after the
+reader ran (~34s) because the place was not in the estate yet and nothing was filed; a second intake
+against the new flat that filed (302, ~43s); approval on the ledger; the draft tenancy page. That is
+the upload-and-approve path working as specified.
+
+One 404 on `GET /documents/:id` — that URL has no screen; the reading is `/read` and the ledger is
+`/fields`. Favicon 404 is noise.
+
+Activate and the handover protocol were not clicked in this session. The next flow starts elsewhere.
