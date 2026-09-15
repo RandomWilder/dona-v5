@@ -81,10 +81,10 @@ import {
 } from './extract.ts';
 import { fileDocument } from './intake.ts';
 import { confirmLeaseTenancy, proposeLeaseTenancy } from './lease.ts';
+import { destinationAfterFiling } from './orchestrate.ts';
 import { listDocumentPassages } from './passages.ts';
 import { readPlace, resolvePlace } from './place.ts';
 import { promoteExtractedField } from './promote.ts';
-import { isProtocolType } from './protocol.ts';
 import {
   type DocumentReading,
   ocrConfigured,
@@ -759,25 +759,14 @@ export function registerDocumentRoutes(
         },
       });
     }
-    if (
-      isProtocolType(type.typeKey) &&
-      result.verification.verdict === 'verified'
-    ) {
-      return reply.redirect(`/documents/${result.documentId}/seed`);
-    }
-    if (
-      type.typeKey === 'lease' &&
-      tenancyId === null &&
-      result.verification.verdict === 'verified'
-    ) {
-      return reply.redirect(`/documents/${result.documentId}/tenancy`);
-    }
-    if (
-      type.typeKey === 'lease_amendment' &&
-      tenancyId !== null &&
-      result.verification.verdict === 'verified'
-    ) {
-      return reply.redirect(`/documents/${result.documentId}/tenancy`);
+    const next = destinationAfterFiling({
+      documentId: result.documentId,
+      verdict: result.verification.verdict,
+      typeKey: type.typeKey,
+      tenancyId,
+    });
+    if (next) {
+      return reply.redirect(next);
     }
     return renderFiledPage({
       nav: chromeOf(deps, request),
@@ -971,13 +960,14 @@ export function registerDocumentRoutes(
         },
       });
     }
-    if (result.verification.verdict === 'verified') {
-      if (isProtocolType(type.typeKey)) {
-        return reply.redirect(`/documents/${result.documentId}/seed`);
-      }
-      if (type.typeKey === 'lease') {
-        return reply.redirect(`/documents/${result.documentId}/tenancy`);
-      }
+    const next = destinationAfterFiling({
+      documentId: result.documentId,
+      verdict: result.verification.verdict,
+      typeKey: type.typeKey,
+      tenancyId: null,
+    });
+    if (next) {
+      return reply.redirect(next);
     }
     return renderFiledPage({
       nav: chromeOf(deps, request),

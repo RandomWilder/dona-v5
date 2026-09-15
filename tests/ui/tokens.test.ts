@@ -417,6 +417,22 @@ function fieldsLedger(options: {
         READ_IDENTIFIER,
         0.91,
       ),
+      reading(
+        'dddddddd-0000-4000-8000-000000000006',
+        'rent_amount',
+        'דמי השכירות',
+        '5200',
+        0.92,
+        { page: 3 },
+      ),
+      reading(
+        'dddddddd-0000-4000-8000-000000000007',
+        'guarantor_name',
+        'שם הערב',
+        GUARANTOR_NAME,
+        0.9,
+        { page: 4 },
+      ),
       // Already signed, and corrected on the way: both values on the row, which is the whole reason
       // the slice adds a column instead of an UPDATE.
       reading(
@@ -2204,7 +2220,12 @@ describe('shared UI tokens', () => {
     assert.doesNotMatch(ledger, /אישור הכל/);
     // The correction and the reading, both on the row. One column would have shown only the first.
     assert.match(ledger, /הרב קוק 54/);
-    assert.match(ledger, /נקרא: <a[^>]*>הרב קוק 45/);
+    assert.match(ledger, /נקרא: הרב קוק 45/);
+    assert.match(ledger, /<th>עמוד<\/th>/);
+    assert.match(ledger, /שוכר ראשי/);
+    assert.match(ledger, /ערב · אינו איש קשר לשירות/);
+    assert.match(ledger, /דמי השכירות/);
+    assert.match(ledger, /<details class="prose-fold"/);
   });
 
   it('withholds the transcript of the paper, and names the page instead of drawing it', () => {
@@ -2250,7 +2271,7 @@ describe('shared UI tokens', () => {
     assert.doesNotMatch(buildingHtml, /href="gs:/);
   });
 
-  it('opens a listed document on the read overlay, and a lease on confirm', () => {
+  it('opens a listed document on the read overlay, and a lease on the ledger', () => {
     const html = renderUnitPage(hit, 2, [filed], NAV);
     assert.match(
       html,
@@ -2258,7 +2279,7 @@ describe('shared UI tokens', () => {
     );
     assert.match(
       html,
-      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/tenancy"/,
+      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/fields"/,
     );
     const search = renderSearchPage(
       'שכירות',
@@ -2302,7 +2323,7 @@ describe('shared UI tokens', () => {
     assert.match(emptyRead, /לא נקראו שדות מהמסמך/);
     assert.match(
       emptyRead,
-      /href="\/documents\/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee\/tenancy"/,
+      /href="\/documents\/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee\/fields"/,
     );
   });
 

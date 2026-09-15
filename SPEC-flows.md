@@ -133,6 +133,12 @@ paper. Both end in the same `fileDocument` call against the same `UNIT` place, s
 this line — the guard, the refusal that writes nothing, the audit line, the bounds and the per-caller
 cap — is true of both entries and is stated once.
 
+**Amended at #109: a verified lease does not go to the confirm screen.** Both doors, and the unit
+document list, enter one orchestrator. After `fileDocument` has filed and extracted, the operator
+lands on A15's ledger. The reading's quality verdict is on that screen and on the read screen. A
+file that is not the declared type is still refused at the door and still writes nothing. Creating
+the draft tenancy is A2 after the ledger, and is #110's.
+
 **Declaring a *new draft* tenancy from the upload screen is A2's, not A1's.** Invariant 5 puts a human
 confirmation between a proposed party and a written `tenancy_party` row, and `upsertParty` needs a
 ת.ז. it can key on, so the "declared by the administrator" path 3.3 was planned with would have been

@@ -122,6 +122,11 @@ export {
   searchDocuments,
   signLinkedDocuments,
 } from './internal/list.ts';
+export type { FilingContinuation } from './internal/orchestrate.ts';
+export {
+  destinationAfterFiling,
+  unitDocumentAction,
+} from './internal/orchestrate.ts';
 export type { DocumentPassage } from './internal/passages.ts';
 export { listDocumentPassages } from './internal/passages.ts';
 export type {

@@ -413,6 +413,22 @@ behind a gated rail is the door that answers `not_allowed` after somebody has al
 it — 6.1's refusal-after-typing, which A11 refused to build for its own form. The permission names
 the act the tab is for: this is the filing tab's front page, not a reading of what is filed.
 
+### One orchestrator, two doors — ticket #109
+
+The commands that file, extract and approve already exist (`fileDocument`, `extractFiledDocument`,
+`approveExtractedField`, `approveUnflagged`). What #109 adds is **the path through them**, not a
+second copy of any of them.
+
+`destinationAfterFiling` is that path. Both upload doors — unit-first `POST /documents` and A12
+`POST /documents/intake` — call `fileDocument` and then this function, so a verified lease lands on
+the approval ledger (`GET /documents/:id/fields`) rather than on the confirm screen that used to
+follow it. A protocol still goes to seed; an addendum still goes to its confirm; a refusal still
+writes nothing. The unit's document list is a second door into the same destinations, not a second
+mechanism: a lease there opens the ledger.
+
+Creating the draft tenancy from an approved reading is #110's, and the old `/documents/:id/tenancy`
+route stays until that ticket deletes it.
+
 ### The approval ledger — `GET /documents/:id/fields` (slice 7.3)
 
 Flow **A15**, and the three routes it is made of — the ledger (`documents.read`), the signature
@@ -427,6 +443,13 @@ passages and neither screen re-reads the file), and **the declarations it lists 
 today's — a field declared this morning is not something last month's lease failed to carry. 7.3
 also **moved the `קדם` buttons off the read overlay**: two screens writing the same row is how the
 two drift into disagreeing about which one is the flow.
+
+**#109 redraws the ledger from the #100 paint.** The table leads. Every value row carries the page
+it was read from. The reading's quality verdict sits in the head — `טובה` when at least one field
+was measured, `לא נמדדה` when every field arrived with no score, which is also when
+`אישור כל מה שלא סומן` is withheld. Explanation is behind a `<details>`. A name row prints the role
+the field carries (`tenant_name` is a tenant, `guarantor_name` is a guarantor who is never a service
+contact). Amounts are ordinary rows: after #101 they are.
 
 ### The declaration becomes editable — `POST /documents/types/:typeKey/fields` (slice 7.2)
 

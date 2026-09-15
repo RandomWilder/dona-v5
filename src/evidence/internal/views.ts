@@ -71,8 +71,9 @@ const styles = h`<style>
   /* Slice 7.2, lifted from the paint's own block. One control per row, and it is a form rather
      than a link because retiring a declaration is a write and a GET that writes is a GET a crawler
      can fire. */
-  .row-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+  .row-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
   .row-actions form { display: contents; }
+  .row-actions input { inline-size: auto; flex: 1 1 7rem; min-inline-size: 5rem; }
   .mini {
     min-height: var(--size-control-ops);
     padding-inline: var(--space-3);
@@ -101,6 +102,32 @@ const styles = h`<style>
      so this is emphasis on a number and never the whole meaning of a cell. */
   .quality.is-low { color: var(--color-alert); font-weight: 600; }
   .second { color: var(--color-text-muted); font-size: var(--text-xs); }
+  .role { display: block; color: var(--color-text-muted); font-size: var(--text-xs); }
+  .role.is-guarantor { color: var(--color-alert); }
+  .ledger-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+    align-items: center;
+    margin-block-start: var(--space-2);
+  }
+  .verdict { background: var(--color-surface); gap: var(--space-2); }
+  .verdict.is-low { color: var(--color-alert); }
+  .prose-fold {
+    border: var(--size-hairline) solid var(--color-divider-soft);
+    border-radius: var(--radius-3);
+    background: var(--color-surface);
+    padding: var(--space-3) var(--space-4);
+  }
+  .prose-fold > summary {
+    cursor: pointer;
+    min-height: var(--size-control-ops);
+    display: flex;
+    align-items: center;
+    color: var(--color-accent-ink);
+    font-size: var(--text-base);
+  }
+  .prose-fold p { color: var(--color-text-muted); font-size: var(--text-sm); margin: var(--space-3) 0 0; }
   .term-found { color: var(--color-ok); }
   .term-missing { color: var(--color-alert); }
   .term-state { font-weight: 600; }
@@ -748,7 +775,7 @@ export function renderFiledPage(screen: FiledScreen): string {
       }
       ${
         screen.documentId && type.typeKey === 'lease'
-          ? h`<a class="btn btn-secondary" href="/documents/${screen.documentId}/tenancy">אישור חוזה</a>`
+          ? h`<a class="btn btn-secondary" href="/documents/${screen.documentId}/fields">אישור הקריאה</a>`
           : h``
       }
       ${
@@ -907,6 +934,22 @@ export interface ReadScreen {
   }>;
 }
 
+function qualityVerdict(
+  rows: ReadonlyArray<{ confidence: number | null }>,
+): 'measured' | 'unmeasured' {
+  return rows.some((row) => row.confidence !== null)
+    ? 'measured'
+    : 'unmeasured';
+}
+
+function qualityVerdictChip(
+  rows: ReadonlyArray<{ confidence: number | null }>,
+): Html {
+  return qualityVerdict(rows) === 'measured'
+    ? h`<span class="chip verdict">איכות הקריאה: טובה</span>`
+    : h`<span class="chip verdict is-low">איכות הקריאה: לא נמדדה</span>`;
+}
+
 function pageHref(documentId: string, page: number): string {
   return `/documents/${documentId}/read?page=${String(page)}`;
 }
@@ -1011,6 +1054,7 @@ export function renderReadPage(screen: ReadScreen): string {
       <a class="back" href="${back}">← ${screen.buildingName}</a>
       <h1>מילים על הדף</h1>
       <p class="lede">${screen.labelHe}${screen.unitId ? h`` : h` · הבניין`}</p>
+      <div class="ledger-head">${qualityVerdictChip(screen.extracted ?? [])}</div>
     </div>
     <section class="notice">
       <dl class="facts">
@@ -1033,13 +1077,8 @@ export function renderReadPage(screen: ReadScreen): string {
         // **Slice 7.3.** The ledger is where a reading is signed, corrected or promoted. It is the
         // primary control on this page for that reason: reading the pixels is what somebody does
         // *before* they act, and the act is next door.
-        (screen.extracted ?? []).length > 0
+        (screen.extracted ?? []).length > 0 || screen.typeKey === 'lease'
           ? h`<a class="btn btn-primary" href="/documents/${screen.documentId}/fields">אישור הקריאה</a>`
-          : h``
-      }
-      ${
-        screen.typeKey === 'lease'
-          ? h`<a class="btn btn-secondary" href="/documents/${screen.documentId}/tenancy">אישור חוזה</a>`
           : h``
       }
       ${
@@ -1653,6 +1692,24 @@ function ledgerOrder(rows: readonly ExtractedRow[]): ExtractedRow[] {
   );
 }
 
+function nameRole(row: ExtractedRow, rows: readonly ExtractedRow[]): Html {
+  if (row.fieldKey === 'guarantor_name') {
+    return h`<span class="role is-guarantor">ערב · אינו איש קשר לשירות</span>`;
+  }
+  if (row.fieldKey !== 'tenant_name') {
+    return h``;
+  }
+  const names = rows.filter(
+    (candidate) => candidate.fieldKey === 'tenant_name',
+  );
+  const at = names.findIndex(
+    (candidate) => candidate.extractedFieldId === row.extractedFieldId,
+  );
+  return at === 0
+    ? h`<span class="role">שוכר ראשי · הראשון שנקרא</span>`
+    : h`<span class="role">שוכר נוסף</span>`;
+}
+
 function approveControl(screen: FieldsScreen, row: ExtractedRow): Html {
   if (row.approvedAt !== null) {
     return h`<td class="muted">אושר</td>`;
@@ -1686,7 +1743,7 @@ function valueCell(screen: FieldsScreen, row: ExtractedRow): Html {
   if (!shows(screen, row)) {
     return h`<td class="key">${ltr(MASK)}</td>`;
   }
-  const read = h`<a href="${pageHref(screen.documentId, row.page)}">${row.value}</a>`;
+  const read = row.value;
   if (row.approvedValue === null || row.approvedValue === row.value) {
     return h`<td>${read}</td>`;
   }
@@ -1721,7 +1778,15 @@ export function renderFieldsPage(screen: FieldsScreen): string {
     <div>
       <a class="back" href="${back}">← ${screen.unitId ? h`הדירה` : screen.buildingName}</a>
       <h1>מה נקרא מן המסמך</h1>
-      <p class="lede">${screen.labelHe} · ההצהרה שתקפה ל־${ltr(screen.on)}</p>
+      <div class="ledger-head">
+        <span>${screen.labelHe} · ההצהרה שתקפה ל־${ltr(screen.on)}</span>
+        ${qualityVerdictChip(shown)}
+        ${
+          open.length - unflagged.length > 0
+            ? h`<span class="chip verdict is-low">${ltr(open.length - unflagged.length)} שורות לבדיקה אישית</span>`
+            : h``
+        }
+      </div>
     </div>
     ${
       screen.saved === undefined
@@ -1738,13 +1803,14 @@ export function renderFieldsPage(screen: FieldsScreen): string {
         : h`<div class="table-wrap">
       <table class="grid-table">
         <thead>
-          <tr><th>שדה</th><th>ערך שנקרא</th><th>איכות הקריאה</th><th>פעולה</th></tr>
+          <tr><th>שדה</th><th>ערך שנקרא</th><th>עמוד</th><th>איכות הקריאה</th><th>פעולה</th></tr>
         </thead>
         <tbody>
           ${ledgerOrder(shown).map(
             (row) => h`<tr>
-            <td class="value">${row.labelHe}</td>
+            <td class="value">${row.labelHe}${nameRole(row, screen.rows)}</td>
             ${valueCell(screen, row)}
+            <td class="key"><a href="${pageHref(screen.documentId, row.page)}">${ltr(row.page)}</a></td>
             ${qualityCell(row)}
             ${approveControl(screen, row)}
           </tr>`,
@@ -1753,6 +1819,7 @@ export function renderFieldsPage(screen: FieldsScreen): string {
             (field) => h`<tr>
             <td class="value muted">${field.labelHe}</td>
             <td class="muted">לא נקרא${field.isRequired ? h`` : h` — שדה רשות`}</td>
+            <td class="muted">—</td>
             <td class="muted">—</td>
             <td class="muted">—</td>
           </tr>`,
@@ -1779,12 +1846,15 @@ export function renderFieldsPage(screen: FieldsScreen): string {
           : h``
       }
     </div>
-    <p class="form-note">
+    <details class="prose-fold">
+      <summary>מה בדיוק עושה «אישור», ומה ההבדל בינו לבין «קידום»</summary>
+      <p>
       «אישור» אינו «קידום». אישור אומר שהקריאה נכונה ונשמר על שורת המסמך; קידום מעתיק ערך לעמודה
       מוקלדת של ההשכרה, ויש לו יעד רק לשני התאריכים. ערך שנקרא לעולם אינו נמחק — תיקון נכתב לצדו.
       <strong>קידום מחייב אישור תחילה</strong>, והערך שמועתק הוא הערך שאושר: שורה שלא נחתמה אינה
       מוצגת כאן לקידום.
-    </p>
+      </p>
+    </details>
     ${
       promotable.length > 0
         ? h`<form class="form-actions" method="post" action="/documents/${screen.documentId}/promote">

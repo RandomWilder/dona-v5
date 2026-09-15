@@ -3,7 +3,7 @@ number: 109
 title: "The orchestrator: upload, read, approve"
 status: open
 labels: [ready-for-agent]
-assignee:
+assignee: agent
 blocked_by: [100, 101, 102]
 parent: 99
 created: 2026-09-15

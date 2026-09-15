@@ -655,7 +655,7 @@ function documentCard(doc: FiledDocumentView): Html {
       <a href="/documents/${doc.documentId}/read">מילים על הדף</a>
       ${
         doc.typeKey === 'lease'
-          ? h`<a href="/documents/${doc.documentId}/tenancy">אישור חוזה</a>`
+          ? h`<a href="/documents/${doc.documentId}/fields">אישור הקריאה</a>`
           : h``
       }
     </p>

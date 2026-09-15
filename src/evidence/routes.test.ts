@@ -286,14 +286,14 @@ describe('evidence · the upload route', () => {
         assert.equal(response.statusCode, 302);
         assert.match(
           response.headers.location ?? '',
-          /\/documents\/[0-9a-f-]{36}\/tenancy$/,
+          /\/documents\/[0-9a-f-]{36}\/fields$/,
         );
         const confirm = await as(lease).inject({
           method: 'GET',
           url: String(response.headers.location),
         });
         assert.equal(confirm.statusCode, 200);
-        assert.match(confirm.body, /אישור חוזה/);
+        assert.match(confirm.body, /מה נקרא מן המסמך/);
         assert.doesNotMatch(confirm.body, /כהן/);
 
         const rows = await pool.query<{
@@ -334,7 +334,7 @@ describe('evidence · the upload route', () => {
           assert.match(unitPage.body, /X-Goog-Expires=/);
           assert.match(unitPage.body, /נמצאו כל הביטויים הקבועים של הטופס/);
           assert.match(unitPage.body, /\/documents\/[0-9a-f-]{36}\/read/);
-          assert.match(unitPage.body, /\/documents\/[0-9a-f-]{36}\/tenancy/);
+          assert.match(unitPage.body, /\/documents\/[0-9a-f-]{36}\/fields/);
           assert.doesNotMatch(unitPage.body, /href="gs:/);
           assert.doesNotMatch(unitPage.body, /gs:\/\/dona-v5-test-docs\//);
 
@@ -657,7 +657,7 @@ describe('evidence · the upload route', () => {
           hashes.push(postedHash);
           const location = String(response.headers.location ?? '');
           const documentId =
-            location.match(/\/documents\/([0-9a-f-]{36})\/tenancy$/)?.[1] ?? '';
+            location.match(/\/documents\/([0-9a-f-]{36})\/fields$/)?.[1] ?? '';
           assert.ok(documentId);
           const overlay = await as(app).inject({
             method: 'GET',
@@ -1115,7 +1115,7 @@ describe('evidence · A12 a document finds its own place', () => {
           assert.equal(response.statusCode, 302, response.body.slice(0, 400));
           assert.match(
             response.headers.location ?? '',
-            /\/documents\/[0-9a-f-]{36}\/tenancy$/,
+            /\/documents\/[0-9a-f-]{36}\/fields$/,
           );
           assert.equal((await documentsHere()) - before, 1);
           const rows = await pool.query<{
@@ -1589,7 +1589,7 @@ describe('evidence · a captured ת.ז., withheld unless the viewer may read it'
       assert.equal(response.statusCode, 302, response.body.slice(0, 400));
       const documentId =
         String(response.headers.location ?? '').match(
-          /\/documents\/([0-9a-f-]{36})\/tenancy$/,
+          /\/documents\/([0-9a-f-]{36})\/fields$/,
         )?.[1] ?? '';
       assert.ok(documentId, 'a verified lease goes to its confirm screen');
       const row = await pool.query<{ file_hash: string }>(
@@ -2047,7 +2047,7 @@ describe('evidence · A12 offers to create, to an admin', () => {
           assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
           assert.match(
             filed.headers.location ?? '',
-            /\/documents\/[0-9a-f-]{36}\/tenancy$/,
+            /\/documents\/[0-9a-f-]{36}\/fields$/,
           );
           hashes.push(documentFileHash(pdfBytes('6.9 filed')));
         },
@@ -2692,7 +2692,7 @@ describe('evidence · the approval ledger, and who may sign what', () => {
       assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
       documentId =
         String(filed.headers.location ?? '').match(
-          /\/documents\/([0-9a-f-]{36})\/tenancy$/,
+          /\/documents\/([0-9a-f-]{36})\/fields$/,
         )?.[1] ?? '';
       assert.ok(documentId, 'a verified lease goes to its confirm screen');
 
