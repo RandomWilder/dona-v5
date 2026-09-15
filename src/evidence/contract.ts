@@ -124,6 +124,17 @@ export {
   searchDocuments,
   signLinkedDocuments,
 } from './internal/list.ts';
+export type {
+  OfficeTurnDeps,
+  OfficeTurnResult,
+  OfficeTurnSpec,
+} from './internal/office-turn.ts';
+export {
+  answerOfficeHits,
+  OFFICE_TURN_INSTRUCTIONS,
+  OFFICE_TURN_REFUSAL,
+  runOfficeTurn,
+} from './internal/office-turn.ts';
 export type { FilingContinuation } from './internal/orchestrate.ts';
 export {
   destinationAfterFiling,

@@ -1,14 +1,19 @@
+import {
+  createSettings,
+  readExtractionSettings,
+} from '../src/kernel/config.ts';
+import { createConfiguredExtractor } from '../src/kernel/extraction.ts';
 import { migratedPoolOrNull } from '../src/kernel/pg-support.ts';
 import { buildCorpus, type Corpus, embeddingsConfigured } from './corpus.ts';
 import { formatReport, loadCases, runCases } from './runner.ts';
-import { placeholderSubject } from './subject.ts';
+import { officeTurnSubject, placeholderSubject } from './subject.ts';
 
 // CI entry point (`npm run evals`). Non-zero exit blocks the merge, exactly
 // like a failing test -- docs/pipeline.md §5.
 
 const cases = await loadCases();
 const wantsCorpus = cases.some(
-  (golden) => golden.retrieval || golden.grounding,
+  (golden) => golden.retrieval || golden.grounding || golden.expect,
 );
 
 const keyed = embeddingsConfigured();
@@ -16,6 +21,9 @@ const keyed = embeddingsConfigured();
 // The same argument REQUIRE_POSTGRES makes, for the other half of what a
 // retrieval case needs. Without a key the corpus cases skip, which is right on
 // a clean clone and a lie in CI: the gate would pass by grading nothing.
+//
+// Behavioural cases now grade the office turn, which needs the same embedder
+// (to rank this turn's Passages) and the answering model.
 //
 // Checked before the pool is opened, so the loud exit does not leave one behind.
 if (wantsCorpus && !keyed && process.env.REQUIRE_EMBEDDINGS === '1') {
@@ -49,8 +57,20 @@ if (pool) {
   );
 }
 
+const extraction = pool
+  ? await readExtractionSettings(createSettings(pool))
+  : null;
+
 const report = await runCases(cases, {
-  answer: placeholderSubject,
+  answer:
+    corpus && extraction
+      ? officeTurnSubject({
+          corpus,
+          extractor: createConfiguredExtractor(),
+          model: extraction.model,
+          reasoningEffort: extraction.reasoningEffort,
+        })
+      : placeholderSubject,
   retrieve: corpus?.retrieve,
   ground: corpus?.ground,
 });

@@ -9,7 +9,7 @@ this file and the workbook disagree, the workbook is right and this file is a bu
 - **Entities:** E12, E13, E15, E16 — Document · DocumentLink · DocumentType · DocumentTypeField ·
   ExtractedField · FieldPromotion · **Passage** (#103).   Retrieval over that store takes a required
   **Stance** (#104) and a required **retrieval bound** (#112).
-- **Depends on:** estate, parties, tenancy.
+- **Depends on:** estate, parties, tenancy, staff (the office retrieval thread, #113).
 - **Builds:** week 3 (slices 3.1–3.3, 3.5's confirm screen, 3.6) and week 4 (OCR at 4.1, comprehension
   at 4.2, promotion at 4.3, A2's draft tenancy at 4.6, A3's addendum at 4.7). **The stub gained content at slice 3.1**, which
   is the signal its build started. ExtractedField landed at 4.2; FieldPromotion lands at 4.3.
@@ -965,6 +965,24 @@ page-sized chunk and this search are retrieval configuration, so rent and deposi
 the golden set against an explicit portfolio bound, and a Unit-bound case asserts that a neighbour
 Unit's answering Passage is absent, ranked against the corpus fixtures and ratcheted to the rank
 the day they land.
+
+**#113 is the office turn.** One command: staff account, retrieval bound, question. It is not the
+agent and not a Conversation. It may call only `searchPassages`. Stance is administrator — the
+paper as printed, for every staff role that may read Documents — and is not a parameter a caller
+can omit or swap. Tenant stance on a Building or portfolio bound remains refused at search, so the
+forbidden combination still cannot be assembled.
+
+The command loads that account's office retrieval thread for the bound (empty if none), embeds, and
+searches. Zero hits: refuse, persist, no citations, and the answering model is not called. Hits:
+the model may use thread text only to interpret this turn's question, and may use only this turn's
+hit texts as facts. A fact that is not a Passage hit this turn is not in the answer. If none of the
+hits answer, refuse and persist, with no citations — including a question about another Unit's
+paper while this Unit is the bound, and including an off-lease question whose nearest Passages
+exist and do not answer. If they do answer: Hebrew, identifiers and amounts as printed, citations
+that name Document and page. Follow-ups search again. No silent widen, no Building nudge.
+
+Behavioural golden cases grade this turn as the evals subject (cite / refuse / tool = search).
+Grounding case `off-lease-refuses` still means hits may exist and none answer.
 
 **#105 backfills the archive.** Documents holding no passages — filed before #103, or filed with an
 unconfigured embedder — are walked by `sweepMissingPassages` the way `sweepUnverified` walks

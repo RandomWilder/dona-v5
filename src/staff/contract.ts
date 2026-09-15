@@ -63,6 +63,17 @@ export {
   createUnconfiguredIdentity,
   IdentityRefusal,
 } from './internal/identity.ts';
+export type {
+  AppendOfficeTurnSpec,
+  OfficeCitation,
+  OfficeRetrievalBound,
+  OfficeRetrievalTurn,
+} from './internal/office-thread.ts';
+export {
+  appendOfficeRetrievalTurn,
+  clearOfficeRetrievalThread,
+  loadOfficeRetrievalThread,
+} from './internal/office-thread.ts';
 export type { Permission, Role } from './internal/roles.ts';
 export {
   can,

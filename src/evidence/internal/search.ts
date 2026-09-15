@@ -19,6 +19,7 @@ export type RetrievalBound =
 export const SEARCH_PASSAGE_LIMIT = 8;
 
 export interface PassageHit {
+  passageId: string;
   documentId: string;
   page: number;
   text: string;
@@ -73,6 +74,7 @@ export async function searchPassages(
   }
   const boundId = bound.kind === 'portfolio' ? null : bound.id;
   const found = await db.query<{
+    document_passage_id: string;
     document_id: string;
     page: number;
     body: string;
@@ -80,7 +82,8 @@ export async function searchPassages(
     unit_id: string | null;
     distance: number;
   }>(
-    `SELECT p.document_id,
+    `SELECT p.document_passage_id,
+            p.document_id,
             p.page,
             p.body,
             dt.type_key,
@@ -161,6 +164,7 @@ export async function searchPassages(
     [vectorLiteral(vector), bound.kind, boundId],
   );
   return found.rows.map((row) => ({
+    passageId: row.document_passage_id,
     documentId: row.document_id,
     page: row.page,
     text: stance === 'tenant' ? maskIdentifierRuns(row.body) : row.body,

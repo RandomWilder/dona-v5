@@ -51,6 +51,7 @@ import {
 /** A hit, plus which corpus it came from -- what the grounder reads. */
 export interface CorpusHit extends RankedHit {
   source: ClauseSource;
+  text: string;
 }
 
 export interface Corpus {
@@ -142,9 +143,10 @@ export async function buildCorpus(
     const found = await client.query<{
       ref: string;
       source: ClauseSource;
+      body: string;
       distance: number;
     }>(
-      `SELECT ref, source, embedding <=> $1::vector AS distance
+      `SELECT ref, source, body, embedding <=> $1::vector AS distance
          FROM eval_chunk
         WHERE $2::text = 'portfolio'
            OR unit_id = $3
@@ -159,6 +161,7 @@ export async function buildCorpus(
     return found.rows.map((row) => ({
       clauseRef: row.ref,
       source: row.source,
+      text: row.body,
       distance: Number(row.distance),
     }));
   }

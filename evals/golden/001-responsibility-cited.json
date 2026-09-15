@@ -5,7 +5,7 @@
   "expect": {
     "refuses": false,
     "citesClause": true,
-    "tool": null,
-    "contains": ["סעיף"]
+      "tool": "search",
+    "contains": ["בעל הדירה"]
   }
 }
