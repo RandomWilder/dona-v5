@@ -25,7 +25,12 @@ for a week the register and the decision disagreed about whether three of four d
 | [0004](ADR-0004-personal-data-reaches-the-model-provider.md) | Personal data reaches the model provider, and that is a decision rather than an accident | accepted — decision 3's deliverable is fuse **F6** |
 | [0005](ADR-0005-the-credential-is-google-s.md) | The staff credential is Google's; the allowlist replaces the assertable second factor | accepted |
 | [0006](ADR-0006-the-extractor-may-read-a-declared-identifier.md) | The extractor may read a **declared** identifier; masking binds the embedder and any tenant-facing model call | accepted |
+| [0007](ADR-0007-work-is-tracked-as-blocking-edges-not-a-calendar.md) | Work is tracked as blocking edges between tickets, not a calendar of slices and weeks | accepted |
 
-**A1–A10 in [tasks/plan.md](../../tasks/plan.md) are numbered as they will become ADRs.** They are
-decisions of record already; they become files here as the slices that implement them land, so an ADR
-is written against something that exists rather than something intended.
+**A1–A10 in [archive/tasks-w1-7/plan.md](../../archive/tasks-w1-7/plan.md) are numbered as they will
+become ADRs.** They are decisions of record already; they become files here as the work that
+implements them lands, so an ADR is written against something that exists rather than something
+intended. That file is archived as of ADR-0007 and is read for those ten decisions, nothing else.
+
+**This is the ADR home**, and the only one. The engineering skills' own docs say `docs/adr/`;
+[../agents/domain.md](../agents/domain.md) redirects them here.

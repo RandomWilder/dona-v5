@@ -83,7 +83,7 @@ These are the parts that must survive contact with code.
   `DocumentTypeField` is versioned by `effective_from` so a value extracted under an older schema
   stays explicable. **Promotion is the governed half:** an extracted value becoming a typed column
   costs a migration and a reviewed mapping, which is why there is deliberately no `promotes_to`
-  column anywhere in E15 or E16. Added 7 Sep 2026 by slice 3.0; this is [../../tasks/plan.md](../../tasks/plan.md)'s
+  column anywhere in E15 or E16. Added 7 Sep 2026 by slice 3.0; this is [../../archive/tasks-w1-7/plan.md](../../archive/tasks-w1-7/plan.md)'s
   **A8**, and it is `ObligationType` and `asset_type` applied to documents.
 
 ## Two conventions to preserve

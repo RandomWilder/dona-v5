@@ -12,7 +12,7 @@ this file and the workbook disagree, the workbook is right and this file is a bu
 - **Builds:** week 3 (slices 3.1–3.3, 3.5's confirm screen, 3.6) and week 4 (OCR at 4.1, comprehension
   at 4.2, promotion at 4.3, A2's draft tenancy at 4.6, A3's addendum at 4.7). **The stub gained content at slice 3.1**, which
   is the signal its build started. ExtractedField landed at 4.2; FieldPromotion lands at 4.3.
-- **Carries:** **capture is open, promotion is governed** ([tasks/plan.md](tasks/plan.md) A8). A new
+- **Carries:** **capture is open, promotion is governed** ([archive/tasks-w1-7/plan.md](archive/tasks-w1-7/plan.md) A8). A new
   type or field is a row — zero migrations, zero deploys — and is citable the moment it is extracted;
   an extracted value becoming a typed column costs a migration and a reviewed mapping.
   `DocumentTypeField` is versioned by `effective_from`, so a value extracted under version 3 of a
@@ -761,6 +761,19 @@ Names do not get a promotion target: party provenance is a `PARTY` / `SIGNATORY`
 `invalid` and writes nothing. Zero `guarantor_name` rows is success. Two `tenant_name` rows are two
 parties. No name is matched against the global party register.
 
+**Amended 15 Sep 2026: role comes from the field family, and the ledger stamp is the confirmation.**
+The director ruled that a select asking a person to name the role of `שם הערב` is a second way to say
+what the field name already says. The role is not a value read off the page; it is carried by
+**which declared field the name was read into**, so `tenant_name` is a tenant and `guarantor_name` is
+a `GUARANTOR`. What a human must still do — and invariant 5 is unchanged — is affirm the *reading*,
+which they already do on A15's ledger, one row and one edit box at a time. So the rule above becomes:
+**a captured name row with no approval stamp writes no party**, on exactly the standing a missing
+role had, and an approved one writes its family's role. The confirm screen this paragraph was written
+for is deleted; #110 wires the write. The `is_service_contact = false` on `GUARANTOR` is still the
+database's CHECK and not the caller's promise, which is why this is safe to move: the one distinction
+with an isolation consequence is enforced where a wrong answer is rejected rather than accepted
+politely.
+
 **Cross-check.** Extracted `apartment_number` and `address` are asserted against the unit. A mismatch
 is `invalid`: no tenancy, no party, no new link. This is the content check 3.3 deferred.
 
@@ -776,7 +789,14 @@ is the whole point, and it is the same one A12's refusal screen draws.
 **Idempotent confirm.** A lease that already has a `TENANCY` / `EVIDENCE` link returns
 `alreadyEstablished` and creates no second household.
 
-**Which letting, and the attach branch. Slice 6.5.** Until 6.5 this flow could only *create*: a
+**Which letting, and the attach branch. Slice 6.5, and provisional from 15 Sep 2026.** The director
+ruled that a lease **defines** a letting rather than attaching to one, so the *prompt* below — a list
+of candidate lettings shown to a person to choose from — is gone with the confirm screen. The branch
+itself is reached from a conflict rather than from a prompt, and whether it survives in that shape is
+#110's to decide and to record here; see A2 step 6 in `SPEC-flows.md` for the ruling in full. What
+follows is what the code does today.
+
+Until 6.5 this flow could only *create*: a
 second lease on a unit and a start date it already held died on `conflict — that unit already has a
 lease starting on this date`, with nothing an operator could do from the screen. `proposeLeaseTenancy`
 now carries the unit's lettings from `listUnitTenancies` as **candidates**, and `confirmLeaseTenancy`
@@ -847,8 +867,10 @@ confirm, the same skip A2 and A6 use.
 **The addendum contributes to the existing tenancy.** Evidence does not call `upsertTenancy` and does
 not ask for a `terms_profile`. It calls `createParty` and `upsertTenancyParty` for each confirmed
 `guarantor_name`, and `promoteExtractedField` for `new_end_date` when capture has one. Zero
-guarantors is success. A missing role for a captured name is `invalid` and writes nothing. There is
-no address/apartment cross-check: those fields are not on this type, and the letting was chosen at
+guarantors is success. A missing role for a captured name is `invalid` and writes nothing — read
+under A2's amendment of 15 Sep 2026, which makes the role the field family's and the approval stamp
+the confirmation, so on this flow it is an unstamped `guarantor_name` row that writes nothing. There
+is no address/apartment cross-check: those fields are not on this type, and the letting was chosen at
 upload.
 
 **Later document wins; earlier provenance stays.** Promoting `new_end_date` copies onto
@@ -905,7 +927,7 @@ lines, and is allowed to be zero.
 
 The published [Data Model](docs/data-model.html)'s `Document` card lists four columns the workbook's
 E12 does not, and the Data Model is the authority on what the system is — so each omission is a
-decision with a reason, made at slice 3.1 and recorded in [tasks/evidence/3.1.md](tasks/evidence/3.1.md).
+decision with a reason, made at slice 3.1 and recorded in [archive/tasks-w1-7/evidence/3.1.md](archive/tasks-w1-7/evidence/3.1.md).
 All four are nullable `ADD COLUMN`s when they come.
 
 - **`state`** — figure 5's `RECEIVED → EXTRACTED → ACCEPTED / REJECTED` is the review queue's state

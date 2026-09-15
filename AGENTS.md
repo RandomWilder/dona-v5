@@ -3,7 +3,7 @@
 ## Commands
 - `npm test` · `npm run typecheck` · `npm run lint` · `npm run format` · `npm run db:up && npm run dev`
   → `/health` asserts `db:up`; `/` is the index. Node 24 type-strips `.ts`; no build step.
-  **`npm run dev` does not watch** — restart it after a slice, then click the changed screen before
+  **`npm run dev` does not watch** — restart it after a change, then click the changed screen before
   merge ([docs/pipeline.md](docs/pipeline.md) §8).
   `npm run migrate` applies `src/kernel/migrations/` as a Cloud Run job before a revision serves;
   `seed` · `import:register` · `seed:register` · `register:generate` · `seed:doctypes` ·
@@ -19,7 +19,8 @@
   scope · register · policy · calls · channel · staff. Shared `src/kernel/` imports from no module.
 - A module imports another's `contract.ts`, never its `internal/`, and **`src/scope/` is the only
   place the isolation join is written**. A grep guard and `kernel/boundary.test.ts` enforce both.
-- Read `SPEC.md` first; a module's `SPEC-<module>.md` is updated before its code, in the same change.
+- Read `CONTEXT.md` for the vocabulary and `SPEC.md` for the rules; a module's `SPEC-<module>.md` is
+  updated before its code, in the same change.
 
 ## Code style
 - TypeScript, erasable syntax only; explicit `.ts` on relative imports; `import type` for types.
@@ -31,4 +32,7 @@
 - `.claude/hooks/` has teeth: destructive shell commands are blocked, and a write under
   `src/<module>/` runs that module's tests and reports the failures back.
 - Secrets only through `infra/set-secret.sh`; **real tenant documents never enter this repo**.
-- Now: `tasks/todo.md` · Process: `docs/pipeline.md` · `docs/decisions/` · What exists: `SPEC.md` Status
+- Now: `issues/` (open = `grep -l 'status: open' issues/*.md`) · Process: `docs/pipeline.md` ·
+  `CLAUDE.md` §Agent skills · Decisions:
+  `docs/decisions/` · What exists: `SPEC.md` Status. **`tasks/` is archived at
+  `archive/tasks-w1-7/`** (ADR-0007) — code comments citing `tasks/evidence/<n>.md` resolve there.

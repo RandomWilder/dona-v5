@@ -71,7 +71,7 @@ mechanism — tier 2 never enters the repo, and `.gitignore`, the corpus bucket 
 are what hold it there.
 
 **Decision 3 is not.** The DPA with each processor and the disclosure to data subjects are the
-owner's, they are **fuse F6** on [tasks/fuses.md](../../tasks/fuses.md), and they are owed **before
+owner's, they are **fuse F6** on [docs/fuses.md](../fuses.md), and they are owed **before
 the tier-2 corpus lands** — which is why 1.12 built every control and deliberately did not take
 delivery. It is still outstanding — but it is a deliverable on a fuse, not an unadopted decision;
 the status moved to `accepted` on 6 Sep 2026 for the reason set out below, and F6 now names the
@@ -92,7 +92,7 @@ decisions bind **today**, and it invited a later reader to treat the entire ADR 
 
 The rule this sets, and it applies to every ADR here: **a decision is `accepted` when it has been
 taken and is being followed. An outstanding deliverable of an accepted decision belongs on
-[tasks/fuses.md](../../tasks/fuses.md), not in a status field.** A fuse has an owner, a burn time and
+[docs/fuses.md](../fuses.md), not in a status field.** A fuse has an owner, a burn time and
 a weekly walk; a status field has none of those, so parking an obligation there is how it gets lost.
 
 Nothing about the obligation changed. What changed is where it is tracked, and how precisely: F6 now
@@ -105,7 +105,7 @@ being true.
 
 ## Open, and owed
 
-- **The two DPAs and the notice.** Recorded on [tasks/fuses.md](../../tasks/fuses.md) as **F6**, with
+- **The two DPAs and the notice.** Recorded on [docs/fuses.md](../fuses.md) as **F6**, with
   the instrument named per processor. The notice is drafted at
   [docs/data-subject-notice.draft.md](../data-subject-notice.draft.md) — every element PPL §11 requires,
   filled in where the system determines the answer and marked `⟨…⟩` where only the owner can. Reviewing

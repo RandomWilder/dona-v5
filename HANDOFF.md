@@ -5,9 +5,11 @@
 >
 > **The body of this file is dated 3 Sep 2026 and was written before any code existed.** Its
 > decisions and reasoning still hold; its *status* claims do not. **For where the project actually
-> is, read [tasks/todo.md](tasks/todo.md) first** — it is rewritten every Sunday and is always
-> current — then [tasks/roadmap.md](tasks/roadmap.md), [tasks/fuses.md](tasks/fuses.md) and the
-> newest file in [tasks/evidence/](tasks/evidence/).
+> is, read [issues/](issues/)** — the open tickets and their blocking edges are the current state — then
+> read [docs/fuses.md](docs/fuses.md) for what is waiting on someone else. The slice-and-week process
+> that ran from 6 to 15 Sep 2026 is archived at [archive/tasks-w1-7/](archive/tasks-w1-7/) and its
+> sixty-seven evidence files are the record of what was proved in that period
+> ([ADR-0007](docs/decisions/ADR-0007-work-is-tracked-as-blocking-edges-not-a-calendar.md)).
 >
 > **Status as of 9 Sep 2026 (week 4 close · M1):** application code exists and is deployed. **450
 > code + 41 hooks + 47 policy tests, 0 failed; 3 grep guards.** Staging serves at
@@ -336,8 +338,7 @@ has no new screen.
 
 > **This section is the state on 3 Sep 2026, before the build started. It is kept because it explains
 > how the plan was arrived at, not because it is current.** Four weeks of building have happened
-> since; the header of this file carries the status, and [tasks/todo.md](tasks/todo.md) carries the
-> detail. Read this section as history.
+> since; the header of this file says where to find the current state. Read this section as history.
 
 The refinement arc is complete and **all three documents have been reconciled against each other**
 (2 Sep 2026). The Data Model was approved first and treated as authority; the Brief was aligned to
