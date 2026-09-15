@@ -240,48 +240,199 @@ const styles = h`<style>
   }
   .notice h2 { font-size: var(--text-lg); margin: 0 0 var(--space-2); }
   .notice h2.second-heading { margin-block-start: var(--space-5); }
+  /* Split pane, not a card: the Unit and the thread share the main column, and the
+     checkbox collapses the thread the same way the ops rail opens — no script. */
+  .ops:has(.unit-sheet) .ops-main {
+    max-width: none;
+    padding: 0;
+    min-height: 100%;
+    display: grid;
+  }
   .unit-sheet {
     display: grid;
-    gap: var(--space-6);
     grid-template-columns: minmax(0, 1fr);
+    min-height: 100%;
+    min-width: 0;
   }
+  .unit-retrieval-toggle {
+    position: absolute;
+    width: var(--size-hairline);
+    height: var(--size-hairline);
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .unit-sheet-main {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    padding: var(--space-6);
+    padding-inline: max(var(--space-6), env(safe-area-inset-inline-start, 0px), env(safe-area-inset-inline-end, 0px));
+    padding-block-end: max(var(--space-6), env(safe-area-inset-bottom, 0px));
+  }
+  .unit-retrieval {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .unit-retrieval {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    min-width: 0;
+    min-height: 0;
+    max-height: 50dvh;
+    background: var(--color-surface-card);
+    border-block-start: var(--size-hairline) solid var(--color-divider);
+  }
+  .unit-retrieval-head {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    border-block-end: var(--size-hairline) solid var(--color-divider-soft);
+  }
+  .unit-retrieval-head h2 {
+    margin: 0;
+    min-width: 0;
+    font-size: var(--text-base);
+    font-weight: 500;
+  }
+  .unit-retrieval-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: center;
+  }
+  .unit-retrieval-tools form { margin: 0; }
+  .unit-retrieval-tools .btn {
+    min-height: var(--size-control-ops);
+    padding-inline: var(--space-3);
+    font-size: var(--text-sm);
+  }
+  .unit-retrieval-hide {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--size-control-ops);
+    padding-inline: var(--space-3);
+    border-radius: var(--radius-2);
+    border: var(--size-hairline) solid var(--color-field-line);
+    background: var(--color-surface-card);
+    color: var(--color-text);
+    font: inherit;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .unit-retrieval-hide .when-closed { display: none; }
+  .unit-sheet:has(.unit-retrieval-toggle:not(:checked)) .unit-thread,
+  .unit-sheet:has(.unit-retrieval-toggle:not(:checked)) .unit-retrieval-empty,
+  .unit-sheet:has(.unit-retrieval-toggle:not(:checked)) .unit-retrieval-ask,
+  .unit-sheet:has(.unit-retrieval-toggle:not(:checked)) .unit-retrieval-head h2,
+  .unit-sheet:has(.unit-retrieval-toggle:not(:checked)) .unit-retrieval-tools form {
+    display: none;
+  }
+  .unit-sheet:has(.unit-retrieval-toggle:not(:checked)) .unit-retrieval {
+    max-height: none;
+    grid-template-rows: auto;
+  }
+  .unit-sheet:has(.unit-retrieval-toggle:not(:checked)) .unit-retrieval-head {
+    padding: var(--space-2) var(--space-4);
+  }
+  .unit-sheet:has(.unit-retrieval-toggle:not(:checked)) .unit-retrieval-hide .when-open {
+    display: none;
+  }
+  .unit-sheet:has(.unit-retrieval-toggle:not(:checked)) .unit-retrieval-hide .when-closed {
+    display: inline;
+  }
+  .unit-retrieval-toggle:focus-visible + .unit-sheet-main + .unit-retrieval .unit-retrieval-hide {
+    outline: var(--size-focus) solid var(--color-accent-line);
+    outline-offset: var(--size-focus);
+  }
+  .unit-thread {
+    display: grid;
+    align-content: start;
+    gap: var(--space-3);
+    margin: 0;
+    padding: var(--space-4);
+    list-style: none;
+    overflow: auto;
+    min-height: 0;
+  }
+  .unit-turn {
+    display: grid;
+    gap: var(--space-2);
+    min-width: 0;
+    padding: var(--space-3);
+    border-radius: var(--radius-2);
+    background: var(--color-bg);
+  }
+  .unit-turn .asked { margin: 0; font-weight: 500; font-size: var(--text-sm); color: var(--color-text-muted); }
+  .unit-turn .answered { margin: 0; }
+  .unit-turn.is-refused .answered { color: var(--color-text-muted); }
+  .unit-citations { margin: 0; padding: 0; display: grid; gap: var(--space-1); list-style: none; }
+  .unit-citations a { font-size: var(--text-sm); }
+  .unit-retrieval-empty {
+    margin: 0;
+    padding: var(--space-4);
+    color: var(--color-text-muted);
+  }
+  .unit-retrieval-ask {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    padding-block-end: max(var(--space-4), env(safe-area-inset-bottom, 0px));
+    border-block-start: var(--size-hairline) solid var(--color-divider-soft);
+    background: var(--color-surface);
+  }
+  .unit-retrieval-ask .form-grid { max-width: none; gap: var(--space-3); }
+  .unit-retrieval-ask textarea { min-height: calc(var(--space-10) + var(--space-6)); resize: none; }
   @media (min-width: 64rem) {
+    .ops:has(.unit-sheet) {
+      height: 100dvh;
+      overflow: hidden;
+    }
+    .ops:has(.unit-sheet) .ops-main {
+      min-height: 0;
+      overflow: hidden;
+    }
     .unit-sheet {
       grid-template-columns: minmax(0, 1fr) var(--size-retrieval);
-      align-items: start;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .unit-sheet:has(.unit-retrieval-toggle:not(:checked)) {
+      grid-template-columns: minmax(0, 1fr) var(--size-touch);
+    }
+    .unit-sheet-main {
+      overflow: auto;
     }
     .unit-retrieval {
       grid-column: 2;
       grid-row: 1;
     }
+    .unit-retrieval {
+      max-height: none;
+      height: 100%;
+      border-block-start: 0;
+      border-inline-start: var(--size-hairline) solid var(--color-divider);
+    }
+    .unit-sheet:has(.unit-retrieval-toggle:not(:checked)) .unit-retrieval-head {
+      height: 100%;
+      padding: var(--space-4) 0;
+      border-block-end: 0;
+    }
+    .unit-sheet:has(.unit-retrieval-toggle:not(:checked)) .unit-retrieval-hide {
+      writing-mode: vertical-rl;
+      min-height: 0;
+      height: 100%;
+      width: 100%;
+      padding-block: var(--space-4);
+      padding-inline: 0;
+      border: 0;
+      border-radius: 0;
+      background: var(--color-surface);
+    }
   }
-  .unit-retrieval {
-    background: var(--color-surface-card);
-    border: var(--size-hairline) solid var(--color-divider-soft);
-    border-radius: var(--radius-3);
-    padding: var(--space-4);
-    display: grid;
-    gap: var(--space-4);
-  }
-  .unit-retrieval > summary {
-    cursor: pointer;
-    font-weight: 500;
-    font-size: var(--text-lg);
-  }
-  .unit-retrieval[open] > summary { margin-block-end: var(--space-3); }
-  .unit-thread {
-    display: grid;
-    gap: var(--space-4);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .unit-turn { display: grid; gap: var(--space-2); min-width: 0; }
-  .unit-turn .asked { margin: 0; font-weight: 500; }
-  .unit-turn .answered { margin: 0; }
-  .unit-turn.is-refused .answered { color: var(--color-text-muted); }
-  .unit-citations { margin: 0; padding: 0; display: grid; gap: var(--space-1); list-style: none; }
-  .unit-citations a { font-size: var(--text-sm); }
   .tenancy-head { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: baseline; }
   .status.is-active { background: color-mix(in srgb, var(--color-ok) 14%, var(--color-surface-card)); color: var(--color-ok); }
   .term-found { color: var(--color-ok); }
@@ -878,7 +1029,7 @@ export function renderUnitPage(
   const body =
     retrieval === undefined
       ? sheet
-      : h`<div class="unit-sheet">${sheet}${retrievalPanel(retrieval)}</div>`;
+      : h`<div class="unit-sheet">${retrievalSplit(sheet, retrieval)}</div>`;
   return page(`דונה דום — דירה ${unit.unit_number}`, body, nav);
 }
 
@@ -897,44 +1048,55 @@ export interface UnitRetrievalView {
   }[];
 }
 
-function retrievalPanel(retrieval: UnitRetrievalView): Html {
+function retrievalSplit(sheet: Html, retrieval: UnitRetrievalView): Html {
   const ask = `/estate/units/${retrieval.unitId}/office-turn`;
   const clear = `/estate/units/${retrieval.unitId}/office-thread`;
-  return h`<details class="unit-retrieval" data-office-retrieval="unit" open>
-    <summary>שאלות על המסמכים</summary>
-    ${
-      retrieval.thread.length === 0
-        ? h`<p class="lede">עדיין לא נשאלה שאלה.</p>`
-        : h`<ol class="unit-thread">
-            ${retrieval.thread.map(
-              (
-                turn,
-              ) => h`<li class="unit-turn${turn.refused ? ' is-refused' : ''}">
-                <p class="asked">${turn.question}</p>
-                <p class="answered">${turn.answer}</p>
-                ${citationList(turn.citations)}
-              </li>`,
-            )}
-          </ol>`
-    }
-    <form method="post" action="${ask}" class="form-grid">
-      ${csrfInput(retrieval.csrf)}
-      <label class="form-row">שאלה
-        <textarea name="question" required maxlength="2000" rows="3"></textarea>
-      </label>
-      <div class="form-actions">
-        <button type="submit">שאלו</button>
-      </div>
-    </form>
-    ${
-      retrieval.thread.length === 0
-        ? h``
-        : h`<form method="post" action="${clear}">
-            ${csrfInput(retrieval.csrf)}
-            <button type="submit">מחיקת השיחה</button>
-          </form>`
-    }
-  </details>`;
+  return h`
+    <input type="checkbox" id="unit-retrieval-toggle" class="unit-retrieval-toggle" checked />
+    <div class="unit-sheet-main">${sheet}</div>
+    <aside class="unit-retrieval" data-office-retrieval="unit" aria-label="שאלות על המסמכים">
+      <header class="unit-retrieval-head">
+        <h2>שאלות על המסמכים</h2>
+        <div class="unit-retrieval-tools">
+          ${
+            retrieval.thread.length === 0
+              ? h``
+              : h`<form method="post" action="${clear}">
+                  ${csrfInput(retrieval.csrf)}
+                  <button class="btn btn-secondary" type="submit">מחיקת השיחה</button>
+                </form>`
+          }
+          <label class="unit-retrieval-hide" for="unit-retrieval-toggle"><span class="when-open">הסתרה</span><span class="when-closed">שאלות</span></label>
+        </div>
+      </header>
+      ${
+        retrieval.thread.length === 0
+          ? h`<p class="unit-retrieval-empty">עדיין לא נשאלה שאלה.</p>`
+          : h`<ol class="unit-thread">
+              ${retrieval.thread.map(
+                (
+                  turn,
+                ) => h`<li class="unit-turn${turn.refused ? ' is-refused' : ''}">
+                  <p class="asked">${turn.question}</p>
+                  <p class="answered">${turn.answer}</p>
+                  ${citationList(turn.citations)}
+                </li>`,
+              )}
+            </ol>`
+      }
+      <form method="post" action="${ask}" class="unit-retrieval-ask">
+        <div class="form-grid">
+          ${csrfInput(retrieval.csrf)}
+          <label class="form-row">שאלה
+            <textarea name="question" required maxlength="2000" rows="2"></textarea>
+          </label>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">שאלו</button>
+          </div>
+        </div>
+      </form>
+    </aside>
+  `;
 }
 
 function citationList(

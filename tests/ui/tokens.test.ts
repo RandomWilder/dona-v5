@@ -2472,7 +2472,11 @@ describe('shared UI tokens', () => {
       ],
     });
     assert.match(html, /data-office-retrieval="unit"/);
+    assert.match(html, /<aside class="unit-retrieval"/);
+    assert.match(html, /unit-retrieval-toggle/);
     assert.match(html, /שאלות על המסמכים/);
+    assert.doesNotMatch(html, /<details/);
+    assert.doesNotMatch(html, /<summary/);
     assert.match(html, /מה דמי השכירות\?/);
     assert.match(html, /דמי השכירות הם 4,520 ש״ח לחודש/);
     assert.match(html, /חוזה שכירות/);
