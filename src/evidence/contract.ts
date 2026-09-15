@@ -156,7 +156,11 @@ export {
 } from './internal/read.ts';
 export type { DocumentDeps } from './internal/routes.ts';
 export { registerDocumentRoutes } from './internal/routes.ts';
-export type { PassageHit, RetrievalStance } from './internal/search.ts';
+export type {
+  PassageHit,
+  RetrievalBound,
+  RetrievalStance,
+} from './internal/search.ts';
 export { SEARCH_PASSAGE_LIMIT, searchPassages } from './internal/search.ts';
 export type { ProtocolProposal, SeedDeps } from './internal/seed.ts';
 export {

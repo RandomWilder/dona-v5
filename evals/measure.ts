@@ -74,7 +74,7 @@ console.log(`grounding cutoff in force: ${groundingCutoff}\n`);
 console.log('| question | expected | rank | distance | lead over next |');
 console.log('|---|---|---|---|---|');
 for (const probe of probes) {
-  const hits = await corpus.search(probe.question);
+  const hits = await corpus.search(probe.question, { kind: 'portfolio' });
   const at = hits.findIndex((hit) => hit.clauseRef === probe.expect);
   const top = hits[0];
   const lead = leadOf(hits);
@@ -88,7 +88,7 @@ for (const probe of probes) {
 
 console.log(`\n## every result set, in order\n`);
 for (const probe of probes) {
-  const hits = await corpus.search(probe.question);
+  const hits = await corpus.search(probe.question, { kind: 'portfolio' });
   console.log(`**${probe.question}**`);
   for (const [at, hit] of hits.entries()) {
     const admitted = hit.distance <= groundingCutoff ? '' : '  ← beyond cutoff';

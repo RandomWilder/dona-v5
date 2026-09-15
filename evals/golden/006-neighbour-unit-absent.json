@@ -1,0 +1,14 @@
+{
+  "id": "neighbour-unit-absent",
+  "title": "A Unit-bound search does not return a neighbour Unit's answering Passage",
+  "input": {
+    "message": "כמה דמי שכירות משלמים בחודש?"
+  },
+  "retrieval": {
+    "expectRef": "חוזה §10.3",
+    "absentRef": "שכן · חוזה §10.3",
+    "rankAtMost": 8,
+    "bound": { "kind": "unit", "id": "home-unit" },
+    "note": "#112. Same rent question as monthly-rent-ranks, bound to one Unit. The neighbour copy of חוזה §10.3 is in the corpus and is as near as the home copy; it must not appear. No assertion on distance."
+  }
+}

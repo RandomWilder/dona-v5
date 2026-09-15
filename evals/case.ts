@@ -19,8 +19,12 @@
 //
 // Lifted from v3 (docs/from-v3.md Tier 1), renaming nothing.
 
+import type { RetrievalBound } from '../src/evidence/contract.ts';
+
 export interface CaseInput {
   message: string;
+  /** Required on retrieval cases. Grounding and behavioural cases omit it. */
+  bound?: RetrievalBound;
 }
 
 export interface Expectation {
@@ -48,10 +52,17 @@ export interface Expectation {
 export interface RetrievalExpectation {
   /** The clause reference that answers the question, as the corpus spells it. */
   expectRef: string;
+  /**
+   * A clause that must not appear. Used to grade a Unit bound against a
+   * neighbour Unit's answering Passage.
+   */
+  absentRef?: string;
   /** 1-based. The expected clause must come back at this rank or better. */
   rankAtMost: number;
   /** Free text: where the number came from, so the file explains itself. */
   note?: string;
+  /** Which Documents' Passages this case searches. Required; no default. */
+  bound: RetrievalBound;
 }
 
 // A grounding case asserts **where an answer was allowed to come from**, and
@@ -145,11 +156,12 @@ export function parseCase(raw: unknown, source: string): GoldenCase {
   const message = (input as Record<string, string>).message;
 
   if (kinds[0] === 'retrieval') {
+    const retrieval = parseRetrieval(value.retrieval, fail);
     return {
       id,
       title,
-      input: { message },
-      retrieval: parseRetrieval(value.retrieval, fail),
+      input: { message, bound: retrieval.bound },
+      retrieval,
     };
   }
 
@@ -214,11 +226,39 @@ function parseRetrieval(
   if (value.note !== undefined && typeof value.note !== 'string') {
     fail('retrieval.note must be a string when present');
   }
+  if (value.absentRef !== undefined && typeof value.absentRef !== 'string') {
+    fail('retrieval.absentRef must be a string when present');
+  }
+  if (typeof value.absentRef === 'string' && value.absentRef.length === 0) {
+    fail('retrieval.absentRef must be a non-empty string when present');
+  }
   return {
     expectRef: value.expectRef,
+    absentRef: value.absentRef as string | undefined,
     rankAtMost: value.rankAtMost,
     note: value.note as string | undefined,
+    bound: parseBound(value.bound, fail),
   };
+}
+
+function parseBound(
+  raw: unknown,
+  fail: (why: string) => never,
+): RetrievalBound {
+  if (typeof raw !== 'object' || raw === null) {
+    fail('retrieval.bound is required');
+  }
+  const value = raw as Record<string, unknown>;
+  if (value.kind === 'portfolio') {
+    return { kind: 'portfolio' };
+  }
+  if (value.kind === 'unit' || value.kind === 'building') {
+    if (typeof value.id !== 'string' || value.id.length === 0) {
+      fail('retrieval.bound.id must be a non-empty string');
+    }
+    return { kind: value.kind, id: value.id };
+  }
+  fail('retrieval.bound.kind must be unit, building or portfolio');
 }
 
 function parseGrounding(

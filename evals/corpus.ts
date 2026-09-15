@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import type { RetrievalBound } from '../src/evidence/contract.ts';
 import { createSettings, readEmbeddingSettings } from '../src/kernel/config.ts';
 import {
   createOpenAiEmbedder,
@@ -14,6 +15,7 @@ import type {
 import {
   type ClauseSource,
   specimenClauses,
+  specimenRefs,
 } from './fixtures/specimen-clauses.ts';
 
 // The corpus a retrieval or grounding case is graded against.
@@ -59,7 +61,7 @@ export interface Corpus {
   retrieve: Retriever;
   ground: Grounder;
   /** Every hit for a question, for the measurement rather than the gate. */
-  search(question: string): Promise<CorpusHit[]>;
+  search(question: string, bound: RetrievalBound): Promise<CorpusHit[]>;
   close(): Promise<void>;
 }
 
@@ -98,6 +100,11 @@ const searchLimit = 8;
 // exactly why the number needs a gap around it and not a decimal place.
 export const groundingCutoff = 0.56;
 
+export const HOME_UNIT = 'home-unit';
+export const NEIGHBOUR_UNIT = 'neighbour-unit';
+export const NEIGHBOUR_RENT_REF = 'שכן · חוזה §10.3';
+export const PORTFOLIO_BOUND: RetrievalBound = { kind: 'portfolio' };
+
 // The embedder is injected in one place only -- corpus.test.ts, which proves
 // the DDL, the insert and the `<=>` ordering against a real database with the
 // kernel's deterministic fake. The seam exists so that half of this file is
@@ -127,7 +134,10 @@ export async function buildCorpus(
   const client = await pool.connect();
   await index(client, embedder, embedder.dimensions);
 
-  async function search(question: string): Promise<CorpusHit[]> {
+  async function search(
+    question: string,
+    bound: RetrievalBound,
+  ): Promise<CorpusHit[]> {
     const [vector] = await embedder.embed([question]);
     const found = await client.query<{
       ref: string;
@@ -136,9 +146,15 @@ export async function buildCorpus(
     }>(
       `SELECT ref, source, embedding <=> $1::vector AS distance
          FROM eval_chunk
+        WHERE $2::text = 'portfolio'
+           OR unit_id = $3
         ORDER BY embedding <=> $1::vector
         LIMIT ${searchLimit}`,
-      [toVector(vector)],
+      [
+        toVector(vector),
+        bound.kind,
+        bound.kind === 'portfolio' ? null : bound.id,
+      ],
     );
     return found.rows.map((row) => ({
       clauseRef: row.ref,
@@ -148,7 +164,7 @@ export async function buildCorpus(
   }
 
   async function ground(question: string): Promise<GroundedAnswer> {
-    const hits = await search(question);
+    const hits = await search(question, PORTFOLIO_BOUND);
     const near = hits.filter((hit) => hit.distance <= groundingCutoff);
     const top = near[0];
     if (!top) {
@@ -168,10 +184,15 @@ export async function buildCorpus(
   }
 
   return {
-    chunks: specimenClauses.length,
+    chunks: specimenClauses.length + 1,
     describe: embedder.describe(),
     search,
-    retrieve: (input: CaseInput) => search(input.message),
+    retrieve: (input: CaseInput) => {
+      if (!input.bound) {
+        throw new Error('a retrieval bound is required');
+      }
+      return search(input.message, input.bound);
+    },
     ground: (input: CaseInput) => ground(input.message),
     close: () => {
       client.release();
@@ -197,6 +218,7 @@ async function index(
       ref       text NOT NULL,
       source    text NOT NULL,
       body      text NOT NULL,
+      unit_id   text NOT NULL,
       embedding vector(${dimensions}) NOT NULL
     ) ON COMMIT PRESERVE ROWS
   `);
@@ -204,14 +226,36 @@ async function index(
   // One call for every passage, in order: Embedder.embed pairs by index, and
   // pairing a clause with another clause's vector is a silent corruption that
   // every later answer would cite through.
-  const vectors = await embedder.embed(specimenClauses.map((one) => one.body));
+  const rent = specimenClauses.find(
+    (clause) => clause.ref === specimenRefs.monthlyRent,
+  );
+  if (!rent) throw new Error('the neighbour copy needs the rent clause');
+  const bodies = [...specimenClauses.map((one) => one.body), rent.body];
+  const vectors = await embedder.embed(bodies);
   for (const [at, clause] of specimenClauses.entries()) {
     await client.query(
-      `INSERT INTO eval_chunk (ref, source, body, embedding)
-       VALUES ($1, $2, $3, $4::vector)`,
-      [clause.ref, clause.source, clause.body, toVector(vectors[at])],
+      `INSERT INTO eval_chunk (ref, source, body, unit_id, embedding)
+       VALUES ($1, $2, $3, $4, $5::vector)`,
+      [
+        clause.ref,
+        clause.source,
+        clause.body,
+        HOME_UNIT,
+        toVector(vectors[at]),
+      ],
     );
   }
+  await client.query(
+    `INSERT INTO eval_chunk (ref, source, body, unit_id, embedding)
+     VALUES ($1, $2, $3, $4, $5::vector)`,
+    [
+      NEIGHBOUR_RENT_REF,
+      rent.source,
+      rent.body,
+      NEIGHBOUR_UNIT,
+      toVector(vectors[specimenClauses.length]),
+    ],
+  );
 }
 
 // pgvector's text input format. The driver has no vector type, so the value

@@ -176,5 +176,7 @@ describe('policy · the copy sent to the embedder', () => {
     assert.match(reader, /stance: RetrievalStance/);
     assert.doesNotMatch(reader, /stance\?:/);
     assert.doesNotMatch(reader, /stance\s*=\s*['"]/);
+    assert.match(reader, /bound: RetrievalBound/);
+    assert.doesNotMatch(reader, /bound\?:/);
   });
 });

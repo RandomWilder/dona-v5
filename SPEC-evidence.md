@@ -7,8 +7,8 @@ this file and the workbook disagree, the workbook is right and this file is a bu
 - **Owns:** the paper, and every value that traces back to it. A **schema-driven ingestion engine, not
   a lease parser**: its inputs are a document, a declared type, and that type's field schema.
 - **Entities:** E12, E13, E15, E16 — Document · DocumentLink · DocumentType · DocumentTypeField ·
-  ExtractedField · FieldPromotion · **Passage** (#103). Retrieval over that store takes a required
-  **Stance** (#104).
+  ExtractedField · FieldPromotion · **Passage** (#103).   Retrieval over that store takes a required
+  **Stance** (#104) and a required **retrieval bound** (#112).
 - **Depends on:** estate, parties, tenancy.
 - **Builds:** week 3 (slices 3.1–3.3, 3.5's confirm screen, 3.6) and week 4 (OCR at 4.1, comprehension
   at 4.2, promotion at 4.3, A2's draft tenancy at 4.6, A3's addendum at 4.7). **The stub gained content at slice 3.1**, which
@@ -947,17 +947,24 @@ are written — documents without passages, including the pre-#103 archive, are 
 **Viewing a reading that has passages does not re-read the bytes.** `GET /documents/:id/read` paints
 stored passages when they exist; without them it still reads the file, which is the archive path.
 
-**#104 searches the passage store.** `searchPassages` takes a question, an embedder, and a required
-**stance** — administrator or tenant, never defaulted, so no caller retrieves without saying who is
-asking. Each hit carries the document, the page, the text, the document type, the flat the document
-is anchored to (the `UNIT` link, or the tenancy's unit when that is the only place-binding), and a
-distance. Distance orders the results and is never asserted on. The administrator stance returns
-identifiers as printed. The tenant stance masks identifier-shaped runs in the returned text and does
-not rewrite the stored passage. Masking is not a reveal: a reveal of a withheld identifier remains
-`POST /documents/:id/fields/reveal` and still writes `evidence.read_identifier`. There is no
-tenant-facing surface on this command yet. The page-sized chunk and this search are retrieval
-configuration, so rent and deposit questions enter the golden set, ranked against the corpus
-fixtures and ratcheted to the rank the day they land.
+**#104 searches the passage store.** `searchPassages` takes a question, an embedder, a required
+**stance** — administrator or tenant, never defaulted — and a required **retrieval bound** — a Unit,
+a Building, or the whole portfolio, never defaulted, so no caller searches the whole store by
+omitting a filter (#112). Each hit carries the document, the page, the text, the document type, the
+flat the document is anchored to (the `UNIT` link, or the tenancy's unit when that is the only
+place-binding), and a distance. Distance orders the results and is never asserted on. A Unit bound
+returns only Passages of Documents linked to that Unit (a `UNIT` link, or a `TENANCY` link whose
+tenancy's unit is that Unit). A Building bound is the same command with a wider filter: Documents
+linked to that Building, or to a Unit in it, or to a tenancy of a Unit in it. A portfolio bound is
+the whole store, named. The administrator stance returns identifiers as printed. The tenant stance
+masks identifier-shaped runs in the returned text and does not rewrite the stored passage. A
+Building or portfolio bound asked with tenant stance is refused at the command. Masking is not a
+reveal: a reveal of a withheld identifier remains `POST /documents/:id/fields/reveal` and still
+writes `evidence.read_identifier`. There is no tenant-facing surface on this command yet. The
+page-sized chunk and this search are retrieval configuration, so rent and deposit questions enter
+the golden set against an explicit portfolio bound, and a Unit-bound case asserts that a neighbour
+Unit's answering Passage is absent, ranked against the corpus fixtures and ratcheted to the rank
+the day they land.
 
 **#105 backfills the archive.** Documents holding no passages — filed before #103, or filed with an
 unconfigured embedder — are walked by `sweepMissingPassages` the way `sweepUnverified` walks

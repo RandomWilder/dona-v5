@@ -22,6 +22,7 @@ import {
   applyDocumentTypeCatalogue,
   fileDocument,
   listDocumentPassages,
+  type RetrievalBound,
   searchPassages,
 } from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
@@ -29,6 +30,7 @@ import { seedDocumentTypes } from './fixtures/document-types.ts';
 const BUCKET = 'dona-v5-test-search';
 const AT = new Date('2026-09-15T09:00:00.000Z');
 const RENT = '4,520';
+const PORTFOLIO: RetrievalBound = { kind: 'portfolio' };
 
 const specimen = (file: string): string => {
   const found = specimenDocuments.find((document) => document.file === file);
@@ -81,7 +83,13 @@ describe('evidence · search over passages', () => {
         const page = `דמי השכירות ${RENT} ש״ח`;
         const { documentId, unitId } = await fileLease(db, [page]);
         const embedder = createFakeEmbedder(embeddingColumnDimensions);
-        const hits = await searchPassages(db, embedder, page, 'administrator');
+        const hits = await searchPassages(
+          db,
+          embedder,
+          page,
+          'administrator',
+          PORTFOLIO,
+        );
         const hit = hits.find((row) => row.documentId === documentId);
         assert.ok(hit, 'the filed document is in the result');
         assert.equal(hit.page, 2);
@@ -110,6 +118,7 @@ describe('evidence · search over passages', () => {
           createFakeEmbedder(embeddingColumnDimensions),
           page,
           'administrator',
+          PORTFOLIO,
         );
         assert.equal(hits[0]?.documentId, documentId);
         assert.equal(hits[0]?.page, 2);
@@ -130,10 +139,23 @@ describe('evidence · search over passages', () => {
       await inRolledBackTransaction(pool, async (db) => {
         const identifier = '312345678';
         const page = `ת.ז. ${identifier}`;
-        const { documentId } = await fileLease(db, [page]);
+        const { documentId, unitId } = await fileLease(db, [page]);
         const embedder = createFakeEmbedder(embeddingColumnDimensions);
-        const admin = await searchPassages(db, embedder, page, 'administrator');
-        const tenant = await searchPassages(db, embedder, page, 'tenant');
+        const bound: RetrievalBound = { kind: 'unit', id: unitId };
+        const admin = await searchPassages(
+          db,
+          embedder,
+          page,
+          'administrator',
+          bound,
+        );
+        const tenant = await searchPassages(
+          db,
+          embedder,
+          page,
+          'tenant',
+          bound,
+        );
         const adminHit = admin.find((row) => row.documentId === documentId);
         const tenantHit = tenant.find((row) => row.documentId === documentId);
         assert.equal(adminHit?.text, page);
@@ -156,18 +178,21 @@ describe('evidence · search over passages', () => {
     try {
       await inRolledBackTransaction(pool, async (db) => {
         const page = `ת.ז. 312345678`;
-        const { documentId } = await fileLease(db, [page]);
+        const { documentId, unitId } = await fileLease(db, [page]);
+        const bound: RetrievalBound = { kind: 'unit', id: unitId };
         await searchPassages(
           db,
           createFakeEmbedder(embeddingColumnDimensions),
           page,
           'administrator',
+          bound,
         );
         await searchPassages(
           db,
           createFakeEmbedder(embeddingColumnDimensions),
           page,
           'tenant',
+          bound,
         );
         const afterSearch = await db.query<{ n: string }>(
           `SELECT count(*)::text AS n FROM audit_log
@@ -181,4 +206,122 @@ describe('evidence · search over passages', () => {
       await pool.end();
     }
   });
+
+  it("a Unit bound omits a neighbour Unit's nearer Passage", async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const answering = `דמי השכירות החודשיים הם ${RENT} ש״ח — יחידת השכן`;
+        const home = await fileLease(db, ['דף אחר בבית']);
+        const neighbour = await fileLease(db, [answering]);
+        const hits = await searchPassages(
+          db,
+          createFakeEmbedder(embeddingColumnDimensions),
+          answering,
+          'administrator',
+          { kind: 'unit', id: home.unitId },
+        );
+        assert.equal(
+          hits.some((hit) => hit.documentId === neighbour.documentId),
+          false,
+        );
+        assert.equal(
+          hits.some((hit) => hit.documentId === home.documentId),
+          true,
+        );
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('a Unit bound includes a Passage linked only through a Tenancy of that Unit', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const unitId = await seedListedUnit(db);
+        const tenancyId = await seedListedTenancy(db, unitId);
+        const page = `דמי השכירות ${RENT} ש״ח`;
+        const { documentId } = await fileLease(db, [page], unitId);
+        await db.query(
+          `INSERT INTO document_link (document_id, entity_type, entity_id, link_role)
+           VALUES ($1, 'TENANCY', $2, 'EVIDENCE')
+           ON CONFLICT (document_id, entity_type, entity_id) DO NOTHING`,
+          [documentId, tenancyId],
+        );
+        await db.query(
+          `DELETE FROM document_link
+            WHERE document_id = $1 AND entity_type = 'UNIT'`,
+          [documentId],
+        );
+        const hits = await searchPassages(
+          db,
+          createFakeEmbedder(embeddingColumnDimensions),
+          page,
+          'administrator',
+          { kind: 'unit', id: unitId },
+        );
+        const hit = hits.find((row) => row.documentId === documentId);
+        assert.ok(hit, 'the Tenancy-linked Passage is in the Unit bound');
+        assert.equal(hit.unitId, unitId);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
 });
+
+async function seedListedUnit(db: PoolClient): Promise<string> {
+  const buildingId = newId();
+  const unitId = newId();
+  await db.query(
+    `INSERT INTO building (building_id, name, address_line, city, handover_date,
+                           warranty_end_date, status)
+     VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE')`,
+    [
+      buildingId,
+      'bound-test',
+      `Bound ${unitId}`,
+      'Shoham',
+      '2026-01-01',
+      '2027-01-01',
+    ],
+  );
+  await db.query(
+    `INSERT INTO space (space_id, building_id, space_kind, name)
+     VALUES ($1, $2, 'UNIT', $3)`,
+    [unitId, buildingId, '1'],
+  );
+  await db.query(
+    `INSERT INTO unit (unit_id, unit_number, rooms, has_mamad, condition_status)
+     VALUES ($1, '1', 3.5, true, 'READY')`,
+    [unitId],
+  );
+  return unitId;
+}
+
+async function seedListedTenancy(
+  db: PoolClient,
+  unitId: string,
+): Promise<string> {
+  const profileId = newId();
+  const tenancyId = newId();
+  await db.query(
+    `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)`,
+    [profileId, 'bound-test'],
+  );
+  await db.query(
+    `INSERT INTO tenancy (tenancy_id, unit_id, start_date, end_date, status, terms_profile_id)
+     VALUES ($1, $2, $3, $4, 'ACTIVE', $5)`,
+    [tenancyId, unitId, '2026-01-01', '2027-01-01', profileId],
+  );
+  return tenancyId;
+}

@@ -52,6 +52,8 @@ introducing one fails the build. Say "the scope", not "the tenant's permissions"
 | **DocumentTypeField** | A field declared on a type. Also a row. |
 | **Passage** | One page of a Document, as text. Written once, when the document is read — at filing, or by the archive sweep for rows that have none. Never re-derived from the bytes after that. Identifiers stay in the text. Masking is a read, not a write. |
 | **Stance** | Who is asking a retrieval question. Required on every search; there is no default. The administrator stance returns identifiers as printed. The tenant stance masks them in the returned text and leaves the stored passage unchanged. Distinct from a route's declared permission. |
+| **Retrieval bound** | Which Documents' Passages a search may consider — a Unit, a Building, or the whole portfolio. Required on every office search; the current estate screen picks the bound. Distinct from the isolation join and from Stance. |
+| **Office retrieval thread** | A persisted question-and-answer history for one staff account on one retrieval bound. Not a Conversation. |
 | **ExtractedField** | A value read out of a Document, citable the moment it is extracted. |
 | **Capture** | Getting a value into an `ExtractedField`. **Open** — cheap, ungoverned. |
 | **Approval** | A person signing a reading. A stamp on the `ExtractedField`. |

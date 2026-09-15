@@ -12,8 +12,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createFakeEmbedder } from '../src/kernel/embeddings.ts';
 import { migratedPoolOrNull, skipReason } from '../src/kernel/pg-support.ts';
-import { buildCorpus, groundingCutoff } from './corpus.ts';
-import { specimenClauses } from './fixtures/specimen-clauses.ts';
+import {
+  buildCorpus,
+  groundingCutoff,
+  HOME_UNIT,
+  NEIGHBOUR_RENT_REF,
+} from './corpus.ts';
+import { specimenClauses, specimenRefs } from './fixtures/specimen-clauses.ts';
 
 // The width the real column is created at, so the fake stands where the real
 // embedder stands rather than in a smaller space.
@@ -32,10 +37,12 @@ describe('the golden-set corpus', () => {
     }
     const corpus = await buildCorpus(pool, fake);
     try {
-      assert.equal(corpus.chunks, specimenClauses.length);
+      assert.equal(corpus.chunks, specimenClauses.length + 1);
       assert.equal(corpus.describe, 'fake@1536');
 
-      const hits = await corpus.search(ownRepairs!.body);
+      const hits = await corpus.search(ownRepairs!.body, {
+        kind: 'portfolio',
+      });
       assert.equal(hits.length, 8, 'the search window is eight');
       assert.equal(hits[0]?.clauseRef, ownRepairs!.ref);
       assert.ok(
@@ -76,10 +83,45 @@ describe('the golden-set corpus', () => {
       assert.equal(nothing.escalate, true);
       assert.deepEqual(nothing.hits, [], 'a refusal cites nothing');
 
-      const hits = await corpus.search('מי זכה בגביע המדינה בכדורגל?');
+      const hits = await corpus.search('מי זכה בגביע המדינה בכדורגל?', {
+        kind: 'portfolio',
+      });
       assert.ok(
         (hits[0]?.distance ?? 0) > groundingCutoff,
         `the refusal must be the cutoff's doing: nearest was ${hits[0]?.distance}`,
+      );
+    } finally {
+      await corpus.close();
+      await pool.end();
+    }
+  });
+
+  it("a Unit bound keeps the home rent clause and drops the neighbour's copy", async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const corpus = await buildCorpus(pool, fake);
+    try {
+      const rent = specimenClauses.find(
+        (clause) => clause.ref === specimenRefs.monthlyRent,
+      );
+      const hits = await corpus.search(rent!.body, {
+        kind: 'unit',
+        id: HOME_UNIT,
+      });
+      assert.equal(hits[0]?.clauseRef, specimenRefs.monthlyRent);
+      assert.equal(
+        hits.some((hit) => hit.clauseRef === NEIGHBOUR_RENT_REF),
+        false,
+      );
+      const portfolio = await corpus.search(rent!.body, {
+        kind: 'portfolio',
+      });
+      assert.equal(
+        portfolio.some((hit) => hit.clauseRef === NEIGHBOUR_RENT_REF),
+        true,
       );
     } finally {
       await corpus.close();
