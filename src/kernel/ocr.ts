@@ -15,15 +15,8 @@ import { fakeItems, type PdfPage, type PdfTextItem } from './pdf.ts';
 //   https://cloud.google.com/document-ai/docs/reference/rest/v1/projects.locations.processors/process
 //   https://cloud.google.com/document-ai/docs/ocr
 
-export interface OcrPageImage {
-  pageNumber: number;
-  mimeType: string;
-  bytes: Buffer;
-}
-
 export interface OcrResult {
   pages: PdfPage[];
-  images: OcrPageImage[];
 }
 
 export interface OcrText {
@@ -109,7 +102,6 @@ interface ProcessorPage {
   dimension?: { width?: number; height?: number };
   tokens?: Array<{ layout?: Layout }>;
   lines?: Array<{ layout?: Layout }>;
-  image?: { content?: string; mimeType?: string };
 }
 
 interface ProcessResponse {
@@ -151,7 +143,7 @@ export function createDocumentAiOcr(options: DocumentAiOcrOptions): OcrText {
           },
           body: JSON.stringify({
             skipHumanReview: true,
-            imagelessMode: false,
+            imagelessMode: true,
             rawDocument: {
               mimeType,
               content: bytes.toString('base64'),
@@ -196,12 +188,6 @@ export function createUnconfiguredOcr(): OcrText {
   };
 }
 
-// A 1×1 PNG so an overlay test has a page image without a live processor.
-const fakePagePng = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-  'base64',
-);
-
 export function createFakeOcrText(
   pages: readonly string[],
   confidence = 1,
@@ -229,11 +215,6 @@ export function createFakeOcrText(
           // a second copy is a second place a line break can be forgotten (slice 6.8).
           items: fakeItems(page.text, confidence),
         })),
-        images: wanted.map((page) => ({
-          pageNumber: page.number,
-          mimeType: 'image/png',
-          bytes: fakePagePng,
-        })),
       };
     },
     describe: () => 'fake',
@@ -258,7 +239,6 @@ export function readOcrDocument(
   const text = document?.text ?? '';
   const sourcePages = document?.pages ?? [];
   const pages: PdfPage[] = [];
-  const images: OcrPageImage[] = [];
   for (const source of sourcePages) {
     const number = source.pageNumber ?? pages.length + 1;
     const width = source.dimension?.width ?? 1;
@@ -295,15 +275,8 @@ export function readOcrDocument(
     }
     markLineEnds(items, lineOf, lines.length > 0);
     pages.push({ number, width, height, items });
-    if (source.image?.content) {
-      images.push({
-        pageNumber: number,
-        mimeType: source.image.mimeType ?? 'image/png',
-        bytes: Buffer.from(source.image.content, 'base64'),
-      });
-    }
   }
-  return { pages, images };
+  return { pages };
 }
 
 /**

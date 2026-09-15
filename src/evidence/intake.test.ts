@@ -481,7 +481,7 @@ describe('evidence · filing a declared document', () => {
             const ocr: OcrText = {
               async pages() {
                 called += 1;
-                return { pages: [], images: [] };
+                return { pages: [] };
               },
               describe: () => 'fake',
             };
@@ -659,7 +659,7 @@ describe('evidence · filing a declared document', () => {
             const ocr: OcrText = {
               async pages() {
                 called += 1;
-                return { pages: [], images: [] };
+                return { pages: [] };
               },
               describe: () => 'fake',
             };

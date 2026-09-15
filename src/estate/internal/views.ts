@@ -749,7 +749,7 @@ function promotedPanel(fields: readonly PromotedFieldView[]): Html {
   return h`<section>
     <h2>מקור</h2>
     <dl class="facts">${fields.map((field) => {
-      const href = `/documents/${field.documentId}/read?page=${String(field.page)}#f-${field.extractedFieldId}`;
+      const href = `/documents/${field.documentId}/read?page=${String(field.page)}`;
       const score =
         field.confidence === null
           ? h``

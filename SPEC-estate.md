@@ -330,8 +330,8 @@ already uses — a unit number and the building it is in, and no party. Evidence
 the unit an upload is being filed against; a document screen inventing its own unit query would be
 the second copy estate exists to prevent. **`GET /estate/units/:unitId` is the thin unit page 3.6
 added**: that same header, the occupancy chip, the upload link, and the documents panel. Slice 4.4
-adds the **promoted values** on that page: each stamped date is a link through to its pixels on the
-read overlay. **Slice 5.5 adds the change log** — old → new, the operator email, the source
+adds the **promoted values** on that page: each stamped date is a link through to the page of the
+read screen it was read from. **Slice 5.5 adds the change log** — old → new, the operator email, the source
 document — from `listTenancyEvents`, injected the same way. Empty is legal. Never a tenant's name.
 **Slice 5.6:** a clock-driven end is `ACTIVE → ENDED`, actor `system`, and no document link. The
 unit page calls `expireDueTenancies` (injected from tenancy) against the clock before it reads the

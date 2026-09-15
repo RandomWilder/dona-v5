@@ -392,7 +392,6 @@ describe('evidence · promote an extracted field', () => {
       source: 'pdfjs',
       mayReadIdentifiers: false,
       page: null,
-      image: null,
       extracted: READINGS,
     });
     assert.doesNotMatch(read, /action="[^"]*\/promote"/);
@@ -451,7 +450,7 @@ describe('evidence · promote an extracted field', () => {
     assert.doesNotMatch(signed, /name="promoted_by"/);
   });
 
-  it('links an extracted value to its pixels on that page', () => {
+  it('links an extracted value to the page it was read from', () => {
     const fieldId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
     const otherId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
     const html = renderReadPage({
@@ -483,7 +482,6 @@ describe('evidence · promote an extracted field', () => {
           },
         ],
       },
-      image: null,
       extracted: [
         {
           extractedFieldId: fieldId,
@@ -511,11 +509,15 @@ describe('evidence · promote an extracted field', () => {
     });
     assert.match(
       html,
-      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read\?page=1#f-dddddddd-dddd-4ddd-8ddd-dddddddddddd"/,
+      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read\?page=1"/,
     );
-    assert.match(html, /id="f-dddddddd-dddd-4ddd-8ddd-dddddddddddd"/);
-    assert.match(html, /field-box/);
+    assert.match(
+      html,
+      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read\?page=2"/,
+    );
+    assert.match(html, /עמוד/);
+    assert.doesNotMatch(html, /field-box/);
+    assert.doesNotMatch(html, /#f-/);
     assert.match(html, /91%/);
-    assert.doesNotMatch(html, /id="f-eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"/);
   });
 });

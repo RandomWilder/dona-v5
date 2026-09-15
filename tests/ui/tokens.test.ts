@@ -319,11 +319,8 @@ function readOverlay(mayReadIdentifiers: boolean): string {
           confidence: 0.91,
         },
         // **Slice 6.6, and the word this whole slice is about.** The page printed the ת.ז., so the
-        // reader measured it, so the overlay has a box for it — and until 6.6 that box carried the
-        // word in a `title` attribute at every stance. A word box is the one thing on this page
-        // whose text comes from the document rather than from a fixture, which is why 6.5 could not
-        // catch this with a registry assertion and why the case below renders a page whose words
-        // the test itself chose.
+        // reader measured it. Until #102 the overlay put that word in a `title` on a box at every
+        // stance. The transcript is now the per-page text, and it is withheld below the permission.
         {
           text: READ_IDENTIFIER,
           x: 10,
@@ -335,14 +332,6 @@ function readOverlay(mayReadIdentifiers: boolean): string {
           confidence: 0.88,
         },
       ],
-    },
-    image: {
-      pageNumber: 1,
-      mimeType: 'image/png',
-      bytes: Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-        'base64',
-      ),
     },
     extracted: [
       {
@@ -1129,7 +1118,6 @@ const SCREENS: Array<[string, () => string]> = [
         source: 'ocr',
         mayReadIdentifiers: false,
         page: null,
-        image: null,
       }),
   ],
   [
@@ -2130,34 +2118,32 @@ describe('shared UI tokens', () => {
     assert.match(ledger, /נקרא: <a[^>]*>הרב קוק 45/);
   });
 
-  it('withholds the word off the paper too, and keeps the box it was in', () => {
-    // **Slice 6.6, and the defect 6.5 found by clicking.** 6.4's gate above withholds the captured
-    // *row*; this page also draws one span per measured word, and until now each carried the word's
-    // own text in a `title` attribute at every stance — so an operator whose captured row was
-    // correctly withheld could read the same ת.ז. off the box beside it.
+  it('withholds the transcript of the paper, and names the page instead of drawing it', () => {
+    // **Slice 6.6, and the defect 6.5 found by clicking.** 6.4's gate withholds the captured row.
+    // Until #102 this page also drew one span per measured word, each carrying the word in a
+    // `title` — so an operator whose captured row was withheld could read the same ת.ז. off the box.
     //
     // **This is the one case in this file that reads a value the document supplied rather than the
     // registry**, and it is allowed for the reason week 5's lesson allows: the word under test is a
-    // word this test put on the page. A registry assertion cannot reach it, because the words come
-    // from the reader and not from a fixture the screen was handed.
+    // word this test put on the page.
     //
     // The ruling is in SPEC.md: **captured is governed, printed is the document.** The transcript is
-    // ours and is withheld; the page image is the paper and is not — the same viewer already holds a
-    // fifteen-minute signed read of the bytes from 5.4, so withholding a picture of the page would
-    // claim a control this system does not have.
+    // ours and is withheld. There is no page image. The page number beside the extracted value is
+    // how an administrator checks the paper they hold.
     const withheld = readOverlay(false);
     assert.doesNotMatch(withheld, new RegExp(READ_IDENTIFIER));
-    // Narrow to the box: the ops rail has carried a `title` on every nav item since 5.2c, and a
-    // guard that reads the whole page for the attribute is a guard about the wrong element.
-    assert.doesNotMatch(withheld, /word-box[^>]*title=/);
-    // The geometry stays. A box with no word is still the answer to *where did it read something*,
-    // which is what this screen is called.
-    assert.match(withheld, /class="word-box"/);
-    assert.match(withheld, /<img alt="" src="data:image\/png;base64,/);
+    assert.doesNotMatch(withheld, /word-box/);
+    assert.doesNotMatch(withheld, /field-box/);
+    assert.doesNotMatch(withheld, /<img /);
+    assert.doesNotMatch(withheld, /data:image\//);
+    assert.match(withheld, /עמוד/);
 
     const disclosed = readOverlay(true);
-    assert.match(disclosed, new RegExp(`title="${READ_IDENTIFIER}"`));
-    assert.match(disclosed, /title="דירה"/);
+    assert.match(disclosed, new RegExp(READ_IDENTIFIER));
+    assert.match(disclosed, /class="page-text"/);
+    assert.match(disclosed, /דירה/);
+    assert.doesNotMatch(disclosed, /word-box/);
+    assert.doesNotMatch(disclosed, /<img /);
   });
 
   it('serves a signed read on the panel, never a gs:// href', () => {
@@ -2223,7 +2209,6 @@ describe('shared UI tokens', () => {
       source: 'ocr',
       mayReadIdentifiers: false,
       page: null,
-      image: null,
     });
     assert.match(emptyRead, /לא נקראו שדות מהמסמך/);
     assert.match(
@@ -2245,7 +2230,7 @@ describe('shared UI tokens', () => {
     ]);
     assert.match(
       html,
-      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read\?page=1#f-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"/,
+      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read\?page=1"/,
     );
     assert.match(html, /91%/);
     assert.doesNotMatch(html, /href="gs:/);
@@ -2276,18 +2261,9 @@ describe('shared UI tokens', () => {
         confidence: 0.8,
       },
     ]);
-    assert.match(
-      three,
-      /aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read\?page=1#f-11111111/,
-    );
-    assert.match(
-      three,
-      /bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\/read\?page=2#f-22222222/,
-    );
-    assert.match(
-      three,
-      /cccccccc-cccc-4ccc-8ccc-cccccccccccc\/read\?page=1#f-33333333/,
-    );
+    assert.match(three, /aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read\?page=1"/);
+    assert.match(three, /bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\/read\?page=2"/);
+    assert.match(three, /cccccccc-cccc-4ccc-8ccc-cccccccccccc\/read\?page=1"/);
   });
 
   it('shows a unit change log as old to new, actor, and document, never a tenant name', () => {

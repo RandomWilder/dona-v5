@@ -5,7 +5,6 @@ import type { AuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
 import {
-  type OcrPageImage,
   type OcrText,
   onlineOcrByteLimit,
   onlineOcrPageLimit,
@@ -46,7 +45,6 @@ export interface DocumentRead {
   fileHash: string;
   verification: Verification;
   pages: PdfPage[];
-  images: OcrPageImage[];
   source: 'pdfjs' | 'ocr' | 'none';
 }
 
@@ -94,7 +92,6 @@ export async function readFiledDocument(
             matchedTerms: [],
           },
     pages: read.pages,
-    images: read.images,
     source: read.source,
   };
 }
@@ -286,18 +283,17 @@ async function readBytes(
   bytes: Buffer,
 ): Promise<{
   pages: PdfPage[];
-  images: OcrPageImage[];
   source: DocumentRead['source'];
 }> {
   const extension = sniffExtension(bytes);
   if (extension === 'pdf') {
     const pages = await deps.pdf.pages(bytes);
     if (pages.some((page) => page.items.length > 0)) {
-      return { pages, images: [], source: 'pdfjs' };
+      return { pages, source: 'pdfjs' };
     }
   }
   if (!ocrConfigured(deps.ocr)) {
-    return { pages: [], images: [], source: 'none' };
+    return { pages: [], source: 'none' };
   }
   try {
     const result = await deps.ocr.pages(
@@ -305,9 +301,9 @@ async function readBytes(
       documentContentTypes[extension],
       deps.ocrVersion,
     );
-    return { pages: result.pages, images: result.images, source: 'ocr' };
+    return { pages: result.pages, source: 'ocr' };
   } catch {
-    return { pages: [], images: [], source: 'none' };
+    return { pages: [], source: 'none' };
   }
 }
 

@@ -108,27 +108,27 @@ sheet existed.
     what a shape test costs when it is wrong: a duplicated one read the CSRF token's own hex and
     failed 4 runs in 20.
   - **Withheld by default on every read path.** `renderReadPage` takes a required
-    `mayReadIdentifiers` stance; false drops the rows and their page outlines and prints **a count**
+    `mayReadIdentifiers` stance; false drops the identifier rows and prints **a count**
     instead — a state and a count, never the value, which is the rule this console has kept since
     5.2. Only `party.national_id.read` sets it true, and only ADMIN holds that.
   - **Disclosure writes `evidence.read_identifier`** — actor, role, document and the field keys, never
     the value (SPEC.md: PII never in logs). Withholding is not a read and writes nothing.
-  - **The word-box transcript is withheld too. Slice 6.6**, which is where the rule acquired its
-    third subject and its sharpest sentence: **captured is governed; printed is the document.** The
-    overlay draws one `<span class="word-box">` per measured word and carried the word's own text in
-    a `title` attribute for every viewer, so a ת.ז. printed on the lease was readable by an OPERATOR
-    on the same page whose captured row was correctly withheld — found by clicking at 6.5, where the
-    captured-row gate scored admin **1** / operator **0** and the overlay scored **1** for both. The
-    `title` is our transcription of the paper, in text, in our own response, and it is rendered only
-    when `mayReadIdentifiers` is true. Withheld **wholesale rather than word by word**: a run split
+  - **The page transcript is withheld too. Slice 6.6, rewritten at #102.** The rule acquired its
+    third subject and its sharpest sentence: **captured is governed; printed is the document.** Until
+    #102 the overlay drew one `<span class="word-box">` per measured word and carried the word's own
+    text in a `title` attribute, so a ת.ז. printed on the lease was readable by an OPERATOR on the
+    same page whose captured row was correctly withheld — found by clicking at 6.5, where the
+    captured-row gate scored admin **1** / operator **0** and the overlay scored **1** for both.
+    **#102 deletes that overlay.** There is no page image, no word box and no field box. The
+    transcript is now the per-page text on `/documents/:id/read`, and it is rendered only when
+    `mayReadIdentifiers` is true. Withheld **wholesale rather than word by word**: a run split
     across OCR tokens (`312`, `345`, `678`) matches no pattern applied to one token, and the type's
     catalogue declaration is the wrong gate because a declaration governs what is *captured*, not
-    what a page happens to print. The geometry stays at both stances — the boxes still show where
-    words were found, which is what `מילים על הדף` is for.
-  - **The page image is not withheld, and that is the boundary.** The same viewer already holds a
-    fifteen-minute signed read of the document's bytes (5.4), so withholding a picture of the page
-    would claim a control this system does not have. Whoever may open a document may read what is
-    printed on it. What the permission governs is this system's own copy — the row, the transcript,
+    what a page happens to print. Each extracted value is labelled with the page it was read from,
+    which is how an administrator checks the paper they still hold.
+  - **There is no page image to withhold.** The same viewer already holds a fifteen-minute signed
+    read of the document's bytes (5.4). OCR runs in imageless mode and returns words, not pictures.
+    What the permission governs is this system's own copy — the row, the transcript,
     `party.national_id` — and saying so plainly is worth more than a control that is believed and
     absent.
   **No `field_promotion` target for either field**, deliberately: the identifier becomes
@@ -915,14 +915,15 @@ filed, and 3.3's refused-writes-nothing still holds at the door. `refused` is no
 and 4.1 does not invent one.
 
 **Two readers, one page shape.** A native PDF with a text layer is pdfjs (confidence `null`). A
-scan, a photograph, or a PDF whose pages came back empty is Document AI (confidence set, boxes from
-the OCR engine). Images skip pdfjs. More than 15 pages is not sent whole: on the sweep the row stays
-`unverified`, and **on the upload path, from 6.8, the first fifteen pages are selected and read**
-rather than the file being filed as though it had been read. The overlay (`GET /documents/:id/read`) draws those boxes on the page image the
-processor already returned — logical CSS, specimens. **From 6.6 a word box carries its word only
-for a viewer holding `party.national_id.read`**; below it the boxes are geometry and nothing
-else. **Which page** is a query
-(`?page=`, 1-based, matching the stored field). Clicking a promoted value is 4.4's.
+scan, a photograph, or a PDF whose pages came back empty is Document AI (confidence set, boxes used
+only while extracting so a field knows its page). Images skip pdfjs. More than 15 pages is not sent
+whole: on the sweep the row stays `unverified`, and **on the upload path, from 6.8, the first fifteen
+pages are selected and read** rather than the file being filed as though it had been read. **#102
+deleted the overlay.** `GET /documents/:id/read` shows the per-page text, the quality verdict, and
+the page number beside each extracted value — never a page image, never a word box, never a field
+box. The OCR request runs in imageless mode. **From 6.6 the transcript is shown only to a viewer
+holding `party.national_id.read`.** **Which page** is a query (`?page=`, 1-based, matching the stored
+field). Clicking a promoted value is 4.4's.
 
 `sweepUnverified` walks already-filed `unverified` rows the same way. It is how week 3's backlog is
 discharged; the count of verdicts that moved is recorded in the slice evidence, from the audit
@@ -1112,8 +1113,8 @@ that will never have anywhere to be promoted to — `address`, `apartment_number
   lease, most of them above 90%: approve-all would become a reflex and the measurement would die the
   day it shipped.
 - **A second signal is not this slice's.** The honest one — whether the words the model pointed at
-  sit under the declared field's label on the page — is geometry the read overlay already holds.
-  Named, not built.
+  sit under the declared field's label on the page — is geometry extraction already holds while it
+  reads. Named, not built.
 
 ### Approving an identifier
 
@@ -1139,16 +1140,17 @@ and in a referrer, and a refresh would re-log a disclosure that did not happen t
 
 ## Provenance viewer (slice 4.4)
 
-A promoted value on the unit screen is a link to the pixels it came from. Capture stays a row;
+A promoted value on the unit screen is a link to the page it was read from. Capture stays a row;
 the click is an `href`, not a script.
 
 - **No client JavaScript.** The screens have never had any ([SPEC-estate.md](SPEC-estate.md)). The
-  link is `/documents/:id/read?page=N#f-<extracted_field_id>`. The overlay draws the field's stored
-  union box with that `id`; the browser's `:target` and `scroll-margin` do the rest. A hash is not
-  sent to the server, so the page number cannot live only in the fragment.
-- **The box is the field's, not every word.** Word boxes stay as 4.1's overlay. The highlighted
-  rectangle is `extracted_field.bbox` on that page. Confidence is shown next to the value (a percent
-  when Document AI scored the words; omitted when pdfjs stored `null`).
+  link is `/documents/:id/read?page=N`. **#102 deleted the overlay**, so there is no field box and
+  no hash to scroll to: the page number is the whole pointer. A query string is sent to the server,
+  which is why the page cannot live only in a fragment.
+- **The page is the field's, not a box on an image.** Confidence is shown next to the value (a percent
+  when Document AI scored the words; omitted when pdfjs stored `null`). Extraction still unions the
+  words a field was read from so household pairing keeps document order; that box is stored and is
+  never drawn.
 - **Estate does not query `extracted_field`.** `listPromotedFieldsForUnit` lives here and is
   injected the same way `listLinkedDocuments` already is, so the estate ↔ evidence cycle stays
   broken. The list is every stamped field on paper linked to that unit (the unit itself, or a

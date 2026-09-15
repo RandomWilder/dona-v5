@@ -448,7 +448,7 @@ describe('evidence · the upload route', () => {
       );
 
       await t.test(
-        'GET /documents/:id/read draws word boxes for a native PDF',
+        'GET /documents/:id/read shows the page text, not word boxes',
         async () => {
           const rows = await pool.query<{ document_id: string }>(
             `SELECT d.document_id FROM document d
@@ -465,9 +465,9 @@ describe('evidence · the upload route', () => {
           });
           assert.equal(response.statusCode, 200);
           assert.match(response.body, /מילים על הדף/);
-          assert.match(response.body, /word-box/);
-          assert.match(response.body, /inset-inline-start/);
-          assert.doesNotMatch(response.body, /(?:^|[\s;{])left\s*:/);
+          assert.doesNotMatch(response.body, /word-box/);
+          assert.doesNotMatch(response.body, /field-box/);
+          assert.doesNotMatch(response.body, /<img /);
         },
       );
 
@@ -559,7 +559,7 @@ describe('evidence · the upload route', () => {
       );
 
       await t.test(
-        'OCRs a scan on the same request and offers the overlay',
+        'OCRs a scan on the same request and offers the reading',
         async () => {
           const app = buildApp({
             pool,
@@ -603,7 +603,7 @@ describe('evidence · the upload route', () => {
             url: `/documents/${documentId}/read`,
           });
           assert.equal(overlay.statusCode, 200, overlay.body.slice(0, 400));
-          assert.match(overlay.body, /word-box/);
+          assert.doesNotMatch(overlay.body, /word-box/);
           assert.match(overlay.body, /קריאה אוטומטית/);
         },
       );
@@ -1293,7 +1293,7 @@ describe('evidence · A12 a document finds its own place', () => {
               describe: () => 'fake',
               pages: async () => {
                 calls += 1;
-                return { pages: [], images: [] };
+                return { pages: [] };
               },
             },
             bucket: BUCKET,

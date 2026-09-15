@@ -1030,10 +1030,6 @@ export function registerDocumentRoutes(
       const asked = (request.query as { page?: string }).page;
       const at = pageIndex(asked, read.pages.length);
       const page = read.pages[at] ?? null;
-      const image =
-        page === null
-          ? null
-          : (read.images.find((img) => img.pageNumber === page.number) ?? null);
       html(reply);
       if (anchor.kind === 'UNIT') {
         const unit = await getUnit(deps.pool, anchor.id);
@@ -1049,7 +1045,6 @@ export function registerDocumentRoutes(
           fileHash: read.fileHash,
           source: read.source,
           page,
-          image,
           extracted,
           mayReadIdentifiers: identifiers,
         });
@@ -1068,7 +1063,6 @@ export function registerDocumentRoutes(
           fileHash: read.fileHash,
           source: read.source,
           page,
-          image,
           extracted,
           mayReadIdentifiers: identifiers,
         });

@@ -1,13 +1,13 @@
 ---
 number: 102
 title: "Delete the word-box overlay; the page number replaces it"
-status: open
+status: closed
 labels: [ready-for-agent]
-assignee:
+assignee: cursor
 blocked_by: []
 parent: 99
 created: 2026-09-15
-closed:
+closed: 2026-09-15
 ---
 
 ## Parent
@@ -40,15 +40,22 @@ of leak; check nothing else in the removed markup was the only thing withholding
 
 ## Acceptance criteria
 
-- [ ] The read screen renders per-page text and the quality verdict, with no page image and no word or field boxes
-- [ ] Every extracted value on the read screen is labelled with the page it was read from
-- [ ] The page-image geometry is removed from the read screen, the reader's return shape and the OCR client
-- [ ] The OCR request runs in imageless mode
-- [ ] No code path in the system fetches, stores or renders a page image; no rasterising dependency is added
-- [ ] Extraction still knows the page a field was read from
-- [ ] The read screen is clicked on a running local server before merge
-- [ ] Evidence specs are edited in the same change
+- [x] The read screen renders per-page text and the quality verdict, with no page image and no word or field boxes
+- [x] Every extracted value on the read screen is labelled with the page it was read from
+- [x] The page-image geometry is removed from the read screen, the reader's return shape and the OCR client
+- [x] The OCR request runs in imageless mode
+- [x] No code path in the system fetches, stores or renders a page image; no rasterising dependency is added
+- [x] Extraction still knows the page a field was read from
+- [x] The read screen is clicked on a running local server before merge
+- [x] Evidence specs are edited in the same change
 
 ## Blocked by
 
 None (can start immediately).
+
+## Comment — 2026-09-15
+
+Done. Overlay, page images and imageless OCR. Per-page text withheld below `party.national_id.read`
+(the old `title` leak has no markup left). Extraction still stores the union box so household pairing
+keeps document order; that box is never drawn. Clicked `GET /documents/:id/read` on `:3000` after
+restart — 200, no `word-box`, no `<img`.

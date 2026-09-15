@@ -197,20 +197,22 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   and it is drawn because 6.5 found an OPERATOR reading a ת.ז. off the read overlay.** The rule is
   **captured is governed; printed is the document.** `party.national_id.read` governs this system's
   own copy of an identifier — the `extracted_field` row, `party.national_id`, and **the transcript we
-  make of the paper** — and it does not govern the paper. Two consequences, both testable:
-  **the word-box transcript on `/documents/:id/read` is withheld below the permission, on every
-  document type.** The `title` attribute holding an OCR word is not the paper; it is our
-  transcription of it, as text, in our own response — sweepable, loggable, copy-pasteable and
-  reachable by anything that later consumes a rendered page. It is withheld wholesale rather than
-  masked word by word, because a run split across OCR tokens (`312`, `345`, `678`) matches no pattern
-  applied to one token, and because gating on the type's catalogue declaration would be the wrong
-  proxy: a declaration governs what is *captured*, not what a page happens to print. An operator
-  keeps the page image, the word-box geometry, every non-identifier captured row with its value and
-  confidence, and the promote buttons; what they lose is a hover tooltip.
-  **The page image is not withheld, and that is deliberate.** The same role already holds a
-  fifteen-minute signed read of the document's bytes (5.4), so withholding a picture of the page
-  would claim a control this system does not have — and a control that is believed and absent is
-  worse than one that was never claimed. Whoever may open a document may read what is printed on it.
+  make of the paper** — and it does not govern the paper. **#102 deleted the word-box overlay**, so
+  the leak 6.5 found (a withheld identifier in a `title` on a word box) has no markup left to live
+  in. Two consequences, both still testable:
+  **the per-page transcript on `/documents/:id/read` is withheld below the permission, on every
+  document type.** That transcript is not the paper; it is our copy of it, as text, in our own
+  response — sweepable, loggable, copy-pasteable and reachable by anything that later consumes a
+  rendered page. It is withheld wholesale rather than masked word by word, because a run split
+  across OCR tokens (`312`, `345`, `678`) matches no pattern applied to one token, and because
+  gating on the type's catalogue declaration would be the wrong proxy: a declaration governs what
+  is *captured*, not what a page happens to print. An operator keeps every non-identifier captured
+  row with its value, page number and quality, and the link to the ledger; what they lose is the
+  page text.
+  **There is no page image on this screen.** Whoever may open a document may still take a
+  fifteen-minute signed read of the bytes (5.4). Hiding a picture of a page we no longer fetch
+  would claim nothing. The overlay's job — check a value against the paper — is the page number
+  beside each extracted value, because the administrator has the file in front of them.
   **Two guards hold all of it**, and neither runs through the agent: `tests/policy/identifier.test.ts`
   asserts that nothing `src/scope/` serves carries an identifier-shaped run, with a party that has a
   `national_id` and a document that has an `extracted_field` identifier row seeded so the case has
@@ -255,7 +257,7 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   | Third party | What it sees | From |
   |---|---|---|
   | **OpenAI** | Passage text sent for embedding, and document text sent for comprehension | Today, through the CI-only `OPENAI_API_KEY` — authored fixture text with no personal data in it. Tenant text from week 4. |
-  | **Google Cloud** | Whole page images (Document AI OCR, ADR-0002, processor location **`eu`** — Document AI does not serve `me-west1`); every stored document and row (Cloud Storage, Cloud SQL) as processor | Week 4 for OCR (slice 4.1); today for storage |
+  | **Google Cloud** | Document bytes for OCR (Document AI, ADR-0002, imageless mode, processor location **`eu`** — Document AI does not serve `me-west1`); every stored document and row (Cloud Storage, Cloud SQL) as processor | Week 4 for OCR (slice 4.1); today for storage |
   | **Meta — WhatsApp Cloud API** | Every message either end of a conversation sends | Week 9 |
   | **Twilio** | The OTP message and the mobile number it goes to, as the SMS fallback | Week 9 |
   | **Anthropic** | This repository, read by Claude Code as it is built | Today, **development-time only**. It never sees tenant text, and the mechanism that makes that true is that tier 2 never enters the repo — `.gitignore`, the bucket, and this rule, not an assurance. |
