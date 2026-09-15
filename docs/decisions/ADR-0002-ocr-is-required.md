@@ -38,7 +38,7 @@ Three findings from that ADR are load-bearing in v5 and are carried forward rath
   ADR-0004's rule.
 - **v3's open question is closed by a different route.** That ADR worried that a citation might degrade
   from a clause to a page. v5 does not depend on one document's numbering scheme at all: capture is
-  schema-driven ([tasks/plan.md](../../tasks/plan.md) A8), and an `ExtractedField` carries
+  schema-driven ([archive/tasks-w1-7/plan.md](../../archive/tasks-w1-7/plan.md) A8), and an `ExtractedField` carries
   `(page, bbox, confidence, model, schema_version_id)`. **A value points at pixels**, which is a
   stronger guarantee than a clause reference and survives a document with no numbering.
 - **The "schema over templates" framing that ADR deferred is now settled** as A8 and is not reopened

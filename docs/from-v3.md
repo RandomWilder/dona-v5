@@ -242,7 +242,7 @@ database constraint** — no toggle, no import path, no agent override.
 
 ## Not code, and already running
 
-`tasks/fuses.md` tracks external dependencies that were fired during v3 and **whose state carries
+`docs/fuses.md` tracks external dependencies that were fired during v3 and **whose state carries
 forward**. Read it before assuming anything needs starting from zero.
 
 - **Meta WhatsApp Business verification — fired 2026-08-21, in progress.** This is the critical path

@@ -1880,7 +1880,8 @@ describe('shared UI tokens', () => {
 
   // Asserted over the **wired** settings screens in the registry. It was asserted against the
   // painted A9 variant until 6.1, which put the only copy of a live guard on a mockup — and a
-  // mockup is deleted the day its slice closes (scripts/guards.ts, guard four). The rule it
+  // mockup is deleted the day the flow it painted is wired (CLAUDE.md; the guard that enforced
+  // it was retired with slices by ADR-0007). The rule it
   // carries is the settings screen's: the role matrix is code, and `asset_type` is guarded
   // (SPEC.md rule 8), so neither may ever grow a card here.
   it('keeps asset kinds and the role matrix off the settings screen', () => {

@@ -1,6 +1,6 @@
 # SPEC: channel
 
-**Stub.** Content arrives in its build week — see [tasks/roadmap.md](tasks/roadmap.md); a stub gaining
+**Stub.** Content arrives when this module is built; a stub gaining
 content is the signal its build has started. Shared conventions live in [SPEC.md](SPEC.md) and are not
 repeated here.
 
@@ -15,4 +15,4 @@ repeated here.
   two standing refusal cases in the golden set that are never relaxed. An emergency never reaches this
   module. OTP goes over WhatsApp first with SMS as the fallback; Hebrew is missing from Twilio
   Verify's default locales, so tenant-facing copy needs custom templates
-  ([tasks/fuses.md](tasks/fuses.md)).
+  ([docs/fuses.md](docs/fuses.md)).

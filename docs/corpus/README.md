@@ -68,6 +68,6 @@ Asserted by `evals/fixtures/specimen-clauses.test.ts`, not promised in a comment
 
 **Tier 2 — the real documents from Dona Dom — never enter this repository.** They live in a dated
 bucket of their own with a lifecycle rule, a proved deletion path and a removal date on
-`tasks/fuses.md`: `infra/corpus-bucket.sh` provisions it, `infra/corpus-delete.sh` removes from it.
+`docs/fuses.md`: `infra/corpus-bucket.sh` provisions it, `infra/corpus-delete.sh` removes from it.
 `.gitignore` refuses PDFs and images outside this directory, which is a safety net against a stray
 `git add -A` and not a policy in itself — the policy is that they never arrive here at all.

@@ -49,7 +49,7 @@ every writer state it.
 defaults). It is nullable because we frequently do not have it and a required identifier would be
 typed as `000000000` within a week. That it never appears in an agent tool's response shape is a
 **policy case**, not a review — deterministic, so it belongs in `tests/policy/` beside the isolation
-cases, and week 5 owns writing it ([tasks/roadmap.md](tasks/roadmap.md)).
+cases, and week 5 owns writing it ([archive/tasks-w1-7/roadmap.md](archive/tasks-w1-7/roadmap.md)).
 
 ## The rule this schema exists to enforce
 

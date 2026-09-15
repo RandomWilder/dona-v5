@@ -2,10 +2,14 @@
 
 How this system gets built: **one developer directing agents, with the process doing the reviewing.**
 No human reviews a diff but me, so the gates have to be mechanical. Reads alongside
-[CLAUDE.md](../CLAUDE.md) and [HANDOFF.md](../HANDOFF.md); the schedule it runs against is
-[Rollout Cadence](rollout-cadence.html), which is the authority on weeks and gates and is never
-restated here. What crosses over from the previous codebase, and what must not, is
-[from-v3.md](from-v3.md).
+[CLAUDE.md](../CLAUDE.md) and [HANDOFF.md](../HANDOFF.md). What crosses over from the previous
+codebase, and what must not, is [from-v3.md](from-v3.md).
+
+**This file is the mechanics — gates, guards, the chain from a laptop to production.** It stopped
+being a schedule on 15 Sep 2026: [ADR-0007](decisions/ADR-0007-work-is-tracked-as-blocking-edges-not-a-calendar.md)
+retired the slice/week/evidence process, and what replaced it is the skills flow in
+[CLAUDE.md](../CLAUDE.md) §Agent skills. [Rollout Cadence](rollout-cadence.html) remains the
+client-facing statement of intent; nothing here is derived from it.
 
 ---
 
@@ -20,8 +24,10 @@ restated here. What crosses over from the previous codebase, and what must not, 
    specification and not a description. Sessions start from the spec, never from a chat description.
 3. **CI is the reviewer.** Typecheck, lint, contract tests and both required gates decide what
    merges. Never merge red, never "fix it after".
-4. **Small verified slices.** One vertical slice per session: plan → implement → verify → staging.
-   If a task cannot be described in three acceptance bullets, split it before starting.
+4. **Small verified tickets.** One **tracer bullet** per session — a narrow but complete path through
+   every layer, demoable on its own, sized to one fresh context window: plan → implement → verify →
+   staging. If a task cannot be described in three acceptance bullets, split it before starting.
+   Sequencing is the blocking edges between tickets, never a date.
 5. **Mock data is the development substrate, by design and not by shortage.** We define the fixtures
    and templates the system is built against, chosen for coverage of the cases that break things
    rather than for whatever a customer happened to send. Real tenant data enters at sign-off, and the
@@ -47,39 +53,32 @@ someone else's export, someone else's decision. **Light it in week 1, before the
 it is written.** A fuse lit late does not cost its own burn time — it costs the burn time *plus*
 every day of work that was ready and waiting on it.
 
-One file, `tasks/fuses.md`, one row per fuse, **reviewed once a week**. Every row carries four
-things and nothing else: **date lit · expected burn · status · what stalls if it does not land.**
-An unlit or overdue fuse goes on the standing asks slide at the weekly demo — visible to Dona Dom's
-management as their dependency, not as our delay.
+One file, [fuses.md](fuses.md), one row per fuse. Every row carries four things and nothing else:
+**date lit · expected burn · status · what stalls if it does not land.** An unlit or overdue fuse is
+a standing ask on the client — visible to Dona Dom's management as their dependency, not as our
+delay. It lives in `docs/` rather than the issue tracker because a fuse is a dependency we do not
+control and cannot close, and because the F6 processor table is a legal register, not a ticket.
 
-| Fuse | Lit | Expected burn | What stalls if it does not land |
-|---|---|---|---|
-| **Meta business verification** | W1 | **4–6 weeks, uncompressible** | The whole agent half. This is the critical path in every document; filing in week 1 is what buys the runway. Fallback is a message simulator, then swapping in the live number. |
-| **WhatsApp number under Dona Dom's legal entity** | W1 | Days, once the entity is decided | Verification itself — the number must belong to the company, never a personal mobile. A wrong number here means refiling, not editing. |
-| **Priority ERP read-only keys** | W1 | Client IT's calendar | The register import, the ERP foreign keys, and every financial reference. Open question #1 in the handoff decides how much of month one depends on this. |
-| **Google Drive access to the document folders** | W1 | Days | Document ingestion. Drive is the known source for lease and building paperwork, so this fuse converts a backfill expedition into an import. |
-| **ADR-0004 — personal data reaching a model provider** | W1 · **lit 6 Sep** | Days, once asked | Slice 1.12 and everything after it. The obligation is a disclosure: the legal basis, and every third party that sees tenant text, named before it is called. A third party discovered later is a data-custody incident, not a config edit. **Half discharged at 1.12** — the naming is in `SPEC.md`; the DPA and the disclosure are the owner's and still owed. |
-| **The client's GCP organisation decision** | W1 | Weeks — a management decision | Nothing immediately; everything eventually. The project is created under an organisation now and migrated later. Two things must be true before the move: an `@donadom.co.il` identity exists (most organisations block IAM grants to external addresses outright, which is the likeliest way to get locked out of your own project), and no real tenant data has landed yet, so the transfer is an admin task and not a data-custody event. If the GitHub repository moves with it, the `assertion.repository` attribute condition and both deploy workflows change with it. |
-
-**Open, and to be answered before week 1 is planned:** the Meta verification filed 2026-08-21 may
-already be most of the way through its burn, or may have to be refiled against the correct legal
-entity. Those two possibilities are weeks apart in their effect on the agent half. Confirm the
-status and the filing entity before planning around a fresh application.
+**Walk it when a ticket touches something it gates**, and before any conversation with the client.
+The live table is [fuses.md](fuses.md): seven rows, F1–F7, with their dates and their current
+status. It is not restated here — a fuse table copied into a second file is a fuse table that goes
+stale in one of them.
 
 ## 3. The context layer
 
 ```
 AGENTS.md               ← root, 20–30 lines MAX: commands, style, architecture map
-CLAUDE.md               ← thin pointer: "Read AGENTS.md", plus Claude-specific notes
+CLAUDE.md               ← thin pointer: "Read AGENTS.md", the skills flow, this repo's additions
+CONTEXT.md              ← the glossary: the nouns and their one meaning each
 SPEC.md                 ← shared conventions + the foundation rules
 SPEC-<module>.md        ← one per module; updated BEFORE the code changes
 .claude/settings.json   ← permissions allowlist + hooks (§4)
-.claude/skills/         ← repeatable workflows with real steps, e.g. the progress schematic
+docs/agents/*.md        ← what the engineering skills read: tracker, labels, domain-doc layout
 docs/decisions/ADR-*.md ← why a choice was made, so agents cite instead of relitigating
 docs/model/             ← the workbook: the specification for month one's tables
-tasks/todo.md           ← the current week's slices, with acceptance criteria
-tasks/fuses.md          ← the fuse table (§2)
-tasks/evidence/*.md     ← one file per slice: what was actually proved, with the numbers
+docs/fuses.md           ← the fuse table (§2)
+GitHub Issues           ← the work itself: tickets with acceptance criteria and blocking edges
+archive/tasks-w1-7/     ← the retired slice/week process, 6–15 Sep 2026. Read, never written
 ```
 
 Rules that matter:
@@ -93,9 +92,11 @@ Rules that matter:
   existed to brief a second editor do not exist. The three that matter — migration conventions, the
   kernel boundary, UI tokens with RTL logical properties — are stated in `SPEC.md` and *enforced* by
   the write hook and by CI, which is stronger than a rules file an editor may or may not load.
-- **`tasks/evidence/` is what makes the history legible a month later.** One file per slice, written
-  when the slice closes, recording what was proved and what the numbers were. It is also where
+- **The closing comment on an issue is what makes the history legible a month later.** Written when
+  the ticket closes, recording what was proved and what the numbers were. It is also where
   observations that must never become assertions live — embedding distances, timings, accuracy runs.
+  Through 15 Sep 2026 these were files under `tasks/evidence/`; sixty-seven of them are archived at
+  `archive/tasks-w1-7/evidence/` and code comments citing them still resolve.
 
 ## 4. Guardrails, enforced by code rather than memory
 
@@ -171,9 +172,9 @@ prod:     full CI re-run against the tagged commit → migrations → deploy →
   the duty phone with no model call in between. "Deployed but silently broken" is the failure this
   exists to make impossible.
 - **`npm run dev` does not reload.** Node loads the process once. A browser refresh is not a new
-  revision. After any slice that changes a screen or a write path, **stop the listener and start
+  revision. After any change to a screen or a write path, **stop the listener and start
   `npm run dev` again**, then click the path on `:3000` before merge. Tests `inject` the current
-  files; they do not update the leftover process. Staging is still Thursday's demo; local is the
+  files; they do not update the leftover process. Staging is what gets demoed; local is the
   first look so a typed field or a refuse is not discovered only after deploy.
 
 ## 6. The policy suite — the gate for everything no model may decide
@@ -245,12 +246,6 @@ along with the guard that made it five, and the drift is left visible rather tha
   it arrives. That is what *controls before data* means when it is a mechanism rather than an
   intention.
 
-- **A mockup does not outlive the slice that wired it.** §4's rule is that a flow is painted before
-  it is built; the failure mode is a paint left in `mockups/` after the screen exists, so that the
-  next person reads a two-week-old drawing as the design. `MOCKUP_OWNERS` names the slice that owns
-  each paint, and the guard fails when a mockup file and that slice's evidence file both exist. It is
-  the one guard allowed to scan nothing: no painted flow is the idle state.
-
 - **An instant becomes a date in one file.** `toISOString().slice(0, 10)` is the UTC day, and for the
   two or three hours after midnight in Israel that is yesterday. Slice 7.2b found eleven call sites
   deriving it, one of them the isolation join deciding who lives in a unit. A grep for that spelling —
@@ -292,8 +287,8 @@ ranking change is a fix is that the number goes down. "A ranking change that doe
 not a fix" stops being a claim in a commit message and becomes something the runner enforces.
 
 **No assertion is ever on a distance.** Provider embeddings are not bit-identical between runs, so a
-committed distance is a gate that fails for weather. Distances are observations; they live in
-`tasks/evidence/`. Rank and order are what the gate reads.
+committed distance is a gate that fails for weather. Distances are observations; they live in the
+ticket's closing comment. Rank and order are what the gate reads.
 
 **Silent skips are failures.** Retrieval cases need a database and an embedding key; absent either
 they skip — right on a clean clone, a lie in CI, where the job goes green having ranked nothing.
@@ -311,64 +306,41 @@ It decides what a ranking change should *be*; `npm run evals` decides whether it
 
 ## 8. The loop
 
-**Per slice.**
+**Per ticket.** The ticket comes off the tracker (`gh issue list --label ready-for-agent`), already
+carrying acceptance criteria and its blocking edges. `/implement` drives steps 2–4.
 
-1. Take the slice from `tasks/todo.md`, where it is already written with acceptance criteria.
+1. Read the ticket and its comments. Confirm every blocker is closed.
 2. Update `SPEC-<module>.md` if behaviour changes — before the code, not after.
-3. Plan mode if it is non-trivial or on the §4 mandatory list; approve the plan; implement with tests.
-4. Read the diff yourself. CI is the gate, but nothing merges unread.
-5. **Restart local and look.** `npm run dev` has no watch. Kill the listener, start it on the
-   working copy, click the screen this slice changed. Record in the evidence that it was this
-   process, not a leftover from yesterday. Skip only when the slice has no human-facing path
+3. Plan mode if it is non-trivial or on the §4 mandatory list; approve the plan; implement with tests,
+   one red-green slice at a time.
+4. `/code-review` the diff — two axes, Standards and Spec — then read the diff yourself. CI is the
+   gate, but nothing merges unread.
+5. **Restart local and look.** `npm run dev` has no watch. Kill the listener, start it on the working
+   copy, click the screen this ticket changed. Skip only when the ticket has no human-facing path
    (a constraint, a migration, a guard).
 6. Merge green → staging deploys itself → two-minute smoke on staging.
-7. Close the slice with a `tasks/evidence/` file. End of day, staging is current and `todo.md` is true.
-8. **Carry every raised item into the entry of the slice that closes it** — `tasks/todo.md` and
-   `tasks/roadmap.md`, not only the evidence file. A slice is not closed while something it raised
-   has no owner.
+7. Close the issue with a comment saying what was proved, with the numbers. **Nothing this ticket
+   raised is left unowned**: anything deferred becomes an issue, and an issue it gates gets the
+   blocking edge. That is the carry rule, and the tracker now holds it instead of a paragraph of
+   prose.
 
-**The carry rule, and why it is a rule.** A slice legitimately leaves things open: week 1 is a
-dependency chain, and 1.2 cannot join `npm test` before 1.3 creates it. The bar is therefore not
-*nothing open* — it is **nothing open that is unowned**. Evidence files are written once and reopened
-never, so an item recorded only there is an item lost: slice 1.1 raised three, two of which had
-vanished from the plan by 1.2 — including the sharpest hazard in the repo. What an item costs to
-carry is one sentence in the closing slice's entry, read at the moment it matters. What it costs to
-lose is discovered by tripping over it.
+**Prod tagging.** The ordinary change produces no `v*` tag: until the pilot building has real tenants
+on the system there is nothing in prod to serve, and staging *is* the delivered artifact. The tag path
+and the rollback were both exercised once on purpose, on day one, while nothing depended on them (§9).
+Once the pilot is live, a tag is cut for every change that reaches it.
 
-**Per week.** The week's shape belongs to the Cadence — the demo kind is declared on the week's first
-working day, the build is frozen Wednesday, the demo runs Thursday. What the pipeline owes each of
-those:
-
-- **Sunday** — `tasks/todo.md` rewritten for the week, with the declared demo kind at the top, so the
-  slices and the promise cannot drift apart. The Cadence says "Monday" and means the first working
-  day of the week; **the working week here is Sun–Thu**, so it is Sunday, which is what
-  `tasks/roadmap.md` has always said. Corrected at slice 2.1 — week 1's evidence raised the
-  discrepancy, and a schedule stated two ways in two files is one nobody can be held to.
-- **Wednesday** — the freeze is a pipeline event, not an intention: the last merge that reaches
-  staging lands Wednesday, and anything finished after it waits on a branch until the demo is done.
-  Nothing is ever demoed that was finished that morning.
-- **Thursday** — **the demo runs off staging**, on the same URL as last week, never off a laptop.
-  Same link, same service call, getting progressively more real.
-- **Once a week** — walk `tasks/fuses.md`. Anything unlit or overdue goes on the asks slide.
-
-**Prod tagging starts at week 12.** Before the pilot is live there is nothing in prod to serve and
-nobody to serve it, so the ordinary week produces no `v*` tag at all and staging *is* the delivered
-artifact. The exception is deliberate and happens once, on day one: the tag path and the rollback are
-both exercised on purpose while nothing depends on them (§9). From week 12 the pilot building is on
-the system with real tenants, and a tag is cut for every change that reaches them.
-
-**The monthly gates are where the loop widens.** M1–M4 are the only points where scope, priorities
-and the roadmap get re-planned — on the record, in the room, and absorbed rather than negotiated
-silently between weeks. The pipeline's contribution to each: the fuse table, the evidence files
-written since the last gate, and the two gates' current numbers. What each gate decides belongs to
-the Cadence, not here.
+**What is not in this file any more.** Weeks, demo days, freeze Wednesdays, monthly gates, slice
+numbers, evidence files. They ran from 6 to 15 September 2026, they are archived at
+`archive/tasks-w1-7/`, and [ADR-0007](decisions/ADR-0007-work-is-tracked-as-blocking-edges-not-a-calendar.md)
+says why they stopped. Demos still happen and status is still reported — both on request, neither on
+a calendar this repository has to store.
 
 ## 9. Day one, in order
 
 - [x] `git init` + GitHub repo; branch protection on `main` — required checks, no force push
-- [ ] **Light every fuse in §2 and create `tasks/fuses.md` before any of the below.** They burn
+- [ ] **Light every fuse in §2 and create `docs/fuses.md` before any of the below.** They burn
       while the scaffolding gets built; nothing here is on their critical path
-- [x] Scaffold: `AGENTS.md` (20 lines), `CLAUDE.md` pointer, `SPEC.md`, `tasks/todo.md`
+- [x] Scaffold: `AGENTS.md` (20 lines), `CLAUDE.md` pointer, `SPEC.md`, the issue tracker
 - [x] `.claude/settings.json`: permissions allowlist plus the four hooks from §4
 - [x] Biome, tsconfig, `node --test` wiring; one passing dummy test
 - [x] `infra/bootstrap.sh` against the new project — `REGION` stays `me-west1`. Provisions APIs,
@@ -386,10 +358,10 @@ the Cadence, not here.
       staging live; tag → prod; then **roll prod back**, and confirm the next deploy still takes
       traffic. The one time this is easy to do is the day nothing depends on it
 
-**Closed by slice 1.10 on 2026-09-05**, except the fuse row, which stays open on purpose: `tasks/fuses.md`
-exists and F1 is lit, but F2–F7 are someone else's decision and are walked weekly until they land. The
+**Closed by slice 1.10 on 2026-09-05**, except the fuse row, which stays open on purpose: `docs/fuses.md`
+exists and F1 is lit, but F2–F7 are someone else's decision and are walked until they land. The
 last line was performed rather than built — three tags, a rollback, and a deploy that took 100% of the
-traffic afterwards ([tasks/evidence/1.10.md](../tasks/evidence/1.10.md)).
+traffic afterwards ([archive/tasks-w1-7/evidence/1.10.md](../archive/tasks-w1-7/evidence/1.10.md)).
 
 ## 10. Anti-patterns
 

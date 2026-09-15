@@ -60,7 +60,7 @@ is a flow specified wrongly.
    extraction, and that mechanism grows worse with every document type added.
 3. **`DocumentType` and `DocumentTypeField` describe what to look for in a file. They are not where
    answers land.** They are the extraction target list, versioned by `effective_from`
-   ([tasks/roadmap.md](tasks/roadmap.md), slice 3.1).
+   ([archive/tasks-w1-7/roadmap.md](archive/tasks-w1-7/roadmap.md), slice 3.1).
 4. **Completeness is a state, never a NOT NULL.** A requirement that a database rejects is a
    requirement an addendum can never satisfy, because the row it would complete was refused. Business
    requirements about *what a tenancy ought to have* are policy cases over saved rows; database
@@ -298,7 +298,7 @@ unit, or to nothing. A guarantor resolves to nothing. A person whose tenancy has
 to nothing.
 **Open, and owed before week 9:** whether the notice to data subjects is delivered on first contact
 through this channel. If it is, this flow gains a step, and that must be known in advance rather than
-discovered during the build ([tasks/fuses.md](tasks/fuses.md), F6).
+discovered during the build ([docs/fuses.md](docs/fuses.md), F6).
 
 ### S1 — A portfolio question
 
@@ -364,7 +364,7 @@ and this absence is half of what they found. A11 is the correction; A12 is the o
 units, and **A13**'s apartment screen is what fills it.
 
 > This sentence said *A12's apartment screen* when 6.1 wrote it, and A12 is the document-first
-> intake in both [tasks/roadmap.md](tasks/roadmap.md) and [tasks/todo.md](tasks/todo.md), where the
+> intake in both [archive/tasks-w1-7/roadmap.md](archive/tasks-w1-7/roadmap.md) and [archive/tasks-w1-7/todo.md](archive/tasks-w1-7/todo.md), where the
 > number was assigned before either flow was written. Corrected at 6.2 in favour of the two planning
 > files rather than against them: the apartment screen is **A13**. A flow number is an identifier
 > and not a sequence — A7–A10 are deferred and A11 was already out of order.

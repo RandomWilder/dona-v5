@@ -3,9 +3,14 @@
 // Two of them are §6's own — no `current_tenant` column, and the isolation join in one file. The
 // third is slice 1.12's: `-- pii` had been a sentence in SPEC.md since 1.1 with nothing behind it,
 // and the slice whose whole thesis is *controls before data* is the one that owes it a mechanism.
-// The fourth keeps a paint from outliving the slice that wired it. The fifth is 7.2b's: an instant
-// becomes a date in one file, because eleven places were deriving the UTC day and one of them was
-// the isolation join.
+// The fourth is 7.2b's: an instant becomes a date in one file, because eleven places were deriving
+// the UTC day and one of them was the isolation join.
+//
+// **There were five.** A fourth guard coupled `mockups/<flow>.html` to `tasks/evidence/<slice>.md` so
+// a paint could not outlive the slice that wired it. ADR-0007 retired slices and evidence files, and
+// half of that guard went with them — a guard whose other half no longer exists is a guard that
+// passes forever, which is the failure this file's header names. The rule it enforced survives as a
+// convention in CLAUDE.md, and `mockups/` and `/dev/mockups/:flow` are unchanged.
 //
 // They run as a step of the `gate` job, which is a **required** check on `main` with
 // `enforce_admins: true` — so a guard that fires blocks every merge, including an admin's. That is
@@ -13,7 +18,7 @@
 // than discovered on `main`.
 //
 // **Every guard fails when it scanned nothing.** A guard pointed at a path that matches no files
-// passes forever and reads like diligence: docs/pipeline.md §6 and tasks/todo.md both wrote guard one
+// passes forever and reads like diligence: docs/pipeline.md §6 and the week-1 plan both wrote guard one
 // against `migrations/*.sql`, which has never been where migrations live in this repository. The
 // count is the part of the guard that catches that, and it is not optional.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -29,8 +34,6 @@ export interface GuardResult {
   guard: string;
   scanned: number;
   violations: Violation[];
-  /** Zero files is a pass. Used by the mockup guard: no painted flow is the idle state. */
-  allowEmpty?: boolean;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -318,72 +321,7 @@ export function guardPiiComments(root: string): GuardResult {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Guard four — a painted mockup cannot outlive the slice that wired it.
-//
-// `mockups/<flow>.html` is the director's review surface. `tasks/evidence/<slice>.md` is the proof
-// that slice closed. Both at once means two products. Zero mockup files is the idle state, not a
-// dead path, so this guard is allowed to scan nothing.
-// ---------------------------------------------------------------------------------------------
-
-export const MOCKUPS_DIR = 'mockups';
-// The slice each painted flow belongs to. **Two entries left on 14 Sep 2026** — `responsibility`
-// (was 7.6) and `ticket` (was 8.2). Neither flow was ever painted, and the slices that would have
-// painted them are archived: tasks/archive/displaced-slices.md. An owner pointing at a slice that
-// will not run is the stale entry this map's own history warns about, and a map that names flows
-// nobody will draw is a guard that has stopped meaning anything. They come back with their slices
-// if their slices come back.
-export const MOCKUP_OWNERS: Record<string, string> = {
-  ia: '5.3',
-  changelog: '5.5',
-  a9: '5.8',
-  'building-new': '6.1',
-  'unit-new': '6.2',
-  // **`document-intake` was here and is gone. Slice 7.3 wired the last of it and deleted it**, which
-  // is what this guard exists to force: A12's flow was painted for 6.3, repainted at 6.9 for the
-  // refusal that offers to create, and repainted a third time at 7.1 to show the declaration before
-  // the file and the readings after it. 7.1 wired the declaration, 7.2 the editor, 7.3 the approval
-  // table — and the entry comes out with the file, because an owner pointing at a slice that has
-  // closed is a guard that cannot fire again.
-};
-
-export function guardMockups(root: string): GuardResult {
-  const dir = path.join(root, MOCKUPS_DIR);
-  const files = existsSync(dir)
-    ? readdirSync(dir)
-        .filter((name) => name.endsWith('.html'))
-        .sort()
-    : [];
-  const violations: Violation[] = [];
-  for (const name of files) {
-    const flow = name.replace(/\.html$/, '');
-    const slice = MOCKUP_OWNERS[flow];
-    if (slice === undefined) {
-      violations.push({
-        guard: 'mockup-does-not-outlive-evidence',
-        file: path.join(MOCKUPS_DIR, name),
-        detail: `no owner slice registered for flow "${flow}"`,
-      });
-      continue;
-    }
-    const evidence = path.join('tasks', 'evidence', `${slice}.md`);
-    if (existsSync(path.join(root, evidence))) {
-      violations.push({
-        guard: 'mockup-does-not-outlive-evidence',
-        file: path.join(MOCKUPS_DIR, name),
-        detail: `${evidence} exists; delete the mockup or do not close the slice yet`,
-      });
-    }
-  }
-  return {
-    guard: 'mockup-does-not-outlive-evidence',
-    scanned: files.length,
-    violations,
-    allowEmpty: true,
-  };
-}
-
-// ---------------------------------------------------------------------------------------------
-// Guard five — an instant becomes a date in exactly one file. Slice 7.2b.
+// Guard four — an instant becomes a date in exactly one file. Slice 7.2b.
 //
 // `toISOString().slice(0, 10)` is the **UTC** day. Israel is UTC+2 in winter and UTC+3 in summer, so
 // for the two or three hours after midnight that expression answers with the country's yesterday.
@@ -447,7 +385,6 @@ export function runGuards(root: string): GuardResult[] {
     guardMigrations(root),
     guardScopeJoin(root),
     guardPiiComments(root),
-    guardMockups(root),
     guardUtcDay(root),
   ];
 }
@@ -455,7 +392,7 @@ export function runGuards(root: string): GuardResult[] {
 export function report(results: GuardResult[]): boolean {
   let ok = true;
   for (const result of results) {
-    if (result.scanned === 0 && result.allowEmpty !== true) {
+    if (result.scanned === 0) {
       ok = false;
       console.error(
         `guard ${result.guard}: FAILED — scanned 0 files. A guard that reads nothing passes forever.`,

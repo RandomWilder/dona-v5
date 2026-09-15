@@ -12,7 +12,7 @@ this file and the workbook disagree, the workbook is right and this file is a bu
 - **Builds:** week 3 (slices 3.1–3.3, 3.5's confirm screen, 3.6) and week 4 (OCR at 4.1, comprehension
   at 4.2, promotion at 4.3, A2's draft tenancy at 4.6, A3's addendum at 4.7). **The stub gained content at slice 3.1**, which
   is the signal its build started. ExtractedField landed at 4.2; FieldPromotion lands at 4.3.
-- **Carries:** **capture is open, promotion is governed** ([tasks/plan.md](tasks/plan.md) A8). A new
+- **Carries:** **capture is open, promotion is governed** ([archive/tasks-w1-7/plan.md](archive/tasks-w1-7/plan.md) A8). A new
   type or field is a row — zero migrations, zero deploys — and is citable the moment it is extracted;
   an extracted value becoming a typed column costs a migration and a reviewed mapping.
   `DocumentTypeField` is versioned by `effective_from`, so a value extracted under version 3 of a
@@ -905,7 +905,7 @@ lines, and is allowed to be zero.
 
 The published [Data Model](docs/data-model.html)'s `Document` card lists four columns the workbook's
 E12 does not, and the Data Model is the authority on what the system is — so each omission is a
-decision with a reason, made at slice 3.1 and recorded in [tasks/evidence/3.1.md](tasks/evidence/3.1.md).
+decision with a reason, made at slice 3.1 and recorded in [archive/tasks-w1-7/evidence/3.1.md](archive/tasks-w1-7/evidence/3.1.md).
 All four are nullable `ADD COLUMN`s when they come.
 
 - **`state`** — figure 5's `RECEIVED → EXTRACTED → ACCEPTED / REJECTED` is the review queue's state

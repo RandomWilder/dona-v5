@@ -41,7 +41,7 @@ around; the rest are what makes them enforceable.
    the only kind that can ever be the tenant's.
 7. **A guarantor (ערב) never receives service information.** `is_service_contact` is *forced* false
    when `role = GUARANTOR` — a database constraint, not a form default. No toggle exists.
-8. **Capture is open; promotion is governed** ([tasks/plan.md](tasks/plan.md) A8). A document type is a row and a field is a
+8. **Capture is open; promotion is governed** ([archive/tasks-w1-7/plan.md](archive/tasks-w1-7/plan.md) A8). A document type is a row and a field is a
    row — new ones cost no migration and no deploy, and the value is citable the moment it is
    extracted. An extracted value becoming a *typed column* costs a migration and a reviewed mapping,
    because those columns are what the isolation join, the responsibility matrix and the state machine
@@ -255,7 +255,7 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   | **Anthropic** | This repository, read by Claude Code as it is built | Today, **development-time only**. It never sees tenant text, and the mechanism that makes that true is that tier 2 never enters the repo — `.gitignore`, the bucket, and this rule, not an assurance. |
 
   Naming them is the engineering half of ADR-0004. The other half is the owner's, is tracked as **F6**
-  on [tasks/fuses.md](tasks/fuses.md), and is owed **before the tier-2 corpus lands**. As of
+  on [docs/fuses.md](docs/fuses.md), and is owed **before the tier-2 corpus lands**. As of
   2026-09-06 it is three named acts and not an open question: execute OpenAI's DPA, confirm Google
   Cloud's is in force, and publish the notice to data subjects drafted at
   [docs/data-subject-notice.draft.md](docs/data-subject-notice.draft.md). Meta's and Twilio's terms
@@ -281,7 +281,7 @@ Only one of them is ours, and it is the one no gate runs against.
    week 3 and do not change what tier 1 is for (slice 1.12).
 2. **Real documents from Dona Dom** — they measure accuracy against scans, handwriting and
    signatures, and they do nothing else. They live in a dated bucket of their own with a lifecycle
-   rule, a tested deletion path and a removal date recorded on `tasks/fuses.md` the day they land.
+   rule, a tested deletion path and a removal date recorded on `docs/fuses.md` the day they land.
    **Never in this repo.**
 3. **Synthetic register rows** — the tenant / unit / phone table, designed for coverage of the cases
    that break things. The data request sent to Dona Dom is *derived from* it rather than dictating it.
@@ -373,7 +373,7 @@ version, so the true sentence is *removed with seven days to undo it*, not *dest
 `src/scope/`'s join reads landed with that migration, and `tests/policy/relations.test.ts` fails the
 build if any case takes the pending branch again, because a case that stopped reporting pending and
 also stopped running looks identical in a green summary. Every other module spec is a stub until its
-build week ([tasks/roadmap.md](tasks/roadmap.md)), and a stub gaining content is the signal its build
+build week ([archive/tasks-w1-7/roadmap.md](archive/tasks-w1-7/roadmap.md)), and a stub gaining content is the signal its build
 started.
 
 **The application serves screens from 1.11 and six estate routes from 3.6**: an index at `/`, the buildings

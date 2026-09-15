@@ -1,6 +1,6 @@
 # SPEC: calls
 
-**Stub.** Content arrives in its build week — see [tasks/roadmap.md](tasks/roadmap.md); a stub gaining
+**Stub.** Content arrives when this module is built; a stub gaining
 content is the signal its build has started. Shared conventions live in [SPEC.md](SPEC.md) and are not
 repeated here.
 

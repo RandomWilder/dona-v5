@@ -62,7 +62,7 @@ portfolio.
   home for an identifier and the case names the table, not only `party.national_id`.
 - **F6 covers a category it did not before.** The extractor is now asked to return an identifier, so
   the OpenAI DPA and the notice to data subjects describe a processing purpose that was hypothetical
-  when [tasks/fuses.md](../../tasks/fuses.md) was last walked. This makes F6 sharper, not looser: it
+  when [docs/fuses.md](../fuses.md) was last walked. This makes F6 sharper, not looser: it
   still blocks the tier-2 corpus, and nothing in week 6 needs it, because every lease put through this
   week is invented.
 
