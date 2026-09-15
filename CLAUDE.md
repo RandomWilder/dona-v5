@@ -16,13 +16,15 @@ that resists a first glance; `/prototype` for a design question that needs a run
 
 **This is the only engineering workflow in this repo.** The account-level skills that duplicate it —
 `test-driven-development`, `code-review-and-quality`, `spec-driven-development`,
-`planning-and-task-breakdown`, `interview-me` and the twenty others in the same family — are turned
+`planning-and-task-breakdown`, `interview-me` and the nineteen others in the same family — are turned
 off here by `skillOverrides` in [.claude/settings.json](.claude/settings.json). Two skills with
 near-identical descriptions is worse than either alone: the model picks between them on wording, so
 which method runs becomes a coin flip. The setting is project-scoped, so those skills stay available
-in every other repository. Document, artifact and harness skills (`docx`, `xlsx`, `pdf`, `pptx`,
-`artifact-*`, `dataviz`, `update-config`, `run`, `security-review`) are untouched — they collide with
-nothing and the four published documents need the artifact ones. The built-in `/code-review` and
+in every other repository. **Collision is the whole test, and a skill that duplicates nothing stays
+on.** `frontend-ui-engineering` has no counterpart in the flow and this repo has real screens, so it
+is on; document, artifact and harness skills (`docx`, `xlsx`, `pdf`, `pptx`, `artifact-*`, `dataviz`,
+`update-config`, `run`, `security-review`) are untouched too — and the four published documents need
+the artifact ones. The built-in `/code-review` and
 `/simplify` are `user-invocable-only`: type them and they run, but the model reaches for
 `mattpocock-skills:code-review` on its own. Adding a skill to this repo means adding it to the
 workflow, not alongside it.

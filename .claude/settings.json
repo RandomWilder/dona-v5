@@ -43,7 +43,6 @@
     "deprecation-and-migration": "off",
     "documentation-and-adrs": "off",
     "doubt-driven-development": "off",
-    "frontend-ui-engineering": "off",
     "git-workflow-and-versioning": "off",
     "idea-refine": "off",
     "incremental-implementation": "off",
