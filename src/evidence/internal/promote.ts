@@ -1,7 +1,15 @@
 // Slice 4.3. Copy an extracted value onto a typed tenancy column, or refuse.
 //
 // Capture stays a row. Becoming business truth requires a FieldPromotion mapping, a TENANCY
-// link, and a named promoter. The database refuses a stamp written without dona.promoting.
+// link, a named promoter, and — from slice 7.4 — an approval stamp on the reading itself. The
+// database refuses a stamp written without dona.promoting, and refuses one written on a reading
+// nobody approved.
+//
+// **Why 7.4 added the fourth requirement.** 4.3 governed which declarations may reach a typed
+// column and left ungoverned what value arrives there: an unsigned reading could be copied onto
+// `tenancy.start_date` with an operator's name in `promoted_by`, so the name signed a button rather
+// than a value. Those columns are what the isolation join and the obligation state machine are
+// computed from. 7.3 made the copy *prefer* `approved_value`; this requires it.
 import type { AuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
@@ -46,17 +54,18 @@ export async function promoteExtractedField(
     const captured = await db.query<{
       extracted_field_id: string;
       document_id: string;
-      value: string;
+      value: string | null;
+      approved_at: Date | null;
       promoted_to: string | null;
       target: string | null;
     }>(
       `SELECT e.extracted_field_id, e.document_id,
-              -- **Slice 7.3.** The approved value when a person corrected the reading, and the
-              -- reading itself otherwise. Copying the raw read onto a typed column after somebody
-              -- corrected it would write a value nobody affirmed. Whether an approval should be
-              -- *required* before a promotion is 7.4's question.
-              COALESCE(e.approved_value, e.value) AS value,
-              e.promoted_to, p.target
+              -- **Slice 7.4.** The value a person signed, and nothing else. 7.3 wrote this as
+              -- COALESCE(e.approved_value, e.value) with the approval still optional; with the
+              -- approval required, a fallback that can no longer be taken is a claim about what
+              -- this command can do that stopped being true.
+              e.approved_value AS value,
+              e.approved_at, e.promoted_to, p.target
          FROM extracted_field e
          LEFT JOIN field_promotion p
            ON p.document_type_field_id = e.document_type_field_id
@@ -96,15 +105,31 @@ export async function promoteExtractedField(
       );
     }
 
+    // Already on the column, and this runs **before** the approval requirement on purpose: a row
+    // promoted before 7.4 must keep answering, not start failing on a rule that did not exist when
+    // it was signed. The same reason the trigger looks only at a row that is gaining the stamp.
     if (row.promoted_to === row.target) {
-      return { tenancyId, target: row.target, value: row.value };
+      return { tenancyId, target: row.target, value: row.value ?? '' };
     }
+
+    // **Slice 7.4.** `conflict`, as `'that reading is already approved'` is: both are the row's
+    // state refusing the request rather than the request being malformed. The screen draws no
+    // `קדם` button on an unsigned row, and A2's and A3's confirm sign the dates they promote — so
+    // this is the caller the module does not have yet, and the trigger behind it is every caller
+    // after that.
+    if (row.approved_at === null || row.value === null) {
+      throw new KernelError(
+        'conflict',
+        'that reading has not been approved, and only an approved reading is promoted',
+      );
+    }
+    const value = row.value;
 
     await db.query("SELECT set_config('dona.promoting', 'on', true)");
     await applyPromotedField(db, {
       tenancyId,
       field,
-      value: row.value,
+      value,
       actor: promotedBy,
       at: deps.clock.now(),
       sourceDocumentId: row.document_id,
@@ -132,6 +157,6 @@ export async function promoteExtractedField(
       { outcome: 'ok' },
     );
 
-    return { tenancyId, target: row.target, value: row.value };
+    return { tenancyId, target: row.target, value };
   });
 }

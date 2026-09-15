@@ -215,6 +215,19 @@ unit — which is the sequence step 5 of that flow describes anyway.
    to get past the guard is the move the guard exists to forbid. The list already carries both dates
    as text, so the arithmetic is ordinary code with its own cases.
 7. The written tenancy is `DRAFT` and carries per-field provenance back to the lease.
+
+   **The confirm signs the dates it promotes — slice 7.4.** From 7.4 a promotion requires an approval
+   stamp on the reading (A15's verb, SPEC-evidence.md). This screen shows `תחילת השכירות` and
+   `סיום השכירות` as read, so pressing the button *is* a person affirming those two readings: the
+   confirm writes the approval for each date row it is about to promote, as read, with `confirmed_by`
+   as the approver, and leaves alone any row already signed on the ledger. The alternative was to
+   exempt this path from the rule, and since nearly every promotion in this system comes through it,
+   that would have been a rule about nothing.
+
+   **And it proposes what a person signed.** Where a date was corrected and approved on A15's ledger,
+   that corrected value — not the raw reading — is what this screen proposes, what the letting
+   arithmetic in step 6 compares, and what `upsertTenancy` writes. The raw reading stays on the
+   evidence row, as it always does.
 8. **Attaching to an existing letting is A2's branch from 6.5, and it writes no dates.** Before 6.5
    this flow could only create, and a second lease on a unit and start date it already held died on
    a conflict with nothing a human could do about it. Confirming an attach writes the document's
@@ -238,7 +251,8 @@ contributes values to the tenancy's fields and each carries its own provenance.
 **Effects:** a guarantor named in an addendum becomes a `tenancy_party` under the existing tenancy and
 the tenancy's completeness state is re-evaluated. Where an addendum supplies a value the lease already
 set, **the later document wins and the earlier value is retained**, visibly, because both provenances
-are recorded.
+are recorded. **A3's confirm signs `new_end_date` before promoting it**, on A2's step 7 argument and
+for the same reason: the screen shows `מועד סיום מעודכן` and the button is the person affirming it.
 
 ### A4 — Resolve an incomplete tenancy
 
@@ -641,8 +655,11 @@ verb. **Approving is a stamp on the evidence row; promoting is still the copy on
    dataset this flow exists to produce. A viewer who *may* read one still has to ask: the row is
    flagged for everybody, so a ת.ז. is revealed and signed on its own or not at all.
 
-**What A15 does not do.** It does not promote — a promotion is still 4.3's command with 7.4's
-targets, and it now copies the approved value when one exists. It does not create a row for a
+**What A15 does not do.** It does not promote — a promotion is still 4.3's command, and 7.4 ruled
+that its targets stay the two dates. **What 7.4 did change is the direction of the dependency: a
+promotion now requires the stamp this flow writes**, and copies `approved_value`. A2's and A3's
+confirm screens write that stamp themselves for the dates they promote, so the operator who never
+opens the ledger is still signing what the reader produced — on a screen that shows it. It does not create a row for a
 declaration the reader found nothing for: an `extracted_field` with no page and no bbox is refused by
 `0017`, and whether a hand-typed value is evidence at all is a ruling and not a button. It does not
 change what the reader looks for — that is A14, one screen earlier.

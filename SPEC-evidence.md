@@ -961,16 +961,72 @@ matrix could read cannot be added by seeding a catalogue field.
   writes to `tenancy.start_date` stay legal — the register importer writes those columns without a
   document, and locking them would break week 2.
 - **`promoteExtractedField`** is the command. It requires a mapping row, a `TENANCY` link on the
-  document, and a non-empty promoter. It asks tenancy to apply the typed value (dates only, this
-  slice), then stamps. An unmapped field (`apartment_number`, `address`, `tenant_name`,
-  `guarantor_name`) is capturable, listed, searchable, and **incapable** of becoming business truth:
-  the command returns `invalid` and the tenancy row does not move. **From 7.3 those fields are
-  attestable even though they are not promotable** — the approval stamp is the verb that reaches
-  them — and a promotion copies `COALESCE(approved_value, value)`, because copying the raw read
-  after a person corrected it would write a value nobody affirmed.
+  document, a non-empty promoter, and **from 7.4 an approval stamp on the row**. It asks tenancy to
+  apply the typed value (dates only, and 7.4 ruled that it stays dates only), then stamps. An
+  unmapped field (`apartment_number`, `address`, `tenant_name`, `guarantor_name`) is capturable,
+  listed, searchable, and **incapable** of becoming business truth: the command returns `invalid`
+  and the tenancy row does not move. **From 7.3 those fields are attestable even though they are not
+  promotable** — the approval stamp is the verb that reaches them — and from 7.4 a promotion copies
+  `approved_value`, which by then is the only value a promotable row can have.
 - **R9.** Nothing in `src/policy/`, `src/scope/` or `src/calls/` may mention `extracted_field`.
   Isolation, responsibility and the state machine read typed columns. A contract test scans those
   trees.
+
+### Which declared fields are copies — the ruling, slice 7.4
+
+7.4 was scoped to widen the CHECK *target by target*. It widened it by nothing, and the reason is
+worth more than the default it happens to agree with: **promotion is the verb for a value the
+document is the source of, and most of the lease's declared fields are not that.**
+
+| Declared field | Copy? | Why |
+|---|---|---|
+| `lease.start_date` · `lease.end_date` | **Yes** | The lease *is* the source of the letting's term. Mapped since 4.3. |
+| `lease_amendment.new_end_date` | **Yes** | Same column, later paper. Later document wins; earlier provenance stays (A3). |
+| `lease_amendment.effective_date` | No | No tenancy column to land on. The annex's own date is a fact about the annex. |
+| `address` · `apartment_number` | **No — this is the third verb** | Facts about the *unit*, and A11 says only an ADMIN shapes those. Promoting one would not write a new fact, it would assert the document against the flat it was filed under, where disagreement is a defect to surface and a value to argue with — not a value to copy. That is `verify`, and it is named below, not built. |
+| `tenant_name` · `guarantor_name` | No | Party provenance is a `PARTY` / `SIGNATORY` link, written by the confirm (A2, 6.5). A name has never had a promotion target and does not acquire one here. |
+| `tenant_id_number` · `guarantor_id_number` | No | Already ruled, above: the identifier becomes `party.national_id` when a human confirms a household, **which is an act and not a promotion**. |
+| `handover_protocol.handover_date` | Not here | It dates the *flat* (`unit.warranty_end_date`, R14) — a second table, a second module's ADMIN-shaped fact, and a different argument from this one. It gets its own slice or it stays unpromoted. |
+
+**`verify`, the third verb — named and not built.** A cross-check answers *does this document agree
+with the record it was filed against*, and its result is a disagreement to show rather than a column
+to move. It is what `address` and `apartment_number` want, and it is the same shape as the question
+7.1 left open about a lease refusing its own annex. Nothing in the schema anticipates it: there is no
+mapping table for it and there should not be one until the flow exists.
+
+### An approval is required before a promotion (slice 7.4, `0029_promotion_requires_approval.sql`)
+
+7.3 left this open and made the cheap half true: a promotion *preferred* `approved_value`. 7.4 makes
+it a requirement, because the half that was missing is the one that matters — **an unsigned reading
+could still become a typed column, with a person's name on the stamp.** `promoted_by` records who
+signed the copy; if nobody had affirmed the reading, what that name signed was a button, not a value.
+The columns the copy lands on are read by the isolation join and the obligation state machine, which
+SPEC.md says are never decided by a model.
+
+- **Three places say it, and that is deliberate.** The command refuses (`conflict`, *that reading has
+  not been approved*); `extracted_field_promotion_needs_approval()` refuses the stamp in the database
+  even with the command bypassed; and the ledger draws no `קדם` button on an unsigned row. The
+  database is the one that makes it true for every caller this module ever grows — 0018's own
+  argument, applied to the rule 0018 could not yet state.
+- **A third trigger, not a rewrite of the first two.** 0028 stated the reason when it added the
+  second: keeping them apart means each carries its own argument, and a `CREATE OR REPLACE` of 0018's
+  function would have restated 4.3's body to add one line to it.
+- **The confirm signs what it promotes.** A2's and A3's confirm screens show the dates they are about
+  to promote (`תחילת השכירות` / `סיום השכירות` / `מועד סיום מעודכן`), so pressing the button *is* a
+  person affirming those readings. The confirm therefore writes the approval stamp for each date row
+  it is about to promote, as read, with `confirmed_by` as the approver — and leaves alone any row a
+  person already signed on the ledger. **The alternative was an exemption for the confirm path, and
+  it was refused:** almost every promotion this system performs goes through that path, so a rule
+  that excused it would be a rule about nothing.
+- **A row promoted before 7.4 is not re-examined.** The command's idempotent return (already promoted
+  to this target) happens before the new refusal, and the trigger only fires on a row that is
+  *gaining* the stamp. The rule is about new promotions, which is the only thing a rule can honestly
+  be about.
+- **The confirm proposes the approved value, too.** `firstValue` read `value` alone, so a date a
+  person corrected on the ledger was ignored by the proposal, by the overlap arithmetic that picks
+  the letting, and by `upsertTenancy` — which writes `tenancy.start_date` directly, *before* any
+  promotion runs. 7.3 closed this door for `promoteExtractedField` and could not see the second one.
+  Both now read what a person signed.
 
 ## Approval — the stamp that is not a promotion (slice 7.3, `0028_extracted_field_approval.sql`)
 
@@ -999,10 +1055,11 @@ that will never have anywhere to be promoted to — `address`, `apartment_number
   it meant was the promotion. An approval is a person's attestation and deleting it would erase who
   said so; the DELETE is now `promoted_at IS NULL AND approved_at IS NULL` and the trigger enforces
   what the query intends.
-- **A promotion copies the approved value when there is one** — `COALESCE(approved_value, value)`.
-  Copying the raw read onto a typed column after a person corrected it would write a value nobody
-  affirmed. Whether an approval should be *required* before a promotion is 7.4's question, in the
-  slice that decides which targets are genuinely copies.
+- **A promotion copies the approved value, and from 7.4 there is always one.** 7.3 wrote
+  `COALESCE(approved_value, value)` and left the question open; 7.4 closed it by requiring the
+  approval, so the copy is `approved_value` and the fallback is gone. See *An approval is required
+  before a promotion* above for what enforces it and why the confirm path signs rather than is
+  excused.
 
 ### Read quality, and what the number actually is
 

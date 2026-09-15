@@ -19,6 +19,7 @@ import { upsertTermsProfile } from '../tenancy/contract.ts';
 import type { IntakeDeps } from './contract.ts';
 import {
   applyDocumentTypeCatalogue,
+  approveExtractedField,
   confirmLeaseTenancy,
   dayOverlap,
   fileDocument,
@@ -206,6 +207,23 @@ describe('evidence · flow A2 confirms a lease into a draft tenancy', () => {
           'tenancy.start_date',
         );
 
+        // **Slice 7.4: the confirm signed what it promoted.** A promotion requires an approval, and
+        // nobody opened A15's ledger — this screen showed both dates and the operator pressed the
+        // button, so the confirm writes the stamp it earned rather than being exempted from the
+        // rule. `approved_value` equals the reading, because nothing was corrected.
+        for (const fieldKey of ['start_date', 'end_date'] as const) {
+          const row = stamped.find((field) => field.fieldKey === fieldKey);
+          assert.equal(row?.approvedBy, 'אסף', `${fieldKey} was not signed`);
+          assert.equal(row?.approvedValue, row?.value);
+          assert.notEqual(row?.approvedAt, null);
+        }
+        // And nothing else was signed on the way past: the confirm affirms the two dates it copies
+        // and says nothing about the name or the flat number it also read.
+        assert.equal(
+          stamped.filter((row) => row.approvedAt !== null).length,
+          2,
+        );
+
         const again = await confirmLeaseTenancy(deps, {
           documentId,
           termsProfileName: `a2-${unitId.slice(24)}`,
@@ -219,6 +237,83 @@ describe('evidence · flow A2 confirms a lease into a draft tenancy', () => {
           [confirmed.tenancyId],
         );
         assert.equal(partyCount.rows[0]?.n, '2');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('proposes and writes the date a person corrected, not the one read', async (t) => {
+    // **Slice 7.4, and the defect 7.3 could not see.** 7.3 made `promoteExtractedField` copy
+    // `approved_value`, which is one of two doors a value walks through on the way to
+    // `tenancy.start_date` — `confirmLeaseTenancy` writes that column **directly**, through
+    // `upsertTenancy`, before any promotion runs, and it read `value`. So a date somebody corrected
+    // and signed on A15's ledger was proposed wrong, ranked the lettings wrong, and landed on the
+    // column wrong, while the promotion that followed copied the right one over it. Both doors read
+    // the signed value now.
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const unitId = await insertUnit(db, '12', ADDRESS);
+        await upsertTermsProfile(db, `a2c-${unitId.slice(24)}`);
+        const documentId = await fileLease(
+          db,
+          unitId,
+          matchingFindings,
+          'a2-corrected',
+        );
+
+        // The reader put the lease's start at 1 March; the page says 1 April, and a person fixed it
+        // on the ledger before ever opening the confirm screen.
+        const read = await listExtractedFields(db, documentId);
+        const start = read.find((row) => row.fieldKey === 'start_date');
+        await approveExtractedField(leaseDeps(db), {
+          extractedFieldId: start?.extractedFieldId ?? '',
+          approvedValue: '2026-04-01',
+          approvedBy: 'אסף',
+          mayReadIdentifiers: false,
+        });
+
+        const proposed = await proposeLeaseTenancy(leaseDeps(db), {
+          documentId,
+          readBy: READ_BY,
+        });
+        assert.equal(
+          proposed.startDate,
+          '2026-04-01',
+          'the screen proposed the raw reading over a signed correction',
+        );
+
+        const confirmed = await confirmLeaseTenancy(leaseDeps(db), {
+          documentId,
+          termsProfileName: `a2c-${unitId.slice(24)}`,
+          confirmedBy: 'אסף',
+          roles: Object.fromEntries(
+            proposed.people.map((person) => [
+              person.extractedFieldId,
+              person.proposedRole,
+            ]),
+          ),
+        });
+        const tenancy = await db.query<{ start_date: string }>(
+          `SELECT start_date::text FROM tenancy WHERE tenancy_id = $1`,
+          [confirmed.tenancyId],
+        );
+        assert.equal(tenancy.rows[0]?.start_date, '2026-04-01');
+
+        const stamped = await listExtractedFields(db, documentId);
+        const signed = stamped.find((row) => row.fieldKey === 'start_date');
+        // The reading itself is untouched, which is the whole of 7.3: the delta is the dataset.
+        assert.equal(signed?.value, '2026-03-01');
+        assert.equal(signed?.approvedValue, '2026-04-01');
+        // And the confirm did not sign it a second time — a person had already signed this one.
+        assert.equal(signed?.approvedBy, 'אסף');
+        assert.equal(signed?.promotedTo, 'tenancy.start_date');
       });
     } finally {
       await pool.end();

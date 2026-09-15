@@ -23,6 +23,7 @@ import {
   upsertTenancy,
   upsertTenancyParty,
 } from '../../tenancy/contract.ts';
+import { approveExtractedField } from './approve.ts';
 import { anchorOf, getFiledDocument, linkDocument } from './documents.ts';
 import { type ExtractedRow, listExtractedFields } from './extract.ts';
 import { promoteExtractedField } from './promote.ts';
@@ -165,11 +166,58 @@ export function addressMatches(
   return captured.includes(unit) || unit.includes(captured);
 }
 
+/**
+ * **The confirm signs the reading it is about to promote. Slice 7.4.**
+ *
+ * From 7.4 a promotion requires an approval stamp (`promote.ts`, and the trigger in 0029). A2's and
+ * A3's confirm screens promote without anybody having opened A15's ledger — and they are entitled
+ * to, because those screens *show* the dates they are about to copy (`תחילת השכירות`,
+ * `סיום השכירות`, `מועד סיום מעודכן`): pressing the button is a person affirming those readings.
+ * So the confirm writes the stamp it has earned rather than being excused from the rule. The
+ * alternative was an exemption for the path almost every promotion in this system goes through,
+ * which would have made the rule true of nothing.
+ *
+ * A row a person already signed on the ledger is left alone — a second approval is `conflict` by
+ * design, and the value they signed is the one that gets copied either way.
+ *
+ * **`mayReadIdentifiers: false`**, deliberately, on a path where the question cannot arise: no date
+ * is an identifier and no identifier has a promotion target. If one ever did, `false` is the value
+ * that refuses rather than the one that signs on somebody's behalf for a number they never saw.
+ */
+async function signAndPromote(
+  deps: { db: Queryable; audit: AuditLog; clock: Clock },
+  row: ExtractedRow,
+  confirmedBy: string,
+): Promise<void> {
+  if (row.approvedAt === null) {
+    await approveExtractedField(deps, {
+      extractedFieldId: row.extractedFieldId,
+      approvedBy: confirmedBy,
+      mayReadIdentifiers: false,
+    });
+  }
+  await promoteExtractedField(deps, {
+    extractedFieldId: row.extractedFieldId,
+    promotedBy: confirmedBy,
+  });
+}
+
+/**
+ * What this document says a field is — **the value a person signed when there is one**.
+ *
+ * **Slice 7.4, and it closes a door 7.3 could not see.** Until today this read `value` alone, so a
+ * date corrected and approved on A15's ledger was ignored by everything downstream of here: the
+ * proposal screen, the day arithmetic that ranks the lettings, and `upsertTenancy`, which writes
+ * `tenancy.start_date` **directly** and before any promotion runs. 7.3 fixed the promotion's copy
+ * and this second door stayed open. The raw reading is untouched on the evidence row, as always.
+ */
 function firstValue(
   rows: readonly ExtractedRow[],
   fieldKey: string,
 ): string | null {
-  return rows.find((row) => row.fieldKey === fieldKey)?.value ?? null;
+  const row = rows.find((field) => field.fieldKey === fieldKey);
+  if (!row) return null;
+  return row.approvedValue ?? row.value;
 }
 
 /** Reading order: down the page, then across, then by id so two boxes at one point still order. */
@@ -728,10 +776,7 @@ async function confirmAmendment(
   };
   const endDate = rows.find((field) => field.fieldKey === 'new_end_date');
   if (endDate) {
-    await promoteExtractedField(promote, {
-      extractedFieldId: endDate.extractedFieldId,
-      promotedBy: confirmedBy,
-    });
+    await signAndPromote(promote, endDate, confirmedBy);
   }
 
   const partiesWritten = await writeParties(db, {
@@ -869,10 +914,7 @@ export async function confirmLeaseTenancy(
     for (const fieldKey of ['start_date', 'end_date'] as const) {
       const row = rows.find((field) => field.fieldKey === fieldKey);
       if (row) {
-        await promoteExtractedField(promote, {
-          extractedFieldId: row.extractedFieldId,
-          promotedBy: confirmedBy,
-        });
+        await signAndPromote(promote, row, confirmedBy);
       }
     }
 
