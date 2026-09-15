@@ -1,13 +1,13 @@
 ---
 number: 104
 title: "Retrieval with a required stance"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: [103]
 parent: 99
 created: 2026-09-15
-closed:
+closed: 2026-09-15
 ---
 
 ## Parent
@@ -39,16 +39,21 @@ immediately and block the next regression rather than the current state.
 
 ## Acceptance criteria
 
-- [ ] Search returns, per hit, the document, page, text, document type, anchored flat and a distance
-- [ ] The stance parameter is required; there is no default and no caller omits it
-- [ ] The administrator stance returns identifiers as printed
-- [ ] The tenant stance masks identifiers in the returned text; the stored passage is unchanged
-- [ ] A reveal of a withheld identifier writes a ledger row
-- [ ] A question about a rent or deposit amount returns the exact figure with its document and page
-- [ ] Golden cases are added, rank-graded, ratcheted to the day's achieved result, and green on landing
-- [ ] No assertion anywhere is made on a distance
-- [ ] The full golden set runs and passes; the glossary gains the stance as a noun
+- [x] Search returns, per hit, the document, page, text, document type, anchored flat and a distance
+- [x] The stance parameter is required; there is no default and no caller omits it
+- [x] The administrator stance returns identifiers as printed
+- [x] The tenant stance masks identifiers in the returned text; the stored passage is unchanged
+- [x] A reveal of a withheld identifier writes a ledger row
+- [x] A question about a rent or deposit amount returns the exact figure with its document and page
+- [x] Golden cases are added, rank-graded, ratcheted to the day's achieved result, and green on landing
+- [x] No assertion anywhere is made on a distance
+- [x] The full golden set runs and passes; the glossary gains the stance as a noun
 
 ## Blocked by
 
 - #103 — One reading writes passages: the document text is kept
+
+## Comment — 2026-09-15
+
+Closed: `c934dea`. Passage search takes a required stance; admin returns identifiers as printed,
+tenant masks at read time. Golden set ranks money questions. No distance assertion.

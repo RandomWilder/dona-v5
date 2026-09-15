@@ -1,13 +1,13 @@
 ---
 number: 107
 title: "The tenancy page: one screen that shows one tenancy"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: [100, 106]
 parent: 99
 created: 2026-09-15
-closed:
+closed: 2026-09-15
 ---
 
 ## Parent
@@ -58,9 +58,14 @@ Clicked on a running local server before merge — including the refusal path an
 - [x] The screen is appended to the existing screen registry and passes its guard
 - [x] The screen is Hebrew, right-to-left, server-rendered, with no client-side scripting
 - [x] The tenancy-page mockup file is deleted
-- [ ] Both the refusal path and the activation press are clicked on a running local server before merge
+- [x] Both the refusal path and the activation press are clicked on a running local server before merge
 
 ## Blocked by
 
 - #100 — Paint the three screens of the document-upload flow
 - #106 — The activation gate, and a tenancy a person activates
+
+## Comment — 2026-09-15
+
+Closed: `1f64c7b`. One letting at `/estate/tenancies/:tenancyId`; page prints the gate; activate is
+the person command. Mockup deleted. Tracker had left the click box open after the implement run.
