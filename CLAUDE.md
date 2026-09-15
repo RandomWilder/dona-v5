@@ -14,6 +14,19 @@ context between tickets. `/implement` drives `/tdd` and closes with `/code-revie
 Skip straight to `/implement` when the work is one session's worth. `/diagnosing-bugs` for the bug
 that resists a first glance; `/prototype` for a design question that needs a runnable answer.
 
+**This is the only engineering workflow in this repo.** The account-level skills that duplicate it —
+`test-driven-development`, `code-review-and-quality`, `spec-driven-development`,
+`planning-and-task-breakdown`, `interview-me` and the twenty others in the same family — are turned
+off here by `skillOverrides` in [.claude/settings.json](.claude/settings.json). Two skills with
+near-identical descriptions is worse than either alone: the model picks between them on wording, so
+which method runs becomes a coin flip. The setting is project-scoped, so those skills stay available
+in every other repository. Document, artifact and harness skills (`docx`, `xlsx`, `pdf`, `pptx`,
+`artifact-*`, `dataviz`, `update-config`, `run`, `security-review`) are untouched — they collide with
+nothing and the four published documents need the artifact ones. The built-in `/code-review` and
+`/simplify` are `user-invocable-only`: type them and they run, but the model reaches for
+`mattpocock-skills:code-review` on its own. Adding a skill to this repo means adding it to the
+workflow, not alongside it.
+
 ### Issue tracker
 
 GitHub Issues on `RandomWilder/dona-v5`, via `gh`. See [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).

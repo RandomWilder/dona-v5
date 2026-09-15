@@ -32,6 +32,37 @@
       "Bash(docker compose logs:*)"
     ]
   },
+  "skillOverrides": {
+    "api-and-interface-design": "off",
+    "browser-testing-with-devtools": "off",
+    "ci-cd-and-automation": "off",
+    "code-review-and-quality": "off",
+    "code-simplification": "off",
+    "context-engineering": "off",
+    "debugging-and-error-recovery": "off",
+    "deprecation-and-migration": "off",
+    "documentation-and-adrs": "off",
+    "doubt-driven-development": "off",
+    "frontend-ui-engineering": "off",
+    "git-workflow-and-versioning": "off",
+    "idea-refine": "off",
+    "incremental-implementation": "off",
+    "interview-me": "off",
+    "observability-and-instrumentation": "off",
+    "performance-optimization": "off",
+    "planning-and-task-breakdown": "off",
+    "security-and-hardening": "off",
+    "shipping-and-launch": "off",
+    "source-driven-development": "off",
+    "spec-driven-development": "off",
+    "test-driven-development": "off",
+    "using-agent-skills": "off",
+    "vibesec": "off",
+    "epic-authoring": "off",
+    "epis-provider-report": "off",
+    "code-review": "user-invocable-only",
+    "simplify": "user-invocable-only"
+  },
   "hooks": {
     "PreToolUse": [
       {
