@@ -264,3 +264,35 @@ export async function listUnverifiedDocuments(db: Queryable): Promise<
     verificationTerms: row.verification_terms,
   }));
 }
+
+export async function listDocumentsWithoutPassages(db: Queryable): Promise<
+  Array<{
+    documentId: string;
+    storageUri: string;
+    typeKey: string;
+    verificationTerms: string[] | null;
+  }>
+> {
+  const result = await db.query<{
+    document_id: string;
+    storage_uri: string;
+    type_key: string;
+    verification_terms: string[] | null;
+  }>(
+    `SELECT d.document_id, d.storage_uri, dt.type_key, dt.verification_terms
+       FROM document d
+       JOIN document_type dt ON dt.document_type_id = d.document_type_id
+      WHERE NOT EXISTS (
+              SELECT 1
+                FROM document_passage p
+               WHERE p.document_id = d.document_id
+            )
+      ORDER BY d.ingested_at`,
+  );
+  return result.rows.map((row) => ({
+    documentId: row.document_id,
+    storageUri: row.storage_uri,
+    typeKey: row.type_key,
+    verificationTerms: row.verification_terms,
+  }));
+}

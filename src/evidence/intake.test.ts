@@ -39,6 +39,8 @@ import {
   applyDocumentTypeCatalogue,
   fileDocument,
   listDocumentPassages,
+  searchPassages,
+  sweepMissingPassages,
   sweepUnverified,
 } from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
@@ -892,6 +894,63 @@ describe('evidence · filing a declared document', () => {
         assert.equal(passages[1]?.page, 2);
         assert.equal(passages[1]?.ordinal, 1);
         assert.equal(passages[1]?.body, `ת.ז. ${identifier}`);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('backfills a filed document that has no passages, then a second run does nothing', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const unitId = newId();
+        const rent = '4,520';
+        const page = `דמי השכירות ${rent} ש״ח`;
+        const wired = deps(db, [specimen('lease-standard.md'), page]);
+        const result = await fileDocument(wired, {
+          bytes: pdfBytes(`archive-${Date.now()}`),
+          typeKey: 'lease',
+          place: { kind: 'UNIT', id: unitId },
+          tenancyId: null,
+        });
+        assert.equal(result.filed, true);
+        if (!result.filed) return;
+        assert.equal(
+          (await listDocumentPassages(db, result.documentId)).length,
+          0,
+        );
+        const embedder = createFakeEmbedder(embeddingColumnDimensions);
+        const sweepDeps = { ...wired, embedder };
+        const first = await sweepMissingPassages(sweepDeps, {
+          documentIds: [result.documentId],
+        });
+        assert.equal(first.examined, 1);
+        assert.equal(first.written, 1);
+        assert.equal(first.unchanged, 0);
+        assert.equal(first.failed, 0);
+        const passages = await listDocumentPassages(db, result.documentId);
+        assert.equal(passages.length, 2);
+        assert.equal(passages[1]?.body, page);
+        const hits = await searchPassages(db, embedder, page, 'administrator');
+        const hit = hits.find((row) => row.documentId === result.documentId);
+        assert.ok(hit, 'the backfilled document is searchable');
+        assert.equal(hit.page, 2);
+        assert.equal(hit.text, page);
+        const second = await sweepMissingPassages(sweepDeps, {
+          documentIds: [result.documentId],
+        });
+        assert.equal(second.examined, 0);
+        assert.equal(second.written, 0);
+        assert.equal(
+          (await listDocumentPassages(db, result.documentId)).length,
+          2,
+        );
       });
     } finally {
       await pool.end();

@@ -7,7 +7,7 @@
   merge ([docs/pipeline.md](docs/pipeline.md) §8).
   `npm run migrate` applies `src/kernel/migrations/` as a Cloud Run job before a revision serves;
   `seed` · `import:register` · `seed:register` · `register:generate` · `seed:doctypes` ·
-  `seed:obligation-types` are in no workflow, on purpose.
+  `seed:obligation-types` · `passages:sweep` are in no workflow, on purpose.
 - **Two required gates** plus `npm run guards`: `test:policy` (nothing a model may decide) and `evals`
   (the agent). Beside them, gating nothing: `measure` · `measure:scale`. CI sets `REQUIRE_*=1` — a
   silent skip is a failure.

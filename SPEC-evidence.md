@@ -949,6 +949,16 @@ tenant-facing surface on this command yet. The page-sized chunk and this search 
 configuration, so rent and deposit questions enter the golden set, ranked against the corpus
 fixtures and ratcheted to the rank the day they land.
 
+**#105 backfills the archive.** Documents holding no passages — filed before #103, or filed with an
+unconfigured embedder — are walked by `sweepMissingPassages` the way `sweepUnverified` walks
+`unverified` rows: one at a time, optional id filter, a report of examined / written / unchanged /
+failed, allowed to be zero. Each document is read through `readForVerdict` and written through
+`writeDocumentPassages`, so a backfilled document is searchable on the same terms as one filed today,
+and a second run over a swept corpus examines nothing. The write is already idempotent on a document
+that has passages, so re-running never duplicates a page. The entry point is `npm run passages:sweep`,
+wired into no workflow, the same standing as `ocr:sweep`: an unconfigured embedder prints NOT RUN
+rather than a measured zero.
+
 `sweepUnverified` walks already-filed `unverified` rows the same way. It is how week 3's backlog is
 discharged; the count of verdicts that moved is recorded in the slice evidence, from the audit
 lines, and is allowed to be zero.

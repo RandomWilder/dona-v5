@@ -135,12 +135,15 @@ export type {
   DocumentRead,
   DocumentReading,
   OcrOutcome,
+  PassageSweepDeps,
+  PassageSweepReport,
   ReadDeps,
   SweepReport,
 } from './internal/read.ts';
 export {
   readFiledDocument,
   readForVerdict,
+  sweepMissingPassages,
   sweepUnverified,
 } from './internal/read.ts';
 export type { DocumentDeps } from './internal/routes.ts';
