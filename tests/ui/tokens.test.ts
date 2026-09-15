@@ -303,36 +303,7 @@ function readOverlay(mayReadIdentifiers: boolean): string {
     fileHash: 'e'.repeat(64),
     source: 'ocr',
     mayReadIdentifiers,
-    page: {
-      number: 1,
-      width: 100,
-      height: 200,
-      items: [
-        {
-          text: 'דירה',
-          x: 10,
-          y: 40,
-          width: 30,
-          height: 20,
-          rightToLeft: true,
-          endsLine: false,
-          confidence: 0.91,
-        },
-        // **Slice 6.6, and the word this whole slice is about.** The page printed the ת.ז., so the
-        // reader measured it. Until #102 the overlay put that word in a `title` on a box at every
-        // stance. The transcript is now the per-page text, and it is withheld below the permission.
-        {
-          text: READ_IDENTIFIER,
-          x: 10,
-          y: 80,
-          width: 40,
-          height: 20,
-          rightToLeft: false,
-          endsLine: true,
-          confidence: 0.88,
-        },
-      ],
-    },
+    pageText: `דירה ${READ_IDENTIFIER}`,
     extracted: [
       {
         extractedFieldId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
@@ -1117,7 +1088,7 @@ const SCREENS: Array<[string, () => string]> = [
         fileHash: 'e'.repeat(64),
         source: 'ocr',
         mayReadIdentifiers: false,
-        page: null,
+        pageText: null,
       }),
   ],
   [
@@ -2208,7 +2179,7 @@ describe('shared UI tokens', () => {
       fileHash: 'e'.repeat(64),
       source: 'ocr',
       mayReadIdentifiers: false,
-      page: null,
+      pageText: null,
     });
     assert.match(emptyRead, /לא נקראו שדות מהמסמך/);
     assert.match(

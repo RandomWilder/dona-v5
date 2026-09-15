@@ -22,7 +22,9 @@ import { buildApp } from '../app.ts';
 import type { EstatePlan } from '../estate/contract.ts';
 import { importEstate } from '../estate/contract.ts';
 import { fixedClock } from '../kernel/clock.ts';
+import { embeddingColumnDimensions } from '../kernel/config.ts';
 import { inTransaction } from '../kernel/db.ts';
+import { createFakeEmbedder } from '../kernel/embeddings.ts';
 import { KernelError } from '../kernel/errors.ts';
 import { createFakeExtractor } from '../kernel/extraction.ts';
 import { createMemoryStore } from '../kernel/objects.ts';
@@ -520,6 +522,65 @@ describe('evidence · the upload route', () => {
             url: `/documents/${documentId}/read?page=nope`,
           });
           assert.equal(bad.statusCode, 400);
+        },
+      );
+
+      await t.test(
+        'GET /documents/:id/read a second time does not re-read the bytes',
+        async () => {
+          const bytes = pdfBytes(`stored-passages-${Date.now()}`);
+          hashes.push(documentFileHash(bytes));
+          let reads = 0;
+          const inner = createFakePdfText([
+            specimen('lease-standard.md'),
+            'PAGE-TWO-ONLY-WORD',
+          ]);
+          const stored = buildApp({
+            pool,
+            version: '9.9.9-test',
+            clock: fixedClock(AT),
+            objects,
+            pdf: {
+              pages: async (file) => {
+                reads += 1;
+                return inner.pages(file);
+              },
+              describe: () => inner.describe(),
+            },
+            embedder: createFakeEmbedder(embeddingColumnDimensions),
+            bucket: BUCKET,
+          });
+          extraApps.push(stored);
+          const posted = await as(stored).inject({
+            method: 'POST',
+            url: '/documents',
+            ...upload(
+              { unit: unitId, type: 'lease', tenancy: '' },
+              { filename: 'stored.pdf', bytes },
+            ),
+          });
+          assert.equal(posted.statusCode, 302, posted.body.slice(0, 400));
+          const afterUpload = reads;
+          assert.equal(afterUpload, 1);
+          const rows = await pool.query<{ document_id: string }>(
+            'SELECT document_id FROM document WHERE file_hash = $1',
+            [documentFileHash(bytes)],
+          );
+          const documentId = rows.rows[0]?.document_id ?? '';
+          assert.ok(documentId);
+          const first = await as(stored).inject({
+            method: 'GET',
+            url: `/documents/${documentId}/read`,
+          });
+          assert.equal(first.statusCode, 200, first.body.slice(0, 400));
+          assert.match(first.body, /הקריאה שנשמרה/);
+          const second = await as(stored).inject({
+            method: 'GET',
+            url: `/documents/${documentId}/read?page=2`,
+          });
+          assert.equal(second.statusCode, 200);
+          assert.match(second.body, /PAGE-TWO-ONLY-WORD/);
+          assert.equal(reads, afterUpload);
         },
       );
 

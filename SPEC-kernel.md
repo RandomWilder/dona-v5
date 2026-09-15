@@ -303,6 +303,12 @@ caller's transaction rolls back, so a document is never half-indexed.
 than returning zeros. A process that lost its key must not index a document into vectors that match
 nothing — that failure is invisible until someone asks a question and gets silence.
 
+**The first durable vector column is `document_passage.embedding` (#103).** Width is
+`embeddingColumnDimensions` (1536), compiled into the column type, the same check
+`readEmbeddingSettings` already makes. There is **no hnsw / ivfflat index**
+([ADR-0009](docs/decisions/ADR-0009-passage-embeddings-have-no-index-yet.md)). The evals corpus stays
+a TEMP table and is not this column.
+
 ## Extraction (`extraction.ts`)
 
 `extract({ model, instructions, input, schema })` → the JSON the schema describes. The second model

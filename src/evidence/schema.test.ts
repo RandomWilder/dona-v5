@@ -15,6 +15,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { Pool, PoolClient } from 'pg';
+import { embeddingColumnDimensions } from '../kernel/config.ts';
 import { newId } from '../kernel/ids.ts';
 import {
   inRolledBackTransaction,
@@ -1660,6 +1661,79 @@ describe('E16 · a declaration written at run time (slice 7.2, flow A14)', () =>
           assert.equal((error as { code?: string }).code, 'not_found');
           return true;
         },
+      );
+    });
+  });
+});
+
+describe('evidence · document_passage', () => {
+  const PASSAGE_COLUMNS = [
+    'document_passage_id',
+    'document_id',
+    'page',
+    'ordinal',
+    'body',
+    'embedding',
+  ];
+
+  it('has one row shape per page, at the welded embedding width, and no vector index', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const columns = await db.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'document_passage'
+          ORDER BY ordinal_position`,
+      );
+      assert.deepEqual(
+        columns.rows.map((row) => row.column_name),
+        PASSAGE_COLUMNS,
+      );
+      const width = await db.query<{ typ: string }>(
+        `SELECT format_type(a.atttypid, a.atttypmod) AS typ
+           FROM pg_attribute a
+           JOIN pg_class c ON c.oid = a.attrelid
+          WHERE c.relname = 'document_passage'
+            AND a.attname = 'embedding'
+            AND a.attnum > 0
+            AND NOT a.attisdropped`,
+      );
+      assert.equal(width.rows[0]?.typ, `vector(${embeddingColumnDimensions})`);
+      const vectorIndexes = await db.query<{ relname: string }>(
+        `SELECT ic.relname
+           FROM pg_index i
+           JOIN pg_class t ON t.oid = i.indrelid
+           JOIN pg_class ic ON ic.oid = i.indexrelid
+           JOIN pg_am am ON am.oid = ic.relam
+          WHERE t.relname = 'document_passage'
+            AND am.amname IN ('hnsw', 'ivfflat')`,
+      );
+      assert.deepEqual(vectorIndexes.rows, []);
+    });
+  });
+
+  it('refuses a second passage on the same page of one document', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const documentTypeId = await seedType(db, { name: 'passage-page' });
+      const documentId = await seedDocument(
+        db,
+        documentTypeId,
+        `${BLOCK}-passage-page-hash`,
+      );
+      const zeros = `[${Array(embeddingColumnDimensions).fill(0).join(',')}]`;
+      await db.query(
+        `INSERT INTO document_passage (
+           document_passage_id, document_id, page, ordinal, body, embedding
+         ) VALUES ($1, $2, 1, 0, 'first', $3::vector)`,
+        [newId(), documentId, zeros],
+      );
+      await rejects(db, UNIQUE_VIOLATION, () =>
+        db.query(
+          `INSERT INTO document_passage (
+             document_passage_id, document_id, page, ordinal, body, embedding
+           ) VALUES ($1, $2, 1, 1, 'second', $3::vector)`,
+          [newId(), documentId, zeros],
+        ),
       );
     });
   });

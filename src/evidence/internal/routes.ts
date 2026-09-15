@@ -28,6 +28,7 @@ import {
   readExtractionSettings,
   readOcrSettings,
 } from '../../kernel/config.ts';
+import type { Embedder } from '../../kernel/embeddings.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { Extractor } from '../../kernel/extraction.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
@@ -80,6 +81,7 @@ import {
 } from './extract.ts';
 import { fileDocument } from './intake.ts';
 import { confirmLeaseTenancy, proposeLeaseTenancy } from './lease.ts';
+import { listDocumentPassages } from './passages.ts';
 import { readPlace, resolvePlace } from './place.ts';
 import { promoteExtractedField } from './promote.ts';
 import { isProtocolType } from './protocol.ts';
@@ -99,6 +101,7 @@ import {
   documentFileHash,
   sniffExtension,
 } from './storage-path.ts';
+import { pageText as textOfPage } from './verify.ts';
 import type { AnchoredPlace, FieldsScreen, SeedScreen } from './views.ts';
 import {
   renderDocumentsPage,
@@ -119,6 +122,7 @@ export interface DocumentDeps {
   pdf: PdfText;
   ocr?: OcrText;
   extractor?: Extractor;
+  embedder?: Embedder;
   work?: WorkRunner;
   clock: Clock;
   /** The bucket `storage_uri` names. The memory store's stand-in locally (slice 3.2). */
@@ -996,21 +1000,45 @@ export function registerDocumentRoutes(
     READ,
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
-      const ocrVersion = (await readOcrSettings(createSettings(deps.pool)))
-        .processorVersion;
-      const read = await readFiledDocument(
-        {
-          db: deps.pool,
-          objects: deps.objects,
-          pdf: deps.pdf,
-          ocr: deps.ocr ?? createUnconfiguredOcr(),
-          ocrVersion,
-          audit: createAuditLog(deps.pool, deps.clock),
-          clock: deps.clock,
-          bucket: deps.bucket,
-        },
-        documentId,
-      );
+      const passages = await listDocumentPassages(deps.pool, documentId);
+      const asked = (request.query as { page?: string }).page;
+      let typeKey: string;
+      let labelHe: string;
+      let fileHash: string;
+      let source: 'pdfjs' | 'ocr' | 'none' | 'stored';
+      let pageText: string | null;
+      if (passages.length > 0) {
+        const filed = await getFiledDocument(deps.pool, documentId);
+        typeKey = filed.typeKey;
+        labelHe = filed.labelHe;
+        fileHash = filed.fileHash;
+        source = 'stored';
+        const at = pageIndex(asked, passages.length);
+        pageText = passages[at]?.body ?? '';
+      } else {
+        const ocrVersion = (await readOcrSettings(createSettings(deps.pool)))
+          .processorVersion;
+        const read = await readFiledDocument(
+          {
+            db: deps.pool,
+            objects: deps.objects,
+            pdf: deps.pdf,
+            ocr: deps.ocr ?? createUnconfiguredOcr(),
+            ocrVersion,
+            audit: createAuditLog(deps.pool, deps.clock),
+            clock: deps.clock,
+            bucket: deps.bucket,
+          },
+          documentId,
+        );
+        typeKey = read.typeKey;
+        labelHe = read.labelHe;
+        fileHash = read.fileHash;
+        source = read.source;
+        const at = pageIndex(asked, read.pages.length);
+        const page = read.pages[at] ?? null;
+        pageText = page ? textOfPage(page) : null;
+      }
       // **Slice 6.10.** This was the second unordered `LIMIT 1` over `document_link`'s `SUBJECT`
       // rows, and on a document carrying two of them it drew the page's back link and its building
       // name off whichever came back. One read for both call sites now, and it is the place the
@@ -1023,13 +1051,10 @@ export function registerDocumentRoutes(
       if (identifiers) {
         await logIdentifierRead(deps, request, {
           documentId,
-          typeKey: read.typeKey,
+          typeKey,
           rows: extracted,
         });
       }
-      const asked = (request.query as { page?: string }).page;
-      const at = pageIndex(asked, read.pages.length);
-      const page = read.pages[at] ?? null;
       html(reply);
       if (anchor.kind === 'UNIT') {
         const unit = await getUnit(deps.pool, anchor.id);
@@ -1040,11 +1065,11 @@ export function registerDocumentRoutes(
           buildingId: unit.building_id,
           buildingName: unit.building_name,
           unitId: unit.unit_id,
-          typeKey: read.typeKey,
-          labelHe: read.labelHe,
-          fileHash: read.fileHash,
-          source: read.source,
-          page,
+          typeKey,
+          labelHe,
+          fileHash,
+          source,
+          pageText,
           extracted,
           mayReadIdentifiers: identifiers,
         });
@@ -1058,11 +1083,11 @@ export function registerDocumentRoutes(
           buildingId: detail.building.building_id,
           buildingName: detail.building.name,
           unitId: null,
-          typeKey: read.typeKey,
-          labelHe: read.labelHe,
-          fileHash: read.fileHash,
-          source: read.source,
-          page,
+          typeKey,
+          labelHe,
+          fileHash,
+          source,
+          pageText,
           extracted,
           mayReadIdentifiers: identifiers,
         });
@@ -1485,6 +1510,7 @@ async function filingDeps(deps: DocumentDeps) {
     ocr: deps.ocr,
     ocrVersion: ocr.processorVersion,
     extractor: deps.extractor,
+    embedder: deps.embedder,
     extractModel: extraction.model,
     extractReasoningEffort: extraction.reasoningEffort,
     work: deps.work,

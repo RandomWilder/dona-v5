@@ -16,6 +16,8 @@ import type { PoolClient } from 'pg';
 import { specimenDocuments } from '../../evals/fixtures/specimen-clauses.ts';
 import { createAuditLog } from '../kernel/audit.ts';
 import { fixedClock } from '../kernel/clock.ts';
+import { embeddingColumnDimensions } from '../kernel/config.ts';
+import { createFakeEmbedder } from '../kernel/embeddings.ts';
 import { KernelError } from '../kernel/errors.ts';
 import { newId } from '../kernel/ids.ts';
 import { createMemoryStore, type ObjectStore } from '../kernel/objects.ts';
@@ -36,6 +38,7 @@ import type { IntakeDeps } from './contract.ts';
 import {
   applyDocumentTypeCatalogue,
   fileDocument,
+  listDocumentPassages,
   sweepUnverified,
 } from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
@@ -80,7 +83,11 @@ function countingStore(): ObjectStore & { puts: number } {
 function deps(
   db: PoolClient,
   text: string[],
-  extra: { ocr?: OcrText; objects?: ObjectStore } = {},
+  extra: {
+    ocr?: OcrText;
+    objects?: ObjectStore;
+    embedder?: IntakeDeps['embedder'];
+  } = {},
 ): IntakeDeps {
   return {
     db,
@@ -88,6 +95,7 @@ function deps(
     pdf: createFakePdfText(text),
     ocr: extra.ocr,
     ocrVersion: extra.ocr ? defaultOcrProcessorVersion : undefined,
+    embedder: extra.embedder,
     audit: createAuditLog(db, fixedClock(AT)),
     clock: fixedClock(AT),
     bucket: BUCKET,
@@ -847,6 +855,44 @@ describe('evidence · filing a declared document', () => {
           });
         },
       );
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('writes one unmasked passage per page, as the reading printed it', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const unitId = newId();
+        const identifier = '123456789';
+        const result = await fileDocument(
+          deps(db, [specimen('lease-standard.md'), `ת.ז. ${identifier}`], {
+            embedder: createFakeEmbedder(embeddingColumnDimensions),
+          }),
+          {
+            bytes: pdfBytes('lease-passages'),
+            typeKey: 'lease',
+            place: { kind: 'UNIT', id: unitId },
+            tenancyId: null,
+          },
+        );
+        assert.equal(result.filed, true);
+        if (!result.filed) return;
+        const passages = await listDocumentPassages(db, result.documentId);
+        assert.equal(passages.length, 2);
+        assert.equal(passages[0]?.page, 1);
+        assert.equal(passages[0]?.ordinal, 0);
+        assert.match(passages[0]?.body ?? '', /המושכר|הדירה/);
+        assert.equal(passages[1]?.page, 2);
+        assert.equal(passages[1]?.ordinal, 1);
+        assert.equal(passages[1]?.body, `ת.ז. ${identifier}`);
+      });
     } finally {
       await pool.end();
     }

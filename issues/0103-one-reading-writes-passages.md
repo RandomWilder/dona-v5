@@ -1,13 +1,13 @@
 ---
 number: 103
 title: "One reading writes passages: the document text is kept"
-status: open
+status: closed
 labels: [ready-for-agent]
-assignee:
+assignee: cursor
 blocked_by: [102]
 parent: 99
 created: 2026-09-15
-closed:
+closed: 2026-09-15
 ---
 
 ## Parent
@@ -42,14 +42,20 @@ This ticket is blocked by #102 because both change the reader's fan-out. The sub
 
 ## Acceptance criteria
 
-- [ ] A migration adds the passage table: document, page number, ordinal, text as printed, embedding at the welded dimension
-- [ ] Uploading a document writes one passage per page, in page order
-- [ ] Passage text matches the text the reading produced, identifiers included, unmasked
-- [ ] The reading still happens at exactly one decision point; no route re-reads bytes
-- [ ] Viewing a reading a second time makes no second call to the reader
-- [ ] No vector index is created, and the deferral is recorded
-- [ ] The glossary gains the passage as a noun, edited in the same change
+- [x] A migration adds the passage table: document, page number, ordinal, text as printed, embedding at the welded dimension
+- [x] Uploading a document writes one passage per page, in page order
+- [x] Passage text matches the text the reading produced, identifiers included, unmasked
+- [x] The reading still happens at exactly one decision point; no route re-reads bytes
+- [x] Viewing a reading a second time makes no second call to the reader
+- [x] No vector index is created, and the deferral is recorded
+- [x] The glossary gains the passage as a noun, edited in the same change
 
 ## Blocked by
 
 - #102 — Delete the word-box overlay; the page number replaces it
+
+## Comment — 2026-09-15
+
+Closed: one reading writes one passage per page (text as printed, welded embedding, no vector
+index — ADR-0009). Viewing a stored reading does not call the reader again. Unconfigured embedder
+skips the store, same as an unconfigured extractor; #105 sweeps the rest.

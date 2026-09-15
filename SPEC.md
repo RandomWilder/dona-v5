@@ -318,7 +318,9 @@ its NOT NULL foreign key needs a target for (2.2), `0008_occupancy_view.sql` is 
 view (2.3), `0009_import_natural_keys.sql` gives `party`, `party_contact` and `terms_profile`
 the keys the register importer needs to be run twice (2.4), `0010_scale_indexes.sql` carries the
 one index 2.6 measured its way to, `0011_evidence.sql` is the evidence plane — E15, E16, E12 and
-E13, the type catalogue before the document that points at it (3.1), `0012_assets.sql` is E14's
+E13, the type catalogue before the document that points at it (3.1), `0030_document_passage.sql`
+is one row per page of a filed document (the text as printed, plus the welded embedding; no
+vector index, [ADR-0009](docs/decisions/ADR-0009-passage-embeddings-have-no-index-yet.md)), `0012_assets.sql` is E14's
 three-column Provider stub plus E11 Asset (3.5), so R11 has a table to point at and Q3 and Q7 have
 a row to read, and `0013_asset_natural_key.sql` is the unique index `(space_id, asset_type)` that
 makes a re-import and a second A6 confirm the same fact stated twice. `0021_staff.sql` is the admin edge's own three

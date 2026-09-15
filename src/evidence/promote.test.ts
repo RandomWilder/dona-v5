@@ -391,7 +391,7 @@ describe('evidence · promote an extracted field', () => {
       fileHash: 'e'.repeat(64),
       source: 'pdfjs',
       mayReadIdentifiers: false,
-      page: null,
+      pageText: null,
       extracted: READINGS,
     });
     assert.doesNotMatch(read, /action="[^"]*\/promote"/);
@@ -465,23 +465,7 @@ describe('evidence · promote an extracted field', () => {
       fileHash: 'e'.repeat(64),
       source: 'ocr',
       mayReadIdentifiers: false,
-      page: {
-        number: 1,
-        width: 100,
-        height: 200,
-        items: [
-          {
-            text: 'שכירות',
-            x: 8,
-            y: 18,
-            width: 20,
-            height: 10,
-            rightToLeft: true,
-            endsLine: false,
-            confidence: 0.91,
-          },
-        ],
-      },
+      pageText: 'שכירות',
       extracted: [
         {
           extractedFieldId: fieldId,

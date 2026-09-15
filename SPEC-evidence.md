@@ -7,7 +7,7 @@ this file and the workbook disagree, the workbook is right and this file is a bu
 - **Owns:** the paper, and every value that traces back to it. A **schema-driven ingestion engine, not
   a lease parser**: its inputs are a document, a declared type, and that type's field schema.
 - **Entities:** E12, E13, E15, E16 — Document · DocumentLink · DocumentType · DocumentTypeField ·
-  ExtractedField · FieldPromotion.
+  ExtractedField · FieldPromotion · **Passage** (#103).
 - **Depends on:** estate, parties, tenancy.
 - **Builds:** week 3 (slices 3.1–3.3, 3.5's confirm screen, 3.6) and week 4 (OCR at 4.1, comprehension
   at 4.2, promotion at 4.3, A2's draft tenancy at 4.6, A3's addendum at 4.7). **The stub gained content at slice 3.1**, which
@@ -420,9 +420,9 @@ Flow **A15**, and the three routes it is made of — the ledger (`documents.read
 consult it). What the stamp is, why `value` is never overwritten, what the read-quality number
 actually measures and why an identifier is never bulk-approved are all in **"Approval — the stamp
 that is not a promotion"** below, beside the columns they are about. Two facts belong here with the
-other routes: **the ledger reads no bytes** (the page count and reader line the paint drew cost an
-OCR call or a pdf parse per view, and `/documents/:id/read` is one link away and already pays for
-them), and **the declarations it lists are the ones governing the day the extraction ran**, never
+other routes: **the ledger reads no bytes** (the page count and reader line the paint drew would
+have cost an OCR call or a pdf parse per view; from #103 `/documents/:id/read` paints stored
+passages and neither screen re-reads the file), and **the declarations it lists are the ones governing the day the extraction ran**, never
 today's — a field declared this morning is not something last month's lease failed to carry. 7.3
 also **moved the `קדם` buttons off the read overlay**: two screens writing the same row is how the
 two drift into disagreeing about which one is the flow.
@@ -924,6 +924,17 @@ the page number beside each extracted value — never a page image, never a word
 box. The OCR request runs in imageless mode. **From 6.6 the transcript is shown only to a viewer
 holding `party.national_id.read`.** **Which page** is a query (`?page=`, 1-based, matching the stored
 field). Clicking a promoted value is 4.4's.
+
+**#103 keeps the reading.** `readForVerdict` remains the only decision point that chooses native text
+versus OCR. Its output fans out to three destinations: the verdict, the extracted fields, and one
+**passage** per page — document, page number, ordinal, the text as printed (identifiers included,
+unmasked), and an embedding at the welded dimension. Masking is a later read, never a write: masking
+here would both hide a tenant's own identifier from them and corrupt the vector. **No vector index**
+([ADR-0009](docs/decisions/ADR-0009-passage-embeddings-have-no-index-yet.md)). An unconfigured
+embedder is the same shape as an unconfigured extractor: the document is still filed and no passages
+are written — documents without passages, including the pre-#103 archive, are #105's sweep.
+**Viewing a reading that has passages does not re-read the bytes.** `GET /documents/:id/read` paints
+stored passages when they exist; without them it still reads the file, which is the archive path.
 
 `sweepUnverified` walks already-filed `unverified` rows the same way. It is how week 3's backlog is
 discharged; the count of verdicts that moved is recorded in the slice evidence, from the audit

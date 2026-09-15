@@ -4,8 +4,13 @@
 // which is why v3's hand-written .env loader (src/dev.ts) is not lifted.
 import { buildApp } from './app.ts';
 import { zonedClock } from './kernel/clock.ts';
-import { createSettings, readClockSettings } from './kernel/config.ts';
+import {
+  createSettings,
+  readClockSettings,
+  readEmbeddingSettings,
+} from './kernel/config.ts';
 import { createPool } from './kernel/db.ts';
+import { createConfiguredEmbedder } from './kernel/embeddings.ts';
 import { createConfiguredExtractor } from './kernel/extraction.ts';
 import { configuredBucket, createConfiguredStore } from './kernel/objects.ts';
 import { createConfiguredOcr } from './kernel/ocr.ts';
@@ -45,7 +50,11 @@ const identity = createConfiguredIdentity();
 // boot line for the same reason `docs: memory` is: a revision running on the wrong zone answers
 // "who lives here" about the wrong day for three hours a night, and that must be readable rather
 // than discovered.
-const clock = zonedClock((await readClockSettings(createSettings(pool))).zone);
+const settings = createSettings(pool);
+const clock = zonedClock((await readClockSettings(settings)).zone);
+const embedder = createConfiguredEmbedder(
+  await readEmbeddingSettings(settings),
+);
 const work = createWorkRunner(pool);
 work.start();
 
@@ -61,6 +70,7 @@ const app = buildApp({
   pdf: createPdfjsText(),
   ocr,
   extractor,
+  embedder,
   work,
   bucket: configuredBucket(),
   identity,
@@ -76,5 +86,6 @@ console.log(`dona-v5: http://127.0.0.1:${port}/health`);
 console.log(`docs: ${objects.describe()}`);
 console.log(`ocr: ${ocr.describe()}`);
 console.log(`extract: ${extractor.describe()}`);
+console.log(`embed: ${embedder.describe()}`);
 console.log(`identity: ${identity.describe()}`);
 console.log(`clock: ${clock.zone}`);

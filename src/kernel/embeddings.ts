@@ -160,3 +160,23 @@ function normalize(vector: number[]): number[] {
   const length = Math.hypot(...vector);
   return length === 0 ? vector : vector.map((value) => value / length);
 }
+
+/** pgvector's text input. The driver has no vector type. */
+export function vectorLiteral(vector: readonly number[]): string {
+  return `[${vector.join(',')}]`;
+}
+
+export function createConfiguredEmbedder(
+  settings: { model: string; dimensions: number },
+  env: Record<string, string | undefined> = process.env,
+): Embedder {
+  const apiKey = env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return createUnconfiguredEmbedder();
+  }
+  return createOpenAiEmbedder({
+    apiKey,
+    model: settings.model,
+    dimensions: settings.dimensions,
+  });
+}

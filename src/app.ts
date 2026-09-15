@@ -24,6 +24,7 @@ import {
 } from './evidence/contract.ts';
 import { renderIndexPage } from './index-page.ts';
 import { type Clock, systemClock } from './kernel/clock.ts';
+import type { Embedder } from './kernel/embeddings.ts';
 import { httpStatus, KernelError, toErrorBody } from './kernel/errors.ts';
 import type { Extractor } from './kernel/extraction.ts';
 import {
@@ -83,6 +84,7 @@ export interface AppDeps {
   /** The OCR reader. Absent or unconfigured leaves scans unverified. */
   ocr?: OcrText;
   extractor?: Extractor;
+  embedder?: Embedder;
   work?: WorkRunner;
   /** The bucket a `storage_uri` names, which is not the same statement as which store is running. */
   bucket?: string;
@@ -445,6 +447,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     pdf: deps.pdf ?? createPdfjsText(),
     ocr: deps.ocr,
     extractor: deps.extractor,
+    embedder: deps.embedder,
     work: deps.work,
     bucket,
     chrome: signedInChrome,

@@ -121,6 +121,8 @@ export {
   searchDocuments,
   signLinkedDocuments,
 } from './internal/list.ts';
+export type { DocumentPassage } from './internal/passages.ts';
+export { listDocumentPassages } from './internal/passages.ts';
 export type {
   PromoteDeps,
   PromoteResult,
@@ -174,7 +176,10 @@ export type { Queryable } from './internal/types.ts';
 // The verification guard (slice 3.3). Exported because `tests/policy/document-verification.test.ts`
 // is its gate and the policy suite reads contracts, never internals.
 export type { Verification, VerificationVerdict } from './internal/verify.ts';
-export { documentText, verifyDeclaredType } from './internal/verify.ts';
+export {
+  documentText,
+  verifyDeclaredType,
+} from './internal/verify.ts';
 export type {
   DocumentsScreen,
   FieldsScreen,

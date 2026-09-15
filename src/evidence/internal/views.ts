@@ -24,7 +24,6 @@ function megabytes(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(1);
 }
 
-import { type PdfPage, pageLines } from '../../kernel/pdf.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import type { UnitLetting } from '../../tenancy/contract.ts';
@@ -882,8 +881,8 @@ export interface ReadScreen {
   typeKey: string;
   labelHe: string;
   fileHash: string;
-  source: 'pdfjs' | 'ocr' | 'none';
-  page: PdfPage | null;
+  source: 'pdfjs' | 'ocr' | 'none' | 'stored';
+  pageText: string | null;
   /**
    * **Whether this viewer may see a captured identifier. Slice 6.4, and it is required on purpose.**
    *
@@ -994,24 +993,19 @@ function extractedSection(screen: ReadScreen) {
 
 export function renderReadPage(screen: ReadScreen): string {
   const back = `/estate/buildings/${screen.buildingId}`;
-  const page = screen.page;
   // **The transcript is withheld below the permission. Slice 6.6, rewritten at #102.** 6.5 found an
   // operator reading a ת.ז. off a word-box `title`. There is no overlay now. The per-page text is
   // this system's transcription of the paper, so it is shown only when `mayReadIdentifiers` is true.
-  // The page number beside each extracted value is how an administrator checks the paper they hold.
   const transcript =
-    page && screen.mayReadIdentifiers
-      ? pageLines(page)
-          .map((line) => line.map((item) => item.text).join(' '))
-          .join('\n')
-      : '';
-  const pageBlock = page
-    ? screen.mayReadIdentifiers
-      ? transcript.length > 0
-        ? h`<pre class="page-text">${transcript}</pre>`
-        : h`<p class="lede">אין טקסט בדף זה.</p>`
-      : h``
-    : h`<p class="lede">אין דף להצגה.</p>`;
+    screen.pageText && screen.mayReadIdentifiers ? screen.pageText : '';
+  const pageBlock =
+    screen.pageText !== null
+      ? screen.mayReadIdentifiers
+        ? transcript.length > 0
+          ? h`<pre class="page-text">${transcript}</pre>`
+          : h`<p class="lede">אין טקסט בדף זה.</p>`
+        : h``
+      : h`<p class="lede">אין דף להצגה.</p>`;
   const body = h`
     <div>
       <a class="back" href="${back}">← ${screen.buildingName}</a>
@@ -1025,7 +1019,9 @@ export function renderReadPage(screen: ReadScreen): string {
             ? h`קריאה אוטומטית`
             : screen.source === 'pdfjs'
               ? h`שכבת הטקסט שבקובץ`
-              : h`אין מילים לקריאה`
+              : screen.source === 'stored'
+                ? h`הקריאה שנשמרה`
+                : h`אין מילים לקריאה`
         }</dd></div>
         <div><dt>טביעת הקובץ</dt><dd class="digest">${ltr(screen.fileHash)}</dd></div>
       </dl>
