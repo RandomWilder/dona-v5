@@ -79,6 +79,7 @@ export type {
   TenancyEventView,
   TenancyPersonView,
   TenancySheet,
+  UnitRetrievalView,
 } from './internal/views.ts';
 export {
   renderBuildingPage,

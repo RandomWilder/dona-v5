@@ -240,6 +240,48 @@ const styles = h`<style>
   }
   .notice h2 { font-size: var(--text-lg); margin: 0 0 var(--space-2); }
   .notice h2.second-heading { margin-block-start: var(--space-5); }
+  .unit-sheet {
+    display: grid;
+    gap: var(--space-6);
+    grid-template-columns: minmax(0, 1fr);
+  }
+  @media (min-width: 64rem) {
+    .unit-sheet {
+      grid-template-columns: minmax(0, 1fr) var(--size-retrieval);
+      align-items: start;
+    }
+    .unit-retrieval {
+      grid-column: 2;
+      grid-row: 1;
+    }
+  }
+  .unit-retrieval {
+    background: var(--color-surface-card);
+    border: var(--size-hairline) solid var(--color-divider-soft);
+    border-radius: var(--radius-3);
+    padding: var(--space-4);
+    display: grid;
+    gap: var(--space-4);
+  }
+  .unit-retrieval > summary {
+    cursor: pointer;
+    font-weight: 500;
+    font-size: var(--text-lg);
+  }
+  .unit-retrieval[open] > summary { margin-block-end: var(--space-3); }
+  .unit-thread {
+    display: grid;
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .unit-turn { display: grid; gap: var(--space-2); min-width: 0; }
+  .unit-turn .asked { margin: 0; font-weight: 500; }
+  .unit-turn .answered { margin: 0; }
+  .unit-turn.is-refused .answered { color: var(--color-text-muted); }
+  .unit-citations { margin: 0; padding: 0; display: grid; gap: var(--space-1); list-style: none; }
+  .unit-citations a { font-size: var(--text-sm); }
   .tenancy-head { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: baseline; }
   .status.is-active { background: color-mix(in srgb, var(--color-ok) 14%, var(--color-surface-card)); color: var(--color-ok); }
   .term-found { color: var(--color-ok); }
@@ -818,8 +860,9 @@ export function renderUnitPage(
   nav: Html,
   promoted: readonly PromotedFieldView[] = [],
   events: readonly TenancyEventView[] = [],
+  retrieval?: UnitRetrievalView,
 ): string {
-  const body = h`
+  const sheet = h`
     <div>
       <a class="back" href="/estate/buildings/${unit.building_id}">← ${unit.building_name}</a>
       <h1>דירה ${ltr(unit.unit_number)}</h1>
@@ -832,7 +875,80 @@ export function renderUnitPage(
     ${promotedPanel(promoted)}
     ${changeLogPanel(events)}
     ${documentsPanel(documents, 'מסמכים')}`;
+  const body =
+    retrieval === undefined
+      ? sheet
+      : h`<div class="unit-sheet">${sheet}${retrievalPanel(retrieval)}</div>`;
   return page(`דונה דום — דירה ${unit.unit_number}`, body, nav);
+}
+
+export interface UnitRetrievalView {
+  csrf: string;
+  unitId: string;
+  thread: readonly {
+    question: string;
+    answer: string;
+    refused: boolean;
+    citations: readonly {
+      documentId: string;
+      page: number;
+      documentType: string;
+    }[];
+  }[];
+}
+
+function retrievalPanel(retrieval: UnitRetrievalView): Html {
+  const ask = `/estate/units/${retrieval.unitId}/office-turn`;
+  const clear = `/estate/units/${retrieval.unitId}/office-thread`;
+  return h`<details class="unit-retrieval" data-office-retrieval="unit" open>
+    <summary>שאלות על המסמכים</summary>
+    ${
+      retrieval.thread.length === 0
+        ? h`<p class="lede">עדיין לא נשאלה שאלה.</p>`
+        : h`<ol class="unit-thread">
+            ${retrieval.thread.map(
+              (
+                turn,
+              ) => h`<li class="unit-turn${turn.refused ? ' is-refused' : ''}">
+                <p class="asked">${turn.question}</p>
+                <p class="answered">${turn.answer}</p>
+                ${citationList(turn.citations)}
+              </li>`,
+            )}
+          </ol>`
+    }
+    <form method="post" action="${ask}" class="form-grid">
+      ${csrfInput(retrieval.csrf)}
+      <label class="form-row">שאלה
+        <textarea name="question" required maxlength="2000" rows="3"></textarea>
+      </label>
+      <div class="form-actions">
+        <button type="submit">שאלו</button>
+      </div>
+    </form>
+    ${
+      retrieval.thread.length === 0
+        ? h``
+        : h`<form method="post" action="${clear}">
+            ${csrfInput(retrieval.csrf)}
+            <button type="submit">מחיקת השיחה</button>
+          </form>`
+    }
+  </details>`;
+}
+
+function citationList(
+  citations: UnitRetrievalView['thread'][number]['citations'],
+): Html {
+  if (citations.length === 0) return h``;
+  return h`<ul class="unit-citations">
+    ${citations.map((cite) => {
+      const labelHe = DOC_LABEL[cite.documentType] ?? cite.documentType;
+      return h`<li>
+        <a href="/documents/${cite.documentId}/read?page=${cite.page}">${labelHe} · עמוד ${ltr(cite.page)}</a>
+      </li>`;
+    })}
+  </ul>`;
 }
 
 // ------------------------------------------------------------------------------------------------

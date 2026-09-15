@@ -69,6 +69,11 @@ export async function signOutAll(pool: Pool, domain: string): Promise<void> {
        (SELECT staff_account_id FROM staff_account WHERE email LIKE $1)`,
     [`%@${domain}`],
   );
+  await pool.query(
+    `DELETE FROM office_retrieval_thread WHERE staff_account_id IN
+       (SELECT staff_account_id FROM staff_account WHERE email LIKE $1)`,
+    [`%@${domain}`],
+  );
   await pool.query('DELETE FROM staff_account WHERE email LIKE $1', [
     `%@${domain}`,
   ]);
