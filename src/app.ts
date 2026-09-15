@@ -17,6 +17,7 @@ import {
   listDocumentTypes,
   listLinkedDocuments,
   listPromotedFieldsForUnit,
+  listTenancyDocumentFacts,
   registerDocumentRoutes,
   searchDocuments,
   signLinkedDocuments,
@@ -37,6 +38,7 @@ import { createPdfjsText, type PdfText } from './kernel/pdf.ts';
 import { registerUiAssets } from './kernel/ui/assets.ts';
 import { registerFormBodies } from './kernel/ui/forms.ts';
 import type { WorkRunner } from './kernel/work.ts';
+import { listPartyNames } from './parties/contract.ts';
 import {
   parseDocumentTypeForm,
   parseObligationTypeForm,
@@ -60,10 +62,14 @@ import {
 } from './staff/contract.ts';
 import { CALLS_STUB, renderStubPage } from './stub-page.ts';
 import {
+  activateTenancy,
+  activationGate,
   expireDueTenancies,
+  getTenancy,
   listIncompleteTenancies,
   listObligationTypes,
   listTenancyEvents,
+  listTenancyParties,
   recordCompletenessException,
   upsertObligationType,
 } from './tenancy/contract.ts';
@@ -436,6 +442,13 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     expireDueTenancies,
     listIncompleteTenancies,
     recordCompletenessException,
+    getTenancy,
+    listTenancyParties,
+    listPartyNames,
+    activationGate: (db, tenancyId) =>
+      activationGate(db, clock, tenancyId, listTenancyDocumentFacts),
+    activateTenancy: (db, spec) =>
+      activateTenancy(db, clock, spec, listTenancyDocumentFacts),
   });
   // Slice 5.1, and from 5.2 no longer the only routes behind a session: every route this
   // application registers declares a stance above, and the hook calls `requireStaff` once.

@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { asOperator, signIn, signOutAll } from '../../tests/support/session.ts';
 import { buildApp } from '../app.ts';
-import { systemClock } from '../kernel/clock.ts';
+import { fixedClock, systemClock } from '../kernel/clock.ts';
 import { newId } from '../kernel/ids.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
 import type { EstatePlan } from './contract.ts';
@@ -1093,6 +1093,341 @@ describe('estate · A13, an administrator adds an apartment', () => {
     } finally {
       await a13Cleanup(pool);
       await signOutAll(pool, A13_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+});
+
+const A5_DOMAIN = 'tenancy-page.test';
+const A5_CITY = 'עיר השכרה';
+const A5_ADDRESS = 'רחוב השכרה 7';
+const A5_PROJECT = 'TEST-A5-PAGE';
+const A5_TENANT = 'דנה כהן-a5';
+const A5_AT = new Date('2026-09-15T09:00:00.000Z');
+
+const a5Plan: EstatePlan = {
+  projects: [
+    {
+      name: 'מכרז השכרה',
+      projectCode: A5_PROJECT,
+      tenderRef: null,
+      status: 'ACTIVE',
+    },
+  ],
+  buildings: [
+    {
+      name: 'בניין השכרה',
+      addressLine: A5_ADDRESS,
+      city: A5_CITY,
+      projectCode: A5_PROJECT,
+      handoverDate: '2025-03-01',
+      warrantyEndDate: '2027-03-01',
+      status: 'ACTIVE',
+      spaces: [
+        { kind: 'UNIT', name: 'דירה 12A', floor: '2', accessNote: null },
+      ],
+      units: [
+        {
+          spaceName: 'דירה 12A',
+          unitNumber: '12A',
+          rooms: 3.5,
+          areaSqm: 78.5,
+          hasMamad: true,
+          parkingSpaceName: null,
+          storageSpaceName: null,
+          warrantyEndDate: null,
+          conditionStatus: 'READY',
+        },
+      ],
+    },
+  ],
+};
+
+async function a5Cleanup(pool: import('pg').Pool): Promise<void> {
+  await pool.query(
+    'ALTER TABLE tenancy_event DISABLE TRIGGER tenancy_event_is_append_only',
+  );
+  try {
+    await pool.query(
+      `DELETE FROM tenancy_event
+      WHERE tenancy_id IN (
+        SELECT t.tenancy_id FROM tenancy t
+        JOIN space s ON s.space_id = t.unit_id
+        JOIN building b ON b.building_id = s.building_id
+        WHERE b.city = $1 AND b.address_line = $2)`,
+      [A5_CITY, A5_ADDRESS],
+    );
+    await pool.query(
+      `DELETE FROM tenancy_party
+      WHERE tenancy_id IN (
+        SELECT t.tenancy_id FROM tenancy t
+        JOIN space s ON s.space_id = t.unit_id
+        JOIN building b ON b.building_id = s.building_id
+        WHERE b.city = $1 AND b.address_line = $2)`,
+      [A5_CITY, A5_ADDRESS],
+    );
+    await pool.query(
+      `DELETE FROM document_link
+      WHERE entity_type = 'TENANCY' AND entity_id IN (
+        SELECT t.tenancy_id FROM tenancy t
+        JOIN space s ON s.space_id = t.unit_id
+        JOIN building b ON b.building_id = s.building_id
+        WHERE b.city = $1 AND b.address_line = $2)`,
+      [A5_CITY, A5_ADDRESS],
+    );
+    await pool.query(
+      `DELETE FROM tenancy
+      WHERE unit_id IN (
+        SELECT space_id FROM space s
+        JOIN building b ON b.building_id = s.building_id
+        WHERE b.city = $1 AND b.address_line = $2)`,
+      [A5_CITY, A5_ADDRESS],
+    );
+    await pool.query(`DELETE FROM party WHERE full_name = $1`, [A5_TENANT]);
+    await pool.query(
+      `DELETE FROM unit WHERE unit_id IN (
+      SELECT space_id FROM space s
+      JOIN building b ON b.building_id = s.building_id
+      WHERE b.city = $1 AND b.address_line = $2)`,
+      [A5_CITY, A5_ADDRESS],
+    );
+    await pool.query(
+      `DELETE FROM space WHERE building_id IN (
+      SELECT building_id FROM building WHERE city = $1 AND address_line = $2)`,
+      [A5_CITY, A5_ADDRESS],
+    );
+    await pool.query(
+      'DELETE FROM building WHERE city = $1 AND address_line = $2',
+      [A5_CITY, A5_ADDRESS],
+    );
+    await pool.query('DELETE FROM project WHERE project_code = $1', [
+      A5_PROJECT,
+    ]);
+  } finally {
+    await pool.query(
+      'ALTER TABLE tenancy_event ENABLE TRIGGER tenancy_event_is_append_only',
+    );
+  }
+}
+
+async function linkType(
+  pool: import('pg').Pool,
+  tenancyId: string,
+  typeKey: string,
+  labelHe: string,
+): Promise<string> {
+  const type = await pool.query<{ document_type_id: string }>(
+    `INSERT INTO document_type (
+       document_type_id, type_key, label_he, label_en, verification_terms, is_active
+     ) VALUES ($1, $2, $3, NULL, NULL, true)
+     ON CONFLICT (type_key) DO UPDATE SET label_he = EXCLUDED.label_he
+     RETURNING document_type_id`,
+    [newId(), typeKey, labelHe],
+  );
+  const documentId = newId();
+  await pool.query(
+    `INSERT INTO document (
+       document_id, document_type_id, storage_uri, file_hash,
+       ingested_at, verification_verdict
+     ) VALUES ($1, $2, $3, $4, $5, 'unguarded')`,
+    [
+      documentId,
+      type.rows[0]?.document_type_id,
+      `gs://x/${documentId}.pdf`,
+      `hash-${documentId}`,
+      A5_AT,
+    ],
+  );
+  await pool.query(
+    `INSERT INTO document_link (document_id, entity_type, entity_id, link_role)
+     VALUES ($1, 'TENANCY', $2, 'EVIDENCE')`,
+    [documentId, tenancyId],
+  );
+  return documentId;
+}
+
+describe('estate · the tenancy page', () => {
+  it('shows one letting, refuses until the gate passes, and activates on the press', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(A5_AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    await signOutAll(pool, A5_DOMAIN);
+    await a5Cleanup(pool);
+    const who = await signIn(pool, clock, { email: `ops@${A5_DOMAIN}` });
+    const client = asOperator(app, who);
+    try {
+      await importEstate(pool, a5Plan);
+      const unit = await pool.query<{ unit_id: string }>(
+        `SELECT u.unit_id FROM unit u
+         JOIN space s ON s.space_id = u.unit_id
+         JOIN building b ON b.building_id = s.building_id
+         WHERE b.city = $1 AND b.address_line = $2`,
+        [A5_CITY, A5_ADDRESS],
+      );
+      const unitId = unit.rows[0]?.unit_id ?? '';
+      const profile = await pool.query<{ terms_profile_id: string }>(
+        `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)
+         ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+         RETURNING terms_profile_id`,
+        [newId(), `a5-${A5_PROJECT}`],
+      );
+      const tenancyId = newId();
+      const partyId = newId();
+      await pool.query(
+        `INSERT INTO tenancy (tenancy_id, unit_id, start_date, end_date, status, terms_profile_id)
+         VALUES ($1, $2, '2026-09-01', '2027-08-31', 'DRAFT', $3)`,
+        [tenancyId, unitId, profile.rows[0]?.terms_profile_id],
+      );
+      await pool.query(
+        `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', $2)`,
+        [partyId, A5_TENANT],
+      );
+      await pool.query(
+        `INSERT INTO tenancy_party (tenancy_id, party_id, role, is_service_contact)
+         VALUES ($1, $2, 'PRIMARY_TENANT', true)`,
+        [tenancyId, partyId],
+      );
+
+      const missing = await client.inject({
+        method: 'GET',
+        url: `/estate/tenancies/${newId()}`,
+      });
+      assert.equal(missing.statusCode, 404);
+      assert.equal(missing.json().code, 'not_found');
+
+      await linkType(pool, tenancyId, 'lease', 'חוזה שכירות');
+
+      const blocked = await client.inject({
+        method: 'GET',
+        url: `/estate/tenancies/${tenancyId}`,
+      });
+      assert.equal(blocked.statusCode, 200);
+      assert.match(blocked.body, /<html lang="he" dir="rtl">/);
+      assert.match(blocked.body, new RegExp(A5_TENANT));
+      assert.match(blocked.body, /טיוטה/);
+      assert.match(blocked.body, /חוזה שכירות מאושר/);
+      assert.match(blocked.body, /פרוטוקול מסירה מאושר/);
+      assert.match(blocked.body, /לא עבר/);
+      assert.match(blocked.body, /פרוטוקול מסירה — לא הוגש/);
+      assert.match(blocked.body, /disabled/);
+      assert.doesNotMatch(
+        blocked.body,
+        /action="\/estate\/tenancies\/[^"]+\/activate"/,
+      );
+
+      const refused = await client.inject({
+        method: 'POST',
+        url: `/estate/tenancies/${tenancyId}/activate`,
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        payload: '',
+      });
+      assert.equal(refused.statusCode, 400);
+      assert.equal(refused.json().code, 'invalid');
+
+      await linkType(pool, tenancyId, 'handover_protocol', 'פרוטוקול מסירה');
+
+      const open = await client.inject({
+        method: 'GET',
+        url: `/estate/tenancies/${tenancyId}`,
+      });
+      assert.equal(open.statusCode, 200);
+      assert.match(open.body, /עבר/);
+      assert.doesNotMatch(open.body, /לא עבר/);
+      assert.match(
+        open.body,
+        new RegExp(`action="/estate/tenancies/${tenancyId}/activate"`),
+      );
+      assert.doesNotMatch(open.body, /disabled/);
+
+      const pressed = await client.inject({
+        method: 'POST',
+        url: `/estate/tenancies/${tenancyId}/activate`,
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        payload: '',
+      });
+      assert.equal(pressed.statusCode, 302);
+      assert.equal(pressed.headers.location, `/estate/tenancies/${tenancyId}`);
+
+      const live = await client.inject({
+        method: 'GET',
+        url: `/estate/tenancies/${tenancyId}`,
+      });
+      assert.match(live.body, /פעיל/);
+      assert.doesNotMatch(live.body, /הפעלת ההשכרה/);
+    } finally {
+      await a5Cleanup(pool);
+      await signOutAll(pool, A5_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('names the date the button arms when only time remains', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(A5_AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    await signOutAll(pool, A5_DOMAIN);
+    await a5Cleanup(pool);
+    const who = await signIn(pool, clock, { email: `ops@${A5_DOMAIN}` });
+    const client = asOperator(app, who);
+    try {
+      await importEstate(pool, a5Plan);
+      const unit = await pool.query<{ unit_id: string }>(
+        `SELECT u.unit_id FROM unit u
+         JOIN space s ON s.space_id = u.unit_id
+         JOIN building b ON b.building_id = s.building_id
+         WHERE b.city = $1 AND b.address_line = $2`,
+        [A5_CITY, A5_ADDRESS],
+      );
+      const profile = await pool.query<{ terms_profile_id: string }>(
+        `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)
+         ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+         RETURNING terms_profile_id`,
+        [newId(), `a5-future-${A5_PROJECT}`],
+      );
+      const tenancyId = newId();
+      const partyId = newId();
+      await pool.query(
+        `INSERT INTO tenancy (tenancy_id, unit_id, start_date, end_date, status, terms_profile_id)
+         VALUES ($1, $2, '2026-11-01', '2027-10-31', 'DRAFT', $3)`,
+        [tenancyId, unit.rows[0]?.unit_id, profile.rows[0]?.terms_profile_id],
+      );
+      await pool.query(
+        `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', $2)`,
+        [partyId, A5_TENANT],
+      );
+      await pool.query(
+        `INSERT INTO tenancy_party (tenancy_id, party_id, role, is_service_contact)
+         VALUES ($1, $2, 'PRIMARY_TENANT', true)`,
+        [tenancyId, partyId],
+      );
+      await linkType(pool, tenancyId, 'lease', 'חוזה שכירות');
+      await linkType(pool, tenancyId, 'handover_protocol', 'פרוטוקול מסירה');
+
+      const page = await client.inject({
+        method: 'GET',
+        url: `/estate/tenancies/${tenancyId}`,
+      });
+      assert.equal(page.statusCode, 200);
+      assert.match(page.body, /הכפתור נדלק ב־/);
+      assert.match(page.body, /2026-11-01/);
+      assert.match(page.body, /disabled/);
+    } finally {
+      await a5Cleanup(pool);
+      await signOutAll(pool, A5_DOMAIN);
       await app.close();
       await pool.end();
     }

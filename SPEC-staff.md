@@ -252,7 +252,8 @@ the only somewhere available is the table this module is forbidden to put a toke
 
 **The scope is every write route in the application**, not this module's alone: `POST /documents`,
 `POST /documents/:id/promote`, `POST /documents/:id/seed`, `POST /documents/:id/tenancy`,
-`POST /estate/incomplete/:tenancyId/exception`, `POST /staff/operators`, `POST /staff/logout`,
+`POST /estate/incomplete/:tenancyId/exception`, `POST /estate/tenancies/:tenancyId/activate`,
+`POST /staff/operators`, `POST /staff/logout`,
 `POST /settings/obligation-types` and `POST /settings/document-types`.
 Enforcement is one `preHandler` hook in the composition root, which is why the list above is a
 consequence of the method rather than a list anybody maintains.

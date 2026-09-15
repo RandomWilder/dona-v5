@@ -201,7 +201,12 @@ by tripping the guard rather than by anticipating it.
   approved on the letting, or not), `start_reached`, `within_term`. A fully-approved future
   letting reports `activatableOn` as the lease start date. `activateTenancy` refuses unless every
   check passed, the row is `DRAFT`, and the actor is a name. Evidence-side facts arrive through an
-  injected reader: **this module imports no evidence module**. An `ENDED` letting is not reopened
+  injected reader: **this module imports no evidence module**.
+  **#107 adds `getTenancy` and `listTenancyParties`.** The sheet is estate's screen; these two
+  reads are what it is allowed to ask. `getTenancy` takes a `tenancy_id` and returns dates, status
+  and `unit_id` — no party and no name. `listTenancyParties` returns `party_id`, `role` and
+  `is_service_contact` for that letting, still no name. The composition root asks parties for the
+  names the title needs. Neither query carries a temporal predicate. An `ENDED` letting is not reopened
   by the clock or by `activateTenancy`; the register may still write historical `tenancy_party`
   rows onto an `ENDED` row because that is how a past household is loaded. A required document
   whose `valid_to` is strictly before today, on an `ACTIVE` letting, is a flag on the gate and

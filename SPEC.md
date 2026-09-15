@@ -435,8 +435,16 @@ person. **A transcription is not a disclosure; a register is.** What was not all
 happen, is the rule lapsing quietly because a document screen arrived — the five earlier slices
 entitled to lift it (5.2, 5.4, 5.5, 5.6, 5.8) each wrote down that they had not, and this one names
 the line instead of adding a sixth silence. `tests/ui/tokens.test.ts` holds it: the person names in
-its fixtures may appear only on the document-shaped screens its registry names, and a name rendered
+its fixtures may appear only on the screens its registry names, and a name rendered
 anywhere else fails the build.
+
+**#107 is the seventh writing, and it names a second shape rather than relaxing the first.** A
+tenancy page is about **one letting**, reached by that letting's identifier, not a list and not a
+search. The title that lets an administrator recognise it is the tenant's name plus the address and
+apartment number; the household is printed read-only because it was signed on the approval ledger.
+That is still not a register: `/estate`, search, the occupancy chip and the incomplete queue still
+carry a state and a count and never a name. A permission gate on those names is a later change that
+does not redraw the screen.
 
 **Slice 6.1 gave estate its own first write route and this system its seventh permission.** `GET
 /estate/buildings/new` and `POST /estate/buildings` are flow **A11** ([SPEC-flows.md](SPEC-flows.md))

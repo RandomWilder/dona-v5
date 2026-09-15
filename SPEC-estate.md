@@ -145,6 +145,7 @@ writes it and nothing reads it but the constraint; `address_line` and `city` rem
 by kind and its units. Slice 2.6 added three more: `GET /` is an index of the screens,
 `GET /estate/search?q=` searches the portfolio, and `GET /estate/expiring` is Q5. Slice 3.6 added
 `GET /estate/units/:unitId` — a thin unit page, not the workbook's full unit sheet.
+`GET /estate/tenancies/:tenancyId` and `POST …/activate` — one letting (#107, flow A5).
 
 Server-rendered through the kernel's `h` template, which escapes every interpolation — so there is
 **no client JavaScript at all**, and no JSON API that would have to be scoped before the screens can
@@ -337,6 +338,17 @@ document — from `listTenancyEvents`, injected the same way. Empty is legal. Ne
 unit page calls `expireDueTenancies` (injected from tenancy) against the clock before it reads the
 log, so opening the sheet is what closes a lease whose date has passed — not a hidden job.
 The workbook's other unit-sheet panels (tenancy, obligations, assets) wait.
+
+**`GET /estate/tenancies/:tenancyId` is A5's sheet (#107).** The first screen that shows one
+letting: the title an administrator recognises it by (tenant name, address, apartment number),
+status, the lease's dates, the documents bound to the letting, what the gate still misses, every
+check the gate returned, and the activate button. Estate renders; it does not own the gate. The
+composition root injects `getTenancy`, `listTenancyParties`, the party-name lookup, `activationGate`,
+`activateTenancy` and `listLinkedDocuments` for `TENANCY`. The page prints the gate's facts and does
+not re-evaluate the four rules. `POST /estate/tenancies/:tenancyId/activate` asks for `tenancy.write`,
+as the completeness exception already does. Party names appear on this screen with no new permission;
+a later gate does not redraw it. Search, the occupancy chip, the buildings list and the incomplete
+queue still carry no name.
 
 **The documents listed on these screens are injected, not imported.** `EstateDeps` carries
 `listLinkedDocuments`, `searchDocuments` and (from 4.4) `listPromotedFieldsForUnit` from evidence's

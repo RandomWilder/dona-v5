@@ -49,15 +49,15 @@ Clicked on a running local server before merge — including the refusal path an
 
 ## Acceptance criteria
 
-- [ ] A tenancy is reachable at its own page by identifier
-- [ ] The page shows title, status, lease dates, documents held, what is missing, and what passed
-- [ ] The activate button is dark until the gate passes, and every checked requirement is named beside it with its outcome
-- [ ] A tenancy blocked only by its start date shows the date the button arms
-- [ ] Pressing the button activates the tenancy; nothing else does
-- [ ] The page reads the gate's returned facts rather than re-deriving the rules
-- [ ] The screen is appended to the existing screen registry and passes its guard
-- [ ] The screen is Hebrew, right-to-left, server-rendered, with no client-side scripting
-- [ ] The tenancy-page mockup file is deleted
+- [x] A tenancy is reachable at its own page by identifier
+- [x] The page shows title, status, lease dates, documents held, what is missing, and what passed
+- [x] The activate button is dark until the gate passes, and every checked requirement is named beside it with its outcome
+- [x] A tenancy blocked only by its start date shows the date the button arms
+- [x] Pressing the button activates the tenancy; nothing else does
+- [x] The page reads the gate's returned facts rather than re-deriving the rules
+- [x] The screen is appended to the existing screen registry and passes its guard
+- [x] The screen is Hebrew, right-to-left, server-rendered, with no client-side scripting
+- [x] The tenancy-page mockup file is deleted
 - [ ] Both the refusal path and the activation press are clicked on a running local server before merge
 
 ## Blocked by

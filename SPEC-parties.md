@@ -151,9 +151,10 @@ constraint already rejected.
   `national_id_key` would be an insert wearing an upsert's name. `createParty` is always an insert
   (`national_id` null). Two calls with the same name are two people. **Slice 5.5 kept that:** 0
   nameless parties in the generated portfolio, so no count that would justify matching a name.
-  There is still no screen over this module and no query on its contract; `src/scope/` answers who
-  is reachable, and 2.6's grid reads estate. Evidence calls this after a human confirms the role,
-  and never matches a name across tenancies.
+  There is still no screen over this module. **#107 adds `listPartyNames`**, the narrowest read
+  the tenancy page is allowed: ids in, `party_id` and `full_name` out, never a contact and never a
+  `national_id`. Who is reachable on a number is still `src/scope/`'s answer. Evidence calls the
+  write commands after a human confirms the role, and never matches a name across tenancies.
 
   **Slice 6.5 narrows `createParty` to the case its comment was written for.** 6.4 put a declared
   ת.ז. on the capture path, so a lease no longer *often* names none — it names one when the paper

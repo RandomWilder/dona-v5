@@ -158,6 +158,8 @@ describe('every route in the application', () => {
       // Slice 6.2, flow A13. Both again, for the same reason.
       'GET /estate/buildings/:buildingId/units/new',
       'POST /estate/buildings/:buildingId/units',
+      'GET /estate/tenancies/:tenancyId',
+      'POST /estate/tenancies/:tenancyId/activate',
       // Slice 6.3, flow A12. The document-first post. `GET /documents/new` is already above and
       // covers both of its screens — the same URL serves the unit-first form and the intake one.
       'POST /documents/intake',
@@ -213,6 +215,7 @@ describe('a request with no session', () => {
         '/estate/expiring',
         '/estate/incomplete',
         '/estate/units/11111111-1111-4111-8111-111111111111',
+        '/estate/tenancies/11111111-1111-4111-8111-111111111111',
         '/estate/buildings/11111111-1111-4111-8111-111111111111/units/new',
         '/documents/new?unit=11111111-1111-4111-8111-111111111111',
         '/documents/11111111-1111-4111-8111-111111111111/read',

@@ -336,6 +336,14 @@ those dates (`tenancy.start_date` / `tenancy.end_date`). Each refusal names its 
 handover protocol is **per letting**: it records that the tenant accepted the flat after inspecting
 it, and it is bound with `entity_type = 'TENANCY'`.
 
+**Screen:** `GET /estate/tenancies/:tenancyId` — one letting, reached by its identifier. Title
+(tenant name plus address and apartment number), status, the lease's dates, the documents it holds,
+what is missing, every gate check with its outcome, and the activate button. The page prints the
+gate's returned facts and re-derives none of the rules. The button is dark until `canActivate`; a
+dark button names every requirement the gate checked. When the only miss is the start date, the
+page states `activatableOn`. `POST /estate/tenancies/:tenancyId/activate` is the person command
+(`tenancy.write`); the clock never posts it.
+
 **Writes:** `DRAFT → ACTIVE`, and a `TenancyEvent` of kind `activated` naming who and when. No
 document on that event — the paper is already on the letting; the event records the human act.
 **Enforcement:** the gate first, then `one_active_tenancy_per_unit`. Promoting a draft that still

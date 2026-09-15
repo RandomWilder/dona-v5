@@ -50,9 +50,15 @@ export {
 } from './internal/completeness.ts';
 export type { TenancyEventRow } from './internal/events.ts';
 export { listTenancyEvents } from './internal/events.ts';
-export type { UnitLetting } from './internal/lettings.ts';
+export type {
+  TenancyPartyRow,
+  TenancyRow,
+  UnitLetting,
+} from './internal/lettings.ts';
 export {
   countIdentifierOverlap,
+  getTenancy,
+  listTenancyParties,
   listUnitTenancies,
 } from './internal/lettings.ts';
 export type {

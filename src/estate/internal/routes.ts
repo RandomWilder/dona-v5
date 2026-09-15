@@ -56,8 +56,10 @@ import {
   renderNewBuildingPage,
   renderNewUnitPage,
   renderSearchPage,
+  renderTenancyDetailPage,
   renderUnitPage,
   type TenancyEventView,
+  type TenancyPersonView,
 } from './views.ts';
 
 export interface EstateDeps {
@@ -77,7 +79,7 @@ export interface EstateDeps {
    */
   listLinkedDocuments: (
     db: Pool,
-    entityType: 'BUILDING' | 'UNIT',
+    entityType: 'BUILDING' | 'UNIT' | 'TENANCY',
     entityId: string,
   ) => Promise<readonly FiledDocumentView[]>;
   searchDocuments: (
@@ -109,6 +111,43 @@ export interface EstateDeps {
       at: Date;
     },
   ) => Promise<'recorded' | 'alreadyRecorded'>;
+  getTenancy: (
+    db: Pool,
+    tenancyId: string,
+  ) => Promise<{
+    tenancy_id: string;
+    unit_id: string;
+    start_date: string;
+    end_date: string;
+    status: string;
+  }>;
+  listTenancyParties: (
+    db: Pool,
+    tenancyId: string,
+  ) => Promise<
+    readonly {
+      party_id: string;
+      role: string;
+      is_service_contact: boolean;
+    }[]
+  >;
+  listPartyNames: (
+    db: Pool,
+    partyIds: readonly string[],
+  ) => Promise<readonly { party_id: string; full_name: string }[]>;
+  activationGate: (
+    db: Pool,
+    tenancyId: string,
+  ) => Promise<{
+    checks: readonly { rule: string; passed: boolean }[];
+    canActivate: boolean;
+    activatableOn: string | null;
+    flags: readonly { typeKey: string }[];
+  }>;
+  activateTenancy: (
+    db: Pool,
+    spec: { tenancyId: string; actor: string },
+  ) => Promise<void>;
 }
 
 /** What a search box may be sent before it stops being a search box. */
@@ -729,4 +768,58 @@ export function registerEstateRoutes(
       events,
     );
   });
+
+  app.get('/estate/tenancies/:tenancyId', READ, async (request, reply) => {
+    const tenancyId = validId(
+      (request.params as { tenancyId: string }).tenancyId,
+      'tenancyId',
+    );
+    const letting = await deps.getTenancy(deps.pool, tenancyId);
+    const unit = await getUnit(deps.pool, letting.unit_id);
+    const [members, documents, gate] = await Promise.all([
+      deps.listTenancyParties(deps.pool, tenancyId),
+      deps.listLinkedDocuments(deps.pool, 'TENANCY', tenancyId),
+      deps.activationGate(deps.pool, tenancyId),
+    ]);
+    const names = await deps.listPartyNames(
+      deps.pool,
+      members.map((member) => member.party_id),
+    );
+    const byId = new Map(names.map((row) => [row.party_id, row.full_name]));
+    const people: TenancyPersonView[] = members.map((member) => ({
+      fullName: byId.get(member.party_id) ?? '',
+      role: member.role,
+      isServiceContact: member.is_service_contact,
+    }));
+    const csrf = csrfFrom(request);
+    html(reply);
+    return renderTenancyDetailPage({
+      tenancyId,
+      status: letting.status,
+      startDate: letting.start_date,
+      endDate: letting.end_date,
+      unit,
+      people,
+      documents,
+      checks: gate.checks,
+      canActivate: gate.canActivate,
+      activatableOn: gate.activatableOn,
+      flags: gate.flags,
+      csrf,
+      nav: deps.chrome(csrf, 'estate', mayFile(request)),
+    });
+  });
+
+  app.post<{ Params: { tenancyId: string } }>(
+    '/estate/tenancies/:tenancyId/activate',
+    WRITE,
+    async (request, reply) => {
+      const tenancyId = validId(request.params.tenancyId, 'tenancyId');
+      await deps.activateTenancy(deps.pool, {
+        tenancyId,
+        actor: requireText(request.staff?.email ?? '', 'actor', 200),
+      });
+      return reply.redirect(`/estate/tenancies/${tenancyId}`);
+    },
+  );
 }

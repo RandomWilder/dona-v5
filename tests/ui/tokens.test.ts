@@ -32,6 +32,7 @@ import {
   renderNewBuildingPage,
   renderNewUnitPage,
   renderSearchPage,
+  renderTenancyDetailPage,
   renderUnitPage,
 } from '../../src/estate/contract.ts';
 import type {
@@ -538,6 +539,117 @@ const SCREENS: Array<[string, () => string]> = [
       }),
   ],
   ['estate · one unit', () => renderUnitPage(hit, 2, [filed], NAV)],
+  [
+    'estate · one tenancy, blocked',
+    () =>
+      renderTenancyDetailPage({
+        tenancyId: '55555555-5555-4555-8555-555555555555',
+        status: 'DRAFT',
+        startDate: '2026-11-01',
+        endDate: '2027-10-31',
+        unit: hit,
+        people: [
+          {
+            fullName: TENANT_NAME,
+            role: 'PRIMARY_TENANT',
+            isServiceContact: true,
+          },
+          {
+            fullName: GUARANTOR_NAME,
+            role: 'GUARANTOR',
+            isServiceContact: false,
+          },
+        ],
+        documents: [filed],
+        checks: [
+          { rule: 'lease', passed: true },
+          { rule: 'handover_protocol', passed: false },
+          { rule: 'start_reached', passed: false },
+          { rule: 'within_term', passed: true },
+        ],
+        canActivate: false,
+        activatableOn: null,
+        flags: [],
+        csrf: CSRF,
+        nav: NAV,
+      }),
+  ],
+  [
+    'estate · one tenancy, arms on a date',
+    () =>
+      renderTenancyDetailPage({
+        tenancyId: '55555555-5555-4555-8555-555555555555',
+        status: 'DRAFT',
+        startDate: '2026-11-01',
+        endDate: '2027-10-31',
+        unit: hit,
+        people: [
+          {
+            fullName: TENANT_NAME,
+            role: 'PRIMARY_TENANT',
+            isServiceContact: true,
+          },
+        ],
+        documents: [
+          filed,
+          {
+            ...filed,
+            documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab',
+            typeKey: 'handover_protocol',
+            labelHe: 'פרוטוקול מסירה',
+          },
+        ],
+        checks: [
+          { rule: 'lease', passed: true },
+          { rule: 'handover_protocol', passed: true },
+          { rule: 'start_reached', passed: false },
+          { rule: 'within_term', passed: true },
+        ],
+        canActivate: false,
+        activatableOn: '2026-11-01',
+        flags: [],
+        csrf: CSRF,
+        nav: NAV,
+      }),
+  ],
+  [
+    'estate · one tenancy, open',
+    () =>
+      renderTenancyDetailPage({
+        tenancyId: '55555555-5555-4555-8555-555555555555',
+        status: 'DRAFT',
+        startDate: '2026-09-01',
+        endDate: '2027-08-31',
+        unit: hit,
+        people: [
+          {
+            fullName: TENANT_NAME,
+            role: 'PRIMARY_TENANT',
+            isServiceContact: true,
+          },
+        ],
+        documents: [
+          filed,
+          {
+            ...filed,
+            documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab',
+            typeKey: 'handover_protocol',
+            labelHe: 'פרוטוקול מסירה',
+          },
+        ],
+        checks: [
+          { rule: 'lease', passed: true },
+          { rule: 'handover_protocol', passed: true },
+          { rule: 'start_reached', passed: true },
+          { rule: 'within_term', passed: true },
+        ],
+        canActivate: true,
+        activatableOn: null,
+        flags: [],
+        csrf: CSRF,
+        nav: NAV,
+      }),
+  ],
   [
     'estate · one unit, with a promoted date',
     () =>
@@ -1986,11 +2098,12 @@ describe('shared UI tokens', () => {
   // ruling in SPEC.md is that **a confirm screen showing what the document in the operator's hand
   // says is not the same act as putting a household on a list** — so the rule is kept, and the line
   // it turns on is drawn here rather than left to the next screen's author.
-  it('transcribes a name only on a screen about one document', () => {
-    // Reached from one document, about that document, not queryable and not a list. Every other
-    // screen in the registry is reached by browsing the estate, and a name on one of those is a
-    // disclosure. Adding an entry here is a decision about disclosure and belongs in SPEC.md first.
-    const ABOUT_ONE_DOCUMENT = [
+  it('transcribes a name only on a screen about one document or one letting', () => {
+    // Reached from one document or one letting, about that one thing, not queryable and not a list.
+    // Every other screen in the registry is reached by browsing the estate, and a name on one of
+    // those is a disclosure. Adding an entry here is a decision about disclosure and belongs in
+    // SPEC.md first.
+    const MAY_TRANSCRIBE_NAMES = [
       // **Slice 7.3.** The ledger is the screen a person checks the machine's reading on, with the
       // paper in their hand — the case SPEC.md's sixth reconsideration describes exactly. It is
       // reached from one document, it is about that document, and it is neither queryable nor a
@@ -2002,6 +2115,11 @@ describe('shared UI tokens', () => {
       'documents · confirm a lease, an identifier read and two lettings offered',
       'documents · confirm a lease, an existing letting pre-selected',
       'documents · confirm an addendum',
+      // **#107.** One letting, reached by its identifier. The title carries a name so an
+      // administrator can recognise it. Lists still do not.
+      'estate · one tenancy, blocked',
+      'estate · one tenancy, arms on a date',
+      'estate · one tenancy, open',
     ];
     // **The two write receipts were on that list until this case was first run, and came off it.**
     // `renderTenancyWrittenPage` says `partiesWritten` and not who: once the confirm is done the
@@ -2014,7 +2132,7 @@ describe('shared UI tokens', () => {
       const names = [TENANT_NAME, GUARANTOR_NAME].filter((person) =>
         html.includes(person),
       );
-      if (ABOUT_ONE_DOCUMENT.includes(name)) {
+      if (MAY_TRANSCRIBE_NAMES.includes(name)) {
         // Asserted from both sides, for the reason the exemption above is: a screen listed here
         // and transcribing nothing is an entry nobody needs, and an unneeded entry is how the next
         // one gets waved in.
@@ -2024,7 +2142,7 @@ describe('shared UI tokens', () => {
       }
       assert.deepEqual(names, [], name);
     }
-    assert.equal(exercised, ABOUT_ONE_DOCUMENT.length);
+    assert.equal(exercised, MAY_TRANSCRIBE_NAMES.length);
   });
 
   it('withholds a captured identifier, and says how many it withheld', () => {
