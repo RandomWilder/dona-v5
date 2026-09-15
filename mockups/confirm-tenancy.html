@@ -1,0 +1,234 @@
+<!--
+  Painted flow: confirm-tenancy — issue #100, the second of the three screens of #99's flow.
+
+  A redraw of the wired `/documents/:id/tenancy` (src/evidence/internal/views.ts,
+  renderTenancyPage) with one instruction: reduce it to three decisions and let nothing else
+  compete. Which flat. Which letting. Each party's role.
+
+  What the wired screen puts on this page and this paint does not:
+
+    - `מה שנקרא מהמסמך` — the four read values as a fact list. They were approved one screen ago,
+      on the ledger, where they were editable. Reprinting them here invites a second reading of a
+      decision already taken and offers no control to act on it.
+    - The maintenance annex select. It belongs to a new letting; it is a term of the letting and not
+      a decision about which letting this paper is. See the amber block — this is the one thing the
+      paint removes that the wired screen actually writes.
+    - The four cross-check sentences, unless the cross-check failed. A screen that says which flat
+      it matched, when it matched, is explaining a thing nobody asked.
+
+  Nothing here is wired. Every value is invented. No real tenant document, no real identifier.
+-->
+<style>
+  /* Copied from src/evidence/internal/views.ts so the paint reads as the wired screen does. */
+  .form-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); max-width: var(--size-shell-max); }
+  /* `.hint` and not `.form-row .hint`, which is how the wired screen spells it: this paint has no
+     `.form-row` — the three decisions are fieldsets — so the descendant selector matched nothing and
+     every hint on the page rendered at body size and body colour. Caught by review, fixed here,
+     and the wired screen keeps its own spelling because there the ancestor exists. */
+  .hint { color: var(--color-text-muted); font-size: var(--text-sm); margin: 0; }
+  .form-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: center; }
+  .notice {
+    border: var(--size-hairline) solid var(--color-divider-soft);
+    border-radius: var(--radius-3);
+    padding: var(--space-4) var(--space-5);
+    background: var(--color-surface-card);
+  }
+  .notice h2 { margin-block-end: var(--space-2); }
+  .read-facts { display: grid; gap: var(--space-1); margin: var(--space-3) 0 0; }
+  .read-facts p { margin: 0; }
+
+  /* The paint's own furniture. None of this ships as written. */
+  .paint { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-8); }
+  .paint > section { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+  .paint .notice { min-width: 0; }
+  .paint-note {
+    border-inline-start: var(--size-marker) solid var(--color-alert);
+    border-radius: var(--radius-1);
+    background: color-mix(in srgb, var(--color-alert) 7%, var(--color-surface-card));
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--text-base);
+  }
+  .paint-note p { margin: 0 0 var(--space-2); }
+  .paint-note p:last-child { margin-block-end: 0; }
+  .paint-note strong { color: var(--color-alert); }
+
+  /* Three decisions, numbered, each one a fieldset with a legend that is the question. The number
+     is decoration on a `<legend>` and not a list: a form with three questions should read as three
+     questions to a screen reader too. */
+  /* One `<h1>` per page — the paint's own. A painted screen's title is a heading *inside* the paint,
+     so it is an `<h2>` (an `<h3>` on the tenancy page, which nests a state heading above it) wearing
+     the `<h1>` size. Review caught the reverse: an `<h1>` under an `<h2>`, three times over. */
+  .screen-title { font-size: var(--text-xl); margin: 0; }
+  .decision {
+    border: var(--size-hairline) solid var(--color-divider-soft);
+    border-radius: var(--radius-3);
+    background: var(--color-surface-card);
+    padding: var(--space-4) var(--space-5);
+    margin: 0;
+    min-width: 0;
+  }
+  .decision > legend {
+    font-size: var(--text-lg);
+    font-weight: 500;
+    padding-inline: var(--space-2);
+  }
+  .decision .seq { color: var(--color-text-muted); font-size: var(--text-sm); }
+  .choices { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+  .choices .check { align-items: baseline; }
+  .choice-second { color: var(--color-text-muted); font-size: var(--text-sm); }
+  .people { display: grid; gap: var(--space-4); }
+  .person { display: grid; gap: var(--space-2); max-width: var(--size-form-max); }
+  .person-name { font-weight: 500; }
+</style>
+
+<div class="paint">
+
+  <section>
+    <div>
+      <h1>הדמיה — אישור וכתיבה</h1>
+      <p class="lede">
+        גיליון #100, לא מחובר. שרטוט מחדש של <span dir="ltr">/documents/:id/tenancy</span>: שלוש
+        הכרעות, ודבר נוסף אינו מתחרה עליהן.
+      </p>
+    </div>
+    <div class="paint-note">
+      <p><strong>מה ירד מהמסך, ולמה.</strong> הערכים שנקראו אושרו במסך הקודם, אחד־אחד, ושם היו
+        ניתנים לתיקון. הדפסתם כאן מזמינה קריאה שנייה של הכרעה שכבר נחתמה, ואין לצדה כפתור לפעול
+        בו.</p>
+      <p><strong>נספח התחזוקה — הכרעה בפני המנהל.</strong> הוא תנאי של השכרה חדשה, לא שאלה על זהות
+        הנייר. הוא הדבר היחיד שהמסך הקיים <em>כותב</em> והצבע הזה מוריד. שלוש אפשרויות: לנספח ברירת
+        מחדל מן הפנקס, לשאלה רביעית במסך הזה, או למסך ההשכרה שאחריו. הצבע מניח את הראשונה.</p>
+      <p><strong>ארבע שורות ההצלבה</strong> מופיעות רק כשההצלבה נכשלה. מסך שמסביר התאמה שהצליחה
+        מסביר דבר שאיש לא שאל.</p>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────  the screen  ───────────────────────────── -->
+  <section>
+    <div>
+      <a class="back" href="#">← דירה 12A</a>
+      <h2 class="screen-title">דנה כהן · רקפת 12, שוהם · דירה 12A</h2>
+      <p class="lede">חוזה שכירות · <span dir="ltr">2026-11-01</span> — <span dir="ltr">2027-10-31</span></p>
+    </div>
+
+    <form class="form-grid">
+
+      <fieldset class="decision">
+        <legend><span class="seq mono">1 ·</span> לאיזו דירה שייך המסמך</legend>
+        <ul class="choices">
+          <li>
+            <label class="check">
+              <input type="radio" name="unit" value="12a" checked />
+              <span>
+                דירה 12A · רקפת 12, שוהם
+                <span class="choice-second">· הדירה שאליה הוגש המסמך</span>
+              </span>
+            </label>
+          </li>
+          <li>
+            <label class="check">
+              <input type="radio" name="unit" value="other" />
+              <span>דירה אחרת <span class="choice-second">· בחירה מתוך הבניין</span></span>
+            </label>
+          </li>
+        </ul>
+        <p class="hint">
+          הכתובת ומספר הדירה שנקראו מן המסמך תואמים לדירה שאליה הוגש. מסמך שנקרא היטב לעולם אינו
+          נכתב לדירה הלא־נכונה בלי שאדם אישר את הדירה.
+        </p>
+      </fieldset>
+
+      <fieldset class="decision">
+        <legend><span class="seq mono">2 ·</span> לאיזו השכרה שייך המסמך</legend>
+        <ul class="choices">
+          <li>
+            <label class="check">
+              <input type="radio" name="attach_tenancy" value="new" checked />
+              <span>השכרה חדשה</span>
+            </label>
+          </li>
+          <li>
+            <label class="check">
+              <input type="radio" name="attach_tenancy" value="t-2025" />
+              <span>
+                <span dir="ltr">2025-11-01</span> — <span dir="ltr">2026-10-31</span> · הסתיים
+                <span class="choice-second">· התאמה לפי ת.ז.: <span dir="ltr">1</span></span>
+              </span>
+            </label>
+          </li>
+        </ul>
+        <p class="hint">
+          אין השכרה שמתחילה בתאריך שבמסמך, ולכן ברירת המחדל היא השכרה חדשה. צירוף להשכרה קיימת
+          אינו משנה תאריכים.
+        </p>
+      </fieldset>
+
+      <fieldset class="decision">
+        <legend><span class="seq mono">3 ·</span> מה תפקידו של כל אדם</legend>
+        <div class="people">
+          <div class="person">
+            <label>
+              <span class="person-name">דנה כהן</span>
+              <select name="role-1">
+                <option value="PRIMARY_TENANT" selected>שוכר ראשי</option>
+                <option value="CO_TENANT">שוכר נוסף</option>
+                <option value="GUARANTOR">ערב</option>
+                <option value="OCCUPANT">דייר</option>
+              </select>
+            </label>
+            <p class="hint">ת.ז. נקראה מהמסמך ותשויך לאדם הזה. הערך עצמו אינו מוצג כאן.</p>
+          </div>
+          <div class="person">
+            <label>
+              <span class="person-name">יואב כהן</span>
+              <select name="role-2">
+                <option value="PRIMARY_TENANT">שוכר ראשי</option>
+                <option value="CO_TENANT" selected>שוכר נוסף</option>
+                <option value="GUARANTOR">ערב</option>
+                <option value="OCCUPANT">דייר</option>
+              </select>
+            </label>
+            <p class="hint">לא שויכה ת.ז. לאדם הזה.</p>
+          </div>
+          <div class="person">
+            <label>
+              <span class="person-name">מרים לוי</span>
+              <select name="role-3">
+                <option value="PRIMARY_TENANT">שוכר ראשי</option>
+                <option value="CO_TENANT">שוכר נוסף</option>
+                <option value="GUARANTOR" selected>ערב</option>
+                <option value="OCCUPANT">דייר</option>
+              </select>
+            </label>
+            <p class="hint">ערב אינו איש קשר לשירות. מי שערב לחוזה לא ייקרא כמי שגר בדירה.</p>
+          </div>
+        </div>
+      </fieldset>
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="button">אישור וכתיבה</button>
+        <a href="#">ביטול</a>
+      </div>
+      <p class="hint">ההשכרה תיכתב כטיוטה. הפעלה היא לחיצה של אדם, במסך ההשכרה.</p>
+    </form>
+  </section>
+
+  <!-- ─────────────────────  the same screen, cross-check failed  ───────────────────── -->
+  <section>
+    <div>
+      <h2>אותו מסך, כשההצלבה נכשלה</h2>
+      <p class="lede">כאן — ורק כאן — מופיעות שורות ההצלבה. משפט אחד לכל סיבה.</p>
+    </div>
+    <section class="notice">
+      <div class="read-facts">
+        <p>מספר הדירה שנקרא מהמסמך אינו מספר הדירה שאליה הוגש.</p>
+        <p>לא נקראה כתובת מן המסמך.</p>
+        <p class="lede"><strong>לא נכתוב שוכרים.</strong></p>
+      </div>
+      <div class="form-actions">
+        <a href="#">חזרה לדירה</a>
+      </div>
+    </section>
+  </section>
+
+</div>

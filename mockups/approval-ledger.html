@@ -1,0 +1,300 @@
+<!--
+  Painted flow: approval-ledger — issue #100, the first of the three screens of #99's flow.
+
+  This is a redraw of the wired `/documents/:id/fields` (src/evidence/internal/views.ts,
+  renderFieldsPage), not a new screen. Three things change and they are the reason for the paint:
+
+    1. The table leads. The explanatory prose that dominates the screen today is still here and is
+       still true, and it is behind a `<details>` — open it and it reads exactly as it reads now.
+    2. Every value row carries the page it was read from, as a column. That is what replaces the
+       word-box overlay #102 deletes: the administrator has the paper in front of them, and a page
+       number is the cheap half of what the overlay was for.
+    3. Amounts are ordinary rows. Foundation rule 2 has not been retired yet — #101 does that — so
+       these four rows are paint and nothing more. They are here because the point of painting is to
+       see the screen the rule's removal produces before the rule is removed.
+
+  Nothing here is wired. Every value is invented. No real tenant document, no real identifier.
+  The amber blocks are decisions, not screens.
+-->
+<style>
+  /* Copied from src/evidence/internal/views.ts so the paint reads as the wired screen does.
+     `renderMockup` passes no module styles — a paint carries its own. */
+  .form-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: center; }
+  .row-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+  /* **The paint's one change to the action cell.** The token sheet gives every input `width: 100%`,
+     so the wired ledger's edit box takes the whole cell and pushes `אישור` onto a second line —
+     two rows of furniture per value, on a table whose whole argument is that it is scannable. Here
+     the box flexes and the button sits beside it, and the cell wraps back to two lines on a phone.
+     This belongs in the wired screen when #109 redraws it. */
+  .row-actions input { inline-size: auto; flex: 1 1 7rem; min-inline-size: 5rem; }
+  .mini {
+    min-height: var(--size-control-ops);
+    padding-inline: var(--space-3);
+    font-size: var(--text-sm);
+  }
+  .quality.is-low { color: var(--color-alert); font-weight: 600; }
+  .second { color: var(--color-text-muted); font-size: var(--text-xs); }
+
+  /* The paint's own furniture. None of this ships as written. */
+  .paint { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-8); }
+  .paint > section { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+  .paint-note {
+    border-inline-start: var(--size-marker) solid var(--color-alert);
+    border-radius: var(--radius-1);
+    background: color-mix(in srgb, var(--color-alert) 7%, var(--color-surface-card));
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--text-base);
+  }
+  .paint-note p { margin: 0 0 var(--space-2); }
+  .paint-note p:last-child { margin-block-end: 0; }
+  .paint-note strong { color: var(--color-alert); }
+
+  /* The head of the screen: one line of state, and the verdict in it rather than above it. */
+  .ledger-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+    align-items: center;
+    margin-block-start: var(--space-2);
+  }
+  /* One `<h1>` per page — the paint's own. A painted screen's title is a heading *inside* the paint,
+     so it is an `<h2>` (an `<h3>` on the tenancy page, which nests a state heading above it) wearing
+     the `<h1>` size. Review caught the reverse: an `<h1>` under an `<h2>`, three times over. */
+  .screen-title { font-size: var(--text-xl); margin: 0; }
+  .verdict { background: var(--color-surface); gap: var(--space-2); }
+  .verdict.is-low { color: var(--color-alert); }
+
+
+  /* The prose, collapsed. `<details>` is markup and not a script: the screen works with scripting
+     switched off, which is the rule this console has held since 3.3. */
+  .prose-fold {
+    border: var(--size-hairline) solid var(--color-divider-soft);
+    border-radius: var(--radius-3);
+    background: var(--color-surface);
+    padding: var(--space-3) var(--space-4);
+  }
+  .prose-fold > summary {
+    cursor: pointer;
+    min-height: var(--size-control-ops);
+    display: flex;
+    align-items: center;
+    color: var(--color-accent-ink);
+    font-size: var(--text-base);
+  }
+  .prose-fold p { color: var(--color-text-muted); font-size: var(--text-sm); margin: var(--space-3) 0 0; }
+  /* The face comes from `.grid-table .key` on the cell, never from here: a font-family typed into
+     a screen is what tests/ui/tokens.test.ts exists to refuse. This adds only the tracking. */
+  .masked { letter-spacing: 0.12em; }
+</style>
+
+<div class="paint">
+
+  <section>
+    <div>
+      <h1>הדמיה — פנקס האישור</h1>
+      <p class="lede">
+        גיליון #100, לא מחובר. שרטוט מחדש של <span dir="ltr">/documents/:id/fields</span>: הטבלה
+        בראש הדף, ההסבר מקופל, לכל ערך מספר עמוד, והסכומים שורות רגילות ככל השאר.
+      </p>
+    </div>
+    <div class="paint-note">
+      <p><strong>מה משתנה ביחס למסך שקיים היום.</strong> הטבלה כבר קיימת ונשארת. שלושה שינויים:
+        ההסבר יורד לתוך מקפל, נוסף טור <strong>עמוד</strong> לכל שורה, ונוספות ארבע שורות
+        סכום.</p>
+      <p>שורות הסכום כאן הן <strong>צבע בלבד</strong>. כלל היסוד השני עדיין בתוקף, וגיליון #101 הוא
+        שמבטל אותו. צובעים כדי לראות את המסך שהביטול מייצר לפני שמבטלים.</p>
+      <p>טור העמוד מחליף את שכבת המילים על הדף, שגיליון #102 מוחק. מי שמאשר מחזיק את הנייר
+        בידו; מספר עמוד עושה את אותה עבודה בלי לרנדר דף.</p>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────  the screen  ───────────────────────────── -->
+  <section>
+    <div>
+      <a class="back" href="#">← דירה 12A</a>
+      <h2 class="screen-title">מה נקרא מן המסמך</h2>
+      <div class="ledger-head">
+        <span>חוזה שכירות · ההצהרה שתקפה ל־<span dir="ltr">2026-09-15</span></span>
+        <span class="chip verdict">איכות הקריאה: טובה</span>
+        <span class="chip verdict is-low"><span dir="ltr">3</span> שורות לבדיקה אישית</span>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="grid-table">
+        <thead>
+          <tr>
+            <th>שדה</th>
+            <th>ערך שנקרא</th>
+            <th>עמוד</th>
+            <th>איכות הקריאה</th>
+            <th>פעולה</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="value">כתובת המושכר</td>
+            <td>רקפת 12, שוהם</td>
+            <td class="key"><span dir="ltr">1</span></td>
+            <td class="muted">נקרא מטקסט, לא נמדד</td>
+            <td class="row-actions">
+              <input class="mini" value="רקפת 12, שוהם" aria-label="הערך המאושר לכתובת המושכר" />
+              <button class="btn btn-primary mini" type="button">אישור</button>
+            </td>
+          </tr>
+          <tr>
+            <td class="value">דמי השכירות</td>
+            <td><span dir="ltr">5200</span> <span class="second">· ₪</span></td>
+            <td class="key"><span dir="ltr">3</span></td>
+            <td class="key quality is-low"><span dir="ltr">71%</span></td>
+            <td class="row-actions">
+              <input class="mini" value="5200" aria-label="הערך המאושר לדמי השכירות" />
+              <button class="btn btn-primary mini" type="button">אישור</button>
+            </td>
+          </tr>
+          <tr>
+            <td class="value">פיקדון</td>
+            <td><span dir="ltr">10400</span> <span class="second">· ₪</span></td>
+            <td class="key"><span dir="ltr">3</span></td>
+            <td class="key quality is-low"><span dir="ltr">68%</span></td>
+            <td class="row-actions">
+              <input class="mini" value="10400" aria-label="הערך המאושר לפיקדון" />
+              <button class="btn btn-primary mini" type="button">אישור</button>
+            </td>
+          </tr>
+          <tr>
+            <td class="value">ת.ז. השוכר</td>
+            <td class="key masked"><span dir="ltr">•••••••••</span></td>
+            <td class="key"><span dir="ltr">1</span></td>
+            <td class="key quality"><span dir="ltr">94%</span></td>
+            <td class="row-actions">
+              <button class="btn btn-secondary mini" type="button">גילוי</button>
+            </td>
+          </tr>
+          <tr>
+            <td class="value">שם השוכר</td>
+            <td>דנה כהן</td>
+            <td class="key"><span dir="ltr">1</span></td>
+            <td class="key quality"><span dir="ltr">96%</span></td>
+            <td class="row-actions">
+              <input class="mini" value="דנה כהן" aria-label="הערך המאושר לשם השוכר" />
+              <button class="btn btn-primary mini" type="button">אישור</button>
+            </td>
+          </tr>
+          <tr>
+            <td class="value">מספר הדירה</td>
+            <td>12A</td>
+            <td class="key"><span dir="ltr">1</span></td>
+            <td class="key quality"><span dir="ltr">95%</span></td>
+            <td class="row-actions">
+              <input class="mini" value="12A" aria-label="הערך המאושר למספר הדירה" />
+              <button class="btn btn-primary mini" type="button">אישור</button>
+            </td>
+          </tr>
+          <tr>
+            <td class="value">מטבע דמי השכירות</td>
+            <td><span dir="ltr">ILS</span></td>
+            <td class="key"><span dir="ltr">3</span></td>
+            <td class="key quality"><span dir="ltr">92%</span></td>
+            <td class="row-actions">
+              <input class="mini" value="ILS" aria-label="הערך המאושר למטבע דמי השכירות" />
+              <button class="btn btn-primary mini" type="button">אישור</button>
+            </td>
+          </tr>
+          <tr>
+            <td class="value">מטבע הפיקדון</td>
+            <td><span dir="ltr">ILS</span></td>
+            <td class="key"><span dir="ltr">3</span></td>
+            <td class="key quality"><span dir="ltr">92%</span></td>
+            <td class="row-actions">
+              <input class="mini" value="ILS" aria-label="הערך המאושר למטבע הפיקדון" />
+              <button class="btn btn-primary mini" type="button">אישור</button>
+            </td>
+          </tr>
+          <tr>
+            <td class="value">תחילת תקופת השכירות</td>
+            <td>
+              <span class="value"><span dir="ltr">2026-11-01</span></span>
+              <span class="second">· נקרא: <span dir="ltr">2026-11-07</span></span>
+            </td>
+            <td class="key"><span dir="ltr">2</span></td>
+            <td class="key quality"><span dir="ltr">89%</span></td>
+            <td class="muted">אושר</td>
+          </tr>
+          <tr>
+            <td class="value">סיום תקופת השכירות</td>
+            <td><span dir="ltr">2027-10-31</span></td>
+            <td class="key"><span dir="ltr">2</span></td>
+            <td class="key quality"><span dir="ltr">91%</span></td>
+            <td class="muted">אושר</td>
+          </tr>
+          <tr>
+            <td class="value muted">שם הערב</td>
+            <td class="muted">לא נקרא — שדה רשות</td>
+            <td class="muted">—</td>
+            <td class="muted">—</td>
+            <td class="muted">—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="button">אישור כל מה שלא סומן</button>
+      <span class="chip"><span dir="ltr">3</span> שורות לבדיקה אישית</span>
+    </div>
+
+    <!-- Slice 7.4's promotion path, kept. It is not part of what #100 redraws, and a paint that
+         quietly dropped it would hand #109 a ledger that lost a control nobody decided to lose. -->
+    <div class="form-actions">
+      <button class="btn btn-secondary" type="button">קדם · תחילת תקופת השכירות</button>
+      <button class="btn btn-secondary" type="button">קדם · סיום תקופת השכירות</button>
+    </div>
+
+    <details class="prose-fold">
+      <summary>מה בדיוק עושה «אישור», ומה ההבדל בינו לבין «קידום»</summary>
+      <p>
+        «אישור» אינו «קידום». אישור אומר שהקריאה נכונה ונשמר על שורת המסמך; קידום מעתיק ערך לעמודה
+        מוקלדת של ההשכרה, ויש לו יעד רק לשני התאריכים. ערך שנקרא לעולם אינו נמחק — תיקון נכתב לצדו,
+        וההפרש בין שני הטורים הוא מדידת הדיוק של הקורא.
+      </p>
+      <p>
+        <strong>קידום מחייב אישור תחילה</strong>, והערך שמועתק הוא הערך שאושר: שורה שלא נחתמה אינה
+        מוצגת כאן לקידום. שדה חובה שלא נמצא על הדף הוא תוצאה ולא שגיאה.
+      </p>
+      <p>
+        ערך מזהה אינו מוצג עד בקשת גילוי, וכל גילוי נרשם. חתימה על ערך מוסתר היא רישום כוזב, ולכן
+        השורה המוסתרת נושאת כפתור גילוי ולא כפתור אישור.
+      </p>
+    </details>
+
+    <div class="paint-note">
+      <p><strong>סדר השורות לא השתנה.</strong> מסומן תחילה, ובתוך המסומן — מה שלא נמדד בראש. זה מה
+        שמאפשר ל«אישור כל מה שלא סומן» להיות בטוח ללחיצה, והפנקס הקיים כבר עושה זאת.</p>
+      <p><strong>מה שירד מן המסך.</strong> הקישור מכל ערך אל «מילים על הדף» — במקומו מספר עמוד.
+        גיליון #102 מוחק את השכבה עצמה, ולכן אין לאן לקשר. הקידום נשאר כפי שהוא: גיליון #100 משרטט
+        מחדש את הטבלה ואת ההסבר, ולא נוגע בנתיב הקידום של 7.4.</p>
+    </div>
+  </section>
+
+  <!-- ─────────  the same screen, when the confidence signal will not carry it  ───────── -->
+  <section>
+    <div>
+      <h2>אותו מסך, כשאי־אפשר לאשר בלחיצה אחת</h2>
+      <p class="lede">
+        «אישור כל מה שלא סומן» בטוח רק כשהסימון כן. מסמך שנקרא משכבת הטקסט מגיע בלי ציון כלל, ואז
+        אין «מה שלא סומן» — הכול טעון עין.
+      </p>
+    </div>
+    <div class="form-actions">
+      <span class="chip verdict is-low">איכות הקריאה: לא נמדדה</span>
+      <span class="chip"><span dir="ltr">10</span> שורות לבדיקה אישית</span>
+    </div>
+    <div class="paint-note">
+      <p><strong>הכפתור פשוט אינו מצויר.</strong> לא כפתור כהה ולא כפתור שמסרב — כפתור שהלחיצה עליו
+        אינה חוקית לעולם הוא פקד שכל תפקידו להיכשל. כאן יש שורות, ולכל שורה כפתור אישור משלה.</p>
+      <p>זה מה שגיליון #109 יורש: הפעולה הקבוצתית נמנעת כשהאות אינו ישר, ולא מוצגת ומסרבת.</p>
+    </div>
+  </section>
+
+</div>
