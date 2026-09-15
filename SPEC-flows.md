@@ -296,9 +296,12 @@ A3 could never land. Zero guarantors remains a legal insert.
 **The query, not a status.** Completeness is derived on each load. The first rule id is `guarantor`.
 A tenancy is incomplete when it is `DRAFT` or `ACTIVE`, it has a `document_link` of
 `entity_type = 'TENANCY'` (the paper path A2/A3 writes; register lettings with no such link stay
-off the queue), it has zero `tenancy_party` rows with `role = 'GUARANTOR'`, and it has no exception
-row for that rule. What is missing is the rule id; the Hebrew on the screen is ערב. A second
-rule later is another predicate on the same query — not a column on `tenancy`.
+off the queue), and at least one named rule misses. The guarantor rule still misses when there is
+zero `tenancy_party` rows with `role = 'GUARANTOR'` and no exception row for that rule. **#108
+joins the activation gate's failures onto the same query**, as the gate's own rule ids — not as
+prose, not as a count, and not as a second list. A letting whose gate passes is not listed for the
+gate. What is missing is the rule id; the Hebrew on the screen is the same wording the tenancy
+page already uses for that id. Extra predicates are not a column on `tenancy`.
 **Exception:** a row in `tenancy_completeness_exception`, keyed `(tenancy_id, rule)`. Recording it
 clears the queue the way an addendum that writes a `GUARANTOR` does. A second record of the same
 pair is a no-op. It is not `tenancy.complete`.
@@ -354,8 +357,8 @@ and not before.
 **After activation.** An expired tenancy is `ENDED` and is not reopened — the clock does not
 activate anything, and `activateTenancy` will not move an `ENDED` row. A required document whose
 `valid_to` has passed raises a **flag** and never moves `tenancy.status` — the status keeps
-meaning what it says while the lapse stays visible. Gate misses joining the incomplete-tenancy
-queue are #108's, not this flow's.
+meaning what it says while the lapse stays visible. Gate misses appear on A4's existing queue
+(#108), each as the gate's named rule.
 
 ### T1 — A tenant asks a question
 

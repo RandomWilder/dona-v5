@@ -79,7 +79,7 @@ export function renderIndexPage(screen: IndexScreen): string {
         ${marker('is-alert')}
         <a class="card-link" href="/estate/incomplete">
           <p class="card-title"><span>חוזים לא שלמים</span></p>
-          <p class="lede">טיוטות וחוזים פעילים שחסר בהם ערב, על המסמך שהיה אמור לשאת אותו.</p>
+          <p class="lede">טיוטות וחוזים פעילים שממתינים להשלמה, על המסמך שכבר על ההשכרה.</p>
         </a>
       </article>
       ${

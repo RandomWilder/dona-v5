@@ -193,7 +193,12 @@ by tripping the guard rather than by anticipating it.
   portfolio question (S1 / A4), not "who is in this unit today". It takes no phone number, returns
   no party and no name, and carries neither isolation predicate. Completeness is a query over saved
   rows plus an exception table — never a NOT NULL on `tenancy_party` and never a status column on
-  `tenancy`. Slice 5.6 exports `expireDueTenancies` beside them. Slice 5.7 exports
+  `tenancy`. **#108:** the same query also surfaces every activation-gate miss as a named rule,
+  using the gate's own identifiers (`lease`, `handover_protocol`, `start_reached`, `within_term`)
+  and never a second copy of those predicates. The clock and the document reader are injected the
+  way the gate already takes them. A tenancy whose every gate check passed is not listed for the
+  gate; the guarantor rule remains its own row. Only misses appear. The exception table still
+  excepts `guarantor` only. Slice 5.6 exports `expireDueTenancies` beside them. Slice 5.7 exports
   `upsertObligationType`, `createObligation`, `getObligation` and `listObligationsForTenancy`.
   Slice 5.8 adds `listObligationTypes`. #106 exports `activationGate` and `activateTenancy`.
   `REQUIRED_FOR_ACTIVATION` is `['lease', 'handover_protocol']` — one constant, the only list. The
@@ -240,7 +245,8 @@ by tripping the guard rather than by anticipating it.
   an identifier and the caller writes `evidence.match_identifier` for it** (SPEC.md, Security
   defaults); this module writes no audit line, because it does not know who asked.
 - **`tenancy_completeness_exception` (slice 4.8, `src/kernel/migrations/0020_tenancy_completeness.sql`).**
-  `(tenancy_id, rule)` unique. `rule` is `guarantor` today. `at` comes from the injected clock; no
+  `(tenancy_id, rule)` unique. `rule` is `guarantor` today — gate misses are not excepted; they
+  clear when the gate passes. `at` comes from the injected clock; no
   `DEFAULT now()`. `actor` is `-- pii`, same standing as `tenancy_event.actor` until week 5 has
   staff. `reason` is required text, validated at the POST. A second insert of the same pair is a
   no-op. There is no completeness column and no CHECK that a tenancy has a guarantor.

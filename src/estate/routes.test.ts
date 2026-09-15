@@ -236,7 +236,6 @@ describe('estate · the routes', () => {
       await t.test(
         'a document-backed draft with no ערב is in the incomplete queue, and an exception clears it',
         async () => {
-          const typeId = newId();
           const documentId = newId();
           const tenancyId = newId();
           const partyId = newId();
@@ -260,30 +259,37 @@ describe('estate · the routes', () => {
              VALUES ($1, $2, 'PRIMARY_TENANT', true)`,
             [tenancyId, partyId],
           );
-          await pool.query(
-            `INSERT INTO document_type (
-               document_type_id, type_key, label_he, label_en, verification_terms, is_active
-             ) VALUES ($1, $2, 'חוזה שכירות', NULL, NULL, true)`,
-            [typeId, `lease-routes-48-${typeId.slice(24)}`],
-          );
-          await pool.query(
-            `INSERT INTO document (
-               document_id, document_type_id, storage_uri, file_hash,
-               ingested_at, verification_verdict
-             ) VALUES ($1, $2, $3, $4, $5, 'unguarded')`,
-            [
-              documentId,
-              typeId,
-              `gs://x/${documentId}.pdf`,
-              `hash-${documentId}`,
-              new Date('2026-09-08T12:00:00Z'),
-            ],
-          );
-          await pool.query(
-            `INSERT INTO document_link (document_id, entity_type, entity_id, link_role)
-             VALUES ($1, 'TENANCY', $2, 'EVIDENCE')`,
-            [documentId, tenancyId],
-          );
+          for (const [typeKey, label, id] of [
+            ['lease', 'חוזה שכירות', documentId],
+            ['handover_protocol', 'פרוטוקול מסירה', newId()],
+          ] as const) {
+            const type = await pool.query<{ document_type_id: string }>(
+              `INSERT INTO document_type (
+                 document_type_id, type_key, label_he, label_en, verification_terms, is_active
+               ) VALUES ($1, $2, $3, NULL, NULL, true)
+               ON CONFLICT (type_key) DO UPDATE SET label_he = EXCLUDED.label_he
+               RETURNING document_type_id`,
+              [newId(), typeKey, label],
+            );
+            await pool.query(
+              `INSERT INTO document (
+                 document_id, document_type_id, storage_uri, file_hash,
+                 ingested_at, verification_verdict
+               ) VALUES ($1, $2, $3, $4, $5, 'unguarded')`,
+              [
+                id,
+                type.rows[0]?.document_type_id,
+                `gs://x/${id}.pdf`,
+                `hash-${id}`,
+                new Date('2026-09-08T12:00:00Z'),
+              ],
+            );
+            await pool.query(
+              `INSERT INTO document_link (document_id, entity_type, entity_id, link_role)
+               VALUES ($1, 'TENANCY', $2, 'EVIDENCE')`,
+              [id, tenancyId],
+            );
+          }
 
           const listed = await client.inject({
             method: 'GET',

@@ -14,9 +14,10 @@ workbook is right and this file is a bug.
   same migration so R11 has a table to point at. Slice 3.6 added a thin unit page and grew search by
   a documents half; both list what is filed, never who signed it. Slice 4.8 added
   `GET /estate/incomplete`, the A4 queue: a derived list of document-backed drafts and live
-  lettings missing an ערב. The query and the exception write live in tenancy; estate renders them
-  through `EstateDeps`, the same injection `listLinkedDocuments` already uses, so this module
-  still does not import tenancy. **Slice 6.1 added this module's first write route** — `GET
+  lettings that miss a named completeness rule — the original ערב rule, and from #108 each
+  activation-gate miss under the gate's own identifier. The query and the exception write live in
+  tenancy; estate renders them through `EstateDeps`, the same injection `listLinkedDocuments`
+  already uses, so this module still does not import tenancy. There is no second queue. **Slice 6.1 added this module's first write route** — `GET
   /estate/buildings/new` and `POST /estate/buildings`, flow A11, behind the new `estate.write`
   permission — and it writes through `importEstate` rather than through a command of its own.
   **Slice 6.2 added the second**, flow A13: `GET /estate/buildings/:buildingId/units/new` and
@@ -359,8 +360,9 @@ The change log never comes from an estate query of `tenancy_event`.
 
 **`GET /estate/incomplete` is A4's queue (slice 4.8).** Same standing as `/estate/expiring`: a
 portfolio operations list, a unit and a date and a missing-rule label, and no party. Completeness
-is tenancy's query; the POST that records an exception is tenancy's write; both are injected. The
-root index and the rail gain a fourth link. The index lived here until **5.2 moved it to
+is tenancy's query; the POST that records an exception is tenancy's write (guarantor only); both
+are injected. **#108:** each gate miss is a row on this same screen, labelled with the gate's
+rule, never a second list. The root index and the rail gain a fourth link. The index lived here until **5.2 moved it to
 `src/index-page.ts`**, on the schedule 2.6 set for it. **5.2b took the remaining private nav with
 it**; **5.2c did not give it back**. This module's screens receive the composition root's chrome.
 

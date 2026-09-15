@@ -1022,6 +1022,18 @@ const TENANCY_STATUS: Record<string, string> = {
   TERMINATED_EARLY: 'הופסק',
 };
 
+const GATE_LABEL: Record<string, string> = {
+  lease: 'חוזה שכירות מאושר',
+  handover_protocol: 'פרוטוקול מסירה מאושר',
+  start_reached: 'היום אינו לפני תחילת החוזה',
+  within_term: 'היום אינו אחרי סיום החוזה',
+};
+
+const DOC_LABEL: Record<string, string> = {
+  lease: 'חוזה שכירות',
+  handover_protocol: 'פרוטוקול מסירה',
+};
+
 export interface IncompleteTenancyRow {
   tenancy_id: string;
   unit_id: string;
@@ -1038,9 +1050,10 @@ export interface IncompleteTenancyRow {
 }
 
 /**
- * A4 — document-backed drafts and live lettings missing an ערב.
+ * A4 — document-backed drafts and live lettings that miss a named rule.
  *
  * A unit, dates, a missing-rule label and the document the rule was expected in. No party.
+ * Gate-miss labels are the same wording as the tenancy page, so the two screens cannot disagree.
  */
 export function renderIncompletePage(
   rows: readonly IncompleteTenancyRow[],
@@ -1059,7 +1072,7 @@ export function renderIncompletePage(
     <div>
       <h1>חוזים לא שלמים</h1>
       <p class="lede">
-        ${ltr(rows.length)} חוזים בתיק שחסר בהם ערב. נספח משלים, או רישום חריג.
+        ${ltr(rows.length)} חוזים בתיק שממתינים להשלמה. מסמך משלים, או רישום חריג לערב.
       </p>
     </div>
     ${
@@ -1068,7 +1081,9 @@ export function renderIncompletePage(
         : h`<div class="row-list">
             ${rows.map((row) => {
               const missing =
-                row.missing === 'guarantor' ? 'חסר ערב' : row.missing;
+                row.missing === 'guarantor'
+                  ? 'חסר ערב'
+                  : (GATE_LABEL[row.missing] ?? row.missing);
               return h`<article class="row-card queue-card">
                 ${marker('ALERT')}
                 <p class="card-title">
@@ -1087,7 +1102,9 @@ export function renderIncompletePage(
                   המסמך:
                   <a href="/documents/${row.expected_document_id}/read">${row.expected_document_label}</a>
                 </p>
-                <form
+                ${
+                  row.missing === 'guarantor'
+                    ? h`<form
                   method="post"
                   action="/estate/incomplete/${row.tenancy_id}/exception"
                 >
@@ -1102,7 +1119,9 @@ export function renderIncompletePage(
                     placeholder="סיבת החריג"
                   />
                   <button class="btn btn-secondary" type="submit">רשום חריג</button>
-                </form>
+                </form>`
+                    : ''
+                }
               </article>`;
             })}
           </div>`
@@ -1115,18 +1134,6 @@ const ROLE_LABEL: Record<string, string> = {
   CO_TENANT: 'שוכר נוסף',
   GUARANTOR: 'ערב',
   OCCUPANT: 'דייר',
-};
-
-const GATE_LABEL: Record<string, string> = {
-  lease: 'חוזה שכירות מאושר',
-  handover_protocol: 'פרוטוקול מסירה מאושר',
-  start_reached: 'היום אינו לפני תחילת החוזה',
-  within_term: 'היום אינו אחרי סיום החוזה',
-};
-
-const DOC_LABEL: Record<string, string> = {
-  lease: 'חוזה שכירות',
-  handover_protocol: 'פרוטוקול מסירה',
 };
 
 export interface TenancyPersonView {

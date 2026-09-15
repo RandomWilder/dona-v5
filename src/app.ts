@@ -440,7 +440,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     listPromotedFieldsForUnit,
     listTenancyEvents,
     expireDueTenancies,
-    listIncompleteTenancies,
+    listIncompleteTenancies: (db) =>
+      listIncompleteTenancies(db, clock, listTenancyDocumentFacts),
     recordCompletenessException,
     getTenancy,
     listTenancyParties,

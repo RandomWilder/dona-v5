@@ -4,7 +4,8 @@
 // Write commands, two reads, the completeness query, the change log, the clock close, and from
 // 5.7 Obligation / ObligationType (`listObligationTypes` at 5.8 for the settings screen). Who is in a unit *today* is still `src/scope/`'s answer;
 // `listUnitTenancies` answers which lettings a flat has; `listIncompleteTenancies` answers which
-// of those are missing an ערב; `listTenancyEvents` answers what changed on those lettings. None
+// of those miss a named completeness rule (ערב, and from #108 each activation-gate miss);
+// `listTenancyEvents` answers what changed on those lettings. None
 // takes a phone.
 // SPEC-tenancy.md sets out the difference, because the line between the two is the module boundary.
 
