@@ -340,6 +340,20 @@ unit page calls `expireDueTenancies` (injected from tenancy) against the clock b
 log, so opening the sheet is what closes a lease whose date has passed — not a hidden job.
 The workbook's other unit-sheet panels (tenancy, obligations, assets) wait.
 
+**#114 is the office retrieval panel on that page only.** A signed-in holder of `documents.read`
+(ADMIN, OPERATOR, VIEWER — no new permission) sees a split pane on the visual left of the sheet:
+the Unit keeps the remaining width; the thread fills the pane's height with the composer at the
+bottom; a control collapses the pane to a rail and opens it again. Same checkbox-and-label
+pattern as the ops nav — no client script. On a narrow viewport the pane sits under the sheet
+and collapses to a bar. They ask in Hebrew; the post runs evidence's office-turn command bound to
+this Unit and redirects back to the same GET, which paints that account's thread oldest-first.
+Cited answers name the Document and the page, with a link through to the read overlay. A refusal
+is the frozen Hebrew sentence, with no citations. Clear deletes only this account's thread for
+this Unit. CSRF and a session are required on both posts. The GET itself stays `estate.read`;
+asking and clearing are `documents.read`. Building, all-buildings, search, expiring, incomplete,
+letting sheet, documents, settings and queues do not render the panel and do not keep a leftover
+bound.
+
 **`GET /estate/tenancies/:tenancyId` is A5's sheet (#107).** The first screen that shows one
 letting: the title an administrator recognises it by (tenant name, address, apartment number),
 status, the lease's dates, the documents bound to the letting, what the gate still misses, every

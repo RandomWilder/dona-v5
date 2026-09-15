@@ -12,6 +12,8 @@ import { describe, it } from 'node:test';
 import { asOperator, signIn, signOutAll } from '../../tests/support/session.ts';
 import { buildApp } from '../app.ts';
 import { fixedClock, systemClock } from '../kernel/clock.ts';
+import { embeddingColumnDimensions } from '../kernel/config.ts';
+import { createFakeEmbedder } from '../kernel/embeddings.ts';
 import { newId } from '../kernel/ids.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
 import type { EstatePlan } from './contract.ts';
@@ -124,6 +126,7 @@ describe('estate · the routes', () => {
             response.body,
             new RegExp(`/estate/buildings/${buildingId}`),
           );
+          assert.doesNotMatch(response.body, /data-office-retrieval="unit"/);
         },
       );
 
@@ -137,6 +140,7 @@ describe('estate · the routes', () => {
         assert.match(response.body, /ממ״ד/);
         assert.match(response.body, new RegExp(`/estate/units/${unitId}`));
         assert.match(response.body, /מסמכי הבניין/);
+        assert.doesNotMatch(response.body, /data-office-retrieval="unit"/);
       });
 
       await t.test(
@@ -155,6 +159,8 @@ describe('estate · the routes', () => {
             response.body,
             new RegExp(`/documents/new\\?unit=${unitId}`),
           );
+          assert.match(response.body, /data-office-retrieval="unit"/);
+          assert.match(response.body, /שאלות על המסמכים/);
         },
       );
 
@@ -195,6 +201,7 @@ describe('estate · the routes', () => {
           /text\/html; charset=utf-8/,
         );
         assert.match(found.body, /בניין בדיקה/);
+        assert.doesNotMatch(found.body, /data-office-retrieval="unit"/);
       });
 
       await t.test('an empty search asks rather than lists', async () => {
@@ -204,6 +211,7 @@ describe('estate · the routes', () => {
         });
         assert.equal(empty.statusCode, 200);
         assert.match(empty.body, /חפשו לפי כתובת/);
+        assert.doesNotMatch(empty.body, /data-office-retrieval="unit"/);
       });
 
       await t.test(
@@ -230,6 +238,7 @@ describe('estate · the routes', () => {
           // No count is asserted. This query is whole-portfolio by design, so its number belongs to
           // whatever else is in the database (1.11, learned in CI within the hour).
           assert.match(ending.body, /חוזים מסתיימים/);
+          assert.doesNotMatch(ending.body, /data-office-retrieval="unit"/);
         },
       );
 
@@ -298,6 +307,13 @@ describe('estate · the routes', () => {
           assert.equal(listed.statusCode, 200);
           assert.match(listed.body, /חוזים לא שלמים/);
           assert.match(listed.body, /חסר ערב/);
+          assert.doesNotMatch(listed.body, /data-office-retrieval="unit"/);
+          const letting = await client.inject({
+            method: 'GET',
+            url: `/estate/tenancies/${tenancyId}`,
+          });
+          assert.equal(letting.statusCode, 200);
+          assert.doesNotMatch(letting.body, /data-office-retrieval="unit"/);
           // **Slice 5.2, and the defect this case now owns.** `renderIncompletePage` took its token
           // with a default of `''`, so the route that never passed one compiled, rendered, and
           // served an exception form refused on every submit. It is asserted *here* rather than in
@@ -447,6 +463,195 @@ describe('estate · the routes', () => {
       await pool
         .query('DELETE FROM project WHERE project_code = $1', [PROJECT_CODE])
         .catch(() => {});
+      await app.close();
+      await pool.end();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// #114. The office retrieval panel on the Unit page: ask, paint, clear. The command is evidence's;
+// this suite is the HTTP seam #111 named.
+// ---------------------------------------------------------------------------------------------
+
+const ASK_DOMAIN = 'estate-ask.test';
+const ASK_CITY = 'עיר שאלות';
+const ASK_ADDRESS = 'רחוב שאלות 1';
+const ASK_PROJECT = 'TEST-ASK';
+
+const askPlan: EstatePlan = {
+  projects: [
+    {
+      name: 'מכרז שאלות',
+      projectCode: ASK_PROJECT,
+      tenderRef: null,
+      status: 'ACTIVE',
+    },
+  ],
+  buildings: [
+    {
+      name: 'בניין שאלות',
+      addressLine: ASK_ADDRESS,
+      city: ASK_CITY,
+      projectCode: ASK_PROJECT,
+      handoverDate: '2025-03-01',
+      warrantyEndDate: '2027-03-01',
+      status: 'ACTIVE',
+      spaces: [{ kind: 'UNIT', name: 'דירה 1', floor: '1', accessNote: null }],
+      units: [
+        {
+          spaceName: 'דירה 1',
+          unitNumber: '1',
+          rooms: 3,
+          areaSqm: 70,
+          hasMamad: false,
+          parkingSpaceName: null,
+          storageSpaceName: null,
+          warrantyEndDate: null,
+          conditionStatus: 'READY',
+        },
+      ],
+    },
+  ],
+};
+
+async function askCleanup(pool: import('pg').Pool): Promise<void> {
+  await pool.query(
+    `DELETE FROM office_retrieval_thread
+      WHERE bound_kind = 'unit' AND bound_id IN (
+        SELECT u.unit_id FROM unit u
+        JOIN space s ON s.space_id = u.unit_id
+        JOIN building b ON b.building_id = s.building_id
+        WHERE b.city = $1 AND b.address_line = $2)`,
+    [ASK_CITY, ASK_ADDRESS],
+  );
+  await pool.query(
+    `DELETE FROM unit WHERE unit_id IN (
+      SELECT space_id FROM space s
+      JOIN building b ON b.building_id = s.building_id
+      WHERE b.city = $1 AND b.address_line = $2)`,
+    [ASK_CITY, ASK_ADDRESS],
+  );
+  await pool.query(
+    `DELETE FROM space WHERE building_id IN (
+      SELECT building_id FROM building WHERE city = $1 AND address_line = $2)`,
+    [ASK_CITY, ASK_ADDRESS],
+  );
+  await pool.query(
+    'DELETE FROM building WHERE city = $1 AND address_line = $2',
+    [ASK_CITY, ASK_ADDRESS],
+  );
+  await pool.query('DELETE FROM project WHERE project_code = $1', [
+    ASK_PROJECT,
+  ]);
+}
+
+describe('estate · unit retrieval panel', () => {
+  it('lets a viewer ask, keeps the thread private, and clears only that account', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      embedder: createFakeEmbedder(embeddingColumnDimensions),
+    });
+    await signOutAll(pool, ASK_DOMAIN);
+    await askCleanup(pool);
+    const viewer = await signIn(pool, systemClock, {
+      email: `view@${ASK_DOMAIN}`,
+      role: 'VIEWER',
+    });
+    const other = await signIn(pool, systemClock, {
+      email: `ops@${ASK_DOMAIN}`,
+      role: 'OPERATOR',
+    });
+    const asViewer = asOperator(app, viewer);
+    const asOther = asOperator(app, other);
+    try {
+      await importEstate(pool, askPlan);
+      const unit = await pool.query<{ unit_id: string }>(
+        `SELECT u.unit_id FROM unit u
+         JOIN space s ON s.space_id = u.unit_id
+         JOIN building b ON b.building_id = s.building_id
+         WHERE b.city = $1 AND b.address_line = $2`,
+        [ASK_CITY, ASK_ADDRESS],
+      );
+      const unitId = unit.rows[0]?.unit_id ?? '';
+      const path = `/estate/units/${unitId}`;
+      const askUrl = `${path}/office-turn`;
+      const clearUrl = `${path}/office-thread`;
+      const question = 'מה דמי השכירות?';
+
+      const documents = await asOther.inject({
+        method: 'GET',
+        url: '/documents',
+      });
+      assert.equal(documents.statusCode, 200);
+      assert.doesNotMatch(documents.body, /data-office-retrieval="unit"/);
+      const settings = await asOther.inject({
+        method: 'GET',
+        url: '/settings',
+      });
+      assert.equal(settings.statusCode, 200);
+      assert.doesNotMatch(settings.body, /data-office-retrieval="unit"/);
+      const calls = await asOther.inject({ method: 'GET', url: '/calls' });
+      assert.equal(calls.statusCode, 200);
+      assert.doesNotMatch(calls.body, /data-office-retrieval="unit"/);
+
+      const anon = await app.inject({
+        method: 'POST',
+        url: askUrl,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(question)}`,
+      });
+      assert.equal(anon.statusCode, 303);
+      assert.equal(anon.headers.location, '/staff/login');
+
+      const noToken = await app.inject({
+        method: 'POST',
+        url: askUrl,
+        headers: {
+          cookie: viewer.cookie,
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        payload: `question=${encodeURIComponent(question)}`,
+      });
+      assert.equal(noToken.statusCode, 403);
+
+      const asked = await asViewer.inject({
+        method: 'POST',
+        url: askUrl,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(question)}`,
+      });
+      assert.equal(asked.statusCode, 303, asked.body.slice(0, 400));
+      assert.equal(asked.headers.location, path);
+
+      const painted = await asViewer.inject({ method: 'GET', url: path });
+      assert.equal(painted.statusCode, 200);
+      assert.match(painted.body, /מה דמי השכירות\?/);
+      assert.match(painted.body, /אין במסמכים האלה תשובה לשאלה הזו/);
+
+      const neighbour = await asOther.inject({ method: 'GET', url: path });
+      assert.equal(neighbour.statusCode, 200);
+      assert.doesNotMatch(neighbour.body, /מה דמי השכירות\?/);
+
+      const cleared = await asViewer.inject({
+        method: 'POST',
+        url: clearUrl,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: '',
+      });
+      assert.equal(cleared.statusCode, 303, cleared.body.slice(0, 400));
+      assert.equal(cleared.headers.location, path);
+      const after = await asViewer.inject({ method: 'GET', url: path });
+      assert.doesNotMatch(after.body, /מה דמי השכירות\?/);
+    } finally {
+      await askCleanup(pool);
+      await signOutAll(pool, ASK_DOMAIN);
       await app.close();
       await pool.end();
     }

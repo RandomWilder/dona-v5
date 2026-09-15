@@ -119,6 +119,14 @@ export function gradeRetrieval(
       `${retrieval.expectRef} ranked ${rank}, worse than the ratchet at ${retrieval.rankAtMost}`,
     ];
   }
+  if (
+    retrieval.absentRef !== undefined &&
+    hits.some((hit) => hit.clauseRef === retrieval.absentRef)
+  ) {
+    return [
+      `${retrieval.absentRef} came back inside a bound that must not include it`,
+    ];
+  }
   return [];
 }
 

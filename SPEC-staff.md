@@ -4,10 +4,10 @@ The admin edge — authentication, sessions, roles, and the row that makes someb
 a domain module**: it owns none of E1–E16, and it owns no fact about a building, a household or a
 piece of paper. Shared conventions live in [SPEC.md](SPEC.md) and are not repeated here.
 
-- **Owns:** the operator's identity, the session that carries it, the role matrix, and the operator
-  row.
-- **Entities:** none of E1–E16. Its two tables — `staff_account`, `staff_session` — are the
-  mechanism's own and appear in no entity catalogue.
+- **Owns:** the operator's identity, the session that carries it, the role matrix, the operator
+  row, and the **office retrieval thread** (#113) — one history per staff account × retrieval bound.
+- **Entities:** none of E1–E16. Its tables — `staff_account`, `staff_session`, and the office
+  retrieval thread — are the mechanism's own and appear in no entity catalogue.
 - **Depends on:** kernel. Nothing else. **Every other module depends on it from slice 5.2**, which
   put every route in the application behind `requireStaff` and every write route behind a CSRF
   token derived from the session.
@@ -355,6 +355,30 @@ line.** `SPEC.md`'s security default is *PII never in logs*, and the audit row n
 `staff_account_id`, which resolves to a person for anyone entitled to resolve it and to nobody else.
 A failed sign-in for an address that matches no account names no subject at all, which is the same
 non-answer the screen gives.
+
+---
+
+## The office retrieval thread (#113)
+
+A persisted question-and-answer history for one staff account on one **retrieval bound**. It is not
+a Conversation, not Message, and not the agent. Evidence owns the turn that searches and answers;
+this module owns the store the turn writes to.
+
+- **Unique on staff account, bound kind, and bound id.** A second operator on the same Unit has a
+  different thread. Switching Units (or Buildings, or the portfolio) is a different thread for the
+  same operator. A portfolio bound has no id; uniqueness treats that null as one key
+  (`UNIQUE NULLS NOT DISTINCT`).
+- **Turns are oldest-first.** Each turn stores the question, the answer or refusal, whether it was
+  refused, the citations (document and page), and this turn's Passage hit ids. A refused turn is
+  stored: the office can see what was asked and that it was declined. Question and answer are
+  `-- pii`.
+- **Clear deletes that thread** — the row and its turns — for that account and bound only. There is
+  no retention job and no export. Another account's thread on the same bound is untouched.
+- **No new permission.** Asking and clearing are later HTTP on `documents.read`; this module does
+  not invent a second gate beside opening the paper.
+
+`loadOfficeRetrievalThread`, `appendOfficeRetrievalTurn` and `clearOfficeRetrievalThread` are the
+commands. The Unit panel that posts them is #114 and estate's.
 
 ---
 

@@ -18,7 +18,12 @@ import { KernelError } from '../../kernel/errors.ts';
 import type { Html } from '../../kernel/ui/html.ts';
 import { optionalText, requireText, validId } from '../../kernel/validate.ts';
 import { resolveOccupiedUnits } from '../../scope/contract.ts';
-import { can, csrfFrom } from '../../staff/contract.ts';
+import {
+  can,
+  clearOfficeRetrievalThread,
+  csrfFrom,
+  loadOfficeRetrievalThread,
+} from '../../staff/contract.ts';
 import { addCalendarYears, WARRANTY_YEARS } from './assets.ts';
 import { importEstate, upsertUnitRow } from './importer.ts';
 import type {
@@ -60,6 +65,7 @@ import {
   renderUnitPage,
   type TenancyEventView,
   type TenancyPersonView,
+  type UnitRetrievalView,
 } from './views.ts';
 
 export interface EstateDeps {
@@ -148,6 +154,14 @@ export interface EstateDeps {
     db: Pool,
     spec: { tenancyId: string; actor: string },
   ) => Promise<void>;
+  /**
+   * #114. Injected from evidence so this module never imports it. Bound is always this Unit.
+   */
+  runOfficeTurn: (spec: {
+    staffAccountId: string;
+    unitId: string;
+    question: string;
+  }) => Promise<void>;
 }
 
 /** What a search box may be sent before it stops being a search box. */
@@ -247,6 +261,32 @@ function mayFile(request: FastifyRequest): boolean {
   return can(request.staff?.role ?? null, 'documents.write');
 }
 
+function requireStaffAccountId(request: FastifyRequest): string {
+  const id = request.staff?.staffAccountId;
+  if (!id) {
+    throw new KernelError('not_allowed', 'not_allowed');
+  }
+  return id;
+}
+
+async function unitRetrieval(
+  pool: Pool,
+  request: FastifyRequest,
+  unitId: string,
+  csrf: string,
+): Promise<UnitRetrievalView | undefined> {
+  if (!can(request.staff?.role ?? null, 'documents.read')) {
+    return undefined;
+  }
+  const staffAccountId = request.staff?.staffAccountId;
+  if (!staffAccountId) return undefined;
+  const thread = await loadOfficeRetrievalThread(pool, staffAccountId, {
+    kind: 'unit',
+    id: unitId,
+  });
+  return { csrf, unitId, thread };
+}
+
 function html(reply: { header: (k: string, v: string) => unknown }): void {
   reply.header('content-type', 'text/html; charset=utf-8');
   // Until assets are content-hashed, a cached page against a fresh stylesheet is the failure mode
@@ -269,6 +309,8 @@ function html(reply: { header: (k: string, v: string) => unknown }): void {
  */
 const READ = { config: { staff: 'estate.read' } } as const;
 const WRITE = { config: { staff: 'tenancy.write' } } as const;
+/** Asking and clearing the Unit panel. No new permission — SPEC-staff.md. */
+const ASK = { config: { staff: 'documents.read' } } as const;
 
 /**
  * **Slice 6.1, flow A11.** ADMIN only ([SPEC-staff.md](SPEC-staff.md)): an operator files paper, an
@@ -758,16 +800,58 @@ export function registerEstateRoutes(
     );
     await deps.expireDueTenancies(deps.pool, deps.clock);
     const events = await deps.listTenancyEvents(deps.pool, unit.unit_id);
+    const csrf = csrfFrom(request);
     html(reply);
     return renderUnitPage(
       unit,
       occupied[0]?.occupants,
       documents,
-      deps.chrome(csrfFrom(request), 'estate', mayFile(request)),
+      deps.chrome(csrf, 'estate', mayFile(request)),
       promoted,
       events,
+      await unitRetrieval(deps.pool, request, unit.unit_id, csrf),
     );
   });
+
+  app.post<{ Params: { unitId: string } }>(
+    '/estate/units/:unitId/office-turn',
+    ASK,
+    async (request, reply) => {
+      const unitId = validId(request.params.unitId, 'unitId');
+      await getUnit(deps.pool, unitId);
+      const posted = request.body as { question?: string };
+      await deps.runOfficeTurn({
+        staffAccountId: requireStaffAccountId(request),
+        unitId,
+        question: requireText(posted.question, 'question', 2000),
+      });
+      return reply
+        .code(303)
+        .header('location', `/estate/units/${unitId}`)
+        .send();
+    },
+  );
+
+  app.post<{ Params: { unitId: string } }>(
+    '/estate/units/:unitId/office-thread',
+    ASK,
+    async (request, reply) => {
+      const unitId = validId(request.params.unitId, 'unitId');
+      await getUnit(deps.pool, unitId);
+      await clearOfficeRetrievalThread(
+        deps.pool,
+        requireStaffAccountId(request),
+        {
+          kind: 'unit',
+          id: unitId,
+        },
+      );
+      return reply
+        .code(303)
+        .header('location', `/estate/units/${unitId}`)
+        .send();
+    },
+  );
 
   app.get('/estate/tenancies/:tenancyId', READ, async (request, reply) => {
     const tenancyId = validId(

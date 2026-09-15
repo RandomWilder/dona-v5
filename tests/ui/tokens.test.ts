@@ -556,6 +556,34 @@ const SCREENS: Array<[string, () => string]> = [
   ],
   ['estate · one unit', () => renderUnitPage(hit, 2, [filed], NAV)],
   [
+    'estate · one unit, retrieval panel',
+    () =>
+      renderUnitPage(hit, 2, [filed], NAV, [], [], {
+        csrf: CSRF,
+        unitId: hit.unit_id,
+        thread: [
+          {
+            question: 'מה דמי השכירות?',
+            answer: 'דמי השכירות הם 4,520 ש״ח לחודש.',
+            refused: false,
+            citations: [
+              {
+                documentId: filed.documentId,
+                page: 3,
+                documentType: 'lease',
+              },
+            ],
+          },
+          {
+            question: 'מה עם הכדורגל?',
+            answer: 'אין במסמכים האלה תשובה לשאלה הזו.',
+            refused: true,
+            citations: [],
+          },
+        ],
+      }),
+  ],
+  [
     'estate · one tenancy, blocked',
     () =>
       renderTenancyDetailPage({
@@ -2422,5 +2450,44 @@ describe('shared UI tokens', () => {
     assert.doesNotMatch(closed, />מסמך</);
     const empty = renderUnitPage(hit, 2, [filed], NAV);
     assert.doesNotMatch(empty, /יומן שינויים/);
+  });
+
+  it('paints cited answers under the unit retrieval panel', () => {
+    const html = renderUnitPage(hit, 2, [filed], NAV, [], [], {
+      csrf: CSRF,
+      unitId: hit.unit_id,
+      thread: [
+        {
+          question: 'מה דמי השכירות?',
+          answer: 'דמי השכירות הם 4,520 ש״ח לחודש.',
+          refused: false,
+          citations: [
+            {
+              documentId: filed.documentId,
+              page: 3,
+              documentType: 'lease',
+            },
+          ],
+        },
+      ],
+    });
+    assert.match(html, /data-office-retrieval="unit"/);
+    assert.match(html, /<aside class="unit-retrieval"/);
+    assert.match(html, /unit-retrieval-toggle/);
+    assert.match(html, /שאלות על המסמכים/);
+    assert.doesNotMatch(html, /<details/);
+    assert.doesNotMatch(html, /<summary/);
+    assert.match(html, /מה דמי השכירות\?/);
+    assert.match(html, /דמי השכירות הם 4,520 ש״ח לחודש/);
+    assert.match(html, /חוזה שכירות/);
+    assert.match(html, /עמוד <span dir="ltr">3<\/span>/);
+    assert.match(
+      html,
+      new RegExp(`/documents/${filed.documentId}/read\\?page=3`),
+    );
+    assert.doesNotMatch(
+      renderUnitPage(hit, 2, [filed], NAV),
+      /data-office-retrieval="unit"/,
+    );
   });
 });

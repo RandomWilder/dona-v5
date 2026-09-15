@@ -19,15 +19,23 @@ import {
   listPromotedFieldsForUnit,
   listTenancyDocumentFacts,
   registerDocumentRoutes,
+  runOfficeTurn,
   searchDocuments,
   signLinkedDocuments,
   upsertDocumentType,
 } from './evidence/contract.ts';
 import { renderIndexPage } from './index-page.ts';
 import { type Clock, systemClock } from './kernel/clock.ts';
-import type { Embedder } from './kernel/embeddings.ts';
+import { createSettings, readExtractionSettings } from './kernel/config.ts';
+import {
+  createUnconfiguredEmbedder,
+  type Embedder,
+} from './kernel/embeddings.ts';
 import { httpStatus, KernelError, toErrorBody } from './kernel/errors.ts';
-import type { Extractor } from './kernel/extraction.ts';
+import {
+  createUnconfiguredExtractor,
+  type Extractor,
+} from './kernel/extraction.ts';
 import {
   configuredBucket,
   createMemoryStore,
@@ -450,6 +458,26 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       activationGate(db, clock, tenancyId, listTenancyDocumentFacts),
     activateTenancy: (db, spec) =>
       activateTenancy(db, clock, spec, listTenancyDocumentFacts),
+    runOfficeTurn: async (spec) => {
+      const extraction = await readExtractionSettings(
+        createSettings(deps.pool),
+      );
+      await runOfficeTurn(
+        {
+          db: deps.pool,
+          clock,
+          extractor: deps.extractor ?? createUnconfiguredExtractor(),
+          embedder: deps.embedder ?? createUnconfiguredEmbedder(),
+          model: extraction.model,
+          reasoningEffort: extraction.reasoningEffort,
+        },
+        {
+          staffAccountId: spec.staffAccountId,
+          bound: { kind: 'unit', id: spec.unitId },
+          question: spec.question,
+        },
+      );
+    },
   });
   // Slice 5.1, and from 5.2 no longer the only routes behind a session: every route this
   // application registers declares a stance above, and the hook calls `requireStaff` once.

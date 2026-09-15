@@ -131,7 +131,11 @@ describe('the ranking ratchet', () => {
     id: 'r',
     title: 'r',
     input: { message: 'מי מתקן דוד מים שהתקלקל מבלאי?' },
-    retrieval: { expectRef: 'חוזה §7.2', rankAtMost: 3 },
+    retrieval: {
+      expectRef: 'חוזה §7.2',
+      rankAtMost: 3,
+      bound: { kind: 'portfolio' },
+    },
   };
 
   it('counts a rank from one, so the first hit is rank 1', () => {
@@ -161,6 +165,27 @@ describe('the ranking ratchet', () => {
     );
     assert.match(missing[0] ?? '', /did not come back at all in 3 hits/);
   });
+
+  it('fails when a neighbour clause is in the bound', () => {
+    const unitBound: GoldenCase = {
+      ...golden,
+      retrieval: {
+        expectRef: 'חוזה §10.3',
+        absentRef: 'שכן · חוזה §10.3',
+        rankAtMost: 8,
+        bound: { kind: 'unit', id: 'home-unit' },
+      },
+    };
+    assert.deepEqual(
+      gradeRetrieval(unitBound, hitsOf(['חוזה §10.3', 'חוזה §12.1'])),
+      [],
+    );
+    const leaked = gradeRetrieval(
+      unitBound,
+      hitsOf(['חוזה §10.3', 'שכן · חוזה §10.3']),
+    );
+    assert.match(leaked[0] ?? '', /שכן · חוזה §10.3/);
+  });
 });
 
 describe('golden case validation', () => {
@@ -186,7 +211,11 @@ describe('golden case validation', () => {
               tool: null,
               contains: [],
             },
-            retrieval: { expectRef: 'a', rankAtMost: 1 },
+            retrieval: {
+              expectRef: 'a',
+              rankAtMost: 1,
+              bound: { kind: 'portfolio' },
+            },
           },
           'both.json',
         ),
@@ -204,7 +233,11 @@ describe('golden case validation', () => {
             id: 'x',
             title: 'y',
             input,
-            retrieval: { expectRef: 'a', rankAtMost: 1 },
+            retrieval: {
+              expectRef: 'a',
+              rankAtMost: 1,
+              bound: { kind: 'portfolio' },
+            },
             grounding: { expectSource: 'none' },
           },
           'both-again.json',
@@ -218,7 +251,14 @@ describe('golden case validation', () => {
     assert.throws(
       () =>
         parseCase(
-          { ...base, retrieval: { expectRef: 'a', rankAtMost: 0 } },
+          {
+            ...base,
+            retrieval: {
+              expectRef: 'a',
+              rankAtMost: 0,
+              bound: { kind: 'portfolio' },
+            },
+          },
           'zero.json',
         ),
       /rankAtMost/,
@@ -226,10 +266,25 @@ describe('golden case validation', () => {
     assert.throws(
       () =>
         parseCase(
-          { ...base, retrieval: { expectRef: '', rankAtMost: 1 } },
+          {
+            ...base,
+            retrieval: {
+              expectRef: '',
+              rankAtMost: 1,
+              bound: { kind: 'portfolio' },
+            },
+          },
           'empty.json',
         ),
       /expectRef/,
+    );
+    assert.throws(
+      () =>
+        parseCase(
+          { ...base, retrieval: { expectRef: 'a', rankAtMost: 1 } },
+          'unbound.json',
+        ),
+      /retrieval.bound is required/,
     );
   });
 });

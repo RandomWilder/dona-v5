@@ -76,7 +76,7 @@ Follows the workbook's entities, not v3's ([docs/from-v3.md](docs/from-v3.md) Ti
 | `estate` | E1–E4, E11, E14 — Project · Building · Space · Unit · Asset · Provider (stub) | kernel |
 | `parties` | E5, E6 — Party · PartyContact | kernel |
 | `tenancy` | E7–E10 — Tenancy · TenancyParty · Obligation · ObligationType | estate, parties |
-| `evidence` | E12, E13, E15, E16 — Document · DocumentLink · DocumentType · DocumentTypeField · ExtractedField · FieldPromotion | estate, parties, tenancy |
+| `evidence` | E12, E13, E15, E16 — Document · DocumentLink · DocumentType · DocumentTypeField · ExtractedField · FieldPromotion | estate, parties, tenancy, staff |
 | `scope` | — the isolation join and nothing else | parties, tenancy, estate |
 | `register` | — the register file and nothing else | estate, parties, tenancy, scope |
 | `policy` | responsibility matrix · SLA · escalation | estate, tenancy |
@@ -149,13 +149,13 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   is a ratchet set to what retrieval achieves today, so the gate blocks regression while staying
   green. **No assertion is ever on a distance**: provider embeddings are not bit-identical between
   runs, and a committed distance is a gate that fails for weather. Distances live in `tasks/evidence/`.
-- **The golden set's subject and corpus are placeholders, and say so in the file.** There is no agent
-  and no ingestion path yet, so `evals/subject.ts` answers from a stub and `evals/corpus.ts` indexes
-  nine authored Hebrew passages into a **TEMP** `vector(n)` table — through the real config rows, the
-  real embedder and pgvector's own ordering, because a corpus that needed neither a database nor a
-  key would make both `REQUIRE_*` switches decorative. What is real from commit one is the *grading*.
-  `runCases` takes a `Subject` and a `Retriever`, so the real agent and the real search replace them
-  one at a time, and the harness never has to be introduced late (slice 1.8).
+- **The golden set's retrieval corpus is still a TEMP table; the office-turn subject is not a stub.**
+  Rank and grounding cases index authored Hebrew passages into `eval_chunk` — real config rows, real
+  embedder, pgvector ordering (`evals/corpus.ts`). Behavioural cite and refuse cases grade
+  `runOfficeTurn`'s answering (`evals/subject.ts` `officeTurnSubject`) when a key and database are
+  present; without them the harness still grades a placeholder so `npm test` does not need a provider.
+  `runCases` takes a `Subject` and a `Retriever`, so the WhatsApp agent can replace the remaining
+  stub later without introducing the harness late (slice 1.8).
 - **A skip is a failure wherever a gate runs.** `REQUIRE_POSTGRES=1` and `REQUIRE_EMBEDDINGS=1` are
   set on the jobs that must not pass by grading nothing; locally, absent either, the cases that need
   them skip and say so in the count.

@@ -1,0 +1,11 @@
+{
+  "id": "office-turn-refuses",
+  "title": "An off-lease question is refused after search, with no citations",
+  "input": { "message": "מי זכה בגביע המדינה בכדורגל?" },
+  "expect": {
+    "refuses": true,
+    "citesClause": false,
+    "tool": "search",
+    "contains": []
+  }
+}

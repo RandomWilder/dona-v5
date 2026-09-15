@@ -242,6 +242,8 @@ const PII_QUALIFIED_COLUMNS = new Set([
   'extracted_field.value',
   'document_passage.body',
   'tenancy_event.actor',
+  'office_retrieval_turn.question',
+  'office_retrieval_turn.answer',
 ]);
 
 // Two shapes, because a column arrives two ways. A definition inside CREATE TABLE starts the line;

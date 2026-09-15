@@ -7,6 +7,7 @@
   "retrieval": {
     "expectRef": "חוזה §12.1",
     "rankAtMost": 8,
+    "bound": { "kind": "portfolio" },
     "note": "Ratchet landing-wide: the window is eight. Tightened to the measured rank once evals run against the real embedder on the day this case lands (#104)."
   }
 }

@@ -937,7 +937,9 @@ describe('evidence · filing a declared document', () => {
         const passages = await listDocumentPassages(db, result.documentId);
         assert.equal(passages.length, 2);
         assert.equal(passages[1]?.body, page);
-        const hits = await searchPassages(db, embedder, page, 'administrator');
+        const hits = await searchPassages(db, embedder, page, 'administrator', {
+          kind: 'portfolio',
+        });
         const hit = hits.find((row) => row.documentId === result.documentId);
         assert.ok(hit, 'the backfilled document is searchable');
         assert.equal(hit.page, 2);
