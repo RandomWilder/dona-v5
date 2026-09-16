@@ -207,14 +207,7 @@ export async function applyEstatePurge(
   }
 
   const storage = await loadStorage(db, ids.documentIds);
-  let disabledTriggers = false;
-  try {
-    await db.query('SET LOCAL session_replication_role = replica');
-  } catch {
-    await db.query('ALTER TABLE extracted_field DISABLE TRIGGER USER');
-    await db.query('ALTER TABLE tenancy_event DISABLE TRIGGER USER');
-    disabledTriggers = true;
-  }
+  const disabledTriggers = await bypassDeleteGuards(db);
   try {
     await deleteBag(db, ids);
   } finally {
@@ -649,4 +642,20 @@ async function deleteOrphanParties(
 
 function unique(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+// Staging's runtime is not superuser. SET LOCAL replica then fails and aborts
+// the transaction unless it sits in a savepoint; DISABLE TRIGGER is the fallback
+// the table owner is allowed.
+async function bypassDeleteGuards(db: Queryable): Promise<boolean> {
+  await db.query('SAVEPOINT estate_purge_bypass');
+  try {
+    await db.query('SET LOCAL session_replication_role = replica');
+    return false;
+  } catch {
+    await db.query('ROLLBACK TO SAVEPOINT estate_purge_bypass');
+    await db.query('ALTER TABLE extracted_field DISABLE TRIGGER USER');
+    await db.query('ALTER TABLE tenancy_event DISABLE TRIGGER USER');
+    return true;
+  }
 }

@@ -330,6 +330,91 @@ describe('estate · operator purge', () => {
     }
   });
 
+  it('still applies when replica role is refused mid-transaction', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await importEstate(db, plan(`${STREET} 52`, ['4']));
+        const [building] = await listEstatePurge(db, {
+          address: `${STREET} 52`,
+          city: CITY,
+        });
+        assert.ok(building);
+        const unit = await unitId(db, building.buildingId, '4');
+        const hash = `hash-52-${newId()}`;
+        const doc = await fileLease(db, unit, hash);
+        const field = await upsertDocumentTypeField(db, {
+          documentTypeId:
+            (
+              await db.query<{ document_type_id: string }>(
+                'SELECT document_type_id FROM document WHERE document_id = $1',
+                [doc],
+              )
+            ).rows[0]?.document_type_id ?? '',
+          fieldKey: `rent-52-${newId()}`,
+          labelHe: 'שכירות',
+          valueType: 'TEXT',
+          isRequired: false,
+          extractionHint: null,
+          effectiveFrom: '2025-01-01',
+          effectiveTo: null,
+        });
+        await db.query(
+          `INSERT INTO extracted_field (
+             extracted_field_id, document_id, document_type_field_id, value,
+             page, bbox, confidence, model, extracted_at
+           ) VALUES ($1, $2, $3, '4500', 1, '{"x":1,"y":2,"width":3,"height":4}',
+                     null, 'fake', $4)`,
+          [newId(), doc, field.id, AT],
+        );
+        await db.query(`SELECT set_config('dona.approving', 'on', true)`);
+        await db.query(
+          `UPDATE extracted_field
+              SET approved_value = value, approved_by = 'ops@test', approved_at = $1
+            WHERE document_id = $2`,
+          [AT, doc],
+        );
+        await db.query(`SELECT set_config('dona.approving', 'off', true)`);
+
+        const refused: Pick<PoolClient, 'query'> = {
+          query: (text: string, values?: unknown[]) => {
+            if (
+              typeof text === 'string' &&
+              text.includes('session_replication_role = replica')
+            ) {
+              return db.query(
+                'SET LOCAL session_replication_role = not_a_role',
+              );
+            }
+            return db.query(text, values);
+          },
+        };
+
+        const report = await applyEstatePurge(refused, {
+          kind: 'building',
+          id: building.buildingId,
+        });
+        assert.equal(report.documentCount, 1);
+        const gone = await db.query(
+          'SELECT 1 FROM building WHERE building_id = $1',
+          [building.buildingId],
+        );
+        assert.equal(gone.rows.length, 0);
+        const reuse = await db.query(
+          'SELECT 1 FROM document WHERE file_hash = $1',
+          [hash],
+        );
+        assert.equal(reuse.rows.length, 0);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
   it('applying one Unit leaves the sibling Unit and a Building-bound Document', async (t) => {
     const pool = await migratedPoolOrNull();
     if (!pool) {
