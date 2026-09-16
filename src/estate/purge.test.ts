@@ -380,24 +380,27 @@ describe('estate · operator purge', () => {
         );
         await db.query(`SELECT set_config('dona.approving', 'off', true)`);
 
-        const refused: Pick<PoolClient, 'query'> = {
-          query: (text: string, values?: unknown[]) => {
-            if (
-              typeof text === 'string' &&
-              text.includes('session_replication_role = replica')
-            ) {
-              return db.query(
-                'SET LOCAL session_replication_role = not_a_role',
-              );
-            }
-            return db.query(text, values);
-          },
-        };
-
-        const report = await applyEstatePurge(refused, {
-          kind: 'building',
-          id: building.buildingId,
-        });
+        const originalQuery = db.query.bind(db);
+        db.query = ((text: string, values?: unknown[]) => {
+          if (
+            typeof text === 'string' &&
+            text.includes('session_replication_role = replica')
+          ) {
+            return originalQuery(
+              'SET LOCAL session_replication_role = not_a_role',
+            );
+          }
+          return originalQuery(text, values);
+        }) as typeof db.query;
+        let report: Awaited<ReturnType<typeof applyEstatePurge>>;
+        try {
+          report = await applyEstatePurge(db, {
+            kind: 'building',
+            id: building.buildingId,
+          });
+        } finally {
+          db.query = originalQuery;
+        }
         assert.equal(report.documentCount, 1);
         const gone = await db.query(
           'SELECT 1 FROM building WHERE building_id = $1',
