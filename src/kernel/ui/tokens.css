@@ -149,6 +149,59 @@ a {
   font-family: var(--font-mono);
 }
 
+/* A span the paper said, inside a sentence of ours. Weight and tint, not a second face:
+   Hebrew in the mono face reads as a hash. The word is still a word. */
+.excerpt {
+  display: inline;
+  font-weight: 600;
+  color: var(--color-accent-deep);
+  background: var(--color-accent-tint);
+  padding-inline: var(--space-2);
+  padding-block: 0;
+  border-radius: var(--radius-1);
+  box-decoration-break: clone;
+}
+
+.filing-beats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-4) 0 var(--space-5);
+  padding: 0 0 var(--space-3);
+  list-style: none;
+  border-block-end: var(--size-hairline) solid var(--color-divider-soft);
+}
+
+.filing-beats li {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.filing-beats li[aria-current="step"] {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.filing-beats li.is-done {
+  color: var(--color-ok);
+}
+
+.file-well {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  padding: var(--space-6);
+  border: var(--size-hairline) dashed var(--color-field-line);
+  border-radius: var(--radius-3);
+  background: var(--color-surface-card);
+}
+
+.file-well .hint {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  margin: 0;
+}
+
 [dir="ltr"] {
   unicode-bidi: isolate;
 }

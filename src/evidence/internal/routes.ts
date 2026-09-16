@@ -79,7 +79,7 @@ import {
   isIdentifierField,
   listExtractedFields,
 } from './extract.ts';
-import { fileDocument } from './intake.ts';
+import { fileDocument, findDocumentByHash } from './intake.ts';
 import {
   confirmLeaseTenancy,
   establishApprovedLease,
@@ -106,12 +106,18 @@ import {
   sniffExtension,
 } from './storage-path.ts';
 import { pageText as textOfPage } from './verify.ts';
-import type { AnchoredPlace, FieldsScreen, SeedScreen } from './views.ts';
+import type {
+  AnchoredPlace,
+  FieldsScreen,
+  LeaseFilingScreen,
+  SeedScreen,
+} from './views.ts';
 import {
   renderDocumentsPage,
   renderFieldsPage,
   renderFiledPage,
   renderIntakePage,
+  renderLeaseFilingPage,
   renderReadPage,
   renderSeededPage,
   renderSeedPage,
@@ -216,14 +222,18 @@ function sessionTokenOf(request: FastifyRequest): string {
  * Who is filing. The guard set this before the handler ran, so its absence is a wiring fault rather
  * than an unauthenticated request — and it fails closed instead of filing a document under nobody.
  */
-function chromeOf(deps: DocumentDeps, request: FastifyRequest): Html {
+function chromeOf(
+  deps: DocumentDeps,
+  request: FastifyRequest,
+  dest: ChromeDest = 'documents',
+): Html {
   // **`'documents'` from 6.9, and `'estate'` before it.** These are this module's screens, so the
   // rail marks its own destination on them rather than marking the one next door — which is what a
   // reader following the bar back from a filed document saw until 6.9: the estate tab lit up, on a
-  // page that is not estate's.
+  // page that is not estate's. A16's tab is `'filing'`.
   return deps.chrome(
     csrfFrom(request),
-    'documents',
+    dest,
     can(request.staff?.role ?? null, 'documents.write'),
   );
 }
@@ -447,6 +457,7 @@ const FILE = {
 const INTAKE = {
   config: { staff: 'documents.write', csrf: 'in-body' },
 } as const;
+const FILING = INTAKE;
 const CONFIRM = { config: { staff: 'tenancy.write' } } as const;
 /**
  * **Slice 7.3.** Signing a reading writes nothing outside this module — no typed column, no tenancy
@@ -532,6 +543,179 @@ export function registerDocumentRoutes(
       // OPERATOR reads this page and is simply not shown the editor.
       mayWrite: can(request.staff?.role ?? null, 'settings.write'),
       ...(saved === 'declared' || saved === 'retired' ? { saved } : {}),
+    });
+  });
+
+  const leaseFiling = (
+    request: FastifyRequest,
+    extras: Omit<LeaseFilingScreen, 'nav' | 'csrf'>,
+  ) =>
+    renderLeaseFilingPage({
+      nav: chromeOf(deps, request, 'filing'),
+      csrf: csrfFrom(request),
+      ...extras,
+    });
+
+  app.get('/documents/filing', NEW, async (request, reply) => {
+    html(reply);
+    return leaseFiling(request, { beat: 'file' });
+  });
+
+  app.get<{ Params: { documentId: string } }>(
+    '/documents/filing/:documentId',
+    NEW,
+    async (request, reply) => {
+      const documentId = validId(request.params.documentId, 'document');
+      await getFiledDocument(deps.pool, documentId);
+      html(reply);
+      return leaseFiling(request, { beat: 'read' });
+    },
+  );
+
+  app.post('/documents/filing', FILING, async (request, reply) => {
+    const { fields, bytes } = await readUpload(request);
+    verifyCsrf(sessionTokenOf(request), fields[CSRF_FIELD]);
+    const operator = requireOperator(request);
+    await boundTheCaller(deps, operator);
+
+    const type = await documentTypeByKey(deps.pool, 'lease');
+    if (!type) {
+      throw new KernelError('invalid', 'that is not a document type');
+    }
+    const extension = sniffExtension(bytes);
+    const chosen = fields.unit ? validId(fields.unit, 'unit') : null;
+    const fileHash = documentFileHash(bytes);
+
+    const paintRefusal = async (
+      code: number,
+      extras: Omit<LeaseFilingScreen, 'nav' | 'csrf'>,
+    ) => {
+      html(reply);
+      reply.code(code);
+      return leaseFiling(request, extras);
+    };
+
+    const existing = await findDocumentByHash(deps.pool, fileHash);
+    const documentHref = existing
+      ? `/documents/${existing.documentId}/read`
+      : undefined;
+
+    const read = await intakeReading(
+      deps,
+      bytes,
+      extension,
+      type.verificationTerms,
+    );
+    if (read.ocrOutcome === 'too_large') {
+      await createAuditLog(deps.pool, deps.clock).write(
+        {
+          actorKind: 'staff',
+          actorId: operator,
+          actorRole: request.staff?.role ?? undefined,
+          action: 'evidence.intake_unresolved',
+          inputs: {
+            typeKey: type.typeKey,
+            extension,
+            bytes: bytes.length,
+            fileHash,
+            candidates: 0,
+            ocr: read.ocrOutcome,
+            pages: read.native.length,
+          },
+        },
+        { outcome: 'ok' },
+      );
+      return paintRefusal(422, {
+        beat: 'file',
+        tooLargeBytes: bytes.length,
+      });
+    }
+    if (read.verification.verdict === 'refused') {
+      return paintRefusal(422, {
+        beat: 'file',
+        refused: {
+          type,
+          verification: read.verification,
+          reason: 'terms',
+        },
+      });
+    }
+    if (existing) {
+      return paintRefusal(422, {
+        beat: 'file',
+        refused: {
+          type,
+          verification: read.verification,
+          reason: 'anchored',
+          documentHref,
+        },
+      });
+    }
+    if (chosen) {
+      const unit = await getUnit(deps.pool, chosen);
+      const result = await fileDocument(await filingDeps(deps), {
+        bytes,
+        typeKey: type.typeKey,
+        place: placeFor(type.typeKey, unit),
+        tenancyId: null,
+        filedBy: operator,
+        reading: read,
+      });
+      html(reply);
+      if (!result.filed) {
+        reply.code(422);
+        return leaseFiling(request, {
+          beat: 'file',
+          refused: {
+            type,
+            verification: result.verification,
+            reason: result.refusal,
+          },
+        });
+      }
+      return reply.redirect(`/documents/filing/${result.documentId}`);
+    }
+    const reading = readPlace(read.text);
+    const resolved = await resolvePlace(deps.pool, reading);
+    if (!resolved.unit) {
+      await createAuditLog(deps.pool, deps.clock).write(
+        {
+          actorKind: 'staff',
+          actorId: operator,
+          actorRole: request.staff?.role ?? undefined,
+          action: 'evidence.intake_unresolved',
+          inputs: {
+            typeKey: type.typeKey,
+            extension,
+            bytes: bytes.length,
+            fileHash,
+            candidates: resolved.candidates.length,
+            ocr: read.ocrOutcome,
+            pages: read.native.length,
+            ...(read.pagesRead === undefined
+              ? {}
+              : { pagesRead: read.pagesRead }),
+          },
+        },
+        { outcome: 'ok' },
+      );
+      return paintRefusal(422, {
+        beat: 'place',
+        reading,
+        candidateTotal: resolved.total,
+        building: resolved.building
+          ? {
+              building_id: resolved.building.building_id,
+              name: resolved.building.name,
+            }
+          : null,
+      });
+    }
+    html(reply);
+    return leaseFiling(request, {
+      beat: 'place',
+      matched: resolved.unit,
+      reading,
     });
   });
 

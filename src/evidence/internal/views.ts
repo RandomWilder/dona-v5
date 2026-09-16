@@ -468,14 +468,17 @@ function createHref(
  * operator cannot act on is a refusal they will work around, and "we could not place it" without
  * saying what was read is exactly that refusal. No name, no date, no line of the lease.
  */
-function placeRead(screen: IntakeScreen, reading: PlaceReading): Html {
+function placeFacts(
+  reading: PlaceReading,
+  building: IntakeScreen['building'],
+): Html {
   const address = reading.addressLine
     ? h`<p>
         נקראה הכתובת ${ltr(reading.addressLine)}${
           reading.city ? h`, ${reading.city}` : h``
         }.
         ${
-          screen.building
+          building
             ? h`הבניין נמצא בתיק, והדירה לא.`
             : h`הכתובת הזו אינה בתיק — לא הבניין ולא הדירה.`
         }
@@ -499,7 +502,11 @@ function placeRead(screen: IntakeScreen, reading: PlaceReading): Html {
           הצדדים ולא מתיאור הנכס.
         </p>`
     : h`<p>לא נקרא מספר דירה.</p>`;
-  return h`<div class="read-facts">${address}${apartment}</div>
+  return h`<div class="read-facts">${address}${apartment}</div>`;
+}
+
+function placeRead(screen: IntakeScreen, reading: PlaceReading): Html {
+  return h`${placeFacts(reading, screen.building)}
     <p class="lede">
       <strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום.
       בחרו את הדירה שאליה הנייר שייך, או חפשו אותה, וצרפו את הקובץ שוב.
@@ -678,6 +685,189 @@ export function renderIntakePage(screen: IntakeScreen): string {
         : h``
     }`;
   return shell('דונה דום — הוספת מסמך', body, screen.nav);
+}
+
+const FILING_BEATS = [
+  { key: 'file', label: 'המסמך' },
+  { key: 'place', label: 'הדירה' },
+  { key: 'read', label: 'הקריאה' },
+  { key: 'draft', label: 'הטיוטה' },
+  { key: 'done', label: 'די היום' },
+] as const;
+
+type FilingBeat = (typeof FILING_BEATS)[number]['key'];
+
+function filingBeats(current: FilingBeat): Html {
+  const at = FILING_BEATS.findIndex((beat) => beat.key === current);
+  return h`<ol class="filing-beats" aria-label="שלבי התיוק">
+    ${FILING_BEATS.map((beat, index) => {
+      const mark =
+        index === at
+          ? h`aria-current="step"`
+          : index < at
+            ? h`class="is-done"`
+            : h``;
+      return h`<li ${mark}>${beat.label}</li>`;
+    })}
+  </ol>`;
+}
+
+function filingHeadline(reading: PlaceReading, candidates: number): Html {
+  if (candidates > 1) {
+    return h`נמצאה יותר מדירה אחת`;
+  }
+  if (reading.addressLine === null && reading.annexDeferral) {
+    return h`הנכס מתואר בנספח`;
+  }
+  return h`לא זוהתה דירה אחת`;
+}
+
+export interface LeaseFilingScreen {
+  nav: Html;
+  csrf: string;
+  beat: FilingBeat;
+  matched?: UnitHit;
+  reading?: PlaceReading;
+  building?: { building_id: string; name: string } | null;
+  /** How many Units answered. Used only for the A12 headline when nothing is exact. */
+  candidateTotal?: number;
+  tooLargeBytes?: number;
+  refused?: {
+    type: DocumentTypeRow;
+    verification: Verification;
+    reason?: IntakeRefusal;
+    documentHref?: string;
+  };
+}
+
+export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
+  const tooLong =
+    screen.tooLargeBytes === undefined
+      ? h``
+      : h`<section class="notice">
+          <h2>הקובץ גדול מכדי שנקרא אותו</h2>
+          <p class="lede">
+            גודל הקובץ ${megabytes(screen.tooLargeBytes)} מ״ב, והקורא מקבל עד
+            ${megabytes(onlineOcrByteLimit)} מ״ב בפנייה אחת. לכן לא נקרא דבר ו<strong>לא נשמר
+            דבר</strong> — לא הקובץ ולא רישום. סרקו את המסמך ברזולוציה נמוכה יותר וצרפו שוב.
+          </p>
+        </section>`;
+  const duplicate = screen.refused?.reason === 'anchored';
+  const terms =
+    screen.refused && screen.refused.reason !== 'anchored'
+      ? refusal(
+          screen.refused.type,
+          screen.refused.verification,
+          screen.refused.reason,
+        )
+      : h``;
+  const already = duplicate
+    ? h`<section class="notice">
+        <h2>הקובץ הזה כבר מתויק</h2>
+        <p class="lede">
+          אותם בתים בדיוק כבר שמורים במערכת
+          ${
+            screen.refused?.documentHref
+              ? h` — <a href="${screen.refused.documentHref}">המסמך הקיים</a>`
+              : h``
+          }.
+          <strong>לא נשמר דבר</strong>. אם זה המסמך הנכון, הוא כבר במערכת.
+        </p>
+      </section>`
+    : h``;
+  const unresolved =
+    screen.reading !== undefined && !screen.matched
+      ? h`<section class="notice">
+          <h2>${filingHeadline(screen.reading, screen.candidateTotal ?? 0)}</h2>
+          ${placeFacts(screen.reading, screen.building)}
+          <p class="lede">
+            <strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום. צרפו קובץ אחר.
+          </p>
+        </section>`
+      : h``;
+  const match = screen.matched
+    ? h`<section class="notice">
+        <h2>דירה אחת</h2>
+        <p>
+          נקראה הכתובת
+          ${
+            screen.reading?.addressLine
+              ? h`<span class="excerpt">${screen.reading.addressLine}${
+                  screen.reading.city ? h`, ${screen.reading.city}` : h``
+                }</span>`
+              : h``
+          }
+          ${
+            screen.reading?.apartmentNumber
+              ? h` · דירה <span class="excerpt">${screen.reading.apartmentNumber}</span>`
+              : h``
+          }
+        </p>
+        <dl class="facts">
+          <div>
+            <dt>בתיק</dt>
+            <dd>
+              דירה ${ltr(screen.matched.unit_number)} · ${screen.matched.address_line} ·
+              ${screen.matched.city}
+            </dd>
+          </div>
+        </dl>
+      </section>`
+    : h``;
+  const stub =
+    screen.beat === 'read'
+      ? h`<section class="notice">
+          <h2>הקריאה</h2>
+          <p class="lede">הקובץ תויק. אישור השמות והתאריכים ייפתח כאן.</p>
+        </section>`
+      : h``;
+  const attach =
+    screen.beat === 'read'
+      ? h``
+      : h`<form class="file-well" method="post" action="/documents/filing" enctype="multipart/form-data">
+          ${csrfInput(screen.csrf)}
+          ${
+            screen.matched
+              ? h`<input type="hidden" name="unit" value="${screen.matched.unit_id}" />`
+              : h``
+          }
+          <span class="chip">חוזה שכירות</span>
+          <label for="file">הקובץ</label>
+          <input id="file" name="file" type="file" required
+            accept="${documentExtensions.map((ext) => `.${ext}`).join(',')}" />
+          <p class="hint">
+            ${
+              screen.matched
+                ? h`נשאר על הצעד עד המשך. נשמר רק אחרי אישור הדירה.`
+                : h`עד 20 מ״ב. נשמר רק אחרי שהדירה אושרה.`
+            }
+          </p>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">${
+              screen.matched ? h`המשך ותיוק` : h`קריאת הכתובת`
+            }</button>
+          </div>
+        </form>`;
+  const body = h`
+    <div>
+      <h1>תיוק חוזה</h1>
+      <p class="lede">${
+        screen.beat === 'read'
+          ? h`החוזה בתיק. הקריאה בטאב הזה.`
+          : screen.matched
+            ? h`נקראה כתובת. עדיין לא נשמר דבר.`
+            : h`חוזה אחד. הדירה מן הכתובת שעל הדף.`
+      }</p>
+    </div>
+    ${filingBeats(screen.beat)}
+    ${tooLong}
+    ${terms}
+    ${already}
+    ${unresolved}
+    ${match}
+    ${stub}
+    ${attach}`;
+  return shell('דונה דום — תיוק חוזה', body, screen.nav);
 }
 
 export interface FiledScreen {

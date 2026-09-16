@@ -45,6 +45,7 @@ import {
   renderFieldsPage,
   renderFiledPage,
   renderIntakePage,
+  renderLeaseFilingPage,
   renderReadPage,
   renderSeededPage,
   renderSeedPage,
@@ -265,6 +266,7 @@ const NAV_EXPIRING = signedInChrome(CSRF, 'expiring', true);
 const NAV_INCOMPLETE = signedInChrome(CSRF, 'incomplete', true);
 const NAV_STAFF = signedInChrome(CSRF, 'staff', true);
 const NAV_DOCUMENTS = signedInChrome(CSRF, 'documents', true);
+const NAV_FILING = signedInChrome(CSRF, 'filing', true);
 
 /**
  * **The read overlay at a stance. Slice 6.4.**
@@ -985,6 +987,47 @@ const SCREENS: Array<[string, () => string]> = [
     // Slice 6.3, flow A12. The screen that asks for no flat.
     'documents · intake',
     () => renderIntakePage({ nav: NAV, csrf: CSRF, types: documentTypes }),
+  ],
+  [
+    'documents · lease filing',
+    () => renderLeaseFilingPage({ nav: NAV_FILING, csrf: CSRF, beat: 'file' }),
+  ],
+  [
+    'documents · lease filing, exact one Unit',
+    () =>
+      renderLeaseFilingPage({
+        nav: NAV_FILING,
+        csrf: CSRF,
+        beat: 'place',
+        matched: hit,
+        reading: {
+          addressLine: 'הבילויים 10',
+          city: 'ראשון לציון',
+          apartmentNumber: '9',
+          annexDeferral: false,
+        },
+      }),
+  ],
+  [
+    'documents · lease filing, not ours',
+    () =>
+      renderLeaseFilingPage({
+        nav: NAV_FILING,
+        csrf: CSRF,
+        beat: 'place',
+        reading: {
+          addressLine: 'אלמוג 5',
+          city: 'עיר שאיננה',
+          apartmentNumber: '3',
+          annexDeferral: false,
+        },
+        building: null,
+        candidateTotal: 0,
+      }),
+  ],
+  [
+    'documents · lease filing, reading stub',
+    () => renderLeaseFilingPage({ nav: NAV_FILING, csrf: CSRF, beat: 'read' }),
   ],
   [
     // Slice 6.8. The other refusal this screen has: nothing was read at all, because the file is
@@ -1808,10 +1851,10 @@ describe('shared UI tokens', () => {
   /**
    * **The two screens in the registry whose rail is a viewer's. Slice 6.9.**
    *
-   * `documents` is the one gated destination on the bar — `documents.write`, which a VIEWER does
-   * not hold — so a rail built without it is a different screen and is registered as one. Named
-   * explicitly rather than matched by a pattern, so a screen added next month is asserted to carry
-   * the destination unless somebody says in this list that it does not.
+   * `documents` and `filing` are the gated destinations on the bar — `documents.write`, which a
+   * VIEWER does not hold — so a rail built without them is a different screen and is registered as
+   * one. Named explicitly rather than matched by a pattern, so a screen added next month is
+   * asserted to carry the destinations unless somebody says in this list that it does not.
    */
   const VIEWER_RAIL = new Set([
     'root · index, צופה',
@@ -1844,6 +1887,7 @@ describe('shared UI tokens', () => {
       // Gated, and the gate is asserted in both directions.
       if (VIEWER_RAIL.has(name)) {
         assert.doesNotMatch(html, /data-dest="documents"/, name);
+        assert.doesNotMatch(html, /data-dest="filing"/, name);
       } else {
         assert.match(html, /data-dest="documents"/, name);
         // **Slice 7.1 repointed it.** The rail item was the filing form; it is the tab now, and
@@ -1851,6 +1895,12 @@ describe('shared UI tokens', () => {
         // one is still a route and a rail that drifted back to it would otherwise pass.
         assert.match(html, /href="\/documents"/, name);
         assert.match(html, />מסמכים</, name);
+        assert.match(html, /data-dest="filing"/, name);
+        assert.match(html, /href="\/documents\/filing"/, name);
+        assert.match(html, />תיוק חוזה</, name);
+        const docs = html.indexOf('data-dest="documents"');
+        const filing = html.indexOf('data-dest="filing"');
+        assert.ok(docs < filing, name);
       }
       assert.match(html, /action="\/staff\/logout"/, name);
       assert.match(html, />יציאה</, name);

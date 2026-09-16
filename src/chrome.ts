@@ -19,6 +19,7 @@ export type ChromeDest =
   // unit-first screen without once reaching the flow the room had asked for. A flow's entrance is
   // part of the flow.
   | 'documents'
+  | 'filing'
   | 'expiring'
   | 'incomplete'
   | 'search'
@@ -44,7 +45,7 @@ function item(
 /**
  * The rail. **`mayFile` is required and has no default. Slice 6.9.**
  *
- * It is the one destination here that is gated, and the gate is `documents.write`: a VIEWER holds
+ * The documents tab and the lease-filing tab are gated, and the gate is `documents.write`: a VIEWER holds
  * `estate.read` and `documents.read` and nothing else, so an ungated tab would be a door that
  * answers `not_allowed` after somebody walked through it — which is exactly the refusal-after-typing
  * A11 refused to build for its own form. A required parameter rather than an optional one for 5.8's
@@ -64,7 +65,7 @@ export function signedInChrome(
     ${item('estate', '/estate', 'בניינים', dest, h`<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18" /><path d="M6 12h12" /><path d="M6 16h12" /><path d="M10 6h.01" /><path d="M14 6h.01" />`)}
     ${
       mayFile
-        ? item(
+        ? h`${item(
             'documents',
             // **Slice 7.1 moved this from `/documents/new` and renamed it.** The rail item was the
             // filing form itself, so the tab had no front page and the declaration the reader works
@@ -74,7 +75,13 @@ export function signedInChrome(
             'מסמכים',
             dest,
             h`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M12 18v-6" /><path d="m9 15 3-3 3 3" />`,
-          )
+          )}${item(
+            'filing',
+            '/documents/filing',
+            'תיוק חוזה',
+            dest,
+            h`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M16 13H8" /><path d="M16 17H8" /><path d="M10 9H8" />`,
+          )}`
         : h``
     }
     ${item('expiring', '/estate/expiring', 'חוזים מסתיימים', dest, h`<path d="M3 21h18" /><path d="M7 21V10" /><path d="M12 21V4" /><path d="M17 21v-7" />`)}

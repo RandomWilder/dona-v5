@@ -652,12 +652,41 @@ is no staging store, no `UNFILED` place kind and no fifth `PlaceKind` value. The
 real place (slice 3.2) and A6 settled the principle for the deterministic case: the cost is that the
 operator re-attaches the file, which is what 3.3's wrong-file refusal has always cost.
 
-**The second `csrf: 'in-body'` route, and the reason it is exactly two.** That flag is an exemption
+**The `csrf: 'in-body'` routes, and the reason the list is named.** That flag is an exemption
 from the composition root's CSRF `preHandler`, and the exemption is one sentence: *this body is a
 multipart stream and a hook that read the token would consume the stream the handler must parse*.
-That is true of `POST /documents/intake` for the same reason it is true of `POST /documents` and of
-nothing else in this system. `src/guard.test.ts` names both routes, so a third exemption fails the
+That is true of `POST /documents`, `POST /documents/intake` and `POST /documents/filing`, and of
+nothing else in this system. `src/guard.test.ts` names the three, so a fourth exemption fails the
 suite rather than passing quietly.
+
+### Filing a lease in one workspace — flow A16
+
+A16 is a **new door** over the same commands as A12. [SPEC-flows.md](SPEC-flows.md) A16 is the
+journey; this section is the routes. A12 is not amended: `POST /documents/intake` still files the
+moment the address is unique.
+
+**`GET /documents/filing`** is the rail tab **תיוק חוזה**, immediately under **מסמכים**, gated on
+`documents.write` as that tab is. The empty state **is** beat 1: type locked to **חוזה שכירות**,
+no type menu, an attach well, and the five beats as status — not as links. A VIEWER never sees the
+item.
+
+**`POST /documents/filing`** reads the place the way A12 does (`readForVerdict` → `readPlace` →
+`resolvePlace`). **Exact one Unit is shown, then Continue files.** The first post writes no row and
+no object. Continue is a second post of the same file with that Unit, and only then does
+`fileDocument` run. Nothing is held between the two posts. Type is `lease` at the edge; a posted
+type is ignored.
+
+**Wrong file, a scan the online reader cannot carry, and bytes already on file** refuse on this
+tab with a sentence, write nothing, and re-arm the file input. Duplicate bytes name the existing
+Document and link to it. **Not exactly one Unit** stays here with A12's sentence for that cause and
+a re-armed file input; pick, search and create are a later ticket on this tab.
+
+**After a successful file** the operator is still on this tab: `GET /documents/filing/:documentId`.
+That URL is this journey's, not `/documents/:id/fields` and not a Tenancy page. Beat 3 may still be
+a stub until the thin-reading ticket.
+
+**The rail destination** is `filing`. Other destinations, **מסמכים**, and A12's auto-file-on-exact-one
+are unchanged.
 
 **A refused resolution is on the audit log and counts against the cap.** `evidence.intake_unresolved`
 carries the declared type, the sniffed extension, the byte count, the file hash and how many
