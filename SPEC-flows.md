@@ -776,7 +776,7 @@ create-building / create-Unit **commands** reused here. Tenancy owns draft-from-
 activation facts (read, not invoked). Staff owns `documents.write` and `estate.write`. The rail
 gains one destination; no other destination changes.
 
-**Work item:** #115. Paint before wire.
+**Work item:** #115. Paint deleted after wire (#119).
 
 ## Open
 

@@ -53,6 +53,10 @@ const label = (table: Record<string, string>, value: string): string =>
 const ltr = (value: string | number): Html =>
   h`<span dir="ltr">${value}</span>`;
 
+/** A value the paper said, inside a sentence of ours. A16; old screens do not mark. */
+const excerpt = (value: string | Html): Html =>
+  h`<span class="excerpt">${value}</span>`;
+
 const styles = h`<style>
   /* minmax(0, 1fr) and not the default auto, from slice 7.1. Carried from the paint review: an
      implicit grid column floors at its widest item's min-content, so one .notice holding a table
@@ -473,12 +477,14 @@ function createHref(
 function placeFacts(
   reading: PlaceReading,
   building: IntakeScreen['building'],
+  paper: (value: Html) => Html = (value) => value,
 ): Html {
-  const address = reading.addressLine
+  const named = reading.addressLine
+    ? h`${ltr(reading.addressLine)}${reading.city ? h`, ${reading.city}` : h``}`
+    : null;
+  const address = named
     ? h`<p>
-        נקראה הכתובת ${ltr(reading.addressLine)}${
-          reading.city ? h`, ${reading.city}` : h``
-        }.
+        נקראה הכתובת ${paper(named)}.
         ${
           building
             ? h`הבניין נמצא בתיק, והדירה לא.`
@@ -498,9 +504,9 @@ function placeFacts(
   // had said it about the property.
   const apartment = reading.apartmentNumber
     ? reading.addressLine
-      ? h`<p>נקרא מספר דירה ${ltr(reading.apartmentNumber)}.</p>`
+      ? h`<p>נקרא מספר דירה ${paper(ltr(reading.apartmentNumber))}.</p>`
       : h`<p>
-          נקרא מספר דירה ${ltr(reading.apartmentNumber)}, אך ללא כתובת — ייתכן שנקרא משורה של אחד
+          נקרא מספר דירה ${paper(ltr(reading.apartmentNumber))}, אך ללא כתובת — ייתכן שנקרא משורה של אחד
           הצדדים ולא מתיאור הנכס.
         </p>`
     : h`<p>לא נקרא מספר דירה.</p>`;
@@ -811,10 +817,6 @@ export interface LeaseFilingScreen {
   draft?: FilingDraftFacts;
 }
 
-function shownReading(row: ExtractedRow): string {
-  return row.approvedValue ?? row.value;
-}
-
 function filingApproveControl(
   screen: LeaseFilingScreen,
   row: ExtractedRow,
@@ -875,7 +877,11 @@ function filingReading(screen: LeaseFilingScreen): Html {
           ${rows.map(
             (row) => h`<tr>
               <td>${row.labelHe}${nameRole(row, rows)}</td>
-              <td><span class="excerpt">${shownReading(row)}</span></td>
+              <td>${
+                row.fieldKey.endsWith('_date')
+                  ? excerpt(ltr(row.value))
+                  : excerpt(row.value)
+              }</td>
               ${filingApproveControl(screen, row)}
             </tr>`,
           )}
@@ -954,7 +960,7 @@ function filingLede(screen: LeaseFilingScreen): Html {
   }
   if (screen.beat === 'read') {
     return screen.unit
-      ? h`תויק לדירה ${ltr(screen.unit.unit_number)}. חתמו על שמות ותאריכים — נפתחת טיוטה.`
+      ? h`תויק לדירה ${excerpt(ltr(screen.unit.unit_number))}. חתמו על שמות ותאריכים — נפתחת טיוטה.`
       : h`החוזה בתיק. הקריאה בטאב הזה.`;
   }
   if (screen.matched) {
@@ -1003,7 +1009,7 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
     screen.reading !== undefined && !screen.matched && !screen.chosenUnitId
       ? h`<section class="notice">
           <h2>${filingHeadline(screen.reading, screen.candidateTotal ?? 0)}</h2>
-          ${placeFacts(screen.reading, screen.building)}
+          ${placeFacts(screen.reading, screen.building, excerpt)}
           <p class="lede">
             <strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום. בחרו דירה, חפשו, או צרפו שוב.
           </p>

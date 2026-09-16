@@ -709,6 +709,11 @@ control. No protocol file. Copy: going live is the Tenancy screen's act. **די 
 the strip until this arrival, then offers file another (`GET /documents/filing`, empty state; the
 draft is untouched), open the Tenancy, open the Unit.
 
+**What the paper said is marked** on these screens: street, city, apartment, names and dates are
+`excerpt` inside our sentences; operator copy is not. The empty attach is a `file-well`. The five
+beats are the strip. A12, A15, Tenancy and **מסמכים** do not use these marks. The lease-filing paint
+is gone; `GET /dev/mockups/lease-filing*` is not found.
+
 **A second lease on the same Unit and the same start date** is `conflict` on this tab, with a link
 to the existing Tenancy. Overlapping `ACTIVE` + `DRAFT` on one Unit remains ordinary and is not
 re-specified here.

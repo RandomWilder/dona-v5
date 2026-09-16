@@ -1853,6 +1853,30 @@ describe('shared UI tokens', () => {
     }
   });
 
+  it('marks paper values only on the lease-filing screens', () => {
+    const filing = SCREENS.filter(([name]) =>
+      name.startsWith('documents · lease filing'),
+    );
+    assert.ok(filing.length >= 5);
+    for (const [name, render] of filing) {
+      const html = render();
+      assert.match(html, /class="filing-beats"/, name);
+      if (name === 'documents · lease filing') {
+        assert.match(html, /class="file-well"/, name);
+        assert.doesNotMatch(html, /class="excerpt"/, name);
+        continue;
+      }
+      assert.match(html, /class="excerpt"/, name);
+    }
+    for (const [name, render] of SCREENS) {
+      if (name.startsWith('documents · lease filing')) continue;
+      const html = render();
+      assert.doesNotMatch(html, /class="excerpt"/, name);
+      assert.doesNotMatch(html, /class="file-well"/, name);
+      assert.doesNotMatch(html, /class="filing-beats"/, name);
+    }
+  });
+
   it('carries a CSRF token on every form that writes', () => {
     // **Slice 5.2, and this is the assertion that catches the eighth form.** Seven screens in this
     // system post; each of them was given the hidden input by hand, and a hand is exactly what

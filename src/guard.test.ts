@@ -525,6 +525,19 @@ describe('dev mockups', () => {
     );
   });
 
+  it('does not serve the lease-filing paint after the journey is wired', () => {
+    for (const flow of [
+      'lease-filing',
+      'lease-filing-place',
+      'lease-filing-several',
+      'lease-filing-reading',
+      'lease-filing-draft',
+      'lease-filing-large',
+    ]) {
+      assert.throws(() => renderMockup(flow, 'csrf'), /not found/, flow);
+    }
+  });
+
   it('refuses a segment that could leave the mockups directory', () => {
     for (const flow of [
       '../package',

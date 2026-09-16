@@ -1,9 +1,10 @@
-// A16 — the lease-filing tab. Issues #116, #117 and #118.
+// A16 — the lease-filing tab. Issues #116, #117, #118 and #119.
 //
 // Highest seam is HTTP against the new tab. Command guts (place reader, fileDocument, type
 // guard, OCR ceiling, upsertUnitRow, draft from approved reading, same-Unit-and-start conflict)
 // stay proved where they already are. This suite proves the sequence: confirm-then-file,
-// pick/search/create, thin reading → טיוטה on this tab, and that A12 still files on exact one.
+// pick/search/create, thin reading → טיוטה on this tab, paper marks, that A12 still files on
+// exact one, and that the paint is gone.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { specimenDocuments } from '../../evals/fixtures/specimen-clauses.ts';
@@ -40,6 +41,46 @@ const BUCKET = 'dona-v5-test-a16';
 const AT = new Date('2026-09-16T09:00:00.000Z');
 const STAFF_DOMAIN = 'a16-filing.test';
 const BOUNDARY = '----donaa16';
+
+const paperMarks = (html: string): string[] => {
+  const marks: string[] = [];
+  const start = /<span class="excerpt"[^>]*>/g;
+  let found = start.exec(html);
+  while (found) {
+    let depth = 1;
+    let at = found.index + found[0].length;
+    const innerStart = at;
+    while (at < html.length && depth > 0) {
+      const open = html.indexOf('<span', at);
+      const close = html.indexOf('</span>', at);
+      if (close === -1) break;
+      if (open !== -1 && open < close) {
+        depth += 1;
+        at = open + 5;
+        continue;
+      }
+      depth -= 1;
+      if (depth === 0) {
+        marks.push(
+          html
+            .slice(innerStart, close)
+            .replace(/<[^>]+>/g, '')
+            .replace(/\s+/g, ' ')
+            .trim(),
+        );
+      }
+      at = close + 7;
+    }
+    found = start.exec(html);
+  }
+  return marks;
+};
+
+const noA16Paint = (html: string) => {
+  assert.doesNotMatch(html, /class="excerpt"/);
+  assert.doesNotMatch(html, /class="file-well"/);
+  assert.doesNotMatch(html, /class="filing-beats"/);
+};
 
 const specimen = (file: string): string => {
   const found = specimenDocuments.find((document) => document.file === file);
@@ -307,6 +348,8 @@ describe('evidence · A16 file a lease in one workspace', {
           assert.doesNotMatch(response.body, /<select[^>]*name="type"/);
           assert.doesNotMatch(response.body, /name="type"/);
           assert.match(response.body, /class="filing-beats"/);
+          assert.match(response.body, /class="file-well"/);
+          assert.deepEqual(paperMarks(response.body), []);
           assert.match(response.body, /המסמך/);
           assert.match(response.body, /הדירה/);
           assert.match(response.body, /הקריאה/);
@@ -363,6 +406,12 @@ describe('evidence · A16 file a lease in one workspace', {
           });
           assert.equal(seen.statusCode, 200, seen.body.slice(0, 400));
           assert.match(seen.body, /דירה אחת/);
+          const marks = paperMarks(seen.body);
+          assert.ok(marks.some((mark) => mark.includes(ADDRESS)));
+          assert.ok(marks.some((mark) => mark.includes(CITY)));
+          assert.ok(marks.some((mark) => mark === '9'));
+          assert.ok(marks.every((mark) => !/נקראה|בתיק|המשך/.test(mark)));
+          assert.match(seen.body, /class="file-well"/);
           assert.match(seen.body, new RegExp(`value="${unitNine}"`));
           assert.match(seen.body, /type="file"/);
           assert.doesNotMatch(seen.body, /type="radio"/);
@@ -443,6 +492,8 @@ describe('evidence · A16 file a lease in one workspace', {
           });
           assert.equal(response.statusCode, 422);
           assert.match(response.body, /גדול מכדי/);
+          assert.match(response.body, /class="file-well"/);
+          assert.deepEqual(paperMarks(response.body), []);
           assert.match(response.body, /type="file"/);
           assert.equal(await documentsHere(), before);
           assert.equal(puts, putsBefore);
@@ -496,6 +547,11 @@ describe('evidence · A16 file a lease in one workspace', {
           });
           assert.equal(many.statusCode, 422);
           assert.match(many.body, /נמצאה יותר מדירה אחת/);
+          const marks = paperMarks(many.body);
+          assert.ok(marks.some((mark) => mark.includes(ADDRESS)));
+          assert.ok(marks.some((mark) => mark.includes(CITY)));
+          assert.ok(marks.every((mark) => !/נקראה|יותר מדירה/.test(mark)));
+          assert.match(many.body, /class="file-well"/);
           assert.match(many.body, /type="radio"/);
           assert.match(many.body, new RegExp(`value="${unitNine}"`));
           assert.match(many.body, new RegExp(`value="${unitTen}"`));
@@ -538,6 +594,10 @@ describe('evidence · A16 file a lease in one workspace', {
           });
           assert.equal(none.statusCode, 422);
           assert.match(none.body, /אינה בתיק/);
+          const marks = paperMarks(none.body);
+          assert.ok(marks.some((mark) => mark.includes(NONE_STREET)));
+          assert.ok(marks.some((mark) => mark.includes(NONE_CITY)));
+          assert.ok(marks.every((mark) => !/אינה בתיק/.test(mark)));
           assert.match(none.body, /חיפוש דירה/);
           assert.match(none.body, /type="file"/);
           assert.doesNotMatch(none.body, /\/estate\/buildings\/new/);
@@ -764,6 +824,25 @@ describe('evidence · A16 file a lease in one workspace', {
           );
           assert.equal((await documentsHere()) - before, 1);
           hashes.push(documentFileHash(pdfBytes('a16 a12 still')));
+          const intake = await as(here).inject({
+            method: 'GET',
+            url: '/documents/new',
+          });
+          assert.equal(intake.statusCode, 200);
+          noA16Paint(intake.body);
+          const catalogue = await as(here).inject({
+            method: 'GET',
+            url: '/documents',
+          });
+          assert.equal(catalogue.statusCode, 200);
+          noA16Paint(catalogue.body);
+          const fields = await as(here).inject({
+            method: 'GET',
+            url: String(response.headers.location),
+          });
+          assert.equal(fields.statusCode, 200);
+          assert.match(fields.body, /מה נקרא מן המסמך/);
+          noA16Paint(fields.body);
         },
       );
     } finally {
@@ -1064,6 +1143,12 @@ describe('evidence · A16 file a lease in one workspace', {
       assert.match(reading.body, new RegExp(TENANT));
       assert.match(reading.body, new RegExp(START));
       assert.match(reading.body, new RegExp(END));
+      const readingMarks = paperMarks(reading.body);
+      assert.ok(readingMarks.includes(TENANT));
+      assert.ok(readingMarks.includes(START));
+      assert.ok(readingMarks.includes(END));
+      assert.ok(readingMarks.includes('9'));
+      assert.ok(readingMarks.every((mark) => !/חתמו|טיוטה|שדה/.test(mark)));
       assert.match(
         reading.body,
         new RegExp(`action="/documents/filing/${documentId}/approve"`),
@@ -1083,6 +1168,7 @@ describe('evidence · A16 file a lease in one workspace', {
       assert.match(ledger.body, /מה נקרא מן המסמך/);
       assert.match(ledger.body, /איכות הקריאה/);
       assert.match(ledger.body, /\/documents\/.*\/fields\/approve/);
+      noA16Paint(ledger.body);
 
       const last = await stampOpening(documentId);
       assert.equal(last.statusCode, 302, last.body.slice(0, 400));
@@ -1102,6 +1188,13 @@ describe('evidence · A16 file a lease in one workspace', {
       assert.match(draft.body, new RegExp(TENANT));
       assert.match(draft.body, new RegExp(START));
       assert.match(draft.body, new RegExp(END));
+      const draftMarks = paperMarks(draft.body);
+      assert.ok(draftMarks.includes(TENANT));
+      assert.ok(draftMarks.includes(START));
+      assert.ok(draftMarks.includes(END));
+      assert.ok(
+        draftMarks.every((mark) => !/הטיוטה נרשמה|פרוטוקול|די היום/.test(mark)),
+      );
       assert.match(draft.body, /פרוטוקול מסירה/);
       assert.match(draft.body, /לא הוגש/);
       assert.match(draft.body, /href="\/documents\/filing"/);
@@ -1118,6 +1211,12 @@ describe('evidence · A16 file a lease in one workspace', {
       assert.ok(tenancyHref);
       const tenancyId =
         tenancyHref.match(/\/estate\/tenancies\/([0-9a-f-]{36})$/)?.[1] ?? '';
+      const tenancy = await asRole(app, actor).inject({
+        method: 'GET',
+        url: tenancyHref,
+      });
+      assert.equal(tenancy.statusCode, 200);
+      noA16Paint(tenancy.body);
 
       const another = await asRole(app, actor).inject({
         method: 'GET',
