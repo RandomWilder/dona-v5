@@ -1026,8 +1026,51 @@ const SCREENS: Array<[string, () => string]> = [
       }),
   ],
   [
-    'documents · lease filing, reading stub',
-    () => renderLeaseFilingPage({ nav: NAV_FILING, csrf: CSRF, beat: 'read' }),
+    'documents · lease filing, thin reading',
+    () =>
+      renderLeaseFilingPage({
+        nav: NAV_FILING,
+        csrf: CSRF,
+        beat: 'read',
+        documentId: FIELDS_DOCUMENT,
+        unit: hit,
+        mayApprove: true,
+        rows: [
+          reading(
+            'dddddddd-0000-4000-8000-000000000001',
+            'start_date',
+            'תחילת תקופת השכירות',
+            '2026-11-01',
+            0.96,
+          ),
+          reading(
+            'dddddddd-0000-4000-8000-000000000002',
+            'tenant_name',
+            'שם השוכר',
+            TENANT_NAME,
+            0.9,
+          ),
+        ],
+      }),
+  ],
+  [
+    'documents · lease filing, draft arrival',
+    () =>
+      renderLeaseFilingPage({
+        nav: NAV_FILING,
+        csrf: CSRF,
+        beat: 'draft',
+        documentId: FIELDS_DOCUMENT,
+        unit: hit,
+        draft: {
+          tenancyId: '55555555-5555-4555-8555-555555555555',
+          tenants: [TENANT_NAME],
+          guarantors: [GUARANTOR_NAME],
+          startDate: '2026-11-01',
+          endDate: '2027-10-31',
+          protocolPresent: false,
+        },
+      }),
   ],
   [
     // Slice 6.8. The other refusal this screen has: nothing was read at all, because the file is
@@ -2214,6 +2257,8 @@ describe('shared UI tokens', () => {
       'estate · one tenancy, blocked',
       'estate · one tenancy, arms on a date',
       'estate · one tenancy, open',
+      'documents · lease filing, thin reading',
+      'documents · lease filing, draft arrival',
     ];
     // **The two write receipts were on that list until this case was first run, and came off it.**
     // `renderTenancyWrittenPage` says `partiesWritten` and not who: once the confirm is done the

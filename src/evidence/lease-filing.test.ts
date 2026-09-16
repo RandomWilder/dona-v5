@@ -1,8 +1,9 @@
-// A16 — the lease-filing tab. Issues #116 and #117.
+// A16 — the lease-filing tab. Issues #116, #117 and #118.
 //
 // Highest seam is HTTP against the new tab. Command guts (place reader, fileDocument, type
-// guard, OCR ceiling, upsertUnitRow) stay proved where they already are. This suite proves the
-// sequence: confirm-then-file, pick/search/create on this tab, and that A12 still files on exact one.
+// guard, OCR ceiling, upsertUnitRow, draft from approved reading, same-Unit-and-start conflict)
+// stay proved where they already are. This suite proves the sequence: confirm-then-file,
+// pick/search/create, thin reading → טיוטה on this tab, and that A12 still files on exact one.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { specimenDocuments } from '../../evals/fixtures/specimen-clauses.ts';
@@ -16,11 +17,18 @@ import { buildApp } from '../app.ts';
 import type { EstatePlan } from '../estate/contract.ts';
 import { importEstate } from '../estate/contract.ts';
 import { fixedClock } from '../kernel/clock.ts';
+import { inTransaction } from '../kernel/db.ts';
+import { createFakeExtractor } from '../kernel/extraction.ts';
 import { createMemoryStore } from '../kernel/objects.ts';
 import { createFakeOcrText, onlineOcrByteLimit } from '../kernel/ocr.ts';
 import { createFakePdfText } from '../kernel/pdf.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
-import { applyDocumentTypeCatalogue, documentFileHash } from './contract.ts';
+import { upsertTermsProfile } from '../tenancy/contract.ts';
+import {
+  applyDocumentTypeCatalogue,
+  DEFAULT_TERMS_PROFILE,
+  documentFileHash,
+} from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const CITY = 'עיר תיוק חוזה';
@@ -138,7 +146,9 @@ function upload(
   };
 }
 
-describe('evidence · A16 file a lease in one workspace', () => {
+describe('evidence · A16 file a lease in one workspace', {
+  concurrency: false,
+}, () => {
   it('shows the tab, confirms exact one, then files on this tab', async (t) => {
     const pool = await migratedPoolOrNull();
     if (!pool) {
@@ -247,6 +257,24 @@ describe('evidence · A16 file a lease in one workspace', () => {
       };
       await wipePlace(CITY, ADDRESS);
       await wipePlace(NONE_CITY, NONE_STREET);
+      await pool.query(
+        `DELETE FROM extracted_field WHERE document_id IN
+           (SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
+        [`gs://${BUCKET}/%`],
+      );
+      await pool.query(
+        `DELETE FROM document_passage WHERE document_id IN
+           (SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
+        [`gs://${BUCKET}/%`],
+      );
+      await pool.query(
+        `DELETE FROM document_link WHERE document_id IN
+           (SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
+        [`gs://${BUCKET}/%`],
+      );
+      await pool.query('DELETE FROM document WHERE storage_uri LIKE $1', [
+        `gs://${BUCKET}/%`,
+      ]);
       await applyDocumentTypeCatalogue(pool, seedDocumentTypes);
       await importEstate(pool, plan);
       const found = await pool.query<{ unit_id: string; unit_number: string }>(
@@ -810,6 +838,395 @@ describe('evidence · A16 file a lease in one workspace', () => {
       for (const app of apps) {
         await app.close();
       }
+      await pool.end();
+    }
+  });
+
+  it('stamps names and dates on this tab, then arrives at טיוטה', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+
+    const CITY_R = 'עיר תיוק קריאה';
+    const ADDRESS_R = 'הבילויים 11';
+    const PROJECT_R = 'TEST-A16-R';
+    const BUCKET_R = 'dona-v5-test-a16-read';
+    const DOMAIN_R = 'a16-read.test';
+    const START = '2026-11-01';
+    const END = '2027-10-31';
+    const TENANT = 'יוסף כהן';
+    const findings = [
+      { field_key: 'start_date', value: START, word_ids: [0] },
+      { field_key: 'end_date', value: END, word_ids: [1] },
+      { field_key: 'apartment_number', value: '9', word_ids: [2] },
+      { field_key: 'address', value: ADDRESS_R, word_ids: [3] },
+      { field_key: 'tenant_name', value: TENANT, word_ids: [4] },
+      { field_key: 'tenant_id_number', value: '123456789', word_ids: [5] },
+    ];
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      clock: fixedClock(AT),
+      objects: createMemoryStore(),
+      pdf: createFakePdfText([leasing(`${ADDRESS_R}, ${CITY_R}, דירה 9`)]),
+      extractor: createFakeExtractor(() => ({ findings })),
+      bucket: BUCKET_R,
+    });
+    const planR: EstatePlan = {
+      projects: [
+        {
+          name: 'מכרז תיוק קריאה',
+          projectCode: PROJECT_R,
+          tenderRef: null,
+          status: 'ACTIVE',
+        },
+      ],
+      buildings: [
+        {
+          name: 'בניין הבילויים 11',
+          addressLine: ADDRESS_R,
+          city: CITY_R,
+          projectCode: PROJECT_R,
+          handoverDate: '2025-03-01',
+          warrantyEndDate: '2027-03-01',
+          status: 'ACTIVE',
+          spaces: [
+            { kind: 'UNIT', name: 'דירה 9', floor: '1', accessNote: null },
+          ],
+          units: [
+            {
+              spaceName: 'דירה 9',
+              unitNumber: '9',
+              rooms: 3,
+              areaSqm: 70,
+              hasMamad: false,
+              parkingSpaceName: null,
+              storageSpaceName: null,
+              warrantyEndDate: null,
+              conditionStatus: 'READY',
+            },
+          ],
+        },
+      ],
+    };
+
+    const form = (fields: Record<string, string>): string =>
+      new URLSearchParams(fields).toString();
+    let actor: SignedIn;
+    const post = (url: string, fields: Record<string, string>) =>
+      asRole(app, actor).inject({
+        method: 'POST',
+        url,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({ csrf: actor.csrf, ...fields }),
+      });
+    const send = (
+      fields: Record<string, string>,
+      file: { filename: string; bytes: Buffer },
+    ) => {
+      const body = upload({ csrf: actor.csrf, ...fields }, file);
+      return asRole(app, actor).inject({
+        method: 'POST',
+        url: '/documents/filing',
+        ...body,
+      });
+    };
+
+    const rowIdOf = async (
+      documentId: string,
+      fieldKey: string,
+    ): Promise<string> => {
+      const rows = await pool.query<{ id: string }>(
+        `SELECT e.extracted_field_id AS id FROM extracted_field e
+           JOIN document_type_field f
+             ON f.document_type_field_id = e.document_type_field_id
+          WHERE e.document_id = $1 AND f.field_key = $2
+          ORDER BY e.extracted_field_id`,
+        [documentId, fieldKey],
+      );
+      const id = rows.rows[0]?.id ?? '';
+      assert.ok(id, fieldKey);
+      return id;
+    };
+
+    const fileOnTab = async (marker: string): Promise<string> => {
+      const seen = await send(
+        {},
+        { filename: 'שכירות.pdf', bytes: pdfBytes(marker) },
+      );
+      assert.equal(seen.statusCode, 200, seen.body.slice(0, 400));
+      const filed = await send(
+        { unit: unitId },
+        { filename: 'שכירות.pdf', bytes: pdfBytes(marker) },
+      );
+      assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
+      const location = String(filed.headers.location ?? '');
+      assert.match(location, /\/documents\/filing\/[0-9a-f-]{36}$/);
+      return location.match(/\/documents\/filing\/([0-9a-f-]{36})$/)?.[1] ?? '';
+    };
+
+    const stampOpening = async (documentId: string) => {
+      for (const key of ['start_date', 'end_date', 'tenant_name'] as const) {
+        const stamped = await post(`/documents/filing/${documentId}/approve`, {
+          extracted_field_id: await rowIdOf(documentId, key),
+        });
+        if (key !== 'tenant_name') {
+          assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 400));
+          assert.equal(
+            stamped.headers.location,
+            `/documents/filing/${documentId}`,
+          );
+        } else {
+          return stamped;
+        }
+      }
+      throw new Error('no last stamp');
+    };
+
+    let unitId = '';
+    try {
+      await signOutAll(pool, DOMAIN_R);
+      actor = await signIn(pool, fixedClock(AT), {
+        email: `admin@${DOMAIN_R}`,
+        role: 'ADMIN',
+      });
+      await applyDocumentTypeCatalogue(pool, seedDocumentTypes);
+      await pool.query(
+        'ALTER TABLE tenancy_event DISABLE TRIGGER tenancy_event_is_append_only',
+      );
+      try {
+        await pool.query(
+          `DELETE FROM tenancy_event WHERE tenancy_id IN (
+             SELECT t.tenancy_id FROM tenancy t
+             JOIN space s ON s.space_id = t.unit_id
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [CITY_R, ADDRESS_R],
+        );
+        await pool.query(
+          `DELETE FROM tenancy_party WHERE tenancy_id IN (
+             SELECT t.tenancy_id FROM tenancy t
+             JOIN space s ON s.space_id = t.unit_id
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [CITY_R, ADDRESS_R],
+        );
+        await pool.query(
+          `DELETE FROM tenancy WHERE unit_id IN (
+             SELECT s.space_id FROM space s
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [CITY_R, ADDRESS_R],
+        );
+        await pool.query(
+          `DELETE FROM unit WHERE unit_id IN (
+             SELECT s.space_id FROM space s
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [CITY_R, ADDRESS_R],
+        );
+        await pool.query(
+          `DELETE FROM space WHERE building_id IN (
+             SELECT building_id FROM building WHERE city = $1 AND address_line = $2)`,
+          [CITY_R, ADDRESS_R],
+        );
+        await pool.query(
+          'DELETE FROM building WHERE city = $1 AND address_line = $2',
+          [CITY_R, ADDRESS_R],
+        );
+      } finally {
+        await pool.query(
+          'ALTER TABLE tenancy_event ENABLE TRIGGER tenancy_event_is_append_only',
+        );
+      }
+      await importEstate(pool, planR);
+      await upsertTermsProfile(pool, DEFAULT_TERMS_PROFILE);
+      const found = await pool.query<{ unit_id: string }>(
+        `SELECT u.unit_id FROM unit u
+           JOIN space s ON s.space_id = u.unit_id
+           JOIN building b ON b.building_id = s.building_id
+          WHERE b.city = $1 AND b.address_line = $2`,
+        [CITY_R, ADDRESS_R],
+      );
+      unitId = found.rows[0]?.unit_id ?? '';
+      assert.ok(unitId);
+
+      const documentId = await fileOnTab('a16-read-one');
+      const reading = await asRole(app, actor).inject({
+        method: 'GET',
+        url: `/documents/filing/${documentId}`,
+      });
+      assert.equal(reading.statusCode, 200);
+      assert.match(reading.body, /תיוק חוזה/);
+      assert.match(reading.body, /הקריאה/);
+      assert.match(reading.body, new RegExp(TENANT));
+      assert.match(reading.body, new RegExp(START));
+      assert.match(reading.body, new RegExp(END));
+      assert.match(
+        reading.body,
+        new RegExp(`action="/documents/filing/${documentId}/approve"`),
+      );
+      assert.doesNotMatch(reading.body, /מה נקרא מן המסמך/);
+      assert.doesNotMatch(reading.body, /אישור כל מה שלא סומן/);
+      assert.doesNotMatch(reading.body, />קדם/);
+      assert.doesNotMatch(reading.body, /\/fields\/reveal/);
+      assert.doesNotMatch(reading.body, /פתיחת החוזה/);
+      assert.doesNotMatch(reading.body, /123456789/);
+
+      const ledger = await asRole(app, actor).inject({
+        method: 'GET',
+        url: `/documents/${documentId}/fields`,
+      });
+      assert.equal(ledger.statusCode, 200);
+      assert.match(ledger.body, /מה נקרא מן המסמך/);
+      assert.match(ledger.body, /איכות הקריאה/);
+      assert.match(ledger.body, /\/documents\/.*\/fields\/approve/);
+
+      const last = await stampOpening(documentId);
+      assert.equal(last.statusCode, 302, last.body.slice(0, 400));
+      assert.equal(last.headers.location, `/documents/filing/${documentId}`);
+      assert.doesNotMatch(
+        String(last.headers.location),
+        /\/estate\/tenancies\//,
+      );
+
+      const draft = await asRole(app, actor).inject({
+        method: 'GET',
+        url: `/documents/filing/${documentId}`,
+      });
+      assert.equal(draft.statusCode, 200);
+      assert.match(draft.body, /הטיוטה/);
+      assert.match(draft.body, /די היום/);
+      assert.match(draft.body, new RegExp(TENANT));
+      assert.match(draft.body, new RegExp(START));
+      assert.match(draft.body, new RegExp(END));
+      assert.match(draft.body, /פרוטוקול מסירה/);
+      assert.match(draft.body, /לא הוגש/);
+      assert.match(draft.body, /href="\/documents\/filing"/);
+      assert.match(draft.body, /פתיחת החוזה/);
+      assert.match(draft.body, /פתיחת הדירה/);
+      assert.match(draft.body, new RegExp(`/estate/units/${unitId}`));
+      assert.doesNotMatch(draft.body, /\/activate/);
+      assert.doesNotMatch(draft.body, /name="file"/);
+      assert.doesNotMatch(draft.body, /handover_protocol/);
+      assert.doesNotMatch(draft.body, /מה נקרא מן המסמך/);
+      const tenancyHref =
+        draft.body.match(/href="(\/estate\/tenancies\/[0-9a-f-]{36})"/)?.[1] ??
+        '';
+      assert.ok(tenancyHref);
+      const tenancyId =
+        tenancyHref.match(/\/estate\/tenancies\/([0-9a-f-]{36})$/)?.[1] ?? '';
+
+      const another = await asRole(app, actor).inject({
+        method: 'GET',
+        url: '/documents/filing',
+      });
+      assert.equal(another.statusCode, 200);
+      assert.match(another.body, /type="file"/);
+      assert.doesNotMatch(another.body, new RegExp(TENANT));
+      const kept = await pool.query<{ n: string }>(
+        'SELECT count(*)::text AS n FROM tenancy WHERE tenancy_id = $1',
+        [tenancyId],
+      );
+      assert.equal(kept.rows[0]?.n, '1');
+
+      const secondId = await fileOnTab('a16-read-two');
+      const clash = await stampOpening(secondId);
+      assert.equal(clash.statusCode, 409, clash.body.slice(0, 400));
+      assert.match(clash.body, /conflict/);
+      assert.match(clash.body, new RegExp(`/estate/tenancies/${tenancyId}`));
+    } finally {
+      await inTransaction(pool, async (db) => {
+        await db.query("SELECT set_config('dona.approving', 'on', true)");
+        await db.query("SELECT set_config('dona.promoting', 'on', true)");
+        await db.query(
+          `UPDATE extracted_field
+              SET approved_value = NULL, approved_by = NULL, approved_at = NULL,
+                  promoted_to = NULL, promoted_by = NULL, promoted_at = NULL
+            WHERE document_id IN (SELECT document_id FROM document
+                                   WHERE storage_uri LIKE $1)`,
+          [`gs://${BUCKET_R}/%`],
+        );
+      });
+      await pool.query(
+        'ALTER TABLE tenancy_event DISABLE TRIGGER tenancy_event_is_append_only',
+      );
+      try {
+        await pool.query(
+          `DELETE FROM tenancy_event WHERE extracted_field_id IN (
+             SELECT extracted_field_id FROM extracted_field
+              WHERE document_id IN (SELECT document_id FROM document
+                                     WHERE storage_uri LIKE $1))`,
+          [`gs://${BUCKET_R}/%`],
+        );
+        await pool.query(
+          `DELETE FROM tenancy_event WHERE tenancy_id IN (
+             SELECT t.tenancy_id FROM tenancy t
+             JOIN space s ON s.space_id = t.unit_id
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [CITY_R, ADDRESS_R],
+        );
+        await pool.query(
+          `DELETE FROM tenancy_party WHERE tenancy_id IN (
+             SELECT t.tenancy_id FROM tenancy t
+             JOIN space s ON s.space_id = t.unit_id
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [CITY_R, ADDRESS_R],
+        );
+        await pool.query(
+          `DELETE FROM tenancy WHERE unit_id IN (
+             SELECT s.space_id FROM space s
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [CITY_R, ADDRESS_R],
+        );
+      } finally {
+        await pool.query(
+          'ALTER TABLE tenancy_event ENABLE TRIGGER tenancy_event_is_append_only',
+        );
+      }
+      await pool.query(
+        `DELETE FROM extracted_field WHERE document_id IN
+           (SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
+        [`gs://${BUCKET_R}/%`],
+      );
+      await pool.query(
+        `DELETE FROM document_passage WHERE document_id IN
+           (SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
+        [`gs://${BUCKET_R}/%`],
+      );
+      await pool.query(
+        `DELETE FROM document_link WHERE document_id IN
+           (SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
+        [`gs://${BUCKET_R}/%`],
+      );
+      await pool.query('DELETE FROM document WHERE storage_uri LIKE $1', [
+        `gs://${BUCKET_R}/%`,
+      ]);
+      await pool.query(
+        `DELETE FROM unit WHERE unit_id IN (
+           SELECT s.space_id FROM space s
+           JOIN building b ON b.building_id = s.building_id
+           WHERE b.city = $1 AND b.address_line = $2)`,
+        [CITY_R, ADDRESS_R],
+      );
+      await pool.query(
+        `DELETE FROM space WHERE building_id IN (
+           SELECT building_id FROM building WHERE city = $1 AND address_line = $2)`,
+        [CITY_R, ADDRESS_R],
+      );
+      await pool.query(
+        'DELETE FROM building WHERE city = $1 AND address_line = $2',
+        [CITY_R, ADDRESS_R],
+      );
+      await pool.query('DELETE FROM project WHERE project_code = $1', [
+        PROJECT_R,
+      ]);
+      await app.close();
       await pool.end();
     }
   });

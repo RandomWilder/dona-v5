@@ -86,6 +86,8 @@ const styles = h`<style>
     background: var(--color-surface-card);
   }
   .notice h2 { margin-block-end: var(--space-2); }
+  .notice h2.second-heading { margin-block-start: var(--space-5); }
+  .missing { margin: var(--space-3) 0 0; padding: 0; list-style: none; display: grid; gap: var(--space-2); }
   /* One pair per line here, unlike a unit card's grid: there are three of them and one is a
      64-character digest, which in two columns wraps into a block nobody can read a line of. */
   .notice .facts { grid-template-columns: 1fr; }
@@ -762,6 +764,25 @@ function filingHeadline(reading: PlaceReading, candidates: number): Html {
   return h`לא זוהתה דירה אחת`;
 }
 
+/** The stamps that open a letting. A15 keeps every other field. */
+export const FILING_OPENING_FIELDS = [
+  'tenant_name',
+  'guarantor_name',
+  'start_date',
+  'end_date',
+] as const;
+
+const OPENING_FIELD = new Set<string>(FILING_OPENING_FIELDS);
+
+export interface FilingDraftFacts {
+  tenancyId: string;
+  tenants: readonly string[];
+  guarantors: readonly string[];
+  startDate: string;
+  endDate: string;
+  protocolPresent: boolean;
+}
+
 export interface LeaseFilingScreen {
   nav: Html;
   csrf: string;
@@ -782,6 +803,164 @@ export interface LeaseFilingScreen {
     reason?: IntakeRefusal;
     documentHref?: string;
   };
+  documentId?: string;
+  unit?: UnitHit;
+  rows?: readonly ExtractedRow[];
+  mayApprove?: boolean;
+  conflictTenancyId?: string;
+  draft?: FilingDraftFacts;
+}
+
+function shownReading(row: ExtractedRow): string {
+  return row.approvedValue ?? row.value;
+}
+
+function filingApproveControl(
+  screen: LeaseFilingScreen,
+  row: ExtractedRow,
+): Html {
+  if (!screen.documentId) {
+    return h``;
+  }
+  if (row.approvedAt !== null) {
+    return h`<td class="muted">אושר</td>`;
+  }
+  if (!screen.mayApprove) {
+    return h`<td class="muted">—</td>`;
+  }
+  return h`<td class="row-actions">
+    <form method="post" action="/documents/filing/${screen.documentId}/approve">
+      ${csrfInput(screen.csrf)}
+      <input type="hidden" name="extracted_field_id" value="${row.extractedFieldId}" />
+      <input class="mini" name="approved_value" value="${row.value}" maxlength="2000"
+        aria-label="הערך המאושר ל${row.labelHe}" />
+      <button class="btn btn-primary mini" type="submit">אישור</button>
+    </form>
+  </td>`;
+}
+
+function filingReading(screen: LeaseFilingScreen): Html {
+  const rows = (screen.rows ?? []).filter((row) =>
+    OPENING_FIELD.has(row.fieldKey),
+  );
+  if (screen.beat !== 'read') {
+    return h``;
+  }
+  const conflict = screen.conflictTenancyId
+    ? h`<section class="notice">
+        <h2>conflict</h2>
+        <p class="lede">
+          כבר יש חוזה לדירה הזו באותו מועד תחילה —
+          <a href="/estate/tenancies/${screen.conflictTenancyId}">פתיחת החוזה</a>.
+        </p>
+      </section>`
+    : h``;
+  if (rows.length === 0) {
+    return h`${conflict}<section class="notice">
+      <h2>הקריאה</h2>
+      <p class="lede">הקובץ תויק. אישור השמות והתאריכים ייפתח כאן.</p>
+    </section>`;
+  }
+  return h`${conflict}<section class="notice">
+    <div class="table-wrap">
+      <table class="grid-table">
+        <thead>
+          <tr>
+            <th>שדה</th>
+            <th>מן הדף</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(
+            (row) => h`<tr>
+              <td>${row.labelHe}${nameRole(row, rows)}</td>
+              <td><span class="excerpt">${shownReading(row)}</span></td>
+              ${filingApproveControl(screen, row)}
+            </tr>`,
+          )}
+        </tbody>
+      </table>
+    </div>
+  </section>`;
+}
+
+function filingDraft(screen: LeaseFilingScreen): Html {
+  const draft = screen.draft;
+  const unit = screen.unit;
+  if (screen.beat !== 'draft' || !draft || !unit) {
+    return h``;
+  }
+  const title = draft.tenants[0]
+    ? h`<span class="excerpt">${draft.tenants[0]}</span>
+        · ${unit.address_line}, ${unit.city} · דירה ${ltr(unit.unit_number)}`
+    : h`${unit.address_line}, ${unit.city} · דירה ${ltr(unit.unit_number)}`;
+  const tenants =
+    draft.tenants.length === 0
+      ? h`—`
+      : h`${draft.tenants.map(
+          (name, index) =>
+            h`${index === 0 ? h`` : h` · `}<span class="excerpt">${name}</span>`,
+        )}`;
+  const guarantors =
+    draft.guarantors.length === 0
+      ? h`אין ערב`
+      : h`${draft.guarantors.map(
+          (name, index) =>
+            h`${index === 0 ? h`` : h` · `}<span class="excerpt">${name}</span>`,
+        )}`;
+  return h`<section class="notice">
+    <h2>${title} <span class="chip">טיוטה</span></h2>
+    <p class="lede">
+      <span class="excerpt">${ltr(draft.startDate)}</span> —
+      <span class="excerpt">${ltr(draft.endDate)}</span>
+    </p>
+    <dl class="facts">
+      <div>
+        <dt>דירה</dt>
+        <dd>${unit.address_line}, ${unit.city} · דירה ${ltr(unit.unit_number)}</dd>
+      </div>
+      <div>
+        <dt>שוכרים</dt>
+        <dd>${tenants}</dd>
+      </div>
+      <div>
+        <dt>ערב</dt>
+        <dd>${guarantors}</dd>
+      </div>
+    </dl>
+    <h2 class="second-heading">מה חסר כדי לעלות לאוויר</h2>
+    <ul class="missing">
+      <li>
+        <span class="chip">${draft.protocolPresent ? h`הוגש` : h`לא הוגש`}</span>
+        פרוטוקול מסירה
+      </li>
+    </ul>
+    <p class="lede">העלאה לאוויר — במסך החוזה. לא כאן.</p>
+  </section>
+  <section class="notice">
+    <h2>די היום</h2>
+    <div class="form-actions">
+      <a class="btn btn-primary" href="/documents/filing">תיוק חוזה נוסף</a>
+      <a class="btn btn-secondary" href="/estate/tenancies/${draft.tenancyId}">פתיחת החוזה</a>
+      <a class="btn btn-secondary" href="/estate/units/${unit.unit_id}">פתיחת הדירה</a>
+    </div>
+  </section>`;
+}
+
+function filingLede(screen: LeaseFilingScreen): Html {
+  if (screen.beat === 'draft') {
+    return h`הטיוטה נרשמה. הגעה בשם — לא מסך חוזה אחר.`;
+  }
+  if (screen.beat === 'read') {
+    return screen.unit
+      ? h`תויק לדירה ${ltr(screen.unit.unit_number)}. חתמו על שמות ותאריכים — נפתחת טיוטה.`
+      : h`החוזה בתיק. הקריאה בטאב הזה.`;
+  }
+  if (screen.matched) {
+    return h`נקראה כתובת. עדיין לא נשמר דבר.`;
+  }
+  return h`חוזה אחד. הדירה מן הכתובת שעל הדף.`;
 }
 
 export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
@@ -868,15 +1047,8 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
         </dl>
       </section>`
     : h``;
-  const stub =
-    screen.beat === 'read'
-      ? h`<section class="notice">
-          <h2>הקריאה</h2>
-          <p class="lede">הקובץ תויק. אישור השמות והתאריכים ייפתח כאן.</p>
-        </section>`
-      : h``;
   const attach =
-    screen.beat === 'read'
+    screen.beat === 'read' || screen.beat === 'draft'
       ? h``
       : h`<form class="file-well" method="post" action="/documents/filing" enctype="multipart/form-data">
           ${csrfInput(screen.csrf)}
@@ -940,7 +1112,7 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
           </div>
         </form>`;
   const search =
-    screen.beat === 'read' || screen.matched
+    screen.beat === 'read' || screen.beat === 'draft' || screen.matched
       ? h``
       : screen.reading !== undefined || candidates.length > 0
         ? h`<form class="form-grid" method="get" action="/documents/filing">
@@ -958,13 +1130,7 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
   const body = h`
     <div>
       <h1>תיוק חוזה</h1>
-      <p class="lede">${
-        screen.beat === 'read'
-          ? h`החוזה בתיק. הקריאה בטאב הזה.`
-          : screen.matched
-            ? h`נקראה כתובת. עדיין לא נשמר דבר.`
-            : h`חוזה אחד. הדירה מן הכתובת שעל הדף.`
-      }</p>
+      <p class="lede">${filingLede(screen)}</p>
     </div>
     ${filingBeats(screen.beat)}
     ${tooLong}
@@ -973,7 +1139,8 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
     ${unresolved}
     ${created}
     ${match}
-    ${stub}
+    ${filingReading(screen)}
+    ${filingDraft(screen)}
     ${attach}
     ${search}`;
   return shell('דונה דום — תיוק חוזה', body, screen.nav);

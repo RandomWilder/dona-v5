@@ -64,7 +64,11 @@ function pageIndex(asked: unknown, pageCount: number): number {
 }
 
 import type { WorkRunner } from '../../kernel/work.ts';
-import { listUnitTenancies, type TenancyRole } from '../../tenancy/contract.ts';
+import {
+  getTenancy,
+  listUnitTenancies,
+  type TenancyRole,
+} from '../../tenancy/contract.ts';
 import { approveExtractedField, approveUnflagged } from './approve.ts';
 import {
   declareDocumentTypeField,
@@ -88,6 +92,7 @@ import {
   establishApprovedLease,
   proposeLeaseTenancy,
 } from './lease.ts';
+import { listTenancyDocumentFacts } from './list.ts';
 import { destinationAfterFiling } from './orchestrate.ts';
 import { listDocumentPassages } from './passages.ts';
 import { readPlace, resolvePlace } from './place.ts';
@@ -116,6 +121,7 @@ import type {
   SeedScreen,
 } from './views.ts';
 import {
+  FILING_OPENING_FIELDS,
   renderDocumentsPage,
   renderFieldsPage,
   renderFiledPage,
@@ -560,6 +566,107 @@ export function registerDocumentRoutes(
       ...extras,
     });
 
+  const openingFields = new Set<string>(FILING_OPENING_FIELDS);
+
+  const tenancyBoundTo = async (documentId: string): Promise<string | null> => {
+    const found = await deps.pool.query<{ entity_id: string }>(
+      `SELECT entity_id FROM document_link
+        WHERE document_id = $1 AND entity_type = 'TENANCY'`,
+      [documentId],
+    );
+    return found.rows[0]?.entity_id ?? null;
+  };
+
+  const collidingOn = async (
+    unitId: string,
+    startDate: string,
+  ): Promise<string | null> => {
+    const found = await deps.pool.query<{ tenancy_id: string }>(
+      `SELECT tenancy_id FROM tenancy
+        WHERE unit_id = $1 AND start_date = $2`,
+      [unitId, startDate],
+    );
+    return found.rows[0]?.tenancy_id ?? null;
+  };
+
+  const openingReady = (rows: readonly ExtractedRow[]): boolean => {
+    const tenants = rows.filter((row) => row.fieldKey === 'tenant_name');
+    if (
+      tenants.length === 0 ||
+      tenants.some((row) => row.approvedAt === null)
+    ) {
+      return false;
+    }
+    if (
+      rows
+        .filter((row) => row.fieldKey === 'guarantor_name')
+        .some((row) => row.approvedAt === null)
+    ) {
+      return false;
+    }
+    for (const key of ['start_date', 'end_date'] as const) {
+      const row = rows.find((field) => field.fieldKey === key);
+      if (!row || row.approvedAt === null) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const printed = (row: ExtractedRow): string => row.approvedValue ?? row.value;
+
+  const filingOfDocument = async (
+    request: FastifyRequest,
+    documentId: string,
+  ): Promise<Omit<LeaseFilingScreen, 'nav' | 'csrf'>> => {
+    await getFiledDocument(deps.pool, documentId);
+    const anchor = await anchorOf(deps.pool, documentId);
+    if (anchor.kind !== 'UNIT') {
+      throw new KernelError('not_found', 'document not found');
+    }
+    const unit = await getUnit(deps.pool, anchor.id);
+    const bound = await tenancyBoundTo(documentId);
+    const rows = (await listExtractedFields(deps.pool, documentId)).filter(
+      (row) => openingFields.has(row.fieldKey),
+    );
+    if (bound) {
+      const tenancy = await getTenancy(deps.pool, bound);
+      const facts = await listTenancyDocumentFacts(deps.pool, bound);
+      return {
+        beat: 'draft',
+        documentId,
+        unit,
+        draft: {
+          tenancyId: bound,
+          tenants: rows
+            .filter((row) => row.fieldKey === 'tenant_name')
+            .map(printed),
+          guarantors: rows
+            .filter((row) => row.fieldKey === 'guarantor_name')
+            .map(printed),
+          startDate: tenancy.start_date,
+          endDate: tenancy.end_date,
+          protocolPresent: facts.some(
+            (fact) => fact.typeKey === 'handover_protocol' && fact.approved,
+          ),
+        },
+      };
+    }
+    const start = rows.find((row) => row.fieldKey === 'start_date');
+    const clash =
+      start && openingReady(rows)
+        ? await collidingOn(unit.unit_id, printed(start))
+        : null;
+    return {
+      beat: 'read',
+      documentId,
+      unit,
+      rows,
+      mayApprove: can(request.staff?.role ?? null, 'documents.write'),
+      ...(clash ? { conflictTenancyId: clash } : {}),
+    };
+  };
+
   app.get('/documents/filing', NEW, async (request, reply) => {
     html(reply);
     const query = String((request.query as { q?: string }).q ?? '');
@@ -588,9 +695,77 @@ export function registerDocumentRoutes(
     NEW,
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
-      await getFiledDocument(deps.pool, documentId);
       html(reply);
-      return leaseFiling(request, { beat: 'read' });
+      return leaseFiling(request, await filingOfDocument(request, documentId));
+    },
+  );
+
+  app.post<{ Params: { documentId: string } }>(
+    '/documents/filing/:documentId/approve',
+    APPROVE,
+    async (request, reply) => {
+      const documentId = validId(request.params.documentId, 'document');
+      const fields = formBody(request);
+      if (fields.action === 'unflagged') {
+        throw new KernelError('invalid', 'that control is not on this journey');
+      }
+      const extractedFieldId = validId(
+        fields.extracted_field_id ?? '',
+        'extracted field',
+      );
+      const rows = await listExtractedFields(deps.pool, documentId);
+      const row = rows.find(
+        (candidate) => candidate.extractedFieldId === extractedFieldId,
+      );
+      if (!row) {
+        throw new KernelError('not_found', 'extracted field not found');
+      }
+      if (!openingFields.has(row.fieldKey)) {
+        throw new KernelError(
+          'invalid',
+          'that reading does not open a letting',
+        );
+      }
+      const approvedBy = requireOperatorEmail(request);
+      const approveDeps = {
+        db: deps.pool,
+        audit: createAuditLog(deps.pool, deps.clock),
+        clock: deps.clock,
+      };
+      await approveExtractedField(approveDeps, {
+        extractedFieldId,
+        ...(fields.approved_value === undefined
+          ? {}
+          : { approvedValue: fields.approved_value }),
+        approvedBy,
+        mayReadIdentifiers: mayReadIdentifiers(request),
+      });
+      try {
+        await establishApprovedLease(
+          {
+            db: deps.pool,
+            audit: createAuditLog(deps.pool, deps.clock),
+            clock: deps.clock,
+          },
+          { documentId, confirmedBy: approvedBy },
+        );
+      } catch (error) {
+        if (
+          error instanceof KernelError &&
+          error.code === 'conflict' &&
+          error.message ===
+            'that unit already has a lease starting on this date'
+        ) {
+          html(reply);
+          reply.code(409);
+          return leaseFiling(
+            request,
+            await filingOfDocument(request, documentId),
+          );
+        }
+        throw error;
+      }
+      return reply.redirect(`/documents/filing/${documentId}`);
     },
   );
 

@@ -169,6 +169,7 @@ describe('every route in the application', () => {
       'POST /documents/intake',
       'POST /documents/filing',
       'POST /documents/filing/place',
+      'POST /documents/filing/:documentId/approve',
     ]) {
       const stance = declared.find(([name]) => name === url)?.[1];
       assert.ok(stance !== undefined, `${url} is not registered at all`);

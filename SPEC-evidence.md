@@ -690,8 +690,28 @@ the paint showed. Then attach again: nothing is held. An operator sees pick and 
 disabled create control, and the create post refuses them. A11/A13 screens are untouched.
 
 **After a successful file** the operator is still on this tab: `GET /documents/filing/:documentId`.
-That URL is this journey's, not `/documents/:id/fields` and not a Tenancy page. Beat 3 may still be
-a stub until the thin-reading ticket.
+That URL is this journey's, not `/documents/:id/fields` and not a Tenancy page. Refresh keeps it.
+
+**Beat 3 is thin reading.** The same GET paints the stamps that open a letting: `tenant_name`,
+`guarantor_name`, `start_date`, `end_date`. One row, one אישור, an optional correction in
+`approved_value`. A15's ledger stays at `GET /documents/:id/fields` for every other door — this
+journey does not load it. Reveal, promote, and `אישור כל מה שלא סומן` are not on this screen.
+
+**`POST /documents/filing/:documentId/approve`** is `documents.write` and urlencoded (the token
+belongs to the composition-root hook; this body is not a stream). It stamps through
+`approveExtractedField` and then `establishApprovedLease` — the same moment as #110. A field that
+is not one of those four is `invalid`. When the reading is ready the draft is written and the next
+GET of this URL is beat 4.
+
+**Beat 4 is טיוטה on this tab.** Title, people and dates from the approved reading; whether
+**פרוטוקול מסירה** is missing or present, read from the letting's linked documents. No activate
+control. No protocol file. Copy: going live is the Tenancy screen's act. **די היום** is quiet in
+the strip until this arrival, then offers file another (`GET /documents/filing`, empty state; the
+draft is untouched), open the Tenancy, open the Unit.
+
+**A second lease on the same Unit and the same start date** is `conflict` on this tab, with a link
+to the existing Tenancy. Overlapping `ACTIVE` + `DRAFT` on one Unit remains ordinary and is not
+re-specified here.
 
 **The rail destination** is `filing`. Other destinations, **מסמכים**, and A12's auto-file-on-exact-one
 are unchanged.
