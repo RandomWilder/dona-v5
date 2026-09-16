@@ -15,10 +15,12 @@ import type { Pool } from 'pg';
 import type { ChromeDest } from '../../chrome.ts';
 import {
   addCalendarYears,
+  type BuildingStatus,
   getBuilding,
   getUnit,
   searchEstate,
   type UnitHit,
+  upsertUnitRow,
   WARRANTY_YEARS,
 } from '../../estate/contract.ts';
 import { countActions, createAuditLog } from '../../kernel/audit.ts';
@@ -28,6 +30,7 @@ import {
   readExtractionSettings,
   readOcrSettings,
 } from '../../kernel/config.ts';
+import { inTransaction } from '../../kernel/db.ts';
 import type { Embedder } from '../../kernel/embeddings.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { Extractor } from '../../kernel/extraction.ts';
@@ -458,6 +461,7 @@ const INTAKE = {
   config: { staff: 'documents.write', csrf: 'in-body' },
 } as const;
 const FILING = INTAKE;
+const PLACE = { config: { staff: 'estate.write' } } as const;
 const CONFIRM = { config: { staff: 'tenancy.write' } } as const;
 /**
  * **Slice 7.3.** Signing a reading writes nothing outside this module — no typed column, no tenancy
@@ -558,7 +562,25 @@ export function registerDocumentRoutes(
 
   app.get('/documents/filing', NEW, async (request, reply) => {
     html(reply);
-    return leaseFiling(request, { beat: 'file' });
+    const query = String((request.query as { q?: string }).q ?? '');
+    if (query === '') {
+      return leaseFiling(request, { beat: 'file' });
+    }
+    const found = await searchEstate(deps.pool, query);
+    return leaseFiling(request, {
+      beat: 'place',
+      reading: {
+        addressLine: null,
+        city: null,
+        apartmentNumber: null,
+        annexDeferral: false,
+      },
+      candidates: found.units,
+      candidateTotal: found.units.length,
+      query,
+      mayCreate: mayShapeTheEstate(request),
+      building: null,
+    });
   });
 
   app.get<{ Params: { documentId: string } }>(
@@ -571,6 +593,72 @@ export function registerDocumentRoutes(
       return leaseFiling(request, { beat: 'read' });
     },
   );
+
+  app.post('/documents/filing/place', PLACE, async (request, reply) => {
+    const body = (request.body as Form | undefined) ?? {};
+    const unitNumber = requireText(body.unit_number, 'unit_number', 32);
+    const addressLine = requireText(body.address_line, 'address_line', 200);
+    const city = requireText(body.city, 'city', 120);
+    const askedBuilding = body.building
+      ? validId(body.building, 'building')
+      : null;
+    const handover = today(deps.clock);
+    const held = askedBuilding
+      ? (await getBuilding(deps.pool, askedBuilding)).building
+      : null;
+    const written = await inTransaction(deps.pool, (db) =>
+      upsertUnitRow(db, {
+        project: null,
+        building: held
+          ? {
+              name: held.name,
+              addressLine: held.address_line,
+              city: held.city,
+              projectCode: held.project_code,
+              handoverDate: held.handover_date,
+              warrantyEndDate: held.warranty_end_date,
+              status: held.status as BuildingStatus,
+            }
+          : {
+              name: addressLine,
+              addressLine,
+              city,
+              projectCode: null,
+              handoverDate: handover,
+              warrantyEndDate: addCalendarYears(handover, WARRANTY_YEARS),
+              status: 'ACTIVE',
+            },
+        unit: {
+          spaceName: unitNumber,
+          unitNumber,
+          rooms: 1,
+          areaSqm: null,
+          hasMamad: false,
+          warrantyEndDate: null,
+          conditionStatus: 'READY',
+        },
+        floor: null,
+      }),
+    );
+    const unit = await getUnit(deps.pool, written.unitId);
+    html(reply);
+    return leaseFiling(request, {
+      beat: 'place',
+      candidates: [unit],
+      candidateTotal: 1,
+      chosenUnitId: unit.unit_id,
+      mayCreate: true,
+      building: held
+        ? { building_id: held.building_id, name: held.name }
+        : null,
+      reading: {
+        addressLine,
+        city,
+        apartmentNumber: unitNumber,
+        annexDeferral: false,
+      },
+    });
+  });
 
   app.post('/documents/filing', FILING, async (request, reply) => {
     const { fields, bytes } = await readUpload(request);
@@ -702,7 +790,10 @@ export function registerDocumentRoutes(
       return paintRefusal(422, {
         beat: 'place',
         reading,
+        candidates: resolved.candidates,
         candidateTotal: resolved.total,
+        query: reading.addressLine ?? '',
+        mayCreate: mayShapeTheEstate(request),
         building: resolved.building
           ? {
               building_id: resolved.building.building_id,

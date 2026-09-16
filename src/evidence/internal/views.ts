@@ -712,6 +712,46 @@ function filingBeats(current: FilingBeat): Html {
   </ol>`;
 }
 
+function filingCreateOffer(
+  screen: LeaseFilingScreen,
+  reading: PlaceReading,
+): Html {
+  if (!screen.mayCreate || !reading.addressLine) {
+    return h``;
+  }
+  return h`<form class="form-grid" method="post" action="/documents/filing/place">
+    ${csrfInput(screen.csrf)}
+    ${
+      screen.building
+        ? h`<input type="hidden" name="building" value="${screen.building.building_id}" />`
+        : h``
+    }
+    <div class="form-row">
+      <label for="address_line">רחוב</label>
+      <input id="address_line" name="address_line" value="${reading.addressLine}" />
+    </div>
+    <div class="form-row">
+      <label for="city">יישוב</label>
+      <input id="city" name="city" value="${reading.city ?? ''}" />
+    </div>
+    <div class="form-row">
+      <label for="unit_number">מספר דירה</label>
+      <input id="unit_number" name="unit_number" value="${reading.apartmentNumber ?? ''}" />
+    </div>
+    <div class="form-actions">
+      <button class="btn ${screen.building ? h`btn-secondary` : h`btn-primary`}" type="submit">${
+        screen.building
+          ? h`הוספת הדירה לבניין ${screen.building.name}`
+          : h`יצירת הבניין והדירה`
+      }</button>
+    </div>
+    <p class="hint">
+      מה שנקרא מהמסמך הוא נקודת ההתחלה וניתן לתקן. אחרי היצירה יש לצרף את הקובץ שוב — שום דבר אינו
+      נשמר בין הניסיונות.
+    </p>
+  </form>`;
+}
+
 function filingHeadline(reading: PlaceReading, candidates: number): Html {
   if (candidates > 1) {
     return h`נמצאה יותר מדירה אחת`;
@@ -729,8 +769,12 @@ export interface LeaseFilingScreen {
   matched?: UnitHit;
   reading?: PlaceReading;
   building?: { building_id: string; name: string } | null;
+  candidates?: UnitHit[];
   /** How many Units answered. Used only for the A12 headline when nothing is exact. */
   candidateTotal?: number;
+  query?: string;
+  mayCreate?: boolean;
+  chosenUnitId?: string;
   tooLargeBytes?: number;
   refused?: {
     type: DocumentTypeRow;
@@ -775,16 +819,26 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
         </p>
       </section>`
     : h``;
+  const candidates = screen.candidates ?? [];
   const unresolved =
-    screen.reading !== undefined && !screen.matched
+    screen.reading !== undefined && !screen.matched && !screen.chosenUnitId
       ? h`<section class="notice">
           <h2>${filingHeadline(screen.reading, screen.candidateTotal ?? 0)}</h2>
           ${placeFacts(screen.reading, screen.building)}
           <p class="lede">
-            <strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום. צרפו קובץ אחר.
+            <strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום. בחרו דירה, חפשו, או צרפו שוב.
           </p>
+          ${filingCreateOffer(screen, screen.reading)}
         </section>`
       : h``;
+  const created = screen.chosenUnitId
+    ? h`<section class="notice">
+        <h2>הדירה נוצרה</h2>
+        <p class="lede">
+          הדירה מסומנת למטה. צרפו את הקובץ שוב — הוא לא נשמר בין הניסיונות — ותייקו.
+        </p>
+      </section>`
+    : h``;
   const match = screen.matched
     ? h`<section class="notice">
         <h2>דירה אחת</h2>
@@ -831,6 +885,37 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
               ? h`<input type="hidden" name="unit" value="${screen.matched.unit_id}" />`
               : h``
           }
+          ${
+            !screen.matched && candidates.length > 0
+              ? h`<ul class="candidates">
+                  ${candidates.map(
+                    (unit) =>
+                      h`<li class="candidate">
+                        <input type="radio" id="u-${unit.unit_id}" name="unit" value="${unit.unit_id}" required ${
+                          screen.chosenUnitId === unit.unit_id
+                            ? h`checked`
+                            : h``
+                        } />
+                        <label for="u-${unit.unit_id}">דירה ${ltr(
+                          unit.unit_number,
+                        )} · ${unit.building_name} · ${unit.address_line}, ${
+                          unit.city
+                        }</label>
+                      </li>`,
+                  )}
+                </ul>
+                ${
+                  (screen.candidateTotal ?? candidates.length) >
+                  candidates.length
+                    ? h`<p class="hint">
+                        בכתובת הזו ${ltr(screen.candidateTotal ?? 0)} דירות. מוצגות ${ltr(
+                          CANDIDATE_LIMIT,
+                        )} הראשונות — אם הדירה אינה ביניהן, חפשו אותה למטה.
+                      </p>`
+                    : h``
+                }`
+              : h``
+          }
           <span class="chip">חוזה שכירות</span>
           <label for="file">הקובץ</label>
           <input id="file" name="file" type="file" required
@@ -839,15 +924,37 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
             ${
               screen.matched
                 ? h`נשאר על הצעד עד המשך. נשמר רק אחרי אישור הדירה.`
-                : h`עד 20 מ״ב. נשמר רק אחרי שהדירה אושרה.`
+                : candidates.length > 0
+                  ? h`יש לצרף שוב. נשמר רק אחרי שהדירה אושרה.`
+                  : h`עד 20 מ״ב. נשמר רק אחרי שהדירה אושרה.`
             }
           </p>
           <div class="form-actions">
             <button class="btn btn-primary" type="submit">${
-              screen.matched ? h`המשך ותיוק` : h`קריאת הכתובת`
+              screen.matched
+                ? h`המשך ותיוק`
+                : candidates.length > 0
+                  ? h`תיוק לדירה שנבחרה`
+                  : h`קריאת הכתובת`
             }</button>
           </div>
         </form>`;
+  const search =
+    screen.beat === 'read' || screen.matched
+      ? h``
+      : screen.reading !== undefined || candidates.length > 0
+        ? h`<form class="form-grid" method="get" action="/documents/filing">
+            <div class="form-row">
+              <label for="q">חיפוש דירה</label>
+              <input class="field" id="q" name="q" type="search" value="${
+                screen.query ?? ''
+              }" />
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-secondary" type="submit">חיפוש</button>
+            </div>
+          </form>`
+        : h``;
   const body = h`
     <div>
       <h1>תיוק חוזה</h1>
@@ -864,9 +971,11 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
     ${terms}
     ${already}
     ${unresolved}
+    ${created}
     ${match}
     ${stub}
-    ${attach}`;
+    ${attach}
+    ${search}`;
   return shell('דונה דום — תיוק חוזה', body, screen.nav);
 }
 

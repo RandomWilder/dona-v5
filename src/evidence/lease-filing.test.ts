@@ -1,8 +1,8 @@
-// A16 — the lease-filing tab: see the match, then file. Issue #116.
+// A16 — the lease-filing tab. Issues #116 and #117.
 //
 // Highest seam is HTTP against the new tab. Command guts (place reader, fileDocument, type
-// guard, OCR ceiling) stay proved where they already are. This suite proves the sequence and
-// that A12's door still files on exact one.
+// guard, OCR ceiling, upsertUnitRow) stay proved where they already are. This suite proves the
+// sequence: confirm-then-file, pick/search/create on this tab, and that A12 still files on exact one.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { specimenDocuments } from '../../evals/fixtures/specimen-clauses.ts';
@@ -25,6 +25,8 @@ import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const CITY = 'עיר תיוק חוזה';
 const ADDRESS = 'הבילויים 10';
+const NONE_CITY = 'עיר תיוק מקום';
+const NONE_STREET = 'ארז 88';
 const PROJECT = 'TEST-A16';
 const BUCKET = 'dona-v5-test-a16';
 const AT = new Date('2026-09-16T09:00:00.000Z');
@@ -94,8 +96,13 @@ const plan: EstatePlan = {
 };
 
 let who: SignedIn;
+let operator: SignedIn;
 const as = <T extends { inject: (o: never) => unknown }>(app: T): T =>
   asOperator(app as never, who) as unknown as T;
+const asRole = <T extends { inject: (o: never) => unknown }>(
+  app: T,
+  actor: SignedIn,
+): T => asOperator(app as never, actor) as unknown as T;
 
 function upload(
   fields: Record<string, string>,
@@ -159,7 +166,7 @@ describe('evidence · A16 file a lease in one workspace', () => {
       });
     const here = appFor(leasing(`${ADDRESS}, ${CITY}, דירה 9`));
     const several = appFor(leasing(`${ADDRESS}, ${CITY}`));
-    const elsewhere = appFor(leasing('אלמוג 5, עיר שאיננה, דירה 3'));
+    const elsewhere = appFor(leasing(`${NONE_STREET}, ${NONE_CITY}, דירה 3`));
     const annex = appFor(
       `${specimen('lease-standard.md')}\nהמושכר כמפורט בנספח א'.`,
     );
@@ -190,8 +197,56 @@ describe('evidence · A16 file a lease in one workspace', () => {
     try {
       await signOutAll(pool, STAFF_DOMAIN);
       who = await signIn(pool, fixedClock(AT), {
-        email: `ops@${STAFF_DOMAIN}`,
+        email: `admin@${STAFF_DOMAIN}`,
+        role: 'ADMIN',
       });
+      operator = await signIn(pool, fixedClock(AT), {
+        email: `ops@${STAFF_DOMAIN}`,
+        role: 'OPERATOR',
+      });
+      const wipePlace = async (city: string, address: string) => {
+        await pool.query(
+          `DELETE FROM tenancy_event WHERE tenancy_id IN (
+             SELECT t.tenancy_id FROM tenancy t
+             JOIN space s ON s.space_id = t.unit_id
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [city, address],
+        );
+        await pool.query(
+          `DELETE FROM tenancy_party WHERE tenancy_id IN (
+             SELECT t.tenancy_id FROM tenancy t
+             JOIN space s ON s.space_id = t.unit_id
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [city, address],
+        );
+        await pool.query(
+          `DELETE FROM tenancy WHERE unit_id IN (
+             SELECT s.space_id FROM space s
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [city, address],
+        );
+        await pool.query(
+          `DELETE FROM unit WHERE unit_id IN (
+             SELECT s.space_id FROM space s
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [city, address],
+        );
+        await pool.query(
+          `DELETE FROM space WHERE building_id IN (
+             SELECT building_id FROM building WHERE city = $1 AND address_line = $2)`,
+          [city, address],
+        );
+        await pool.query(
+          'DELETE FROM building WHERE city = $1 AND address_line = $2',
+          [city, address],
+        );
+      };
+      await wipePlace(CITY, ADDRESS);
+      await wipePlace(NONE_CITY, NONE_STREET);
       await applyDocumentTypeCatalogue(pool, seedDocumentTypes);
       await importEstate(pool, plan);
       const found = await pool.query<{ unit_id: string; unit_number: string }>(
@@ -399,7 +454,7 @@ describe('evidence · A16 file a lease in one workspace', () => {
       );
 
       await t.test(
-        'not exactly one Unit stays here with A12’s sentence and no pick UI',
+        'several Units: the sentence, a list to pick, then attach again files',
         async () => {
           const before = await documentsHere();
           const putsBefore = puts;
@@ -413,11 +468,38 @@ describe('evidence · A16 file a lease in one workspace', () => {
           });
           assert.equal(many.statusCode, 422);
           assert.match(many.body, /נמצאה יותר מדירה אחת/);
+          assert.match(many.body, /type="radio"/);
+          assert.match(many.body, new RegExp(`value="${unitNine}"`));
+          assert.match(many.body, new RegExp(`value="${unitTen}"`));
+          assert.match(many.body, /חיפוש דירה/);
           assert.match(many.body, /type="file"/);
-          assert.doesNotMatch(many.body, /type="radio"/);
-          assert.doesNotMatch(many.body, /חיפוש דירה אחרת/);
-          assert.doesNotMatch(many.body, /יצירת הבניין/);
+          assert.doesNotMatch(many.body, /\/estate\/buildings\/new/);
+          assert.equal(await documentsHere(), before);
+          assert.equal(puts, putsBefore);
 
+          const filed = await as(several).inject({
+            method: 'POST',
+            url: '/documents/filing',
+            ...upload(
+              { unit: unitTen },
+              { filename: 'several.pdf', bytes: pdfBytes('a16 several') },
+            ),
+          });
+          assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
+          assert.match(
+            filed.headers.location ?? '',
+            /\/documents\/filing\/[0-9a-f-]{36}$/,
+          );
+          assert.equal((await documentsHere()) - before, 1);
+          hashes.push(documentFileHash(pdfBytes('a16 several')));
+        },
+      );
+
+      await t.test(
+        'nothing readable, annex, and an address in nobody’s portfolio stay here with A12’s sentences',
+        async () => {
+          const before = await documentsHere();
+          const putsBefore = puts;
           const none = await as(elsewhere).inject({
             method: 'POST',
             url: '/documents/filing',
@@ -428,8 +510,9 @@ describe('evidence · A16 file a lease in one workspace', () => {
           });
           assert.equal(none.statusCode, 422);
           assert.match(none.body, /אינה בתיק/);
+          assert.match(none.body, /חיפוש דירה/);
           assert.match(none.body, /type="file"/);
-          assert.doesNotMatch(none.body, /חיפוש דירה אחרת/);
+          assert.doesNotMatch(none.body, /\/estate\/buildings\/new/);
 
           const deferred = await as(annex).inject({
             method: 'POST',
@@ -441,8 +524,9 @@ describe('evidence · A16 file a lease in one workspace', () => {
           });
           assert.equal(deferred.statusCode, 422);
           assert.match(deferred.body, /מפנה את פרטי הנכס לנספח/);
-          assert.match(deferred.body, /type="file"/);
-          assert.doesNotMatch(deferred.body, /חיפוש דירה אחרת/);
+          assert.match(deferred.body, /חיפוש דירה/);
+          assert.doesNotMatch(deferred.body, /יצירת הבניין/);
+          assert.doesNotMatch(deferred.body, /יצירת דירה/);
 
           const blank = await as(unread).inject({
             method: 'POST',
@@ -454,10 +538,182 @@ describe('evidence · A16 file a lease in one workspace', () => {
           });
           assert.equal(blank.statusCode, 422);
           assert.match(blank.body, /לא נקראה כתובת/);
-          assert.match(blank.body, /type="file"/);
-          assert.doesNotMatch(blank.body, /חיפוש דירה אחרת/);
+          assert.match(blank.body, /חיפוש דירה/);
+          assert.doesNotMatch(blank.body, /יצירת הבניין/);
           assert.equal(await documentsHere(), before);
           assert.equal(puts, putsBefore);
+        },
+      );
+
+      await t.test('search for a Unit works on this step', async () => {
+        const found = await as(here).inject({
+          method: 'GET',
+          url: `/documents/filing?q=${encodeURIComponent(ADDRESS)}`,
+        });
+        assert.equal(found.statusCode, 200);
+        assert.match(found.body, /תיוק חוזה/);
+        assert.match(found.body, /type="radio"/);
+        assert.match(found.body, new RegExp(`value="${unitNine}"`));
+        assert.match(found.body, /type="file"/);
+        assert.match(found.body, /action="\/documents\/filing"/);
+        assert.doesNotMatch(found.body, /\/estate\/buildings\/new/);
+      });
+
+      await t.test(
+        'an OPERATOR sees pick and search and no create control',
+        async () => {
+          const response = await asRole(elsewhere, operator).inject({
+            method: 'POST',
+            url: '/documents/filing',
+            ...upload(
+              { csrf: operator.csrf },
+              { filename: 'ops.pdf', bytes: pdfBytes('a16 ops none') },
+            ),
+          });
+          assert.equal(response.statusCode, 422);
+          assert.match(response.body, /חיפוש דירה/);
+          assert.doesNotMatch(response.body, /יצירת הבניין/);
+          assert.doesNotMatch(response.body, /יצירת דירה/);
+          assert.doesNotMatch(response.body, /name="address_line"/);
+          assert.doesNotMatch(
+            response.body,
+            /action="\/documents\/filing\/place"/,
+          );
+          const forbidden = await asRole(elsewhere, operator).inject({
+            method: 'POST',
+            url: '/documents/filing/place',
+            payload: new URLSearchParams({
+              csrf: operator.csrf,
+              address_line: NONE_STREET,
+              city: NONE_CITY,
+              unit_number: '3',
+            }).toString(),
+            headers: {
+              'content-type': 'application/x-www-form-urlencoded',
+            },
+          });
+          assert.equal(forbidden.statusCode, 403);
+        },
+      );
+
+      await t.test(
+        'estate-write creates a Building and Unit on this step, prefilled, then attach files',
+        async () => {
+          const before = await documentsHere();
+          const putsBefore = puts;
+          const createBytes = pdfBytes(`a16-117-create-${Date.now()}`);
+          const seen = await as(elsewhere).inject({
+            method: 'POST',
+            url: '/documents/filing',
+            ...upload({}, { filename: 'create.pdf', bytes: createBytes }),
+          });
+          assert.equal(seen.statusCode, 422, seen.body.slice(0, 400));
+          assert.match(seen.body, /action="\/documents\/filing\/place"/);
+          assert.match(seen.body, /name="address_line"/);
+          assert.match(seen.body, new RegExp(`value="${NONE_STREET}"`));
+          assert.match(seen.body, new RegExp(`value="${NONE_CITY}"`));
+          assert.match(seen.body, /value="3"/);
+          assert.doesNotMatch(seen.body, /\/estate\/buildings\/new/);
+          assert.doesNotMatch(seen.body, /handover_date/);
+          assert.equal(await documentsHere(), before);
+          assert.equal(puts, putsBefore);
+
+          const created = await as(elsewhere).inject({
+            method: 'POST',
+            url: '/documents/filing/place',
+            payload: new URLSearchParams({
+              address_line: NONE_STREET,
+              city: NONE_CITY,
+              unit_number: '3',
+            }).toString(),
+            headers: {
+              'content-type': 'application/x-www-form-urlencoded',
+            },
+          });
+          assert.equal(created.statusCode, 200, created.body.slice(0, 400));
+          assert.match(created.body, /הדירה נוצרה/);
+          assert.match(created.body, /type="file"/);
+          assert.match(created.body, /type="radio"/);
+          assert.doesNotMatch(created.body, /\/estate\/buildings\//);
+          const createdUnit =
+            /name="unit"[^>]*value="([0-9a-f-]{36})"/.exec(created.body)?.[1] ??
+            /value="([0-9a-f-]{36})"[^>]*name="unit"/.exec(created.body)?.[1] ??
+            '';
+          assert.ok(createdUnit);
+          assert.equal(await documentsHere(), before);
+          assert.equal(puts, putsBefore);
+
+          const filed = await as(elsewhere).inject({
+            method: 'POST',
+            url: '/documents/filing',
+            ...upload(
+              { unit: createdUnit },
+              { filename: 'create.pdf', bytes: createBytes },
+            ),
+          });
+          assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
+          assert.match(
+            filed.headers.location ?? '',
+            /\/documents\/filing\/[0-9a-f-]{36}$/,
+          );
+          const linked = await pool.query<{ n: string }>(
+            'SELECT count(*)::text AS n FROM document_link WHERE entity_id = $1',
+            [createdUnit],
+          );
+          assert.equal(linked.rows[0]?.n, '1');
+          hashes.push(documentFileHash(createBytes));
+        },
+      );
+
+      await t.test(
+        'when the building is already held, only the Unit is created on this step',
+        async () => {
+          const missingFlat = appFor(leasing(`${ADDRESS}, ${CITY}, דירה 12`));
+          apps.push(missingFlat);
+          const seen = await as(missingFlat).inject({
+            method: 'POST',
+            url: '/documents/filing',
+            ...upload(
+              {},
+              { filename: 'flat.pdf', bytes: pdfBytes('a16 flat only') },
+            ),
+          });
+          assert.equal(seen.statusCode, 422);
+          assert.match(seen.body, /הבניין נמצא בתיק, והדירה לא/);
+          assert.match(seen.body, /name="building"/);
+          const buildingId =
+            /name="building"[^>]*value="([0-9a-f-]{36})"/.exec(
+              seen.body,
+            )?.[1] ??
+            /value="([0-9a-f-]{36})"[^>]*name="building"/.exec(
+              seen.body,
+            )?.[1] ??
+            '';
+          assert.ok(buildingId);
+          const created = await as(missingFlat).inject({
+            method: 'POST',
+            url: '/documents/filing/place',
+            payload: new URLSearchParams({
+              building: buildingId,
+              address_line: ADDRESS,
+              city: CITY,
+              unit_number: '12',
+            }).toString(),
+            headers: {
+              'content-type': 'application/x-www-form-urlencoded',
+            },
+          });
+          assert.equal(created.statusCode, 200, created.body.slice(0, 400));
+          const createdUnit =
+            /name="unit"[^>]*value="([0-9a-f-]{36})"/.exec(created.body)?.[1] ??
+            /value="([0-9a-f-]{36})"[^>]*name="unit"/.exec(created.body)?.[1] ??
+            '';
+          assert.ok(createdUnit);
+          const row = await pool.query<{ building_id: string }>(
+            'SELECT building_id FROM space WHERE space_id = $1',
+            [createdUnit],
+          );
+          assert.equal(row.rows[0]?.building_id, buildingId);
         },
       );
 
@@ -486,8 +742,8 @@ describe('evidence · A16 file a lease in one workspace', () => {
       await pool
         .query(
           `DELETE FROM audit_log
-            WHERE action = 'evidence.intake_unresolved' AND actor_id = $1`,
-          [who?.staffAccountId],
+            WHERE action = 'evidence.intake_unresolved' AND actor_id = ANY($1::uuid[])`,
+          [[who?.staffAccountId, operator?.staffAccountId].filter(Boolean)],
         )
         .catch(() => {});
       await signOutAll(pool, STAFF_DOMAIN);
@@ -504,25 +760,50 @@ describe('evidence · A16 file a lease in one workspace', () => {
         );
         await pool.query('DELETE FROM document WHERE file_hash = $1', [hash]);
       }
-      for (const unitId of [unitNine, unitTen].filter(Boolean)) {
-        await pool.query(
-          `DELETE FROM tenancy_event WHERE tenancy_id IN
-             (SELECT tenancy_id FROM tenancy WHERE unit_id = $1)`,
-          [unitId],
-        );
-        await pool.query(
-          `DELETE FROM tenancy_party WHERE tenancy_id IN
-             (SELECT tenancy_id FROM tenancy WHERE unit_id = $1)`,
-          [unitId],
-        );
-        await pool.query('DELETE FROM tenancy WHERE unit_id = $1', [unitId]);
-        await pool.query('DELETE FROM unit WHERE unit_id = $1', [unitId]);
-        await pool.query('DELETE FROM space WHERE space_id = $1', [unitId]);
-      }
-      await pool.query(
-        'DELETE FROM building WHERE city = $1 AND address_line = $2',
+      for (const [city, address] of [
         [CITY, ADDRESS],
-      );
+        [NONE_CITY, NONE_STREET],
+      ] as const) {
+        await pool.query(
+          `DELETE FROM tenancy_event WHERE tenancy_id IN (
+             SELECT t.tenancy_id FROM tenancy t
+             JOIN space s ON s.space_id = t.unit_id
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [city, address],
+        );
+        await pool.query(
+          `DELETE FROM tenancy_party WHERE tenancy_id IN (
+             SELECT t.tenancy_id FROM tenancy t
+             JOIN space s ON s.space_id = t.unit_id
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [city, address],
+        );
+        await pool.query(
+          `DELETE FROM tenancy WHERE unit_id IN (
+             SELECT s.space_id FROM space s
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [city, address],
+        );
+        await pool.query(
+          `DELETE FROM unit WHERE unit_id IN (
+             SELECT s.space_id FROM space s
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [city, address],
+        );
+        await pool.query(
+          `DELETE FROM space WHERE building_id IN (
+             SELECT building_id FROM building WHERE city = $1 AND address_line = $2)`,
+          [city, address],
+        );
+        await pool.query(
+          'DELETE FROM building WHERE city = $1 AND address_line = $2',
+          [city, address],
+        );
+      }
       await pool.query('DELETE FROM project WHERE project_code = $1', [
         PROJECT,
       ]);

@@ -678,8 +678,16 @@ type is ignored.
 
 **Wrong file, a scan the online reader cannot carry, and bytes already on file** refuse on this
 tab with a sentence, write nothing, and re-arm the file input. Duplicate bytes name the existing
-Document and link to it. **Not exactly one Unit** stays here with A12's sentence for that cause and
-a re-armed file input; pick, search and create are a later ticket on this tab.
+Document and link to it. **Not exactly one Unit** stays here with A12's sentence for that cause, a
+re-armed file input, the candidate list, and estate search (`GET /documents/filing?q=`). Picking a
+candidate and attaching again is the second post of the same file, still `fileDocument`.
+
+**Create is on this step**, not on A11 or A13's screens. `POST /documents/filing/place` is
+`estate.write` and calls `upsertUnitRow` — the same command A11/A13 use. Street, city and apartment
+are prefilled from the reading and editable. What the paper does not name (handover, rooms) is
+filled as today's date, two years of warranty, one room, `READY`, so the tab stays the three fields
+the paint showed. Then attach again: nothing is held. An operator sees pick and search only — no
+disabled create control, and the create post refuses them. A11/A13 screens are untouched.
 
 **After a successful file** the operator is still on this tab: `GET /documents/filing/:documentId`.
 That URL is this journey's, not `/documents/:id/fields` and not a Tenancy page. Beat 3 may still be

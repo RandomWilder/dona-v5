@@ -168,6 +168,7 @@ describe('every route in the application', () => {
       // covers both of its screens — the same URL serves the unit-first form and the intake one.
       'POST /documents/intake',
       'POST /documents/filing',
+      'POST /documents/filing/place',
     ]) {
       const stance = declared.find(([name]) => name === url)?.[1];
       assert.ok(stance !== undefined, `${url} is not registered at all`);
