@@ -1,13 +1,13 @@
 ---
 number: 115
 title: "A16 — File a lease in one workspace (תיוק חוזה)"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent:
 created: 2026-09-16
-closed:
+closed: 2026-09-17
 ---
 
 ## Problem Statement
@@ -208,3 +208,7 @@ quiet until arrival, then the current/done step — not a product teaser. Old sc
 ## Comment — 2026-09-16
 
 Journey wired through #116–#119. Paint deleted; `/dev/mockups/lease-filing*` 404. Old doors unchanged.
+
+## Comment — 2026-09-17
+
+Closed. Wired tab clicked on `:3000`: rail **תיוק חוזה** under **מסמכים**, empty well, type locked, beats as status, paint 404, unit **הוספת מסמך** still the old door. HTTP suite 56/56. Merge to `main` for staging.
