@@ -426,6 +426,9 @@ need a way to empty a place on **local** or **staging** so the same specimen can
 or id; apply by **Building** id or **Unit** id only. Confirm is y/n on the laptop, never inside a
 Cloud Run job.
 
+Staging's runtime is not superuser, so apply cannot set replica role. It rolls a savepoint
+and disables the two delete-guard triggers instead; a failed SET must not abort the write.
+
 Apply removes what hangs off that place: Spaces and Units, Assets, Tenancies and TenancyParty,
 Documents (readings, Passages, links) whose place is in the bag, office retrieval threads for those
 bounds. A **Party** with no remaining Tenancy goes; a person still on another street stays. Project,
