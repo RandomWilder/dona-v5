@@ -53,6 +53,10 @@ const label = (table: Record<string, string>, value: string): string =>
 const ltr = (value: string | number): Html =>
   h`<span dir="ltr">${value}</span>`;
 
+/** A value the paper said, inside a sentence of ours. A16; old screens do not mark. */
+const excerpt = (value: string | Html): Html =>
+  h`<span class="excerpt">${value}</span>`;
+
 const styles = h`<style>
   /* minmax(0, 1fr) and not the default auto, from slice 7.1. Carried from the paint review: an
      implicit grid column floors at its widest item's min-content, so one .notice holding a table
@@ -86,6 +90,8 @@ const styles = h`<style>
     background: var(--color-surface-card);
   }
   .notice h2 { margin-block-end: var(--space-2); }
+  .notice h2.second-heading { margin-block-start: var(--space-5); }
+  .missing { margin: var(--space-3) 0 0; padding: 0; list-style: none; display: grid; gap: var(--space-2); }
   /* One pair per line here, unlike a unit card's grid: there are three of them and one is a
      64-character digest, which in two columns wraps into a block nobody can read a line of. */
   .notice .facts { grid-template-columns: 1fr; }
@@ -468,14 +474,19 @@ function createHref(
  * operator cannot act on is a refusal they will work around, and "we could not place it" without
  * saying what was read is exactly that refusal. No name, no date, no line of the lease.
  */
-function placeRead(screen: IntakeScreen, reading: PlaceReading): Html {
-  const address = reading.addressLine
+function placeFacts(
+  reading: PlaceReading,
+  building: IntakeScreen['building'],
+  paper: (value: Html) => Html = (value) => value,
+): Html {
+  const named = reading.addressLine
+    ? h`${ltr(reading.addressLine)}${reading.city ? h`, ${reading.city}` : h``}`
+    : null;
+  const address = named
     ? h`<p>
-        נקראה הכתובת ${ltr(reading.addressLine)}${
-          reading.city ? h`, ${reading.city}` : h``
-        }.
+        נקראה הכתובת ${paper(named)}.
         ${
-          screen.building
+          building
             ? h`הבניין נמצא בתיק, והדירה לא.`
             : h`הכתובת הזו אינה בתיק — לא הבניין ולא הדירה.`
         }
@@ -493,13 +504,17 @@ function placeRead(screen: IntakeScreen, reading: PlaceReading): Html {
   // had said it about the property.
   const apartment = reading.apartmentNumber
     ? reading.addressLine
-      ? h`<p>נקרא מספר דירה ${ltr(reading.apartmentNumber)}.</p>`
+      ? h`<p>נקרא מספר דירה ${paper(ltr(reading.apartmentNumber))}.</p>`
       : h`<p>
-          נקרא מספר דירה ${ltr(reading.apartmentNumber)}, אך ללא כתובת — ייתכן שנקרא משורה של אחד
+          נקרא מספר דירה ${paper(ltr(reading.apartmentNumber))}, אך ללא כתובת — ייתכן שנקרא משורה של אחד
           הצדדים ולא מתיאור הנכס.
         </p>`
     : h`<p>לא נקרא מספר דירה.</p>`;
-  return h`<div class="read-facts">${address}${apartment}</div>
+  return h`<div class="read-facts">${address}${apartment}</div>`;
+}
+
+function placeRead(screen: IntakeScreen, reading: PlaceReading): Html {
+  return h`${placeFacts(reading, screen.building)}
     <p class="lede">
       <strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום.
       בחרו את הדירה שאליה הנייר שייך, או חפשו אותה, וצרפו את הקובץ שוב.
@@ -678,6 +693,463 @@ export function renderIntakePage(screen: IntakeScreen): string {
         : h``
     }`;
   return shell('דונה דום — הוספת מסמך', body, screen.nav);
+}
+
+const FILING_BEATS = [
+  { key: 'file', label: 'המסמך' },
+  { key: 'place', label: 'הדירה' },
+  { key: 'read', label: 'הקריאה' },
+  { key: 'draft', label: 'הטיוטה' },
+  { key: 'done', label: 'די היום' },
+] as const;
+
+type FilingBeat = (typeof FILING_BEATS)[number]['key'];
+
+function filingBeats(current: FilingBeat): Html {
+  const at = FILING_BEATS.findIndex((beat) => beat.key === current);
+  return h`<ol class="filing-beats" aria-label="שלבי התיוק">
+    ${FILING_BEATS.map((beat, index) => {
+      const mark =
+        index === at
+          ? h`aria-current="step"`
+          : index < at
+            ? h`class="is-done"`
+            : h``;
+      return h`<li ${mark}>${beat.label}</li>`;
+    })}
+  </ol>`;
+}
+
+function filingCreateOffer(
+  screen: LeaseFilingScreen,
+  reading: PlaceReading,
+): Html {
+  if (!screen.mayCreate || !reading.addressLine) {
+    return h``;
+  }
+  return h`<form class="form-grid" method="post" action="/documents/filing/place">
+    ${csrfInput(screen.csrf)}
+    ${
+      screen.building
+        ? h`<input type="hidden" name="building" value="${screen.building.building_id}" />`
+        : h``
+    }
+    <div class="form-row">
+      <label for="address_line">רחוב</label>
+      <input id="address_line" name="address_line" value="${reading.addressLine}" />
+    </div>
+    <div class="form-row">
+      <label for="city">יישוב</label>
+      <input id="city" name="city" value="${reading.city ?? ''}" />
+    </div>
+    <div class="form-row">
+      <label for="unit_number">מספר דירה</label>
+      <input id="unit_number" name="unit_number" value="${reading.apartmentNumber ?? ''}" />
+    </div>
+    <div class="form-actions">
+      <button class="btn ${screen.building ? h`btn-secondary` : h`btn-primary`}" type="submit">${
+        screen.building
+          ? h`הוספת הדירה לבניין ${screen.building.name}`
+          : h`יצירת הבניין והדירה`
+      }</button>
+    </div>
+    <p class="hint">
+      מה שנקרא מהמסמך הוא נקודת ההתחלה וניתן לתקן. אחרי היצירה יש לצרף את הקובץ שוב — שום דבר אינו
+      נשמר בין הניסיונות.
+    </p>
+  </form>`;
+}
+
+function filingHeadline(reading: PlaceReading, candidates: number): Html {
+  if (candidates > 1) {
+    return h`נמצאה יותר מדירה אחת`;
+  }
+  if (reading.addressLine === null && reading.annexDeferral) {
+    return h`הנכס מתואר בנספח`;
+  }
+  return h`לא זוהתה דירה אחת`;
+}
+
+/** The stamps that open a letting. A15 keeps every other field. */
+export const FILING_OPENING_FIELDS = [
+  'tenant_name',
+  'guarantor_name',
+  'start_date',
+  'end_date',
+] as const;
+
+const OPENING_FIELD = new Set<string>(FILING_OPENING_FIELDS);
+
+export interface FilingDraftFacts {
+  tenancyId: string;
+  tenants: readonly string[];
+  guarantors: readonly string[];
+  startDate: string;
+  endDate: string;
+  protocolPresent: boolean;
+}
+
+export interface LeaseFilingScreen {
+  nav: Html;
+  csrf: string;
+  beat: FilingBeat;
+  matched?: UnitHit;
+  reading?: PlaceReading;
+  building?: { building_id: string; name: string } | null;
+  candidates?: UnitHit[];
+  /** How many Units answered. Used only for the A12 headline when nothing is exact. */
+  candidateTotal?: number;
+  query?: string;
+  mayCreate?: boolean;
+  chosenUnitId?: string;
+  tooLargeBytes?: number;
+  refused?: {
+    type: DocumentTypeRow;
+    verification: Verification;
+    reason?: IntakeRefusal;
+    documentHref?: string;
+  };
+  documentId?: string;
+  unit?: UnitHit;
+  rows?: readonly ExtractedRow[];
+  mayApprove?: boolean;
+  conflictTenancyId?: string;
+  draft?: FilingDraftFacts;
+}
+
+function filingApproveControl(
+  screen: LeaseFilingScreen,
+  row: ExtractedRow,
+): Html {
+  if (!screen.documentId) {
+    return h``;
+  }
+  if (row.approvedAt !== null) {
+    return h`<td class="muted">אושר</td>`;
+  }
+  if (!screen.mayApprove) {
+    return h`<td class="muted">—</td>`;
+  }
+  return h`<td class="row-actions">
+    <form method="post" action="/documents/filing/${screen.documentId}/approve">
+      ${csrfInput(screen.csrf)}
+      <input type="hidden" name="extracted_field_id" value="${row.extractedFieldId}" />
+      <input class="mini" name="approved_value" value="${row.value}" maxlength="2000"
+        aria-label="הערך המאושר ל${row.labelHe}" />
+      <button class="btn btn-primary mini" type="submit">אישור</button>
+    </form>
+  </td>`;
+}
+
+function filingReading(screen: LeaseFilingScreen): Html {
+  const rows = (screen.rows ?? []).filter((row) =>
+    OPENING_FIELD.has(row.fieldKey),
+  );
+  if (screen.beat !== 'read') {
+    return h``;
+  }
+  const conflict = screen.conflictTenancyId
+    ? h`<section class="notice">
+        <h2>conflict</h2>
+        <p class="lede">
+          כבר יש חוזה לדירה הזו באותו מועד תחילה —
+          <a href="/estate/tenancies/${screen.conflictTenancyId}">פתיחת החוזה</a>.
+        </p>
+      </section>`
+    : h``;
+  if (rows.length === 0) {
+    return h`${conflict}<section class="notice">
+      <h2>הקריאה</h2>
+      <p class="lede">הקובץ תויק. אישור השמות והתאריכים ייפתח כאן.</p>
+    </section>`;
+  }
+  return h`${conflict}<section class="notice">
+    <div class="table-wrap">
+      <table class="grid-table">
+        <thead>
+          <tr>
+            <th>שדה</th>
+            <th>מן הדף</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(
+            (row) => h`<tr>
+              <td>${row.labelHe}${nameRole(row, rows)}</td>
+              <td>${
+                row.fieldKey.endsWith('_date')
+                  ? excerpt(ltr(row.value))
+                  : excerpt(row.value)
+              }</td>
+              ${filingApproveControl(screen, row)}
+            </tr>`,
+          )}
+        </tbody>
+      </table>
+    </div>
+  </section>`;
+}
+
+function filingDraft(screen: LeaseFilingScreen): Html {
+  const draft = screen.draft;
+  const unit = screen.unit;
+  if (screen.beat !== 'draft' || !draft || !unit) {
+    return h``;
+  }
+  const title = draft.tenants[0]
+    ? h`<span class="excerpt">${draft.tenants[0]}</span>
+        · ${unit.address_line}, ${unit.city} · דירה ${ltr(unit.unit_number)}`
+    : h`${unit.address_line}, ${unit.city} · דירה ${ltr(unit.unit_number)}`;
+  const tenants =
+    draft.tenants.length === 0
+      ? h`—`
+      : h`${draft.tenants.map(
+          (name, index) =>
+            h`${index === 0 ? h`` : h` · `}<span class="excerpt">${name}</span>`,
+        )}`;
+  const guarantors =
+    draft.guarantors.length === 0
+      ? h`אין ערב`
+      : h`${draft.guarantors.map(
+          (name, index) =>
+            h`${index === 0 ? h`` : h` · `}<span class="excerpt">${name}</span>`,
+        )}`;
+  return h`<section class="notice">
+    <h2>${title} <span class="chip">טיוטה</span></h2>
+    <p class="lede">
+      <span class="excerpt">${ltr(draft.startDate)}</span> —
+      <span class="excerpt">${ltr(draft.endDate)}</span>
+    </p>
+    <dl class="facts">
+      <div>
+        <dt>דירה</dt>
+        <dd>${unit.address_line}, ${unit.city} · דירה ${ltr(unit.unit_number)}</dd>
+      </div>
+      <div>
+        <dt>שוכרים</dt>
+        <dd>${tenants}</dd>
+      </div>
+      <div>
+        <dt>ערב</dt>
+        <dd>${guarantors}</dd>
+      </div>
+    </dl>
+    <h2 class="second-heading">מה חסר כדי לעלות לאוויר</h2>
+    <ul class="missing">
+      <li>
+        <span class="chip">${draft.protocolPresent ? h`הוגש` : h`לא הוגש`}</span>
+        פרוטוקול מסירה
+      </li>
+    </ul>
+    <p class="lede">העלאה לאוויר — במסך החוזה. לא כאן.</p>
+  </section>
+  <section class="notice">
+    <h2>די היום</h2>
+    <div class="form-actions">
+      <a class="btn btn-primary" href="/documents/filing">תיוק חוזה נוסף</a>
+      <a class="btn btn-secondary" href="/estate/tenancies/${draft.tenancyId}">פתיחת החוזה</a>
+      <a class="btn btn-secondary" href="/estate/units/${unit.unit_id}">פתיחת הדירה</a>
+    </div>
+  </section>`;
+}
+
+function filingLede(screen: LeaseFilingScreen): Html {
+  if (screen.beat === 'draft') {
+    return h`הטיוטה נרשמה. הגעה בשם — לא מסך חוזה אחר.`;
+  }
+  if (screen.beat === 'read') {
+    return screen.unit
+      ? h`תויק לדירה ${excerpt(ltr(screen.unit.unit_number))}. חתמו על שמות ותאריכים — נפתחת טיוטה.`
+      : h`החוזה בתיק. הקריאה בטאב הזה.`;
+  }
+  if (screen.matched) {
+    return h`נקראה כתובת. עדיין לא נשמר דבר.`;
+  }
+  return h`חוזה אחד. הדירה מן הכתובת שעל הדף.`;
+}
+
+export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
+  const tooLong =
+    screen.tooLargeBytes === undefined
+      ? h``
+      : h`<section class="notice">
+          <h2>הקובץ גדול מכדי שנקרא אותו</h2>
+          <p class="lede">
+            גודל הקובץ ${megabytes(screen.tooLargeBytes)} מ״ב, והקורא מקבל עד
+            ${megabytes(onlineOcrByteLimit)} מ״ב בפנייה אחת. לכן לא נקרא דבר ו<strong>לא נשמר
+            דבר</strong> — לא הקובץ ולא רישום. סרקו את המסמך ברזולוציה נמוכה יותר וצרפו שוב.
+          </p>
+        </section>`;
+  const duplicate = screen.refused?.reason === 'anchored';
+  const terms =
+    screen.refused && screen.refused.reason !== 'anchored'
+      ? refusal(
+          screen.refused.type,
+          screen.refused.verification,
+          screen.refused.reason,
+        )
+      : h``;
+  const already = duplicate
+    ? h`<section class="notice">
+        <h2>הקובץ הזה כבר מתויק</h2>
+        <p class="lede">
+          אותם בתים בדיוק כבר שמורים במערכת
+          ${
+            screen.refused?.documentHref
+              ? h` — <a href="${screen.refused.documentHref}">המסמך הקיים</a>`
+              : h``
+          }.
+          <strong>לא נשמר דבר</strong>. אם זה המסמך הנכון, הוא כבר במערכת.
+        </p>
+      </section>`
+    : h``;
+  const candidates = screen.candidates ?? [];
+  const unresolved =
+    screen.reading !== undefined && !screen.matched && !screen.chosenUnitId
+      ? h`<section class="notice">
+          <h2>${filingHeadline(screen.reading, screen.candidateTotal ?? 0)}</h2>
+          ${placeFacts(screen.reading, screen.building, excerpt)}
+          <p class="lede">
+            <strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום. בחרו דירה, חפשו, או צרפו שוב.
+          </p>
+          ${filingCreateOffer(screen, screen.reading)}
+        </section>`
+      : h``;
+  const created = screen.chosenUnitId
+    ? h`<section class="notice">
+        <h2>הדירה נוצרה</h2>
+        <p class="lede">
+          הדירה מסומנת למטה. צרפו את הקובץ שוב — הוא לא נשמר בין הניסיונות — ותייקו.
+        </p>
+      </section>`
+    : h``;
+  const match = screen.matched
+    ? h`<section class="notice">
+        <h2>דירה אחת</h2>
+        <p>
+          נקראה הכתובת
+          ${
+            screen.reading?.addressLine
+              ? h`<span class="excerpt">${screen.reading.addressLine}${
+                  screen.reading.city ? h`, ${screen.reading.city}` : h``
+                }</span>`
+              : h``
+          }
+          ${
+            screen.reading?.apartmentNumber
+              ? h` · דירה <span class="excerpt">${screen.reading.apartmentNumber}</span>`
+              : h``
+          }
+        </p>
+        <dl class="facts">
+          <div>
+            <dt>בתיק</dt>
+            <dd>
+              דירה ${ltr(screen.matched.unit_number)} · ${screen.matched.address_line} ·
+              ${screen.matched.city}
+            </dd>
+          </div>
+        </dl>
+      </section>`
+    : h``;
+  const attach =
+    screen.beat === 'read' || screen.beat === 'draft'
+      ? h``
+      : h`<form class="file-well" method="post" action="/documents/filing" enctype="multipart/form-data">
+          ${csrfInput(screen.csrf)}
+          ${
+            screen.matched
+              ? h`<input type="hidden" name="unit" value="${screen.matched.unit_id}" />`
+              : h``
+          }
+          ${
+            !screen.matched && candidates.length > 0
+              ? h`<ul class="candidates">
+                  ${candidates.map(
+                    (unit) =>
+                      h`<li class="candidate">
+                        <input type="radio" id="u-${unit.unit_id}" name="unit" value="${unit.unit_id}" required ${
+                          screen.chosenUnitId === unit.unit_id
+                            ? h`checked`
+                            : h``
+                        } />
+                        <label for="u-${unit.unit_id}">דירה ${ltr(
+                          unit.unit_number,
+                        )} · ${unit.building_name} · ${unit.address_line}, ${
+                          unit.city
+                        }</label>
+                      </li>`,
+                  )}
+                </ul>
+                ${
+                  (screen.candidateTotal ?? candidates.length) >
+                  candidates.length
+                    ? h`<p class="hint">
+                        בכתובת הזו ${ltr(screen.candidateTotal ?? 0)} דירות. מוצגות ${ltr(
+                          CANDIDATE_LIMIT,
+                        )} הראשונות — אם הדירה אינה ביניהן, חפשו אותה למטה.
+                      </p>`
+                    : h``
+                }`
+              : h``
+          }
+          <span class="chip">חוזה שכירות</span>
+          <label for="file">הקובץ</label>
+          <input id="file" name="file" type="file" required
+            accept="${documentExtensions.map((ext) => `.${ext}`).join(',')}" />
+          <p class="hint">
+            ${
+              screen.matched
+                ? h`נשאר על הצעד עד המשך. נשמר רק אחרי אישור הדירה.`
+                : candidates.length > 0
+                  ? h`יש לצרף שוב. נשמר רק אחרי שהדירה אושרה.`
+                  : h`עד 20 מ״ב. נשמר רק אחרי שהדירה אושרה.`
+            }
+          </p>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">${
+              screen.matched
+                ? h`המשך ותיוק`
+                : candidates.length > 0
+                  ? h`תיוק לדירה שנבחרה`
+                  : h`קריאת הכתובת`
+            }</button>
+          </div>
+        </form>`;
+  const search =
+    screen.beat === 'read' || screen.beat === 'draft' || screen.matched
+      ? h``
+      : screen.reading !== undefined || candidates.length > 0
+        ? h`<form class="form-grid" method="get" action="/documents/filing">
+            <div class="form-row">
+              <label for="q">חיפוש דירה</label>
+              <input class="field" id="q" name="q" type="search" value="${
+                screen.query ?? ''
+              }" />
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-secondary" type="submit">חיפוש</button>
+            </div>
+          </form>`
+        : h``;
+  const body = h`
+    <div>
+      <h1>תיוק חוזה</h1>
+      <p class="lede">${filingLede(screen)}</p>
+    </div>
+    ${filingBeats(screen.beat)}
+    ${tooLong}
+    ${terms}
+    ${already}
+    ${unresolved}
+    ${created}
+    ${match}
+    ${filingReading(screen)}
+    ${filingDraft(screen)}
+    ${attach}
+    ${search}`;
+  return shell('דונה דום — תיוק חוזה', body, screen.nav);
 }
 
 export interface FiledScreen {

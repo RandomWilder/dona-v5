@@ -148,6 +148,8 @@ describe('every route in the application', () => {
       'GET /documents/new',
       // Slice 7.1. The tab's landing, gated as the rail item that reaches it.
       'GET /documents',
+      'GET /documents/filing',
+      'GET /documents/filing/:documentId',
       'GET /calls',
       'GET /settings',
       'POST /documents',
@@ -165,6 +167,9 @@ describe('every route in the application', () => {
       // Slice 6.3, flow A12. The document-first post. `GET /documents/new` is already above and
       // covers both of its screens — the same URL serves the unit-first form and the intake one.
       'POST /documents/intake',
+      'POST /documents/filing',
+      'POST /documents/filing/place',
+      'POST /documents/filing/:documentId/approve',
     ]) {
       const stance = declared.find(([name]) => name === url)?.[1];
       assert.ok(stance !== undefined, `${url} is not registered at all`);
@@ -178,24 +183,21 @@ describe('every route in the application', () => {
     await pool.end();
   });
 
-  it('marks exactly the two multipart routes as verifying their own token', async () => {
+  it('marks exactly the multipart routes as verifying their own token', async () => {
     // `csrf: 'in-body'` is an exemption from the hook, and an exemption that spreads is the hook
-    // being switched off one route at a time. There are two, they are the multipart uploads, and
-    // each calls the same `verifyCsrf` the hook calls.
-    //
-    // **It went from one to two at slice 6.3, and it went red to do it.** That is the whole design
-    // of this assertion: an allow-list of named routes cannot be widened by a route being added,
-    // only by somebody editing this line — which is a diff a reviewer reads, next to the handler
-    // that now parses its own body. The reason is the same both times and is not "uploads are
-    // special": this body is a multipart stream the handler must consume itself, so the field
-    // carrying the token cannot be read before the handler runs.
+    // being switched off one route at a time. The three are the multipart uploads, and each
+    // calls the same `verifyCsrf` the hook calls.
     const pool = deadPool();
     const app = buildApp({ pool, version: '9.9.9-test' });
     await app.ready();
     const exempt = app.stances
       .filter((route) => route.csrf === 'in-body')
       .map((route) => `${route.method} ${route.url}`);
-    assert.deepEqual(exempt, ['POST /documents', 'POST /documents/intake']);
+    assert.deepEqual(exempt, [
+      'POST /documents/filing',
+      'POST /documents',
+      'POST /documents/intake',
+    ]);
     await app.close();
     await pool.end();
   });
@@ -521,6 +523,19 @@ describe('dev mockups', () => {
       () => renderMockup('building-new-that-is-not-painted', 'csrf'),
       /not found/,
     );
+  });
+
+  it('does not serve the lease-filing paint after the journey is wired', () => {
+    for (const flow of [
+      'lease-filing',
+      'lease-filing-place',
+      'lease-filing-several',
+      'lease-filing-reading',
+      'lease-filing-draft',
+      'lease-filing-large',
+    ]) {
+      assert.throws(() => renderMockup(flow, 'csrf'), /not found/, flow);
+    }
   });
 
   it('refuses a segment that could leave the mockups directory', () => {

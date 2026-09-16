@@ -652,12 +652,74 @@ is no staging store, no `UNFILED` place kind and no fifth `PlaceKind` value. The
 real place (slice 3.2) and A6 settled the principle for the deterministic case: the cost is that the
 operator re-attaches the file, which is what 3.3's wrong-file refusal has always cost.
 
-**The second `csrf: 'in-body'` route, and the reason it is exactly two.** That flag is an exemption
+**The `csrf: 'in-body'` routes, and the reason the list is named.** That flag is an exemption
 from the composition root's CSRF `preHandler`, and the exemption is one sentence: *this body is a
 multipart stream and a hook that read the token would consume the stream the handler must parse*.
-That is true of `POST /documents/intake` for the same reason it is true of `POST /documents` and of
-nothing else in this system. `src/guard.test.ts` names both routes, so a third exemption fails the
+That is true of `POST /documents`, `POST /documents/intake` and `POST /documents/filing`, and of
+nothing else in this system. `src/guard.test.ts` names the three, so a fourth exemption fails the
 suite rather than passing quietly.
+
+### Filing a lease in one workspace — flow A16
+
+A16 is a **new door** over the same commands as A12. [SPEC-flows.md](SPEC-flows.md) A16 is the
+journey; this section is the routes. A12 is not amended: `POST /documents/intake` still files the
+moment the address is unique.
+
+**`GET /documents/filing`** is the rail tab **תיוק חוזה**, immediately under **מסמכים**, gated on
+`documents.write` as that tab is. The empty state **is** beat 1: type locked to **חוזה שכירות**,
+no type menu, an attach well, and the five beats as status — not as links. A VIEWER never sees the
+item.
+
+**`POST /documents/filing`** reads the place the way A12 does (`readForVerdict` → `readPlace` →
+`resolvePlace`). **Exact one Unit is shown, then Continue files.** The first post writes no row and
+no object. Continue is a second post of the same file with that Unit, and only then does
+`fileDocument` run. Nothing is held between the two posts. Type is `lease` at the edge; a posted
+type is ignored.
+
+**Wrong file, a scan the online reader cannot carry, and bytes already on file** refuse on this
+tab with a sentence, write nothing, and re-arm the file input. Duplicate bytes name the existing
+Document and link to it. **Not exactly one Unit** stays here with A12's sentence for that cause, a
+re-armed file input, the candidate list, and estate search (`GET /documents/filing?q=`). Picking a
+candidate and attaching again is the second post of the same file, still `fileDocument`.
+
+**Create is on this step**, not on A11 or A13's screens. `POST /documents/filing/place` is
+`estate.write` and calls `upsertUnitRow` — the same command A11/A13 use. Street, city and apartment
+are prefilled from the reading and editable. What the paper does not name (handover, rooms) is
+filled as today's date, two years of warranty, one room, `READY`, so the tab stays the three fields
+the paint showed. Then attach again: nothing is held. An operator sees pick and search only — no
+disabled create control, and the create post refuses them. A11/A13 screens are untouched.
+
+**After a successful file** the operator is still on this tab: `GET /documents/filing/:documentId`.
+That URL is this journey's, not `/documents/:id/fields` and not a Tenancy page. Refresh keeps it.
+
+**Beat 3 is thin reading.** The same GET paints the stamps that open a letting: `tenant_name`,
+`guarantor_name`, `start_date`, `end_date`. One row, one אישור, an optional correction in
+`approved_value`. A15's ledger stays at `GET /documents/:id/fields` for every other door — this
+journey does not load it. Reveal, promote, and `אישור כל מה שלא סומן` are not on this screen.
+
+**`POST /documents/filing/:documentId/approve`** is `documents.write` and urlencoded (the token
+belongs to the composition-root hook; this body is not a stream). It stamps through
+`approveExtractedField` and then `establishApprovedLease` — the same moment as #110. A field that
+is not one of those four is `invalid`. When the reading is ready the draft is written and the next
+GET of this URL is beat 4.
+
+**Beat 4 is טיוטה on this tab.** Title, people and dates from the approved reading; whether
+**פרוטוקול מסירה** is missing or present, read from the letting's linked documents. No activate
+control. No protocol file. Copy: going live is the Tenancy screen's act. **די היום** is quiet in
+the strip until this arrival, then offers file another (`GET /documents/filing`, empty state; the
+draft is untouched), open the Tenancy, open the Unit.
+
+**What the paper said is marked** on these screens: street, city, apartment, names and dates are
+`excerpt` inside our sentences; operator copy is not. The empty attach is a `file-well`. The five
+beats are the strip. A12, A15, Tenancy and **מסמכים** do not use these marks. The lease-filing paint
+is gone; `GET /dev/mockups/lease-filing*` is not found.
+
+**A second lease on the same Unit and the same start date** is `conflict` on this tab, with a link
+to the existing Tenancy. Overlapping `ACTIVE` + `DRAFT` on one Unit remains ordinary and is not
+re-specified here.
+
+**The rail destination** is `filing`. Other destinations, **מסמכים**, and A12's auto-file-on-exact-one
+are unchanged.
 
 **A refused resolution is on the audit log and counts against the cap.** `evidence.intake_unresolved`
 carries the declared type, the sniffed extension, the byte count, the file hash and how many

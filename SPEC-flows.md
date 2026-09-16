@@ -706,6 +706,78 @@ change what the reader looks for — that is A14, one screen earlier.
 **Module:** evidence owns the columns, the command, the routes and the screen. Staff owns the two
 permissions and decides nothing else.
 
+### A16 — File a lease in one workspace (תיוק חוזה)
+
+**Trigger:** an operator holds a signed lease, knows it is a lease, and does not want to hunt the
+Unit among 1,500 flats — and must not be sent into a different-looking app for the place, the
+reading, or the draft.
+
+**Why it is a flow at all, and why it does not replace A12.** A12, A15 and A2 already file a lease
+from paper, stamp a reading, and write a draft. Each is a correct act. Together they feel like five
+products: the rail says **מסמכים**, the place refusal is its own page, the reading is titled
+**מה נקרא מן המסמך**, the draft lands on the Tenancy screen. A16 is a **new lettered journey** with
+**new screens** and **one new rail door**. It calls the same commands. A1, A12, A15, A2, A3, A5, A6,
+A11, A13 and **מסמכים** stay. Their routes, copy, and behaviour are not amended by this flow.
+
+**What the paper said is marked.** A value the reader took off the page is an `excerpt` in our
+sentence — weight and tint, same face — so street, city, apartment, names and dates do not sit in
+the same voice as the operator's copy. The empty file step is a well, not a wall of hints. These
+marks live in the token sheet; this flow is the first to use them. Old screens are not restyled by
+A16.
+
+**Screen:** a rail item **תיוק חוזה**, directly under **מסמכים**, shown only when the role holds
+`documents.write`. The empty state of that tab **is** beat 1. The five beats are always visible as
+**status**, never as a skip control:
+
+**המסמך · הדירה · הקריאה · הטיוטה · די היום**
+
+Before the Document exists, the operator may change the file. After Continue files, beats 1–2 are
+done; the stepper does not unfile. Abandoned work is not listed here — **חוזים לא שלמים** and the
+Unit remain the other doors. Refresh keeps this tab's URL.
+
+**Type is declared and locked.** Beat 1 shows **חוזה שכירות**. There is no type menu. Other types
+stay on A1 / A12 / **מסמכים**.
+
+**Sequence.** Same laws as A12 and A15; different chrome.
+
+1. **המסמך.** Attach one file. Bounds unchanged: one file, 20 MB, four sniffed kinds; a scan the
+   online reader cannot carry (`onlineOcrByteLimit`) is refused with a sentence and writes nothing.
+   A later issue owns larger scans. Wrong file for a lease: same tab, attach again.
+2. **הדירה — same step as the file.** Bytes are read in memory; nothing is held between read and
+   file. A deterministic place reader returns street, city, apartment. **Exact one Unit:** show it
+   (*we read … → this Unit*); Continue then files through `fileDocument`. **Zero, several, nothing
+   read, or annex:** same step, four sentences as A12. Candidates and search on this step. Picking a
+   candidate and attaching again is the second post. **Create** is offered only with `estate.write`:
+   building and/or Unit, **prefilled from the reading**, human may edit, then create via A11/A13
+   **commands** (not their screens). Then attach again. An operator sees pick/search only — no
+   disabled create door.
+3. **הקריאה.** New screens under this tab, not `/documents/:id/fields`. The stamps that **open** a
+   letting: names and dates (the required reading). Not a clone of A15's full ledger, bulk
+   approve-rest, promote, or reveal. Those remain on A15 for every other door. Approving those stamps
+   writes the draft **at the same moment as #110 / A2** — unit, dates, at least one tenant, from the
+   approved reading. This tab then shows beat 4. It does not teleport to the Tenancy page.
+4. **הטיוטה.** Named arrival in this tab: title, people, dates, and whether **פרוטוקול מסירה** is
+   missing or present. Facts only. No activate (A5 stays on the Tenancy screen). No protocol attach
+   (A6 stays). Copy: going live is a later act on the Tenancy.
+5. **די היום.** File another (empty state of this tab) · open the Tenancy · open the Unit. Those
+   last two are **links out**, by choice.
+
+**A second lease on the same Unit and start date** is `conflict` with that reason, in this tab, with
+a link to the existing Tenancy. Duplicate bytes: news in this tab, link to the existing Document, not
+a silent merge. Overlapping `ACTIVE` + `DRAFT` on one Unit remains ordinary.
+
+**What A16 does not do.** It does not classify. It does not hold bytes. It does not raise the file
+or OCR ceilings. It does not file a handover protocol or activate a Tenancy. It does not list
+unfinished filings. It does not change A12's auto-file-on-exact-one (that door still files the
+moment the address is unique). It does not retitle A15.
+
+**Module:** evidence owns the new screens and the posts that sequence existing commands. Estate owns
+create-building / create-Unit **commands** reused here. Tenancy owns draft-from-approved-reading and
+activation facts (read, not invoked). Staff owns `documents.write` and `estate.write`. The rail
+gains one destination; no other destination changes.
+
+**Work item:** #115. Paint deleted after wire (#119).
+
 ## Open
 
 - **Which three to five document types open the concept work.** The catalogue seeds eight; the working

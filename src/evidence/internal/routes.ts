@@ -15,10 +15,12 @@ import type { Pool } from 'pg';
 import type { ChromeDest } from '../../chrome.ts';
 import {
   addCalendarYears,
+  type BuildingStatus,
   getBuilding,
   getUnit,
   searchEstate,
   type UnitHit,
+  upsertUnitRow,
   WARRANTY_YEARS,
 } from '../../estate/contract.ts';
 import { countActions, createAuditLog } from '../../kernel/audit.ts';
@@ -28,6 +30,7 @@ import {
   readExtractionSettings,
   readOcrSettings,
 } from '../../kernel/config.ts';
+import { inTransaction } from '../../kernel/db.ts';
 import type { Embedder } from '../../kernel/embeddings.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { Extractor } from '../../kernel/extraction.ts';
@@ -61,7 +64,11 @@ function pageIndex(asked: unknown, pageCount: number): number {
 }
 
 import type { WorkRunner } from '../../kernel/work.ts';
-import { listUnitTenancies, type TenancyRole } from '../../tenancy/contract.ts';
+import {
+  getTenancy,
+  listUnitTenancies,
+  type TenancyRole,
+} from '../../tenancy/contract.ts';
 import { approveExtractedField, approveUnflagged } from './approve.ts';
 import {
   declareDocumentTypeField,
@@ -79,12 +86,13 @@ import {
   isIdentifierField,
   listExtractedFields,
 } from './extract.ts';
-import { fileDocument } from './intake.ts';
+import { fileDocument, findDocumentByHash } from './intake.ts';
 import {
   confirmLeaseTenancy,
   establishApprovedLease,
   proposeLeaseTenancy,
 } from './lease.ts';
+import { listTenancyDocumentFacts } from './list.ts';
 import { destinationAfterFiling } from './orchestrate.ts';
 import { listDocumentPassages } from './passages.ts';
 import { readPlace, resolvePlace } from './place.ts';
@@ -106,12 +114,19 @@ import {
   sniffExtension,
 } from './storage-path.ts';
 import { pageText as textOfPage } from './verify.ts';
-import type { AnchoredPlace, FieldsScreen, SeedScreen } from './views.ts';
+import type {
+  AnchoredPlace,
+  FieldsScreen,
+  LeaseFilingScreen,
+  SeedScreen,
+} from './views.ts';
 import {
+  FILING_OPENING_FIELDS,
   renderDocumentsPage,
   renderFieldsPage,
   renderFiledPage,
   renderIntakePage,
+  renderLeaseFilingPage,
   renderReadPage,
   renderSeededPage,
   renderSeedPage,
@@ -216,14 +231,18 @@ function sessionTokenOf(request: FastifyRequest): string {
  * Who is filing. The guard set this before the handler ran, so its absence is a wiring fault rather
  * than an unauthenticated request — and it fails closed instead of filing a document under nobody.
  */
-function chromeOf(deps: DocumentDeps, request: FastifyRequest): Html {
+function chromeOf(
+  deps: DocumentDeps,
+  request: FastifyRequest,
+  dest: ChromeDest = 'documents',
+): Html {
   // **`'documents'` from 6.9, and `'estate'` before it.** These are this module's screens, so the
   // rail marks its own destination on them rather than marking the one next door — which is what a
   // reader following the bar back from a filed document saw until 6.9: the estate tab lit up, on a
-  // page that is not estate's.
+  // page that is not estate's. A16's tab is `'filing'`.
   return deps.chrome(
     csrfFrom(request),
-    'documents',
+    dest,
     can(request.staff?.role ?? null, 'documents.write'),
   );
 }
@@ -447,6 +466,8 @@ const FILE = {
 const INTAKE = {
   config: { staff: 'documents.write', csrf: 'in-body' },
 } as const;
+const FILING = INTAKE;
+const PLACE = { config: { staff: 'estate.write' } } as const;
 const CONFIRM = { config: { staff: 'tenancy.write' } } as const;
 /**
  * **Slice 7.3.** Signing a reading writes nothing outside this module — no typed column, no tenancy
@@ -532,6 +553,435 @@ export function registerDocumentRoutes(
       // OPERATOR reads this page and is simply not shown the editor.
       mayWrite: can(request.staff?.role ?? null, 'settings.write'),
       ...(saved === 'declared' || saved === 'retired' ? { saved } : {}),
+    });
+  });
+
+  const leaseFiling = (
+    request: FastifyRequest,
+    extras: Omit<LeaseFilingScreen, 'nav' | 'csrf'>,
+  ) =>
+    renderLeaseFilingPage({
+      nav: chromeOf(deps, request, 'filing'),
+      csrf: csrfFrom(request),
+      ...extras,
+    });
+
+  const openingFields = new Set<string>(FILING_OPENING_FIELDS);
+
+  const tenancyBoundTo = async (documentId: string): Promise<string | null> => {
+    const found = await deps.pool.query<{ entity_id: string }>(
+      `SELECT entity_id FROM document_link
+        WHERE document_id = $1 AND entity_type = 'TENANCY'`,
+      [documentId],
+    );
+    return found.rows[0]?.entity_id ?? null;
+  };
+
+  const collidingOn = async (
+    unitId: string,
+    startDate: string,
+  ): Promise<string | null> => {
+    const found = await deps.pool.query<{ tenancy_id: string }>(
+      `SELECT tenancy_id FROM tenancy
+        WHERE unit_id = $1 AND start_date = $2`,
+      [unitId, startDate],
+    );
+    return found.rows[0]?.tenancy_id ?? null;
+  };
+
+  const openingReady = (rows: readonly ExtractedRow[]): boolean => {
+    const tenants = rows.filter((row) => row.fieldKey === 'tenant_name');
+    if (
+      tenants.length === 0 ||
+      tenants.some((row) => row.approvedAt === null)
+    ) {
+      return false;
+    }
+    if (
+      rows
+        .filter((row) => row.fieldKey === 'guarantor_name')
+        .some((row) => row.approvedAt === null)
+    ) {
+      return false;
+    }
+    for (const key of ['start_date', 'end_date'] as const) {
+      const row = rows.find((field) => field.fieldKey === key);
+      if (!row || row.approvedAt === null) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const printed = (row: ExtractedRow): string => row.approvedValue ?? row.value;
+
+  const filingOfDocument = async (
+    request: FastifyRequest,
+    documentId: string,
+  ): Promise<Omit<LeaseFilingScreen, 'nav' | 'csrf'>> => {
+    await getFiledDocument(deps.pool, documentId);
+    const anchor = await anchorOf(deps.pool, documentId);
+    if (anchor.kind !== 'UNIT') {
+      throw new KernelError('not_found', 'document not found');
+    }
+    const unit = await getUnit(deps.pool, anchor.id);
+    const bound = await tenancyBoundTo(documentId);
+    const rows = (await listExtractedFields(deps.pool, documentId)).filter(
+      (row) => openingFields.has(row.fieldKey),
+    );
+    if (bound) {
+      const tenancy = await getTenancy(deps.pool, bound);
+      const facts = await listTenancyDocumentFacts(deps.pool, bound);
+      return {
+        beat: 'draft',
+        documentId,
+        unit,
+        draft: {
+          tenancyId: bound,
+          tenants: rows
+            .filter((row) => row.fieldKey === 'tenant_name')
+            .map(printed),
+          guarantors: rows
+            .filter((row) => row.fieldKey === 'guarantor_name')
+            .map(printed),
+          startDate: tenancy.start_date,
+          endDate: tenancy.end_date,
+          protocolPresent: facts.some(
+            (fact) => fact.typeKey === 'handover_protocol' && fact.approved,
+          ),
+        },
+      };
+    }
+    const start = rows.find((row) => row.fieldKey === 'start_date');
+    const clash =
+      start && openingReady(rows)
+        ? await collidingOn(unit.unit_id, printed(start))
+        : null;
+    return {
+      beat: 'read',
+      documentId,
+      unit,
+      rows,
+      mayApprove: can(request.staff?.role ?? null, 'documents.write'),
+      ...(clash ? { conflictTenancyId: clash } : {}),
+    };
+  };
+
+  app.get('/documents/filing', NEW, async (request, reply) => {
+    html(reply);
+    const query = String((request.query as { q?: string }).q ?? '');
+    if (query === '') {
+      return leaseFiling(request, { beat: 'file' });
+    }
+    const found = await searchEstate(deps.pool, query);
+    return leaseFiling(request, {
+      beat: 'place',
+      reading: {
+        addressLine: null,
+        city: null,
+        apartmentNumber: null,
+        annexDeferral: false,
+      },
+      candidates: found.units,
+      candidateTotal: found.units.length,
+      query,
+      mayCreate: mayShapeTheEstate(request),
+      building: null,
+    });
+  });
+
+  app.get<{ Params: { documentId: string } }>(
+    '/documents/filing/:documentId',
+    NEW,
+    async (request, reply) => {
+      const documentId = validId(request.params.documentId, 'document');
+      html(reply);
+      return leaseFiling(request, await filingOfDocument(request, documentId));
+    },
+  );
+
+  app.post<{ Params: { documentId: string } }>(
+    '/documents/filing/:documentId/approve',
+    APPROVE,
+    async (request, reply) => {
+      const documentId = validId(request.params.documentId, 'document');
+      const fields = formBody(request);
+      if (fields.action === 'unflagged') {
+        throw new KernelError('invalid', 'that control is not on this journey');
+      }
+      const extractedFieldId = validId(
+        fields.extracted_field_id ?? '',
+        'extracted field',
+      );
+      const rows = await listExtractedFields(deps.pool, documentId);
+      const row = rows.find(
+        (candidate) => candidate.extractedFieldId === extractedFieldId,
+      );
+      if (!row) {
+        throw new KernelError('not_found', 'extracted field not found');
+      }
+      if (!openingFields.has(row.fieldKey)) {
+        throw new KernelError(
+          'invalid',
+          'that reading does not open a letting',
+        );
+      }
+      const approvedBy = requireOperatorEmail(request);
+      const approveDeps = {
+        db: deps.pool,
+        audit: createAuditLog(deps.pool, deps.clock),
+        clock: deps.clock,
+      };
+      await approveExtractedField(approveDeps, {
+        extractedFieldId,
+        ...(fields.approved_value === undefined
+          ? {}
+          : { approvedValue: fields.approved_value }),
+        approvedBy,
+        mayReadIdentifiers: mayReadIdentifiers(request),
+      });
+      try {
+        await establishApprovedLease(
+          {
+            db: deps.pool,
+            audit: createAuditLog(deps.pool, deps.clock),
+            clock: deps.clock,
+          },
+          { documentId, confirmedBy: approvedBy },
+        );
+      } catch (error) {
+        if (
+          error instanceof KernelError &&
+          error.code === 'conflict' &&
+          error.message ===
+            'that unit already has a lease starting on this date'
+        ) {
+          html(reply);
+          reply.code(409);
+          return leaseFiling(
+            request,
+            await filingOfDocument(request, documentId),
+          );
+        }
+        throw error;
+      }
+      return reply.redirect(`/documents/filing/${documentId}`);
+    },
+  );
+
+  app.post('/documents/filing/place', PLACE, async (request, reply) => {
+    const body = (request.body as Form | undefined) ?? {};
+    const unitNumber = requireText(body.unit_number, 'unit_number', 32);
+    const addressLine = requireText(body.address_line, 'address_line', 200);
+    const city = requireText(body.city, 'city', 120);
+    const askedBuilding = body.building
+      ? validId(body.building, 'building')
+      : null;
+    const handover = today(deps.clock);
+    const held = askedBuilding
+      ? (await getBuilding(deps.pool, askedBuilding)).building
+      : null;
+    const written = await inTransaction(deps.pool, (db) =>
+      upsertUnitRow(db, {
+        project: null,
+        building: held
+          ? {
+              name: held.name,
+              addressLine: held.address_line,
+              city: held.city,
+              projectCode: held.project_code,
+              handoverDate: held.handover_date,
+              warrantyEndDate: held.warranty_end_date,
+              status: held.status as BuildingStatus,
+            }
+          : {
+              name: addressLine,
+              addressLine,
+              city,
+              projectCode: null,
+              handoverDate: handover,
+              warrantyEndDate: addCalendarYears(handover, WARRANTY_YEARS),
+              status: 'ACTIVE',
+            },
+        unit: {
+          spaceName: unitNumber,
+          unitNumber,
+          rooms: 1,
+          areaSqm: null,
+          hasMamad: false,
+          warrantyEndDate: null,
+          conditionStatus: 'READY',
+        },
+        floor: null,
+      }),
+    );
+    const unit = await getUnit(deps.pool, written.unitId);
+    html(reply);
+    return leaseFiling(request, {
+      beat: 'place',
+      candidates: [unit],
+      candidateTotal: 1,
+      chosenUnitId: unit.unit_id,
+      mayCreate: true,
+      building: held
+        ? { building_id: held.building_id, name: held.name }
+        : null,
+      reading: {
+        addressLine,
+        city,
+        apartmentNumber: unitNumber,
+        annexDeferral: false,
+      },
+    });
+  });
+
+  app.post('/documents/filing', FILING, async (request, reply) => {
+    const { fields, bytes } = await readUpload(request);
+    verifyCsrf(sessionTokenOf(request), fields[CSRF_FIELD]);
+    const operator = requireOperator(request);
+    await boundTheCaller(deps, operator);
+
+    const type = await documentTypeByKey(deps.pool, 'lease');
+    if (!type) {
+      throw new KernelError('invalid', 'that is not a document type');
+    }
+    const extension = sniffExtension(bytes);
+    const chosen = fields.unit ? validId(fields.unit, 'unit') : null;
+    const fileHash = documentFileHash(bytes);
+
+    const paintRefusal = async (
+      code: number,
+      extras: Omit<LeaseFilingScreen, 'nav' | 'csrf'>,
+    ) => {
+      html(reply);
+      reply.code(code);
+      return leaseFiling(request, extras);
+    };
+
+    const existing = await findDocumentByHash(deps.pool, fileHash);
+    const documentHref = existing
+      ? `/documents/${existing.documentId}/read`
+      : undefined;
+
+    const read = await intakeReading(
+      deps,
+      bytes,
+      extension,
+      type.verificationTerms,
+    );
+    if (read.ocrOutcome === 'too_large') {
+      await createAuditLog(deps.pool, deps.clock).write(
+        {
+          actorKind: 'staff',
+          actorId: operator,
+          actorRole: request.staff?.role ?? undefined,
+          action: 'evidence.intake_unresolved',
+          inputs: {
+            typeKey: type.typeKey,
+            extension,
+            bytes: bytes.length,
+            fileHash,
+            candidates: 0,
+            ocr: read.ocrOutcome,
+            pages: read.native.length,
+          },
+        },
+        { outcome: 'ok' },
+      );
+      return paintRefusal(422, {
+        beat: 'file',
+        tooLargeBytes: bytes.length,
+      });
+    }
+    if (read.verification.verdict === 'refused') {
+      return paintRefusal(422, {
+        beat: 'file',
+        refused: {
+          type,
+          verification: read.verification,
+          reason: 'terms',
+        },
+      });
+    }
+    if (existing) {
+      return paintRefusal(422, {
+        beat: 'file',
+        refused: {
+          type,
+          verification: read.verification,
+          reason: 'anchored',
+          documentHref,
+        },
+      });
+    }
+    if (chosen) {
+      const unit = await getUnit(deps.pool, chosen);
+      const result = await fileDocument(await filingDeps(deps), {
+        bytes,
+        typeKey: type.typeKey,
+        place: placeFor(type.typeKey, unit),
+        tenancyId: null,
+        filedBy: operator,
+        reading: read,
+      });
+      html(reply);
+      if (!result.filed) {
+        reply.code(422);
+        return leaseFiling(request, {
+          beat: 'file',
+          refused: {
+            type,
+            verification: result.verification,
+            reason: result.refusal,
+          },
+        });
+      }
+      return reply.redirect(`/documents/filing/${result.documentId}`);
+    }
+    const reading = readPlace(read.text);
+    const resolved = await resolvePlace(deps.pool, reading);
+    if (!resolved.unit) {
+      await createAuditLog(deps.pool, deps.clock).write(
+        {
+          actorKind: 'staff',
+          actorId: operator,
+          actorRole: request.staff?.role ?? undefined,
+          action: 'evidence.intake_unresolved',
+          inputs: {
+            typeKey: type.typeKey,
+            extension,
+            bytes: bytes.length,
+            fileHash,
+            candidates: resolved.candidates.length,
+            ocr: read.ocrOutcome,
+            pages: read.native.length,
+            ...(read.pagesRead === undefined
+              ? {}
+              : { pagesRead: read.pagesRead }),
+          },
+        },
+        { outcome: 'ok' },
+      );
+      return paintRefusal(422, {
+        beat: 'place',
+        reading,
+        candidates: resolved.candidates,
+        candidateTotal: resolved.total,
+        query: reading.addressLine ?? '',
+        mayCreate: mayShapeTheEstate(request),
+        building: resolved.building
+          ? {
+              building_id: resolved.building.building_id,
+              name: resolved.building.name,
+            }
+          : null,
+      });
+    }
+    html(reply);
+    return leaseFiling(request, {
+      beat: 'place',
+      matched: resolved.unit,
+      reading,
     });
   });
 
