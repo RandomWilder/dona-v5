@@ -415,6 +415,26 @@ rows are placeholders, the same standing as the מסירה dates the importer co
 handover protocol has a bay to land a gate motor on. A building whose real bay count is known (Shoham)
 arrives as a plan. A real register whose counts disagree is 2.5's to measure.
 
+## Operator purge (not a screen)
+
+The screens never destroy a **Document**, a **Building**, or a **Unit**. That rule stays. Developers
+need a way to empty a place on **local** or **staging** so the same specimen can be filed again
+(`file_hash` is unique until the Document row is gone).
+
+`listEstatePurge` / `applyEstatePurge` (CLI `npm run estate:purge`, staging wrapper
+`infra/estate-purge.sh`) are that act. Prod is refused. There is no portfolio wipe. List by address
+or id; apply by **Building** id or **Unit** id only. Confirm is y/n on the laptop, never inside a
+Cloud Run job.
+
+Apply removes what hangs off that place: Spaces and Units, Assets, Tenancies and TenancyParty,
+Documents (readings, Passages, links) whose place is in the bag, office retrieval threads for those
+bounds. A **Party** with no remaining Tenancy goes; a person still on another street stays. Project,
+DocumentType, staff, terms_profile, and sibling Units stay. A Building-bound Document stays when
+only one Unit is applied.
+
+Rows first. The wrapper then prints object prefixes for `infra/docs-delete.sh`. If the bucket step
+fails, the hash is already free; leftover bytes are restorable for seven days.
+
 ## What is deliberately not a column
 
 - **`Building.unit_count`** — counted, never stored. A stored count drifts the first time someone

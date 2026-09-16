@@ -36,6 +36,21 @@ export type {
   UnitRowSpec,
 } from './internal/plan.ts';
 export type {
+  EstatePurgeApplySpec,
+  EstatePurgeArgs,
+  EstatePurgeKind,
+  EstatePurgeListQuery,
+  EstatePurgeReport,
+  EstatePurgeTarget,
+  EstatePurgeUnitLine,
+} from './internal/purge.ts';
+export {
+  applyEstatePurge,
+  listEstatePurge,
+  parseEstatePurgeArgs,
+  refuseProdDatabase,
+} from './internal/purge.ts';
+export type {
   BuildingDetail,
   BuildingSummary,
   ExpiringLease,
