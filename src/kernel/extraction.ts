@@ -146,9 +146,11 @@ export function createOpenAiExtractor(
         });
       }
       if (!response.ok) {
+        const provider = await readProviderError(response);
         throw new KernelError('unavailable', 'the extraction call failed', {
           status: response.status,
           name: request.name,
+          ...provider,
         });
       }
       const body = (await response.json()) as CompletionResponse;
@@ -197,6 +199,32 @@ export function createFakeExtractor(
     },
     describe: () => 'fake',
   };
+}
+
+const PROVIDER_CODE_MAX = 64;
+const PROVIDER_MESSAGE_MAX = 300;
+
+async function readProviderError(
+  response: Response,
+): Promise<{ providerCode?: string; providerMessage?: string }> {
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return {};
+  }
+  if (typeof body !== 'object' || body === null) return {};
+  const error = (body as { error?: unknown }).error;
+  if (typeof error !== 'object' || error === null) return {};
+  const fields = error as { code?: unknown; message?: unknown };
+  const details: { providerCode?: string; providerMessage?: string } = {};
+  if (typeof fields.code === 'string' && fields.code.length > 0) {
+    details.providerCode = fields.code.slice(0, PROVIDER_CODE_MAX);
+  }
+  if (typeof fields.message === 'string' && fields.message.length > 0) {
+    details.providerMessage = fields.message.slice(0, PROVIDER_MESSAGE_MAX);
+  }
+  return details;
 }
 
 function readContent(body: CompletionResponse, name: string): unknown {

@@ -14,6 +14,7 @@ import { buildApp } from '../app.ts';
 import { fixedClock, systemClock } from '../kernel/clock.ts';
 import { embeddingColumnDimensions } from '../kernel/config.ts';
 import { createFakeEmbedder } from '../kernel/embeddings.ts';
+import { KernelError } from '../kernel/errors.ts';
 import { createFakeExtractor } from '../kernel/extraction.ts';
 import { newId } from '../kernel/ids.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
@@ -823,6 +824,92 @@ describe('estate · building retrieval panel', () => {
         url: unitPath,
       });
       assert.match(unitAfter.body, /מה דמי השכירות\?/);
+    } finally {
+      await askCleanup(pool);
+      await signOutAll(pool, ASK_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('stays on the Building when the extractor is unavailable, and records the provider error', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      embedder: createFakeEmbedder(embeddingColumnDimensions),
+      extractor: createFakeExtractor(() => {
+        throw new KernelError('unavailable', 'the extraction call failed', {
+          status: 404,
+          name: 'office_turn',
+          providerCode: 'model_not_found',
+          providerMessage:
+            'The model does not exist or you do not have access to it.',
+        });
+      }),
+    });
+    await signOutAll(pool, ASK_DOMAIN);
+    await askCleanup(pool);
+    const viewer = await signIn(pool, systemClock, {
+      email: `view@${ASK_DOMAIN}`,
+      role: 'VIEWER',
+    });
+    const asViewer = asOperator(app, viewer);
+    try {
+      await importEstate(pool, askPlan);
+      const place = await pool.query<{ building_id: string }>(
+        `SELECT b.building_id FROM building b
+         WHERE b.city = $1 AND b.address_line = $2`,
+        [ASK_CITY, ASK_ADDRESS],
+      );
+      const buildingId = place.rows[0]?.building_id ?? '';
+      const buildingPath = `/estate/buildings/${buildingId}`;
+      const asked = await asViewer.inject({
+        method: 'POST',
+        url: `${buildingPath}/office-turn`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent('כמה דירות מאוכלסות?')}`,
+      });
+      assert.equal(asked.statusCode, 303, asked.body.slice(0, 400));
+      assert.equal(asked.headers.location, `${buildingPath}?ask=unavailable`);
+      assert.doesNotMatch(asked.body, /"code":"unavailable"/);
+
+      const painted = await asViewer.inject({
+        method: 'GET',
+        url: `${buildingPath}?ask=unavailable`,
+      });
+      assert.equal(painted.statusCode, 200);
+      assert.match(painted.body, /לא ניתן לענות עכשיו/);
+      assert.doesNotMatch(painted.body, /כמה דירות מאוכלסות/);
+
+      const logged = await pool.query<{
+        action: string;
+        outcome: string;
+        error_code: string | null;
+        inputs: { name?: string; status?: number; providerCode?: string };
+      }>(
+        `SELECT action, outcome, error_code, inputs
+           FROM audit_log
+          WHERE action = 'evidence.office_turn' AND subject_id = $1
+          ORDER BY at DESC
+          LIMIT 1`,
+        [buildingId],
+      );
+      const row = logged.rows[0];
+      assert.equal(row?.action, 'evidence.office_turn');
+      assert.equal(row?.outcome, 'error');
+      assert.equal(row?.error_code, 'unavailable');
+      assert.equal(row?.inputs.name, 'office_turn');
+      assert.equal(row?.inputs.status, 404);
+      assert.equal(row?.inputs.providerCode, 'model_not_found');
+      assert.equal(
+        JSON.stringify(row?.inputs).includes('כמה דירות מאוכלסות'),
+        false,
+      );
     } finally {
       await askCleanup(pool);
       await signOutAll(pool, ASK_DOMAIN);

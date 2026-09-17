@@ -115,3 +115,12 @@ Do not add a third seam (SQL against occupancy, embedding distance). The list co
 Unit staging quality was the gate; it held. Same class of Passage question as the Unit panel; the list path is the second job in the same box. `/to-tickets` should split at the seams above (list command → office-turn tool choice → Building panel HTTP), not as a UI ticket that pretends the turn is unchanged.
 
 Clicked on `:3000` after restarting `npm run dev` before merge. Staging: table ask and protocol ask on one Building, Unit panels still isolated across two Units in that Building.
+
+## Comment — 2026-09-17
+
+Staging after #105: Unit asks 303 and answer well. Building asks returned JSON
+`unavailable` / extraction 404 `name: office_turn` (our HTTP 503; provider 404).
+Retry same. Unit still good. Follow-up: provider `error.code` + `error.message`
+on the extract failure; ask POST 303s back to the bound page with a frozen
+Hebrew notice. This issue stays open until a Building ask on staging 303s and
+paints an answer.

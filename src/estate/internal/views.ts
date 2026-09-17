@@ -1051,6 +1051,7 @@ export interface OfficeRetrievalView {
       documentType: string;
     }[];
   }[];
+  notice?: string;
 }
 
 /** #114. Same shape as the Building panel; the bound is this Unit. */
@@ -1083,8 +1084,15 @@ function retrievalSplit(sheet: Html, retrieval: OfficeRetrievalView): Html {
         </div>
       </header>
       ${
+        retrieval.notice
+          ? h`<p class="unit-retrieval-empty">${retrieval.notice}</p>`
+          : h``
+      }
+      ${
         retrieval.thread.length === 0
-          ? h`<p class="unit-retrieval-empty">עדיין לא נשאלה שאלה.</p>`
+          ? retrieval.notice
+            ? h``
+            : h`<p class="unit-retrieval-empty">עדיין לא נשאלה שאלה.</p>`
           : h`<ol class="unit-thread">
               ${retrieval.thread.map(
                 (

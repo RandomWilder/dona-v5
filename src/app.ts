@@ -25,6 +25,7 @@ import {
   upsertDocumentType,
 } from './evidence/contract.ts';
 import { renderIndexPage } from './index-page.ts';
+import { createAuditLog } from './kernel/audit.ts';
 import { type Clock, systemClock } from './kernel/clock.ts';
 import { createSettings, readExtractionSettings } from './kernel/config.ts';
 import {
@@ -462,21 +463,55 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       const extraction = await readExtractionSettings(
         createSettings(deps.pool),
       );
-      await runOfficeTurn(
-        {
-          db: deps.pool,
-          clock,
-          extractor: deps.extractor ?? createUnconfiguredExtractor(),
-          embedder: deps.embedder ?? createUnconfiguredEmbedder(),
-          model: extraction.model,
-          reasoningEffort: extraction.reasoningEffort,
+      const audit = createAuditLog(deps.pool, clock);
+      const entry = {
+        actorKind: 'staff' as const,
+        actorId: spec.staffAccountId,
+        action: 'evidence.office_turn',
+        subjectId: spec.bound.id,
+        inputs: {
+          boundKind: spec.bound.kind,
         },
-        {
-          staffAccountId: spec.staffAccountId,
-          bound: spec.bound,
-          question: spec.question,
-        },
-      );
+      };
+      try {
+        await runOfficeTurn(
+          {
+            db: deps.pool,
+            clock,
+            extractor: deps.extractor ?? createUnconfiguredExtractor(),
+            embedder: deps.embedder ?? createUnconfiguredEmbedder(),
+            model: extraction.model,
+            reasoningEffort: extraction.reasoningEffort,
+          },
+          {
+            staffAccountId: spec.staffAccountId,
+            bound: spec.bound,
+            question: spec.question,
+          },
+        );
+        await audit.write(entry, { outcome: 'ok' });
+      } catch (error) {
+        const details =
+          error instanceof KernelError ? error.details : undefined;
+        await audit.write(
+          {
+            ...entry,
+            inputs: {
+              ...entry.inputs,
+              name: details?.name,
+              status: details?.status,
+              providerCode: details?.providerCode,
+              providerMessage: details?.providerMessage,
+            },
+          },
+          {
+            outcome: 'error',
+            code: error instanceof KernelError ? error.code : 'unavailable',
+            message: error instanceof Error ? error.message : undefined,
+          },
+        );
+        throw error;
+      }
     },
   });
   // Slice 5.1, and from 5.2 no longer the only routes behind a session: every route this

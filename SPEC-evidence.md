@@ -1061,6 +1061,10 @@ Behavioural golden cases grade this turn as the evals subject (cite / refuse / t
 on a Building bound list vs search vs empty roll). Grounding case `off-lease-refuses` still means
 hits may exist and none answer.
 
+An extractor failure (`unavailable`) is not a turn: nothing is appended to the thread. Estate's
+POST 303s back to the bound page. The kernel records the provider `error.code` and
+`error.message` on that failure (SPEC-kernel.md); the office turn does not.
+
 **#105 backfills the archive.** Documents holding no passages — filed before #103, or filed with an
 unconfigured embedder — are walked by `sweepMissingPassages` the way `sweepUnverified` walks
 `unverified` rows: one at a time, optional id filter, a report of examined / written / unchanged /

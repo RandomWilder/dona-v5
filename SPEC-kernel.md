@@ -321,6 +321,13 @@ the provider enforces is the difference between a malformed reply being an error
 with a plausible wrong shape. A reply that is not the schema, or is not JSON at all, is
 `unavailable` — never a partial object.
 
+A failed HTTP call is `unavailable` with `details.status` (the provider's status) and
+`details.name` (this extract's schema name). When the provider body is JSON in OpenAI's
+`{ error: { code, message } }` shape, `details.providerCode` and `details.providerMessage`
+are copied too — message capped, never the API key, never the prompt, never a completion.
+Those two fields are how a 404 on `office_turn` is diagnosed; status-and-name alone is not
+enough. A body that is not that shape still carries status and name only.
+
 **The model id arrives per call**, read from `config_settings` by the caller, for the reason the two
 settings differ above.
 
