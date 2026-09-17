@@ -125,14 +125,19 @@ export {
   signLinkedDocuments,
 } from './internal/list.ts';
 export type {
+  OfficeTool,
   OfficeTurnDeps,
   OfficeTurnResult,
   OfficeTurnSpec,
 } from './internal/office-turn.ts';
 export {
   answerOfficeHits,
+  chooseOfficeTools,
+  listOfficeLettings,
+  OFFICE_TOOLS_INSTRUCTIONS,
   OFFICE_TURN_INSTRUCTIONS,
   OFFICE_TURN_REFUSAL,
+  offeredOfficeTools,
   runOfficeTurn,
 } from './internal/office-turn.ts';
 export type { FilingContinuation } from './internal/orchestrate.ts';

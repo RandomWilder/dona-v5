@@ -219,12 +219,28 @@ by tripping the guard rather than by anticipating it.
   rows onto an `ENDED` row because that is how a past household is loaded. A required document
   whose `valid_to` is strictly before today, on an `ACTIVE` letting, is a flag on the gate and
   never a status change.
+  **#122 adds `listActiveLettingsInBuilding`.** An office inventory of who is let in a Building
+  today, not the front door and not a second isolation join. It takes a Building id and the clock,
+  and returns one row per Unit in that Building whose letting is `ACTIVE` and whose dates cover
+  the clock's day in the office zone (`today(clock)`), the same clock comparison `activationGate`
+  already makes in this module. Each row is the Unit's name, the letting's start and end, and the
+  `full_name` of every party on that letting except `GUARANTOR` (ערב). It returns no phone, no
+  ת.ז., no rent, no captured field, no party id and no tenancy id. Vacant Units, `DRAFT`, `ENDED`,
+  `TERMINATED_EARLY`, and an `ACTIVE` letting that has not started or has already ended relative to
+  today are absent. Another Building's lettings are absent. An empty list is the answer when nobody
+  is let there today — including a Building id that names nothing — and is not an error. The
+  command takes no phone number. Estate does not own this read; evidence does not query tenancy
+  tables for it. Offering it on a Unit bound, a portfolio bound, or a tenant-facing path is #123's
+  refusal, not this command's. The covering-today filter is not written as the isolation join's
+  tenancy-active predicate (guard two); it is applied here from the clock, after a query that
+  selects `ACTIVE` lettings in the Building and no day predicate.
   Slice 5.5 adds
   `listTenancyEvents`: every event row on every letting of one unit,
   oldest first, `unit_id` in, field / old → new / actor / source document out, **no party and no
   name**. An empty list is a register-only letting. A `terminated` row carries a null document. The line this module does not cross is the one
-  that matters: **who is in a unit today is `src/scope/`'s answer and never this module's**, which
-  is foundation rule 1 expressed as a module boundary. `listUnitTenancies` answers *which lettings
+  that matters: **who a phone reaches today is `src/scope/`'s answer and never this module's**, which
+  is foundation rule 1 expressed as a module boundary. The office roll of who is let in a Building
+  today is `#122`'s, and it takes no phone. `listUnitTenancies` answers *which lettings
   does this flat have* — every status, ordered by date — for an administrator choosing which one a
   lease belongs to. It takes a `unit_id` and never a phone number, it returns dates and a status and
   **no party and no name**, it carries neither of the isolation join's temporal predicates, and

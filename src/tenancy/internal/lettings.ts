@@ -1,17 +1,15 @@
-// This module's one read. Slice 3.3, and SPEC-tenancy.md, "No read model, and from 3.3 exactly one
-// read".
+// Reads on this module's contract. Slice 3.3 started with one; #122 is another.
 //
-// `commands.ts` says write commands only, and that stays true of it: **who is in a unit today is
-// `src/scope/`'s answer and never this module's** (foundation rule 1). The question here is a
-// different one, asked by an administrator with a signed lease in their hand — *which lettings does
-// this flat have* — and the difference is structural rather than a matter of degree:
+// `commands.ts` still writes only. **Who a phone reaches today is `src/scope/`'s answer**
+// (foundation rule 1). `listUnitTenancies` is a different question — *which lettings does this
+// flat have* — and `listActiveLettingsInBuilding` is the office inventory of Units let in a
+// Building today. Neither is the front door:
 //
-//   - it takes a `unit_id` and never a phone number, so it is not the front door;
-//   - it returns every status in date order and applies **no day predicate at all**, so neither of
-//     the isolation join's two temporal predicates is written here and guard two has nothing to
-//     catch — which is the guard working, not a line walked up to;
-//   - it returns dates and a status and **no party**, so nothing personal can reach the screen;
-//   - and nothing decides what anybody may *see* from its result. It fills a select box.
+//   - both take an estate id and never a phone number;
+//   - `listUnitTenancies` returns every status, dates, **no party**, **no day predicate**;
+//   - `listActiveLettingsInBuilding` returns `ACTIVE` rows whose dates cover the clock's day,
+//     with names except `GUARANTOR`, and does not restate the isolation join.
+import { type Clock, today as dayOf } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { Queryable } from './types.ts';
 
@@ -113,6 +111,63 @@ export async function listTenancyParties(
     [tenancyId],
   );
   return result.rows;
+}
+
+/** One Unit let today in a Building. Names, not identifiers. #122. */
+export interface ActiveLettingInBuilding {
+  unit_name: string;
+  start_date: string;
+  end_date: string;
+  party_names: string[];
+}
+
+/**
+ * Units currently let in one Building. Office inventory, not the front door.
+ *
+ * `ACTIVE` lettings of Units in the Building, then the clock decides which of those
+ * still cover today — the same comparison `activationGate` already makes, not the
+ * isolation join. `GUARANTOR` is on the lease and not in `party_names`.
+ */
+export async function listActiveLettingsInBuilding(
+  db: Queryable,
+  buildingId: string,
+  clock: Clock,
+): Promise<ActiveLettingInBuilding[]> {
+  const result = await db.query<{
+    unit_name: string;
+    start_date: string;
+    end_date: string;
+    party_names: string[] | null;
+  }>(
+    `SELECT s.name AS unit_name,
+            t.start_date::text AS start_date,
+            t.end_date::text AS end_date,
+            array_agg(p.full_name ORDER BY CASE tp.role
+              WHEN 'PRIMARY_TENANT' THEN 0
+              WHEN 'CO_TENANT' THEN 1
+              WHEN 'OCCUPANT' THEN 2
+              ELSE 4
+            END, p.full_name)
+              FILTER (WHERE tp.role <> 'GUARANTOR') AS party_names
+       FROM tenancy t
+       JOIN space s ON s.space_id = t.unit_id
+       LEFT JOIN tenancy_party tp ON tp.tenancy_id = t.tenancy_id
+       LEFT JOIN party p ON p.party_id = tp.party_id
+      WHERE s.building_id = $1
+        AND t.status = 'ACTIVE'
+      GROUP BY t.tenancy_id, s.name, t.start_date, t.end_date
+      ORDER BY s.name`,
+    [buildingId],
+  );
+  const day = dayOf(clock);
+  return result.rows
+    .filter((row) => row.start_date <= day && row.end_date >= day)
+    .map((row) => ({
+      unit_name: row.unit_name,
+      start_date: row.start_date,
+      end_date: row.end_date,
+      party_names: row.party_names ?? [],
+    }));
 }
 
 /**

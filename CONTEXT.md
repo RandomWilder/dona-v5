@@ -9,9 +9,10 @@ they win wherever the two could be read as disagreeing. Decisions are in `docs/d
 ## The system
 
 **Dona Dom** — the operator. ~1,500 long-term rental apartments under **דירה להשכיר** tenders.
-**The agent** — the WhatsApp-facing model, on both ends of a service call. It is a client, not a
-brain: it acts only through documented module commands. **The office** — the humans who supervise
-exceptions.
+**The agent** — the WhatsApp-facing model, on both ends of a service call. **The office retrieval
+model** — the model on an **office retrieval thread**. Neither is a brain: both act only through
+documented module commands, never by writing a store query. Distinct from each other. **The office**
+— the humans who supervise exceptions.
 
 ## Place
 
@@ -52,8 +53,9 @@ introducing one fails the build. Say "the scope", not "the tenant's permissions"
 | **DocumentTypeField** | A field declared on a type. Also a row. |
 | **Passage** | One page of a Document, as text. Written once, when the document is read — at filing, or by the archive sweep for rows that have none. Never re-derived from the bytes after that. Identifiers stay in the text. Masking is a read, not a write. |
 | **Stance** | Who is asking a retrieval question. Required on every search; there is no default. The administrator stance returns identifiers as printed. The tenant stance masks them in the returned text and leaves the stored passage unchanged. Distinct from a route's declared permission. |
-| **Retrieval bound** | Which Documents' Passages a search may consider — a Unit, a Building, or the whole portfolio. Required on every office search; the current estate screen picks the bound. Distinct from the isolation join and from Stance. |
-| **Office retrieval thread** | A persisted question-and-answer history for one staff account on one retrieval bound. Not a Conversation. |
+| **Retrieval bound** | Which Documents' Passages a search may consider — a Unit, a Building, or the whole portfolio. Required on every office search; the current estate screen picks the bound. Distinct from the isolation join and from Stance. A **Building** bound is the office bag: that Building's paper, every Unit in it, and those Units' lettings. Tenant stance cannot use it. |
+| **Office retrieval thread** | A persisted question-and-answer history for one staff account on one retrieval bound. Not a Conversation. Switching bound is a different thread. |
+| **Building paper** | Documents linked to the Building itself, not to a Unit in it. The later tenant-facing bound for rules and regulations. Not the office Building **retrieval bound**. |
 | **ExtractedField** | A value read out of a Document, citable the moment it is extracted. |
 | **Capture** | Getting a value into an `ExtractedField`. **Open** — cheap, ungoverned. |
 | **Approval** | A person signing a reading. A stamp on the `ExtractedField`. |

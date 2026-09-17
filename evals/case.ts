@@ -136,9 +136,14 @@ export function parseCase(raw: unknown, source: string): GoldenCase {
       : fail(`${key} must be a non-empty string`);
 
   const input = value.input as Record<string, unknown> | undefined;
-  if (typeof input?.message !== 'string' || input.message.length === 0) {
-    fail('input.message must be a non-empty string');
+  if (
+    input === undefined ||
+    typeof input.message !== 'string' ||
+    input.message.length === 0
+  ) {
+    return fail('input.message must be a non-empty string');
   }
+  const asked = input;
 
   // Exactly one kind, checked before any of them is read. A file carrying two
   // would be graded twice against two different subjects; one carrying none
@@ -153,7 +158,9 @@ export function parseCase(raw: unknown, source: string): GoldenCase {
 
   const id = text('id');
   const title = text('title');
-  const message = (input as Record<string, string>).message;
+  const message = asked.message as string;
+  const bound =
+    asked.bound === undefined ? undefined : parseBound(asked.bound, fail);
 
   if (kinds[0] === 'retrieval') {
     const retrieval = parseRetrieval(value.retrieval, fail);
@@ -193,7 +200,7 @@ export function parseCase(raw: unknown, source: string): GoldenCase {
   return {
     id,
     title,
-    input: { message },
+    input: { message, bound },
     expect: {
       refuses: flag('refuses'),
       citesClause: flag('citesClause'),

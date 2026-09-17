@@ -1,0 +1,14 @@
+{
+  "id": "building-empty-roll",
+  "title": "Nobody let today is an answer, not the documents-refusal sentence",
+  "input": {
+    "message": "אילו דירות מושכרות היום ומי הדיירים?",
+    "bound": { "kind": "building", "id": "empty-building" }
+  },
+  "expect": {
+    "refuses": false,
+    "citesClause": false,
+    "tool": "list",
+    "contains": []
+  }
+}

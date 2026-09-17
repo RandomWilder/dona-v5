@@ -53,6 +53,7 @@ import {
   type IncompleteTenancyRow,
   type OccupancyByBuilding,
   type OccupancyByUnit,
+  type OfficeRetrievalView,
   type PromotedFieldView,
   renderBuildingPage,
   renderBuildingsPage,
@@ -65,7 +66,6 @@ import {
   renderUnitPage,
   type TenancyEventView,
   type TenancyPersonView,
-  type UnitRetrievalView,
 } from './views.ts';
 
 export interface EstateDeps {
@@ -155,11 +155,12 @@ export interface EstateDeps {
     spec: { tenancyId: string; actor: string },
   ) => Promise<void>;
   /**
-   * #114. Injected from evidence so this module never imports it. Bound is always this Unit.
+   * #114 / #121. Injected from evidence so this module never imports it. Bound is this Unit or
+   * this Building.
    */
   runOfficeTurn: (spec: {
     staffAccountId: string;
-    unitId: string;
+    bound: { kind: 'unit' | 'building'; id: string };
     question: string;
   }) => Promise<void>;
 }
@@ -269,22 +270,19 @@ function requireStaffAccountId(request: FastifyRequest): string {
   return id;
 }
 
-async function unitRetrieval(
+async function officeRetrieval(
   pool: Pool,
   request: FastifyRequest,
-  unitId: string,
+  bound: { kind: 'unit' | 'building'; id: string },
   csrf: string,
-): Promise<UnitRetrievalView | undefined> {
+): Promise<OfficeRetrievalView | undefined> {
   if (!can(request.staff?.role ?? null, 'documents.read')) {
     return undefined;
   }
   const staffAccountId = request.staff?.staffAccountId;
   if (!staffAccountId) return undefined;
-  const thread = await loadOfficeRetrievalThread(pool, staffAccountId, {
-    kind: 'unit',
-    id: unitId,
-  });
-  return { csrf, unitId, thread };
+  const thread = await loadOfficeRetrievalThread(pool, staffAccountId, bound);
+  return { csrf, bound, thread };
 }
 
 function html(reply: { header: (k: string, v: string) => unknown }): void {
@@ -309,7 +307,7 @@ function html(reply: { header: (k: string, v: string) => unknown }): void {
  */
 const READ = { config: { staff: 'estate.read' } } as const;
 const WRITE = { config: { staff: 'tenancy.write' } } as const;
-/** Asking and clearing the Unit panel. No new permission — SPEC-staff.md. */
+/** Asking and clearing an office retrieval panel. No new permission — SPEC-staff.md. */
 const ASK = { config: { staff: 'documents.read' } } as const;
 
 /**
@@ -769,15 +767,25 @@ export function registerEstateRoutes(
       'BUILDING',
       detail.building.building_id,
     );
+    const csrf = csrfFrom(request);
     html(reply);
     return renderBuildingPage(
       detail,
       occupancy,
-      deps.chrome(csrfFrom(request), 'estate', mayFile(request)),
+      deps.chrome(csrf, 'estate', mayFile(request)),
       documents,
       // Slice 6.2: the door to A13's screen, rendered for a viewer who may walk through it and for
       // nobody else — the buildings list's rule, one level down.
       can(request.staff?.role ?? null, 'estate.write'),
+      await officeRetrieval(
+        deps.pool,
+        request,
+        {
+          kind: 'building',
+          id: detail.building.building_id,
+        },
+        csrf,
+      ),
     );
   });
 
@@ -809,7 +817,15 @@ export function registerEstateRoutes(
       deps.chrome(csrf, 'estate', mayFile(request)),
       promoted,
       events,
-      await unitRetrieval(deps.pool, request, unit.unit_id, csrf),
+      await officeRetrieval(
+        deps.pool,
+        request,
+        {
+          kind: 'unit',
+          id: unit.unit_id,
+        },
+        csrf,
+      ),
     );
   });
 
@@ -822,7 +838,7 @@ export function registerEstateRoutes(
       const posted = request.body as { question?: string };
       await deps.runOfficeTurn({
         staffAccountId: requireStaffAccountId(request),
-        unitId,
+        bound: { kind: 'unit', id: unitId },
         question: requireText(posted.question, 'question', 2000),
       });
       return reply
@@ -849,6 +865,46 @@ export function registerEstateRoutes(
       return reply
         .code(303)
         .header('location', `/estate/units/${unitId}`)
+        .send();
+    },
+  );
+
+  app.post<{ Params: { buildingId: string } }>(
+    '/estate/buildings/:buildingId/office-turn',
+    ASK,
+    async (request, reply) => {
+      const buildingId = validId(request.params.buildingId, 'buildingId');
+      await getBuilding(deps.pool, buildingId);
+      const posted = request.body as { question?: string };
+      await deps.runOfficeTurn({
+        staffAccountId: requireStaffAccountId(request),
+        bound: { kind: 'building', id: buildingId },
+        question: requireText(posted.question, 'question', 2000),
+      });
+      return reply
+        .code(303)
+        .header('location', `/estate/buildings/${buildingId}`)
+        .send();
+    },
+  );
+
+  app.post<{ Params: { buildingId: string } }>(
+    '/estate/buildings/:buildingId/office-thread',
+    ASK,
+    async (request, reply) => {
+      const buildingId = validId(request.params.buildingId, 'buildingId');
+      await getBuilding(deps.pool, buildingId);
+      await clearOfficeRetrievalThread(
+        deps.pool,
+        requireStaffAccountId(request),
+        {
+          kind: 'building',
+          id: buildingId,
+        },
+      );
+      return reply
+        .code(303)
+        .header('location', `/estate/buildings/${buildingId}`)
         .send();
     },
   );

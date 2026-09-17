@@ -89,6 +89,7 @@ export type {
   NewUnitScreen,
   OccupancyByBuilding,
   OccupancyByUnit,
+  OfficeRetrievalView,
   PromotedFieldView,
   SearchPageResults,
   TenancyEventView,

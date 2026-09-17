@@ -378,7 +378,8 @@ this module owns the store the turn writes to.
   not invent a second gate beside opening the paper.
 
 `loadOfficeRetrievalThread`, `appendOfficeRetrievalTurn` and `clearOfficeRetrievalThread` are the
-commands. The Unit panel that posts them is #114 and estate's.
+commands. The Unit panel (#114) and the Building page (#121) both post into this store; estate
+paints them. Threads stay distinct by bound.
 
 ---
 

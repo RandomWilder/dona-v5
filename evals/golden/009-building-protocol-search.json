@@ -1,0 +1,14 @@
+{
+  "id": "building-protocol-search",
+  "title": "A Building-bound protocol question searches paper and does not list the household",
+  "input": {
+    "message": "מה נרשם בפרוטוקול המסירה על מועד המסירה?",
+    "bound": { "kind": "building", "id": "roll-building" }
+  },
+  "expect": {
+    "refuses": false,
+    "citesClause": true,
+    "tool": "search",
+    "contains": ["מועד המסירה"]
+  }
+}

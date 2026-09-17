@@ -32,6 +32,7 @@ for a week the register and the decision disagreed about whether three of four d
 | [0007](ADR-0007-work-is-tracked-as-blocking-edges-not-a-calendar.md) | Work is tracked as blocking edges between tickets, not a calendar of slices and weeks | accepted |
 | [0008](ADR-0008-money-is-ordinary-data.md) | Money is ordinary data; **foundation rule 2 is retired in full** and its three enforcements are deleted | accepted — the four published documents still promise the retired rule |
 | [0009](ADR-0009-passage-embeddings-have-no-index-yet.md) | Passage embeddings have **no vector index yet**; sequential scan until a measured row count | accepted |
+| [0010](ADR-0010-office-building-bound-is-not-tenant-building-paper.md) | The office **Building retrieval bound** is the wide bag; tenant stance cannot use it; later tenant rules use **Building paper** only | accepted |
 
 **A1–A10 in [archive/tasks-w1-7/plan.md](../../archive/tasks-w1-7/plan.md) are numbered as they will
 become ADRs.** They are decisions of record already; they become files here as the work that
