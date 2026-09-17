@@ -526,6 +526,28 @@ const SCREENS: Array<[string, () => string]> = [
   ],
   ['estate · one building', () => renderBuildingPage(detail, occupancy, NAV)],
   [
+    'estate · one building, retrieval panel',
+    () =>
+      renderBuildingPage(detail, occupancy, NAV, [], false, {
+        csrf: CSRF,
+        bound: { kind: 'building', id: building.building_id },
+        thread: [
+          {
+            question: 'מה כתוב בפרוטוקול המסירה?',
+            answer: 'פרוטוקול המסירה נחתם ביום 1.3.2025.',
+            refused: false,
+            citations: [
+              {
+                documentId: unverified.documentId,
+                page: 1,
+                documentType: 'handover_protocol',
+              },
+            ],
+          },
+        ],
+      }),
+  ],
+  [
     // Slice 6.2: the same screen for a role that may add an apartment. The door is the only
     // difference, and the registry is where it is asserted rather than in a second guard.
     'estate · one building, admin',
@@ -562,7 +584,7 @@ const SCREENS: Array<[string, () => string]> = [
     () =>
       renderUnitPage(hit, 2, [filed], NAV, [], [], {
         csrf: CSRF,
-        unitId: hit.unit_id,
+        bound: { kind: 'unit', id: hit.unit_id },
         thread: [
           {
             question: 'מה דמי השכירות?',
@@ -2574,7 +2596,7 @@ describe('shared UI tokens', () => {
   it('paints cited answers under the unit retrieval panel', () => {
     const html = renderUnitPage(hit, 2, [filed], NAV, [], [], {
       csrf: CSRF,
-      unitId: hit.unit_id,
+      bound: { kind: 'unit', id: hit.unit_id },
       thread: [
         {
           question: 'מה דמי השכירות?',
@@ -2607,6 +2629,44 @@ describe('shared UI tokens', () => {
     assert.doesNotMatch(
       renderUnitPage(hit, 2, [filed], NAV),
       /data-office-retrieval="unit"/,
+    );
+  });
+
+  it('paints cited answers under the building retrieval panel', () => {
+    const html = renderBuildingPage(detail, occupancy, NAV, [], false, {
+      csrf: CSRF,
+      bound: { kind: 'building', id: building.building_id },
+      thread: [
+        {
+          question: 'מה כתוב בפרוטוקול המסירה?',
+          answer: 'פרוטוקול המסירה נחתם ביום 1.3.2025.',
+          refused: false,
+          citations: [
+            {
+              documentId: unverified.documentId,
+              page: 1,
+              documentType: 'handover_protocol',
+            },
+          ],
+        },
+      ],
+    });
+    assert.match(html, /data-office-retrieval="building"/);
+    assert.match(html, /<aside class="unit-retrieval"/);
+    assert.match(html, /unit-retrieval-toggle/);
+    assert.match(html, /שאלות על המסמכים/);
+    assert.doesNotMatch(html, /<details/);
+    assert.match(html, /מה כתוב בפרוטוקול המסירה\?/);
+    assert.match(html, /פרוטוקול המסירה נחתם ביום 1\.3\.2025/);
+    assert.match(html, /פרוטוקול מסירה/);
+    assert.match(html, /עמוד <span dir="ltr">1<\/span>/);
+    assert.match(
+      html,
+      new RegExp(`/documents/${unverified.documentId}/read\\?page=1`),
+    );
+    assert.doesNotMatch(
+      renderBuildingPage(detail, occupancy, NAV),
+      /data-office-retrieval="building"/,
     );
   });
 });

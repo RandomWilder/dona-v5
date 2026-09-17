@@ -340,7 +340,7 @@ unit page calls `expireDueTenancies` (injected from tenancy) against the clock b
 log, so opening the sheet is what closes a lease whose date has passed — not a hidden job.
 The workbook's other unit-sheet panels (tenancy, obligations, assets) wait.
 
-**#114 is the office retrieval panel on that page only.** A signed-in holder of `documents.read`
+**#114 is the office retrieval panel on that page.** A signed-in holder of `documents.read`
 (ADMIN, OPERATOR, VIEWER — no new permission) sees a split pane on the visual left of the sheet:
 the Unit keeps the remaining width; the thread fills the pane's height with the composer at the
 bottom; a control collapses the pane to a rail and opens it again. Same checkbox-and-label
@@ -350,9 +350,19 @@ this Unit and redirects back to the same GET, which paints that account's thread
 Cited answers name the Document and the page, with a link through to the read overlay. A refusal
 is the frozen Hebrew sentence, with no citations. Clear deletes only this account's thread for
 this Unit. CSRF and a session are required on both posts. The GET itself stays `estate.read`;
-asking and clearing are `documents.read`. Building, all-buildings, search, expiring, incomplete,
-letting sheet, documents, settings and queues do not render the panel and do not keep a leftover
+asking and clearing are `documents.read`. All-buildings, search, expiring, incomplete, letting
+sheet, documents, settings and queues do not render the Unit panel and do not keep a leftover
 bound.
+
+**#121 is the same panel on the Building page.** `GET /estate/buildings/:buildingId` grows the
+same split for a signed-in holder of `documents.read`. The post runs the office-turn command
+bound to this Building (the office bag: that Building's paper, every Unit in it, those Units'
+lettings) and redirects to the same GET. Clear wipes only this account's thread for this
+Building. A Unit thread and a Building thread for the same staff account stay distinct. CSRF and
+a session on both posts; VIEWER may ask; no new permission. This ticket is cite-from-paper only
+— the office turn still searches Passages and does not list lettings. The buildings list, Unit
+page (which keeps its own panel), letting sheet, documents, settings and queues do not render a
+Building panel and do not keep a leftover Building bound.
 
 **`GET /estate/tenancies/:tenancyId` is A5's sheet (#107).** The first screen that shows one
 letting: the title an administrator recognises it by (tenant name, address, apartment number),

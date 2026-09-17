@@ -164,6 +164,8 @@ describe('every route in the application', () => {
       'POST /estate/tenancies/:tenancyId/activate',
       'POST /estate/units/:unitId/office-turn',
       'POST /estate/units/:unitId/office-thread',
+      'POST /estate/buildings/:buildingId/office-turn',
+      'POST /estate/buildings/:buildingId/office-thread',
       // Slice 6.3, flow A12. The document-first post. `GET /documents/new` is already above and
       // covers both of its screens — the same URL serves the unit-first form and the intake one.
       'POST /documents/intake',

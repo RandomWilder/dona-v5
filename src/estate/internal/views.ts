@@ -927,10 +927,11 @@ export function renderBuildingPage(
    * and nothing more.
    */
   mayWrite = false,
+  retrieval?: OfficeRetrievalView,
 ): string {
   const { building, kinds, units } = detail;
   const let_ = units.filter((unit) => occupancy.has(unit.unit_id)).length;
-  const body = h`
+  const sheet = h`
     <div>
       <a class="back" href="/estate">← כל הבניינים</a>
       <h1>${building.name}</h1>
@@ -963,6 +964,10 @@ export function renderBuildingPage(
           : h`<div class="unit-grid">${units.map((unit) => unitCard(unit, occupancy))}</div>`
       }
     </section>`;
+  const body =
+    retrieval === undefined
+      ? sheet
+      : h`<div class="unit-sheet">${retrievalSplit(sheet, retrieval)}</div>`;
   return page(`דונה דום — ${building.name}`, body, nav);
 }
 
@@ -1011,7 +1016,7 @@ export function renderUnitPage(
   nav: Html,
   promoted: readonly PromotedFieldView[] = [],
   events: readonly TenancyEventView[] = [],
-  retrieval?: UnitRetrievalView,
+  retrieval?: OfficeRetrievalView,
 ): string {
   const sheet = h`
     <div>
@@ -1033,9 +1038,9 @@ export function renderUnitPage(
   return page(`דונה דום — דירה ${unit.unit_number}`, body, nav);
 }
 
-export interface UnitRetrievalView {
+export interface OfficeRetrievalView {
   csrf: string;
-  unitId: string;
+  bound: { kind: 'unit' | 'building'; id: string };
   thread: readonly {
     question: string;
     answer: string;
@@ -1048,13 +1053,21 @@ export interface UnitRetrievalView {
   }[];
 }
 
-function retrievalSplit(sheet: Html, retrieval: UnitRetrievalView): Html {
-  const ask = `/estate/units/${retrieval.unitId}/office-turn`;
-  const clear = `/estate/units/${retrieval.unitId}/office-thread`;
+/** #114. Same shape as the Building panel; the bound is this Unit. */
+export type UnitRetrievalView = OfficeRetrievalView;
+
+function retrievalSplit(sheet: Html, retrieval: OfficeRetrievalView): Html {
+  const prefix =
+    retrieval.bound.kind === 'unit'
+      ? `/estate/units/${retrieval.bound.id}`
+      : `/estate/buildings/${retrieval.bound.id}`;
+  const ask = `${prefix}/office-turn`;
+  const clear = `${prefix}/office-thread`;
+  const toggleId = `${retrieval.bound.kind}-retrieval-toggle`;
   return h`
-    <input type="checkbox" id="unit-retrieval-toggle" class="unit-retrieval-toggle" checked />
+    <input type="checkbox" id="${toggleId}" class="unit-retrieval-toggle" checked />
     <div class="unit-sheet-main">${sheet}</div>
-    <aside class="unit-retrieval" data-office-retrieval="unit" aria-label="שאלות על המסמכים">
+    <aside class="unit-retrieval" data-office-retrieval="${retrieval.bound.kind}" aria-label="שאלות על המסמכים">
       <header class="unit-retrieval-head">
         <h2>שאלות על המסמכים</h2>
         <div class="unit-retrieval-tools">
@@ -1066,7 +1079,7 @@ function retrievalSplit(sheet: Html, retrieval: UnitRetrievalView): Html {
                   <button class="btn btn-secondary" type="submit">מחיקת השיחה</button>
                 </form>`
           }
-          <label class="unit-retrieval-hide" for="unit-retrieval-toggle"><span class="when-open">הסתרה</span><span class="when-closed">שאלות</span></label>
+          <label class="unit-retrieval-hide" for="${toggleId}"><span class="when-open">הסתרה</span><span class="when-closed">שאלות</span></label>
         </div>
       </header>
       ${
@@ -1100,7 +1113,7 @@ function retrievalSplit(sheet: Html, retrieval: UnitRetrievalView): Html {
 }
 
 function citationList(
-  citations: UnitRetrievalView['thread'][number]['citations'],
+  citations: OfficeRetrievalView['thread'][number]['citations'],
 ): Html {
   if (citations.length === 0) return h``;
   return h`<ul class="unit-citations">

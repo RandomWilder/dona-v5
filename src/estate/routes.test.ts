@@ -127,6 +127,10 @@ describe('estate · the routes', () => {
             new RegExp(`/estate/buildings/${buildingId}`),
           );
           assert.doesNotMatch(response.body, /data-office-retrieval="unit"/);
+          assert.doesNotMatch(
+            response.body,
+            /data-office-retrieval="building"/,
+          );
         },
       );
 
@@ -141,6 +145,7 @@ describe('estate · the routes', () => {
         assert.match(response.body, new RegExp(`/estate/units/${unitId}`));
         assert.match(response.body, /מסמכי הבניין/);
         assert.doesNotMatch(response.body, /data-office-retrieval="unit"/);
+        assert.match(response.body, /data-office-retrieval="building"/);
       });
 
       await t.test(
@@ -202,6 +207,7 @@ describe('estate · the routes', () => {
         );
         assert.match(found.body, /בניין בדיקה/);
         assert.doesNotMatch(found.body, /data-office-retrieval="unit"/);
+        assert.doesNotMatch(found.body, /data-office-retrieval="building"/);
       });
 
       await t.test('an empty search asks rather than lists', async () => {
@@ -212,6 +218,7 @@ describe('estate · the routes', () => {
         assert.equal(empty.statusCode, 200);
         assert.match(empty.body, /חפשו לפי כתובת/);
         assert.doesNotMatch(empty.body, /data-office-retrieval="unit"/);
+        assert.doesNotMatch(empty.body, /data-office-retrieval="building"/);
       });
 
       await t.test(
@@ -239,6 +246,7 @@ describe('estate · the routes', () => {
           // whatever else is in the database (1.11, learned in CI within the hour).
           assert.match(ending.body, /חוזים מסתיימים/);
           assert.doesNotMatch(ending.body, /data-office-retrieval="unit"/);
+          assert.doesNotMatch(ending.body, /data-office-retrieval="building"/);
         },
       );
 
@@ -308,12 +316,14 @@ describe('estate · the routes', () => {
           assert.match(listed.body, /חוזים לא שלמים/);
           assert.match(listed.body, /חסר ערב/);
           assert.doesNotMatch(listed.body, /data-office-retrieval="unit"/);
+          assert.doesNotMatch(listed.body, /data-office-retrieval="building"/);
           const letting = await client.inject({
             method: 'GET',
             url: `/estate/tenancies/${tenancyId}`,
           });
           assert.equal(letting.statusCode, 200);
           assert.doesNotMatch(letting.body, /data-office-retrieval="unit"/);
+          assert.doesNotMatch(letting.body, /data-office-retrieval="building"/);
           // **Slice 5.2, and the defect this case now owns.** `renderIncompletePage` took its token
           // with a default of `''`, so the route that never passed one compiled, rendered, and
           // served an exception form refused on every submit. It is asserted *here* rather than in
@@ -518,11 +528,13 @@ const askPlan: EstatePlan = {
 async function askCleanup(pool: import('pg').Pool): Promise<void> {
   await pool.query(
     `DELETE FROM office_retrieval_thread
-      WHERE bound_kind = 'unit' AND bound_id IN (
+      WHERE (bound_kind = 'unit' AND bound_id IN (
         SELECT u.unit_id FROM unit u
         JOIN space s ON s.space_id = u.unit_id
         JOIN building b ON b.building_id = s.building_id
-        WHERE b.city = $1 AND b.address_line = $2)`,
+        WHERE b.city = $1 AND b.address_line = $2))
+         OR (bound_kind = 'building' AND bound_id IN (
+        SELECT building_id FROM building WHERE city = $1 AND address_line = $2))`,
     [ASK_CITY, ASK_ADDRESS],
   );
   await pool.query(
@@ -591,15 +603,18 @@ describe('estate · unit retrieval panel', () => {
       });
       assert.equal(documents.statusCode, 200);
       assert.doesNotMatch(documents.body, /data-office-retrieval="unit"/);
+      assert.doesNotMatch(documents.body, /data-office-retrieval="building"/);
       const settings = await asOther.inject({
         method: 'GET',
         url: '/settings',
       });
       assert.equal(settings.statusCode, 200);
       assert.doesNotMatch(settings.body, /data-office-retrieval="unit"/);
+      assert.doesNotMatch(settings.body, /data-office-retrieval="building"/);
       const calls = await asOther.inject({ method: 'GET', url: '/calls' });
       assert.equal(calls.statusCode, 200);
       assert.doesNotMatch(calls.body, /data-office-retrieval="unit"/);
+      assert.doesNotMatch(calls.body, /data-office-retrieval="building"/);
 
       const anon = await app.inject({
         method: 'POST',
@@ -649,6 +664,158 @@ describe('estate · unit retrieval panel', () => {
       assert.equal(cleared.headers.location, path);
       const after = await asViewer.inject({ method: 'GET', url: path });
       assert.doesNotMatch(after.body, /מה דמי השכירות\?/);
+    } finally {
+      await askCleanup(pool);
+      await signOutAll(pool, ASK_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// #121. The office retrieval panel on the Building page: same HTTP seam as #114, Building bound.
+// Cite-from-paper only — lettings list waits on #123.
+// ---------------------------------------------------------------------------------------------
+
+describe('estate · building retrieval panel', () => {
+  it('lets a viewer ask on the Building, keeps the Unit thread distinct, and clears only the Building', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      embedder: createFakeEmbedder(embeddingColumnDimensions),
+    });
+    await signOutAll(pool, ASK_DOMAIN);
+    await askCleanup(pool);
+    const viewer = await signIn(pool, systemClock, {
+      email: `view@${ASK_DOMAIN}`,
+      role: 'VIEWER',
+    });
+    const other = await signIn(pool, systemClock, {
+      email: `ops@${ASK_DOMAIN}`,
+      role: 'OPERATOR',
+    });
+    const asViewer = asOperator(app, viewer);
+    const asOther = asOperator(app, other);
+    try {
+      await importEstate(pool, askPlan);
+      const place = await pool.query<{
+        unit_id: string;
+        building_id: string;
+      }>(
+        `SELECT u.unit_id, b.building_id FROM unit u
+         JOIN space s ON s.space_id = u.unit_id
+         JOIN building b ON b.building_id = s.building_id
+         WHERE b.city = $1 AND b.address_line = $2`,
+        [ASK_CITY, ASK_ADDRESS],
+      );
+      const unitId = place.rows[0]?.unit_id ?? '';
+      const buildingId = place.rows[0]?.building_id ?? '';
+      const buildingPath = `/estate/buildings/${buildingId}`;
+      const unitPath = `/estate/units/${unitId}`;
+      const askUrl = `${buildingPath}/office-turn`;
+      const clearUrl = `${buildingPath}/office-thread`;
+      const buildingQuestion = 'מה כתוב בפרוטוקול המסירה?';
+      const unitQuestion = 'מה דמי השכירות?';
+
+      const shown = await asViewer.inject({
+        method: 'GET',
+        url: buildingPath,
+      });
+      assert.equal(shown.statusCode, 200);
+      assert.match(shown.body, /data-office-retrieval="building"/);
+      assert.doesNotMatch(shown.body, /data-office-retrieval="unit"/);
+
+      const anon = await app.inject({
+        method: 'POST',
+        url: askUrl,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(buildingQuestion)}`,
+      });
+      assert.equal(anon.statusCode, 303);
+      assert.equal(anon.headers.location, '/staff/login');
+
+      const noToken = await app.inject({
+        method: 'POST',
+        url: askUrl,
+        headers: {
+          cookie: viewer.cookie,
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        payload: `question=${encodeURIComponent(buildingQuestion)}`,
+      });
+      assert.equal(noToken.statusCode, 403);
+
+      const asked = await asViewer.inject({
+        method: 'POST',
+        url: askUrl,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(buildingQuestion)}`,
+      });
+      assert.equal(asked.statusCode, 303, asked.body.slice(0, 400));
+      assert.equal(asked.headers.location, buildingPath);
+
+      const painted = await asViewer.inject({
+        method: 'GET',
+        url: buildingPath,
+      });
+      assert.equal(painted.statusCode, 200);
+      assert.match(painted.body, /מה כתוב בפרוטוקול המסירה\?/);
+      assert.match(painted.body, /אין במסמכים האלה תשובה לשאלה הזו/);
+
+      const unitPage = await asViewer.inject({
+        method: 'GET',
+        url: unitPath,
+      });
+      assert.equal(unitPage.statusCode, 200);
+      assert.match(unitPage.body, /data-office-retrieval="unit"/);
+      assert.doesNotMatch(unitPage.body, /מה כתוב בפרוטוקול המסירה\?/);
+
+      const unitAsked = await asViewer.inject({
+        method: 'POST',
+        url: `${unitPath}/office-turn`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(unitQuestion)}`,
+      });
+      assert.equal(unitAsked.statusCode, 303, unitAsked.body.slice(0, 400));
+
+      const buildingAfterUnit = await asViewer.inject({
+        method: 'GET',
+        url: buildingPath,
+      });
+      assert.match(buildingAfterUnit.body, /מה כתוב בפרוטוקול המסירה\?/);
+      assert.doesNotMatch(buildingAfterUnit.body, /מה דמי השכירות\?/);
+
+      const neighbour = await asOther.inject({
+        method: 'GET',
+        url: buildingPath,
+      });
+      assert.equal(neighbour.statusCode, 200);
+      assert.doesNotMatch(neighbour.body, /מה כתוב בפרוטוקול המסירה\?/);
+
+      const cleared = await asViewer.inject({
+        method: 'POST',
+        url: clearUrl,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: '',
+      });
+      assert.equal(cleared.statusCode, 303, cleared.body.slice(0, 400));
+      assert.equal(cleared.headers.location, buildingPath);
+      const after = await asViewer.inject({
+        method: 'GET',
+        url: buildingPath,
+      });
+      assert.doesNotMatch(after.body, /מה כתוב בפרוטוקול המסירה\?/);
+      const unitAfter = await asViewer.inject({
+        method: 'GET',
+        url: unitPath,
+      });
+      assert.match(unitAfter.body, /מה דמי השכירות\?/);
     } finally {
       await askCleanup(pool);
       await signOutAll(pool, ASK_DOMAIN);

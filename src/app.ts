@@ -473,7 +473,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
         },
         {
           staffAccountId: spec.staffAccountId,
-          bound: { kind: 'unit', id: spec.unitId },
+          bound: spec.bound,
           question: spec.question,
         },
       );
