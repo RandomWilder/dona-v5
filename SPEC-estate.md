@@ -348,8 +348,10 @@ pattern as the ops nav — no client script. On a narrow viewport the pane sits 
 and collapses to a bar. They ask in Hebrew; the post runs evidence's office-turn command bound to
 this Unit and redirects back to the same GET, which paints that account's thread oldest-first.
 Cited answers name the Document and the page, with a link through to the read overlay. A refusal
-is the frozen Hebrew sentence, with no citations. Clear deletes only this account's thread for
-this Unit. CSRF and a session are required on both posts. The GET itself stays `estate.read`;
+is the frozen Hebrew sentence, with no citations. If the office-turn command is `unavailable`,
+the post still 303s to that GET with `ask=unavailable`; the pane shows the frozen Hebrew
+*cannot answer now* sentence, the thread is unchanged, and the JSON error body does not replace
+the estate screen. Clear deletes only this account's thread for this Unit. CSRF and a session are required on both posts. The GET itself stays `estate.read`;
 asking and clearing are `documents.read`. All-buildings, search, expiring, incomplete, letting
 sheet, documents, settings and queues do not render the Unit panel and do not keep a leftover
 bound.
@@ -357,8 +359,9 @@ bound.
 **#121 is the same panel on the Building page.** `GET /estate/buildings/:buildingId` grows the
 same split for a signed-in holder of `documents.read`. The post runs the office-turn command
 bound to this Building (the office bag: that Building's paper, every Unit in it, those Units'
-lettings) and redirects to the same GET. Clear wipes only this account's thread for this
-Building. A Unit thread and a Building thread for the same staff account stay distinct. CSRF and
+lettings) and redirects to the same GET. The same `unavailable` 303 as the Unit panel: stay on
+this Building, paint the frozen Hebrew notice, do not dump `{ code, message }` on the POST URL.
+Clear wipes only this account's thread for this Building. A Unit thread and a Building thread for the same staff account stay distinct. CSRF and
 a session on both posts; VIEWER may ask; no new permission. **#123:** a Building-bound turn may
 list who is let today as well as search Passages; the panel is unchanged. The buildings list, Unit
 page (which keeps its own panel), letting sheet, documents, settings and queues do not render a

@@ -282,7 +282,7 @@ async function officeRetrieval(
   const staffAccountId = request.staff?.staffAccountId;
   if (!staffAccountId) return undefined;
   const thread = await loadOfficeRetrievalThread(pool, staffAccountId, bound);
-  return { csrf, bound, thread };
+  return { csrf, bound, thread, notice: officeAskNotice(request) };
 }
 
 function html(reply: { header: (k: string, v: string) => unknown }): void {
@@ -309,6 +309,13 @@ const READ = { config: { staff: 'estate.read' } } as const;
 const WRITE = { config: { staff: 'tenancy.write' } } as const;
 /** Asking and clearing an office retrieval panel. No new permission — SPEC-staff.md. */
 const ASK = { config: { staff: 'documents.read' } } as const;
+
+const OFFICE_ASK_UNAVAILABLE = 'לא ניתן לענות עכשיו. נסו שוב בעוד רגע.';
+
+function officeAskNotice(request: FastifyRequest): string | undefined {
+  const ask = (request.query as { ask?: string }).ask;
+  return ask === 'unavailable' ? OFFICE_ASK_UNAVAILABLE : undefined;
+}
 
 /**
  * **Slice 6.1, flow A11.** ADMIN only ([SPEC-staff.md](SPEC-staff.md)): an operator files paper, an
@@ -836,11 +843,21 @@ export function registerEstateRoutes(
       const unitId = validId(request.params.unitId, 'unitId');
       await getUnit(deps.pool, unitId);
       const posted = request.body as { question?: string };
-      await deps.runOfficeTurn({
-        staffAccountId: requireStaffAccountId(request),
-        bound: { kind: 'unit', id: unitId },
-        question: requireText(posted.question, 'question', 2000),
-      });
+      try {
+        await deps.runOfficeTurn({
+          staffAccountId: requireStaffAccountId(request),
+          bound: { kind: 'unit', id: unitId },
+          question: requireText(posted.question, 'question', 2000),
+        });
+      } catch (error) {
+        if (error instanceof KernelError && error.code === 'unavailable') {
+          return reply
+            .code(303)
+            .header('location', `/estate/units/${unitId}?ask=unavailable`)
+            .send();
+        }
+        throw error;
+      }
       return reply
         .code(303)
         .header('location', `/estate/units/${unitId}`)
@@ -876,11 +893,24 @@ export function registerEstateRoutes(
       const buildingId = validId(request.params.buildingId, 'buildingId');
       await getBuilding(deps.pool, buildingId);
       const posted = request.body as { question?: string };
-      await deps.runOfficeTurn({
-        staffAccountId: requireStaffAccountId(request),
-        bound: { kind: 'building', id: buildingId },
-        question: requireText(posted.question, 'question', 2000),
-      });
+      try {
+        await deps.runOfficeTurn({
+          staffAccountId: requireStaffAccountId(request),
+          bound: { kind: 'building', id: buildingId },
+          question: requireText(posted.question, 'question', 2000),
+        });
+      } catch (error) {
+        if (error instanceof KernelError && error.code === 'unavailable') {
+          return reply
+            .code(303)
+            .header(
+              'location',
+              `/estate/buildings/${buildingId}?ask=unavailable`,
+            )
+            .send();
+        }
+        throw error;
+      }
       return reply
         .code(303)
         .header('location', `/estate/buildings/${buildingId}`)

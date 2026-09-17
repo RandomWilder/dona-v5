@@ -155,6 +155,41 @@ describe('extraction', () => {
 
     assert.equal(error.code, 'unavailable');
     assert.equal(error.details?.status, 500);
+    assert.equal(error.details?.name, 'lease_term');
+    assert.equal(error.details?.providerCode, undefined);
+    assert.equal(JSON.stringify(error.details).includes('sk-test'), false);
+  });
+
+  it('copies the provider error code and message from a failed call', async () => {
+    const fetcher = fakeFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              message:
+                'The model `gpt-5` does not exist or you do not have access to it.',
+              type: 'invalid_request_error',
+              code: 'model_not_found',
+            },
+          }),
+          { status: 404 },
+        ),
+    );
+    const extractor = createOpenAiExtractor({
+      apiKey: 'sk-test',
+      fetchImpl: fetcher.impl,
+    });
+
+    const error = await refusal(() => extractor.extract(request));
+
+    assert.equal(error.code, 'unavailable');
+    assert.equal(error.details?.status, 404);
+    assert.equal(error.details?.name, 'lease_term');
+    assert.equal(error.details?.providerCode, 'model_not_found');
+    assert.equal(
+      error.details?.providerMessage,
+      'The model `gpt-5` does not exist or you do not have access to it.',
+    );
     assert.equal(JSON.stringify(error.details).includes('sk-test'), false);
   });
 
