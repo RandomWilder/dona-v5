@@ -1,0 +1,14 @@
+{
+  "id": "building-lettings-list",
+  "title": "A Building-bound table of who is let today uses the list, not Passages",
+  "input": {
+    "message": "אילו דירות מושכרות היום ומי הדיירים?",
+    "bound": { "kind": "building", "id": "roll-building" }
+  },
+  "expect": {
+    "refuses": false,
+    "citesClause": false,
+    "tool": "list",
+    "contains": ["יעל כהן", "דירה 12"]
+  }
+}

@@ -99,6 +99,9 @@ function refusingExtractor() {
 
 function echoingExtractor() {
   return createFakeExtractor((request: ExtractionRequest) => {
+    if (request.name === 'office_tools') {
+      return { search: true, list: false };
+    }
     const facts = request.input.split('PASSAGES:')[1] ?? '';
     const first = facts.match(/\[1\][\s\S]*?(?=\[\d+\]|$)/)?.[0] ?? '';
     return {
@@ -106,6 +109,16 @@ function echoingExtractor() {
       text: first,
       hit_indexes: [1],
     };
+  });
+}
+
+function toolsThen(
+  tools: { search: boolean; list: boolean },
+  answer: (request: ExtractionRequest) => unknown,
+) {
+  return createFakeExtractor((request: ExtractionRequest) => {
+    if (request.name === 'office_tools') return tools;
+    return answer(request);
   });
 }
 
@@ -295,6 +308,259 @@ describe('evidence · office turn', () => {
           true,
         );
         assert.equal(other.thread.length === 1, true);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+});
+
+const TENANT = 'יעל כהן';
+const UNIT_NAME = 'דירה 12';
+const PROTOCOL = 'מועד המסירה בפרוטוקול: 2024-06-01. מעלית נבדקה.';
+
+async function seedBuilding(
+  db: PoolClient,
+): Promise<{ buildingId: string; unitId: string }> {
+  const buildingId = newId();
+  const unitId = newId();
+  await db.query(
+    `INSERT INTO building (building_id, name, address_line, city, handover_date,
+                           warranty_end_date, status)
+     VALUES ($1, 'office-turn-building', $2, 'Shoham', '2020-01-01', '2022-01-01', 'ACTIVE')`,
+    [buildingId, `Office ${buildingId}`],
+  );
+  await db.query(
+    `INSERT INTO space (space_id, building_id, space_kind, name)
+     VALUES ($1, $2, 'UNIT', $3)`,
+    [unitId, buildingId, UNIT_NAME],
+  );
+  await db.query(
+    `INSERT INTO unit (unit_id, unit_number, rooms, has_mamad, condition_status)
+     VALUES ($1, '12', 3.5, true, 'READY')`,
+    [unitId],
+  );
+  return { buildingId, unitId };
+}
+
+async function seedActiveLetting(
+  db: PoolClient,
+  unitId: string,
+  name: string,
+): Promise<void> {
+  const profileId = newId();
+  const tenancyId = newId();
+  const partyId = newId();
+  await db.query(
+    `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)`,
+    [profileId, `office-turn-${profileId}`],
+  );
+  await db.query(
+    `INSERT INTO tenancy (tenancy_id, unit_id, start_date, end_date, status, terms_profile_id)
+     VALUES ($1, $2, '2026-01-01', '2027-01-01', 'ACTIVE', $3)`,
+    [tenancyId, unitId, profileId],
+  );
+  await db.query(
+    `INSERT INTO party (party_id, party_kind, full_name, preferred_language)
+     VALUES ($1, 'PERSON', $2, 'he')`,
+    [partyId, name],
+  );
+  await db.query(
+    `INSERT INTO tenancy_party (tenancy_id, party_id, role, is_service_contact)
+     VALUES ($1, $2, 'PRIMARY_TENANT', true)`,
+    [tenancyId, partyId],
+  );
+}
+
+function listingAnswer(request: ExtractionRequest) {
+  const facts = request.input.split('LETTINGS:')[1]?.trim() ?? '';
+  if (facts === '' || facts === '(none)') {
+    return {
+      answers: true,
+      text: 'אין דירות מושכרות היום.',
+      hit_indexes: [],
+    };
+  }
+  return {
+    answers: true,
+    text: facts,
+    hit_indexes: [],
+  };
+}
+
+describe('evidence · office turn on a Building bound', () => {
+  it('lists who is let today without reading the names from Passages', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const { buildingId, unitId } = await seedBuilding(db);
+        await seedActiveLetting(db, unitId, TENANT);
+        await fileLease(db, ['דף על שכירות בלי שם דייר'], unitId);
+        const extractor = toolsThen(
+          { search: false, list: true },
+          listingAnswer,
+        );
+        const result = await runOfficeTurn(turnDeps(db, extractor), {
+          staffAccountId: await operator(db),
+          bound: { kind: 'building', id: buildingId },
+          question: 'אילו דירות מושכרות היום ומי הדיירים?',
+        });
+        assert.deepEqual(result.tools, ['list']);
+        assert.equal(result.refused, false);
+        assert.equal(result.text.includes(TENANT), true);
+        assert.equal(result.text.includes(UNIT_NAME), true);
+        assert.deepEqual(result.citations, []);
+        assert.equal(
+          extractor.calls.some((call) => call.input.includes('PASSAGES:')),
+          false,
+        );
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('searches a protocol question and does not load the household roll', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const { buildingId, unitId } = await seedBuilding(db);
+        await seedActiveLetting(db, unitId, TENANT);
+        await fileLease(db, [PROTOCOL], unitId);
+        const extractor = toolsThen(
+          { search: true, list: false },
+          (request) => {
+            assert.equal(request.input.includes('LETTINGS:'), false);
+            assert.equal(request.input.includes(TENANT), false);
+            return {
+              answers: true,
+              text: PROTOCOL,
+              hit_indexes: [1],
+            };
+          },
+        );
+        const result = await runOfficeTurn(turnDeps(db, extractor), {
+          staffAccountId: await operator(db),
+          bound: { kind: 'building', id: buildingId },
+          question: PROTOCOL,
+        });
+        assert.deepEqual(result.tools, ['search']);
+        assert.equal(result.refused, false);
+        assert.equal(result.citations.length > 0, true);
+        assert.equal(result.text.includes(TENANT), false);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('may run both this turn; an earlier table is not a fact unless listed again', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const { buildingId, unitId } = await seedBuilding(db);
+        await seedActiveLetting(db, unitId, TENANT);
+        await fileLease(db, [PROTOCOL], unitId);
+        const staffAccountId = await operator(db);
+        const bound: RetrievalBound = { kind: 'building', id: buildingId };
+        const first = toolsThen({ search: true, list: true }, listingAnswer);
+        const listed = await runOfficeTurn(turnDeps(db, first), {
+          staffAccountId,
+          bound,
+          question: 'אילו דירות מושכרות היום ומי הדיירים?',
+        });
+        assert.equal(listed.tools.includes('list'), true);
+        assert.equal(listed.tools.includes('search'), true);
+        assert.equal(listed.text.includes(TENANT), true);
+
+        const second = toolsThen({ search: true, list: false }, (request) => {
+          assert.equal(request.input.includes('LETTINGS:'), false);
+          const thread = request.input.split('QUESTION:')[0] ?? '';
+          assert.equal(thread.includes(TENANT), true);
+          return {
+            answers: true,
+            text: PROTOCOL,
+            hit_indexes: [1],
+          };
+        });
+        const follow = await runOfficeTurn(turnDeps(db, second), {
+          staffAccountId,
+          bound,
+          question: PROTOCOL,
+        });
+        assert.deepEqual(follow.tools, ['search']);
+        assert.equal(follow.text.includes(TENANT), false);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('cannot call the list from a Unit bound', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const { unitId } = await fileLease(db, [PROTOCOL]);
+        const extractor = toolsThen({ search: false, list: true }, () => ({
+          answers: true,
+          text: TENANT,
+          hit_indexes: [],
+        }));
+        const result = await runOfficeTurn(turnDeps(db, extractor), {
+          staffAccountId: await operator(db),
+          bound: { kind: 'unit', id: unitId },
+          question: 'אילו דירות מושכרות היום ומי הדיירים?',
+        });
+        assert.deepEqual(result.tools, ['search']);
+        assert.equal(
+          extractor.calls.some((call) => call.name === 'office_tools'),
+          false,
+        );
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('answers an empty roll without the documents-refusal sentence', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const { buildingId } = await seedBuilding(db);
+        const extractor = toolsThen(
+          { search: false, list: true },
+          listingAnswer,
+        );
+        const result = await runOfficeTurn(turnDeps(db, extractor), {
+          staffAccountId: await operator(db),
+          bound: { kind: 'building', id: buildingId },
+          question: 'אילו דירות מושכרות היום ומי הדיירים?',
+        });
+        assert.deepEqual(result.tools, ['list']);
+        assert.equal(result.refused, false);
+        assert.equal(result.text, 'אין דירות מושכרות היום.');
+        assert.notEqual(result.text, OFFICE_TURN_REFUSAL);
+        assert.deepEqual(result.citations, []);
       });
     } finally {
       await pool.end();

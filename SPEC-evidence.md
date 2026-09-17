@@ -1029,22 +1029,37 @@ Unit's answering Passage is absent, ranked against the corpus fixtures and ratch
 the day they land.
 
 **#113 is the office turn.** One command: staff account, retrieval bound, question. It is not the
-agent and not a Conversation. It may call only `searchPassages`. Stance is administrator — the
-paper as printed, for every staff role that may read Documents — and is not a parameter a caller
-can omit or swap. Tenant stance on a Building or portfolio bound remains refused at search, so the
-forbidden combination still cannot be assembled.
+agent and not a Conversation. Stance is administrator — the paper as printed, for every staff role
+that may read Documents — and is not a parameter a caller can omit or swap. Tenant stance on a
+Building or portfolio bound remains refused at search, so the forbidden combination still cannot be
+assembled.
 
-The command loads that account's office retrieval thread for the bound (empty if none), embeds, and
-searches. Zero hits: refuse, persist, no citations, and the answering model is not called. Hits:
-the model may use thread text only to interpret this turn's question, and may use only this turn's
-hit texts as facts. A fact that is not a Passage hit this turn is not in the answer. If none of the
-hits answer, refuse and persist, with no citations — including a question about another Unit's
-paper while this Unit is the bound, and including an off-lease question whose nearest Passages
-exist and do not answer. If they do answer: Hebrew, identifiers and amounts as printed, citations
-that name Document and page. Follow-ups search again. No silent widen, no Building nudge.
+On a Unit bound or a portfolio bound the turn may call only `searchPassages`. **#123:** on a
+Building bound the office retrieval model may choose, this turn, Passage search, tenancy's
+`listActiveLettingsInBuilding`, or both. Facts are only what this turn's chosen commands returned.
+An earlier table in the thread is not a fact unless the list is fetched again. The list command is
+not offered on a Unit bound, a portfolio bound, or any tenant-facing path; offering it is a
+command error, fail closed. Evidence does not query tenancy tables; it calls the named command.
 
-Behavioural golden cases grade this turn as the evals subject (cite / refuse / tool = search).
-Grounding case `off-lease-refuses` still means hits may exist and none answer.
+The command loads that account's office retrieval thread for the bound (empty if none). Search,
+when chosen: embed and retrieve, eight nearest Passages. Zero search hits and no list this turn:
+refuse, persist, no citations, and the answering model is not called. Hits: the model may use
+thread text only to interpret this turn's question, and may use only this turn's hit texts as
+passage facts. A fact that is not a Passage hit this turn is not in a cite-from-paper answer. If
+none of the hits answer and the list was not fetched, refuse and persist, with no citations —
+including a question about another Unit's paper while this Unit is the bound, and including an
+off-lease question whose nearest Passages exist and do not answer. If they do answer: Hebrew,
+identifiers and amounts as printed, citations that name Document and page. Follow-ups search
+again when search is chosen. No silent widen, no Building nudge.
+
+A table of apartments let today and their tenants uses the list and does not rebuild the roll from
+Passages. A protocol ask uses search and does not load the household roll into the model. A list
+answer cites no paper; it is the letting. An empty active roll is an answer, not the
+documents-refusal sentence, and it carries no Passage citations. Rent is not on the roll.
+
+Behavioural golden cases grade this turn as the evals subject (cite / refuse / tool = search, and
+on a Building bound list vs search vs empty roll). Grounding case `off-lease-refuses` still means
+hits may exist and none answer.
 
 **#105 backfills the archive.** Documents holding no passages — filed before #103, or filed with an
 unconfigured embedder — are walked by `sweepMissingPassages` the way `sweepUnverified` walks

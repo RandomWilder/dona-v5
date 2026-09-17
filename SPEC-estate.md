@@ -359,8 +359,8 @@ same split for a signed-in holder of `documents.read`. The post runs the office-
 bound to this Building (the office bag: that Building's paper, every Unit in it, those Units'
 lettings) and redirects to the same GET. Clear wipes only this account's thread for this
 Building. A Unit thread and a Building thread for the same staff account stay distinct. CSRF and
-a session on both posts; VIEWER may ask; no new permission. This ticket is cite-from-paper only
-— the office turn still searches Passages and does not list lettings. The buildings list, Unit
+a session on both posts; VIEWER may ask; no new permission. **#123:** a Building-bound turn may
+list who is let today as well as search Passages; the panel is unchanged. The buildings list, Unit
 page (which keeps its own panel), letting sheet, documents, settings and queues do not render a
 Building panel and do not keep a leftover Building bound.
 

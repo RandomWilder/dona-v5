@@ -14,6 +14,7 @@ import { buildApp } from '../app.ts';
 import { fixedClock, systemClock } from '../kernel/clock.ts';
 import { embeddingColumnDimensions } from '../kernel/config.ts';
 import { createFakeEmbedder } from '../kernel/embeddings.ts';
+import { createFakeExtractor } from '../kernel/extraction.ts';
 import { newId } from '../kernel/ids.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
 import type { EstatePlan } from './contract.ts';
@@ -674,8 +675,8 @@ describe('estate · unit retrieval panel', () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// #121. The office retrieval panel on the Building page: same HTTP seam as #114, Building bound.
-// Cite-from-paper only — lettings list waits on #123.
+// #121 / #123. The office retrieval panel on the Building page: same HTTP seam as #114, Building bound.
+// Tool choice is the office turn's; this seam only posts the question.
 // ---------------------------------------------------------------------------------------------
 
 describe('estate · building retrieval panel', () => {
@@ -689,6 +690,12 @@ describe('estate · building retrieval panel', () => {
       pool,
       version: '9.9.9-test',
       embedder: createFakeEmbedder(embeddingColumnDimensions),
+      extractor: createFakeExtractor((request) => {
+        if (request.name === 'office_tools') {
+          return { search: true, list: false };
+        }
+        return { answers: false, text: '', hit_indexes: [] };
+      }),
     });
     await signOutAll(pool, ASK_DOMAIN);
     await askCleanup(pool);
