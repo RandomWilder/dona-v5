@@ -1,13 +1,13 @@
 ---
 number: 120
 title: "Office retrieval on the Building: panel, list command, tool choice"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent: 111
 created: 2026-09-17
-closed:
+closed: 2026-09-18
 ---
 
 ## Parent
@@ -124,3 +124,12 @@ Retry same. Unit still good. Follow-up: provider `error.code` + `error.message`
 on the extract failure; ask POST 303s back to the bound page with a frozen
 Hebrew notice. This issue stays open until a Building ask on staging 303s and
 paints an answer.
+
+## Comment — 2026-09-18
+
+Closed. Staging on `dona-staging` after #105/#106: Building panel is live;
+cited questions on a Building with paper work; Unit panel still isolated. A
+second lease on the same Building files and the Unit page retrieves it. Occupancy
+and unit-count questions that refuse, filing approve 409 JSON on a second stamp,
+and naming a neighbour Unit inside the eight-Passage Building bag are out of
+this ticket — next session.
