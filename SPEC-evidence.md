@@ -764,9 +764,13 @@ future screen.
 
 **`POST /documents/filing/:documentId/approve`** is `documents.write` and urlencoded (the token
 belongs to the composition-root hook; this body is not a stream). It stamps through
-`approveExtractedField` and then `establishApprovedLease` — the same moment as #110. A field that
-is not one of those four is `invalid`. When the reading is ready the draft is written and the next
-GET of this URL is beat 4.
+`approveExtractedField` and then `establishApprovedLease` — the same moment as #110. Any captured
+row on this document may be stamped: beat 3 is the declared set, and a field that is not on this
+reading is `invalid`. The stamps that **open** a letting are still names and dates — `main_tenant_name`
+(or a September `tenant_name`), `guarantor_name` when present, `start_date`, `end_date`. When those
+are ready the draft is written and the next GET of this URL is beat 4. Extra declared rows may be
+stamped on this sitting; they do not delay the draft, and the ledger remains the door for anything
+left unsigned.
 
 **Beat 4 is טיוטה on this tab.** Title, people and dates from the approved reading; whether
 **פרוטוקול מסירה** is missing or present, read from the letting's linked documents. No activate

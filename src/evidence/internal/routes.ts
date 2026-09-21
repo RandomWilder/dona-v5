@@ -90,6 +90,7 @@ import { fileDocument, findDocumentByHash } from './intake.ts';
 import {
   confirmLeaseTenancy,
   establishApprovedLease,
+  leaseReadingIsReady,
   proposeLeaseTenancy,
 } from './lease.ts';
 import { listTenancyDocumentFacts } from './list.ts';
@@ -121,7 +122,6 @@ import type {
   SeedScreen,
 } from './views.ts';
 import {
-  FILING_OPENING_FIELDS,
   renderDocumentsPage,
   renderFieldsPage,
   renderFiledPage,
@@ -566,8 +566,6 @@ export function registerDocumentRoutes(
       ...extras,
     });
 
-  const openingFields = new Set<string>(FILING_OPENING_FIELDS);
-
   const tenancyBoundTo = async (documentId: string): Promise<string | null> => {
     const found = await deps.pool.query<{ entity_id: string }>(
       `SELECT entity_id FROM document_link
@@ -589,30 +587,6 @@ export function registerDocumentRoutes(
     return found.rows[0]?.tenancy_id ?? null;
   };
 
-  const openingReady = (rows: readonly ExtractedRow[]): boolean => {
-    const tenants = rows.filter((row) => row.fieldKey === 'tenant_name');
-    if (
-      tenants.length === 0 ||
-      tenants.some((row) => row.approvedAt === null)
-    ) {
-      return false;
-    }
-    if (
-      rows
-        .filter((row) => row.fieldKey === 'guarantor_name')
-        .some((row) => row.approvedAt === null)
-    ) {
-      return false;
-    }
-    for (const key of ['start_date', 'end_date'] as const) {
-      const row = rows.find((field) => field.fieldKey === key);
-      if (!row || row.approvedAt === null) {
-        return false;
-      }
-    }
-    return true;
-  };
-
   const printed = (row: ExtractedRow): string => row.approvedValue ?? row.value;
 
   const filingOfDocument = async (
@@ -626,9 +600,7 @@ export function registerDocumentRoutes(
     }
     const unit = await getUnit(deps.pool, anchor.id);
     const bound = await tenancyBoundTo(documentId);
-    const rows = (await listExtractedFields(deps.pool, documentId)).filter(
-      (row) => openingFields.has(row.fieldKey),
-    );
+    const rows = await listExtractedFields(deps.pool, documentId);
     if (bound) {
       const tenancy = await getTenancy(deps.pool, bound);
       const facts = await listTenancyDocumentFacts(deps.pool, bound);
@@ -639,7 +611,13 @@ export function registerDocumentRoutes(
         draft: {
           tenancyId: bound,
           tenants: rows
-            .filter((row) => row.fieldKey === 'tenant_name')
+            .filter(
+              (row) =>
+                row.fieldKey === 'main_tenant_name' ||
+                row.fieldKey === 'second_tenant_name' ||
+                (row.fieldKey === 'tenant_name' &&
+                  !rows.some((other) => other.fieldKey === 'main_tenant_name')),
+            )
             .map(printed),
           guarantors: rows
             .filter((row) => row.fieldKey === 'guarantor_name')
@@ -654,7 +632,7 @@ export function registerDocumentRoutes(
     }
     const start = rows.find((row) => row.fieldKey === 'start_date');
     const clash =
-      start && openingReady(rows)
+      start && leaseReadingIsReady(rows)
         ? await collidingOn(unit.unit_id, printed(start))
         : null;
     return {
@@ -720,12 +698,6 @@ export function registerDocumentRoutes(
       if (!row) {
         throw new KernelError('not_found', 'extracted field not found');
       }
-      if (!openingFields.has(row.fieldKey)) {
-        throw new KernelError(
-          'invalid',
-          'that reading does not open a letting',
-        );
-      }
       const approvedBy = requireOperatorEmail(request);
       const approveDeps = {
         db: deps.pool,
@@ -738,7 +710,8 @@ export function registerDocumentRoutes(
           ? {}
           : { approvedValue: fields.approved_value }),
         approvedBy,
-        mayReadIdentifiers: mayReadIdentifiers(request),
+        // Beat 3 prints identifiers. A stamp here is on a value the signer was shown.
+        mayReadIdentifiers: true,
       });
       try {
         await establishApprovedLease(

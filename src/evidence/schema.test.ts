@@ -1159,6 +1159,10 @@ describe('the acceptance bar — a new type costs no DDL', () => {
     assert.equal(mainName?.isRequired, true);
     assert.equal(mainName?.valueType, 'TEXT');
     assert.equal(mainName?.effectiveFrom, '2026-09-21');
+    assert.equal(
+      (lease?.fields ?? []).some((field) => 'groupKey' in field),
+      false,
+    );
 
     for (const [fieldKey, valueType] of [
       ['main_tenant_id_number', 'TEXT'],
@@ -1206,6 +1210,20 @@ describe('the acceptance bar — a new type costs no DDL', () => {
       assert.equal(nowKeys.includes('tenant_id_number'), false);
       assert.equal(nowKeys.includes('gush'), false);
       assert.equal(nowKeys.includes('helka'), false);
+    });
+  });
+
+  it('does not add a group_key column to document_type_field', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const columns = await db.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'document_type_field'`,
+      );
+      assert.equal(
+        columns.rows.some((row) => row.column_name === 'group_key'),
+        false,
+      );
     });
   });
 

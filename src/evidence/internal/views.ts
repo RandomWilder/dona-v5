@@ -109,7 +109,13 @@ const styles = h`<style>
   .quality.is-low { color: var(--color-alert); font-weight: 600; }
   .second { color: var(--color-text-muted); font-size: var(--text-xs); }
   .role { display: block; color: var(--color-text-muted); font-size: var(--text-xs); }
-  .role.is-guarantor { color: var(--color-alert); }
+  .role.is-guarantor, .role.is-half { color: var(--color-alert); }
+  .grid-table .group {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    background: var(--color-surface);
+  }
   .ledger-head {
     display: flex;
     flex-wrap: wrap;
@@ -770,15 +776,59 @@ function filingHeadline(reading: PlaceReading, candidates: number): Html {
   return h`לא זוהתה דירה אחת`;
 }
 
-/** The stamps that open a letting. A15 keeps every other field. */
-export const FILING_OPENING_FIELDS = [
-  'tenant_name',
-  'guarantor_name',
-  'start_date',
-  'end_date',
-] as const;
+/** View grouping for A16 beat 3. Not a catalogue column. */
+const READING_GROUPS: ReadonlyArray<{
+  key: string;
+  labelHe: string;
+  keys: ReadonlySet<string>;
+}> = [
+  {
+    key: 'dates',
+    labelHe: 'תאריכים',
+    keys: new Set(['start_date', 'end_date', 'option_end_date', 'signed_date']),
+  },
+  {
+    key: 'money',
+    labelHe: 'כסף',
+    keys: new Set([
+      'rent_amount',
+      'rent_currency',
+      'deposit_amount',
+      'deposit_currency',
+      'maintenance_amount',
+      'maintenance_currency',
+      'deposit_months',
+      'promissory_note_amount',
+      'promissory_note_currency',
+    ]),
+  },
+  {
+    key: 'people',
+    labelHe: 'אנשים',
+    keys: new Set([
+      'tenant_name',
+      'tenant_id_number',
+      'main_tenant_name',
+      'main_tenant_id_number',
+      'second_tenant_name',
+      'second_tenant_id_number',
+      'guarantor_name',
+      'guarantor_id_number',
+    ]),
+  },
+  {
+    key: 'place',
+    labelHe: 'מקום',
+    keys: new Set(['apartment_number', 'address']),
+  },
+];
 
-const OPENING_FIELD = new Set<string>(FILING_OPENING_FIELDS);
+const AMOUNT_CURRENCY: Readonly<Record<string, string>> = {
+  rent_amount: 'rent_currency',
+  deposit_amount: 'deposit_currency',
+  maintenance_amount: 'maintenance_currency',
+  promissory_note_amount: 'promissory_note_currency',
+};
 
 export interface FilingDraftFacts {
   tenancyId: string;
@@ -841,10 +891,43 @@ function filingApproveControl(
   </td>`;
 }
 
+function readingGroupOf(fieldKey: string): number {
+  const at = READING_GROUPS.findIndex((group) => group.keys.has(fieldKey));
+  return at === -1 ? READING_GROUPS.length : at;
+}
+
+function missingCurrency(
+  row: ExtractedRow,
+  rows: readonly ExtractedRow[],
+): boolean {
+  const currencyKey = AMOUNT_CURRENCY[row.fieldKey];
+  if (!currencyKey) {
+    return false;
+  }
+  return !rows.some((candidate) => candidate.fieldKey === currencyKey);
+}
+
+function filingReadingRow(
+  screen: LeaseFilingScreen,
+  row: ExtractedRow,
+  rows: readonly ExtractedRow[],
+): Html {
+  const half = missingCurrency(row, rows)
+    ? h`<span class="role is-half">חסר מטבע</span>`
+    : h``;
+  return h`<tr>
+    <td>${row.labelHe}${nameRole(row, rows)}${half}</td>
+    <td>${
+      row.fieldKey.endsWith('_date')
+        ? excerpt(ltr(row.value))
+        : excerpt(row.value)
+    }</td>
+    ${filingApproveControl(screen, row)}
+  </tr>`;
+}
+
 function filingReading(screen: LeaseFilingScreen): Html {
-  const rows = (screen.rows ?? []).filter((row) =>
-    OPENING_FIELD.has(row.fieldKey),
-  );
+  const rows = screen.rows ?? [];
   if (screen.beat !== 'read') {
     return h``;
   }
@@ -863,6 +946,13 @@ function filingReading(screen: LeaseFilingScreen): Html {
       <p class="lede">הקובץ תויק. אישור השמות והתאריכים ייפתח כאן.</p>
     </section>`;
   }
+  const grouped = READING_GROUPS.map((group, at) => ({
+    labelHe: group.labelHe,
+    rows: rows.filter((row) => readingGroupOf(row.fieldKey) === at),
+  })).filter((group) => group.rows.length > 0);
+  const leftover = rows.filter(
+    (row) => readingGroupOf(row.fieldKey) === READING_GROUPS.length,
+  );
   return h`${conflict}<section class="notice">
     <div class="table-wrap">
       <table class="grid-table">
@@ -873,19 +963,21 @@ function filingReading(screen: LeaseFilingScreen): Html {
             <th></th>
           </tr>
         </thead>
-        <tbody>
-          ${rows.map(
-            (row) => h`<tr>
-              <td>${row.labelHe}${nameRole(row, rows)}</td>
-              <td>${
-                row.fieldKey.endsWith('_date')
-                  ? excerpt(ltr(row.value))
-                  : excerpt(row.value)
-              }</td>
-              ${filingApproveControl(screen, row)}
-            </tr>`,
-          )}
-        </tbody>
+        ${grouped.map(
+          (group) => h`<tbody>
+            <tr>
+              <th class="group" colspan="3">${group.labelHe}</th>
+            </tr>
+            ${group.rows.map((row) => filingReadingRow(screen, row, rows))}
+          </tbody>`,
+        )}
+        ${
+          leftover.length === 0
+            ? h``
+            : h`<tbody>
+            ${leftover.map((row) => filingReadingRow(screen, row, rows))}
+          </tbody>`
+        }
       </table>
     </div>
   </section>`;
@@ -1648,7 +1740,11 @@ export function renderTenancyPage(screen: TenancyScreen): string {
     open &&
     screen.startDate !== null &&
     screen.endDate !== null &&
-    screen.people.some((person) => person.fieldKey === 'tenant_name') &&
+    screen.people.some(
+      (person) =>
+        person.fieldKey === 'tenant_name' ||
+        person.fieldKey === 'main_tenant_name',
+    ) &&
     screen.termsProfileNames.length > 0;
   const canAttach = open && screen.candidates.length > 0;
   const canWrite = isAmendment
@@ -2167,6 +2263,12 @@ function ledgerOrder(rows: readonly ExtractedRow[]): ExtractedRow[] {
 function nameRole(row: ExtractedRow, rows: readonly ExtractedRow[]): Html {
   if (row.fieldKey === 'guarantor_name') {
     return h`<span class="role is-guarantor">ערב · אינו איש קשר לשירות</span>`;
+  }
+  if (row.fieldKey === 'main_tenant_name') {
+    return h`<span class="role">שוכר ראשי</span>`;
+  }
+  if (row.fieldKey === 'second_tenant_name') {
+    return h`<span class="role">שוכר נוסף</span>`;
   }
   if (row.fieldKey !== 'tenant_name') {
     return h``;
