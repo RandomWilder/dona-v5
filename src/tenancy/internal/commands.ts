@@ -9,6 +9,7 @@ import { type Clock, today as dayOf } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
+import { requireText, validId } from '../../kernel/validate.ts';
 import type { Queryable } from './types.ts';
 
 export type TenancyStatus = 'DRAFT' | 'ACTIVE' | 'ENDED' | 'TERMINATED_EARLY';
@@ -372,4 +373,68 @@ export async function expireDueTenancies(
     return;
   }
   await expireDueOn(db, clock);
+}
+
+export interface ExerciseOptionSpec {
+  tenancyId: string;
+  actor: string;
+  sourceDocumentId?: string | null;
+}
+
+/**
+ * Take the option on an ACTIVE letting. Same row, later `end_date`, event
+ * `extended`. `option_end_date` stays; a missing document is representable.
+ */
+export async function exerciseOption(
+  db: Queryable,
+  clock: Clock,
+  spec: ExerciseOptionSpec,
+): Promise<void> {
+  const actor = requireText(spec.actor, 'actor', 200);
+  const sourceDocumentId =
+    spec.sourceDocumentId === undefined || spec.sourceDocumentId === null
+      ? null
+      : validId(spec.sourceDocumentId, 'sourceDocumentId');
+  const current = await db.query<{
+    status: string;
+    end_date: string;
+    option_end_date: string | null;
+  }>(
+    `SELECT status,
+            end_date::text AS end_date,
+            option_end_date::text AS option_end_date
+       FROM tenancy WHERE tenancy_id = $1`,
+    [spec.tenancyId],
+  );
+  const row = current.rows[0];
+  if (!row) {
+    throw new KernelError('not_found', 'tenancy not found');
+  }
+  if (
+    row.status !== 'ACTIVE' ||
+    row.option_end_date === null ||
+    row.option_end_date <= row.end_date
+  ) {
+    throw new KernelError('invalid', 'this letting cannot be extended');
+  }
+  await db.query(`UPDATE tenancy SET end_date = $2 WHERE tenancy_id = $1`, [
+    spec.tenancyId,
+    row.option_end_date,
+  ]);
+  await db.query(
+    `INSERT INTO tenancy_event (
+       tenancy_event_id, tenancy_id, at, actor, kind, field,
+       old_value, new_value, source_document_id, extracted_field_id
+     ) VALUES ($1, $2, $3, $4, 'extended', 'end_date',
+               $5, $6, $7, NULL)`,
+    [
+      newId(),
+      spec.tenancyId,
+      clock.now(),
+      actor,
+      row.end_date,
+      row.option_end_date,
+      sourceDocumentId,
+    ],
+  );
 }

@@ -134,11 +134,13 @@ the record has to answer a question it has never been asked: what happens when a
 option. The answer is that **nothing ends and nothing begins**. The same household stays in the same
 flat under the same agreement, for longer.
 
-**Exercising the option appends a `tenancy_event` and moves `end_date`.** The event is the history,
-in the same shape `activated` and `terminated` already use, and the column move is what every reader
-of this schema already understands. `option_end_date` is **not cleared**, because a letting that was
-extended is a different fact from a letting that was always five years long, and that column is the
-only place the distinction survives.
+**`exerciseOption` is the seventh write command.** It appends a `tenancy_event` of kind `extended`
+and moves `end_date` to `option_end_date`. The event is the history, in the same shape `activated`
+and `terminated` already use, and the column move is what every reader of this schema already
+understands. `option_end_date` is **not cleared**, because a letting that was extended is a different
+fact from a letting that was always five years long, and that column is the only place the
+distinction survives. The letting's identity does not change; a second `tenancy` row is refused by
+construction, because that is a turnover.
 
 **The kind is `extended`, and its `source_document_id` is nullable** — which is neither of its
 neighbours' shapes, deliberately. `amended` requires a document, because a promotion is a copy off a
@@ -202,10 +204,13 @@ own first five years from it.
   copies an extracted value onto a typed column appends
   `(field, old → new, actor, source_document_id, extracted_field_id)` with `kind = 'amended'`.
   `source_document_id` is NOT NULL for that kind (`amended_names_its_document`) and that constraint
-  is never dropped. `kind` is `amended | terminated | activated`. A clock-driven end is
-  `terminated`; a person making a draft live is `activated`. Both kinds carry a null
-  `source_document_id` and `extracted_field_id` (`terminated_has_no_document` for the clock
-  kind, `activated_has_no_document` for the person kind). UPDATE and DELETE are rejected
+  is never dropped. `kind` is `amended | terminated | activated | extended`. A clock-driven end is
+  `terminated`; a person making a draft live is `activated`; a person taking the option is
+  `extended`. `terminated` and `activated` carry a null `source_document_id` and
+  `extracted_field_id` (`terminated_has_no_document` for the clock kind, `activated_has_no_document`
+  for the person kind). `extended` names a document when there is one and does not when there is
+  not — no extra CHECK, because an option exercise is honestly either a signed notice or a phone
+  call. UPDATE and DELETE are rejected
   (`restrict_violation`). `at` comes from the injected clock; there is no `DEFAULT now()`. `actor`
   is `-- pii`; a clock end snapshots `system`, not an operator. Register `upsertTenancy` does
   **not** write events — isolation dates from the import stay legal without a document.
@@ -217,11 +222,14 @@ own first five years from it.
   the clock closes it. A second call is a no-op. Natural end is `ENDED`, never
   `TERMINATED_EARLY`. **The clock never writes `ACTIVE`.** A draft whose start date has arrived
   stays a draft until a person activates it (A5, #106). `activateTenancy` is the sixth write
-  command.
+  command. `exerciseOption` is the seventh: an `ACTIVE` letting whose `option_end_date` is later
+  than `end_date` moves `end_date` to that option end, leaves `option_end_date` in place, and
+  appends `extended` with `field = end_date`. A missing letting is `not_found`. Ended, with no
+  option, or already at the option end is `invalid`. The actor is the person who invoked it.
 - **No read model, and from 3.3 exactly one list plus one lookup.** *(Slice 6.5 adds a second list,
   `countIdentifierOverlap`, described at the end of this bullet.)* `contract.ts` exists from 2.4
   and exports the register importer's three write commands — `upsertTermsProfile`, `upsertTenancy` and
-  `upsertTenancyParty` — plus `applyPromotedField` from 4.3. `listUnitTenancies` joins them at 3.3.
+  `upsertTenancyParty` — plus `applyPromotedField` from 4.3 and `exerciseOption` from #135. `listUnitTenancies` joins them at 3.3.
   Slice 4.6 added `findTermsProfileByName`: A2 must hang a draft on a profile that already exists and
   must not invent `standard`. A missing name is `null`, not an upsert. Slice 4.6b added
   `listTermsProfiles`: names only, ordered, so the confirm screen is a select of what already exists

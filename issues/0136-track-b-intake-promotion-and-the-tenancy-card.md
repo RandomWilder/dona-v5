@@ -95,7 +95,7 @@ This is what "track B is done" is tested against. Each line is end-to-end, not a
 - [ ] An amount without its currency can be approved and cannot be promoted
 - [ ] The reading screen and the tenancy card cite every value they show
 - [ ] No deterministic path reads a capture — the contract test is green and **unmodified**
-- [ ] Exercising an option extends the letting; a tenant's retrieval bound reaches the same paper
+- [x] Exercising an option extends the letting; a tenant's retrieval bound reaches the same paper
       after the extension as before it
 - [ ] `test:policy`, `evals`, `npm test` and the guards are green; every new deterministic constraint
       had a policy case that was red first
@@ -113,7 +113,7 @@ In dependency order. The frontier is #130 and #131, which are independent of eac
 6. #132 — Promote rent and the option end onto the tenancy · *blocked by 131, 130* · **the migration**
 7. #133 — Beat 3 reads the declared set · *blocked by 131*
 8. #134 — The tenancy card, under the render-only rule · *blocked by 132*
-9. #135 — Exercising the option extends the letting · *blocked by 132*
+9. #135 — Exercising the option extends the letting · *blocked by 132* · **closed 2026-09-21**
 10. #137 — A long scan is read to page fifteen, and everything downstream extracts from there ·
     *unblocked, raised by #127* · a prerequisite of nothing above, and it bounds what all of them can
     achieve in the live path: the baseline on #127 is measured over every page, and the running

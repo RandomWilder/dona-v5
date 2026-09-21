@@ -1,7 +1,7 @@
 // The tenancy module's public surface. Other modules, the composition root and the tests import
 // this file and never internal/ (AGENTS.md, and src/kernel/boundary.test.ts proves it from 2.4).
 //
-// Write commands, two reads, the completeness query, the change log, the clock close, and from
+// Write commands (including `exerciseOption`), two reads, the completeness query, the change log, the clock close, and from
 // 5.7 Obligation / ObligationType (`listObligationTypes` at 5.8 for the settings screen). Who a
 // phone reaches *today* is still `src/scope/`'s answer; `listUnitTenancies` answers which lettings
 // a flat has; `listIncompleteTenancies` answers which of those miss a named completeness rule (ערב,
@@ -25,6 +25,7 @@ export {
   REQUIRED_FOR_ACTIVATION,
 } from './internal/activation.ts';
 export type {
+  ExerciseOptionSpec,
   PromotedFieldSpec,
   PromotedTenancyField,
   TenancyPartySpec,
@@ -34,6 +35,7 @@ export type {
 } from './internal/commands.ts';
 export {
   applyPromotedField,
+  exerciseOption,
   expireDueTenancies,
   findTermsProfileByName,
   listTermsProfiles,
