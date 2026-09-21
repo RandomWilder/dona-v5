@@ -53,6 +53,14 @@ const label = (table: Record<string, string>, value: string): string =>
 const ltr = (value: string | number): Html =>
   h`<span dir="ltr">${value}</span>`;
 
+/** How much of a long scan has been read. Absent when the two numbers meet, or on the archive. */
+function coverageMark(pageCount?: number, pagesRead?: number): Html {
+  if (pageCount == null || pagesRead == null || pagesRead >= pageCount) {
+    return h``;
+  }
+  return h`<span class="chip">${pagesRead} מתוך ${pageCount}</span>`;
+}
+
 /** A value the paper said, inside a sentence of ours. A16; old screens do not mark. */
 const excerpt = (value: string | Html): Html =>
   h`<span class="excerpt">${value}</span>`;
@@ -347,7 +355,7 @@ export function renderUploadPage(screen: UploadScreen): string {
         <input id="file" name="file" type="file" required
           accept="${documentExtensions.map((ext) => `.${ext}`).join(',')}" />
         <p class="hint">
-          עד 20MB. סוג הקובץ נקבע מתוכנו ולא משמו, ושם הקובץ אינו נשמר.
+          עד 100MB. סוג הקובץ נקבע מתוכנו ולא משמו, ושם הקובץ אינו נשמר.
         </p>
       </div>
       <div class="form-actions">
@@ -666,8 +674,8 @@ export function renderIntakePage(screen: IntakeScreen): string {
         <p class="hint">
           ${
             refused
-              ? h`עד 20MB. הקובץ אינו נשמר בין הניסיונות, ולכן יש לצרף אותו שוב.`
-              : h`עד 20MB. סוג הקובץ נקבע מתוכנו ולא משמו, ושם הקובץ אינו נשמר.`
+              ? h`עד 100MB. הקובץ אינו נשמר בין הניסיונות, ולכן יש לצרף אותו שוב.`
+              : h`עד 100MB. סוג הקובץ נקבע מתוכנו ולא משמו, ושם הקובץ אינו נשמר.`
           }
         </p>
       </div>
@@ -865,6 +873,8 @@ export interface LeaseFilingScreen {
   mayApprove?: boolean;
   conflictTenancyId?: string;
   draft?: FilingDraftFacts;
+  pageCount?: number;
+  pagesRead?: number;
 }
 
 function filingApproveControl(
@@ -942,7 +952,7 @@ function filingReading(screen: LeaseFilingScreen): Html {
     : h``;
   if (rows.length === 0) {
     return h`${conflict}<section class="notice">
-      <h2>הקריאה</h2>
+      <h2>הקריאה ${coverageMark(screen.pageCount, screen.pagesRead)}</h2>
       <p class="lede">הקובץ תויק. אישור השמות והתאריכים ייפתח כאן.</p>
     </section>`;
   }
@@ -954,7 +964,7 @@ function filingReading(screen: LeaseFilingScreen): Html {
     (row) => readingGroupOf(row.fieldKey) === READING_GROUPS.length,
   );
   return h`${conflict}<section class="notice">
-    <div class="table-wrap">
+    <h2>הקריאה ${coverageMark(screen.pageCount, screen.pagesRead)}</h2>
       <table class="grid-table">
         <thead>
           <tr>
@@ -1196,7 +1206,7 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
                 ? h`נשאר על הצעד עד המשך. נשמר רק אחרי אישור הדירה.`
                 : candidates.length > 0
                   ? h`יש לצרף שוב. נשמר רק אחרי שהדירה אושרה.`
-                  : h`עד 20 מ״ב. נשמר רק אחרי שהדירה אושרה.`
+                  : h`עד 100 מ״ב. נשמר רק אחרי שהדירה אושרה.`
             }
           </p>
           <div class="form-actions">
@@ -1496,6 +1506,8 @@ export interface ReadScreen {
     /** Slice 7.3. A state, said in one word; the ledger is where it is acted on. */
     approvedAt?: Date | null;
   }>;
+  pageCount?: number;
+  pagesRead?: number;
 }
 
 function qualityVerdict(
@@ -1618,7 +1630,7 @@ export function renderReadPage(screen: ReadScreen): string {
       <a class="back" href="${back}">← ${screen.buildingName}</a>
       <h1>מילים על הדף</h1>
       <p class="lede">${screen.labelHe}${screen.unitId ? h`` : h` · הבניין`}</p>
-      <div class="ledger-head">${qualityVerdictChip(screen.extracted ?? [])}</div>
+      <div class="ledger-head">${qualityVerdictChip(screen.extracted ?? [])}${coverageMark(screen.pageCount, screen.pagesRead)}</div>
     </div>
     <section class="notice">
       <dl class="facts">
@@ -2211,6 +2223,8 @@ export interface FieldsScreen {
   revealed?: string;
   /** How many rows the last press signed. */
   saved?: number;
+  pageCount?: number;
+  pagesRead?: number;
 }
 
 const MASK = IDENTIFIER_MASK;
@@ -2355,6 +2369,7 @@ export function renderFieldsPage(screen: FieldsScreen): string {
       <div class="ledger-head">
         <span>${screen.labelHe} · ההצהרה שתקפה ל־${ltr(screen.on)}</span>
         ${qualityVerdictChip(shown)}
+        ${coverageMark(screen.pageCount, screen.pagesRead)}
         ${
           open.length - unflagged.length > 0
             ? h`<span class="chip verdict is-low">${ltr(open.length - unflagged.length)} שורות לבדיקה אישית</span>`
@@ -2392,7 +2407,13 @@ export function renderFieldsPage(screen: FieldsScreen): string {
           ${screen.unread.map(
             (field) => h`<tr>
             <td class="value muted">${field.labelHe}</td>
-            <td class="muted">לא נקרא${field.isRequired ? h`` : h` — שדה רשות`}</td>
+            <td class="muted">${
+              screen.pagesRead != null &&
+              screen.pageCount != null &&
+              screen.pagesRead < screen.pageCount
+                ? h`הקריאה טרם כיסתה את כל העמודים`
+                : h`לא נקרא${field.isRequired ? h`` : h` — שדה רשות`}`
+            }</td>
             <td class="muted">—</td>
             <td class="muted">—</td>
             <td class="muted">—</td>

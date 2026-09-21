@@ -321,7 +321,7 @@ changed.
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
 `GET`/`POST /documents/new`, reached from a unit row on the building page. It went behind the session
 at 5.2 with everything else, and its bounds are stated in full by
-[SPEC-evidence.md](SPEC-evidence.md): one file, 20 MB, four kinds sniffed from the
+[SPEC-evidence.md](SPEC-evidence.md): one file, 100 MB, four kinds sniffed from the
 bytes, no filename kept, nothing personal on the screen, a CSRF token from 5.2, and **fifty filed
 documents per operator per rolling day**, which is the bound on a caller that none of the others
 were. Only tier-1 specimens are filed until the corpus arrives, because it is gated behind F6 and

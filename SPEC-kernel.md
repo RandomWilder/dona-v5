@@ -262,11 +262,13 @@ else — the same split `objects.ts` made. **No Document AI SDK.** Processor typ
 `me-west1`, and `eu` is the closest residency that hosts this processor. The regional endpoint is
 `https://eu-documentai.googleapis.com/v1/...:process`. Version is `ocr.processor_version` in
 `config_settings`, read per call, default `pretrained-ocr-v2.1-2024-08-07`. Hebrew language hint
-`iw`. Online process only, and **from 6.8 a document longer than 15 pages is read in part rather
-than refused**: `individualPageSelector` carries the pages the caller chose, which is the escape
-hatch that makes `batchProcess`, a GCS staging store and a PDF splitter all unnecessary. The bound
-Document AI sets is on the *request* — 20 MiB, and a raw file arrives base64-encoded — so
-`onlineOcrByteLimit` is three quarters of it and a file above that cannot be read at any page count.
+`iw`. Online process only. **From 6.8 a document longer than 15 pages is read in part rather
+than refused**; **from #137 each call is a slice of at most fifteen pages cut from the PDF**, not
+the original file with `individualPageSelector`. Selecting pages does not shrink the request when
+the whole scan still rides in it. The bound Document AI sets is on the *request* — 20 MiB, and a
+raw file arrives base64-encoded — so `onlineOcrByteLimit` is three quarters of it and applies to
+the **slice**. A 100 MB scan is stored; a slice that still will not fit is `too_large`. Batch
+Document AI is not this port.
 Timeout **90 seconds, raised from 20 at 6.8**: most of a large call is spent putting the bytes on the
 wire, measured at 33.2s for three pages of a 15.6 MB file and 36.4s for fifteen, and the old bound
 turned a slow answer into a recorded failure. A failed, timed-out or unconfigured call is `unavailable` from this port; the caller

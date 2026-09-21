@@ -292,20 +292,32 @@ nothing outside it writes a document row.
   nobody could read it; it does not mean nobody has checked.
 - **A long document is read in part, and a large one is refused (slice 6.8).** `onlineOcrPageLimit`
   is 15 and real leases exceed it — the week-6 demo's is 38 pages — and until 6.8 a longer scan was
-  simply not sent, then filed as though it had been read. It is read in part now: the call carries
-  `individualPageSelector` for the first fifteen pages, which is where a lease says what it is and
-  where it belongs. **`pagesRead` goes on the audit line beside the page count**, because *verified*
-  on a partial reading is a different claim from *verified* and the difference has to be somewhere a
-  person can count. *(Measured before it was written: the demo's own file, pages 1–15 selected, came
-  back `200` with fifteen pages in 36.4 seconds.)*
-- **`too_large` is a refusal and never a stored verdict (slice 6.8).** The bound Document AI sets is
-  on the **request**, and the whole file rides in every request base64-encoded, so a file above
-  `onlineOcrByteLimit` cannot be read at any page count. Selecting fewer pages does not make it fit.
-  An upload above that ceiling is refused with a sentence saying so, rather than filed on a reading
-  that never happened. The upload route's own `LIMITS.fileSize` is larger, so there is a band where a
-  file is storable and unreadable, and that band is the refusal. The
-  `document.verification_verdict` CHECK still holds three values: nothing carrying this outcome
-  reaches a row.
+  simply not sent, then filed as though it had been read. 6.8 read the opening pages so a lease
+  could still say what it is and where it belongs; **`pagesRead` goes on the audit line beside the
+  page count**, because *verified* on a partial reading is a different claim from *verified* and the
+  difference has to be somewhere a person can count. *(Measured before it was written: the demo's
+  own file, pages 1–15 selected, came back `200` with fifteen pages in 36.4 seconds.)* #137 keeps
+  that verdict and stops sending the original file with `individualPageSelector`.
+- **The verdict stays on the first fifteen pages; extraction and passages read the rest (#137).**
+  The opening pages still answer *is this a lease, and where is it?* The pages the extractor and the
+  passage store inherit used to be those same fifteen, so a value printed on page 20 was a credited
+  miss for the wrong reason. **Each OCR call is a slice of at most fifteen pages, cut from the PDF
+  before the processor sees it** — not the original scan with `individualPageSelector`. Selecting
+  pages on the full file does not shrink the request, because the whole file still rides in it.
+  After the row is filed, remaining slices run on the work queue, never on the upload request.
+  Extraction and passages wait until those slices have been read. `document.page_count` and
+  `document.pages_read` carry the coverage onto the row, and the reading screen and the field ledger
+  say so when the two differ. The operator may open הקריאה on a shortfall; unread pages are not an
+  absence in the paper. A later cheap first pass that picks the annex is not built until this path
+  has been measured. Batch Document AI is not this issue. *(Document AI is paid per call. A 38-page
+  scan is three slices.)*
+- **`too_large` is a refusal and never a stored verdict (slice 6.8, restated at #137).** The bound
+  Document AI sets is on the **request** (~20 MiB, file base64-encoded). After #137 that request is
+  a slice, so a 100 MB scan is readable in fifteens as long as each slice fits. A first slice that
+  still will not fit is refused with a sentence and writes nothing — the alternative is a verdict
+  about pages nobody sent. The upload bound is **100 MB** (`LIMITS.fileSize`), chosen for scans as
+  a runaway ceiling, not as an unbounded store. The `document.verification_verdict` CHECK still
+  holds three values: nothing carrying this outcome reaches a row.
 
 ### A refused upload leaves no row — the question slice 3.1 left open
 
@@ -394,10 +406,11 @@ screen. Nothing needs it yet; the day something does, it is a slice and not an e
 Every route before 3.3 was a read. From 3.3 to 5.2 this one accepted bytes from anybody who could
 reach the service, and what stood in for a session was bounds rather than intentions. **Slice 5.2
 gave it the session, a CSRF token and a bound on the caller**; the 3.3 bounds are kept, because they
-bound a different quantity and an authenticated operator can still post a 200 MB file by accident.
+bound a different quantity and an authenticated operator can still post a runaway file by accident.
 
-- **One file per request, 20 MB, and four kinds** — sniffed from the bytes, so a `.pdf` that is not a
-  PDF is `invalid` at the edge rather than an object in the bucket.
+- **One file per request, 100 MB, and four kinds** — sniffed from the bytes, so a `.pdf` that is not a
+  PDF is `invalid` at the edge rather than an object in the bucket. One hundred is the scan ceiling
+  (#137); it is a bound on a runaway, not a processor limit. OCR sees only a fifteen-page slice.
 - **Fifty filed documents per operator per rolling 24 hours** (slice 5.2). This is the bound none of
   the others is: they bound a *request*, and nothing bounded a *caller*, so one poster could fill a
   versioned bucket the application is built to be unable to empty. It is counted from `audit_log` —
@@ -1134,8 +1147,8 @@ and 4.1 does not invent one.
 **Two readers, one page shape.** A native PDF with a text layer is pdfjs (confidence `null`). A
 scan, a photograph, or a PDF whose pages came back empty is Document AI (confidence set, boxes used
 only while extracting so a field knows its page). Images skip pdfjs. More than 15 pages is not sent
-whole: on the sweep the row stays `unverified`, and **on the upload path, from 6.8, the first fifteen
-pages are selected and read** rather than the file being filed as though it had been read. **#102
+whole: on the sweep the row stays `unverified`, and **on the upload path, from 6.8 / #137, the first
+slice of fifteen pages is cut and read** rather than the file being filed as though it had been read. **#102
 deleted the overlay.** `GET /documents/:id/read` shows the per-page text, the quality verdict, and
 the page number beside each extracted value — never a page image, never a word box, never a field
 box. The OCR request runs in imageless mode. **From 6.6 the transcript is shown only to a viewer
@@ -1143,9 +1156,14 @@ holding `party.national_id.read`.** **Which page** is a query (`?page=`, 1-based
 field). Clicking a promoted value is 4.4's.
 
 **#103 keeps the reading.** `readForVerdict` remains the only decision point that chooses native text
-versus OCR. Its output fans out to three destinations: the verdict, the extracted fields, and one
+versus OCR **for the verdict**. Its output fans out to three destinations: the verdict, the extracted
+fields, and one
 **passage** per page — document, page number, ordinal, the text as printed (identifiers included,
-unmasked), and an embedding at the welded dimension. Masking is a later read, never a write: masking
+unmasked), and an embedding at the welded dimension. **#137 splits the fans.** The verdict still
+takes the first slice of at most `onlineOcrPageLimit` pages, cut from the PDF. Extraction and
+passages wait until the remaining slices have been read in further calls of the same size, hung on
+`EXTRACT_WORK_KIND` so the upload returns on the first slice. The row records `page_count` and
+`pages_read`; a screen may display them and must not treat a shortfall as an absence in the paper. Masking is a later read, never a write: masking
 here would both hide a tenant's own identifier from them and corrupt the vector. **No vector index**
 ([ADR-0009](docs/decisions/ADR-0009-passage-embeddings-have-no-index-yet.md)). An unconfigured
 embedder is the same shape as an unconfigured extractor: the document is still filed and no passages

@@ -1,39 +1,35 @@
 ---
 number: 137
 title: "A long scan is read to page fifteen, and everything downstream extracts from there"
-status: open
+status: closed
 labels: [ready-for-agent]
-assignee:
+assignee: cursor
 blocked_by: []
 parent: 136
 created: 2026-09-21
-closed:
+closed: 2026-09-22
 ---
 
 ## What is wrong
 
-`readForVerdict` (`src/evidence/internal/read.ts`) sends the first `onlineOcrPageLimit` pages of a
-long document to OCR, and that is correct for the question it is answering: *is this a lease, and
-where is it?* — which the opening pages settle. Slice 6.8 added it so that a 38-page file would be
-read in part rather than not at all, and the reasoning is sound and recorded.
+`readForVerdict` sends the first `onlineOcrPageLimit` pages of a long document to OCR, and that is
+correct for the question it is answering: *is this a lease, and where is it?* — which the opening
+pages settle. Slice 6.8 added it so that a 38-page file would be read in part rather than not at all,
+and the reasoning is sound and recorded.
 
-The defect is what happens to that partial reading afterwards. In `fileDocument`
-(`src/evidence/internal/intake.ts`):
+The defect is what happens to that partial reading afterwards. In `fileDocument`, the pages read for
+a verdict become the pages extracted from, and the pages indexed as Passages. For a scan with no
+usable text layer — which both specimen leases are — that means field extraction and retrieval both
+see pages 1 to 15 of a 37- or 38-page document, and nothing anywhere says the other twenty-three were
+never looked at. `ocrOutcome: 'partial'` and `pagesRead` record the truth about the *verdict*, and
+nothing carries it to the two readers that inherit the same pages.
 
-```ts
-const pagesForExtract = reading.pages;
-...
-await extractAfterFile(deps, filed.id, pagesForExtract);
-if (embedderConfigured(deps.embedder)) {
-  await writeDocumentPassages(deps.db, filed.id, pagesForExtract, deps.embedder);
-}
-```
-
-**The pages read for a verdict become the pages extracted from, and the pages indexed as Passages.**
-For a scan with no usable text layer — which both specimen leases are — that means field extraction
-and retrieval both see pages 1 to 15 of a 37- or 38-page document, and nothing anywhere says the
-other twenty-three were never looked at. `ocrOutcome: 'partial'` and `pagesRead` record the truth
-about the *verdict*, and nothing carries it to the two readers that inherit the same pages.
+A second defect sits under the first. Slice 6.8 sends the **whole file** on every OCR call and asks
+for fifteen pages with `individualPageSelector`. Document AI bounds the *request* at 20 MiB, and the
+file is base64-encoded, so a scan above `onlineOcrByteLimit` (~15 MiB) cannot be read at any page
+count. Selecting pages 16–30 does not shrink the request. Remainder OCR in that shape is three
+uploads of the same blob, and the next fat scan never reaches “the rest.” These are scans; 15 MiB is
+already the lip of the demo lease.
 
 ## What it costs, measured
 
@@ -58,20 +54,43 @@ is this issue.
 
 ## What to build
 
-Undecided, and the choice is the work. Three shapes, in increasing cost:
+Decided. One path, not a menu.
 
-- **Say so, and nothing else.** Carry `pagesRead` onto the document row and show it on the reading
-  and the field ledger, so an operator signing a reading knows it covers fifteen pages of thirty-
-  eight. Cheapest, and honest; changes no number.
-- **Read the whole document for extraction**, in chunks, as `specimens:capture` already does — the
-  processor takes fifteen pages a call and the whole file rides in every request, so a 38-page lease
-  is three calls of roughly 30 seconds each. That cannot happen on the upload request, so it is the
-  work queue's, and `EXTRACT_WORK_KIND` already exists to hang it on.
-- **Read the pages that answer the question.** The commercial annex is one page and the note is two,
-  and which pages those are is discoverable from a cheap first pass. Least wasteful, most machinery,
-  and it should not be built before the middle option has been measured.
+**Each OCR call is a slice of at most fifteen pages, cut from the PDF before the processor sees it.**
+The port receives that thin file, not the original scan with a page list. Original page numbers are
+preserved on the words. The first slice is the verdict (unchanged question: is this a lease, and
+where). After the row is filed, remaining slices run on the work queue — never on the upload
+request. Extraction and passages wait until those slices have been read; they must not run on the
+verdict's fifteen pages and then pretend the document is done.
 
-The first is a prerequisite of either of the others and should land whichever is chosen.
+**Coverage is a fact on the row.** `document.page_count` and `document.pages_read` (nullable together
+for archive rows filed before this knew the count). Beat 3 and the field ledger say so when the two
+differ. The operator may open הקריאה while it is still 15 of 38; that sitting is not gated on
+completion. Unread pages are not an absence in the paper: a missing guarantor is only a missing
+guarantor once page 21 has been read.
+
+**A scan may be filed up to 100 MB.** That is the upload bound (`LIMITS.fileSize`). It is a bound on
+a runaway, chosen for scans, not a claim that Document AI will swallow 100 MB. `too_large` is a
+refusal when a *slice* still will not fit the processor request, and writes nothing for that file if
+the first slice cannot be sent. There is no unlimited size.
+
+**Not built here:** Document AI batch, picking the annex from a cheap first pass, and any store
+ceiling above 100 MB. Batch and annex-picking wait until this path has been measured.
+
+## Acceptance criteria
+
+- [x] OCR is called with a PDF of at most fifteen pages, not the original file plus a page selector
+- [x] The verdict is taken on the first slice only
+- [x] Remaining slices run on the work queue; the upload returns on the first slice
+- [x] Extraction and passages run over the pages that have been read once the remainder has run, not
+      over the verdict slice alone
+- [x] `document.page_count` and `document.pages_read` record coverage; the reading screen and the
+      field ledger say so when they differ; a shortfall is not treated as an absence in the paper
+- [x] A file up to 100 MB is accepted at the upload edge; a first slice that still exceeds the
+      processor request is `too_large` and writes nothing
+- [x] Capture (`specimens:capture`) uses the same slice-then-OCR shape as the live path
+- [x] Policy or contract case was red first: a long scan's later page is absent from extract/passages
+      until the remainder has run, and present after
 
 ## How it was found
 
@@ -80,5 +99,11 @@ difference between it and the live path visible; nothing in the suite or the gat
 
 ## Related
 
-`SPEC-evidence.md` *Reading a filed document*; slice 6.8's `onlineOcrPageLimit` reasoning in
-`src/kernel/ocr.ts`; the baseline comment on #127.
+`SPEC-evidence.md` *Reading a filed document* and the 6.8 byte-bound paragraph, both amended in this
+change. Slice 6.8's `onlineOcrPageLimit` in `src/kernel/ocr.ts`. The baseline comment on #127.
+
+## Comment — 2026-09-22
+
+Decided: remainder OCR by **slicing** the PDF, not by sending the whole file with
+`individualPageSelector`. Upload ceiling **100 MB** for scans. No batch processor, no unbounded
+size, no annex-picking. Beat 3 is not gated on 38 of 38. Spec files in the same change.

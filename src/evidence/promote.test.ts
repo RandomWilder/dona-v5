@@ -31,6 +31,7 @@ import {
   numberWords,
   promoteExtractedField,
   renderFieldsPage,
+  renderLeaseFilingPage,
   renderReadPage,
 } from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
@@ -419,6 +420,7 @@ describe('evidence · promote an extracted field', () => {
       /\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/fields/,
     );
     assert.match(read, /תחילת תקופת השכירות/);
+    assert.doesNotMatch(read, /מתוך/);
 
     const ledger = renderFieldsPage({
       nav: NAV,
@@ -466,6 +468,54 @@ describe('evidence · promote an extracted field', () => {
     // An unmapped field is capturable, listed, signable — and still has nowhere to be promoted to.
     assert.doesNotMatch(signed, /קדם · מספר הדירה/);
     assert.doesNotMatch(signed, /name="promoted_by"/);
+  });
+
+  it('says when the reading did not cover the whole file', () => {
+    const coverage = {
+      pageCount: 21,
+      pagesRead: 15,
+    };
+    const read = renderReadPage({
+      nav: NAV,
+      csrf: '',
+      documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      buildingId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      buildingName: 'בניין',
+      unitId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      typeKey: 'lease',
+      labelHe: 'חוזה שכירות',
+      fileHash: 'e'.repeat(64),
+      source: 'ocr',
+      mayReadIdentifiers: false,
+      pageText: null,
+      extracted: [],
+      ...coverage,
+    });
+    assert.match(read, /15 מתוך 21/);
+    const ledger = renderFieldsPage({
+      nav: NAV,
+      csrf: '',
+      documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      buildingId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      buildingName: 'בניין',
+      unitId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      labelHe: 'חוזה שכירות',
+      on: '2026-09-15',
+      rows: [],
+      unread: [],
+      mayReadIdentifiers: false,
+      mayApprove: false,
+      ...coverage,
+    });
+    assert.match(ledger, /15 מתוך 21/);
+    const filing = renderLeaseFilingPage({
+      nav: NAV,
+      csrf: '',
+      beat: 'read',
+      documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      ...coverage,
+    });
+    assert.match(filing, /15 מתוך 21/);
   });
 
   it('links an extracted value to the page it was read from', () => {

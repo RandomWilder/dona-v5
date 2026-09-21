@@ -7,6 +7,7 @@ import {
   createPdfjsText,
   type PdfTextItem,
   pageLines,
+  slicePdf,
 } from './pdf.ts';
 import { type SampleRun, samplePdf } from './pdf-sample.ts';
 
@@ -160,6 +161,25 @@ describe('pdf text', () => {
         ['3', true],
       ],
     );
+  });
+
+  it('cuts named pages into a thinner PDF, keeping their contents', async () => {
+    // #137: Document AI bounds the *request*. Selecting pages on the original
+    // file does not shrink it, so the caller cuts a slice before the processor
+    // sees the bytes. The thinner file is what the port is handed.
+    const source = samplePdf([
+      [textAt(100, 700, 'one')],
+      [textAt(100, 700, 'two')],
+      [textAt(100, 700, 'three')],
+    ]);
+    const slice = await slicePdf(source, [2, 3]);
+    const pages = await createPdfjsText().pages(slice);
+    assert.equal(pages.length, 2);
+    assert.deepEqual(
+      pages.map((page) => page.items[0]?.text),
+      ['two', 'three'],
+    );
+    assert.ok(slice.length < source.length);
   });
 
   it('returns no pages when the reader has not finished in time, rather than hanging', async () => {

@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { PDFDocument } from 'pdf-lib';
 import { KernelError } from './errors.ts';
 
 // PDF text, on the same footing as objects.ts: the shape of a document and no
@@ -63,6 +64,68 @@ export interface PdfTextOptions {
 }
 
 export const defaultPdfTimeoutMs = 8_000;
+
+/**
+ * **A thinner PDF of named pages, 1-based. #137.**
+ *
+ * The online processor bounds the *request*, and a raw file arrives base64-encoded, so selecting
+ * pages on the original scan does not make a large file fit. The caller cuts a slice of at most
+ * `onlineOcrPageLimit` pages and hands the port that file. Original page numbers are the caller's
+ * to stamp back on the words — this function only copies the pages.
+ */
+export async function slicePdf(
+  bytes: Buffer,
+  pages: readonly number[],
+): Promise<Buffer> {
+  if (pages.length === 0) {
+    throw new KernelError('invalid', 'a pdf slice needs at least one page');
+  }
+  let source: PDFDocument;
+  try {
+    source = await PDFDocument.load(bytes, { ignoreEncryption: true });
+  } catch (cause) {
+    throw new KernelError('invalid', 'the file could not be read as a PDF', {
+      reason: cause instanceof Error ? cause.message : 'unknown',
+    });
+  }
+  const count = source.getPageCount();
+  const indices = pages.map((number) => {
+    if (!Number.isInteger(number) || number < 1 || number > count) {
+      throw new KernelError('invalid', 'that page is not in the file', {
+        page: number,
+        pages: count,
+      });
+    }
+    return number - 1;
+  });
+  const out = await PDFDocument.create();
+  const copied = await out.copyPages(source, indices);
+  for (const page of copied) {
+    out.addPage(page);
+  }
+  return Buffer.from(await out.save());
+}
+
+/**
+ * Stamp the original page numbers onto a slice the processor numbered 1..n.
+ * A reply that already used the document's own numbers is left alone.
+ */
+export function stampOriginalPages(
+  pages: readonly PdfPage[],
+  original: readonly number[],
+): PdfPage[] {
+  if (original.length === 0) {
+    return [...pages];
+  }
+  const sequential = pages.every((page, at) => page.number === at + 1);
+  if (!sequential) {
+    return [...pages];
+  }
+  return pages.map((page, at) => ({
+    ...page,
+    number: original[at] ?? page.number,
+  }));
+}
 
 /**
  * A page's items, folded into the lines the reader marked. Slice 6.8.

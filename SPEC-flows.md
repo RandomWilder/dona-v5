@@ -545,11 +545,12 @@ none through this one, for a flow that had been working for two hours. A destina
 
 **Sequence:** read → resolve → file.
 
-1. The bytes are read once, in memory, under the bounds A1 already set — one file, 20 MB, four kinds
+1. The bytes are read once, in memory, under the bounds A1 already set — one file, 100 MB, four kinds
    sniffed from the bytes. The text is `documentText` over the pdf reader, and **OCR whenever that
    text does not satisfy the declared type's terms** and an OCR processor is configured (slice 6.8;
    until then it was *no text layer at all*, and a phone scanner's own layer therefore outranked
-   Document AI). A file too long for the online call is refused with a sentence that says so.
+   Document AI). A first slice the online reader still cannot carry is refused with a sentence that
+   says so.
 2. **A deterministic place reader** runs over that text — the analogue of A6's protocol reader, and
    deliberately the same kind of thing: no model, no `ExtractedField`, a pure function over a string.
    It returns an address, a city and an apartment number, or nulls.
@@ -748,9 +749,10 @@ stay on A1 / A12 / **מסמכים**.
 
 **Sequence.** Same laws as A12 and A15; different chrome.
 
-1. **המסמך.** Attach one file. Bounds unchanged: one file, 20 MB, four sniffed kinds; a scan the
-   online reader cannot carry (`onlineOcrByteLimit`) is refused with a sentence and writes nothing.
-   A later issue owns larger scans. Wrong file for a lease: same tab, attach again.
+1. **המסמך.** Attach one file. Bounds: one file, **100 MB**, four sniffed kinds. OCR is a
+   fifteen-page slice, not the whole scan (#137). A first slice the online reader still cannot
+   carry is refused with a sentence and writes nothing. Wrong file for a lease: same tab, attach
+   again.
 2. **הדירה — same step as the file.** Bytes are read in memory; nothing is held between read and
    file. A deterministic place reader returns street, city, apartment. **Exact one Unit:** show it
    (*we read … → this Unit*); Continue then files through `fileDocument`. **Zero, several, nothing

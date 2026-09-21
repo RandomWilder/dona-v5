@@ -414,6 +414,34 @@ describe('E12 · document — one file, hashed at ingest (R17)', () => {
     });
   });
 
+  it('records how many pages were read of how many', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const documentTypeId = await seedType(db, { name: 'pages-read' });
+      const documentId = await seedDocument(
+        db,
+        documentTypeId,
+        `${BLOCK}-pages-read-hash`,
+      );
+      await db.query(
+        `UPDATE document SET page_count = 21, pages_read = 15 WHERE document_id = $1`,
+        [documentId],
+      );
+      const row = await db.query<{ page_count: number; pages_read: number }>(
+        `SELECT page_count, pages_read FROM document WHERE document_id = $1`,
+        [documentId],
+      );
+      assert.equal(row.rows[0]?.page_count, 21);
+      assert.equal(row.rows[0]?.pages_read, 15);
+      await rejects(db, CHECK_VIOLATION, () =>
+        db.query(
+          `UPDATE document SET page_count = 10, pages_read = 15 WHERE document_id = $1`,
+          [documentId],
+        ),
+      );
+    });
+  });
+
   it('keeps file_hash and storage_uri immutable after ingest', async (t) => {
     if (!pool) return t.skip(skipReason);
     await inRolledBackTransaction(pool, async (db) => {

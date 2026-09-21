@@ -3,7 +3,7 @@
 //
 // Every route before this one was a read. SPEC-evidence.md, "The first write route in this system,
 // and what bounds it", is where these bounds are set out
-// and argued; they are applied here: one file, 20 MB, four kinds sniffed from the bytes, no filename
+// and argued; they are applied here: one file, 100 MB, four kinds sniffed from the bytes, no filename
 // kept, and nothing personal in the response.
 //
 // **There is no CSRF token, and that is not an omission.** A CSRF token defends a session's
@@ -49,6 +49,16 @@ import {
 
 const PAGE_NUMBER = /^[1-9]\d*$/;
 
+function pageCoverage(filed: {
+  pageCount: number | null;
+  pagesRead: number | null;
+}): { pageCount: number; pagesRead: number } | Record<string, never> {
+  if (filed.pageCount == null || filed.pagesRead == null) {
+    return {};
+  }
+  return { pageCount: filed.pageCount, pagesRead: filed.pagesRead };
+}
+
 /** 0-based index into the reader's pages. Missing → 0. Out of range clamps. Garbage is invalid. */
 function pageIndex(asked: unknown, pageCount: number): number {
   if (asked === undefined || asked === '') {
@@ -82,11 +92,12 @@ import {
 } from './catalogue.ts';
 import { anchorOf, getFiledDocument } from './documents.ts';
 import {
+  EXTRACT_WORK_KIND,
   type ExtractedRow,
   isIdentifierField,
   listExtractedFields,
 } from './extract.ts';
-import { fileDocument, findDocumentByHash } from './intake.ts';
+import { fileDocument, findDocumentByHash, runExtractWork } from './intake.ts';
 import {
   confirmLeaseTenancy,
   establishApprovedLease,
@@ -157,15 +168,15 @@ export interface DocumentDeps {
 /**
  * One file, and it may not be a large one.
  *
- * A lease is a few hundred kilobytes and a scanned one a few megabytes; twenty is generous and is
- * chosen as a bound on a runaway rather than as a budget, which is `kernel/extraction.ts`'s
- * reasoning about its own timeout. `fields` and `fieldSize` are bounded for the same reason. From
- * 5.2 the caller is authenticated and bounded too, and these stay: they bound one request, and an
- * operator can post a runaway by accident as easily as a stranger could on purpose.
+ * A lease is a few hundred kilobytes and a scanned one a few megabytes; one hundred is the scan
+ * ceiling (#137), a bound on a runaway rather than a processor limit. OCR sees only a fifteen-page
+ * slice. `fields` and `fieldSize` are bounded for the same reason. From 5.2 the caller is
+ * authenticated and bounded too, and these stay: they bound one request, and an operator can post a
+ * runaway by accident as easily as a stranger could on purpose.
  */
 const LIMITS = {
   files: 1,
-  fileSize: 20 * 1024 * 1024,
+  fileSize: 100 * 1024 * 1024,
   fields: 40,
   fieldSize: 200,
 };
@@ -175,7 +186,7 @@ const LIMITS = {
  *
  * `LIMITS` above bounds a request; this bounds an operator. Nothing bounded one until 5.2, because
  * until 5.2 there was no operator to bound — an anonymous poster could fill a versioned bucket this
- * application is deliberately unable to empty (slice 3.2), one legal 20 MB request at a time.
+ * application is deliberately unable to empty (slice 3.2), one legal 100 MB request at a time.
  *
  * **Fifty a day, per operator.** A person filing paper for 1,500 units files a handful in a day and
  * a bad afternoon is a dozen; fifty is chosen as the bound on a runaway rather than as a budget,
@@ -498,6 +509,11 @@ export function registerDocumentRoutes(
   deps: DocumentDeps,
 ): void {
   app.register(multipart, { limits: LIMITS });
+  if (deps.work) {
+    deps.work.register(EXTRACT_WORK_KIND, async (payload) => {
+      await runExtractWork(await filingDeps(deps), payload);
+    });
+  }
 
   // **The tab's landing. Slice 7.1.**
   //
@@ -593,7 +609,7 @@ export function registerDocumentRoutes(
     request: FastifyRequest,
     documentId: string,
   ): Promise<Omit<LeaseFilingScreen, 'nav' | 'csrf'>> => {
-    await getFiledDocument(deps.pool, documentId);
+    const filed = await getFiledDocument(deps.pool, documentId);
     const anchor = await anchorOf(deps.pool, documentId);
     if (anchor.kind !== 'UNIT') {
       throw new KernelError('not_found', 'document not found');
@@ -641,6 +657,7 @@ export function registerDocumentRoutes(
       unit,
       rows,
       mayApprove: can(request.staff?.role ?? null, 'documents.write'),
+      ...pageCoverage(filed),
       ...(clash ? { conflictTenancyId: clash } : {}),
     };
   };
@@ -1135,7 +1152,7 @@ export function registerDocumentRoutes(
     //
     // It is checked *after* the parts are read and *before* anything is written, which is the only
     // order available: the field arrives inside the thing being defended. The bytes are held in
-    // memory and bounded at 20 MB by `LIMITS`, so a forged post costs a bounded read and no row.
+    // memory and bounded at 100 MB by `LIMITS`, so a forged post costs a bounded read and no row.
     verifyCsrf(sessionTokenOf(request), fields[CSRF_FIELD]);
     // The caller, bounded, before the type lookup and before a single object is written.
     const operator = requireOperator(request);
@@ -1489,6 +1506,7 @@ export function registerDocumentRoutes(
           pageText,
           extracted,
           mayReadIdentifiers: identifiers,
+          ...pageCoverage(await getFiledDocument(deps.pool, documentId)),
         });
       }
       if (anchor.kind === 'BUILDING') {
@@ -1507,6 +1525,7 @@ export function registerDocumentRoutes(
           pageText,
           extracted,
           mayReadIdentifiers: identifiers,
+          ...pageCoverage(await getFiledDocument(deps.pool, documentId)),
         });
       }
       throw new KernelError('not_found', 'document not found');
@@ -1550,6 +1569,7 @@ export function registerDocumentRoutes(
       unread,
       mayReadIdentifiers: mayReadIdentifiers(request),
       mayApprove: can(request.staff?.role ?? null, 'documents.write'),
+      ...pageCoverage(filed),
       ...extra,
     };
     if (anchor.kind === 'UNIT') {
