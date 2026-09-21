@@ -1283,20 +1283,35 @@ the way the floors are set.
 It says *count* rather than *which*, and that was decided by measurement rather than by preference.
 The first design named the contradictions the baseline found and failed anything new, which is the
 obvious reading of *a value returned with a confident citation that disagrees with the fixture is a
-failure*. **Five runs of one reader over one capture of each specimen produced eight distinct
-contradictions, five of them appearing exactly once.** At `reasoning: none` this reader is not
-deterministic, and a gate keyed on which value it invented would have been red on nearly every run
-while telling nobody anything. A ceiling holds the line that matters — a change that makes the reader
-invent more than it invents today fails, whichever values it invents — and survives the jitter.
+failure*. **Fourteen runs of one reader over one capture of each specimen produced nine distinct
+contradictions, none of them in every run.** At `reasoning: none` this reader is not deterministic,
+and a gate keyed on which value it invented would have been red on nearly every run while telling
+nobody anything. A ceiling holds the line that matters — a change that makes the reader invent more
+than it invents today fails, whichever values it invents — and survives the jitter.
 
 **The jitter is the baseline's main finding**, ahead of any of its percentages. Required-field
-accuracy spread 12.5 points across those five runs and optional-field accuracy 16.7, on identical
-input. It follows that **no single run of this gate is evidence of anything**, and that the reading
-changes below are to be judged over at least five runs each: a one-run improvement inside a spread
-this wide is a coin landing the way somebody hoped. It also follows that the floors sit a graded
-value below the *worst* run rather than at the mean — `evals/measure.ts` makes exactly this argument
-about a rank inside the embedder's own run-to-run jitter, and a floor half the runs fall through is
-a coin flip rather than a gate.
+accuracy ranged 68.8% to 81.3% across those runs and optional-field accuracy 58.3% to 75.0%, on
+identical input. It follows that **no single run of this gate is evidence of anything**, and that the
+reading changes below are to be judged over at least eight runs each: a one-run improvement inside a
+spread this wide is a coin landing the way somebody hoped.
+
+**A bound is set with headroom above the worst run, never at it.** The floors sit a graded value
+below the lowest observed and the ceiling sits two above the highest, and that asymmetry was paid
+for: the ceiling was first set at the worst of five runs, and the sixth run walked through it. A
+bound at the edge of a sample is a bound the next sample breaks, and a gate that cries wolf on
+ordinary variation is a gate somebody switches off — which is the same reason the accuracy bar is a
+ratchet rather than the spec's 95%. `evals/measure.ts` makes this argument about a rank inside the
+embedder's own run-to-run jitter; it holds here with a wider spread and less excuse for ignoring it.
+
+**The optional-field figure is bimodal and the mechanism is known**, which is why it is quoted as two
+values rather than as a range. It is 75.0% when the second specimen's two credited absences are
+credited and 58.3% when they are not, with nothing between, because those two units are the whole
+difference. **The reader invents a guarantor there in roughly half of all runs**, taking the second
+*tenant* and her ת.ז. and filing them as guarantor and guarantor identifier — on the one specimen
+whose correct answer is that no guarantor exists. That is not jitter around a correct reading; it is
+the failure the credited-absence rule was written to make visible, occurring at a rate that a scorer
+crediting absences by inspection would never have found. It is the sharpest thing the first baseline
+learned about the reader, and #131's declaration of the household by role is what should move it.
 
 **Both specimens are read once, not per run.** Neither carries a text layer worth the name — the
 first is a flatbed scan with no text at all and the second a phone scan whose only item per page is

@@ -133,3 +133,47 @@ limit rather than leaving it to be found in a green build.
 
 Reading every page of both specimens raised a defect in the live path that is not this ticket's:
 see #137.
+
+## Comment — 2026-09-21 (correction)
+
+**The ceiling in the comment above was wrong, and a run on the director's machine found it within an
+hour.** It was set at 4, the worst of the five runs recorded there. The next run returned 5 and the
+gate went red on a reader nobody had touched. Nine further runs put the count between 2 and 5 across
+fourteen in total, and the ratchet now reads 7.
+
+The lesson is not the number. It is that **a bound set at the edge of its sample is a bound the next
+sample walks through**, and that I applied *no single run is evidence of anything* to the reader's
+accuracy in the comment above while setting my own threshold from the extreme of a five-run sample in
+the same breath. A floor gets a graded value of headroom below the worst run and a ceiling gets two
+above the highest; five runs is enough to see a spread and not enough to bound one. Re-measure over
+at least eight.
+
+**Corrected figures, fourteen runs, same reader, same captures, `reasoning: none`.**
+
+| | range |
+|---|---|
+| required | 68.8% – 81.3% (11/16 – 13/16) |
+| optional | **58.3% or 75.0%, nothing between** |
+| contradictions | 2 – 5, nine distinct, none in every run |
+
+**The optional figure is bimodal, and finding out why is the most useful thing this baseline has
+produced.** The two values are exactly two graded units apart, and those two units are
+`bloch-206-7`'s credited absences. **The reader invents a guarantor there in roughly half of all
+runs** — `guarantor_id_number=204893143` in 5 of the last 8, `guarantor_name=דבורה בלאך` in 5 of 8
+across its two spellings. Both are lifted from the second *tenant*: דבורה בלאך is a signatory, her
+ת.ז. is `204893143`, and the document names no guarantor at all because the election on PDF page 1
+bought the guarantors out with a third month of deposit.
+
+So the specimen chosen to prove that a correct nothing scores as right is the specimen where the
+reader most often returns something, and the two facts the fixture records about it — *zero
+guarantors is the correct answer* and *the tenancy is complete* — are both contradicted by the live
+reader about half the time. The earlier comment reported this as a once-in-five curiosity. It is not;
+it is the reader's normal behaviour on that document, and the first sample was lucky.
+
+This sharpens what #131 is for. Declaring the household by role is described in the proposal as
+solving identifier *pairing*; on this evidence it is also the only thing that distinguishes a
+signatory from a guarantor, and the number to watch when it lands is optional-field accuracy
+collapsing to a single value rather than two.
+
+Nothing else in the comment above changes: the floors held in all fourteen runs, the four identities
+still report `unreachable`, and the thirty-one undeclared values are unmoved.
