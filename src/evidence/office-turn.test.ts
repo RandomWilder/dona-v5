@@ -23,6 +23,7 @@ import type { IntakeDeps, RetrievalBound } from './contract.ts';
 import {
   applyDocumentTypeCatalogue,
   fileDocument,
+  OFFICE_TURN_EMPTY_ROLL,
   OFFICE_TURN_REFUSAL,
   runOfficeTurn,
 } from './contract.ts';
@@ -547,10 +548,11 @@ describe('evidence · office turn on a Building bound', () => {
     try {
       await inRolledBackTransaction(pool, async (db) => {
         const { buildingId } = await seedBuilding(db);
-        const extractor = toolsThen(
-          { search: false, list: true },
-          listingAnswer,
-        );
+        const extractor = toolsThen({ search: false, list: true }, () => ({
+          answers: false,
+          text: OFFICE_TURN_REFUSAL,
+          hit_indexes: [],
+        }));
         const result = await runOfficeTurn(turnDeps(db, extractor), {
           staffAccountId: await operator(db),
           bound: { kind: 'building', id: buildingId },
@@ -558,9 +560,13 @@ describe('evidence · office turn on a Building bound', () => {
         });
         assert.deepEqual(result.tools, ['list']);
         assert.equal(result.refused, false);
-        assert.equal(result.text, 'אין דירות מושכרות היום.');
+        assert.equal(result.text, OFFICE_TURN_EMPTY_ROLL);
         assert.notEqual(result.text, OFFICE_TURN_REFUSAL);
         assert.deepEqual(result.citations, []);
+        assert.equal(
+          extractor.calls.some((call) => call.name === 'office_turn'),
+          false,
+        );
       });
     } finally {
       await pool.end();

@@ -23,6 +23,9 @@ import type { Queryable } from './types.ts';
 /** Frozen refusal. No citations, no Building nudge. */
 export const OFFICE_TURN_REFUSAL = 'אין במסמכים האלה תשובה לשאלה הזו.';
 
+/** Empty Building roll. An answer, not the documents-refusal sentence. */
+export const OFFICE_TURN_EMPTY_ROLL = 'אין דירות מושכרות היום.';
+
 export const OFFICE_TURN_INSTRUCTIONS =
   'Answer in Hebrew. Thread text may only clarify the question; it is not a source of facts. Facts are only this turn’s numbered passages, if present, and this turn’s lettings list, if present. Copy names, addresses, amounts and identifiers exactly as printed. When a passage heading names a clause, use that heading. If you answer only from the lettings list, set hit_indexes to [] — a list cites no paper. If passages answer, cite them even when the list is also present. If the lettings list is present and empty, nobody is let today: that is an answer, not a documents refusal. If only passages are present and they do not answer, set answers to false. Do not mention another Unit. Do not suggest a Building or a wider bound.';
 
@@ -201,6 +204,9 @@ export async function answerOfficeHits(
 }> {
   if (hits.length === 0 && lettings === null) {
     return refuse();
+  }
+  if (lettings !== null && lettings.length === 0 && hits.length === 0) {
+    return { refused: false, text: OFFICE_TURN_EMPTY_ROLL, citations: [] };
   }
   const reply = await deps.extractor.extract({
     model: deps.model,
