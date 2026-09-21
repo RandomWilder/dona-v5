@@ -91,3 +91,18 @@ retrieval-ranking cases, which `evals/corpus.ts` skips without an `OPENAI_API_KE
 `neighbour-unit-absent`, the case nearest this change. They were not graded here. A bound change is
 retrieval configuration, so the five want a keyed run before this behaviour reaches a tenant route.
 There is no tenant route yet, which is why the door was closed before the room was built.
+
+## Comment — 2026-09-21, the keyed run
+
+The run above wanted a key and has now had one. Against the real provider — 86 passages indexed
+through `openai:text-embedding-3-large@1536`, and the behavioural cases answered by the office turn
+rather than by the harness stub — the golden set is **10 of 10 passed, 0 failed, 0 skipped**.
+`neighbour-unit-absent`, the case nearest this change, is green on a graded run and not on a skipped
+one. The caveat this comment was left open for is discharged.
+
+Two things the earlier paragraph got wrong, recorded here rather than silently corrected. The five
+that "passed" unkeyed passed against `placeholderSubject`, a stub returning fixed strings, so the
+honest count for an unkeyed run is not five graded and five skipped — it is nothing graded at all.
+And the local golden set has no equivalent of CI's `REQUIRE_EMBEDDINGS=1`: absent a key it reports a
+pass count instead of saying it measured nothing. That is a defect in the harness rather than in
+this change, and it belongs in an issue of its own.
