@@ -140,6 +140,7 @@ export {
   chooseOfficeTools,
   listOfficeLettings,
   OFFICE_TOOLS_INSTRUCTIONS,
+  OFFICE_TURN_EMPTY_ROLL,
   OFFICE_TURN_INSTRUCTIONS,
   OFFICE_TURN_REFUSAL,
   offeredOfficeTools,

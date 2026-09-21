@@ -19,6 +19,7 @@ import { fixedClock } from '../kernel/clock.ts';
 import { embeddingColumnDimensions } from '../kernel/config.ts';
 import { createFakeEmbedder } from '../kernel/embeddings.ts';
 import { KernelError } from '../kernel/errors.ts';
+import { createFakeExtractor } from '../kernel/extraction.ts';
 import { newId } from '../kernel/ids.ts';
 import { createMemoryStore, type ObjectStore } from '../kernel/objects.ts';
 import {
@@ -34,6 +35,7 @@ import {
   migratedPoolOrNull,
   skipReason,
 } from '../kernel/pg-support.ts';
+import { createWorkRunner } from '../kernel/work.ts';
 import type { IntakeDeps } from './contract.ts';
 import {
   applyDocumentTypeCatalogue,
@@ -89,6 +91,8 @@ function deps(
     ocr?: OcrText;
     objects?: ObjectStore;
     embedder?: IntakeDeps['embedder'];
+    extractor?: IntakeDeps['extractor'];
+    work?: IntakeDeps['work'];
   } = {},
 ): IntakeDeps {
   return {
@@ -98,6 +102,9 @@ function deps(
     ocr: extra.ocr,
     ocrVersion: extra.ocr ? defaultOcrProcessorVersion : undefined,
     embedder: extra.embedder,
+    extractor: extra.extractor,
+    extractModel: extra.extractor ? 'gpt-test' : undefined,
+    work: extra.work,
     audit: createAuditLog(db, fixedClock(AT)),
     clock: fixedClock(AT),
     bucket: BUCKET,
@@ -614,7 +621,7 @@ describe('evidence · filing a declared document', () => {
             // answers both questions being asked: what kind of document is this, and where does it
             // belong. `pagesRead` is what keeps `verified` honest about how much was read.
             const unitId = newId();
-            let asked: readonly number[] | undefined;
+            const asked: Array<readonly number[] | undefined> = [];
             const reader = createFakeOcrText([
               specimen('lease-standard.md'),
               ...Array.from(
@@ -625,7 +632,7 @@ describe('evidence · filing a declared document', () => {
             const ocr: OcrText = {
               describe: () => 'fake',
               pages: async (bytes, mime, version, pages) => {
-                asked = pages;
+                asked.push(pages);
                 return reader.pages(bytes, mime, version, pages);
               },
             };
@@ -643,14 +650,101 @@ describe('evidence · filing a declared document', () => {
             if (!result.filed) return;
             assert.equal(result.verification.verdict, 'verified');
             assert.deepEqual(
-              asked,
+              asked[0],
               Array.from({ length: onlineOcrPageLimit }, (_, at) => at + 1),
               'the first fifteen pages, by their own numbers',
+            );
+            assert.deepEqual(
+              asked[1],
+              [16, 17, 18, 19, 20, 21],
+              'the rest, in one further chunk, after the verdict',
             );
             const lines = await auditLines(db, unitId);
             assert.equal(lines[0]?.inputs.ocr, 'partial');
             assert.equal(lines[0]?.inputs.pages, onlineOcrPageLimit + 6);
             assert.equal(lines[0]?.inputs.pagesRead, onlineOcrPageLimit);
+            const coverage = await db.query<{
+              page_count: number;
+              pages_read: number;
+            }>(
+              `SELECT page_count, pages_read FROM document WHERE document_id = $1`,
+              [result.documentId],
+            );
+            assert.equal(coverage.rows[0]?.page_count, onlineOcrPageLimit + 6);
+            assert.equal(coverage.rows[0]?.pages_read, onlineOcrPageLimit + 6);
+          });
+        },
+      );
+
+      await t.test(
+        'does not extract a long scan on the upload, and hands the rest to the work item',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+            const unitId = newId();
+            const wordPages: number[] = [];
+            const extractor = createFakeExtractor((request) => {
+              const body = JSON.parse(request.input) as {
+                words: Array<{ page: number }>;
+              };
+              const seen = [...new Set(body.words.map((word) => word.page))];
+              wordPages.length = 0;
+              wordPages.push(...seen);
+              return { findings: [] };
+            });
+            const long = Array.from(
+              { length: onlineOcrPageLimit + 6 },
+              (_, at) => `עמוד ${at + 1} של סריקה ארוכה ללא שכבת טקסט שמישה`,
+            );
+            const work = createWorkRunner(db, { clock: fixedClock(AT) });
+            const result = await fileDocument(
+              deps(db, long, {
+                ocr: createFakeOcrText([
+                  specimen('lease-standard.md'),
+                  ...Array.from(
+                    { length: onlineOcrPageLimit + 5 },
+                    (_, at) => `נספח ${at + 1}`,
+                  ),
+                ]),
+                extractor,
+                embedder: createFakeEmbedder(embeddingColumnDimensions),
+                work,
+              }),
+              {
+                bytes: pdfBytes('a long phone scan queued'),
+                typeKey: 'lease',
+                place: { kind: 'UNIT', id: unitId },
+                tenancyId: null,
+              },
+            );
+            assert.equal(result.filed, true);
+            if (!result.filed) return;
+            assert.equal(wordPages.length, 0, 'the upload did not extract');
+            assert.equal(
+              (await listDocumentPassages(db, result.documentId)).length,
+              0,
+              'the upload did not write passages',
+            );
+            const waiting = await db.query<{
+              pages_read: number;
+              page_count: number;
+            }>(
+              `SELECT pages_read, page_count FROM document WHERE document_id = $1`,
+              [result.documentId],
+            );
+            assert.equal(waiting.rows[0]?.pages_read, onlineOcrPageLimit);
+            assert.equal(waiting.rows[0]?.page_count, onlineOcrPageLimit + 6);
+            await work.tick();
+            assert.ok(wordPages.includes(onlineOcrPageLimit + 6));
+            const passages = await listDocumentPassages(db, result.documentId);
+            assert.ok(
+              passages.some((row) => row.page === onlineOcrPageLimit + 6),
+            );
+            const done = await db.query<{ pages_read: number }>(
+              `SELECT pages_read FROM document WHERE document_id = $1`,
+              [result.documentId],
+            );
+            assert.equal(done.rows[0]?.pages_read, onlineOcrPageLimit + 6);
           });
         },
       );
@@ -660,10 +754,10 @@ describe('evidence · filing a declared document', () => {
         async () => {
           await inRolledBackTransaction(pool, async (db) => {
             await applyDocumentTypeCatalogue(db, seedDocumentTypes);
-            // Size, not length. The bound is on the *request* and the whole file rides in every
-            // one of them, so selecting fewer pages does not make a large file fit — there is no
-            // reading to be had at any page count. Filing it would write a verdict about a document
-            // nobody has seen a page of, so it is refused and nothing is written.
+            // Size, not length. After #137 the bound is on the *slice*. A first slice that still
+            // will not fit is refused, because filing it would write a verdict about pages nobody
+            // sent. This fixture is not a PDF pdf-lib can cut, so the slice is the whole file and
+            // the same refusal fires.
             const unitId = newId();
             let called = 0;
             const ocr: OcrText = {

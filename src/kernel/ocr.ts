@@ -25,14 +25,12 @@ export interface OcrText {
     mimeType: string,
     processorVersion: string,
     /**
-     * **Which pages, 1-based, when not all of them. Slice 6.8.**
+     * **Which original page numbers this slice is, 1-based. Slice 6.8, restated at #137.**
      *
-     * The online processor takes `onlineOcrPageLimit` pages per call, and until 6.8 a longer
-     * document was simply not sent — so the week-6 demo's 38-page lease was never read at all and
-     * the row was filed as though somebody had looked. `individualPageSelector` is the way through,
-     * and it was measured before it was written: that same file, pages 1-15 selected, came back
-     * `200` with fifteen pages in 36.4 seconds. Absent means the whole document, which is every
-     * caller inside the limit.
+     * The caller cuts a PDF of at most `onlineOcrPageLimit` pages before this port sees it. The
+     * numbers name those pages in the original file so a citation still points at the page a
+     * person counts to. The fake honours them as a filter over its fixture. The live adapter
+     * does not send a page selector: the bytes already *are* the slice.
      */
     pages?: readonly number[],
   ): Promise<OcrResult>;
@@ -69,13 +67,13 @@ export const onlineOcrPageLimit = 15;
  *
  * Document AI bounds the *request*, not the document, at 20 MiB — and a raw document arrives base64
  * encoded, which is four bytes for every three. So the ceiling on the file itself is three quarters
- * of that, and a document above it cannot be read online at any page count: selecting fifteen pages
- * does not make the request smaller, because the whole file is still what gets sent.
+ * of that, and a **slice** above it cannot be read. Selecting fifteen pages of the original scan
+ * does not make the request smaller, because the whole file would still be what gets sent — which
+ * is why #137 cuts the PDF first. A 100 MB scan is stored; a fifteen-page slice that still will
+ * not fit is `too_large`.
  *
  * The demo's 15.6 MB lease encodes to 19.8 MB and goes through with a little room to spare, which is
- * the measurement this constant is set from. `LIMITS.fileSize` on the upload route is 20 MiB, so
- * there is a band between the two where a file is storable and not readable — and that band is a
- * refusal with a sentence rather than a row that claims to have been read.
+ * the measurement this constant is set from.
  */
 export const onlineOcrByteLimit = 15 * 1024 * 1024;
 
@@ -130,7 +128,7 @@ export function createDocumentAiOcr(options: DocumentAiOcrOptions): OcrText {
     });
 
   return {
-    async pages(bytes, mimeType, processorVersion, pages) {
+    async pages(bytes, mimeType, processorVersion, _pages) {
       const name = `projects/${project}/locations/${location}/processors/${processorId}/processorVersions/${processorVersion}`;
       const url = `${host}/v1/${name}:process`;
       let response: Response;
@@ -150,11 +148,8 @@ export function createDocumentAiOcr(options: DocumentAiOcrOptions): OcrText {
             },
             processOptions: {
               ocrConfig: { hints: { languageHints: ['iw'] } },
-              // Absent for a document inside the limit, so the ordinary call is the call it always
-              // was. Present only when the caller has chosen, which it does for a long document.
-              ...(pages && pages.length > 0
-                ? { individualPageSelector: { pages: [...pages] } }
-                : {}),
+              // #137: the bytes already are the slice. A page selector on the original file
+              // would send the original file.
             },
           }),
           signal: AbortSignal.timeout(timeoutMs),

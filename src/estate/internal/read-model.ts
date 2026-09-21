@@ -532,6 +532,47 @@ export async function listUnitParkingAssets(
   return result.rows;
 }
 
+export interface ApprovedCapture {
+  documentId: string;
+  labelHe: string;
+  value: string;
+  page: number;
+}
+
+/**
+ * Approved captures on paper bound to this letting. #134.
+ *
+ * Display and citation only: the list is every stamped row that is *not* a promotion target.
+ * Those copies already live on `tenancy`. Unapproved rows stay off the list. Two approved rows of
+ * one declaration stay two rows — picking a winner would be a comparison, which this read does
+ * not do.
+ */
+export async function listApprovedCapturesForTenancy(
+  db: Queryable,
+  tenancyId: string,
+): Promise<ApprovedCapture[]> {
+  const result = await db.query<ApprovedCapture>(
+    `SELECT e.document_id AS "documentId",
+            f.label_he AS "labelHe",
+            e.approved_value AS value,
+            e.page
+       FROM extracted_field e
+       JOIN document_type_field f
+         ON f.document_type_field_id = e.document_type_field_id
+       LEFT JOIN field_promotion p
+         ON p.document_type_field_id = e.document_type_field_id
+      WHERE e.approved_at IS NOT NULL
+        AND p.target IS NULL
+        AND e.document_id IN (
+          SELECT document_id FROM document_link
+           WHERE entity_type = 'TENANCY' AND entity_id = $1
+        )
+      ORDER BY f.field_key, e.extracted_field_id`,
+    [tenancyId],
+  );
+  return result.rows;
+}
+
 /** The strings `npm run measure:scale` explains, so the instrument reads what the screen runs. */
 export const MEASURED_QUERIES = {
   'estate · buildings list': LIST_BUILDINGS_SQL,

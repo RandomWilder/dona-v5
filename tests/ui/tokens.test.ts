@@ -615,6 +615,9 @@ const SCREENS: Array<[string, () => string]> = [
         status: 'DRAFT',
         startDate: '2026-11-01',
         endDate: '2027-10-31',
+        rentAmount: null,
+        rentCurrency: null,
+        optionEndDate: null,
         unit: hit,
         people: [
           {
@@ -629,6 +632,7 @@ const SCREENS: Array<[string, () => string]> = [
           },
         ],
         documents: [filed],
+        captures: [],
         checks: [
           { rule: 'lease', passed: true },
           { rule: 'handover_protocol', passed: false },
@@ -650,6 +654,9 @@ const SCREENS: Array<[string, () => string]> = [
         status: 'DRAFT',
         startDate: '2026-11-01',
         endDate: '2027-10-31',
+        rentAmount: null,
+        rentCurrency: null,
+        optionEndDate: null,
         unit: hit,
         people: [
           {
@@ -667,6 +674,7 @@ const SCREENS: Array<[string, () => string]> = [
             labelHe: 'פרוטוקול מסירה',
           },
         ],
+        captures: [],
         checks: [
           { rule: 'lease', passed: true },
           { rule: 'handover_protocol', passed: true },
@@ -688,6 +696,9 @@ const SCREENS: Array<[string, () => string]> = [
         status: 'DRAFT',
         startDate: '2026-09-01',
         endDate: '2027-08-31',
+        rentAmount: '4500',
+        rentCurrency: 'ILS',
+        optionEndDate: '2028-08-31',
         unit: hit,
         people: [
           {
@@ -703,6 +714,14 @@ const SCREENS: Array<[string, () => string]> = [
             documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab',
             typeKey: 'handover_protocol',
             labelHe: 'פרוטוקול מסירה',
+          },
+        ],
+        captures: [
+          {
+            documentId: filed.documentId,
+            labelHe: 'סכום הפיקדון',
+            value: '12000',
+            page: 3,
           },
         ],
         checks: [
@@ -1066,11 +1085,53 @@ const SCREENS: Array<[string, () => string]> = [
             0.96,
           ),
           reading(
+            'dddddddd-0000-4000-8000-000000000008',
+            'option_end_date',
+            'סיום תקופת האופציה',
+            '2031-10-31',
+            0.9,
+          ),
+          reading(
+            'dddddddd-0000-4000-8000-000000000003',
+            'rent_amount',
+            'דמי שכירות חודשיים',
+            '4500',
+            0.91,
+          ),
+          reading(
+            'dddddddd-0000-4000-8000-000000000004',
+            'rent_amount',
+            'דמי שכירות חודשיים',
+            '4600',
+            0.88,
+          ),
+          reading(
             'dddddddd-0000-4000-8000-000000000002',
             'tenant_name',
             'שם השוכר',
             TENANT_NAME,
             0.9,
+          ),
+          reading(
+            'dddddddd-0000-4000-8000-000000000006',
+            'main_tenant_name',
+            'שם השוכר הראשי',
+            TENANT_NAME,
+            0.93,
+          ),
+          reading(
+            'dddddddd-0000-4000-8000-000000000007',
+            'main_tenant_id_number',
+            'מזהה השוכר הראשי',
+            READ_IDENTIFIER,
+            0.94,
+          ),
+          reading(
+            'dddddddd-0000-4000-8000-000000000005',
+            'apartment_number',
+            'מספר הדירה',
+            '9',
+            0.95,
           ),
         ],
       }),
@@ -2257,6 +2318,10 @@ describe('shared UI tokens', () => {
       // because somebody asked for that row rather than because they opened a screen. The ruling is
       // in SPEC-evidence.md, "Approving an identifier", written before this line was.
       'documents · field approval, one identifier revealed',
+      // **#133.** Beat 3 of תיוק חוזה is the administrator stance throughout: identifiers as
+      // printed, no reveal, no tenant route. Adding a later tenant route that inherits this
+      // rendering is the leak #125 owns.
+      'documents · lease filing, thin reading',
     ];
     let exercised = 0;
     for (const [name, render] of SCREENS) {
@@ -2328,6 +2393,53 @@ describe('shared UI tokens', () => {
       assert.deepEqual(names, [], name);
     }
     assert.equal(exercised, MAY_TRANSCRIBE_NAMES.length);
+  });
+
+  it('reads the declared set on הקריאה, grouped in the view', () => {
+    // #133. Beat 3 is still one row per value and one אישור; what widened is which rows it
+    // paints. Grouping is the screen's, not a catalogue column. A missing currency is marked and
+    // still approvable. Two captures of one declaration are two rows. Identifiers as printed.
+    const html = SCREENS.find(
+      ([name]) => name === 'documents · lease filing, thin reading',
+    )?.[1]();
+    assert.ok(html);
+    const heading = (label: string): number => {
+      const match = html.match(
+        new RegExp(`<th class="group"[^>]*>${label}</th>`),
+      );
+      return match ? html.indexOf(match[0]) : -1;
+    };
+    const dates = heading('תאריכים');
+    const money = heading('כסף');
+    const people = heading('אנשים');
+    const place = heading('מקום');
+    assert.ok(dates >= 0, 'dates group');
+    assert.ok(money > dates, 'money after dates');
+    assert.ok(people > money, 'people after money');
+    assert.ok(place > people, 'place after people');
+    assert.match(html, /דמי שכירות חודשיים/);
+    assert.match(html, /סיום תקופת האופציה/);
+    assert.match(html, /מספר הדירה/);
+    assert.match(html, /שם השוכר הראשי/);
+    assert.match(html, /שוכר ראשי/);
+    assert.doesNotMatch(html, /שייך את המזהה|לשייך מזהה/);
+    assert.match(html, /חסר מטבע/);
+    assert.match(html, /4500/);
+    assert.match(html, /4600/);
+    assert.equal(
+      (html.match(/name="approved_value" value="4500"/g) ?? []).length,
+      1,
+    );
+    assert.equal(
+      (html.match(/name="approved_value" value="4600"/g) ?? []).length,
+      1,
+    );
+    assert.match(html, new RegExp(READ_IDENTIFIER));
+    assert.doesNotMatch(html, /גילוי/);
+    assert.doesNotMatch(html, /אישור כל מה שלא סומן/);
+    assert.doesNotMatch(html, />קדם/);
+    assert.doesNotMatch(html, /\/fields\/reveal/);
+    assert.doesNotMatch(html, /\/fields\/promote/);
   });
 
   it('withholds a captured identifier, and says how many it withheld', () => {

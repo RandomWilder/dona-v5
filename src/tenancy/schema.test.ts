@@ -490,6 +490,9 @@ describe('tenancy · the rest of the schema', () => {
             'actual_move_out',
             'end_date',
             'notice_date',
+            'option_end_date',
+            'rent_amount',
+            'rent_currency',
             'start_date',
             'status',
             'tenancy_id',
@@ -512,9 +515,9 @@ describe('tenancy · the rest of the schema', () => {
       // **There was a money case here, and it is deleted.** It asserted that no column on
       // `tenancy`, `tenancy_party` or `terms_profile` was named for an amount, under foundation
       // rule 2. That rule is retired (docs/decisions/ADR-0008-money-is-ordinary-data.md) and
-      // nothing replaces the case. These tables still carry no amount, and the `columnsOf`
-      // assertions directly above are what say so: they list every column exactly, so a column
-      // added here is a red build whatever it is named.
+      // nothing replaces the case. Track B (#132) adds `rent_amount`, `rent_currency` and
+      // `option_end_date` because code will branch on them; the `columnsOf` assertions directly
+      // above are exact, so a fourth column arriving here is still a red build whatever it is named.
 
       // Foundation rule 1: the scope is a view, never a column. Guard one greps the migrations for
       // `current_tenant`; this asserts the shipped schema from the other side.
@@ -760,6 +763,77 @@ describe('tenancy_event — append-only promotion log', () => {
           db.query('DELETE FROM tenancy_event WHERE tenancy_event_id = $1', [
             eventId,
           ]),
+        );
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('accepts extended with or without paper, and still refuses amended without paper', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const estate = await seedEstate(db);
+        const tenancyId = await seedTenancy(db, {
+          ...estate,
+          from: '2026-01-01',
+          to: '2027-01-01',
+        });
+        await db.query(
+          `INSERT INTO tenancy_event (
+             tenancy_event_id, tenancy_id, at, actor, kind, field,
+             old_value, new_value, source_document_id, extracted_field_id
+           ) VALUES ($1, $2, $3, 'אסף', 'extended', 'end_date',
+                     '2027-01-01', '2030-01-01', NULL, NULL)`,
+          [newId(), tenancyId, new Date('2026-09-21T09:00:00.000Z')],
+        );
+        const typeId = newId();
+        const documentId = newId();
+        await db.query(
+          `INSERT INTO document_type (
+             document_type_id, type_key, label_he, label_en, verification_terms, is_active
+           ) VALUES ($1, $2, 'הודעה', NULL, NULL, true)`,
+          [typeId, `t135-event-${typeId.slice(24)}`],
+        );
+        await db.query(
+          `INSERT INTO document (
+             document_id, document_type_id, storage_uri, file_hash,
+             ingested_at, verification_verdict
+           ) VALUES ($1, $2, 'gs://x/notice.pdf', $3, $4, 'unguarded')`,
+          [
+            documentId,
+            typeId,
+            `hash-${documentId}`,
+            new Date('2026-09-21T09:00:00.000Z'),
+          ],
+        );
+        await db.query(
+          `INSERT INTO tenancy_event (
+             tenancy_event_id, tenancy_id, at, actor, kind, field,
+             old_value, new_value, source_document_id, extracted_field_id
+           ) VALUES ($1, $2, $3, 'אסף', 'extended', 'end_date',
+                     '2027-01-01', '2030-01-01', $4, NULL)`,
+          [
+            newId(),
+            tenancyId,
+            new Date('2026-09-21T09:01:00.000Z'),
+            documentId,
+          ],
+        );
+        await rejects(db, CHECK_VIOLATION, () =>
+          db.query(
+            `INSERT INTO tenancy_event (
+               tenancy_event_id, tenancy_id, at, actor, kind, field,
+               old_value, new_value, source_document_id, extracted_field_id
+             ) VALUES ($1, $2, $3, 'אסף', 'amended', 'end_date',
+                       '2027-01-01', '2030-01-01', NULL, NULL)`,
+            [newId(), tenancyId, new Date('2026-09-21T09:02:00.000Z')],
+          ),
         );
       });
     } finally {

@@ -414,6 +414,34 @@ describe('E12 · document — one file, hashed at ingest (R17)', () => {
     });
   });
 
+  it('records how many pages were read of how many', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const documentTypeId = await seedType(db, { name: 'pages-read' });
+      const documentId = await seedDocument(
+        db,
+        documentTypeId,
+        `${BLOCK}-pages-read-hash`,
+      );
+      await db.query(
+        `UPDATE document SET page_count = 21, pages_read = 15 WHERE document_id = $1`,
+        [documentId],
+      );
+      const row = await db.query<{ page_count: number; pages_read: number }>(
+        `SELECT page_count, pages_read FROM document WHERE document_id = $1`,
+        [documentId],
+      );
+      assert.equal(row.rows[0]?.page_count, 21);
+      assert.equal(row.rows[0]?.pages_read, 15);
+      await rejects(db, CHECK_VIOLATION, () =>
+        db.query(
+          `UPDATE document SET page_count = 10, pages_read = 15 WHERE document_id = $1`,
+          [documentId],
+        ),
+      );
+    });
+  });
+
   it('keeps file_hash and storage_uri immutable after ingest', async (t) => {
     if (!pool) return t.skip(skipReason);
     await inRolledBackTransaction(pool, async (db) => {
@@ -1127,6 +1155,106 @@ describe('the acceptance bar — a new type costs no DDL', () => {
     );
   });
 
+  // **Ticket #131.** The household is named by role so an identifier cannot land on the wrong
+  // person, and the terms the specimens actually print join as optional rows. All of it is seed
+  // data at a new `effective_from`. The Map in the #101 test above would lose a closed row that
+  // shares a key with an open one, so these look up by key and window.
+  it('names the lease household by role, and closes the unpaired names rather than editing them', () => {
+    const lease = seedDocumentTypes.find(
+      (entry) => entry.type.typeKey === 'lease',
+    );
+    const of = (fieldKey: string) =>
+      (lease?.fields ?? []).filter((field) => field.fieldKey === fieldKey);
+    const live = (fieldKey: string) =>
+      of(fieldKey).find((field) => field.effectiveTo === null);
+    const closed = (fieldKey: string) =>
+      of(fieldKey).find((field) => field.effectiveTo !== null);
+
+    const tenantName = closed('tenant_name');
+    assert.ok(tenantName, 'tenant_name is closed, not deleted');
+    assert.equal(tenantName?.effectiveFrom, '2026-09-07');
+    assert.equal(tenantName?.effectiveTo, '2026-09-20');
+    assert.equal(tenantName?.labelHe, 'שם השוכר');
+    assert.equal(live('tenant_name'), undefined);
+
+    const tenantId = closed('tenant_id_number');
+    assert.ok(tenantId, 'tenant_id_number is closed, not deleted');
+    assert.equal(tenantId?.effectiveFrom, '2026-09-13');
+    assert.equal(tenantId?.effectiveTo, '2026-09-20');
+    assert.equal(live('tenant_id_number'), undefined);
+
+    const mainName = live('main_tenant_name');
+    assert.equal(mainName?.isRequired, true);
+    assert.equal(mainName?.valueType, 'TEXT');
+    assert.equal(mainName?.effectiveFrom, '2026-09-21');
+    assert.equal(
+      (lease?.fields ?? []).some((field) => 'groupKey' in field),
+      false,
+    );
+
+    for (const [fieldKey, valueType] of [
+      ['main_tenant_id_number', 'TEXT'],
+      ['second_tenant_name', 'TEXT'],
+      ['second_tenant_id_number', 'TEXT'],
+      ['maintenance_amount', 'NUMBER'],
+      ['maintenance_currency', 'TEXT'],
+      ['deposit_months', 'NUMBER'],
+      ['promissory_note_amount', 'NUMBER'],
+      ['promissory_note_currency', 'TEXT'],
+      ['option_end_date', 'DATE'],
+      ['signed_date', 'DATE'],
+    ] as const) {
+      const field = live(fieldKey);
+      assert.ok(field, `${fieldKey} is declared on the lease`);
+      assert.equal(field?.isRequired, false, `${fieldKey} is optional`);
+      assert.equal(field?.valueType, valueType);
+      assert.equal(field?.effectiveFrom, '2026-09-21');
+    }
+
+    assert.equal(live('guarantor_name')?.isRequired, false);
+    assert.equal(live('guarantor_id_number')?.isRequired, false);
+    assert.equal(live('gush'), undefined);
+    assert.equal(live('helka'), undefined);
+    assert.equal(live('structure_designation'), undefined);
+  });
+
+  it('a September reading still resolves against the unpaired tenant_name', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const columns = await schemaSnapshot(db);
+      await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+      assert.equal(await schemaSnapshot(db), columns, 'no migration');
+
+      const then = await documentTypeFields(db, 'lease', '2026-09-13');
+      const thenKeys = then.map((field) => field.fieldKey);
+      assert.equal(thenKeys.includes('tenant_name'), true);
+      assert.equal(thenKeys.includes('tenant_id_number'), true);
+      assert.equal(thenKeys.includes('main_tenant_name'), false);
+
+      const now = await documentTypeFields(db, 'lease', '2026-09-21');
+      const nowKeys = now.map((field) => field.fieldKey);
+      assert.equal(nowKeys.includes('main_tenant_name'), true);
+      assert.equal(nowKeys.includes('tenant_name'), false);
+      assert.equal(nowKeys.includes('tenant_id_number'), false);
+      assert.equal(nowKeys.includes('gush'), false);
+      assert.equal(nowKeys.includes('helka'), false);
+    });
+  });
+
+  it('does not add a group_key column to document_type_field', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      const columns = await db.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'document_type_field'`,
+      );
+      assert.equal(
+        columns.rows.some((row) => row.column_name === 'group_key'),
+        false,
+      );
+    });
+  });
+
   it('adds a type with four fields, and the schema does not move', async (t) => {
     if (!pool) return t.skip(skipReason);
     await inRolledBackTransaction(pool, async (db) => {
@@ -1317,6 +1445,20 @@ describe('field_promotion — A8 governed half', () => {
           `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
            VALUES ($1, $2, 'tenancy.notice_date')`,
           [newId(), other],
+        ),
+      );
+      const rent = await seedField(db, documentTypeId, 'rent_amount');
+      await db.query(
+        `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+         VALUES ($1, $2, 'tenancy.rent_amount')`,
+        [newId(), rent],
+      );
+      const deposit = await seedField(db, documentTypeId, 'deposit_amount');
+      await rejects(db, CHECK_VIOLATION, () =>
+        db.query(
+          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+           VALUES ($1, $2, 'tenancy.deposit_amount')`,
+          [newId(), deposit],
         ),
       );
     });

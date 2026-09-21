@@ -1446,14 +1446,25 @@ export interface TenancyGateCheckView {
   passed: boolean;
 }
 
+export interface CitedCaptureView {
+  documentId: string;
+  labelHe: string;
+  value: string;
+  page: number;
+}
+
 export interface TenancySheet {
   tenancyId: string;
   status: string;
   startDate: string;
   endDate: string;
+  rentAmount: string | null;
+  rentCurrency: string | null;
+  optionEndDate: string | null;
   unit: UnitHit;
   people: readonly TenancyPersonView[];
   documents: readonly FiledDocumentView[];
+  captures: readonly CitedCaptureView[];
   checks: readonly TenancyGateCheckView[];
   canActivate: boolean;
   activatableOn: string | null;
@@ -1554,8 +1565,20 @@ function guarantorsLine(people: readonly TenancyPersonView[]): Html {
   )}`;
 }
 
+function rentLine(amount: string | null, currency: string | null): Html {
+  if (amount === null && currency === null) return h`—`;
+  if (amount === null) return ltr(currency ?? '');
+  if (currency === null) return ltr(amount);
+  return h`${ltr(amount)} ${ltr(currency)}`;
+}
+
+function optionLine(optionEndDate: string | null): Html {
+  return optionEndDate === null ? h`—` : ltr(optionEndDate);
+}
+
 /**
- * A5 — one letting. #107. Prints the gate; does not re-run it.
+ * A5 — one letting. #107. The card under the render-only rule: #134.
+ * Prints the gate; does not re-run it. Prints every capture it is handed; does not inspect values.
  */
 export function renderTenancyDetailPage(sheet: TenancySheet): string {
   const primary =
@@ -1625,6 +1648,20 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
           <dt>ערב</dt>
           <dd>${guarantorsLine(sheet.people)}</dd>
         </div>
+        <div>
+          <dt>דמי שכירות</dt>
+          <dd>${rentLine(sheet.rentAmount, sheet.rentCurrency)}</dd>
+        </div>
+        <div>
+          <dt>תום האופציה</dt>
+          <dd>${optionLine(sheet.optionEndDate)}</dd>
+        </div>
+        ${sheet.captures.map(
+          (row) => h`<div>
+            <dt>${row.labelHe}</dt>
+            <dd><a href="/documents/${row.documentId}/read?page=${String(row.page)}">${ltr(row.value)}</a> · עמוד ${ltr(row.page)}</dd>
+          </div>`,
+        )}
       </dl>
 
       <h2 class="second-heading">מה חסר</h2>

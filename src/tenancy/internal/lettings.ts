@@ -20,13 +20,16 @@ export interface UnitLetting {
   status: string;
 }
 
-/** One letting, for the tenancy sheet. Dates and a status. No party. #107. */
+/** One letting, for the tenancy sheet. Dates, status, and the promoted copies. No party. #107, #134. */
 export interface TenancyRow {
   tenancy_id: string;
   unit_id: string;
   start_date: string;
   end_date: string;
   status: string;
+  rent_amount: string | null;
+  rent_currency: string | null;
+  option_end_date: string | null;
 }
 
 /** Who is on the letting, as ids and roles. The name lives in `party`. #107. */
@@ -76,7 +79,10 @@ export async function getTenancy(
             unit_id,
             start_date::text AS start_date,
             end_date::text AS end_date,
-            status
+            status,
+            rent_amount::text AS rent_amount,
+            rent_currency,
+            option_end_date::text AS option_end_date
        FROM tenancy
       WHERE tenancy_id = $1`,
     [tenancyId],

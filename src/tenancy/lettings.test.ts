@@ -20,6 +20,7 @@ import {
 } from '../kernel/pg-support.ts';
 import {
   countIdentifierOverlap,
+  getTenancy,
   listActiveLettingsInBuilding,
 } from './contract.ts';
 
@@ -376,6 +377,34 @@ describe('tenancy · listActiveLettingsInBuilding', () => {
         assert.deepEqual(empty, []);
         const missing = await listActiveLettingsInBuilding(db, newId(), CLOCK);
         assert.deepEqual(missing, []);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+});
+
+describe('tenancy · one letting', () => {
+  it('returns the promoted rent and option end from the row', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const unitId = await seedFlat(db);
+        const tenancyId = await seedLetting(db, unitId, '2026-09-01');
+        await db.query(
+          `UPDATE tenancy
+              SET rent_amount = 4500, rent_currency = 'ILS', option_end_date = '2028-08-31'
+            WHERE tenancy_id = $1`,
+          [tenancyId],
+        );
+        const row = await getTenancy(db, tenancyId);
+        assert.equal(row.rent_amount, '4500');
+        assert.equal(row.rent_currency, 'ILS');
+        assert.equal(row.option_end_date, '2028-08-31');
       });
     } finally {
       await pool.end();

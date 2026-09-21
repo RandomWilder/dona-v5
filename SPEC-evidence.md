@@ -80,7 +80,7 @@ sheet existed.
   disagree. Two values for the same declaration (two tenants on one lease) are two rows: there is
   no unique on `(document_id, document_type_field_id)`.
 - **Two engines.** Document AI or pdfjs **measures** `(page, bbox, confidence)`. The language model
-  **maps** meaning: it is handed numbered words `{id, page, text}` and the live field list from
+  **maps** meaning: it is handed numbered words `{id, page, text, x, y}` and the live field list from
   `documentTypeFields`, and it returns `{field_key, value, word_ids}`. Geometry is the union of
   those words' boxes. A bbox, page or confidence in the model reply is ignored. Empty or unknown
   `word_ids` drop the finding — no invented box. Native pdfjs may store `confidence` null; a scan
@@ -103,16 +103,19 @@ sheet existed.
   reachable only by arithmetic the document itself invites — a deposit stated as a number of months
   of rent plus maintenance, a promissory note at six of them. A reader given no room to work cannot
   check its own answer against the identity printed beside it. This is a `config_settings` row read
-  per call, so it is a change of default and not a deploy, and it can be moved back by an operator
-  on the settings screen if the measured run says it bought nothing.
+  per call, so it is a change of default and not a deploy, and an operator can still move it back
+  on the settings screen. #129 kept `medium` after eight measured runs: the credited-absence fix was
+  real, required accuracy got worse, and walking it back remains a row.
 - **What is deliberately not changed with them.** The extractor still makes one call per document,
   carrying every declared field across every page, and `EXTRACT_INSTRUCTIONS` is still a single
-  accumulated string of bug patches. Both are real defects and both are larger changes than these
-  two. They wait on purpose: position and reasoning effort are independent of each other and cheap,
-  and a measured run across the two will say whether the remaining two are worth building. **If
-  normalised position does not move the score, the layout hypothesis is wrong and the larger
-  line-reconstruction work should not be done at all** — which is the whole reason the scorer above
-  lands before either of them.
+  accumulated string of bug patches. Both remain true. **They are not being built from these two
+  measurements.** #128's eight runs did not move required accuracy in the direction the layout
+  hypothesis needed, so the larger line-reconstruction work is not started, and splitting the call
+  to serve that hypothesis does not earn its cost. #129's eight runs at `medium` stopped the reader
+  inventing a guarantor (optional accuracy 75% on every run, against 58.3% on every run at `none`)
+  and did not lift the household: names still fuse, `Ariella Atkin` is still missed, `A36688170`
+  still comes back stripped. That failure is a declaration the schema cannot say, which is #131,
+  not another prompt patch. The decision and both deltas live on #129.
 - **Building number is not the flat.** On a Hebrew lease `בניין מספר` belongs in `address` (street,
   building number, city). `apartment_number` is `דירה מספר` only. A parking bay (`חניה`) is neither.
   From 2026-09-08 the mapping instructions say that, and the lease field hints do too — a new
@@ -289,20 +292,32 @@ nothing outside it writes a document row.
   nobody could read it; it does not mean nobody has checked.
 - **A long document is read in part, and a large one is refused (slice 6.8).** `onlineOcrPageLimit`
   is 15 and real leases exceed it — the week-6 demo's is 38 pages — and until 6.8 a longer scan was
-  simply not sent, then filed as though it had been read. It is read in part now: the call carries
-  `individualPageSelector` for the first fifteen pages, which is where a lease says what it is and
-  where it belongs. **`pagesRead` goes on the audit line beside the page count**, because *verified*
-  on a partial reading is a different claim from *verified* and the difference has to be somewhere a
-  person can count. *(Measured before it was written: the demo's own file, pages 1–15 selected, came
-  back `200` with fifteen pages in 36.4 seconds.)*
-- **`too_large` is a refusal and never a stored verdict (slice 6.8).** The bound Document AI sets is
-  on the **request**, and the whole file rides in every request base64-encoded, so a file above
-  `onlineOcrByteLimit` cannot be read at any page count. Selecting fewer pages does not make it fit.
-  An upload above that ceiling is refused with a sentence saying so, rather than filed on a reading
-  that never happened. The upload route's own `LIMITS.fileSize` is larger, so there is a band where a
-  file is storable and unreadable, and that band is the refusal. The
-  `document.verification_verdict` CHECK still holds three values: nothing carrying this outcome
-  reaches a row.
+  simply not sent, then filed as though it had been read. 6.8 read the opening pages so a lease
+  could still say what it is and where it belongs; **`pagesRead` goes on the audit line beside the
+  page count**, because *verified* on a partial reading is a different claim from *verified* and the
+  difference has to be somewhere a person can count. *(Measured before it was written: the demo's
+  own file, pages 1–15 selected, came back `200` with fifteen pages in 36.4 seconds.)* #137 keeps
+  that verdict and stops sending the original file with `individualPageSelector`.
+- **The verdict stays on the first fifteen pages; extraction and passages read the rest (#137).**
+  The opening pages still answer *is this a lease, and where is it?* The pages the extractor and the
+  passage store inherit used to be those same fifteen, so a value printed on page 20 was a credited
+  miss for the wrong reason. **Each OCR call is a slice of at most fifteen pages, cut from the PDF
+  before the processor sees it** — not the original scan with `individualPageSelector`. Selecting
+  pages on the full file does not shrink the request, because the whole file still rides in it.
+  After the row is filed, remaining slices run on the work queue, never on the upload request.
+  Extraction and passages wait until those slices have been read. `document.page_count` and
+  `document.pages_read` carry the coverage onto the row, and the reading screen and the field ledger
+  say so when the two differ. The operator may open הקריאה on a shortfall; unread pages are not an
+  absence in the paper. A later cheap first pass that picks the annex is not built until this path
+  has been measured. Batch Document AI is not this issue. *(Document AI is paid per call. A 38-page
+  scan is three slices.)*
+- **`too_large` is a refusal and never a stored verdict (slice 6.8, restated at #137).** The bound
+  Document AI sets is on the **request** (~20 MiB, file base64-encoded). After #137 that request is
+  a slice, so a 100 MB scan is readable in fifteens as long as each slice fits. A first slice that
+  still will not fit is refused with a sentence and writes nothing — the alternative is a verdict
+  about pages nobody sent. The upload bound is **100 MB** (`LIMITS.fileSize`), chosen for scans as
+  a runaway ceiling, not as an unbounded store. The `document.verification_verdict` CHECK still
+  holds three values: nothing carrying this outcome reaches a row.
 
 ### A refused upload leaves no row — the question slice 3.1 left open
 
@@ -391,10 +406,11 @@ screen. Nothing needs it yet; the day something does, it is a slice and not an e
 Every route before 3.3 was a read. From 3.3 to 5.2 this one accepted bytes from anybody who could
 reach the service, and what stood in for a session was bounds rather than intentions. **Slice 5.2
 gave it the session, a CSRF token and a bound on the caller**; the 3.3 bounds are kept, because they
-bound a different quantity and an authenticated operator can still post a 200 MB file by accident.
+bound a different quantity and an authenticated operator can still post a runaway file by accident.
 
-- **One file per request, 20 MB, and four kinds** — sniffed from the bytes, so a `.pdf` that is not a
-  PDF is `invalid` at the edge rather than an object in the bucket.
+- **One file per request, 100 MB, and four kinds** — sniffed from the bytes, so a `.pdf` that is not a
+  PDF is `invalid` at the edge rather than an object in the bucket. One hundred is the scan ceiling
+  (#137); it is a bound on a runaway, not a processor limit. OCR sees only a fifteen-page slice.
 - **Fifty filed documents per operator per rolling 24 hours** (slice 5.2). This is the bound none of
   the others is: they bound a *request*, and nothing bounded a *caller*, so one poster could fill a
   versioned bucket the application is built to be unable to empty. It is counted from `audit_log` —
@@ -761,9 +777,13 @@ future screen.
 
 **`POST /documents/filing/:documentId/approve`** is `documents.write` and urlencoded (the token
 belongs to the composition-root hook; this body is not a stream). It stamps through
-`approveExtractedField` and then `establishApprovedLease` — the same moment as #110. A field that
-is not one of those four is `invalid`. When the reading is ready the draft is written and the next
-GET of this URL is beat 4.
+`approveExtractedField` and then `establishApprovedLease` — the same moment as #110. Any captured
+row on this document may be stamped: beat 3 is the declared set, and a field that is not on this
+reading is `invalid`. The stamps that **open** a letting are still names and dates — `main_tenant_name`
+(or a September `tenant_name`), `guarantor_name` when present, `start_date`, `end_date`. When those
+are ready the draft is written and the next GET of this URL is beat 4. Extra declared rows may be
+stamped on this sitting; they do not delay the draft, and the ledger remains the door for anything
+left unsigned.
 
 **Beat 4 is טיוטה on this tab.** Title, people and dates from the approved reading; whether
 **פרוטוקול מסירה** is missing or present, read from the letting's linked documents. No activate
@@ -995,7 +1015,7 @@ confirm page **recomputes from those rows plus `getUnit`**. There is no staging 
 confirms each proposed person's role and selects an existing `terms_profile` from the list tenancy
 already holds, evidence calls `createParty` or `upsertParty`, `upsertTenancy`, `upsertTenancyParty`
 and `promoteExtractedField`. The name is never typed and never invented: an empty list shows that fact
-and withholds the write. Dates become truth through FieldPromotion (the CHECK is still dates only).
+and withholds the write. Dates, rent and the option end become truth through FieldPromotion.
 Names do not get a promotion target: party provenance is a `PARTY` / `SIGNATORY` link and the
 `evidence.confirm_lease` audit line.
 
@@ -1127,8 +1147,8 @@ and 4.1 does not invent one.
 **Two readers, one page shape.** A native PDF with a text layer is pdfjs (confidence `null`). A
 scan, a photograph, or a PDF whose pages came back empty is Document AI (confidence set, boxes used
 only while extracting so a field knows its page). Images skip pdfjs. More than 15 pages is not sent
-whole: on the sweep the row stays `unverified`, and **on the upload path, from 6.8, the first fifteen
-pages are selected and read** rather than the file being filed as though it had been read. **#102
+whole: on the sweep the row stays `unverified`, and **on the upload path, from 6.8 / #137, the first
+slice of fifteen pages is cut and read** rather than the file being filed as though it had been read. **#102
 deleted the overlay.** `GET /documents/:id/read` shows the per-page text, the quality verdict, and
 the page number beside each extracted value — never a page image, never a word box, never a field
 box. The OCR request runs in imageless mode. **From 6.6 the transcript is shown only to a viewer
@@ -1136,9 +1156,14 @@ holding `party.national_id.read`.** **Which page** is a query (`?page=`, 1-based
 field). Clicking a promoted value is 4.4's.
 
 **#103 keeps the reading.** `readForVerdict` remains the only decision point that chooses native text
-versus OCR. Its output fans out to three destinations: the verdict, the extracted fields, and one
+versus OCR **for the verdict**. Its output fans out to three destinations: the verdict, the extracted
+fields, and one
 **passage** per page — document, page number, ordinal, the text as printed (identifiers included,
-unmasked), and an embedding at the welded dimension. Masking is a later read, never a write: masking
+unmasked), and an embedding at the welded dimension. **#137 splits the fans.** The verdict still
+takes the first slice of at most `onlineOcrPageLimit` pages, cut from the PDF. Extraction and
+passages wait until the remaining slices have been read in further calls of the same size, hung on
+`EXTRACT_WORK_KIND` so the upload returns on the first slice. The row records `page_count` and
+`pages_read`; a screen may display them and must not treat a shortfall as an absence in the paper. Masking is a later read, never a write: masking
 here would both hide a tenant's own identifier from them and corrupt the vector. **No vector index**
 ([ADR-0009](docs/decisions/ADR-0009-passage-embeddings-have-no-index-yet.md)). An unconfigured
 embedder is the same shape as an unconfigured extractor: the document is still filed and no passages
@@ -1255,20 +1280,17 @@ separately and are never blended into one number**, because a miss on `guarantor
 The hand reading satisfying its own arithmetic is checked unconditionally and on every run, including
 in `npm test`, so an edit to the fixture that breaks one is caught where it is made. The check
 against what the reader returned is the one the ticket describes — *a reading that returns all three
-parts but a figure that does not satisfy the identity has not read the document* — and it is
-**reported as unreachable today**: every identity either specimen records multiplies
-`maintenance_amount`, which the catalogue does not declare, so the mapping schema cannot return it
-and no reading can be tested against any of the four. An instrument that cannot fail must say so
-rather than printing the word for a reader that was asked and stayed silent. It becomes reachable
-when that key is declared.
+parts but a figure that does not satisfy the identity has not read the document*. From #131 every
+operand is declared, so a silent reading is `not-returned` and a complete reading that breaks the
+identity fails the gate. `unreachable` remains for an operand the catalogue still does not declare.
 
-**Three groups, because the catalogue declares twelve of the fixture's field keys and not the rest.**
+**Three groups, because the catalogue declares twenty-one of the fixture's field keys and not the rest.**
 A fixture value is *required* when the live `document_type_field` list declares its key and marks it
 required, *optional* when it declares it and does not, and **not asked for** when the catalogue does
 not declare it at all. The third group is scored by nothing and reported as a count: the mapping
 schema restricts `field_key` to the declared list, so the reader is structurally incapable of
-returning `maintenance_amount` today and folding those values into either percentage would report a
-failure of the catalogue as a failure of the reader. The group empties as track B's seed rows land,
+returning `gush` or `helka` and folding those values into either percentage would report a
+failure of the catalogue as a failure of the reader. The group shrinks as track B's seed rows land,
 which is the point of counting it. **Which key sits in which group is read from the catalogue at run
 time and never from the fixture** (A8), and the fixture's own `declaration` mark is checked against
 it: a seed row that lands without the fixture moving is a gate failure, because the two have then
@@ -1406,7 +1428,7 @@ matrix could read cannot be added by seeding a catalogue field.
   document, and locking them would break week 2.
 - **`promoteExtractedField`** is the command. It requires a mapping row, a `TENANCY` link on the
   document, a non-empty promoter, and **from 7.4 an approval stamp on the row**. It asks tenancy to
-  apply the typed value (dates only, and 7.4 ruled that it stays dates only), then stamps. An
+  apply the typed value, then stamps. An
   unmapped field (`apartment_number`, `address`, `tenant_name`, `guarantor_name`) is capturable,
   listed, searchable, and **incapable** of becoming business truth: the command returns `invalid`
   and the tenancy row does not move. **From 7.3 those fields are attestable even though they are not
@@ -1474,7 +1496,9 @@ document on the same letting would move the price of a tenancy with nothing said
 `conflict` when it differs.** Re-filing the same lease is an ordinary act and must not be an error. A
 rent that changed is the single thing an operator most needs to be told. The refusal names the
 existing value and the document it came from, and superseding it is a deliberate second act rather
-than a retry of the first.
+than a retry of the first. The command takes `supersede`; without it a differing write is refused.
+Confirming an amendment is that act for `new_end_date` — later paper wins, and earlier provenance
+stays.
 
 This is a policy case, red first.
 
@@ -1487,6 +1511,22 @@ machinery no model decides, and half a price on one of them is worse than no pri
 
 This is the seam the module already has, used as it was designed — open on the way in, governed at
 the gate. It is a policy case, red first.
+
+### The tenancy card, under the render-only rule (#134)
+
+Most of what a letting's sheet shows will never be a typed column, because most of it is never
+branched on. Promoting those fields so a screen can render them would spend the governed verb on a
+display problem.
+
+**`GET /estate/tenancies/:tenancyId` reads approved captures in estate's read model and view.** Rent,
+its currency and the option end come from `tenancy`'s columns. Every other approved capture on paper
+bound to that letting is shown and cited (`/documents/:id/read?page=N`). Unapproved values do not
+appear. Declarations that already have a promotion target do not appear as captures — the typed
+column is their display. The view does not branch on a capture value. Nothing here lives in
+`src/tenancy/internal/` or `src/evidence/internal/`. R9 stays the scan it was.
+
+This screen is the administrator stance. The day it acquires a tenant route, it needs a stance
+(#125).
 
 ### An approval is required before a promotion (slice 7.4, `0029_promotion_requires_approval.sql`)
 
@@ -1617,10 +1657,12 @@ the click is an `href`, not a script.
   when Document AI scored the words; omitted when pdfjs stored `null`). Extraction still unions the
   words a field was read from so household pairing keeps document order; that box is stored and is
   never drawn.
-- **Estate does not query `extracted_field`.** `listPromotedFieldsForUnit` lives here and is
-  injected the same way `listLinkedDocuments` already is, so the estate ↔ evidence cycle stays
-  broken. The list is every stamped field on paper linked to that unit (the unit itself, or a
+- **Estate does not query `extracted_field` for the unit page.** `listPromotedFieldsForUnit` lives
+  here and is injected the same way `listLinkedDocuments` already is, so the estate ↔ evidence cycle
+  stays broken. The list is every stamped field on paper linked to that unit (the unit itself, or a
   tenancy of that unit). Unmapped capture does not appear: it never became a value on the unit.
+  **The tenancy card is the exception the render-only rule names:** estate's read model lists
+  approved captures for that letting. R9 is unchanged.
 - **Still no names.** The only mappings this week are dates. A name that extraction captured stays
   on the read page and off the unit screen — 5.2 chose not to change that, and 5.4 did not either.
 

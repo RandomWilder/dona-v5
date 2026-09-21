@@ -321,7 +321,7 @@ changed.
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
 `GET`/`POST /documents/new`, reached from a unit row on the building page. It went behind the session
 at 5.2 with everything else, and its bounds are stated in full by
-[SPEC-evidence.md](SPEC-evidence.md): one file, 20 MB, four kinds sniffed from the
+[SPEC-evidence.md](SPEC-evidence.md): one file, 100 MB, four kinds sniffed from the
 bytes, no filename kept, nothing personal on the screen, a CSRF token from 5.2, and **fifty filed
 documents per operator per rolling day**, which is the bound on a caller that none of the others
 were. Only tier-1 specimens are filed until the corpus arrives, because it is gated behind F6 and
@@ -367,23 +367,33 @@ list who is let today as well as search Passages; the panel is unchanged. The bu
 page (which keeps its own panel), letting sheet, documents, settings and queues do not render a
 Building panel and do not keep a leftover Building bound.
 
-**`GET /estate/tenancies/:tenancyId` is A5's sheet (#107).** The first screen that shows one
-letting: the title an administrator recognises it by (tenant name, address, apartment number),
-status, the lease's dates, the documents bound to the letting, what the gate still misses, every
-check the gate returned, and the activate button. Estate renders; it does not own the gate. The
-composition root injects `getTenancy`, `listTenancyParties`, the party-name lookup, `activationGate`,
-`activateTenancy` and `listLinkedDocuments` for `TENANCY`. The page prints the gate's facts and does
-not re-evaluate the four rules. `POST /estate/tenancies/:tenancyId/activate` asks for `tenancy.write`,
-as the completeness exception already does. Party names appear on this screen with no new permission;
-a later gate does not redraw it. Search, the occupancy chip, the buildings list and the incomplete
-queue still carry no name.
+**`GET /estate/tenancies/:tenancyId` is A5's sheet (#107) and the tenancy card (#134).** The first
+screen that shows one letting: the title an administrator recognises it by (tenant name, address,
+apartment number), status, the lease's dates, the documents bound to the letting, what the gate
+still misses, every check the gate returned, and the activate button. Estate renders; it does not
+own the gate. The composition root injects `getTenancy`, `listTenancyParties`, the party-name lookup,
+`activationGate`, `activateTenancy` and `listLinkedDocuments` for `TENANCY`. The page prints the
+gate's facts and does not re-evaluate the four rules. `POST /estate/tenancies/:tenancyId/activate`
+asks for `tenancy.write`, as the completeness exception already does. Party names appear on this
+screen with no new permission; a later gate does not redraw it. Search, the occupancy chip, the
+buildings list and the incomplete queue still carry no name.
+
+**The card reads two kinds of fact (#134).** Rent, rent currency and option end come off
+`tenancy`'s own columns via `getTenancy`. The rest of what the lease said is listed from
+`listApprovedCapturesForTenancy` in this module's read model: approved `ExtractedField` rows on
+paper linked to this letting, excluding declarations that already have a promotion target, each
+cited to the page it was read from. Unapproved rows are not in the list. The view prints every row
+it is handed and does not inspect a capture's value. This is the administrator stance; identifiers
+render as printed.
 
 **The documents listed on these screens are injected, not imported.** `EstateDeps` carries
 `listLinkedDocuments`, `searchDocuments` and (from 4.4) `listPromotedFieldsForUnit` from evidence's
 contract, and from 5.5 `listTenancyEvents` from tenancy's, and from 5.6 `expireDueTenancies`, wired in
 `app.ts`. Estate renders the cards; evidence and tenancy own the SQL. Building-level paper stays on the building page; unit
-paper stays on the unit page. Promoted values never come from an estate query of `extracted_field`.
-The change log never comes from an estate query of `tenancy_event`.
+paper stays on the unit page. Promoted values on the unit page never come from an estate query of
+`extracted_field`. The tenancy card's render-only captures do: they are a read-model list, not a
+command, and they are the exception CONTEXT.md names. The change log never comes from an estate
+query of `tenancy_event`.
 
 **`GET /estate/incomplete` is A4's queue (slice 4.8).** Same standing as `/estate/expiring`: a
 portfolio operations list, a unit and a date and a missing-rule label, and no party. Completeness

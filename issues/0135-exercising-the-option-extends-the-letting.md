@@ -1,13 +1,13 @@
 ---
 number: 135
 title: "Exercising the option extends the letting"
-status: open
+status: closed
 labels: [ready-for-agent]
-assignee:
+assignee: cursor
 blocked_by: [132]
 parent: 136
 created: 2026-09-21
-closed:
+closed: 2026-09-21
 ---
 
 ## What to build
@@ -39,14 +39,14 @@ else's.
 
 ## Acceptance criteria
 
-- [ ] Exercising the option appends a `tenancy_event` of kind `extended`
-- [ ] `source_document_id` on that event is nullable, and an exercise with no paper is representable
-- [ ] `end_date` moves to the option's end
-- [ ] `option_end_date` retains its value after the exercise
-- [ ] No second `tenancy` row is created; the letting's identity is unchanged
-- [ ] A tenant's retrieval bound after an exercise reaches the same paper it reached before —
+- [x] Exercising the option appends a `tenancy_event` of kind `extended`
+- [x] `source_document_id` on that event is nullable, and an exercise with no paper is representable
+- [x] `end_date` moves to the option's end
+- [x] `option_end_date` retains its value after the exercise
+- [x] No second `tenancy` row is created; the letting's identity is unchanged
+- [x] A tenant's retrieval bound after an exercise reaches the same paper it reached before —
       an extension is not a turnover
-- [ ] A policy case covers the last two, red first
+- [x] A policy case covers the last two, red first
 
 ## Blocked by
 
@@ -56,3 +56,12 @@ else's.
 
 `SPEC-tenancy.md`, *The option, exercised — track B*. `CONTEXT.md` glossary, **Option**.
 #124 — the Tenancy bound, and why a turnover and an extension must not look alike.
+
+## Comment — 2026-09-21
+
+Closed: `0035` widens `tenancy_event` to `extended`. `exerciseOption` moves `end_date` to
+`option_end_date`, leaves the option column, and appends the event with a nullable
+`source_document_id`. Same `tenancy_id`. Policy case red first: the file imported
+`exerciseOption` before it existed, so identity and bag could not be asserted until the
+command landed. Schema CHECK `tenancy_event_kind_check` was a separate red, in the tenancy
+schema suite.

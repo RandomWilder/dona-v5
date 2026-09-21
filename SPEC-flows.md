@@ -314,6 +314,14 @@ dark button names every requirement the gate checked. When the only miss is the 
 page states `activatableOn`. `POST /estate/tenancies/:tenancyId/activate` is the person command
 (`tenancy.write`); the clock never posts it.
 
+**The same GET is the tenancy card (#134).** Rent, its currency and the option end come from
+`tenancy`'s columns, because those copies exist. Everything else the lease said is an **approved**
+capture, each cited to `/documents/:id/read?page=N`. Unapproved readings do not appear. The page
+does not branch on a capture value, compare one, aggregate over one, or let one decide what happens
+next. Those reads live in estate's read model and this view; they are not a tenancy or evidence
+command, and they do not touch R9. This screen is the administrator stance; nothing on it is
+masked. A tenant route, when it exists, needs a stance (#125).
+
 **Writes:** `DRAFT → ACTIVE`, and a `TenancyEvent` of kind `activated` naming who and when. No
 document on that event — the paper is already on the letting; the event records the human act.
 **Enforcement:** the gate first, then `one_active_tenancy_per_unit`. Promoting a draft that still
@@ -537,11 +545,12 @@ none through this one, for a flow that had been working for two hours. A destina
 
 **Sequence:** read → resolve → file.
 
-1. The bytes are read once, in memory, under the bounds A1 already set — one file, 20 MB, four kinds
+1. The bytes are read once, in memory, under the bounds A1 already set — one file, 100 MB, four kinds
    sniffed from the bytes. The text is `documentText` over the pdf reader, and **OCR whenever that
    text does not satisfy the declared type's terms** and an OCR processor is configured (slice 6.8;
    until then it was *no text layer at all*, and a phone scanner's own layer therefore outranked
-   Document AI). A file too long for the online call is refused with a sentence that says so.
+   Document AI). A first slice the online reader still cannot carry is refused with a sentence that
+   says so.
 2. **A deterministic place reader** runs over that text — the analogue of A6's protocol reader, and
    deliberately the same kind of thing: no model, no `ExtractedField`, a pure function over a string.
    It returns an address, a city and an apartment number, or nulls.
@@ -740,9 +749,10 @@ stay on A1 / A12 / **מסמכים**.
 
 **Sequence.** Same laws as A12 and A15; different chrome.
 
-1. **המסמך.** Attach one file. Bounds unchanged: one file, 20 MB, four sniffed kinds; a scan the
-   online reader cannot carry (`onlineOcrByteLimit`) is refused with a sentence and writes nothing.
-   A later issue owns larger scans. Wrong file for a lease: same tab, attach again.
+1. **המסמך.** Attach one file. Bounds: one file, **100 MB**, four sniffed kinds. OCR is a
+   fifteen-page slice, not the whole scan (#137). A first slice the online reader still cannot
+   carry is refused with a sentence and writes nothing. Wrong file for a lease: same tab, attach
+   again.
 2. **הדירה — same step as the file.** Bytes are read in memory; nothing is held between read and
    file. A deterministic place reader returns street, city, apartment. **Exact one Unit:** show it
    (*we read … → this Unit*); Continue then files through `fileDocument`. **Zero, several, nothing

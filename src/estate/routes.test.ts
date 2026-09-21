@@ -1904,4 +1904,172 @@ describe('estate · the tenancy page', () => {
       await pool.end();
     }
   });
+
+  it('shows rent from the tenancy row and cites approved captures only', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(A5_AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    await signOutAll(pool, A5_DOMAIN);
+    await a5Cleanup(pool);
+    const who = await signIn(pool, clock, { email: `ops@${A5_DOMAIN}` });
+    const client = asOperator(app, who);
+    try {
+      await importEstate(pool, a5Plan);
+      const unit = await pool.query<{ unit_id: string }>(
+        `SELECT u.unit_id FROM unit u
+         JOIN space s ON s.space_id = u.unit_id
+         JOIN building b ON b.building_id = s.building_id
+         WHERE b.city = $1 AND b.address_line = $2`,
+        [A5_CITY, A5_ADDRESS],
+      );
+      const profile = await pool.query<{ terms_profile_id: string }>(
+        `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)
+         ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+         RETURNING terms_profile_id`,
+        [newId(), `a5-card-${A5_PROJECT}`],
+      );
+      const tenancyId = newId();
+      const partyId = newId();
+      await pool.query(
+        `INSERT INTO tenancy (
+           tenancy_id, unit_id, start_date, end_date, status, terms_profile_id,
+           rent_amount, rent_currency, option_end_date
+         ) VALUES ($1, $2, '2026-09-01', '2027-08-31', 'DRAFT', $3, 4500, 'ILS', '2028-08-31')`,
+        [tenancyId, unit.rows[0]?.unit_id, profile.rows[0]?.terms_profile_id],
+      );
+      await pool.query(
+        `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', $2)`,
+        [partyId, A5_TENANT],
+      );
+      await pool.query(
+        `INSERT INTO tenancy_party (tenancy_id, party_id, role, is_service_contact)
+         VALUES ($1, $2, 'PRIMARY_TENANT', true)`,
+        [tenancyId, partyId],
+      );
+      const documentId = await linkType(
+        pool,
+        tenancyId,
+        `card-lease-${tenancyId}`,
+        'חוזה שכירות',
+      );
+      const type = await pool.query<{ document_type_id: string }>(
+        'SELECT document_type_id FROM document WHERE document_id = $1',
+        [documentId],
+      );
+      const typeId = type.rows[0]?.document_type_id ?? '';
+      const depositField = newId();
+      const secretField = newId();
+      const rentField = newId();
+      await pool.query(
+        `INSERT INTO document_type_field (
+           document_type_field_id, document_type_id, field_key, label_he,
+           value_type, is_required, extraction_hint, effective_from, effective_to
+         ) VALUES
+           ($1, $4, 'card_deposit', 'סכום הפיקדון', 'TEXT', false, NULL, '2020-01-01', NULL),
+           ($2, $4, 'card_note', 'הערה', 'TEXT', false, NULL, '2020-01-01', NULL),
+           ($3, $4, 'card_rent', 'דמי שכירות', 'TEXT', false, NULL, '2020-01-01', NULL)`,
+        [depositField, secretField, rentField, typeId],
+      );
+      await pool.query(
+        `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+         VALUES ($1, $2, 'tenancy.rent_amount')`,
+        [newId(), rentField],
+      );
+      const bbox = '{"x":1,"y":2,"width":3,"height":4}';
+      const depositRow = newId();
+      const secretRow = newId();
+      const rentRow = newId();
+      await pool.query(
+        `INSERT INTO extracted_field (
+           extracted_field_id, document_id, document_type_field_id, value,
+           page, bbox, confidence, model, extracted_at
+         ) VALUES
+           ($1, $4, $5, '12000', 3, $8, null, 'fake', $9),
+           ($2, $4, $6, 'UNAPPROVED-SECRET', 2, $8, null, 'fake', $9),
+           ($3, $4, $7, '9999', 1, $8, null, 'fake', $9)`,
+        [
+          depositRow,
+          secretRow,
+          rentRow,
+          documentId,
+          depositField,
+          secretField,
+          rentField,
+          bbox,
+          A5_AT,
+        ],
+      );
+      const stamper = await pool.connect();
+      try {
+        await stamper.query('BEGIN');
+        await stamper.query("SELECT set_config('dona.approving', 'on', true)");
+        await stamper.query(
+          `UPDATE extracted_field
+              SET approved_value = value, approved_by = 'ops@test', approved_at = $1
+            WHERE extracted_field_id = ANY($2::uuid[])`,
+          [A5_AT, [depositRow, rentRow]],
+        );
+        await stamper.query('COMMIT');
+      } catch (error) {
+        await stamper.query('ROLLBACK');
+        throw error;
+      } finally {
+        stamper.release();
+      }
+
+      const page = await client.inject({
+        method: 'GET',
+        url: `/estate/tenancies/${tenancyId}`,
+      });
+      assert.equal(page.statusCode, 200);
+      assert.match(page.body, /4500/);
+      assert.match(page.body, /ILS/);
+      assert.match(page.body, /2028-08-31/);
+      assert.match(page.body, /12000/);
+      assert.match(
+        page.body,
+        new RegExp(`href="/documents/${documentId}/read\\?page=3"`),
+      );
+      assert.doesNotMatch(page.body, /UNAPPROVED-SECRET/);
+      assert.doesNotMatch(page.body, />9999</);
+    } finally {
+      await pool.query('ALTER TABLE extracted_field DISABLE TRIGGER USER');
+      await pool.query(
+        `DELETE FROM extracted_field WHERE document_id IN (
+           SELECT l.document_id FROM document_link l
+           JOIN tenancy t ON t.tenancy_id = l.entity_id
+           JOIN space s ON s.space_id = t.unit_id
+           JOIN building b ON b.building_id = s.building_id
+           WHERE b.city = $1 AND b.address_line = $2)`,
+        [A5_CITY, A5_ADDRESS],
+      );
+      await pool.query('ALTER TABLE extracted_field ENABLE TRIGGER USER');
+      await pool.query(
+        `DELETE FROM field_promotion
+          WHERE document_type_field_id IN (
+            SELECT f.document_type_field_id FROM document_type_field f
+            JOIN document_type t ON t.document_type_id = f.document_type_id
+            WHERE t.type_key LIKE 'card-lease-%')`,
+      );
+      await a5Cleanup(pool);
+      await pool.query(
+        `DELETE FROM document WHERE document_type_id IN (
+           SELECT document_type_id FROM document_type WHERE type_key LIKE 'card-lease-%')`,
+      );
+      await pool.query(
+        `DELETE FROM document_type_field WHERE document_type_id IN (
+           SELECT document_type_id FROM document_type WHERE type_key LIKE 'card-lease-%')`,
+      );
+      await pool.query(
+        `DELETE FROM document_type WHERE type_key LIKE 'card-lease-%'`,
+      );
+      await signOutAll(pool, A5_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
 });

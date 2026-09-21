@@ -10,6 +10,9 @@
 // `tenancy.start_date` with an operator's name in `promoted_by`, so the name signed a button rather
 // than a value. Those columns are what the isolation join and the obligation state machine are
 // computed from. 7.3 made the copy *prefer* `approved_value`; this requires it.
+//
+// **#132.** Rent is a pair. An amount may be approved without its currency; it may not be promoted
+// without it. The two copies land in one transaction, or neither does.
 import type { AuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
@@ -30,6 +33,8 @@ export interface PromoteDeps {
 export interface PromoteSpec {
   extractedFieldId: string;
   promotedBy: string;
+  /** Replace a value already promoted from a different field. Without this, a differing write is `conflict`. */
+  supersede?: boolean;
 }
 
 export interface PromoteResult {
@@ -41,6 +46,20 @@ export interface PromoteResult {
 const TARGET_FIELD: Record<string, PromotedTenancyField> = {
   'tenancy.start_date': 'start_date',
   'tenancy.end_date': 'end_date',
+  'tenancy.rent_amount': 'rent_amount',
+  'tenancy.rent_currency': 'rent_currency',
+  'tenancy.option_end_date': 'option_end_date',
+};
+
+const RENT_SIBLING: Record<string, { fieldKey: string; target: string }> = {
+  'tenancy.rent_amount': {
+    fieldKey: 'rent_currency',
+    target: 'tenancy.rent_currency',
+  },
+  'tenancy.rent_currency': {
+    fieldKey: 'rent_amount',
+    target: 'tenancy.rent_amount',
+  },
 };
 
 export async function promoteExtractedField(
@@ -49,6 +68,7 @@ export async function promoteExtractedField(
 ): Promise<PromoteResult> {
   const extractedFieldId = validId(spec.extractedFieldId, 'extracted field');
   const promotedBy = requireText(spec.promotedBy, 'promoted_by', 200);
+  const supersede = spec.supersede === true;
 
   return inTransaction(deps.db, async (db) => {
     const captured = await db.query<{
@@ -123,40 +143,142 @@ export async function promoteExtractedField(
         'that reading has not been approved, and only an approved reading is promoted',
       );
     }
-    const value = row.value;
-
-    await db.query("SELECT set_config('dona.promoting', 'on', true)");
-    await applyPromotedField(db, {
-      tenancyId,
-      field,
-      value,
-      actor: promotedBy,
-      at: deps.clock.now(),
-      sourceDocumentId: row.document_id,
-      extractedFieldId,
-    });
-    await db.query(
-      `UPDATE extracted_field
-          SET promoted_to = $2, promoted_by = $3, promoted_at = $4
-        WHERE extracted_field_id = $1`,
-      [extractedFieldId, row.target, promotedBy, deps.clock.now()],
-    );
-
-    await deps.audit.write(
+    const copies: Array<{
+      extractedFieldId: string;
+      target: string;
+      field: PromotedTenancyField;
+      value: string;
+      alreadyStamped: boolean;
+    }> = [
       {
-        actorKind: 'staff',
-        actorId: promotedBy,
-        action: 'evidence.promote_field',
-        subjectId: extractedFieldId,
-        inputs: {
-          documentId: row.document_id,
-          tenancyId,
-          target: row.target,
-        },
+        extractedFieldId,
+        target: row.target,
+        field,
+        value: row.value,
+        alreadyStamped: false,
       },
-      { outcome: 'ok' },
-    );
+    ];
 
-    return { tenancyId, target: row.target, value };
+    // **#132.** Rent is one price. Capture may hold an amount with no currency; the typed
+    // columns may not. The sibling is the other declared half on this document, and the two
+    // copies land in this transaction or neither does.
+    const siblingSpec = RENT_SIBLING[row.target];
+    if (siblingSpec) {
+      const sibling = await db.query<{
+        extracted_field_id: string;
+        value: string | null;
+        approved_at: Date | null;
+        promoted_to: string | null;
+        target: string | null;
+      }>(
+        `SELECT e.extracted_field_id, e.approved_value AS value, e.approved_at,
+                e.promoted_to, p.target
+           FROM extracted_field e
+           JOIN document_type_field f
+             ON f.document_type_field_id = e.document_type_field_id
+           LEFT JOIN field_promotion p
+             ON p.document_type_field_id = e.document_type_field_id
+          WHERE e.document_id = $1 AND f.field_key = $2
+          ORDER BY e.extracted_at DESC, e.extracted_field_id
+          LIMIT 1`,
+        [row.document_id, siblingSpec.fieldKey],
+      );
+      const other = sibling.rows[0];
+      const siblingField = TARGET_FIELD[siblingSpec.target];
+      if (
+        !other ||
+        other.approved_at === null ||
+        other.value === null ||
+        other.target !== siblingSpec.target ||
+        !siblingField
+      ) {
+        throw new KernelError(
+          'conflict',
+          'that rent is missing its other half, and only a priced pair is promoted',
+        );
+      }
+      copies.push({
+        extractedFieldId: other.extracted_field_id,
+        target: siblingSpec.target,
+        field: siblingField,
+        value: other.value,
+        alreadyStamped: other.promoted_to === siblingSpec.target,
+      });
+    }
+
+    const skipIds = copies.map((copy) => copy.extractedFieldId);
+    let moved = false;
+    await db.query("SELECT set_config('dona.promoting', 'on', true)");
+    for (const copy of copies) {
+      // **#130.** Occupancy is a stamp from a *different* extracted field on this letting, not a
+      // register date. Identical values succeed without rewriting the column. A differing value is
+      // `conflict` unless the caller said `supersede` — confirming an amendment is that act.
+      const occupant = await db.query<{
+        document_id: string;
+        value: string | null;
+      }>(
+        `SELECT e.document_id, e.approved_value AS value
+           FROM extracted_field e
+           JOIN document_link l
+             ON l.document_id = e.document_id AND l.entity_type = 'TENANCY'
+          WHERE l.entity_id = $1
+            AND e.promoted_to = $2
+            AND e.extracted_field_id <> ALL($3::uuid[])
+          ORDER BY e.promoted_at DESC NULLS LAST, e.extracted_field_id
+          LIMIT 1`,
+        [tenancyId, copy.target, skipIds],
+      );
+      const held = occupant.rows[0];
+      if (held && held.value !== copy.value && !supersede) {
+        throw new KernelError(
+          'conflict',
+          `that column already carries ${held.value} from document ${held.document_id}`,
+          {
+            existingValue: held.value,
+            sourceDocumentId: held.document_id,
+          },
+        );
+      }
+      const sameValueAlreadyHeld =
+        held !== undefined && held.value === copy.value;
+      if (!sameValueAlreadyHeld) {
+        await applyPromotedField(db, {
+          tenancyId,
+          field: copy.field,
+          value: copy.value,
+          actor: promotedBy,
+          at: deps.clock.now(),
+          sourceDocumentId: row.document_id,
+          extractedFieldId: copy.extractedFieldId,
+        });
+        moved = true;
+      }
+      if (!copy.alreadyStamped) {
+        await db.query(
+          `UPDATE extracted_field
+              SET promoted_to = $2, promoted_by = $3, promoted_at = $4
+            WHERE extracted_field_id = $1`,
+          [copy.extractedFieldId, copy.target, promotedBy, deps.clock.now()],
+        );
+      }
+    }
+    if (moved) {
+      await deps.audit.write(
+        {
+          actorKind: 'staff',
+          actorId: promotedBy,
+          action: 'evidence.promote_field',
+          subjectId: extractedFieldId,
+          inputs: {
+            documentId: row.document_id,
+            tenancyId,
+            target: row.target,
+          },
+        },
+        { outcome: 'ok' },
+      );
+    }
+
+    return { tenancyId, target: row.target, value: row.value };
   });
 }

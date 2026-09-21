@@ -10,7 +10,12 @@ import {
   onlineOcrByteLimit,
   onlineOcrPageLimit,
 } from '../../kernel/ocr.ts';
-import type { PdfPage, PdfText } from '../../kernel/pdf.ts';
+import {
+  type PdfPage,
+  type PdfText,
+  slicePdf,
+  stampOriginalPages,
+} from '../../kernel/pdf.ts';
 import {
   getFiledDocument,
   listDocumentsWithoutPassages,
@@ -121,9 +126,9 @@ export type OcrOutcome =
   /** The call was made and failed, timed out, or was refused. */
   | 'failed'
   /**
-   * The file is larger than the online call carries, so no call was made and none could be — the
-   * bound is on the request and the whole file rides in every one of them. A refusal, because a row
-   * written on no reading claims a verdict about a document nobody has seen a page of.
+   * The slice is larger than the online call carries, so no call was made and none could be — the
+   * bound is on the request. A refusal, because a row written on no reading claims a verdict about
+   * a document nobody has seen a page of.
    */
   | 'too_large';
 
@@ -144,6 +149,87 @@ export interface DocumentReading {
    * *verified*, and the difference has to be somewhere a person can count.
    */
   pagesRead?: number;
+}
+
+/** Consecutive 1-based page numbers, in chunks of `onlineOcrPageLimit`. */
+export function pageSlices(pageCount: number, afterPage = 0): number[][] {
+  const slices: number[][] = [];
+  for (
+    let from = afterPage + 1;
+    from <= pageCount;
+    from += onlineOcrPageLimit
+  ) {
+    const to = Math.min(pageCount, from + onlineOcrPageLimit - 1);
+    slices.push(Array.from({ length: to - from + 1 }, (_, at) => from + at));
+  }
+  return slices;
+}
+
+async function bytesForOcrSlice(
+  bytes: Buffer,
+  pages: readonly number[] | undefined,
+): Promise<Buffer> {
+  if (!pages || pages.length === 0) {
+    return bytes;
+  }
+  try {
+    return await slicePdf(bytes, pages);
+  } catch {
+    // Test fixtures are a PDF sniff, not a file pdf-lib can open. The fake
+    // reader still honours `pages`; the live path never hits this branch on a
+    // real scan, because the native reader has already counted its pages.
+    return bytes;
+  }
+}
+
+export async function ocrNamedPages(
+  ocr: OcrText,
+  bytes: Buffer,
+  mimeType: string,
+  version: string,
+  pages?: readonly number[],
+): Promise<{ pages: PdfPage[]; bytes: Buffer; skipped: boolean }> {
+  const payload = await bytesForOcrSlice(bytes, pages);
+  if (payload.length > onlineOcrByteLimit) {
+    return { pages: [], bytes: payload, skipped: true };
+  }
+  const result = await ocr.pages(payload, mimeType, version, pages);
+  return {
+    bytes: payload,
+    skipped: false,
+    pages: pages ? stampOriginalPages(result.pages, pages) : result.pages,
+  };
+}
+
+export async function readRemainingSlices(
+  deps: {
+    ocr: OcrText;
+    ocrVersion: string;
+  },
+  bytes: Buffer,
+  mimeType: string,
+  pageCount: number,
+  already: readonly PdfPage[],
+): Promise<PdfPage[]> {
+  const readThrough = already.reduce(
+    (max, page) => Math.max(max, page.number),
+    0,
+  );
+  const pages = [...already];
+  for (const slice of pageSlices(pageCount, readThrough)) {
+    const result = await ocrNamedPages(
+      deps.ocr,
+      bytes,
+      mimeType,
+      deps.ocrVersion,
+      slice,
+    );
+    if (result.skipped) {
+      break;
+    }
+    pages.push(...result.pages);
+  }
+  return pages;
 }
 
 /**
@@ -203,29 +289,28 @@ export async function readForVerdict(
     // nobody could get text out of - which is what `unverified` has always meant.
     return reading;
   }
-  if (input.bytes.length > onlineOcrByteLimit) {
-    // **No call, and no call is possible.** The bound is on the request and the whole file rides in
-    // every request, so selecting fewer pages would not make this one fit. A refusal, because the
-    // alternative is a row carrying a verdict about a document nobody has read a page of.
-    return { ...reading, ocrOutcome: 'too_large' };
-  }
-  // **A long document is read in part rather than not at all. Slice 6.8.** The online processor
-  // takes `onlineOcrPageLimit` pages, and the demo's lease is 38 - so until this slice it was never
-  // sent, and the row was filed as though somebody had looked at it. The first pages are also the
-  // ones that answer both questions being asked here: a lease says what it is in its heading and
-  // where it is in its opening clause. `pagesRead` carries how partial the reading was.
+  // **A long document is read in part rather than not at all. Slice 6.8 / #137.** The opening
+  // pages answer both questions being asked here. Each call is a slice of at most fifteen pages
+  // cut from the PDF; the remainder is the work queue's. `pagesRead` keeps `verified` honest.
   const selected =
     native.length > onlineOcrPageLimit
       ? Array.from({ length: onlineOcrPageLimit }, (_, at) => at + 1)
       : undefined;
   let pages: PdfPage[];
   try {
-    const result = await deps.ocr.pages(
+    const result = await ocrNamedPages(
+      deps.ocr,
       input.bytes,
       documentContentTypes[input.extension],
       deps.ocrVersion,
       selected,
     );
+    if (result.skipped) {
+      // **No call that would fit.** After #137 the bound is on the slice. A first slice that
+      // still will not fit is refused, because the alternative is a verdict about pages nobody
+      // sent.
+      return { ...reading, ocrOutcome: 'too_large' };
+    }
     pages = result.pages;
   } catch {
     // A miss must never become a 503 on an upload - the bound is 90 seconds and the operator can
@@ -333,10 +418,24 @@ export async function sweepMissingPassages(
         report.unchanged += 1;
         continue;
       }
+      let pages = reading.pages;
+      if (
+        ocrConfigured(deps.ocr) &&
+        deps.ocrVersion &&
+        reading.native.length > pages.length
+      ) {
+        pages = await readRemainingSlices(
+          { ocr: deps.ocr, ocrVersion: deps.ocrVersion },
+          object.bytes,
+          documentContentTypes[sniffExtension(object.bytes)],
+          reading.native.length,
+          pages,
+        );
+      }
       await writeDocumentPassages(
         deps.db,
         row.documentId,
-        reading.pages,
+        pages,
         deps.embedder,
       );
       report.written += 1;
@@ -355,21 +454,32 @@ async function readBytes(
   source: DocumentRead['source'];
 }> {
   const extension = sniffExtension(bytes);
+  let nativeCount = 0;
   if (extension === 'pdf') {
     const pages = await deps.pdf.pages(bytes);
     if (pages.some((page) => page.items.length > 0)) {
       return { pages, source: 'pdfjs' };
     }
+    nativeCount = pages.length;
   }
   if (!ocrConfigured(deps.ocr)) {
     return { pages: [], source: 'none' };
   }
   try {
-    const result = await deps.ocr.pages(
+    const selected =
+      nativeCount > onlineOcrPageLimit
+        ? Array.from({ length: onlineOcrPageLimit }, (_, at) => at + 1)
+        : undefined;
+    const result = await ocrNamedPages(
+      deps.ocr,
       bytes,
       documentContentTypes[extension],
       deps.ocrVersion,
+      selected,
     );
+    if (result.skipped) {
+      return { pages: [], source: 'none' };
+    }
     return { pages: result.pages, source: 'ocr' };
   } catch {
     return { pages: [], source: 'none' };

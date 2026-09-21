@@ -217,7 +217,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   // **The guard, and it is `requireStaff` -- one function, one call site.**
   //
   // `onRequest` rather than `preHandler`, because this hook runs before the body is parsed: an
-  // unauthenticated 20 MB upload is refused before a byte of it is read.
+  // unauthenticated 100 MB upload is refused before a byte of it is read.
   //
   // A request that matched no route reaches here with no config, and is treated as guarded rather
   // than as public. That is deliberate: answering 404 to an anonymous caller and a redirect to a

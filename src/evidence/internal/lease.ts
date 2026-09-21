@@ -42,7 +42,11 @@ export interface LeaseDeps {
 
 export interface ProposedPerson {
   extractedFieldId: string;
-  fieldKey: 'tenant_name' | 'guarantor_name';
+  fieldKey:
+    | 'tenant_name'
+    | 'main_tenant_name'
+    | 'second_tenant_name'
+    | 'guarantor_name';
   value: string;
   proposedRole: TenancyRole;
   /**
@@ -185,6 +189,7 @@ async function signAndPromote(
   deps: { db: Queryable; audit: AuditLog; clock: Clock },
   row: ExtractedRow,
   confirmedBy: string,
+  options: { supersede?: boolean } = {},
 ): Promise<void> {
   if (row.approvedAt === null) {
     await approveExtractedField(deps, {
@@ -196,6 +201,7 @@ async function signAndPromote(
   await promoteExtractedField(deps, {
     extractedFieldId: row.extractedFieldId,
     promotedBy: confirmedBy,
+    supersede: options.supersede,
   });
 }
 
@@ -227,8 +233,15 @@ function inDocumentOrder(a: ExtractedRow, b: ExtractedRow): number {
   );
 }
 
-/** The two field families, each counted on its own. `[names, identifiers, first role, rest]`. */
+/** Name/identifier families. `[names, identifiers, first role, rest]`. */
 const FAMILIES = [
+  [
+    'main_tenant_name',
+    'main_tenant_id_number',
+    'PRIMARY_TENANT',
+    'PRIMARY_TENANT',
+  ],
+  ['second_tenant_name', 'second_tenant_id_number', 'CO_TENANT', 'CO_TENANT'],
   ['tenant_name', 'tenant_id_number', 'PRIMARY_TENANT', 'CO_TENANT'],
   ['guarantor_name', 'guarantor_id_number', 'GUARANTOR', 'GUARANTOR'],
 ] as const;
@@ -632,7 +645,7 @@ async function confirmAmendment(
   };
   const endDate = rows.find((field) => field.fieldKey === 'new_end_date');
   if (endDate) {
-    await signAndPromote(promote, endDate, confirmedBy);
+    await signAndPromote(promote, endDate, confirmedBy, { supersede: true });
   }
 
   const partiesWritten = await writeParties(db, {
@@ -661,15 +674,17 @@ async function confirmAmendment(
   };
 }
 
+const NAME_KEYS = new Set([
+  'main_tenant_name',
+  'second_tenant_name',
+  'tenant_name',
+  'guarantor_name',
+]);
+
 function stampedNameIds(rows: readonly ExtractedRow[]): Set<string> {
   return new Set(
     rows
-      .filter(
-        (row) =>
-          (row.fieldKey === 'tenant_name' ||
-            row.fieldKey === 'guarantor_name') &&
-          row.approvedAt !== null,
-      )
+      .filter((row) => NAME_KEYS.has(row.fieldKey) && row.approvedAt !== null)
       .map((row) => row.extractedFieldId),
   );
 }
@@ -699,18 +714,34 @@ async function resolveTermsProfileName(
   throw new KernelError('invalid', 'that terms profile does not exist');
 }
 
-function readingIsReady(rows: readonly ExtractedRow[]): boolean {
-  const tenants = rows.filter((row) => row.fieldKey === 'tenant_name');
-  if (tenants.length === 0 || tenants.some((row) => row.approvedAt === null)) {
+/**
+ * Whether the stamps that open a letting are on the reading. Live filings name the household by
+ * role (`main_tenant_name`); a September reading still names `tenant_name`. Two captures of the
+ * same role are a pick: one approved row is enough. Unapproved extras stay for the ledger.
+ */
+export function leaseReadingIsReady(rows: readonly ExtractedRow[]): boolean {
+  const byRole = rows.filter((row) => row.fieldKey === 'main_tenant_name');
+  const tenants =
+    byRole.length > 0
+      ? byRole
+      : rows.filter((row) => row.fieldKey === 'tenant_name');
+  if (!tenants.some((row) => row.approvedAt !== null)) {
     return false;
   }
-  const guarantors = rows.filter((row) => row.fieldKey === 'guarantor_name');
-  if (guarantors.some((row) => row.approvedAt === null)) {
+  if (byRole.length === 0 && tenants.some((row) => row.approvedAt === null)) {
+    return false;
+  }
+  if (
+    rows
+      .filter((row) => row.fieldKey === 'guarantor_name')
+      .some((row) => row.approvedAt === null)
+  ) {
     return false;
   }
   for (const key of ['start_date', 'end_date'] as const) {
-    const row = rows.find((field) => field.fieldKey === key);
-    if (!row || row.approvedAt === null) {
+    if (
+      !rows.some((field) => field.fieldKey === key && field.approvedAt !== null)
+    ) {
       return false;
     }
   }
@@ -733,7 +764,7 @@ export async function establishApprovedLease(
     return null;
   }
   const rows = await listExtractedFields(deps.db, documentId);
-  if (!readingIsReady(rows)) {
+  if (!leaseReadingIsReady(rows)) {
     return null;
   }
   const confirmed = await confirmLeaseTenancy(deps, {
@@ -789,7 +820,8 @@ export async function confirmLeaseTenancy(
     const stamped = stampedNameIds(rows);
     const tenants = household.people.filter(
       (person) =>
-        person.fieldKey === 'tenant_name' &&
+        (person.fieldKey === 'tenant_name' ||
+          person.fieldKey === 'main_tenant_name') &&
         stamped.has(person.extractedFieldId),
     );
     if (tenants.length === 0) {

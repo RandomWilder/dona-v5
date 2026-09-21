@@ -43,6 +43,10 @@ export interface DocumentSpec {
    * paths, and on rows ingested before the column existed.
    */
   uploadedBy?: string | null;
+  /** How many pages the file has, when the reader counted them. Null on the archive. */
+  pageCount?: number | null;
+  /** How many of those pages have been read. Null together with `pageCount`. */
+  pagesRead?: number | null;
 }
 
 export interface DocumentLinkSpec {
@@ -77,8 +81,8 @@ export async function ingestDocument(
   const result = await db.query<{ document_id: string; inserted: boolean }>(
     `INSERT INTO document (document_id, document_type_id, storage_uri, file_hash,
                            drive_file_id, valid_from, valid_to, ingested_at,
-                           verification_verdict, uploaded_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                           verification_verdict, uploaded_by, page_count, pages_read)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      ON CONFLICT (file_hash) DO UPDATE
        SET document_type_id = EXCLUDED.document_type_id,
            drive_file_id = EXCLUDED.drive_file_id,
@@ -98,6 +102,8 @@ export async function ingestDocument(
       ingestedAt,
       spec.verificationVerdict,
       spec.uploadedBy ?? null,
+      spec.pageCount ?? null,
+      spec.pagesRead ?? null,
     ],
   );
   const row = result.rows[0];
@@ -177,6 +183,8 @@ export interface FiledDocument {
   fileHash: string;
   verificationVerdict: FiledVerdict;
   verificationTerms: string[] | null;
+  pageCount: number | null;
+  pagesRead: number | null;
 }
 
 export async function getFiledDocument(
@@ -192,9 +200,12 @@ export async function getFiledDocument(
     file_hash: string;
     verification_verdict: FiledVerdict;
     verification_terms: string[] | null;
+    page_count: number | null;
+    pages_read: number | null;
   }>(
     `SELECT d.document_id, d.document_type_id, dt.type_key, dt.label_he,
-            d.storage_uri, d.file_hash, d.verification_verdict, dt.verification_terms
+            d.storage_uri, d.file_hash, d.verification_verdict, dt.verification_terms,
+            d.page_count, d.pages_read
        FROM document d
        JOIN document_type dt ON dt.document_type_id = d.document_type_id
       WHERE d.document_id = $1`,
@@ -213,6 +224,8 @@ export async function getFiledDocument(
     fileHash: row.file_hash,
     verificationVerdict: row.verification_verdict,
     verificationTerms: row.verification_terms,
+    pageCount: row.page_count,
+    pagesRead: row.pages_read,
   };
 }
 
@@ -235,6 +248,20 @@ export async function updateVerificationVerdict(
     [documentId, verdict],
   );
   return result.rows.length === 1;
+}
+
+export async function recordPageCoverage(
+  db: Queryable,
+  documentId: string,
+  pageCount: number,
+  pagesRead: number,
+): Promise<void> {
+  await db.query(
+    `UPDATE document
+        SET page_count = $2, pages_read = $3
+      WHERE document_id = $1`,
+    [documentId, pageCount, pagesRead],
+  );
 }
 
 export async function listUnverifiedDocuments(db: Queryable): Promise<

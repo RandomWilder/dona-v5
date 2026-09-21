@@ -128,11 +128,12 @@ describe('settings', () => {
     try {
       // Read per call rather than at boot: neither is welded to anything
       // already stored, so a wrong model -- or one that reasons for minutes on
-      // a browser request -- is fixed by editing a row. 0014 is what chose
-      // these two values, and it chose them from a measured timeout.
+      // a browser request -- is fixed by editing a row. 0003 seeded `none` from
+      // a measured timeout; #129 moved the default to `medium` because lease
+      // values the paper prints as arithmetic need room to check themselves.
       assert.deepEqual(await readExtractionSettings(createSettings(pool)), {
         model: 'gpt-5.6-luna',
-        reasoningEffort: 'none',
+        reasoningEffort: 'medium',
       });
       assert.deepEqual(await readOcrSettings(createSettings(pool)), {
         processorVersion: 'pretrained-ocr-v2.1-2024-08-07',
@@ -140,6 +141,16 @@ describe('settings', () => {
     } finally {
       await pool.end();
     }
+  });
+
+  it('defaults extraction effort to medium when the row is missing', async () => {
+    // Same standing as the migration seed: a fresh database mid-migration must
+    // not take the process down, and the fallback has to be the default the
+    // spec names, not the historical `none` 0003 first wrote.
+    assert.deepEqual(await readExtractionSettings(settingsOf({})), {
+      model: 'gpt-5.6-luna',
+      reasoningEffort: 'medium',
+    });
   });
 
   it('takes the extraction model and effort from the rows', async () => {

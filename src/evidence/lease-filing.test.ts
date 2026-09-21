@@ -1158,7 +1158,7 @@ describe('evidence · A16 file a lease in one workspace', {
       assert.doesNotMatch(reading.body, />קדם/);
       assert.doesNotMatch(reading.body, /\/fields\/reveal/);
       assert.doesNotMatch(reading.body, /פתיחת החוזה/);
-      assert.doesNotMatch(reading.body, /123456789/);
+      assert.match(reading.body, /123456789/);
 
       const ledger = await asRole(app, actor).inject({
         method: 'GET',
@@ -1324,6 +1324,315 @@ describe('evidence · A16 file a lease in one workspace', {
       );
       await pool.query('DELETE FROM project WHERE project_code = $1', [
         PROJECT_R,
+      ]);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('reads the declared set on הקריאה, and a money row is approvable without its currency', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+
+    const CITY_D = 'עיר תיוק מוצהר';
+    const ADDRESS_D = 'הבילויים 12';
+    const PROJECT_D = 'TEST-A16-D';
+    const BUCKET_D = 'dona-v5-test-a16-declared';
+    const DOMAIN_D = 'a16-declared.test';
+    const ON = new Date('2026-09-21T09:00:00.000Z');
+    const START = '2026-11-01';
+    const END = '2027-10-31';
+    const TENANT = 'יוסף כהן';
+    const ID = '312345678';
+    const findings = [
+      { field_key: 'start_date', value: START, word_ids: [0] },
+      { field_key: 'end_date', value: END, word_ids: [1] },
+      { field_key: 'apartment_number', value: '9', word_ids: [2] },
+      { field_key: 'address', value: ADDRESS_D, word_ids: [3] },
+      { field_key: 'main_tenant_name', value: TENANT, word_ids: [4] },
+      { field_key: 'main_tenant_name', value: `${TENANT} ב`, word_ids: [4] },
+      { field_key: 'main_tenant_id_number', value: ID, word_ids: [5] },
+      { field_key: 'rent_amount', value: '4500', word_ids: [0] },
+    ];
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      clock: fixedClock(ON),
+      objects: createMemoryStore(),
+      pdf: createFakePdfText([leasing(`${ADDRESS_D}, ${CITY_D}, דירה 9`)]),
+      extractor: createFakeExtractor(() => ({ findings })),
+      bucket: BUCKET_D,
+    });
+    const planD: EstatePlan = {
+      projects: [
+        {
+          name: 'מכרז תיוק מוצהר',
+          projectCode: PROJECT_D,
+          tenderRef: null,
+          status: 'ACTIVE',
+        },
+      ],
+      buildings: [
+        {
+          name: 'בניין הבילויים 12',
+          addressLine: ADDRESS_D,
+          city: CITY_D,
+          projectCode: PROJECT_D,
+          handoverDate: '2025-03-01',
+          warrantyEndDate: '2027-03-01',
+          status: 'ACTIVE',
+          spaces: [
+            { kind: 'UNIT', name: 'דירה 9', floor: '1', accessNote: null },
+          ],
+          units: [
+            {
+              spaceName: 'דירה 9',
+              unitNumber: '9',
+              rooms: 3,
+              areaSqm: 70,
+              hasMamad: false,
+              parkingSpaceName: null,
+              storageSpaceName: null,
+              warrantyEndDate: null,
+              conditionStatus: 'READY',
+            },
+          ],
+        },
+      ],
+    };
+
+    const form = (fields: Record<string, string>): string =>
+      new URLSearchParams(fields).toString();
+    let actor: SignedIn;
+    const post = (url: string, fields: Record<string, string>) =>
+      asRole(app, actor).inject({
+        method: 'POST',
+        url,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({ csrf: actor.csrf, ...fields }),
+      });
+    const send = (
+      fields: Record<string, string>,
+      file: { filename: string; bytes: Buffer },
+    ) => {
+      const body = upload({ csrf: actor.csrf, ...fields }, file);
+      return asRole(app, actor).inject({
+        method: 'POST',
+        url: '/documents/filing',
+        ...body,
+      });
+    };
+    const rowIdsOf = async (
+      documentId: string,
+      fieldKey: string,
+    ): Promise<string[]> => {
+      const rows = await pool.query<{ id: string }>(
+        `SELECT e.extracted_field_id AS id FROM extracted_field e
+           JOIN document_type_field f
+             ON f.document_type_field_id = e.document_type_field_id
+          WHERE e.document_id = $1 AND f.field_key = $2
+          ORDER BY e.extracted_field_id`,
+        [documentId, fieldKey],
+      );
+      return rows.rows.map((row) => row.id);
+    };
+
+    let unitId = '';
+    try {
+      await signOutAll(pool, DOMAIN_D);
+      actor = await signIn(pool, fixedClock(ON), {
+        email: `admin@${DOMAIN_D}`,
+        role: 'ADMIN',
+      });
+      await applyDocumentTypeCatalogue(pool, seedDocumentTypes);
+      await pool.query(
+        'ALTER TABLE tenancy_event DISABLE TRIGGER tenancy_event_is_append_only',
+      );
+      try {
+        await pool.query(
+          `DELETE FROM tenancy_event WHERE tenancy_id IN (
+             SELECT t.tenancy_id FROM tenancy t
+             JOIN space s ON s.space_id = t.unit_id
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [CITY_D, ADDRESS_D],
+        );
+        await pool.query(
+          `DELETE FROM tenancy_party WHERE tenancy_id IN (
+             SELECT t.tenancy_id FROM tenancy t
+             JOIN space s ON s.space_id = t.unit_id
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [CITY_D, ADDRESS_D],
+        );
+        await pool.query(
+          `DELETE FROM tenancy WHERE unit_id IN (
+             SELECT s.space_id FROM space s
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [CITY_D, ADDRESS_D],
+        );
+      } finally {
+        await pool.query(
+          'ALTER TABLE tenancy_event ENABLE TRIGGER tenancy_event_is_append_only',
+        );
+      }
+      await importEstate(pool, planD);
+      await upsertTermsProfile(pool, DEFAULT_TERMS_PROFILE);
+      const found = await pool.query<{ unit_id: string }>(
+        `SELECT u.unit_id FROM unit u
+           JOIN space s ON s.space_id = u.unit_id
+           JOIN building b ON b.building_id = s.building_id
+          WHERE b.city = $1 AND b.address_line = $2`,
+        [CITY_D, ADDRESS_D],
+      );
+      unitId = found.rows[0]?.unit_id ?? '';
+      assert.ok(unitId);
+
+      const seen = await send(
+        {},
+        { filename: 'שכירות.pdf', bytes: pdfBytes('a16-declared') },
+      );
+      assert.equal(seen.statusCode, 200, seen.body.slice(0, 400));
+      const filed = await send(
+        { unit: unitId },
+        { filename: 'שכירות.pdf', bytes: pdfBytes('a16-declared') },
+      );
+      assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
+      const documentId =
+        String(filed.headers.location ?? '').match(
+          /\/documents\/filing\/([0-9a-f-]{36})$/,
+        )?.[1] ?? '';
+      assert.ok(documentId);
+
+      const reading = await asRole(app, actor).inject({
+        method: 'GET',
+        url: `/documents/filing/${documentId}`,
+      });
+      assert.equal(reading.statusCode, 200);
+      assert.match(reading.body, /<th class="group"[^>]*>תאריכים<\/th>/);
+      assert.match(reading.body, /<th class="group"[^>]*>כסף<\/th>/);
+      assert.match(reading.body, /<th class="group"[^>]*>אנשים<\/th>/);
+      assert.match(reading.body, /<th class="group"[^>]*>מקום<\/th>/);
+      assert.match(reading.body, /דמי שכירות חודשיים/);
+      assert.match(reading.body, /חסר מטבע/);
+      assert.match(reading.body, new RegExp(TENANT));
+      assert.match(reading.body, new RegExp(`${TENANT} ב`));
+      assert.match(reading.body, new RegExp(ID));
+      assert.match(reading.body, /שוכר ראשי/);
+      assert.doesNotMatch(reading.body, /אישור כל מה שלא סומן/);
+      assert.doesNotMatch(reading.body, />קדם/);
+      assert.doesNotMatch(reading.body, /\/fields\/reveal/);
+
+      const rentId = (await rowIdsOf(documentId, 'rent_amount'))[0] ?? '';
+      const rent = await post(`/documents/filing/${documentId}/approve`, {
+        extracted_field_id: rentId,
+      });
+      assert.equal(rent.statusCode, 302, rent.body.slice(0, 400));
+
+      for (const key of ['start_date', 'end_date'] as const) {
+        const id = (await rowIdsOf(documentId, key))[0] ?? '';
+        const stamped = await post(`/documents/filing/${documentId}/approve`, {
+          extracted_field_id: id,
+        });
+        assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 400));
+      }
+      const names = await rowIdsOf(documentId, 'main_tenant_name');
+      assert.equal(names.length, 2);
+      const last = await post(`/documents/filing/${documentId}/approve`, {
+        extracted_field_id: names[0] ?? '',
+      });
+      assert.equal(last.statusCode, 302, last.body.slice(0, 400));
+      const draft = await asRole(app, actor).inject({
+        method: 'GET',
+        url: `/documents/filing/${documentId}`,
+      });
+      assert.equal(draft.statusCode, 200);
+      assert.match(draft.body, /הטיוטה/);
+    } finally {
+      await inTransaction(pool, async (db) => {
+        await db.query("SELECT set_config('dona.approving', 'on', true)");
+        await db.query("SELECT set_config('dona.promoting', 'on', true)");
+        await db.query(
+          `UPDATE extracted_field
+              SET approved_value = NULL, approved_by = NULL, approved_at = NULL,
+                  promoted_to = NULL, promoted_by = NULL, promoted_at = NULL
+            WHERE document_id IN (SELECT document_id FROM document
+                                   WHERE storage_uri LIKE $1)`,
+          [`gs://${BUCKET_D}/%`],
+        );
+      });
+      await pool.query(
+        'ALTER TABLE tenancy_event DISABLE TRIGGER tenancy_event_is_append_only',
+      );
+      try {
+        await pool.query(
+          `DELETE FROM tenancy_event WHERE tenancy_id IN (
+             SELECT t.tenancy_id FROM tenancy t
+             JOIN space s ON s.space_id = t.unit_id
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [CITY_D, ADDRESS_D],
+        );
+        await pool.query(
+          `DELETE FROM tenancy_party WHERE tenancy_id IN (
+             SELECT t.tenancy_id FROM tenancy t
+             JOIN space s ON s.space_id = t.unit_id
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [CITY_D, ADDRESS_D],
+        );
+        await pool.query(
+          `DELETE FROM tenancy WHERE unit_id IN (
+             SELECT s.space_id FROM space s
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [CITY_D, ADDRESS_D],
+        );
+      } finally {
+        await pool.query(
+          'ALTER TABLE tenancy_event ENABLE TRIGGER tenancy_event_is_append_only',
+        );
+      }
+      await pool.query(
+        `DELETE FROM extracted_field WHERE document_id IN
+           (SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
+        [`gs://${BUCKET_D}/%`],
+      );
+      await pool.query(
+        `DELETE FROM document_passage WHERE document_id IN
+           (SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
+        [`gs://${BUCKET_D}/%`],
+      );
+      await pool.query(
+        `DELETE FROM document_link WHERE document_id IN
+           (SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
+        [`gs://${BUCKET_D}/%`],
+      );
+      await pool.query('DELETE FROM document WHERE storage_uri LIKE $1', [
+        `gs://${BUCKET_D}/%`,
+      ]);
+      await pool.query(
+        `DELETE FROM unit WHERE unit_id IN (
+           SELECT s.space_id FROM space s
+           JOIN building b ON b.building_id = s.building_id
+           WHERE b.city = $1 AND b.address_line = $2)`,
+        [CITY_D, ADDRESS_D],
+      );
+      await pool.query(
+        `DELETE FROM space WHERE building_id IN (
+           SELECT building_id FROM building WHERE city = $1 AND address_line = $2)`,
+        [CITY_D, ADDRESS_D],
+      );
+      await pool.query(
+        'DELETE FROM building WHERE city = $1 AND address_line = $2',
+        [CITY_D, ADDRESS_D],
+      );
+      await pool.query('DELETE FROM project WHERE project_code = $1', [
+        PROJECT_D,
       ]);
       await app.close();
       await pool.end();

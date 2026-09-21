@@ -6,7 +6,12 @@ import {
   onlineOcrByteLimit,
   onlineOcrPageLimit,
 } from '../src/kernel/ocr.ts';
-import { createPdfjsText, type PdfPage } from '../src/kernel/pdf.ts';
+import {
+  createPdfjsText,
+  type PdfPage,
+  slicePdf,
+  stampOriginalPages,
+} from '../src/kernel/pdf.ts';
 
 // Measure one specimen lease into the word list the extraction golden set scores against.
 //
@@ -23,11 +28,9 @@ import { createPdfjsText, type PdfPage } from '../src/kernel/pdf.ts';
 // runs of the gate comparable: an OCR that read differently on Tuesday would move the score for a
 // reason that has nothing to do with the change being judged.
 //
-// **Every page, not the first fifteen.** `readForVerdict` reads the first `onlineOcrPageLimit` pages
-// of a long document because it is answering "is this a lease and where is it", which the opening
-// pages settle. The fixture's values are spread across pages 1 to 21, so a capture that stopped at
-// fifteen would make a third of them unreachable and the baseline would be measuring the page limit
-// rather than the reader.
+// **The same slice-then-OCR shape as the live path (#137).** `readForVerdict` still answers "is this
+// a lease and where is it" from the first fifteen pages. Capture reads every slice, because the
+// fixture's values are spread across pages 1 to 21.
 
 const [key, file] = process.argv.slice(2);
 if (!key || !file) {
@@ -48,18 +51,12 @@ if (ocr.describe() === 'unconfigured') {
 }
 
 const bytes = readFileSync(file);
-if (bytes.byteLength > onlineOcrByteLimit) {
-  console.error(
-    `  NOT RUN — ${(bytes.byteLength / 1_048_576).toFixed(1)} MiB is beyond the online call's limit.`,
-  );
-  process.exit(1);
-}
 
 // pdfjs for the page count only. It is the one thing a scan without a text layer still tells you.
 const native = await createPdfjsText({ timeoutMs: 120_000 }).pages(bytes);
 console.log(`  ${file}`);
 console.log(
-  `  ${native.length} pages, read in chunks of ${onlineOcrPageLimit}`,
+  `  ${native.length} pages, read in slices of ${onlineOcrPageLimit}`,
 );
 
 const pages: PdfPage[] = [];
@@ -68,21 +65,19 @@ for (let from = 1; from <= native.length; from += onlineOcrPageLimit) {
     { length: Math.min(onlineOcrPageLimit, native.length - from + 1) },
     (_, at) => from + at,
   );
-  const started = Date.now();
-  const result = await ocr.pages(bytes, 'application/pdf', 'stable', selected);
-  // The processor is asked for original page numbers and says so, but a reply that numbered its own
-  // selection 1..n would silently fuse three chunks onto the same fifteen pages. Checked rather than
-  // trusted, because the failure is invisible in the output.
-  const offset =
-    result.pages.every((page) => selected.includes(page.number)) ||
-    result.pages.length === 0
-      ? 0
-      : from - 1;
-  for (const page of result.pages) {
-    pages.push({ ...page, number: page.number + offset });
+  const slice = await slicePdf(bytes, selected);
+  if (slice.byteLength > onlineOcrByteLimit) {
+    console.error(
+      `  NOT RUN — slice ${selected[0]}-${selected[selected.length - 1]} is ${(slice.byteLength / 1_048_576).toFixed(1)} MiB, beyond the online call.`,
+    );
+    process.exit(1);
   }
+  const started = Date.now();
+  const result = await ocr.pages(slice, 'application/pdf', 'stable', selected);
+  const stamped = stampOriginalPages(result.pages, selected);
+  pages.push(...stamped);
   console.log(
-    `    pages ${selected[0]}-${selected[selected.length - 1]}: ${result.pages.length} back in ${((Date.now() - started) / 1000).toFixed(1)}s`,
+    `    pages ${selected[0]}-${selected[selected.length - 1]}: ${stamped.length} back in ${((Date.now() - started) / 1000).toFixed(1)}s (${(slice.byteLength / 1_048_576).toFixed(1)} MiB)`,
   );
 }
 

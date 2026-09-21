@@ -1,13 +1,13 @@
 ---
 number: 131
 title: "Declare the lease household by role, and the terms it prints"
-status: open
+status: closed
 labels: [ready-for-agent]
-assignee:
+assignee: cursor
 blocked_by: [129]
 parent: 136
 created: 2026-09-21
-closed:
+closed: 2026-09-21
 ---
 
 ## What to build
@@ -70,15 +70,15 @@ is true.
 
 ## Acceptance criteria
 
-- [ ] The household and terms declarations exist as seed rows at a new `effective_from`
-- [ ] No migration is written
-- [ ] `tenant_name` and `tenant_id_number` are closed, not edited; September's values still resolve
+- [x] The household and terms declarations exist as seed rows at a new `effective_from`
+- [x] No migration is written
+- [x] `tenant_name` and `tenant_id_number` are closed, not edited; September's values still resolve
       against the declaration they were read under
-- [ ] `main_tenant_name` is required; every other new key is optional
-- [ ] The new keys mirror `tenancy_party.role` rather than inventing a parallel seniority
-- [ ] Two captures of one declaration both persist; nothing resolves them silently
-- [ ] `gush`, `helka` and the structure designation are not declared on the lease type
-- [ ] The golden set from #127 is re-run against the widened declared set and the new denominator
+- [x] `main_tenant_name` is required; every other new key is optional
+- [x] The new keys mirror `tenancy_party.role` rather than inventing a parallel seniority
+- [x] Two captures of one declaration both persist; nothing resolves them silently
+- [x] `gush`, `helka` and the structure designation are not declared on the lease type
+- [x] The golden set from #127 is re-run against the widened declared set and the new denominator
       recorded as a comment
 
 ## Blocked by
@@ -89,3 +89,21 @@ is true.
 ## Related
 
 `SPEC-evidence.md`, *What a lease declares, from track B*, under *Seeding the catalogue*.
+
+## Comment — 2026-09-21
+
+Closed: seed rows at `effective_from` 2026-09-21. `tenant_name` and `tenant_id_number` closed
+2026-09-20, labels unedited. No migration.
+
+**Denominator after the widen, one run, `gpt-5.6-luna`, `reasoning: medium`.**
+
+| group | today | was (#127) |
+|---|---|---|
+| required | 14 | 16 |
+| optional | 28 | 12 |
+| not declared | 17 | 31 |
+
+This run: required 92.9% (13/14), optional 89.3% (25/28), 3 contradictions, all four identities
+`holds` on the reading. Ratchet floors left where #129 set them; they still pass. The retrieval
+half of the same `evals` command failed `building-empty-roll` (9/10); that case is unrelated and
+was already flickering on #129.

@@ -29,8 +29,10 @@ import type { WorkRunner } from '../../kernel/work.ts';
 import { documentTypeByKey } from './catalogue.ts';
 import {
   type DocumentSpec,
+  getFiledDocument,
   ingestDocument,
   linkDocument,
+  recordPageCoverage,
 } from './documents.ts';
 import {
   EXTRACT_WORK_KIND,
@@ -39,13 +41,19 @@ import {
   parseMeasuredWords,
 } from './extract.ts';
 import { embedderConfigured, writeDocumentPassages } from './passages.ts';
-import { type DocumentReading, readForVerdict } from './read.ts';
+import {
+  type DocumentReading,
+  ocrConfigured,
+  readForVerdict,
+  readRemainingSlices,
+} from './read.ts';
 import {
   documentContentTypes,
   documentFileHash,
   documentObjectPath,
   documentStorageUri,
   type Place,
+  parseStorageUri,
   placeOfStorageUri,
   sniffExtension,
 } from './storage-path.ts';
@@ -185,8 +193,11 @@ export async function fileDocument(
       extension,
       verificationTerms: type.verificationTerms,
     }));
-  const pagesForExtract = reading.pages;
   const verification = reading.verification;
+  const pageCount =
+    reading.native.length > 0 ? reading.native.length : reading.pages.length;
+  const pagesRead =
+    reading.pagesRead ?? (pageCount === 0 ? 0 : reading.pages.length);
 
   const line = {
     actorKind: 'staff' as const,
@@ -292,6 +303,7 @@ export async function fileDocument(
     validTo: request.validTo ?? null,
     verificationVerdict: verification.verdict,
     uploadedBy: request.filedBy ?? null,
+    ...(pageCount > 0 ? { pageCount, pagesRead } : {}),
   };
   const filed = await ingestDocument(deps.db, spec, deps.clock.now());
   await linkDocument(deps.db, {
@@ -317,14 +329,35 @@ export async function fileDocument(
     { outcome: 'ok' },
   );
 
-  await extractAfterFile(deps, filed.id, pagesForExtract);
-  if (embedderConfigured(deps.embedder)) {
-    await writeDocumentPassages(
-      deps.db,
-      filed.id,
-      pagesForExtract,
-      deps.embedder,
-    );
+  const remainder = pageCount > pagesRead;
+  if (remainder && deps.work && ocrConfigured(deps.ocr) && deps.ocrVersion) {
+    bindExtractWork(deps);
+    await deps.work.schedule({
+      kind: EXTRACT_WORK_KIND,
+      runAt: deps.clock.now(),
+      payload: {
+        documentId: filed.id,
+        remainder: true,
+        pageCount,
+        pages: reading.pages,
+      },
+      intentKey: `extract:${filed.id}`,
+    });
+  } else {
+    const pages = remainder
+      ? await finishFiledReading(
+          deps,
+          filed.id,
+          request.bytes,
+          extension,
+          pageCount,
+          reading.pages,
+        )
+      : reading.pages;
+    await extractAfterFile(deps, filed.id, pages);
+    if (embedderConfigured(deps.embedder)) {
+      await writeDocumentPassages(deps.db, filed.id, pages, deps.embedder);
+    }
   }
 
   return {
@@ -341,31 +374,15 @@ async function extractAfterFile(
   documentId: string,
   pages: PdfPage[],
 ): Promise<void> {
-  if (!deps.extractor) {
-    return;
-  }
   const words = numberWords(pages);
-  if (words.length === 0) {
+  if (!deps.extractor || words.length === 0) {
     return;
   }
-  const extract: Parameters<typeof extractFiledDocument>[0] = {
-    db: deps.db,
-    extractor: deps.extractor,
-    audit: deps.audit,
-    clock: deps.clock,
-    model: deps.extractModel ?? 'unconfigured',
-    reasoningEffort: deps.extractReasoningEffort,
-  };
   if (!deps.work) {
-    await extractFiledDocument(extract, { documentId, words });
+    await extractNow(deps, documentId, pages, words);
     return;
   }
-  deps.work.register(EXTRACT_WORK_KIND, async (payload) => {
-    await extractFiledDocument(extract, {
-      documentId: String(payload.documentId ?? ''),
-      words: parseMeasuredWords(payload.words),
-    });
-  });
+  bindExtractWork(deps);
   await deps.work.schedule({
     kind: EXTRACT_WORK_KIND,
     runAt: deps.clock.now(),
@@ -373,6 +390,125 @@ async function extractAfterFile(
     intentKey: `extract:${documentId}`,
   });
   await deps.work.tick();
+}
+
+export function bindExtractWork(deps: IntakeDeps): void {
+  if (!deps.work) {
+    return;
+  }
+  deps.work.register(EXTRACT_WORK_KIND, async (payload) => {
+    await runExtractWork(deps, payload);
+  });
+}
+
+export async function runExtractWork(
+  deps: IntakeDeps,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const documentId = String(payload.documentId ?? '');
+  if (payload.remainder === true) {
+    const filed = await getFiledDocument(deps.db, documentId);
+    const { path } = parseStorageUri(filed.storageUri, deps.bucket);
+    const object = await deps.objects.read(path);
+    const extension = sniffExtension(object.bytes);
+    const pageCount = Number(payload.pageCount);
+    const already = parsePdfPages(payload.pages);
+    const pages = await finishFiledReading(
+      deps,
+      documentId,
+      object.bytes,
+      extension,
+      pageCount,
+      already,
+    );
+    await extractNow(deps, documentId, pages);
+    if (embedderConfigured(deps.embedder)) {
+      await writeDocumentPassages(deps.db, documentId, pages, deps.embedder);
+    }
+    return;
+  }
+  await extractNow(deps, documentId, [], parseMeasuredWords(payload.words));
+}
+
+async function finishFiledReading(
+  deps: IntakeDeps,
+  documentId: string,
+  bytes: Buffer,
+  extension: keyof typeof documentContentTypes,
+  pageCount: number,
+  already: readonly PdfPage[],
+): Promise<PdfPage[]> {
+  if (
+    !ocrConfigured(deps.ocr) ||
+    !deps.ocrVersion ||
+    already.length >= pageCount
+  ) {
+    return [...already];
+  }
+  const pages = await readRemainingSlices(
+    { ocr: deps.ocr, ocrVersion: deps.ocrVersion },
+    bytes,
+    documentContentTypes[extension],
+    pageCount,
+    already,
+  );
+  await recordPageCoverage(deps.db, documentId, pageCount, pages.length);
+  return pages;
+}
+
+async function extractNow(
+  deps: IntakeDeps,
+  documentId: string,
+  pages: readonly PdfPage[],
+  words = numberWords(pages),
+): Promise<void> {
+  if (!deps.extractor || words.length === 0) {
+    return;
+  }
+  await extractFiledDocument(
+    {
+      db: deps.db,
+      extractor: deps.extractor,
+      audit: deps.audit,
+      clock: deps.clock,
+      model: deps.extractModel ?? 'unconfigured',
+      reasoningEffort: deps.extractReasoningEffort,
+    },
+    { documentId, words },
+  );
+}
+
+function parsePdfPages(value: unknown): PdfPage[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const pages: PdfPage[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) {
+      continue;
+    }
+    const row = entry as Record<string, unknown>;
+    if (
+      typeof row.number !== 'number' ||
+      typeof row.width !== 'number' ||
+      typeof row.height !== 'number' ||
+      !Array.isArray(row.items)
+    ) {
+      continue;
+    }
+    pages.push({
+      number: row.number,
+      width: row.width,
+      height: row.height,
+      items: row.items.filter(
+        (item): item is PdfPage['items'][number] =>
+          typeof item === 'object' &&
+          item !== null &&
+          typeof (item as { text?: unknown }).text === 'string',
+      ),
+    });
+  }
+  return pages;
 }
 
 /**

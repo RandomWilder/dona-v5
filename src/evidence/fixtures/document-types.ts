@@ -56,6 +56,10 @@ const SCHEMA_V3 = '2026-09-13';
 // The day money stopped being a refusal. ADR-0008 retired foundation rule 2; these are the first
 // four amount fields this catalogue has ever declared, and they are seed rows like every other.
 const SCHEMA_V4 = '2026-09-15';
+// Ticket #131. The household named by role, and the terms the specimens print.
+const SCHEMA_V5 = '2026-09-21';
+// Inclusive windows: close the superseded declaration the day before the successor opens.
+const LAST_DAY_BEFORE_V5 = '2026-09-20';
 const ISO_DATE_HINT = 'YYYY-MM-DD. Not Hebrew month names and not dd/mm/yyyy.';
 
 function field(
@@ -146,7 +150,10 @@ export const seedDocumentTypes: SeedDocumentType[] = [
         'רחוב + בניין מספר + עיר. לא דירה מספר במקום מספר הבניין.',
         { from: SCHEMA_V2 },
       ),
-      field('tenant_name', 'שם השוכר', 'TEXT', true, 'השוכר'),
+      // Closed at #131, not edited. A value read in September still points at this row (R18).
+      field('tenant_name', 'שם השוכר', 'TEXT', true, 'השוכר', {
+        to: LAST_DAY_BEFORE_V5,
+      }),
       field('guarantor_name', 'שם הערב', 'TEXT', false, 'ערב'),
       // **Slice 6.4, and the first identifier this catalogue ever declared.** Two seed rows and no
       // migration — A8's open half used for real for the third time, and the third is the one that
@@ -170,7 +177,7 @@ export const seedDocumentTypes: SeedDocumentType[] = [
         'TEXT',
         false,
         'תעודת זהות של השוכר. ספרות בלבד, ללא מקפים. לא מספר חוזה, לא מספר טלפון ולא מספר חשבון בנק.',
-        { from: SCHEMA_V3 },
+        { from: SCHEMA_V3, to: LAST_DAY_BEFORE_V5 },
       ),
       field(
         'guarantor_id_number',
@@ -228,6 +235,99 @@ export const seedDocumentTypes: SeedDocumentType[] = [
         false,
         'המטבע שבו נקוב הפיקדון: ILS, USD או EUR. ₪ ו-ש"ח הם ILS. לא בהכרח המטבע של דמי השכירות.',
         { from: SCHEMA_V4 },
+      ),
+      // **Ticket #131, from track B.** The household is named by role so pairing is solved by
+      // construction — `main_tenant_id_number` belongs to `main_tenant_name` because the
+      // declaration says so. The keys name `tenancy_party.role` (`PRIMARY_TENANT` / `CO_TENANT`);
+      // they do not invent a parallel seniority. Cap at two is a seed cap: a third signatory is
+      // another row at a later `effective_from`.
+      field(
+        'main_tenant_name',
+        'שם השוכר הראשי',
+        'TEXT',
+        true,
+        'שם השוכר הראשי. לא שם השוכר הנוסף ולא שם הערב.',
+        { from: SCHEMA_V5 },
+      ),
+      field(
+        'main_tenant_id_number',
+        'מזהה השוכר הראשי',
+        'TEXT',
+        false,
+        'תעודת זהות או מספר דרכון של השוכר הראשי. דרכון כולל אות פותחת. לא מספר חוזה, לא מספר טלפון ולא מספר חשבון בנק. שייך לשם השוכר הראשי בלבד.',
+        { from: SCHEMA_V5 },
+      ),
+      field(
+        'second_tenant_name',
+        'שם השוכר הנוסף',
+        'TEXT',
+        false,
+        'שם השוכר הנוסף. לא שם השוכר הראשי ולא שם הערב. חוזה עם שוכר אחד מחזיר אפס.',
+        { from: SCHEMA_V5 },
+      ),
+      field(
+        'second_tenant_id_number',
+        'מזהה השוכר הנוסף',
+        'TEXT',
+        false,
+        'תעודת זהות או מספר דרכון של השוכר הנוסף. דרכון כולל אות פותחת. שייך לשם השוכר הנוסף בלבד. לא מזהה השוכר הראשי.',
+        { from: SCHEMA_V5 },
+      ),
+      field(
+        'maintenance_amount',
+        'דמי ועד בית',
+        'NUMBER',
+        false,
+        'דמי ועד בית או דמי אחזקה החודשיים. מספר בלבד, ללא פסיקים, ללא רווחים וללא סימן מטבע. לא דמי השכירות החודשיים ולא סכום הפיקדון.',
+        { from: SCHEMA_V5 },
+      ),
+      field(
+        'maintenance_currency',
+        'מטבע דמי ועד בית',
+        'TEXT',
+        false,
+        'המטבע שבו נקובים דמי ועד בית: ILS, USD או EUR. ₪ ו-ש"ח הם ILS. לא בהכרח המטבע של דמי השכירות.',
+        { from: SCHEMA_V5 },
+      ),
+      field(
+        'deposit_months',
+        'מספר חודשי הפיקדון',
+        'NUMBER',
+        false,
+        'מכפיל הפיקדון בחודשי שכירות (פלוס ועד בית אם מצוין). מספר בלבד. לא סכום הפיקדון עצמו. שני חודשים ושלושה חודשים שניהם חוקיים.',
+        { from: SCHEMA_V5 },
+      ),
+      field(
+        'promissory_note_amount',
+        'סכום שטר החוב',
+        'NUMBER',
+        false,
+        'סכום שטר החוב. מספר בלבד, ללא פסיקים, ללא רווחים וללא סימן מטבע. לא סכום הפיקדון ולא דמי השכירות החודשיים.',
+        { from: SCHEMA_V5 },
+      ),
+      field(
+        'promissory_note_currency',
+        'מטבע שטר החוב',
+        'TEXT',
+        false,
+        'המטבע שבו נקוב שטר החוב: ILS, USD או EUR. ₪ ו-ש"ח הם ILS.',
+        { from: SCHEMA_V5 },
+      ),
+      field(
+        'option_end_date',
+        'סיום תקופת האופציה',
+        'DATE',
+        false,
+        `${ISO_DATE_HINT} סיום תקופת השכירות הנוספת (האופציה), לא סיום התקופה המקורית (end_date).`,
+        { from: SCHEMA_V5 },
+      ),
+      field(
+        'signed_date',
+        'מועד החתימה',
+        'DATE',
+        false,
+        `${ISO_DATE_HINT} היום שבו נחתם המסמך, לא תחילת תקופת השכירות.`,
+        { from: SCHEMA_V5 },
       ),
     ],
   },

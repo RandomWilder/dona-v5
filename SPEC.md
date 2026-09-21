@@ -52,6 +52,11 @@ around; the rest are what makes them enforceable.
    extracted. An extracted value becoming a *typed column* costs a migration and a reviewed mapping,
    because those columns are what the isolation join, the responsibility matrix and the state machine
    read. Nothing deterministic reads an `ExtractedField` value directly; a contract test asserts it.
+   A view may display and cite an **approved** capture under the render-only rule in
+   [CONTEXT.md](CONTEXT.md); it may not branch on one, compare one, or aggregate over one. Those
+   reads live in the estate read model and the view, never in tenancy, evidence, policy, isolation
+   or the state machine. The contract test still scans policy, isolation and the state machine
+   and is not loosened for a screen.
    Two instances of the same split are already settled in the workbook and bind the schema:
    **`ObligationType` is an admin-managed catalogue** — deactivated, never deleted, with
    `responsible_party` copied onto the obligation at creation so editing the catalogue cannot rewrite
@@ -463,7 +468,7 @@ directory while two closed slices' paint sat in `src/` where it could not see it
 **3.3 added the first write route**: `GET /documents/new` and
 `POST /documents`, flow A1, reached from a unit on the building page. The bounds it carries are
 stated in [SPEC-evidence.md](SPEC-evidence.md) and applied in
-`src/evidence/internal/routes.ts` — one file, 20 MB, four kinds **sniffed from the bytes and never
+`src/evidence/internal/routes.ts` — one file, 100 MB, four kinds **sniffed from the bytes and never
 from the name**, the filename discarded, and nothing personal in the response. Those bound a
 *request*; **slice 5.2 added the bound on a *caller***, which is a different quantity — fifty filed
 documents per operator per rolling day, counted off the audit log, because nothing else stopped one

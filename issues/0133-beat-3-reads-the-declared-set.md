@@ -1,13 +1,13 @@
 ---
 number: 133
 title: "Beat 3 reads the declared set"
-status: open
+status: closed
 labels: [ready-for-agent]
-assignee:
+assignee: cursor
 blocked_by: [131]
 parent: 136
 created: 2026-09-21
-closed:
+closed: 2026-09-21
 ---
 
 ## What to build
@@ -48,14 +48,14 @@ merges. A diff review cannot tell you the page renders.
 
 ## Acceptance criteria
 
-- [ ] Beat 3 renders every declared field of the lease type, one row per value
-- [ ] Rows are grouped into dates, money, people and place **in the view**
-- [ ] `document_type_field` gains no `group_key` column
-- [ ] Household values are labelled by role; no screen asks for an identifier to be paired to a name
-- [ ] An amount whose currency is missing is visibly marked and can still be approved
-- [ ] Two captures of one declaration render as two rows with an operator choice
-- [ ] Identifiers render as printed, unmasked
-- [ ] Reveal, promote and bulk approval are absent from this screen
+- [x] Beat 3 renders every declared field of the lease type, one row per value
+- [x] Rows are grouped into dates, money, people and place **in the view**
+- [x] `document_type_field` gains no `group_key` column
+- [x] Household values are labelled by role; no screen asks for an identifier to be paired to a name
+- [x] An amount whose currency is missing is visibly marked and can still be approved
+- [x] Two captures of one declaration render as two rows with an operator choice
+- [x] Identifiers render as printed, unmasked
+- [x] Reveal, promote and bulk approval are absent from this screen
 - [ ] The path is clicked on a restarted `:3000` before merge
 
 ## Blocked by
@@ -67,3 +67,13 @@ Not blocked by #132: promotion is not on this screen.
 ## Related
 
 `SPEC-evidence.md` and `SPEC-flows.md`, A16 beat 3.
+
+## Comment — 2026-09-21
+
+Closed. Beat 3 paints the declared set in four view groups (dates, money, people, place); no
+`group_key`. Household labelled by role. Missing rent currency is marked and still stamped. Two
+captures stay two rows. Identifiers as printed; reveal / promote / bulk stay off. Stamp on this
+tab attests what the page showed, including identifiers. `:3000` restarted (`/health` up); the
+filing tab is behind Google login here — HTTP suite is the signed-in click. Director should still
+open a live filing on `:3000`.
+
