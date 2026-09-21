@@ -1240,12 +1240,82 @@ absences, 4 arithmetic identities and 10 recorded hazards across two specimens. 
 ground truth this module has had. Like every other eval here it needs `OPENAI_API_KEY` and is skipped
 without one, and it adds no CI machinery: the gate already runs, and this is another case inside it.
 
-**What it asserts.** Per-field exact match at 95% or better. No value returned with a confident
-citation that disagrees with the fixture. Both of the second specimen's credited absences credited.
-All four arithmetic identities holding. **Required-field accuracy and optional-field accuracy are
-reported separately and are never blended into one number**, because a miss on `guarantor_name` and a
-miss on `rent_amount` are not the same failure, and a single percentage hides which of the two you
-have.
+**What it asserts.** Per-field exact match against a ratchet, on the retrieval cases' rule and for
+their reason: the floor is the number the reader reaches today, recorded in
+`evals/fixtures/extraction-ratchet.json`, so the gate blocks a regression from the first commit while
+staying green, and the proof that a later reading change is a fix is that the number goes *up*. 95%
+is the target the ratchet climbs toward and is not the bar on the day it lands — a gate that is red
+on adoption day measures nothing and gets switched off. No value returned with a confident citation
+that disagrees with the fixture. Both of the second specimen's credited absences credited. All four
+arithmetic identities holding. **Required-field accuracy and optional-field accuracy are reported
+separately and are never blended into one number**, because a miss on `guarantor_name` and a miss on
+`rent_amount` are not the same failure, and a single percentage hides which of the two you have.
+
+**The identities are asserted against the fixture always, and against the reading when they can be.**
+The hand reading satisfying its own arithmetic is checked unconditionally and on every run, including
+in `npm test`, so an edit to the fixture that breaks one is caught where it is made. The check
+against what the reader returned is the one the ticket describes — *a reading that returns all three
+parts but a figure that does not satisfy the identity has not read the document* — and it is
+**reported as unreachable today**: every identity either specimen records multiplies
+`maintenance_amount`, which the catalogue does not declare, so the mapping schema cannot return it
+and no reading can be tested against any of the four. An instrument that cannot fail must say so
+rather than printing the word for a reader that was asked and stayed silent. It becomes reachable
+when that key is declared.
+
+**Three groups, because the catalogue declares twelve of the fixture's field keys and not the rest.**
+A fixture value is *required* when the live `document_type_field` list declares its key and marks it
+required, *optional* when it declares it and does not, and **not asked for** when the catalogue does
+not declare it at all. The third group is scored by nothing and reported as a count: the mapping
+schema restricts `field_key` to the declared list, so the reader is structurally incapable of
+returning `maintenance_amount` today and folding those values into either percentage would report a
+failure of the catalogue as a failure of the reader. The group empties as track B's seed rows land,
+which is the point of counting it. **Which key sits in which group is read from the catalogue at run
+time and never from the fixture** (A8), and the fixture's own `declaration` mark is checked against
+it: a seed row that lands without the fixture moving is a gate failure, because the two have then
+stopped describing the same system.
+
+**A contradiction is counted against a ceiling and a miss moves a percentage.** A value the reader
+returns that the fixture does not carry for that key — a surplus value, or any guarantor at all in
+the second specimen — is a different defect from a reading that stopped short, and is reported
+separately and in full on every run. What the gate asserts is the **count**, against a ceiling set
+the way the floors are set.
+
+It says *count* rather than *which*, and that was decided by measurement rather than by preference.
+The first design named the contradictions the baseline found and failed anything new, which is the
+obvious reading of *a value returned with a confident citation that disagrees with the fixture is a
+failure*. **Five runs of one reader over one capture of each specimen produced eight distinct
+contradictions, five of them appearing exactly once.** At `reasoning: none` this reader is not
+deterministic, and a gate keyed on which value it invented would have been red on nearly every run
+while telling nobody anything. A ceiling holds the line that matters — a change that makes the reader
+invent more than it invents today fails, whichever values it invents — and survives the jitter.
+
+**The jitter is the baseline's main finding**, ahead of any of its percentages. Required-field
+accuracy spread 12.5 points across those five runs and optional-field accuracy 16.7, on identical
+input. It follows that **no single run of this gate is evidence of anything**, and that the reading
+changes below are to be judged over at least five runs each: a one-run improvement inside a spread
+this wide is a coin landing the way somebody hoped. It also follows that the floors sit a graded
+value below the *worst* run rather than at the mean — `evals/measure.ts` makes exactly this argument
+about a rank inside the embedder's own run-to-run jitter, and a floor half the runs fall through is
+a coin flip rather than a gate.
+
+**Both specimens are read once, not per run.** Neither carries a text layer worth the name — the
+first is a flatbed scan with no text at all and the second a phone scan whose only item per page is
+the scanner's own watermark — so the words the mapper is given come from Document AI, and the gate
+scores the **mapper** rather than the OCR beneath it. `npm run specimens:capture` measures one PDF
+once and writes `evals/specimens/<key>.words.json`, the same `MeasuredWord[]` the work queue already
+carries as a payload. The gate reads those files. **They are never committed**: a capture holds every
+word of the document it was taken from, which is the one thing this repository may not hold, and the
+fixture beside it is a hand reading precisely so that the words themselves need not be. Absent, the
+extraction cases skip and say which file they wanted, on `ocr:sweep`'s argument — an unread specimen
+is not a measured zero, and `REQUIRE_SPECIMENS=1` turns that skip into a failure for a run that meant
+to measure.
+
+**CI cannot set that variable, and this is the one gate here that CI does not enforce.** The
+`REQUIRE_*=1` pattern lives in `.github/workflows/ci.yml`, and the captures are permanently outside
+the repository a CI job checks out, so the place the variable belongs is the one place it can never
+be satisfied. The extraction half therefore runs on a machine that holds the documents, and reaches
+everyone else as the ratchet file and a comment on the issue that moved it. That is a real limit and
+it is stated rather than left to be discovered from a green build.
 
 **A credited absence is a declared field that correctly returns nothing**, because the document does
 not contain it. The second specimen names no guarantor at all, and extraction returning zero of them

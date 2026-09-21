@@ -4,7 +4,7 @@ title: "Send each word its normalised position"
 status: open
 labels: [ready-for-agent]
 assignee:
-blocked_by: [127]
+blocked_by: []
 parent: 136
 created: 2026-09-21
 closed:
@@ -56,3 +56,22 @@ us the layout hypothesis is wrong.
 ## Related
 
 `SPEC-evidence.md`, *ExtractedField*, the **Two engines** bullet.
+
+## Comment — 2026-09-21
+
+Unblocked: #127 is closed and the baseline is the comment on it. Two things from it bear on this
+ticket directly.
+
+**Measure over at least five runs, not one.** Five runs of the current reader over identical words
+spread required-field accuracy across 12.5 points (68.8 / 75.0 / 81.3 / 81.3 / 68.8). A single run
+showing normalised position helping, or not helping, is inside the noise and means nothing. The
+proposal's own test for this change — *if normalised position does not move the score, the layout
+hypothesis is wrong and the larger line-reconstruction work should not be done at all* — needs a
+distribution on both sides of it or it cannot be applied honestly.
+
+**The number to watch is required-field accuracy, and the mechanism to watch is the household.** All
+four missing required values are the two tenants' names and identifiers, and all three recurring
+contradictions are the same defect: the household read as a block rather than as people
+(`Rami Meir Pinchot; Ariella Atkin` in one value, `A36688170` returned as `36688170`). The signatory
+block is laid out exactly like the two-column annex this change is aimed at, so it is the place
+position should show up first if the hypothesis is right.

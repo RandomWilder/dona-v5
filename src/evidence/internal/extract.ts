@@ -9,7 +9,7 @@ import { KernelError } from '../../kernel/errors.ts';
 import type { Extractor, JsonSchema } from '../../kernel/extraction.ts';
 import { newId } from '../../kernel/ids.ts';
 import type { PdfPage } from '../../kernel/pdf.ts';
-import type { FieldValueType } from './catalogue.ts';
+import type { DocumentTypeFieldRow, FieldValueType } from './catalogue.ts';
 import { documentTypeFields } from './catalogue.ts';
 import { getFiledDocument } from './documents.ts';
 import type { Queryable } from './types.ts';
@@ -334,6 +334,97 @@ function asFindings(reply: unknown): Array<{
   return rows;
 }
 
+/**
+ * One reading, captured but not filed. **Ticket #127.**
+ *
+ * The mapper's whole job, with the database on neither side of it: declared fields and numbered
+ * words in, captured values with their geometry out. `extractFiledDocument` below persists these;
+ * `evals/extraction.ts` scores them against the hand reading in
+ * `evals/fixtures/lease-extraction.ts` and stores nothing at all.
+ *
+ * It is a seam and not a second reader, which is the only reason the score means anything: a gate
+ * that graded its own copy of the prompt, the schema and the capture rules would report on the copy.
+ */
+export interface MappedFinding {
+  field: DocumentTypeFieldRow;
+  /** Captured — `asIsoDate` or `asBareNumber` has already run. Never the raw span. */
+  value: string;
+  page: number;
+  bbox: BBox;
+  confidence: number | null;
+}
+
+/**
+ * Ask the model to fill the declared fields from the numbered words, and capture what comes back.
+ *
+ * Throws what the extractor throws. The `unavailable` case is a filed document's problem — there is
+ * a row to audit against — so it is handled by the caller that has one.
+ */
+export async function mapFieldsFromWords(
+  deps: {
+    extractor: Extractor;
+    model: string;
+    reasoningEffort?: string;
+  },
+  input: {
+    fields: readonly DocumentTypeFieldRow[];
+    words: readonly MeasuredWord[];
+  },
+): Promise<MappedFinding[]> {
+  const byId = new Map(input.words.map((word) => [word.id, word]));
+  const byKey = new Map(input.fields.map((field) => [field.fieldKey, field]));
+  const reply = await deps.extractor.extract({
+    model: deps.model,
+    name: 'document_fields',
+    instructions: EXTRACT_INSTRUCTIONS,
+    input: JSON.stringify({
+      fields: input.fields.map((field) => ({
+        field_key: field.fieldKey,
+        label_he: field.labelHe,
+        value_type: field.valueType,
+        extraction_hint: field.extractionHint,
+      })),
+      words: JSON.parse(wordsForModel(input.words)) as unknown,
+    }),
+    schema: findingsSchema(input.fields.map((field) => field.fieldKey)),
+    reasoningEffort: deps.reasoningEffort,
+  });
+
+  const mapped: MappedFinding[] = [];
+  for (const finding of asFindings(reply)) {
+    const field = byKey.get(finding.field_key);
+    if (!field || finding.value.trim().length === 0) {
+      continue;
+    }
+    // Two value types have a printed form and a stored form: a DATE and, from ticket #101, a
+    // NUMBER. Everything else is stored as it was read.
+    const value = captureValue(field.valueType, finding.value);
+    if (!value) {
+      continue;
+    }
+    const selected: MeasuredWord[] = [];
+    for (const id of finding.word_ids) {
+      const word = byId.get(id);
+      if (word && (selected.length === 0 || word.page === selected[0]?.page)) {
+        selected.push(word);
+      }
+    }
+    if (selected.length === 0) {
+      continue;
+    }
+    mapped.push({
+      field,
+      value,
+      page: selected[0]?.page as number,
+      bbox: unionBox(selected),
+      confidence: selected.some((word) => word.confidence === null)
+        ? null
+        : Math.min(...selected.map((word) => word.confidence as number)),
+    });
+  }
+  return mapped;
+}
+
 export async function extractFiledDocument(
   deps: ExtractDeps,
   input: { documentId: string; words: readonly MeasuredWord[] },
@@ -352,26 +443,9 @@ export async function extractFiledDocument(
     return { written: 0 };
   }
 
-  const byId = new Map(input.words.map((word) => [word.id, word]));
-  const byKey = new Map(fields.map((field) => [field.fieldKey, field]));
-  let reply: unknown;
+  let mapped: MappedFinding[];
   try {
-    reply = await deps.extractor.extract({
-      model: deps.model,
-      name: 'document_fields',
-      instructions: EXTRACT_INSTRUCTIONS,
-      input: JSON.stringify({
-        fields: fields.map((field) => ({
-          field_key: field.fieldKey,
-          label_he: field.labelHe,
-          value_type: field.valueType,
-          extraction_hint: field.extractionHint,
-        })),
-        words: JSON.parse(wordsForModel(input.words)) as unknown,
-      }),
-      schema: findingsSchema(fields.map((field) => field.fieldKey)),
-      reasoningEffort: deps.reasoningEffort,
-    });
+    mapped = await mapFieldsFromWords(deps, { fields, words: input.words });
   } catch (error) {
     if (error instanceof KernelError && error.code === 'unavailable') {
       await deps.audit.write(
@@ -399,31 +473,7 @@ export async function extractFiledDocument(
   );
 
   let written = 0;
-  for (const finding of asFindings(reply)) {
-    const field = byKey.get(finding.field_key);
-    if (!field || finding.value.trim().length === 0) {
-      continue;
-    }
-    // Two value types have a printed form and a stored form: a DATE and, from ticket #101, a
-    // NUMBER. Everything else is stored as it was read.
-    const value = captureValue(field.valueType, finding.value);
-    if (!value) {
-      continue;
-    }
-    const selected: MeasuredWord[] = [];
-    for (const id of finding.word_ids) {
-      const word = byId.get(id);
-      if (word && (selected.length === 0 || word.page === selected[0]?.page)) {
-        selected.push(word);
-      }
-    }
-    if (selected.length === 0) {
-      continue;
-    }
-    const bbox = unionBox(selected);
-    const confidence = selected.some((word) => word.confidence === null)
-      ? null
-      : Math.min(...selected.map((word) => word.confidence as number));
+  for (const finding of mapped) {
     await deps.db.query(
       `INSERT INTO extracted_field (
          extracted_field_id, document_id, document_type_field_id, value,
@@ -432,11 +482,11 @@ export async function extractFiledDocument(
       [
         newId(deps.clock),
         input.documentId,
-        field.documentTypeFieldId,
-        value,
-        selected[0]?.page,
-        JSON.stringify(bbox),
-        confidence,
+        finding.field.documentTypeFieldId,
+        finding.value,
+        finding.page,
+        JSON.stringify(finding.bbox),
+        finding.confidence,
         deps.model,
         deps.clock.now(),
       ],

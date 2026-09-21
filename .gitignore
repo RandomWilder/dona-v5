@@ -19,3 +19,9 @@ dist/
 *.jpeg
 *.png
 !docs/corpus/**
+
+# And a measured specimen is the same document in another coat (ticket #127). A capture holds
+# every word of a signed lease; the hand reading in evals/fixtures/lease-extraction.ts is what
+# may be committed, which is why it is a hand reading. README.md is the exception.
+evals/specimens/*
+!evals/specimens/README.md
