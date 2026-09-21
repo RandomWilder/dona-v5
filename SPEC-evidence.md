@@ -1010,17 +1010,30 @@ are written — documents without passages, including the pre-#103 archive, are 
 stored passages when they exist; without them it still reads the file, which is the archive path.
 
 **#104 searches the passage store.** `searchPassages` takes a question, an embedder, a required
-**stance** — administrator or tenant, never defaulted — and a required **retrieval bound** — a Unit,
-a Building, or the whole portfolio, never defaulted, so no caller searches the whole store by
-omitting a filter (#112). Each hit carries the document, the page, the text, the document type, the
+**stance** — administrator or tenant, never defaulted — and a required **retrieval bound** — a
+Tenancy, a Unit, a Building, or the whole portfolio, never defaulted, so no caller searches the
+whole store by omitting a filter (#112). Each hit carries the document, the page, the text, the
+document type, the
 flat the document is anchored to (the `UNIT` link, or the tenancy's unit when that is the only
 place-binding), and a distance. Distance orders the results and is never asserted on. A Unit bound
 returns only Passages of Documents linked to that Unit (a `UNIT` link, or a `TENANCY` link whose
 tenancy's unit is that Unit). A Building bound is the same command with a wider filter: Documents
 linked to that Building, or to a Unit in it, or to a tenancy of a Unit in it. A portfolio bound is
 the whole store, named. The administrator stance returns identifiers as printed. The tenant stance
-masks identifier-shaped runs in the returned text and does not rewrite the stored passage. A
-Building or portfolio bound asked with tenant stance is refused at the command. Masking is not a
+masks identifier-shaped runs in the returned text and does not rewrite the stored passage.
+
+**#124 gives the tenant a bound of their own.** A **Tenancy bound** returns only Passages of
+Documents carrying a `TENANCY` link to that one Tenancy, and tenant stance may ask nothing else:
+a Unit, a Building or a portfolio bound asked with tenant stance is refused at the command. The
+bound is drawn around the household and not around the flat, because a flat outlives its
+households — the Unit bound #112 built reaches every Tenancy that Unit has ever had, which is what
+the office wants and the opposite of what a tenant may read. Masking does not close that gap and
+was never meant to: it hides identifier-shaped runs, not a previous tenant's name, rent, deposit or
+dates. The first cut is strict — `TENANCY` links only, so a tenant does not reach `UNIT`-linked
+place paper for their own flat even during their own term. Widening a bag later costs a filter;
+narrowing one after a tenant has read something costs more than that. The office turn does not take
+a Tenancy bound and refuses it rather than widening it to the Unit, because a turn that silently
+became a Unit turn would persist under a bound nobody asked for. Masking is not a
 reveal: a reveal of a withheld identifier remains `POST /documents/:id/fields/reveal` and still
 writes `evidence.read_identifier`. There is no tenant-facing surface on this command yet. The
 page-sized chunk and this search are retrieval configuration, so rent and deposit questions enter
@@ -1030,9 +1043,9 @@ the day they land.
 
 **#113 is the office turn.** One command: staff account, retrieval bound, question. It is not the
 agent and not a Conversation. Stance is administrator — the paper as printed, for every staff role
-that may read Documents — and is not a parameter a caller can omit or swap. Tenant stance on a
-Building or portfolio bound remains refused at search, so the forbidden combination still cannot be
-assembled.
+that may read Documents — and is not a parameter a caller can omit or swap. Tenant stance on any
+bound but a Tenancy remains refused at search, and the office turn refuses a Tenancy bound, so the
+forbidden combination still cannot be assembled from either end.
 
 On a Unit bound or a portfolio bound the turn may call only `searchPassages`. **#123:** on a
 Building bound the office retrieval model may choose, this turn, Passage search, tenancy's
