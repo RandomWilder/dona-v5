@@ -284,6 +284,32 @@ textarea {
   line-height: 1.2;
 }
 
+.chip.is-busy {
+  gap: var(--space-2);
+}
+
+.loader {
+  inline-size: var(--space-3);
+  block-size: var(--space-3);
+  border: var(--size-hairline) solid currentColor;
+  border-block-start-color: transparent;
+  border-radius: var(--radius-pill);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loader {
+    animation: none;
+    border-block-start-color: currentColor;
+  }
+}
+
 /* A table of declared rows — slice 7.1's document schema, and 7.3's approval ledger after it. It
    is here rather than in the module that drew it first for .facts's reason and one more: the key
    column is the mono face, and a face named inside a screen is what tokens.test.ts exists to

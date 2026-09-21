@@ -216,6 +216,8 @@ const shell = h`<style>
 export interface PageOptions {
   /** The `<title>`. Escaped, like every other interpolation `h` touches. */
   title: string;
+  /** Extra `<head>` nodes that are not the page's `<style>` block. */
+  head?: Html;
   /** The screens' own layout. One `<style>` per page, after the shell's. */
   styles?: Html;
   /** What sits in the ops rail. The caller's, never the kernel's. Absent on login. */
@@ -259,6 +261,7 @@ ${h`<html lang="he" dir="rtl">
     <meta name="robots" content="noindex" />
     <title>${options.title}</title>
     <link rel="stylesheet" href="/ui/tokens.css" />
+    ${options.head ?? h``}
     ${shell}
     ${options.styles ?? h``}
   </head>

@@ -16,6 +16,23 @@ import type { Queryable } from './types.ts';
 
 export const EXTRACT_WORK_KIND = 'evidence.extract_document';
 
+export function extractIntentKey(documentId: string): string {
+  return `extract:${documentId}`;
+}
+
+export async function extractWorkIsOpen(
+  db: Queryable,
+  documentId: string,
+): Promise<boolean> {
+  const found = await db.query(
+    `SELECT 1 FROM scheduled_work
+      WHERE intent_key = $1 AND done_at IS NULL
+      LIMIT 1`,
+    [extractIntentKey(documentId)],
+  );
+  return found.rows.length > 0;
+}
+
 /**
  * **The field keys that hold an identifier. Slice 6.4.**
  *

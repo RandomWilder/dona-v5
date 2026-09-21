@@ -54,9 +54,16 @@ const ltr = (value: string | number): Html =>
   h`<span dir="ltr">${value}</span>`;
 
 /** How much of a long scan has been read. Absent when the two numbers meet, or on the archive. */
-function coverageMark(pageCount?: number, pagesRead?: number): Html {
+function coverageMark(
+  pageCount?: number,
+  pagesRead?: number,
+  pending?: boolean,
+): Html {
   if (pageCount == null || pagesRead == null || pagesRead >= pageCount) {
     return h``;
+  }
+  if (pending) {
+    return h`<span class="chip is-busy" aria-busy="true"><span class="loader" aria-hidden="true"></span>${pagesRead} מתוך ${pageCount} · הקריאה ממשיכה</span>`;
   }
   return h`<span class="chip">${pagesRead} מתוך ${pageCount}</span>`;
 }
@@ -172,8 +179,8 @@ const styles = h`<style>
   }
 </style>`;
 
-function shell(title: string, body: Html, nav: Html): string {
-  return renderPage({ title, styles, nav, body });
+function shell(title: string, body: Html, nav: Html, head: Html = h``): string {
+  return renderPage({ title, styles, nav, body, head });
 }
 
 function unitLine(unit: UnitHit): Html {
@@ -875,6 +882,7 @@ export interface LeaseFilingScreen {
   draft?: FilingDraftFacts;
   pageCount?: number;
   pagesRead?: number;
+  readingPending?: boolean;
 }
 
 function filingApproveControl(
@@ -941,6 +949,11 @@ function filingReading(screen: LeaseFilingScreen): Html {
   if (screen.beat !== 'read') {
     return h``;
   }
+  const mark = coverageMark(
+    screen.pageCount,
+    screen.pagesRead,
+    screen.readingPending,
+  );
   const conflict = screen.conflictTenancyId
     ? h`<section class="notice">
         <h2>conflict</h2>
@@ -952,8 +965,12 @@ function filingReading(screen: LeaseFilingScreen): Html {
     : h``;
   if (rows.length === 0) {
     return h`${conflict}<section class="notice">
-      <h2>הקריאה ${coverageMark(screen.pageCount, screen.pagesRead)}</h2>
-      <p class="lede">הקובץ תויק. אישור השמות והתאריכים ייפתח כאן.</p>
+      <h2>הקריאה ${mark}</h2>
+      <p class="lede">${
+        screen.readingPending
+          ? h`עדיין קוראים את שאר העמודים. המסך יתעדכן לבד.`
+          : h`הקובץ תויק. אישור השמות והתאריכים ייפתח כאן.`
+      }</p>
     </section>`;
   }
   const grouped = READING_GROUPS.map((group, at) => ({
@@ -964,7 +981,7 @@ function filingReading(screen: LeaseFilingScreen): Html {
     (row) => readingGroupOf(row.fieldKey) === READING_GROUPS.length,
   );
   return h`${conflict}<section class="notice">
-    <h2>הקריאה ${coverageMark(screen.pageCount, screen.pagesRead)}</h2>
+    <h2>הקריאה ${mark}</h2>
       <table class="grid-table">
         <thead>
           <tr>
@@ -1251,7 +1268,13 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
     ${filingDraft(screen)}
     ${attach}
     ${search}`;
-  return shell('דונה דום — תיוק חוזה', body, screen.nav);
+  const refresh =
+    screen.beat === 'read' &&
+    screen.readingPending === true &&
+    (screen.rows?.length ?? 0) === 0
+      ? h`<meta http-equiv="refresh" content="8" />`
+      : h``;
+  return shell('דונה דום — תיוק חוזה', body, screen.nav, refresh);
 }
 
 export interface FiledScreen {
