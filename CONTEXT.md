@@ -33,6 +33,7 @@ documented module commands, never by writing a store query. Distinct from each o
 | **Party** | A person or company. Never "user", never "customer". |
 | **PartyContact** | A phone or email, valid over a date range. The join starts here. |
 | **Tenancy** | A contract over a Unit, active over a date range. |
+| **Option** | A clause letting a Tenancy run past its initial term. **Exercising** it extends the same Tenancy — it never ends one and never starts another, because the household and the flat do not change. Distinct from a renewal that creates a new letting, and from `end_date`, which the exercise moves. |
 | **TenancyParty** | A Party's role in a Tenancy. |
 | **Guarantor** (**ערב**) | A role. Never receives service information — `is_service_contact` is forced false by a database constraint, not a form default. |
 
@@ -59,6 +60,7 @@ introducing one fails the build. Say "the scope", not "the tenant's permissions"
 | **Building paper** | Documents linked to the Building itself, not to a Unit in it. The later tenant-facing bound for rules and regulations. Not the office Building **retrieval bound**. |
 | **ExtractedField** | A value read out of a Document, citable the moment it is extracted. |
 | **Capture** | Getting a value into an `ExtractedField`. **Open** — cheap, ungoverned. |
+| **Credited absence** | A declared field that correctly returns nothing, because the document does not carry it. Scored as right, never as a miss — a scorer that penalises it tunes the reader toward inventing values. The measurable form of *a missing required field is a result, not an error*. |
 | **Approval** | A person signing a reading. A stamp on the `ExtractedField`. |
 | **Promotion** | Copying an approved value onto a **typed column**. **Governed** — costs a migration and a reviewed mapping, and only happens after approval. |
 | **FieldPromotion** | The record that a promotion happened. |
@@ -66,6 +68,16 @@ introducing one fails the build. Say "the scope", not "the tenant's permissions"
 **Capture is open; promotion is governed.** Nothing deterministic ever reads an `ExtractedField`
 value directly — typed columns are what the isolation join, the responsibility matrix and the state
 machine read. A contract test asserts it.
+
+**The render-only rule.** A view may read an **approved** `ExtractedField` value in order to display
+it and to cite it. It may not branch on one, compare one, aggregate over one, or let one decide what
+happens next. Those stay the exclusive business of typed columns, which is what the contract test has
+always been about: the rule's target is **decisions**, not pixels, and a value shown on screen beside
+a link to the page it came from is the opposite of a hidden dependency. The boundary is kept
+structural rather than honour-based — these reads live in the read model and the view layer, never
+inside a module's `internal/`. It is written down precisely because *display only* is the exact
+phrase that erodes: the first comparison written against an approved capture will be small,
+reasonable, and the end of the distinction.
 
 **Verification terms** are the phrases a document must contain to be accepted as its declared type.
 One requirement per line, `|` separating the spellings of **one** requirement; every requirement must

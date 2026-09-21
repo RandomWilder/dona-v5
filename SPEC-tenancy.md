@@ -55,6 +55,18 @@ suite is asserted exactly — an added column is a red build whatever it is name
 lease lives where every other value read off a document lives**: `extracted_field`, under the
 `lease` type's declarations. **A balance is still Priority's** and this module writes none.
 
+**Track B amends the first half of that paragraph and leaves the last sentence exactly as it is.**
+`tenancy` gains three nullable columns — `rent_amount`, `rent_currency` and `option_end_date` — and
+`src/tenancy/schema.test.ts`'s exact column list moves with them in the same change. The reason is
+not that an amount has become welcome here; it is the test the evidence module applies to every
+promotion target, **will code branch on it**, and rent is the clearest yes this schema has. Arrears,
+reminders and the office bag all compare a rent to something. A value nothing compares stays where
+it was read: deposit, maintenance and the promissory note remain captured rows, quoted at move-out
+and cited from the page, and they acquire no column here. The ruling and its cost are written in
+[SPEC-evidence.md](SPEC-evidence.md), *Three more copies — track B*, which is also where the
+promotion refusals that guard these columns live. **A balance is still Priority's**, none of the
+three is one, and this module still writes none.
+
 **No `-- pii` marker on any column**, and that is a claim the guard checks rather than a claim this
 file makes: nothing here is person-shaped. The people are in `party`, reached through
 `tenancy_party.party_id`.
@@ -116,6 +128,35 @@ with the table rather than with its first importer.
 `start_date <= end_date` on purpose: guard 2 matches the join's tenancy-active predicate over
 whitespace-collapsed text, and the mirrored spelling cannot collide with it. 2.1 learned that lesson
 by tripping the guard rather than by anticipating it.
+
+## The option, exercised — track B
+
+Both lease specimens run an initial term with an option to extend, and both print all four dates. So
+the record has to answer a question it has never been asked: what happens when a tenant takes the
+option. The answer is that **nothing ends and nothing begins**. The same household stays in the same
+flat under the same agreement, for longer.
+
+**Exercising the option appends a `tenancy_event` and moves `end_date`.** The event is the history,
+in the same shape `activated` and `terminated` already use, and the column move is what every reader
+of this schema already understands. `option_end_date` is **not cleared**, because a letting that was
+extended is a different fact from a letting that was always five years long, and that column is the
+only place the distinction survives.
+
+**The kind is `extended`, and its `source_document_id` is nullable** — which is neither of its
+neighbours' shapes, deliberately. `amended` requires a document, because a promotion is a copy off a
+page and naming the page is the whole point. `terminated` and `activated` forbid one, because a clock
+and a person are not paper. An option exercise is honestly either: sometimes a signed notice arrives
+and should be cited, and sometimes it is a phone call the office records. Forcing it into one of the
+two existing shapes would make the spec certain where the world is not, and the cost of being wrong
+is an operator with a letter they cannot attach or a field they have to invent a document for.
+
+Two alternatives were considered and refused. **Updating `end_date` alone** loses the fact that an
+option ever existed, which is the one thing the renewal conversation needs. **Creating a second
+tenancy row** makes one continuous letting look like a turnover — and that is precisely the
+distinction the isolation rule exists to preserve. #124 drew the tenant's bag around the Tenancy on
+the reasoning that a previous household's paper must not be reachable from a current letting; a
+renewal is not a previous household, and a schema that modelled it as one would hide this household's
+own first five years from it.
 
 ## What is deliberately not here
 
