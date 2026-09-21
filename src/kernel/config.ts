@@ -139,9 +139,10 @@ export interface ExtractionSettings {
 // thinking for minutes on a browser request -- must be correctable with a row
 // rather than with a deploy.
 //
-// The defaults here match what the migration seeds, and exist for the reason
-// `text()` has a fallback at all: a fresh database mid-migration must not take
-// the process down.
+// The fallbacks here match the live default after every migration has run, and
+// exist for the reason `text()` has a fallback at all: a fresh database
+// mid-migration must not take the process down. 0003 still inserts the
+// historical `none`; 0033 rewrites a row that is still that value.
 export async function readExtractionSettings(
   settings: Settings,
 ): Promise<ExtractionSettings> {
@@ -151,7 +152,7 @@ export async function readExtractionSettings(
   );
   const effort = await settings.text(
     extractionSettingKeys.reasoningEffort,
-    'none',
+    'medium',
   );
   if (!(reasoningEfforts as readonly string[]).includes(effort)) {
     throw new KernelError(

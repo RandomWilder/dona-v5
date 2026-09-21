@@ -27,7 +27,7 @@ called an improvement or a regression. Every claim about the extractor to date h
 `width`, `height` and `confidence` were all produced and all discarded. On a Hebrew lease that is
 expensive in a specific way — the commercial-terms annex is a two-column right-to-left table where
 the label sits beside its value, so in reading order they are far apart and on the page they are
-adjacent. And `reasoning_effort` is `none`, on a document whose deposit is printed as an arithmetic
+adjacent. And `reasoning_effort` was `none` until #129, on a document whose deposit is printed as an arithmetic
 identity the reader is never given room to check.
 
 **The declaration cannot say who a value belongs to.** Two rows of `tenant_name` and two rows of
@@ -83,8 +83,8 @@ This is what "track B is done" is tested against. Each line is end-to-end, not a
 
 - [ ] An extraction score exists, runs on the `evals` gate, and reports required- and optional-field
       accuracy separately with credited absences scored as right
-- [ ] The two reader changes were each measured alone, and both deltas are written down
-- [ ] The decision on splitting the extractor call and rewriting `EXTRACT_INSTRUCTIONS` is recorded,
+- [x] The two reader changes were each measured alone, and both deltas are written down
+- [x] The decision on splitting the extractor call and rewriting `EXTRACT_INSTRUCTIONS` is recorded,
       whichever way it went
 - [ ] A lease read today yields the household by role, with no pairing step anywhere in the flow
 - [ ] `deposit_months` and `option_end_date` are read from the paper, not assumed
@@ -102,13 +102,14 @@ This is what "track B is done" is tested against. Each line is end-to-end, not a
 
 ## Children
 
-In dependency order. The frontier is #128 and #130, which are independent of each other.
+In dependency order. The frontier is #130 and #131, which are independent of each other now that #129 is closed.
 
 1. #127 — Score the lease reading against the fixture · **closed 2026-09-21**, baseline on the issue
-2. #128 — Send each word its normalised position · *blocked by 127* — **unblocked**
-3. #129 — Raise extraction reasoning effort to medium · *blocked by 128*
+2. #128 — Send each word its normalised position · *blocked by 127* — **closed 2026-09-21**
+3. #129 — Raise extraction reasoning effort to medium · *blocked by 128* — **closed 2026-09-21**;
+   call split and instruction rewrite are not being built; deltas on the issue
 4. #130 — Refuse a promotion onto an occupied column · *unblocked*
-5. #131 — Declare the lease household by role, and the terms it prints · *blocked by 129*
+5. #131 — Declare the lease household by role, and the terms it prints · *unblocked*
 6. #132 — Promote rent and the option end onto the tenancy · *blocked by 131, 130* · **the migration**
 7. #133 — Beat 3 reads the declared set · *blocked by 131*
 8. #134 — The tenancy card, under the render-only rule · *blocked by 132*

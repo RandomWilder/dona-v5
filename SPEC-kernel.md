@@ -342,10 +342,10 @@ page reaching the operator.
 ### `reasoning_effort` is a setting, and unset is not the same as none
 
 A model family that reasons by default treats an absent parameter as "reason as much as you like".
-The effort is `extraction.reasoning_effort`, a config row beside the model, so walking `none → low`
-when a field comes back wrong costs no deploy. The row also accepts **`omit`**, which is ours and
-not the provider's: send no `reasoning_effort` field at all, for a model that *refuses* the
-parameter rather than ignoring it.
+The effort is `extraction.reasoning_effort`, a config row beside the model. The default is `medium`
+(#129); moving it — including back to `none` for the latency baseline — costs no deploy. The row
+also accepts **`omit`**, which is ours and not the provider's: send no `reasoning_effort` field at
+all, for a model that *refuses* the parameter rather than ignoring it.
 
 `createUnconfiguredExtractor()` throws, on the argument the unconfigured embedder makes.
 `createFakeExtractor(replies)` is what the tests use: scripted JSON, no network and no key.

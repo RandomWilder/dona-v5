@@ -103,16 +103,19 @@ sheet existed.
   reachable only by arithmetic the document itself invites — a deposit stated as a number of months
   of rent plus maintenance, a promissory note at six of them. A reader given no room to work cannot
   check its own answer against the identity printed beside it. This is a `config_settings` row read
-  per call, so it is a change of default and not a deploy, and it can be moved back by an operator
-  on the settings screen if the measured run says it bought nothing.
+  per call, so it is a change of default and not a deploy, and an operator can still move it back
+  on the settings screen. #129 kept `medium` after eight measured runs: the credited-absence fix was
+  real, required accuracy got worse, and walking it back remains a row.
 - **What is deliberately not changed with them.** The extractor still makes one call per document,
   carrying every declared field across every page, and `EXTRACT_INSTRUCTIONS` is still a single
-  accumulated string of bug patches. Both are real defects and both are larger changes than these
-  two. They wait on purpose: position and reasoning effort are independent of each other and cheap,
-  and a measured run across the two will say whether the remaining two are worth building. **If
-  normalised position does not move the score, the layout hypothesis is wrong and the larger
-  line-reconstruction work should not be done at all** — which is the whole reason the scorer above
-  lands before either of them.
+  accumulated string of bug patches. Both remain true. **They are not being built from these two
+  measurements.** #128's eight runs did not move required accuracy in the direction the layout
+  hypothesis needed, so the larger line-reconstruction work is not started, and splitting the call
+  to serve that hypothesis does not earn its cost. #129's eight runs at `medium` stopped the reader
+  inventing a guarantor (optional accuracy 75% on every run, against 58.3% on every run at `none`)
+  and did not lift the household: names still fuse, `Ariella Atkin` is still missed, `A36688170`
+  still comes back stripped. That failure is a declaration the schema cannot say, which is #131,
+  not another prompt patch. The decision and both deltas live on #129.
 - **Building number is not the flat.** On a Hebrew lease `בניין מספר` belongs in `address` (street,
   building number, city). `apartment_number` is `דירה מספר` only. A parking bay (`חניה`) is neither.
   From 2026-09-08 the mapping instructions say that, and the lease field hints do too — a new
