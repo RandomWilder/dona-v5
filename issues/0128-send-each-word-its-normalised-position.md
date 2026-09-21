@@ -1,13 +1,13 @@
 ---
 number: 128
 title: "Send each word its normalised position"
-status: open
+status: closed
 labels: [ready-for-agent]
-assignee:
+assignee: cursor
 blocked_by: []
 parent: 136
 created: 2026-09-21
-closed:
+closed: 2026-09-21
 ---
 
 ## What to build
@@ -42,12 +42,12 @@ us the layout hypothesis is wrong.
 
 ## Acceptance criteria
 
-- [ ] Each word reaches the mapping model as `{id, page, text, x, y}`
-- [ ] `x` and `y` are integers in a 0–1000 page space, normalised per page
-- [ ] No `width`, `height` or `confidence` is added to the prompt payload
-- [ ] `extracted_field.bbox` and the provenance highlight are unchanged
-- [ ] This is the only behavioural change in the ticket — reasoning effort is untouched
-- [ ] The golden set is re-run and the delta against #127's baseline recorded as a comment
+- [x] Each word reaches the mapping model as `{id, page, text, x, y}`
+- [x] `x` and `y` are integers in a 0–1000 page space, normalised per page
+- [x] No `width`, `height` or `confidence` is added to the prompt payload
+- [x] `extracted_field.bbox` and the provenance highlight are unchanged
+- [x] This is the only behavioural change in the ticket — reasoning effort is untouched
+- [x] The golden set is re-run and the delta against #127's baseline recorded as a comment
 
 ## Blocked by
 
@@ -98,3 +98,46 @@ there: two names, two identifiers, and a guarantor invented from a tenant. It is
 way as the נספח א׳ annex the layout hypothesis is about — label beside value, right to left — so if
 position is going to show up anywhere it is there. If it moves nothing there, the proposal's own
 conclusion applies and the larger line-reconstruction work should not be started.
+
+## Comment — 2026-09-21
+
+Shipped. Mapping words are `{id, page, text, x, y}` with `x`/`y` integers in a 0–1000 space per
+page. Citation boxes still come from the measuring engine. Reasoning effort left at `none`.
+
+**Eight runs, `gpt-5.6-luna`, `reasoning: none`, after this change only.** Against #127's fourteen-run
+baseline (required 68.8–81.3, optional 58.3 or 75.0, contradictions 2–5).
+
+| run | required | optional | contradictions |
+|---|---|---|---|
+| 1 | 81.3% (13/16) | 58.3% (7/12) | 4 |
+| 2 | 81.3% (13/16) | 58.3% (7/12) | 4 |
+| 3 | 87.5% (14/16) | 58.3% (7/12) | 3 |
+| 4 | 81.3% (13/16) | 58.3% (7/12) | 4 |
+| 5 | 68.8% (11/16) | 58.3% (7/12) | 6 |
+| 6 | 75.0% (12/16) | 58.3% (7/12) | 4 |
+| 7 | 81.3% (13/16) | 58.3% (7/12) | 3 |
+| 8 | 75.0% (12/16) | 58.3% (7/12) | 3 |
+
+| | this change | #127 baseline |
+|---|---|---|
+| required | 68.8% – 87.5% | 68.8% – 81.3% |
+| optional | **58.3% on every run** | 58.3% or 75.0% |
+| contradictions | 3 – 6 | 2 – 5 |
+
+**Normalised position does not move the score in the direction the layout hypothesis needs.** Required
+overlaps the baseline (one run at 14/16 is inside the same household luck, not a new capability).
+Optional never left the failure mode: all eight runs invented a guarantor on `bloch-206-7` from the
+second tenant (`דבורה בלאך` / `204893143`). The signatory block is unchanged: `Ariella Atkin` still
+missed, `A36688170` still comes back as `36688170`, names still fuse. One run hit six contradictions
+(two extra `address` spellings); the ceiling of 7 still held.
+
+The proposal's own test applies: the layout hypothesis is wrong on this evidence, and the larger
+line-reconstruction work should not be started from this ticket. `npm test` green, `npm run evals`
+10/10 on a ninth extraction pass that looked like run 1.
+
+**Caveat on the scale.** Today's specimen captures do not carry page size, so these eight runs
+normalised against the occupied word hull per page, not the page's own width and height. The live
+path now has those dimensions from the measuring engine and uses them. Recapturing the specimens
+would be a new measurement, not this one.
+
+Closed.

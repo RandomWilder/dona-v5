@@ -1,8 +1,8 @@
 // Slice 4.2. Map OCR/pdfjs words onto the live DocumentTypeField list.
 //
 // Two engines: the measuring one already ran (pdfjs or Document AI). The language model is
-// handed numbered words without boxes and returns field_key + word_ids. Geometry is joined
-// here. A bbox in the model reply is ignored.
+// handed numbered words with a normalised origin and returns field_key + word_ids. Geometry is
+// joined here from the measuring engine's boxes. A bbox in the model reply is ignored.
 import type { AuditLog } from '../../kernel/audit.ts';
 import { type Clock, today } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
@@ -52,6 +52,9 @@ export interface MeasuredWord {
   width: number;
   height: number;
   confidence: number | null;
+  /** Page size in the same units as `x`/`y`. Absent on older captures. */
+  pageWidth?: number;
+  pageHeight?: number;
 }
 
 export interface BBox {
@@ -115,6 +118,8 @@ export function numberWords(pages: readonly PdfPage[]): MeasuredWord[] {
         width: item.width,
         height: item.height,
         confidence: item.confidence,
+        pageWidth: page.width,
+        pageHeight: page.height,
       });
       id += 1;
     }
@@ -295,9 +300,62 @@ function findingsSchema(fieldKeys: readonly string[]): JsonSchema {
   };
 }
 
+function pageExtent(words: readonly MeasuredWord[]): {
+  width: number;
+  height: number;
+} {
+  const sized = words.find(
+    (word) =>
+      typeof word.pageWidth === 'number' &&
+      word.pageWidth > 0 &&
+      typeof word.pageHeight === 'number' &&
+      word.pageHeight > 0,
+  );
+  if (sized?.pageWidth && sized.pageHeight) {
+    return { width: sized.pageWidth, height: sized.pageHeight };
+  }
+  let width = 0;
+  let height = 0;
+  for (const word of words) {
+    width = Math.max(width, word.x + word.width);
+    height = Math.max(height, word.y + word.height);
+  }
+  return { width, height };
+}
+
+function asPageCoord(value: number, extent: number): number {
+  if (!(extent > 0)) {
+    return 0;
+  }
+  const n = Math.round((value / extent) * 1000);
+  return Math.min(1000, Math.max(0, n));
+}
+
 function wordsForModel(words: readonly MeasuredWord[]): string {
+  const byPage = new Map<number, MeasuredWord[]>();
+  for (const word of words) {
+    const list = byPage.get(word.page);
+    if (list) {
+      list.push(word);
+    } else {
+      byPage.set(word.page, [word]);
+    }
+  }
+  const extents = new Map<number, { width: number; height: number }>();
+  for (const [page, pageWords] of byPage) {
+    extents.set(page, pageExtent(pageWords));
+  }
   return JSON.stringify(
-    words.map((word) => ({ id: word.id, page: word.page, text: word.text })),
+    words.map((word) => {
+      const extent = extents.get(word.page) ?? { width: 0, height: 0 };
+      return {
+        id: word.id,
+        page: word.page,
+        text: word.text,
+        x: asPageCoord(word.x, extent.width),
+        y: asPageCoord(word.y, extent.height),
+      };
+    }),
   );
 }
 
@@ -643,6 +701,12 @@ export function parseMeasuredWords(value: unknown): MeasuredWord[] {
       width: row.width,
       height: row.height,
       confidence: typeof row.confidence === 'number' ? row.confidence : null,
+      ...(typeof row.pageWidth === 'number' && row.pageWidth > 0
+        ? { pageWidth: row.pageWidth }
+        : {}),
+      ...(typeof row.pageHeight === 'number' && row.pageHeight > 0
+        ? { pageHeight: row.pageHeight }
+        : {}),
     });
   }
   return words;

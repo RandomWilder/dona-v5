@@ -80,7 +80,7 @@ sheet existed.
   disagree. Two values for the same declaration (two tenants on one lease) are two rows: there is
   no unique on `(document_id, document_type_field_id)`.
 - **Two engines.** Document AI or pdfjs **measures** `(page, bbox, confidence)`. The language model
-  **maps** meaning: it is handed numbered words `{id, page, text}` and the live field list from
+  **maps** meaning: it is handed numbered words `{id, page, text, x, y}` and the live field list from
   `documentTypeFields`, and it returns `{field_key, value, word_ids}`. Geometry is the union of
   those words' boxes. A bbox, page or confidence in the model reply is ignored. Empty or unknown
   `word_ids` drop the finding — no invented box. Native pdfjs may store `confidence` null; a scan

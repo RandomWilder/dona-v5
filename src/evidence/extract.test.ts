@@ -27,6 +27,7 @@ import {
   extractFiledDocument,
   fileDocument,
   listExtractedFields,
+  mapFieldsFromWords,
   numberWords,
   upsertDocumentTypeField,
 } from './contract.ts';
@@ -69,7 +70,121 @@ function wordsOf(text: string) {
   ]);
 }
 
+const ONE_FIELD = [
+  {
+    documentTypeFieldId: 'field-1',
+    fieldKey: 'apartment_number',
+    labelHe: 'דירה',
+    valueType: 'TEXT' as const,
+    isRequired: false,
+    extractionHint: null,
+    effectiveFrom: '2026-01-01',
+    effectiveTo: null,
+  },
+];
+
 describe('evidence · extract into the declared schema', () => {
+  it('hands the mapping model each word as id, page, text and a 0–1000 origin', async () => {
+    const extractor = createFakeExtractor(() => ({ findings: [] }));
+    await mapFieldsFromWords(
+      { extractor, model: 'gpt-test' },
+      {
+        fields: ONE_FIELD,
+        words: [
+          {
+            id: 0,
+            page: 1,
+            text: 'דירה',
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
+            confidence: 0.91,
+            pageWidth: 200,
+            pageHeight: 400,
+          },
+          {
+            id: 1,
+            page: 1,
+            text: '14',
+            x: 90,
+            y: 180,
+            width: 10,
+            height: 20,
+            confidence: 0.88,
+            pageWidth: 200,
+            pageHeight: 400,
+          },
+          {
+            id: 2,
+            page: 2,
+            text: 'נספח',
+            x: 50,
+            y: 25,
+            width: 50,
+            height: 25,
+            confidence: 0.7,
+            pageWidth: 100,
+            pageHeight: 50,
+          },
+        ],
+      },
+    );
+    const request = extractor.calls[0];
+    assert.ok(request);
+    const payload = JSON.parse(request.input) as {
+      words: Array<Record<string, unknown>>;
+    };
+    assert.deepEqual(payload.words, [
+      { id: 0, page: 1, text: 'דירה', x: 0, y: 0 },
+      { id: 1, page: 1, text: '14', x: 450, y: 450 },
+      { id: 2, page: 2, text: 'נספח', x: 500, y: 500 },
+    ]);
+    for (const word of payload.words) {
+      assert.equal('width' in word, false);
+      assert.equal('height' in word, false);
+      assert.equal('confidence' in word, false);
+      assert.equal('pageWidth' in word, false);
+      assert.equal('pageHeight' in word, false);
+      assert.equal(Number.isInteger(word.x), true);
+      assert.equal(Number.isInteger(word.y), true);
+      assert.ok((word.x as number) >= 0 && (word.x as number) <= 1000);
+      assert.ok((word.y as number) >= 0 && (word.y as number) <= 1000);
+    }
+  });
+
+  it('falls back to the occupied page hull when a capture has no page size', async () => {
+    const extractor = createFakeExtractor(() => ({ findings: [] }));
+    await mapFieldsFromWords(
+      { extractor, model: 'gpt-test' },
+      {
+        fields: ONE_FIELD,
+        words: [
+          {
+            id: 0,
+            page: 1,
+            text: '14',
+            x: 90,
+            y: 180,
+            width: 10,
+            height: 20,
+            confidence: 0.88,
+          },
+        ],
+      },
+    );
+    const payload = JSON.parse(extractor.calls[0]?.input ?? '{}') as {
+      words: Array<{ x: number; y: number }>;
+    };
+    assert.deepEqual(payload.words[0], {
+      id: 0,
+      page: 1,
+      text: '14',
+      x: 900,
+      y: 900,
+    });
+  });
+
   it('adds a field mid-test and re-extracts it with no DDL', async (t) => {
     const pool = await migratedPoolOrNull();
     if (!pool) {
