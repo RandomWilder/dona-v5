@@ -1,13 +1,13 @@
 ---
 number: 130
 title: "Refuse a promotion onto an occupied column"
-status: open
+status: closed
 labels: [ready-for-agent]
-assignee:
+assignee: cursor
 blocked_by: []
 parent: 136
 created: 2026-09-21
-closed:
+closed: 2026-09-21
 ---
 
 ## What to build
@@ -34,14 +34,14 @@ constraint gets a failing case before it gets an implementation.
 
 ## Acceptance criteria
 
-- [ ] A policy case asserting the conflict refusal is written and observed failing before any
+- [x] A policy case asserting the conflict refusal is written and observed failing before any
       implementation
-- [ ] Re-promoting the same extracted field onto the same column succeeds and is silent
-- [ ] Promoting a *different* extracted field whose value is identical succeeds and is silent
-- [ ] Promoting a different extracted field whose value differs refuses with `conflict`
-- [ ] The refusal names both the existing value and the document it was promoted from
-- [ ] Superseding an existing promotion remains possible as an explicit act
-- [ ] `npm run test:policy` is green
+- [x] Re-promoting the same extracted field onto the same column succeeds and is silent
+- [x] Promoting a *different* extracted field whose value is identical succeeds and is silent
+- [x] Promoting a different extracted field whose value differs refuses with `conflict`
+- [x] The refusal names both the existing value and the document it was promoted from
+- [x] Superseding an existing promotion remains possible as an explicit act
+- [x] `npm run test:policy` is green
 
 ## Blocked by
 
@@ -51,3 +51,10 @@ the reader.
 ## Related
 
 `SPEC-evidence.md`, *A promotion onto an occupied column*.
+
+## Comment — 2026-09-21
+
+Closed: occupancy is a stamp from a different extracted field on the same letting. Same value stamps
+quietly; a different value is `conflict` and names the existing value and its document. `supersede`
+is the explicit overwrite — amendment confirm passes it for `new_end_date`. Policy case red first:
+`Missing expected rejection` before the command refused.

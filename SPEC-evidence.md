@@ -1477,7 +1477,9 @@ document on the same letting would move the price of a tenancy with nothing said
 `conflict` when it differs.** Re-filing the same lease is an ordinary act and must not be an error. A
 rent that changed is the single thing an operator most needs to be told. The refusal names the
 existing value and the document it came from, and superseding it is a deliberate second act rather
-than a retry of the first.
+than a retry of the first. The command takes `supersede`; without it a differing write is refused.
+Confirming an amendment is that act for `new_end_date` — later paper wins, and earlier provenance
+stays.
 
 This is a policy case, red first.
 

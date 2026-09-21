@@ -30,6 +30,8 @@ export interface PromoteDeps {
 export interface PromoteSpec {
   extractedFieldId: string;
   promotedBy: string;
+  /** Replace a value already promoted from a different field. Without this, a differing write is `conflict`. */
+  supersede?: boolean;
 }
 
 export interface PromoteResult {
@@ -49,6 +51,7 @@ export async function promoteExtractedField(
 ): Promise<PromoteResult> {
   const extractedFieldId = validId(spec.extractedFieldId, 'extracted field');
   const promotedBy = requireText(spec.promotedBy, 'promoted_by', 200);
+  const supersede = spec.supersede === true;
 
   return inTransaction(deps.db, async (db) => {
     const captured = await db.query<{
@@ -125,37 +128,71 @@ export async function promoteExtractedField(
     }
     const value = row.value;
 
+    // **#130.** Occupancy is a stamp from a *different* extracted field on this letting, not a
+    // register date. Identical values succeed without rewriting the column. A differing value is
+    // `conflict` unless the caller said `supersede` — confirming an amendment is that act.
+    const occupant = await db.query<{
+      document_id: string;
+      value: string | null;
+    }>(
+      `SELECT e.document_id, e.approved_value AS value
+         FROM extracted_field e
+         JOIN document_link l
+           ON l.document_id = e.document_id AND l.entity_type = 'TENANCY'
+        WHERE l.entity_id = $1
+          AND e.promoted_to = $2
+          AND e.extracted_field_id <> $3
+        ORDER BY e.promoted_at DESC NULLS LAST, e.extracted_field_id
+        LIMIT 1`,
+      [tenancyId, row.target, extractedFieldId],
+    );
+    const held = occupant.rows[0];
+    if (held && held.value !== value && !supersede) {
+      throw new KernelError(
+        'conflict',
+        `that column already carries ${held.value} from document ${held.document_id}`,
+        {
+          existingValue: held.value,
+          sourceDocumentId: held.document_id,
+        },
+      );
+    }
+    const sameValueAlreadyHeld = held !== undefined && held.value === value;
+
     await db.query("SELECT set_config('dona.promoting', 'on', true)");
-    await applyPromotedField(db, {
-      tenancyId,
-      field,
-      value,
-      actor: promotedBy,
-      at: deps.clock.now(),
-      sourceDocumentId: row.document_id,
-      extractedFieldId,
-    });
+    if (!sameValueAlreadyHeld) {
+      await applyPromotedField(db, {
+        tenancyId,
+        field,
+        value,
+        actor: promotedBy,
+        at: deps.clock.now(),
+        sourceDocumentId: row.document_id,
+        extractedFieldId,
+      });
+    }
     await db.query(
       `UPDATE extracted_field
           SET promoted_to = $2, promoted_by = $3, promoted_at = $4
         WHERE extracted_field_id = $1`,
       [extractedFieldId, row.target, promotedBy, deps.clock.now()],
     );
-
-    await deps.audit.write(
-      {
-        actorKind: 'staff',
-        actorId: promotedBy,
-        action: 'evidence.promote_field',
-        subjectId: extractedFieldId,
-        inputs: {
-          documentId: row.document_id,
-          tenancyId,
-          target: row.target,
+    if (!sameValueAlreadyHeld) {
+      await deps.audit.write(
+        {
+          actorKind: 'staff',
+          actorId: promotedBy,
+          action: 'evidence.promote_field',
+          subjectId: extractedFieldId,
+          inputs: {
+            documentId: row.document_id,
+            tenancyId,
+            target: row.target,
+          },
         },
-      },
-      { outcome: 'ok' },
-    );
+        { outcome: 'ok' },
+      );
+    }
 
     return { tenancyId, target: row.target, value };
   });

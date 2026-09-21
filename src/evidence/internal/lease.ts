@@ -185,6 +185,7 @@ async function signAndPromote(
   deps: { db: Queryable; audit: AuditLog; clock: Clock },
   row: ExtractedRow,
   confirmedBy: string,
+  options: { supersede?: boolean } = {},
 ): Promise<void> {
   if (row.approvedAt === null) {
     await approveExtractedField(deps, {
@@ -196,6 +197,7 @@ async function signAndPromote(
   await promoteExtractedField(deps, {
     extractedFieldId: row.extractedFieldId,
     promotedBy: confirmedBy,
+    supersede: options.supersede,
   });
 }
 
@@ -632,7 +634,7 @@ async function confirmAmendment(
   };
   const endDate = rows.find((field) => field.fieldKey === 'new_end_date');
   if (endDate) {
-    await signAndPromote(promote, endDate, confirmedBy);
+    await signAndPromote(promote, endDate, confirmedBy, { supersede: true });
   }
 
   const partiesWritten = await writeParties(db, {
