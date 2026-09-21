@@ -1,13 +1,13 @@
 ---
 number: 136
 title: "Track B — intake, promotion, and the tenancy card"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent:
 created: 2026-09-21
-closed:
+closed: 2026-09-22
 ---
 
 ## Problem Statement
@@ -81,43 +81,44 @@ from and carries the full argument; where the two could be read as disagreeing, 
 
 This is what "track B is done" is tested against. Each line is end-to-end, not a layer.
 
-- [ ] An extraction score exists, runs on the `evals` gate, and reports required- and optional-field
+- [x] An extraction score exists, runs on the `evals` gate, and reports required- and optional-field
       accuracy separately with credited absences scored as right
 - [x] The two reader changes were each measured alone, and both deltas are written down
 - [x] The decision on splitting the extractor call and rewriting `EXTRACT_INSTRUCTIONS` is recorded,
       whichever way it went
-- [ ] A lease read today yields the household by role, with no pairing step anywhere in the flow
-- [ ] `deposit_months` and `option_end_date` are read from the paper, not assumed
-- [ ] September's `tenant_name` values still mean what they meant — the old declarations were closed,
+- [x] A lease read today yields the household by role, with no pairing step anywhere in the flow
+- [x] `deposit_months` and `option_end_date` are read from the paper, not assumed
+- [x] September's `tenant_name` values still mean what they meant — the old declarations were closed,
       not edited
-- [ ] Rent, its currency and the option end reach `tenancy` only through approve → promote
-- [ ] A promotion that would overwrite a different value refuses and names what is already there
-- [ ] An amount without its currency can be approved and cannot be promoted
-- [ ] The reading screen and the tenancy card cite every value they show
-- [ ] No deterministic path reads a capture — the contract test is green and **unmodified**
+- [x] Rent, its currency and the option end reach `tenancy` only through approve → promote
+- [x] A promotion that would overwrite a different value refuses and names what is already there
+- [x] An amount without its currency can be approved and cannot be promoted
+- [x] The reading screen and the tenancy card cite every value they show
+- [x] No deterministic path reads a capture — the contract test is green and **unmodified**
 - [x] Exercising an option extends the letting; a tenant's retrieval bound reaches the same paper
       after the extension as before it
-- [ ] `test:policy`, `evals`, `npm test` and the guards are green; every new deterministic constraint
+- [x] `test:policy`, `evals`, `npm test` and the guards are green; every new deterministic constraint
       had a policy case that was red first
 
 ## Children
 
-In dependency order. The frontier is #130 and #131, which are independent of each other now that #129 is closed.
+In dependency order. All ten are closed.
 
 1. #127 — Score the lease reading against the fixture · **closed 2026-09-21**, baseline on the issue
 2. #128 — Send each word its normalised position · *blocked by 127* — **closed 2026-09-21**
 3. #129 — Raise extraction reasoning effort to medium · *blocked by 128* — **closed 2026-09-21**;
    call split and instruction rewrite are not being built; deltas on the issue
-4. #130 — Refuse a promotion onto an occupied column · *unblocked*
-5. #131 — Declare the lease household by role, and the terms it prints · *unblocked*
+4. #130 — Refuse a promotion onto an occupied column · **closed 2026-09-21**
+5. #131 — Declare the lease household by role, and the terms it prints · **closed 2026-09-21**
 6. #132 — Promote rent and the option end onto the tenancy · *blocked by 131, 130* · **the migration**
-7. #133 — Beat 3 reads the declared set · *blocked by 131*
-8. #134 — The tenancy card, under the render-only rule · *blocked by 132*
+   · **closed 2026-09-21**
+7. #133 — Beat 3 reads the declared set · *blocked by 131* · **closed 2026-09-21**
+8. #134 — The tenancy card, under the render-only rule · *blocked by 132* · **closed 2026-09-21**
 9. #135 — Exercising the option extends the letting · *blocked by 132* · **closed 2026-09-21**
 10. #137 — A long scan is read to page fifteen, and everything downstream extracts from there ·
-    *unblocked, raised by #127* · a prerequisite of nothing above, and it bounds what all of them can
-    achieve in the live path: the baseline on #127 is measured over every page, and the running
-    system reads fifteen
+    *raised by #127* · **closed 2026-09-22** · a prerequisite of nothing above, and it bounds what
+    all of them can achieve in the live path: the baseline on #127 is measured over every page, and
+    the running system now reads the rest in later slices
 
 ## Out of scope
 
@@ -127,3 +128,23 @@ belong to track A: they are facts about the building, not about the letting.
 
 #125 is not a child of this track. It asks what place paper a tenant may read, is parented to #124,
 and is the director's to triage.
+
+## Comment — 2026-09-22
+
+Closed. All ten children closed (#127–#135, #137). Parent ticks filled from those issues, not from
+new work.
+
+- Score: #127 on the `evals` gate; required and optional printed separately; credited absences score
+  as right. Reader deltas and the “do not split / rewrite instructions” decision: #128, #129.
+- Household by role, no pairing; `deposit_months` and `option_end_date` declared; `tenant_name`
+  closed not edited: #131 / #133.
+- Rent, currency, option end only via approve → promote; half-pair approvable, not promotable: #132.
+  Occupied-column refuse-and-name: #130. Policy cases red first on both.
+- Reading screen and tenancy card cite; R9 contract test last touched in slice 4.3, still green
+  unmodified: #133 / #134.
+- Option exercise keeps the letting and the same paper in the tenant bag: #135.
+- Long scan no longer stops at page fifteen for extraction: #137.
+
+Gates this close: `test:policy` 108/108, `npm test` 802 + 41 hooks, four guards, typecheck. Live
+`evals` not re-run here (costs a model call per specimen); the gate and the scorer suite remain
+from #127. Track A and #125 stay out of scope.
