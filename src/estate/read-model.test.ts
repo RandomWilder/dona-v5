@@ -33,6 +33,7 @@ import {
   countUnitsByBuilding,
   getBuilding,
   importEstate,
+  listApprovedCapturesForTenancy,
   listBuildings,
   listExpiringLeases,
   listOverdueInspections,
@@ -357,6 +358,178 @@ describe('estate · the portfolio-scale reads', () => {
           });
         },
       );
+    } finally {
+      await pool.end();
+    }
+  });
+});
+
+const BBOX = '{"x":1,"y":2,"width":3,"height":4}';
+const CAPTURE_AT = new Date('2026-09-21T09:00:00.000Z');
+
+async function seedLettingPaper(
+  db: import('pg').PoolClient,
+): Promise<{ tenancyId: string; documentId: string }> {
+  const buildingId = newId();
+  const unitId = newId();
+  const tenancyId = newId();
+  const profileId = newId();
+  const typeId = newId();
+  const documentId = newId();
+  await db.query(
+    `INSERT INTO building (building_id, name, address_line, city, handover_date,
+                           warranty_end_date, status)
+     VALUES ($1, 'card-building', $2, 'card-city', '2020-01-01', '2022-01-01', 'ACTIVE')`,
+    [buildingId, `Card ${buildingId}`],
+  );
+  await db.query(
+    `INSERT INTO space (space_id, building_id, space_kind, name)
+     VALUES ($1, $2, 'UNIT', 'דירה 1')`,
+    [unitId, buildingId],
+  );
+  await db.query(
+    `INSERT INTO unit (unit_id, unit_number, rooms, has_mamad, condition_status)
+     VALUES ($1, '1', 3.5, true, 'READY')`,
+    [unitId],
+  );
+  await db.query(
+    `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)`,
+    [profileId, `card-${profileId}`],
+  );
+  await db.query(
+    `INSERT INTO tenancy (tenancy_id, unit_id, start_date, end_date, status, terms_profile_id)
+     VALUES ($1, $2, '2026-09-01', '2027-08-31', 'DRAFT', $3)`,
+    [tenancyId, unitId, profileId],
+  );
+  await db.query(
+    `INSERT INTO document_type (
+       document_type_id, type_key, label_he, label_en, verification_terms, is_active
+     ) VALUES ($1, $2, 'חוזה', NULL, NULL, true)`,
+    [typeId, `card-lease-${typeId}`],
+  );
+  await db.query(
+    `INSERT INTO document (
+       document_id, document_type_id, storage_uri, file_hash,
+       ingested_at, verification_verdict
+     ) VALUES ($1, $2, $3, $4, $5, 'unguarded')`,
+    [
+      documentId,
+      typeId,
+      `gs://x/${documentId}.pdf`,
+      `hash-${documentId}`,
+      CAPTURE_AT,
+    ],
+  );
+  await db.query(
+    `INSERT INTO document_link (document_id, entity_type, entity_id, link_role)
+     VALUES ($1, 'TENANCY', $2, 'EVIDENCE')`,
+    [documentId, tenancyId],
+  );
+  return { tenancyId, documentId };
+}
+
+async function declareField(
+  db: import('pg').PoolClient,
+  documentId: string,
+  fieldKey: string,
+  labelHe: string,
+): Promise<string> {
+  const type = await db.query<{ document_type_id: string }>(
+    'SELECT document_type_id FROM document WHERE document_id = $1',
+    [documentId],
+  );
+  const fieldId = newId();
+  await db.query(
+    `INSERT INTO document_type_field (
+       document_type_field_id, document_type_id, field_key, label_he,
+       value_type, is_required, extraction_hint, effective_from
+     ) VALUES ($1, $2, $3, $4, 'TEXT', false, NULL, '2020-01-01')`,
+    [fieldId, type.rows[0]?.document_type_id, fieldKey, labelHe],
+  );
+  return fieldId;
+}
+
+async function capture(
+  db: import('pg').PoolClient,
+  documentId: string,
+  fieldId: string,
+  value: string,
+  page: number,
+  approved: boolean,
+): Promise<void> {
+  const extractedId = newId();
+  await db.query(
+    `INSERT INTO extracted_field (
+       extracted_field_id, document_id, document_type_field_id, value,
+       page, bbox, confidence, model, extracted_at
+     ) VALUES ($1, $2, $3, $4, $5, $6, null, 'fake', $7)`,
+    [extractedId, documentId, fieldId, value, page, BBOX, CAPTURE_AT],
+  );
+  if (!approved) return;
+  await db.query("SELECT set_config('dona.approving', 'on', true)");
+  await db.query(
+    `UPDATE extracted_field
+        SET approved_value = value, approved_by = 'ops@test', approved_at = $1
+      WHERE extracted_field_id = $2`,
+    [CAPTURE_AT, extractedId],
+  );
+  await db.query("SELECT set_config('dona.approving', 'off', true)");
+}
+
+describe('estate · approved captures for one letting', () => {
+  it('lists only approved, unmapped captures, with the page they came from', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const { tenancyId, documentId } = await seedLettingPaper(db);
+        const depositId = await declareField(
+          db,
+          documentId,
+          'deposit_amount',
+          'סכום הפיקדון',
+        );
+        const secretId = await declareField(
+          db,
+          documentId,
+          'unsigned_note',
+          'הערה',
+        );
+        const rentId = await declareField(
+          db,
+          documentId,
+          'rent_amount',
+          'דמי שכירות',
+        );
+        await db.query(
+          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+           VALUES ($1, $2, 'tenancy.rent_amount')`,
+          [newId(), rentId],
+        );
+        await capture(db, documentId, depositId, '12000', 3, true);
+        await capture(db, documentId, secretId, 'UNAPPROVED-SECRET', 2, false);
+        await capture(db, documentId, rentId, '9999', 1, true);
+        const rows = await listApprovedCapturesForTenancy(db, tenancyId);
+        assert.deepEqual(
+          rows.map((row) => ({
+            labelHe: row.labelHe,
+            value: row.value,
+            page: row.page,
+            documentId: row.documentId,
+          })),
+          [
+            {
+              labelHe: 'סכום הפיקדון',
+              value: '12000',
+              page: 3,
+              documentId,
+            },
+          ],
+        );
+      });
     } finally {
       await pool.end();
     }

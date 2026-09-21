@@ -41,6 +41,7 @@ import {
   findBuildingAtAddress,
   getBuilding,
   getUnit,
+  listApprovedCapturesForTenancy,
   listBuildings,
   listExpiringLeases,
   listProjects,
@@ -126,6 +127,9 @@ export interface EstateDeps {
     start_date: string;
     end_date: string;
     status: string;
+    rent_amount: string | null;
+    rent_currency: string | null;
+    option_end_date: string | null;
   }>;
   listTenancyParties: (
     db: Pool,
@@ -946,10 +950,11 @@ export function registerEstateRoutes(
     );
     const letting = await deps.getTenancy(deps.pool, tenancyId);
     const unit = await getUnit(deps.pool, letting.unit_id);
-    const [members, documents, gate] = await Promise.all([
+    const [members, documents, gate, captures] = await Promise.all([
       deps.listTenancyParties(deps.pool, tenancyId),
       deps.listLinkedDocuments(deps.pool, 'TENANCY', tenancyId),
       deps.activationGate(deps.pool, tenancyId),
+      listApprovedCapturesForTenancy(deps.pool, tenancyId),
     ]);
     const names = await deps.listPartyNames(
       deps.pool,
@@ -968,9 +973,13 @@ export function registerEstateRoutes(
       status: letting.status,
       startDate: letting.start_date,
       endDate: letting.end_date,
+      rentAmount: letting.rent_amount,
+      rentCurrency: letting.rent_currency,
+      optionEndDate: letting.option_end_date,
       unit,
       people,
       documents,
+      captures,
       checks: gate.checks,
       canActivate: gate.canActivate,
       activatableOn: gate.activatableOn,

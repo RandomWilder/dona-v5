@@ -51,6 +51,7 @@ export {
   refuseProdDatabase,
 } from './internal/purge.ts';
 export type {
+  ApprovedCapture,
   BuildingDetail,
   BuildingSummary,
   ExpiringLease,
@@ -70,6 +71,7 @@ export {
   findUnitsAtAddress,
   getBuilding,
   getUnit,
+  listApprovedCapturesForTenancy,
   listBuildings,
   listExpiringLeases,
   listOverdueInspections,
@@ -82,6 +84,7 @@ export {
 export type { EstateDeps } from './internal/routes.ts';
 export { registerEstateRoutes } from './internal/routes.ts';
 export type {
+  CitedCaptureView,
   DocumentSearchHit,
   FiledDocumentView,
   IncompleteTenancyRow,

@@ -1494,6 +1494,22 @@ machinery no model decides, and half a price on one of them is worse than no pri
 This is the seam the module already has, used as it was designed — open on the way in, governed at
 the gate. It is a policy case, red first.
 
+### The tenancy card, under the render-only rule (#134)
+
+Most of what a letting's sheet shows will never be a typed column, because most of it is never
+branched on. Promoting those fields so a screen can render them would spend the governed verb on a
+display problem.
+
+**`GET /estate/tenancies/:tenancyId` reads approved captures in estate's read model and view.** Rent,
+its currency and the option end come from `tenancy`'s columns. Every other approved capture on paper
+bound to that letting is shown and cited (`/documents/:id/read?page=N`). Unapproved values do not
+appear. Declarations that already have a promotion target do not appear as captures — the typed
+column is their display. The view does not branch on a capture value. Nothing here lives in
+`src/tenancy/internal/` or `src/evidence/internal/`. R9 stays the scan it was.
+
+This screen is the administrator stance. The day it acquires a tenant route, it needs a stance
+(#125).
+
 ### An approval is required before a promotion (slice 7.4, `0029_promotion_requires_approval.sql`)
 
 7.3 left this open and made the cheap half true: a promotion *preferred* `approved_value`. 7.4 makes
@@ -1623,10 +1639,12 @@ the click is an `href`, not a script.
   when Document AI scored the words; omitted when pdfjs stored `null`). Extraction still unions the
   words a field was read from so household pairing keeps document order; that box is stored and is
   never drawn.
-- **Estate does not query `extracted_field`.** `listPromotedFieldsForUnit` lives here and is
-  injected the same way `listLinkedDocuments` already is, so the estate ↔ evidence cycle stays
-  broken. The list is every stamped field on paper linked to that unit (the unit itself, or a
+- **Estate does not query `extracted_field` for the unit page.** `listPromotedFieldsForUnit` lives
+  here and is injected the same way `listLinkedDocuments` already is, so the estate ↔ evidence cycle
+  stays broken. The list is every stamped field on paper linked to that unit (the unit itself, or a
   tenancy of that unit). Unmapped capture does not appear: it never became a value on the unit.
+  **The tenancy card is the exception the render-only rule names:** estate's read model lists
+  approved captures for that letting. R9 is unchanged.
 - **Still no names.** The only mappings this week are dates. A name that extraction captured stays
   on the read page and off the unit screen — 5.2 chose not to change that, and 5.4 did not either.
 

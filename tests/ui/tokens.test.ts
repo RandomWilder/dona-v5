@@ -615,6 +615,9 @@ const SCREENS: Array<[string, () => string]> = [
         status: 'DRAFT',
         startDate: '2026-11-01',
         endDate: '2027-10-31',
+        rentAmount: null,
+        rentCurrency: null,
+        optionEndDate: null,
         unit: hit,
         people: [
           {
@@ -629,6 +632,7 @@ const SCREENS: Array<[string, () => string]> = [
           },
         ],
         documents: [filed],
+        captures: [],
         checks: [
           { rule: 'lease', passed: true },
           { rule: 'handover_protocol', passed: false },
@@ -650,6 +654,9 @@ const SCREENS: Array<[string, () => string]> = [
         status: 'DRAFT',
         startDate: '2026-11-01',
         endDate: '2027-10-31',
+        rentAmount: null,
+        rentCurrency: null,
+        optionEndDate: null,
         unit: hit,
         people: [
           {
@@ -667,6 +674,7 @@ const SCREENS: Array<[string, () => string]> = [
             labelHe: 'פרוטוקול מסירה',
           },
         ],
+        captures: [],
         checks: [
           { rule: 'lease', passed: true },
           { rule: 'handover_protocol', passed: true },
@@ -688,6 +696,9 @@ const SCREENS: Array<[string, () => string]> = [
         status: 'DRAFT',
         startDate: '2026-09-01',
         endDate: '2027-08-31',
+        rentAmount: '4500',
+        rentCurrency: 'ILS',
+        optionEndDate: '2028-08-31',
         unit: hit,
         people: [
           {
@@ -703,6 +714,14 @@ const SCREENS: Array<[string, () => string]> = [
             documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab',
             typeKey: 'handover_protocol',
             labelHe: 'פרוטוקול מסירה',
+          },
+        ],
+        captures: [
+          {
+            documentId: filed.documentId,
+            labelHe: 'סכום הפיקדון',
+            value: '12000',
+            page: 3,
           },
         ],
         checks: [

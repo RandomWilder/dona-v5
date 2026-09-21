@@ -314,6 +314,14 @@ dark button names every requirement the gate checked. When the only miss is the 
 page states `activatableOn`. `POST /estate/tenancies/:tenancyId/activate` is the person command
 (`tenancy.write`); the clock never posts it.
 
+**The same GET is the tenancy card (#134).** Rent, its currency and the option end come from
+`tenancy`'s columns, because those copies exist. Everything else the lease said is an **approved**
+capture, each cited to `/documents/:id/read?page=N`. Unapproved readings do not appear. The page
+does not branch on a capture value, compare one, aggregate over one, or let one decide what happens
+next. Those reads live in estate's read model and this view; they are not a tenancy or evidence
+command, and they do not touch R9. This screen is the administrator stance; nothing on it is
+masked. A tenant route, when it exists, needs a stance (#125).
+
 **Writes:** `DRAFT → ACTIVE`, and a `TenancyEvent` of kind `activated` naming who and when. No
 document on that event — the paper is already on the letting; the event records the human act.
 **Enforcement:** the gate first, then `one_active_tenancy_per_unit`. Promoting a draft that still

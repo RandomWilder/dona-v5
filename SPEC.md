@@ -52,6 +52,11 @@ around; the rest are what makes them enforceable.
    extracted. An extracted value becoming a *typed column* costs a migration and a reviewed mapping,
    because those columns are what the isolation join, the responsibility matrix and the state machine
    read. Nothing deterministic reads an `ExtractedField` value directly; a contract test asserts it.
+   A view may display and cite an **approved** capture under the render-only rule in
+   [CONTEXT.md](CONTEXT.md); it may not branch on one, compare one, or aggregate over one. Those
+   reads live in the estate read model and the view, never in tenancy, evidence, policy, isolation
+   or the state machine. The contract test still scans policy, isolation and the state machine
+   and is not loosened for a screen.
    Two instances of the same split are already settled in the workbook and bind the schema:
    **`ObligationType` is an admin-managed catalogue** — deactivated, never deleted, with
    `responsible_party` copied onto the obligation at creation so editing the catalogue cannot rewrite
