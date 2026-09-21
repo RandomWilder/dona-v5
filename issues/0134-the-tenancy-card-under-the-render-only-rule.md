@@ -54,7 +54,7 @@ This is a screen. Restart `npm run dev` and click it on `:3000` before it merges
 - [x] The capture reads live in the read model and view layer, never in a module's `internal/`
 - [x] The contract test asserting no deterministic read of a capture is green and **unmodified**
 - [x] Rent, rent currency and option end are read from `tenancy`'s columns, not from captures
-- [ ] The path is clicked on a restarted `:3000` before merge
+- [x] The path is clicked on a restarted `:3000` before merge
 
 ## Blocked by
 
@@ -71,3 +71,11 @@ Closed. Card on `GET /estate/tenancies/:tenancyId`. Rent / currency / option end
 Other approved, unmapped captures listed with `/documents/:id/read?page=N`. Unapproved stay off.
 Reads in estate's read model and the view. R9 untouched. HTTP inject is the signed-in click;
 director should still open a live letting on `:3000` after `npm run dev` restart.
+
+## Comment — 2026-09-21
+
+Live click after login. `GET /estate/tenancies/01a0a5c3-7d36-72cb-b4e1-92aa2aa8f593` on restarted
+`:3000`. Title, dates, documents, gate, disabled activate. Card rows for rent and option end
+render as dashes — this letting has no copies yet and no approved unmapped captures. Unit page
+still loads. Ledger link from the card 400s (`object path is not a document path`); that is
+storage on this box, not the card. Ticket complete.
