@@ -31,6 +31,9 @@ const PROMOTION_TARGETS: Readonly<
   lease: {
     start_date: 'tenancy.start_date',
     end_date: 'tenancy.end_date',
+    rent_amount: 'tenancy.rent_amount',
+    rent_currency: 'tenancy.rent_currency',
+    option_end_date: 'tenancy.option_end_date',
   },
   lease_amendment: {
     new_end_date: 'tenancy.end_date',

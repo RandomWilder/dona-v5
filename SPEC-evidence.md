@@ -998,7 +998,7 @@ confirm page **recomputes from those rows plus `getUnit`**. There is no staging 
 confirms each proposed person's role and selects an existing `terms_profile` from the list tenancy
 already holds, evidence calls `createParty` or `upsertParty`, `upsertTenancy`, `upsertTenancyParty`
 and `promoteExtractedField`. The name is never typed and never invented: an empty list shows that fact
-and withholds the write. Dates become truth through FieldPromotion (the CHECK is still dates only).
+and withholds the write. Dates, rent and the option end become truth through FieldPromotion.
 Names do not get a promotion target: party provenance is a `PARTY` / `SIGNATORY` link and the
 `evidence.confirm_lease` audit line.
 
@@ -1406,7 +1406,7 @@ matrix could read cannot be added by seeding a catalogue field.
   document, and locking them would break week 2.
 - **`promoteExtractedField`** is the command. It requires a mapping row, a `TENANCY` link on the
   document, a non-empty promoter, and **from 7.4 an approval stamp on the row**. It asks tenancy to
-  apply the typed value (dates only, and 7.4 ruled that it stays dates only), then stamps. An
+  apply the typed value, then stamps. An
   unmapped field (`apartment_number`, `address`, `tenant_name`, `guarantor_name`) is capturable,
   listed, searchable, and **incapable** of becoming business truth: the command returns `invalid`
   and the tenancy row does not move. **From 7.3 those fields are attestable even though they are not

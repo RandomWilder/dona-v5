@@ -1401,6 +1401,20 @@ describe('field_promotion — A8 governed half', () => {
           [newId(), other],
         ),
       );
+      const rent = await seedField(db, documentTypeId, 'rent_amount');
+      await db.query(
+        `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+         VALUES ($1, $2, 'tenancy.rent_amount')`,
+        [newId(), rent],
+      );
+      const deposit = await seedField(db, documentTypeId, 'deposit_amount');
+      await rejects(db, CHECK_VIOLATION, () =>
+        db.query(
+          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+           VALUES ($1, $2, 'tenancy.deposit_amount')`,
+          [newId(), deposit],
+        ),
+      );
     });
   });
 

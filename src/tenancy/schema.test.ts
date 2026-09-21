@@ -490,6 +490,9 @@ describe('tenancy · the rest of the schema', () => {
             'actual_move_out',
             'end_date',
             'notice_date',
+            'option_end_date',
+            'rent_amount',
+            'rent_currency',
             'start_date',
             'status',
             'tenancy_id',
@@ -512,9 +515,9 @@ describe('tenancy · the rest of the schema', () => {
       // **There was a money case here, and it is deleted.** It asserted that no column on
       // `tenancy`, `tenancy_party` or `terms_profile` was named for an amount, under foundation
       // rule 2. That rule is retired (docs/decisions/ADR-0008-money-is-ordinary-data.md) and
-      // nothing replaces the case. These tables still carry no amount, and the `columnsOf`
-      // assertions directly above are what say so: they list every column exactly, so a column
-      // added here is a red build whatever it is named.
+      // nothing replaces the case. Track B (#132) adds `rent_amount`, `rent_currency` and
+      // `option_end_date` because code will branch on them; the `columnsOf` assertions directly
+      // above are exact, so a fourth column arriving here is still a red build whatever it is named.
 
       // Foundation rule 1: the scope is a view, never a column. Guard one greps the migrations for
       // `current_tenant`; this asserts the shipped schema from the other side.

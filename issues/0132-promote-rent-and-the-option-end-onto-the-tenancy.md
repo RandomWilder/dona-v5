@@ -1,13 +1,13 @@
 ---
 number: 132
 title: "Promote rent and the option end onto the tenancy"
-status: open
+status: closed
 labels: [ready-for-agent]
-assignee:
+assignee: cursor
 blocked_by: [131, 130]
 parent: 136
 created: 2026-09-21
-closed:
+closed: 2026-09-21
 ---
 
 ## What to build
@@ -52,17 +52,17 @@ re-stated here.
 
 ## Acceptance criteria
 
-- [ ] A policy case asserting the half-pair refusal is written and observed failing first
-- [ ] A migration widens `field_promotion.target` to admit `rent_amount`, `rent_currency` and
+- [x] A policy case asserting the half-pair refusal is written and observed failing first
+- [x] A migration widens `field_promotion.target` to admit `rent_amount`, `rent_currency` and
       `option_end_date`
-- [ ] `tenancy` gains those three columns, all nullable
-- [ ] `src/tenancy/schema.test.ts`'s exact column list moves in the same commit
-- [ ] An approved amount without its currency can be approved, and refuses to promote
-- [ ] The pair promotes together; neither half lands alone
-- [ ] Promoting rent onto a tenancy that already carries a different rent refuses with `conflict`
+- [x] `tenancy` gains those three columns, all nullable
+- [x] `src/tenancy/schema.test.ts`'s exact column list moves in the same commit
+- [x] An approved amount without its currency can be approved, and refuses to promote
+- [x] The pair promotes together; neither half lands alone
+- [x] Promoting rent onto a tenancy that already carries a different rent refuses with `conflict`
       (#130's rule, now reaching a column that matters)
-- [ ] Nothing else is added to the promotion target list
-- [ ] `npm run test:policy`, `npm test` and `npx tsc --noEmit` are green
+- [x] Nothing else is added to the promotion target list
+- [x] `npm run test:policy`, `npm test` and `npx tsc --noEmit` are green
 
 ## Blocked by
 
@@ -73,3 +73,11 @@ re-stated here.
 
 `SPEC-evidence.md`, *Three more copies — track B* and *A half-priced pair is not promotable*.
 `SPEC-tenancy.md`, the *no amount column* paragraph, which this change amends in the same commit.
+
+## Comment — 2026-09-21
+
+Closed: `0034` widens the CHECK and adds the three nullable columns. Rent is a pair — an amount
+without a currency is approvable and not promotable (`conflict`); both halves land together. #130
+now reaches the price. Policy case red first: CHECK `field_promotion_target_check` before the
+mapping existed.
+

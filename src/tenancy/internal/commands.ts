@@ -176,7 +176,12 @@ export async function upsertTenancyParty(
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-export type PromotedTenancyField = 'start_date' | 'end_date';
+export type PromotedTenancyField =
+  | 'start_date'
+  | 'end_date'
+  | 'rent_amount'
+  | 'rent_currency'
+  | 'option_end_date';
 
 export interface PromotedFieldSpec {
   tenancyId: string;
@@ -214,8 +219,43 @@ function pgCode(error: unknown): string | undefined {
   return undefined;
 }
 
+const PROMOTED_COLUMN: Record<PromotedTenancyField, string> = {
+  start_date: 'start_date',
+  end_date: 'end_date',
+  rent_amount: 'rent_amount',
+  rent_currency: 'rent_currency',
+  option_end_date: 'option_end_date',
+};
+
+const DATE_FIELDS = new Set<PromotedTenancyField>([
+  'start_date',
+  'end_date',
+  'option_end_date',
+]);
+
+const AMOUNT = /^\d+(\.\d+)?$/;
+
+function requireAmount(value: string): string {
+  if (!AMOUNT.test(value)) {
+    throw new KernelError('invalid', 'that is not an amount');
+  }
+  return value;
+}
+
+function requirePromotedValue(
+  field: PromotedTenancyField,
+  value: string,
+): string {
+  if (DATE_FIELDS.has(field)) return requireDate(value);
+  if (field === 'rent_amount') return requireAmount(value);
+  if (value.trim() === '') {
+    throw new KernelError('invalid', 'that currency is empty');
+  }
+  return value;
+}
+
 /**
- * Copy a promoted date onto the tenancy row and append TenancyEvent.
+ * Copy a promoted value onto the tenancy row and append TenancyEvent.
  *
  * Isolation dates from the register importer still go through `upsertTenancy` and do not write
  * events. This command is the document path: old → new, who approved it, which document caused it.
@@ -224,20 +264,19 @@ export async function applyPromotedField(
   db: Queryable,
   spec: PromotedFieldSpec,
 ): Promise<void> {
-  const value = requireDate(spec.value);
-  const column = spec.field === 'start_date' ? 'start_date' : 'end_date';
-  const current = await db.query<{
-    start_date: string;
-    end_date: string;
-  }>(
-    `SELECT start_date::text, end_date::text FROM tenancy WHERE tenancy_id = $1`,
+  const value = requirePromotedValue(spec.field, spec.value);
+  const column = PROMOTED_COLUMN[spec.field];
+  const current = await db.query<Record<string, string | null>>(
+    `SELECT start_date::text, end_date::text, rent_amount::text, rent_currency,
+            option_end_date::text
+       FROM tenancy WHERE tenancy_id = $1`,
     [spec.tenancyId],
   );
   const row = current.rows[0];
   if (!row) {
     throw new KernelError('not_found', 'tenancy not found');
   }
-  const oldValue = column === 'start_date' ? row.start_date : row.end_date;
+  const oldValue = row[column] ?? null;
   if (oldValue !== value) {
     try {
       await db.query(

@@ -141,8 +141,26 @@ describe('evidence · promote an extracted field', () => {
         const mappings = await db.query<{ n: string }>(
           `SELECT count(*)::text AS n FROM field_promotion`,
         );
-        // start_date, end_date, new_end_date — two effective_from rows each (R18).
-        assert.equal(mappings.rows[0]?.n, '6');
+        // start_date, end_date, new_end_date — two effective_from rows each (R18) — plus the
+        // three track B copies: rent_amount, rent_currency, option_end_date.
+        assert.equal(mappings.rows[0]?.n, '9');
+        const extras = await db.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM field_promotion p
+             JOIN document_type_field f
+               ON f.document_type_field_id = p.document_type_field_id
+            WHERE f.field_key LIKE ANY($1::text[])`,
+          [
+            [
+              'deposit%',
+              'maintenance%',
+              'promissory%',
+              'signed_date',
+              '%tenant_name',
+              '%id_number',
+            ],
+          ],
+        );
+        assert.equal(extras.rows[0]?.n, '0');
 
         const unitId = await insertUnit(db);
         const profile = await upsertTermsProfile(

@@ -39,7 +39,7 @@ FIELDS sheet gives these entities no timestamp, and every date here is a fact so
 | Table | Columns |
 |---|---|
 | `terms_profile` | `terms_profile_id` PK · `name` |
-| `tenancy` | `tenancy_id` PK · `unit_id` FK → unit · `start_date` · `end_date` · `status` · `terms_profile_id` FK → terms_profile · `notice_date?` · `actual_move_out?` |
+| `tenancy` | `tenancy_id` PK · `unit_id` FK → unit · `start_date` · `end_date` · `status` · `terms_profile_id` FK → terms_profile · `notice_date?` · `actual_move_out?` · `rent_amount?` · `rent_currency?` · `option_end_date?` |
 | `tenancy_party` | `tenancy_id` + `party_id` composite PK, both FK · `role` · `is_service_contact` |
 
 Vocabularies: `tenancy.status` = `DRAFT · ACTIVE · ENDED · TERMINATED_EARLY`; `tenancy_party.role` =
@@ -50,10 +50,8 @@ resident.
 ([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)) and the two
 `information_schema.columns` cases in `src/tenancy/schema.test.ts` that forbade a money-named column
 on `tenancy`, `tenancy_party`, `terms_profile`, `obligation` and `obligation_type` are deleted with
-it. The tables still carry no amount, because none of them needs one and the column list in the same
-suite is asserted exactly — an added column is a red build whatever it is named. **The rent on a
-lease lives where every other value read off a document lives**: `extracted_field`, under the
-`lease` type's declarations. **A balance is still Priority's** and this module writes none.
+it. **A balance is still Priority's** and this module writes none. What *does* land on `tenancy` is
+the next paragraph: rent, because code will branch on it.
 
 **Track B amends the first half of that paragraph and leaves the last sentence exactly as it is.**
 `tenancy` gains three nullable columns — `rent_amount`, `rent_currency` and `option_end_date` — and
@@ -201,7 +199,7 @@ own first five years from it.
   still does not import `src/evidence/internal/`.
 - **`TenancyEvent` (slice 4.3, `src/kernel/migrations/0019_tenancy_event.sql`; clock kind at 5.6,
   `0025_tenancy_event_terminated.sql`).** The row is mutable; the log is not. Every promotion that
-  copies an extracted date onto `start_date` or `end_date` appends
+  copies an extracted value onto a typed column appends
   `(field, old → new, actor, source_document_id, extracted_field_id)` with `kind = 'amended'`.
   `source_document_id` is NOT NULL for that kind (`amended_names_its_document`) and that constraint
   is never dropped. `kind` is `amended | terminated | activated`. A clock-driven end is
@@ -211,8 +209,8 @@ own first five years from it.
   (`restrict_violation`). `at` comes from the injected clock; there is no `DEFAULT now()`. `actor`
   is `-- pii`; a clock end snapshots `system`, not an operator. Register `upsertTenancy` does
   **not** write events — isolation dates from the import stay legal without a document.
-  `applyPromotedField` is the fourth write command: parse a DATE, update the named column, append
-  the event. A collision on `(unit_id, start_date)` is `conflict`. `expireDueTenancies(db, clock)`
+  `applyPromotedField` is the fourth write command: parse the value the column holds, update the
+  named column, append the event. A collision on `(unit_id, start_date)` is `conflict`. `expireDueTenancies(db, clock)`
   is the fifth: every `ACTIVE` tenancy whose `end_date` is strictly before the clock's day in the
   office's zone becomes `ENDED` and appends `terminated` with `field = status`, `ACTIVE → ENDED`.
   The last day of the lease still counts (isolation's `end_date >= today`); the day after is when
