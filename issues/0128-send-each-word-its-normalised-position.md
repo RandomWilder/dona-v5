@@ -75,3 +75,26 @@ contradictions are the same defect: the household read as a block rather than as
 (`Rami Meir Pinchot; Ariella Atkin` in one value, `A36688170` returned as `36688170`). The signatory
 block is laid out exactly like the two-column annex this change is aimed at, so it is the place
 position should show up first if the hypothesis is right.
+
+## Comment — 2026-09-21 (correction)
+
+**Read *eight* runs, not five.** The comment above says at least five on each side of the change, and
+five turned out to be exactly the sample size that looks sufficient and is not: the ceiling set from
+five runs on #127 was broken by the sixth. Fourteen runs put required accuracy between 68.8% and
+81.3% and the contradiction count between 2 and 5. Judge this change on distributions of at least
+eight, and compare ranges rather than means — a mean moving inside a 12.5-point spread is not a
+result.
+
+Two more things from #127's correction that bear on what to measure here:
+
+**Optional-field accuracy is bimodal, so quote it as two values.** It is 75.0% or 58.3% and never
+between, because the difference is exactly `bloch-206-7`'s two credited absences. If normalised
+position helps the household at all, the visible effect is that figure spending more runs at 75.0 —
+not a fractional improvement, a change in how often the reader invents a guarantor out of the second
+tenant.
+
+**The signatory block is the place to look first.** Every value this change could plausibly fix is
+there: two names, two identifiers, and a guarantor invented from a tenant. It is laid out the same
+way as the נספח א׳ annex the layout hypothesis is about — label beside value, right to left — so if
+position is going to show up anywhere it is there. If it moves nothing there, the proposal's own
+conclusion applies and the larger line-reconstruction work should not be started.
