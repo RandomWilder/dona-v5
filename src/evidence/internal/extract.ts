@@ -32,6 +32,8 @@ export const EXTRACT_WORK_KIND = 'evidence.extract_document';
 export const IDENTIFIER_FIELD_KEYS: ReadonlySet<string> = new Set([
   'tenant_id_number',
   'guarantor_id_number',
+  'main_tenant_id_number',
+  'second_tenant_id_number',
 ]);
 
 /** Whether this field key holds an identifier, and so is withheld unless the viewer may read it. */

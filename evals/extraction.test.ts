@@ -380,11 +380,9 @@ describe('the arithmetic the paper asserts about its own numbers', () => {
     }
   });
 
-  // The check the ticket asks for — "a reading that returns all three parts but a figure that does
-  // not satisfy the identity has not read the document" — cannot fire today, because every identity
-  // either specimen records multiplies `maintenance_amount` and nothing declares it. An instrument
-  // that is switched off must say so rather than printing the word for a reader that stayed silent.
-  it('reports every identity as unreachable while an operand is undeclared', () => {
+  // #131 declared `maintenance_amount`, so the identities are reachable. An empty reading is
+  // `not-returned`, not `unreachable` — the instrument is on and the reader was asked.
+  it('reports every identity as not-returned once every operand is declared', () => {
     const lease = seedDocumentTypes.find((one) => one.type.typeKey === 'lease');
     assert.ok(lease);
     const live: DeclaredField[] = lease.fields
@@ -400,10 +398,9 @@ describe('the arithmetic the paper asserts about its own numbers', () => {
     const identities = score.documents.flatMap((one) => one.identities);
     assert.equal(identities.length, 4);
     for (const identity of identities) {
-      assert.equal(identity.reading, 'unreachable');
+      assert.equal(identity.reading, 'not-returned');
     }
-    // And the reason is one key, which is what #131's seed rows move.
-    assert.ok(!live.some((one) => one.fieldKey === 'maintenance_amount'));
+    assert.ok(live.some((one) => one.fieldKey === 'maintenance_amount'));
   });
 
   it('fails a reading that returns every part and a figure the identity refuses', () => {

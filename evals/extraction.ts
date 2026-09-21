@@ -66,10 +66,10 @@ export interface DeclaredField {
  * Which accuracy a value counts toward.
  *
  * `not-declared` is the third group and it is scored by nothing: the mapping schema restricts
- * `field_key` to the declared list, so the reader is structurally incapable of returning
- * `maintenance_amount` today. Folding those into either percentage would report a gap in the
- * catalogue as a defect in the reader. The group empties as track B's seed rows land, which is why
- * it is counted rather than dropped.
+ * `field_key` to the declared list, so the reader cannot return a key the catalogue has not asked
+ * for. Folding those into either percentage would report a gap in the catalogue as a defect in the
+ * reader. The group shrinks as track B's seed rows land, which is why it is counted rather than
+ * dropped. #131 emptied `maintenance_amount` from it; `gush` and `helka` stay.
  */
 export type ScoreGroup = 'required' | 'optional' | 'not-declared';
 
@@ -106,13 +106,11 @@ export interface IdentityScore {
   /**
    * Whether the reader's own figures satisfy it.
    *
-   * **`unreachable` is the honest answer today and it is why this is four states rather than three.**
-   * Every identity either specimen records multiplies `maintenance_amount`, which the catalogue does
-   * not declare, so the mapping schema cannot return it and the reading side of all four checks can
-   * never fire. A check that cannot fail is not a check, and reporting that as `not-returned` — the
-   * word for a reader that was asked and stayed silent — would read as a reader's miss rather than as
-   * an instrument that is switched off. It becomes reachable the moment #131's seed rows land, which
-   * is the point of naming it instead of quietly passing.
+   * **`unreachable` is for an operand the catalogue does not declare.** Until #131 that was every
+   * identity, because all four multiply `maintenance_amount`. Reporting that as `not-returned` —
+   * the word for a reader that was asked and stayed silent — would read as a reader's miss rather
+   * than as an instrument that is switched off. The identities are reachable now that the seed
+   * rows landed; `unreachable` stays in the union for the next undeclared operand.
    */
   reading: 'holds' | 'breaks' | 'not-returned' | 'unreachable';
 }
@@ -359,9 +357,7 @@ function scoreIdentity(
 ): IdentityScore {
   const expression = expressionOf(check);
   // Every part has to be a key the reader could return before the reading side of this check means
-  // anything. All four identities multiply `maintenance_amount`, which nothing declares today, so
-  // all four are switched off — and saying so is the whole reason this is computed rather than
-  // assumed. See `IdentityScore.reading`.
+  // anything. See `IdentityScore.reading`.
   const reachable = [...check.operands, check.equals].every((key) =>
     declared.has(key),
   );

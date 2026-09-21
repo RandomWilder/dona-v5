@@ -217,7 +217,7 @@ const pinchot: GroundTruthDocument = {
       printed: '14/08/2035',
       pdfPage: 13,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
       note: 'תקופת השכירות הנוספת. Not exercised — a right, not a term. Capturing it is what stops it contaminating end_date.',
     },
 
@@ -244,8 +244,8 @@ const pinchot: GroundTruthDocument = {
       printed: '635 ₪',
       pdfPage: 13,
       printedPage: 13,
-      declaration: 'undeclared',
-      note: 'דמי אחזקה, VAT included per the clause. A second recurring monthly charge the tenant owes and nothing in the catalogue can hold. Both specimens print one.',
+      declaration: 'declared',
+      note: 'דמי אחזקה, VAT included per the clause. A second recurring monthly charge the tenant owes. Both specimens print one.',
     },
     {
       fieldKey: 'maintenance_currency',
@@ -253,7 +253,7 @@ const pinchot: GroundTruthDocument = {
       printed: '₪',
       pdfPage: 13,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
     },
     {
       fieldKey: 'deposit_amount',
@@ -277,7 +277,7 @@ const pinchot: GroundTruthDocument = {
       printed: null,
       pdfPage: 14,
       printedPage: 14,
-      declaration: 'undeclared',
+      declaration: 'declared',
       note: 'NOT printed anywhere in this file. Derived from 19,870 ÷ (9,300 + 635). `bloch` prints its own multiplier on a separate document. Recorded so the arithmetic check below has a parameter instead of a hard-coded 2.',
     },
     {
@@ -286,7 +286,7 @@ const pinchot: GroundTruthDocument = {
       printed: '59,610 ₪',
       pdfPage: 14,
       printedPage: 14,
-      declaration: 'undeclared',
+      declaration: 'declared',
       note: 'Printed twice — §12 here and again in the note itself on page 20. A second occurrence is free corroboration and nothing uses it.',
     },
     {
@@ -295,22 +295,22 @@ const pinchot: GroundTruthDocument = {
       printed: 'ש"ח',
       pdfPage: 20,
       printedPage: 20,
-      declaration: 'undeclared',
+      declaration: 'declared',
       note: 'Spelled ₪ on page 14 and ש"ח on page 20. Same currency, two glyphs.',
     },
 
     // --- the household. Two tenants, both on passports. ---
     {
-      fieldKey: 'tenant_name',
+      fieldKey: 'main_tenant_name',
       value: 'Rami Meir Pinchot',
       printed: 'Rami Meir Pinchot',
       pdfPage: 1,
       printedPage: 1,
       declaration: 'declared',
-      note: 'Latin script inside an RTL document. Printed again on page 20 as a maker of the note.',
+      note: 'Latin script inside an RTL document. Printed again on page 20 as a maker of the note. Named by role so the passport below cannot land on Ariella.',
     },
     {
-      fieldKey: 'tenant_id_number',
+      fieldKey: 'main_tenant_id_number',
       value: 'A36688170',
       printed: 'דרכון מספר A36688170',
       pdfPage: 1,
@@ -320,16 +320,16 @@ const pinchot: GroundTruthDocument = {
       note: 'Leading letter. Any check shaped like a nine-digit ת.ז. rejects it.',
     },
     {
-      fieldKey: 'tenant_name',
+      fieldKey: 'second_tenant_name',
       value: 'Ariella Atkin',
       printed: 'Ariella Atkin',
       pdfPage: 1,
       printedPage: 1,
       declaration: 'declared',
-      note: 'The SECOND row under one field key. `document_type_field` has no cardinality concept, so the catalogue cannot currently say this field repeats.',
+      note: 'Paired with her identifier by the declaration, not by proximity.',
     },
     {
-      fieldKey: 'tenant_id_number',
+      fieldKey: 'second_tenant_id_number',
       value: '531081473',
       printed: 'דרכון מספר 531081473',
       pdfPage: 1,
@@ -365,7 +365,7 @@ const pinchot: GroundTruthDocument = {
       printed: '12 לחודש 5 שנת 2025',
       pdfPage: 1,
       printedPage: 1,
-      declaration: 'undeclared',
+      declaration: 'declared',
       note: 'Handwritten into printed blanks, day and month in separate boxes. Not a date string anywhere on the page.',
     },
     {
@@ -482,7 +482,7 @@ const bloch: GroundTruthDocument = {
       printed: 'לשלושה חודשי דמי שכירות',
       pdfPage: 1,
       printedPage: null,
-      declaration: 'undeclared',
+      declaration: 'declared',
       note: 'THE reason this fixture exists. `pinchot` is 2 and this is 3, and the multiplier is printed on a page that is not the lease. A deposit check hard-coded at 2 flags this correct lease as wrong.',
     },
     {
@@ -491,7 +491,7 @@ const bloch: GroundTruthDocument = {
       printed: '19/5/2025',
       pdfPage: 1,
       printedPage: null,
-      declaration: 'undeclared',
+      declaration: 'declared',
       note: 'The election form is dated the same day as the lease. Handwritten, slashed, no leading zeros.',
     },
 
@@ -585,7 +585,7 @@ const bloch: GroundTruthDocument = {
       printed: '14/08/2035',
       pdfPage: 14,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
     },
 
     // --- money. Different figures, same structure. ---
@@ -611,7 +611,7 @@ const bloch: GroundTruthDocument = {
       printed: '628 ₪',
       pdfPage: 14,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
     },
     {
       fieldKey: 'maintenance_currency',
@@ -619,7 +619,7 @@ const bloch: GroundTruthDocument = {
       printed: '₪',
       pdfPage: 14,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
     },
     {
       fieldKey: 'deposit_amount',
@@ -643,7 +643,7 @@ const bloch: GroundTruthDocument = {
       printed: '51,768 ₪',
       pdfPage: 15,
       printedPage: 14,
-      declaration: 'undeclared',
+      declaration: 'declared',
     },
     {
       fieldKey: 'promissory_note_currency',
@@ -651,12 +651,12 @@ const bloch: GroundTruthDocument = {
       printed: 'ש"ח',
       pdfPage: 21,
       printedPage: 20,
-      declaration: 'undeclared',
+      declaration: 'declared',
     },
 
     // --- the household. Two tenants, TWO DIFFERENT identifier kinds. ---
     {
-      fieldKey: 'tenant_name',
+      fieldKey: 'main_tenant_name',
       value: 'Yitzchok Shmuel Bloch',
       printed: 'Yitzchok Shmuel Bloch',
       pdfPage: 2,
@@ -664,7 +664,7 @@ const bloch: GroundTruthDocument = {
       declaration: 'declared',
     },
     {
-      fieldKey: 'tenant_id_number',
+      fieldKey: 'main_tenant_id_number',
       value: '571643211',
       printed: 'דרכון מספר 571643211',
       pdfPage: 2,
@@ -673,7 +673,7 @@ const bloch: GroundTruthDocument = {
       identifierKind: 'passport',
     },
     {
-      fieldKey: 'tenant_name',
+      fieldKey: 'second_tenant_name',
       value: 'דבורה בלאך (בן זקרי)',
       printed: 'דבורה בלאך (בן זקרי)',
       pdfPage: 2,
@@ -682,7 +682,7 @@ const bloch: GroundTruthDocument = {
       note: 'A maiden name in parentheses, inside the name. Not a second party, not an annotation — part of the printed name, and it must survive into `party.full_name` intact or the two spellings stop matching.',
     },
     {
-      fieldKey: 'tenant_id_number',
+      fieldKey: 'second_tenant_id_number',
       value: '204893143',
       printed: 'ת.ז. 204893143',
       pdfPage: 2,

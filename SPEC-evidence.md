@@ -1258,20 +1258,17 @@ separately and are never blended into one number**, because a miss on `guarantor
 The hand reading satisfying its own arithmetic is checked unconditionally and on every run, including
 in `npm test`, so an edit to the fixture that breaks one is caught where it is made. The check
 against what the reader returned is the one the ticket describes — *a reading that returns all three
-parts but a figure that does not satisfy the identity has not read the document* — and it is
-**reported as unreachable today**: every identity either specimen records multiplies
-`maintenance_amount`, which the catalogue does not declare, so the mapping schema cannot return it
-and no reading can be tested against any of the four. An instrument that cannot fail must say so
-rather than printing the word for a reader that was asked and stayed silent. It becomes reachable
-when that key is declared.
+parts but a figure that does not satisfy the identity has not read the document*. From #131 every
+operand is declared, so a silent reading is `not-returned` and a complete reading that breaks the
+identity fails the gate. `unreachable` remains for an operand the catalogue still does not declare.
 
-**Three groups, because the catalogue declares twelve of the fixture's field keys and not the rest.**
+**Three groups, because the catalogue declares twenty-one of the fixture's field keys and not the rest.**
 A fixture value is *required* when the live `document_type_field` list declares its key and marks it
 required, *optional* when it declares it and does not, and **not asked for** when the catalogue does
 not declare it at all. The third group is scored by nothing and reported as a count: the mapping
 schema restricts `field_key` to the declared list, so the reader is structurally incapable of
-returning `maintenance_amount` today and folding those values into either percentage would report a
-failure of the catalogue as a failure of the reader. The group empties as track B's seed rows land,
+returning `gush` or `helka` and folding those values into either percentage would report a
+failure of the catalogue as a failure of the reader. The group shrinks as track B's seed rows land,
 which is the point of counting it. **Which key sits in which group is read from the catalogue at run
 time and never from the fixture** (A8), and the fixture's own `declaration` mark is checked against
 it: a seed row that lands without the fixture moving is a gate failure, because the two have then
