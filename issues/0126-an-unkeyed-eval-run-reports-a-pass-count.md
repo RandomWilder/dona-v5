@@ -75,3 +75,24 @@ None.
 While discharging the golden-set caveat on #124. The keyed run came back 10/10, 0 failed, 0 skipped,
 which is recorded in that issue's second comment along with the correction to what the unkeyed run
 had been reported as.
+
+## Comment — 2026-09-21
+
+A neighbour of this issue, found while wiring #127's extraction half into the same runner, and left
+here rather than fixed because it is this issue's subject and not that one's.
+
+**A run with a key the provider rejects does not report, it crashes.** `buildCorpus` is not wrapped,
+so an embedding call that comes back 401 throws an uncaught `KernelError` and the process dies with a
+stack trace. No boot line for the corpus, no summary line, and no verdict on any case — including the
+cases that had already been graded. It is the same shape as the finding above: the run that most
+needs to say what it did is the one that says nothing, and here it is worse, because a stack trace
+where a summary belongs reads as a broken tool rather than as a run that measured nothing.
+
+Whatever this issue does about the unkeyed run's boot line should cover the badly-keyed run too. A
+key that is set and rejected is a third state beside *keyed* and *unkeyed*, and `embeddingsConfigured()`
+cannot see it — it tests whether the variable is present, which is why a placeholder like `your-key`
+gets all the way to the provider before anything notices.
+
+#127 fixed only its own half of this: the extraction golden set now prints its boot line before it
+spends a call, and an unreachable model is reported as that half failing rather than as a crash, so
+it no longer takes the corpus half down with it. The corpus half still behaves as described above.

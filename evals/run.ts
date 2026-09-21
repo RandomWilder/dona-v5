@@ -75,6 +75,13 @@ const extraction = pool
 // per specimen goes first.
 let extractionFailed = 0;
 if (extraction && pool) {
+  // **The boot line before the work, and not after it.** This half spends a model call per specimen
+  // and can die on one; printed afterwards, the line never arrives on exactly the run that most
+  // needed to say what it was doing. #126's finding about the unkeyed run is the same finding — the
+  // run that needs to explain itself is the one that says nothing.
+  console.log(
+    `extraction: model ${extraction.model} · reasoning ${extraction.reasoningEffort ?? 'unset'}`,
+  );
   const run = await runExtractionGoldenSet({
     db: pool,
     extractor: createConfiguredExtractor(),
@@ -82,16 +89,20 @@ if (extraction && pool) {
     reasoningEffort: extraction.reasoningEffort,
     on: today(systemClock),
   });
-  console.log(
-    `extraction: model ${extraction.model} · reasoning ${extraction.reasoningEffort ?? 'unset'}`,
-  );
   for (const why of run.skipped) {
     console.log(`  ○ ${why}`);
   }
   if (run.score) {
     console.log(formatExtractionReport(run.score, run.ratchet));
-    extractionFailed = run.failures.length;
   }
+  // Outside the `if`, deliberately. The failures that come back with **no** score are the ones that
+  // mean nothing was measured at all — an unreachable model, or REQUIRE_SPECIMENS on a run with no
+  // capture — and reading them only when a score exists would let the run that measured nothing be
+  // the one run that could not fail.
+  for (const failure of run.failures) {
+    console.log(`  ✘ ${failure}`);
+  }
+  extractionFailed = run.failures.length;
 } else {
   console.log(
     'extraction: not run — the golden set needs OPENAI_API_KEY and a database.',

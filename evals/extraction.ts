@@ -3,11 +3,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   documentTypeFields,
+  type MappedFinding,
   type MeasuredWord,
   mapFieldsFromWords,
   parseMeasuredWords,
   type Queryable,
 } from '../src/evidence/contract.ts';
+import { KernelError } from '../src/kernel/errors.ts';
 import type { Extractor } from '../src/kernel/extraction.ts';
 import type {
   ArithmeticCheck,
@@ -584,9 +586,10 @@ export function formatExtractionReport(
   for (const one of score.contradictions) {
     lines.push(`  ~ ${contradictionLine(one)}`);
   }
-  for (const failure of [...score.failures, ...checkRatchet(score, ratchet)]) {
-    lines.push(`  ✘ ${failure}`);
-  }
+  // **The verdict is the caller's line and not this one's.** The failures that matter most are the
+  // ones that arrive with no score at all — an unreachable model measures nothing and has nothing to
+  // format — so printing them here would put the run's verdict in the one place a failed run never
+  // reaches. `runExtractionGoldenSet` returns them and `run.ts` prints them, scored or not.
   return lines.join('\n');
 }
 
@@ -659,7 +662,30 @@ export async function runExtractionGoldenSet(deps: {
       );
       continue;
     }
-    const mapped = await mapFieldsFromWords(deps, { fields, words });
+    // **A model this run cannot reach is this half failing, and never the run dying.** The other
+    // half needs a different provider call and has its own verdict to report; a key the extractor
+    // rejects must not decide whether the corpus cases got to run, which is the same independence
+    // the ordering above exists for and was worth nothing while this throw was uncaught. It is also
+    // what `extractFiledDocument` already does with this exact error on the live path — there it
+    // becomes an audit line rather than a 503 — so the gate now treats it as that path does.
+    let mapped: MappedFinding[];
+    try {
+      mapped = await mapFieldsFromWords(deps, { fields, words });
+    } catch (error) {
+      if (error instanceof KernelError && error.code === 'unavailable') {
+        return {
+          score: null,
+          ratchet,
+          skipped,
+          // A failure and not a skip: a key was set and a model was asked, so this run intended to
+          // measure and did not. Reported in the same breath as which specimen it died on.
+          failures: [
+            `the extractor could not be reached, so ${truth.key} was not measured: ${error.message}`,
+          ],
+        };
+      }
+      throw error;
+    }
     runs.push({
       truth,
       read: mapped.map((finding) => ({
