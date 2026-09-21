@@ -41,6 +41,16 @@ workbook a specification rather than a description.
   `value_type` has no `MONEY` member, and it does not need one: an amount is a `NUMBER` beside a
   `TEXT` currency, which is how `lease` declares its rent and its deposit from 15 Sep 2026
   ([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md) retired foundation rule 2).
+  **`is_required` stays a boolean, and track B declined to widen it.** It means what it has always
+  meant — a statement about what a document of this type is expected to carry, never a refusal, and a
+  missing required field is a result. Two cases from the lease do not fit a boolean, and neither
+  becomes a column. **A pair**: an amount without its currency is not a partial answer but an
+  unusable one, and that is a property of the reading rather than of the declaration, so it is
+  enforced at the one place it matters, the promotion gate. **A conditional**:
+  `guarantor_id_number` is optional in general and expected once `guarantor_name` is present, which
+  is left to the reading screen rather than to the schema, because the lease is currently the only
+  type with enough structure to need it and a `requirement` enum added for one type is a migration
+  paid for by every other.
 - **`document`** — E12. One file, hashed at ingest. From 5.4 it also carries **`uploaded_by`**, a
   nullable FK to `staff_account`. `file_hash` is **unique**, which is what makes
   *the same file filed twice is one document with two links* a property of the database rather than a
@@ -76,6 +86,33 @@ sheet existed.
   `word_ids` drop the finding — no invented box. Native pdfjs may store `confidence` null; a scan
   stores Document AI's score. The mapping model id is stored on the row so a dispute can name which
   comprehension pass produced the value.
+- **The mapper is given position, from track B.** The measuring engine produces `x`, `y`, `width`,
+  `height` and `confidence` for every word, and until now all of it was discarded before the prompt
+  was built. On a Hebrew lease that is expensive in one specific way: the annex carrying the
+  commercial terms is a two-column right-to-left table, where the label sits *beside* its value
+  rather than before it. In reading order the label and the value are far apart; on the page they are
+  adjacent. Stripping position removes the only signal that says so. **Each word is therefore sent as
+  `{id, page, text, x, y}`, with `x` and `y` as integers in a 0–1000 page space.** Normalised rather
+  than raw, because page dimensions vary across the corpus and what the model needs is relative
+  placement rather than absolute points. Origin only, because the token cost of four coordinates per
+  word across a thirty-eight-page document is real and the extent of a word carries little that its
+  origin does not. **This changes nothing about citation**: `extracted_field.bbox` is written by the
+  measuring engine and is what the provenance viewer highlights. The two are separate uses of the
+  same measurements, and conflating them has already produced one wrong estimate in this project.
+- **`extraction.reasoning_effort` defaults to `medium`, not `none`.** Several values on a lease are
+  reachable only by arithmetic the document itself invites — a deposit stated as a number of months
+  of rent plus maintenance, a promissory note at six of them. A reader given no room to work cannot
+  check its own answer against the identity printed beside it. This is a `config_settings` row read
+  per call, so it is a change of default and not a deploy, and it can be moved back by an operator
+  on the settings screen if the measured run says it bought nothing.
+- **What is deliberately not changed with them.** The extractor still makes one call per document,
+  carrying every declared field across every page, and `EXTRACT_INSTRUCTIONS` is still a single
+  accumulated string of bug patches. Both are real defects and both are larger changes than these
+  two. They wait on purpose: position and reasoning effort are independent of each other and cheap,
+  and a measured run across the two will say whether the remaining two are worth building. **If
+  normalised position does not move the score, the layout hypothesis is wrong and the larger
+  line-reconstruction work should not be done at all** — which is the whole reason the scorer above
+  lands before either of them.
 - **Building number is not the flat.** On a Hebrew lease `בניין מספר` belongs in `address` (street,
   building number, city). `apartment_number` is `דירה מספר` only. A parking bay (`חניה`) is neither.
   From 2026-09-08 the mapping instructions say that, and the lease field hints do too — a new
@@ -697,6 +734,31 @@ That URL is this journey's, not `/documents/:id/fields` and not a Tenancy page. 
 `approved_value`. A15's ledger stays at `GET /documents/:id/fields` for every other door — this
 journey does not load it. Reveal, promote, and `אישור כל מה שלא סומן` are not on this screen.
 
+**Track B widens beat 3 from those four rows to the declared set**, and changes nothing else about
+it. It is still one row per value, one אישור, one optional correction; reveal, promote and bulk
+approval stay off this screen, because this journey ends in a draft letting and the ledger remains
+the door for everything else. The five beats are unchanged — המסמך · הדירה · הקריאה · הטיוטה · די
+היום — and everything here lands inside beats 3 and 4. The beats are named for what the operator is
+doing, and reading a lease and signing the reading are one sitting; splitting them would turn the
+workspace the office asked for into two.
+
+**Fields are grouped in the view and not in the schema**: dates, money, people, place.
+`document_type_field` gains no `group_key` column. The lease is the only type with enough declared
+fields to need grouping, and a column added for one type is paid for by every type that follows. The
+day a second type declares twenty fields, that column is the right answer; today it is speculative
+structure.
+
+**A pair with a missing half is marked on this screen and is approvable anyway.** The refusal is at
+promotion, not here — which is the same seam stated from the screen's side.
+
+**Identifiers are shown as printed.** This flow is the administrator stance throughout and nothing in
+it is masked. There is no tenant-facing route to any of these screens, and inventing masking rules
+for a route that does not exist would be speculation. It is noted here once, deliberately, that **the
+tenancy card will need a stance the day it acquires a tenant route**: a screen that grows one and
+inherits the office's identifier rendering is precisely how a leak ships. #124 drew the tenant's
+Tenancy bound before there was a route to use it, and this is the same argument applied to the same
+future screen.
+
 **`POST /documents/filing/:documentId/approve`** is `documents.write` and urlencoded (the token
 belongs to the composition-root hook; this body is not a stream). It stamps through
 `approveExtractedField` and then `establishApprovedLease` — the same moment as #110. A field that
@@ -825,6 +887,81 @@ is operator-to-tenant and `building.handover_date` is developer-to-operator — 
 and A8's open half means the second is a seed row rather than a migration. The 3.1 acceptance bar
 (a type with four fields of its own costs no DDL) still holds and is still proved on a type that is
 not in the seed.
+
+### What a lease declares, from track B
+
+The declarations below are **seed rows at a new `effective_from` and cost no migration**, which is
+the acceptance bar above being spent rather than restated. They come from reading two specimen leases
+end to end by hand; two documents is a thin sample, so everything here is biased toward the
+reversible change.
+
+**The household is named by role.** A lease is signed by more than one person, and a declaration has
+to say which person each value belongs to. `extracted_field` has always permitted two rows of one
+declaration, but two rows of `tenant_name` and two rows of `tenant_id_number` arrive with **no link
+between them** — nothing says which identifier belongs to which name. On the second specimen the two
+signatories carry different *kinds* of identifier, a passport and a ת.ז., one line apart. A pairing
+heuristic that gets this wrong writes one person's identifier onto another person's record and looks
+entirely correct doing it.
+
+| Key | Required | Becomes |
+|---|---|---|
+| `main_tenant_name` | yes | `tenancy_party.role = 'PRIMARY_TENANT'` |
+| `main_tenant_id_number` | no | that party's `national_id` |
+| `second_tenant_name` | no | `tenancy_party.role = 'CO_TENANT'` |
+| `second_tenant_id_number` | no | that party's `national_id` |
+| `guarantor_name` | no | `'GUARANTOR'` — unchanged, already declared |
+| `guarantor_id_number` | no | unchanged, already declared |
+
+Pairing is solved by construction: `main_tenant_id_number` belongs to `main_tenant_name` because the
+declaration says so. There is no proximity heuristic and no screen that asks an operator to attach an
+identifier to a name. The keys mirror `tenancy_party.role`, which already distinguishes
+`PRIMARY_TENANT` from `CO_TENANT`; they do not invent a parallel idea of seniority, they name one the
+tenancy module already governs.
+
+**The cap at two is a seed cap and not a schema cap.** A lease with three signatories is served by a
+`third_tenant_name` row at a new `effective_from` — reversible, no DDL, exactly the direction A8's
+open half points. Nothing in the schema changes to accommodate it.
+
+**The existing `tenant_name` and `tenant_id_number` rows are closed, not edited.** R18 is not
+negotiable here: a value extracted in September under the old declaration must keep meaning what it
+meant, and an edit would silently rewrite it.
+
+**A duplicate capture is shown, not resolved.** There is still no unique key on
+`(document_id, document_type_field_id)`, so a model returning two values for `main_tenant_name`
+writes two rows. The reading screen renders both and the operator picks. A silent first-wins would be
+the bug — the point of capture being open is that disagreement survives as far as a person.
+
+**The terms the specimens actually print.** All optional, all seed rows:
+
+| Key | Type | Note |
+|---|---|---|
+| `maintenance_amount` | NUMBER | ועד בית, charged monthly beside the rent |
+| `maintenance_currency` | TEXT | paired with the amount, per [ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md) |
+| `deposit_months` | NUMBER | the multiplier, **not** assumed — see below |
+| `promissory_note_amount` | NUMBER | שטר חוב |
+| `promissory_note_currency` | TEXT | |
+| `option_end_date` | DATE | the end of the extension period, distinct from `end_date` |
+| `signed_date` | DATE | when it was signed, which is not when the term starts |
+
+**`deposit_months` is declared rather than assumed, and this is the hand reading's central finding.**
+Both specimens compute their deposit as (rent + maintenance) × a multiplier. The first uses two
+months; the second uses three, and states so on a page that is **a different document bound into the
+same PDF** — an election form filed as part of the lease file. A deposit check hard-coded at two
+would flag a correct lease as wrong, and would do it on the lease whose own paperwork explains why.
+
+**`option_end_date` closes a trap the current hints cannot see.** Both specimens run five years with
+a five-year option, and both print all four dates. The live hint for `start_date` says only that the
+value is ISO-formatted; nothing in it distinguishes the original period from the option, so there is
+nothing stopping the option's dates landing in `end_date`. Declaring the option separately makes the
+distinction the reader's job and gives the scorer something to fail on.
+
+**What is deliberately not declared here.** `gush`, `helka` and the plan's structure designation are
+printed on both leases and are **facts about the building, not about the letting**. They belong to a
+Building declaration — track A — and declaring them on the lease type would put a fact in the place
+it happened to be printed rather than the place it is true of. Both specimens also disagree with
+themselves about the plot number, printing one value in the body and another on the plan, identically
+in both documents. That is a property of the form rather than a typo: the fixture records it as a
+known conflict with no field key and no score attached, because there is no right answer to grade.
 
 ## Flow A6 — seeding from a handover protocol (slice 3.5)
 
@@ -1010,17 +1147,30 @@ are written — documents without passages, including the pre-#103 archive, are 
 stored passages when they exist; without them it still reads the file, which is the archive path.
 
 **#104 searches the passage store.** `searchPassages` takes a question, an embedder, a required
-**stance** — administrator or tenant, never defaulted — and a required **retrieval bound** — a Unit,
-a Building, or the whole portfolio, never defaulted, so no caller searches the whole store by
-omitting a filter (#112). Each hit carries the document, the page, the text, the document type, the
+**stance** — administrator or tenant, never defaulted — and a required **retrieval bound** — a
+Tenancy, a Unit, a Building, or the whole portfolio, never defaulted, so no caller searches the
+whole store by omitting a filter (#112). Each hit carries the document, the page, the text, the
+document type, the
 flat the document is anchored to (the `UNIT` link, or the tenancy's unit when that is the only
 place-binding), and a distance. Distance orders the results and is never asserted on. A Unit bound
 returns only Passages of Documents linked to that Unit (a `UNIT` link, or a `TENANCY` link whose
 tenancy's unit is that Unit). A Building bound is the same command with a wider filter: Documents
 linked to that Building, or to a Unit in it, or to a tenancy of a Unit in it. A portfolio bound is
 the whole store, named. The administrator stance returns identifiers as printed. The tenant stance
-masks identifier-shaped runs in the returned text and does not rewrite the stored passage. A
-Building or portfolio bound asked with tenant stance is refused at the command. Masking is not a
+masks identifier-shaped runs in the returned text and does not rewrite the stored passage.
+
+**#124 gives the tenant a bound of their own.** A **Tenancy bound** returns only Passages of
+Documents carrying a `TENANCY` link to that one Tenancy, and tenant stance may ask nothing else:
+a Unit, a Building or a portfolio bound asked with tenant stance is refused at the command. The
+bound is drawn around the household and not around the flat, because a flat outlives its
+households — the Unit bound #112 built reaches every Tenancy that Unit has ever had, which is what
+the office wants and the opposite of what a tenant may read. Masking does not close that gap and
+was never meant to: it hides identifier-shaped runs, not a previous tenant's name, rent, deposit or
+dates. The first cut is strict — `TENANCY` links only, so a tenant does not reach `UNIT`-linked
+place paper for their own flat even during their own term. Widening a bag later costs a filter;
+narrowing one after a tenant has read something costs more than that. The office turn does not take
+a Tenancy bound and refuses it rather than widening it to the Unit, because a turn that silently
+became a Unit turn would persist under a bound nobody asked for. Masking is not a
 reveal: a reveal of a withheld identifier remains `POST /documents/:id/fields/reveal` and still
 writes `evidence.read_identifier`. There is no tenant-facing surface on this command yet. The
 page-sized chunk and this search are retrieval configuration, so rent and deposit questions enter
@@ -1030,9 +1180,9 @@ the day they land.
 
 **#113 is the office turn.** One command: staff account, retrieval bound, question. It is not the
 agent and not a Conversation. Stance is administrator — the paper as printed, for every staff role
-that may read Documents — and is not a parameter a caller can omit or swap. Tenant stance on a
-Building or portfolio bound remains refused at search, so the forbidden combination still cannot be
-assembled.
+that may read Documents — and is not a parameter a caller can omit or swap. Tenant stance on any
+bound but a Tenancy remains refused at search, and the office turn refuses a Tenancy bound, so the
+forbidden combination still cannot be assembled from either end.
 
 On a Unit bound or a portfolio bound the turn may call only `searchPassages`. **#123:** on a
 Building bound the office retrieval model may choose, this turn, Passage search, tenancy's
@@ -1078,6 +1228,122 @@ rather than a measured zero.
 `sweepUnverified` walks already-filed `unverified` rows the same way. It is how week 3's backlog is
 discharged; the count of verdicts that moved is recorded in the slice evidence, from the audit
 lines, and is allowed to be zero.
+
+### The reading is scored before it is improved — track B
+
+Until now this module has had no number for how well it reads. Every claim about extraction has been
+an argument from the shape of the code, and every change to the mapping instructions has been
+believed rather than measured. A golden set for extraction joins the existing `evals` gate and ends
+that: it runs the live extractor over the specimen leases and compares every value against
+`evals/fixtures/lease-extraction.ts`, the hand reading of those documents — 57 values, 2 credited
+absences, 4 arithmetic identities and 10 recorded hazards across two specimens. It is the first
+ground truth this module has had. Like every other eval here it needs `OPENAI_API_KEY` and is skipped
+without one, and it adds no CI machinery: the gate already runs, and this is another case inside it.
+
+**What it asserts.** Per-field exact match against a ratchet, on the retrieval cases' rule and for
+their reason: the floor is the number the reader reaches today, recorded in
+`evals/fixtures/extraction-ratchet.json`, so the gate blocks a regression from the first commit while
+staying green, and the proof that a later reading change is a fix is that the number goes *up*. 95%
+is the target the ratchet climbs toward and is not the bar on the day it lands — a gate that is red
+on adoption day measures nothing and gets switched off. No value returned with a confident citation
+that disagrees with the fixture. Both of the second specimen's credited absences credited. All four
+arithmetic identities holding. **Required-field accuracy and optional-field accuracy are reported
+separately and are never blended into one number**, because a miss on `guarantor_name` and a miss on
+`rent_amount` are not the same failure, and a single percentage hides which of the two you have.
+
+**The identities are asserted against the fixture always, and against the reading when they can be.**
+The hand reading satisfying its own arithmetic is checked unconditionally and on every run, including
+in `npm test`, so an edit to the fixture that breaks one is caught where it is made. The check
+against what the reader returned is the one the ticket describes — *a reading that returns all three
+parts but a figure that does not satisfy the identity has not read the document* — and it is
+**reported as unreachable today**: every identity either specimen records multiplies
+`maintenance_amount`, which the catalogue does not declare, so the mapping schema cannot return it
+and no reading can be tested against any of the four. An instrument that cannot fail must say so
+rather than printing the word for a reader that was asked and stayed silent. It becomes reachable
+when that key is declared.
+
+**Three groups, because the catalogue declares twelve of the fixture's field keys and not the rest.**
+A fixture value is *required* when the live `document_type_field` list declares its key and marks it
+required, *optional* when it declares it and does not, and **not asked for** when the catalogue does
+not declare it at all. The third group is scored by nothing and reported as a count: the mapping
+schema restricts `field_key` to the declared list, so the reader is structurally incapable of
+returning `maintenance_amount` today and folding those values into either percentage would report a
+failure of the catalogue as a failure of the reader. The group empties as track B's seed rows land,
+which is the point of counting it. **Which key sits in which group is read from the catalogue at run
+time and never from the fixture** (A8), and the fixture's own `declaration` mark is checked against
+it: a seed row that lands without the fixture moving is a gate failure, because the two have then
+stopped describing the same system.
+
+**A contradiction is counted against a ceiling and a miss moves a percentage.** A value the reader
+returns that the fixture does not carry for that key — a surplus value, or any guarantor at all in
+the second specimen — is a different defect from a reading that stopped short, and is reported
+separately and in full on every run. What the gate asserts is the **count**, against a ceiling set
+the way the floors are set.
+
+It says *count* rather than *which*, and that was decided by measurement rather than by preference.
+The first design named the contradictions the baseline found and failed anything new, which is the
+obvious reading of *a value returned with a confident citation that disagrees with the fixture is a
+failure*. **Fourteen runs of one reader over one capture of each specimen produced nine distinct
+contradictions, none of them in every run.** At `reasoning: none` this reader is not deterministic,
+and a gate keyed on which value it invented would have been red on nearly every run while telling
+nobody anything. A ceiling holds the line that matters — a change that makes the reader invent more
+than it invents today fails, whichever values it invents — and survives the jitter.
+
+**The jitter is the baseline's main finding**, ahead of any of its percentages. Required-field
+accuracy ranged 68.8% to 81.3% across those runs and optional-field accuracy 58.3% to 75.0%, on
+identical input. It follows that **no single run of this gate is evidence of anything**, and that the
+reading changes below are to be judged over at least eight runs each: a one-run improvement inside a
+spread this wide is a coin landing the way somebody hoped.
+
+**A bound is set with headroom above the worst run, never at it.** The floors sit a graded value
+below the lowest observed and the ceiling sits two above the highest, and that asymmetry was paid
+for: the ceiling was first set at the worst of five runs, and the sixth run walked through it. A
+bound at the edge of a sample is a bound the next sample breaks, and a gate that cries wolf on
+ordinary variation is a gate somebody switches off — which is the same reason the accuracy bar is a
+ratchet rather than the spec's 95%. `evals/measure.ts` makes this argument about a rank inside the
+embedder's own run-to-run jitter; it holds here with a wider spread and less excuse for ignoring it.
+
+**The optional-field figure is bimodal and the mechanism is known**, which is why it is quoted as two
+values rather than as a range. It is 75.0% when the second specimen's two credited absences are
+credited and 58.3% when they are not, with nothing between, because those two units are the whole
+difference. **The reader invents a guarantor there in roughly half of all runs**, taking the second
+*tenant* and her ת.ז. and filing them as guarantor and guarantor identifier — on the one specimen
+whose correct answer is that no guarantor exists. That is not jitter around a correct reading; it is
+the failure the credited-absence rule was written to make visible, occurring at a rate that a scorer
+crediting absences by inspection would never have found. It is the sharpest thing the first baseline
+learned about the reader, and #131's declaration of the household by role is what should move it.
+
+**Both specimens are read once, not per run.** Neither carries a text layer worth the name — the
+first is a flatbed scan with no text at all and the second a phone scan whose only item per page is
+the scanner's own watermark — so the words the mapper is given come from Document AI, and the gate
+scores the **mapper** rather than the OCR beneath it. `npm run specimens:capture` measures one PDF
+once and writes `evals/specimens/<key>.words.json`, the same `MeasuredWord[]` the work queue already
+carries as a payload. The gate reads those files. **They are never committed**: a capture holds every
+word of the document it was taken from, which is the one thing this repository may not hold, and the
+fixture beside it is a hand reading precisely so that the words themselves need not be. Absent, the
+extraction cases skip and say which file they wanted, on `ocr:sweep`'s argument — an unread specimen
+is not a measured zero, and `REQUIRE_SPECIMENS=1` turns that skip into a failure for a run that meant
+to measure.
+
+**CI cannot set that variable, and this is the one gate here that CI does not enforce.** The
+`REQUIRE_*=1` pattern lives in `.github/workflows/ci.yml`, and the captures are permanently outside
+the repository a CI job checks out, so the place the variable belongs is the one place it can never
+be satisfied. The extraction half therefore runs on a machine that holds the documents, and reaches
+everyone else as the ratchet file and a comment on the issue that moved it. That is a real limit and
+it is stated rather than left to be discovered from a green build.
+
+**A credited absence is a declared field that correctly returns nothing**, because the document does
+not contain it. The second specimen names no guarantor at all, and extraction returning zero of them
+is the right answer; scoring it as a miss would tune the reader toward inventing guarantors to
+satisfy a number. This is already the module's doctrine — *a missing required field is a result, not
+an error* — and the scorer is the first thing that has to encode it in arithmetic instead of in
+prose.
+
+**What the bar is for, stated so it is not mistaken for something better.** Two documents cannot
+establish that the reader is good. They can establish that a change made it worse, which is the only
+thing a tripwire has ever been for. The baseline is therefore measured *before* any of the reading
+changes below land, on a green branch — a baseline taken on a red suite is not a baseline, and a
+baseline taken after the change it is supposed to judge is an opinion with a number attached.
 
 ## What E12 deliberately does not carry
 
@@ -1171,6 +1437,56 @@ with the record it was filed against*, and its result is a disagreement to show 
 to move. It is what `address` and `apartment_number` want, and it is the same shape as the question
 7.1 left open about a lease refusing its own annex. Nothing in the schema anticipates it: there is no
 mapping table for it and there should not be one until the flow exists.
+
+**Track B widens this ruling by three fields and refuses the rest; the table above is 7.4's and
+stands.** The reason 7.4 gave is the reason that admits them.
+
+### Three more copies — track B
+
+| Declared field | Copy? | Why |
+|---|---|---|
+| `rent_amount` · `rent_currency` | **Yes** | The lease *is* the source of the price of the letting, in exactly the sense its dates are the source of the term. Arrears, reminders and the office bag all branch on it. The pair promotes together or not at all. |
+| `option_end_date` | **Yes** | Whether a letting can be extended, and until when, is a question the renewal path asks of the record rather than of the paper. |
+| `deposit_amount` · `deposit_currency` · `maintenance_*` · `promissory_note_*` | No | Quoted at move-out and cited from the page. Nothing branches on them. |
+| `main_tenant_name` · `second_tenant_name` · the identifiers | No | Unchanged from 7.4. A household is written by the confirm as `PARTY` links; an identifier becomes `party.national_id` by an act, not a copy. |
+| `signed_date` · `deposit_months` | No | Facts about the document. There is no column to land on. |
+
+The test is **"will code branch on it?"**, and it is not "is it important". A tenant's passport number
+is important and is never compared to anything by a machine; the rent is compared to a payment.
+
+**This costs one migration**, and it is the only irreversible step track B contains: the CHECK on
+`field_promotion.target` widens, and `tenancy` gains `rent_amount`, `rent_currency` and
+`option_end_date`. **None of the three is `NOT NULL`** — completeness is a state and never a
+constraint. Two files say the shape of `tenancy` out loud and both move in the same change:
+[SPEC-tenancy.md](SPEC-tenancy.md), whose *no amount column here* paragraph is amended by this
+ruling, and `src/tenancy/schema.test.ts`, which asserts that table's column list exactly and goes red
+on any added column whatever it is named. That test going red is the design working; updating it is
+part of the migration and not a repair afterwards.
+
+### A promotion onto an occupied column
+
+`promoteExtractedField` is idempotent for the same row re-promoted, but nothing today examines
+whether the target column already carries a value promoted from a **different** extracted field. With
+dates alone that was survivable. With rent it is not: an amendment, a corrected reading, or a second
+document on the same letting would move the price of a tenancy with nothing said to anyone.
+
+**A promotion onto an occupied column succeeds silently when the value is identical, and refuses with
+`conflict` when it differs.** Re-filing the same lease is an ordinary act and must not be an error. A
+rent that changed is the single thing an operator most needs to be told. The refusal names the
+existing value and the document it came from, and superseding it is a deliberate second act rather
+than a retry of the first.
+
+This is a policy case, red first.
+
+### A half-priced pair is not promotable
+
+An amount may be **approved** without its currency — capture is open, and what the page says is
+always attestable. It may not be **promoted** without it. The refusal lives in the promote command,
+beside the approval requirement and for the same reason: the columns a copy lands on are read by
+machinery no model decides, and half a price on one of them is worse than no price at all.
+
+This is the seam the module already has, used as it was designed — open on the way in, governed at
+the gate. It is a policy case, red first.
 
 ### An approval is required before a promotion (slice 7.4, `0029_promotion_requires_approval.sql`)
 

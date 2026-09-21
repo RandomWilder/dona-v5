@@ -57,6 +57,7 @@ async function fileLease(
   db: PoolClient,
   extraPages: string[],
   unitId = newId(),
+  tenancyId: string | null = null,
 ): Promise<{ documentId: string; unitId: string }> {
   await applyDocumentTypeCatalogue(db, seedDocumentTypes);
   const pages = [specimen('lease-standard.md'), ...extraPages];
@@ -64,7 +65,7 @@ async function fileLease(
     bytes: pdfBytes(`search-${newId()}`),
     typeKey: 'lease',
     place: { kind: 'UNIT', id: unitId },
-    tenancyId: null,
+    tenancyId,
   });
   assert.equal(result.filed, true);
   if (!result.filed) throw new Error('expected a filed document');
@@ -139,23 +140,25 @@ describe('evidence · search over passages', () => {
       await inRolledBackTransaction(pool, async (db) => {
         const identifier = '312345678';
         const page = `ת.ז. ${identifier}`;
-        const { documentId, unitId } = await fileLease(db, [page]);
+        const unitId = await seedListedUnit(db);
+        const tenancyId = await seedListedTenancy(db, unitId);
+        const { documentId } = await fileLease(db, [page], unitId, tenancyId);
         const embedder = createFakeEmbedder(embeddingColumnDimensions);
-        const bound: RetrievalBound = { kind: 'unit', id: unitId };
         const admin = await searchPassages(
           db,
           embedder,
           page,
           'administrator',
-          bound,
+          {
+            kind: 'unit',
+            id: unitId,
+          },
         );
-        const tenant = await searchPassages(
-          db,
-          embedder,
-          page,
-          'tenant',
-          bound,
-        );
+        // #124: the tenant reads their own Tenancy, never the flat.
+        const tenant = await searchPassages(db, embedder, page, 'tenant', {
+          kind: 'tenancy',
+          id: tenancyId,
+        });
         const adminHit = admin.find((row) => row.documentId === documentId);
         const tenantHit = tenant.find((row) => row.documentId === documentId);
         assert.equal(adminHit?.text, page);
@@ -178,21 +181,22 @@ describe('evidence · search over passages', () => {
     try {
       await inRolledBackTransaction(pool, async (db) => {
         const page = `ת.ז. 312345678`;
-        const { documentId, unitId } = await fileLease(db, [page]);
-        const bound: RetrievalBound = { kind: 'unit', id: unitId };
+        const unitId = await seedListedUnit(db);
+        const tenancyId = await seedListedTenancy(db, unitId);
+        const { documentId } = await fileLease(db, [page], unitId, tenancyId);
         await searchPassages(
           db,
           createFakeEmbedder(embeddingColumnDimensions),
           page,
           'administrator',
-          bound,
+          { kind: 'unit', id: unitId },
         );
         await searchPassages(
           db,
           createFakeEmbedder(embeddingColumnDimensions),
           page,
           'tenant',
-          bound,
+          { kind: 'tenancy', id: tenancyId },
         );
         const afterSearch = await db.query<{ n: string }>(
           `SELECT count(*)::text AS n FROM audit_log

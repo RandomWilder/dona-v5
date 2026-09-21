@@ -215,6 +215,16 @@ export async function answerOfficeHits(
 
 function asOfficeBound(bound: RetrievalBound): OfficeRetrievalBound {
   if (bound.kind === 'portfolio') return { kind: 'portfolio' };
+  // #124: a Tenancy bound is the tenant's and is refused here rather than
+  // widened to its Unit. The office thread is keyed on the office's three
+  // bounds, and a turn that silently became a Unit turn would persist under a
+  // bound nobody asked for.
+  if (bound.kind === 'tenancy') {
+    throw new KernelError(
+      'not_allowed',
+      'the office turn does not take a Tenancy bound',
+    );
+  }
   return { kind: bound.kind, id: bound.id };
 }
 

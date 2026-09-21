@@ -756,6 +756,13 @@ stay on A1 / A12 / **מסמכים**.
    approve-rest, promote, or reveal. Those remain on A15 for every other door. Approving those stamps
    writes the draft **at the same moment as #110 / A2** — unit, dates, at least one tenant, from the
    approved reading. This tab then shows beat 4. It does not teleport to the Tenancy page.
+   **Track B widens this step to the whole declared set** and changes none of the sentence above:
+   still one row per value, one אישור, one optional correction, and still no reveal, promote or
+   bulk approval. The rows are **grouped in the view** — dates, money, people, place — which is a
+   thing the screen does and not a thing the catalogue declares. **The household is read by role**,
+   so an identifier arrives already attached to the name it belongs to and no step asks an operator
+   to pair them. **A money pair missing its currency is marked here and approvable anyway**: this
+   step attests what the page says, and the refusal belongs at promotion.
 4. **הטיוטה.** Named arrival in this tab: title, people, dates, and whether **פרוטוקול מסירה** is
    missing or present. Facts only. No activate (A5 stays on the Tenancy screen). No protocol attach
    (A6 stays). Copy: going live is a later act on the Tenancy.

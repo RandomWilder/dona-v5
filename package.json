@@ -11,8 +11,8 @@
     "test:code": "node --test 'src/**/*.test.ts' 'tests/**/*.test.ts' 'evals/**/*.test.ts'",
     "test:hooks": "node --test '.claude/hooks/**/*.test.mjs'",
     "test:policy": "node --test 'tests/policy/**/*.test.ts'",
-    "evals": "node evals/run.ts",
-    "measure": "node evals/measure.ts",
+    "evals": "node --env-file-if-exists=.env evals/run.ts",
+    "measure": "node --env-file-if-exists=.env evals/measure.ts",
     "measure:scale": "node --env-file-if-exists=.env.example --env-file-if-exists=.env scripts/measure-scale.ts",
     "guards": "node scripts/guards.ts",
     "typecheck": "tsc --noEmit",
@@ -30,6 +30,7 @@
     "docs:probe": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/docs-probe.ts",
     "ocr:sweep": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/ocr-sweep.ts",
     "passages:sweep": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/passages-sweep.ts",
+    "specimens:capture": "node --env-file-if-exists=.env.example --env-file-if-exists=.env scripts/capture-specimen.ts",
     "estate:purge": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/estate-purge.ts",
     "dev": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/serve.ts",
     "start": "node src/serve.ts"

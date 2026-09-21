@@ -10,8 +10,14 @@ export type RetrievalStance = 'administrator' | 'tenant';
 /**
  * Which Documents' Passages a search may consider. Required; there is no
  * default and no whole-store search by omission.
+ *
+ * A Tenancy bound is the tenant's bound and the office does not use it. It is
+ * drawn around the household and not around the flat, because a flat outlives
+ * its households: a Unit bound reaches every Tenancy the flat has ever had,
+ * which is what the office wants and the opposite of what a tenant may read.
  */
 export type RetrievalBound =
+  | { kind: 'tenancy'; id: string }
   | { kind: 'unit'; id: string }
   | { kind: 'building'; id: string }
   | { kind: 'portfolio' };
@@ -34,10 +40,15 @@ export interface PassageHit {
  * Stance is required: the administrator read returns identifiers as printed;
  * the tenant read masks them. The stored row is never rewritten.
  *
- * Bound is required: a Unit bound returns only Passages of Documents linked
- * to that Unit; a Building bound is the same command with a wider filter; a
- * portfolio bound is the whole store, named. A Building or portfolio bound
- * asked with tenant stance is refused.
+ * Bound is required: a Tenancy bound returns only Passages of Documents
+ * carrying a TENANCY link to that one Tenancy; a Unit bound returns Passages
+ * of Documents linked to that Unit, through a UNIT link or through any Tenancy
+ * of it; a Building bound is the same command with a wider filter; a portfolio
+ * bound is the whole store, named.
+ *
+ * Tenant stance may ask only a Tenancy bound. Every wider bound asked with
+ * tenant stance is refused, because masking is not isolation: it hides
+ * identifier-shaped runs and not a previous tenant's name, rent or dates.
  */
 export async function searchPassages(
   db: Queryable,
@@ -50,6 +61,7 @@ export async function searchPassages(
     throw new KernelError('invalid', 'a retrieval bound is required');
   }
   if (
+    bound.kind !== 'tenancy' &&
     bound.kind !== 'unit' &&
     bound.kind !== 'building' &&
     bound.kind !== 'portfolio'
@@ -57,15 +69,15 @@ export async function searchPassages(
     throw new KernelError('invalid', 'a retrieval bound is required');
   }
   if (
-    (bound.kind === 'unit' || bound.kind === 'building') &&
+    bound.kind !== 'portfolio' &&
     (typeof bound.id !== 'string' || bound.id.length === 0)
   ) {
     throw new KernelError('invalid', 'a retrieval bound is required');
   }
-  if (stance === 'tenant' && bound.kind !== 'unit') {
+  if (stance === 'tenant' && bound.kind !== 'tenancy') {
     throw new KernelError(
       'not_allowed',
-      'tenant stance cannot search a Building or portfolio bound',
+      'tenant stance can search only a Tenancy bound',
     );
   }
   const [vector] = await embedder.embed([question]);
@@ -106,6 +118,19 @@ export async function searchPassages(
           LIMIT 1
        ) tenancy_unit ON true
       WHERE $2::text = 'portfolio'
+         OR (
+              -- The tenant's bag. One TENANCY link and nothing else: not the
+              -- UNIT link the same lease also carries, and not a sibling
+              -- Tenancy of the same flat.
+              $2::text = 'tenancy'
+          AND EXISTS (
+                SELECT 1
+                  FROM document_link tenancy_only
+                 WHERE tenancy_only.document_id = p.document_id
+                   AND tenancy_only.entity_type = 'TENANCY'
+                   AND tenancy_only.entity_id = $3::uuid
+              )
+            )
          OR (
               $2::text = 'unit'
           AND (

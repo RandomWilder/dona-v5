@@ -65,6 +65,7 @@ export type {
   ExtractDeps,
   ExtractedRow,
   ExtractReport,
+  MappedFinding,
   MeasuredWord,
   PromotedField,
 } from './internal/extract.ts';
@@ -80,6 +81,10 @@ export {
   isIdentifierField,
   listExtractedFields,
   listPromotedFieldsForUnit,
+  // The mapper without the database on either side of it. `evals/extraction.ts` scores what it
+  // returns against the hand reading, which only means anything because it is this function and not
+  // a copy of it (ticket #127).
+  mapFieldsFromWords,
   numberWords,
   parseMeasuredWords,
   unionBox,

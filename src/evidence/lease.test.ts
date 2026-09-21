@@ -514,9 +514,30 @@ const leaseFindings = (over: {
   return findings;
 };
 
-async function partyCount(db: PoolClient): Promise<number> {
+/**
+ * **How many parties hold these identifiers**, folded by the database rather than compared as
+ * strings — `party_national_id_key` is `0027`'s and is the same expression `party.national_id_key`
+ * is generated from.
+ *
+ * Scoped to the identifiers under test rather than counted over the whole `party` table. Test files
+ * run concurrently against one database and several of them commit parties on the pool rather than
+ * inside a rolled-back transaction, so a global count taken twice around a confirm measures their
+ * inserts as well as this fixture's: the reads are READ COMMITTED and another session's commit
+ * becomes visible between the two statements. That is a race, and it fails as a wrong answer about
+ * identifier folding rather than as a timeout, which is the expensive kind. The household-scoped
+ * queries below were already written this way for the neighbouring reason.
+ */
+async function partiesHolding(
+  db: PoolClient,
+  ...identifiers: string[]
+): Promise<number> {
   const rows = await db.query<{ n: string }>(
-    `SELECT count(*)::text AS n FROM party`,
+    `SELECT count(*)::text AS n
+       FROM party
+      WHERE national_id_key = ANY (
+              SELECT party_national_id_key('PERSON', probe)
+                FROM unnest($1::text[]) AS probe)`,
+    [identifiers],
   );
   return Number(rows.rows[0]?.n ?? '0');
 }
@@ -572,7 +593,6 @@ describe('evidence · a lease defines a letting', () => {
         await upsertTermsProfile(db, profile);
 
         const yael = idNumber();
-        const before = await partyCount(db);
         const oneDoc = await fileLease(
           db,
           first,
@@ -612,8 +632,9 @@ describe('evidence · a lease defines a letting', () => {
         assert.equal(two.result.partiesWritten, 1);
         assert.notEqual(two.result.tenancyId, one.result.tenancyId);
 
-        // **One party, two tenancies.** The count is the assertion, not the ids.
-        assert.equal(await partyCount(db), before + 1);
+        // **One party, two tenancies.** The count is the assertion, not the ids — and it is a count
+        // of who holds this ת.ז., not of the table, for the reason `partiesHolding` gives.
+        assert.equal(await partiesHolding(db, yael), 1);
         const households = await db.query<{ n: string }>(
           `SELECT count(DISTINCT tp.party_id)::text AS n
              FROM tenancy_party tp
@@ -854,7 +875,7 @@ describe('evidence · a lease defines a letting', () => {
           '65-doubled',
           AT_ID,
         );
-        const before = await partyCount(db);
+        const before = await partiesHolding(db, yael, dan);
         await assert.rejects(
           () => confirm(db, doubled, profile),
           (error: KernelError) => {
@@ -863,7 +884,7 @@ describe('evidence · a lease defines a letting', () => {
             return true;
           },
         );
-        assert.equal(await partyCount(db), before);
+        assert.equal(await partiesHolding(db, yael, dan), before);
       });
     } finally {
       await pool.end();
