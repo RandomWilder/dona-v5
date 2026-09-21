@@ -94,6 +94,7 @@ import { anchorOf, getFiledDocument } from './documents.ts';
 import {
   EXTRACT_WORK_KIND,
   type ExtractedRow,
+  extractWorkIsOpen,
   isIdentifierField,
   listExtractedFields,
 } from './extract.ts';
@@ -658,6 +659,7 @@ export function registerDocumentRoutes(
       rows,
       mayApprove: can(request.staff?.role ?? null, 'documents.write'),
       ...pageCoverage(filed),
+      readingPending: await extractWorkIsOpen(deps.pool, documentId),
       ...(clash ? { conflictTenancyId: clash } : {}),
     };
   };

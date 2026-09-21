@@ -518,6 +518,46 @@ describe('evidence · promote an extracted field', () => {
     assert.match(filing, /15 מתוך 21/);
   });
 
+  it('says the rest of the file is still being read', () => {
+    const filing = renderLeaseFilingPage({
+      nav: NAV,
+      csrf: '',
+      beat: 'read',
+      documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      pageCount: 38,
+      pagesRead: 15,
+      readingPending: true,
+    });
+    assert.match(filing, /15 מתוך 38/);
+    assert.match(filing, /הקריאה ממשיכה/);
+    assert.match(filing, /aria-busy="true"/);
+    assert.match(filing, /http-equiv="refresh"/);
+    assert.doesNotMatch(
+      renderLeaseFilingPage({
+        nav: NAV,
+        csrf: '',
+        beat: 'read',
+        documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        pageCount: 38,
+        pagesRead: 15,
+      }),
+      /הקריאה ממשיכה/,
+    );
+    assert.doesNotMatch(
+      renderLeaseFilingPage({
+        nav: NAV,
+        csrf: '',
+        beat: 'read',
+        documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        pageCount: 38,
+        pagesRead: 15,
+        readingPending: true,
+        rows: READINGS,
+      }),
+      /http-equiv="refresh"/,
+    );
+  });
+
   it('links an extracted value to the page it was read from', () => {
     const fieldId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
     const otherId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';

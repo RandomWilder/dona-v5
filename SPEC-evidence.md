@@ -307,7 +307,11 @@ nothing outside it writes a document row.
   After the row is filed, remaining slices run on the work queue, never on the upload request.
   Extraction and passages wait until those slices have been read. `document.page_count` and
   `document.pages_read` carry the coverage onto the row, and the reading screen and the field ledger
-  say so when the two differ. The operator may open הקריאה on a shortfall; unread pages are not an
+  say so when the two differ. **While that work row is still open, beat 3 of תיוק חוזה also says the
+  reading is continuing** (a loader on the coverage chip, and a refresh of the empty reading until
+  fields arrive or the work is done). A shortfall whose work has finished is still a count, not a
+  spinner — that is a stopped partial. The page does not refresh once a row is on the screen, because
+  the operator may be stamping. The operator may open הקריאה on a shortfall; unread pages are not an
   absence in the paper. A later cheap first pass that picks the annex is not built until this path
   has been measured. Batch Document AI is not this issue. *(Document AI is paid per call. A 38-page
   scan is three slices.)*

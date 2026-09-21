@@ -37,6 +37,7 @@ import {
 import {
   EXTRACT_WORK_KIND,
   extractFiledDocument,
+  extractIntentKey,
   numberWords,
   parseMeasuredWords,
 } from './extract.ts';
@@ -341,7 +342,7 @@ export async function fileDocument(
         pageCount,
         pages: reading.pages,
       },
-      intentKey: `extract:${filed.id}`,
+      intentKey: extractIntentKey(filed.id),
     });
   } else {
     const pages = remainder
@@ -387,7 +388,7 @@ async function extractAfterFile(
     kind: EXTRACT_WORK_KIND,
     runAt: deps.clock.now(),
     payload: { documentId, words },
-    intentKey: `extract:${documentId}`,
+    intentKey: extractIntentKey(documentId),
   });
   await deps.work.tick();
 }
