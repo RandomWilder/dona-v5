@@ -835,8 +835,11 @@ accepted.
 **Screen:** the ops-rail item **נכסים**. Portfolio list of every Building (imported ones included,
 with whatever Spaces they already have). Create uses A11's identity fields plus four counts (Units
 ≥ 1; parking, storage, elevators may be 0) and a first number for each counted kind except
-elevators. The building page lists every Space grouped by kind. Vacancy chips are a later beat of
-this tab, not this flow.
+elevators. The building page lists every Space grouped by kind, with headline counts and a vacancy chip on
+each Unit, parking Space, and storage Space. Elevators and later shared Spaces have no chip. A
+vacant Unit is no letting that counts today; a vacant bay or storage room is no assigned place on
+such a letting. A built-bay or built-storage link does not occupy the Space. Rent and lease-end
+are not on this list.
 
 **Writes:** one Building and the minted Spaces (and a Unit row per UNIT Space) through
 `importEstate`. Names are the bare integer sequence. Elevators are TECHNICAL Spaces `1`…`N`. No
@@ -851,7 +854,7 @@ the lists.** A VIEWER may read and must not post.
 **Module:** estate owns the routes, the screens, and the mint plan. Chrome gains the sibling rail
 item. בניינים routes and views are not edited.
 
-**Work item:** #149 (tab, create, mint, grouped list). Vacancy is #150; add/remove is #151.
+**Work items:** #149 (tab, create, mint, grouped list), #150 (derived vacancy). Add/remove is #151.
 
 ## Open
 

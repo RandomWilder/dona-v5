@@ -576,7 +576,20 @@ const SCREENS: Array<[string, () => string]> = [
             space_kind: 'PARKING',
             name: '50',
           },
+          {
+            space_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+            space_kind: 'TECHNICAL',
+            name: '1',
+          },
+          {
+            space_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+            space_kind: 'COMMON',
+            name: 'לובי',
+          },
         ],
+        occupancy: occupancy,
+        occupiedParking: new Set(['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb']),
+        occupiedStorage: new Set(),
         nav: NAV_INVENTORY,
       }),
   ],
@@ -2856,5 +2869,53 @@ describe('shared UI tokens', () => {
       renderBuildingPage(detail, occupancy, NAV),
       /data-office-retrieval="building"/,
     );
+  });
+
+  it('paints vacancy chips on inventory Units, bays and stores, not on elevators or a lobby', () => {
+    const html = renderInventoryBuildingPage({
+      building,
+      spaces: [
+        {
+          space_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          space_kind: 'UNIT',
+          name: '10',
+        },
+        {
+          space_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          space_kind: 'PARKING',
+          name: '50',
+        },
+        {
+          space_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          space_kind: 'TECHNICAL',
+          name: '1',
+        },
+        {
+          space_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+          space_kind: 'COMMON',
+          name: 'לובי',
+        },
+      ],
+      occupancy: new Map(),
+      occupiedParking: new Set(['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb']),
+      occupiedStorage: new Set(),
+      nav: NAV_INVENTORY,
+    });
+    assert.match(html, /דירות פנויות · <span dir="ltr">1<\/span>/);
+    assert.match(html, /חניות פנויות · <span dir="ltr">0<\/span>/);
+    assert.match(
+      html,
+      /<span dir="ltr">10<\/span><span class="chip">פנויה<\/span>/,
+    );
+    assert.match(
+      html,
+      /<span dir="ltr">50<\/span><span class="chip">תפוסה<\/span>/,
+    );
+    const technical = html.split('<h2>חללים טכניים</h2>')[1] ?? '';
+    assert.doesNotMatch(technical, /chip/);
+    const shared = html.split('<h2>שטחים משותפים</h2>')[1] ?? '';
+    assert.doesNotMatch(shared, /chip/);
+    assert.doesNotMatch(html, /דמי שכירות/);
+    assert.doesNotMatch(html, /תום חוזה/);
   });
 });

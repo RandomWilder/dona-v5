@@ -212,6 +212,7 @@ const styles = h`<style>
   a.card-link:hover .card-title { text-decoration: underline; }
   a.unit-no { color: inherit; }
   .index-list { display: grid; gap: var(--space-2); }
+  .index-list li { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; }
   .lease-when { display: flex; gap: var(--space-3); align-items: baseline; flex-wrap: wrap; }
   .doc-uri { word-break: break-all; }
   .doc-group { display: grid; gap: var(--space-2); }
@@ -765,19 +766,57 @@ const INVENTORY_KIND_ORDER = [
 export function renderInventoryBuildingPage(screen: {
   building: BuildingSummary;
   spaces: readonly InventorySpaceRow[];
+  occupancy: OccupancyByUnit;
+  occupiedParking: ReadonlySet<string>;
+  occupiedStorage: ReadonlySet<string>;
   nav: Html;
 }): string {
   const grouped = INVENTORY_KIND_ORDER.map((kind) => ({
     kind,
-    names: screen.spaces
-      .filter((space) => space.space_kind === kind)
-      .map((space) => space.name),
-  })).filter((group) => group.names.length > 0);
+    rows: screen.spaces.filter((space) => space.space_kind === kind),
+  })).filter((group) => group.rows.length > 0);
+  const unitRows = screen.spaces.filter((space) => space.space_kind === 'UNIT');
+  const parkingRows = screen.spaces.filter(
+    (space) => space.space_kind === 'PARKING',
+  );
+  const storageRows = screen.spaces.filter(
+    (space) => space.space_kind === 'STORAGE',
+  );
+  const vacantUnits = unitRows.filter(
+    (space) => !screen.occupancy.has(space.space_id),
+  ).length;
+  const vacantParking = parkingRows.filter(
+    (space) => !screen.occupiedParking.has(space.space_id),
+  ).length;
+  const vacantStorage = storageRows.filter(
+    (space) => !screen.occupiedStorage.has(space.space_id),
+  ).length;
+  const headlines = [
+    ...grouped.map((group) => ({
+      label: label(SPACE_KIND, group.kind),
+      n: group.rows.length,
+    })),
+    ...(unitRows.length > 0 ? [{ label: 'דירות פנויות', n: vacantUnits }] : []),
+    ...(parkingRows.length > 0
+      ? [{ label: 'חניות פנויות', n: vacantParking }]
+      : []),
+    ...(storageRows.length > 0
+      ? [{ label: 'מחסנים פנויים', n: vacantStorage }]
+      : []),
+  ];
   const body = h`
     <div>
       <a class="back" href="/estate/inventory">← נכסים</a>
       <h1>${screen.building.name}</h1>
       <p class="lede">${screen.building.address_line}, ${screen.building.city}</p>
+      ${
+        headlines.length === 0
+          ? h``
+          : h`<div class="chips">${headlines.map(
+              (item) =>
+                h`<span class="chip">${item.label} · ${ltr(item.n)}</span>`,
+            )}</div>`
+      }
     </div>
     ${
       grouped.length === 0
@@ -786,12 +825,35 @@ export function renderInventoryBuildingPage(screen: {
             (group) => h`<section>
               <h2>${label(SPACE_KIND, group.kind)}</h2>
               <ul class="index-list">
-                ${group.names.map((name) => h`<li>${ltr(name)}</li>`)}
+                ${group.rows.map(
+                  (space) =>
+                    h`<li>${ltr(space.name)}${inventoryVacancyChip(space, screen)}</li>`,
+                )}
               </ul>
             </section>`,
           )
     }`;
   return page(`דונה דום — ${screen.building.name}`, body, screen.nav);
+}
+
+function inventoryVacancyChip(
+  space: InventorySpaceRow,
+  screen: {
+    occupancy: OccupancyByUnit;
+    occupiedParking: ReadonlySet<string>;
+    occupiedStorage: ReadonlySet<string>;
+  },
+): Html {
+  if (space.space_kind === 'UNIT') {
+    return h`<span class="chip">${screen.occupancy.has(space.space_id) ? 'מאוכלסת' : 'פנויה'}</span>`;
+  }
+  if (space.space_kind === 'PARKING') {
+    return h`<span class="chip">${screen.occupiedParking.has(space.space_id) ? 'תפוסה' : 'פנויה'}</span>`;
+  }
+  if (space.space_kind === 'STORAGE') {
+    return h`<span class="chip">${screen.occupiedStorage.has(space.space_id) ? 'תפוסה' : 'פנויה'}</span>`;
+  }
+  return h``;
 }
 
 /**

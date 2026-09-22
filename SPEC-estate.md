@@ -31,7 +31,8 @@ workbook is right and this file is a bug.
   rows 4.6 already wrote have.
   **#149 added נכסים** — `GET /estate/inventory`, create+mint, and the grouped building page.
   Writes go through `importEstate`. First mint writes one `estate.inventory_mint` audit line.
-  בניינים routes and views are unchanged.
+  **#150 derived vacancy** on that page from the occupancy injection and the assigned bay /
+  assigned storage on those lettings. בניינים routes and views are unchanged.
 
 ## The shape, and why it is this one
 
@@ -405,8 +406,8 @@ rows.
 
 **Routes.** `GET /estate/inventory` (`estate.read`) lists every Building. `GET /estate/inventory/new`
 and `POST /estate/inventory` (`estate.write`, including the GET) create one and mint its Spaces.
-`GET /estate/inventory/:buildingId` (`estate.read`) lists those Spaces grouped by kind. The rail
-destination is `inventory`.
+`GET /estate/inventory/:buildingId` (`estate.read`) lists those Spaces grouped by kind, with
+headline counts and derived vacancy. The rail destination is `inventory`.
 
 **The write is still `importEstate`.** The POST rebuilds A11's identity plan and adds Spaces: UNIT,
 PARKING, and STORAGE named by the bare integer sequence from each kind's first number; TECHNICAL
@@ -426,6 +427,18 @@ second one.
 ranges). Not `estate_event`.
 
 The POST replies `303` to that Building's נכסים page.
+
+**Vacancy is derived on every load, stored nowhere (#150).** Headlines name each kind's count, plus
+vacant Units, vacant parking, and vacant storage. Each UNIT, PARKING, and STORAGE row carries a
+vacancy chip. Elevators and later COMMON / EXTERIOR / extra TECHNICAL rows do not: the chip means
+assignment, not existence. Rent and lease-end stay off this list.
+
+A vacant Unit is a Unit with no letting that counts today — the same `resolveOccupiedUnits`
+injection the occupancy chip already uses. A vacant parking Space is one with no assigned bay on a
+letting that counts today; a built-bay link does not occupy it. A vacant storage Space is one with
+no assigned storage on a letting that counts today; built storage does not occupy it. Estate does
+not grow a second day predicate: the occupied-unit tenancy ids come from that injection, and
+assigned bay / assigned storage are read off those rows only.
 
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
 `GET`/`POST /documents/new`, reached from a unit row on the building page. It went behind the session

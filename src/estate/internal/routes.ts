@@ -52,6 +52,7 @@ import {
   listBuildings,
   listExpiringLeases,
   listInventorySpaces,
+  listOccupiedAssignments,
   listParkingSpacesInBuilding,
   listProjects,
   listStorageSpacesInBuilding,
@@ -680,10 +681,37 @@ export function registerEstateRoutes(
       const buildingId = validId(request.params.buildingId, 'buildingId');
       const detail = await getBuilding(deps.pool, buildingId);
       const spaces = await listInventorySpaces(deps.pool, buildingId);
+      const occupied = await resolveOccupiedUnits(
+        deps.pool,
+        spaces
+          .filter((space) => space.space_kind === 'UNIT')
+          .map((space) => space.space_id),
+        deps.clock,
+      );
+      const occupancy: OccupancyByUnit = new Map(
+        occupied.map((unit) => [unit.unit_id, unit.occupants]),
+      );
+      const assigned = await listOccupiedAssignments(
+        deps.pool,
+        occupied.map((unit) => unit.tenancy_id),
+      );
+      const occupiedParking = new Set(
+        assigned.flatMap((row) =>
+          row.parking_space_id ? [row.parking_space_id] : [],
+        ),
+      );
+      const occupiedStorage = new Set(
+        assigned.flatMap((row) =>
+          row.storage_space_id ? [row.storage_space_id] : [],
+        ),
+      );
       html(reply);
       return renderInventoryBuildingPage({
         building: detail.building,
         spaces,
+        occupancy,
+        occupiedParking,
+        occupiedStorage,
         nav: deps.chrome(csrfFrom(request), 'inventory', mayFile(request)),
       });
     },

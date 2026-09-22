@@ -7,6 +7,7 @@ import { describe, it } from 'node:test';
 import { asOperator, signIn, signOutAll } from '../../tests/support/session.ts';
 import { buildApp } from '../app.ts';
 import { systemClock } from '../kernel/clock.ts';
+import { newId } from '../kernel/ids.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
 import type { EstatePlan } from './contract.ts';
 import { importEstate } from './contract.ts';
@@ -52,6 +53,15 @@ async function cleanupCity(
        WHERE b.city = $1)`,
     `DELETE FROM audit_log WHERE action = 'estate.inventory_mint'
        AND subject_id IN (SELECT building_id::text FROM building WHERE city = $1)`,
+    `DELETE FROM tenancy_party WHERE tenancy_id IN (
+       SELECT t.tenancy_id FROM tenancy t
+       JOIN space s ON s.space_id = t.unit_id
+       JOIN building b ON b.building_id = s.building_id
+       WHERE b.city = $1)`,
+    `DELETE FROM tenancy WHERE unit_id IN (
+       SELECT space_id FROM space s
+       JOIN building b ON b.building_id = s.building_id
+       WHERE b.city = $1)`,
     `DELETE FROM unit WHERE unit_id IN (
        SELECT space_id FROM space s
        JOIN building b ON b.building_id = s.building_id
@@ -239,6 +249,28 @@ describe('estate · נכסים, tab create and mint', () => {
       assert.match(detail.body, /<span dir="ltr">10<\/span>/);
       assert.match(detail.body, /<span dir="ltr">50<\/span>/);
       assert.match(detail.body, /<span dir="ltr">7<\/span>/);
+      assert.match(detail.body, /דירות · <span dir="ltr">3<\/span>/);
+      assert.match(detail.body, /דירות פנויות · <span dir="ltr">3<\/span>/);
+      assert.match(detail.body, /חניות · <span dir="ltr">2<\/span>/);
+      assert.match(detail.body, /חניות פנויות · <span dir="ltr">2<\/span>/);
+      assert.match(detail.body, /מחסנים · <span dir="ltr">1<\/span>/);
+      assert.match(detail.body, /מחסנים פנויים · <span dir="ltr">1<\/span>/);
+      assert.match(
+        detail.body,
+        /<span dir="ltr">10<\/span><span class="chip">פנויה<\/span>/,
+      );
+      assert.match(
+        detail.body,
+        /<span dir="ltr">50<\/span><span class="chip">פנויה<\/span>/,
+      );
+      assert.match(
+        detail.body,
+        /<span dir="ltr">7<\/span><span class="chip">פנויה<\/span>/,
+      );
+      const technical = detail.body.split('<h2>חללים טכניים</h2>')[1] ?? '';
+      assert.doesNotMatch(technical, /chip/);
+      assert.doesNotMatch(detail.body, /דמי שכירות/);
+      assert.doesNotMatch(detail.body, /תום חוזה/);
 
       const audit = await pool.query<{
         action: string;
@@ -410,6 +442,8 @@ describe('estate · נכסים, tab create and mint', () => {
       assert.equal(detail.statusCode, 200);
       assert.match(detail.body, /<span dir="ltr">12A<\/span>/);
       assert.match(detail.body, /לובי/);
+      const shared = detail.body.split('<h2>שטחים משותפים</h2>')[1] ?? '';
+      assert.doesNotMatch(shared, /chip/);
 
       const form = await client.inject({
         method: 'GET',
@@ -434,6 +468,143 @@ describe('estate · נכסים, tab create and mint', () => {
       assert.equal(rows.rowCount, 0);
     } finally {
       await cleanup(pool);
+      await signOutAll(pool, DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('occupies only the Unit and the assigned bay and storage of a letting that counts today', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({ pool, version: '9.9.9-test' });
+    await signOutAll(pool, DOMAIN);
+    await cleanup(pool);
+    const admin = await signIn(pool, systemClock, {
+      email: `occupancy@${DOMAIN}`,
+      role: 'ADMIN',
+    });
+    const client = asOperator(app, admin);
+    const partyName = 'נכסים occupancy tenant';
+    const profileName = `נכסים occupancy ${DOMAIN}`;
+    try {
+      const created = await client.inject({
+        method: 'POST',
+        url: '/estate/inventory',
+        headers: FORM,
+        payload: mintForm({ storage_count: '2', storage_first: '7' }),
+      });
+      assert.equal(created.statusCode, 303);
+      const buildingId = String(created.headers.location ?? '')
+        .split('/')
+        .at(-1);
+      const spaces = await pool.query<{
+        space_id: string;
+        space_kind: string;
+        name: string;
+      }>(
+        `SELECT space_id, space_kind, name FROM space
+          WHERE building_id = $1`,
+        [buildingId],
+      );
+      const idOf = (kind: string, name: string) =>
+        spaces.rows.find((row) => row.space_kind === kind && row.name === name)
+          ?.space_id ?? '';
+      const unit10 = idOf('UNIT', '10');
+      const unit11 = idOf('UNIT', '11');
+      const unit12 = idOf('UNIT', '12');
+      const bay50 = idOf('PARKING', '50');
+      const bay51 = idOf('PARKING', '51');
+      const store7 = idOf('STORAGE', '7');
+      const store8 = idOf('STORAGE', '8');
+
+      await pool.query(
+        `UPDATE unit SET parking_space_id = $1, storage_space_id = $2
+          WHERE unit_id = $3`,
+        [bay51, store8, unit11],
+      );
+
+      const profile = await pool.query<{ terms_profile_id: string }>(
+        `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)
+         ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+         RETURNING terms_profile_id`,
+        [newId(), profileName],
+      );
+      const live = newId();
+      const ended = newId();
+      const partyId = newId();
+      await pool.query(
+        `INSERT INTO party (party_id, party_kind, full_name)
+         VALUES ($1, 'PERSON', $2)`,
+        [partyId, partyName],
+      );
+      await pool.query(
+        `INSERT INTO tenancy (
+           tenancy_id, unit_id, start_date, end_date, status,
+           terms_profile_id, parking_space_id, storage_space_id)
+         VALUES ($1, $2, '2020-01-01', '2099-12-31', 'ACTIVE', $3, $4, $5)`,
+        [live, unit10, profile.rows[0]?.terms_profile_id, bay50, store7],
+      );
+      await pool.query(
+        `INSERT INTO tenancy (
+           tenancy_id, unit_id, start_date, end_date, status,
+           terms_profile_id, parking_space_id, storage_space_id)
+         VALUES ($1, $2, '2020-01-01', '2020-12-31', 'ENDED', $3, $4, $5)`,
+        [ended, unit12, profile.rows[0]?.terms_profile_id, bay51, store8],
+      );
+      await pool.query(
+        `INSERT INTO tenancy_party (tenancy_id, party_id, role, is_service_contact)
+         VALUES ($1, $2, 'PRIMARY_TENANT', true),
+                ($3, $2, 'PRIMARY_TENANT', true)`,
+        [live, partyId, ended],
+      );
+
+      const page = await client.inject({
+        method: 'GET',
+        url: `/estate/inventory/${buildingId}`,
+      });
+      assert.equal(page.statusCode, 200);
+      assert.match(page.body, /דירות פנויות · <span dir="ltr">2<\/span>/);
+      assert.match(page.body, /חניות פנויות · <span dir="ltr">1<\/span>/);
+      assert.match(page.body, /מחסנים פנויים · <span dir="ltr">1<\/span>/);
+      assert.match(
+        page.body,
+        /<span dir="ltr">10<\/span><span class="chip">מאוכלסת<\/span>/,
+      );
+      assert.match(
+        page.body,
+        /<span dir="ltr">11<\/span><span class="chip">פנויה<\/span>/,
+      );
+      assert.match(
+        page.body,
+        /<span dir="ltr">12<\/span><span class="chip">פנויה<\/span>/,
+      );
+      assert.match(
+        page.body,
+        /<span dir="ltr">50<\/span><span class="chip">תפוסה<\/span>/,
+      );
+      assert.match(
+        page.body,
+        /<span dir="ltr">51<\/span><span class="chip">פנויה<\/span>/,
+      );
+      assert.match(
+        page.body,
+        /<span dir="ltr">7<\/span><span class="chip">תפוסה<\/span>/,
+      );
+      assert.match(
+        page.body,
+        /<span dir="ltr">8<\/span><span class="chip">פנויה<\/span>/,
+      );
+      assert.doesNotMatch(page.body, /דמי שכירות/);
+    } finally {
+      await cleanup(pool);
+      await pool.query('DELETE FROM party WHERE full_name = $1', [partyName]);
+      await pool.query('DELETE FROM terms_profile WHERE name = $1', [
+        profileName,
+      ]);
       await signOutAll(pool, DOMAIN);
       await app.close();
       await pool.end();
