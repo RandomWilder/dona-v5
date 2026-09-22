@@ -20,6 +20,7 @@ import type {
   BuildingDetail,
   BuildingSummary,
   ExpiringLease,
+  InventorySpaceRow,
   ProjectOption,
   SearchResults,
   UnassignedSpaceRow,
@@ -211,6 +212,7 @@ const styles = h`<style>
   a.card-link:hover .card-title { text-decoration: underline; }
   a.unit-no { color: inherit; }
   .index-list { display: grid; gap: var(--space-2); }
+  .index-list li { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; }
   .lease-when { display: flex; gap: var(--space-3); align-items: baseline; flex-wrap: wrap; }
   .doc-uri { word-break: break-all; }
   .doc-group { display: grid; gap: var(--space-2); }
@@ -586,6 +588,356 @@ export function renderBuildingsPage(
           </div>`
     }`;
   return page('דונה דום — בניינים', body, nav);
+}
+
+export function renderInventoryPage(
+  buildings: BuildingSummary[],
+  nav: Html,
+  mayWrite = false,
+): string {
+  const body = h`
+    <div>
+      <h1>נכסים</h1>
+      <p class="lede">
+        המלאי של כל בניין — דירות, חניות, מחסנים ומעליות — לפני שהנייר ממלא אותן.
+      </p>
+      ${
+        mayWrite
+          ? h`<p class="form-actions">
+              <a class="btn btn-primary" href="/estate/inventory/new">בניין חדש</a>
+            </p>`
+          : h``
+      }
+    </div>
+    ${
+      buildings.length === 0
+        ? h`<p class="empty-state">אין עדיין בניינים במערכת.</p>`
+        : h`<div class="row-list">
+            ${buildings.map(
+              (building) => h`<article class="row-card">
+                ${marker(building.status)}
+                <a class="card-link" href="/estate/inventory/${building.building_id}">
+                  <p class="card-title">
+                    <span>${building.name}</span>
+                    <span class="chip">${label(BUILDING_STATUS, building.status)}</span>
+                  </p>
+                  <p class="lede">${building.address_line}, ${building.city}</p>
+                </a>
+              </article>`,
+            )}
+          </div>`
+    }`;
+  return page('דונה דום — נכסים', body, nav);
+}
+
+export function renderNewInventoryPage(screen: {
+  nav: Html;
+  csrf: string;
+  projects: readonly ProjectOption[];
+}): string {
+  const body = h`
+    <div>
+      <a class="back" href="/estate/inventory">← נכסים</a>
+      <h1>בניין חדש</h1>
+      <p class="lede">
+        זהות הבניין וארבע ספירות. שמירה אחת מייצרת את החללים.
+      </p>
+    </div>
+    <form class="form-grid" method="post" action="/estate/inventory">
+      ${csrfInput(screen.csrf)}
+      <div class="form-row">
+        <label for="name">שם הבניין</label>
+        <input id="name" name="name" type="text" maxlength="200" required />
+        <p class="hint">איך הצוות קורא לבניין. אינו חייב להיות זהה לכתובת.</p>
+      </div>
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="address_line">רחוב ומספר</label>
+          <input id="address_line" name="address_line" type="text" maxlength="200" required />
+        </div>
+        <div class="form-row">
+          <label for="city">עיר</label>
+          <input id="city" name="city" type="text" maxlength="120" required />
+        </div>
+      </div>
+      <p class="form-note">
+        הכתובת היא מה שמזהה בניין. אותה כתובת פעמיים מעדכנת את הבניין הקיים ואינה יוצרת בניין שני.
+      </p>
+      <div class="form-row">
+        <label for="project_code">פרויקט</label>
+        <select id="project_code" name="project_code">
+          <option value="">ללא פרויקט</option>
+          ${screen.projects.map(
+            (project) =>
+              h`<option value="${project.project_code}">${project.name} · ${ltr(
+                project.project_code,
+              )}</option>`,
+          )}
+        </select>
+      </div>
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="gush">גוש</label>
+          <input id="gush" name="gush" type="text" maxlength="64" />
+        </div>
+        <div class="form-row">
+          <label for="helka">חלקה</label>
+          <input id="helka" name="helka" type="text" maxlength="64" />
+        </div>
+      </div>
+      <div class="form-row">
+        <label for="building_number">מספר בניין</label>
+        <input id="building_number" name="building_number" type="text" maxlength="32" />
+      </div>
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="handover_date">תאריך מסירה</label>
+          <input id="handover_date" name="handover_date" type="date" required />
+        </div>
+        <div class="form-row">
+          <label for="warranty_end_date">תום תקופת הבדק</label>
+          <input id="warranty_end_date" name="warranty_end_date" type="date" />
+        </div>
+      </div>
+      <div class="form-row">
+        <label for="status">סטטוס</label>
+        <select id="status" name="status">
+          ${BUILDING_STATUSES.map(
+            (status) =>
+              h`<option value="${status}" ${
+                status === 'ACTIVE' ? h`selected` : h``
+              }>${label(BUILDING_STATUS, status)}</option>`,
+          )}
+        </select>
+      </div>
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="unit_count">דירות</label>
+          <input id="unit_count" name="unit_count" type="number" min="1" max="999" step="1" required />
+        </div>
+        <div class="form-row">
+          <label for="unit_first">מספר ראשון</label>
+          <input id="unit_first" name="unit_first" type="number" min="0" step="1" />
+          <p class="hint">חובה כשהספירה גדולה מאפס. השמות הם המספרים עצמם.</p>
+        </div>
+      </div>
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="parking_count">חניות</label>
+          <input id="parking_count" name="parking_count" type="number" min="0" max="999" step="1" required />
+        </div>
+        <div class="form-row">
+          <label for="parking_first">מספר ראשון</label>
+          <input id="parking_first" name="parking_first" type="number" min="0" step="1" />
+        </div>
+      </div>
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="storage_count">מחסנים</label>
+          <input id="storage_count" name="storage_count" type="number" min="0" max="999" step="1" required />
+        </div>
+        <div class="form-row">
+          <label for="storage_first">מספר ראשון</label>
+          <input id="storage_first" name="storage_first" type="number" min="0" step="1" />
+        </div>
+      </div>
+      <div class="form-row">
+        <label for="elevator_count">מעליות</label>
+        <input id="elevator_count" name="elevator_count" type="number" min="0" max="999" step="1" required />
+        <p class="hint">חללים טכניים בשמות 1 עד N. אפס מותר.</p>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">יצירת בניין</button>
+        <a href="/estate/inventory">ביטול</a>
+      </div>
+    </form>`;
+  return page('דונה דום — בניין חדש', body, screen.nav);
+}
+
+const INVENTORY_KIND_ORDER = [
+  'UNIT',
+  'PARKING',
+  'STORAGE',
+  'TECHNICAL',
+  'COMMON',
+  'EXTERIOR',
+] as const;
+
+export function renderInventoryBuildingPage(screen: {
+  building: BuildingSummary;
+  spaces: readonly InventorySpaceRow[];
+  occupancy: OccupancyByUnit;
+  occupiedParking: ReadonlySet<string>;
+  occupiedStorage: ReadonlySet<string>;
+  nav: Html;
+  write?: { csrf: string };
+}): string {
+  const grouped = INVENTORY_KIND_ORDER.map((kind) => ({
+    kind,
+    rows: screen.spaces.filter((space) => space.space_kind === kind),
+  })).filter((group) => group.rows.length > 0);
+  const unitRows = screen.spaces.filter((space) => space.space_kind === 'UNIT');
+  const parkingRows = screen.spaces.filter(
+    (space) => space.space_kind === 'PARKING',
+  );
+  const storageRows = screen.spaces.filter(
+    (space) => space.space_kind === 'STORAGE',
+  );
+  const vacantUnits = unitRows.filter(
+    (space) => !screen.occupancy.has(space.space_id),
+  ).length;
+  const vacantParking = parkingRows.filter(
+    (space) => !screen.occupiedParking.has(space.space_id),
+  ).length;
+  const vacantStorage = storageRows.filter(
+    (space) => !screen.occupiedStorage.has(space.space_id),
+  ).length;
+  const headlines = [
+    ...grouped.map((group) => ({
+      label: label(SPACE_KIND, group.kind),
+      n: group.rows.length,
+    })),
+    ...(unitRows.length > 0 ? [{ label: 'דירות פנויות', n: vacantUnits }] : []),
+    ...(parkingRows.length > 0
+      ? [{ label: 'חניות פנויות', n: vacantParking }]
+      : []),
+    ...(storageRows.length > 0
+      ? [{ label: 'מחסנים פנויים', n: vacantStorage }]
+      : []),
+  ];
+  const body = h`
+    <div>
+      <a class="back" href="/estate/inventory">← נכסים</a>
+      <h1>${screen.building.name}</h1>
+      <p class="lede">${screen.building.address_line}, ${screen.building.city}</p>
+      ${
+        headlines.length === 0
+          ? h``
+          : h`<div class="chips">${headlines.map(
+              (item) =>
+                h`<span class="chip">${item.label} · ${ltr(item.n)}</span>`,
+            )}</div>`
+      }
+    </div>
+    ${
+      grouped.length === 0
+        ? h`<p class="empty-state">אין עדיין חללים בבניין זה.</p>`
+        : grouped.map(
+            (group) => h`<section>
+              <h2>${label(SPACE_KIND, group.kind)}</h2>
+              <ul class="index-list">
+                ${group.rows.map(
+                  (space) =>
+                    h`<li>${ltr(space.name)}${inventoryVacancyChip(space, screen)}${
+                      screen.write
+                        ? h`<form class="remove-space" method="post"
+                              action="/estate/inventory/spaces/${space.space_id}/remove">
+                            ${csrfInput(screen.write.csrf)}
+                            <button class="btn-link" type="submit"
+                              aria-label="הסרת ${space.name}">הסרה</button>
+                          </form>`
+                        : h``
+                    }</li>`,
+                )}
+              </ul>
+            </section>`,
+          )
+    }
+    ${
+      screen.write
+        ? h`
+      <section>
+        <h2>הוספת חללים</h2>
+        <form class="form-grid" method="post"
+          action="/estate/inventory/${screen.building.building_id}/spaces">
+          ${csrfInput(screen.write.csrf)}
+          <div class="form-pair">
+            <div class="form-row">
+              <label for="unit_count">דירות</label>
+              <input id="unit_count" name="unit_count" type="number" min="0" max="999" step="1" value="0" required />
+            </div>
+            <div class="form-row">
+              <label for="unit_first">מספר ראשון</label>
+              <input id="unit_first" name="unit_first" type="number" min="0" step="1" />
+            </div>
+          </div>
+          <div class="form-pair">
+            <div class="form-row">
+              <label for="parking_count">חניות</label>
+              <input id="parking_count" name="parking_count" type="number" min="0" max="999" step="1" value="0" required />
+            </div>
+            <div class="form-row">
+              <label for="parking_first">מספר ראשון</label>
+              <input id="parking_first" name="parking_first" type="number" min="0" step="1" />
+            </div>
+          </div>
+          <div class="form-pair">
+            <div class="form-row">
+              <label for="storage_count">מחסנים</label>
+              <input id="storage_count" name="storage_count" type="number" min="0" max="999" step="1" value="0" required />
+            </div>
+            <div class="form-row">
+              <label for="storage_first">מספר ראשון</label>
+              <input id="storage_first" name="storage_first" type="number" min="0" step="1" />
+            </div>
+          </div>
+          <div class="form-row">
+            <label for="elevator_count">מעליות</label>
+            <input id="elevator_count" name="elevator_count" type="number" min="0" max="999" step="1" value="0" required />
+            <p class="hint">ממשיכות את השמות הטכניים הקיימים. אפס מדלג.</p>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">הוספה</button>
+          </div>
+        </form>
+      </section>
+      <section>
+        <h2>מקום משותף</h2>
+        <form class="form-grid" method="post"
+          action="/estate/inventory/${screen.building.building_id}/shared">
+          ${csrfInput(screen.write.csrf)}
+          <div class="form-pair">
+            <div class="form-row">
+              <label for="space_kind">סוג</label>
+              <select id="space_kind" name="space_kind" required>
+                <option value="COMMON">שטח משותף</option>
+                <option value="EXTERIOR">שטח חוץ</option>
+                <option value="TECHNICAL">חלל טכני</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="shared_name">שם</label>
+              <input id="shared_name" name="name" type="text" maxlength="64" required />
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">הוספה</button>
+          </div>
+        </form>
+      </section>`
+        : h``
+    }`;
+  return page(`דונה דום — ${screen.building.name}`, body, screen.nav);
+}
+
+function inventoryVacancyChip(
+  space: InventorySpaceRow,
+  screen: {
+    occupancy: OccupancyByUnit;
+    occupiedParking: ReadonlySet<string>;
+    occupiedStorage: ReadonlySet<string>;
+  },
+): Html {
+  if (space.space_kind === 'UNIT') {
+    return h`<span class="chip">${screen.occupancy.has(space.space_id) ? 'מאוכלסת' : 'פנויה'}</span>`;
+  }
+  if (space.space_kind === 'PARKING') {
+    return h`<span class="chip">${screen.occupiedParking.has(space.space_id) ? 'תפוסה' : 'פנויה'}</span>`;
+  }
+  if (space.space_kind === 'STORAGE') {
+    return h`<span class="chip">${screen.occupiedStorage.has(space.space_id) ? 'תפוסה' : 'פנויה'}</span>`;
+  }
+  return h``;
 }
 
 /**
@@ -1627,6 +1979,9 @@ export interface TenancySheet {
   parkingSpaceId: string | null;
   parkingName: string | null;
   parkingOptions: readonly { space_id: string; name: string }[];
+  storageSpaceId: string | null;
+  storageName: string | null;
+  storageOptions: readonly { space_id: string; name: string }[];
   unit: UnitHit;
   people: readonly TenancyPersonView[];
   documents: readonly FiledDocumentView[];
@@ -1826,6 +2181,10 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
           <dt>חניה משויכת</dt>
           <dd>${sheet.parkingName ? ltr(sheet.parkingName) : h`—`}</dd>
         </div>
+        <div>
+          <dt>מחסן משויך</dt>
+          <dd>${sheet.storageName ? ltr(sheet.storageName) : h`—`}</dd>
+        </div>
         ${sheet.captures.map(
           (row) => h`<div>
             <dt>${row.labelHe}</dt>
@@ -1885,6 +2244,23 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
           )}
         </select>
         <button class="btn btn-secondary" type="submit">העברת חניה</button>
+      </form>`
+      }
+      ${
+        sheet.storageOptions.length === 0
+          ? h``
+          : h`<form method="post" action="/estate/tenancies/${sheet.tenancyId}/storage" class="activate">
+        ${csrfInput(sheet.csrf)}
+        <label for="storage_space_id">העברת מחסן</label>
+        <select id="storage_space_id" name="storage_space_id">
+          ${sheet.storageOptions.map(
+            (room) =>
+              h`<option value="${room.space_id}" ${
+                room.space_id === sheet.storageSpaceId ? 'selected' : ''
+              }>${ltr(room.name)}</option>`,
+          )}
+        </select>
+        <button class="btn btn-secondary" type="submit">העברת מחסן</button>
       </form>`
       }
     </section>

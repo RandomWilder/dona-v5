@@ -29,6 +29,11 @@ workbook is right and this file is a bug.
   `POST /estate/spaces/:spaceId/remove` is this module's first delete of a `space`
   outside the operator purge — narrow, refusing rather than cascading, and the only forward path the
   rows 4.6 already wrote have.
+  **#149 added נכסים** — `GET /estate/inventory`, create+mint, and the grouped building page.
+  Writes go through `importEstate`. First mint writes one `estate.inventory_mint` audit line.
+  **#150 derived vacancy** on that page from the occupancy injection and the assigned bay /
+  assigned storage on those lettings. **#151 added later add, remove, and shared Spaces** on that
+  same page. בניינים routes and views are unchanged.
 
 ## The shape, and why it is this one
 
@@ -99,8 +104,10 @@ one of `building_id` or `unit_id` is set and it matches the type. Same discrimin
 `document_link`. There is no `space_id`: `unit.rooms` and `space.floor` on the unit's space share
 `unit_id` (`unit_id` = `space_id`).
 
-**Only a promotion appends.** A11, A13, `applyProtocolSeed`, and the register importer do not write
-here. The typed original is `old_value` on the first promotion row. The unit sheet lists these
+**Only a promotion appends.** A11, A13, נכסים mint, later inventory add/remove, `applyProtocolSeed`,
+and the register importer do not write here. The mint's batch line is kernel `audit_log`
+(`estate.inventory_mint`); each later add or remove is one `estate.inventory_add` or
+`estate.inventory_remove` line per Space. None of those are this table. The typed original is `old_value` on the first promotion row. The unit sheet lists these
 rows the same way it lists tenancy events, so an operator can ask what the room count used to be.
 
 **`applyPromotedField` is the write.** It lives on this module's contract, beside `applyProtocolSeed`,
@@ -392,6 +399,68 @@ is optional and blank means *the building's date applies* (R14) rather than *no 
 The POST replies `303` to the building page, which is where the space count, the unit card and the
 פנויה chip are — the acceptance bar's own wording, and the three things the write should have
 changed.
+
+### נכסים — inventory list, create, and mint (#149)
+
+A second estate tab, beside בניינים. All inventory work lives only here. בניינים keeps A11 and A13
+as they are. The same Building / Space / Unit rows appear under both tabs because they are the same
+rows.
+
+**Routes.** `GET /estate/inventory` (`estate.read`) lists every Building. `GET /estate/inventory/new`
+and `POST /estate/inventory` (`estate.write`, including the GET) create one and mint its Spaces.
+`GET /estate/inventory/:buildingId` (`estate.read`) lists those Spaces grouped by kind, with
+headline counts and derived vacancy. Later growth and shrink live on that page:
+`POST /estate/inventory/:buildingId/spaces` (count + first number; elevators count only),
+`POST /estate/inventory/:buildingId/shared` (kind + typed name), and
+`POST /estate/inventory/spaces/:spaceId/remove`. Those three are `estate.write`. The rail
+destination is `inventory`. This is not A13's `POST /estate/spaces/:spaceId/remove`, which still
+detaches a built bay or store.
+
+**The write is still `importEstate`.** The POST rebuilds A11's identity plan and adds Spaces: UNIT,
+PARKING, and STORAGE named by the bare integer sequence from each kind's first number; TECHNICAL
+elevators named `1`…`N`. Each UNIT Space gets a Unit row, `READY`, rooms `0`, floor empty, no built
+bay or built storage. No Asset on an elevator. Names that already exist in the Building are omitted
+from the plan so a re-post updates identity and does not wipe rooms or floor. Occupancy is not
+stored. הצמדה is not paired.
+
+**Counts at the edge.** Units integer ≥ 1. Parking, storage, and elevators integer ≥ 0. A first
+number is required when that kind's count is above zero, parsed as an integer, then incremented
+`count` times. Elevators need only a count.
+
+**Idempotence is still `address_key`.** The same address posted twice updates that Building, never a
+second one.
+
+**Audit.** One `estate.inventory_mint` line on first mint (who, when, counts, inclusive name
+ranges). Each later add or remove writes one `estate.inventory_add` or `estate.inventory_remove`
+line for that Space (who, when, kind, name). A second create of the same address that names Spaces
+the first mint did not cover writes those Spaces and one `estate.inventory_add` line each, and does
+not write a second mint line. A re-post that only changes identity writes no new audit line. Not
+`estate_event`. No rename-in-place.
+
+**Later add (#151).** Same rule as mint: kind + count + first number; elevators need only a count
+and continue TECHNICAL integer names so they do not collide with `1`…`N` already there. A name that
+already exists for that kind in the Building is `conflict` and does not overwrite rooms, floor, or
+lettings. Zero of every kind is `invalid`. Shared places (lobby, yard, stairs) are a separate post:
+an existing kind `COMMON`, `EXTERIOR`, or `TECHNICAL` plus a typed name — not a fifth mandatory
+count at create. They land on the same grouped list.
+
+**Later remove (#151).** An unreferenced Space is deleted (a UNIT Space takes its Unit row with
+it). A Space a letting, built bay, built storage, Asset, or document still points at is `conflict`
+and the message names which. Nothing is detached and nothing cascades.
+
+The create POST replies `303` to that Building's נכסים page. Later add and remove do the same.
+
+**Vacancy is derived on every load, stored nowhere (#150).** Headlines name each kind's count, plus
+vacant Units, vacant parking, and vacant storage. Each UNIT, PARKING, and STORAGE row carries a
+vacancy chip. Elevators and later COMMON / EXTERIOR / extra TECHNICAL rows do not: the chip means
+assignment, not existence. Rent and lease-end stay off this list.
+
+A vacant Unit is a Unit with no letting that counts today — the same `resolveOccupiedUnits`
+injection the occupancy chip already uses. A vacant parking Space is one with no assigned bay on a
+letting that counts today; a built-bay link does not occupy it. A vacant storage Space is one with
+no assigned storage on a letting that counts today; built storage does not occupy it. Estate does
+not grow a second day predicate: the occupied-unit tenancy ids come from that injection, and
+assigned bay / assigned storage are read off those rows only.
 
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
 `GET`/`POST /documents/new`, reached from a unit row on the building page. It went behind the session

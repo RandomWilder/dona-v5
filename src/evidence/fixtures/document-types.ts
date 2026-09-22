@@ -335,6 +335,7 @@ export const seedDocumentTypes: SeedDocumentType[] = [
       // **Ticket #144, from track A.** The lease recites these; the unit, the space, or the typed
       // building already holds them. Seed rows, no promotion target. Parcel keys are scored against
       // the typed building as a set on `helka`. `parking_space_number` lands on the assigned bay.
+      // `storage_space_number` lands on assigned storage (#148).
       field(
         'rooms',
         'מספר חדרים',

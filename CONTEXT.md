@@ -26,11 +26,15 @@ documented module commands, never by writing a store query. Distinct from each o
 | **Space** | One of `UNIT · COMMON · TECHNICAL · EXTERIOR · PARKING · STORAGE`. |
 | **Unit** | The leasable kind of Space. `Unit.unit_id = Space.space_id` — not a separate thing. |
 | **Asset** | Anything that can break. Sits in exactly one Space. |
+| **Elevator** | A TECHNICAL Space. The machine that can break in it is an Asset in that Space, not the Space itself. |
 | **Built bay** | The `PARKING` Space the plan attached to a Unit (הצמדה) — `Unit.parking_space_id`. It survives vacancy, and it is what a gate motor hangs off and what a service call is filed against. |
 | **Assigned bay** | The `PARKING` Space a household parks in. It belongs to the **Tenancy**, and the landlord may move it at will, with no amendment and no new document. Never a property of the flat. |
+| **Built storage** | The `STORAGE` Space the plan attached to a Unit (הצמדה) — `Unit.storage_space_id`. It survives vacancy. |
+| **Assigned storage** | The `STORAGE` Space a household uses. It belongs to the **Tenancy**, same standing as the assigned bay. Never a property of the flat. |
 
 **A bay is two facts, not one.** The built bay and the assigned bay are both true and are frequently
 different; writing a lease's bay number onto the Unit is the same class of error as `current_tenant`.
+**Storage is the same split.** A lease writes assigned storage; it does not write built storage.
 
 **Responsibility falls out of location.** `UNIT` is the only Space kind that can ever be the tenant's.
 

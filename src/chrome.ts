@@ -14,6 +14,7 @@ import { CSRF_FIELD } from './kernel/ui/page.ts';
 export type ChromeDest =
   | 'index'
   | 'estate'
+  | 'inventory'
   // **Slice 6.9.** A12 was built at 6.3 and had one door — a card on the index — so the week-6 demo
   // walked from a building page, never passed the root again, and filed six documents through A1's
   // unit-first screen without once reaching the flow the room had asked for. A flow's entrance is
@@ -63,6 +64,7 @@ export function signedInChrome(
 ): Html {
   return h`<nav aria-label="יעדי דלפק">
     ${item('estate', '/estate', 'בניינים', dest, h`<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18" /><path d="M6 12h12" /><path d="M6 16h12" /><path d="M10 6h.01" /><path d="M14 6h.01" />`)}
+    ${item('inventory', '/estate/inventory', 'נכסים', dest, h`<path d="M3 3h8v8H3z" /><path d="M13 3h8v8h-8z" /><path d="M3 13h8v8H3z" /><path d="M13 13h8v8h-8z" />`)}
     ${
       mayFile
         ? h`${item(

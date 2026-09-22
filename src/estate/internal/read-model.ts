@@ -120,6 +120,37 @@ export async function listBuildings(db: Queryable): Promise<BuildingSummary[]> {
   return result.rows;
 }
 
+/** Every Space in a Building, for the נכסים page. Occupancy of each row is derived on the load. */
+export interface InventorySpaceRow {
+  space_id: string;
+  space_kind: string;
+  name: string;
+}
+
+export async function listInventorySpaces(
+  db: Queryable,
+  buildingId: string,
+): Promise<InventorySpaceRow[]> {
+  const result = await db.query<InventorySpaceRow>(
+    `SELECT space_id, space_kind, name
+       FROM space
+      WHERE building_id = $1
+      ORDER BY CASE space_kind
+                 WHEN 'UNIT' THEN 1
+                 WHEN 'PARKING' THEN 2
+                 WHEN 'STORAGE' THEN 3
+                 WHEN 'TECHNICAL' THEN 4
+                 WHEN 'COMMON' THEN 5
+                 WHEN 'EXTERIOR' THEN 6
+                 ELSE 7
+               END,
+               NULLIF(regexp_replace(name, '\\D', '', 'g'), '')::int NULLS LAST,
+               name`,
+    [buildingId],
+  );
+  return result.rows;
+}
+
 /** The projects a new building may be attached to (6.1). Ordered the way the select reads. */
 export async function listProjects(db: Queryable): Promise<ProjectOption[]> {
   const result = await db.query<ProjectOption>(
@@ -263,6 +294,20 @@ export async function listParkingSpacesInBuilding(
     `SELECT space_id, name
        FROM space
       WHERE building_id = $1 AND space_kind = 'PARKING'
+      ORDER BY name, space_id`,
+    [buildingId],
+  );
+  return result.rows;
+}
+
+export async function listStorageSpacesInBuilding(
+  db: Queryable,
+  buildingId: string,
+): Promise<ParkingSpaceOption[]> {
+  const result = await db.query<ParkingSpaceOption>(
+    `SELECT space_id, name
+       FROM space
+      WHERE building_id = $1 AND space_kind = 'STORAGE'
       ORDER BY name, space_id`,
     [buildingId],
   );
@@ -635,6 +680,34 @@ export async function listApprovedCapturesForTenancy(
         )
       ORDER BY f.field_key, e.extracted_field_id`,
     [tenancyId],
+  );
+  return result.rows;
+}
+
+/**
+ * Assigned bay and assigned storage on lettings that already count today.
+ *
+ * The ids come from `resolveOccupiedUnits`. This query has no day predicate on purpose: putting
+ * `today` here would be a second copy of the tenancy-active rule, and guard two exists so that
+ * does not happen.
+ */
+export async function listOccupiedAssignments(
+  db: Queryable,
+  tenancyIds: readonly string[],
+): Promise<
+  { parking_space_id: string | null; storage_space_id: string | null }[]
+> {
+  if (tenancyIds.length === 0) {
+    return [];
+  }
+  const result = await db.query<{
+    parking_space_id: string | null;
+    storage_space_id: string | null;
+  }>(
+    `SELECT parking_space_id, storage_space_id
+       FROM tenancy
+      WHERE tenancy_id = ANY($1::uuid[])`,
+    [[...tenancyIds]],
   );
   return result.rows;
 }

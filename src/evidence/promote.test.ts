@@ -143,9 +143,9 @@ describe('evidence · promote an extracted field', () => {
           `SELECT count(*)::text AS n FROM field_promotion`,
         );
         // start_date, end_date, new_end_date — two effective_from rows each (R18) — plus the
-        // three track B copies, #141's rooms and floor, and #146's assigned bay
-        // (one SCHEMA_V6 row each).
-        assert.equal(mappings.rows[0]?.n, '12');
+        // three track B copies, #141's rooms and floor, #146's assigned bay, and #148's
+        // assigned storage (one SCHEMA_V6 row each).
+        assert.equal(mappings.rows[0]?.n, '13');
         const extras = await db.query<{ n: string }>(
           `SELECT count(*)::text AS n FROM field_promotion p
              JOIN document_type_field f
@@ -164,7 +164,6 @@ describe('evidence · promote an extracted field', () => {
               'building_number',
               'apartment_type',
               'has_storage',
-              'storage_space_number',
             ],
           ],
         );
@@ -509,6 +508,241 @@ describe('evidence · promote an extracted field', () => {
         assert.equal(log[0]?.field, 'parking_space_id');
         assert.equal(log[0]?.new_value, '574');
         assert.equal(log[0]?.source_document_id, filed.documentId);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('promotes a storage number onto assigned storage, never built storage', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const unitId = await insertUnit(db);
+        const building = await db.query<{ building_id: string }>(
+          `SELECT building_id FROM space WHERE space_id = $1`,
+          [unitId],
+        );
+        const builtStore = newId();
+        const assignedStore = newId();
+        await db.query(
+          `INSERT INTO space (space_id, building_id, space_kind, name)
+           VALUES ($1, $2, 'STORAGE', '600'), ($3, $2, 'STORAGE', '601')`,
+          [builtStore, building.rows[0]?.building_id, assignedStore],
+        );
+        await db.query(
+          `UPDATE unit SET storage_space_id = $1 WHERE unit_id = $2`,
+          [builtStore, unitId],
+        );
+        const profile = await upsertTermsProfile(
+          db,
+          `promo-store-${unitId.slice(24)}`,
+        );
+        const tenancy = await upsertTenancy(db, {
+          unitId,
+          startDate: '2025-01-01',
+          endDate: '2026-12-31',
+          status: 'ACTIVE',
+          termsProfileId: profile.id,
+          noticeDate: null,
+          actualMoveOut: null,
+        });
+        const clock = fixedClock(new Date('2026-09-22T09:00:00.000Z'));
+        const extractor = createFakeExtractor(() => ({
+          findings: [
+            {
+              field_key: 'storage_space_number',
+              value: '601',
+              word_ids: [0],
+            },
+          ],
+        }));
+        const filed = await fileDocument(
+          {
+            db,
+            objects: createMemoryStore(),
+            pdf: createFakePdfText([MARKERS]),
+            audit: createAuditLog(db, clock),
+            clock,
+            bucket: BUCKET,
+            extractor,
+            extractModel: 'gpt-test',
+          } satisfies IntakeDeps,
+          {
+            bytes: pdfBytes('promote-store'),
+            typeKey: 'lease',
+            place: { kind: 'UNIT', id: unitId },
+            tenancyId: tenancy.id,
+          },
+        );
+        assert.equal(filed.filed, true);
+        if (!filed.filed) return;
+        const rows = await listExtractedFields(db, filed.documentId);
+        const store = rows.find(
+          (row) => row.fieldKey === 'storage_space_number',
+        );
+        assert.equal(store?.promotionTarget, 'tenancy.storage_space_id');
+        await approveExtractedField(
+          {
+            db,
+            audit: createAuditLog(db, fixedClock(AT)),
+            clock: fixedClock(AT),
+          },
+          {
+            extractedFieldId: store?.extractedFieldId ?? '',
+            approvedBy: 'אסף',
+            mayReadIdentifiers: false,
+          },
+        );
+        const promoted = await promoteExtractedField(
+          {
+            db,
+            audit: createAuditLog(db, fixedClock(AT)),
+            clock: fixedClock(AT),
+          },
+          {
+            extractedFieldId: store?.extractedFieldId ?? '',
+            promotedBy: 'אסף',
+          },
+        );
+        assert.equal(promoted.target, 'tenancy.storage_space_id');
+        const letting = await db.query<{ storage_space_id: string | null }>(
+          'SELECT storage_space_id FROM tenancy WHERE tenancy_id = $1',
+          [tenancy.id],
+        );
+        assert.equal(letting.rows[0]?.storage_space_id, assignedStore);
+        const unit = await db.query<{ storage_space_id: string | null }>(
+          'SELECT storage_space_id FROM unit WHERE unit_id = $1',
+          [unitId],
+        );
+        assert.equal(unit.rows[0]?.storage_space_id, builtStore);
+        const log = await listTenancyEvents(db, unitId);
+        assert.equal(log[0]?.kind, 'amended');
+        assert.equal(log[0]?.field, 'storage_space_id');
+        assert.equal(log[0]?.new_value, '601');
+        assert.equal(log[0]?.source_document_id, filed.documentId);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('refuses a storage name that is not in the building, and still promotes the rest', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const unitId = await insertUnit(db);
+        const profile = await upsertTermsProfile(
+          db,
+          `promo-miss-store-${unitId.slice(24)}`,
+        );
+        const tenancy = await upsertTenancy(db, {
+          unitId,
+          startDate: '2024-01-01',
+          endDate: '2026-12-31',
+          status: 'ACTIVE',
+          termsProfileId: profile.id,
+          noticeDate: null,
+          actualMoveOut: null,
+        });
+        const clock = fixedClock(new Date('2026-09-22T09:00:00.000Z'));
+        const extractor = createFakeExtractor(() => ({
+          findings: [
+            {
+              field_key: 'storage_space_number',
+              value: '999',
+              word_ids: [0],
+            },
+            {
+              field_key: 'start_date',
+              value: '2025-02-01',
+              word_ids: [1],
+            },
+          ],
+        }));
+        const filed = await fileDocument(
+          {
+            db,
+            objects: createMemoryStore(),
+            pdf: createFakePdfText([MARKERS]),
+            audit: createAuditLog(db, clock),
+            clock,
+            bucket: BUCKET,
+            extractor,
+            extractModel: 'gpt-test',
+          } satisfies IntakeDeps,
+          {
+            bytes: pdfBytes('promote-miss-store'),
+            typeKey: 'lease',
+            place: { kind: 'UNIT', id: unitId },
+            tenancyId: tenancy.id,
+          },
+        );
+        assert.equal(filed.filed, true);
+        if (!filed.filed) return;
+        const rows = await listExtractedFields(db, filed.documentId);
+        const store = rows.find(
+          (row) => row.fieldKey === 'storage_space_number',
+        );
+        const start = rows.find((row) => row.fieldKey === 'start_date');
+        const deps = {
+          db,
+          audit: createAuditLog(db, fixedClock(AT)),
+          clock: fixedClock(AT),
+        };
+        await approveExtractedField(deps, {
+          extractedFieldId: store?.extractedFieldId ?? '',
+          approvedBy: 'אסף',
+          mayReadIdentifiers: false,
+        });
+        await approveExtractedField(deps, {
+          extractedFieldId: start?.extractedFieldId ?? '',
+          approvedBy: 'אסף',
+          mayReadIdentifiers: false,
+        });
+        await assert.rejects(
+          () =>
+            promoteExtractedField(deps, {
+              extractedFieldId: store?.extractedFieldId ?? '',
+              promotedBy: 'אסף',
+            }),
+          (error: KernelError) =>
+            error.code === 'invalid' && error.message.includes('storage space'),
+        );
+        const letting = await db.query<{
+          storage_space_id: string | null;
+          start_date: string;
+        }>(
+          `SELECT storage_space_id, start_date::text AS start_date
+             FROM tenancy WHERE tenancy_id = $1`,
+          [tenancy.id],
+        );
+        assert.equal(letting.rows[0]?.storage_space_id, null);
+        assert.equal(letting.rows[0]?.start_date, '2024-01-01');
+        await promoteExtractedField(deps, {
+          extractedFieldId: start?.extractedFieldId ?? '',
+          promotedBy: 'אסף',
+        });
+        const after = await db.query<{
+          storage_space_id: string | null;
+          start_date: string;
+        }>(
+          `SELECT storage_space_id, start_date::text AS start_date
+             FROM tenancy WHERE tenancy_id = $1`,
+          [tenancy.id],
+        );
+        assert.equal(after.rows[0]?.storage_space_id, null);
+        assert.equal(after.rows[0]?.start_date, '2025-02-01');
       });
     } finally {
       await pool.end();

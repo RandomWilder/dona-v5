@@ -1000,7 +1000,7 @@ those two; it still does not establish the land.
 | `building_number` | TEXT | **Cross-check only** against `building.building_number`. |
 | `apartment_type` | TEXT | A tender typology and a drawing title-block, not a column. Captured and scored so the baseline says whether the reader can see a title block at all. |
 | `has_storage` | BOOLEAN | A reading, not a column. Derived on the estate side from `unit.storage_space_id IS NOT NULL`. |
-| `storage_space_number` | TEXT | A reading. A storage room with no number is a real case and a credited absence. |
+| `storage_space_number` | TEXT | Promotes to `tenancy.storage_space_id` through a `TENANCY` link. Never to `unit.storage_space_id`. Occupied when assigned storage is set, whoever wrote it. A name that is not a `STORAGE` Space in this Building refuses that write only. |
 | `parking_space_number` | TEXT | Promotes to `tenancy.parking_space_id` through a `TENANCY` link. Never to `unit.parking_space_id`. Occupied when the assigned bay is set, whoever wrote it. |
 
 **The parcel keys are declared so they extract and score; they are not promotion targets.** A lease
@@ -1553,8 +1553,9 @@ find none and overwrite the typed value.
 **A non-null estate column is occupied, whoever wrote it.** A promotion onto it refuses and names the
 existing value. An operator with the lease in front of them may `supersede`, and that is the record
 of who decided. There is no provenance column. Tenancy occupancy is unchanged **except the assigned
-bay**: `tenancy.parking_space_id` is occupied when set, whoever wrote it, because a reassignment
-writes the column with no extracted-field stamp. The estate definition lives
+bay and assigned storage**: `tenancy.parking_space_id` and `tenancy.storage_space_id` are occupied
+when set, whoever wrote it, because a reassignment writes the column with no extracted-field stamp.
+The estate definition lives
 on estate's contract (`occupantOfEstateColumn`) so the promotion family consumes it rather than
 re-deriving it, and so evidence issues no estate SQL. #141 widens `field_promotion.target` by
 `unit.rooms` and `space.floor` and writes through estate's `applyPromotedField`, which always

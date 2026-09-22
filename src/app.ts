@@ -80,6 +80,7 @@ import {
   listTenancyEvents,
   listTenancyParties,
   reassignParkingSpace,
+  reassignStorageSpace,
   recordCompletenessException,
   upsertObligationType,
 } from './tenancy/contract.ts';
@@ -461,6 +462,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     activateTenancy: (db, spec) =>
       activateTenancy(db, clock, spec, listTenancyDocumentFacts),
     reassignParkingSpace: (db, spec) => reassignParkingSpace(db, clock, spec),
+    reassignStorageSpace: (db, spec) => reassignStorageSpace(db, clock, spec),
     runOfficeTurn: async (spec) => {
       const extraction = await readExtractionSettings(
         createSettings(deps.pool),

@@ -39,7 +39,7 @@ FIELDS sheet gives these entities no timestamp, and every date here is a fact so
 | Table | Columns |
 |---|---|
 | `terms_profile` | `terms_profile_id` PK · `name` |
-| `tenancy` | `tenancy_id` PK · `unit_id` FK → unit · `start_date` · `end_date` · `status` · `terms_profile_id` FK → terms_profile · `notice_date?` · `actual_move_out?` · `rent_amount?` · `rent_currency?` · `option_end_date?` · `parking_space_id?` |
+| `tenancy` | `tenancy_id` PK · `unit_id` FK → unit · `start_date` · `end_date` · `status` · `terms_profile_id` FK → terms_profile · `notice_date?` · `actual_move_out?` · `rent_amount?` · `rent_currency?` · `option_end_date?` · `parking_space_id?` · `storage_space_id?` |
 | `tenancy_party` | `tenancy_id` + `party_id` composite PK, both FK · `role` · `is_service_contact` |
 
 Vocabularies: `tenancy.status` = `DRAFT · ACTIVE · ENDED · TERMINATED_EARLY`; `tenancy_party.role` =
@@ -75,6 +75,13 @@ appends `tenancy_event` of kind `reassigned`. That kind **must not** name a sour
 Promotion of a lease's `parking_space_number` lands here, never on the built bay. A non-null
 assigned bay is occupied whoever wrote it — a typed reassignment must not be overwritten by a
 later copy off the paper unless the operator said supersede.
+
+**#148 adds assigned storage the same way.** `storage_space_id` is nullable and points at a
+`STORAGE` space. Promotion of `storage_space_number` lands here, never on built storage
+(`unit.storage_space_id`). A printed number that matches no `STORAGE` space in the Building
+refuses that write only; the rest of approve may succeed and the lease does not mint a Space.
+`reassignStorageSpace` is the ninth write command: same `reassigned` kind, no source document.
+A non-null assigned-storage column is occupied whoever wrote it.
 
 **No `-- pii` marker on any column**, and that is a claim the guard checks rather than a claim this
 file makes: nothing here is person-shaped. The people are in `party`, reached through
@@ -241,12 +248,13 @@ call. UPDATE and DELETE are rejected
   `reassignParkingSpace` is the eighth: an existing letting, a `PARKING` space in the same
   building, and no paper. It writes `tenancy.parking_space_id` and appends `reassigned` with
   `field = parking_space_id`. `unit.parking_space_id` does not move. A space of another kind, or
-  in another building, is `invalid`. The same bay twice is a no-op.
+  in another building, is `invalid`. The same bay twice is a no-op. `reassignStorageSpace` is the
+  ninth, the same shape for `tenancy.storage_space_id` / `STORAGE` / built storage.
 - **No read model, and from 3.3 exactly one list plus one lookup.** *(Slice 6.5 adds a second list,
   `countIdentifierOverlap`, described at the end of this bullet.)* `contract.ts` exists from 2.4
   and exports the register importer's three write commands — `upsertTermsProfile`, `upsertTenancy` and
   `upsertTenancyParty` — plus `applyPromotedField` from 4.3, `exerciseOption` from #135, and
-  `reassignParkingSpace` from #146. `listUnitTenancies` joins them at 3.3.
+  `reassignParkingSpace` from #146, and `reassignStorageSpace` from #148. `listUnitTenancies` joins them at 3.3.
   Slice 4.6 added `findTermsProfileByName`: A2 must hang a draft on a profile that already exists and
   must not invent `standard`. A missing name is `null`, not an upsert. Slice 4.6b added
   `listTermsProfiles`: names only, ordered, so the confirm screen is a select of what already exists

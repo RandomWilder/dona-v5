@@ -12,6 +12,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import type { ChromeDest } from '../../chrome.ts';
+import { createAuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
@@ -27,16 +28,26 @@ import {
 import { addCalendarYears, WARRANTY_YEARS } from './assets.ts';
 import { listEstateEvents } from './events.ts';
 import { importEstate, upsertUnitRow } from './importer.ts';
+import {
+  inventoryAddFromForm,
+  inventoryFromForm,
+  mintAuditInputs,
+  omitExisting,
+  refuseExisting,
+  sharedSpaceFromForm,
+} from './inventory.ts';
 import type {
   BuildingPlan,
   BuildingStatus,
   ConditionStatus,
   ProjectPlan,
   ProjectStatus,
+  Queryable,
   UnitRowSpec,
 } from './plan.ts';
 import {
   addressKeyOf,
+  type BuildingSummary,
   countUnitsByBuilding,
   EXPIRING_WINDOW_DAYS,
   findBuildingAtAddress,
@@ -45,12 +56,15 @@ import {
   listApprovedCapturesForTenancy,
   listBuildings,
   listExpiringLeases,
+  listInventorySpaces,
+  listOccupiedAssignments,
   listParkingSpacesInBuilding,
   listProjects,
+  listStorageSpacesInBuilding,
   type ProjectOption,
   searchEstate,
 } from './read-model.ts';
-import { removeSpace } from './spaces.ts';
+import { removeInventorySpace, removeSpace } from './spaces.ts';
 import {
   type DocumentSearchHit,
   type FiledDocumentView,
@@ -63,7 +77,10 @@ import {
   renderBuildingsPage,
   renderExpiringPage,
   renderIncompletePage,
+  renderInventoryBuildingPage,
+  renderInventoryPage,
   renderNewBuildingPage,
+  renderNewInventoryPage,
   renderNewUnitPage,
   renderSearchPage,
   renderTenancyDetailPage,
@@ -135,6 +152,8 @@ export interface EstateDeps {
     option_end_date: string | null;
     parking_space_id: string | null;
     parking_name: string | null;
+    storage_space_id: string | null;
+    storage_name: string | null;
   }>;
   listTenancyParties: (
     db: Pool,
@@ -166,6 +185,10 @@ export interface EstateDeps {
   reassignParkingSpace: (
     db: Pool,
     spec: { tenancyId: string; parkingSpaceId: string; actor: string },
+  ) => Promise<void>;
+  reassignStorageSpace: (
+    db: Pool,
+    spec: { tenancyId: string; storageSpaceId: string; actor: string },
   ) => Promise<void>;
   /**
    * #114 / #121. Injected from evidence so this module never imports it. Bound is this Unit or
@@ -488,6 +511,30 @@ function blankToNull(value: unknown): unknown {
     : value;
 }
 
+function identityPlan(
+  building: BuildingSummary,
+  projects: readonly ProjectOption[],
+): { plan: BuildingPlan; projects: ProjectPlan[] } {
+  const project = chosenProject(building.project_code, projects);
+  return {
+    plan: {
+      name: building.name,
+      addressLine: building.address_line,
+      city: building.city,
+      projectCode: project === null ? null : project.projectCode,
+      handoverDate: addCalendarYears(building.handover_date, 0),
+      warrantyEndDate: addCalendarYears(building.warranty_end_date, 0),
+      status: buildingStatus(building.status),
+      gush: building.gush,
+      helka: building.helka,
+      buildingNumber: building.building_number,
+      spaces: [],
+      units: [],
+    },
+    projects: project === null ? [] : [project],
+  };
+}
+
 /** A checkbox is present or absent; `src/settings-page.ts` reads its own the same way. */
 function checked(value: unknown): boolean {
   return value === 'true' || value === 'on';
@@ -555,6 +602,36 @@ function unitFromForm(body: unknown): {
   };
 }
 
+async function recordInventoryAdds(
+  db: Queryable,
+  clock: Clock,
+  actor: { actorId: string | undefined; actorRole: string | undefined },
+  buildingId: string,
+  spaces: readonly { kind: string; name: string }[],
+): Promise<void> {
+  const after = await listInventorySpaces(db, buildingId);
+  const audit = createAuditLog(db, clock);
+  for (const space of spaces) {
+    const row = after.find(
+      (item) => item.space_kind === space.kind && item.name === space.name,
+    );
+    if (!row) {
+      throw new KernelError('unavailable', 'space was not written');
+    }
+    await audit.write(
+      {
+        actorKind: 'staff',
+        actorId: actor.actorId,
+        actorRole: actor.actorRole,
+        action: 'estate.inventory_add',
+        subjectId: row.space_id,
+        inputs: { kind: space.kind, name: space.name, buildingId },
+      },
+      { outcome: 'ok' },
+    );
+  }
+}
+
 export function registerEstateRoutes(
   app: FastifyInstance,
   deps: EstateDeps,
@@ -585,6 +662,246 @@ export function registerEstateRoutes(
       can(request.staff?.role ?? null, 'estate.write'),
     );
   });
+
+  app.get('/estate/inventory', READ, async (request, reply) => {
+    const buildings = await listBuildings(deps.pool);
+    html(reply);
+    return renderInventoryPage(
+      buildings,
+      deps.chrome(csrfFrom(request), 'inventory', mayFile(request)),
+      can(request.staff?.role ?? null, 'estate.write'),
+    );
+  });
+
+  app.get('/estate/inventory/new', ESTATE_WRITE, async (request, reply) => {
+    const projects = await listProjects(deps.pool);
+    const csrf = csrfFrom(request);
+    html(reply);
+    return renderNewInventoryPage({
+      nav: deps.chrome(csrf, 'inventory', mayFile(request)),
+      csrf,
+      projects,
+    });
+  });
+
+  app.post('/estate/inventory', ESTATE_WRITE, async (request, reply) => {
+    const projects = await listProjects(deps.pool);
+    const { plan, projects: named } = buildingFromForm(request.body, projects);
+    const mint = inventoryFromForm(request.body);
+    const addressKey = addressKeyOf(plan.city, plan.addressLine);
+    const existing = await findBuildingAtAddress(deps.pool, [addressKey]);
+    const known = new Set(
+      existing
+        ? (await listInventorySpaces(deps.pool, existing.building_id)).map(
+            (space) => `${space.space_kind}\n${space.name}`,
+          )
+        : [],
+    );
+    const fresh = omitExisting(mint, known);
+    plan.spaces = fresh.spaces;
+    plan.units = fresh.units;
+    const buildingId = await inTransaction(deps.pool, async (db) => {
+      await importEstate(db, { projects: named, buildings: [plan] });
+      const created = await findBuildingAtAddress(db, [addressKey]);
+      if (!created) {
+        throw new KernelError('unavailable', 'building was not written');
+      }
+      const prior = await db.query(
+        `SELECT 1 FROM audit_log
+          WHERE action = 'estate.inventory_mint' AND subject_id = $1
+          LIMIT 1`,
+        [created.building_id],
+      );
+      const actor = {
+        actorId: request.staff?.staffAccountId,
+        actorRole: request.staff?.role ?? undefined,
+      };
+      if (fresh.spaces.length > 0 && (prior.rowCount ?? 0) === 0) {
+        await createAuditLog(db, deps.clock).write(
+          {
+            actorKind: 'staff',
+            actorId: actor.actorId,
+            actorRole: actor.actorRole,
+            action: 'estate.inventory_mint',
+            subjectId: created.building_id,
+            inputs: mintAuditInputs(mint),
+          },
+          { outcome: 'ok' },
+        );
+      } else if (fresh.spaces.length > 0) {
+        await recordInventoryAdds(
+          db,
+          deps.clock,
+          actor,
+          created.building_id,
+          fresh.spaces,
+        );
+      }
+      return created.building_id;
+    });
+    return reply
+      .code(303)
+      .header('location', `/estate/inventory/${buildingId}`)
+      .send();
+  });
+
+  app.get<{ Params: { buildingId: string } }>(
+    '/estate/inventory/:buildingId',
+    READ,
+    async (request, reply) => {
+      const buildingId = validId(request.params.buildingId, 'buildingId');
+      const detail = await getBuilding(deps.pool, buildingId);
+      const spaces = await listInventorySpaces(deps.pool, buildingId);
+      const occupied = await resolveOccupiedUnits(
+        deps.pool,
+        spaces
+          .filter((space) => space.space_kind === 'UNIT')
+          .map((space) => space.space_id),
+        deps.clock,
+      );
+      const occupancy: OccupancyByUnit = new Map(
+        occupied.map((unit) => [unit.unit_id, unit.occupants]),
+      );
+      const assigned = await listOccupiedAssignments(
+        deps.pool,
+        occupied.map((unit) => unit.tenancy_id),
+      );
+      const occupiedParking = new Set(
+        assigned.flatMap((row) =>
+          row.parking_space_id ? [row.parking_space_id] : [],
+        ),
+      );
+      const occupiedStorage = new Set(
+        assigned.flatMap((row) =>
+          row.storage_space_id ? [row.storage_space_id] : [],
+        ),
+      );
+      html(reply);
+      const csrf = csrfFrom(request);
+      return renderInventoryBuildingPage({
+        building: detail.building,
+        spaces,
+        occupancy,
+        occupiedParking,
+        occupiedStorage,
+        nav: deps.chrome(csrf, 'inventory', mayFile(request)),
+        write: can(request.staff?.role ?? null, 'estate.write')
+          ? { csrf }
+          : undefined,
+      });
+    },
+  );
+
+  app.post<{ Params: { buildingId: string } }>(
+    '/estate/inventory/:buildingId/spaces',
+    ESTATE_WRITE,
+    async (request, reply) => {
+      const buildingId = validId(request.params.buildingId, 'buildingId');
+      const detail = await getBuilding(deps.pool, buildingId);
+      const existing = await listInventorySpaces(deps.pool, buildingId);
+      const mint = inventoryAddFromForm(
+        request.body,
+        existing
+          .filter((space) => space.space_kind === 'TECHNICAL')
+          .map((space) => space.name),
+      );
+      refuseExisting(
+        mint.spaces,
+        new Set(existing.map((space) => `${space.space_kind}\n${space.name}`)),
+      );
+      const { plan, projects: named } = identityPlan(
+        detail.building,
+        await listProjects(deps.pool),
+      );
+      plan.spaces = mint.spaces;
+      plan.units = mint.units;
+      await inTransaction(deps.pool, async (db) => {
+        await importEstate(db, { projects: named, buildings: [plan] });
+        await recordInventoryAdds(
+          db,
+          deps.clock,
+          {
+            actorId: request.staff?.staffAccountId,
+            actorRole: request.staff?.role ?? undefined,
+          },
+          buildingId,
+          mint.spaces,
+        );
+      });
+      return reply
+        .code(303)
+        .header('location', `/estate/inventory/${buildingId}`)
+        .send();
+    },
+  );
+
+  app.post<{ Params: { buildingId: string } }>(
+    '/estate/inventory/:buildingId/shared',
+    ESTATE_WRITE,
+    async (request, reply) => {
+      const buildingId = validId(request.params.buildingId, 'buildingId');
+      const detail = await getBuilding(deps.pool, buildingId);
+      const space = sharedSpaceFromForm(request.body);
+      const existing = await listInventorySpaces(deps.pool, buildingId);
+      refuseExisting(
+        [space],
+        new Set(existing.map((row) => `${row.space_kind}\n${row.name}`)),
+      );
+      const { plan, projects: named } = identityPlan(
+        detail.building,
+        await listProjects(deps.pool),
+      );
+      plan.spaces = [space];
+      await inTransaction(deps.pool, async (db) => {
+        await importEstate(db, { projects: named, buildings: [plan] });
+        await recordInventoryAdds(
+          db,
+          deps.clock,
+          {
+            actorId: request.staff?.staffAccountId,
+            actorRole: request.staff?.role ?? undefined,
+          },
+          buildingId,
+          [space],
+        );
+      });
+      return reply
+        .code(303)
+        .header('location', `/estate/inventory/${buildingId}`)
+        .send();
+    },
+  );
+
+  app.post<{ Params: { spaceId: string } }>(
+    '/estate/inventory/spaces/:spaceId/remove',
+    ESTATE_WRITE,
+    async (request, reply) => {
+      const spaceId = validId(request.params.spaceId, 'spaceId');
+      const removed = await inTransaction(deps.pool, async (db) => {
+        const result = await removeInventorySpace(db, spaceId);
+        await createAuditLog(db, deps.clock).write(
+          {
+            actorKind: 'staff',
+            actorId: request.staff?.staffAccountId,
+            actorRole: request.staff?.role ?? undefined,
+            action: 'estate.inventory_remove',
+            subjectId: spaceId,
+            inputs: {
+              kind: result.kind,
+              name: result.name,
+              buildingId: result.buildingId,
+            },
+          },
+          { outcome: 'ok' },
+        );
+        return result;
+      });
+      return reply
+        .code(303)
+        .header('location', `/estate/inventory/${removed.buildingId}`)
+        .send();
+    },
+  );
 
   app.get('/estate/search', READ, async (request, reply) => {
     const asked = (request.query as { q?: string }).q ?? '';
@@ -1025,13 +1342,14 @@ export function registerEstateRoutes(
     );
     const letting = await deps.getTenancy(deps.pool, tenancyId);
     const unit = await getUnit(deps.pool, letting.unit_id);
-    const [members, documents, gate, captures, parkingOptions] =
+    const [members, documents, gate, captures, parkingOptions, storageOptions] =
       await Promise.all([
         deps.listTenancyParties(deps.pool, tenancyId),
         deps.listLinkedDocuments(deps.pool, 'TENANCY', tenancyId),
         deps.activationGate(deps.pool, tenancyId),
         listApprovedCapturesForTenancy(deps.pool, tenancyId),
         listParkingSpacesInBuilding(deps.pool, unit.building_id),
+        listStorageSpacesInBuilding(deps.pool, unit.building_id),
       ]);
     const names = await deps.listPartyNames(
       deps.pool,
@@ -1056,6 +1374,9 @@ export function registerEstateRoutes(
       parkingSpaceId: letting.parking_space_id,
       parkingName: letting.parking_name,
       parkingOptions,
+      storageSpaceId: letting.storage_space_id,
+      storageName: letting.storage_name,
+      storageOptions,
       unit,
       people,
       documents,
@@ -1091,6 +1412,21 @@ export function registerEstateRoutes(
       await deps.reassignParkingSpace(deps.pool, {
         tenancyId,
         parkingSpaceId: validId(posted.parking_space_id ?? '', 'parking space'),
+        actor: requireText(request.staff?.email ?? '', 'actor', 200),
+      });
+      return reply.redirect(`/estate/tenancies/${tenancyId}`);
+    },
+  );
+
+  app.post<{ Params: { tenancyId: string } }>(
+    '/estate/tenancies/:tenancyId/storage',
+    WRITE,
+    async (request, reply) => {
+      const tenancyId = validId(request.params.tenancyId, 'tenancyId');
+      const posted = request.body as { storage_space_id?: string };
+      await deps.reassignStorageSpace(deps.pool, {
+        tenancyId,
+        storageSpaceId: validId(posted.storage_space_id ?? '', 'storage space'),
         actor: requireText(request.staff?.email ?? '', 'actor', 200),
       });
       return reply.redirect(`/estate/tenancies/${tenancyId}`);

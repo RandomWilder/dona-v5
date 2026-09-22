@@ -497,6 +497,8 @@ describe('tenancy · the rest of the schema', () => {
             'rent_currency',
             'start_date',
             'status',
+            'storage_kind',
+            'storage_space_id',
             'tenancy_id',
             'terms_profile_id',
             'unit_id',
@@ -572,6 +574,47 @@ describe('tenancy · the rest of the schema', () => {
               [tenancyId],
             );
             assert.equal(row.rows[0]?.parking_space_id, bay);
+          });
+        },
+      );
+
+      await t.test(
+        'D3 · assigned storage points at a STORAGE space, never a lobby',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            const estate = await seedEstate(db);
+            const lobby = newId();
+            const room = newId();
+            const building = await db.query<{ building_id: string }>(
+              `SELECT s.building_id FROM space s WHERE s.space_id = $1`,
+              [estate.unitId],
+            );
+            const buildingId = building.rows[0]?.building_id ?? '';
+            await db.query(
+              `INSERT INTO space (space_id, building_id, space_kind, name)
+               VALUES ($1, $2, 'COMMON', 'לובי'), ($3, $2, 'STORAGE', '601')`,
+              [lobby, buildingId, room],
+            );
+            const tenancyId = await seedTenancy(db, {
+              ...estate,
+              from: '2026-01-01',
+              to: '2027-01-01',
+            });
+            await rejects(db, FOREIGN_KEY_VIOLATION, () =>
+              db.query(
+                `UPDATE tenancy SET storage_space_id = $2 WHERE tenancy_id = $1`,
+                [tenancyId, lobby],
+              ),
+            );
+            await db.query(
+              `UPDATE tenancy SET storage_space_id = $2 WHERE tenancy_id = $1`,
+              [tenancyId, room],
+            );
+            const row = await db.query<{ storage_space_id: string }>(
+              'SELECT storage_space_id FROM tenancy WHERE tenancy_id = $1',
+              [tenancyId],
+            );
+            assert.equal(row.rows[0]?.storage_space_id, room);
           });
         },
       );

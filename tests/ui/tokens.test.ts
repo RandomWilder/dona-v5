@@ -29,7 +29,10 @@ import {
   renderBuildingsPage,
   renderExpiringPage,
   renderIncompletePage,
+  renderInventoryBuildingPage,
+  renderInventoryPage,
   renderNewBuildingPage,
+  renderNewInventoryPage,
   renderNewUnitPage,
   renderSearchPage,
   renderTenancyDetailPage,
@@ -279,6 +282,7 @@ const CSRF = 'a1b2c3d4'.repeat(8);
 // registered as one — `root · index, צופה` and `root · settings, viewer` below are where the
 // registry holds that variant.
 const NAV = signedInChrome(CSRF, 'estate', true);
+const NAV_INVENTORY = signedInChrome(CSRF, 'inventory', true);
 const NAV_SEARCH = signedInChrome(CSRF, 'search', true);
 const NAV_EXPIRING = signedInChrome(CSRF, 'expiring', true);
 const NAV_INCOMPLETE = signedInChrome(CSRF, 'incomplete', true);
@@ -542,6 +546,54 @@ const SCREENS: Array<[string, () => string]> = [
         carry: { unitNumber: '14', typeKey: 'lease', next: 'intake' },
       }),
   ],
+  [
+    'estate · inventory',
+    () => renderInventoryPage([building], NAV_INVENTORY, true),
+  ],
+  ['estate · inventory, empty', () => renderInventoryPage([], NAV_INVENTORY)],
+  [
+    'estate · new inventory building',
+    () =>
+      renderNewInventoryPage({
+        nav: NAV_INVENTORY,
+        csrf: CSRF,
+        projects: [],
+      }),
+  ],
+  [
+    'estate · inventory building',
+    () =>
+      renderInventoryBuildingPage({
+        building,
+        spaces: [
+          {
+            space_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            space_kind: 'UNIT',
+            name: '10',
+          },
+          {
+            space_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            space_kind: 'PARKING',
+            name: '50',
+          },
+          {
+            space_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+            space_kind: 'TECHNICAL',
+            name: '1',
+          },
+          {
+            space_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+            space_kind: 'COMMON',
+            name: 'לובי',
+          },
+        ],
+        occupancy: occupancy,
+        occupiedParking: new Set(['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb']),
+        occupiedStorage: new Set(),
+        nav: NAV_INVENTORY,
+        write: { csrf: CSRF },
+      }),
+  ],
   ['estate · one building', () => renderBuildingPage(detail, occupancy, NAV)],
   [
     'estate · one building, retrieval panel',
@@ -639,6 +691,9 @@ const SCREENS: Array<[string, () => string]> = [
         parkingSpaceId: null,
         parkingName: null,
         parkingOptions: [],
+        storageSpaceId: null,
+        storageName: null,
+        storageOptions: [],
         unit: hit,
         people: [
           {
@@ -681,6 +736,9 @@ const SCREENS: Array<[string, () => string]> = [
         parkingSpaceId: null,
         parkingName: null,
         parkingOptions: [],
+        storageSpaceId: null,
+        storageName: null,
+        storageOptions: [],
         unit: hit,
         people: [
           {
@@ -726,6 +784,9 @@ const SCREENS: Array<[string, () => string]> = [
         parkingSpaceId: null,
         parkingName: null,
         parkingOptions: [],
+        storageSpaceId: null,
+        storageName: null,
+        storageOptions: [],
         unit: hit,
         people: [
           {
@@ -2051,6 +2112,8 @@ describe('shared UI tokens', () => {
       assert.match(html, /class="ops-menu"/, name);
       assert.match(html, />תפריט</, name);
       assert.match(html, /href="\/estate"/, name);
+      assert.match(html, /href="\/estate\/inventory"/, name);
+      assert.match(html, />נכסים</, name);
       assert.match(html, /href="\/estate\/expiring"/, name);
       assert.match(html, /href="\/estate\/incomplete"/, name);
       assert.match(html, /href="\/estate\/search"/, name);
@@ -2807,5 +2870,53 @@ describe('shared UI tokens', () => {
       renderBuildingPage(detail, occupancy, NAV),
       /data-office-retrieval="building"/,
     );
+  });
+
+  it('paints vacancy chips on inventory Units, bays and stores, not on elevators or a lobby', () => {
+    const html = renderInventoryBuildingPage({
+      building,
+      spaces: [
+        {
+          space_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          space_kind: 'UNIT',
+          name: '10',
+        },
+        {
+          space_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          space_kind: 'PARKING',
+          name: '50',
+        },
+        {
+          space_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          space_kind: 'TECHNICAL',
+          name: '1',
+        },
+        {
+          space_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+          space_kind: 'COMMON',
+          name: 'לובי',
+        },
+      ],
+      occupancy: new Map(),
+      occupiedParking: new Set(['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb']),
+      occupiedStorage: new Set(),
+      nav: NAV_INVENTORY,
+    });
+    assert.match(html, /דירות פנויות · <span dir="ltr">1<\/span>/);
+    assert.match(html, /חניות פנויות · <span dir="ltr">0<\/span>/);
+    assert.match(
+      html,
+      /<span dir="ltr">10<\/span><span class="chip">פנויה<\/span>/,
+    );
+    assert.match(
+      html,
+      /<span dir="ltr">50<\/span><span class="chip">תפוסה<\/span>/,
+    );
+    const technical = html.split('<h2>חללים טכניים</h2>')[1] ?? '';
+    assert.doesNotMatch(technical, /chip/);
+    const shared = html.split('<h2>שטחים משותפים</h2>')[1] ?? '';
+    assert.doesNotMatch(shared, /chip/);
+    assert.doesNotMatch(html, /דמי שכירות/);
+    assert.doesNotMatch(html, /תום חוזה/);
   });
 });

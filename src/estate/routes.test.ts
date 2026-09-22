@@ -2486,28 +2486,28 @@ describe('estate · the tenancy page', () => {
       assert.doesNotMatch(page.body, />9999</);
     } finally {
       await pool.query('ALTER TABLE extracted_field DISABLE TRIGGER USER');
-      await pool.query(
-        `DELETE FROM extracted_field WHERE document_id IN (
-           SELECT l.document_id FROM document_link l
-           JOIN tenancy t ON t.tenancy_id = l.entity_id
-           JOIN space s ON s.space_id = t.unit_id
-           JOIN building b ON b.building_id = s.building_id
-           WHERE b.city = $1 AND b.address_line = $2)`,
-        [A5_CITY, A5_ADDRESS],
-      );
-      await pool.query('ALTER TABLE extracted_field ENABLE TRIGGER USER');
-      await pool.query(
-        `DELETE FROM field_promotion
+      try {
+        await pool.query(
+          `DELETE FROM extracted_field WHERE document_id IN (
+             SELECT d.document_id FROM document d
+             JOIN document_type t ON t.document_type_id = d.document_type_id
+             WHERE t.type_key LIKE 'card-lease-%')`,
+        );
+        await pool.query(
+          `DELETE FROM field_promotion
           WHERE document_type_field_id IN (
             SELECT f.document_type_field_id FROM document_type_field f
             JOIN document_type t ON t.document_type_id = f.document_type_id
             WHERE t.type_key LIKE 'card-lease-%')`,
-      );
-      await a5Cleanup(pool);
-      await pool.query(
-        `DELETE FROM document WHERE document_type_id IN (
-           SELECT document_type_id FROM document_type WHERE type_key LIKE 'card-lease-%')`,
-      );
+        );
+        await a5Cleanup(pool);
+        await pool.query(
+          `DELETE FROM document WHERE document_type_id IN (
+             SELECT document_type_id FROM document_type WHERE type_key LIKE 'card-lease-%')`,
+        );
+      } finally {
+        await pool.query('ALTER TABLE extracted_field ENABLE TRIGGER USER');
+      }
       await pool.query(
         `DELETE FROM document_type_field WHERE document_type_id IN (
            SELECT document_type_id FROM document_type WHERE type_key LIKE 'card-lease-%')`,
