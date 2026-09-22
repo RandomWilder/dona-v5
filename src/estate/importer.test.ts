@@ -327,8 +327,73 @@ describe('estate · the import runs twice', () => {
 
 const ROW_CITY = 'לוד — בדיקת שורת יחידה';
 
-describe('estate · upsertUnitRow implies parking and storage', () => {
-  it('assigns a bay and a store named from the apartment, twice is a no-op', async (t) => {
+// #140. Slice 4.6 had this function invent a `PARKING` space `חניה {unit_number}` and a `STORAGE`
+// space `מחסן {unit_number}` for every row, so that a handover protocol would have a bay to land a
+// gate motor on. Against the two hand-read leases in `evals/fixtures/lease-extraction.ts` the
+// invention is wrong in both directions: flat 206-4's bay is **594** and its storage room has no
+// number at all, and flat 206-7's are **574** and **601**. A placeholder nobody can reconcile with
+// the developer's plan is worse than a null, because `parking_space_id IS NOT NULL` then answers
+// "yes" for every apartment in the building and stops being a fact.
+//
+// So the names are the caller's, always, and null creates nothing. `MATCH SIMPLE` leaves both
+// foreign keys unenforced while null, and `0004_estate.sql` calls unassigned the ordinary state.
+describe('estate · upsertUnitRow names no space the caller did not name', () => {
+  const specFor = (
+    unitNumber: string,
+    bays: { parkingSpaceName: string | null; storageSpaceName: string | null },
+  ) => ({
+    project: null,
+    building: {
+      name: 'בניין שורה',
+      addressLine: 'הרצל 1',
+      city: ROW_CITY,
+      projectCode: null,
+      handoverDate: '2025-01-01',
+      warrantyEndDate: '2027-01-01',
+      status: 'ACTIVE' as const,
+    },
+    unit: {
+      spaceName: unitNumber,
+      unitNumber,
+      rooms: 3,
+      areaSqm: 70,
+      hasMamad: false,
+      warrantyEndDate: null,
+      conditionStatus: 'READY' as const,
+      ...bays,
+    },
+    floor: null,
+  });
+
+  const spacesIn = async (db: PoolClient) => {
+    const { rows } = await db.query<{ space_kind: string; name: string }>(
+      `SELECT s.space_kind, s.name
+         FROM space s
+         JOIN building b ON b.building_id = s.building_id
+        WHERE b.city = $1
+        ORDER BY s.space_kind, s.name`,
+      [ROW_CITY],
+    );
+    return rows.map((row) => `${row.space_kind}:${row.name}`);
+  };
+
+  const assignedTo = async (db: PoolClient, unitId: string) => {
+    const { rows } = await db.query<{
+      parking: string | null;
+      storage: string | null;
+    }>(
+      `SELECT p.name AS parking, st.name AS storage
+         FROM unit u
+         LEFT JOIN space p ON p.space_id = u.parking_space_id
+         LEFT JOIN space st ON st.space_id = u.storage_space_id
+        WHERE u.unit_id = $1`,
+      [unitId],
+    );
+    return rows[0];
+  };
+
+  // The case that corrupts data today: A13 with nothing typed into either number.
+  it('names neither, and writes one space and two null keys', async (t) => {
     const pool = await migratedPoolOrNull();
     if (!pool) {
       t.skip(skipReason);
@@ -336,68 +401,88 @@ describe('estate · upsertUnitRow implies parking and storage', () => {
     }
     try {
       await inRolledBackTransaction(pool, async (db) => {
-        const spec = {
-          project: null,
-          building: {
-            name: 'בניין שורה',
-            addressLine: 'הרצל 1',
-            city: ROW_CITY,
-            projectCode: null,
-            handoverDate: '2025-01-01',
-            warrantyEndDate: '2027-01-01',
-            status: 'ACTIVE' as const,
-          },
-          unit: {
-            spaceName: '12',
-            unitNumber: '12',
-            rooms: 3,
-            areaSqm: 70,
-            hasMamad: false,
-            warrantyEndDate: null,
-            conditionStatus: 'READY' as const,
-          },
-          floor: null,
-        };
+        const spec = specFor('12', {
+          parkingSpaceName: null,
+          storageSpaceName: null,
+        });
         const first = await upsertUnitRow(db, spec);
-        const kinds = await db.query<{ space_kind: string; name: string }>(
-          `SELECT s.space_kind, s.name
-             FROM space s
-             JOIN building b ON b.building_id = s.building_id
-            WHERE b.city = $1
-            ORDER BY s.space_kind, s.name`,
-          [ROW_CITY],
-        );
-        assert.deepEqual(
-          kinds.rows.map((row) => `${row.space_kind}:${row.name}`),
-          ['PARKING:חניה 12', 'STORAGE:מחסן 12', 'UNIT:12'],
-        );
-        const assigned = await db.query<{
-          parking: string | null;
-          storage: string | null;
-        }>(
-          `SELECT p.name AS parking, st.name AS storage
-             FROM unit u
-             LEFT JOIN space p ON p.space_id = u.parking_space_id
-             LEFT JOIN space st ON st.space_id = u.storage_space_id
-            WHERE u.unit_id = $1`,
-          [first.unitId],
-        );
-        assert.equal(assigned.rows[0]?.parking, 'חניה 12');
-        assert.equal(assigned.rows[0]?.storage, 'מחסן 12');
-        assert.equal(first.inserted.parking, true);
-        assert.equal(first.inserted.storage, true);
+        assert.deepEqual(await spacesIn(db), ['UNIT:12']);
+        assert.deepEqual(await assignedTo(db, first.unitId), {
+          parking: null,
+          storage: null,
+        });
+        // Null and not `false`: nothing was asked for, which is not the same fact as "it was
+        // already there". `src/register/`'s `record` skips a null, so neither is counted.
+        assert.equal(first.inserted.parking, null);
+        assert.equal(first.inserted.storage, null);
 
         const second = await upsertUnitRow(db, spec);
         assert.equal(second.unitId, first.unitId);
+        assert.deepEqual(await spacesIn(db), ['UNIT:12']);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  // 206-4 (`pinchot`): a numbered bay, and a storage room the plan leaves unnumbered.
+  it('creates only the bay when only the bay has a number', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const spec = specFor('4', {
+          parkingSpaceName: '594',
+          storageSpaceName: null,
+        });
+        const first = await upsertUnitRow(db, spec);
+        assert.deepEqual(await spacesIn(db), ['PARKING:594', 'UNIT:4']);
+        assert.deepEqual(await assignedTo(db, first.unitId), {
+          parking: '594',
+          storage: null,
+        });
+        assert.equal(first.inserted.parking, true);
+        assert.equal(first.inserted.storage, null);
+
+        // The natural key still converges: the same numbers twice are a correction, not a second bay.
+        const second = await upsertUnitRow(db, spec);
+        assert.equal(second.unitId, first.unitId);
         assert.equal(second.inserted.parking, false);
-        assert.equal(second.inserted.storage, false);
-        const again = await db.query<{ n: string }>(
-          `SELECT count(*)::text AS n FROM space s
-             JOIN building b ON b.building_id = s.building_id
-            WHERE b.city = $1`,
-          [ROW_CITY],
+        assert.deepEqual(await spacesIn(db), ['PARKING:594', 'UNIT:4']);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  // 206-7 (`bloch`): both numbered, and neither number is the door's.
+  it('names both spaces with the numbers the plan prints', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const written = await upsertUnitRow(
+          db,
+          specFor('7', {
+            parkingSpaceName: '574',
+            storageSpaceName: '601',
+          }),
         );
-        assert.equal(again.rows[0]?.n, '3');
+        assert.deepEqual(await spacesIn(db), [
+          'PARKING:574',
+          'STORAGE:601',
+          'UNIT:7',
+        ]);
+        assert.deepEqual(await assignedTo(db, written.unitId), {
+          parking: '574',
+          storage: '601',
+        });
       });
     } finally {
       await pool.end();

@@ -48,6 +48,7 @@ import {
   type ProjectOption,
   searchEstate,
 } from './read-model.ts';
+import { removeSpace } from './spaces.ts';
 import {
   type DocumentSearchHit,
   type FiledDocumentView,
@@ -483,6 +484,13 @@ function checked(value: unknown): boolean {
  * `floor` is named separately because it lives on Space and not on Unit, which is `UnitRowSpec`'s
  * own shape and not a decision this form makes. A blank `warranty_end_date` is null and means *the
  * building's date applies* (R14) — not *no warranty*.
+ *
+ * **The two bay numbers are optional and are copied, never derived (#140).** A blank one writes no
+ * `PARKING` or `STORAGE` space at all and leaves the foreign key null, which is what
+ * `0004_estate.sql` calls the ordinary state. Until this ticket the write invented `חניה
+ * {unit_number}` and `מחסן {unit_number}` for every flat — a number off the door standing in for a
+ * number off the developer's plan, which nothing reconciles. What the operator types is the name:
+ * text and not a number, because a bay is printed `594` in one plan and `12/ב` in the next.
  */
 function unitFromForm(body: unknown): {
   unit: UnitRowSpec['unit'];
@@ -513,6 +521,16 @@ function unitFromForm(body: unknown): {
               0,
             ),
       conditionStatus: conditionStatus(form.condition_status),
+      parkingSpaceName: optionalText(
+        blankToNull(form.parking_space_name),
+        'parking_space_name',
+        64,
+      ),
+      storageSpaceName: optionalText(
+        blankToNull(form.storage_space_name),
+        'storage_space_name',
+        64,
+      ),
     },
     // **A blank text input is absent, not empty.** `optionalText` answers null for a field a caller
     // omitted and `invalid` for one it sent empty — which is right for an API and wrong for a form,
@@ -756,6 +774,36 @@ export function registerEstateRoutes(
     },
   );
 
+  /**
+   * **Issue 140.** Deletes a `PARKING` or `STORAGE` space, detaching the flat that points at it
+   * first, behind the same `estate.write` line A13 keeps.
+   *
+   * `POST … /remove` rather than `DELETE`: a form posts, and every write on these screens is a
+   * form. **Keyed on the Space alone**, because whether a flat still points at the placeholder
+   * depends only on whether the operator wrote the real number before or after coming here, and
+   * a route that needed a unit made the orphan — the case the issue is about — unreachable.
+   * `removeSpace` refuses and names anything else still holding it.
+   *
+   * One transaction, for `POST …/units`’ reason one screen up: the `UPDATE`s and the `DELETE`
+   * handed a `Pool` would be three, and a failure between them leaves the orphan this removes.
+   */
+  app.post<{ Params: { spaceId: string } }>(
+    '/estate/spaces/:spaceId/remove',
+    ESTATE_WRITE,
+    async (request, reply) => {
+      const spaceId = validId(request.params.spaceId, 'spaceId');
+      const { buildingId } = await inTransaction(deps.pool, (db) =>
+        removeSpace(db, spaceId),
+      );
+      // Back to the building page, which is where the card, the number and the kind chips are —
+      // the three things this write should have changed.
+      return reply
+        .code(303)
+        .header('location', `/estate/buildings/${buildingId}`)
+        .send();
+    },
+  );
+
   app.get('/estate/buildings/:buildingId', READ, async (request, reply) => {
     const { buildingId } = request.params as { buildingId: string };
     // Validated at the edge, before it reaches a query: a malformed id is `invalid` and a
@@ -786,8 +834,9 @@ export function registerEstateRoutes(
       deps.chrome(csrf, 'estate', mayFile(request)),
       documents,
       // Slice 6.2: the door to A13's screen, rendered for a viewer who may walk through it and for
-      // nobody else — the buildings list's rule, one level down.
-      can(request.staff?.role ?? null, 'estate.write'),
+      // nobody else — the buildings list's rule, one level down. Issue 140 hangs the remove
+      // controls off the same answer, so the stance and the token it posts travel together.
+      can(request.staff?.role ?? null, 'estate.write') ? { csrf } : undefined,
       await officeRetrieval(
         deps.pool,
         request,

@@ -321,11 +321,32 @@ describe('estate · the schema is the constraint', () => {
           const buildingId = await insertBuilding(db);
           const apartment = await insertSpace(db, buildingId, 'UNIT');
           await insertUnit(db, apartment);
-          const row = await db.query<{ parking_space_id: string | null }>(
-            'SELECT parking_space_id FROM unit WHERE unit_id = $1',
+          const row = await db.query<{
+            parking_space_id: string | null;
+            storage_space_id: string | null;
+          }>(
+            'SELECT parking_space_id, storage_space_id FROM unit WHERE unit_id = $1',
             [apartment],
           );
           assert.equal(row.rows[0]?.parking_space_id, null);
+          assert.equal(row.rows[0]?.storage_space_id, null);
+
+          // **And the building holds one Space (#140).** Both keys stood null through an insert
+          // that named neither, which is what `MATCH SIMPLE` means and what `0004_estate.sql`
+          // calls the ordinary state — nothing had to be invented to satisfy them. Slice 4.6 read
+          // the same schema the other way and had `upsertUnitRow` write a `PARKING` space `חניה
+          // {unit_number}` and a `STORAGE` space `מחסן {unit_number}` for every flat A13 made, in
+          // a numbering scheme no developer plan uses. This is the case that corrupted data, and
+          // the assertion is here rather than only in the route suite because what permits the
+          // null is the schema and not the application above it.
+          const spaces = await db.query<{ space_kind: string }>(
+            'SELECT space_kind FROM space WHERE building_id = $1',
+            [buildingId],
+          );
+          assert.deepEqual(
+            spaces.rows.map((space) => space.space_kind),
+            ['UNIT'],
+          );
         });
       });
 

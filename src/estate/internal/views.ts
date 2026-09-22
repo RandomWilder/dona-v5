@@ -22,6 +22,7 @@ import type {
   ExpiringLease,
   ProjectOption,
   SearchResults,
+  UnassignedSpaceRow,
   UnitHit,
   UnitRow,
 } from './read-model.ts';
@@ -178,6 +179,24 @@ const styles = h`<style>
   }
   .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
   .unit-actions { margin: var(--space-3) 0 0; }
+  /* Issue 140 — taking a bay off a flat. The issue number is written without its number sign here:
+     tests/ui/tokens.test.ts refuses a hex colour anywhere in a rendered screen, and three digits
+     behind a hash is one. It sits inside the <dd> holding the number it removes, so it is
+     a link and not a button: a control the width of the card would read as the card's own action,
+     and this one is about one line of it. The touch target is the token minimum all the same. */
+  .remove-space { display: inline; margin-inline-start: var(--space-2); }
+  .btn-link {
+    border: 0;
+    background: none;
+    padding: 0;
+    min-height: var(--size-touch);
+    font: inherit;
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    text-decoration: underline;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
   .unit-grid {
     display: grid;
     gap: var(--space-2);
@@ -792,6 +811,18 @@ export function renderNewUnitPage(screen: NewUnitScreen): string {
         <input id="has_mamad" name="has_mamad" type="checkbox" value="true" />
         יש ממ״ד
       </label>
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="parking_space_name">מספר חניה</label>
+          <input id="parking_space_name" name="parking_space_name" type="text" maxlength="64" />
+          <p class="hint">כמספרה בתכניות, לא כמספר הדירה. ריק — לא נרשמת חניה כלל.</p>
+        </div>
+        <div class="form-row">
+          <label for="storage_space_name">מספר מחסן</label>
+          <input id="storage_space_name" name="storage_space_name" type="text" maxlength="64" />
+          <p class="hint">ריק — אין מחסן, או שאין לו מספר. אל תמציאו מספר.</p>
+        </div>
+      </div>
       <div class="form-row">
         <label for="warranty_end_date">תום תקופת הבדק לדירה</label>
         <input id="warranty_end_date" name="warranty_end_date" type="date" />
@@ -806,8 +837,8 @@ export function renderNewUnitPage(screen: NewUnitScreen): string {
       </div>
     </form>
     <p class="form-note">
-      עם הדירה נכתבים גם חניה ומחסן על שמה, כמקומות ריקים — כדי שלפרוטוקול מסירה יהיה על מה לנחות.
-      אותו מספר דירה פעמיים מעדכן את הדירה הקיימת ואינו יוצר דירה שנייה.
+      נכתבת הדירה בלבד. חניה ומחסן נכתבים רק אם מולאו מספריהם למעלה, ובמספר שהתכניות מדפיסות —
+      לא במספר הדלת. אותו מספר דירה פעמיים מעדכן את הדירה הקיימת ואינו יוצר דירה שנייה.
     </p>`;
   return page(`דונה דום — דירה חדשה`, body, screen.nav);
 }
@@ -885,7 +916,46 @@ function documentsPanel(
   </section>`;
 }
 
-function unitCard(unit: UnitRow, occupancy: OccupancyByUnit): Html {
+/**
+ * The control that takes a bay off a flat. **#140.**
+ *
+ * It sits on the fact it removes rather than in the card's action row, because what an operator is
+ * looking at is the wrong number — `חניה 7` beside a plan that prints 574 — and a button anywhere
+ * else would not say which of the two lines it meant. Rendered only for a viewer holding
+ * `estate.write`: the refusal behind it says `not_allowed` and nothing more, which is the list's
+ * own rule one level down.
+ */
+function removeSpaceForm(spaceId: string, csrf: string, what: string): Html {
+  return h`<form class="remove-space" method="post"
+      action="/estate/spaces/${spaceId}/remove">
+    ${csrfInput(csrf)}
+    <button class="btn-link" type="submit" aria-label="הסרת ה${what}">הסרה</button>
+  </form>`;
+}
+
+/**
+ * One `<dt>/<dd>` pair for a bay, with the control that removes it when the viewer may write.
+ *
+ * Written once rather than twice: the חניה and מחסן rows differ in a label and two fields, and two
+ * copies of thirteen lines is how the two come to disagree about which of them carries the button.
+ */
+function bayRow(
+  label: string,
+  name: string | null,
+  spaceId: string | null,
+  write?: { csrf: string },
+): Html {
+  if (!name || !spaceId) return h``;
+  return h`<div><dt>${label}</dt><dd>${ltr(name)}${
+    write ? removeSpaceForm(spaceId, write.csrf, label) : h``
+  }</dd></div>`;
+}
+
+function unitCard(
+  unit: UnitRow,
+  occupancy: OccupancyByUnit,
+  write?: WriteStance,
+): Html {
   const residents = occupancy.get(unit.unit_id);
   return h`<article class="row-card unit-card">
     ${marker(unit.condition_status === 'READY' ? 'ACTIVE' : unit.condition_status)}
@@ -902,8 +972,8 @@ function unitCard(unit: UnitRow, occupancy: OccupancyByUnit): Html {
         <dt>שטח</dt>
         <dd>${unit.area_sqm ? h`${ltr(unit.area_sqm)} מ״ר` : h`טרם נמדד`}</dd>
       </div>
-      ${unit.parking_name ? h`<div><dt>חניה</dt><dd>${ltr(unit.parking_name)}</dd></div>` : h``}
-      ${unit.storage_name ? h`<div><dt>מחסן</dt><dd>${ltr(unit.storage_name)}</dd></div>` : h``}
+      ${bayRow('חניה', unit.parking_name, unit.parking_space_id, write)}
+      ${bayRow('מחסן', unit.storage_name, unit.storage_space_id, write)}
       ${
         unit.warranty_end_date
           ? h`<div><dt>בדק עד</dt><dd>${ltr(unit.warranty_end_date)}</dd></div>`
@@ -916,20 +986,75 @@ function unitCard(unit: UnitRow, occupancy: OccupancyByUnit): Html {
   </article>`;
 }
 
+/** `estate.write`, and the token this viewer’s forms post. Undefined is every other viewer. */
+export interface WriteStance {
+  csrf: string;
+}
+
+/**
+ * Bays and stores no flat points at. **Issue 140.**
+ *
+ * Hidden entirely when there are none, because an empty section on every building page would read
+ * as a thing to act on. A spare bay the building really has is an ordinary row here; so is the
+ * `חניה 7` that 4.6 invented and a real number later replaced, and that one has nowhere else to
+ * appear at all.
+ */
+/**
+ * One bay, in the singular. `SPACE_KIND` is the chip vocabulary and counts things — חניות, מחסנים —
+ * so reading it into "הסרת ה…" gives a button that says *remove the parkings*. The card rows next to
+ * it already say חניה and מחסן, and this is the same word.
+ */
+const ONE_SPACE: Record<string, string> = {
+  PARKING: 'חניה',
+  STORAGE: 'מחסן',
+};
+
+function unassignedPanel(
+  spaces: readonly UnassignedSpaceRow[],
+  write?: WriteStance,
+): Html {
+  if (spaces.length === 0) return h``;
+  return h`<section>
+    <h2>חניות ומחסנים ללא שיוך</h2>
+    <p class="lede">
+      אינם משויכים לאף דירה. חניה פנויה היא מצב רגיל; שם שאינו מופיע בתכניות אפשר להסיר.
+    </p>
+    <dl class="facts">${spaces.map(
+      (space) => h`<div>
+        <dt>${label(SPACE_KIND, space.space_kind)}</dt>
+        <dd>${ltr(space.name)}${
+          write
+            ? removeSpaceForm(
+                space.space_id,
+                write.csrf,
+                ONE_SPACE[space.space_kind] ?? space.space_kind,
+              )
+            : h``
+        }</dd>
+      </div>`,
+    )}</dl>
+  </section>`;
+}
+
 export function renderBuildingPage(
   detail: BuildingDetail,
   occupancy: OccupancyByUnit,
   nav: Html,
   documents: readonly FiledDocumentView[] = [],
   /**
-   * Whether this viewer holds `estate.write` (slice 6.2). The buildings list's rule, one level
-   * down: the door is rendered for nobody else, because the refusal behind it says `not_allowed`
-   * and nothing more.
+   * Whether this viewer holds `estate.write` (slice 6.2), and the token their forms post. The
+   * buildings list's rule one level down: the door is rendered for nobody else, because the
+   * refusal behind it says `not_allowed` and nothing more.
+   *
+   * **One parameter and not two** (issue 140). It was `mayWrite: boolean` beside an optional
+   * `csrf`, and every write control on this page needs both — a caller passing the stance and
+   * forgetting the token would have silently rendered a page with no remove buttons on it and no
+   * test able to say why. Undefined is the whole of "may not write".
    */
-  mayWrite = false,
+  write?: WriteStance,
   retrieval?: OfficeRetrievalView,
 ): string {
-  const { building, kinds, units } = detail;
+  const { building, kinds, units, unassigned } = detail;
   const let_ = units.filter((unit) => occupancy.has(unit.unit_id)).length;
   const sheet = h`
     <div>
@@ -947,12 +1072,13 @@ export function renderBuildingPage(
         )}
       </div>
     </section>
+    ${unassignedPanel(unassigned, write)}
     ${documentsPanel(documents, 'מסמכי הבניין')}
     <section>
       <h2>יחידות דיור · ${ltr(units.length)}</h2>
       <p class="lede">${ltr(let_)} מאוכלסות היום, ${ltr(units.length - let_)} פנויות. נגזר בכל טעינה ואינו נשמר.</p>
       ${
-        mayWrite
+        write
           ? h`<p class="form-actions">
               <a class="btn btn-primary" href="/estate/buildings/${building.building_id}/units/new">דירה חדשה</a>
             </p>`
@@ -961,7 +1087,7 @@ export function renderBuildingPage(
       ${
         units.length === 0
           ? h`<p class="empty-state">אין יחידות דיור בבניין זה.</p>`
-          : h`<div class="unit-grid">${units.map((unit) => unitCard(unit, occupancy))}</div>`
+          : h`<div class="unit-grid">${units.map((unit) => unitCard(unit, occupancy, write))}</div>`
       }
     </section>`;
   const body =

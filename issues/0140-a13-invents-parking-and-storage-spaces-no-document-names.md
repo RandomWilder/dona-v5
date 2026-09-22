@@ -1,13 +1,13 @@
 ---
 number: 140
 title: "A13 invents parking and storage spaces that no document names"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent: 142
 created: 2026-09-22
-closed:
+closed: 2026-09-22
 ---
 
 ## What is wrong
@@ -70,15 +70,15 @@ only, no `unit` referencing it, no asset in it, no service call against it.
 
 ## Acceptance criteria
 
-- [ ] A unit created through A13 with no numbers given has `parking_space_id` and `storage_space_id`
+- [x] A unit created through A13 with no numbers given has `parking_space_id` and `storage_space_id`
       null and has created no `PARKING` or `STORAGE` space
-- [ ] A unit created with a bay number given has a `PARKING` space named with that number
-- [ ] The register import path is unchanged — its explicit names still win
-- [ ] An unreferenced placeholder space can be deleted by an operator; one that is referenced by a
-      unit, an asset or a service call is refused, and the refusal says which
-- [ ] `src/estate/schema.test.ts` and the A13 route tests cover the no-numbers case, which is the one
+- [x] A unit created with a bay number given has a `PARKING` space named with that number
+- [x] The plan-shaped import path is unchanged — `importEstate` still takes the names off the plan
+- [x] An unreferenced placeholder space can be deleted by an operator; one that is referenced by a
+      unit or an asset is refused, and the refusal says which
+- [x] `src/estate/schema.test.ts` and the A13 route tests cover the no-numbers case, which is the one
       that corrupts data today
-- [ ] The screen is clicked on `:3000` after a `npm run dev` restart, both paths
+- [x] The screen is clicked on `:3000` after a `npm run dev` restart, both paths
 
 ## Related
 
@@ -86,3 +86,53 @@ only, no `unit` referencing it, no asset in it, no service call against it.
 `src/estate/internal/purge.ts:604`, `evals/fixtures/lease-extraction.ts`.
 [docs/proposals/track-a-the-place-a-fact-is-true-of.md](../docs/proposals/track-a-the-place-a-fact-is-true-of.md) §4,
 where this was found; it is step 1 of that proposal's order and depends on none of its open questions.
+
+## Closed
+
+Three changes, in `src/estate/`, plus a type that propagates to two callers.
+
+1. **`upsertUnitRow` names no space its caller did not name.** `UnitRowSpec.unit` is a whole
+   `UnitPlan` now rather than a `UnitPlan` with the two bay names omitted, so the names are always
+   the caller's and null writes nothing. `UnitRowResult.inserted.parking` and `.storage` are
+   `boolean | null` on the same footing as `.project`; `src/register/`’s `record` already skipped a
+   null, so that module needed no code change beyond passing the two nulls explicitly.
+2. **A13 asks for the two numbers, optionally.** `parking_space_name` and `storage_space_name`, text
+   and not number (a bay is printed `594` in one plan and `12/ב` in the next), blank-to-null through
+   the same `blankToNull` the floor input uses. What the operator types is the Space's name.
+3. **`POST /estate/spaces/:spaceId/remove`** (`internal/spaces.ts`), behind `estate.write`. It
+   detaches the one unit pointing at the Space and deletes it in one transaction, and refuses rather
+   than cascading: an asset in it, or two units assigned to it, is a `conflict` naming which.
+
+**Two corrections to this ticket as written.**
+
+- *"the register importer passes explicit `parkingSpaceName` and `storageSpaceName` and never
+  reaches this path"* was wrong about the code. `UnitRowSpec` omitted both fields, so **every**
+  caller of `upsertUnitRow` got the placeholders, the register CSV import included — the path with
+  explicit names is `importEstate`, the plan-shaped one, and that is what is unchanged. So the fix's
+  blast radius was wider than "bounded to A13": the nine-row register fixture’s space counts move
+  **15/12 → 5/4**, one `UNIT` Space per line instead of three. This is right — the 22-column header
+  names no bay — and `SPEC-register.md` now says so.
+**A third correction, from `/code-review`.** The first cut keyed the remove on the unit — `POST
+/estate/units/:unitId/spaces/:spaceId/remove` — and refused a space the flat did not point at. That
+reading makes the criterion above impossible to satisfy: an *unreferenced* space was exactly the one
+that could not be removed. It also left the ticket's own scenario open, because an operator who
+writes the real bay number **before** deleting `חניה 7` repoints the flat and orphans the
+placeholder, and the orphan was then unreachable forever — which of the two you got depended only on
+the order you happened to work in. The route is keyed on the Space now, the building page grew a
+`חניות ומחסנים ללא שיוך` section so an unassigned bay is visible at all, and one unit pointing at the
+space is detached rather than refused (two is the `conflict`). `src/estate/routes.test.ts` covers the
+orphan end to end: placeholder, correction, the section, the remove, the section gone.
+
+- **The service-call refusal could not be written: there is no table.** `src/calls/` is unbuilt and
+  `0004_estate.sql` has no `service_call`; the only two rows that reference `space` are `unit` and
+  `asset`, and both are refused. `internal/spaces.ts` marks where the third `NOT EXISTS` goes.
+
+No backfill, as specified. The rows 4.6 already wrote stay until an operator removes them through
+(3) — `npm run seed` data included, which is why the Shoham plan’s 184 spaces are untouched.
+
+Clicked on `:3000` after a `npm run dev` restart, both paths: a flat with both inputs blank wrote
+one Space and no bay chips; a flat with `574` and `601` wrote three, showed both on the card, and
+the חניה הסרה control took the bay off and left the store. Then the orphan
+path, after a second restart for the review changes: `חניה 7`, corrected to `574`, the placeholder
+appearing under `חניות ומחסנים ללא שיוך`, removed from there, and the section gone with its last
+row.

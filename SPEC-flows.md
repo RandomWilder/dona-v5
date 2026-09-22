@@ -471,14 +471,38 @@ and an optional end of תקופת הבדק for the flat itself (R14, when a unit
 Nothing about the building appears on it, because nothing about the building is this screen's to
 change.
 
-**Writes:** one `UNIT` space, one `unit` row, and **the two bays the apartment implies** — a
-`PARKING` space `חניה {unit_number}` and a `STORAGE` space `מחסן {unit_number}`, assigned on the
-unit. That is slice 4.6's convention and this flow does not invent a second one: the bays are
-placeholders with a name and no facts, so a handover protocol has a space to land a gate motor on
-([SPEC-estate.md](SPEC-estate.md)). Three spaces and one unit, for one apartment.
+**Writes:** one `UNIT` space, one `unit` row, and **a `PARKING` or `STORAGE` space only where the
+operator typed a number into it** (#140). Both inputs are optional, both post empty by default,
+and an empty one writes nothing and leaves the foreign key null — which `0004_estate.sql` names as
+the ordinary state, `MATCH SIMPLE` leaving the key unenforced while it is. One space and one unit
+is the ordinary apartment; three is the apartment whose plan was in front of the operator.
+
+**A bay number is copied, never derived.** Slice 4.6 had this write invent `חניה {unit_number}`
+and `מחסן {unit_number}` for every flat and assign both. Bay numbering is a property of the
+developer's plan and has nothing to do with the door: against the two hand-read leases in
+`evals/fixtures/lease-extraction.ts`, both in one building in one month, flat 206-4's bay is **594**
+and its storage room carries no number at all, and flat 206-7's are **574** and **601**. Nothing
+would ever have reconciled `חניה 7` with bay 574 except a person noticing, and because `space` is
+keyed `(building_id, space_kind, name)` the invention made this screen a second writer spelling bay
+names in a scheme no document uses. It also made `unit.storage_space_id IS NOT NULL` a constant
+rather than an answer, which is the derivation the track A proposal rests on.
+
+**And the flow can take one off again:** `POST /estate/spaces/:spaceId/remove`, same `estate.write`
+stance, rendered beside the number it removes — on the card while a flat still points at the bay, and
+under `חניות ומחסנים ללא שיוך` on the building page once nothing does. It detaches the one unit
+pointing at the Space and deletes it in one transaction, and it **refuses rather than cascades** — an
+asset in it (R3), or two units assigned to it, is a `conflict` naming which. `PARKING` and `STORAGE`
+only: an apartment is a Space too and is the unit's own row (R2).
+
+**Keyed on the Space, because the order the operator works in is not a fact about the estate.**
+Writing the real number first repoints the flat and orphans `חניה 7`; writing it second leaves the
+flat pointing at the placeholder. A remove that needed a unit reaches only the second, and the first
+— the orphan, the second `PARKING` row this whole ticket is about — would be unreachable forever.
+**There is no backfill**: which of two bays is the real one is an operator's judgement about a piece
+of paper.
 
 **Through `upsertUnitRow`, and there is no new estate command.** That function is the register's own
-per-row primitive (slice 2.4), and it already does exactly these four upserts in exactly this order.
+per-row primitive (slice 2.4), and it already does exactly these upserts in exactly this order.
 A screen that wrote its own SQL would be the second copy of the natural keys
 [SPEC-estate.md](SPEC-estate.md) exists to prevent — and the first thing it would drift on is the
 name of the `UNIT` space.

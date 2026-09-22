@@ -23,6 +23,12 @@ workbook is right and this file is a bug.
   **Slice 6.2 added the second**, flow A13: `GET /estate/buildings/:buildingId/units/new` and
   `POST /estate/buildings/:buildingId/units`, which fills a building A11 created empty and writes
   through `upsertUnitRow` — the register's own per-row primitive, which now has a second caller.
+  **#140 gave A13 optional bay and storage numbers and took the invented ones away**: from 4.6 that
+  primitive wrote a `PARKING` space `חניה {unit_number}` and a `STORAGE` space `מחסן {unit_number}`
+  for every caller, in a scheme no plan prints. It names what it is told and nothing else now, and
+  `POST /estate/spaces/:spaceId/remove` is this module's first delete of a `space`
+  outside the operator purge — narrow, refusing rather than cascading, and the only forward path the
+  rows 4.6 already wrote have.
 
 ## The shape, and why it is this one
 
@@ -289,12 +295,42 @@ building page carries the door, and only for a viewer who holds the permission �
 buildings list keeps for `בניין חדש`.
 
 **The write is `upsertUnitRow`, and there is no new estate command.** One `UNIT` space, one `unit`,
-and the `PARKING` and `STORAGE` placeholders 4.6 implies, in that order, in the function the
-register importer has called since 2.4. What it does not do is decide names: the `UNIT` space is
+and a `PARKING` or `STORAGE` space **only where the caller named one**, in that order, in the
+function the register importer has called since 2.4. It decides no name at all: the `UNIT` space is
 named by the **bare `unit_number`**, which is what `src/register/internal/importer.ts` passes, and
-the bays are `חניה {unit_number}` and `מחסן {unit_number}`, which are the function's own. Two
-writers spelling that name two ways would be two apartments behind one door, and `space` is keyed
-`(building_id, space_kind, name)`, so the key is the only thing stopping it.
+a bay is named by the number A13’s operator read off the plan. Two writers spelling a name two ways
+would be two apartments behind one door, and `space` is keyed `(building_id, space_kind, name)`, so
+the key is the only thing stopping it.
+
+**#140 took the invented bays out of it.** From 4.6 to #140 this function wrote `חניה {unit_number}`
+and `מחסן {unit_number}` for every row and assigned both. That is a door number standing in for a
+plan number and the two are unrelated: flat 206-4's bay is 594 and its storage room is unnumbered,
+flat 206-7's are 574 and 601 (`evals/fixtures/lease-extraction.ts`, one building, one month). The
+defect was silent, it made this function the second writer spelling bay names in a scheme no
+document uses, and it made `unit.storage_space_id IS NOT NULL` a constant instead of a fact. Both
+names are the caller’s now and null writes nothing — `MATCH SIMPLE` leaves both foreign keys
+unenforced while null, and *unassigned* is what `0004_estate.sql` calls the ordinary state.
+
+**A bay can be taken off again** — `POST /estate/spaces/:spaceId/remove` (`internal/spaces.ts`),
+behind the same `estate.write` line. It detaches the one unit that points at the Space, then deletes
+it, in one transaction, and **refuses rather than cascades**: an asset in it (R3), or two units
+assigned to it, is a `conflict` naming which, and only `PARKING` and `STORAGE` may go (an apartment
+is a Space and is the unit's own row, R2). This is the only delete of a `space` outside the operator
+purge, and it exists because the rows 4.6 already wrote otherwise have no forward path: a real bay
+number arriving later would leave a second `PARKING` space in the building with nothing to say which
+is real.
+
+**It is keyed on the Space and not on a Unit, and the building page lists what nothing points at.**
+Those are one decision. An operator writing the real number *before* deleting the placeholder
+repoints the flat and orphans `חניה 7`; writing it after leaves the flat still pointing at it. A
+remove that needed a unit could only ever reach the second, so the case this whole ticket is about —
+the second `PARKING` row — would have been unreachable, and which case you got would have depended
+on the order you happened to work in. So the route takes a Space, and `חניות ומחסנים ללא שיוך` on
+the building page is where an unassigned bay is visible at all. A bay the building genuinely has
+spare is an ordinary row there; the section is hidden when it is empty.
+
+**Nothing is backfilled** — which of two bays is real is an operator's judgement about a piece of
+paper, not a migration's.
 
 **The building is rebuilt from its own row.** `upsertUnitRow` takes a building, not a building id —
 it is written for a flat file whose rows repeat their building — and its upsert sets
@@ -432,11 +468,13 @@ needs no statement of its own. The register still passes a project to upsert; th
 `null` and names the building's existing `project_code`, because the project is already there and
 the code is all `upsertBuilding` resolves it by.
 
-**Slice 4.6 also upserts a `PARKING` space `חניה {unit_number}` and a `STORAGE` space `מחסן
-{unit_number}` and assigns them on the unit.** The register file still has no bay columns; these
-rows are placeholders, the same standing as the מסירה dates the importer copies from the lease, so a
-handover protocol has a bay to land a gate motor on. A building whose real bay count is known (Shoham)
-arrives as a plan. A real register whose counts disagree is 2.5's to measure.
+**Slice 4.6 also upserted a `PARKING` space `חניה {unit_number}` and a `STORAGE` space `מחסן
+{unit_number}` and assigned them on the unit. #140 removed that.** The placeholders were meant to
+give a handover protocol a bay to land a gate motor on, and they cost more than they gave: the names
+are in no document, the register file has no bay columns to correct them from, and every A13 flat
+carried two. The function writes what its caller names and nothing else now; the register names
+neither, so a line is one Space. A building whose real bay count is known (Shoham) arrives as a
+plan. A real register whose counts disagree is 2.5's to measure.
 
 ## Operator purge (not a screen)
 

@@ -148,6 +148,12 @@ async function writeRow(
       rooms: row.rooms,
       areaSqm: row.areaSqm,
       hasMamad: row.hasMamad,
+      // **The file has no bay columns, so the row names no bay** (#140). Until 6.2 this was not the
+      // register's choice to make: `upsertUnitRow` invented `חניה {unit}` and `מחסן {unit}` for
+      // every row it was handed. It does not any more, and the 22-column header still carries
+      // nothing a bay number could be read from, so both stay null and no Space row is written.
+      parkingSpaceName: null,
+      storageSpaceName: null,
       warrantyEndDate: null,
       conditionStatus: REGISTER_CONDITION,
     },

@@ -801,6 +801,10 @@ export function registerDocumentRoutes(
           rooms: 1,
           areaSqm: null,
           hasMamad: false,
+          // A16's in-tab create knows the flat number off the lease and nothing else — the same
+          // reason `rooms` is 1 here. It names no bay (#140), so none is written.
+          parkingSpaceName: null,
+          storageSpaceName: null,
           warrantyEndDate: null,
           conditionStatus: 'READY',
         },

@@ -127,14 +127,19 @@ export interface EstatePlan {
  * One register line's worth of estate. Slice 2.4, for `upsertUnitRow`.
  *
  * Row-shaped rather than plan-shaped, because the register (SPEC-register.md) is a flat file whose
- * rows repeat their building and converge through the natural keys. The file still names no bay:
- * slice 4.6 implies `חניה {unit}` and `מחסן {unit}` so a protocol has a space to land on.
+ * rows repeat their building and converge through the natural keys.
+ *
+ * **The unit is a whole `UnitPlan`, bay names included (#140).** Slice 4.6 omitted the two names and
+ * had the function invent `חניה {unit}` and `מחסן {unit}` for every caller, which is a bay number in
+ * a scheme no developer's plan uses. The names are the caller's now, and null is the ordinary case:
+ * the register file has no bay columns to read them from, and A13's operator leaves the input empty
+ * when the paper in front of them does not say.
  */
 export interface UnitRowSpec {
   /** Null is R15's ordinary case — a building with no project. */
   project: ProjectPlan | null;
   building: Omit<BuildingPlan, 'spaces' | 'units'>;
-  unit: Omit<UnitPlan, 'parkingSpaceName' | 'storageSpaceName'>;
+  unit: UnitPlan;
   /** The `UNIT` space's floor. It lives on Space, not on Unit, so it is named here separately. */
   floor: string | null;
 }
@@ -142,8 +147,9 @@ export interface UnitRowSpec {
 /**
  * What `upsertUnitRow` did. Booleans and not counts, because a row touches each table exactly once
  * and the caller is the one aggregating — `src/register/` owns the report, this module owns the
- * rows. `project` is null when the row named none (R15). `parking` and `storage` are the implied
- * spaces 4.6 added; they are still Space rows, so the register counts them under `space`.
+ * rows. `project` is null when the row named none (R15). `parking` and `storage` are null on the
+ * same footing (#140): the caller named no bay, so no Space row was touched and there is nothing to
+ * count. When they are a boolean they are Space rows, and the register counts them under `space`.
  */
 export interface UnitRowResult {
   unitId: string;
@@ -151,8 +157,8 @@ export interface UnitRowResult {
     project: boolean | null;
     building: boolean;
     space: boolean;
-    parking: boolean;
-    storage: boolean;
+    parking: boolean | null;
+    storage: boolean | null;
     unit: boolean;
   };
 }

@@ -381,8 +381,20 @@ export async function importEstate(
 
 /**
  * Upserts one register line's worth of estate — one project, one building, one `UNIT` space, one
- * unit, plus the implied `PARKING` and `STORAGE` placeholders (slice 4.6) — and **returns the
+ * unit, and a `PARKING` or `STORAGE` space **only where the caller named one** — and **returns the
  * `unit_id`**, which is what `importEstate` does not.
+ *
+ * **It invents no name (#140).** Slice 4.6 had it write `חניה {unit_number}` and `מחסן
+ * {unit_number}` for every row and assign both, so that a handover protocol would have a bay to land
+ * a gate motor on. Bay numbering is a property of the developer's plan and has nothing to do with
+ * the door number — flat 206-4's bay is 594 and its storage room is unnumbered — so the placeholder
+ * was a fact nothing could reconcile except a person noticing, and `space` being keyed
+ * `(building_id, space_kind, name)` meant this function was a second writer spelling bay names in a
+ * scheme no document uses. Worse, it made `unit.storage_space_id IS NOT NULL` a constant rather than
+ * an answer.
+ *
+ * Nothing needs the placeholder. `MATCH SIMPLE` leaves both foreign keys unenforced while null, and
+ * `0004_estate.sql` names *unassigned* as the ordinary state.
  *
  * Slice 2.4. The register (SPEC-register.md) is a flat file whose rows repeat their building, so its
  * importer needs a row-shaped call rather than a plan-shaped one, and it needs the id back in order
@@ -408,38 +420,33 @@ export async function upsertUnitRow(
     units: [],
   });
 
-  const parkingName = `חניה ${spec.unit.unitNumber}`;
-  const storageName = `מחסן ${spec.unit.unitNumber}`;
   const space = await upsertSpace(db, building.buildingId, {
     kind: 'UNIT',
     name: spec.unit.spaceName,
     floor: spec.floor,
     accessNote: null,
   });
-  const parking = await upsertSpace(db, building.buildingId, {
-    kind: 'PARKING',
-    name: parkingName,
-    floor: null,
-    accessNote: null,
-  });
-  const storage = await upsertSpace(db, building.buildingId, {
-    kind: 'STORAGE',
-    name: storageName,
-    floor: null,
-    accessNote: null,
-  });
+  // Named, or nothing at all. A bay carries no floor and no access note here: a number off a plan is
+  // the whole of what the caller was given, and a column invented to fill a row is what #140 is.
+  const named = async (kind: 'PARKING' | 'STORAGE', name: string | null) =>
+    name === null
+      ? null
+      : await upsertSpace(db, building.buildingId, {
+          kind,
+          name,
+          floor: null,
+          accessNote: null,
+        });
+  const parking = await named('PARKING', spec.unit.parkingSpaceName);
+  const storage = await named('STORAGE', spec.unit.storageSpaceName);
   const unit = await upsertUnit(
     db,
     {
       unitId: space.spaceId,
-      parking: parking.spaceId,
-      storage: storage.spaceId,
+      parking: parking?.spaceId ?? null,
+      storage: storage?.spaceId ?? null,
     },
-    {
-      ...spec.unit,
-      parkingSpaceName: parkingName,
-      storageSpaceName: storageName,
-    },
+    spec.unit,
   );
   return {
     unitId: space.spaceId,
@@ -447,8 +454,8 @@ export async function upsertUnitRow(
       project,
       building: building.inserted,
       space: space.inserted,
-      parking: parking.inserted,
-      storage: storage.inserted,
+      parking: parking === null ? null : parking.inserted,
+      storage: storage === null ? null : storage.inserted,
       unit,
     },
   };
