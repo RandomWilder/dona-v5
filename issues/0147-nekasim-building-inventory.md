@@ -1,13 +1,13 @@
 ---
 number: 147
 title: "נכסים — building inventory, minted before paper"
-status: open
-labels: [ready-for-agent]
+status: closed
+labels: []
 assignee:
 blocked_by: []
 parent:
 created: 2026-09-22
-closed:
+closed: 2026-09-22
 ---
 
 ## Problem Statement
@@ -237,3 +237,25 @@ harness.
 
 Published from the inventory grill. בניינים explicitly untouched; same tables; assigned storage is
 the one schema add; mint audit is a batch; later add/remove is per Space on `audit_log`.
+
+## Comment — 2026-09-22
+
+Closed. All four children closed (#148, #149, #150, #151). Reviewed against this map after the last
+child. One hole fixed before close: a second create of the same address that names Spaces the first
+mint did not cover now writes one `estate.inventory_add` line per new Space, and still does not
+write a second mint line or a second Building.
+
+- Assigned storage on the letting; promote never writes built storage; a missing name refuses that
+  copy only; `reassigned` with no paper; occupied column refuses and names the value unless
+  superseded: #148. Policy case red first. One keyed run on that ticket.
+- נכסים tab, create, mint, grouped list, one mint audit line, viewer cannot post: #149.
+- Vacancy derived from the occupancy injection and assigned bay / assigned storage; built links do
+  not occupy; no rent or lease-end: #150.
+- Later add, collision, elevator continuation, shared name, refused remove, one audit line per
+  Space: #151.
+
+Gates this close: `npm test` 842 + 41 hooks, typecheck, guards. Live `evals` not re-run here (the
+extractor prompt did not change; the keyed run sits on #148). `seed:doctypes` is still not in the
+deploy workflow — staging will not assign storage from a lease until that seed runs against the new
+revision, same standing as parking after #146. Out of scope on this map stays out of scope.
+בניינים stays.

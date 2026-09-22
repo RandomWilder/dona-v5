@@ -42,6 +42,7 @@ import type {
   ConditionStatus,
   ProjectPlan,
   ProjectStatus,
+  Queryable,
   UnitRowSpec,
 } from './plan.ts';
 import {
@@ -601,6 +602,36 @@ function unitFromForm(body: unknown): {
   };
 }
 
+async function recordInventoryAdds(
+  db: Queryable,
+  clock: Clock,
+  actor: { actorId: string | undefined; actorRole: string | undefined },
+  buildingId: string,
+  spaces: readonly { kind: string; name: string }[],
+): Promise<void> {
+  const after = await listInventorySpaces(db, buildingId);
+  const audit = createAuditLog(db, clock);
+  for (const space of spaces) {
+    const row = after.find(
+      (item) => item.space_kind === space.kind && item.name === space.name,
+    );
+    if (!row) {
+      throw new KernelError('unavailable', 'space was not written');
+    }
+    await audit.write(
+      {
+        actorKind: 'staff',
+        actorId: actor.actorId,
+        actorRole: actor.actorRole,
+        action: 'estate.inventory_add',
+        subjectId: row.space_id,
+        inputs: { kind: space.kind, name: space.name, buildingId },
+      },
+      { outcome: 'ok' },
+    );
+  }
+}
+
 export function registerEstateRoutes(
   app: FastifyInstance,
   deps: EstateDeps,
@@ -681,17 +712,29 @@ export function registerEstateRoutes(
           LIMIT 1`,
         [created.building_id],
       );
+      const actor = {
+        actorId: request.staff?.staffAccountId,
+        actorRole: request.staff?.role ?? undefined,
+      };
       if (fresh.spaces.length > 0 && (prior.rowCount ?? 0) === 0) {
         await createAuditLog(db, deps.clock).write(
           {
             actorKind: 'staff',
-            actorId: request.staff?.staffAccountId,
-            actorRole: request.staff?.role ?? undefined,
+            actorId: actor.actorId,
+            actorRole: actor.actorRole,
             action: 'estate.inventory_mint',
             subjectId: created.building_id,
             inputs: mintAuditInputs(mint),
           },
           { outcome: 'ok' },
+        );
+      } else if (fresh.spaces.length > 0) {
+        await recordInventoryAdds(
+          db,
+          deps.clock,
+          actor,
+          created.building_id,
+          fresh.spaces,
         );
       }
       return created.building_id;
@@ -774,32 +817,16 @@ export function registerEstateRoutes(
       plan.units = mint.units;
       await inTransaction(deps.pool, async (db) => {
         await importEstate(db, { projects: named, buildings: [plan] });
-        const after = await listInventorySpaces(db, buildingId);
-        const audit = createAuditLog(db, deps.clock);
-        for (const space of mint.spaces) {
-          const row = after.find(
-            (item) =>
-              item.space_kind === space.kind && item.name === space.name,
-          );
-          if (!row) {
-            throw new KernelError('unavailable', 'space was not written');
-          }
-          await audit.write(
-            {
-              actorKind: 'staff',
-              actorId: request.staff?.staffAccountId,
-              actorRole: request.staff?.role ?? undefined,
-              action: 'estate.inventory_add',
-              subjectId: row.space_id,
-              inputs: {
-                kind: space.kind,
-                name: space.name,
-                buildingId,
-              },
-            },
-            { outcome: 'ok' },
-          );
-        }
+        await recordInventoryAdds(
+          db,
+          deps.clock,
+          {
+            actorId: request.staff?.staffAccountId,
+            actorRole: request.staff?.role ?? undefined,
+          },
+          buildingId,
+          mint.spaces,
+        );
       });
       return reply
         .code(303)
@@ -827,27 +854,15 @@ export function registerEstateRoutes(
       plan.spaces = [space];
       await inTransaction(deps.pool, async (db) => {
         await importEstate(db, { projects: named, buildings: [plan] });
-        const after = await listInventorySpaces(db, buildingId);
-        const row = after.find(
-          (item) => item.space_kind === space.kind && item.name === space.name,
-        );
-        if (!row) {
-          throw new KernelError('unavailable', 'space was not written');
-        }
-        await createAuditLog(db, deps.clock).write(
+        await recordInventoryAdds(
+          db,
+          deps.clock,
           {
-            actorKind: 'staff',
             actorId: request.staff?.staffAccountId,
             actorRole: request.staff?.role ?? undefined,
-            action: 'estate.inventory_add',
-            subjectId: row.space_id,
-            inputs: {
-              kind: space.kind,
-              name: space.name,
-              buildingId,
-            },
           },
-          { outcome: 'ok' },
+          buildingId,
+          [space],
         );
       });
       return reply

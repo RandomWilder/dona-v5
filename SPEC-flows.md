@@ -853,7 +853,9 @@ points at it. Shared places are kind + typed name onto the same list. No rename-
 GET), and `estate.read` on the lists.** A VIEWER may read and must not post.
 
 **Audit:** one `estate.inventory_mint` batch on first mint. One `estate.inventory_add` or
-`estate.inventory_remove` line per later Space. Not a document promotion and not `estate_event`.
+`estate.inventory_remove` line per later Space, including a second create of the same address that
+names Spaces the first mint did not cover. A re-post that only changes identity writes no new line.
+Not a document promotion and not `estate_event`.
 
 **Module:** estate owns the routes, the screens, and the mint plan. Chrome gains the sibling rail
 item. בניינים routes and views are not edited.

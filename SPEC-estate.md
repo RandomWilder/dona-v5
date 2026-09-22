@@ -432,7 +432,10 @@ second one.
 
 **Audit.** One `estate.inventory_mint` line on first mint (who, when, counts, inclusive name
 ranges). Each later add or remove writes one `estate.inventory_add` or `estate.inventory_remove`
-line for that Space (who, when, kind, name). Not `estate_event`. No rename-in-place.
+line for that Space (who, when, kind, name). A second create of the same address that names Spaces
+the first mint did not cover writes those Spaces and one `estate.inventory_add` line each, and does
+not write a second mint line. A re-post that only changes identity writes no new audit line. Not
+`estate_event`. No rename-in-place.
 
 **Later add (#151).** Same rule as mint: kind + count + first number; elevators need only a count
 and continue TECHNICAL integer names so they do not collide with `1`…`N` already there. A name that

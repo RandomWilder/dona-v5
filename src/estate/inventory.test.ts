@@ -443,6 +443,39 @@ describe('estate · נכסים, tab create and mint', () => {
       );
       assert.equal(auditAgain.rows[0]?.n, '1');
 
+      const grown = await client.inject({
+        method: 'POST',
+        url: '/estate/inventory',
+        headers: FORM,
+        payload: mintForm({
+          name: 'בניין נכסים — שם מתוקן',
+          unit_count: '4',
+          unit_first: '10',
+        }),
+      });
+      assert.equal(grown.statusCode, 303);
+      const extra = await pool.query<{ space_id: string }>(
+        `SELECT space_id FROM space
+          WHERE building_id = $1 AND space_kind = 'UNIT' AND name = '13'`,
+        [buildingId],
+      );
+      assert.equal(extra.rowCount, 1);
+      const addedLine = await pool.query<{ name: string }>(
+        `SELECT inputs->>'name' AS name FROM audit_log
+          WHERE action = 'estate.inventory_add' AND subject_id = $1`,
+        [extra.rows[0]?.space_id],
+      );
+      assert.equal(addedLine.rowCount, 1);
+      assert.equal(addedLine.rows[0]?.name, '13');
+      const stillOne = await pool.query<{ n: string; buildings: string }>(
+        `SELECT (SELECT count(*)::text FROM audit_log
+                  WHERE action = 'estate.inventory_mint' AND subject_id = $1) AS n,
+                (SELECT count(*)::text FROM building WHERE city = $2) AS buildings`,
+        [buildingId, CITY],
+      );
+      assert.equal(stillOne.rows[0]?.n, '1');
+      assert.equal(stillOne.rows[0]?.buildings, '1');
+
       const buildings = await client.inject({
         method: 'GET',
         url: '/estate',
