@@ -29,7 +29,10 @@ import {
   renderBuildingsPage,
   renderExpiringPage,
   renderIncompletePage,
+  renderInventoryBuildingPage,
+  renderInventoryPage,
   renderNewBuildingPage,
+  renderNewInventoryPage,
   renderNewUnitPage,
   renderSearchPage,
   renderTenancyDetailPage,
@@ -279,6 +282,7 @@ const CSRF = 'a1b2c3d4'.repeat(8);
 // registered as one — `root · index, צופה` and `root · settings, viewer` below are where the
 // registry holds that variant.
 const NAV = signedInChrome(CSRF, 'estate', true);
+const NAV_INVENTORY = signedInChrome(CSRF, 'inventory', true);
 const NAV_SEARCH = signedInChrome(CSRF, 'search', true);
 const NAV_EXPIRING = signedInChrome(CSRF, 'expiring', true);
 const NAV_INCOMPLETE = signedInChrome(CSRF, 'incomplete', true);
@@ -540,6 +544,40 @@ const SCREENS: Array<[string, () => string]> = [
         projects: [],
         prefill: { name: 'דקל 9', addressLine: 'דקל 9', city: 'כפר סבא' },
         carry: { unitNumber: '14', typeKey: 'lease', next: 'intake' },
+      }),
+  ],
+  [
+    'estate · inventory',
+    () => renderInventoryPage([building], NAV_INVENTORY, true),
+  ],
+  ['estate · inventory, empty', () => renderInventoryPage([], NAV_INVENTORY)],
+  [
+    'estate · new inventory building',
+    () =>
+      renderNewInventoryPage({
+        nav: NAV_INVENTORY,
+        csrf: CSRF,
+        projects: [],
+      }),
+  ],
+  [
+    'estate · inventory building',
+    () =>
+      renderInventoryBuildingPage({
+        building,
+        spaces: [
+          {
+            space_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            space_kind: 'UNIT',
+            name: '10',
+          },
+          {
+            space_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            space_kind: 'PARKING',
+            name: '50',
+          },
+        ],
+        nav: NAV_INVENTORY,
       }),
   ],
   ['estate · one building', () => renderBuildingPage(detail, occupancy, NAV)],
@@ -2060,6 +2098,8 @@ describe('shared UI tokens', () => {
       assert.match(html, /class="ops-menu"/, name);
       assert.match(html, />תפריט</, name);
       assert.match(html, /href="\/estate"/, name);
+      assert.match(html, /href="\/estate\/inventory"/, name);
+      assert.match(html, />נכסים</, name);
       assert.match(html, /href="\/estate\/expiring"/, name);
       assert.match(html, /href="\/estate\/incomplete"/, name);
       assert.match(html, /href="\/estate\/search"/, name);

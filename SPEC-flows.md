@@ -448,7 +448,8 @@ Creating a project earns its own slice on the day somebody needs one.
 building it creates. `building.handover_date` and `warranty_end_date` are entered here and are
 **superseded by A6** when the building handover protocol arrives: A6 reads them off the paper and
 this screen is the placeholder standing until it does — the same standing week 2's imported מסירה
-dates have.
+dates have. **Minting an inventory is a different door:** the **נכסים** tab ([A17](#a17--an-administrator-mints-a-buildings-inventory-נכסים))
+sits beside this flow and does not amend it. A12 still offers A11, not A17.
 
 **A11 is also reached from A12's refusal, prefilled. Slice 6.9.** An operator holding a lease for an
 address in nobody's portfolio used to be told only that it could not be placed. From 6.9 the refusal
@@ -820,6 +821,37 @@ activation facts (read, not invoked). Staff owns `documents.write` and `estate.w
 gains one destination; no other destination changes.
 
 **Work item:** #115. Paint deleted after wire (#119).
+
+### A17 — An administrator mints a building's inventory (נכסים)
+
+**Trigger:** an admin needs the building as a complete set of places before any document arrives —
+how many Units, bays, storage rooms, and elevators, named the way a lease will match.
+
+**Why it is a flow at all, and why it is not A11.** A11 still creates an empty Building, because
+A12's refusal and one-flat filing depend on that. The office also needs a denominator that paper
+fills rather than creates. That work has its own tab so בניינים can stay as it is until נכסים is
+accepted.
+
+**Screen:** the ops-rail item **נכסים**. Portfolio list of every Building (imported ones included,
+with whatever Spaces they already have). Create uses A11's identity fields plus four counts (Units
+≥ 1; parking, storage, elevators may be 0) and a first number for each counted kind except
+elevators. The building page lists every Space grouped by kind. Vacancy chips are a later beat of
+this tab, not this flow.
+
+**Writes:** one Building and the minted Spaces (and a Unit row per UNIT Space) through
+`importEstate`. Names are the bare integer sequence. Elevators are TECHNICAL Spaces `1`…`N`. No
+stub Asset. No stored occupancy. No הצמדה pairing. Re-posting the address updates that Building.
+
+**The permission is `estate.write` on create and mint (and those forms' GET), and `estate.read` on
+the lists.** A VIEWER may read and must not post.
+
+**Audit:** one `estate.inventory_mint` batch on first mint. Not a document promotion and not
+`estate_event`.
+
+**Module:** estate owns the routes, the screens, and the mint plan. Chrome gains the sibling rail
+item. בניינים routes and views are not edited.
+
+**Work item:** #149 (tab, create, mint, grouped list). Vacancy is #150; add/remove is #151.
 
 ## Open
 

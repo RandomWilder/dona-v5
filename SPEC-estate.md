@@ -29,6 +29,9 @@ workbook is right and this file is a bug.
   `POST /estate/spaces/:spaceId/remove` is this module's first delete of a `space`
   outside the operator purge — narrow, refusing rather than cascading, and the only forward path the
   rows 4.6 already wrote have.
+  **#149 added נכסים** — `GET /estate/inventory`, create+mint, and the grouped building page.
+  Writes go through `importEstate`. First mint writes one `estate.inventory_mint` audit line.
+  בניינים routes and views are unchanged.
 
 ## The shape, and why it is this one
 
@@ -99,8 +102,9 @@ one of `building_id` or `unit_id` is set and it matches the type. Same discrimin
 `document_link`. There is no `space_id`: `unit.rooms` and `space.floor` on the unit's space share
 `unit_id` (`unit_id` = `space_id`).
 
-**Only a promotion appends.** A11, A13, `applyProtocolSeed`, and the register importer do not write
-here. The typed original is `old_value` on the first promotion row. The unit sheet lists these
+**Only a promotion appends.** A11, A13, נכסים mint, `applyProtocolSeed`, and the register importer
+do not write here. The mint's batch line is kernel `audit_log` (`estate.inventory_mint`), not this
+table. The typed original is `old_value` on the first promotion row. The unit sheet lists these
 rows the same way it lists tenancy events, so an operator can ask what the room count used to be.
 
 **`applyPromotedField` is the write.** It lives on this module's contract, beside `applyProtocolSeed`,
@@ -392,6 +396,36 @@ is optional and blank means *the building's date applies* (R14) rather than *no 
 The POST replies `303` to the building page, which is where the space count, the unit card and the
 פנויה chip are — the acceptance bar's own wording, and the three things the write should have
 changed.
+
+### נכסים — inventory list, create, and mint (#149)
+
+A second estate tab, beside בניינים. All inventory work lives only here. בניינים keeps A11 and A13
+as they are. The same Building / Space / Unit rows appear under both tabs because they are the same
+rows.
+
+**Routes.** `GET /estate/inventory` (`estate.read`) lists every Building. `GET /estate/inventory/new`
+and `POST /estate/inventory` (`estate.write`, including the GET) create one and mint its Spaces.
+`GET /estate/inventory/:buildingId` (`estate.read`) lists those Spaces grouped by kind. The rail
+destination is `inventory`.
+
+**The write is still `importEstate`.** The POST rebuilds A11's identity plan and adds Spaces: UNIT,
+PARKING, and STORAGE named by the bare integer sequence from each kind's first number; TECHNICAL
+elevators named `1`…`N`. Each UNIT Space gets a Unit row, `READY`, rooms `0`, floor empty, no built
+bay or built storage. No Asset on an elevator. Names that already exist in the Building are omitted
+from the plan so a re-post updates identity and does not wipe rooms or floor. Occupancy is not
+stored. הצמדה is not paired.
+
+**Counts at the edge.** Units integer ≥ 1. Parking, storage, and elevators integer ≥ 0. A first
+number is required when that kind's count is above zero, parsed as an integer, then incremented
+`count` times. Elevators need only a count.
+
+**Idempotence is still `address_key`.** The same address posted twice updates that Building, never a
+second one.
+
+**Audit.** One `estate.inventory_mint` line on first mint (who, when, counts, inclusive name
+ranges). Not `estate_event`.
+
+The POST replies `303` to that Building's נכסים page.
 
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
 `GET`/`POST /documents/new`, reached from a unit row on the building page. It went behind the session

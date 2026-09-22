@@ -12,6 +12,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import type { ChromeDest } from '../../chrome.ts';
+import { createAuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
@@ -27,6 +28,11 @@ import {
 import { addCalendarYears, WARRANTY_YEARS } from './assets.ts';
 import { listEstateEvents } from './events.ts';
 import { importEstate, upsertUnitRow } from './importer.ts';
+import {
+  inventoryFromForm,
+  mintAuditInputs,
+  omitExisting,
+} from './inventory.ts';
 import type {
   BuildingPlan,
   BuildingStatus,
@@ -45,6 +51,7 @@ import {
   listApprovedCapturesForTenancy,
   listBuildings,
   listExpiringLeases,
+  listInventorySpaces,
   listParkingSpacesInBuilding,
   listProjects,
   listStorageSpacesInBuilding,
@@ -64,7 +71,10 @@ import {
   renderBuildingsPage,
   renderExpiringPage,
   renderIncompletePage,
+  renderInventoryBuildingPage,
+  renderInventoryPage,
   renderNewBuildingPage,
+  renderNewInventoryPage,
   renderNewUnitPage,
   renderSearchPage,
   renderTenancyDetailPage,
@@ -592,6 +602,92 @@ export function registerEstateRoutes(
       can(request.staff?.role ?? null, 'estate.write'),
     );
   });
+
+  app.get('/estate/inventory', READ, async (request, reply) => {
+    const buildings = await listBuildings(deps.pool);
+    html(reply);
+    return renderInventoryPage(
+      buildings,
+      deps.chrome(csrfFrom(request), 'inventory', mayFile(request)),
+      can(request.staff?.role ?? null, 'estate.write'),
+    );
+  });
+
+  app.get('/estate/inventory/new', ESTATE_WRITE, async (request, reply) => {
+    const projects = await listProjects(deps.pool);
+    const csrf = csrfFrom(request);
+    html(reply);
+    return renderNewInventoryPage({
+      nav: deps.chrome(csrf, 'inventory', mayFile(request)),
+      csrf,
+      projects,
+    });
+  });
+
+  app.post('/estate/inventory', ESTATE_WRITE, async (request, reply) => {
+    const projects = await listProjects(deps.pool);
+    const { plan, projects: named } = buildingFromForm(request.body, projects);
+    const mint = inventoryFromForm(request.body);
+    const addressKey = addressKeyOf(plan.city, plan.addressLine);
+    const existing = await findBuildingAtAddress(deps.pool, [addressKey]);
+    const known = new Set(
+      existing
+        ? (await listInventorySpaces(deps.pool, existing.building_id)).map(
+            (space) => `${space.space_kind}\n${space.name}`,
+          )
+        : [],
+    );
+    const fresh = omitExisting(mint, known);
+    plan.spaces = fresh.spaces;
+    plan.units = fresh.units;
+    const buildingId = await inTransaction(deps.pool, async (db) => {
+      await importEstate(db, { projects: named, buildings: [plan] });
+      const created = await findBuildingAtAddress(db, [addressKey]);
+      if (!created) {
+        throw new KernelError('unavailable', 'building was not written');
+      }
+      const prior = await db.query(
+        `SELECT 1 FROM audit_log
+          WHERE action = 'estate.inventory_mint' AND subject_id = $1
+          LIMIT 1`,
+        [created.building_id],
+      );
+      if (fresh.spaces.length > 0 && (prior.rowCount ?? 0) === 0) {
+        await createAuditLog(db, deps.clock).write(
+          {
+            actorKind: 'staff',
+            actorId: request.staff?.staffAccountId,
+            actorRole: request.staff?.role ?? undefined,
+            action: 'estate.inventory_mint',
+            subjectId: created.building_id,
+            inputs: mintAuditInputs(mint),
+          },
+          { outcome: 'ok' },
+        );
+      }
+      return created.building_id;
+    });
+    return reply
+      .code(303)
+      .header('location', `/estate/inventory/${buildingId}`)
+      .send();
+  });
+
+  app.get<{ Params: { buildingId: string } }>(
+    '/estate/inventory/:buildingId',
+    READ,
+    async (request, reply) => {
+      const buildingId = validId(request.params.buildingId, 'buildingId');
+      const detail = await getBuilding(deps.pool, buildingId);
+      const spaces = await listInventorySpaces(deps.pool, buildingId);
+      html(reply);
+      return renderInventoryBuildingPage({
+        building: detail.building,
+        spaces,
+        nav: deps.chrome(csrfFrom(request), 'inventory', mayFile(request)),
+      });
+    },
+  );
 
   app.get('/estate/search', READ, async (request, reply) => {
     const asked = (request.query as { q?: string }).q ?? '';

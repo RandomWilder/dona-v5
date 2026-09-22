@@ -120,6 +120,37 @@ export async function listBuildings(db: Queryable): Promise<BuildingSummary[]> {
   return result.rows;
 }
 
+/** Every Space in a Building, for the נכסים page. Names only; vacancy is #150. */
+export interface InventorySpaceRow {
+  space_id: string;
+  space_kind: string;
+  name: string;
+}
+
+export async function listInventorySpaces(
+  db: Queryable,
+  buildingId: string,
+): Promise<InventorySpaceRow[]> {
+  const result = await db.query<InventorySpaceRow>(
+    `SELECT space_id, space_kind, name
+       FROM space
+      WHERE building_id = $1
+      ORDER BY CASE space_kind
+                 WHEN 'UNIT' THEN 1
+                 WHEN 'PARKING' THEN 2
+                 WHEN 'STORAGE' THEN 3
+                 WHEN 'TECHNICAL' THEN 4
+                 WHEN 'COMMON' THEN 5
+                 WHEN 'EXTERIOR' THEN 6
+                 ELSE 7
+               END,
+               NULLIF(regexp_replace(name, '\\D', '', 'g'), '')::int NULLS LAST,
+               name`,
+    [buildingId],
+  );
+  return result.rows;
+}
+
 /** The projects a new building may be attached to (6.1). Ordered the way the select reads. */
 export async function listProjects(db: Queryable): Promise<ProjectOption[]> {
   const result = await db.query<ProjectOption>(

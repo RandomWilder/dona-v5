@@ -20,6 +20,7 @@ import type {
   BuildingDetail,
   BuildingSummary,
   ExpiringLease,
+  InventorySpaceRow,
   ProjectOption,
   SearchResults,
   UnassignedSpaceRow,
@@ -586,6 +587,211 @@ export function renderBuildingsPage(
           </div>`
     }`;
   return page('דונה דום — בניינים', body, nav);
+}
+
+export function renderInventoryPage(
+  buildings: BuildingSummary[],
+  nav: Html,
+  mayWrite = false,
+): string {
+  const body = h`
+    <div>
+      <h1>נכסים</h1>
+      <p class="lede">
+        המלאי של כל בניין — דירות, חניות, מחסנים ומעליות — לפני שהנייר ממלא אותן.
+      </p>
+      ${
+        mayWrite
+          ? h`<p class="form-actions">
+              <a class="btn btn-primary" href="/estate/inventory/new">בניין חדש</a>
+            </p>`
+          : h``
+      }
+    </div>
+    ${
+      buildings.length === 0
+        ? h`<p class="empty-state">אין עדיין בניינים במערכת.</p>`
+        : h`<div class="row-list">
+            ${buildings.map(
+              (building) => h`<article class="row-card">
+                ${marker(building.status)}
+                <a class="card-link" href="/estate/inventory/${building.building_id}">
+                  <p class="card-title">
+                    <span>${building.name}</span>
+                    <span class="chip">${label(BUILDING_STATUS, building.status)}</span>
+                  </p>
+                  <p class="lede">${building.address_line}, ${building.city}</p>
+                </a>
+              </article>`,
+            )}
+          </div>`
+    }`;
+  return page('דונה דום — נכסים', body, nav);
+}
+
+export function renderNewInventoryPage(screen: {
+  nav: Html;
+  csrf: string;
+  projects: readonly ProjectOption[];
+}): string {
+  const body = h`
+    <div>
+      <a class="back" href="/estate/inventory">← נכסים</a>
+      <h1>בניין חדש</h1>
+      <p class="lede">
+        זהות הבניין וארבע ספירות. שמירה אחת מייצרת את החללים.
+      </p>
+    </div>
+    <form class="form-grid" method="post" action="/estate/inventory">
+      ${csrfInput(screen.csrf)}
+      <div class="form-row">
+        <label for="name">שם הבניין</label>
+        <input id="name" name="name" type="text" maxlength="200" required />
+        <p class="hint">איך הצוות קורא לבניין. אינו חייב להיות זהה לכתובת.</p>
+      </div>
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="address_line">רחוב ומספר</label>
+          <input id="address_line" name="address_line" type="text" maxlength="200" required />
+        </div>
+        <div class="form-row">
+          <label for="city">עיר</label>
+          <input id="city" name="city" type="text" maxlength="120" required />
+        </div>
+      </div>
+      <p class="form-note">
+        הכתובת היא מה שמזהה בניין. אותה כתובת פעמיים מעדכנת את הבניין הקיים ואינה יוצרת בניין שני.
+      </p>
+      <div class="form-row">
+        <label for="project_code">פרויקט</label>
+        <select id="project_code" name="project_code">
+          <option value="">ללא פרויקט</option>
+          ${screen.projects.map(
+            (project) =>
+              h`<option value="${project.project_code}">${project.name} · ${ltr(
+                project.project_code,
+              )}</option>`,
+          )}
+        </select>
+      </div>
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="gush">גוש</label>
+          <input id="gush" name="gush" type="text" maxlength="64" />
+        </div>
+        <div class="form-row">
+          <label for="helka">חלקה</label>
+          <input id="helka" name="helka" type="text" maxlength="64" />
+        </div>
+      </div>
+      <div class="form-row">
+        <label for="building_number">מספר בניין</label>
+        <input id="building_number" name="building_number" type="text" maxlength="32" />
+      </div>
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="handover_date">תאריך מסירה</label>
+          <input id="handover_date" name="handover_date" type="date" required />
+        </div>
+        <div class="form-row">
+          <label for="warranty_end_date">תום תקופת הבדק</label>
+          <input id="warranty_end_date" name="warranty_end_date" type="date" />
+        </div>
+      </div>
+      <div class="form-row">
+        <label for="status">סטטוס</label>
+        <select id="status" name="status">
+          ${BUILDING_STATUSES.map(
+            (status) =>
+              h`<option value="${status}" ${
+                status === 'ACTIVE' ? h`selected` : h``
+              }>${label(BUILDING_STATUS, status)}</option>`,
+          )}
+        </select>
+      </div>
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="unit_count">דירות</label>
+          <input id="unit_count" name="unit_count" type="number" min="1" max="999" step="1" required />
+        </div>
+        <div class="form-row">
+          <label for="unit_first">מספר ראשון</label>
+          <input id="unit_first" name="unit_first" type="number" min="0" step="1" />
+          <p class="hint">חובה כשהספירה גדולה מאפס. השמות הם המספרים עצמם.</p>
+        </div>
+      </div>
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="parking_count">חניות</label>
+          <input id="parking_count" name="parking_count" type="number" min="0" max="999" step="1" required />
+        </div>
+        <div class="form-row">
+          <label for="parking_first">מספר ראשון</label>
+          <input id="parking_first" name="parking_first" type="number" min="0" step="1" />
+        </div>
+      </div>
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="storage_count">מחסנים</label>
+          <input id="storage_count" name="storage_count" type="number" min="0" max="999" step="1" required />
+        </div>
+        <div class="form-row">
+          <label for="storage_first">מספר ראשון</label>
+          <input id="storage_first" name="storage_first" type="number" min="0" step="1" />
+        </div>
+      </div>
+      <div class="form-row">
+        <label for="elevator_count">מעליות</label>
+        <input id="elevator_count" name="elevator_count" type="number" min="0" max="999" step="1" required />
+        <p class="hint">חללים טכניים בשמות 1 עד N. אפס מותר.</p>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">יצירת בניין</button>
+        <a href="/estate/inventory">ביטול</a>
+      </div>
+    </form>`;
+  return page('דונה דום — בניין חדש', body, screen.nav);
+}
+
+const INVENTORY_KIND_ORDER = [
+  'UNIT',
+  'PARKING',
+  'STORAGE',
+  'TECHNICAL',
+  'COMMON',
+  'EXTERIOR',
+] as const;
+
+export function renderInventoryBuildingPage(screen: {
+  building: BuildingSummary;
+  spaces: readonly InventorySpaceRow[];
+  nav: Html;
+}): string {
+  const grouped = INVENTORY_KIND_ORDER.map((kind) => ({
+    kind,
+    names: screen.spaces
+      .filter((space) => space.space_kind === kind)
+      .map((space) => space.name),
+  })).filter((group) => group.names.length > 0);
+  const body = h`
+    <div>
+      <a class="back" href="/estate/inventory">← נכסים</a>
+      <h1>${screen.building.name}</h1>
+      <p class="lede">${screen.building.address_line}, ${screen.building.city}</p>
+    </div>
+    ${
+      grouped.length === 0
+        ? h`<p class="empty-state">אין עדיין חללים בבניין זה.</p>`
+        : grouped.map(
+            (group) => h`<section>
+              <h2>${label(SPACE_KIND, group.kind)}</h2>
+              <ul class="index-list">
+                ${group.names.map((name) => h`<li>${ltr(name)}</li>`)}
+              </ul>
+            </section>`,
+          )
+    }`;
+  return page(`דונה דום — ${screen.building.name}`, body, screen.nav);
 }
 
 /**
