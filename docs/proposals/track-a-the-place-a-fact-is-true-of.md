@@ -1,15 +1,18 @@
 # Proposal: Track A — the place a fact is true of
 
-**Status: DRAFT, 2026-09-22. NOT ADOPTED.** This file is written to be grilled, not to be
-implemented. It proposes no work until the director has been through it and the open questions at the
-end have answers. Where it and a SPEC file could be read as disagreeing today, the SPEC file wins —
-nothing here has been adopted into one yet.
+**Status: DRAFT, 2026-09-22. GRILLED, NOT ADOPTED. Parent ticket:
+[#142](../../issues/0142-track-a-the-place-a-fact-is-true-of.md).** The open questions at the end have been answered
+by the director — §10 records each answer and what it changed. This file still proposes rather than
+specifies: adoption happens one implementing ticket at a time, spec edit before code edit. Where it
+and a SPEC file could be read as disagreeing today, the SPEC file wins — nothing here has been adopted
+into one yet.
 
 **Date:** 2026-09-22
 **Supersedes nothing. Would amend on adoption:** `SPEC-estate.md` (the tables, *What is deliberately
 not a column*, the A13 unit screen, *Open*), `SPEC-evidence.md` (*Seeding the catalogue*, the
-promotion target list under *FieldPromotion*), `SPEC-flows.md` (A11, A13), `CONTEXT.md` (two glossary
-entries, if §3 is accepted).
+promotion target list under *FieldPromotion*), `SPEC-flows.md` (A11, A13), `SPEC-tenancy.md` (the
+assigned bay and the `reassigned` event). `CONTEXT.md`'s two glossary entries — **built bay**,
+**assigned bay** — are already in, because a glossary is not a spec and the terms are settled.
 
 ---
 
@@ -33,7 +36,9 @@ B actually built, not from the clause.
 
 Two documents remains a thin sample, and this draft keeps track B's bias throughout: a seed row
 rather than a migration, a derived value rather than a column, a cross-check rather than a capture.
-It proposes **two** new columns in total, and argues against three more that look obvious.
+It proposes **three** new columns on `building` and **one** on `tenancy`, and argues against four more
+that look obvious. The grill in §10 is what moved the count from two: `building_number` earned a
+column, and the assigned bay is the finding the draft had left open.
 
 ---
 
@@ -96,7 +101,8 @@ the same page — and this proposal's first job is to draw it somewhere a later 
 
 **The proposed rule.** A fact is declared on the document type that *establishes* it, and
 cross-checked from every other type that merely *recites* it. A lease recites `gush`. It establishes
-nothing about the land. §8 is what follows from that rule and is the open question of this draft.
+nothing about the land. §8 is what follows from that rule, and it was the central question of the
+draft before the grill.
 
 ---
 
@@ -130,27 +136,39 @@ where it would outlive the tenancy that created it and be read by the next house
 property of their flat. That is the same class of error as `current_tenant` on a unit — foundation
 rule 1, which this repo enforces with a grep guard over the migrations.
 
-**Three ways out, and this draft does not choose between them.** This is question 2 in §10.
+**Settled: both, explicitly.** A bay is two facts, and `CONTEXT.md` now carries both terms.
 
-1. **The assignment is a tenancy fact.** A column or a `tenancy_event` on the letting, and
-   `unit.parking_space_id` keeps meaning *the bay this flat was built with*, which is what the
-   developer's plan says and what a service call needs.
-2. **The assignment is the only truth and the unit column is wrong.** `unit.parking_space_id` becomes
-   derived from the current letting, or is dropped. Cheapest to state, most expensive to live with: a
-   vacant flat then has no bay, and the asset register loses the thing a gate motor hangs off.
-3. **Both, explicitly.** The flat has a default bay; the letting may override it. Two facts, both
-   true, one of them nullable.
+- The **built bay** is `unit.parking_space_id` — the `PARKING` space the plan attached to the flat
+  (הצמדה). It survives vacancy, it is what a gate motor hangs off, and it is what a service call is
+  filed against. D3 is untouched.
+- The **assigned bay** is `tenancy.parking_space_id`, nullable, new — where this household parks
+  today. The lease establishes it; the landlord may move it at will.
 
-Whichever is chosen, **`parking_space_number` must not be declared on the lease type until it is**,
-because a declaration creates a capture, a capture invites a promotion, and there is currently no
-correct target for it to land on.
+Dropping the unit column instead was rejected for the reason the asset register exists: a vacant flat
+would then have no bay, and the thing a gate motor hangs off would be reachable only through a
+letting that has ended.
+
+**The reassignment is logged, and it needs a `tenancy_event` kind that does not exist.**
+`amended_names_its_document` (`0019_tenancy_event.sql:23`) forces every `amended` row to name a source
+document, and the whole point of this section is that the landlord moves a bay with no amendment and
+no new document. So a new kind — `reassigned`, with `CHECK (kind <> 'reassigned' OR
+source_document_id IS NULL)` — mirroring what `0025` did for `terminated` and `0031` for `activated`.
+Keeping `amended` and demanding paper was rejected explicitly: it would make an undocumented act
+impossible to record, operators would change the column directly, and the append-only table would be
+silently incomplete. A table that lies is worse than a table that is absent.
+
+**`parking_space_number` must not be declared on the lease type until the assigned bay exists**,
+because a declaration creates a capture, a capture invites a promotion, and until then there is no
+correct target for it to land on. This is step 6 and it arrives last.
 
 ---
 
 ## 4. Pre-created spaces are pre-created with names the paper does not use
 
 **Belongs in:** `SPEC-estate.md`, *The second — `GET /estate/buildings/:buildingId/units/new`*.
-**This is a live defect and should be a ticket regardless of what the rest of this proposal becomes.**
+**Filed as [#140](../../issues/0140-a13-invents-parking-and-storage-spaces-no-document-names.md)**, and
+it is step 1: it depends on no question this proposal raised, it corrupts data on every use, and §5's
+`has_storage` argument is unsound until it lands.
 
 `upsertUnitRow` creates, for every unit the A13 screen makes, a `PARKING` space named
 `חניה {unit_number}` and a `STORAGE` space named `מחסן {unit_number}`
@@ -182,11 +200,19 @@ The defect is bounded — it affects units created through A13, not through the 
 it is silent, which is worse. It should be filed now and fixed independently of §§2–3, because it
 corrupts data on every use and does not depend on any design question this proposal raises.
 
-**What the fix probably is, and it is not "name them better".** The screen should either ask for the
-bay and storage numbers, or create neither and let a later act create them with the numbers the plan
-prints. Inventing a placeholder to satisfy a nullable foreign key is the root of it: `MATCH SIMPLE`
-already leaves `parking_space_id` unenforced while null, and *unassigned* is described in the
-migration itself as the ordinary state.
+**The fix, and it is not "name them better".** Create the `UNIT` space and nothing else; add optional
+bay and storage number inputs to A13; create a space only when a number is given. Inventing a
+placeholder to satisfy a nullable foreign key is the root of it: `MATCH SIMPLE` already leaves
+`parking_space_id` unenforced while null, and *unassigned* is described in the migration itself as the
+ordinary state.
+
+**No backfill — but "fix forward" needed somewhere to go.** Rows already written stay; which of two
+spaces is the real bay is an operator's judgement, not a migration's. That left a gap: no route in the
+repository edits or deletes a `space`, the only `DELETE FROM space` outside tests being the building
+purge (`src/estate/internal/purge.ts:604`). A real bay number arriving later would produce a *second*
+`PARKING` space in the building with nothing to say which is real, on the same screen that lists them.
+So #140 also carries a narrow operator delete: unreferenced `PARKING` and `STORAGE` spaces only,
+refused if a unit, an asset or a service call points at it.
 
 ---
 
@@ -194,30 +220,41 @@ migration itself as the ordinary state.
 
 **Belongs in:** `SPEC-estate.md`, *What is deliberately not a column*, extended.
 
-This draft proposes **two** new columns and argues against three that look necessary.
-
-**Two columns, on `building`:**
+**Three** new columns, all on `building`, and three candidates argued against.
 
 | Column | Type | Why |
 |---|---|---|
 | `gush` | `text` | Not an integer — it is an identifier, printed with no arithmetic ever done to it. |
 | `helka` | `text` | **A list.** `pinchot` prints `חלקות 43, 46` — two parcels, one building — and the fixture's note records that the list *"is not ordered the same way on every page"*. An integer column is wrong on the first building we own. |
+| `building_number` | `text` | Nullable, **and deliberately not unique.** See below. |
 
-`helka` being a list is a genuine modelling question and question 3 in §10: `text` holding `43,46`,
-or a `building_parcel` table. This draft proposes `text`, on the reversibility bias — a table is the
-kind of thing that is cheap to add later and impossible to remove once written to, and nothing
-deterministic reads a parcel today.
+`helka` stays `text` rather than becoming a `building_parcel` table, on the reversibility bias: a
+table is cheap to add later and impossible to remove once written to, and nothing deterministic reads
+a parcel today. The cost lands on the scorer instead, and §8 carries it — **a cross-check on `helka`
+compares sets, never strings.** `43,46` and `46,43` are one building, and a string compare would fail
+a valid lease.
+
+**`building_number` is a column, and is not a key.** The draft originally asked whether it should be
+cross-checked against `building.name`; that framing was wrong. `building.name` is not the building's
+identity and never was — the natural key is `address_key`, `lower(city|address_line)`, generated and
+unique (`0005_estate_natural_keys.sql:42`), while `name` carries no constraint at all and the register
+fixture fills it with address-derived free text. So the real question was whether
+`(project_id, building_number)` becomes a second natural key, and the answer is no: two unique keys on
+one table are two writers' worth of disagreement — SPEC-estate's own argument about `space` names —
+and `206` is meaningful only inside the Beit Shemesh project, so the key collapses on a standalone
+building where `project_id` is null. A fact worth holding, not an identity.
 
 **Three that should not be columns:**
 
-- **`has_storage`** — derive it. `unit.storage_space_id IS NOT NULL` already answers this exactly,
+- **`has_storage`** — derive it, **after [#140](../../issues/0140-a13-invents-parking-and-storage-spaces-no-document-names.md)
+  and not before.** `unit.storage_space_id IS NOT NULL` already answers this exactly,
   and a stored boolean beside a nullable foreign key is two facts that can disagree. This is R6's own
   argument (`Building.unit_count` is counted, never stored) applied to a new candidate. The fixture's
   note asks for *"a boolean beside a nullable number"* — that is a correct description of the
   **reading**, and the reading is `extracted_field`, which already holds exactly that. It is not an
-  argument for a column.
-- **`building_number`** — probably not a column, probably a cross-check. See §8; it depends entirely
-  on whether `building.name` is meant to be human-facing text or an identifier, which is question 4.
+  argument for a column. Today, with #140 standing, every A13 unit has a storage space and the derived
+  value is a constant rather than a fact — which is why the ordering matters and not only the ticket.
+- **`(project_id, building_number)` as a unique index** — above.
 - **`apartment_type`** — `BG` on `pinchot`, `B1` on `bloch`. This is a **tender typology**: a
   developer's plan designation, shared by every flat of that layout across the project. Storing it on
   `unit` denormalises a fact about a *type* onto each of its instances. If it is worth having it is
@@ -242,7 +279,7 @@ Every piece of promotion machinery track B built is tenancy-shaped, end to end:
 - It writes through `applyPromotedField` on **tenancy's** contract. Evidence issues no estate SQL and
   must not start.
 
-So `unit.rooms` as a promotion target needs three things, and none of them is a rewrite:
+So `unit.rooms` as a promotion target needs four things, and none of them is a rewrite:
 
 1. A migration widening the `target` CHECK. Deliberate, and correct — it is the governed half of A8
    working as specified.
@@ -254,8 +291,15 @@ So `unit.rooms` as a promotion target needs three things, and none of them is a 
    shape of seam — `applyProtocolSeed` is what A6 calls so that evidence never writes `asset`, `unit`
    or `building` itself. The rule is on file; this is a second function under it.
 
+4. **An `estate_event` table**, which the first draft of this section missed. Tenancy promotion records
+   old → new in an append-only log that names the actor and the causing document; estate has no
+   counterpart, so a promoted `unit.rooms` would change a flat's room count with no history but the
+   evidence-side stamp. Filed as
+   [#141](../../issues/0141-an-estate-promotion-has-nowhere-to-record-old-to-new.md) so it is not
+   discovered late. **Step 5 is two tables' worth of DDL, not a widened CHECK.**
+
 **This is extension along a seam that exists, and the seam was designed for it.** It is the
-best-aligned part of track A.
+best-aligned part of track A — and (4) is the correction to that sentence: aligned is not free.
 
 ---
 
@@ -279,9 +323,25 @@ lease. `space.floor` is nullable but is written by the same two hands and has th
 whenever it is set.
 
 For tenancy dates the gap was survivable and #130 said so explicitly. **One level down it is the
-common case, not the edge.** Something has to distinguish *nobody has said* from *a person said, with
-no document* — a provenance the estate tables do not currently carry. That is question 5, and it is
-the one place where this track needs a rule that track B did not need.
+common case, not the edge.**
+
+**Settled, and it needs no column.** The first draft called this a missing provenance and reached for
+`rooms_source` on the estate row. That was the wrong conclusion from a correct observation: `promote`
+already has the vocabulary. An occupied column is `conflict` *unless the caller passed `supersede`*
+([promote.ts:234](../../src/evidence/internal/promote.ts:234)) — confirming an amendment is that act.
+Applied one level down, the rule is:
+
+> A non-null estate column is occupied, whatever wrote it. A promotion onto it refuses. An operator
+> with the lease in front of them may supersede, and the supersession is the record of who decided.
+
+So the promotion never has to tell *nobody has said* from *a person typed it*, because it treats both
+the same way and hands the decision to the person. `unit.rooms` being `NOT NULL` stops being a problem
+and becomes the ordinary case: every promotion onto it is a confirmation, never a silent overwrite.
+The alternative — a `*_source` column per promotable field, carried by the estate tables forever — is
+the kind of thing this repo's reversibility bias exists to refuse.
+
+What this costs is a spec sentence, not DDL: #130's rule as stated reads occupancy off an
+`extracted_field` stamp, and at estate level occupancy is *the column is not null*. That is the edit.
 
 ---
 
@@ -298,11 +358,12 @@ the one place where this track needs a rule that track B did not need.
   ([src/evidence/fixtures/document-types.ts:503](../../src/evidence/fixtures/document-types.ts:503)).
   It is a מסירה record. There is no reason it would carry a parcel number.
 - The document that actually establishes `gush` and `helka` is a **tabu extract (נסח טאבו)** or the
-  **plan**. Neither is a document type here, and whether either exists in the corpus at all is
-  unknown to this draft.
+  **plan**. Neither is a document type here, and **whether either is in the corpus is unknown — nobody
+  has looked.** The director confirmed that on 22 September; it is not a fact this proposal can
+  discover, and the recommendation below is built to be right either way.
 
-**Recommendation: do not extract `gush` and `helka`. Type them.** Two columns on `building`, filled
-on the A11 building screen, with the `estate.write` stance both halves of that screen already carry.
+**Settled: do not extract `gush` and `helka`. Type them.** Three columns on `building` (§5), filled on
+the A11 building screen, with the `estate.write` stance both halves of that screen already carry.
 
 The argument is proportion. Shoham is tens of buildings, not thousands. The values are on the tabu,
 they are five digits, they change never, and one of them is a list whose order varies by page. Against
@@ -320,8 +381,21 @@ wrong building or is not the document it claims to be, and that is a genuinely v
 gate to catch. It is also the only use of the extracted value that does not put the fact in the wrong
 place.
 
+**The cross-check is a scorer assertion, not a gate.** It lives in `evals/extraction.ts` beside the
+arithmetic identities. It does **not** block an operator from approving a lease whose `gush` disagrees.
+A disagreement most often means the document is filed against the wrong building — but it also means
+the reader misread five digits, and blocking a person's approval on an OCR result is the failure mode
+this repo keeps designing away from. A non-blocking warning on the screen is a reasonable later
+addition; a refusal is not, and is a promise to the client that has not been made.
+
+**On `helka` it compares sets, never strings**, per §5: the fixture's note says the order varies by
+page, so a string compare would fail a valid lease and the gate would be teaching the reader to
+reproduce a page order that carries no meaning.
+
 This recommendation is reversible in the direction that matters: if a tabu extract turns out to be
 routinely filed, the typed column becomes a promotion target and nothing already written is wrong.
+Since nobody has yet looked at whether one exists, that reversibility is doing real work rather than
+being a rhetorical comfort.
 
 ---
 
@@ -341,48 +415,66 @@ in the corpus has tested the reader against a drawing.
 
 ---
 
-## 10. Open questions — these are what the grill is for
+## 10. What the grill settled
 
-This draft proposes nothing that can start before these have answers. They are ordered by how much
-downstream work each one decides.
+Answered by the director on 22 September 2026, in the order the questions were asked. Recorded here
+because the reasoning is the part that does not survive in a diff.
 
-1. **Is there a tabu extract, a plan, or any building-level document in the corpus for these
-   buildings?** Decides §8 entirely. If yes, extraction may be worth it after all and this proposal's
-   central recommendation is wrong.
-2. **Does the bay belong to the flat, to the letting, or to both?** §3. Decides whether
-   `parking_space_number` may be declared at all, and whether `unit.parking_space_id` survives
+1. **Is there building-level paper in the corpus?** *Nobody has looked.* §8's recommendation is built
+   to hold either way, and the typed column is the reversible direction.
+2. **Who does the bay belong to?** *Both, explicitly.* §3, rewritten. `CONTEXT.md` now carries **built
+   bay** and **assigned bay** as two terms.
+3. **How does a promotion tell "nobody said" from "a person typed it"?** *It does not, and must not
+   try.* `supersede` already exists; a non-null estate column is occupied whoever wrote it. §7,
+   rewritten — no provenance column.
+4. **Is `building_number` a key?** *A column, not a key.* No unique index. §5, rewritten, and the
+   `building.name` framing it replaced was wrong on the facts.
+5. **`helka` as text or a table?** *Text*, with the cost moved to the scorer as a set comparison.
+6. **Is §4 its own ticket?** *Yes, filed now, and it blocks §5's `has_storage` claim.*
+   → [#140](../../issues/0140-a13-invents-parking-and-storage-spaces-no-document-names.md)
+7. **Refuse-always or refuse-unless-superseded?** *Refuse-unless-superseded*, the existing rule
    unchanged.
-3. **Is `helka` a text list or its own table?** §5. Cheap either way today, expensive to change after
-   something reads it.
-4. **Is `building.name` a human-facing name or an identifier?** §5. Decides whether `building_number`
-   is a new column, a cross-check against `name`, or nothing.
-5. **How does a promotion tell "nobody has said" from "a person typed it"?** §7. The only rule this
-   track needs that track B did not, and it blocks every unit-level promotion.
-6. **Is the A13 placeholder defect (§4) its own ticket, filed now?** This draft says yes and says it
-   should not wait for answers to 1–5.
+8. **Where does an estate promotion record old → new?** *An `estate_event` table, built with step 5,
+   not before.* → [#141](../../issues/0141-an-estate-promotion-has-nowhere-to-record-old-to-new.md)
+9. **Where does the assigned bay live?** *`tenancy.parking_space_id` plus a logged event* — and the
+   grill found that `amended` cannot hold it, because that kind is constrained to name a source
+   document and a reassignment has none. A new `reassigned` kind, mirroring `terminated`.
+10. **Is the §8 cross-check a gate?** *No.* Scorer assertion now, non-blocking warning later, never a
+    refusal.
+11. **The placeholder rows already written?** *Leave them, fix forward* — which turned out to need a
+    forward path, since no route deletes a space. #140 carries it.
+12. **The ordering contradiction.** *Steps 2 and 3 swap.* A cross-check needs a typed side to check
+    against, and the draft scheduled the cross-check first.
 
 ---
 
-## Order of work, if it is adopted as drafted
+## Order of work
 
 Written the way track B's §9 was, because that ordering worked: the reversible things first, the one
 irreversible thing after the reading that depends on it has been measured.
 
-1. **The A13 placeholder defect** (§4). Independent of everything else, corrupts data today, needs no
-   answer to any open question.
-2. **Seed rows** for the unit-level declarations that have somewhere correct to land — `rooms`,
-   `floor`, and `building_number`/`gush`/`helka` as **cross-checks only**, not promotion targets. No
-   DDL. Re-measure on the golden set; the reader has never been asked for these.
-3. **The typed columns** — `building.gush`, `building.helka`, on A11. One migration.
-4. **The provenance rule** (§7), red first as a policy case, before any estate column becomes a
-   promotion target. #130's ordering argument, reused: build the refusal while the gap is still
-   survivable.
+1. **The A13 placeholder defect** (§4,
+   [#140](../../issues/0140-a13-invents-parking-and-storage-spaces-no-document-names.md)). Independent
+   of everything else, corrupts data today, and a prerequisite for §5.
+2. **The typed columns** — `building.gush`, `building.helka`, `building.building_number`, on A11. One
+   migration, three nullable columns, no unique index.
+3. **Seed rows** for the declarations that have somewhere correct to land — `rooms`, `floor`, and
+   `gush`/`helka`/`building_number` as **cross-checks only**, not promotion targets. No DDL.
+   Re-measure on the golden set; the reader has never been asked for these.
+4. **The occupancy rule one level down** (§7), red first as a policy case, before any estate column
+   becomes a promotion target. #130's ordering argument, reused: build the refusal while the gap is
+   still survivable. A spec edit and a test, no schema.
 5. **The estate promotion family** (§6) — the `target` CHECK widened, the link-kind branch, estate's
-   `applyPromotedField`. This is the irreversible one and it arrives last.
-6. **The bay** (§3), whatever question 2's answer turns it into.
+   `applyPromotedField`, and `estate_event`
+   ([#141](../../issues/0141-an-estate-promotion-has-nowhere-to-record-old-to-new.md)). This is the
+   irreversible one and it arrives last.
+6. **The bay** (§3) — `tenancy.parking_space_id`, the `reassigned` event kind, and only then
+   `parking_space_number` declared on the lease type.
 
-Steps 1 and 2 touch no schema. Step 3 adds two nullable columns. Step 5 is the only one that changes
-what `promote` can do to a table it has never written to.
+**Steps 2 and 3 are swapped from the draft**, because a cross-check has nothing to check against until
+the typed column exists. Steps 1, 3 and 4 touch no schema. Step 2 adds three nullable columns. Step 5
+is the only one that changes what `promote` can do to a table it has never written to, and step 6 is
+the only one that adds a column to `tenancy`.
 
 ---
 
