@@ -979,13 +979,39 @@ value is ISO-formatted; nothing in it distinguishes the original period from the
 nothing stopping the option's dates landing in `end_date`. Declaring the option separately makes the
 distinction the reader's job and gives the scorer something to fail on.
 
-**What is deliberately not declared here.** `gush`, `helka` and the plan's structure designation are
-printed on both leases and are **facts about the building, not about the letting**. They belong to a
-Building declaration — track A — and declaring them on the lease type would put a fact in the place
-it happened to be printed rather than the place it is true of. Both specimens also disagree with
-themselves about the plot number, printing one value in the body and another on the plan, identically
-in both documents. That is a property of the form rather than a typo: the fixture records it as a
-known conflict with no field key and no score attached, because there is no right answer to grade.
+**What is deliberately not declared here (track B).** The plot number the two specimens disagree with
+themselves about — one value in the body, another on the plan, identically in both documents — is a
+property of the form rather than a typo. The fixture records it as a known conflict with no field
+key and no score attached, because there is no right answer to grade. `parking_space_number` waits
+for the assigned-bay column. `security_structure`, `index_base_month` and `index_publication_date`
+are not place facts and are not named here.
+
+### What a lease recites about a place, from track A
+
+Seed rows at a new `effective_from` (2026-09-22). **No migration. None of these is a
+`field_promotion.target`.** The lease recites them; the unit, the space, or the typed building already
+holds them, or they stay in `extracted_field` until something reads them.
+
+| Key | Type | What happens |
+|---|---|---|
+| `rooms` | NUMBER | The unit already holds it. Extracted and scored. Not promoted on this ticket. |
+| `floor` | NUMBER | The unit's space already holds it. Same. |
+| `gush` | TEXT | **Cross-check only** against `building.gush`. |
+| `helka` | TEXT | **Cross-check only** against `building.helka`. Compared as **sets**, never strings: `43,46` and `46,43` pass, `43,47` fails. |
+| `building_number` | TEXT | **Cross-check only** against `building.building_number`. |
+| `apartment_type` | TEXT | A tender typology and a drawing title-block, not a column. Captured and scored so the baseline says whether the reader can see a title block at all. |
+| `has_storage` | BOOLEAN | A reading, not a column. Derived on the estate side from `unit.storage_space_id IS NOT NULL`. |
+| `storage_space_number` | TEXT | A reading. A storage room with no number is a real case and a credited absence. |
+
+**The parcel keys are declared so they extract and score; they are not promotion targets.** A lease
+does not establish the land. The typed columns on `building` (#143) are the source of truth. The
+scorer asserts the reading against that typed side, in the same shape as the fixture's arithmetic
+identities.
+
+**A cross-check failure does not block approve.** It is a scorer assertion in `evals/`, never a
+refusal on the operator's stamp. A disagreement most often means the document is filed against the
+wrong building, and it also means the reader misread five digits; blocking a person's approval on an
+OCR result is the failure mode this module keeps designing away from.
 
 ## Flow A6 — seeding from a handover protocol (slice 3.5)
 
@@ -1288,17 +1314,24 @@ parts but a figure that does not satisfy the identity has not read the document*
 operand is declared, so a silent reading is `not-returned` and a complete reading that breaks the
 identity fails the gate. `unreachable` remains for an operand the catalogue still does not declare.
 
-**Three groups, because the catalogue declares twenty-one of the fixture's field keys and not the rest.**
+**Three groups, because the catalogue declares the fixture's field keys it has asked for and not the rest.**
 A fixture value is *required* when the live `document_type_field` list declares its key and marks it
 required, *optional* when it declares it and does not, and **not asked for** when the catalogue does
 not declare it at all. The third group is scored by nothing and reported as a count: the mapping
-schema restricts `field_key` to the declared list, so the reader is structurally incapable of
-returning `gush` or `helka` and folding those values into either percentage would report a
-failure of the catalogue as a failure of the reader. The group shrinks as track B's seed rows land,
-which is the point of counting it. **Which key sits in which group is read from the catalogue at run
-time and never from the fixture** (A8), and the fixture's own `declaration` mark is checked against
-it: a seed row that lands without the fixture moving is a gate failure, because the two have then
-stopped describing the same system.
+schema restricts `field_key` to the declared list, so folding an undeclared key into either
+percentage would report a failure of the catalogue as a failure of the reader. Track A's seed rows
+moved `rooms`, `floor`, the three parcel keys, `apartment_type`, `has_storage` and
+`storage_space_number` out of that group; `parking_space_number` stays until the assigned bay exists,
+and the three out-of-scope keys (`security_structure`, `index_base_month`, `index_publication_date`)
+stay unnamed here. **Which key sits in which group is read from the catalogue at run time and never
+from the fixture** (A8), and the fixture's own `declaration` mark is checked against it: a seed row
+that lands without the fixture moving is a gate failure, because the two have then stopped
+describing the same system.
+
+**A parcel cross-check is an identity, not a value score.** `gush`, `helka` and `building_number` are
+asserted against the typed building the way the four arithmetic identities are asserted against the
+paper's own numbers. On `helka` the compare is a set: order is not meaning. A broken cross-check is a
+gate failure on the golden set and is not a refusal on approve.
 
 **A contradiction is counted against a ceiling and a miss moves a percentage.** A value the reader
 returns that the fixture does not carry for that key — a surplus value, or any guarantor at all in

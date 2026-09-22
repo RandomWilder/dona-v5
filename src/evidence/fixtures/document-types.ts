@@ -58,6 +58,8 @@ const SCHEMA_V3 = '2026-09-13';
 const SCHEMA_V4 = '2026-09-15';
 // Ticket #131. The household named by role, and the terms the specimens print.
 const SCHEMA_V5 = '2026-09-21';
+// Ticket #144. Place facts the lease recites; parcel keys are cross-checks, not promotion targets.
+const SCHEMA_V6 = '2026-09-22';
 // Inclusive windows: close the superseded declaration the day before the successor opens.
 const LAST_DAY_BEFORE_V5 = '2026-09-20';
 const ISO_DATE_HINT = 'YYYY-MM-DD. Not Hebrew month names and not dd/mm/yyyy.';
@@ -328,6 +330,73 @@ export const seedDocumentTypes: SeedDocumentType[] = [
         false,
         `${ISO_DATE_HINT} היום שבו נחתם המסמך, לא תחילת תקופת השכירות.`,
         { from: SCHEMA_V5 },
+      ),
+      // **Ticket #144, from track A.** The lease recites these; the unit, the space, or the typed
+      // building already holds them. Seed rows, no promotion target. Parcel keys are scored against
+      // the typed building as a set on `helka`. `parking_space_number` waits for the assigned bay.
+      field(
+        'rooms',
+        'מספר חדרים',
+        'NUMBER',
+        false,
+        'מספר החדרים בדירה. מספר בלבד. לא קומה ולא סוג דירה.',
+        { from: SCHEMA_V6 },
+      ),
+      field(
+        'floor',
+        'קומה',
+        'NUMBER',
+        false,
+        'קומת הדירה. מספר בלבד. לא מספר חדרים ולא מספר דירה.',
+        { from: SCHEMA_V6 },
+      ),
+      field(
+        'gush',
+        'גוש',
+        'TEXT',
+        false,
+        'מספר הגוש. ספרות בלבד. לא חלקה ולא מגרש. החוזה מצטט את הקרקע ואינו קובע אותה.',
+        { from: SCHEMA_V6 },
+      ),
+      field(
+        'helka',
+        'חלקה',
+        'TEXT',
+        false,
+        'מספרי החלקות, מופרדים בפסיקים. הסדר אינו משמעות. לא גוש ולא מגרש.',
+        { from: SCHEMA_V6 },
+      ),
+      field(
+        'building_number',
+        'מספר בניין',
+        'TEXT',
+        false,
+        'מספר הבניין בפרויקט. לא מספר דירה ולא מספר הבית ברחוב.',
+        { from: SCHEMA_V6 },
+      ),
+      field(
+        'apartment_type',
+        'סוג דירה',
+        'TEXT',
+        false,
+        'סוג הדירה מגוש השער של התכנית (למשל BG או B1). לא מספר חדרים. שרטוט, לא פרוזה.',
+        { from: SCHEMA_V6 },
+      ),
+      field(
+        'has_storage',
+        'יש מחסן',
+        'BOOLEAN',
+        false,
+        'האם לדירה מחסן. true או false. לא מספר המחסן.',
+        { from: SCHEMA_V6 },
+      ),
+      field(
+        'storage_space_number',
+        'מספר מחסן',
+        'TEXT',
+        false,
+        'מספר המחסן אם מודפס. מחסן בלי מספר אינו מחזיר ערך. לא מספר חניה.',
+        { from: SCHEMA_V6 },
       ),
     ],
   },

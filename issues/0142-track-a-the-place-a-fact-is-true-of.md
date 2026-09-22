@@ -17,7 +17,7 @@ exactly one child: the first in [Children](#children) that is `status: open`, `a
 whose `blocked_by` names only closed issues. Claim it (`assignee`) before writing code. Spec edit
 before code. `/clear` between children.
 
-Right now that child is **#144**.
+Right now that child is **#145**.
 
 When a child closes: tick the matching acceptance line on this map, rewrite the sentence above to
 the next child, and leave a pointer in this file's comments. Do not implement the next child in the
@@ -116,15 +116,15 @@ What "track A is done" is tested against. Each line is end-to-end, not a layer.
       (#143)
 - [ ] The fourteen residual values are declared and scored; the residual count falls from seventeen to
       three, and those three are named as out of scope (#144, then #146 for `parking_space_number`)
-- [ ] A `helka` cross-check passes on `43,46` and on `46,43`, and fails on `43,47` (#144)
-- [ ] A cross-check failure does not block an operator from approving the reading (#144)
+- [x] A `helka` cross-check passes on `43,46` and on `46,43`, and fails on `43,47` (#144)
+- [x] A cross-check failure does not block an operator from approving the reading (#144)
 - [ ] A promotion onto a non-null estate column refuses, names the existing value, and succeeds when
       superseded — with a policy case that was **red first** (#145, consumed by #141)
 - [ ] Every estate column a promotion can write appends to a log naming the actor and the document
       (#141)
 - [ ] A bay reassignment is recorded without a document, and `unit.parking_space_id` is unchanged by it
       (#146)
-- [ ] The full golden set re-run, judged over at least **eight** keyed runs, comparing ranges rather
+- [x] The full golden set re-run, judged over at least **eight** keyed runs, comparing ranges rather
       than means (#144, again on #146)
 
 ## Children
@@ -136,7 +136,7 @@ irreversible one after the reading that depends on it has been measured.
 2. #143 — Typed `gush`, `helka`, `building_number` on A11 · *blocked by 140* · **the first
    migration** · **closed 2026-09-22**
 3. #144 — Declare the residual place facts as cross-checks, not promotion targets · *blocked by 143*
-   · no DDL · open
+   · no DDL · **closed 2026-09-22**
 4. #145 — Occupied, one level down, means the estate column is not null · *blocked by 144* · spec
    and a red-first test, no schema · open
 5. #141 — Estate promotion family, including `estate_event` · *blocked by 144, 145* · `needs-design`
@@ -167,4 +167,11 @@ removed from this parent so a session does not implement the track as one ticket
 
 [#143](0143-typed-gush-helka-and-building-number-on-a11.md) closed: typed `gush`, `helka` and
 `building_number` on A11. Acceptance line 2 ticked. Frontier is #144.
+
+## Comment — 2026-09-22
+
+[#144](0144-declare-place-facts-as-cross-checks.md) closed: place facts declared as seed rows and
+parcel cross-checks, no promotion targets, no DDL. Helka is a set. Approve is not a gate. Eight keyed
+runs recorded on that issue. Residual values left: parking ×2 plus the three out-of-scope keys.
+Acceptance lines 4, 5 and 9 ticked. Frontier is #145.
 

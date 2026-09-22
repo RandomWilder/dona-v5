@@ -359,4 +359,81 @@ describe('evidence · approve a reading', () => {
       await pool.end();
     }
   });
+
+  it('stamps a parcel reading that disagrees with the typed building', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) return t.skip(skipReason);
+    const after = new Date('2026-09-22T09:00:00.000Z');
+    const clock = fixedClock(after);
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const buildingId = newId();
+        const unitId = newId();
+        await db.query(
+          `INSERT INTO building (building_id, name, address_line, city,
+                                 handover_date, warranty_end_date, status,
+                                 gush, helka, building_number)
+           VALUES ($1, 'parcel-building', $2, 'Shoham', '2020-01-01',
+                   '2022-01-01', 'ACTIVE', '80031', '43, 46', '206')`,
+          [buildingId, `Parcel ${buildingId.slice(24)}`],
+        );
+        await db.query(
+          `INSERT INTO space (space_id, building_id, space_kind, name)
+           VALUES ($1, $2, 'UNIT', 'דירה 4')`,
+          [unitId, buildingId],
+        );
+        await db.query(
+          `INSERT INTO unit (unit_id, unit_number, rooms, has_mamad, condition_status)
+           VALUES ($1, '4', 5, true, 'READY')`,
+          [unitId],
+        );
+        const filed = await fileDocument(
+          {
+            db,
+            objects: createMemoryStore(),
+            pdf: createFakePdfText([MARKERS]),
+            audit: createAuditLog(db, clock),
+            clock,
+            bucket: BUCKET,
+            extractor: createFakeExtractor(() => ({
+              findings: [
+                { field_key: 'gush', value: '99999', word_ids: [0] },
+                { field_key: 'helka', value: '43,47', word_ids: [0] },
+              ],
+            })),
+            extractModel: 'gpt-test',
+          } satisfies IntakeDeps,
+          {
+            bytes: Buffer.from('%PDF-1.4\n% parcel-mismatch\n', 'latin1'),
+            typeKey: 'lease',
+            place: { kind: 'UNIT', id: unitId },
+            tenancyId: null,
+          },
+        );
+        assert.equal(filed.filed, true);
+        if (!filed.filed) return;
+        const gush = by(
+          await listExtractedFields(db, filed.documentId),
+          'gush',
+        );
+        const stamped = await approveExtractedField(
+          { db, audit: createAuditLog(db, clock), clock },
+          {
+            extractedFieldId: gush.extractedFieldId,
+            approvedBy: SIGNER,
+            mayReadIdentifiers: false,
+          },
+        );
+        assert.equal(stamped.fieldKey, 'gush');
+        const row = await db.query<{ approved_at: Date | null }>(
+          `SELECT approved_at FROM extracted_field WHERE extracted_field_id = $1`,
+          [gush.extractedFieldId],
+        );
+        assert.ok(row.rows[0]?.approved_at);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
 });
