@@ -45,6 +45,7 @@ import {
   listApprovedCapturesForTenancy,
   listBuildings,
   listExpiringLeases,
+  listParkingSpacesInBuilding,
   listProjects,
   type ProjectOption,
   searchEstate,
@@ -132,6 +133,8 @@ export interface EstateDeps {
     rent_amount: string | null;
     rent_currency: string | null;
     option_end_date: string | null;
+    parking_space_id: string | null;
+    parking_name: string | null;
   }>;
   listTenancyParties: (
     db: Pool,
@@ -159,6 +162,10 @@ export interface EstateDeps {
   activateTenancy: (
     db: Pool,
     spec: { tenancyId: string; actor: string },
+  ) => Promise<void>;
+  reassignParkingSpace: (
+    db: Pool,
+    spec: { tenancyId: string; parkingSpaceId: string; actor: string },
   ) => Promise<void>;
   /**
    * #114 / #121. Injected from evidence so this module never imports it. Bound is this Unit or
@@ -1018,12 +1025,14 @@ export function registerEstateRoutes(
     );
     const letting = await deps.getTenancy(deps.pool, tenancyId);
     const unit = await getUnit(deps.pool, letting.unit_id);
-    const [members, documents, gate, captures] = await Promise.all([
-      deps.listTenancyParties(deps.pool, tenancyId),
-      deps.listLinkedDocuments(deps.pool, 'TENANCY', tenancyId),
-      deps.activationGate(deps.pool, tenancyId),
-      listApprovedCapturesForTenancy(deps.pool, tenancyId),
-    ]);
+    const [members, documents, gate, captures, parkingOptions] =
+      await Promise.all([
+        deps.listTenancyParties(deps.pool, tenancyId),
+        deps.listLinkedDocuments(deps.pool, 'TENANCY', tenancyId),
+        deps.activationGate(deps.pool, tenancyId),
+        listApprovedCapturesForTenancy(deps.pool, tenancyId),
+        listParkingSpacesInBuilding(deps.pool, unit.building_id),
+      ]);
     const names = await deps.listPartyNames(
       deps.pool,
       members.map((member) => member.party_id),
@@ -1044,6 +1053,9 @@ export function registerEstateRoutes(
       rentAmount: letting.rent_amount,
       rentCurrency: letting.rent_currency,
       optionEndDate: letting.option_end_date,
+      parkingSpaceId: letting.parking_space_id,
+      parkingName: letting.parking_name,
+      parkingOptions,
       unit,
       people,
       documents,
@@ -1064,6 +1076,21 @@ export function registerEstateRoutes(
       const tenancyId = validId(request.params.tenancyId, 'tenancyId');
       await deps.activateTenancy(deps.pool, {
         tenancyId,
+        actor: requireText(request.staff?.email ?? '', 'actor', 200),
+      });
+      return reply.redirect(`/estate/tenancies/${tenancyId}`);
+    },
+  );
+
+  app.post<{ Params: { tenancyId: string } }>(
+    '/estate/tenancies/:tenancyId/parking',
+    WRITE,
+    async (request, reply) => {
+      const tenancyId = validId(request.params.tenancyId, 'tenancyId');
+      const posted = request.body as { parking_space_id?: string };
+      await deps.reassignParkingSpace(deps.pool, {
+        tenancyId,
+        parkingSpaceId: validId(posted.parking_space_id ?? '', 'parking space'),
         actor: requireText(request.staff?.email ?? '', 'actor', 200),
       });
       return reply.redirect(`/estate/tenancies/${tenancyId}`);

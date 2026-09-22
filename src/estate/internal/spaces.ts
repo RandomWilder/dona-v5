@@ -77,10 +77,16 @@ export async function removeSpace(
   // Service calls are the third holder the ticket names and there is no table for them yet:
   // `src/calls/` is unbuilt (AGENTS.md lists it, and no migration declares a `service_call`). When it
   // lands it is one more count here and one more case below, and nothing else moves.
-  const held = await db.query<{ units: string; assets: string }>(
+  const held = await db.query<{
+    units: string;
+    assets: string;
+    lettings: string;
+  }>(
     `SELECT (SELECT count(*)::text FROM unit u
               WHERE u.parking_space_id = $1 OR u.storage_space_id = $1) AS units,
-            (SELECT count(*)::text FROM asset a WHERE a.space_id = $1) AS assets`,
+            (SELECT count(*)::text FROM asset a WHERE a.space_id = $1) AS assets,
+            (SELECT count(*)::text FROM tenancy t
+              WHERE t.parking_space_id = $1) AS lettings`,
     [spaceId],
   );
   const blocked = held.rows[0];
@@ -95,6 +101,11 @@ export async function removeSpace(
   if (Number(blocked.assets) > 0) {
     throw new KernelError('conflict', 'an asset sits in this space', {
       assets: Number(blocked.assets),
+    });
+  }
+  if (Number(blocked.lettings) > 0) {
+    throw new KernelError('conflict', 'a household parks in this space', {
+      lettings: Number(blocked.lettings),
     });
   }
   if (Number(blocked.units) > 1) {

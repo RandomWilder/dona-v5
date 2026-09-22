@@ -1624,6 +1624,9 @@ export interface TenancySheet {
   rentAmount: string | null;
   rentCurrency: string | null;
   optionEndDate: string | null;
+  parkingSpaceId: string | null;
+  parkingName: string | null;
+  parkingOptions: readonly { space_id: string; name: string }[];
   unit: UnitHit;
   people: readonly TenancyPersonView[];
   documents: readonly FiledDocumentView[];
@@ -1819,6 +1822,10 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
           <dt>תום האופציה</dt>
           <dd>${optionLine(sheet.optionEndDate)}</dd>
         </div>
+        <div>
+          <dt>חניה משויכת</dt>
+          <dd>${sheet.parkingName ? ltr(sheet.parkingName) : h`—`}</dd>
+        </div>
         ${sheet.captures.map(
           (row) => h`<div>
             <dt>${row.labelHe}</dt>
@@ -1862,6 +1869,23 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
         }
         ${activateReasons(sheet)}
       </div>`
+      }
+      ${
+        sheet.parkingOptions.length === 0
+          ? h``
+          : h`<form method="post" action="/estate/tenancies/${sheet.tenancyId}/parking" class="activate">
+        ${csrfInput(sheet.csrf)}
+        <label for="parking_space_id">העברת חניה</label>
+        <select id="parking_space_id" name="parking_space_id">
+          ${sheet.parkingOptions.map(
+            (bay) =>
+              h`<option value="${bay.space_id}" ${
+                bay.space_id === sheet.parkingSpaceId ? 'selected' : ''
+              }>${ltr(bay.name)}</option>`,
+          )}
+        </select>
+        <button class="btn btn-secondary" type="submit">העברת חניה</button>
+      </form>`
       }
     </section>
 

@@ -250,6 +250,25 @@ export async function getUnit(db: Queryable, unitId: string): Promise<UnitHit> {
   return unit;
 }
 
+export interface ParkingSpaceOption {
+  space_id: string;
+  name: string;
+}
+
+export async function listParkingSpacesInBuilding(
+  db: Queryable,
+  buildingId: string,
+): Promise<ParkingSpaceOption[]> {
+  const result = await db.query<ParkingSpaceOption>(
+    `SELECT space_id, name
+       FROM space
+      WHERE building_id = $1 AND space_kind = 'PARKING'
+      ORDER BY name, space_id`,
+    [buildingId],
+  );
+  return result.rows;
+}
+
 /**
  * `building.address_key`, computed here for a lookup. **Slice 6.3, flow A12.**
  *

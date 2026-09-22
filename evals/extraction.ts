@@ -69,7 +69,7 @@ export interface DeclaredField {
  * `field_key` to the declared list, so the reader cannot return a key the catalogue has not asked
  * for. Folding those into either percentage would report a gap in the catalogue as a defect in the
  * reader. The group shrinks as track B's seed rows land, which is why it is counted rather than
- * dropped. #131 emptied `maintenance_amount` from it; #144 emptied the place keys except
+ * dropped. #131 emptied `maintenance_amount` from it; #144 emptied the place keys; #146 emptied
  * `parking_space_number`.
  */
 export type ScoreGroup = 'required' | 'optional' | 'not-declared';

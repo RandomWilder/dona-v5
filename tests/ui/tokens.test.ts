@@ -636,6 +636,9 @@ const SCREENS: Array<[string, () => string]> = [
         rentAmount: null,
         rentCurrency: null,
         optionEndDate: null,
+        parkingSpaceId: null,
+        parkingName: null,
+        parkingOptions: [],
         unit: hit,
         people: [
           {
@@ -675,6 +678,9 @@ const SCREENS: Array<[string, () => string]> = [
         rentAmount: null,
         rentCurrency: null,
         optionEndDate: null,
+        parkingSpaceId: null,
+        parkingName: null,
+        parkingOptions: [],
         unit: hit,
         people: [
           {
@@ -717,6 +723,9 @@ const SCREENS: Array<[string, () => string]> = [
         rentAmount: '4500',
         rentCurrency: 'ILS',
         optionEndDate: '2028-08-31',
+        parkingSpaceId: null,
+        parkingName: null,
+        parkingOptions: [],
         unit: hit,
         people: [
           {

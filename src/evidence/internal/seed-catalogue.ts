@@ -36,6 +36,7 @@ const PROMOTION_TARGETS: Readonly<
     option_end_date: 'tenancy.option_end_date',
     rooms: 'unit.rooms',
     floor: 'space.floor',
+    parking_space_number: 'tenancy.parking_space_id',
   },
   lease_amendment: {
     new_end_date: 'tenancy.end_date',

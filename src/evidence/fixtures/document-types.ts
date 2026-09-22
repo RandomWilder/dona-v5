@@ -334,7 +334,7 @@ export const seedDocumentTypes: SeedDocumentType[] = [
       ),
       // **Ticket #144, from track A.** The lease recites these; the unit, the space, or the typed
       // building already holds them. Seed rows, no promotion target. Parcel keys are scored against
-      // the typed building as a set on `helka`. `parking_space_number` waits for the assigned bay.
+      // the typed building as a set on `helka`. `parking_space_number` lands on the assigned bay.
       field(
         'rooms',
         'מספר חדרים',
@@ -397,6 +397,14 @@ export const seedDocumentTypes: SeedDocumentType[] = [
         'TEXT',
         false,
         'מספר המחסן אם מודפס. מחסן בלי מספר אינו מחזיר ערך. לא מספר חניה.',
+        { from: SCHEMA_V6 },
+      ),
+      field(
+        'parking_space_number',
+        'מספר חניה',
+        'TEXT',
+        false,
+        'מספר החניה המשויכת להשכרה. ספרות בלבד. לא מספר מחסן ולא מספר דירה.',
         { from: SCHEMA_V6 },
       ),
     ],

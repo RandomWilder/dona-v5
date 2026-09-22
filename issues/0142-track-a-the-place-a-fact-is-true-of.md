@@ -17,7 +17,12 @@ exactly one child: the first in [Children](#children) that is `status: open`, `a
 whose `blocked_by` names only closed issues. Claim it (`assignee`) before writing code. Spec edit
 before code. `/clear` between children.
 
-Right now that child is **#146** (the assigned bay). Do not implement this map.
+Right now every child is **closed**. Do not implement this map. A new session with no ticket named
+does not pick work from here until a new unblocked child is filed.
+
+When a child closes: tick the matching acceptance line on this map, rewrite the sentence above to
+the next child, and leave a pointer in this file's comments. Do not implement the next child in the
+same session.
 
 When a child closes: tick the matching acceptance line on this map, rewrite the sentence above to
 the next child, and leave a pointer in this file's comments. Do not implement the next child in the
@@ -114,7 +119,7 @@ What "track A is done" is tested against. Each line is end-to-end, not a layer.
       unreferenced placeholder can be removed by an operator (#140)
 - [x] `building` carries `gush`, `helka` and `building_number`, filled on A11, none of them unique
       (#143)
-- [ ] The fourteen residual values are declared and scored; the residual count falls from seventeen to
+- [x] The fourteen residual values are declared and scored; the residual count falls from seventeen to
       three, and those three are named as out of scope (#144, then #146 for `parking_space_number`)
 - [x] A `helka` cross-check passes on `43,46` and on `46,43`, and fails on `43,47` (#144)
 - [x] A cross-check failure does not block an operator from approving the reading (#144)
@@ -122,7 +127,7 @@ What "track A is done" is tested against. Each line is end-to-end, not a layer.
       superseded — with a policy case that was **red first** (#145, consumed by #141)
 - [x] Every estate column a promotion can write appends to a log naming the actor and the document
       (#141)
-- [ ] A bay reassignment is recorded without a document, and `unit.parking_space_id` is unchanged by it
+- [x] A bay reassignment is recorded without a document, and `unit.parking_space_id` is unchanged by it
       (#146)
 - [x] The full golden set re-run, judged over at least **eight** keyed runs, comparing ranges rather
       than means (#144, again on #146)
@@ -142,7 +147,7 @@ irreversible one after the reading that depends on it has been measured.
 5. #141 — Estate promotion family, including `estate_event` · *blocked by 144, 145* · **closed
    2026-09-22**
 6. #146 — The assigned bay · *blocked by 141* · last, because `parking_space_number` must not be
-   declared until the column exists · open
+   declared until the column exists · **closed 2026-09-22**
 
 ## Out of scope
 
@@ -188,4 +193,10 @@ Map acceptance line 6 stays open until #141's promotion path refuses. Frontier i
 [#141](0141-an-estate-promotion-has-nowhere-to-record-old-to-new.md) closed: `estate_event`,
 widened targets `unit.rooms` and `space.floor`, estate `applyPromotedField`, occupancy consumed.
 Acceptance lines 6 and 7 ticked. Frontier is #146.
+
+## Comment — 2026-09-22
+
+[#146](0146-the-assigned-bay-has-nowhere-to-live.md) closed: assigned bay on the letting,
+`reassigned` with no paper, built bay unchanged, `parking_space_number` declared and scored.
+Acceptance lines 3 and 8 ticked. Residual is the three out-of-scope keys. No next child.
 

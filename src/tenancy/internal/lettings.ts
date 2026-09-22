@@ -30,6 +30,8 @@ export interface TenancyRow {
   rent_amount: string | null;
   rent_currency: string | null;
   option_end_date: string | null;
+  parking_space_id: string | null;
+  parking_name: string | null;
 }
 
 /** Who is on the letting, as ids and roles. The name lives in `party`. #107. */
@@ -82,8 +84,11 @@ export async function getTenancy(
             status,
             rent_amount::text AS rent_amount,
             rent_currency,
-            option_end_date::text AS option_end_date
+            option_end_date::text AS option_end_date,
+            parking_space_id,
+            p.name AS parking_name
        FROM tenancy
+       LEFT JOIN space p ON p.space_id = tenancy.parking_space_id
       WHERE tenancy_id = $1`,
     [tenancyId],
   );

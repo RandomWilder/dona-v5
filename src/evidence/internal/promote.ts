@@ -29,6 +29,7 @@ import { KernelError } from '../../kernel/errors.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
 import {
   applyPromotedField as applyTenancyPromotedField,
+  occupantOfAssignedBay,
   type PromotedTenancyField,
 } from '../../tenancy/contract.ts';
 import type { Queryable } from './types.ts';
@@ -59,6 +60,7 @@ const TENANCY_FIELD: Record<string, PromotedTenancyField> = {
   'tenancy.rent_amount': 'rent_amount',
   'tenancy.rent_currency': 'rent_currency',
   'tenancy.option_end_date': 'option_end_date',
+  'tenancy.parking_space_id': 'parking_space_id',
 };
 
 const ESTATE_FIELD: Record<string, PromotedEstateField> = {
@@ -170,6 +172,32 @@ export async function promoteExtractedField(
     // promoted before 7.4 must keep answering, not start failing on a rule that did not exist when
     // it was signed. The same reason the trigger looks only at a row that is gaining the stamp.
     if (row.promoted_to === row.target) {
+      if (
+        tenancyField === 'parking_space_id' &&
+        tenancyId &&
+        row.value !== null
+      ) {
+        const assigned = await occupantOfAssignedBay(db, tenancyId);
+        if (assigned !== null && assigned !== row.value) {
+          if (!supersede) {
+            throw new KernelError(
+              'conflict',
+              `that column already carries ${assigned}`,
+              { existingValue: assigned },
+            );
+          }
+          await db.query("SELECT set_config('dona.promoting', 'on', true)");
+          await applyTenancyPromotedField(db, {
+            tenancyId,
+            field: tenancyField,
+            value: row.value,
+            actor: promotedBy,
+            at: deps.clock.now(),
+            sourceDocumentId: row.document_id,
+            extractedFieldId,
+          });
+        }
+      }
       return {
         tenancyId,
         unitId,
@@ -337,18 +365,31 @@ export async function promoteExtractedField(
         [tenancyId, copy.target, skipIds],
       );
       const held = occupant.rows[0];
-      if (held && held.value !== copy.value && !supersede) {
+      const assigned =
+        copy.field === 'parking_space_id'
+          ? await occupantOfAssignedBay(db, tenancyId)
+          : null;
+      const occupyingValue =
+        copy.field === 'parking_space_id' ? assigned : (held?.value ?? null);
+      if (
+        occupyingValue !== null &&
+        occupyingValue !== copy.value &&
+        !supersede
+      ) {
         throw new KernelError(
           'conflict',
-          `that column already carries ${held.value} from document ${held.document_id}`,
+          copy.field === 'parking_space_id'
+            ? `that column already carries ${occupyingValue}`
+            : `that column already carries ${held?.value} from document ${held?.document_id}`,
           {
-            existingValue: held.value,
-            sourceDocumentId: held.document_id,
+            existingValue: occupyingValue,
+            sourceDocumentId:
+              copy.field === 'parking_space_id' ? undefined : held?.document_id,
           },
         );
       }
       const sameValueAlreadyHeld =
-        held !== undefined && held.value === copy.value;
+        occupyingValue !== null && occupyingValue === copy.value;
       if (!sameValueAlreadyHeld) {
         await applyTenancyPromotedField(db, {
           tenancyId,

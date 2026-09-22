@@ -123,6 +123,9 @@ The same composite-key technique constrains `parking_space_id` to a `PARKING` sp
 `storage_space_id` to a `STORAGE` one (workbook decision D3 — bays and storage rooms are Space rows,
 so they can hold a gate motor and receive service calls). Both are nullable, and `MATCH SIMPLE`
 leaves the foreign key unenforced when the id is null, which is precisely the unassigned case.
+`unit.parking_space_id` is the **built bay**. The household's assigned bay lives on the letting
+(`tenancy.parking_space_id`, #146) and a reassignment does not rewrite this column. Removing a
+space refuses when a letting still parks in it.
 
 ## Asset — E11, slice 3.5, `src/kernel/migrations/0012_assets.sql`
 

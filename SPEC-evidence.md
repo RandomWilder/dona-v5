@@ -982,9 +982,8 @@ distinction the reader's job and gives the scorer something to fail on.
 **What is deliberately not declared here (track B).** The plot number the two specimens disagree with
 themselves about — one value in the body, another on the plan, identically in both documents — is a
 property of the form rather than a typo. The fixture records it as a known conflict with no field
-key and no score attached, because there is no right answer to grade. `parking_space_number` waits
-for the assigned-bay column. `security_structure`, `index_base_month` and `index_publication_date`
-are not place facts and are not named here.
+key and no score attached, because there is no right answer to grade. `security_structure`,
+`index_base_month` and `index_publication_date` are not place facts and are not named here.
 
 ### What a lease recites about a place, from track A
 
@@ -1002,6 +1001,7 @@ those two; it still does not establish the land.
 | `apartment_type` | TEXT | A tender typology and a drawing title-block, not a column. Captured and scored so the baseline says whether the reader can see a title block at all. |
 | `has_storage` | BOOLEAN | A reading, not a column. Derived on the estate side from `unit.storage_space_id IS NOT NULL`. |
 | `storage_space_number` | TEXT | A reading. A storage room with no number is a real case and a credited absence. |
+| `parking_space_number` | TEXT | Promotes to `tenancy.parking_space_id` through a `TENANCY` link. Never to `unit.parking_space_id`. Occupied when the assigned bay is set, whoever wrote it. |
 
 **The parcel keys are declared so they extract and score; they are not promotion targets.** A lease
 does not establish the land. The typed columns on `building` (#143) are the source of truth. The
@@ -1320,10 +1320,9 @@ required, *optional* when it declares it and does not, and **not asked for** whe
 not declare it at all. The third group is scored by nothing and reported as a count: the mapping
 schema restricts `field_key` to the declared list, so folding an undeclared key into either
 percentage would report a failure of the catalogue as a failure of the reader. Track A's seed rows
-moved `rooms`, `floor`, the three parcel keys, `apartment_type`, `has_storage` and
-`storage_space_number` out of that group; `parking_space_number` stays until the assigned bay exists,
-and the three out-of-scope keys (`security_structure`, `index_base_month`, `index_publication_date`)
-stay unnamed here. **Which key sits in which group is read from the catalogue at run time and never
+moved `rooms`, `floor`, the three parcel keys, `apartment_type`, `has_storage`,
+`storage_space_number` and `parking_space_number` out of that group; the three out-of-scope keys
+(`security_structure`, `index_base_month`, `index_publication_date`) stay unnamed here. **Which key sits in which group is read from the catalogue at run time and never
 from the fixture** (A8), and the fixture's own `declaration` mark is checked against it: a seed row
 that lands without the fixture moving is a gate failure, because the two have then stopped
 describing the same system.
@@ -1451,8 +1450,9 @@ matrix could read cannot be added by seeding a catalogue field.
 - **`field_promotion`** — one mapping per declaration. `document_type_field_id` is unique: a field
   promotes to at most one column. `target` is a CHECK enum. Extending it is a migration. Mapping
   *rows* are seed data, applied by the same function as the catalogue, because they point at ids that
-  only exist after `seed:doctypes`. After #141 the enum is the five `tenancy.*` copies plus
-  `unit.rooms` and `space.floor`. `gush`, `helka` and `building_number` stay off it.
+  only exist after `seed:doctypes`. After #146 the enum is the six `tenancy.*` copies (the assigned
+  bay is the sixth) plus `unit.rooms` and `space.floor`. `gush`, `helka` and `building_number` stay
+  off it.
 - **Stamp on `extracted_field`.** `promoted_to`, `promoted_by`, `promoted_at` — nullable until a
   promotion succeeds. `promoted_by` is `-- pii`: it names the operator who signed the copy. It stays
   a snapshot string, not a staff FK, because what it records is who signed the copy at that moment,
@@ -1552,7 +1552,9 @@ find none and overwrite the typed value.
 
 **A non-null estate column is occupied, whoever wrote it.** A promotion onto it refuses and names the
 existing value. An operator with the lease in front of them may `supersede`, and that is the record
-of who decided. There is no provenance column. Tenancy occupancy is unchanged. The definition lives
+of who decided. There is no provenance column. Tenancy occupancy is unchanged **except the assigned
+bay**: `tenancy.parking_space_id` is occupied when set, whoever wrote it, because a reassignment
+writes the column with no extracted-field stamp. The estate definition lives
 on estate's contract (`occupantOfEstateColumn`) so the promotion family consumes it rather than
 re-deriving it, and so evidence issues no estate SQL. #141 widens `field_promotion.target` by
 `unit.rooms` and `space.floor` and writes through estate's `applyPromotedField`, which always

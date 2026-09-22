@@ -196,7 +196,7 @@ const pinchot: GroundTruthDocument = {
       printed: 'חניה שמספרה 594',
       pdfPage: 13,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
       note: 'Assigned to the tenancy and reassignable by the landlord at will — permanently, per the second starred clause on this page. It is not a property of the flat.',
     },
     {
@@ -565,7 +565,7 @@ const bloch: GroundTruthDocument = {
       printed: 'חניה שמספרה 574',
       pdfPage: 14,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
     },
     {
       fieldKey: 'has_storage',

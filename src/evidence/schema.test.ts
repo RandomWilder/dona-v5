@@ -1242,6 +1242,7 @@ describe('the acceptance bar — a new type costs no DDL', () => {
       ['apartment_type', 'TEXT'],
       ['has_storage', 'BOOLEAN'],
       ['storage_space_number', 'TEXT'],
+      ['parking_space_number', 'TEXT'],
     ] as const) {
       const field = live(fieldKey);
       assert.ok(field, `${fieldKey} is declared on the lease`);
@@ -1250,7 +1251,6 @@ describe('the acceptance bar — a new type costs no DDL', () => {
       assert.equal(field?.effectiveFrom, '2026-09-22');
     }
 
-    assert.equal(live('parking_space_number'), undefined);
     assert.equal(live('security_structure'), undefined);
     assert.equal(live('index_base_month'), undefined);
     assert.equal(live('index_publication_date'), undefined);
@@ -1280,7 +1280,7 @@ describe('the acceptance bar — a new type costs no DDL', () => {
       const next = await documentTypeFields(db, 'lease', '2026-09-22');
       const nextKeys = next.map((field) => field.fieldKey);
       assert.equal(nextKeys.includes('gush'), true);
-      assert.equal(nextKeys.includes('parking_space_number'), false);
+      assert.equal(nextKeys.includes('parking_space_number'), true);
     });
   });
 
@@ -1515,6 +1515,20 @@ describe('field_promotion — A8 governed half', () => {
         `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
          VALUES ($1, $2, 'space.floor')`,
         [newId(), floor],
+      );
+      const bay = await seedField(db, documentTypeId, 'parking_space_number');
+      await db.query(
+        `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+         VALUES ($1, $2, 'tenancy.parking_space_id')`,
+        [newId(), bay],
+      );
+      const built = await seedField(db, documentTypeId, 'built_bay');
+      await rejects(db, CHECK_VIOLATION, () =>
+        db.query(
+          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+           VALUES ($1, $2, 'unit.parking_space_id')`,
+          [newId(), built],
+        ),
       );
       const gush = await seedField(db, documentTypeId, 'gush');
       await rejects(db, CHECK_VIOLATION, () =>

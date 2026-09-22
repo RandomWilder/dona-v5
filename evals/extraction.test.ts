@@ -517,7 +517,7 @@ describe('the fixture and the seeded catalogue', () => {
         );
       }
     }
-    assert.equal(current.has('parking_space_number'), false);
+    assert.equal(current.has('parking_space_number'), true);
     assert.equal(current.has('security_structure'), false);
     assert.equal(current.has('index_base_month'), false);
     assert.equal(current.has('index_publication_date'), false);
