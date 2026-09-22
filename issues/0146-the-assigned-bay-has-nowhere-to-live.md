@@ -69,3 +69,9 @@ moved, built unchanged, `reassigned` with no paper.
 Closed as above. Track A children are all closed. Pointer on the map:
 [issues/0142-track-a-the-place-a-fact-is-true-of.md](0142-track-a-the-place-a-fact-is-true-of.md).
 
+## Comment — 2026-09-22
+
+Eight keyed runs after this ticket's declaration, recorded on the parent: required 14/14 every run,
+optional 41–44/46, contradictions 1–3, three undeclared keys. Parking scored both leases every run.
+
+

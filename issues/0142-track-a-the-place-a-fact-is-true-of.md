@@ -208,3 +208,19 @@ per specimen). Eight keyed runs and ranges sit on #144; #146 added one keyed run
 `parking_space_number` was declared and reused those ranges. Out of scope on this map stays out of
 scope.
 
+## Comment — 2026-09-22
+
+Eight keyed runs after parking was declared, `gpt-5.6-luna`, `reasoning: medium`. Acceptance line 9
+is now a range on this map, not a reuse of #144.
+
+| group | range | denominator |
+|---|---|---|
+| required | 100.0 | 14 |
+| optional | 89.1–95.7 | 46 |
+| contradictions | 1–3 | ceiling still 7 |
+| not declared | 3 | the three out-of-scope keys |
+
+Parking 594 and 574 scored on every run. Parcel cross-checks held on every run. Corpus golden set
+10/10 every run. Ratchet floors left where #129 set them.
+
+
