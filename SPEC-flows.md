@@ -844,17 +844,22 @@ are not on this list.
 **Writes:** one Building and the minted Spaces (and a Unit row per UNIT Space) through
 `importEstate`. Names are the bare integer sequence. Elevators are TECHNICAL Spaces `1`…`N`. No
 stub Asset. No stored occupancy. No הצמדה pairing. Re-posting the address updates that Building.
+Later add uses the same count + first-number rule (elevators: count, continuing existing TECHNICAL
+integer names) and refuses a colliding name without overwrite. Later remove deletes an unreferenced
+Space and refuses, naming why, when a letting, built bay, built storage, Asset, or document still
+points at it. Shared places are kind + typed name onto the same list. No rename-in-place.
 
-**The permission is `estate.write` on create and mint (and those forms' GET), and `estate.read` on
-the lists.** A VIEWER may read and must not post.
+**The permission is `estate.write` on create, mint, later add, and later remove (and those forms'
+GET), and `estate.read` on the lists.** A VIEWER may read and must not post.
 
-**Audit:** one `estate.inventory_mint` batch on first mint. Not a document promotion and not
-`estate_event`.
+**Audit:** one `estate.inventory_mint` batch on first mint. One `estate.inventory_add` or
+`estate.inventory_remove` line per later Space. Not a document promotion and not `estate_event`.
 
 **Module:** estate owns the routes, the screens, and the mint plan. Chrome gains the sibling rail
 item. בניינים routes and views are not edited.
 
-**Work items:** #149 (tab, create, mint, grouped list), #150 (derived vacancy). Add/remove is #151.
+**Work items:** #149 (tab, create, mint, grouped list), #150 (derived vacancy), #151 (add, remove,
+shared Spaces).
 
 ## Open
 

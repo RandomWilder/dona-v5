@@ -591,6 +591,7 @@ const SCREENS: Array<[string, () => string]> = [
         occupiedParking: new Set(['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb']),
         occupiedStorage: new Set(),
         nav: NAV_INVENTORY,
+        write: { csrf: CSRF },
       }),
   ],
   ['estate · one building', () => renderBuildingPage(detail, occupancy, NAV)],

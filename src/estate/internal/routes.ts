@@ -29,9 +29,12 @@ import { addCalendarYears, WARRANTY_YEARS } from './assets.ts';
 import { listEstateEvents } from './events.ts';
 import { importEstate, upsertUnitRow } from './importer.ts';
 import {
+  inventoryAddFromForm,
   inventoryFromForm,
   mintAuditInputs,
   omitExisting,
+  refuseExisting,
+  sharedSpaceFromForm,
 } from './inventory.ts';
 import type {
   BuildingPlan,
@@ -43,6 +46,7 @@ import type {
 } from './plan.ts';
 import {
   addressKeyOf,
+  type BuildingSummary,
   countUnitsByBuilding,
   EXPIRING_WINDOW_DAYS,
   findBuildingAtAddress,
@@ -59,7 +63,7 @@ import {
   type ProjectOption,
   searchEstate,
 } from './read-model.ts';
-import { removeSpace } from './spaces.ts';
+import { removeInventorySpace, removeSpace } from './spaces.ts';
 import {
   type DocumentSearchHit,
   type FiledDocumentView,
@@ -506,6 +510,30 @@ function blankToNull(value: unknown): unknown {
     : value;
 }
 
+function identityPlan(
+  building: BuildingSummary,
+  projects: readonly ProjectOption[],
+): { plan: BuildingPlan; projects: ProjectPlan[] } {
+  const project = chosenProject(building.project_code, projects);
+  return {
+    plan: {
+      name: building.name,
+      addressLine: building.address_line,
+      city: building.city,
+      projectCode: project === null ? null : project.projectCode,
+      handoverDate: addCalendarYears(building.handover_date, 0),
+      warrantyEndDate: addCalendarYears(building.warranty_end_date, 0),
+      status: buildingStatus(building.status),
+      gush: building.gush,
+      helka: building.helka,
+      buildingNumber: building.building_number,
+      spaces: [],
+      units: [],
+    },
+    projects: project === null ? [] : [project],
+  };
+}
+
 /** A checkbox is present or absent; `src/settings-page.ts` reads its own the same way. */
 function checked(value: unknown): boolean {
   return value === 'true' || value === 'on';
@@ -706,14 +734,157 @@ export function registerEstateRoutes(
         ),
       );
       html(reply);
+      const csrf = csrfFrom(request);
       return renderInventoryBuildingPage({
         building: detail.building,
         spaces,
         occupancy,
         occupiedParking,
         occupiedStorage,
-        nav: deps.chrome(csrfFrom(request), 'inventory', mayFile(request)),
+        nav: deps.chrome(csrf, 'inventory', mayFile(request)),
+        write: can(request.staff?.role ?? null, 'estate.write')
+          ? { csrf }
+          : undefined,
       });
+    },
+  );
+
+  app.post<{ Params: { buildingId: string } }>(
+    '/estate/inventory/:buildingId/spaces',
+    ESTATE_WRITE,
+    async (request, reply) => {
+      const buildingId = validId(request.params.buildingId, 'buildingId');
+      const detail = await getBuilding(deps.pool, buildingId);
+      const existing = await listInventorySpaces(deps.pool, buildingId);
+      const mint = inventoryAddFromForm(
+        request.body,
+        existing
+          .filter((space) => space.space_kind === 'TECHNICAL')
+          .map((space) => space.name),
+      );
+      refuseExisting(
+        mint.spaces,
+        new Set(existing.map((space) => `${space.space_kind}\n${space.name}`)),
+      );
+      const { plan, projects: named } = identityPlan(
+        detail.building,
+        await listProjects(deps.pool),
+      );
+      plan.spaces = mint.spaces;
+      plan.units = mint.units;
+      await inTransaction(deps.pool, async (db) => {
+        await importEstate(db, { projects: named, buildings: [plan] });
+        const after = await listInventorySpaces(db, buildingId);
+        const audit = createAuditLog(db, deps.clock);
+        for (const space of mint.spaces) {
+          const row = after.find(
+            (item) =>
+              item.space_kind === space.kind && item.name === space.name,
+          );
+          if (!row) {
+            throw new KernelError('unavailable', 'space was not written');
+          }
+          await audit.write(
+            {
+              actorKind: 'staff',
+              actorId: request.staff?.staffAccountId,
+              actorRole: request.staff?.role ?? undefined,
+              action: 'estate.inventory_add',
+              subjectId: row.space_id,
+              inputs: {
+                kind: space.kind,
+                name: space.name,
+                buildingId,
+              },
+            },
+            { outcome: 'ok' },
+          );
+        }
+      });
+      return reply
+        .code(303)
+        .header('location', `/estate/inventory/${buildingId}`)
+        .send();
+    },
+  );
+
+  app.post<{ Params: { buildingId: string } }>(
+    '/estate/inventory/:buildingId/shared',
+    ESTATE_WRITE,
+    async (request, reply) => {
+      const buildingId = validId(request.params.buildingId, 'buildingId');
+      const detail = await getBuilding(deps.pool, buildingId);
+      const space = sharedSpaceFromForm(request.body);
+      const existing = await listInventorySpaces(deps.pool, buildingId);
+      refuseExisting(
+        [space],
+        new Set(existing.map((row) => `${row.space_kind}\n${row.name}`)),
+      );
+      const { plan, projects: named } = identityPlan(
+        detail.building,
+        await listProjects(deps.pool),
+      );
+      plan.spaces = [space];
+      await inTransaction(deps.pool, async (db) => {
+        await importEstate(db, { projects: named, buildings: [plan] });
+        const after = await listInventorySpaces(db, buildingId);
+        const row = after.find(
+          (item) => item.space_kind === space.kind && item.name === space.name,
+        );
+        if (!row) {
+          throw new KernelError('unavailable', 'space was not written');
+        }
+        await createAuditLog(db, deps.clock).write(
+          {
+            actorKind: 'staff',
+            actorId: request.staff?.staffAccountId,
+            actorRole: request.staff?.role ?? undefined,
+            action: 'estate.inventory_add',
+            subjectId: row.space_id,
+            inputs: {
+              kind: space.kind,
+              name: space.name,
+              buildingId,
+            },
+          },
+          { outcome: 'ok' },
+        );
+      });
+      return reply
+        .code(303)
+        .header('location', `/estate/inventory/${buildingId}`)
+        .send();
+    },
+  );
+
+  app.post<{ Params: { spaceId: string } }>(
+    '/estate/inventory/spaces/:spaceId/remove',
+    ESTATE_WRITE,
+    async (request, reply) => {
+      const spaceId = validId(request.params.spaceId, 'spaceId');
+      const removed = await inTransaction(deps.pool, async (db) => {
+        const result = await removeInventorySpace(db, spaceId);
+        await createAuditLog(db, deps.clock).write(
+          {
+            actorKind: 'staff',
+            actorId: request.staff?.staffAccountId,
+            actorRole: request.staff?.role ?? undefined,
+            action: 'estate.inventory_remove',
+            subjectId: spaceId,
+            inputs: {
+              kind: result.kind,
+              name: result.name,
+              buildingId: result.buildingId,
+            },
+          },
+          { outcome: 'ok' },
+        );
+        return result;
+      });
+      return reply
+        .code(303)
+        .header('location', `/estate/inventory/${removed.buildingId}`)
+        .send();
     },
   );
 

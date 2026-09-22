@@ -134,3 +134,91 @@ export async function removeSpace(
     detached: Number(blocked.units) === 1,
   };
 }
+
+export interface RemoveInventorySpaceResult {
+  buildingId: string;
+  kind: SpaceKind;
+  name: string;
+}
+
+/**
+ * Deletes any Space from נכסים when nothing still points at it. Does not detach: a built bay,
+ * a letting, an Asset, or a document is a named refusal so the operator knows what to move first.
+ */
+export async function removeInventorySpace(
+  db: Queryable,
+  spaceId: string,
+): Promise<RemoveInventorySpaceResult> {
+  const found = await db.query<{
+    space_kind: SpaceKind;
+    building_id: string;
+    name: string;
+  }>('SELECT space_kind, building_id, name FROM space WHERE space_id = $1', [
+    spaceId,
+  ]);
+  const space = found.rows[0];
+  if (!space) {
+    throw new KernelError('not_found', 'not_found');
+  }
+
+  const held = await db.query<{
+    lettings: string;
+    built: string;
+    assets: string;
+    documents: string;
+  }>(
+    `SELECT (SELECT count(*)::text FROM tenancy t
+              WHERE t.unit_id = $1
+                 OR t.parking_space_id = $1
+                 OR t.storage_space_id = $1) AS lettings,
+            (SELECT count(*)::text FROM unit u
+              WHERE u.parking_space_id = $1 OR u.storage_space_id = $1) AS built,
+            (SELECT count(*)::text FROM asset a WHERE a.space_id = $1) AS assets,
+            (SELECT count(*)::text FROM document_link l
+              WHERE l.entity_id = $1
+                AND l.entity_type IN ('SPACE', 'UNIT')) AS documents`,
+    [spaceId],
+  );
+  const blocked = held.rows[0];
+  if (!blocked) {
+    throw new KernelError('conflict', 'space holders could not be counted', {
+      spaceId,
+    });
+  }
+  if (Number(blocked.lettings) > 0) {
+    throw new KernelError('conflict', 'a letting still uses this space', {
+      lettings: Number(blocked.lettings),
+    });
+  }
+  if (Number(blocked.built) > 0) {
+    throw new KernelError(
+      'conflict',
+      'a unit still names this space as built parking or storage',
+      { built: Number(blocked.built) },
+    );
+  }
+  if (Number(blocked.assets) > 0) {
+    throw new KernelError('conflict', 'an asset sits in this space', {
+      assets: Number(blocked.assets),
+    });
+  }
+  if (Number(blocked.documents) > 0) {
+    throw new KernelError(
+      'conflict',
+      'a document is filed against this space',
+      {
+        documents: Number(blocked.documents),
+      },
+    );
+  }
+
+  if (space.space_kind === 'UNIT') {
+    await db.query('DELETE FROM unit WHERE unit_id = $1', [spaceId]);
+  }
+  await db.query('DELETE FROM space WHERE space_id = $1', [spaceId]);
+  return {
+    buildingId: space.building_id,
+    kind: space.space_kind,
+    name: space.name,
+  };
+}

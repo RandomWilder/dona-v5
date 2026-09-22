@@ -32,7 +32,8 @@ workbook is right and this file is a bug.
   **#149 added נכסים** — `GET /estate/inventory`, create+mint, and the grouped building page.
   Writes go through `importEstate`. First mint writes one `estate.inventory_mint` audit line.
   **#150 derived vacancy** on that page from the occupancy injection and the assigned bay /
-  assigned storage on those lettings. בניינים routes and views are unchanged.
+  assigned storage on those lettings. **#151 added later add, remove, and shared Spaces** on that
+  same page. בניינים routes and views are unchanged.
 
 ## The shape, and why it is this one
 
@@ -103,9 +104,10 @@ one of `building_id` or `unit_id` is set and it matches the type. Same discrimin
 `document_link`. There is no `space_id`: `unit.rooms` and `space.floor` on the unit's space share
 `unit_id` (`unit_id` = `space_id`).
 
-**Only a promotion appends.** A11, A13, נכסים mint, `applyProtocolSeed`, and the register importer
-do not write here. The mint's batch line is kernel `audit_log` (`estate.inventory_mint`), not this
-table. The typed original is `old_value` on the first promotion row. The unit sheet lists these
+**Only a promotion appends.** A11, A13, נכסים mint, later inventory add/remove, `applyProtocolSeed`,
+and the register importer do not write here. The mint's batch line is kernel `audit_log`
+(`estate.inventory_mint`); each later add or remove is one `estate.inventory_add` or
+`estate.inventory_remove` line per Space. None of those are this table. The typed original is `old_value` on the first promotion row. The unit sheet lists these
 rows the same way it lists tenancy events, so an operator can ask what the room count used to be.
 
 **`applyPromotedField` is the write.** It lives on this module's contract, beside `applyProtocolSeed`,
@@ -407,7 +409,12 @@ rows.
 **Routes.** `GET /estate/inventory` (`estate.read`) lists every Building. `GET /estate/inventory/new`
 and `POST /estate/inventory` (`estate.write`, including the GET) create one and mint its Spaces.
 `GET /estate/inventory/:buildingId` (`estate.read`) lists those Spaces grouped by kind, with
-headline counts and derived vacancy. The rail destination is `inventory`.
+headline counts and derived vacancy. Later growth and shrink live on that page:
+`POST /estate/inventory/:buildingId/spaces` (count + first number; elevators count only),
+`POST /estate/inventory/:buildingId/shared` (kind + typed name), and
+`POST /estate/inventory/spaces/:spaceId/remove`. Those three are `estate.write`. The rail
+destination is `inventory`. This is not A13's `POST /estate/spaces/:spaceId/remove`, which still
+detaches a built bay or store.
 
 **The write is still `importEstate`.** The POST rebuilds A11's identity plan and adds Spaces: UNIT,
 PARKING, and STORAGE named by the bare integer sequence from each kind's first number; TECHNICAL
@@ -424,9 +431,21 @@ number is required when that kind's count is above zero, parsed as an integer, t
 second one.
 
 **Audit.** One `estate.inventory_mint` line on first mint (who, when, counts, inclusive name
-ranges). Not `estate_event`.
+ranges). Each later add or remove writes one `estate.inventory_add` or `estate.inventory_remove`
+line for that Space (who, when, kind, name). Not `estate_event`. No rename-in-place.
 
-The POST replies `303` to that Building's נכסים page.
+**Later add (#151).** Same rule as mint: kind + count + first number; elevators need only a count
+and continue TECHNICAL integer names so they do not collide with `1`…`N` already there. A name that
+already exists for that kind in the Building is `conflict` and does not overwrite rooms, floor, or
+lettings. Zero of every kind is `invalid`. Shared places (lobby, yard, stairs) are a separate post:
+an existing kind `COMMON`, `EXTERIOR`, or `TECHNICAL` plus a typed name — not a fifth mandatory
+count at create. They land on the same grouped list.
+
+**Later remove (#151).** An unreferenced Space is deleted (a UNIT Space takes its Unit row with
+it). A Space a letting, built bay, built storage, Asset, or document still points at is `conflict`
+and the message names which. Nothing is detached and nothing cascades.
+
+The create POST replies `303` to that Building's נכסים page. Later add and remove do the same.
 
 **Vacancy is derived on every load, stored nowhere (#150).** Headlines name each kind's count, plus
 vacant Units, vacant parking, and vacant storage. Each UNIT, PARKING, and STORAGE row carries a

@@ -87,6 +87,29 @@ function ends(names: string[]): { from: string | null; to: string | null } {
   return { from: names[0] ?? null, to: names[names.length - 1] ?? null };
 }
 
+/** Later elevator add: continue from the highest integer TECHNICAL name already in the Building. */
+export function continueIntegerNames(
+  existing: readonly string[],
+  count: number,
+): string[] {
+  const used = new Set(existing);
+  const ints = existing
+    .filter((name) => /^\d+$/.test(name))
+    .map((name) => Number(name));
+  let next = ints.length === 0 ? 1 : Math.max(...ints) + 1;
+  const names: string[] = [];
+  while (names.length < count) {
+    const name = String(next);
+    if (!used.has(name)) {
+      names.push(name);
+    }
+    next += 1;
+  }
+  return names;
+}
+
+const SHARED_KINDS = ['COMMON', 'EXTERIOR', 'TECHNICAL'] as const;
+
 export function inventoryFromForm(body: unknown): InventoryMint {
   const form = (body ?? {}) as Record<string, unknown>;
   const units = countedKind(form, 'unit_count', 'unit_first', 1);
@@ -124,6 +147,80 @@ export function inventoryFromForm(body: unknown): InventoryMint {
     elevatorsFrom: elevatorRange.from,
     elevatorsTo: elevatorRange.to,
   };
+}
+
+export function inventoryAddFromForm(
+  body: unknown,
+  technicalNames: readonly string[],
+): InventoryMint {
+  const form = (body ?? {}) as Record<string, unknown>;
+  const units = countedKind(form, 'unit_count', 'unit_first', 0);
+  const parking = countedKind(form, 'parking_count', 'parking_first', 0);
+  const storage = countedKind(form, 'storage_count', 'storage_first', 0);
+  const elevatorCount = requireInt(
+    form.elevator_count,
+    'elevator_count',
+    0,
+    MAX_COUNT,
+  );
+  const elevators = continueIntegerNames(technicalNames, elevatorCount);
+  const unitRange = ends(units.names);
+  const parkingRange = ends(parking.names);
+  const storageRange = ends(storage.names);
+  const elevatorRange = ends(elevators);
+  const spaces = [
+    ...namedSpaces('UNIT', units.names),
+    ...namedSpaces('PARKING', parking.names),
+    ...namedSpaces('STORAGE', storage.names),
+    ...namedSpaces('TECHNICAL', elevators),
+  ];
+  if (spaces.length === 0) {
+    throw new KernelError('invalid', 'nothing to add');
+  }
+  return {
+    spaces,
+    units: unitRows(units.names),
+    unitCount: units.count,
+    parkingCount: parking.count,
+    storageCount: storage.count,
+    elevatorCount,
+    unitsFrom: unitRange.from,
+    unitsTo: unitRange.to,
+    parkingFrom: parkingRange.from,
+    parkingTo: parkingRange.to,
+    storageFrom: storageRange.from,
+    storageTo: storageRange.to,
+    elevatorsFrom: elevatorRange.from,
+    elevatorsTo: elevatorRange.to,
+  };
+}
+
+export function sharedSpaceFromForm(body: unknown): SpacePlan {
+  const form = (body ?? {}) as Record<string, unknown>;
+  const kind = requireText(form.space_kind, 'space_kind', 16);
+  if (!(SHARED_KINDS as readonly string[]).includes(kind)) {
+    throw new KernelError('invalid', 'space_kind is not a shared kind');
+  }
+  return {
+    kind: kind as (typeof SHARED_KINDS)[number],
+    name: requireText(form.name, 'name', 64),
+    floor: null,
+    accessNote: null,
+  };
+}
+
+export function refuseExisting(
+  spaces: readonly SpacePlan[],
+  known: ReadonlySet<string>,
+): void {
+  const hit = spaces.find((space) => known.has(`${space.kind}\n${space.name}`));
+  if (hit) {
+    throw new KernelError(
+      'conflict',
+      'a space of this kind already has that name',
+      { kind: hit.kind, name: hit.name },
+    );
+  }
 }
 
 export function omitExisting(

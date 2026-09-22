@@ -770,6 +770,7 @@ export function renderInventoryBuildingPage(screen: {
   occupiedParking: ReadonlySet<string>;
   occupiedStorage: ReadonlySet<string>;
   nav: Html;
+  write?: { csrf: string };
 }): string {
   const grouped = INVENTORY_KIND_ORDER.map((kind) => ({
     kind,
@@ -827,11 +828,94 @@ export function renderInventoryBuildingPage(screen: {
               <ul class="index-list">
                 ${group.rows.map(
                   (space) =>
-                    h`<li>${ltr(space.name)}${inventoryVacancyChip(space, screen)}</li>`,
+                    h`<li>${ltr(space.name)}${inventoryVacancyChip(space, screen)}${
+                      screen.write
+                        ? h`<form class="remove-space" method="post"
+                              action="/estate/inventory/spaces/${space.space_id}/remove">
+                            ${csrfInput(screen.write.csrf)}
+                            <button class="btn-link" type="submit"
+                              aria-label="הסרת ${space.name}">הסרה</button>
+                          </form>`
+                        : h``
+                    }</li>`,
                 )}
               </ul>
             </section>`,
           )
+    }
+    ${
+      screen.write
+        ? h`
+      <section>
+        <h2>הוספת חללים</h2>
+        <form class="form-grid" method="post"
+          action="/estate/inventory/${screen.building.building_id}/spaces">
+          ${csrfInput(screen.write.csrf)}
+          <div class="form-pair">
+            <div class="form-row">
+              <label for="unit_count">דירות</label>
+              <input id="unit_count" name="unit_count" type="number" min="0" max="999" step="1" value="0" required />
+            </div>
+            <div class="form-row">
+              <label for="unit_first">מספר ראשון</label>
+              <input id="unit_first" name="unit_first" type="number" min="0" step="1" />
+            </div>
+          </div>
+          <div class="form-pair">
+            <div class="form-row">
+              <label for="parking_count">חניות</label>
+              <input id="parking_count" name="parking_count" type="number" min="0" max="999" step="1" value="0" required />
+            </div>
+            <div class="form-row">
+              <label for="parking_first">מספר ראשון</label>
+              <input id="parking_first" name="parking_first" type="number" min="0" step="1" />
+            </div>
+          </div>
+          <div class="form-pair">
+            <div class="form-row">
+              <label for="storage_count">מחסנים</label>
+              <input id="storage_count" name="storage_count" type="number" min="0" max="999" step="1" value="0" required />
+            </div>
+            <div class="form-row">
+              <label for="storage_first">מספר ראשון</label>
+              <input id="storage_first" name="storage_first" type="number" min="0" step="1" />
+            </div>
+          </div>
+          <div class="form-row">
+            <label for="elevator_count">מעליות</label>
+            <input id="elevator_count" name="elevator_count" type="number" min="0" max="999" step="1" value="0" required />
+            <p class="hint">ממשיכות את השמות הטכניים הקיימים. אפס מדלג.</p>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">הוספה</button>
+          </div>
+        </form>
+      </section>
+      <section>
+        <h2>מקום משותף</h2>
+        <form class="form-grid" method="post"
+          action="/estate/inventory/${screen.building.building_id}/shared">
+          ${csrfInput(screen.write.csrf)}
+          <div class="form-pair">
+            <div class="form-row">
+              <label for="space_kind">סוג</label>
+              <select id="space_kind" name="space_kind" required>
+                <option value="COMMON">שטח משותף</option>
+                <option value="EXTERIOR">שטח חוץ</option>
+                <option value="TECHNICAL">חלל טכני</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="shared_name">שם</label>
+              <input id="shared_name" name="name" type="text" maxlength="64" required />
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">הוספה</button>
+          </div>
+        </form>
+      </section>`
+        : h``
     }`;
   return page(`דונה דום — ${screen.building.name}`, body, screen.nav);
 }
