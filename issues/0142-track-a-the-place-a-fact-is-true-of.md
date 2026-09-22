@@ -17,7 +17,7 @@ exactly one child: the first in [Children](#children) that is `status: open`, `a
 whose `blocked_by` names only closed issues. Claim it (`assignee`) before writing code. Spec edit
 before code. `/clear` between children.
 
-Right now that child is **#145**.
+Right now that child is **#141** (`needs-design` — answer its three questions before DDL).
 
 When a child closes: tick the matching acceptance line on this map, rewrite the sentence above to
 the next child, and leave a pointer in this file's comments. Do not implement the next child in the
@@ -138,7 +138,7 @@ irreversible one after the reading that depends on it has been measured.
 3. #144 — Declare the residual place facts as cross-checks, not promotion targets · *blocked by 143*
    · no DDL · **closed 2026-09-22**
 4. #145 — Occupied, one level down, means the estate column is not null · *blocked by 144* · spec
-   and a red-first test, no schema · open
+   and a red-first test, no schema · **closed 2026-09-22**
 5. #141 — Estate promotion family, including `estate_event` · *blocked by 144, 145* · `needs-design`
    until its three questions are answered on the issue · open
 6. #146 — The assigned bay · *blocked by 141* · last, because `parking_space_number` must not be
@@ -174,4 +174,12 @@ removed from this parent so a session does not implement the track as one ticket
 parcel cross-checks, no promotion targets, no DDL. Helka is a set. Approve is not a gate. Eight keyed
 runs recorded on that issue. Residual values left: parking ×2 plus the three out-of-scope keys.
 Acceptance lines 4, 5 and 9 ticked. Frontier is #145.
+
+## Comment — 2026-09-22
+
+[#145](0145-occupied-means-the-estate-column-is-not-null.md) closed: a non-null estate column is
+occupied whoever wrote it; tenancy occupancy unchanged; no DDL. Definition is
+`occupantOfEstateColumn` for #141 to consume. Policy case red first (missing export), then green.
+Map acceptance line 6 stays open until #141's promotion path refuses. Frontier is #141
+(`needs-design`).
 

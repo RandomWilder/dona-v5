@@ -1539,6 +1539,21 @@ stays.
 
 This is a policy case, red first.
 
+**One level down, occupancy is the column itself.** The rule above reads occupancy off an
+`extracted_field` stamp on a letting, and that carve-out stands: a register date is not an occupant,
+because the register writes dates without a document. It does not survive the move to estate columns.
+`unit.rooms` is `NOT NULL` and is written by A13 or the register, with no stamp behind it; `space.floor`
+is nullable but is written by the same two hands. A promotion that still looked for a stamp would
+find none and overwrite the typed value.
+
+**A non-null estate column is occupied, whoever wrote it.** A promotion onto it refuses and names the
+existing value. An operator with the lease in front of them may `supersede`, and that is the record
+of who decided. There is no provenance column. Tenancy occupancy is unchanged. The definition lives
+on estate's contract so a later promotion family consumes it rather than re-deriving it, and so
+evidence issues no estate SQL. `field_promotion.target` is not widened here.
+
+This is a policy case, red first, at the estate seam: promote cannot yet reach an estate column.
+
 ### A half-priced pair is not promotable
 
 An amount may be **approved** without its currency — capture is open, and what the page says is

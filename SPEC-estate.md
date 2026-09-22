@@ -519,6 +519,11 @@ fails, the hash is already free; leftover bytes are restorable for seven days.
   adds a unit.
 - **`Unit.occupancy`** — derived from tenancy dates (R6). `condition_status` is *not* occupancy: a
   unit can be `READY` and occupied, or `READY` and empty.
+- **A typed estate column, for promotion** — a different question from the chip. A non-null
+  `unit.rooms` or `space.floor` is occupied whoever wrote it (A13, the register, or a later
+  promotion). There is no provenance column. Evidence does not query these tables; the lookup lives
+  on this module's contract. The refusal itself is [SPEC-evidence.md](SPEC-evidence.md), *A promotion
+  onto an occupied column*. Tenancy occupancy is unchanged.
 - **`current_tenant`** — foundation rule 1. The scope is a view, never a column; a grep guard over
   `src/kernel/migrations/*.sql` fails the build over the string, and `src/estate/schema.test.ts`
   asserts the absence of all three against `information_schema`.

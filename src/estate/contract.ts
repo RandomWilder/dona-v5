@@ -12,6 +12,8 @@ export {
   WARRANTY_YEARS,
 } from './internal/assets.ts';
 export { importEstate, upsertUnitRow } from './internal/importer.ts';
+export type { EstatePromotionColumn } from './internal/occupancy.ts';
+export { occupantOfEstateColumn } from './internal/occupancy.ts';
 export type {
   AssetClass,
   AssetPlan,
