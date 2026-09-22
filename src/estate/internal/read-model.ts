@@ -26,6 +26,9 @@ export interface BuildingSummary {
   project_code: string | null;
   unit_count: string;
   space_count: string;
+  gush: string | null;
+  helka: string | null;
+  building_number: string | null;
 }
 
 /**
@@ -98,7 +101,10 @@ const BUILDING_COLUMNS = `
   p.project_code,
   (SELECT count(*) FROM space s JOIN unit u ON u.unit_id = s.space_id
     WHERE s.building_id = b.building_id) AS unit_count,
-  (SELECT count(*) FROM space s WHERE s.building_id = b.building_id) AS space_count`;
+  (SELECT count(*) FROM space s WHERE s.building_id = b.building_id) AS space_count,
+  b.gush,
+  b.helka,
+  b.building_number`;
 
 // Named rather than inlined, from 2.6: `npm run measure:scale` explains and times **these strings**
 // and not a second copy of them typed into a script. A measurement of a query the screen does not

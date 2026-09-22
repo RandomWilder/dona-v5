@@ -1040,6 +1040,18 @@ describe('estate · A11, an administrator creates a building', () => {
       );
       assert.equal(dates.rows[0]?.handover_date, '2025-03-01');
       assert.equal(dates.rows[0]?.warranty_end_date, '2027-03-01');
+
+      // #143 — blank parcel fields are null, not empty string, and the building still saved.
+      const blankParcel = await pool.query<{
+        gush: string | null;
+        helka: string | null;
+        building_number: string | null;
+      }>(`SELECT gush, helka, building_number FROM building WHERE city = $1`, [
+        A11_CITY,
+      ]);
+      assert.equal(blankParcel.rows[0]?.gush, null);
+      assert.equal(blankParcel.rows[0]?.helka, null);
+      assert.equal(blankParcel.rows[0]?.building_number, null);
     } finally {
       await a11Cleanup(pool);
       await signOutAll(pool, A11_DOMAIN);
@@ -1139,6 +1151,92 @@ describe('estate · A11, an administrator creates a building', () => {
         A11_CITY,
       ]);
       assert.equal(rows.rowCount, 0, 'a rejected form wrote a building');
+    } finally {
+      await a11Cleanup(pool);
+      await signOutAll(pool, A11_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('types gush, helka and building_number, and the building page shows them', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({ pool, version: '9.9.9-test' });
+    await signOutAll(pool, A11_DOMAIN);
+    await a11Cleanup(pool);
+    const admin = await signIn(pool, systemClock, {
+      email: `admin@${A11_DOMAIN}`,
+      role: 'ADMIN',
+    });
+    const client = asOperator(app, admin);
+    try {
+      const form = await client.inject({
+        method: 'GET',
+        url: '/estate/buildings/new',
+      });
+      assert.equal(form.statusCode, 200);
+      assert.match(form.body, /name="gush"/);
+      assert.match(form.body, /name="helka"/);
+      assert.match(form.body, /name="building_number"/);
+
+      const created = await client.inject({
+        method: 'POST',
+        url: '/estate/buildings',
+        headers: FORM,
+        payload: a11Form({
+          gush: '6533',
+          helka: '43, 46',
+          building_number: '206',
+        }),
+      });
+      assert.equal(created.statusCode, 303);
+
+      const row = await pool.query<{
+        building_id: string;
+        gush: string | null;
+        helka: string | null;
+        building_number: string | null;
+      }>(
+        `SELECT building_id, gush, helka, building_number
+           FROM building WHERE city = $1`,
+        [A11_CITY],
+      );
+      assert.equal(row.rowCount, 1);
+      assert.equal(row.rows[0]?.gush, '6533');
+      assert.equal(row.rows[0]?.helka, '43, 46');
+      assert.equal(row.rows[0]?.building_number, '206');
+
+      const page = await client.inject({
+        method: 'GET',
+        url: `/estate/buildings/${row.rows[0]?.building_id}`,
+      });
+      assert.equal(page.statusCode, 200);
+      assert.match(page.body, /6533/);
+      assert.match(page.body, /43, 46/);
+      assert.match(page.body, /206/);
+
+      // Blank on a re-post is null, the same as on create — A11 writes what was posted.
+      const cleared = await client.inject({
+        method: 'POST',
+        url: '/estate/buildings',
+        headers: FORM,
+        payload: a11Form(),
+      });
+      assert.equal(cleared.statusCode, 303);
+      const after = await pool.query<{
+        gush: string | null;
+        helka: string | null;
+        building_number: string | null;
+      }>(`SELECT gush, helka, building_number FROM building WHERE city = $1`, [
+        A11_CITY,
+      ]);
+      assert.equal(after.rows[0]?.gush, null);
+      assert.equal(after.rows[0]?.helka, null);
+      assert.equal(after.rows[0]?.building_number, null);
     } finally {
       await a11Cleanup(pool);
       await signOutAll(pool, A11_DOMAIN);

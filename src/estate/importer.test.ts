@@ -134,6 +134,26 @@ describe('estate · the import runs twice', () => {
               asset: { created: 0, updated: 0 },
             });
 
+            // #143 — a plan that names no parcel identifiers writes null, and does not invent them.
+            const unnamed = await db.query<{
+              gush: string | null;
+              helka: string | null;
+              building_number: string | null;
+            }>(
+              `SELECT gush, helka, building_number FROM building WHERE city = $1`,
+              [CITY],
+            );
+            assert.equal(unnamed.rows[0]?.gush, null);
+            assert.equal(unnamed.rows[0]?.helka, null);
+            assert.equal(unnamed.rows[0]?.building_number, null);
+
+            await db.query(
+              `UPDATE building
+                  SET gush = '6533', helka = '43, 46', building_number = '206'
+                WHERE city = $1`,
+              [CITY],
+            );
+
             const afterFirst = await idsIn(db, CITY);
 
             const second = await importEstate(db, smallPlan());
@@ -150,6 +170,18 @@ describe('estate · the import runs twice', () => {
             // a re-import that renumbered every unit would satisfy a count and break everything
             // that ever pointed at one.
             assert.deepEqual(await idsIn(db, CITY), afterFirst);
+
+            const kept = await db.query<{
+              gush: string | null;
+              helka: string | null;
+              building_number: string | null;
+            }>(
+              `SELECT gush, helka, building_number FROM building WHERE city = $1`,
+              [CITY],
+            );
+            assert.equal(kept.rows[0]?.gush, '6533');
+            assert.equal(kept.rows[0]?.helka, '43, 46');
+            assert.equal(kept.rows[0]?.building_number, '206');
           });
         },
       );

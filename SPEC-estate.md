@@ -55,7 +55,7 @@ written by anything but the injected clock is a second source of truth no test c
 | Table | Columns |
 |---|---|
 | `project` | `project_id` PK · `name` · `project_code` · `tender_ref?` · `status` |
-| `building` | `building_id` PK · `name` · `address_line` · `city` · `project_id?` FK → project · `handover_date` · `warranty_end_date` · `status` · `address_key` generated, UNIQUE |
+| `building` | `building_id` PK · `name` · `address_line` · `city` · `project_id?` FK → project · `handover_date` · `warranty_end_date` · `status` · `gush?` · `helka?` · `building_number?` · `address_key` generated, UNIQUE |
 | `space` | `space_id` PK · `building_id` FK → building · `space_kind` · `name` · `floor?` · `access_note?` |
 | `unit` | `unit_id` PK, FK → space · `unit_number` · `rooms` · `area_sqm?` · `has_mamad` · `parking_space_id?` · `storage_space_id?` · `warranty_end_date?` · `condition_status` |
 | `provider` | `provider_id` PK · `name` · `provider_kind` — E14, stub only. Present so R11 is resolvable. Everything else about providers waits. |
@@ -76,6 +76,15 @@ nullable on Unit.
 
 `space.access_note` is commented `-- pii`. It is free text about how a technician physically gets
 into a home, and it acquires a name and a phone number the first week it is used.
+
+**`gush`, `helka` and `building_number` are typed identifiers, not keys and not promotion targets
+(#143).** An operator copies them onto A11 from a tabu extract or a plan; a lease recites them and
+does not establish them. All three are nullable text. None is unique: two buildings may share a גוש,
+`helka` is a list (`43, 46`, order varying by page) so an integer column is wrong on the first
+building we own, and `building_number` (`206`) is meaningful inside one project and collapses on a
+standalone building. Blank on A11 is null. The plan-shaped import and the register importer write
+null where the file has no value; A13 does not invent them. A later tabu type may promote onto the
+typed columns; until then they are the typed side of a cross-check, not a capture.
 
 ## Three rules the schema enforces, rather than the application
 
@@ -282,6 +291,11 @@ case. Creating a project is its own slice on the day somebody needs one.
 `addCalendarYears`, which is 3.5's constant and 3.5's function rather than arithmetic re-typed into a
 form. That function already refuses a non-ISO date with `invalid`, which is the handover field's
 edge validation.
+
+**גוש, חלקה and מספר בניין are optional and blank-to-null (#143).** They are the typed identifiers
+on the building row, not values a lease establishes. A11 always writes what the form posted,
+including null. An importer that omits the fields leaves whatever is already on the row, so a
+register re-run does not wipe a number an operator typed.
 
 The POST replies `303` to `/estate`. `importEstate` returns a report and no ids — a plan-shaped
 caller already knows its own shape — and the buildings list is where a new building is looked for

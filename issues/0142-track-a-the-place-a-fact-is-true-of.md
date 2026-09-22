@@ -2,13 +2,26 @@
 number: 142
 title: "Track A — the place a fact is true of"
 status: open
-labels: [ready-for-agent]
+labels: []
 assignee:
 blocked_by: []
 parent:
 created: 2026-09-22
 closed:
 ---
+
+## Frontier
+
+**Do not implement this issue.** It is the track map. A new session with no ticket named implements
+exactly one child: the first in [Children](#children) that is `status: open`, `assignee` empty, and
+whose `blocked_by` names only closed issues. Claim it (`assignee`) before writing code. Spec edit
+before code. `/clear` between children.
+
+Right now that child is **#144**.
+
+When a child closes: tick the matching acceptance line on this map, rewrite the sentence above to
+the next child, and leave a pointer in this file's comments. Do not implement the next child in the
+same session.
 
 ## Problem Statement
 
@@ -97,35 +110,39 @@ with the lease in front of them supersedes — which is #130's existing rule, un
 
 What "track A is done" is tested against. Each line is end-to-end, not a layer.
 
-- [ ] A unit created through A13 with no numbers given creates no `PARKING` or `STORAGE` space, and an
+- [x] A unit created through A13 with no numbers given creates no `PARKING` or `STORAGE` space, and an
       unreferenced placeholder can be removed by an operator (#140)
-- [ ] `building` carries `gush`, `helka` and `building_number`, filled on A11, none of them unique
+- [x] `building` carries `gush`, `helka` and `building_number`, filled on A11, none of them unique
+      (#143)
 - [ ] The fourteen residual values are declared and scored; the residual count falls from seventeen to
-      three, and those three are named as out of scope
-- [ ] A `helka` cross-check passes on `43,46` and on `46,43`, and fails on `43,47`
-- [ ] A cross-check failure does not block an operator from approving the reading
+      three, and those three are named as out of scope (#144, then #146 for `parking_space_number`)
+- [ ] A `helka` cross-check passes on `43,46` and on `46,43`, and fails on `43,47` (#144)
+- [ ] A cross-check failure does not block an operator from approving the reading (#144)
 - [ ] A promotion onto a non-null estate column refuses, names the existing value, and succeeds when
-      superseded — with a policy case that was **red first**
+      superseded — with a policy case that was **red first** (#145, consumed by #141)
 - [ ] Every estate column a promotion can write appends to a log naming the actor and the document
       (#141)
 - [ ] A bay reassignment is recorded without a document, and `unit.parking_space_id` is unchanged by it
+      (#146)
 - [ ] The full golden set re-run, judged over at least **eight** keyed runs, comparing ranges rather
-      than means
+      than means (#144, again on #146)
 
-## Order
+## Children
 
-From the proposal's *Order of work*. Reversible first; the irreversible one after the reading that
-depends on it has been measured.
+Map order. This list is the frontier's tie-break, not the filesystem. Reversible first; the
+irreversible one after the reading that depends on it has been measured.
 
-1. #140 — the A13 placeholder defect. Unblocked, and a prerequisite for the `has_storage` argument.
-2. The typed columns on `building`, filled on A11. One migration, three nullable columns.
-3. Seed rows for `rooms`, `floor`, `gush`, `helka`, `building_number` — **cross-checks only**, no
-   promotion targets, no DDL. Re-measure.
-4. The occupancy rule one level down, red first as a policy case. Spec edit and a test, no schema.
-5. The estate promotion family — `target` CHECK widened, the link-kind branch, estate's
-   `applyPromotedField`, and `estate_event` (#141).
-6. The bay — `tenancy.parking_space_id`, the `reassigned` event kind, and only then
-   `parking_space_number` declared on the lease type.
+1. #140 — A13 stops inventing parking and storage spaces · **closed 2026-09-22**
+2. #143 — Typed `gush`, `helka`, `building_number` on A11 · *blocked by 140* · **the first
+   migration** · **closed 2026-09-22**
+3. #144 — Declare the residual place facts as cross-checks, not promotion targets · *blocked by 143*
+   · no DDL · open
+4. #145 — Occupied, one level down, means the estate column is not null · *blocked by 144* · spec
+   and a red-first test, no schema · open
+5. #141 — Estate promotion family, including `estate_event` · *blocked by 144, 145* · `needs-design`
+   until its three questions are answered on the issue · open
+6. #146 — The assigned bay · *blocked by 141* · last, because `parking_space_number` must not be
+   declared until the column exists · open
 
 ## Out of scope
 
@@ -139,3 +156,15 @@ than storage), and the obligation and compliance regimes hanging off `asset`.
 [docs/proposals/track-a-the-place-a-fact-is-true-of.md](../docs/proposals/track-a-the-place-a-fact-is-true-of.md)
 — the grilled draft this is folded from. `evals/fixtures/lease-extraction.ts` is the ground truth and
 already covers every value in the track. #136 is track B, closed, and the machinery this extends.
+
+## Comment — 2026-09-22
+
+Children filed for steps 2–6: #143, #144, #145, #141 (step 5, `blocked_by` now 144 and 145), #146.
+#140 closed; this map's first acceptance line ticked from that issue. Label `ready-for-agent`
+removed from this parent so a session does not implement the track as one ticket. Frontier is #143.
+
+## Comment — 2026-09-22
+
+[#143](0143-typed-gush-helka-and-building-number-on-a11.md) closed: typed `gush`, `helka` and
+`building_number` on A11. Acceptance line 2 ticked. Frontier is #144.
+

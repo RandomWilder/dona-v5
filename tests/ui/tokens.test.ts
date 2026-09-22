@@ -76,6 +76,9 @@ const building: BuildingSummary = {
   project_code: 'SHM-01',
   unit_count: '72',
   space_count: '184',
+  gush: null,
+  helka: null,
+  building_number: null,
 };
 
 const detail: BuildingDetail = {

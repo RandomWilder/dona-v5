@@ -406,8 +406,10 @@ paused the rollout on 13 Sep 2026 to check the foundation was on its way to the 
 and this absence is half of what they found. A11 is the correction; A12 is the other half.
 
 **Screen:** name, street and number, city, an optional project, the handover date, the end of
-תקופת הבדק, and a status. Nothing else — a building is created **empty**, with no spaces and no
-units, and **A13**'s apartment screen is what fills it.
+תקופת הבדק, a status, and three optional parcel identifiers — גוש, חלקה, מספר בניין (#143). Blank
+on those three is null; none of them is unique; none of them is a promotion target. A building is
+still created **empty**, with no spaces and no units, and **A13**'s apartment screen is what fills
+it. A13 does not invent parcel values the apartment screen does not carry.
 
 > This sentence said *A12's apartment screen* when 6.1 wrote it, and A12 is the document-first
 > intake in both [archive/tasks-w1-7/roadmap.md](archive/tasks-w1-7/roadmap.md) and [archive/tasks-w1-7/todo.md](archive/tasks-w1-7/todo.md), where the

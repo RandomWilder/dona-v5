@@ -20,6 +20,9 @@ documented module commands, never by writing a store query. Distinct from each o
 |---|---|
 | **Project** | Optional grouping above Building. `Building.project_id` is nullable. |
 | **Building** | A set of **Spaces**. Nothing else. |
+| **Gush** | The land-registry block (גוש) a Building sits on. Typed on A11 from a tabu extract or a plan; a lease only recites it. Nullable text, not unique, not a promotion target. |
+| **Helka** | The land-registry parcel or parcels (חלקה). A list stored as text — order varies by page — so not an integer. Same standing as Gush. |
+| **Building number** | The number a Building has inside a Project (`206`). A fact, not a key: it collapses on a standalone Building, and a second unique key beside `address_key` is two writers' worth of disagreement. |
 | **Space** | One of `UNIT · COMMON · TECHNICAL · EXTERIOR · PARKING · STORAGE`. |
 | **Unit** | The leasable kind of Space. `Unit.unit_id = Space.space_id` — not a separate thing. |
 | **Asset** | Anything that can break. Sits in exactly one Space. |

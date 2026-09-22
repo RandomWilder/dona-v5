@@ -226,7 +226,10 @@ had thought of. Every fixture profile now carries the suffix its cities do.
   developer's plan, and against the two hand-read leases in `evals/fixtures/lease-extraction.ts`
   neither matched. This file names no bay, so `writeRow` passes `parkingSpaceName: null` and
   `storageSpaceName: null` and no `PARKING` or `STORAGE` row is written: **one Space per line, not
-  three.** A building whose real bay count is known still arrives as an estate plan (D3). What a
+  three.** It names no גוש, חלקה or מספר בניין either (#143): those keys are omitted on the
+  building plan, so a register-written building starts with null and a re-run does not wipe a
+  value an operator later typed on A11.
+  A building whose real bay count is known still arrives as an estate plan (D3). What a
   *real* export's bay column would look like is 2.5's, with the export in hand.
 - **`upsertUnitRow` stopped being this module's alone at 6.2.** Flow A13's apartment screen calls it
   too, and it writes the `UNIT` space under the **bare `unit_number`** because that is what

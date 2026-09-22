@@ -141,6 +141,8 @@ async function writeRow(
       handoverDate: row.tenancyStart,
       warrantyEndDate: row.tenancyEnd,
       status: 'ACTIVE',
+      // #143 — the 22-column header names no parcel identifier. The keys are omitted,
+      // not null: a re-run must not wipe a value an operator later typed on A11.
     },
     unit: {
       spaceName: row.unitNumber,

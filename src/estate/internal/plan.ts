@@ -65,6 +65,15 @@ export interface BuildingPlan {
   handoverDate: string;
   warrantyEndDate: string;
   status: BuildingStatus;
+  /**
+   * Typed parcel identifiers (#143). Optional on the plan: omitted (`undefined`) means
+   * the writer has no value — insert null, and on conflict leave the row. `null` is
+   * A11's blank: write null even on conflict. A register re-run therefore does not
+   * wipe a number an operator typed.
+   */
+  gush?: string | null;
+  helka?: string | null;
+  buildingNumber?: string | null;
   spaces: SpacePlan[];
   units: UnitPlan[];
   /** Optional: a plan with no assets is the ordinary 1.11 shape. */

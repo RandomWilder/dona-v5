@@ -511,6 +511,21 @@ function buildingFacts(building: BuildingSummary, occupied?: number): Html {
         ? h`<div><dt>מכרז</dt><dd>${building.project_name} · ${ltr(building.project_code)}</dd></div>`
         : h``
     }
+    ${
+      building.gush
+        ? h`<div><dt>גוש</dt><dd>${ltr(building.gush)}</dd></div>`
+        : h``
+    }
+    ${
+      building.helka
+        ? h`<div><dt>חלקה</dt><dd>${ltr(building.helka)}</dd></div>`
+        : h``
+    }
+    ${
+      building.building_number
+        ? h`<div><dt>מספר בניין</dt><dd>${ltr(building.building_number)}</dd></div>`
+        : h``
+    }
   </dl>`;
 }
 
@@ -682,6 +697,25 @@ export function renderNewBuildingPage(screen: NewBuildingScreen): string {
           בניין יכול לעמוד ללא פרויקט. הרשימה היא הפרויקטים הקיימים; קוד מכרז חדש אינו נפתח כאן.
         </p>
       </div>
+      <div class="form-pair">
+        <div class="form-row">
+          <label for="gush">גוש</label>
+          <input id="gush" name="gush" type="text" maxlength="64" />
+        </div>
+        <div class="form-row">
+          <label for="helka">חלקה</label>
+          <input id="helka" name="helka" type="text" maxlength="64" />
+          <p class="hint">אפשר כמה, מופרדות בפסיק. הסדר אינו חשוב.</p>
+        </div>
+      </div>
+      <div class="form-row">
+        <label for="building_number">מספר בניין</label>
+        <input id="building_number" name="building_number" type="text" maxlength="32" />
+        <p class="hint">מספר בתוך הפרויקט, אם יש. אינו מזהה ייחודי.</p>
+      </div>
+      <p class="form-note">
+        גוש, חלקה ומספר בניין הם מה שמועתק מנסח טאבו או מתכנית, לא מה שחוזה קובע. ריק נשמר כחסר.
+      </p>
       <div class="form-pair">
         <div class="form-row">
           <label for="handover_date">תאריך מסירה</label>

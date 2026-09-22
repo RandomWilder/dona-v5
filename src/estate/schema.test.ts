@@ -426,8 +426,11 @@ describe('estate · the schema is the constraint', () => {
           'address_key',
           'address_line',
           'building_id',
+          'building_number',
           'city',
+          'gush',
           'handover_date',
+          'helka',
           'name',
           'project_id',
           'status',
@@ -478,6 +481,76 @@ describe('estate · the schema is the constraint', () => {
       await pool.end();
     }
   });
+
+  // #143 — typed parcel identifiers. A lease recites them; a tabu extract or a plan establishes
+  // them. They are not keys: two buildings may share a גוש, helka is a list, and building_number
+  // collapses on a standalone building.
+  it('holds gush, helka and building_number as nullable text, none unique', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const cols = await db.query<{
+          column_name: string;
+          data_type: string;
+          is_nullable: string;
+        }>(
+          `SELECT column_name, data_type, is_nullable
+             FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'building'
+              AND column_name IN ('gush', 'helka', 'building_number')
+            ORDER BY column_name`,
+        );
+        assert.deepEqual(
+          cols.rows.map((row) => [
+            row.column_name,
+            row.data_type,
+            row.is_nullable,
+          ]),
+          [
+            ['building_number', 'text', 'YES'],
+            ['gush', 'text', 'YES'],
+            ['helka', 'text', 'YES'],
+          ],
+        );
+
+        const uniqueOnThem = await db.query<{ indexdef: string }>(
+          `SELECT indexdef FROM pg_indexes
+            WHERE schemaname = 'public' AND tablename = 'building'
+              AND (indexdef LIKE '%gush%'
+                OR indexdef LIKE '%helka%'
+                OR indexdef LIKE '%building_number%')`,
+        );
+        assert.deepEqual(uniqueOnThem.rows, []);
+
+        const first = await insertBuilding(db, null, 'Parcel 1');
+        await db.query(
+          `UPDATE building
+              SET gush = '6533', helka = '43, 46', building_number = '206'
+            WHERE building_id = $1`,
+          [first],
+        );
+        const second = await insertBuilding(db, null, 'Parcel 2');
+        await db.query(
+          `UPDATE building
+              SET gush = '6533', helka = '43, 46', building_number = '206'
+            WHERE building_id = $1`,
+          [second],
+        );
+        const shared = await db.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM building
+            WHERE gush = '6533' AND helka = '43, 46' AND building_number = '206'`,
+        );
+        assert.equal(shared.rows[0]?.n, '2');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
   // The natural keys — 0005_estate_natural_keys.sql, slice 1.11. 1.9 shipped this spine with nothing
   // unique but its primary keys, which is fine for a schema and wrong for an importer: the same
   // fixture applied twice produced 2 buildings, 368 spaces and 144 units (tasks/evidence/1.11.md).

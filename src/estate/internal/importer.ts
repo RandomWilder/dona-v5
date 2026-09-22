@@ -156,18 +156,26 @@ async function upsertBuilding(
 ): Promise<{ buildingId: string; inserted: boolean }> {
   // project_id is resolved by the tender code rather than carried in the plan, so a plan never holds
   // an id and the two halves cannot disagree about which project a building is in.
+  //
+  // #143 — on conflict, a plan that *omits* parcel identifiers (register, fixture) leaves
+  // whatever is on the row. A plan that *names* them, including null from A11's blank
+  // inputs, writes that value. `undefined` and `null` are therefore different here.
   const result = await db.query<{ building_id: string; inserted: boolean }>(
     `INSERT INTO building (building_id, name, address_line, city, project_id,
-                           handover_date, warranty_end_date, status)
+                           handover_date, warranty_end_date, status,
+                           gush, helka, building_number)
      VALUES ($1, $2, $3, $4,
              (SELECT project_id FROM project WHERE project_code = $5),
-             $6, $7, $8)
+             $6, $7, $8, $9, $10, $11)
      ON CONFLICT (address_key) DO UPDATE
        SET name = EXCLUDED.name,
            project_id = EXCLUDED.project_id,
            handover_date = EXCLUDED.handover_date,
            warranty_end_date = EXCLUDED.warranty_end_date,
-           status = EXCLUDED.status
+           status = EXCLUDED.status,
+           gush = CASE WHEN $12 THEN EXCLUDED.gush ELSE building.gush END,
+           helka = CASE WHEN $13 THEN EXCLUDED.helka ELSE building.helka END,
+           building_number = CASE WHEN $14 THEN EXCLUDED.building_number ELSE building.building_number END
      RETURNING building_id, ${INSERTED}`,
     [
       newId(),
@@ -178,6 +186,12 @@ async function upsertBuilding(
       building.handoverDate,
       building.warrantyEndDate,
       building.status,
+      building.gush ?? null,
+      building.helka ?? null,
+      building.buildingNumber ?? null,
+      building.gush !== undefined,
+      building.helka !== undefined,
+      building.buildingNumber !== undefined,
     ],
   );
   const row = result.rows[0];
