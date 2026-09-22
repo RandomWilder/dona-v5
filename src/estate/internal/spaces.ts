@@ -86,7 +86,8 @@ export async function removeSpace(
               WHERE u.parking_space_id = $1 OR u.storage_space_id = $1) AS units,
             (SELECT count(*)::text FROM asset a WHERE a.space_id = $1) AS assets,
             (SELECT count(*)::text FROM tenancy t
-              WHERE t.parking_space_id = $1) AS lettings`,
+              WHERE t.parking_space_id = $1
+                 OR t.storage_space_id = $1) AS lettings`,
     [spaceId],
   );
   const blocked = held.rows[0];
@@ -104,7 +105,7 @@ export async function removeSpace(
     });
   }
   if (Number(blocked.lettings) > 0) {
-    throw new KernelError('conflict', 'a household parks in this space', {
+    throw new KernelError('conflict', 'a household is assigned this space', {
       lettings: Number(blocked.lettings),
     });
   }

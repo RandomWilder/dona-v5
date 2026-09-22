@@ -639,6 +639,9 @@ const SCREENS: Array<[string, () => string]> = [
         parkingSpaceId: null,
         parkingName: null,
         parkingOptions: [],
+        storageSpaceId: null,
+        storageName: null,
+        storageOptions: [],
         unit: hit,
         people: [
           {
@@ -681,6 +684,9 @@ const SCREENS: Array<[string, () => string]> = [
         parkingSpaceId: null,
         parkingName: null,
         parkingOptions: [],
+        storageSpaceId: null,
+        storageName: null,
+        storageOptions: [],
         unit: hit,
         people: [
           {
@@ -726,6 +732,9 @@ const SCREENS: Array<[string, () => string]> = [
         parkingSpaceId: null,
         parkingName: null,
         parkingOptions: [],
+        storageSpaceId: null,
+        storageName: null,
+        storageOptions: [],
         unit: hit,
         people: [
           {

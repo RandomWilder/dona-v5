@@ -1627,6 +1627,9 @@ export interface TenancySheet {
   parkingSpaceId: string | null;
   parkingName: string | null;
   parkingOptions: readonly { space_id: string; name: string }[];
+  storageSpaceId: string | null;
+  storageName: string | null;
+  storageOptions: readonly { space_id: string; name: string }[];
   unit: UnitHit;
   people: readonly TenancyPersonView[];
   documents: readonly FiledDocumentView[];
@@ -1826,6 +1829,10 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
           <dt>חניה משויכת</dt>
           <dd>${sheet.parkingName ? ltr(sheet.parkingName) : h`—`}</dd>
         </div>
+        <div>
+          <dt>מחסן משויך</dt>
+          <dd>${sheet.storageName ? ltr(sheet.storageName) : h`—`}</dd>
+        </div>
         ${sheet.captures.map(
           (row) => h`<div>
             <dt>${row.labelHe}</dt>
@@ -1885,6 +1892,23 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
           )}
         </select>
         <button class="btn btn-secondary" type="submit">העברת חניה</button>
+      </form>`
+      }
+      ${
+        sheet.storageOptions.length === 0
+          ? h``
+          : h`<form method="post" action="/estate/tenancies/${sheet.tenancyId}/storage" class="activate">
+        ${csrfInput(sheet.csrf)}
+        <label for="storage_space_id">העברת מחסן</label>
+        <select id="storage_space_id" name="storage_space_id">
+          ${sheet.storageOptions.map(
+            (room) =>
+              h`<option value="${room.space_id}" ${
+                room.space_id === sheet.storageSpaceId ? 'selected' : ''
+              }>${ltr(room.name)}</option>`,
+          )}
+        </select>
+        <button class="btn btn-secondary" type="submit">העברת מחסן</button>
       </form>`
       }
     </section>

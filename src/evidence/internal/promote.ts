@@ -30,6 +30,7 @@ import { requireText, validId } from '../../kernel/validate.ts';
 import {
   applyPromotedField as applyTenancyPromotedField,
   occupantOfAssignedBay,
+  occupantOfAssignedStorage,
   type PromotedTenancyField,
 } from '../../tenancy/contract.ts';
 import type { Queryable } from './types.ts';
@@ -61,6 +62,7 @@ const TENANCY_FIELD: Record<string, PromotedTenancyField> = {
   'tenancy.rent_currency': 'rent_currency',
   'tenancy.option_end_date': 'option_end_date',
   'tenancy.parking_space_id': 'parking_space_id',
+  'tenancy.storage_space_id': 'storage_space_id',
 };
 
 const ESTATE_FIELD: Record<string, PromotedEstateField> = {
@@ -173,11 +175,15 @@ export async function promoteExtractedField(
     // it was signed. The same reason the trigger looks only at a row that is gaining the stamp.
     if (row.promoted_to === row.target) {
       if (
-        tenancyField === 'parking_space_id' &&
+        (tenancyField === 'parking_space_id' ||
+          tenancyField === 'storage_space_id') &&
         tenancyId &&
         row.value !== null
       ) {
-        const assigned = await occupantOfAssignedBay(db, tenancyId);
+        const assigned =
+          tenancyField === 'parking_space_id'
+            ? await occupantOfAssignedBay(db, tenancyId)
+            : await occupantOfAssignedStorage(db, tenancyId);
         if (assigned !== null && assigned !== row.value) {
           if (!supersede) {
             throw new KernelError(
@@ -365,12 +371,14 @@ export async function promoteExtractedField(
         [tenancyId, copy.target, skipIds],
       );
       const held = occupant.rows[0];
-      const assigned =
-        copy.field === 'parking_space_id'
+      const assignedField =
+        copy.field === 'parking_space_id' || copy.field === 'storage_space_id';
+      const assigned = assignedField
+        ? copy.field === 'parking_space_id'
           ? await occupantOfAssignedBay(db, tenancyId)
-          : null;
-      const occupyingValue =
-        copy.field === 'parking_space_id' ? assigned : (held?.value ?? null);
+          : await occupantOfAssignedStorage(db, tenancyId)
+        : null;
+      const occupyingValue = assignedField ? assigned : (held?.value ?? null);
       if (
         occupyingValue !== null &&
         occupyingValue !== copy.value &&
@@ -378,13 +386,12 @@ export async function promoteExtractedField(
       ) {
         throw new KernelError(
           'conflict',
-          copy.field === 'parking_space_id'
+          assignedField
             ? `that column already carries ${occupyingValue}`
             : `that column already carries ${held?.value} from document ${held?.document_id}`,
           {
             existingValue: occupyingValue,
-            sourceDocumentId:
-              copy.field === 'parking_space_id' ? undefined : held?.document_id,
+            sourceDocumentId: assignedField ? undefined : held?.document_id,
           },
         );
       }

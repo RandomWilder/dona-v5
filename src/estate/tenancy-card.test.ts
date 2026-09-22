@@ -40,6 +40,9 @@ function sheet(over: Partial<TenancySheet> = {}): TenancySheet {
     parkingSpaceId: null,
     parkingName: null,
     parkingOptions: [],
+    storageSpaceId: null,
+    storageName: null,
+    storageOptions: [],
     unit,
     people: [
       {
@@ -74,6 +77,7 @@ describe('estate · the tenancy card', () => {
     assert.match(html, /ILS/);
     assert.match(html, /2028-08-31/);
     assert.match(html, /חניה משויכת/);
+    assert.match(html, /מחסן משויך/);
     assert.match(html, /12000/);
     assert.match(
       html,
@@ -106,5 +110,30 @@ describe('estate · the tenancy card', () => {
       /action="\/estate\/tenancies\/55555555-5555-4555-8555-555555555555\/parking"/,
     );
     assert.match(html, /העברת חניה/);
+  });
+
+  it('offers a storage reassignment when the building has storage spaces', () => {
+    const html = renderTenancyDetailPage(
+      sheet({
+        storageSpaceId: '88888888-8888-4888-8888-888888888888',
+        storageName: '601',
+        storageOptions: [
+          {
+            space_id: '88888888-8888-4888-8888-888888888888',
+            name: '601',
+          },
+          {
+            space_id: '99999999-9999-4999-8999-999999999999',
+            name: '610',
+          },
+        ],
+      }),
+    );
+    assert.match(html, />601</);
+    assert.match(
+      html,
+      /action="\/estate\/tenancies\/55555555-5555-4555-8555-555555555555\/storage"/,
+    );
+    assert.match(html, /העברת מחסן/);
   });
 });

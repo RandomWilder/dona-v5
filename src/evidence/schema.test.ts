@@ -1224,7 +1224,7 @@ describe('the acceptance bar — a new type costs no DDL', () => {
     assert.equal(live('structure_designation'), undefined);
   });
 
-  it('declares the residual place facts as optional seed rows, not promotion targets', () => {
+  it('declares the residual place facts as optional seed rows', () => {
     const lease = seedDocumentTypes.find(
       (entry) => entry.type.typeKey === 'lease',
     );
@@ -1522,12 +1522,26 @@ describe('field_promotion — A8 governed half', () => {
          VALUES ($1, $2, 'tenancy.parking_space_id')`,
         [newId(), bay],
       );
+      const store = await seedField(db, documentTypeId, 'storage_space_number');
+      await db.query(
+        `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+         VALUES ($1, $2, 'tenancy.storage_space_id')`,
+        [newId(), store],
+      );
       const built = await seedField(db, documentTypeId, 'built_bay');
       await rejects(db, CHECK_VIOLATION, () =>
         db.query(
           `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
            VALUES ($1, $2, 'unit.parking_space_id')`,
           [newId(), built],
+        ),
+      );
+      const builtStore = await seedField(db, documentTypeId, 'built_store');
+      await rejects(db, CHECK_VIOLATION, () =>
+        db.query(
+          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+           VALUES ($1, $2, 'unit.storage_space_id')`,
+          [newId(), builtStore],
         ),
       );
       const gush = await seedField(db, documentTypeId, 'gush');

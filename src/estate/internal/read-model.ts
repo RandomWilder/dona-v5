@@ -269,6 +269,20 @@ export async function listParkingSpacesInBuilding(
   return result.rows;
 }
 
+export async function listStorageSpacesInBuilding(
+  db: Queryable,
+  buildingId: string,
+): Promise<ParkingSpaceOption[]> {
+  const result = await db.query<ParkingSpaceOption>(
+    `SELECT space_id, name
+       FROM space
+      WHERE building_id = $1 AND space_kind = 'STORAGE'
+      ORDER BY name, space_id`,
+    [buildingId],
+  );
+  return result.rows;
+}
+
 /**
  * `building.address_key`, computed here for a lookup. **Slice 6.3, flow A12.**
  *
