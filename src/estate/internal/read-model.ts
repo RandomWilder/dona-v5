@@ -26,6 +26,9 @@ export interface BuildingSummary {
   project_code: string | null;
   unit_count: string;
   space_count: string;
+  gush: string | null;
+  helka: string | null;
+  building_number: string | null;
 }
 
 /**
@@ -60,12 +63,30 @@ export interface UnitRow {
   warranty_end_date: string | null;
   parking_name: string | null;
   storage_name: string | null;
+  /** #140 — the card's remove control posts these, so the ids come back with the names. */
+  parking_space_id: string | null;
+  storage_space_id: string | null;
+}
+
+/**
+ * A `PARKING` or `STORAGE` space no unit points at. Issue 140.
+ *
+ * Unassigned is the ordinary state for a bay the building genuinely has spare, so this list is
+ * not a fault report — it is the only place an orphan is *visible*. Every one 4.6's placeholders
+ * becomes the moment a real number replaces it lands here, and without the list the operator
+ * would have a second `PARKING` row in the building and no screen that admits it exists.
+ */
+export interface UnassignedSpaceRow {
+  space_id: string;
+  space_kind: string;
+  name: string;
 }
 
 export interface BuildingDetail {
   building: BuildingSummary;
   kinds: SpaceKindCount[];
   units: UnitRow[];
+  unassigned: UnassignedSpaceRow[];
 }
 
 const BUILDING_COLUMNS = `
@@ -80,7 +101,10 @@ const BUILDING_COLUMNS = `
   p.project_code,
   (SELECT count(*) FROM space s JOIN unit u ON u.unit_id = s.space_id
     WHERE s.building_id = b.building_id) AS unit_count,
-  (SELECT count(*) FROM space s WHERE s.building_id = b.building_id) AS space_count`;
+  (SELECT count(*) FROM space s WHERE s.building_id = b.building_id) AS space_count,
+  b.gush,
+  b.helka,
+  b.building_number`;
 
 // Named rather than inlined, from 2.6: `npm run measure:scale` explains and times **these strings**
 // and not a second copy of them typed into a script. A measurement of a query the screen does not
@@ -145,7 +169,9 @@ export async function getBuilding(
             u.condition_status,
             u.warranty_end_date::text AS warranty_end_date,
             pk.name AS parking_name,
-            st.name AS storage_name
+            st.name AS storage_name,
+            u.parking_space_id,
+            u.storage_space_id
      FROM unit u
      JOIN space s ON s.space_id = u.unit_id
      LEFT JOIN space pk ON pk.space_id = u.parking_space_id
@@ -156,7 +182,28 @@ export async function getBuilding(
     [buildingId],
   );
 
-  return { building, kinds: kinds.rows, units: units.rows };
+  // Issue 140. `NOT EXISTS` and not a `LEFT JOIN … IS NULL`: a bay may be pointed at by at most
+  // one unit through each key, but saying so in the query would be saying it twice.
+  const unassigned = await db.query<UnassignedSpaceRow>(
+    `SELECT s.space_id, s.space_kind, s.name
+       FROM space s
+      WHERE s.building_id = $1
+        AND s.space_kind IN ('PARKING', 'STORAGE')
+        AND NOT EXISTS (
+              SELECT 1 FROM unit u
+               WHERE u.parking_space_id = s.space_id
+                  OR u.storage_space_id = s.space_id
+            )
+      ORDER BY s.space_kind, s.name`,
+    [buildingId],
+  );
+
+  return {
+    building,
+    kinds: kinds.rows,
+    units: units.rows,
+    unassigned: unassigned.rows,
+  };
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -201,6 +248,25 @@ export async function getUnit(db: Queryable, unitId: string): Promise<UnitHit> {
     throw new KernelError('not_found', 'unit not found');
   }
   return unit;
+}
+
+export interface ParkingSpaceOption {
+  space_id: string;
+  name: string;
+}
+
+export async function listParkingSpacesInBuilding(
+  db: Queryable,
+  buildingId: string,
+): Promise<ParkingSpaceOption[]> {
+  const result = await db.query<ParkingSpaceOption>(
+    `SELECT space_id, name
+       FROM space
+      WHERE building_id = $1 AND space_kind = 'PARKING'
+      ORDER BY name, space_id`,
+    [buildingId],
+  );
+  return result.rows;
 }
 
 /**

@@ -39,7 +39,7 @@ FIELDS sheet gives these entities no timestamp, and every date here is a fact so
 | Table | Columns |
 |---|---|
 | `terms_profile` | `terms_profile_id` PK · `name` |
-| `tenancy` | `tenancy_id` PK · `unit_id` FK → unit · `start_date` · `end_date` · `status` · `terms_profile_id` FK → terms_profile · `notice_date?` · `actual_move_out?` · `rent_amount?` · `rent_currency?` · `option_end_date?` |
+| `tenancy` | `tenancy_id` PK · `unit_id` FK → unit · `start_date` · `end_date` · `status` · `terms_profile_id` FK → terms_profile · `notice_date?` · `actual_move_out?` · `rent_amount?` · `rent_currency?` · `option_end_date?` · `parking_space_id?` |
 | `tenancy_party` | `tenancy_id` + `party_id` composite PK, both FK · `role` · `is_service_contact` |
 
 Vocabularies: `tenancy.status` = `DRAFT · ACTIVE · ENDED · TERMINATED_EARLY`; `tenancy_party.role` =
@@ -64,6 +64,17 @@ and cited from the page, and they acquire no column here. The ruling and its cos
 [SPEC-evidence.md](SPEC-evidence.md), *Three more copies — track B*, which is also where the
 promotion refusals that guard these columns live. **A balance is still Priority's**, none of the
 three is one, and this module still writes none.
+
+**Track A adds the assigned bay.** `parking_space_id` is nullable and points at a `PARKING` space
+by the same composite-key technique estate uses for the built bay. It is where **this household**
+parks. The built bay (`unit.parking_space_id`) is untouched by a move: that column is the plan's
+הצמדה and it survives vacancy. The landlord may reassign the household with no amendment and no
+new document. `reassignParkingSpace` is the eighth write command: it writes the assigned bay and
+appends `tenancy_event` of kind `reassigned`. That kind **must not** name a source document
+(`reassigned_has_no_document`), because `amended` is constrained to name one and this act has none.
+Promotion of a lease's `parking_space_number` lands here, never on the built bay. A non-null
+assigned bay is occupied whoever wrote it — a typed reassignment must not be overwritten by a
+later copy off the paper unless the operator said supersede.
 
 **No `-- pii` marker on any column**, and that is a claim the guard checks rather than a claim this
 file makes: nothing here is person-shaped. The people are in `party`, reached through
@@ -203,14 +214,15 @@ own first five years from it.
   `0025_tenancy_event_terminated.sql`).** The row is mutable; the log is not. Every promotion that
   copies an extracted value onto a typed column appends
   `(field, old → new, actor, source_document_id, extracted_field_id)` with `kind = 'amended'`.
-  `source_document_id` is NOT NULL for that kind (`amended_names_its_document`) and that constraint
-  is never dropped. `kind` is `amended | terminated | activated | extended`. A clock-driven end is
-  `terminated`; a person making a draft live is `activated`; a person taking the option is
-  `extended`. `terminated` and `activated` carry a null `source_document_id` and
-  `extracted_field_id` (`terminated_has_no_document` for the clock kind, `activated_has_no_document`
-  for the person kind). `extended` names a document when there is one and does not when there is
-  not — no extra CHECK, because an option exercise is honestly either a signed notice or a phone
-  call. UPDATE and DELETE are rejected
+`source_document_id` is NOT NULL for that kind (`amended_names_its_document`) and that constraint
+is never dropped. `kind` is `amended | terminated | activated | extended | reassigned`. A clock-driven end is
+`terminated`; a person making a draft live is `activated`; a person taking the option is
+`extended`; a person moving the household's bay is `reassigned`. `terminated`, `activated` and
+`reassigned` carry a null `source_document_id` and
+`extracted_field_id` (`terminated_has_no_document` for the clock kind, `activated_has_no_document`
+for the person kind, `reassigned_has_no_document` for the bay). `extended` names a document when there is one and does not when there is
+not — no extra CHECK, because an option exercise is honestly either a signed notice or a phone
+call. UPDATE and DELETE are rejected
   (`restrict_violation`). `at` comes from the injected clock; there is no `DEFAULT now()`. `actor`
   is `-- pii`; a clock end snapshots `system`, not an operator. Register `upsertTenancy` does
   **not** write events — isolation dates from the import stay legal without a document.
@@ -226,10 +238,15 @@ own first five years from it.
   than `end_date` moves `end_date` to that option end, leaves `option_end_date` in place, and
   appends `extended` with `field = end_date`. A missing letting is `not_found`. Ended, with no
   option, or already at the option end is `invalid`. The actor is the person who invoked it.
+  `reassignParkingSpace` is the eighth: an existing letting, a `PARKING` space in the same
+  building, and no paper. It writes `tenancy.parking_space_id` and appends `reassigned` with
+  `field = parking_space_id`. `unit.parking_space_id` does not move. A space of another kind, or
+  in another building, is `invalid`. The same bay twice is a no-op.
 - **No read model, and from 3.3 exactly one list plus one lookup.** *(Slice 6.5 adds a second list,
   `countIdentifierOverlap`, described at the end of this bullet.)* `contract.ts` exists from 2.4
   and exports the register importer's three write commands — `upsertTermsProfile`, `upsertTenancy` and
-  `upsertTenancyParty` — plus `applyPromotedField` from 4.3 and `exerciseOption` from #135. `listUnitTenancies` joins them at 3.3.
+  `upsertTenancyParty` — plus `applyPromotedField` from 4.3, `exerciseOption` from #135, and
+  `reassignParkingSpace` from #146. `listUnitTenancies` joins them at 3.3.
   Slice 4.6 added `findTermsProfileByName`: A2 must hang a draft on a profile that already exists and
   must not invent `standard`. A missing name is `null`, not an upsert. Slice 4.6b added
   `listTermsProfiles`: names only, ordered, so the confirm screen is a select of what already exists

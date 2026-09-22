@@ -117,8 +117,23 @@ export interface GroundTruthDocument {
   values: readonly GroundTruthValue[];
   absent: readonly AbsentValue[];
   arithmetic: readonly ArithmeticCheck[];
+  /**
+   * The typed building this lease is filed against. Parcel keys are scored against this
+   * side, not as a promotion. Absent when the fixture has no building to check.
+   */
+  typedBuilding?: {
+    gush: string;
+    helka: string;
+    building_number: string;
+  };
   hazards: readonly Hazard[];
 }
+
+const beitShemesh206 = {
+  gush: '80031',
+  helka: '43, 46',
+  building_number: '206',
+} as const;
 
 // ---------------------------------------------------------------------------
 // Specimen 1 — 206-4, Pinchot. 37 pages, one document, clean flatbed scan.
@@ -130,6 +145,7 @@ const pinchot: GroundTruthDocument = {
   typeKey: 'lease',
   pdfPages: 37,
   frontMatterPages: 0,
+  typedBuilding: beitShemesh206,
   values: [
     // --- the letting itself. All of it is on נספח א', none of it in the body. ---
     {
@@ -155,7 +171,7 @@ const pinchot: GroundTruthDocument = {
       printed: 'בת 5 חדרים',
       pdfPage: 13,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
     },
     {
       fieldKey: 'floor',
@@ -163,7 +179,7 @@ const pinchot: GroundTruthDocument = {
       printed: '1 בקומה',
       pdfPage: 13,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
     },
     {
       fieldKey: 'building_number',
@@ -171,7 +187,7 @@ const pinchot: GroundTruthDocument = {
       printed: "בניין מס' 206",
       pdfPage: 13,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
       note: 'The key EXTRACT_INSTRUCTIONS spends a sentence telling the model NOT to put in apartment_number. Declaring it gives the number somewhere correct to go.',
     },
     {
@@ -180,7 +196,7 @@ const pinchot: GroundTruthDocument = {
       printed: 'חניה שמספרה 594',
       pdfPage: 13,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
       note: 'Assigned to the tenancy and reassignable by the landlord at will — permanently, per the second starred clause on this page. It is not a property of the flat.',
     },
     {
@@ -189,7 +205,7 @@ const pinchot: GroundTruthDocument = {
       printed: 'מחסן צמוד מהמרפסת, כמסומן בתכניות',
       pdfPage: 13,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
       note: 'A storage room with NO number. `bloch` numbers its own. This pair is the whole argument for a boolean beside a nullable number rather than one number field.',
     },
 
@@ -391,7 +407,7 @@ const pinchot: GroundTruthDocument = {
       printed: 'גוש 80031',
       pdfPage: 13,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
     },
     {
       fieldKey: 'helka',
@@ -399,7 +415,7 @@ const pinchot: GroundTruthDocument = {
       printed: 'חלקות 43, 46',
       pdfPage: 13,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
       note: 'Two parcels, one field. Printed as a list, and the list is not ordered the same way on every page.',
     },
     {
@@ -408,11 +424,17 @@ const pinchot: GroundTruthDocument = {
       printed: "BG 5 חד'",
       pdfPage: 21,
       printedPage: 21,
-      declaration: 'undeclared',
+      declaration: 'declared',
       note: 'From the title block of the plan drawing. `bloch` is type B1. This is a drawing, not prose — no text layer worth reading, and the words sit in table cells.',
     },
   ],
-  absent: [],
+  absent: [
+    {
+      fieldKey: 'storage_space_number',
+      reason:
+        'A storage room with no number. The clause names a מחסן and does not number it.',
+    },
+  ],
   arithmetic: [
     {
       operands: ['rent_amount', 'maintenance_amount'],
@@ -463,6 +485,7 @@ const bloch: GroundTruthDocument = {
   typeKey: 'lease',
   pdfPages: 38,
   frontMatterPages: 1,
+  typedBuilding: beitShemesh206,
   values: [
     // --- PDF page 1: not the lease. A signed election, and the only page that
     //     explains why this letting's deposit is what it is. ---
@@ -518,7 +541,7 @@ const bloch: GroundTruthDocument = {
       printed: 'בת 5 חדרים',
       pdfPage: 14,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
     },
     {
       fieldKey: 'floor',
@@ -526,7 +549,7 @@ const bloch: GroundTruthDocument = {
       printed: '2 בקומה',
       pdfPage: 14,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
     },
     {
       fieldKey: 'building_number',
@@ -534,7 +557,7 @@ const bloch: GroundTruthDocument = {
       printed: "בניין מס' 206",
       pdfPage: 14,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
     },
     {
       fieldKey: 'parking_space_number',
@@ -542,7 +565,7 @@ const bloch: GroundTruthDocument = {
       printed: 'חניה שמספרה 574',
       pdfPage: 14,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
     },
     {
       fieldKey: 'has_storage',
@@ -550,7 +573,7 @@ const bloch: GroundTruthDocument = {
       printed: 'מחסן שמספרו 601',
       pdfPage: 14,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
     },
     {
       fieldKey: 'storage_space_number',
@@ -558,8 +581,34 @@ const bloch: GroundTruthDocument = {
       printed: 'מחסן שמספרו 601',
       pdfPage: 14,
       printedPage: 13,
-      declaration: 'undeclared',
+      declaration: 'declared',
       note: 'Numbered here, unnumbered in `pinchot`. Same form, same building, same month. The field is nullable or it is wrong half the time.',
+    },
+    {
+      fieldKey: 'gush',
+      value: '80031',
+      printed: 'גוש 80031',
+      pdfPage: 14,
+      printedPage: 13,
+      declaration: 'declared',
+    },
+    {
+      fieldKey: 'helka',
+      value: '43,46',
+      printed: 'חלקות 43, 46',
+      pdfPage: 14,
+      printedPage: 13,
+      declaration: 'declared',
+      note: 'Same two parcels as `pinchot`. Printed order varies by page; the scorer compares sets.',
+    },
+    {
+      fieldKey: 'apartment_type',
+      value: 'B1',
+      printed: 'B1',
+      pdfPage: 22,
+      printedPage: 21,
+      declaration: 'declared',
+      note: 'Title block of the plan drawing, as on `pinchot`. A drawing, not prose.',
     },
 
     // --- the term. Identical to `pinchot` — it is a tender-level constant. ---
@@ -783,7 +832,7 @@ export const leaseGroundTruth: readonly GroundTruthDocument[] = [
  *
  * Every one of these costs a seed row at a new `effective_from`, not a migration
  * (A8, R18). `field_promotion` is the separate and governed question of whether
- * anything deterministic may then read one, and today it has exactly two targets.
+ * anything deterministic may then read one. Place facts declared at #144 have no mapping.
  */
 export const undeclaredFieldKeys: readonly string[] = [
   ...new Set(

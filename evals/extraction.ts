@@ -69,7 +69,8 @@ export interface DeclaredField {
  * `field_key` to the declared list, so the reader cannot return a key the catalogue has not asked
  * for. Folding those into either percentage would report a gap in the catalogue as a defect in the
  * reader. The group shrinks as track B's seed rows land, which is why it is counted rather than
- * dropped. #131 emptied `maintenance_amount` from it; `gush` and `helka` stay.
+ * dropped. #131 emptied `maintenance_amount` from it; #144 emptied the place keys; #146 emptied
+ * `parking_space_number`.
  */
 export type ScoreGroup = 'required' | 'optional' | 'not-declared';
 
@@ -153,9 +154,21 @@ export interface DocumentScore {
   key: string;
   values: ValueScore[];
   identities: IdentityScore[];
+  /** Parcel keys asserted against the typed building. Scorer only — never an approve refusal. */
+  crossChecks: CrossCheckScore[];
   contradictions: Contradiction[];
   /** Everything that fails outright: the contradictions above, and any broken identity. */
   failures: string[];
+}
+
+export interface CrossCheckScore {
+  documentKey: string;
+  fieldKey: string;
+  /** How the reading was compared to the typed column. */
+  compare: 'exact' | 'set';
+  typed: string;
+  got: string | null;
+  reading: IdentityScore['reading'];
 }
 
 export interface Accuracy {
@@ -289,7 +302,9 @@ export function scoreDocument(
 
     const remaining = [...got];
     for (const value of expected) {
-      const at = remaining.findIndex((one) => one.value === value);
+      const at = remaining.findIndex((one) =>
+        valuesMatch(fieldKey, value, one.value),
+      );
       if (at >= 0) {
         remaining.splice(at, 1);
         scored(fieldKey, group, 'matched', { expected: value, got: value });
@@ -328,8 +343,89 @@ export function scoreDocument(
   const identities = truth.arithmetic.map((check) =>
     scoreIdentity(truth, check, declared, read, failures),
   );
+  const crossChecks = scoreCrossChecks(truth, declared, read, failures);
 
-  return { key: truth.key, values, identities, contradictions, failures };
+  return {
+    key: truth.key,
+    values,
+    identities,
+    crossChecks,
+    contradictions,
+    failures,
+  };
+}
+
+const PARCEL_CHECKS = [
+  { fieldKey: 'gush', compare: 'exact' },
+  { fieldKey: 'helka', compare: 'set' },
+  { fieldKey: 'building_number', compare: 'exact' },
+] as const satisfies readonly {
+  fieldKey: keyof NonNullable<GroundTruthDocument['typedBuilding']>;
+  compare: 'exact' | 'set';
+}[];
+
+function parcelSet(value: string): Set<string> {
+  return new Set(
+    value
+      .split(',')
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0),
+  );
+}
+
+function parcelsEqual(left: string, right: string): boolean {
+  const a = parcelSet(left);
+  const b = parcelSet(right);
+  if (a.size === 0 || a.size !== b.size) return false;
+  for (const one of a) {
+    if (!b.has(one)) return false;
+  }
+  return true;
+}
+
+function valuesMatch(fieldKey: string, expected: string, got: string): boolean {
+  const check = PARCEL_CHECKS.find((one) => one.fieldKey === fieldKey);
+  return check?.compare === 'set'
+    ? parcelsEqual(expected, got)
+    : expected === got;
+}
+
+function scoreCrossChecks(
+  truth: GroundTruthDocument,
+  declared: ReadonlyMap<string, DeclaredField>,
+  read: readonly ReadValue[],
+  failures: string[],
+): CrossCheckScore[] {
+  const typed = truth.typedBuilding;
+  if (!typed) return [];
+  return PARCEL_CHECKS.filter((check) => declared.has(check.fieldKey)).map(
+    (check) => {
+      const expected = typed[check.fieldKey];
+      const found = read.filter((one) => one.fieldKey === check.fieldKey);
+      const got = found.length === 1 ? (found[0]?.value ?? null) : null;
+      let reading: IdentityScore['reading'] = 'not-returned';
+      if (got !== null) {
+        const holds =
+          check.compare === 'set'
+            ? parcelsEqual(expected, got)
+            : expected === got;
+        reading = holds ? 'holds' : 'breaks';
+        if (reading === 'breaks') {
+          failures.push(
+            `${truth.key}: ${check.fieldKey}=${got} disagrees with the typed building (${expected})`,
+          );
+        }
+      }
+      return {
+        documentKey: truth.key,
+        fieldKey: check.fieldKey,
+        compare: check.compare,
+        typed: expected,
+        got,
+        reading,
+      };
+    },
+  );
 }
 
 function expressionOf(check: ArithmeticCheck): string {
@@ -557,6 +653,17 @@ export function formatExtractionReport(
           : '✘';
       lines.push(
         `    ${mark} ${identity.expression} — fixture ${identity.fixture}, reading ${identity.reading}`,
+      );
+    }
+    for (const check of document.crossChecks) {
+      const mark =
+        check.reading === 'breaks'
+          ? '✘'
+          : check.reading === 'unreachable'
+            ? '·'
+            : '✔';
+      lines.push(
+        `    ${mark} ${check.fieldKey} vs typed ${check.typed} — reading ${check.reading}`,
       );
     }
   }

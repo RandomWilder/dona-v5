@@ -182,7 +182,8 @@ export type PromotedTenancyField =
   | 'end_date'
   | 'rent_amount'
   | 'rent_currency'
-  | 'option_end_date';
+  | 'option_end_date'
+  | 'parking_space_id';
 
 export interface PromotedFieldSpec {
   tenancyId: string;
@@ -226,6 +227,7 @@ const PROMOTED_COLUMN: Record<PromotedTenancyField, string> = {
   rent_amount: 'rent_amount',
   rent_currency: 'rent_currency',
   option_end_date: 'option_end_date',
+  parking_space_id: 'parking_space_id',
 };
 
 const DATE_FIELDS = new Set<PromotedTenancyField>([
@@ -250,9 +252,94 @@ function requirePromotedValue(
   if (DATE_FIELDS.has(field)) return requireDate(value);
   if (field === 'rent_amount') return requireAmount(value);
   if (value.trim() === '') {
-    throw new KernelError('invalid', 'that currency is empty');
+    throw new KernelError(
+      'invalid',
+      field === 'parking_space_id'
+        ? 'that parking space is empty'
+        : 'that currency is empty',
+    );
   }
   return value;
+}
+
+async function assignedBay(
+  db: Queryable,
+  tenancyId: string,
+): Promise<{
+  parkingSpaceId: string | null;
+  parkingName: string | null;
+  unitId: string;
+} | null> {
+  const current = await db.query<{
+    parking_space_id: string | null;
+    parking_name: string | null;
+    unit_id: string;
+  }>(
+    `SELECT t.parking_space_id,
+            p.name AS parking_name,
+            t.unit_id
+       FROM tenancy t
+       LEFT JOIN space p ON p.space_id = t.parking_space_id
+      WHERE t.tenancy_id = $1`,
+    [tenancyId],
+  );
+  const row = current.rows[0];
+  if (!row) return null;
+  return {
+    parkingSpaceId: row.parking_space_id,
+    parkingName: row.parking_name,
+    unitId: row.unit_id,
+  };
+}
+
+async function parkingById(
+  db: Queryable,
+  tenancyId: string,
+  spaceId: string,
+): Promise<{ spaceId: string; name: string } | null> {
+  const found = await db.query<{ space_id: string; name: string }>(
+    `SELECT s.space_id, s.name
+       FROM tenancy t
+       JOIN space unit_space ON unit_space.space_id = t.unit_id
+       JOIN space s ON s.building_id = unit_space.building_id
+      WHERE t.tenancy_id = $1
+        AND s.space_kind = 'PARKING'
+        AND s.space_id = $2`,
+    [tenancyId, spaceId],
+  );
+  const row = found.rows[0];
+  return row ? { spaceId: row.space_id, name: row.name } : null;
+}
+
+async function parkingByName(
+  db: Queryable,
+  tenancyId: string,
+  name: string,
+): Promise<{ spaceId: string; name: string } | null> {
+  const found = await db.query<{ space_id: string; name: string }>(
+    `SELECT s.space_id, s.name
+       FROM tenancy t
+       JOIN space unit_space ON unit_space.space_id = t.unit_id
+       JOIN space s ON s.building_id = unit_space.building_id
+      WHERE t.tenancy_id = $1
+        AND s.space_kind = 'PARKING'
+        AND s.name = $2`,
+    [tenancyId, name],
+  );
+  const row = found.rows[0];
+  return row ? { spaceId: row.space_id, name: row.name } : null;
+}
+
+/** The assigned bay's printed name, or null when none is set. Occupied whoever wrote it. */
+export async function occupantOfAssignedBay(
+  db: Queryable,
+  tenancyId: string,
+): Promise<string | null> {
+  const row = await assignedBay(db, validId(tenancyId, 'tenancy'));
+  if (!row) {
+    throw new KernelError('not_found', 'tenancy not found');
+  }
+  return row.parkingName;
 }
 
 /**
@@ -266,6 +353,44 @@ export async function applyPromotedField(
   spec: PromotedFieldSpec,
 ): Promise<void> {
   const value = requirePromotedValue(spec.field, spec.value);
+  if (spec.field === 'parking_space_id') {
+    const current = await assignedBay(db, spec.tenancyId);
+    if (!current) {
+      throw new KernelError('not_found', 'tenancy not found');
+    }
+    const bay = await parkingByName(db, spec.tenancyId, value);
+    if (!bay) {
+      throw new KernelError(
+        'invalid',
+        'that parking space is not in this building',
+      );
+    }
+    const oldValue = current.parkingName;
+    if (current.parkingSpaceId !== bay.spaceId) {
+      await db.query(
+        `UPDATE tenancy SET parking_space_id = $2 WHERE tenancy_id = $1`,
+        [spec.tenancyId, bay.spaceId],
+      );
+    }
+    await db.query(
+      `INSERT INTO tenancy_event (
+         tenancy_event_id, tenancy_id, at, actor, kind, field,
+         old_value, new_value, source_document_id, extracted_field_id
+       ) VALUES ($1, $2, $3, $4, 'amended', $5, $6, $7, $8, $9)`,
+      [
+        newId(),
+        spec.tenancyId,
+        spec.at,
+        spec.actor,
+        'parking_space_id',
+        oldValue,
+        bay.name,
+        spec.sourceDocumentId,
+        spec.extractedFieldId,
+      ],
+    );
+    return;
+  }
   const column = PROMOTED_COLUMN[spec.field];
   const current = await db.query<Record<string, string | null>>(
     `SELECT start_date::text, end_date::text, rent_amount::text, rent_currency,
@@ -436,5 +561,50 @@ export async function exerciseOption(
       row.option_end_date,
       sourceDocumentId,
     ],
+  );
+}
+
+export interface ReassignParkingSpec {
+  tenancyId: string;
+  parkingSpaceId: string;
+  actor: string;
+}
+
+/**
+ * Move this household's bay. No paper. The built bay on the unit does not move.
+ */
+export async function reassignParkingSpace(
+  db: Queryable,
+  clock: Clock,
+  spec: ReassignParkingSpec,
+): Promise<void> {
+  const tenancyId = validId(spec.tenancyId, 'tenancy');
+  const parkingSpaceId = validId(spec.parkingSpaceId, 'parking space');
+  const actor = requireText(spec.actor, 'actor', 200);
+  const current = await assignedBay(db, tenancyId);
+  if (!current) {
+    throw new KernelError('not_found', 'tenancy not found');
+  }
+  const bay = await parkingById(db, tenancyId, parkingSpaceId);
+  if (!bay) {
+    throw new KernelError(
+      'invalid',
+      'that parking space is not in this building',
+    );
+  }
+  if (current.parkingSpaceId === bay.spaceId) {
+    return;
+  }
+  await db.query(
+    `UPDATE tenancy SET parking_space_id = $2 WHERE tenancy_id = $1`,
+    [tenancyId, bay.spaceId],
+  );
+  await db.query(
+    `INSERT INTO tenancy_event (
+       tenancy_event_id, tenancy_id, at, actor, kind, field,
+       old_value, new_value, source_document_id, extracted_field_id
+     ) VALUES ($1, $2, $3, $4, 'reassigned', 'parking_space_id',
+               $5, $6, NULL, NULL)`,
+    [newId(), tenancyId, clock.now(), actor, current.parkingName, bay.name],
   );
 }

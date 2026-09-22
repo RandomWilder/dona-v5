@@ -143,8 +143,9 @@ describe('evidence · promote an extracted field', () => {
           `SELECT count(*)::text AS n FROM field_promotion`,
         );
         // start_date, end_date, new_end_date — two effective_from rows each (R18) — plus the
-        // three track B copies: rent_amount, rent_currency, option_end_date.
-        assert.equal(mappings.rows[0]?.n, '9');
+        // three track B copies, #141's rooms and floor, and #146's assigned bay
+        // (one SCHEMA_V6 row each).
+        assert.equal(mappings.rows[0]?.n, '12');
         const extras = await db.query<{ n: string }>(
           `SELECT count(*)::text AS n FROM field_promotion p
              JOIN document_type_field f
@@ -158,6 +159,12 @@ describe('evidence · promote an extracted field', () => {
               'signed_date',
               '%tenant_name',
               '%id_number',
+              'gush',
+              'helka',
+              'building_number',
+              'apartment_type',
+              'has_storage',
+              'storage_space_number',
             ],
           ],
         );
@@ -392,6 +399,122 @@ describe('evidence · promote an extracted field', () => {
     }
   });
 
+  it('promotes a bay number onto the assigned bay, never the built bay', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const unitId = await insertUnit(db);
+        const building = await db.query<{ building_id: string }>(
+          `SELECT building_id FROM space WHERE space_id = $1`,
+          [unitId],
+        );
+        const builtBay = newId();
+        const assignedBay = newId();
+        await db.query(
+          `INSERT INTO space (space_id, building_id, space_kind, name)
+           VALUES ($1, $2, 'PARKING', '500'), ($3, $2, 'PARKING', '574')`,
+          [builtBay, building.rows[0]?.building_id, assignedBay],
+        );
+        await db.query(
+          `UPDATE unit SET parking_space_id = $1 WHERE unit_id = $2`,
+          [builtBay, unitId],
+        );
+        const profile = await upsertTermsProfile(
+          db,
+          `promo-bay-${unitId.slice(24)}`,
+        );
+        const tenancy = await upsertTenancy(db, {
+          unitId,
+          startDate: '2025-01-01',
+          endDate: '2026-12-31',
+          status: 'ACTIVE',
+          termsProfileId: profile.id,
+          noticeDate: null,
+          actualMoveOut: null,
+        });
+        const clock = fixedClock(new Date('2026-09-22T09:00:00.000Z'));
+        const extractor = createFakeExtractor(() => ({
+          findings: [
+            {
+              field_key: 'parking_space_number',
+              value: '574',
+              word_ids: [0],
+            },
+          ],
+        }));
+        const filed = await fileDocument(
+          {
+            db,
+            objects: createMemoryStore(),
+            pdf: createFakePdfText([MARKERS]),
+            audit: createAuditLog(db, clock),
+            clock,
+            bucket: BUCKET,
+            extractor,
+            extractModel: 'gpt-test',
+          } satisfies IntakeDeps,
+          {
+            bytes: pdfBytes('promote-bay'),
+            typeKey: 'lease',
+            place: { kind: 'UNIT', id: unitId },
+            tenancyId: tenancy.id,
+          },
+        );
+        assert.equal(filed.filed, true);
+        if (!filed.filed) return;
+        const rows = await listExtractedFields(db, filed.documentId);
+        const bay = rows.find((row) => row.fieldKey === 'parking_space_number');
+        assert.equal(bay?.promotionTarget, 'tenancy.parking_space_id');
+        await approveExtractedField(
+          {
+            db,
+            audit: createAuditLog(db, fixedClock(AT)),
+            clock: fixedClock(AT),
+          },
+          {
+            extractedFieldId: bay?.extractedFieldId ?? '',
+            approvedBy: 'אסף',
+            mayReadIdentifiers: false,
+          },
+        );
+        const promoted = await promoteExtractedField(
+          {
+            db,
+            audit: createAuditLog(db, fixedClock(AT)),
+            clock: fixedClock(AT),
+          },
+          {
+            extractedFieldId: bay?.extractedFieldId ?? '',
+            promotedBy: 'אסף',
+          },
+        );
+        assert.equal(promoted.target, 'tenancy.parking_space_id');
+        const letting = await db.query<{ parking_space_id: string | null }>(
+          'SELECT parking_space_id FROM tenancy WHERE tenancy_id = $1',
+          [tenancy.id],
+        );
+        assert.equal(letting.rows[0]?.parking_space_id, assignedBay);
+        const unit = await db.query<{ parking_space_id: string | null }>(
+          'SELECT parking_space_id FROM unit WHERE unit_id = $1',
+          [unitId],
+        );
+        assert.equal(unit.rows[0]?.parking_space_id, builtBay);
+        const log = await listTenancyEvents(db, unitId);
+        assert.equal(log[0]?.kind, 'amended');
+        assert.equal(log[0]?.field, 'parking_space_id');
+        assert.equal(log[0]?.new_value, '574');
+        assert.equal(log[0]?.source_document_id, filed.documentId);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
   it('sends promotion to the ledger, and leaves the pixels a reading', () => {
     // **Slice 7.3 moved the `קדם` control off this page.** It was here from 4.3, beside the values
     // it promoted; the approval ledger is now the screen where a reading is signed, corrected or
@@ -468,6 +591,38 @@ describe('evidence · promote an extracted field', () => {
     // An unmapped field is capturable, listed, signable — and still has nowhere to be promoted to.
     assert.doesNotMatch(signed, /קדם · מספר הדירה/);
     assert.doesNotMatch(signed, /name="promoted_by"/);
+
+    const occupied = renderFieldsPage({
+      nav: NAV,
+      csrf: '',
+      documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      buildingId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      buildingName: 'בניין',
+      unitId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      labelHe: 'חוזה שכירות',
+      on: '2026-09-22',
+      rows: READINGS.map((row) =>
+        row.fieldKey === 'start_date'
+          ? {
+              ...row,
+              approvedValue: row.value,
+              approvedBy: 'אסף',
+              approvedAt: AT,
+            }
+          : row,
+      ),
+      unread: [],
+      mayReadIdentifiers: false,
+      mayApprove: true,
+      overwrite: {
+        extractedFieldId: READINGS[0]?.extractedFieldId ?? '',
+        existingValue: '3.5',
+      },
+    });
+    assert.match(occupied, /העמודה כבר נושאת/);
+    assert.match(occupied, /3\.5/);
+    assert.match(occupied, /החלף · תחילת תקופת השכירות/);
+    assert.match(occupied, /name="supersede"/);
   });
 
   it('says when the reading did not cover the whole file', () => {

@@ -25,6 +25,7 @@ const CHECK_VIOLATION = '23514';
 const NOT_NULL_VIOLATION = '23502';
 const UNIQUE_VIOLATION = '23505';
 const GENERATED_ALWAYS = '428C9';
+const RESTRICT_VIOLATION = '23001';
 
 const SPACE_KINDS = [
   'UNIT',
@@ -321,11 +322,32 @@ describe('estate · the schema is the constraint', () => {
           const buildingId = await insertBuilding(db);
           const apartment = await insertSpace(db, buildingId, 'UNIT');
           await insertUnit(db, apartment);
-          const row = await db.query<{ parking_space_id: string | null }>(
-            'SELECT parking_space_id FROM unit WHERE unit_id = $1',
+          const row = await db.query<{
+            parking_space_id: string | null;
+            storage_space_id: string | null;
+          }>(
+            'SELECT parking_space_id, storage_space_id FROM unit WHERE unit_id = $1',
             [apartment],
           );
           assert.equal(row.rows[0]?.parking_space_id, null);
+          assert.equal(row.rows[0]?.storage_space_id, null);
+
+          // **And the building holds one Space (#140).** Both keys stood null through an insert
+          // that named neither, which is what `MATCH SIMPLE` means and what `0004_estate.sql`
+          // calls the ordinary state — nothing had to be invented to satisfy them. Slice 4.6 read
+          // the same schema the other way and had `upsertUnitRow` write a `PARKING` space `חניה
+          // {unit_number}` and a `STORAGE` space `מחסן {unit_number}` for every flat A13 made, in
+          // a numbering scheme no developer plan uses. This is the case that corrupted data, and
+          // the assertion is here rather than only in the route suite because what permits the
+          // null is the schema and not the application above it.
+          const spaces = await db.query<{ space_kind: string }>(
+            'SELECT space_kind FROM space WHERE building_id = $1',
+            [buildingId],
+          );
+          assert.deepEqual(
+            spaces.rows.map((space) => space.space_kind),
+            ['UNIT'],
+          );
         });
       });
 
@@ -405,8 +427,11 @@ describe('estate · the schema is the constraint', () => {
           'address_key',
           'address_line',
           'building_id',
+          'building_number',
           'city',
+          'gush',
           'handover_date',
+          'helka',
           'name',
           'project_id',
           'status',
@@ -457,6 +482,76 @@ describe('estate · the schema is the constraint', () => {
       await pool.end();
     }
   });
+
+  // #143 — typed parcel identifiers. A lease recites them; a tabu extract or a plan establishes
+  // them. They are not keys: two buildings may share a גוש, helka is a list, and building_number
+  // collapses on a standalone building.
+  it('holds gush, helka and building_number as nullable text, none unique', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const cols = await db.query<{
+          column_name: string;
+          data_type: string;
+          is_nullable: string;
+        }>(
+          `SELECT column_name, data_type, is_nullable
+             FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'building'
+              AND column_name IN ('gush', 'helka', 'building_number')
+            ORDER BY column_name`,
+        );
+        assert.deepEqual(
+          cols.rows.map((row) => [
+            row.column_name,
+            row.data_type,
+            row.is_nullable,
+          ]),
+          [
+            ['building_number', 'text', 'YES'],
+            ['gush', 'text', 'YES'],
+            ['helka', 'text', 'YES'],
+          ],
+        );
+
+        const uniqueOnThem = await db.query<{ indexdef: string }>(
+          `SELECT indexdef FROM pg_indexes
+            WHERE schemaname = 'public' AND tablename = 'building'
+              AND (indexdef LIKE '%gush%'
+                OR indexdef LIKE '%helka%'
+                OR indexdef LIKE '%building_number%')`,
+        );
+        assert.deepEqual(uniqueOnThem.rows, []);
+
+        const first = await insertBuilding(db, null, 'Parcel 1');
+        await db.query(
+          `UPDATE building
+              SET gush = '6533', helka = '43, 46', building_number = '206'
+            WHERE building_id = $1`,
+          [first],
+        );
+        const second = await insertBuilding(db, null, 'Parcel 2');
+        await db.query(
+          `UPDATE building
+              SET gush = '6533', helka = '43, 46', building_number = '206'
+            WHERE building_id = $1`,
+          [second],
+        );
+        const shared = await db.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM building
+            WHERE gush = '6533' AND helka = '43, 46' AND building_number = '206'`,
+        );
+        assert.equal(shared.rows[0]?.n, '2');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
   // The natural keys — 0005_estate_natural_keys.sql, slice 1.11. 1.9 shipped this spine with nothing
   // unique but its primary keys, which is fine for a schema and wrong for an importer: the same
   // fixture applied twice produced 2 buildings, 368 spaces and 144 units (tasks/evidence/1.11.md).
@@ -662,6 +757,138 @@ describe('estate · Asset and the Provider stub', () => {
           });
         },
       );
+    } finally {
+      await pool.end();
+    }
+  });
+});
+
+describe('estate_event — append-only promotion log', () => {
+  const EVENT_COLUMNS = [
+    'estate_event_id',
+    'entity_type',
+    'building_id',
+    'unit_id',
+    'at',
+    'actor',
+    'kind',
+    'field',
+    'old_value',
+    'new_value',
+    'source_document_id',
+    'extracted_field_id',
+  ];
+
+  async function seedDocument(db: PoolClient): Promise<string> {
+    const typeId = newId();
+    const documentId = newId();
+    await db.query(
+      `INSERT INTO document_type (
+         document_type_id, type_key, label_he, label_en, verification_terms, is_active
+       ) VALUES ($1, $2, 'חוזה', NULL, NULL, true)`,
+      [typeId, `estate-event-${typeId.slice(24)}`],
+    );
+    await db.query(
+      `INSERT INTO document (
+         document_id, document_type_id, storage_uri, file_hash,
+         ingested_at, verification_verdict
+       ) VALUES ($1, $2, 'gs://x/a.pdf', $3, $4, 'unguarded')`,
+      [
+        documentId,
+        typeId,
+        `hash-${documentId}`,
+        new Date('2026-09-22T09:00:00.000Z'),
+      ],
+    );
+    return documentId;
+  }
+
+  it('is a relation with the published log columns and no DEFAULT now()', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await db.query('SELECT 1 FROM estate_event LIMIT 0');
+        const result = await db.query<{ column_name: string }>(
+          `SELECT column_name FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'estate_event'
+            ORDER BY ordinal_position`,
+        );
+        assert.deepEqual(
+          result.rows.map((row) => row.column_name),
+          EVENT_COLUMNS,
+        );
+        const defaults = await db.query<{ column_default: string | null }>(
+          `SELECT column_default FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'estate_event'
+              AND column_name = 'at'`,
+        );
+        assert.equal(defaults.rows[0]?.column_default, null);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('refuses a mismatched entity, amended without paper, and any update or delete', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const buildingId = await insertBuilding(db);
+        const unitId = await insertSpace(db, buildingId, 'UNIT');
+        await insertUnit(db, unitId);
+        const documentId = await seedDocument(db);
+        const at = new Date('2026-09-22T09:00:00.000Z');
+
+        await rejects(db, CHECK_VIOLATION, () =>
+          db.query(
+            `INSERT INTO estate_event (
+               estate_event_id, entity_type, building_id, unit_id, at, actor, kind,
+               field, old_value, new_value, source_document_id
+             ) VALUES ($1, 'UNIT', $2, NULL, $3, 'אסף', 'amended',
+                       'rooms', '3.5', '4', $4)`,
+            [newId(), buildingId, at, documentId],
+          ),
+        );
+        await rejects(db, CHECK_VIOLATION, () =>
+          db.query(
+            `INSERT INTO estate_event (
+               estate_event_id, entity_type, building_id, unit_id, at, actor, kind,
+               field, old_value, new_value, source_document_id
+             ) VALUES ($1, 'UNIT', NULL, $2, $3, 'אסף', 'amended',
+                       'rooms', '3.5', '4', NULL)`,
+            [newId(), unitId, at],
+          ),
+        );
+
+        const eventId = newId();
+        await db.query(
+          `INSERT INTO estate_event (
+             estate_event_id, entity_type, building_id, unit_id, at, actor, kind,
+             field, old_value, new_value, source_document_id
+           ) VALUES ($1, 'UNIT', NULL, $2, $3, 'אסף', 'amended',
+                     'rooms', '3.5', '4', $4)`,
+          [eventId, unitId, at, documentId],
+        );
+        await rejects(db, RESTRICT_VIOLATION, () =>
+          db.query(
+            'UPDATE estate_event SET actor = $2 WHERE estate_event_id = $1',
+            [eventId, 'לא'],
+          ),
+        );
+        await rejects(db, RESTRICT_VIOLATION, () =>
+          db.query('DELETE FROM estate_event WHERE estate_event_id = $1', [
+            eventId,
+          ]),
+        );
+      });
     } finally {
       await pool.end();
     }

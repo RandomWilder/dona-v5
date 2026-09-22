@@ -491,6 +491,8 @@ describe('tenancy · the rest of the schema', () => {
             'end_date',
             'notice_date',
             'option_end_date',
+            'parking_kind',
+            'parking_space_id',
             'rent_amount',
             'rent_currency',
             'start_date',
@@ -532,6 +534,47 @@ describe('tenancy · the rest of the schema', () => {
           assert.deepEqual(leaked.rows, []);
         });
       });
+
+      await t.test(
+        'D3 · the assigned bay points at a PARKING space, never a lobby',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            const estate = await seedEstate(db);
+            const lobby = newId();
+            const bay = newId();
+            const building = await db.query<{ building_id: string }>(
+              `SELECT s.building_id FROM space s WHERE s.space_id = $1`,
+              [estate.unitId],
+            );
+            const buildingId = building.rows[0]?.building_id ?? '';
+            await db.query(
+              `INSERT INTO space (space_id, building_id, space_kind, name)
+               VALUES ($1, $2, 'COMMON', 'לובי'), ($3, $2, 'PARKING', '574')`,
+              [lobby, buildingId, bay],
+            );
+            const tenancyId = await seedTenancy(db, {
+              ...estate,
+              from: '2026-01-01',
+              to: '2027-01-01',
+            });
+            await rejects(db, FOREIGN_KEY_VIOLATION, () =>
+              db.query(
+                `UPDATE tenancy SET parking_space_id = $2 WHERE tenancy_id = $1`,
+                [tenancyId, lobby],
+              ),
+            );
+            await db.query(
+              `UPDATE tenancy SET parking_space_id = $2 WHERE tenancy_id = $1`,
+              [tenancyId, bay],
+            );
+            const row = await db.query<{ parking_space_id: string }>(
+              'SELECT parking_space_id FROM tenancy WHERE tenancy_id = $1',
+              [tenancyId],
+            );
+            assert.equal(row.rows[0]?.parking_space_id, bay);
+          });
+        },
+      );
     } finally {
       await pool.end();
     }
@@ -833,6 +876,79 @@ describe('tenancy_event — append-only promotion log', () => {
              ) VALUES ($1, $2, $3, 'אסף', 'amended', 'end_date',
                        '2027-01-01', '2030-01-01', NULL, NULL)`,
             [newId(), tenancyId, new Date('2026-09-21T09:02:00.000Z')],
+          ),
+        );
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('accepts reassigned without paper and still refuses amended without paper', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const estate = await seedEstate(db);
+        const tenancyId = await seedTenancy(db, {
+          ...estate,
+          from: '2026-01-01',
+          to: '2027-01-01',
+        });
+        await db.query(
+          `INSERT INTO tenancy_event (
+             tenancy_event_id, tenancy_id, at, actor, kind, field,
+             old_value, new_value, source_document_id, extracted_field_id
+           ) VALUES ($1, $2, $3, 'אסף', 'reassigned', 'parking_space_id',
+                     NULL, '574', NULL, NULL)`,
+          [newId(), tenancyId, new Date('2026-09-22T09:00:00.000Z')],
+        );
+        const typeId = newId();
+        const documentId = newId();
+        await db.query(
+          `INSERT INTO document_type (
+             document_type_id, type_key, label_he, label_en, verification_terms, is_active
+           ) VALUES ($1, $2, 'חוזה', NULL, NULL, true)`,
+          [typeId, `t146-event-${typeId.slice(24)}`],
+        );
+        await db.query(
+          `INSERT INTO document (
+             document_id, document_type_id, storage_uri, file_hash,
+             ingested_at, verification_verdict
+           ) VALUES ($1, $2, 'gs://x/a.pdf', $3, $4, 'unguarded')`,
+          [
+            documentId,
+            typeId,
+            `hash-${documentId}`,
+            new Date('2026-09-22T09:00:00.000Z'),
+          ],
+        );
+        await rejects(db, CHECK_VIOLATION, () =>
+          db.query(
+            `INSERT INTO tenancy_event (
+               tenancy_event_id, tenancy_id, at, actor, kind, field,
+               old_value, new_value, source_document_id, extracted_field_id
+             ) VALUES ($1, $2, $3, 'אסף', 'reassigned', 'parking_space_id',
+                       NULL, '574', $4, NULL)`,
+            [
+              newId(),
+              tenancyId,
+              new Date('2026-09-22T09:01:00.000Z'),
+              documentId,
+            ],
+          ),
+        );
+        await rejects(db, CHECK_VIOLATION, () =>
+          db.query(
+            `INSERT INTO tenancy_event (
+               tenancy_event_id, tenancy_id, at, actor, kind, field,
+               old_value, new_value, source_document_id, extracted_field_id
+             ) VALUES ($1, $2, $3, 'אסף', 'amended', 'parking_space_id',
+                       NULL, '574', NULL, NULL)`,
+            [newId(), tenancyId, new Date('2026-09-22T09:02:00.000Z')],
           ),
         );
       });

@@ -2246,6 +2246,8 @@ export interface FieldsScreen {
   revealed?: string;
   /** How many rows the last press signed. */
   saved?: number;
+  /** Occupied estate column: the second act names the value already held. */
+  overwrite?: { extractedFieldId: string; existingValue: string };
   pageCount?: number;
   pagesRead?: number;
 }
@@ -2475,13 +2477,22 @@ export function renderFieldsPage(screen: FieldsScreen): string {
     </details>
     ${
       promotable.length > 0
-        ? h`<form class="form-actions" method="post" action="/documents/${screen.documentId}/promote">
+        ? promotable.map((row) => {
+            const overwrite =
+              screen.overwrite?.extractedFieldId === row.extractedFieldId
+                ? screen.overwrite
+                : undefined;
+            return h`<form class="form-actions" method="post" action="/documents/${screen.documentId}/promote">
           ${csrfInput(screen.csrf)}
-          ${promotable.map(
-            (row) =>
-              h`<button class="btn btn-secondary" name="extracted_field_id" value="${row.extractedFieldId}">קדם · ${row.labelHe}</button>`,
-          )}
-        </form>`
+          ${
+            overwrite
+              ? h`<p class="lede">העמודה כבר נושאת ${ltr(overwrite.existingValue)}. החלפה היא החלטה, לא ניסיון שני.</p>
+          <input type="hidden" name="supersede" value="1" />`
+              : h``
+          }
+          <button class="btn btn-secondary" name="extracted_field_id" value="${row.extractedFieldId}">${overwrite ? h`החלף` : h`קדם`} · ${row.labelHe}</button>
+        </form>`;
+          })
         : h``
     }`;
   return shell('דונה דום — אישור קריאה', body, screen.nav);

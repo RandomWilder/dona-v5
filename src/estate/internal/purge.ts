@@ -214,6 +214,7 @@ export async function applyEstatePurge(
     if (disabledTriggers) {
       await db.query('ALTER TABLE extracted_field ENABLE TRIGGER USER');
       await db.query('ALTER TABLE tenancy_event ENABLE TRIGGER USER');
+      await db.query('ALTER TABLE estate_event ENABLE TRIGGER USER');
     }
   }
 
@@ -575,6 +576,16 @@ async function deleteBag(db: Queryable, ids: PlaceIds): Promise<void> {
       ids.assetIds,
     ]);
   }
+  if (ids.unitIds.length > 0) {
+    await db.query(`DELETE FROM estate_event WHERE unit_id = ANY($1::uuid[])`, [
+      ids.unitIds,
+    ]);
+  }
+  if (ids.dropBuilding && ids.buildingId !== null) {
+    await db.query(`DELETE FROM estate_event WHERE building_id = $1`, [
+      ids.buildingId,
+    ]);
+  }
   if (ids.documentIds.length > 0) {
     await db.query(
       `DELETE FROM document_link WHERE document_id = ANY($1::uuid[])`,
@@ -656,6 +667,7 @@ async function bypassDeleteGuards(db: Queryable): Promise<boolean> {
     await db.query('ROLLBACK TO SAVEPOINT estate_purge_bypass');
     await db.query('ALTER TABLE extracted_field DISABLE TRIGGER USER');
     await db.query('ALTER TABLE tenancy_event DISABLE TRIGGER USER');
+    await db.query('ALTER TABLE estate_event DISABLE TRIGGER USER');
     return true;
   }
 }

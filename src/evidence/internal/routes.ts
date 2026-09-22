@@ -801,6 +801,10 @@ export function registerDocumentRoutes(
           rooms: 1,
           areaSqm: null,
           hasMamad: false,
+          // A16's in-tab create knows the flat number off the lease and nothing else — the same
+          // reason `rooms` is 1 here. It names no bay (#140), so none is written.
+          parkingSpaceName: null,
+          storageSpaceName: null,
           warrantyEndDate: null,
           conditionStatus: 'READY',
         },
@@ -1545,7 +1549,11 @@ export function registerDocumentRoutes(
   const fieldsScreen = async (
     request: FastifyRequest,
     documentId: string,
-    extra: { revealed?: string; saved?: number },
+    extra: {
+      revealed?: string;
+      saved?: number;
+      overwrite?: { extractedFieldId: string; existingValue: string };
+    },
   ): Promise<FieldsScreen> => {
     const filed = await getFiledDocument(deps.pool, documentId);
     const anchor = await anchorOf(deps.pool, documentId);
@@ -1710,20 +1718,42 @@ export function registerDocumentRoutes(
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
       const fields = formBody(request);
-      await promoteExtractedField(
-        {
-          db: deps.pool,
-          audit: createAuditLog(deps.pool, deps.clock),
-          clock: deps.clock,
-        },
-        {
-          extractedFieldId: validId(
-            fields.extracted_field_id ?? '',
-            'extracted field',
-          ),
-          promotedBy: requireOperatorEmail(request),
-        },
+      const extractedFieldId = validId(
+        fields.extracted_field_id ?? '',
+        'extracted field',
       );
+      try {
+        await promoteExtractedField(
+          {
+            db: deps.pool,
+            audit: createAuditLog(deps.pool, deps.clock),
+            clock: deps.clock,
+          },
+          {
+            extractedFieldId,
+            promotedBy: requireOperatorEmail(request),
+            supersede: fields.supersede === '1',
+          },
+        );
+      } catch (error) {
+        if (
+          error instanceof KernelError &&
+          error.code === 'conflict' &&
+          typeof error.details?.existingValue === 'string'
+        ) {
+          html(reply);
+          reply.code(409);
+          return renderFieldsPage(
+            await fieldsScreen(request, documentId, {
+              overwrite: {
+                extractedFieldId,
+                existingValue: error.details.existingValue,
+              },
+            }),
+          );
+        }
+        throw error;
+      }
       return reply.redirect(`/documents/${documentId}/read`);
     },
   );

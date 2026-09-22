@@ -25,6 +25,7 @@ import {
   loadOfficeRetrievalThread,
 } from '../../staff/contract.ts';
 import { addCalendarYears, WARRANTY_YEARS } from './assets.ts';
+import { listEstateEvents } from './events.ts';
 import { importEstate, upsertUnitRow } from './importer.ts';
 import type {
   BuildingPlan,
@@ -44,10 +45,12 @@ import {
   listApprovedCapturesForTenancy,
   listBuildings,
   listExpiringLeases,
+  listParkingSpacesInBuilding,
   listProjects,
   type ProjectOption,
   searchEstate,
 } from './read-model.ts';
+import { removeSpace } from './spaces.ts';
 import {
   type DocumentSearchHit,
   type FiledDocumentView,
@@ -130,6 +133,8 @@ export interface EstateDeps {
     rent_amount: string | null;
     rent_currency: string | null;
     option_end_date: string | null;
+    parking_space_id: string | null;
+    parking_name: string | null;
   }>;
   listTenancyParties: (
     db: Pool,
@@ -157,6 +162,10 @@ export interface EstateDeps {
   activateTenancy: (
     db: Pool,
     spec: { tenancyId: string; actor: string },
+  ) => Promise<void>;
+  reassignParkingSpace: (
+    db: Pool,
+    spec: { tenancyId: string; parkingSpaceId: string; actor: string },
   ) => Promise<void>;
   /**
    * #114 / #121. Injected from evidence so this module never imports it. Bound is this Unit or
@@ -415,6 +424,13 @@ function buildingFromForm(
       handoverDate: addCalendarYears(handoverDate, 0),
       warrantyEndDate: addCalendarYears(warrantyEndDate, 0),
       status: buildingStatus(form.status),
+      gush: optionalText(blankToNull(form.gush), 'gush', 64),
+      helka: optionalText(blankToNull(form.helka), 'helka', 64),
+      buildingNumber: optionalText(
+        blankToNull(form.building_number),
+        'building_number',
+        32,
+      ),
       spaces: [],
       units: [],
     },
@@ -483,6 +499,13 @@ function checked(value: unknown): boolean {
  * `floor` is named separately because it lives on Space and not on Unit, which is `UnitRowSpec`'s
  * own shape and not a decision this form makes. A blank `warranty_end_date` is null and means *the
  * building's date applies* (R14) — not *no warranty*.
+ *
+ * **The two bay numbers are optional and are copied, never derived (#140).** A blank one writes no
+ * `PARKING` or `STORAGE` space at all and leaves the foreign key null, which is what
+ * `0004_estate.sql` calls the ordinary state. Until this ticket the write invented `חניה
+ * {unit_number}` and `מחסן {unit_number}` for every flat — a number off the door standing in for a
+ * number off the developer's plan, which nothing reconciles. What the operator types is the name:
+ * text and not a number, because a bay is printed `594` in one plan and `12/ב` in the next.
  */
 function unitFromForm(body: unknown): {
   unit: UnitRowSpec['unit'];
@@ -513,6 +536,16 @@ function unitFromForm(body: unknown): {
               0,
             ),
       conditionStatus: conditionStatus(form.condition_status),
+      parkingSpaceName: optionalText(
+        blankToNull(form.parking_space_name),
+        'parking_space_name',
+        64,
+      ),
+      storageSpaceName: optionalText(
+        blankToNull(form.storage_space_name),
+        'storage_space_name',
+        64,
+      ),
     },
     // **A blank text input is absent, not empty.** `optionalText` answers null for a field a caller
     // omitted and `invalid` for one it sent empty — which is right for an API and wrong for a form,
@@ -723,6 +756,9 @@ export function registerEstateRoutes(
           handoverDate: building.handover_date,
           warrantyEndDate: building.warranty_end_date,
           status: building.status as BuildingStatus,
+          gush: building.gush,
+          helka: building.helka,
+          buildingNumber: building.building_number,
         },
         unit,
         floor,
@@ -749,6 +785,36 @@ export function registerEstateRoutes(
           .header('location', `/documents/new?${back}`)
           .send();
       }
+      return reply
+        .code(303)
+        .header('location', `/estate/buildings/${buildingId}`)
+        .send();
+    },
+  );
+
+  /**
+   * **Issue 140.** Deletes a `PARKING` or `STORAGE` space, detaching the flat that points at it
+   * first, behind the same `estate.write` line A13 keeps.
+   *
+   * `POST … /remove` rather than `DELETE`: a form posts, and every write on these screens is a
+   * form. **Keyed on the Space alone**, because whether a flat still points at the placeholder
+   * depends only on whether the operator wrote the real number before or after coming here, and
+   * a route that needed a unit made the orphan — the case the issue is about — unreachable.
+   * `removeSpace` refuses and names anything else still holding it.
+   *
+   * One transaction, for `POST …/units`’ reason one screen up: the `UPDATE`s and the `DELETE`
+   * handed a `Pool` would be three, and a failure between them leaves the orphan this removes.
+   */
+  app.post<{ Params: { spaceId: string } }>(
+    '/estate/spaces/:spaceId/remove',
+    ESTATE_WRITE,
+    async (request, reply) => {
+      const spaceId = validId(request.params.spaceId, 'spaceId');
+      const { buildingId } = await inTransaction(deps.pool, (db) =>
+        removeSpace(db, spaceId),
+      );
+      // Back to the building page, which is where the card, the number and the kind chips are —
+      // the three things this write should have changed.
       return reply
         .code(303)
         .header('location', `/estate/buildings/${buildingId}`)
@@ -786,8 +852,9 @@ export function registerEstateRoutes(
       deps.chrome(csrf, 'estate', mayFile(request)),
       documents,
       // Slice 6.2: the door to A13's screen, rendered for a viewer who may walk through it and for
-      // nobody else — the buildings list's rule, one level down.
-      can(request.staff?.role ?? null, 'estate.write'),
+      // nobody else — the buildings list's rule, one level down. Issue 140 hangs the remove
+      // controls off the same answer, so the stance and the token it posts travel together.
+      can(request.staff?.role ?? null, 'estate.write') ? { csrf } : undefined,
       await officeRetrieval(
         deps.pool,
         request,
@@ -818,7 +885,15 @@ export function registerEstateRoutes(
       unit.unit_id,
     );
     await deps.expireDueTenancies(deps.pool, deps.clock);
-    const events = await deps.listTenancyEvents(deps.pool, unit.unit_id);
+    const tenancyEvents = await deps.listTenancyEvents(deps.pool, unit.unit_id);
+    const estateEvents = await listEstateEvents(deps.pool, unit.unit_id);
+    const events = [...estateEvents, ...tenancyEvents].sort((left, right) => {
+      const byTime = (left.at ?? '').localeCompare(right.at ?? '');
+      if (byTime !== 0) return byTime;
+      return (left.field + (left.new_value ?? '')).localeCompare(
+        right.field + (right.new_value ?? ''),
+      );
+    });
     const csrf = csrfFrom(request);
     html(reply);
     return renderUnitPage(
@@ -950,12 +1025,14 @@ export function registerEstateRoutes(
     );
     const letting = await deps.getTenancy(deps.pool, tenancyId);
     const unit = await getUnit(deps.pool, letting.unit_id);
-    const [members, documents, gate, captures] = await Promise.all([
-      deps.listTenancyParties(deps.pool, tenancyId),
-      deps.listLinkedDocuments(deps.pool, 'TENANCY', tenancyId),
-      deps.activationGate(deps.pool, tenancyId),
-      listApprovedCapturesForTenancy(deps.pool, tenancyId),
-    ]);
+    const [members, documents, gate, captures, parkingOptions] =
+      await Promise.all([
+        deps.listTenancyParties(deps.pool, tenancyId),
+        deps.listLinkedDocuments(deps.pool, 'TENANCY', tenancyId),
+        deps.activationGate(deps.pool, tenancyId),
+        listApprovedCapturesForTenancy(deps.pool, tenancyId),
+        listParkingSpacesInBuilding(deps.pool, unit.building_id),
+      ]);
     const names = await deps.listPartyNames(
       deps.pool,
       members.map((member) => member.party_id),
@@ -976,6 +1053,9 @@ export function registerEstateRoutes(
       rentAmount: letting.rent_amount,
       rentCurrency: letting.rent_currency,
       optionEndDate: letting.option_end_date,
+      parkingSpaceId: letting.parking_space_id,
+      parkingName: letting.parking_name,
+      parkingOptions,
       unit,
       people,
       documents,
@@ -996,6 +1076,21 @@ export function registerEstateRoutes(
       const tenancyId = validId(request.params.tenancyId, 'tenancyId');
       await deps.activateTenancy(deps.pool, {
         tenancyId,
+        actor: requireText(request.staff?.email ?? '', 'actor', 200),
+      });
+      return reply.redirect(`/estate/tenancies/${tenancyId}`);
+    },
+  );
+
+  app.post<{ Params: { tenancyId: string } }>(
+    '/estate/tenancies/:tenancyId/parking',
+    WRITE,
+    async (request, reply) => {
+      const tenancyId = validId(request.params.tenancyId, 'tenancyId');
+      const posted = request.body as { parking_space_id?: string };
+      await deps.reassignParkingSpace(deps.pool, {
+        tenancyId,
+        parkingSpaceId: validId(posted.parking_space_id ?? '', 'parking space'),
         actor: requireText(request.staff?.email ?? '', 'actor', 200),
       });
       return reply.redirect(`/estate/tenancies/${tenancyId}`);

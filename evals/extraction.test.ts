@@ -440,6 +440,42 @@ describe('the arithmetic the paper asserts about its own numbers', () => {
   });
 });
 
+describe('the parcel cross-check against the typed building', () => {
+  const parcel = {
+    gush: '80031',
+    helka: '43, 46',
+    building_number: '206',
+  };
+  const helkaDeclared: DeclaredField[] = [
+    { fieldKey: 'helka', isRequired: false },
+  ];
+
+  it('passes on 43,46 and on 46,43, and fails on 43,47', () => {
+    const document = truth({
+      values: [value('helka', '43,46')],
+      typedBuilding: parcel,
+    });
+    const same = scoreDocument(document, helkaDeclared, [
+      read('helka', '43,46'),
+    ]);
+    assert.equal(same.crossChecks[0]?.reading, 'holds');
+    assert.equal(same.crossChecks[0]?.compare, 'set');
+    assert.equal(same.failures.length, 0);
+
+    const swapped = scoreDocument(document, helkaDeclared, [
+      read('helka', '46,43'),
+    ]);
+    assert.equal(swapped.crossChecks[0]?.reading, 'holds');
+    assert.equal(swapped.failures.length, 0);
+
+    const other = scoreDocument(document, helkaDeclared, [
+      read('helka', '43,47'),
+    ]);
+    assert.equal(other.crossChecks[0]?.reading, 'breaks');
+    assert.ok(other.failures.some((why) => why.includes('helka')));
+  });
+});
+
 describe('what the gate deliberately does not grade', () => {
   // Both specimens print one plot number in the body and another on the plan, identically. There is
   // no right answer to grade, and grading it would penalise a faithful reading.
@@ -481,5 +517,9 @@ describe('the fixture and the seeded catalogue', () => {
         );
       }
     }
+    assert.equal(current.has('parking_space_number'), true);
+    assert.equal(current.has('security_structure'), false);
+    assert.equal(current.has('index_base_month'), false);
+    assert.equal(current.has('index_publication_date'), false);
   });
 });

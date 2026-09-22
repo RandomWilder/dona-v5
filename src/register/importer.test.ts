@@ -88,7 +88,12 @@ describe('register · the file runs twice', () => {
           assert.deepEqual(first.counts, {
             project: { created: 1, updated: 6 },
             building: { created: 2, updated: 7 },
-            space: { created: 15, updated: 12 },
+            // **One Space per line and not three (#140).** Until this ticket `upsertUnitRow`
+            // invented a `PARKING` and a `STORAGE` space for every row, so this number was
+            // `unit` × 3 — 15/12 against 5/4 — and every unit the register imported carried two
+            // bays the file does not mention. The header still has no bay columns, so the count
+            // is now the `UNIT` spaces alone and matches `unit` exactly.
+            space: { created: 5, updated: 4 },
             unit: { created: 5, updated: 4 },
             terms_profile: { created: 2, updated: 7 },
             party: { created: 8, updated: 1 },

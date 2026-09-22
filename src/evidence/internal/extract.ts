@@ -60,7 +60,7 @@ export function isIdentifierField(fieldKey: string): boolean {
 
 /** Mapping instructions. A change here is a prompt change and runs the golden set. */
 export const EXTRACT_INSTRUCTIONS =
-  'Fill the declared fields from the numbered words. Return word_ids that support each value. Never invent coordinates. On a Hebrew lease, בניין מספר belongs in address; דירה מספר is apartment_number only. Do not swap them. Ignore חניה and parking numbers. Address is street, building number and city — not the flat number as the house number. DATE values are ISO YYYY-MM-DD only, never Hebrew month names and never dd/mm/yyyy.';
+  'Fill the declared fields from the numbered words. Return word_ids that support each value. Never invent coordinates. On a Hebrew lease, דירה מספר is apartment_number only; בניין מספר is building_number, not the house number in address. Address is street, house number and city — not the flat number as the house number. parking_space_number is the bay printed as חניה שמספרה, digits only, not a storage room. DATE values are ISO YYYY-MM-DD only, never Hebrew month names and never dd/mm/yyyy.';
 
 export interface MeasuredWord {
   id: number;

@@ -979,13 +979,39 @@ value is ISO-formatted; nothing in it distinguishes the original period from the
 nothing stopping the option's dates landing in `end_date`. Declaring the option separately makes the
 distinction the reader's job and gives the scorer something to fail on.
 
-**What is deliberately not declared here.** `gush`, `helka` and the plan's structure designation are
-printed on both leases and are **facts about the building, not about the letting**. They belong to a
-Building declaration — track A — and declaring them on the lease type would put a fact in the place
-it happened to be printed rather than the place it is true of. Both specimens also disagree with
-themselves about the plot number, printing one value in the body and another on the plan, identically
-in both documents. That is a property of the form rather than a typo: the fixture records it as a
-known conflict with no field key and no score attached, because there is no right answer to grade.
+**What is deliberately not declared here (track B).** The plot number the two specimens disagree with
+themselves about — one value in the body, another on the plan, identically in both documents — is a
+property of the form rather than a typo. The fixture records it as a known conflict with no field
+key and no score attached, because there is no right answer to grade. `security_structure`,
+`index_base_month` and `index_publication_date` are not place facts and are not named here.
+
+### What a lease recites about a place, from track A
+
+Seed rows at a new `effective_from` (2026-09-22). Parcel keys, typology and storage stay capture
+and score only. **`rooms` and `floor` became promotion targets at #141** — the lease may establish
+those two; it still does not establish the land.
+
+| Key | Type | What happens |
+|---|---|---|
+| `rooms` | NUMBER | Promotes to `unit.rooms` through a `UNIT` link. Occupied whoever wrote it (#145). |
+| `floor` | NUMBER | Promotes to `space.floor` on the unit's space, through a `UNIT` link. Occupied when set. |
+| `gush` | TEXT | **Cross-check only** against `building.gush`. |
+| `helka` | TEXT | **Cross-check only** against `building.helka`. Compared as **sets**, never strings: `43,46` and `46,43` pass, `43,47` fails. |
+| `building_number` | TEXT | **Cross-check only** against `building.building_number`. |
+| `apartment_type` | TEXT | A tender typology and a drawing title-block, not a column. Captured and scored so the baseline says whether the reader can see a title block at all. |
+| `has_storage` | BOOLEAN | A reading, not a column. Derived on the estate side from `unit.storage_space_id IS NOT NULL`. |
+| `storage_space_number` | TEXT | A reading. A storage room with no number is a real case and a credited absence. |
+| `parking_space_number` | TEXT | Promotes to `tenancy.parking_space_id` through a `TENANCY` link. Never to `unit.parking_space_id`. Occupied when the assigned bay is set, whoever wrote it. |
+
+**The parcel keys are declared so they extract and score; they are not promotion targets.** A lease
+does not establish the land. The typed columns on `building` (#143) are the source of truth. The
+scorer asserts the reading against that typed side, in the same shape as the fixture's arithmetic
+identities.
+
+**A cross-check failure does not block approve.** It is a scorer assertion in `evals/`, never a
+refusal on the operator's stamp. A disagreement most often means the document is filed against the
+wrong building, and it also means the reader misread five digits; blocking a person's approval on an
+OCR result is the failure mode this module keeps designing away from.
 
 ## Flow A6 — seeding from a handover protocol (slice 3.5)
 
@@ -1288,17 +1314,23 @@ parts but a figure that does not satisfy the identity has not read the document*
 operand is declared, so a silent reading is `not-returned` and a complete reading that breaks the
 identity fails the gate. `unreachable` remains for an operand the catalogue still does not declare.
 
-**Three groups, because the catalogue declares twenty-one of the fixture's field keys and not the rest.**
+**Three groups, because the catalogue declares the fixture's field keys it has asked for and not the rest.**
 A fixture value is *required* when the live `document_type_field` list declares its key and marks it
 required, *optional* when it declares it and does not, and **not asked for** when the catalogue does
 not declare it at all. The third group is scored by nothing and reported as a count: the mapping
-schema restricts `field_key` to the declared list, so the reader is structurally incapable of
-returning `gush` or `helka` and folding those values into either percentage would report a
-failure of the catalogue as a failure of the reader. The group shrinks as track B's seed rows land,
-which is the point of counting it. **Which key sits in which group is read from the catalogue at run
-time and never from the fixture** (A8), and the fixture's own `declaration` mark is checked against
-it: a seed row that lands without the fixture moving is a gate failure, because the two have then
-stopped describing the same system.
+schema restricts `field_key` to the declared list, so folding an undeclared key into either
+percentage would report a failure of the catalogue as a failure of the reader. Track A's seed rows
+moved `rooms`, `floor`, the three parcel keys, `apartment_type`, `has_storage`,
+`storage_space_number` and `parking_space_number` out of that group; the three out-of-scope keys
+(`security_structure`, `index_base_month`, `index_publication_date`) stay unnamed here. **Which key sits in which group is read from the catalogue at run time and never
+from the fixture** (A8), and the fixture's own `declaration` mark is checked against it: a seed row
+that lands without the fixture moving is a gate failure, because the two have then stopped
+describing the same system.
+
+**A parcel cross-check is an identity, not a value score.** `gush`, `helka` and `building_number` are
+asserted against the typed building the way the four arithmetic identities are asserted against the
+paper's own numbers. On `helka` the compare is a set: order is not meaning. A broken cross-check is a
+gate failure on the golden set and is not a refusal on approve.
 
 **A contradiction is counted against a ceiling and a miss moves a percentage.** A value the reader
 returns that the fixture does not carry for that key — a surplus value, or any guarantor at all in
@@ -1416,9 +1448,11 @@ matrix could read cannot be added by seeding a catalogue field.
 - **There is no `promotes_to` column anywhere in E15 or E16** (slice 3.0). A promotion target as a
   catalogue row would make promotion a row, which is the half A8 governs.
 - **`field_promotion`** — one mapping per declaration. `document_type_field_id` is unique: a field
-  promotes to at most one column. `target` is `tenancy.start_date` or `tenancy.end_date` this slice.
-  Extending that CHECK is a migration. Mapping *rows* are seed data, applied by the same function as
-  the catalogue, because they point at ids that only exist after `seed:doctypes`.
+  promotes to at most one column. `target` is a CHECK enum. Extending it is a migration. Mapping
+  *rows* are seed data, applied by the same function as the catalogue, because they point at ids that
+  only exist after `seed:doctypes`. After #146 the enum is the six `tenancy.*` copies (the assigned
+  bay is the sixth) plus `unit.rooms` and `space.floor`. `gush`, `helka` and `building_number` stay
+  off it.
 - **Stamp on `extracted_field`.** `promoted_to`, `promoted_by`, `promoted_at` — nullable until a
   promotion succeeds. `promoted_by` is `-- pii`: it names the operator who signed the copy. It stays
   a snapshot string, not a staff FK, because what it records is who signed the copy at that moment,
@@ -1430,14 +1464,17 @@ matrix could read cannot be added by seeding a catalogue field.
   same class as `document_is_immutable`). A DELETE of a stamped row is the same rejection. Direct
   writes to `tenancy.start_date` stay legal — the register importer writes those columns without a
   document, and locking them would break week 2.
-- **`promoteExtractedField`** is the command. It requires a mapping row, a `TENANCY` link on the
-  document, a non-empty promoter, and **from 7.4 an approval stamp on the row**. It asks tenancy to
-  apply the typed value, then stamps. An
-  unmapped field (`apartment_number`, `address`, `tenant_name`, `guarantor_name`) is capturable,
-  listed, searchable, and **incapable** of becoming business truth: the command returns `invalid`
-  and the tenancy row does not move. **From 7.3 those fields are attestable even though they are not
-  promotable** — the approval stamp is the verb that reaches them — and from 7.4 a promotion copies
-  `approved_value`, which by then is the only value a promotable row can have.
+- **`promoteExtractedField`** is the command. It requires a mapping row, a non-empty promoter, and
+  **from 7.4 an approval stamp on the row**. A `tenancy.*` target still requires a `TENANCY` link
+  and asks tenancy to apply the typed value. A `unit.*` or `space.floor` target requires a `UNIT`
+  link and asks estate's `applyPromotedField`; a `building.*` target would require a `BUILDING`
+  link. Evidence issues no estate SQL. An unmapped field (`apartment_number`, `address`,
+  `tenant_name`, `guarantor_name`, the parcel keys) is capturable, listed, searchable, and
+  **incapable** of becoming business truth: the command returns `invalid` and no typed row moves.
+  **From 7.3 those fields are attestable even though they are not promotable** — the approval stamp
+  is the verb that reaches them — and from 7.4 a promotion copies `approved_value`, which by then
+  is the only value a promotable row can have. A2's confirm still promotes dates, rent and the
+  option end only: auto-promoting `rooms` would trip occupancy on every confirm.
 - **R9.** Nothing in `src/policy/`, `src/scope/` or `src/calls/` may mention `extracted_field`.
   Isolation, responsibility and the state machine read typed columns. A contract test scans those
   trees.
@@ -1505,6 +1542,26 @@ Confirming an amendment is that act for `new_end_date` — later paper wins, and
 stays.
 
 This is a policy case, red first.
+
+**One level down, occupancy is the column itself.** The rule above reads occupancy off an
+`extracted_field` stamp on a letting, and that carve-out stands: a register date is not an occupant,
+because the register writes dates without a document. It does not survive the move to estate columns.
+`unit.rooms` is `NOT NULL` and is written by A13 or the register, with no stamp behind it; `space.floor`
+is nullable but is written by the same two hands. A promotion that still looked for a stamp would
+find none and overwrite the typed value.
+
+**A non-null estate column is occupied, whoever wrote it.** A promotion onto it refuses and names the
+existing value. An operator with the lease in front of them may `supersede`, and that is the record
+of who decided. There is no provenance column. Tenancy occupancy is unchanged **except the assigned
+bay**: `tenancy.parking_space_id` is occupied when set, whoever wrote it, because a reassignment
+writes the column with no extracted-field stamp. The estate definition lives
+on estate's contract (`occupantOfEstateColumn`) so the promotion family consumes it rather than
+re-deriving it, and so evidence issues no estate SQL. #141 widens `field_promotion.target` by
+`unit.rooms` and `space.floor` and writes through estate's `applyPromotedField`, which always
+appends `estate_event`. Identical values succeed without rewriting the column. The fields page's
+`קדם` is the first act; a differing occupied column is a second POST with `supersede`.
+
+This is a policy case, red first, through `promoteExtractedField`.
 
 ### A half-priced pair is not promotable
 

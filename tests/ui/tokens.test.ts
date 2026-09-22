@@ -76,6 +76,9 @@ const building: BuildingSummary = {
   project_code: 'SHM-01',
   unit_count: '72',
   space_count: '184',
+  gush: null,
+  helka: null,
+  building_number: null,
 };
 
 const detail: BuildingDetail = {
@@ -83,6 +86,14 @@ const detail: BuildingDetail = {
   kinds: [
     { space_kind: 'UNIT', n: '72' },
     { space_kind: 'PARKING', n: '60' },
+  ],
+  // Issue 140: a bay no flat points at — the row that has no other screen to appear on.
+  unassigned: [
+    {
+      space_id: '55555555-5555-4555-8555-555555555555',
+      space_kind: 'PARKING',
+      name: '574',
+    },
   ],
   units: [
     {
@@ -96,6 +107,11 @@ const detail: BuildingDetail = {
       warranty_end_date: null,
       parking_name: 'ח-1',
       storage_name: null,
+      // Issue 140: a real space id, so the admin row below renders the remove control and the
+      // guards in this file see its bytes. A fixture with null ids renders nothing and asserts
+      // nothing, which is the shape of a guard that passes forever.
+      parking_space_id: '44444444-4444-4444-8444-444444444444',
+      storage_space_id: null,
     },
     {
       unit_id: '33333333-3333-4333-8333-333333333333',
@@ -108,6 +124,8 @@ const detail: BuildingDetail = {
       warranty_end_date: '2027-09-01',
       parking_name: null,
       storage_name: null,
+      parking_space_id: null,
+      storage_space_id: null,
     },
   ],
 };
@@ -528,7 +546,7 @@ const SCREENS: Array<[string, () => string]> = [
   [
     'estate · one building, retrieval panel',
     () =>
-      renderBuildingPage(detail, occupancy, NAV, [], false, {
+      renderBuildingPage(detail, occupancy, NAV, [], undefined, {
         csrf: CSRF,
         bound: { kind: 'building', id: building.building_id },
         thread: [
@@ -551,7 +569,7 @@ const SCREENS: Array<[string, () => string]> = [
     // Slice 6.2: the same screen for a role that may add an apartment. The door is the only
     // difference, and the registry is where it is asserted rather than in a second guard.
     'estate · one building, admin',
-    () => renderBuildingPage(detail, occupancy, NAV, [], true),
+    () => renderBuildingPage(detail, occupancy, NAV, [], { csrf: CSRF }),
   ],
   [
     'estate · new apartment',
@@ -618,6 +636,9 @@ const SCREENS: Array<[string, () => string]> = [
         rentAmount: null,
         rentCurrency: null,
         optionEndDate: null,
+        parkingSpaceId: null,
+        parkingName: null,
+        parkingOptions: [],
         unit: hit,
         people: [
           {
@@ -657,6 +678,9 @@ const SCREENS: Array<[string, () => string]> = [
         rentAmount: null,
         rentCurrency: null,
         optionEndDate: null,
+        parkingSpaceId: null,
+        parkingName: null,
+        parkingOptions: [],
         unit: hit,
         people: [
           {
@@ -699,6 +723,9 @@ const SCREENS: Array<[string, () => string]> = [
         rentAmount: '4500',
         rentCurrency: 'ILS',
         optionEndDate: '2028-08-31',
+        parkingSpaceId: null,
+        parkingName: null,
+        parkingOptions: [],
         unit: hit,
         people: [
           {
@@ -2745,7 +2772,7 @@ describe('shared UI tokens', () => {
   });
 
   it('paints cited answers under the building retrieval panel', () => {
-    const html = renderBuildingPage(detail, occupancy, NAV, [], false, {
+    const html = renderBuildingPage(detail, occupancy, NAV, [], undefined, {
       csrf: CSRF,
       bound: { kind: 'building', id: building.building_id },
       thread: [

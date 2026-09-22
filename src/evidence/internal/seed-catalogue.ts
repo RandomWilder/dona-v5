@@ -34,6 +34,9 @@ const PROMOTION_TARGETS: Readonly<
     rent_amount: 'tenancy.rent_amount',
     rent_currency: 'tenancy.rent_currency',
     option_end_date: 'tenancy.option_end_date',
+    rooms: 'unit.rooms',
+    floor: 'space.floor',
+    parking_space_number: 'tenancy.parking_space_id',
   },
   lease_amendment: {
     new_end_date: 'tenancy.end_date',

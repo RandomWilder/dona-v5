@@ -37,6 +37,9 @@ function sheet(over: Partial<TenancySheet> = {}): TenancySheet {
     rentAmount: '4500',
     rentCurrency: 'ILS',
     optionEndDate: '2028-08-31',
+    parkingSpaceId: null,
+    parkingName: null,
+    parkingOptions: [],
     unit,
     people: [
       {
@@ -70,6 +73,7 @@ describe('estate · the tenancy card', () => {
     assert.match(html, /4500/);
     assert.match(html, /ILS/);
     assert.match(html, /2028-08-31/);
+    assert.match(html, /חניה משויכת/);
     assert.match(html, /12000/);
     assert.match(
       html,
@@ -77,5 +81,30 @@ describe('estate · the tenancy card', () => {
     );
     assert.doesNotMatch(html, /UNAPPROVED-SECRET/);
     assert.doesNotMatch(html, /9999/);
+  });
+
+  it('offers a reassignment when the building has parking spaces', () => {
+    const html = renderTenancyDetailPage(
+      sheet({
+        parkingSpaceId: '66666666-6666-4666-8666-666666666666',
+        parkingName: '574',
+        parkingOptions: [
+          {
+            space_id: '66666666-6666-4666-8666-666666666666',
+            name: '574',
+          },
+          {
+            space_id: '77777777-7777-4777-8777-777777777777',
+            name: '580',
+          },
+        ],
+      }),
+    );
+    assert.match(html, />574</);
+    assert.match(
+      html,
+      /action="\/estate\/tenancies\/55555555-5555-4555-8555-555555555555\/parking"/,
+    );
+    assert.match(html, /העברת חניה/);
   });
 });

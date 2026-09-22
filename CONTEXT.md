@@ -20,9 +20,17 @@ documented module commands, never by writing a store query. Distinct from each o
 |---|---|
 | **Project** | Optional grouping above Building. `Building.project_id` is nullable. |
 | **Building** | A set of **Spaces**. Nothing else. |
+| **Gush** | The land-registry block (גוש) a Building sits on. Typed on A11 from a tabu extract or a plan; a lease only recites it. Nullable text, not unique, not a promotion target. |
+| **Helka** | The land-registry parcel or parcels (חלקה). A list stored as text — order varies by page — so not an integer. Same standing as Gush. |
+| **Building number** | The number a Building has inside a Project (`206`). A fact, not a key: it collapses on a standalone Building, and a second unique key beside `address_key` is two writers' worth of disagreement. |
 | **Space** | One of `UNIT · COMMON · TECHNICAL · EXTERIOR · PARKING · STORAGE`. |
 | **Unit** | The leasable kind of Space. `Unit.unit_id = Space.space_id` — not a separate thing. |
 | **Asset** | Anything that can break. Sits in exactly one Space. |
+| **Built bay** | The `PARKING` Space the plan attached to a Unit (הצמדה) — `Unit.parking_space_id`. It survives vacancy, and it is what a gate motor hangs off and what a service call is filed against. |
+| **Assigned bay** | The `PARKING` Space a household parks in. It belongs to the **Tenancy**, and the landlord may move it at will, with no amendment and no new document. Never a property of the flat. |
+
+**A bay is two facts, not one.** The built bay and the assigned bay are both true and are frequently
+different; writing a lease's bay number onto the Unit is the same class of error as `current_tenant`.
 
 **Responsibility falls out of location.** `UNIT` is the only Space kind that can ever be the tenant's.
 

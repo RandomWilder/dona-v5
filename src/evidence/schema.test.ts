@@ -1213,9 +1213,47 @@ describe('the acceptance bar — a new type costs no DDL', () => {
 
     assert.equal(live('guarantor_name')?.isRequired, false);
     assert.equal(live('guarantor_id_number')?.isRequired, false);
-    assert.equal(live('gush'), undefined);
-    assert.equal(live('helka'), undefined);
+    assert.equal(
+      of('gush').some((field) => field.effectiveFrom === '2026-09-21'),
+      false,
+    );
+    assert.equal(
+      of('helka').some((field) => field.effectiveFrom === '2026-09-21'),
+      false,
+    );
     assert.equal(live('structure_designation'), undefined);
+  });
+
+  it('declares the residual place facts as optional seed rows, not promotion targets', () => {
+    const lease = seedDocumentTypes.find(
+      (entry) => entry.type.typeKey === 'lease',
+    );
+    const live = (fieldKey: string) =>
+      (lease?.fields ?? []).find(
+        (field) => field.fieldKey === fieldKey && field.effectiveTo === null,
+      );
+
+    for (const [fieldKey, valueType] of [
+      ['rooms', 'NUMBER'],
+      ['floor', 'NUMBER'],
+      ['gush', 'TEXT'],
+      ['helka', 'TEXT'],
+      ['building_number', 'TEXT'],
+      ['apartment_type', 'TEXT'],
+      ['has_storage', 'BOOLEAN'],
+      ['storage_space_number', 'TEXT'],
+      ['parking_space_number', 'TEXT'],
+    ] as const) {
+      const field = live(fieldKey);
+      assert.ok(field, `${fieldKey} is declared on the lease`);
+      assert.equal(field?.isRequired, false, `${fieldKey} is optional`);
+      assert.equal(field?.valueType, valueType);
+      assert.equal(field?.effectiveFrom, '2026-09-22');
+    }
+
+    assert.equal(live('security_structure'), undefined);
+    assert.equal(live('index_base_month'), undefined);
+    assert.equal(live('index_publication_date'), undefined);
   });
 
   it('a September reading still resolves against the unpaired tenant_name', async (t) => {
@@ -1238,6 +1276,11 @@ describe('the acceptance bar — a new type costs no DDL', () => {
       assert.equal(nowKeys.includes('tenant_id_number'), false);
       assert.equal(nowKeys.includes('gush'), false);
       assert.equal(nowKeys.includes('helka'), false);
+
+      const next = await documentTypeFields(db, 'lease', '2026-09-22');
+      const nextKeys = next.map((field) => field.fieldKey);
+      assert.equal(nextKeys.includes('gush'), true);
+      assert.equal(nextKeys.includes('parking_space_number'), true);
     });
   });
 
@@ -1459,6 +1502,40 @@ describe('field_promotion — A8 governed half', () => {
           `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
            VALUES ($1, $2, 'tenancy.deposit_amount')`,
           [newId(), deposit],
+        ),
+      );
+      const rooms = await seedField(db, documentTypeId, 'rooms');
+      await db.query(
+        `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+         VALUES ($1, $2, 'unit.rooms')`,
+        [newId(), rooms],
+      );
+      const floor = await seedField(db, documentTypeId, 'floor');
+      await db.query(
+        `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+         VALUES ($1, $2, 'space.floor')`,
+        [newId(), floor],
+      );
+      const bay = await seedField(db, documentTypeId, 'parking_space_number');
+      await db.query(
+        `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+         VALUES ($1, $2, 'tenancy.parking_space_id')`,
+        [newId(), bay],
+      );
+      const built = await seedField(db, documentTypeId, 'built_bay');
+      await rejects(db, CHECK_VIOLATION, () =>
+        db.query(
+          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+           VALUES ($1, $2, 'unit.parking_space_id')`,
+          [newId(), built],
+        ),
+      );
+      const gush = await seedField(db, documentTypeId, 'gush');
+      await rejects(db, CHECK_VIOLATION, () =>
+        db.query(
+          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+           VALUES ($1, $2, 'building.gush')`,
+          [newId(), gush],
         ),
       );
     });

@@ -219,11 +219,18 @@ had thought of. Every fixture profile now carries the suffix its cities do.
 - **Whether the real export carries a ת.ז. on every row, and a profile name on every lease.** Both
   are required by this format and both are questions for the client. 2.5 answers them with the export
   in hand.
-- **Whether a register row should be able to name a space that is not a unit.** Closed at 4.6: the
-  file still cannot. The 22-column header is unchanged. `upsertUnitRow` implies a `PARKING` and a
-  `STORAGE` space named from the apartment number and assigns them, as placeholders, so A6 has a bay.
-  A building whose real bay count is known still arrives as an estate plan (D3). What a *real*
-  export's bay column would look like is 2.5's, with the export in hand.
+- **Whether a register row should be able to name a space that is not a unit.** Still no, and the
+  22-column header is unchanged. 4.6 answered it by having `upsertUnitRow` *imply* a `PARKING` and a
+  `STORAGE` space named from the apartment number, as placeholders, so A6 had a bay to land on;
+  **#140 withdrew that.** The names were a number off the door standing in for a number off the
+  developer's plan, and against the two hand-read leases in `evals/fixtures/lease-extraction.ts`
+  neither matched. This file names no bay, so `writeRow` passes `parkingSpaceName: null` and
+  `storageSpaceName: null` and no `PARKING` or `STORAGE` row is written: **one Space per line, not
+  three.** It names no גוש, חלקה or מספר בניין either (#143): those keys are omitted on the
+  building plan, so a register-written building starts with null and a re-run does not wipe a
+  value an operator later typed on A11.
+  A building whose real bay count is known still arrives as an estate plan (D3). What a
+  *real* export's bay column would look like is 2.5's, with the export in hand.
 - **`upsertUnitRow` stopped being this module's alone at 6.2.** Flow A13's apartment screen calls it
   too, and it writes the `UNIT` space under the **bare `unit_number`** because that is what
   `writeRow` passes. The two writers converge on one flat only while they agree on that name, so a
