@@ -70,6 +70,7 @@ export interface TenancyEventView {
   new_value: string;
   actor: string;
   source_document_id: string | null;
+  at?: string;
 }
 
 export interface DocumentSearchHit extends FiledDocumentView {
@@ -144,6 +145,8 @@ const EVENT_FIELD: Record<string, string> = {
   start_date: 'תחילת השכירות',
   end_date: 'סיום השכירות',
   status: 'סטטוס',
+  rooms: 'חדרים',
+  floor: 'קומה',
 };
 
 // Hebrew for a value the schema allows and this table does not translate. A vocabulary gains a

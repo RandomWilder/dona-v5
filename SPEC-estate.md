@@ -60,6 +60,7 @@ written by anything but the injected clock is a second source of truth no test c
 | `unit` | `unit_id` PK, FK → space · `unit_number` · `rooms` · `area_sqm?` · `has_mamad` · `parking_space_id?` · `storage_space_id?` · `warranty_end_date?` · `condition_status` |
 | `provider` | `provider_id` PK · `name` · `provider_kind` — E14, stub only. Present so R11 is resolvable. Everything else about providers waits. |
 | `asset` | `asset_id` PK · `space_id` FK → space, NOT NULL · `asset_class` · `asset_type` · `make_model?` · `serial_no?` · `installed_date?` · `warranty_end_date?` · `warranty_provider_id?` FK → provider · `compliance_regime` · `next_inspection_due?` · `last_certificate_document_id?` FK → document · `source_document_id?` FK → document · `status` |
+| `estate_event` | `estate_event_id` PK · `entity_type` · `building_id?` · `unit_id?` · `at` · `actor` · `kind` · `field` · `old_value?` · `new_value` · `source_document_id?` · `extracted_field_id?` — append-only log of a document-caused write onto an estate column (#141). |
 
 Vocabularies: `project.status` = `PLANNING · ACTIVE · EXITED`; `building.status` = `ACTIVE ·
 IN_CONSTRUCTION · EXITED`; `space.space_kind` = `UNIT · COMMON · TECHNICAL · EXTERIOR · PARKING ·
@@ -85,6 +86,27 @@ building we own, and `building_number` (`206`) is meaningful inside one project 
 standalone building. Blank on A11 is null. The plan-shaped import and the register importer write
 null where the file has no value; A13 does not invent them. A later tabu type may promote onto the
 typed columns; until then they are the typed side of a cross-check, not a capture.
+
+## EstateEvent — old → new on a place (#141)
+
+`tenancy_event` is the letting's log. A room count or a floor written from a lease is a fact about
+the flat, not about the letting, so it does not belong there. `estate_event` is the counterpart:
+append-only by trigger (`restrict_violation` on UPDATE or DELETE), `at` from the injected clock
+with no `DEFAULT now()`, `kind` `amended` only and that kind always names a source document.
+
+One table, keyed by the entity the promotion wrote. `entity_type` is `BUILDING` or `UNIT`; exactly
+one of `building_id` or `unit_id` is set and it matches the type. Same discriminator shape as
+`document_link`. There is no `space_id`: `unit.rooms` and `space.floor` on the unit's space share
+`unit_id` (`unit_id` = `space_id`).
+
+**Only a promotion appends.** A11, A13, `applyProtocolSeed`, and the register importer do not write
+here. The typed original is `old_value` on the first promotion row. The unit sheet lists these
+rows the same way it lists tenancy events, so an operator can ask what the room count used to be.
+
+**`applyPromotedField` is the write.** It lives on this module's contract, beside `applyProtocolSeed`,
+so evidence never issues SQL against `unit`, `space`, or `building`. It parses `rooms` as a number
+and `floor` as non-empty text, updates the column, and appends. Occupancy of those columns is
+`occupantOfEstateColumn`: a non-null value is occupied whoever wrote it.
 
 ## Three rules the schema enforces, rather than the application
 

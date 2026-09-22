@@ -25,6 +25,7 @@ const CHECK_VIOLATION = '23514';
 const NOT_NULL_VIOLATION = '23502';
 const UNIQUE_VIOLATION = '23505';
 const GENERATED_ALWAYS = '428C9';
+const RESTRICT_VIOLATION = '23001';
 
 const SPACE_KINDS = [
   'UNIT',
@@ -756,6 +757,138 @@ describe('estate · Asset and the Provider stub', () => {
           });
         },
       );
+    } finally {
+      await pool.end();
+    }
+  });
+});
+
+describe('estate_event — append-only promotion log', () => {
+  const EVENT_COLUMNS = [
+    'estate_event_id',
+    'entity_type',
+    'building_id',
+    'unit_id',
+    'at',
+    'actor',
+    'kind',
+    'field',
+    'old_value',
+    'new_value',
+    'source_document_id',
+    'extracted_field_id',
+  ];
+
+  async function seedDocument(db: PoolClient): Promise<string> {
+    const typeId = newId();
+    const documentId = newId();
+    await db.query(
+      `INSERT INTO document_type (
+         document_type_id, type_key, label_he, label_en, verification_terms, is_active
+       ) VALUES ($1, $2, 'חוזה', NULL, NULL, true)`,
+      [typeId, `estate-event-${typeId.slice(24)}`],
+    );
+    await db.query(
+      `INSERT INTO document (
+         document_id, document_type_id, storage_uri, file_hash,
+         ingested_at, verification_verdict
+       ) VALUES ($1, $2, 'gs://x/a.pdf', $3, $4, 'unguarded')`,
+      [
+        documentId,
+        typeId,
+        `hash-${documentId}`,
+        new Date('2026-09-22T09:00:00.000Z'),
+      ],
+    );
+    return documentId;
+  }
+
+  it('is a relation with the published log columns and no DEFAULT now()', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await db.query('SELECT 1 FROM estate_event LIMIT 0');
+        const result = await db.query<{ column_name: string }>(
+          `SELECT column_name FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'estate_event'
+            ORDER BY ordinal_position`,
+        );
+        assert.deepEqual(
+          result.rows.map((row) => row.column_name),
+          EVENT_COLUMNS,
+        );
+        const defaults = await db.query<{ column_default: string | null }>(
+          `SELECT column_default FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'estate_event'
+              AND column_name = 'at'`,
+        );
+        assert.equal(defaults.rows[0]?.column_default, null);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('refuses a mismatched entity, amended without paper, and any update or delete', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const buildingId = await insertBuilding(db);
+        const unitId = await insertSpace(db, buildingId, 'UNIT');
+        await insertUnit(db, unitId);
+        const documentId = await seedDocument(db);
+        const at = new Date('2026-09-22T09:00:00.000Z');
+
+        await rejects(db, CHECK_VIOLATION, () =>
+          db.query(
+            `INSERT INTO estate_event (
+               estate_event_id, entity_type, building_id, unit_id, at, actor, kind,
+               field, old_value, new_value, source_document_id
+             ) VALUES ($1, 'UNIT', $2, NULL, $3, 'אסף', 'amended',
+                       'rooms', '3.5', '4', $4)`,
+            [newId(), buildingId, at, documentId],
+          ),
+        );
+        await rejects(db, CHECK_VIOLATION, () =>
+          db.query(
+            `INSERT INTO estate_event (
+               estate_event_id, entity_type, building_id, unit_id, at, actor, kind,
+               field, old_value, new_value, source_document_id
+             ) VALUES ($1, 'UNIT', NULL, $2, $3, 'אסף', 'amended',
+                       'rooms', '3.5', '4', NULL)`,
+            [newId(), unitId, at],
+          ),
+        );
+
+        const eventId = newId();
+        await db.query(
+          `INSERT INTO estate_event (
+             estate_event_id, entity_type, building_id, unit_id, at, actor, kind,
+             field, old_value, new_value, source_document_id
+           ) VALUES ($1, 'UNIT', NULL, $2, $3, 'אסף', 'amended',
+                     'rooms', '3.5', '4', $4)`,
+          [eventId, unitId, at, documentId],
+        );
+        await rejects(db, RESTRICT_VIOLATION, () =>
+          db.query(
+            'UPDATE estate_event SET actor = $2 WHERE estate_event_id = $1',
+            [eventId, 'לא'],
+          ),
+        );
+        await rejects(db, RESTRICT_VIOLATION, () =>
+          db.query('DELETE FROM estate_event WHERE estate_event_id = $1', [
+            eventId,
+          ]),
+        );
+      });
     } finally {
       await pool.end();
     }

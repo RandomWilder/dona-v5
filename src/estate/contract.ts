@@ -11,6 +11,8 @@ export {
   applyProtocolSeed,
   WARRANTY_YEARS,
 } from './internal/assets.ts';
+export type { EstateEventRow } from './internal/events.ts';
+export { listEstateEvents } from './internal/events.ts';
 export { importEstate, upsertUnitRow } from './internal/importer.ts';
 export type { EstatePromotionColumn } from './internal/occupancy.ts';
 export { occupantOfEstateColumn } from './internal/occupancy.ts';
@@ -37,6 +39,11 @@ export type {
   UnitRowResult,
   UnitRowSpec,
 } from './internal/plan.ts';
+export type {
+  PromotedEstateField,
+  PromotedEstateFieldSpec,
+} from './internal/promote.ts';
+export { applyPromotedField } from './internal/promote.ts';
 export type {
   EstatePurgeApplySpec,
   EstatePurgeArgs,

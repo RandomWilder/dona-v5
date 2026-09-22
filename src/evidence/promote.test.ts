@@ -143,8 +143,8 @@ describe('evidence · promote an extracted field', () => {
           `SELECT count(*)::text AS n FROM field_promotion`,
         );
         // start_date, end_date, new_end_date — two effective_from rows each (R18) — plus the
-        // three track B copies: rent_amount, rent_currency, option_end_date.
-        assert.equal(mappings.rows[0]?.n, '9');
+        // three track B copies and #141's rooms and floor (one SCHEMA_V6 row each).
+        assert.equal(mappings.rows[0]?.n, '11');
         const extras = await db.query<{ n: string }>(
           `SELECT count(*)::text AS n FROM field_promotion p
              JOIN document_type_field f
@@ -158,8 +158,6 @@ describe('evidence · promote an extracted field', () => {
               'signed_date',
               '%tenant_name',
               '%id_number',
-              'rooms',
-              'floor',
               'gush',
               'helka',
               'building_number',
@@ -476,6 +474,38 @@ describe('evidence · promote an extracted field', () => {
     // An unmapped field is capturable, listed, signable — and still has nowhere to be promoted to.
     assert.doesNotMatch(signed, /קדם · מספר הדירה/);
     assert.doesNotMatch(signed, /name="promoted_by"/);
+
+    const occupied = renderFieldsPage({
+      nav: NAV,
+      csrf: '',
+      documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      buildingId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      buildingName: 'בניין',
+      unitId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      labelHe: 'חוזה שכירות',
+      on: '2026-09-22',
+      rows: READINGS.map((row) =>
+        row.fieldKey === 'start_date'
+          ? {
+              ...row,
+              approvedValue: row.value,
+              approvedBy: 'אסף',
+              approvedAt: AT,
+            }
+          : row,
+      ),
+      unread: [],
+      mayReadIdentifiers: false,
+      mayApprove: true,
+      overwrite: {
+        extractedFieldId: READINGS[0]?.extractedFieldId ?? '',
+        existingValue: '3.5',
+      },
+    });
+    assert.match(occupied, /העמודה כבר נושאת/);
+    assert.match(occupied, /3\.5/);
+    assert.match(occupied, /החלף · תחילת תקופת השכירות/);
+    assert.match(occupied, /name="supersede"/);
   });
 
   it('says when the reading did not cover the whole file', () => {

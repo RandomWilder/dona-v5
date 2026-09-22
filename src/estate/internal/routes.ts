@@ -25,6 +25,7 @@ import {
   loadOfficeRetrievalThread,
 } from '../../staff/contract.ts';
 import { addCalendarYears, WARRANTY_YEARS } from './assets.ts';
+import { listEstateEvents } from './events.ts';
 import { importEstate, upsertUnitRow } from './importer.ts';
 import type {
   BuildingPlan,
@@ -877,7 +878,15 @@ export function registerEstateRoutes(
       unit.unit_id,
     );
     await deps.expireDueTenancies(deps.pool, deps.clock);
-    const events = await deps.listTenancyEvents(deps.pool, unit.unit_id);
+    const tenancyEvents = await deps.listTenancyEvents(deps.pool, unit.unit_id);
+    const estateEvents = await listEstateEvents(deps.pool, unit.unit_id);
+    const events = [...estateEvents, ...tenancyEvents].sort((left, right) => {
+      const byTime = (left.at ?? '').localeCompare(right.at ?? '');
+      if (byTime !== 0) return byTime;
+      return (left.field + (left.new_value ?? '')).localeCompare(
+        right.field + (right.new_value ?? ''),
+      );
+    });
     const csrf = csrfFrom(request);
     html(reply);
     return renderUnitPage(

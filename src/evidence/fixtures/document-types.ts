@@ -58,7 +58,8 @@ const SCHEMA_V3 = '2026-09-13';
 const SCHEMA_V4 = '2026-09-15';
 // Ticket #131. The household named by role, and the terms the specimens print.
 const SCHEMA_V5 = '2026-09-21';
-// Ticket #144. Place facts the lease recites; parcel keys are cross-checks, not promotion targets.
+// Ticket #144. Place facts the lease recites; parcel keys are cross-checks, not promotion
+// targets. #141 mapped rooms and floor.
 const SCHEMA_V6 = '2026-09-22';
 // Inclusive windows: close the superseded declaration the day before the successor opens.
 const LAST_DAY_BEFORE_V5 = '2026-09-20';

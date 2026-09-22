@@ -988,14 +988,14 @@ are not place facts and are not named here.
 
 ### What a lease recites about a place, from track A
 
-Seed rows at a new `effective_from` (2026-09-22). **No migration. None of these is a
-`field_promotion.target`.** The lease recites them; the unit, the space, or the typed building already
-holds them, or they stay in `extracted_field` until something reads them.
+Seed rows at a new `effective_from` (2026-09-22). Parcel keys, typology and storage stay capture
+and score only. **`rooms` and `floor` became promotion targets at #141** — the lease may establish
+those two; it still does not establish the land.
 
 | Key | Type | What happens |
 |---|---|---|
-| `rooms` | NUMBER | The unit already holds it. Extracted and scored. Not promoted on this ticket. |
-| `floor` | NUMBER | The unit's space already holds it. Same. |
+| `rooms` | NUMBER | Promotes to `unit.rooms` through a `UNIT` link. Occupied whoever wrote it (#145). |
+| `floor` | NUMBER | Promotes to `space.floor` on the unit's space, through a `UNIT` link. Occupied when set. |
 | `gush` | TEXT | **Cross-check only** against `building.gush`. |
 | `helka` | TEXT | **Cross-check only** against `building.helka`. Compared as **sets**, never strings: `43,46` and `46,43` pass, `43,47` fails. |
 | `building_number` | TEXT | **Cross-check only** against `building.building_number`. |
@@ -1449,9 +1449,10 @@ matrix could read cannot be added by seeding a catalogue field.
 - **There is no `promotes_to` column anywhere in E15 or E16** (slice 3.0). A promotion target as a
   catalogue row would make promotion a row, which is the half A8 governs.
 - **`field_promotion`** — one mapping per declaration. `document_type_field_id` is unique: a field
-  promotes to at most one column. `target` is `tenancy.start_date` or `tenancy.end_date` this slice.
-  Extending that CHECK is a migration. Mapping *rows* are seed data, applied by the same function as
-  the catalogue, because they point at ids that only exist after `seed:doctypes`.
+  promotes to at most one column. `target` is a CHECK enum. Extending it is a migration. Mapping
+  *rows* are seed data, applied by the same function as the catalogue, because they point at ids that
+  only exist after `seed:doctypes`. After #141 the enum is the five `tenancy.*` copies plus
+  `unit.rooms` and `space.floor`. `gush`, `helka` and `building_number` stay off it.
 - **Stamp on `extracted_field`.** `promoted_to`, `promoted_by`, `promoted_at` — nullable until a
   promotion succeeds. `promoted_by` is `-- pii`: it names the operator who signed the copy. It stays
   a snapshot string, not a staff FK, because what it records is who signed the copy at that moment,
@@ -1463,14 +1464,17 @@ matrix could read cannot be added by seeding a catalogue field.
   same class as `document_is_immutable`). A DELETE of a stamped row is the same rejection. Direct
   writes to `tenancy.start_date` stay legal — the register importer writes those columns without a
   document, and locking them would break week 2.
-- **`promoteExtractedField`** is the command. It requires a mapping row, a `TENANCY` link on the
-  document, a non-empty promoter, and **from 7.4 an approval stamp on the row**. It asks tenancy to
-  apply the typed value, then stamps. An
-  unmapped field (`apartment_number`, `address`, `tenant_name`, `guarantor_name`) is capturable,
-  listed, searchable, and **incapable** of becoming business truth: the command returns `invalid`
-  and the tenancy row does not move. **From 7.3 those fields are attestable even though they are not
-  promotable** — the approval stamp is the verb that reaches them — and from 7.4 a promotion copies
-  `approved_value`, which by then is the only value a promotable row can have.
+- **`promoteExtractedField`** is the command. It requires a mapping row, a non-empty promoter, and
+  **from 7.4 an approval stamp on the row**. A `tenancy.*` target still requires a `TENANCY` link
+  and asks tenancy to apply the typed value. A `unit.*` or `space.floor` target requires a `UNIT`
+  link and asks estate's `applyPromotedField`; a `building.*` target would require a `BUILDING`
+  link. Evidence issues no estate SQL. An unmapped field (`apartment_number`, `address`,
+  `tenant_name`, `guarantor_name`, the parcel keys) is capturable, listed, searchable, and
+  **incapable** of becoming business truth: the command returns `invalid` and no typed row moves.
+  **From 7.3 those fields are attestable even though they are not promotable** — the approval stamp
+  is the verb that reaches them — and from 7.4 a promotion copies `approved_value`, which by then
+  is the only value a promotable row can have. A2's confirm still promotes dates, rent and the
+  option end only: auto-promoting `rooms` would trip occupancy on every confirm.
 - **R9.** Nothing in `src/policy/`, `src/scope/` or `src/calls/` may mention `extracted_field`.
   Isolation, responsibility and the state machine read typed columns. A contract test scans those
   trees.
@@ -1549,10 +1553,13 @@ find none and overwrite the typed value.
 **A non-null estate column is occupied, whoever wrote it.** A promotion onto it refuses and names the
 existing value. An operator with the lease in front of them may `supersede`, and that is the record
 of who decided. There is no provenance column. Tenancy occupancy is unchanged. The definition lives
-on estate's contract so a later promotion family consumes it rather than re-deriving it, and so
-evidence issues no estate SQL. `field_promotion.target` is not widened here.
+on estate's contract (`occupantOfEstateColumn`) so the promotion family consumes it rather than
+re-deriving it, and so evidence issues no estate SQL. #141 widens `field_promotion.target` by
+`unit.rooms` and `space.floor` and writes through estate's `applyPromotedField`, which always
+appends `estate_event`. Identical values succeed without rewriting the column. The fields page's
+`קדם` is the first act; a differing occupied column is a second POST with `supersede`.
 
-This is a policy case, red first, at the estate seam: promote cannot yet reach an estate column.
+This is a policy case, red first, through `promoteExtractedField`.
 
 ### A half-priced pair is not promotable
 

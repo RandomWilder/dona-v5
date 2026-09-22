@@ -1,7 +1,7 @@
-// Slice 4.3. Copy an extracted value onto a typed tenancy column, or refuse.
+// Slice 4.3. Copy an extracted value onto a typed column, or refuse.
 //
-// Capture stays a row. Becoming business truth requires a FieldPromotion mapping, a TENANCY
-// link, a named promoter, and — from slice 7.4 — an approval stamp on the reading itself. The
+// Capture stays a row. Becoming business truth requires a FieldPromotion mapping, a link of the
+// right kind, a named promoter, and — from slice 7.4 — an approval stamp on the reading itself. The
 // database refuses a stamp written without dona.promoting, and refuses one written on a reading
 // nobody approved.
 //
@@ -13,13 +13,22 @@
 //
 // **#132.** Rent is a pair. An amount may be approved without its currency; it may not be promoted
 // without it. The two copies land in one transaction, or neither does.
+//
+// **#141.** A `unit.*` or `space.floor` target resolves a UNIT link and writes through estate's
+// applyPromotedField. Occupancy is the column itself (#145). Evidence issues no estate SQL.
+import {
+  applyPromotedField as applyEstatePromotedField,
+  type EstatePromotionColumn,
+  occupantOfEstateColumn,
+  type PromotedEstateField,
+} from '../../estate/contract.ts';
 import type { AuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
 import {
-  applyPromotedField,
+  applyPromotedField as applyTenancyPromotedField,
   type PromotedTenancyField,
 } from '../../tenancy/contract.ts';
 import type { Queryable } from './types.ts';
@@ -38,17 +47,23 @@ export interface PromoteSpec {
 }
 
 export interface PromoteResult {
-  tenancyId: string;
+  tenancyId: string | null;
+  unitId: string | null;
   target: string;
   value: string;
 }
 
-const TARGET_FIELD: Record<string, PromotedTenancyField> = {
+const TENANCY_FIELD: Record<string, PromotedTenancyField> = {
   'tenancy.start_date': 'start_date',
   'tenancy.end_date': 'end_date',
   'tenancy.rent_amount': 'rent_amount',
   'tenancy.rent_currency': 'rent_currency',
   'tenancy.option_end_date': 'option_end_date',
+};
+
+const ESTATE_FIELD: Record<string, PromotedEstateField> = {
+  'unit.rooms': 'rooms',
+  'space.floor': 'floor',
 };
 
 const RENT_SIBLING: Record<string, { fieldKey: string; target: string }> = {
@@ -61,6 +76,31 @@ const RENT_SIBLING: Record<string, { fieldKey: string; target: string }> = {
     target: 'tenancy.rent_amount',
   },
 };
+
+function linkKindOf(target: string): 'TENANCY' | 'UNIT' | 'BUILDING' {
+  if (target.startsWith('tenancy.')) return 'TENANCY';
+  if (target.startsWith('building.')) return 'BUILDING';
+  return 'UNIT';
+}
+
+function isEstateTarget(target: string): target is EstatePromotionColumn {
+  return target === 'unit.rooms' || target === 'space.floor';
+}
+
+function sameEstateValue(
+  target: EstatePromotionColumn,
+  held: string,
+  incoming: string,
+): boolean {
+  if (target === 'unit.rooms') return Number(held) === Number(incoming);
+  return held === incoming;
+}
+
+function boundMessage(kind: 'TENANCY' | 'UNIT' | 'BUILDING'): string {
+  if (kind === 'TENANCY') return 'that document is not bound to a tenancy';
+  if (kind === 'BUILDING') return 'that document is not bound to a building';
+  return 'that document is not bound to a unit';
+}
 
 export async function promoteExtractedField(
   deps: PromoteDeps,
@@ -102,34 +142,40 @@ export async function promoteExtractedField(
         'that field cannot become business truth',
       );
     }
-    const field = TARGET_FIELD[row.target];
-    if (!field) {
+    const tenancyField = TENANCY_FIELD[row.target];
+    const estateField = ESTATE_FIELD[row.target];
+    if (!tenancyField && !estateField) {
       throw new KernelError(
         'invalid',
         'that field cannot become business truth',
       );
     }
 
+    const linkKind = linkKindOf(row.target);
     const link = await db.query<{ entity_id: string }>(
       `SELECT entity_id FROM document_link
-        WHERE document_id = $1 AND entity_type = 'TENANCY'
+        WHERE document_id = $1 AND entity_type = $2
         ORDER BY entity_id
         LIMIT 1`,
-      [row.document_id],
+      [row.document_id, linkKind],
     );
-    const tenancyId = link.rows[0]?.entity_id;
-    if (!tenancyId) {
-      throw new KernelError(
-        'invalid',
-        'that document is not bound to a tenancy',
-      );
+    const entityId = link.rows[0]?.entity_id;
+    if (!entityId) {
+      throw new KernelError('invalid', boundMessage(linkKind));
     }
+    const tenancyId = linkKind === 'TENANCY' ? entityId : null;
+    const unitId = linkKind === 'UNIT' ? entityId : null;
 
     // Already on the column, and this runs **before** the approval requirement on purpose: a row
     // promoted before 7.4 must keep answering, not start failing on a rule that did not exist when
     // it was signed. The same reason the trigger looks only at a row that is gaining the stamp.
     if (row.promoted_to === row.target) {
-      return { tenancyId, target: row.target, value: row.value ?? '' };
+      return {
+        tenancyId,
+        unitId,
+        target: row.target,
+        value: row.value ?? '',
+      };
     }
 
     // **Slice 7.4.** `conflict`, as `'that reading is already approved'` is: both are the row's
@@ -143,6 +189,68 @@ export async function promoteExtractedField(
         'that reading has not been approved, and only an approved reading is promoted',
       );
     }
+
+    if (estateField && isEstateTarget(row.target)) {
+      const occupant = await occupantOfEstateColumn(db, {
+        target: row.target,
+        entityId: entityId,
+      });
+      if (
+        occupant !== null &&
+        !sameEstateValue(row.target, occupant, row.value) &&
+        !supersede
+      ) {
+        throw new KernelError(
+          'conflict',
+          `that column already carries ${occupant}`,
+          { existingValue: occupant },
+        );
+      }
+      const sameValueAlreadyHeld =
+        occupant !== null && sameEstateValue(row.target, occupant, row.value);
+      await db.query("SELECT set_config('dona.promoting', 'on', true)");
+      if (!sameValueAlreadyHeld) {
+        await applyEstatePromotedField(db, {
+          entityType: 'UNIT',
+          unitId: entityId,
+          field: estateField,
+          value: row.value,
+          actor: promotedBy,
+          at: deps.clock.now(),
+          sourceDocumentId: row.document_id,
+          extractedFieldId,
+        });
+        await deps.audit.write(
+          {
+            actorKind: 'staff',
+            actorId: promotedBy,
+            action: 'evidence.promote_field',
+            subjectId: extractedFieldId,
+            inputs: {
+              documentId: row.document_id,
+              unitId: entityId,
+              target: row.target,
+            },
+          },
+          { outcome: 'ok' },
+        );
+      }
+      await db.query(
+        `UPDATE extracted_field
+            SET promoted_to = $2, promoted_by = $3, promoted_at = $4
+          WHERE extracted_field_id = $1`,
+        [extractedFieldId, row.target, promotedBy, deps.clock.now()],
+      );
+      return { tenancyId, unitId, target: row.target, value: row.value };
+    }
+
+    if (!tenancyField || tenancyId === null) {
+      throw new KernelError(
+        'invalid',
+        'that field cannot become business truth',
+      );
+    }
+
     const copies: Array<{
       extractedFieldId: string;
       target: string;
@@ -153,7 +261,7 @@ export async function promoteExtractedField(
       {
         extractedFieldId,
         target: row.target,
-        field,
+        field: tenancyField,
         value: row.value,
         alreadyStamped: false,
       },
@@ -184,7 +292,7 @@ export async function promoteExtractedField(
         [row.document_id, siblingSpec.fieldKey],
       );
       const other = sibling.rows[0];
-      const siblingField = TARGET_FIELD[siblingSpec.target];
+      const siblingField = TENANCY_FIELD[siblingSpec.target];
       if (
         !other ||
         other.approved_at === null ||
@@ -242,7 +350,7 @@ export async function promoteExtractedField(
       const sameValueAlreadyHeld =
         held !== undefined && held.value === copy.value;
       if (!sameValueAlreadyHeld) {
-        await applyPromotedField(db, {
+        await applyTenancyPromotedField(db, {
           tenancyId,
           field: copy.field,
           value: copy.value,
@@ -279,6 +387,6 @@ export async function promoteExtractedField(
       );
     }
 
-    return { tenancyId, target: row.target, value: row.value };
+    return { tenancyId, unitId, target: row.target, value: row.value };
   });
 }

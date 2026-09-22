@@ -17,7 +17,7 @@ exactly one child: the first in [Children](#children) that is `status: open`, `a
 whose `blocked_by` names only closed issues. Claim it (`assignee`) before writing code. Spec edit
 before code. `/clear` between children.
 
-Right now that child is **#141** (`needs-design` — answer its three questions before DDL).
+Right now that child is **#146** (the assigned bay). Do not implement this map.
 
 When a child closes: tick the matching acceptance line on this map, rewrite the sentence above to
 the next child, and leave a pointer in this file's comments. Do not implement the next child in the
@@ -118,9 +118,9 @@ What "track A is done" is tested against. Each line is end-to-end, not a layer.
       three, and those three are named as out of scope (#144, then #146 for `parking_space_number`)
 - [x] A `helka` cross-check passes on `43,46` and on `46,43`, and fails on `43,47` (#144)
 - [x] A cross-check failure does not block an operator from approving the reading (#144)
-- [ ] A promotion onto a non-null estate column refuses, names the existing value, and succeeds when
+- [x] A promotion onto a non-null estate column refuses, names the existing value, and succeeds when
       superseded — with a policy case that was **red first** (#145, consumed by #141)
-- [ ] Every estate column a promotion can write appends to a log naming the actor and the document
+- [x] Every estate column a promotion can write appends to a log naming the actor and the document
       (#141)
 - [ ] A bay reassignment is recorded without a document, and `unit.parking_space_id` is unchanged by it
       (#146)
@@ -139,8 +139,8 @@ irreversible one after the reading that depends on it has been measured.
    · no DDL · **closed 2026-09-22**
 4. #145 — Occupied, one level down, means the estate column is not null · *blocked by 144* · spec
    and a red-first test, no schema · **closed 2026-09-22**
-5. #141 — Estate promotion family, including `estate_event` · *blocked by 144, 145* · `needs-design`
-   until its three questions are answered on the issue · open
+5. #141 — Estate promotion family, including `estate_event` · *blocked by 144, 145* · **closed
+   2026-09-22**
 6. #146 — The assigned bay · *blocked by 141* · last, because `parking_space_number` must not be
    declared until the column exists · open
 
@@ -182,4 +182,10 @@ occupied whoever wrote it; tenancy occupancy unchanged; no DDL. Definition is
 `occupantOfEstateColumn` for #141 to consume. Policy case red first (missing export), then green.
 Map acceptance line 6 stays open until #141's promotion path refuses. Frontier is #141
 (`needs-design`).
+
+## Comment — 2026-09-22
+
+[#141](0141-an-estate-promotion-has-nowhere-to-record-old-to-new.md) closed: `estate_event`,
+widened targets `unit.rooms` and `space.floor`, estate `applyPromotedField`, occupancy consumed.
+Acceptance lines 6 and 7 ticked. Frontier is #146.
 

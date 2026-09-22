@@ -1,20 +1,20 @@
 ---
 number: 141
 title: "An estate promotion has nowhere to record old → new"
-status: open
-labels: [needs-design]
-assignee:
-blocked_by: [140]
+status: closed
+labels: []
+assignee: cursor
+blocked_by: [144, 145]
 parent: 142
 created: 2026-09-22
-closed:
+closed: 2026-09-22
 ---
 
 ## What is wrong
 
-This is a defect that does not exist yet, filed so it is not discovered late. **It must not be built
-before the estate promotion family it belongs to, and it must not be forgotten when that family is
-built.**
+This is a defect that does not exist yet, filed so it is not discovered late. **It is the estate
+promotion family** (step 5 of #142). It must not be built before #144 and #145, and it must not be
+forgotten when those close.
 
 Promotion onto a tenancy column records itself: `tenancy_event` is append-only, holds `old_value` and
 `new_value`, names the actor, and every `amended` row names the document that caused it
@@ -53,19 +53,65 @@ Open at filing time, and these are the design questions this ticket carries:
 - Whether the register importer appends. `tenancy_event`'s answer was no, stated in `0019`'s header,
   and the same reasoning probably holds.
 
-**This is DDL that step 5 needs and the track A proposal did not count.** Step 5 is a widened `target`
-CHECK, a link-kind branch in `promote.ts`, an estate-side `applyPromotedField` — and this table.
+**This is the whole of step 5**, not only the table: a widened `target` CHECK (estate columns the
+lease may establish — `unit.rooms`, `space.floor`; not `gush` / `helka` / `building_number`, which
+stay typed), a link-kind branch in `promote.ts` (`UNIT` / `BUILDING` links already exist), estate's
+`applyPromotedField` under the seam `applyProtocolSeed` already establishes, and `estate_event`.
+Occupancy is #145's rule: a non-null estate column is occupied whoever wrote it.
+
+**Session start:** answer the three questions on this issue, with reasons, then set `labels` to
+`[ready-for-agent]`, then write DDL. Do not implement while the label is `needs-design`. Plan mode —
+this is the irreversible schema change.
 
 ## Acceptance criteria
 
-- [ ] No estate column is writable by promotion without an append landing here
-- [ ] The table is append-only by trigger, as `tenancy_event` is — not by convention
-- [ ] `at` comes from the injected clock; no `DEFAULT now()` anywhere, per `0004_estate.sql`'s rule
-- [ ] The three open questions above are answered on this issue with reasons before any DDL is written
+- [x] The three open questions above are answered on this issue with reasons before any DDL is written
+- [x] No estate column is writable by promotion without an append landing here
+- [x] The table is append-only by trigger, as `tenancy_event` is — not by convention
+- [x] `at` comes from the injected clock; no `DEFAULT now()` anywhere, per `0004_estate.sql`'s rule
+- [x] `unit.rooms` and `space.floor` are promotion targets; `gush` / `helka` / `building_number` are not
+- [x] A `unit.*` target resolves through a `UNIT` link, a `building.*` target through `BUILDING`
+- [x] Evidence issues no estate SQL
+- [x] A promotion onto a non-null estate column refuses per #145 and succeeds when superseded
 
 ## Related
 
 `src/kernel/migrations/0019_tenancy_event.sql`, `src/evidence/internal/promote.ts`,
 `src/estate/` (`applyProtocolSeed`, the seam this extends).
 [docs/proposals/track-a-the-place-a-fact-is-true-of.md](../docs/proposals/track-a-the-place-a-fact-is-true-of.md) §6
-and its step 5. Blocked by #140 only in the sense that nothing in track A starts before it.
+and its step 5. Blocked by #144 (the reading is measured) and #145 (the refusal exists).
+
+## Comment — 2026-09-22
+
+`blocked_by` was `[140]` at filing, meaning only that nothing in track A starts before the
+placeholder defect. The children of #142 are now filed: this ticket is step 5, blocked by #144 and
+#145, and it is the whole estate promotion family, not only the log table.
+
+## Comment — 2026-09-22
+
+The three design questions, answered before DDL:
+
+**One table, discriminator, two nullable ids.** `estate_event` with `entity_type` in
+`BUILDING | UNIT`, nullable `building_id` / `unit_id`, and a CHECK that exactly one id is set and
+matches the type. Same shape as `document_link`. Not a table per entity. No `space_id`: this
+ticket's writes are `unit.rooms` and `space.floor` on the unit's space (`unit_id` = `space_id`).
+
+**Only a promotion appends.** A11, A13, and the register stay silent. Same rule as `tenancy_event`:
+the log answers *a document changed this*. The typed original is `old_value` on that first
+promotion row. Wiring every estate write is a second product and is out of scope.
+
+**Register importer does not append.** Same reasoning as `0019_tenancy_event.sql`'s header.
+
+## Closed
+
+`0038_estate_event.sql`: append-only `estate_event`, no `DEFAULT now()`, XOR `BUILDING|UNIT` ids.
+`field_promotion.target` admits `unit.rooms` and `space.floor` only. Estate `applyPromotedField`
+writes the column and the log. `promoteExtractedField` resolves a `UNIT` link, consumes
+`occupantOfEstateColumn`, and refuses a typed room count unless `supersede`. Policy case red first
+(`listEstateEvents` missing, then the unmapped target), then green. A2 still does not auto-promote
+rooms. Frontier of #142 becomes #146.
+
+## Comment — 2026-09-22
+
+Closed as above. Pointer on the map:
+[issues/0142-track-a-the-place-a-fact-is-true-of.md](0142-track-a-the-place-a-fact-is-true-of.md).
