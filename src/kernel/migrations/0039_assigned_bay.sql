@@ -3,7 +3,7 @@
 --
 -- unit.parking_space_id is the built bay. Promoting a lease's bay number
 -- onto it would write a tenancy fact onto an estate row that outlives the
--- letting — the same class of error as current_tenant. The assigned bay is
+-- letting — the same class of error foundation rule 1 forbids. The assigned bay is
 -- a nullable FK on tenancy, constrained to a PARKING space by the same
 -- composite-key technique D3 used on unit.
 --

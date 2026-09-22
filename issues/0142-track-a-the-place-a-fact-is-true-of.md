@@ -1,32 +1,19 @@
 ---
 number: 142
 title: "Track A — the place a fact is true of"
-status: open
+status: closed
 labels: []
 assignee:
 blocked_by: []
 parent:
 created: 2026-09-22
-closed:
+closed: 2026-09-22
 ---
 
 ## Frontier
 
-**Do not implement this issue.** It is the track map. A new session with no ticket named implements
-exactly one child: the first in [Children](#children) that is `status: open`, `assignee` empty, and
-whose `blocked_by` names only closed issues. Claim it (`assignee`) before writing code. Spec edit
-before code. `/clear` between children.
-
-Right now every child is **closed**. Do not implement this map. A new session with no ticket named
-does not pick work from here until a new unblocked child is filed.
-
-When a child closes: tick the matching acceptance line on this map, rewrite the sentence above to
-the next child, and leave a pointer in this file's comments. Do not implement the next child in the
-same session.
-
-When a child closes: tick the matching acceptance line on this map, rewrite the sentence above to
-the next child, and leave a pointer in this file's comments. Do not implement the next child in the
-same session.
+Closed. All six children closed. A new session with no ticket named does not pick work from here
+until a new unblocked child is filed.
 
 ## Problem Statement
 
@@ -199,4 +186,25 @@ Acceptance lines 6 and 7 ticked. Frontier is #146.
 [#146](0146-the-assigned-bay-has-nowhere-to-live.md) closed: assigned bay on the letting,
 `reassigned` with no paper, built bay unchanged, `parking_space_number` declared and scored.
 Acceptance lines 3 and 8 ticked. Residual is the three out-of-scope keys. No next child.
+
+## Comment — 2026-09-22
+
+Closed. All six children closed (#140, #143, #144, #145, #141, #146). Parent ticks filled from those
+issues. Reviewed against this map after the last child; no new product work.
+
+- A13 no invented bay/storage; unreferenced placeholder removable: #140.
+- Typed `gush`, `helka`, `building_number` on A11, none unique: #143.
+- Fourteen residuals declared and scored; residual is the three out-of-scope keys: #144 then #146.
+- Helka is a set; a cross-check miss still approves: #144.
+- Non-null estate column occupied whoever wrote it; refuse names the value; supersede writes: #145
+  consumed by #141. Policy cases red first.
+- Every estate promotion target appends `estate_event` with actor and document: #141.
+- Assigned bay on the letting; `reassigned` with no paper; built bay unchanged: #146.
+
+Gates this close: `test:policy` 112/112, `npm test` 825 + 41 hooks, typecheck, `npm run guards`.
+The #146 migration header named the forbidden occupancy column in a comment and tripped the grep
+guard; the comment now names the rule instead. Live `evals` not re-run here (costs a model call
+per specimen). Eight keyed runs and ranges sit on #144; #146 added one keyed run after
+`parking_space_number` was declared and reused those ranges. Out of scope on this map stays out of
+scope.
 

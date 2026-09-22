@@ -1,18 +1,18 @@
 # Proposal: Track A — the place a fact is true of
 
-**Status: DRAFT, 2026-09-22. GRILLED, NOT ADOPTED. Parent ticket:
-[#142](../../issues/0142-track-a-the-place-a-fact-is-true-of.md).** The open questions at the end have been answered
-by the director — §10 records each answer and what it changed. This file still proposes rather than
-specifies: adoption happens one implementing ticket at a time, spec edit before code edit. Where it
-and a SPEC file could be read as disagreeing today, the SPEC file wins — nothing here has been adopted
-into one yet.
+**Status: ADOPTED, 2026-09-22.** The specs are now the authority and this file is the record of how
+they got that way. Where this proposal and a SPEC file could be read as disagreeing, the SPEC file
+wins — the same rule `CONTEXT.md` states about itself. Parent ticket:
+[#142](../../issues/0142-track-a-the-place-a-fact-is-true-of.md). The open questions at the end were
+answered by the director — §10 records each answer and what it changed.
 
 **Date:** 2026-09-22
-**Supersedes nothing. Would amend on adoption:** `SPEC-estate.md` (the tables, *What is deliberately
-not a column*, the A13 unit screen, *Open*), `SPEC-evidence.md` (*Seeding the catalogue*, the
-promotion target list under *FieldPromotion*), `SPEC-flows.md` (A11, A13), `SPEC-tenancy.md` (the
-assigned bay and the `reassigned` event). `CONTEXT.md`'s two glossary entries — **built bay**,
-**assigned bay** — are already in, because a glossary is not a spec and the terms are settled.
+**Supersedes nothing. Amended on adoption:** `SPEC-estate.md` (the tables, *What is deliberately
+not a column*, the A13 unit screen, occupancy, `estate_event`), `SPEC-evidence.md` (*Seeding the
+catalogue*, the promotion target list under *FieldPromotion*, parcel cross-checks), `SPEC-flows.md`
+(A11, A13), `SPEC-tenancy.md` (the assigned bay and the `reassigned` event). `CONTEXT.md`'s two
+glossary entries — **built bay**, **assigned bay** — were already in, because a glossary is not a
+spec and the terms were settled before the first child.
 
 ---
 
