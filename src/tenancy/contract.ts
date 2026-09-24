@@ -5,7 +5,9 @@
 // 5.7 Obligation / ObligationType (`listObligationTypes` at 5.8 for the settings screen). Who a
 // phone reaches *today* is still `src/scope/`'s answer; `listUnitTenancies` answers which lettings
 // a flat has; `listIncompleteTenancies` answers which of those miss a named completeness rule (ערב,
-// and from #108 each activation-gate miss); `listTenancyEvents` answers what changed on those
+// and from #108 each activation-gate miss); `listActivationQueue` (#158) answers which drafts
+// the gate will activate today or within `ACTIVATION_QUEUE_DAYS`, still with no party;
+// `listTenancyEvents` answers what changed on those
 // lettings; `listActiveLettingsInBuilding` (#122) is the office inventory of Units let in a
 // Building today. None takes a phone.
 // SPEC-tenancy.md sets out the difference, because the line between the two is the module boundary.
@@ -54,12 +56,18 @@ export {
   upsertTermsProfile,
 } from './internal/commands.ts';
 export type {
+  ActivationQueue,
+  ActivationQueueDraft,
+  ArmingSoon,
   CompletenessExceptionSpec,
   CompletenessRule,
   IncompleteTenancy,
   ProtocolWaiverView,
+  ReadyToActivate,
 } from './internal/completeness.ts';
 export {
+  ACTIVATION_QUEUE_DAYS,
+  listActivationQueue,
   listIncompleteTenancies,
   recordCompletenessException,
 } from './internal/completeness.ts';

@@ -989,13 +989,20 @@ const SCREENS: Array<[string, () => string]> = [
             protocolWaiver: null,
           },
         ],
+        { ready: [], soon: [], withinDays: 14 },
         CSRF,
         NAV_INCOMPLETE,
       ),
   ],
   [
     'estate · incomplete tenancies, none',
-    () => renderIncompletePage([], CSRF, NAV_INCOMPLETE),
+    () =>
+      renderIncompletePage(
+        [],
+        { ready: [], soon: [], withinDays: 14 },
+        CSRF,
+        NAV_INCOMPLETE,
+      ),
   ],
   [
     // **Slice 7.1, the tab's landing.** The fifth document-shaped screen, registered here under

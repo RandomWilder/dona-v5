@@ -72,6 +72,7 @@ import {
 } from './read-model.ts';
 import { removeInventorySpace, removeSpace } from './spaces.ts';
 import {
+  type ActivationQueueView,
   type DocumentSearchHit,
   type FiledDocumentView,
   type IncompleteTenancyRow,
@@ -134,6 +135,7 @@ export interface EstateDeps {
   listIncompleteTenancies: (
     db: Pool,
   ) => Promise<readonly IncompleteTenancyRow[]>;
+  listActivationQueue: (db: Pool) => Promise<ActivationQueueView>;
   recordCompletenessException: (
     db: Pool,
     spec: {
@@ -1032,10 +1034,12 @@ export function registerEstateRoutes(
 
   app.get('/estate/incomplete', READ, async (request, reply) => {
     const rows = await deps.listIncompleteTenancies(deps.pool);
+    const queue = await deps.listActivationQueue(deps.pool);
     const csrf = csrfFrom(request);
     html(reply);
     return renderIncompletePage(
       rows,
+      queue,
       csrf,
       deps.chrome(csrf, 'incomplete', mayFile(request)),
     );

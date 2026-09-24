@@ -94,6 +94,7 @@ export {
 export type { EstateDeps } from './internal/routes.ts';
 export { registerEstateRoutes } from './internal/routes.ts';
 export type {
+  ActivationQueueView,
   CitedCaptureView,
   DocumentSearchHit,
   FiledDocumentView,

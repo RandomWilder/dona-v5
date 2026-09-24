@@ -286,7 +286,12 @@ call. `terminated_has_no_document` is not relaxed: the clock's kind keeps its sh
   `unit_free`)
   and never a second copy of those predicates. The clock and the document reader are injected the
   way the gate already takes them. A tenancy whose every gate check passed is not listed for the
-  gate; the guarantor rule remains its own row. Only misses appear. **#156** amends the rule that
+  gate; the guarantor rule remains its own row. Only misses appear. **#158** exports
+  `listActivationQueue` beside that query. It walks the same document-backed drafts and classifies
+  each from `activationGate`: `canActivate` is ready to press, oldest start first; a single miss of
+  `start_reached` whose `activatableOn` is on or before today plus `ACTIVATION_QUEUE_DAYS` (14) is
+  arming soon. The date a ready draft has been waiting is the lease start — the date the gate
+  reports as `activatableOn` before that day arrives. The query returns no party and no name. **#156** amends the rule that
   gate misses are not excepted: `handover_protocol` may be waived for one letting. A recorded
   waiver makes that check pass, and any row the letting still occupies on this queue carries who
   recorded it, the office day, and the reason. The query stops listing the protocol miss. `lease`,

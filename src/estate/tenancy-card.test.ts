@@ -349,7 +349,12 @@ describe('estate · the incomplete queue shows a protocol waiver', () => {
         reason: 'אותו שוכר, חוזה חדש על אותה דירה',
       },
     };
-    const html = renderIncompletePage([row], 'csrf', h``);
+    const html = renderIncompletePage(
+      [row],
+      { ready: [], soon: [], withinDays: 14 },
+      'csrf',
+      h``,
+    );
     assert.match(html, /chip is-neutral/);
     assert.match(html, /dot is-hollow/);
     assert.match(html, /ויתור/);
@@ -357,5 +362,65 @@ describe('estate · the incomplete queue shows a protocol waiver', () => {
     assert.match(html, /ops@tenancy-page.test/);
     assert.match(html, /2026-09-24/);
     assert.match(html, /רשם:/);
+  });
+
+  it('prints a ready draft and an arming draft from the queue it is handed', () => {
+    const html = renderIncompletePage(
+      [],
+      {
+        ready: [
+          {
+            tenancy_id: '55555555-5555-4555-8555-555555555555',
+            unit_number: '12',
+            address_line: 'הרצל 14',
+            city: 'רמת גן',
+            start_date: '2026-09-15',
+            end_date: '2027-09-14',
+            ready_since: '2026-09-15',
+            missed: true,
+          },
+          {
+            tenancy_id: '66666666-6666-4666-8666-666666666666',
+            unit_number: '3',
+            address_line: 'ביאליק 8',
+            city: 'גבעתיים',
+            start_date: '2026-09-24',
+            end_date: '2027-09-23',
+            ready_since: '2026-09-24',
+            missed: false,
+          },
+        ],
+        soon: [
+          {
+            tenancy_id: '77777777-7777-4777-8777-777777777777',
+            unit_number: '7',
+            address_line: 'הרצל 14',
+            city: 'רמת גן',
+            start_date: '2026-10-01',
+            end_date: '2027-09-30',
+            activatable_on: '2026-10-01',
+          },
+        ],
+        withinDays: 21,
+      },
+      'csrf',
+      h``,
+    );
+    assert.match(html, /מוכנות להפעלה/);
+    assert.match(html, /chip is-accent/);
+    assert.match(html, /מוכנה מאז/);
+    assert.match(html, /chip is-ok/);
+    assert.match(html, /מוכנה היום/);
+    assert.match(html, /נדלקות בקרוב/);
+    assert.match(html, />21</);
+    assert.doesNotMatch(html, /נדלקות בקרוב \(14/);
+    assert.match(html, /chip is-neutral/);
+    assert.match(html, /dot is-hollow/);
+    assert.match(html, /נדלקת ב־/);
+    assert.match(
+      html,
+      /href="\/estate\/tenancies\/77777777-7777-4777-8777-777777777777"/,
+    );
+    assert.doesNotMatch(html, /שוכר/);
   });
 });

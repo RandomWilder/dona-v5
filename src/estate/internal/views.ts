@@ -519,6 +519,25 @@ const styles = h`<style>
   .carried dt { color: var(--color-text-muted); font-size: var(--text-sm); min-inline-size: 9rem; margin: 0; }
   .carried dd { margin: 0; min-width: 0; }
   .carried .role { color: var(--color-text-muted); font-size: var(--text-xs); }
+  .glass-stage .sheet {
+    padding: var(--space-5) var(--space-6);
+    display: grid;
+    gap: var(--space-4);
+  }
+  .glass-stage .block-title { margin: 0; font-size: var(--text-lg); font-weight: 600; }
+  .glass-stage .q-list { display: grid; gap: var(--space-2); }
+  .glass-stage .q-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-4) var(--space-5);
+    color: inherit;
+    text-decoration: none;
+  }
+  .glass-stage a.q-row:hover { background: var(--glass-hover); }
+  .glass-stage .q-row .lede { margin: var(--space-1) 0 0; }
 </style>`;
 
 function page(title: string, body: Html, nav: Html): string {
@@ -2110,14 +2129,79 @@ export interface IncompleteTenancyRow {
   } | null;
 }
 
+/** #158. A draft the gate will activate, or one arming inside the named window. No party. */
+export interface ActivationQueueView {
+  ready: readonly {
+    tenancy_id: string;
+    unit_number: string;
+    address_line: string;
+    city: string;
+    start_date: string;
+    end_date: string;
+    ready_since: string;
+    missed: boolean;
+  }[];
+  soon: readonly {
+    tenancy_id: string;
+    unit_number: string;
+    address_line: string;
+    city: string;
+    start_date: string;
+    end_date: string;
+    activatable_on: string;
+  }[];
+  withinDays: number;
+}
+
+function activationPlace(row: {
+  tenancy_id: string;
+  unit_number: string;
+  address_line: string;
+  city: string;
+  start_date: string;
+  end_date: string;
+}): Html {
+  return h`<div>
+    <span>דירה ${ltr(row.unit_number)} · ${row.address_line}, ${row.city}</span>
+    <p class="lede">${ltr(`${row.start_date} — ${row.end_date}`)}</p>
+  </div>`;
+}
+
+function activationBlock(title: Html, body: Html): Html {
+  return h`<section class="glass sheet">
+    <h2 class="block-title">${title}</h2>
+    ${body}
+  </section>`;
+}
+
+function activationLink(
+  row: {
+    tenancy_id: string;
+    unit_number: string;
+    address_line: string;
+    city: string;
+    start_date: string;
+    end_date: string;
+  },
+  chip: Html,
+): Html {
+  return h`<a class="q-row glass is-raised" href="/estate/tenancies/${row.tenancy_id}">
+    ${activationPlace(row)}
+    ${chip}
+  </a>`;
+}
+
 /**
  * A4 — document-backed drafts and live lettings that miss a named rule.
  *
  * A unit, dates, a missing-rule label and the document the rule was expected in. No party.
  * Gate-miss labels are the same wording as the tenancy page, so the two screens cannot disagree.
+ * #158 adds the two blocks above the misses. They print the queue they are handed and re-derive
+ * nothing.
  */
 export function renderIncompletePage(
   rows: readonly IncompleteTenancyRow[],
+  queue: ActivationQueueView,
   /**
    * The CSRF token for this session (slice 5.2). The one form on this screen carries it.
    *
@@ -2129,13 +2213,42 @@ export function renderIncompletePage(
   csrf: string,
   nav: Html,
 ): string {
+  const readyRows =
+    queue.ready.length === 0
+      ? h`<p class="lede">אין טיוטה מוכנה.</p>`
+      : h`<div class="q-list">
+          ${queue.ready.map((row) =>
+            activationLink(
+              row,
+              row.missed
+                ? h`<span class="chip is-accent"><span class="dot"></span>מוכנה מאז ${ltr(row.ready_since)}</span>`
+                : h`<span class="chip is-ok"><span class="dot"></span>מוכנה היום</span>`,
+            ),
+          )}
+        </div>`;
+  const soonRows =
+    queue.soon.length === 0
+      ? h`<p class="lede">אין בטווח.</p>`
+      : h`<div class="q-list">
+          ${queue.soon.map((row) =>
+            activationLink(
+              row,
+              h`<span class="chip is-neutral"><span class="dot is-hollow"></span>נדלקת ב־${ltr(row.activatable_on)}</span>`,
+            ),
+          )}
+        </div>`;
   const body = h`
-    <div>
-      <h1>חוזים לא שלמים</h1>
-      <p class="lede">
-        ${ltr(rows.length)} חוזים בתיק שממתינים להשלמה. מסמך משלים, או רישום חריג לערב.
-      </p>
-    </div>
+    <div class="glass-stage">
+    <header class="page-head">
+      <div>
+        <h1>חוזים לא שלמים</h1>
+        <p class="lede">
+          ${ltr(rows.length)} חוזים בתיק שממתינים להשלמה. מסמך משלים, או רישום חריג לערב.
+        </p>
+      </div>
+    </header>
+    ${activationBlock(h`מוכנות להפעלה`, readyRows)}
+    ${activationBlock(h`נדלקות בקרוב (${ltr(queue.withinDays)} יום)`, soonRows)}
     ${
       rows.length === 0
         ? h`<p class="empty-state">אין חוזים ממתינים להשלמה.</p>`
@@ -2194,7 +2307,8 @@ export function renderIncompletePage(
               </article>`;
             })}
           </div>`
-    }`;
+    }
+    </div>`;
   return page('דונה דום — חוזים לא שלמים', body, nav);
 }
 

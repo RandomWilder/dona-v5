@@ -284,7 +284,13 @@ the office day — as the protocol's resolution. `lease`, `start_reached`, `with
 **Screen:** `GET /estate/incomplete` — each row shows what is missing and the TENANCY-linked
 document it was expected in (a `lease` type wins when both a lease and an addendum are linked).
 No party names — a rule 5.2 kept rather than lifted when it put the screen behind a session, and 5.4
-kept again.
+kept again. **#158** puts two glass blocks above those rows, both read from `activationGate` and
+from no second copy of its checks. **מוכנות להפעלה** lists every document-backed `DRAFT` whose gate
+returns `canActivate`, oldest start first, each linking to its tenancy page. The chip reads מוכנה
+היום when the lease start is the office day, and מוכנה מאז that start when the day has passed
+unpressed — a missed press stays on the block. **נדלקות בקרוב** lists a draft whose only failing
+check is `start_reached` and whose `activatableOn` falls within `ACTIVATION_QUEUE_DAYS` (14). The
+chip names that date. Neither block carries a party name.
 **Resolution:** the administrator uploads the addendum (A3), or records the exception. The exception
 row's `actor` is the signed-in operator (slice 5.4), not a typed name and not the word `console`.
 **Module:** tenancy owns the query and the exception write (`listIncompleteTenancies`,

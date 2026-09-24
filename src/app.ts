@@ -81,6 +81,7 @@ import {
   endTenancyEarly,
   expireDueTenancies,
   getTenancy,
+  listActivationQueue,
   listIncompleteTenancies,
   listObligationTypes,
   listTenancyEvents,
@@ -461,6 +462,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     expireDueTenancies,
     listIncompleteTenancies: (db) =>
       listIncompleteTenancies(db, clock, listTenancyDocumentFacts),
+    listActivationQueue: (db) =>
+      listActivationQueue(db, clock, listTenancyDocumentFacts),
     recordCompletenessException,
     getTenancy,
     listTenancyParties,
