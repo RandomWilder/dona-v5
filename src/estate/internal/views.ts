@@ -474,6 +474,10 @@ const styles = h`<style>
   .gate li { display: flex; gap: var(--space-3); align-items: baseline; flex-wrap: wrap; min-width: 0; }
   .gate .outcome { min-inline-size: 6rem; }
   .gate .why { color: var(--color-text-muted); font-size: var(--text-sm); }
+  .glass-stage .chip.is-miss {
+    background: color-mix(in srgb, var(--color-alert) 12%, var(--color-surface-card));
+    color: var(--color-alert);
+  }
   .activate {
     display: flex;
     flex-wrap: wrap;
@@ -2054,6 +2058,7 @@ const GATE_LABEL: Record<string, string> = {
   handover_protocol: 'פרוטוקול מסירה מאושר',
   start_reached: 'היום אינו לפני תחילת החוזה',
   within_term: 'היום אינו אחרי סיום החוזה',
+  unit_free: 'הדירה פנויה בתקופה',
 };
 
 const DOC_LABEL: Record<string, string> = {
@@ -2172,6 +2177,11 @@ export interface TenancyPersonView {
 export interface TenancyGateCheckView {
   rule: string;
   passed: boolean;
+  blocking?: {
+    tenancyId: string;
+    startDate: string;
+    endDate: string;
+  };
 }
 
 export interface CitedCaptureView {
@@ -2201,6 +2211,8 @@ export interface TenancySheet {
   captures: readonly CitedCaptureView[];
   checks: readonly TenancyGateCheckView[];
   canActivate: boolean;
+  /** Whether this reader holds `tenancy.write`, so a blocked row may link the end-early form. */
+  mayEndEarly: boolean;
   activatableOn: string | null;
   flags: readonly { typeKey: string }[];
   csrf: string;
@@ -2231,6 +2243,14 @@ function checkWhy(check: TenancyGateCheckView, sheet: TenancySheet): Html {
     return check.passed
       ? h`החוזה מסתיים ב־${ltr(sheet.endDate)}`
       : h`החוזה הסתיים ב־${ltr(sheet.endDate)}`;
+  }
+  if (check.rule === 'unit_free' && !check.passed && check.blocking) {
+    const { tenancyId, startDate, endDate } = check.blocking;
+    const open = h`<a href="/estate/tenancies/${tenancyId}">פתיחה</a>`;
+    const end = sheet.mayEndEarly
+      ? h` · <a href="/estate/tenancies/${tenancyId}#end">סיום מוקדם</a>`
+      : h``;
+    return h`השכרה פעילה ${ltr(`${startDate} — ${endDate}`)} עדיין על הדירה · ${open}${end}`;
   }
   return h``;
 }
@@ -2337,7 +2357,7 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
       ${
         active
           ? h`<div>
-        <h2>סיום מוקדם</h2>
+        <h2 id="end">סיום מוקדם</h2>
         <p class="lede">הדיירים עוזבים לפני סוף החוזה. תאריך הסיום החוזי נשאר כפי שהוא. תאריך העזיבה נרשם לצדו.</p>
       </div>
       <form class="form-grid" method="post" action="/estate/tenancies/${sheet.tenancyId}/end" enctype="multipart/form-data">
@@ -2439,13 +2459,17 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
           : h`<p class="lede">מסמך שפג תוקפו מרים דגל ואינו מזיז את המצב.</p>`
       }
       <ul class="gate">
-        ${sheet.checks.map(
-          (check) => h`<li>
-            <span class="outcome term-state ${check.passed ? 'term-found' : 'term-missing'}">${check.passed ? 'עבר' : 'לא עבר'}</span>
+        ${sheet.checks.map((check) => {
+          const chip =
+            check.rule === 'unit_free'
+              ? h`<span class="chip ${check.passed ? 'is-ok' : 'is-miss'}"><span class="dot"></span>${check.passed ? 'עבר' : 'לא עבר'}</span>`
+              : h`<span class="outcome term-state ${check.passed ? 'term-found' : 'term-missing'}">${check.passed ? 'עבר' : 'לא עבר'}</span>`;
+          return h`<li>
+            ${chip}
             <span>${GATE_LABEL[check.rule] ?? check.rule}</span>
             <span class="why">${checkWhy(check, sheet)}</span>
-          </li>`,
-        )}
+          </li>`;
+        })}
       </ul>
 
       ${

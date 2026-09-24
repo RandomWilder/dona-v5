@@ -23,10 +23,26 @@ export type TenancyDocumentsReader = (
   tenancyId: string,
 ) => Promise<TenancyDocumentFact[]>;
 
-export interface ActivationCheck {
-  rule: RequiredActivationDocument | 'start_reached' | 'within_term';
-  passed: boolean;
+export interface BlockingLetting {
+  tenancyId: string;
+  startDate: string;
+  endDate: string;
 }
+
+export type ActivationCheck =
+  | {
+      rule: RequiredActivationDocument | 'start_reached' | 'within_term';
+      passed: boolean;
+    }
+  | {
+      rule: 'unit_free';
+      passed: true;
+    }
+  | {
+      rule: 'unit_free';
+      passed: false;
+      blocking: BlockingLetting;
+    };
 
 export interface ActivationFlag {
   rule: 'lapsed_document';
@@ -60,10 +76,11 @@ export async function activationGate(
 ): Promise<ActivationGate> {
   const current = await db.query<{
     status: string;
+    unit_id: string;
     start_date: string;
     end_date: string;
   }>(
-    `SELECT status, start_date::text AS start_date, end_date::text AS end_date
+    `SELECT status, unit_id, start_date::text AS start_date, end_date::text AS end_date
        FROM tenancy WHERE tenancy_id = $1`,
     [tenancyId],
   );
@@ -81,6 +98,35 @@ export async function activationGate(
   const withinTerm = today <= row.end_date;
   checks.push({ rule: 'start_reached', passed: startReached });
   checks.push({ rule: 'within_term', passed: withinTerm });
+  const overlap = await db.query<{
+    tenancy_id: string;
+    start_date: string;
+    end_date: string;
+  }>(
+    `SELECT tenancy_id, start_date::text AS start_date, end_date::text AS end_date
+       FROM tenancy
+      WHERE unit_id = $1
+        AND status = 'ACTIVE'
+        AND tenancy_id <> $2
+        AND daterange(start_date, end_date, '[]') && daterange($3::date, $4::date, '[]')
+      ORDER BY start_date
+      LIMIT 1`,
+    [row.unit_id, tenancyId, row.start_date, row.end_date],
+  );
+  const blocker = overlap.rows[0];
+  checks.push(
+    blocker
+      ? {
+          rule: 'unit_free',
+          passed: false,
+          blocking: {
+            tenancyId: blocker.tenancy_id,
+            startDate: blocker.start_date,
+            endDate: blocker.end_date,
+          },
+        }
+      : { rule: 'unit_free', passed: true },
+  );
   const documentsPass = REQUIRED_FOR_ACTIVATION.every(
     (typeKey) => checks.find((check) => check.rule === typeKey)?.passed,
   );
@@ -103,7 +149,11 @@ export async function activationGate(
     canActivate:
       row.status === 'DRAFT' && checks.every((check) => check.passed),
     activatableOn:
-      row.status === 'DRAFT' && documentsPass && withinTerm && !startReached
+      row.status === 'DRAFT' &&
+      documentsPass &&
+      withinTerm &&
+      !blocker &&
+      !startReached
         ? row.start_date
         : null,
     flags,

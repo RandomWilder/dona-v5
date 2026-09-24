@@ -15,6 +15,7 @@ export type {
   ActivationCheck,
   ActivationFlag,
   ActivationGate,
+  BlockingLetting,
   RequiredActivationDocument,
   TenancyDocumentFact,
   TenancyDocumentsReader,

@@ -304,12 +304,15 @@ stated constant, and adding a third is a one-line change:
 REQUIRED_FOR_ACTIVATION = ['lease', 'handover_protocol']
 ```
 
-A tenancy becomes `ACTIVE` only when a person invokes the command and all four facts hold: an
+A tenancy becomes `ACTIVE` only when a person invokes the command and all five facts hold: an
 approved lease on the letting; an approved handover protocol on the letting; today is not before the
-lease's start date; today is not after its end date. The lease is the only document that defines
-those dates (`tenancy.start_date` / `tenancy.end_date`). Each refusal names its own reason. A
-handover protocol is **per letting**: it records that the tenant accepted the flat after inspecting
-it, and it is bound with `entity_type = 'TENANCY'`.
+lease's start date; today is not after its end date; and no other `ACTIVE` letting on this unit has
+a date range that overlaps this draft (`unit_free`). The overlap is the same inclusive range as
+`one_active_tenancy_per_unit`. The lease is the only document that defines those dates
+(`tenancy.start_date` / `tenancy.end_date`). Each refusal names its own reason. A handover protocol
+is **per letting**: it records that the tenant accepted the flat after inspecting it, and it is
+bound with `entity_type = 'TENANCY'`. `unit_free` is not waivable. When it fails, the gate names
+the blocking letting by id and dates only — never a party.
 
 **Screen:** `GET /estate/tenancies/:tenancyId` — one letting, reached by its identifier. Title
 (tenant name plus address and apartment number), status, the lease's dates, the documents it holds,
@@ -318,8 +321,12 @@ the status chip share one line, the way a building title does on נכסים, and
 under them. The page prints the
 gate's returned facts and re-derives none of the rules. The button is dark until `canActivate`; a
 dark button names every requirement the gate checked. When the only miss is the start date, the
-page states `activatableOn`. `POST /estate/tenancies/:tenancyId/activate` is the person command
-(`tenancy.write`); the clock never posts it.
+page states `activatableOn`. `unit_free` is one more row in מה נבדק, the same shape as the other
+checks. A pass uses the occupied chip. A miss uses the alert chip and names the outgoing letting by
+its dates, with a link to that letting and — when the reader holds `tenancy.write` — a link to its
+end-early form. The activate button stays the primary pill and stays dark while any check fails,
+with the unmet requirements in muted type beside it. `POST /estate/tenancies/:tenancyId/activate`
+is the person command (`tenancy.write`); the clock never posts it.
 
 **An `ACTIVE` letting on that same page can be ended early (#154).** The form sits in a glass card:
 move-out and notice as a pair of dates, the notice letter as a file field, and the primary button
@@ -338,8 +345,9 @@ masked. A tenant route, when it exists, needs a stance (#125).
 
 **Writes:** `DRAFT → ACTIVE`, and a `TenancyEvent` of kind `activated` naming who and when. No
 document on that event — the paper is already on the letting; the event records the human act.
-**Enforcement:** the gate first, then `one_active_tenancy_per_unit`. Promoting a draft that still
-overlaps a live tenancy is rejected by the database.
+**Enforcement:** the gate first, then `one_active_tenancy_per_unit`. The constraint is unchanged and
+remains the enforcement. `unit_free` is what makes that refusal legible before the press. Promoting
+a draft that still overlaps a live tenancy is rejected by the database.
 **Effect on the agent:** the incoming household resolves through the isolation join from that day
 and not before.
 

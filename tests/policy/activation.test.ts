@@ -233,6 +233,164 @@ describe('policy · activation is a person command with a named gate', () => {
     }
   });
 
+  it('names the active letting that overlaps this draft, by id and dates only', async (t) => {
+    const pool = await policyPool();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const live = await seedOccupancy(db, '1551', {
+          phone: '+972501550001',
+          contactFrom: '2025-11-01',
+          contactTo: null,
+          tenancyFrom: '2025-11-01',
+          tenancyTo: '2026-10-31',
+          status: 'ACTIVE',
+        });
+        const draft = await seedOccupancy(db, '1551', {
+          phone: '+972501550002',
+          contactFrom: '2026-09-15',
+          contactTo: null,
+          tenancyFrom: '2026-09-15',
+          tenancyTo: '2027-09-14',
+          status: 'DRAFT',
+          unitId: live.unitId,
+        });
+        for (const typeKey of REQUIRED_FOR_ACTIVATION) {
+          await linkApproved(db, draft.tenancyId, typeKey);
+        }
+        const gate = await activationGate(
+          db,
+          CLOCK,
+          draft.tenancyId,
+          listTenancyDocumentFacts,
+        );
+        assert.equal(gate.canActivate, false);
+        const free = gate.checks.find((row) => row.rule === 'unit_free') as
+          | {
+              passed: boolean;
+              blocking?: {
+                tenancyId: string;
+                startDate: string;
+                endDate: string;
+              };
+            }
+          | undefined;
+        assert.ok(free);
+        assert.equal(free.passed, false);
+        assert.deepEqual(free.blocking, {
+          tenancyId: live.tenancyId,
+          startDate: '2025-11-01',
+          endDate: '2026-10-31',
+        });
+        assert.deepEqual(Object.keys(free.blocking ?? {}).sort(), [
+          'endDate',
+          'startDate',
+          'tenancyId',
+        ]);
+        for (const rule of [
+          ...REQUIRED_FOR_ACTIVATION,
+          'start_reached',
+          'within_term',
+        ]) {
+          assert.equal(
+            gate.checks.find((row) => row.rule === rule)?.passed,
+            true,
+            rule,
+          );
+        }
+        assert.doesNotMatch(JSON.stringify(gate), /Tenant of/);
+        const error = await refuse(db, draft.tenancyId);
+        assert.equal(error.code, 'invalid');
+        await db.query('SAVEPOINT exclusion');
+        await assert.rejects(
+          () =>
+            db.query(
+              `UPDATE tenancy SET status = 'ACTIVE' WHERE tenancy_id = $1`,
+              [draft.tenancyId],
+            ),
+          (caught: unknown) =>
+            typeof caught === 'object' &&
+            caught !== null &&
+            'code' in caught &&
+            caught.code === '23P01',
+        );
+        await db.query('ROLLBACK TO SAVEPOINT exclusion');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('counts a shared boundary day as overlap, and an ended letting as free', async (t) => {
+    const pool = await policyPool();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const touching = await seedOccupancy(db, '1552', {
+          phone: '+972501550003',
+          contactFrom: '2026-01-01',
+          contactTo: null,
+          tenancyFrom: '2026-01-01',
+          tenancyTo: '2026-09-15',
+          status: 'ACTIVE',
+        });
+        const onTheDay = await seedOccupancy(db, '1552', {
+          phone: '+972501550004',
+          contactFrom: '2026-09-15',
+          contactTo: null,
+          tenancyFrom: '2026-09-15',
+          tenancyTo: '2027-09-14',
+          status: 'DRAFT',
+          unitId: touching.unitId,
+        });
+        const touched = await activationGate(
+          db,
+          CLOCK,
+          onTheDay.tenancyId,
+          listTenancyDocumentFacts,
+        );
+        const touchedFree = touched.checks.find(
+          (row) => row.rule === 'unit_free',
+        );
+        assert.equal(touchedFree?.passed, false);
+
+        const ended = await seedOccupancy(db, '1553', {
+          phone: '+972501550005',
+          contactFrom: '2026-01-01',
+          contactTo: null,
+          tenancyFrom: '2026-01-01',
+          tenancyTo: '2027-01-01',
+          status: 'TERMINATED_EARLY',
+        });
+        const incoming = await seedOccupancy(db, '1553', {
+          phone: '+972501550006',
+          contactFrom: '2026-09-15',
+          contactTo: null,
+          tenancyFrom: '2026-09-15',
+          tenancyTo: '2027-09-14',
+          status: 'DRAFT',
+          unitId: ended.unitId,
+        });
+        const clear = await activationGate(
+          db,
+          CLOCK,
+          incoming.tenancyId,
+          listTenancyDocumentFacts,
+        );
+        const clearFree = clear.checks.find((row) => row.rule === 'unit_free');
+        assert.equal(clearFree?.passed, true);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
   it('activates when every check passed, and records who and when', async (t) => {
     const pool = await policyPool();
     if (!pool) {
@@ -254,8 +412,11 @@ describe('policy · activation is a person command with a named gate', () => {
           occupancy.tenancyId,
           listTenancyDocumentFacts,
         );
-        assert.equal(gate.checks.length, REQUIRED_FOR_ACTIVATION.length + 2);
+        assert.equal(gate.checks.length, REQUIRED_FOR_ACTIVATION.length + 3);
         assert.ok(gate.checks.every((check) => check.passed));
+        const free = gate.checks.find((row) => row.rule === 'unit_free');
+        assert.equal(free?.passed, true);
+        assert.equal(free && 'blocking' in free, false);
         assert.equal(gate.canActivate, true);
         await activateTenancy(
           db,

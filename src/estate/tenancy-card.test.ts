@@ -62,6 +62,7 @@ function sheet(over: Partial<TenancySheet> = {}): TenancySheet {
     ],
     checks: [],
     canActivate: false,
+    mayEndEarly: false,
     activatableOn: null,
     flags: [],
     csrf: 'csrf',
@@ -135,5 +136,62 @@ describe('estate · the tenancy card', () => {
       /action="\/estate\/tenancies\/55555555-5555-4555-8555-555555555555\/storage"/,
     );
     assert.match(html, /העברת מחסן/);
+  });
+
+  it('keeps activation dark and links the letting that blocks it', () => {
+    const blockingId = '99999999-9999-4999-8999-999999999999';
+    const checks = [
+      { rule: 'lease', passed: true },
+      { rule: 'handover_protocol', passed: true },
+      { rule: 'start_reached', passed: true },
+      { rule: 'within_term', passed: true },
+      {
+        rule: 'unit_free',
+        passed: false,
+        blocking: {
+          tenancyId: blockingId,
+          startDate: '2025-11-01',
+          endDate: '2026-10-31',
+        },
+      },
+    ];
+    const writer = renderTenancyDetailPage(
+      sheet({ checks, canActivate: false, mayEndEarly: true }),
+    );
+    assert.match(
+      writer,
+      /<button class="btn btn-primary" type="button" disabled>הפעלת ההשכרה<\/button>/,
+    );
+    assert.match(writer, /chip is-miss/);
+    assert.match(writer, /הדירה פנויה בתקופה/);
+    assert.match(writer, /2025-11-01 — 2026-10-31/);
+    assert.match(writer, new RegExp(`href="/estate/tenancies/${blockingId}"`));
+    assert.match(writer, /פתיחה/);
+    assert.match(
+      writer,
+      new RegExp(`href="/estate/tenancies/${blockingId}#end"`),
+    );
+    assert.match(writer, /סיום מוקדם/);
+    assert.match(writer, /דרישות שטרם התקיימו: הדירה פנויה בתקופה/);
+    assert.doesNotMatch(writer, /Tenant of/);
+
+    const reader = renderTenancyDetailPage(
+      sheet({ checks, canActivate: false, mayEndEarly: false }),
+    );
+    assert.match(reader, /פתיחה/);
+    assert.doesNotMatch(reader, /סיום מוקדם/);
+    assert.doesNotMatch(reader, /#end/);
+
+    const clear = renderTenancyDetailPage(
+      sheet({
+        checks: [{ rule: 'unit_free', passed: true }],
+        canActivate: true,
+        mayEndEarly: true,
+      }),
+    );
+    assert.match(clear, /chip is-ok/);
+    assert.match(clear, /הדירה פנויה בתקופה/);
+    assert.doesNotMatch(clear, /פתיחה/);
+    assert.doesNotMatch(clear, /disabled/);
   });
 });

@@ -1,9 +1,10 @@
 // POLICY CASE — ending the outgoing letting is what lets the incoming one activate.
 //
 // #154. `one_active_tenancy_per_unit` is partial on ACTIVE, so a draft may overlap a
-// live letting and the constraint bites only when that draft is promoted. The person
-// command that clears the block is `endTenancyEarly`: the outgoing row leaves ACTIVE,
-// its contractual end stays, and the draft can then activate.
+// live letting. The activation gate names that letting and refuses before the update;
+// the constraint still rejects a promotion that skips the gate. The person command
+// that clears the block is `endTenancyEarly`: the outgoing row leaves ACTIVE, its
+// contractual end stays, and the draft can then activate.
 //
 // Written red first against the command as it stood before #154: there was no command.
 import assert from 'node:assert/strict';
@@ -93,9 +94,6 @@ describe('policy · ending a letting early frees the unit', () => {
           await linkApproved(db, incoming.tenancyId, typeKey);
         }
 
-        // The exclusion violation aborts the transaction. The savepoint is what
-        // lets the same case go on to end the outgoing letting.
-        await db.query('SAVEPOINT blocked');
         await assert.rejects(
           () =>
             activateTenancy(
@@ -104,13 +102,24 @@ describe('policy · ending a letting early frees the unit', () => {
               { tenancyId: incoming.tenancyId, actor: ACTOR },
               listTenancyDocumentFacts,
             ),
-          (error: unknown) =>
-            error instanceof KernelError &&
-            error.code === 'conflict' &&
-            error.message ===
-              'that unit already has an active tenancy on these dates',
+          (error: unknown) => {
+            if (!(error instanceof KernelError) || error.code !== 'invalid') {
+              return false;
+            }
+            const checks = error.details?.checks as
+              | Array<{
+                  rule: string;
+                  passed: boolean;
+                  blocking?: { tenancyId: string };
+                }>
+              | undefined;
+            const free = checks?.find((row) => row.rule === 'unit_free');
+            return (
+              free?.passed === false &&
+              free.blocking?.tenancyId === outgoing.tenancyId
+            );
+          },
         );
-        await db.query('ROLLBACK TO SAVEPOINT blocked');
 
         await endTenancyEarly(db, CLOCK, {
           tenancyId: outgoing.tenancyId,

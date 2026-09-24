@@ -282,7 +282,8 @@ call. `terminated_has_no_document` is not relaxed: the clock's kind keeps its sh
   no party and no name, and carries neither isolation predicate. Completeness is a query over saved
   rows plus an exception table — never a NOT NULL on `tenancy_party` and never a status column on
   `tenancy`. **#108:** the same query also surfaces every activation-gate miss as a named rule,
-  using the gate's own identifiers (`lease`, `handover_protocol`, `start_reached`, `within_term`)
+  using the gate's own identifiers (`lease`, `handover_protocol`, `start_reached`, `within_term`,
+  `unit_free`)
   and never a second copy of those predicates. The clock and the document reader are injected the
   way the gate already takes them. A tenancy whose every gate check passed is not listed for the
   gate; the guarantor rule remains its own row. Only misses appear. The exception table still
@@ -291,8 +292,11 @@ call. `terminated_has_no_document` is not relaxed: the clock's kind keeps its sh
   Slice 5.8 adds `listObligationTypes`. #106 exports `activationGate` and `activateTenancy`.
   `REQUIRED_FOR_ACTIVATION` is `['lease', 'handover_protocol']` — one constant, the only list. The
   gate returns every check with its outcome, passes included: one row per required type (held and
-  approved on the letting, or not), `start_reached`, `within_term`. A fully-approved future
-  letting reports `activatableOn` as the lease start date. `activateTenancy` refuses unless every
+  approved on the letting, or not), `start_reached`, `within_term`, `unit_free`. `unit_free` passes
+  when no other `ACTIVE` letting on this unit overlaps this letting's inclusive date range — the
+  same range `one_active_tenancy_per_unit` excludes. A miss names that letting by id and dates only,
+  never a party. The check is not waivable. A fully-approved future letting reports `activatableOn`
+  as the lease start date only when `unit_free` also passed. `activateTenancy` refuses unless every
   check passed, the row is `DRAFT`, and the actor is a name. Evidence-side facts arrive through an
   injected reader: **this module imports no evidence module**.
   **#107 adds `getTenancy` and `listTenancyParties`.** The sheet is estate's screen; these two

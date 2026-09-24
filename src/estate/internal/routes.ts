@@ -179,7 +179,15 @@ export interface EstateDeps {
     db: Pool,
     tenancyId: string,
   ) => Promise<{
-    checks: readonly { rule: string; passed: boolean }[];
+    checks: readonly {
+      rule: string;
+      passed: boolean;
+      blocking?: {
+        tenancyId: string;
+        startDate: string;
+        endDate: string;
+      };
+    }[];
     canActivate: boolean;
     activatableOn: string | null;
     flags: readonly { typeKey: string }[];
@@ -1445,6 +1453,7 @@ export function registerEstateRoutes(
       captures,
       checks: gate.checks,
       canActivate: gate.canActivate,
+      mayEndEarly: can(request.staff?.role ?? null, 'tenancy.write'),
       activatableOn: gate.activatableOn,
       flags: gate.flags,
       csrf,

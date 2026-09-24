@@ -534,7 +534,9 @@ apartment number), status, the lease's dates, the documents bound to the letting
 still misses, every check the gate returned, and the activate button. Estate renders; it does not
 own the gate. The composition root injects `getTenancy`, `listTenancyParties`, the party-name lookup,
 `activationGate`, `activateTenancy` and `listLinkedDocuments` for `TENANCY`. The page prints the
-gate's facts and does not re-evaluate the four rules. `POST /estate/tenancies/:tenancyId/activate`
+gate's facts and does not re-evaluate its checks. A failed `unit_free` row prints the blocking
+letting's dates and a link to it, and a link to that letting's end-early form only when the reader
+holds `tenancy.write`. It prints no party. `POST /estate/tenancies/:tenancyId/activate`
 asks for `tenancy.write`, as the completeness exception already does. Party names appear on this
 screen with no new permission; a later gate does not redraw it. Search, the occupancy chip, the
 buildings list and the incomplete queue still carry no name.
