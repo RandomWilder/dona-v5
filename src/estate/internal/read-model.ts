@@ -127,6 +127,24 @@ export interface InventorySpaceRow {
   name: string;
 }
 
+/** The same row, with the Building it belongs to, for the portfolio drill-down. */
+export interface PortfolioSpaceRow extends InventorySpaceRow {
+  building_id: string;
+}
+
+const INVENTORY_SPACE_ORDER = `
+  CASE space_kind
+    WHEN 'UNIT' THEN 1
+    WHEN 'PARKING' THEN 2
+    WHEN 'STORAGE' THEN 3
+    WHEN 'TECHNICAL' THEN 4
+    WHEN 'COMMON' THEN 5
+    WHEN 'EXTERIOR' THEN 6
+    ELSE 7
+  END,
+  NULLIF(regexp_replace(name, '\\D', '', 'g'), '')::int NULLS LAST,
+  name`;
+
 export async function listInventorySpaces(
   db: Queryable,
   buildingId: string,
@@ -135,18 +153,20 @@ export async function listInventorySpaces(
     `SELECT space_id, space_kind, name
        FROM space
       WHERE building_id = $1
-      ORDER BY CASE space_kind
-                 WHEN 'UNIT' THEN 1
-                 WHEN 'PARKING' THEN 2
-                 WHEN 'STORAGE' THEN 3
-                 WHEN 'TECHNICAL' THEN 4
-                 WHEN 'COMMON' THEN 5
-                 WHEN 'EXTERIOR' THEN 6
-                 ELSE 7
-               END,
-               NULLIF(regexp_replace(name, '\\D', '', 'g'), '')::int NULLS LAST,
-               name`,
+      ORDER BY ${INVENTORY_SPACE_ORDER}`,
     [buildingId],
+  );
+  return result.rows;
+}
+
+/** Every Space in the portfolio, in the same kind-then-name order as one Building. */
+export async function listPortfolioSpaces(
+  db: Queryable,
+): Promise<PortfolioSpaceRow[]> {
+  const result = await db.query<PortfolioSpaceRow>(
+    `SELECT building_id, space_id, space_kind, name
+       FROM space
+      ORDER BY building_id, ${INVENTORY_SPACE_ORDER}`,
   );
   return result.rows;
 }

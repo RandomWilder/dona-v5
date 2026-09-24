@@ -31,6 +31,7 @@ import { importEstate, upsertUnitRow } from './importer.ts';
 import {
   inventoryAddFromForm,
   inventoryFromForm,
+  inventoryListStatus,
   mintAuditInputs,
   omitExisting,
   refuseExisting,
@@ -59,6 +60,7 @@ import {
   listInventorySpaces,
   listOccupiedAssignments,
   listParkingSpacesInBuilding,
+  listPortfolioSpaces,
   listProjects,
   listStorageSpacesInBuilding,
   type ProjectOption,
@@ -664,13 +666,35 @@ export function registerEstateRoutes(
   });
 
   app.get('/estate/inventory', READ, async (request, reply) => {
+    const status = inventoryListStatus(request.query);
     const buildings = await listBuildings(deps.pool);
-    html(reply);
-    return renderInventoryPage(
-      buildings,
-      deps.chrome(csrfFrom(request), 'inventory', mayFile(request)),
-      can(request.staff?.role ?? null, 'estate.write'),
+    const spaces = await listPortfolioSpaces(deps.pool);
+    const occupied = await resolveOccupiedUnits(deps.pool, null, deps.clock);
+    const assigned = await listOccupiedAssignments(
+      deps.pool,
+      occupied.map((unit) => unit.tenancy_id),
     );
+    html(reply);
+    return renderInventoryPage({
+      buildings,
+      spaces,
+      occupancy: new Map(
+        occupied.map((unit) => [unit.unit_id, unit.occupants]),
+      ),
+      occupiedParking: new Set(
+        assigned.flatMap((row) =>
+          row.parking_space_id ? [row.parking_space_id] : [],
+        ),
+      ),
+      occupiedStorage: new Set(
+        assigned.flatMap((row) =>
+          row.storage_space_id ? [row.storage_space_id] : [],
+        ),
+      ),
+      nav: deps.chrome(csrfFrom(request), 'inventory', mayFile(request)),
+      mayWrite: can(request.staff?.role ?? null, 'estate.write'),
+      status,
+    });
   });
 
   app.get('/estate/inventory/new', ESTATE_WRITE, async (request, reply) => {

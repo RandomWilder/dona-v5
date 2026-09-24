@@ -581,6 +581,8 @@ describe('estate · נכסים, tab create and mint', () => {
       assert.equal(list.statusCode, 200);
       assert.match(list.body, /בניין מיובא/);
       assert.doesNotMatch(list.body, /href="\/estate\/inventory\/new"/);
+      assert.doesNotMatch(list.body, /הוספת חללים/);
+      assert.doesNotMatch(list.body, /מקום משותף/);
 
       const found = await pool.query<{ building_id: string }>(
         'SELECT building_id FROM building WHERE city = $1',
@@ -766,6 +768,70 @@ describe('estate · נכסים, tab create and mint', () => {
         /<span dir="ltr">8<\/span><span class="chip">פנויה<\/span>/,
       );
       assert.doesNotMatch(page.body, /דמי שכירות/);
+
+      const list = await client.inject({
+        method: 'GET',
+        url: '/estate/inventory',
+      });
+      assert.equal(list.statusCode, 200);
+      const block =
+        list.body
+          .split('בניין נכסים')[1]
+          ?.split('<details class="drill building')[0] ?? '';
+      assert.match(
+        block,
+        new RegExp(`href="/estate/units/${unit10}"[\\s\\S]{0,240}מאוכלסת`),
+      );
+      assert.match(
+        block,
+        new RegExp(`href="/estate/units/${unit11}"[\\s\\S]{0,240}פנויה`),
+      );
+      assert.match(
+        block,
+        /<div class="space-tile is-occupied">[\s\S]{0,160}<span dir="ltr">50<\/span>[\s\S]{0,80}תפוסה/,
+      );
+      assert.match(
+        block,
+        /<div class="space-tile is-vacant">[\s\S]{0,160}<span dir="ltr">51<\/span>[\s\S]{0,80}פנויה/,
+      );
+      assert.match(
+        block,
+        /<div class="space-tile is-occupied">[\s\S]{0,160}<span dir="ltr">7<\/span>[\s\S]{0,80}תפוס/,
+      );
+      assert.match(
+        block,
+        /<div class="space-tile is-vacant">[\s\S]{0,160}<span dir="ltr">8<\/span>[\s\S]{0,80}פנוי/,
+      );
+      assert.match(
+        block,
+        /<span dir="ltr">1<\/span><\/span><span class="sub">מעלית<\/span>/,
+      );
+      assert.doesNotMatch(block, /דמי שכירות/);
+      assert.match(block, new RegExp(`/estate/buildings/${buildingId}`));
+      assert.match(
+        block,
+        new RegExp(`/estate/inventory/${buildingId}#more-spaces`),
+      );
+      assert.match(block, new RegExp(`/estate/inventory/${buildingId}#shared`));
+
+      const hidden = await client.inject({
+        method: 'GET',
+        url: '/estate/inventory?status=IN_CONSTRUCTION',
+      });
+      assert.equal(hidden.statusCode, 200);
+      assert.doesNotMatch(hidden.body, /בניין נכסים/);
+      const shown = await client.inject({
+        method: 'GET',
+        url: '/estate/inventory?status=ACTIVE',
+      });
+      assert.equal(shown.statusCode, 200);
+      assert.match(shown.body, /בניין נכסים/);
+      const bad = await client.inject({
+        method: 'GET',
+        url: '/estate/inventory?status=NOPE',
+      });
+      assert.equal(bad.statusCode, 400);
+      assert.equal(bad.json().code, 'invalid');
     } finally {
       await cleanup(pool);
       await pool.query('DELETE FROM party WHERE full_name = $1', [partyName]);
@@ -1076,9 +1142,36 @@ describe('estate · נכסים, tab create and mint', () => {
         method: 'GET',
         url: `/estate/inventory/${buildingId}`,
       });
+      const pump = await client.inject({
+        method: 'POST',
+        url: `/estate/inventory/${buildingId}/shared`,
+        headers: FORM,
+        payload: new URLSearchParams({
+          space_kind: 'TECHNICAL',
+          name: 'חדר משאבות',
+        }).toString(),
+      });
+      assert.equal(pump.statusCode, 303);
       const shared = page.body.split('<h2>שטחים משותפים</h2>')[1] ?? '';
       assert.match(shared, /לובי/);
       assert.doesNotMatch(shared.split('<h2>')[0] ?? shared, /chip/);
+      const list = await client.inject({
+        method: 'GET',
+        url: '/estate/inventory',
+      });
+      const lobby = list.body.split('>לובי<')[1]?.slice(0, 80) ?? '';
+      assert.match(lobby, /שטח משותף/);
+      const room = list.body.split('>חדר משאבות<')[1]?.slice(0, 80) ?? '';
+      assert.match(room, /חלל טכני/);
+      assert.doesNotMatch(room, /מעלית/);
+      const summary =
+        list.body
+          .split('בניין נכסים')[1]
+          ?.split('<details class="drill building')[0] ?? '';
+      assert.doesNotMatch(
+        summary.split('שטחים משותפים')[0] ?? summary,
+        /חניות/,
+      );
     } finally {
       await cleanup(pool);
       await signOutAll(pool, DOMAIN);

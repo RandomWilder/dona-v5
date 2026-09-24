@@ -21,6 +21,7 @@ import type {
   BuildingSummary,
   ExpiringLease,
   InventorySpaceRow,
+  PortfolioSpaceRow,
   ProjectOption,
   SearchResults,
   UnassignedSpaceRow,
@@ -590,44 +591,250 @@ export function renderBuildingsPage(
   return page('דונה דום — בניינים', body, nav);
 }
 
-export function renderInventoryPage(
-  buildings: BuildingSummary[],
-  nav: Html,
-  mayWrite = false,
-): string {
-  const body = h`
-    <div>
-      <h1>נכסים</h1>
-      <p class="lede">
-        המלאי של כל בניין — דירות, חניות, מחסנים ומעליות — לפני שהנייר ממלא אותן.
-      </p>
-      ${
-        mayWrite
-          ? h`<p class="form-actions">
-              <a class="btn btn-primary" href="/estate/inventory/new">בניין חדש</a>
-            </p>`
-          : h``
+const CHEV = h`<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
+const PLUS = h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>`;
+const TO_BUILDING = h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="m11 18-6-6 6-6"/></svg>`;
+
+const KIND_ICON: Record<string, Html> = {
+  UNIT: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg>`,
+  PARKING: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>`,
+  STORAGE: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5"/><path d="M12 13v8"/></svg>`,
+  TECHNICAL: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="m9 8 3-3 3 3"/><path d="m9 16 3 3 3-3"/></svg>`,
+  COMMON: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+  EXTERIOR: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-7"/><path d="M7 15h10l-5-12z"/></svg>`,
+};
+
+const TILE_WORD: Record<string, { on: string; off: string }> = {
+  UNIT: { on: 'מאוכלסת', off: 'פנויה' },
+  PARKING: { on: 'תפוסה', off: 'פנויה' },
+  STORAGE: { on: 'תפוס', off: 'פנוי' },
+};
+
+const VACANT_PLURAL: Record<string, string> = {
+  UNIT: 'פנויות',
+  PARKING: 'פנויות',
+  STORAGE: 'פנויים',
+};
+
+const SUMMARY_KINDS = [
+  ['UNIT', 'דירות'],
+  ['PARKING', 'חניות'],
+  ['STORAGE', 'מחסנים'],
+] as const;
+
+const LIST_FILTERS: ReadonlyArray<readonly [BuildingStatus | null, string]> = [
+  [null, 'הכול'],
+  ['ACTIVE', 'פעיל'],
+  ['IN_CONSTRUCTION', 'בבנייה'],
+  ['EXITED', 'הסתיים'],
+];
+
+function shareOf(part: number, whole: number): number {
+  if (whole === 0) return 0;
+  return Math.round((part / whole) * 100);
+}
+
+function meter(part: number, whole: number, caption: string): Html {
+  return h`<span class="meter" role="img" aria-label="${caption}"><span style="--p:${shareOf(part, whole)}%"></span></span>`;
+}
+
+function statusChipClass(status: string): string {
+  if (status === 'ACTIVE') return 'chip is-ok';
+  if (status === 'IN_CONSTRUCTION') return 'chip is-accent';
+  return 'chip is-neutral';
+}
+
+function tileName(name: string): Html {
+  return /^\d+$/.test(name) ? ltr(name) : h`${name}`;
+}
+
+export function renderInventoryPage(screen: {
+  buildings: readonly BuildingSummary[];
+  spaces: readonly PortfolioSpaceRow[];
+  occupancy: OccupancyByUnit;
+  occupiedParking: ReadonlySet<string>;
+  occupiedStorage: ReadonlySet<string>;
+  nav: Html;
+  mayWrite?: boolean;
+  status?: BuildingStatus | null;
+}): string {
+  const current = screen.status ?? null;
+  const shown =
+    current === null
+      ? screen.buildings
+      : screen.buildings.filter((building) => building.status === current);
+  const shownIds = new Set(shown.map((building) => building.building_id));
+  const spacesOf = (buildingId: string) =>
+    screen.spaces.filter((space) => space.building_id === buildingId);
+  const isOccupied = (space: InventorySpaceRow): boolean => {
+    if (space.space_kind === 'UNIT')
+      return screen.occupancy.has(space.space_id);
+    if (space.space_kind === 'PARKING') {
+      return screen.occupiedParking.has(space.space_id);
+    }
+    if (space.space_kind === 'STORAGE') {
+      return screen.occupiedStorage.has(space.space_id);
+    }
+    return false;
+  };
+  const unitsOnScreen = screen.spaces.filter(
+    (space) => shownIds.has(space.building_id) && space.space_kind === 'UNIT',
+  );
+  const occupiedOnScreen = unitsOnScreen.filter((space) =>
+    screen.occupancy.has(space.space_id),
+  ).length;
+  const tile = (space: InventorySpaceRow): Html => {
+    const words = TILE_WORD[space.space_kind];
+    if (words) {
+      const on = isOccupied(space);
+      const cls = on ? 'space-tile is-occupied' : 'space-tile is-vacant';
+      const dot = on
+        ? h`<span class="dot"></span>`
+        : h`<span class="dot is-hollow"></span>`;
+      const inner = h`<span class="no">${tileName(space.name)}</span><span class="state">${dot}${words[on ? 'on' : 'off']}</span>`;
+      if (space.space_kind === 'UNIT') {
+        return h`<a class="${cls}" href="/estate/units/${space.space_id}">${inner}</a>`;
       }
-    </div>
-    ${
-      buildings.length === 0
-        ? h`<p class="empty-state">אין עדיין בניינים במערכת.</p>`
-        : h`<div class="row-list">
-            ${buildings.map(
-              (building) => h`<article class="row-card">
-                ${marker(building.status)}
-                <a class="card-link" href="/estate/inventory/${building.building_id}">
-                  <p class="card-title">
-                    <span>${building.name}</span>
-                    <span class="chip">${label(BUILDING_STATUS, building.status)}</span>
-                  </p>
-                  <p class="lede">${building.address_line}, ${building.city}</p>
-                </a>
-              </article>`,
-            )}
-          </div>`
-    }`;
-  return page('דונה דום — נכסים', body, nav);
+      return h`<div class="${cls}">${inner}</div>`;
+    }
+    const sub =
+      space.space_kind === 'TECHNICAL'
+        ? /^\d+$/.test(space.name)
+          ? 'מעלית'
+          : 'חלל טכני'
+        : space.space_kind === 'COMMON'
+          ? 'שטח משותף'
+          : space.space_kind === 'EXTERIOR'
+            ? 'שטח חוץ'
+            : null;
+    return h`<div class="space-tile"><span class="no">${tileName(space.name)}</span>${
+      sub ? h`<span class="sub">${sub}</span>` : h``
+    }</div>`;
+  };
+  const body = h`
+    <div class="glass-stage">
+      <header class="page-head">
+        <div>
+          <h1>נכסים</h1>
+          <p class="lede">המלאי של כל בניין — דירות, חניות, מחסנים ומעליות. פותחים בניין, יורדים לסוג, מגיעים לחלל.</p>
+        </div>
+        ${
+          screen.mayWrite
+            ? h`<a class="btn btn-primary" href="/estate/inventory/new">${PLUS}בניין חדש</a>`
+            : h``
+        }
+      </header>
+      <section class="stat-row" aria-label="סיכום">
+        <div class="stat glass"><span class="stat-label">בניינים</span><span class="stat-value">${ltr(shown.length)}</span></div>
+        <div class="stat glass"><span class="stat-label">יחידות דיור</span><span class="stat-value">${ltr(unitsOnScreen.length)}</span></div>
+        <div class="stat glass"><span class="stat-label">מאוכלסות היום</span><span class="stat-value">${ltr(occupiedOnScreen)}</span>${meter(occupiedOnScreen, unitsOnScreen.length, `${occupiedOnScreen} מתוך ${unitsOnScreen.length}`)}</div>
+        <div class="stat glass"><span class="stat-label">פנויות</span><span class="stat-value">${ltr(unitsOnScreen.length - occupiedOnScreen)}</span></div>
+      </section>
+      <div class="toolbar">
+        <nav class="segmented glass is-raised" aria-label="סינון לפי סטטוס">
+          ${LIST_FILTERS.map(([status, caption]) => {
+            const n = screen.buildings.filter(
+              (building) => status === null || building.status === status,
+            ).length;
+            const href =
+              status === null
+                ? '/estate/inventory'
+                : `/estate/inventory?status=${status}`;
+            return h`<a href="${href}" ${
+              status === current ? h`aria-current="true"` : h``
+            }>${caption} <span class="n">${ltr(n)}</span></a>`;
+          })}
+        </nav>
+        <div class="legend"><span class="is-ok"><span class="dot"></span>מאוכלסת / תפוסה</span><span class="is-accent"><span class="dot is-hollow"></span>פנויה</span></div>
+      </div>
+      ${
+        screen.buildings.length === 0
+          ? h`<p class="empty-state">אין עדיין בניינים במערכת.</p>`
+          : shown.length === 0
+            ? h`<p class="empty-state">אין בניינים בסטטוס זה.</p>`
+            : h`<div class="drill-list">
+                ${shown.map((building, index) => {
+                  const rows = spacesOf(building.building_id);
+                  const grouped = INVENTORY_KIND_ORDER.map((kind) => ({
+                    kind,
+                    rows: rows.filter((space) => space.space_kind === kind),
+                  })).filter((group) => group.rows.length > 0);
+                  const units = rows.filter(
+                    (space) => space.space_kind === 'UNIT',
+                  );
+                  const occupiedUnits = units.filter((space) =>
+                    screen.occupancy.has(space.space_id),
+                  ).length;
+                  return h`<details class="drill building glass" ${
+                    index === 0 ? h`open` : h``
+                  }>
+                    <summary>
+                      ${CHEV}
+                      <div>
+                        <p class="b-title"><span>${building.name}</span><span class="${statusChipClass(building.status)}">${label(BUILDING_STATUS, building.status)}</span></p>
+                        <p class="b-address">${building.address_line}, ${building.city}</p>
+                        <ul class="b-counts">
+                          ${SUMMARY_KINDS.map(([kind, caption]) => {
+                            const n = rows.filter(
+                              (space) => space.space_kind === kind,
+                            ).length;
+                            return n === 0
+                              ? h``
+                              : h`<li><b>${ltr(n)}</b> ${caption}</li>`;
+                          })}
+                        </ul>
+                      </div>
+                      <div class="b-occ">
+                        <span class="b-occ-text"><span>מאוכלסות היום</span><span><b>${ltr(occupiedUnits)}</b> / ${ltr(units.length)}</span></span>
+                        ${meter(occupiedUnits, units.length, `${occupiedUnits} מתוך ${units.length} דירות מאוכלסות`)}
+                      </div>
+                    </summary>
+                    <div class="building-body">
+                      ${grouped.map(
+                        (
+                          group,
+                          kindIndex,
+                        ) => h`<details class="drill kind glass is-raised" ${
+                          index === 0 && kindIndex === 0 ? h`open` : h``
+                        }>
+                          <summary>${CHEV}<span class="kind-icon">${KIND_ICON[group.kind] ?? h``}</span><span class="kind-name">${label(SPACE_KIND, group.kind)}<span class="n">${ltr(group.rows.length)}</span></span><span class="kind-meta">${
+                            VACANT_PLURAL[group.kind]
+                              ? h`${meter(
+                                  group.rows.filter((space) =>
+                                    isOccupied(space),
+                                  ).length,
+                                  group.rows.length,
+                                  `${group.rows.filter((space) => isOccupied(space)).length} מתוך ${group.rows.length}`,
+                                )}<span>${ltr(group.rows.filter((space) => !isOccupied(space)).length)} ${VACANT_PLURAL[group.kind]}</span>`
+                              : h``
+                          }</span></summary>
+                          <div class="kind-body"><ul class="${
+                            group.kind === 'UNIT' ||
+                            group.kind === 'PARKING' ||
+                            group.kind === 'STORAGE'
+                              ? 'tile-grid'
+                              : 'tile-grid is-named'
+                          }">${group.rows.map((space) => h`<li>${tile(space)}</li>`)}</ul></div>
+                        </details>`,
+                      )}
+                      <div class="building-actions">
+                        ${
+                          screen.mayWrite
+                            ? h`<div class="group">
+                                <a class="btn btn-glass btn-sm" href="/estate/inventory/${building.building_id}#more-spaces">${PLUS}הוספת חללים</a>
+                                <a class="btn btn-ghost btn-sm" href="/estate/inventory/${building.building_id}#shared">${PLUS}מקום משותף</a>
+                              </div>`
+                            : h`<div class="group"></div>`
+                        }
+                        <a class="btn btn-secondary btn-sm" href="/estate/buildings/${building.building_id}">לדף הבניין${TO_BUILDING}</a>
+                      </div>
+                    </div>
+                  </details>`;
+                })}
+              </div>`
+      }
+    </div>`;
+  return page('דונה דום — נכסים', body, screen.nav);
 }
 
 export function renderNewInventoryPage(screen: {
@@ -846,7 +1053,7 @@ export function renderInventoryBuildingPage(screen: {
     ${
       screen.write
         ? h`
-      <section>
+      <section id="more-spaces">
         <h2>הוספת חללים</h2>
         <form class="form-grid" method="post"
           action="/estate/inventory/${screen.building.building_id}/spaces">
@@ -891,7 +1098,7 @@ export function renderInventoryBuildingPage(screen: {
           </div>
         </form>
       </section>
-      <section>
+      <section id="shared">
         <h2>מקום משותף</h2>
         <form class="form-grid" method="post"
           action="/estate/inventory/${screen.building.building_id}/shared">

@@ -548,9 +548,29 @@ const SCREENS: Array<[string, () => string]> = [
   ],
   [
     'estate · inventory',
-    () => renderInventoryPage([building], NAV_INVENTORY, true),
+    () =>
+      renderInventoryPage({
+        buildings: [building],
+        spaces: [],
+        occupancy: new Map(),
+        occupiedParking: new Set(),
+        occupiedStorage: new Set(),
+        nav: NAV_INVENTORY,
+        mayWrite: true,
+      }),
   ],
-  ['estate · inventory, empty', () => renderInventoryPage([], NAV_INVENTORY)],
+  [
+    'estate · inventory, empty',
+    () =>
+      renderInventoryPage({
+        buildings: [],
+        spaces: [],
+        occupancy: new Map(),
+        occupiedParking: new Set(),
+        occupiedStorage: new Set(),
+        nav: NAV_INVENTORY,
+      }),
+  ],
   [
     'estate · new inventory building',
     () =>

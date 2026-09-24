@@ -416,6 +416,23 @@ headline counts and derived vacancy. Later growth and shrink live on that page:
 destination is `inventory`. This is not A13's `POST /estate/spaces/:spaceId/remove`, which still
 detaches a built bay or store.
 
+**The list is a drill-down of the same rows.** `GET /estate/inventory` still lists every Building.
+An optional `status` query of `ACTIVE`, `IN_CONSTRUCTION`, or `EXITED` narrows which buildings are
+drawn; any other value is `invalid`. The filter's own counts are the whole portfolio. Four
+headlines follow the buildings on screen: how many buildings, how many Units, how many of those
+Units are occupied today, and how many are vacant (units minus occupied). Each building opens into
+its kinds, and each kind into its Spaces. A kind with no Spaces is omitted. Elevators are not a
+count on the collapsed building line.
+
+Vacancy on a UNIT, PARKING, or STORAGE tile is the same derivation as the building page. On this
+list a store reads תפוס or פנוי. A numbered TECHNICAL Space is subtitled מעלית. A TECHNICAL Space
+with any other name keeps that name and is subtitled חלל טכני. COMMON and EXTERIOR tiles are the
+typed name plus the kind, and carry no vacancy. A UNIT tile links to that Unit's page. לדף הבניין
+links to the בניינים building page, which this list does not restyle. הוספת חללים and מקום משותף,
+for someone who may write, link to the forms already on `GET /estate/inventory/:buildingId`. That
+page stays the place a Space is added or removed. Rent and lease-end stay off the list. A viewer
+sees the drill and not those write links.
+
 **The write is still `importEstate`.** The POST rebuilds A11's identity plan and adds Spaces: UNIT,
 PARKING, and STORAGE named by the bare integer sequence from each kind's first number; TECHNICAL
 elevators named `1`…`N`. Each UNIT Space gets a Unit row, `READY`, rooms `0`, floor empty, no built
