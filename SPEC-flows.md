@@ -318,7 +318,14 @@ a date range that overlaps this draft (`unit_free`). The overlap is the same inc
 is **per letting**: it records that the tenant accepted the flat after inspecting it, and it is
 bound with `entity_type = 'TENANCY'`. **#156:** that protocol may be waived for one letting, by
 a named person, with a written reason. The gate then reports the check as passed and carries who,
-when, and why. `lease`, `start_reached`, `within_term` and `unit_free` are not waivable. When
+when, and why. **#157:** approval of that protocol is A6's confirm, not the link. The reader
+injected into the gate reports `approved` from an `audit_log` row — action
+`evidence.confirm_protocol`, outcome `ok`, subject the document. A TENANCY link without that row
+does not pass. Protocols already linked when this rule landed are not grandfathered: a protocol
+nobody confirmed is the gap, and the letting is listed on A4 under `handover_protocol` until
+someone confirms it. Confirming again is A6's existing no-op on the assets, and it writes the
+signature. A lease is unchanged: its TENANCY link is still its approval. `lease`, `start_reached`,
+`within_term` and `unit_free` are not waivable. When
 `unit_free` fails, the gate names
 the blocking letting by id and dates only — never a party.
 
@@ -336,7 +343,14 @@ end-early form. A missing protocol, for a reader who holds `tenancy.write`, carr
 field and רשום ויתור on that same check row — the small secondary pill. After a waiver the chip
 reads ויתור (neutral, hollow dot) and the line under it is the reason, who recorded it, and the
 date. `POST /estate/tenancies/:tenancyId/waiver` records that row (`tenancy.write`); the actor is
-the signed-in operator and the instant is the clock's. The activate button stays the primary pill and stays dark while any check fails,
+the signed-in operator and the instant is the clock's. **#157:** a `DRAFT` whose protocol check has
+not passed, for a reader who holds `documents.write`, carries the file well on that same check row.
+The button is הגשת פרוטוקול מסירה, the small glass button. There is no type menu and no letting
+menu. `POST /documents/tenancies/:tenancyId/protocol` locks the type to `handover_protocol`, writes
+the TENANCY anchor from the URL, and calls A1's `fileDocument`. A verified file redirects to A6's
+confirm. This page does not confirm the handover date. A protocol already on the letting and not
+yet signed links to that same confirm. A file the guard refuses is not stored, and the page says
+so. The activate button stays the primary pill and stays dark while any check fails,
 with the unmet requirements in muted type beside it. `POST /estate/tenancies/:tenancyId/activate`
 is the person command (`tenancy.write`); the clock never posts it.
 
@@ -421,6 +435,9 @@ function `npm run seed:doctypes` calls, which is A8's open half used for real.
    no-op on the assets and a re-statement of the dates.
 5. תקופת הבדק is two calendar years from the confirmed handover date, matching the fixture the
    screens have shown since 1.11.
+6. **#157.** The confirm writes `evidence.confirm_protocol` for the document, naming the signed-in
+   operator. That row is what the activation gate treats as approval of a `handover_protocol`.
+   The confirm screen is unchanged.
 
 **Module:** evidence owns the reader and the confirm screen; estate owns the writes, because Asset
 is estate's table and a document module that updated `building.handover_date` would be writing
@@ -835,8 +852,10 @@ stay on A1 / A12 / **מסמכים**.
    to pair them. **A money pair missing its currency is marked here and approvable anyway**: this
    step attests what the page says, and the refusal belongs at promotion.
 4. **הטיוטה.** Named arrival in this tab: title, people, dates, and whether **פרוטוקול מסירה** is
-   missing or present. Facts only. No activate (A5 stays on the Tenancy screen). No protocol attach
-   (A6 stays). Copy: going live is a later act on the Tenancy.
+   missing or present. Present means the gate's approval — A6's confirm signed for that document —
+   not a bare link. Facts only. No activate (A5 stays on the Tenancy screen). No protocol attach.
+   When the protocol is missing, that line links to the tenancy page, which is where it is filed
+   (#157). Copy: going live is a later act on the Tenancy.
 5. **די היום.** File another (empty state of this tab) · open the Tenancy · open the Unit. Those
    last two are **links out**, by choice.
 
@@ -845,7 +864,8 @@ a link to the existing Tenancy. Duplicate bytes: news in this tab, link to the e
 a silent merge. Overlapping `ACTIVE` + `DRAFT` on one Unit remains ordinary.
 
 **What A16 does not do.** It does not classify. It does not hold bytes. It does not raise the file
-or OCR ceilings. It does not file a handover protocol or activate a Tenancy. It does not list
+or OCR ceilings. It does not file a handover protocol or activate a Tenancy. Its הטיוטה beat
+links to the tenancy page's upload and does not become that upload. It does not list
 unfinished filings. It does not change A12's auto-file-on-exact-one (that door still files the
 moment the address is unique). It does not retitle A15.
 

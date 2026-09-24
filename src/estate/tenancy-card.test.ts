@@ -69,6 +69,7 @@ function sheet(over: Partial<TenancySheet> = {}): TenancySheet {
     canActivate: false,
     mayEndEarly: false,
     mayWaive: false,
+    mayFileProtocol: false,
     activatableOn: null,
     flags: [],
     csrf: 'csrf',
@@ -249,6 +250,81 @@ describe('estate · the tenancy card', () => {
       }),
     );
     assert.doesNotMatch(reader, /רשום ויתור/);
+  });
+
+  it('offers the protocol upload on a draft, and the confirm once a file is held', () => {
+    const open = renderTenancyDetailPage(
+      sheet({
+        mayFileProtocol: true,
+        checks: [{ rule: 'handover_protocol', passed: false }],
+      }),
+    );
+    assert.match(open, /class="file-well"/);
+    assert.match(open, /הגשת פרוטוקול מסירה/);
+    assert.match(open, /btn btn-glass btn-sm/);
+    assert.match(open, /aria-label="פרוטוקול מסירה"/);
+    assert.match(
+      open,
+      /action="\/documents\/tenancies\/55555555-5555-4555-8555-555555555555\/protocol"/,
+    );
+    assert.doesNotMatch(open, /name="type"/);
+    assert.doesNotMatch(open, /name="tenancy"/);
+
+    const held = renderTenancyDetailPage(
+      sheet({
+        mayFileProtocol: true,
+        documents: [
+          {
+            documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            typeKey: 'handover_protocol',
+            labelHe: 'פרוטוקול מסירה',
+            ingestedAt: '2026-09-01',
+            validFrom: null,
+            validTo: null,
+            storageUri: 'gs://x/a',
+            verificationVerdict: 'verified',
+          },
+        ],
+        checks: [{ rule: 'handover_protocol', passed: false }],
+      }),
+    );
+    assert.match(held, /הוגש, תאריך המסירה טרם אושר/);
+    assert.match(
+      held,
+      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/seed"/,
+    );
+    assert.match(held, /טרם אושר/);
+    assert.doesNotMatch(held, /לא הוגש פרוטוקול מסירה/);
+
+    const scan = renderTenancyDetailPage(
+      sheet({
+        mayFileProtocol: true,
+        documents: [
+          {
+            documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            typeKey: 'handover_protocol',
+            labelHe: 'פרוטוקול מסירה',
+            ingestedAt: '2026-09-01',
+            validFrom: null,
+            validTo: null,
+            storageUri: 'gs://x/a',
+            verificationVerdict: 'unverified',
+          },
+        ],
+        checks: [{ rule: 'handover_protocol', passed: false }],
+      }),
+    );
+    assert.match(scan, /אין בו טקסט לאישור תאריך המסירה/);
+    assert.doesNotMatch(scan, /\/seed/);
+
+    const quiet = renderTenancyDetailPage(
+      sheet({
+        mayFileProtocol: false,
+        checks: [{ rule: 'handover_protocol', passed: false }],
+      }),
+    );
+    assert.doesNotMatch(quiet, /הגשת פרוטוקול מסירה/);
+    assert.doesNotMatch(quiet, /class="file-well"/);
   });
 });
 

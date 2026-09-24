@@ -401,6 +401,23 @@ const ASK = { config: { staff: 'documents.read' } } as const;
 
 const OFFICE_ASK_UNAVAILABLE = 'לא ניתן לענות עכשיו. נסו שוב בעוד רגע.';
 
+function protocolNoticeOf(request: FastifyRequest): string | null {
+  const raw = (request.query as { protocol?: string }).protocol;
+  if (raw === 'refused') {
+    return 'הקובץ אינו נראה כמו פרוטוקול מסירה. לא נשמר דבר.';
+  }
+  if (raw === 'too_large') {
+    return 'הקובץ גדול מכדי שנקרא אותו. לא נשמר דבר.';
+  }
+  if (raw === 'anchored') {
+    return 'הקובץ הזה כבר מתויק במקום אחר. לא נשמר דבר.';
+  }
+  if (raw === 'unverified') {
+    return 'הקובץ הוגש. אין בו טקסט לאישור תאריך המסירה.';
+  }
+  return null;
+}
+
 function officeAskNotice(request: FastifyRequest): string | undefined {
   const ask = (request.query as { ask?: string }).ask;
   return ask === 'unavailable' ? OFFICE_ASK_UNAVAILABLE : undefined;
@@ -1473,6 +1490,8 @@ export function registerEstateRoutes(
       canActivate: gate.canActivate,
       mayEndEarly: can(request.staff?.role ?? null, 'tenancy.write'),
       mayWaive: can(request.staff?.role ?? null, 'tenancy.write'),
+      mayFileProtocol: can(request.staff?.role ?? null, 'documents.write'),
+      protocolNotice: protocolNoticeOf(request),
       activatableOn: gate.activatableOn,
       flags: gate.flags,
       csrf,

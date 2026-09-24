@@ -254,6 +254,12 @@ describe('evidence · upload, read, approve', () => {
           [CITY, ADDRESS],
         );
         await pool.query(
+          `DELETE FROM asset WHERE space_id IN (
+           SELECT space_id FROM space WHERE building_id IN (
+             SELECT building_id FROM building WHERE city = $1 AND address_line = $2))`,
+          [CITY, ADDRESS],
+        );
+        await pool.query(
           `DELETE FROM space WHERE building_id IN (
            SELECT building_id FROM building WHERE city = $1 AND address_line = $2)`,
           [CITY, ADDRESS],
@@ -462,14 +468,9 @@ describe('evidence · upload, read, approve', () => {
 
       const protocol = await asOperator(app as never, who).inject({
         method: 'POST',
-        url: '/documents',
+        url: `/documents/tenancies/${tenancyId}/protocol`,
         ...upload(
-          {
-            csrf: who.csrf,
-            unit: unitId,
-            type: 'handover_protocol',
-            tenancy: tenancyId,
-          },
+          { csrf: who.csrf },
           {
             filename: 'protocol.pdf',
             bytes: pdfBytes(`orch-protocol-${who.csrf}`),
@@ -477,6 +478,23 @@ describe('evidence · upload, read, approve', () => {
         ),
       });
       assert.equal(protocol.statusCode, 302, protocol.body.slice(0, 400));
+      const seedUrl = String(protocol.headers.location);
+      assert.match(seedUrl, /\/documents\/[0-9a-f-]{36}\/seed$/);
+      const protocolId =
+        seedUrl.match(/\/documents\/([0-9a-f-]{36})\/seed$/)?.[1] ?? '';
+      const letting = await pool.query<{ entity_id: string }>(
+        `SELECT entity_id FROM document_link
+          WHERE document_id = $1 AND entity_type = 'TENANCY'`,
+        [protocolId],
+      );
+      assert.equal(letting.rows[0]?.entity_id, tenancyId);
+      const confirmed = await asOperator(app as never, who).inject({
+        method: 'POST',
+        url: seedUrl,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `csrf=${encodeURIComponent(who.csrf)}`,
+      });
+      assert.equal(confirmed.statusCode, 200, confirmed.body.slice(0, 400));
 
       const armed = await asOperator(app as never, who).inject({
         method: 'GET',

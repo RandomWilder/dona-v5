@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { asOperator, signIn, signOutAll } from '../../tests/support/session.ts';
 import { buildApp } from '../app.ts';
+import { PROTOCOL_CONFIRM_ACTION } from '../evidence/contract.ts';
 import { fixedClock, systemClock } from '../kernel/clock.ts';
 import { embeddingColumnDimensions } from '../kernel/config.ts';
 import { createFakeEmbedder } from '../kernel/embeddings.ts';
@@ -308,6 +309,20 @@ describe('estate · the routes', () => {
                VALUES ($1, 'TENANCY', $2, 'EVIDENCE')`,
               [id, tenancyId],
             );
+            if (typeKey === 'handover_protocol') {
+              await pool.query(
+                `INSERT INTO audit_log (
+                   id, at, actor_kind, actor_id, action, subject_id, inputs, outcome
+                 ) VALUES ($1, $2, 'staff', $3, $4, $5, '{}'::jsonb, 'ok')`,
+                [
+                  newId(),
+                  new Date('2026-09-08T12:00:00Z'),
+                  'ops@estate-routes.test',
+                  PROTOCOL_CONFIRM_ACTION,
+                  id,
+                ],
+              );
+            }
           }
 
           const listed = await client.inject({
@@ -2173,6 +2188,20 @@ async function linkType(
      VALUES ($1, 'TENANCY', $2, 'EVIDENCE')`,
     [documentId, tenancyId],
   );
+  if (typeKey === 'handover_protocol') {
+    await pool.query(
+      `INSERT INTO audit_log (
+         id, at, actor_kind, actor_id, action, subject_id, inputs, outcome
+       ) VALUES ($1, $2, 'staff', $3, $4, $5, '{}'::jsonb, 'ok')`,
+      [
+        newId(),
+        A5_AT,
+        'ops@tenancy-page.test',
+        PROTOCOL_CONFIRM_ACTION,
+        documentId,
+      ],
+    );
+  }
   return documentId;
 }
 
@@ -2244,6 +2273,12 @@ describe('estate · the tenancy page', () => {
       assert.match(blocked.body, /לא עבר/);
       assert.match(blocked.body, /פרוטוקול מסירה — לא הוגש/);
       assert.match(blocked.body, /רשום ויתור/);
+      assert.match(blocked.body, /הגשת פרוטוקול מסירה/);
+      assert.match(blocked.body, /class="file-well"/);
+      assert.match(
+        blocked.body,
+        new RegExp(`action="/documents/tenancies/${tenancyId}/protocol"`),
+      );
       assert.match(
         blocked.body,
         new RegExp(`action="/estate/tenancies/${tenancyId}/waiver"`),

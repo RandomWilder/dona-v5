@@ -295,7 +295,11 @@ call. `terminated_has_no_document` is not relaxed: the clock's kind keeps its sh
   Slice 5.8 adds `listObligationTypes`. #106 exports `activationGate` and `activateTenancy`.
   `REQUIRED_FOR_ACTIVATION` is `['lease', 'handover_protocol']` — one constant, the only list. The
   gate returns every check with its outcome, passes included: one row per required type (held and
-  approved on the letting, or not), `start_reached`, `within_term`, `unit_free`. `unit_free` passes
+  approved on the letting, or not), `start_reached`, `within_term`, `unit_free`. **#157:** for
+  `handover_protocol`, approved means A6's confirm was signed for that document. The reader reports
+  it from `evidence.confirm_protocol`. A link alone is not approval, including a protocol linked
+  before the signature existed. Those lettings are listed on A4. A lease stays approved by its
+  TENANCY link. `unit_free` passes
   when no other `ACTIVE` letting on this unit overlaps this letting's inclusive date range — the
   same range `one_active_tenancy_per_unit` excludes. A miss names that letting by id and dates only,
   never a party. `unit_free` is not waivable. **#156:** `handover_protocol` is. A row in

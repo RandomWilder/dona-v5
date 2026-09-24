@@ -8,7 +8,10 @@
 // numbers are in tasks/evidence/4.8.md.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { listTenancyDocumentFacts } from '../../src/evidence/contract.ts';
+import {
+  listTenancyDocumentFacts,
+  PROTOCOL_CONFIRM_ACTION,
+} from '../../src/evidence/contract.ts';
 import { fixedClock } from '../../src/kernel/clock.ts';
 import { newId } from '../../src/kernel/ids.ts';
 import {
@@ -70,6 +73,14 @@ async function linkApproved(
      VALUES ($1, 'TENANCY', $2, 'EVIDENCE')`,
     [documentId, tenancyId],
   );
+  if (typeKey === 'handover_protocol') {
+    await db.query(
+      `INSERT INTO audit_log (
+         id, at, actor_kind, actor_id, action, subject_id, inputs, outcome
+       ) VALUES ($1, $2, 'staff', $3, $4, $5, '{}'::jsonb, 'ok')`,
+      [newId(), AT, 'policy@example.test', PROTOCOL_CONFIRM_ACTION, documentId],
+    );
+  }
   return documentId;
 }
 

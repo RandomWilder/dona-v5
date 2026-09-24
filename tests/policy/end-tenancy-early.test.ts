@@ -9,7 +9,10 @@
 // Written red first against the command as it stood before #154: there was no command.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { listTenancyDocumentFacts } from '../../src/evidence/contract.ts';
+import {
+  listTenancyDocumentFacts,
+  PROTOCOL_CONFIRM_ACTION,
+} from '../../src/evidence/contract.ts';
 import { fixedClock } from '../../src/kernel/clock.ts';
 import { KernelError } from '../../src/kernel/errors.ts';
 import { newId } from '../../src/kernel/ids.ts';
@@ -62,6 +65,14 @@ async function linkApproved(
      VALUES ($1, 'TENANCY', $2, 'EVIDENCE')`,
     [documentId, tenancyId],
   );
+  if (typeKey === 'handover_protocol') {
+    await db.query(
+      `INSERT INTO audit_log (
+         id, at, actor_kind, actor_id, action, subject_id, inputs, outcome
+       ) VALUES ($1, $2, 'staff', $3, $4, $5, '{}'::jsonb, 'ok')`,
+      [newId(), AT, ACTOR, PROTOCOL_CONFIRM_ACTION, documentId],
+    );
+  }
 }
 
 describe('policy · ending a letting early frees the unit', () => {

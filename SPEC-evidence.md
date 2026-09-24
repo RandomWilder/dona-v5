@@ -1031,6 +1031,12 @@ asset rows and updates the dates. Evidence calls it after the administrator conf
 issues SQL against `asset`, `unit` or `building`. A `building_handover_protocol` is filed under the
 building (`PlaceKind = BUILDING`), not under the unit the administrator happened to be looking at.
 
+**#157. The confirm is the stamp the activation gate reads.** It writes one audit row,
+`evidence.confirm_protocol`, subject the document, actor the signed-in operator. The document reader
+injected into the gate reports a `handover_protocol` as `approved` from that row. The TENANCY link,
+which the upload on the tenancy page writes, is the anchor and not the stamp. A protocol linked and
+never confirmed does not pass, and one linked before this row existed is not grandfathered.
+
 A file with no text layer (`unverified`) has nothing to propose and skips the confirm screen —
 OCR at 4.1 is what gives that file a text layer to read.
 

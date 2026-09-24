@@ -7,7 +7,10 @@
 // It imports `REQUIRED_FOR_ACTIVATION` and never a second copy of the list.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { listTenancyDocumentFacts } from '../../src/evidence/contract.ts';
+import {
+  listTenancyDocumentFacts,
+  PROTOCOL_CONFIRM_ACTION,
+} from '../../src/evidence/contract.ts';
 import { fixedClock } from '../../src/kernel/clock.ts';
 import type { KernelError } from '../../src/kernel/errors.ts';
 import { newId } from '../../src/kernel/ids.ts';
@@ -30,6 +33,7 @@ async function linkApproved(
   tenancyId: string,
   typeKey: string,
   validTo: string | null = null,
+  signed = true,
 ): Promise<string> {
   const typeId = newId();
   const documentId = newId();
@@ -61,6 +65,14 @@ async function linkApproved(
      VALUES ($1, 'TENANCY', $2, 'EVIDENCE')`,
     [documentId, tenancyId],
   );
+  if (typeKey === 'handover_protocol' && signed) {
+    await db.query(
+      `INSERT INTO audit_log (
+         id, at, actor_kind, actor_id, action, subject_id, inputs, outcome
+       ) VALUES ($1, $2, 'staff', $3, $4, $5, '{}'::jsonb, 'ok')`,
+      [newId(), AT, ACTOR, PROTOCOL_CONFIRM_ACTION, documentId],
+    );
+  }
   return documentId;
 }
 
@@ -157,6 +169,48 @@ describe('policy · activation is a person command with a named gate', () => {
           false,
         );
         assert.equal(checks.find((row) => row.rule === 'lease')?.passed, true);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('refuses a handover protocol that is linked and nobody confirmed', async (t) => {
+    const pool = await policyPool();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const occupancy = await seedDraft(db, '1068', {
+          from: '2026-01-01',
+          to: '2027-01-01',
+        });
+        await linkApproved(db, occupancy.tenancyId, 'lease');
+        await linkApproved(
+          db,
+          occupancy.tenancyId,
+          'handover_protocol',
+          null,
+          false,
+        );
+        const gate = await activationGate(
+          db,
+          CLOCK,
+          occupancy.tenancyId,
+          listTenancyDocumentFacts,
+        );
+        const protocol = gate.checks.find(
+          (row) => row.rule === 'handover_protocol',
+        );
+        assert.equal(protocol?.passed, false);
+        assert.equal(
+          gate.checks.find((row) => row.rule === 'lease')?.passed,
+          true,
+        );
+        const error = await refuse(db, occupancy.tenancyId);
+        assert.equal(error.code, 'invalid');
       });
     } finally {
       await pool.end();

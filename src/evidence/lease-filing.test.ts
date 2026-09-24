@@ -1197,6 +1197,10 @@ describe('evidence · A16 file a lease in one workspace', {
       );
       assert.match(draft.body, /פרוטוקול מסירה/);
       assert.match(draft.body, /לא הוגש/);
+      assert.match(
+        draft.body,
+        /<a href="\/estate\/tenancies\/[0-9a-f-]{36}">פרוטוקול מסירה<\/a>/,
+      );
       assert.match(draft.body, /href="\/documents\/filing"/);
       assert.match(draft.body, /פתיחת החוזה/);
       assert.match(draft.body, /פתיחת הדירה/);
@@ -1216,7 +1220,10 @@ describe('evidence · A16 file a lease in one workspace', {
         url: tenancyHref,
       });
       assert.equal(tenancy.statusCode, 200);
-      noA16Paint(tenancy.body);
+      assert.doesNotMatch(tenancy.body, /class="excerpt"/);
+      assert.doesNotMatch(tenancy.body, /class="filing-beats"/);
+      assert.match(tenancy.body, /class="file-well"/);
+      assert.match(tenancy.body, /הגשת פרוטוקול מסירה/);
 
       const another = await asRole(app, actor).inject({
         method: 'GET',

@@ -114,8 +114,10 @@ describe('evidence · flow A6 confirms a protocol into estate', () => {
             objects: deps.objects,
             pdf: deps.pdf,
             bucket: BUCKET,
+            audit: deps.audit,
           },
           filed.documentId,
+          'ops@seed.test',
         );
         assert.equal(confirmed.warrantyEndDate, '2026-06-01');
         assert.equal(confirmed.alreadySeeded, false);
@@ -140,8 +142,10 @@ describe('evidence · flow A6 confirms a protocol into estate', () => {
             objects: deps.objects,
             pdf: deps.pdf,
             bucket: BUCKET,
+            audit: deps.audit,
           },
           filed.documentId,
+          'ops@seed.test',
         );
         assert.equal(again.alreadySeeded, true);
         assert.equal(again.assetsWritten, 0);
@@ -177,8 +181,10 @@ describe('evidence · flow A6 confirms a protocol into estate', () => {
             objects: deps.objects,
             pdf: deps.pdf,
             bucket: BUCKET,
+            audit: deps.audit,
           },
           filed.documentId,
+          'ops@seed.test',
         );
         assert.equal(confirmed.warrantyEndDate, '2026-03-01');
 

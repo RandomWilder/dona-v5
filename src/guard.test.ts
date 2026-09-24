@@ -153,6 +153,7 @@ describe('every route in the application', () => {
       'GET /calls',
       'GET /settings',
       'POST /documents',
+      'POST /documents/tenancies/:tenancyId/protocol',
       // Slice 6.1, flow A11. Both, because the form is as admin-only as the post: a screen an
       // operator may fill in and may not submit teaches them nothing the refusal would explain.
       'GET /estate/buildings/new',
@@ -200,6 +201,7 @@ describe('every route in the application', () => {
     assert.deepEqual(exempt, [
       'POST /documents/filing',
       'POST /documents',
+      'POST /documents/tenancies/:tenancyId/protocol',
       'POST /documents/intake',
       'POST /estate/tenancies/:tenancyId/end',
     ]);

@@ -2258,6 +2258,10 @@ export interface TenancySheet {
   mayEndEarly: boolean;
   /** Whether this reader holds `tenancy.write`, so a missing protocol may be waived. */
   mayWaive: boolean;
+  /** Whether this reader holds `documents.write`, so a draft may file its protocol. */
+  mayFileProtocol: boolean;
+  /** A sentence from a protocol upload that did not reach confirm. */
+  protocolNotice?: string | null;
   activatableOn: string | null;
   flags: readonly { typeKey: string }[];
   csrf: string;
@@ -2279,6 +2283,12 @@ function checkWhy(check: TenancyGateCheckView, sheet: TenancySheet): Html {
     const held = ofType(sheet.documents, check.rule);
     if (check.passed && held) {
       return h`אושר ב־${ltr(held.ingestedAt)}`;
+    }
+    if (check.rule === 'handover_protocol' && held) {
+      if (held.verificationVerdict === 'unverified') {
+        return h`הוגש. אין בו טקסט לאישור תאריך המסירה`;
+      }
+      return h`הוגש, תאריך המסירה טרם אושר · <a href="/documents/${held.documentId}/seed">אישור תאריך המסירה</a>`;
     }
     return h`לא הוגש ${DOC_LABEL[check.rule] ?? check.rule} להשכרה הזו`;
   }
@@ -2311,6 +2321,41 @@ function checkChip(check: TenancyGateCheckView): Html {
     return h`<span class="chip ${check.passed ? 'is-ok' : 'is-miss'}"><span class="dot"></span>${check.passed ? 'עבר' : 'לא עבר'}</span>`;
   }
   return h`<span class="outcome term-state ${check.passed ? 'term-found' : 'term-missing'}">${check.passed ? 'עבר' : 'לא עבר'}</span>`;
+}
+
+function protocolUpload(
+  sheet: TenancySheet,
+  check: TenancyGateCheckView,
+): Html {
+  if (
+    sheet.status !== 'DRAFT' ||
+    check.rule !== 'handover_protocol' ||
+    check.passed ||
+    !sheet.mayFileProtocol
+  ) {
+    return h``;
+  }
+  return h`<form class="file-well" method="post" action="/documents/tenancies/${sheet.tenancyId}/protocol" enctype="multipart/form-data">
+    ${csrfInput(sheet.csrf)}
+    ${
+      sheet.protocolNotice
+        ? h`<p class="lede">${sheet.protocolNotice}</p>`
+        : h``
+    }
+    <input type="file" name="file" required aria-label="פרוטוקול מסירה" />
+    <button class="btn btn-glass btn-sm" type="submit">הגשת פרוטוקול מסירה</button>
+  </form>`;
+}
+
+function documentMark(doc: FiledDocumentView, sheet: TenancySheet): Html {
+  if (doc.typeKey !== 'handover_protocol') {
+    return h`<span class="term-state term-found">אושר</span>`;
+  }
+  const check = sheet.checks.find((row) => row.rule === 'handover_protocol');
+  if (check?.passed && !check.waived) {
+    return h`<span class="term-state term-found">אושר</span>`;
+  }
+  return h`<span class="term-state term-missing">טרם אושר</span>`;
 }
 
 function waiverForm(sheet: TenancySheet, check: TenancyGateCheckView): Html {
@@ -2465,7 +2510,7 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
               (doc) => h`<tr>
                 <td class="value"><a href="/documents/${doc.documentId}/${doc.typeKey === 'lease' ? 'fields' : 'read'}">${doc.labelHe}</a></td>
                 <td class="key">${ltr(doc.ingestedAt)}</td>
-                <td><span class="term-state term-found">אושר</span></td>
+                <td>${documentMark(doc, sheet)}</td>
               </tr>`,
             )}
           </tbody>
@@ -2540,6 +2585,7 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
             ${checkChip(check)}
             <span>${GATE_LABEL[check.rule] ?? check.rule}</span>
             <span class="why">${checkWhy(check, sheet)}</span>
+            ${protocolUpload(sheet, check)}
             ${waiverForm(sheet, check)}
           </li>`,
         )}

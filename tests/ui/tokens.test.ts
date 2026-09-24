@@ -738,6 +738,7 @@ const SCREENS: Array<[string, () => string]> = [
         canActivate: false,
         mayEndEarly: false,
         mayWaive: false,
+        mayFileProtocol: true,
         activatableOn: null,
         flags: [],
         csrf: CSRF,
@@ -788,6 +789,7 @@ const SCREENS: Array<[string, () => string]> = [
         canActivate: false,
         mayEndEarly: false,
         mayWaive: false,
+        mayFileProtocol: false,
         activatableOn: '2026-11-01',
         flags: [],
         csrf: CSRF,
@@ -845,6 +847,7 @@ const SCREENS: Array<[string, () => string]> = [
         canActivate: true,
         mayEndEarly: false,
         mayWaive: false,
+        mayFileProtocol: false,
         activatableOn: null,
         flags: [],
         csrf: CSRF,
@@ -2070,7 +2073,9 @@ describe('shared UI tokens', () => {
       if (name.startsWith('documents · lease filing')) continue;
       const html = render();
       assert.doesNotMatch(html, /class="excerpt"/, name);
-      assert.doesNotMatch(html, /class="file-well"/, name);
+      if (name !== 'estate · one tenancy, blocked') {
+        assert.doesNotMatch(html, /class="file-well"/, name);
+      }
       assert.doesNotMatch(html, /class="filing-beats"/, name);
     }
   });

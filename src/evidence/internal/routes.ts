@@ -1230,6 +1230,53 @@ export function registerDocumentRoutes(
     });
   });
 
+  // #157. The tenancy page's protocol well. The type and the letting are the URL, not fields.
+  app.post<{ Params: { tenancyId: string } }>(
+    '/documents/tenancies/:tenancyId/protocol',
+    FILE,
+    async (request, reply) => {
+      const tenancyId = validId(request.params.tenancyId, 'tenancy');
+      const { fields, bytes } = await readUpload(request);
+      verifyCsrf(sessionTokenOf(request), fields[CSRF_FIELD]);
+      const operator = requireOperator(request);
+      await boundTheCaller(deps, operator);
+      const letting = await getTenancy(deps.pool, tenancyId);
+      if (letting.status !== 'DRAFT') {
+        throw new KernelError(
+          'invalid',
+          'a handover protocol is filed from a draft',
+        );
+      }
+      const result = await fileDocument(await filingDeps(deps), {
+        bytes,
+        typeKey: 'handover_protocol',
+        place: { kind: 'UNIT', id: letting.unit_id },
+        tenancyId,
+        filedBy: operator,
+      });
+      if (!result.filed) {
+        const reason =
+          result.refusal === 'too_large'
+            ? 'too_large'
+            : result.refusal === 'anchored'
+              ? 'anchored'
+              : 'refused';
+        return reply.redirect(
+          `/estate/tenancies/${tenancyId}?protocol=${reason}`,
+        );
+      }
+      const next = destinationAfterFiling({
+        documentId: result.documentId,
+        verdict: result.verification.verdict,
+        typeKey: 'handover_protocol',
+        tenancyId,
+      });
+      return reply.redirect(
+        next ?? `/estate/tenancies/${tenancyId}?protocol=unverified`,
+      );
+    },
+  );
+
   /**
    * **A12. The document says where it belongs, and the system looks it up.** Slice 6.3.
    *
@@ -1798,7 +1845,11 @@ export function registerDocumentRoutes(
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
       const proposed = await proposeProtocol(seedDeps(), documentId);
-      const confirmed = await confirmProtocol(seedDeps(), documentId);
+      const confirmed = await confirmProtocol(
+        { ...seedDeps(), audit: createAuditLog(deps.pool, deps.clock) },
+        documentId,
+        requireOperatorEmail(request),
+      );
       const screen = await seedScreen(
         deps,
         proposed,
