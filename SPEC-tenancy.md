@@ -347,11 +347,14 @@ call. `terminated_has_no_document` is not relaxed: the clock's kind keeps its sh
   is foundation rule 1 expressed as a module boundary. The office roll of who is let in a Building
   today is `#122`'s, and it takes no phone. `listUnitTenancies` answers *which lettings
   does this flat have* — every status, ordered by date — for an administrator choosing which one a
-  lease belongs to. It takes a `unit_id` and never a phone number, it returns dates and a status and
-  **no party and no name**, it carries neither of the isolation join's temporal predicates, and
-  nothing decides what anybody may see from its result. A query here that answered "who is in this
-  unit today" would be the second copy of the join, and guard two exists because that is how the
-  constraint dies.
+  lease belongs to. It takes a `unit_id` and never a phone number, it returns dates, a status and
+  `notice_date`, and **no party and no name**. It carries neither of the isolation join's temporal
+  predicates, and nothing decides what anybody may see from its result. A query here that answered
+  "who is in this unit today" would be the second copy of the join, and guard two exists because
+  that is how the constraint dies.
+  **#159 adds `listLettingsForUnits`.** The same facts, for many units in one query: every status,
+  the dates, `notice_date`, `unit_id`, no party and no name, and no day predicate. Estate derives
+  the four Unit states from this read, from `resolveOccupiedUnits`, and from the clock.
 
   **Slice 6.5 adds `countIdentifierOverlap`, and it is the narrowest read in this module.** A2 has to
   rank a flat's lettings so an operator with a lease in their hand can be shown which one it probably

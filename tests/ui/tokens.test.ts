@@ -265,12 +265,14 @@ const lettings: UnitLetting[] = [
     start_date: '2025-01-01',
     end_date: '2027-12-31',
     status: 'ACTIVE',
+    notice_date: null,
   },
   {
     tenancy_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
     start_date: '2022-01-01',
     end_date: '2024-12-31',
     status: 'ENDED',
+    notice_date: null,
   },
 ];
 
@@ -555,6 +557,7 @@ const SCREENS: Array<[string, () => string]> = [
         occupancy: new Map(),
         occupiedParking: new Set(),
         occupiedStorage: new Set(),
+        states: new Map(),
         nav: NAV_INVENTORY,
         mayWrite: true,
       }),
@@ -568,6 +571,7 @@ const SCREENS: Array<[string, () => string]> = [
         occupancy: new Map(),
         occupiedParking: new Set(),
         occupiedStorage: new Set(),
+        states: new Map(),
         nav: NAV_INVENTORY,
       }),
   ],
@@ -668,11 +672,11 @@ const SCREENS: Array<[string, () => string]> = [
         carry: { typeKey: 'lease', next: 'intake' },
       }),
   ],
-  ['estate · one unit', () => renderUnitPage(hit, 2, [filed], NAV)],
+  ['estate · one unit', () => renderUnitPage(hit, 'מושכרת', [filed], NAV)],
   [
     'estate · one unit, retrieval panel',
     () =>
-      renderUnitPage(hit, 2, [filed], NAV, [], [], {
+      renderUnitPage(hit, 'מושכרת', [filed], NAV, [], [], {
         csrf: CSRF,
         bound: { kind: 'unit', id: hit.unit_id },
         thread: [
@@ -857,7 +861,7 @@ const SCREENS: Array<[string, () => string]> = [
   [
     'estate · one unit, with a promoted date',
     () =>
-      renderUnitPage(hit, 2, [filed], NAV, [
+      renderUnitPage(hit, 'מושכרת', [filed], NAV, [
         {
           extractedFieldId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
           documentId: filed.documentId,
@@ -873,7 +877,7 @@ const SCREENS: Array<[string, () => string]> = [
     () =>
       renderUnitPage(
         hit,
-        2,
+        'מושכרת',
         [filed],
         NAV,
         [],
@@ -890,7 +894,7 @@ const SCREENS: Array<[string, () => string]> = [
   ],
   [
     'estate · one unit, vacant and empty',
-    () => renderUnitPage(hit, undefined, [], NAV),
+    () => renderUnitPage(hit, 'פנויה', [], NAV),
   ],
   ['estate · search', () => renderSearchPage('רקפת', results, NAV_SEARCH)],
   [
@@ -2669,7 +2673,7 @@ describe('shared UI tokens', () => {
   it('serves a signed read on the panel, never a gs:// href', () => {
     // A signed URL is a bearer token for one object. Slice 5.4 mints one on the panel.
     // Search still does not. The filed-document screen keeps the uri off the page entirely.
-    const html = renderUnitPage(hit, 2, [filed], NAV);
+    const html = renderUnitPage(hit, 'מושכרת', [filed], NAV);
     assert.match(html, /storage\.googleapis\.com/);
     assert.match(html, /X-Goog-Expires=900/);
     assert.doesNotMatch(html, /href="gs:/);
@@ -2682,7 +2686,7 @@ describe('shared UI tokens', () => {
   });
 
   it('opens a listed document on the read overlay, and a lease on the ledger', () => {
-    const html = renderUnitPage(hit, 2, [filed], NAV);
+    const html = renderUnitPage(hit, 'מושכרת', [filed], NAV);
     assert.match(
       html,
       /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read"/,
@@ -2738,7 +2742,7 @@ describe('shared UI tokens', () => {
   });
 
   it('links a promoted date to its pixels, not the object bytes', () => {
-    const html = renderUnitPage(hit, 2, [filed], NAV, [
+    const html = renderUnitPage(hit, 'מושכרת', [filed], NAV, [
       {
         extractedFieldId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
         documentId: filed.documentId,
@@ -2755,7 +2759,7 @@ describe('shared UI tokens', () => {
     assert.match(html, /91%/);
     assert.doesNotMatch(html, /href="gs:/);
     assert.doesNotMatch(html, /<script/);
-    const three = renderUnitPage(hit, 2, [filed], NAV, [
+    const three = renderUnitPage(hit, 'מושכרת', [filed], NAV, [
       {
         extractedFieldId: '11111111-1111-4111-8111-111111111111',
         documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -2789,7 +2793,7 @@ describe('shared UI tokens', () => {
   it('shows a unit change log as old to new, actor, and document, never a tenant name', () => {
     const html = renderUnitPage(
       hit,
-      2,
+      'מושכרת',
       [filed],
       NAV,
       [],
@@ -2812,7 +2816,7 @@ describe('shared UI tokens', () => {
     );
     const closed = renderUnitPage(
       hit,
-      2,
+      'מושכרת',
       [filed],
       NAV,
       [],
@@ -2830,12 +2834,12 @@ describe('shared UI tokens', () => {
     assert.match(closed, /ACTIVE → ENDED/);
     assert.match(closed, /system/);
     assert.doesNotMatch(closed, />מסמך</);
-    const empty = renderUnitPage(hit, 2, [filed], NAV);
+    const empty = renderUnitPage(hit, 'מושכרת', [filed], NAV);
     assert.doesNotMatch(empty, /יומן שינויים/);
   });
 
   it('paints cited answers under the unit retrieval panel', () => {
-    const html = renderUnitPage(hit, 2, [filed], NAV, [], [], {
+    const html = renderUnitPage(hit, 'מושכרת', [filed], NAV, [], [], {
       csrf: CSRF,
       bound: { kind: 'unit', id: hit.unit_id },
       thread: [
@@ -2868,7 +2872,7 @@ describe('shared UI tokens', () => {
       new RegExp(`/documents/${filed.documentId}/read\\?page=3`),
     );
     assert.doesNotMatch(
-      renderUnitPage(hit, 2, [filed], NAV),
+      renderUnitPage(hit, 'מושכרת', [filed], NAV),
       /data-office-retrieval="unit"/,
     );
   });

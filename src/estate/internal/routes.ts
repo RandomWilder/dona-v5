@@ -14,7 +14,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import type { ChromeDest } from '../../chrome.ts';
 import { createAuditLog } from '../../kernel/audit.ts';
-import { type Clock, dayIn } from '../../kernel/clock.ts';
+import { type Clock, dayIn, today } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { Html } from '../../kernel/ui/html.ts';
@@ -29,6 +29,7 @@ import {
   readSessionCookie,
   verifyCsrf,
 } from '../../staff/contract.ts';
+import { listLettingsForUnits } from '../../tenancy/contract.ts';
 import { addCalendarYears, WARRANTY_YEARS } from './assets.ts';
 import { listEstateEvents } from './events.ts';
 import { importEstate, upsertUnitRow } from './importer.ts';
@@ -71,6 +72,7 @@ import {
   searchEstate,
 } from './read-model.ts';
 import { removeInventorySpace, removeSpace } from './spaces.ts';
+import { UNIT_WORDS, type UnitTileState, unitTiles } from './unit-occupancy.ts';
 import {
   type ActivationQueueView,
   type DocumentSearchHit,
@@ -704,6 +706,21 @@ async function recordInventoryAdds(
   }
 }
 
+async function unitStates(
+  pool: Pool,
+  unitIds: readonly string[],
+  occupied: readonly { unit_id: string; tenancy_id: string }[],
+  clock: Clock,
+): Promise<Map<string, UnitTileState>> {
+  const lettings = await listLettingsForUnits(pool, unitIds);
+  return unitTiles({
+    unitIds,
+    occupied,
+    lettings,
+    today: today(clock),
+  });
+}
+
 export function registerEstateRoutes(
   app: FastifyInstance,
   deps: EstateDeps,
@@ -744,6 +761,9 @@ export function registerEstateRoutes(
       deps.pool,
       occupied.map((unit) => unit.tenancy_id),
     );
+    const unitIds = spaces
+      .filter((space) => space.space_kind === 'UNIT')
+      .map((space) => space.space_id);
     html(reply);
     return renderInventoryPage({
       buildings,
@@ -761,6 +781,7 @@ export function registerEstateRoutes(
           row.storage_space_id ? [row.storage_space_id] : [],
         ),
       ),
+      states: await unitStates(deps.pool, unitIds, occupied, deps.clock),
       nav: deps.chrome(csrfFrom(request), 'inventory', mayFile(request)),
       mayWrite: can(request.staff?.role ?? null, 'estate.write'),
       status,
@@ -1309,9 +1330,15 @@ export function registerEstateRoutes(
     });
     const csrf = csrfFrom(request);
     html(reply);
+    const states = await unitStates(
+      deps.pool,
+      [unit.unit_id],
+      occupied,
+      deps.clock,
+    );
     return renderUnitPage(
       unit,
-      occupied[0]?.occupants,
+      states.get(unit.unit_id)?.word ?? UNIT_WORDS.vacant,
       documents,
       deps.chrome(csrf, 'estate', mayFile(request)),
       promoted,

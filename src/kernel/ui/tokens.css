@@ -945,6 +945,11 @@ textarea {
   grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
 }
 
+.glass-stage .tile-grid.is-states {
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  grid-auto-rows: 7.5rem;
+}
+
 .glass-stage .space-tile {
   display: grid;
   gap: var(--space-1);
@@ -995,6 +1000,20 @@ textarea {
 .glass-stage .space-tile .sub {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
+}
+
+.glass-stage .tile-grid.is-states > li {
+  display: flex;
+  min-block-size: 0;
+}
+
+.glass-stage .tile-grid.is-states .space-tile {
+  flex: 1;
+  inline-size: 100%;
+  block-size: 100%;
+  min-block-size: 0;
+  align-content: start;
+  overflow: hidden;
 }
 
 .glass-stage .legend {

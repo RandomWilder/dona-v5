@@ -895,11 +895,18 @@ accepted.
 **Screen:** the ops-rail item **נכסים**. Portfolio list of every Building (imported ones included,
 with whatever Spaces they already have). Create uses A11's identity fields plus four counts (Units
 ≥ 1; parking, storage, elevators may be 0) and a first number for each counted kind except
-elevators. The building page lists every Space grouped by kind, with headline counts and a vacancy chip on
-each Unit, parking Space, and storage Space. Elevators and later shared Spaces have no chip. A
-vacant Unit is no letting that counts today; a vacant bay or storage room is no assigned place on
-such a letting. A built-bay or built-storage link does not occupy the Space. Rent and lease-end
-are not on this list.
+elevators. The building drill lists every Space grouped by kind, with headline counts. Each Unit is
+a tile in one of four derived states — פנויה, חוזה בטיוטה, מושכרת, בסיום — stored nowhere (#159).
+פנויה and חוזה בטיוטה are the dashed vacant tile; מושכרת and בסיום are the occupied tile. Tiles in
+that grid share one width and one height, and a second line (a waiting draft, or the ending date
+when that end is inside the sixty-day window) stays
+inside that height. A notice on a letting that ends later than the window is בסיום with no ending
+date on the line. A let Unit with a waiting draft stays מושכרת or בסיום and names the draft on
+that line. Headlines count a Unit vacant when no letting counts today, so a waiting draft is vacant.
+The Unit page uses the same four words. Parking and storage stay a vacancy chip: occupied or vacant,
+and a vacant bay or storage room is no assigned place on a letting that counts today. A built-bay or
+built-storage link does not occupy the Space. Elevators and later shared Spaces have no chip. The
+rows on a building's detail page keep the binary chip. Rent and lease-end are not on this list.
 
 **Writes:** one Building and the minted Spaces (and a Unit row per UNIT Space) through
 `importEstate`. Names are the bare integer sequence. Elevators are TECHNICAL Spaces `1`…`N`. No
@@ -921,7 +928,7 @@ Not a document promotion and not `estate_event`.
 item. בניינים routes and views are not edited.
 
 **Work items:** #149 (tab, create, mint, grouped list), #150 (derived vacancy), #151 (add, remove,
-shared Spaces).
+shared Spaces), #159 (four derived Unit states on the tiles and the Unit page).
 
 ## Open
 

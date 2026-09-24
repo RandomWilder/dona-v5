@@ -29,6 +29,11 @@ import type {
   UnitRow,
 } from './read-model.ts';
 import { SEARCH_LIMIT } from './read-model.ts';
+import {
+  UNIT_WORDS,
+  type UnitTileState,
+  type UnitWord,
+} from './unit-occupancy.ts';
 
 /**
  * Which units are let today, and by how many residents. `src/scope/` is the only thing that can
@@ -658,10 +663,32 @@ const KIND_ICON: Record<string, Html> = {
 };
 
 const TILE_WORD: Record<string, { on: string; off: string }> = {
-  UNIT: { on: 'מאוכלסת', off: 'פנויה' },
   PARKING: { on: 'תפוסה', off: 'פנויה' },
   STORAGE: { on: 'תפוס', off: 'פנוי' },
 };
+
+const VACANT_TILE: UnitTileState = {
+  word: UNIT_WORDS.vacant,
+  vacant: true,
+  waitingStart: null,
+  endingOn: null,
+};
+
+function unitSub(state: UnitTileState): Html {
+  if (state.vacant && state.waitingStart) {
+    return h`<span class="sub">טיוטה מ־${ltr(state.waitingStart)} · ממתינה להפעלה</span>`;
+  }
+  if (state.endingOn && state.waitingStart) {
+    return h`<span class="sub">מסתיים ${ltr(state.endingOn)} · טיוטה נכנסת מ־${ltr(state.waitingStart)}</span>`;
+  }
+  if (state.endingOn) {
+    return h`<span class="sub">מסתיים ${ltr(state.endingOn)}</span>`;
+  }
+  if (state.waitingStart) {
+    return h`<span class="sub">טיוטה נכנסת מ־${ltr(state.waitingStart)}</span>`;
+  }
+  return h``;
+}
 
 const VACANT_PLURAL: Record<string, string> = {
   UNIT: 'פנויות',
@@ -707,6 +734,7 @@ export function renderInventoryPage(screen: {
   occupancy: OccupancyByUnit;
   occupiedParking: ReadonlySet<string>;
   occupiedStorage: ReadonlySet<string>;
+  states: ReadonlyMap<string, UnitTileState>;
   nav: Html;
   mayWrite?: boolean;
   status?: BuildingStatus | null;
@@ -737,6 +765,16 @@ export function renderInventoryPage(screen: {
     screen.occupancy.has(space.space_id),
   ).length;
   const tile = (space: InventorySpaceRow): Html => {
+    if (space.space_kind === 'UNIT') {
+      const state = screen.states.get(space.space_id) ?? VACANT_TILE;
+      const cls = state.vacant
+        ? 'space-tile is-vacant'
+        : 'space-tile is-occupied';
+      const dot = state.vacant
+        ? h`<span class="dot is-hollow"></span>`
+        : h`<span class="dot"></span>`;
+      return h`<a class="${cls}" href="/estate/units/${space.space_id}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${state.word}</span>${unitSub(state)}</a>`;
+    }
     const words = TILE_WORD[space.space_kind];
     if (words) {
       const on = isOccupied(space);
@@ -744,11 +782,7 @@ export function renderInventoryPage(screen: {
       const dot = on
         ? h`<span class="dot"></span>`
         : h`<span class="dot is-hollow"></span>`;
-      const inner = h`<span class="no">${tileName(space.name)}</span><span class="state">${dot}${words[on ? 'on' : 'off']}</span>`;
-      if (space.space_kind === 'UNIT') {
-        return h`<a class="${cls}" href="/estate/units/${space.space_id}">${inner}</a>`;
-      }
-      return h`<div class="${cls}">${inner}</div>`;
+      return h`<div class="${cls}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${words[on ? 'on' : 'off']}</span></div>`;
     }
     const sub =
       space.space_kind === 'TECHNICAL'
@@ -798,7 +832,7 @@ export function renderInventoryPage(screen: {
             }>${caption} <span class="n">${ltr(n)}</span></a>`;
           })}
         </nav>
-        <div class="legend"><span class="is-ok"><span class="dot"></span>מאוכלסת / תפוסה</span><span class="is-accent"><span class="dot is-hollow"></span>פנויה</span></div>
+        <div class="legend"><span class="is-ok"><span class="dot"></span>מושכרת / בסיום</span><span class="is-accent"><span class="dot is-hollow"></span>פנויה / חוזה בטיוטה</span></div>
       </div>
       ${
         screen.buildings.length === 0
@@ -862,11 +896,12 @@ export function renderInventoryPage(screen: {
                               : h``
                           }</span></summary>
                           <div class="kind-body"><ul class="${
-                            group.kind === 'UNIT' ||
-                            group.kind === 'PARKING' ||
-                            group.kind === 'STORAGE'
-                              ? 'tile-grid'
-                              : 'tile-grid is-named'
+                            group.kind === 'UNIT'
+                              ? 'tile-grid is-states'
+                              : group.kind === 'PARKING' ||
+                                  group.kind === 'STORAGE'
+                                ? 'tile-grid'
+                                : 'tile-grid is-named'
                           }">${group.rows.map((space) => h`<li>${tile(space)}</li>`)}</ul></div>
                         </details>`,
                       )}
@@ -1786,7 +1821,7 @@ function changeLogPanel(events: readonly TenancyEventView[]): Html {
 
 export function renderUnitPage(
   unit: UnitHit,
-  residents: number | undefined,
+  word: UnitWord,
   documents: readonly FiledDocumentView[],
   nav: Html,
   promoted: readonly PromotedFieldView[] = [],
@@ -1798,7 +1833,7 @@ export function renderUnitPage(
       <a class="back" href="/estate/buildings/${unit.building_id}">← ${unit.building_name}</a>
       <h1>דירה ${ltr(unit.unit_number)}</h1>
       <p class="lede">${unit.building_name} · ${unit.address_line}, ${unit.city}</p>
-      <div class="chips">${occupancyChip(residents)}</div>
+      <div class="chips"><span class="chip">${word}</span></div>
       <p class="unit-actions">
         <a href="/documents/new?unit=${unit.unit_id}">הוספת מסמך</a>
       </p>

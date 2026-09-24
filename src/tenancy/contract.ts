@@ -75,6 +75,7 @@ export type { TenancyEventRow } from './internal/events.ts';
 export { listTenancyEvents } from './internal/events.ts';
 export type {
   ActiveLettingInBuilding,
+  LettingOnUnit,
   TenancyPartyRow,
   TenancyRow,
   UnitLetting,
@@ -83,6 +84,7 @@ export {
   countIdentifierOverlap,
   getTenancy,
   listActiveLettingsInBuilding,
+  listLettingsForUnits,
   listTenancyParties,
   listUnitTenancies,
 } from './internal/lettings.ts';

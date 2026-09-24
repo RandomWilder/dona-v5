@@ -479,6 +479,30 @@ no assigned storage on a letting that counts today; built storage does not occup
 not grow a second day predicate: the occupied-unit tenancy ids come from that injection, and
 assigned bay / assigned storage are read off those rows only.
 
+**#159 widens each Unit tile on the נכסים list, and the chip on the Unit page, to four derived
+states. None is stored.**
+
+- **פנויה** — no letting counts today, and no `DRAFT` is waiting.
+- **חוזה בטיוטה** — no letting counts today, and a `DRAFT` exists whose `end_date` is today or later.
+- **מושכרת** — a letting counts today.
+- **בסיום** — a letting counts today, and that letting's `end_date` falls inside
+  `EXPIRING_WINDOW_DAYS` (the same sixty days Q5 already uses), or the letting carries a
+  `notice_date`.
+
+A let Unit that also has a waiting draft stays **מושכרת**, or **בסיום** when the live letting is
+ending. The draft is a second line on the tile, not another state. The ending date is that second
+line only when `end_date` is inside the window. A `notice_date` on a letting whose end is later
+than the window is **בסיום** with no ending date on the line. פנויה and חוזה בטיוטה use the
+dashed vacant tile; מושכרת and בסיום use the occupied tile. Every Unit tile in the grid is the same
+width and the same height, and the second line stays inside that height. Vacancy headlines still
+count a Unit as vacant whenever nobody counts today, so חוזה בטיוטה is vacant. Parking and storage
+stay binary. The rows on `/estate/inventory/:buildingId` keep the binary chip.
+
+Counts today stays `resolveOccupiedUnits`. The draft, the `end_date` and the `notice_date` come from
+tenancy's `listLettingsForUnits`, which carries no day predicate. Estate applies the clock and
+`EXPIRING_WINDOW_DAYS` after that read. The Unit page prints the same four words. The resident-count
+chip on the building page is unchanged.
+
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
 `GET`/`POST /documents/new`, reached from a unit row on the building page. It went behind the session
 at 5.2 with everything else, and its bounds are stated in full by

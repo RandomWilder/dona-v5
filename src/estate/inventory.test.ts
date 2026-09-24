@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { asOperator, signIn, signOutAll } from '../../tests/support/session.ts';
 import { buildApp } from '../app.ts';
-import { systemClock } from '../kernel/clock.ts';
+import { fixedClock, systemClock } from '../kernel/clock.ts';
 import { newId } from '../kernel/ids.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
 import type { EstatePlan } from './contract.ts';
@@ -780,7 +780,7 @@ describe('estate · נכסים, tab create and mint', () => {
           ?.split('<details class="drill building')[0] ?? '';
       assert.match(
         block,
-        new RegExp(`href="/estate/units/${unit10}"[\\s\\S]{0,240}מאוכלסת`),
+        new RegExp(`href="/estate/units/${unit10}"[\\s\\S]{0,240}מושכרת`),
       );
       assert.match(
         block,
@@ -832,6 +832,195 @@ describe('estate · נכסים, tab create and mint', () => {
       });
       assert.equal(bad.statusCode, 400);
       assert.equal(bad.json().code, 'invalid');
+    } finally {
+      await cleanup(pool);
+      await pool.query('DELETE FROM party WHERE full_name = $1', [partyName]);
+      await pool.query('DELETE FROM terms_profile WHERE name = $1', [
+        profileName,
+      ]);
+      await signOutAll(pool, DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('derives four unit states on the נכסים tiles and the unit page', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(new Date('2026-09-24T12:00:00.000Z'));
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    await signOutAll(pool, DOMAIN);
+    await cleanup(pool);
+    const admin = await signIn(pool, systemClock, {
+      email: `states@${DOMAIN}`,
+      role: 'ADMIN',
+    });
+    const client = asOperator(app, admin);
+    const partyName = 'נכסים states tenant';
+    const profileName = `נכסים states ${DOMAIN}`;
+    try {
+      const created = await client.inject({
+        method: 'POST',
+        url: '/estate/inventory',
+        headers: FORM,
+        payload: mintForm({ unit_count: '8', unit_first: '10' }),
+      });
+      assert.equal(created.statusCode, 303);
+      const buildingId = String(created.headers.location ?? '')
+        .split('/')
+        .at(-1);
+      const spaces = await pool.query<{ space_id: string; name: string }>(
+        `SELECT space_id, name FROM space
+          WHERE building_id = $1 AND space_kind = 'UNIT'`,
+        [buildingId],
+      );
+      const unit = (name: string) =>
+        spaces.rows.find((row) => row.name === name)?.space_id ?? '';
+      const profile = await pool.query<{ terms_profile_id: string }>(
+        `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)
+         ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+         RETURNING terms_profile_id`,
+        [newId(), profileName],
+      );
+      const profileId = profile.rows[0]?.terms_profile_id;
+      const partyId = newId();
+      await pool.query(
+        `INSERT INTO party (party_id, party_kind, full_name)
+         VALUES ($1, 'PERSON', $2)`,
+        [partyId, partyName],
+      );
+      const grant = async (
+        name: string,
+        start: string,
+        end: string,
+        status: 'ACTIVE' | 'DRAFT',
+        notice: string | null = null,
+      ) => {
+        const tenancyId = newId();
+        await pool.query(
+          `INSERT INTO tenancy (
+             tenancy_id, unit_id, start_date, end_date, status,
+             terms_profile_id, notice_date)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [tenancyId, unit(name), start, end, status, profileId, notice],
+        );
+        if (status === 'ACTIVE') {
+          await pool.query(
+            `INSERT INTO tenancy_party (tenancy_id, party_id, role, is_service_contact)
+             VALUES ($1, $2, 'PRIMARY_TENANT', true)`,
+            [tenancyId, partyId],
+          );
+        }
+      };
+      // A draft whose end is already past does not wait.
+      await grant('10', '2025-01-01', '2026-09-23', 'DRAFT');
+      await grant('11', '2026-09-24', '2027-09-23', 'DRAFT');
+      await grant('12', '2026-01-01', '2026-10-30', 'ACTIVE');
+      await grant('12', '2026-11-01', '2027-10-31', 'DRAFT');
+      await grant('13', '2020-01-01', '2099-12-31', 'ACTIVE');
+      await grant('14', '2020-01-01', '2099-12-31', 'ACTIVE');
+      await grant('14', '2027-01-01', '2027-12-31', 'DRAFT');
+      await grant('15', '2020-01-01', '2099-12-31', 'ACTIVE', '2026-08-01');
+      // 2026-11-23 is the 60th day after 2026-09-24; the next day is outside the window.
+      await grant('16', '2026-01-01', '2026-11-23', 'ACTIVE');
+      await grant('17', '2026-01-01', '2026-11-24', 'ACTIVE');
+
+      const list = await client.inject({
+        method: 'GET',
+        url: '/estate/inventory',
+      });
+      assert.equal(list.statusCode, 200);
+      const block =
+        list.body
+          .split('בניין נכסים')[1]
+          ?.split('<details class="drill building')[0] ?? '';
+      assert.match(block, /tile-grid is-states/);
+      const tileOf = (name: string) => {
+        const href = `href="/estate/units/${unit(name)}"`;
+        const at = block.indexOf(href);
+        assert.notEqual(at, -1, name);
+        const open = block.lastIndexOf('<a ', at);
+        const close = block.indexOf('</a>', at);
+        return block.slice(open, close + 4);
+      };
+      const vacant = tileOf('10');
+      assert.match(vacant, /space-tile is-vacant/);
+      assert.match(vacant, />פנויה</);
+      assert.doesNotMatch(vacant, /class="sub"/);
+      const waiting = tileOf('11');
+      assert.match(waiting, /space-tile is-vacant/);
+      assert.match(waiting, />חוזה בטיוטה</);
+      assert.match(
+        waiting,
+        /טיוטה מ־<span dir="ltr">2026-09-24<\/span> · ממתינה להפעלה/,
+      );
+      const ending = tileOf('12');
+      assert.match(ending, /space-tile is-occupied/);
+      assert.match(ending, />בסיום</);
+      assert.match(
+        ending,
+        /מסתיים <span dir="ltr">2026-10-30<\/span> · טיוטה נכנסת מ־<span dir="ltr">2026-11-01<\/span>/,
+      );
+      const letOut = tileOf('13');
+      assert.match(letOut, /space-tile is-occupied/);
+      assert.match(letOut, />מושכרת</);
+      assert.doesNotMatch(letOut, /class="sub"/);
+      const turnover = tileOf('14');
+      assert.match(turnover, /space-tile is-occupied/);
+      assert.match(turnover, />מושכרת</);
+      assert.doesNotMatch(turnover, />בסיום</);
+      assert.match(
+        turnover,
+        /טיוטה נכנסת מ־<span dir="ltr">2027-01-01<\/span>/,
+      );
+      const noticed = tileOf('15');
+      assert.match(noticed, /space-tile is-occupied/);
+      assert.match(noticed, />בסיום</);
+      assert.doesNotMatch(noticed, /מסתיים/);
+      assert.doesNotMatch(noticed, /טיוטה נכנסת/);
+      const onTheWindow = tileOf('16');
+      assert.match(onTheWindow, />בסיום</);
+      assert.match(onTheWindow, /2026-11-23/);
+      const pastTheWindow = tileOf('17');
+      assert.match(pastTheWindow, />מושכרת</);
+      assert.doesNotMatch(pastTheWindow, />בסיום</);
+      assert.doesNotMatch(pastTheWindow, /class="sub"/);
+
+      const detail = await client.inject({
+        method: 'GET',
+        url: `/estate/inventory/${buildingId}`,
+      });
+      assert.equal(detail.statusCode, 200);
+      assert.match(detail.body, /דירות פנויות · <span dir="ltr">2<\/span>/);
+      assert.match(
+        detail.body,
+        /<span dir="ltr">13<\/span><span class="chip">מאוכלסת<\/span>/,
+      );
+      assert.doesNotMatch(detail.body, /חוזה בטיוטה|מושכרת|בסיום/);
+
+      for (const [name, word] of [
+        ['10', 'פנויה'],
+        ['11', 'חוזה בטיוטה'],
+        ['12', 'בסיום'],
+        ['13', 'מושכרת'],
+        ['14', 'מושכרת'],
+        ['15', 'בסיום'],
+        ['16', 'בסיום'],
+        ['17', 'מושכרת'],
+      ] as const) {
+        const page = await client.inject({
+          method: 'GET',
+          url: `/estate/units/${unit(name)}`,
+        });
+        assert.equal(page.statusCode, 200);
+        assert.match(
+          page.body,
+          new RegExp(`<span class="chip">${word}</span>`),
+        );
+      }
     } finally {
       await cleanup(pool);
       await pool.query('DELETE FROM party WHERE full_name = $1', [partyName]);
