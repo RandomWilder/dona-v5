@@ -1,6 +1,6 @@
 // A4 — incomplete tenancies, derived. Slice 4.8. Gate misses join the same
 // query at #108: the rule ids are the activation gate's, never a second copy.
-import type { Clock } from '../../kernel/clock.ts';
+import { type Clock, dayIn } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import {
   type ActivationCheck,
@@ -10,6 +10,13 @@ import {
 import type { Queryable } from './types.ts';
 
 export type CompletenessRule = 'guarantor' | ActivationCheck['rule'];
+
+export interface ProtocolWaiverView {
+  actor: string;
+  /** The office day the waiver was recorded. `YYYY-MM-DD`. */
+  at: string;
+  reason: string;
+}
 
 export interface IncompleteTenancy {
   tenancy_id: string;
@@ -24,6 +31,8 @@ export interface IncompleteTenancy {
   missing: CompletenessRule;
   expected_document_id: string;
   expected_document_label: string;
+  /** Set when this letting's protocol was waived and another rule still misses. */
+  protocolWaiver: ProtocolWaiverView | null;
 }
 
 export interface CompletenessExceptionSpec {
@@ -90,14 +99,44 @@ export async function listIncompleteTenancies(
 ): Promise<IncompleteTenancy[]> {
   const guarantor = await db.query<QueuePlace>(GUARANTOR_SQL);
   const places = await db.query<QueuePlace>(PLACE_SQL);
+  const waived = await db.query<{
+    tenancy_id: string;
+    actor: string;
+    at: Date;
+    reason: string;
+  }>(
+    `SELECT tenancy_id, actor, at, reason
+       FROM tenancy_completeness_exception
+      WHERE rule = 'handover_protocol'`,
+  );
+  const waiverByTenancy = new Map(
+    waived.rows.map((row) => [
+      row.tenancy_id,
+      {
+        actor: row.actor,
+        reason: row.reason,
+        at: dayIn(row.at, clock.zone),
+      },
+    ]),
+  );
+  const withWaiver = (row: QueuePlace): IncompleteTenancy['protocolWaiver'] =>
+    waiverByTenancy.get(row.tenancy_id) ?? null;
   const rows: IncompleteTenancy[] = [
-    ...guarantor.rows.map((row) => ({ ...row, missing: 'guarantor' as const })),
+    ...guarantor.rows.map((row) => ({
+      ...row,
+      missing: 'guarantor' as const,
+      protocolWaiver: withWaiver(row),
+    })),
   ];
   for (const place of places.rows) {
     const gate = await activationGate(db, clock, place.tenancy_id, documents);
     for (const check of gate.checks) {
       if (check.passed) continue;
-      rows.push({ ...place, missing: check.rule });
+      rows.push({
+        ...place,
+        missing: check.rule,
+        protocolWaiver: withWaiver(place),
+      });
     }
   }
   return rows.sort(byPlaceThenRule);

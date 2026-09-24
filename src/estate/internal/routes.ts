@@ -14,7 +14,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import type { ChromeDest } from '../../chrome.ts';
 import { createAuditLog } from '../../kernel/audit.ts';
-import type { Clock } from '../../kernel/clock.ts';
+import { type Clock, dayIn } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { Html } from '../../kernel/ui/html.ts';
@@ -138,7 +138,7 @@ export interface EstateDeps {
     db: Pool,
     spec: {
       tenancyId: string;
-      rule: 'guarantor';
+      rule: 'guarantor' | 'handover_protocol';
       actor: string;
       reason: string;
       at: Date;
@@ -186,6 +186,11 @@ export interface EstateDeps {
         tenancyId: string;
         startDate: string;
         endDate: string;
+      };
+      waived?: {
+        actor: string;
+        at: Date;
+        reason: string;
       };
     }[];
     canActivate: boolean;
@@ -1451,15 +1456,46 @@ export function registerEstateRoutes(
       people,
       documents,
       captures,
-      checks: gate.checks,
+      checks: gate.checks.map((check) => ({
+        rule: check.rule,
+        passed: check.passed,
+        ...(check.blocking ? { blocking: check.blocking } : {}),
+        ...(check.waived
+          ? {
+              waived: {
+                actor: check.waived.actor,
+                reason: check.waived.reason,
+                at: dayIn(check.waived.at, deps.clock.zone),
+              },
+            }
+          : {}),
+      })),
       canActivate: gate.canActivate,
       mayEndEarly: can(request.staff?.role ?? null, 'tenancy.write'),
+      mayWaive: can(request.staff?.role ?? null, 'tenancy.write'),
       activatableOn: gate.activatableOn,
       flags: gate.flags,
       csrf,
       nav: deps.chrome(csrf, 'estate', mayFile(request)),
     });
   });
+
+  app.post<{ Params: { tenancyId: string } }>(
+    '/estate/tenancies/:tenancyId/waiver',
+    WRITE,
+    async (request, reply) => {
+      const tenancyId = validId(request.params.tenancyId, 'tenancyId');
+      const posted = request.body as { reason?: string };
+      await deps.recordCompletenessException(deps.pool, {
+        tenancyId,
+        rule: 'handover_protocol',
+        actor: requireText(request.staff?.email ?? '', 'actor', 200),
+        reason: requireText(posted.reason ?? '', 'reason', 200),
+        at: deps.clock.now(),
+      });
+      return reply.redirect(`/estate/tenancies/${tenancyId}`);
+    },
+  );
 
   app.post<{ Params: { tenancyId: string } }>(
     '/estate/tenancies/:tenancyId/activate',

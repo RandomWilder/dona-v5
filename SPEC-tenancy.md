@@ -286,8 +286,11 @@ call. `terminated_has_no_document` is not relaxed: the clock's kind keeps its sh
   `unit_free`)
   and never a second copy of those predicates. The clock and the document reader are injected the
   way the gate already takes them. A tenancy whose every gate check passed is not listed for the
-  gate; the guarantor rule remains its own row. Only misses appear. The exception table still
-  excepts `guarantor` only. Slice 5.6 exports `expireDueTenancies` beside them. Slice 5.7 exports
+  gate; the guarantor rule remains its own row. Only misses appear. **#156** amends the rule that
+  gate misses are not excepted: `handover_protocol` may be waived for one letting. A recorded
+  waiver makes that check pass, and any row the letting still occupies on this queue carries who
+  recorded it, the office day, and the reason. The query stops listing the protocol miss. `lease`,
+  `start_reached`, `within_term` and `unit_free` stay unexcepted. Slice 5.6 exports `expireDueTenancies` beside them. Slice 5.7 exports
   `upsertObligationType`, `createObligation`, `getObligation` and `listObligationsForTenancy`.
   Slice 5.8 adds `listObligationTypes`. #106 exports `activationGate` and `activateTenancy`.
   `REQUIRED_FOR_ACTIVATION` is `['lease', 'handover_protocol']` — one constant, the only list. The
@@ -295,7 +298,11 @@ call. `terminated_has_no_document` is not relaxed: the clock's kind keeps its sh
   approved on the letting, or not), `start_reached`, `within_term`, `unit_free`. `unit_free` passes
   when no other `ACTIVE` letting on this unit overlaps this letting's inclusive date range — the
   same range `one_active_tenancy_per_unit` excludes. A miss names that letting by id and dates only,
-  never a party. The check is not waivable. A fully-approved future letting reports `activatableOn`
+  never a party. `unit_free` is not waivable. **#156:** `handover_protocol` is. A row in
+  `tenancy_completeness_exception` for that rule, and no approved protocol on the letting, makes
+  the check pass and carries `waived: { actor, at, reason }` — the person, the clock's instant, and
+  the written reason. An approved protocol still passes on its own and does not report a waiver.
+  A fully-approved future letting reports `activatableOn`
   as the lease start date only when `unit_free` also passed. `activateTenancy` refuses unless every
   check passed, the row is `DRAFT`, and the actor is a name. Evidence-side facts arrive through an
   injected reader: **this module imports no evidence module**.
@@ -353,8 +360,10 @@ call. `terminated_has_no_document` is not relaxed: the clock's kind keeps its sh
   an identifier and the caller writes `evidence.match_identifier` for it** (SPEC.md, Security
   defaults); this module writes no audit line, because it does not know who asked.
 - **`tenancy_completeness_exception` (slice 4.8, `src/kernel/migrations/0020_tenancy_completeness.sql`).**
-  `(tenancy_id, rule)` unique. `rule` is `guarantor` today — gate misses are not excepted; they
-  clear when the gate passes. `at` comes from the injected clock; no
+  `(tenancy_id, rule)` unique. `rule` is `guarantor` or `handover_protocol` (#156). Other gate
+  misses are not excepted; they clear when the gate passes. The CHECK refuses `lease`,
+  `start_reached`, `within_term` and `unit_free`, and that refusal is the enforcement. `at` comes
+  from the injected clock; no
   `DEFAULT now()`. `actor` is `-- pii`, same standing as `tenancy_event.actor` until week 5 has
   staff. `reason` is required text, validated at the POST. A second insert of the same pair is a
   no-op. There is no completeness column and no CHECK that a tenancy has a guarantor.

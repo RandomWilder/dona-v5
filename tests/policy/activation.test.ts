@@ -16,6 +16,7 @@ import {
   activationGate,
   expireDueTenancies,
   REQUIRED_FOR_ACTIVATION,
+  recordCompletenessException,
 } from '../../src/tenancy/contract.ts';
 import { seedOccupancy } from './fixtures.ts';
 import { inRolledBackTransaction, policyPool, skipReason } from './support.ts';
@@ -551,6 +552,82 @@ describe('policy · activation is a person command with a named gate', () => {
           [occupancy.tenancyId],
         );
         assert.equal(status.rows[0]?.status, 'ACTIVE');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('a waived handover protocol passes the gate, and the database refuses a waiver of the lease', async (t) => {
+    const pool = await policyPool();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const occupancy = await seedDraft(db, '1561', {
+          from: '2026-01-01',
+          to: '2027-01-01',
+        });
+        await linkApproved(db, occupancy.tenancyId, 'lease');
+        const reason = 'אותו שוכר, חוזה חדש על אותה דירה';
+        await recordCompletenessException(db, {
+          tenancyId: occupancy.tenancyId,
+          rule: 'handover_protocol',
+          actor: ACTOR,
+          reason,
+          at: AT,
+        });
+        const gate = await activationGate(
+          db,
+          CLOCK,
+          occupancy.tenancyId,
+          listTenancyDocumentFacts,
+        );
+        const protocol = gate.checks.find(
+          (row) => row.rule === 'handover_protocol',
+        );
+        assert.equal(protocol?.passed, true);
+        assert.ok(protocol && 'waived' in protocol && protocol.waived);
+        if (protocol && 'waived' in protocol && protocol.waived) {
+          assert.equal(protocol.waived.actor, ACTOR);
+          assert.equal(protocol.waived.reason, reason);
+          assert.equal(protocol.waived.at.toISOString(), AT.toISOString());
+        }
+        const lease = gate.checks.find((row) => row.rule === 'lease');
+        assert.equal(lease?.passed, true);
+        assert.equal(lease && 'waived' in lease, false);
+        assert.equal(gate.canActivate, true);
+        await activateTenancy(
+          db,
+          CLOCK,
+          { tenancyId: occupancy.tenancyId, actor: ACTOR },
+          listTenancyDocumentFacts,
+        );
+
+        for (const rule of [
+          'lease',
+          'start_reached',
+          'within_term',
+          'unit_free',
+        ] as const) {
+          await db.query('SAVEPOINT waiver_refused');
+          try {
+            await recordCompletenessException(db, {
+              tenancyId: occupancy.tenancyId,
+              rule,
+              actor: ACTOR,
+              reason: 'לא ניתן לוותר',
+              at: AT,
+            });
+            assert.fail(`${rule} waiver was accepted`);
+          } catch (error) {
+            assert.equal((error as { code?: string }).code, '23514');
+          } finally {
+            await db.query('ROLLBACK TO SAVEPOINT waiver_refused');
+          }
+        }
       });
     } finally {
       await pool.end();

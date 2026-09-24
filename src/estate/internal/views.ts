@@ -229,6 +229,22 @@ const styles = h`<style>
     align-items: center;
   }
   .queue-card input { min-height: var(--size-control-ops); flex: 1; min-width: 12rem; }
+  .queue-card .chip.is-neutral {
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    gap: var(--space-1);
+  }
+  .queue-card .dot {
+    inline-size: 8px;
+    block-size: 8px;
+    border-radius: var(--radius-pill);
+    flex: none;
+    background: currentColor;
+  }
+  .queue-card .dot.is-hollow {
+    background: transparent;
+    border: 1.5px solid currentColor;
+  }
   .change-log {
     display: grid;
     gap: var(--space-2);
@@ -474,6 +490,14 @@ const styles = h`<style>
   .gate li { display: flex; gap: var(--space-3); align-items: baseline; flex-wrap: wrap; min-width: 0; }
   .gate .outcome { min-inline-size: 6rem; }
   .gate .why { color: var(--color-text-muted); font-size: var(--text-sm); }
+  .gate form {
+    flex-basis: 100%;
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .gate form input { min-height: var(--size-control-ops); flex: 1; min-width: 12rem; }
   .glass-stage .chip.is-miss {
     background: color-mix(in srgb, var(--color-alert) 12%, var(--color-surface-card));
     color: var(--color-alert);
@@ -2079,6 +2103,11 @@ export interface IncompleteTenancyRow {
   missing: string;
   expected_document_id: string;
   expected_document_label: string;
+  protocolWaiver: {
+    actor: string;
+    at: string;
+    reason: string;
+  } | null;
 }
 
 /**
@@ -2135,6 +2164,14 @@ export function renderIncompletePage(
                   <a href="/documents/${row.expected_document_id}/read">${row.expected_document_label}</a>
                 </p>
                 ${
+                  row.protocolWaiver
+                    ? h`<p class="lede">
+                        <span class="chip is-neutral"><span class="dot is-hollow"></span>ויתור</span>
+                        "${row.protocolWaiver.reason}" · רשם: ${ltr(row.protocolWaiver.actor)} · ${ltr(row.protocolWaiver.at)}
+                      </p>`
+                    : ''
+                }
+                ${
                   row.missing === 'guarantor'
                     ? h`<form
                   method="post"
@@ -2182,6 +2219,12 @@ export interface TenancyGateCheckView {
     startDate: string;
     endDate: string;
   };
+  /** Set when this protocol check passed because a person waived it. */
+  waived?: {
+    actor: string;
+    at: string;
+    reason: string;
+  };
 }
 
 export interface CitedCaptureView {
@@ -2213,6 +2256,8 @@ export interface TenancySheet {
   canActivate: boolean;
   /** Whether this reader holds `tenancy.write`, so a blocked row may link the end-early form. */
   mayEndEarly: boolean;
+  /** Whether this reader holds `tenancy.write`, so a missing protocol may be waived. */
+  mayWaive: boolean;
   activatableOn: string | null;
   flags: readonly { typeKey: string }[];
   csrf: string;
@@ -2227,6 +2272,9 @@ function ofType(
 }
 
 function checkWhy(check: TenancyGateCheckView, sheet: TenancySheet): Html {
+  if (check.waived) {
+    return h`"${check.waived.reason}" · רשם: ${ltr(check.waived.actor)} · ${ltr(check.waived.at)}`;
+  }
   if (check.rule === 'lease' || check.rule === 'handover_protocol') {
     const held = ofType(sheet.documents, check.rule);
     if (check.passed && held) {
@@ -2253,6 +2301,34 @@ function checkWhy(check: TenancyGateCheckView, sheet: TenancySheet): Html {
     return h`השכרה פעילה ${ltr(`${startDate} — ${endDate}`)} עדיין על הדירה · ${open}${end}`;
   }
   return h``;
+}
+
+function checkChip(check: TenancyGateCheckView): Html {
+  if (check.waived) {
+    return h`<span class="chip is-neutral"><span class="dot is-hollow"></span>ויתור</span>`;
+  }
+  if (check.rule === 'unit_free') {
+    return h`<span class="chip ${check.passed ? 'is-ok' : 'is-miss'}"><span class="dot"></span>${check.passed ? 'עבר' : 'לא עבר'}</span>`;
+  }
+  return h`<span class="outcome term-state ${check.passed ? 'term-found' : 'term-missing'}">${check.passed ? 'עבר' : 'לא עבר'}</span>`;
+}
+
+function waiverForm(sheet: TenancySheet, check: TenancyGateCheckView): Html {
+  if (check.rule !== 'handover_protocol' || check.passed || !sheet.mayWaive) {
+    return h``;
+  }
+  return h`<form method="post" action="/estate/tenancies/${sheet.tenancyId}/waiver">
+    ${csrfInput(sheet.csrf)}
+    <input
+      name="reason"
+      type="text"
+      maxlength="200"
+      required
+      aria-label="סיבת הוויתור"
+      placeholder="סיבת הוויתור"
+    />
+    <button class="btn btn-secondary btn-sm" type="submit">רשום ויתור</button>
+  </form>`;
 }
 
 function missingItems(sheet: TenancySheet): Html {
@@ -2459,17 +2535,14 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
           : h`<p class="lede">מסמך שפג תוקפו מרים דגל ואינו מזיז את המצב.</p>`
       }
       <ul class="gate">
-        ${sheet.checks.map((check) => {
-          const chip =
-            check.rule === 'unit_free'
-              ? h`<span class="chip ${check.passed ? 'is-ok' : 'is-miss'}"><span class="dot"></span>${check.passed ? 'עבר' : 'לא עבר'}</span>`
-              : h`<span class="outcome term-state ${check.passed ? 'term-found' : 'term-missing'}">${check.passed ? 'עבר' : 'לא עבר'}</span>`;
-          return h`<li>
-            ${chip}
+        ${sheet.checks.map(
+          (check) => h`<li>
+            ${checkChip(check)}
             <span>${GATE_LABEL[check.rule] ?? check.rule}</span>
             <span class="why">${checkWhy(check, sheet)}</span>
-          </li>`;
-        })}
+            ${waiverForm(sheet, check)}
+          </li>`,
+        )}
       </ul>
 
       ${

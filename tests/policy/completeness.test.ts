@@ -413,4 +413,69 @@ describe('policy · gate misses join the incomplete-tenancy queue as named rules
       await pool.end();
     }
   });
+
+  it('stops listing a waived protocol, and a remaining miss carries who waived it', async (t) => {
+    const pool = await policyPool();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const onlyProtocol = await seedOccupancy(db, '1562', {
+          phone: '+972501110156',
+          contactFrom: '2026-01-01',
+          contactTo: null,
+          tenancyFrom: '2026-01-01',
+          tenancyTo: '2027-01-01',
+          status: 'DRAFT',
+        });
+        await linkApproved(db, onlyProtocol.tenancyId, 'lease');
+        await addGuarantor(db, onlyProtocol.tenancyId);
+        const reason = 'פרוטוקול קודם למערכת';
+        await recordCompletenessException(db, {
+          tenancyId: onlyProtocol.tenancyId,
+          rule: 'handover_protocol',
+          actor: 'אסף',
+          reason,
+          at: AT,
+        });
+
+        const waiting = await seedOccupancy(db, '1563', {
+          phone: '+972501110157',
+          contactFrom: '2026-10-01',
+          contactTo: null,
+          tenancyFrom: '2026-10-01',
+          tenancyTo: '2027-09-30',
+          status: 'DRAFT',
+        });
+        await linkApproved(db, waiting.tenancyId, 'lease');
+        await addGuarantor(db, waiting.tenancyId);
+        await recordCompletenessException(db, {
+          tenancyId: waiting.tenancyId,
+          rule: 'handover_protocol',
+          actor: 'אסף',
+          reason,
+          at: AT,
+        });
+
+        const queue = await queueOf(db);
+        assert.ok(
+          !queue.some((row) => row.tenancy_id === onlyProtocol.tenancyId),
+        );
+        const mine = queue.filter(
+          (row) => row.tenancy_id === waiting.tenancyId,
+        );
+        assert.deepEqual(
+          mine.map((row) => row.missing),
+          ['start_reached'],
+        );
+        assert.equal(mine[0]?.protocolWaiver?.actor, 'אסף');
+        assert.equal(mine[0]?.protocolWaiver?.reason, reason);
+        assert.equal(mine[0]?.protocolWaiver?.at, '2026-09-15');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
 });

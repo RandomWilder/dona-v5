@@ -276,7 +276,11 @@ gate. What is missing is the rule id; the Hebrew on the screen is the same wordi
 page already uses for that id. Extra predicates are not a column on `tenancy`.
 **Exception:** a row in `tenancy_completeness_exception`, keyed `(tenancy_id, rule)`. Recording it
 clears the queue the way an addendum that writes a `GUARANTOR` does. A second record of the same
-pair is a no-op. It is not `tenancy.complete`.
+pair is a no-op. It is not `tenancy.complete`. **#156** widens `rule` to `guarantor` or
+`handover_protocol`. A waiver of the protocol clears that miss from this query. While the letting
+stays on the queue for another miss, that row shows the waiver — the reason, who recorded it, and
+the office day — as the protocol's resolution. `lease`, `start_reached`, `within_term` and
+`unit_free` are refused by the table's CHECK.
 **Screen:** `GET /estate/incomplete` — each row shows what is missing and the TENANCY-linked
 document it was expected in (a `lease` type wins when both a lease and an addendum are linked).
 No party names — a rule 5.2 kept rather than lifted when it put the screen behind a session, and 5.4
@@ -305,13 +309,17 @@ REQUIRED_FOR_ACTIVATION = ['lease', 'handover_protocol']
 ```
 
 A tenancy becomes `ACTIVE` only when a person invokes the command and all five facts hold: an
-approved lease on the letting; an approved handover protocol on the letting; today is not before the
+approved lease on the letting; an approved handover protocol on the letting, or a recorded waiver
+of that protocol (#156); today is not before the
 lease's start date; today is not after its end date; and no other `ACTIVE` letting on this unit has
 a date range that overlaps this draft (`unit_free`). The overlap is the same inclusive range as
 `one_active_tenancy_per_unit`. The lease is the only document that defines those dates
 (`tenancy.start_date` / `tenancy.end_date`). Each refusal names its own reason. A handover protocol
 is **per letting**: it records that the tenant accepted the flat after inspecting it, and it is
-bound with `entity_type = 'TENANCY'`. `unit_free` is not waivable. When it fails, the gate names
+bound with `entity_type = 'TENANCY'`. **#156:** that protocol may be waived for one letting, by
+a named person, with a written reason. The gate then reports the check as passed and carries who,
+when, and why. `lease`, `start_reached`, `within_term` and `unit_free` are not waivable. When
+`unit_free` fails, the gate names
 the blocking letting by id and dates only — never a party.
 
 **Screen:** `GET /estate/tenancies/:tenancyId` — one letting, reached by its identifier. Title
@@ -324,7 +332,11 @@ dark button names every requirement the gate checked. When the only miss is the 
 page states `activatableOn`. `unit_free` is one more row in מה נבדק, the same shape as the other
 checks. A pass uses the occupied chip. A miss uses the alert chip and names the outgoing letting by
 its dates, with a link to that letting and — when the reader holds `tenancy.write` — a link to its
-end-early form. The activate button stays the primary pill and stays dark while any check fails,
+end-early form. A missing protocol, for a reader who holds `tenancy.write`, carries the reason
+field and רשום ויתור on that same check row — the small secondary pill. After a waiver the chip
+reads ויתור (neutral, hollow dot) and the line under it is the reason, who recorded it, and the
+date. `POST /estate/tenancies/:tenancyId/waiver` records that row (`tenancy.write`); the actor is
+the signed-in operator and the instant is the clock's. The activate button stays the primary pill and stays dark while any check fails,
 with the unmet requirements in muted type beside it. `POST /estate/tenancies/:tenancyId/activate`
 is the person command (`tenancy.write`); the clock never posts it.
 

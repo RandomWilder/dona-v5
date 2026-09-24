@@ -5,8 +5,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { h } from '../kernel/ui/html.ts';
-import type { FiledDocumentView, TenancySheet, UnitHit } from './contract.ts';
-import { renderTenancyDetailPage } from './contract.ts';
+import type {
+  FiledDocumentView,
+  IncompleteTenancyRow,
+  TenancySheet,
+  UnitHit,
+} from './contract.ts';
+import { renderIncompletePage, renderTenancyDetailPage } from './contract.ts';
 
 const unit: UnitHit = {
   unit_id: '44444444-4444-4444-8444-444444444444',
@@ -63,6 +68,7 @@ function sheet(over: Partial<TenancySheet> = {}): TenancySheet {
     checks: [],
     canActivate: false,
     mayEndEarly: false,
+    mayWaive: false,
     activatableOn: null,
     flags: [],
     csrf: 'csrf',
@@ -193,5 +199,87 @@ describe('estate · the tenancy card', () => {
     assert.match(clear, /הדירה פנויה בתקופה/);
     assert.doesNotMatch(clear, /פתיחה/);
     assert.doesNotMatch(clear, /disabled/);
+  });
+
+  it('shows a protocol waiver, and the reason field while the protocol is missing', () => {
+    const reason = 'אותו שוכר, חוזה חדש על אותה דירה';
+    const waived = renderTenancyDetailPage(
+      sheet({
+        mayWaive: true,
+        checks: [
+          {
+            rule: 'handover_protocol',
+            passed: true,
+            waived: {
+              actor: 'ops@tenancy-page.test',
+              at: '2026-09-24',
+              reason,
+            },
+          },
+        ],
+      }),
+    );
+    assert.match(waived, /chip is-neutral/);
+    assert.match(waived, /dot is-hollow/);
+    assert.match(waived, /ויתור/);
+    assert.match(waived, new RegExp(reason));
+    assert.match(waived, /ops@tenancy-page.test/);
+    assert.match(waived, /2026-09-24/);
+    assert.match(waived, /רשם:/);
+    assert.doesNotMatch(waived, /רשום ויתור/);
+
+    const missing = renderTenancyDetailPage(
+      sheet({
+        mayWaive: true,
+        checks: [{ rule: 'handover_protocol', passed: false }],
+      }),
+    );
+    assert.match(missing, /רשום ויתור/);
+    assert.match(missing, /btn btn-secondary btn-sm/);
+    assert.match(missing, /סיבת הוויתור/);
+    assert.match(
+      missing,
+      /action="\/estate\/tenancies\/55555555-5555-4555-8555-555555555555\/waiver"/,
+    );
+
+    const reader = renderTenancyDetailPage(
+      sheet({
+        mayWaive: false,
+        checks: [{ rule: 'handover_protocol', passed: false }],
+      }),
+    );
+    assert.doesNotMatch(reader, /רשום ויתור/);
+  });
+});
+
+describe('estate · the incomplete queue shows a protocol waiver', () => {
+  it('prints the waiver on the row that remains', () => {
+    const row: IncompleteTenancyRow = {
+      tenancy_id: '55555555-5555-4555-8555-555555555555',
+      unit_id: unit.unit_id,
+      unit_number: unit.unit_number,
+      building_id: unit.building_id,
+      building_name: unit.building_name,
+      city: unit.city,
+      start_date: '2026-10-01',
+      end_date: '2027-09-30',
+      status: 'DRAFT',
+      missing: 'start_reached',
+      expected_document_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      expected_document_label: 'חוזה שכירות',
+      protocolWaiver: {
+        actor: 'ops@tenancy-page.test',
+        at: '2026-09-24',
+        reason: 'אותו שוכר, חוזה חדש על אותה דירה',
+      },
+    };
+    const html = renderIncompletePage([row], 'csrf', h``);
+    assert.match(html, /chip is-neutral/);
+    assert.match(html, /dot is-hollow/);
+    assert.match(html, /ויתור/);
+    assert.match(html, /אותו שוכר, חוזה חדש על אותה דירה/);
+    assert.match(html, /ops@tenancy-page.test/);
+    assert.match(html, /2026-09-24/);
+    assert.match(html, /רשם:/);
   });
 });

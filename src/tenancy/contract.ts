@@ -16,6 +16,7 @@ export type {
   ActivationFlag,
   ActivationGate,
   BlockingLetting,
+  ProtocolWaiver,
   RequiredActivationDocument,
   TenancyDocumentFact,
   TenancyDocumentsReader,
@@ -56,6 +57,7 @@ export type {
   CompletenessExceptionSpec,
   CompletenessRule,
   IncompleteTenancy,
+  ProtocolWaiverView,
 } from './internal/completeness.ts';
 export {
   listIncompleteTenancies,

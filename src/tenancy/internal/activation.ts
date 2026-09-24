@@ -29,10 +29,22 @@ export interface BlockingLetting {
   endDate: string;
 }
 
+/** #156. A named person waived the handover protocol for this one letting. */
+export interface ProtocolWaiver {
+  actor: string;
+  at: Date;
+  reason: string;
+}
+
 export type ActivationCheck =
   | {
-      rule: RequiredActivationDocument | 'start_reached' | 'within_term';
+      rule: 'lease' | 'start_reached' | 'within_term';
       passed: boolean;
+    }
+  | {
+      rule: 'handover_protocol';
+      passed: boolean;
+      waived?: ProtocolWaiver;
     }
   | {
       rule: 'unit_free';
@@ -90,10 +102,32 @@ export async function activationGate(
   }
   const today = dayOf(clock);
   const facts = await documents(db, tenancyId);
-  const checks: ActivationCheck[] = REQUIRED_FOR_ACTIVATION.map((typeKey) => ({
-    rule: typeKey,
-    passed: held(facts, typeKey) !== undefined,
-  }));
+  const waiver = await db.query<{
+    actor: string;
+    at: Date;
+    reason: string;
+  }>(
+    `SELECT actor, at, reason
+       FROM tenancy_completeness_exception
+      WHERE tenancy_id = $1 AND rule = 'handover_protocol'`,
+    [tenancyId],
+  );
+  const recorded = waiver.rows[0];
+  const checks: ActivationCheck[] = REQUIRED_FOR_ACTIVATION.map((typeKey) => {
+    const passed = held(facts, typeKey) !== undefined;
+    if (typeKey === 'handover_protocol' && !passed && recorded) {
+      return {
+        rule: 'handover_protocol' as const,
+        passed: true,
+        waived: {
+          actor: recorded.actor,
+          at: recorded.at,
+          reason: recorded.reason,
+        },
+      };
+    }
+    return { rule: typeKey, passed };
+  });
   const startReached = today >= row.start_date;
   const withinTerm = today <= row.end_date;
   checks.push({ rule: 'start_reached', passed: startReached });

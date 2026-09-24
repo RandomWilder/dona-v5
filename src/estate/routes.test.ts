@@ -2097,6 +2097,15 @@ async function a5Cleanup(pool: import('pg').Pool): Promise<void> {
       [A5_CITY, A5_ADDRESS],
     );
     await pool.query(
+      `DELETE FROM tenancy_completeness_exception
+      WHERE tenancy_id IN (
+        SELECT t.tenancy_id FROM tenancy t
+        JOIN space s ON s.space_id = t.unit_id
+        JOIN building b ON b.building_id = s.building_id
+        WHERE b.city = $1 AND b.address_line = $2)`,
+      [A5_CITY, A5_ADDRESS],
+    );
+    await pool.query(
       `DELETE FROM tenancy
       WHERE unit_id IN (
         SELECT space_id FROM space s
@@ -2234,6 +2243,11 @@ describe('estate · the tenancy page', () => {
       assert.match(blocked.body, /פרוטוקול מסירה מאושר/);
       assert.match(blocked.body, /לא עבר/);
       assert.match(blocked.body, /פרוטוקול מסירה — לא הוגש/);
+      assert.match(blocked.body, /רשום ויתור/);
+      assert.match(
+        blocked.body,
+        new RegExp(`action="/estate/tenancies/${tenancyId}/waiver"`),
+      );
       assert.match(blocked.body, /disabled/);
       assert.doesNotMatch(
         blocked.body,
@@ -2569,6 +2583,106 @@ describe('estate · the tenancy page', () => {
       await pool.query(
         `DELETE FROM document_type WHERE type_key LIKE 'card-lease-%'`,
       );
+      await signOutAll(pool, A5_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('records a protocol waiver and shows who recorded it', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(A5_AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    await signOutAll(pool, A5_DOMAIN);
+    await a5Cleanup(pool);
+    const who = await signIn(pool, clock, { email: `ops@${A5_DOMAIN}` });
+    const client = asOperator(app, who);
+    try {
+      await importEstate(pool, a5Plan);
+      const unit = await pool.query<{ unit_id: string }>(
+        `SELECT u.unit_id FROM unit u
+         JOIN space s ON s.space_id = u.unit_id
+         JOIN building b ON b.building_id = s.building_id
+         WHERE b.city = $1 AND b.address_line = $2`,
+        [A5_CITY, A5_ADDRESS],
+      );
+      const unitId = unit.rows[0]?.unit_id ?? '';
+      const profile = await pool.query<{ terms_profile_id: string }>(
+        `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)
+         ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+         RETURNING terms_profile_id`,
+        [newId(), `a5-waiver-${A5_PROJECT}`],
+      );
+      const tenancyId = newId();
+      const tenantId = newId();
+      const guarantorId = newId();
+      await pool.query(
+        `INSERT INTO tenancy (tenancy_id, unit_id, start_date, end_date, status, terms_profile_id)
+         VALUES ($1, $2, '2026-10-01', '2027-09-30', 'DRAFT', $3)`,
+        [tenancyId, unitId, profile.rows[0]?.terms_profile_id],
+      );
+      await pool.query(
+        `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', $2)`,
+        [tenantId, A5_TENANT],
+      );
+      await pool.query(
+        `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', 'ערב ויתור')`,
+        [guarantorId],
+      );
+      await pool.query(
+        `INSERT INTO tenancy_party (tenancy_id, party_id, role, is_service_contact)
+         VALUES ($1, $2, 'PRIMARY_TENANT', true), ($1, $3, 'GUARANTOR', false)`,
+        [tenancyId, tenantId, guarantorId],
+      );
+      await linkType(pool, tenancyId, 'lease', 'חוזה שכירות');
+
+      const blank = await client.inject({
+        method: 'POST',
+        url: `/estate/tenancies/${tenancyId}/waiver`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: 'reason=',
+      });
+      assert.equal(blank.statusCode, 400);
+      assert.equal(blank.json().code, 'invalid');
+
+      const reason = 'אותו שוכר, חוזה חדש על אותה דירה';
+      const posted = await client.inject({
+        method: 'POST',
+        url: `/estate/tenancies/${tenancyId}/waiver`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `reason=${encodeURIComponent(reason)}`,
+      });
+      assert.equal(posted.statusCode, 302);
+      assert.equal(posted.headers.location, `/estate/tenancies/${tenancyId}`);
+
+      const page = await client.inject({
+        method: 'GET',
+        url: `/estate/tenancies/${tenancyId}`,
+      });
+      assert.equal(page.statusCode, 200);
+      assert.match(page.body, /chip is-neutral/);
+      assert.match(page.body, /ויתור/);
+      assert.match(page.body, new RegExp(reason));
+      assert.match(page.body, new RegExp(who.email));
+      assert.match(page.body, /2026-09-15/);
+      assert.doesNotMatch(page.body, /רשום ויתור/);
+
+      const queue = await client.inject({
+        method: 'GET',
+        url: '/estate/incomplete',
+      });
+      assert.equal(queue.statusCode, 200);
+      assert.match(queue.body, /ויתור/);
+      assert.match(queue.body, new RegExp(reason));
+      assert.match(queue.body, new RegExp(who.email));
+      assert.match(queue.body, new RegExp(`/estate/units/${unitId}`));
+    } finally {
+      await a5Cleanup(pool);
+      await pool.query(`DELETE FROM party WHERE full_name = 'ערב ויתור'`);
       await signOutAll(pool, A5_DOMAIN);
       await app.close();
       await pool.end();
