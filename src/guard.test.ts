@@ -162,6 +162,7 @@ describe('every route in the application', () => {
       'POST /estate/buildings/:buildingId/units',
       'GET /estate/tenancies/:tenancyId',
       'POST /estate/tenancies/:tenancyId/activate',
+      'POST /estate/tenancies/:tenancyId/end',
       'POST /estate/units/:unitId/office-turn',
       'POST /estate/units/:unitId/office-thread',
       'POST /estate/buildings/:buildingId/office-turn',
@@ -187,8 +188,9 @@ describe('every route in the application', () => {
 
   it('marks exactly the multipart routes as verifying their own token', async () => {
     // `csrf: 'in-body'` is an exemption from the hook, and an exemption that spreads is the hook
-    // being switched off one route at a time. The three are the multipart uploads, and each
-    // calls the same `verifyCsrf` the hook calls.
+    // being switched off one route at a time. These are the multipart uploads, and each
+    // calls the same `verifyCsrf` the hook calls. The early-end route is here because the
+    // notice letter is a file.
     const pool = deadPool();
     const app = buildApp({ pool, version: '9.9.9-test' });
     await app.ready();
@@ -199,6 +201,7 @@ describe('every route in the application', () => {
       'POST /documents/filing',
       'POST /documents',
       'POST /documents/intake',
+      'POST /estate/tenancies/:tenancyId/end',
     ]);
     await app.close();
     await pool.end();

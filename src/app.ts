@@ -14,6 +14,7 @@ import { signedInChrome } from './chrome.ts';
 import { renderMockup } from './dev-mockups.ts';
 import { registerEstateRoutes } from './estate/contract.ts';
 import {
+  fileDocument,
   listDocumentTypes,
   listLinkedDocuments,
   listPromotedFieldsForUnit,
@@ -27,7 +28,11 @@ import {
 import { renderIndexPage } from './index-page.ts';
 import { createAuditLog } from './kernel/audit.ts';
 import { type Clock, systemClock } from './kernel/clock.ts';
-import { createSettings, readExtractionSettings } from './kernel/config.ts';
+import {
+  createSettings,
+  readExtractionSettings,
+  readOcrSettings,
+} from './kernel/config.ts';
 import {
   createUnconfiguredEmbedder,
   type Embedder,
@@ -73,6 +78,7 @@ import { CALLS_STUB, renderStubPage } from './stub-page.ts';
 import {
   activateTenancy,
   activationGate,
+  endTenancyEarly,
   expireDueTenancies,
   getTenancy,
   listIncompleteTenancies,
@@ -261,9 +267,10 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   // method that could carry one is in scope -- `POST /staff/logout` included, which is `public`
   // precisely so that an operator whose role was withdrawn can still sign out.
   //
-  // `POST /documents` is the one exception and it is declared, not implicit: its body is a
-  // multipart stream, and reading the field here would consume the stream its handler needs. It
-  // carries `csrf: 'in-body'` and calls the same `verifyCsrf`.
+  // Multipart bodies are the exception and they are declared, not implicit: reading the
+  // field here would consume the stream the handler needs. Each carries `csrf: 'in-body'`
+  // and calls the same `verifyCsrf`. The early-end route is one, because the notice letter
+  // is a file.
   app.addHook('preHandler', async (request) => {
     if (request.method === 'GET' || request.method === 'HEAD') return;
     const config = request.routeOptions?.config as
@@ -435,6 +442,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   const clock = deps.clock ?? systemClock;
   const objects = deps.objects ?? createMemoryStore();
   const bucket = deps.bucket ?? configuredBucket();
+  const pdf = deps.pdf ?? createPdfjsText();
 
   registerEstateRoutes(app, {
     pool: deps.pool,
@@ -463,6 +471,42 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       activateTenancy(db, clock, spec, listTenancyDocumentFacts),
     reassignParkingSpace: (db, spec) => reassignParkingSpace(db, clock, spec),
     reassignStorageSpace: (db, spec) => reassignStorageSpace(db, clock, spec),
+    endTenancyEarly: (db, spec) => endTenancyEarly(db, clock, spec),
+    fileTerminationNotice: async (spec) => {
+      const settings = createSettings(deps.pool);
+      const [extraction, ocr] = await Promise.all([
+        readExtractionSettings(settings),
+        readOcrSettings(settings),
+      ]);
+      const result = await fileDocument(
+        {
+          db: deps.pool,
+          objects,
+          pdf,
+          ocr: deps.ocr,
+          ocrVersion: ocr.processorVersion,
+          extractor: deps.extractor,
+          embedder: deps.embedder,
+          extractModel: extraction.model,
+          extractReasoningEffort: extraction.reasoningEffort,
+          work: deps.work,
+          audit: createAuditLog(deps.pool, clock),
+          clock,
+          bucket,
+        },
+        {
+          bytes: spec.bytes,
+          typeKey: 'termination_notice',
+          place: { kind: 'UNIT', id: spec.unitId },
+          tenancyId: spec.tenancyId,
+          filedBy: spec.filedBy,
+        },
+      );
+      if (!result.filed) {
+        throw new KernelError('invalid', 'the notice could not be filed');
+      }
+      return result.documentId;
+    },
     runOfficeTurn: async (spec) => {
       const extraction = await readExtractionSettings(
         createSettings(deps.pool),
@@ -525,7 +569,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     pool: deps.pool,
     clock,
     objects,
-    pdf: deps.pdf ?? createPdfjsText(),
+    pdf,
     ocr: deps.ocr,
     extractor: deps.extractor,
     embedder: deps.embedder,

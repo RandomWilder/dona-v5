@@ -2239,6 +2239,7 @@ describe('estate · the tenancy page', () => {
         blocked.body,
         /action="\/estate\/tenancies\/[^"]+\/activate"/,
       );
+      assert.doesNotMatch(blocked.body, /סיום ההשכרה/);
 
       const refused = await client.inject({
         method: 'POST',
@@ -2283,6 +2284,59 @@ describe('estate · the tenancy page', () => {
       });
       assert.match(live.body, /פעיל/);
       assert.doesNotMatch(live.body, /הפעלת ההשכרה/);
+      assert.match(
+        live.body,
+        new RegExp(
+          `action="/estate/tenancies/${tenancyId}/end"[^>]*multipart/form-data`,
+        ),
+      );
+      assert.match(live.body, /סיום ההשכרה/);
+      assert.match(live.body, /עזיבה עתידית היא הודעה, לא סיום/);
+
+      const boundary = '----end154';
+      const ended = await client.inject({
+        method: 'POST',
+        url: `/estate/tenancies/${tenancyId}/end`,
+        headers: {
+          'content-type': `multipart/form-data; boundary=${boundary}`,
+        },
+        payload: [
+          `--${boundary}`,
+          'Content-Disposition: form-data; name="csrf"',
+          '',
+          who.csrf,
+          `--${boundary}`,
+          'Content-Disposition: form-data; name="actual_move_out"',
+          '',
+          '2026-09-15',
+          `--${boundary}`,
+          'Content-Disposition: form-data; name="notice_date"',
+          '',
+          '',
+          `--${boundary}--`,
+          '',
+        ].join('\r\n'),
+      });
+      assert.equal(ended.statusCode, 302);
+      assert.equal(ended.headers.location, `/estate/tenancies/${tenancyId}`);
+      const after = await client.inject({
+        method: 'GET',
+        url: `/estate/tenancies/${tenancyId}`,
+      });
+      assert.match(after.body, /הופסק/);
+      assert.doesNotMatch(after.body, /סיום ההשכרה/);
+      const row = await pool.query<{
+        status: string;
+        end_date: string;
+        actual_move_out: string;
+      }>(
+        `SELECT status, end_date::text, actual_move_out::text
+           FROM tenancy WHERE tenancy_id = $1`,
+        [tenancyId],
+      );
+      assert.equal(row.rows[0]?.status, 'TERMINATED_EARLY');
+      assert.equal(row.rows[0]?.end_date, '2027-08-31');
+      assert.equal(row.rows[0]?.actual_move_out, '2026-09-15');
     } finally {
       await a5Cleanup(pool);
       await signOutAll(pool, A5_DOMAIN);

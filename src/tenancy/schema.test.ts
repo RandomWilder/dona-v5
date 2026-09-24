@@ -999,6 +999,94 @@ describe('tenancy_event — append-only promotion log', () => {
       await pool.end();
     }
   });
+
+  it('accepts ended_early with or without paper, and still refuses a document on terminated', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const estate = await seedEstate(db);
+        const tenancyId = await seedTenancy(db, {
+          ...estate,
+          from: '2026-01-01',
+          to: '2027-01-01',
+        });
+        const eventId = newId();
+        await db.query(
+          `INSERT INTO tenancy_event (
+             tenancy_event_id, tenancy_id, at, actor, kind, field,
+             old_value, new_value, source_document_id, extracted_field_id
+           ) VALUES ($1, $2, $3, 'אסף', 'ended_early', 'status',
+                     'ACTIVE', 'TERMINATED_EARLY', NULL, NULL)`,
+          [eventId, tenancyId, new Date('2026-09-24T09:00:00.000Z')],
+        );
+        await rejects(db, RESTRICT_VIOLATION, () =>
+          db.query(
+            'UPDATE tenancy_event SET actor = $2 WHERE tenancy_event_id = $1',
+            [eventId, 'לא'],
+          ),
+        );
+        await rejects(db, RESTRICT_VIOLATION, () =>
+          db.query('DELETE FROM tenancy_event WHERE tenancy_event_id = $1', [
+            eventId,
+          ]),
+        );
+        const typeId = newId();
+        const documentId = newId();
+        await db.query(
+          `INSERT INTO document_type (
+             document_type_id, type_key, label_he, label_en, verification_terms, is_active
+           ) VALUES ($1, $2, 'הודעה', NULL, NULL, true)`,
+          [typeId, `t154-event-${typeId.slice(24)}`],
+        );
+        await db.query(
+          `INSERT INTO document (
+             document_id, document_type_id, storage_uri, file_hash,
+             ingested_at, verification_verdict
+           ) VALUES ($1, $2, 'gs://x/notice.pdf', $3, $4, 'unguarded')`,
+          [
+            documentId,
+            typeId,
+            `hash-${documentId}`,
+            new Date('2026-09-24T09:00:00.000Z'),
+          ],
+        );
+        await db.query(
+          `INSERT INTO tenancy_event (
+             tenancy_event_id, tenancy_id, at, actor, kind, field,
+             old_value, new_value, source_document_id, extracted_field_id
+           ) VALUES ($1, $2, $3, 'אסף', 'ended_early', 'status',
+                     'ACTIVE', 'TERMINATED_EARLY', $4, NULL)`,
+          [
+            newId(),
+            tenancyId,
+            new Date('2026-09-24T09:01:00.000Z'),
+            documentId,
+          ],
+        );
+        await rejects(db, CHECK_VIOLATION, () =>
+          db.query(
+            `INSERT INTO tenancy_event (
+               tenancy_event_id, tenancy_id, at, actor, kind, field,
+               old_value, new_value, source_document_id, extracted_field_id
+             ) VALUES ($1, $2, $3, 'system', 'terminated', 'status',
+                       'ACTIVE', 'ENDED', $4, NULL)`,
+            [
+              newId(),
+              tenancyId,
+              new Date('2026-09-24T09:02:00.000Z'),
+              documentId,
+            ],
+          ),
+        );
+      });
+    } finally {
+      await pool.end();
+    }
+  });
 });
 
 describe('tenancy_completeness_exception — A4 exception row, not a status', () => {

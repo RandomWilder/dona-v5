@@ -25,6 +25,7 @@ export {
   REQUIRED_FOR_ACTIVATION,
 } from './internal/activation.ts';
 export type {
+  EndTenancyEarlySpec,
   ExerciseOptionSpec,
   PromotedFieldSpec,
   PromotedTenancyField,
@@ -37,6 +38,7 @@ export type {
 } from './internal/commands.ts';
 export {
   applyPromotedField,
+  endTenancyEarly,
   exerciseOption,
   expireDueTenancies,
   findTermsProfileByName,

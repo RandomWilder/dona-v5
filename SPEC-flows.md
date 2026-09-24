@@ -88,7 +88,12 @@ The schema already supports this exactly, which was verified rather than assumed
 - `one_active_tenancy_per_unit` is an exclusion constraint **partial on `status = 'ACTIVE'`**, so a
   `DRAFT` overlapping a live tenancy is permitted, and the constraint bites at precisely the right
   moment — promoting `DRAFT → ACTIVE` while the outgoing tenancy is still `ACTIVE` is rejected by the
-  database.
+  database. A person clears that block with `endTenancyEarly` (#154): the outgoing row becomes
+  `TERMINATED_EARLY`, its contractual `end_date` stays, and `actual_move_out` records the day they
+  left. The move-out is today or earlier — a future day is notice, not an end, and is not recorded
+  here. The event kind is `ended_early`, not the clock's `terminated`, so a signed notice can be
+  cited and a phone call can be recorded without one. Once the outgoing row is no longer `ACTIVE`,
+  the incoming draft can activate.
 - `src/scope/internal/isolation-join.ts` resolves the tenancy **active on a supplied date**
   (`status = 'ACTIVE' AND start_date <= $2 AND end_date >= $2`, the date passed as a parameter and
   never `CURRENT_DATE`). A departing tenant and an incoming one therefore cannot both answer for one
@@ -308,11 +313,20 @@ it, and it is bound with `entity_type = 'TENANCY'`.
 
 **Screen:** `GET /estate/tenancies/:tenancyId` — one letting, reached by its identifier. Title
 (tenant name plus address and apartment number), status, the lease's dates, the documents it holds,
-what is missing, every gate check with its outcome, and the activate button. The page prints the
+what is missing, every gate check with its outcome, and the activate button. The household name and
+the status chip share one line, the way a building title does on נכסים, and the lease dates sit
+under them. The page prints the
 gate's returned facts and re-derives none of the rules. The button is dark until `canActivate`; a
 dark button names every requirement the gate checked. When the only miss is the start date, the
 page states `activatableOn`. `POST /estate/tenancies/:tenancyId/activate` is the person command
 (`tenancy.write`); the clock never posts it.
+
+**An `ACTIVE` letting on that same page can be ended early (#154).** The form sits in a glass card:
+move-out and notice as a pair of dates, the notice letter as a file field, and the primary button
+סיום ההשכרה. Under the form, in muted type, a future move-out is notice, not an end.
+`POST /estate/tenancies/:tenancyId/end` is that person command, also `tenancy.write`. A file is
+filed as `termination_notice` on the letting and cited on the event; no file is a phone call, and
+the event still names the person.
 
 **The same GET is the tenancy card (#134).** Rent, its currency and the option end come from
 `tenancy`'s columns, because those copies exist. Everything else the lease said is an **approved**

@@ -458,8 +458,14 @@ const styles = h`<style>
       background: var(--color-surface);
     }
   }
-  .tenancy-head { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: baseline; }
-  .status.is-active { background: color-mix(in srgb, var(--color-ok) 14%, var(--color-surface-card)); color: var(--color-ok); }
+  .glass-stage .tenancy-sheet {
+    display: grid;
+    gap: var(--space-4);
+    padding: var(--space-5) var(--space-6);
+    margin-block-end: var(--space-5);
+  }
+  .glass-stage .who { display: grid; gap: var(--space-1); }
+  .tenancy-sheet h2 { font-size: var(--text-lg); font-weight: 600; margin: 0; }
   .term-found { color: var(--color-ok); }
   .term-missing { color: var(--color-alert); }
   .term-state { font-weight: 600; }
@@ -2317,14 +2323,35 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
     : `${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${sheet.unit.unit_number}`;
   const lease = ofType(sheet.documents, 'lease');
   const active = sheet.status === 'ACTIVE';
+  const heading = primary
+    ? h`${primary.fullName} · ${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${ltr(sheet.unit.unit_number)}`
+    : h`${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${ltr(sheet.unit.unit_number)}`;
   const body = h`
-    <div>
-      <a class="back" href="/estate/units/${sheet.unit.unit_id}">← דירה ${ltr(sheet.unit.unit_number)}</a>
-      <div class="tenancy-head">
-        <h1>${primary ? h`${primary.fullName} · ${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${ltr(sheet.unit.unit_number)}` : h`${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${ltr(sheet.unit.unit_number)}`}</h1>
-        <span class="${active ? 'chip status is-active' : 'chip status'}">${label(TENANCY_STATUS, sheet.status)}</span>
+    <div class="glass-stage">
+    <div class="glass tenancy-sheet">
+      <div class="who">
+        <a class="back" href="/estate/units/${sheet.unit.unit_id}">← דירה ${ltr(sheet.unit.unit_number)}</a>
+        <h1 class="b-title"><span>${heading}</span>${tenancyChip(sheet.status)}</h1>
+        <p class="b-address"><span dir="ltr">${ltr(sheet.startDate)} — ${ltr(sheet.endDate)}</span></p>
       </div>
-      <p class="lede">${ltr(sheet.startDate)} — ${ltr(sheet.endDate)}</p>
+      ${
+        active
+          ? h`<div>
+        <h2>סיום מוקדם</h2>
+        <p class="lede">הדיירים עוזבים לפני סוף החוזה. תאריך הסיום החוזי נשאר כפי שהוא. תאריך העזיבה נרשם לצדו.</p>
+      </div>
+      <form class="form-grid" method="post" action="/estate/tenancies/${sheet.tenancyId}/end" enctype="multipart/form-data">
+        ${csrfInput(sheet.csrf)}
+        <div class="form-pair">
+          <label class="form-row">תאריך עזיבה בפועל<input type="date" name="actual_move_out" required /></label>
+          <label class="form-row">תאריך הודעה (רשות)<input type="date" name="notice_date" /></label>
+        </div>
+        <label class="form-row">מכתב הודעה (רשות)<input type="file" name="file" /></label>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">סיום ההשכרה</button></div>
+      </form>
+      <p class="form-note">נרשם כאירוע: מי סיים, מתי, ועל סמך מה. עזיבה עתידית היא הודעה, לא סיום.</p>`
+          : h``
+      }
     </div>
 
     <section class="notice">
@@ -2475,6 +2502,18 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
     <div class="form-actions">
       <a class="btn btn-secondary" href="/documents/new?unit=${sheet.unit.unit_id}">הוספת מסמך</a>
       <a href="/estate/units/${sheet.unit.unit_id}">חזרה לדירה</a>
+    </div>
     </div>`;
   return page(`דונה דום — ${title}`, body, sheet.nav);
+}
+
+function tenancyChip(status: string): Html {
+  const name = label(TENANCY_STATUS, status);
+  if (status === 'ACTIVE') {
+    return h`<span class="chip is-ok"><span class="dot"></span>${name}</span>`;
+  }
+  if (status === 'DRAFT') {
+    return h`<span class="chip is-accent"><span class="dot is-hollow"></span>${name}</span>`;
+  }
+  return h`<span class="chip is-neutral">${name}</span>`;
 }

@@ -222,14 +222,15 @@ own first five years from it.
   copies an extracted value onto a typed column appends
   `(field, old → new, actor, source_document_id, extracted_field_id)` with `kind = 'amended'`.
 `source_document_id` is NOT NULL for that kind (`amended_names_its_document`) and that constraint
-is never dropped. `kind` is `amended | terminated | activated | extended | reassigned`. A clock-driven end is
+is never dropped. `kind` is `amended | terminated | activated | extended | reassigned | ended_early`. A clock-driven end is
 `terminated`; a person making a draft live is `activated`; a person taking the option is
-`extended`; a person moving the household's bay is `reassigned`. `terminated`, `activated` and
+`extended`; a person moving the household's bay is `reassigned`; a person ending a letting before
+its contractual end is `ended_early`. `terminated`, `activated` and
 `reassigned` carry a null `source_document_id` and
 `extracted_field_id` (`terminated_has_no_document` for the clock kind, `activated_has_no_document`
-for the person kind, `reassigned_has_no_document` for the bay). `extended` names a document when there is one and does not when there is
-not — no extra CHECK, because an option exercise is honestly either a signed notice or a phone
-call. UPDATE and DELETE are rejected
+for the person kind, `reassigned_has_no_document` for the bay). `extended` and `ended_early` name a document when there is one and do not when there is
+not — no extra CHECK, because both are honestly either a signed notice or a phone
+call. `terminated_has_no_document` is not relaxed: the clock's kind keeps its shape, and the person's early end is a different kind. UPDATE and DELETE are rejected
   (`restrict_violation`). `at` comes from the injected clock; there is no `DEFAULT now()`. `actor`
   is `-- pii`; a clock end snapshots `system`, not an operator. Register `upsertTenancy` does
   **not** write events — isolation dates from the import stay legal without a document.
@@ -250,11 +251,23 @@ call. UPDATE and DELETE are rejected
   `field = parking_space_id`. `unit.parking_space_id` does not move. A space of another kind, or
   in another building, is `invalid`. The same bay twice is a no-op. `reassignStorageSpace` is the
   ninth, the same shape for `tenancy.storage_space_id` / `STORAGE` / built storage.
+  `endTenancyEarly` is the tenth. It takes an `ACTIVE` letting, an `actual_move_out` on or before
+  the clock's day and inside the contractual term (`start_date` through `end_date`, inclusive), an
+  optional `notice_date` on or before that move-out, the person, and an optional source document.
+  Status becomes `TERMINATED_EARLY`. The contractual `end_date` does not move; `actual_move_out`
+  records the day they left and `notice_date` records the notice when there was one. The event is
+  `ended_early` with `field = status`, `ACTIVE → TERMINATED_EARLY`, and the person as actor. A
+  missing letting is `not_found`. Not `ACTIVE` is `invalid` (`this letting is not active`). A
+  move-out before `start_date` is `invalid` (`the move-out is before the lease starts`). A move-out
+  after `end_date` is `invalid` (`the move-out is after the contractual end`) — past the end, the
+  clock ends it. A move-out after the clock's day is `invalid` (`a future move-out is notice, not
+  an end`). A notice after the move-out is `invalid` (`the notice is after the move-out`). Because
+  `one_active_tenancy_per_unit` is partial on `ACTIVE`, the ended row no longer occupies the unit.
 - **No read model, and from 3.3 exactly one list plus one lookup.** *(Slice 6.5 adds a second list,
   `countIdentifierOverlap`, described at the end of this bullet.)* `contract.ts` exists from 2.4
   and exports the register importer's three write commands — `upsertTermsProfile`, `upsertTenancy` and
   `upsertTenancyParty` — plus `applyPromotedField` from 4.3, `exerciseOption` from #135, and
-  `reassignParkingSpace` from #146, and `reassignStorageSpace` from #148. `listUnitTenancies` joins them at 3.3.
+  `reassignParkingSpace` from #146, `reassignStorageSpace` from #148, and `endTenancyEarly` from #154. `listUnitTenancies` joins them at 3.3.
   Slice 4.6 added `findTermsProfileByName`: A2 must hang a draft on a profile that already exists and
   must not invent `standard`. A missing name is `null`, not an upsert. Slice 4.6b added
   `listTermsProfiles`: names only, ordered, so the confirm screen is a select of what already exists
