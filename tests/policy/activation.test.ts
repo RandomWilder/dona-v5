@@ -34,6 +34,7 @@ async function linkApproved(
   typeKey: string,
   validTo: string | null = null,
   signed = true,
+  handoverDate?: string,
 ): Promise<string> {
   const typeId = newId();
   const documentId = newId();
@@ -69,8 +70,15 @@ async function linkApproved(
     await db.query(
       `INSERT INTO audit_log (
          id, at, actor_kind, actor_id, action, subject_id, inputs, outcome
-       ) VALUES ($1, $2, 'staff', $3, $4, $5, '{}'::jsonb, 'ok')`,
-      [newId(), AT, ACTOR, PROTOCOL_CONFIRM_ACTION, documentId],
+       ) VALUES ($1, $2, 'staff', $3, $4, $5, $6::jsonb, 'ok')`,
+      [
+        newId(),
+        AT,
+        ACTOR,
+        PROTOCOL_CONFIRM_ACTION,
+        documentId,
+        JSON.stringify(handoverDate ? { handoverDate } : {}),
+      ],
     );
   }
   return documentId;
@@ -681,6 +689,73 @@ describe('policy · activation is a person command with a named gate', () => {
           } finally {
             await db.query('ROLLBACK TO SAVEPOINT waiver_refused');
           }
+        }
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('flags a handover date outside the lease term and leaves the button able', async (t) => {
+    const pool = await policyPool();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        // Lease 2026-09-15 — 2027-09-14. Thirty days before the start is
+        // 2026-08-16: that day is ordinary. The day before it, and the day
+        // after the end, are the two edges.
+        const term = { from: '2026-09-15', to: '2027-09-14' };
+        const cases = [
+          { unit: '1601', handover: '2026-08-15', edge: 'early' as const },
+          { unit: '1602', handover: '2026-08-16', edge: null },
+          { unit: '1603', handover: '2027-09-14', edge: null },
+          { unit: '1604', handover: '2027-09-15', edge: 'late' as const },
+        ];
+        for (const sample of cases) {
+          const occupancy = await seedDraft(db, sample.unit, term);
+          await linkApproved(db, occupancy.tenancyId, 'lease');
+          await linkApproved(
+            db,
+            occupancy.tenancyId,
+            'handover_protocol',
+            null,
+            true,
+            sample.handover,
+          );
+          const gate = await activationGate(
+            db,
+            CLOCK,
+            occupancy.tenancyId,
+            listTenancyDocumentFacts,
+          );
+          assert.equal(gate.handoverDate, sample.handover);
+          assert.equal(gate.canActivate, true);
+          assert.equal(
+            gate.checks.some(
+              (check) => (check.rule as string) === 'handover_outside_term',
+            ),
+            false,
+          );
+          const outside = gate.flags.find(
+            (flag) => flag.rule === 'handover_outside_term',
+          );
+          if (sample.edge === null) {
+            assert.equal(outside, undefined, sample.handover);
+          } else {
+            assert.equal(outside?.rule, 'handover_outside_term');
+            if (outside?.rule === 'handover_outside_term') {
+              assert.equal(outside.edge, sample.edge);
+              assert.equal(outside.handoverDate, sample.handover);
+            }
+          }
+          const status = await db.query<{ status: string }>(
+            `SELECT status FROM tenancy WHERE tenancy_id = $1`,
+            [occupancy.tenancyId],
+          );
+          assert.equal(status.rows[0]?.status, 'DRAFT');
         }
       });
     } finally {

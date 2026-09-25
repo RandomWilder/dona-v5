@@ -26,6 +26,7 @@ export type {
 export {
   activateTenancy,
   activationGate,
+  EARLY_HANDOVER_DAYS,
   REQUIRED_FOR_ACTIVATION,
 } from './internal/activation.ts';
 export type {

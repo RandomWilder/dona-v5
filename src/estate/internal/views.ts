@@ -15,6 +15,10 @@
 // Lists and chips still get a state and a count. #107 hands names to one letting's sheet.
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
+import {
+  type ActivationFlag,
+  EARLY_HANDOVER_DAYS,
+} from '../../tenancy/contract.ts';
 import type { BuildingStatus, ConditionStatus } from './plan.ts';
 import type {
   BuildingDetail,
@@ -486,6 +490,7 @@ const styles = h`<style>
     margin-block-end: var(--space-5);
   }
   .glass-stage .who { display: grid; gap: var(--space-1); }
+  .glass-stage .flag { margin: 0; color: var(--color-alert); font-size: var(--text-sm); }
   .tenancy-sheet h2 { font-size: var(--text-lg); font-weight: 600; margin: 0; }
   .term-found { color: var(--color-ok); }
   .term-missing { color: var(--color-alert); }
@@ -2412,7 +2417,8 @@ export interface TenancySheet {
   /** A sentence from a protocol upload that did not reach confirm. */
   protocolNotice?: string | null;
   activatableOn: string | null;
-  flags: readonly { typeKey: string }[];
+  handoverDate: string | null;
+  flags: readonly ActivationFlag[];
   csrf: string;
   nav: Html;
 }
@@ -2567,6 +2573,21 @@ function activateReasons(sheet: TenancySheet): Html {
   return h`<p class="reasons">דרישות שטרם התקיימו: ${names}.</p>`;
 }
 
+function handoverBeside(sheet: TenancySheet): Html {
+  if (!sheet.handoverDate) return h``;
+  return h` · מסירה ${ltr(sheet.handoverDate)}`;
+}
+
+function handoverFlag(sheet: TenancySheet): Html {
+  const flag = sheet.flags.find((row) => row.rule === 'handover_outside_term');
+  if (flag?.rule !== 'handover_outside_term') return h``;
+  const why =
+    flag.edge === 'early'
+      ? h`קודם ביותר מ־${String(EARLY_HANDOVER_DAYS)} יום לתחילת החוזה`
+      : h`אחרי סיום החוזה`;
+  return h`<p class="flag">דגל: תאריך המסירה בפרוטוקול (${ltr(flag.handoverDate)}) ${why}. אינו חוסם.</p>`;
+}
+
 function tenantsLine(people: readonly TenancyPersonView[]): Html {
   const tenants = people.filter(
     (person) => person.role === 'PRIMARY_TENANT' || person.role === 'CO_TENANT',
@@ -2622,7 +2643,8 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
       <div class="who">
         <a class="back" href="/estate/units/${sheet.unit.unit_id}">← דירה ${ltr(sheet.unit.unit_number)}</a>
         <h1 class="b-title"><span>${heading}</span>${tenancyChip(sheet.status)}</h1>
-        <p class="b-address"><span dir="ltr">${ltr(sheet.startDate)} — ${ltr(sheet.endDate)}</span></p>
+        <p class="b-address"><span dir="ltr">${ltr(sheet.startDate)} — ${ltr(sheet.endDate)}</span>${handoverBeside(sheet)}</p>
+        ${handoverFlag(sheet)}
       </div>
       ${
         active
@@ -2724,9 +2746,9 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
     <section class="notice">
       <h2>מה נבדק</h2>
       ${
-        sheet.flags.length === 0
-          ? h``
-          : h`<p class="lede">מסמך שפג תוקפו מרים דגל ואינו מזיז את המצב.</p>`
+        sheet.flags.some((flag) => flag.rule === 'lapsed_document')
+          ? h`<p class="lede">מסמך שפג תוקפו מרים דגל ואינו מזיז את המצב.</p>`
+          : h``
       }
       <ul class="gate">
         ${sheet.checks.map(

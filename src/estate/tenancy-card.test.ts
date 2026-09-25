@@ -71,6 +71,7 @@ function sheet(over: Partial<TenancySheet> = {}): TenancySheet {
     mayWaive: false,
     mayFileProtocol: false,
     activatableOn: null,
+    handoverDate: null,
     flags: [],
     csrf: 'csrf',
     nav: h``,
@@ -325,6 +326,63 @@ describe('estate · the tenancy card', () => {
     );
     assert.doesNotMatch(quiet, /הגשת פרוטוקול מסירה/);
     assert.doesNotMatch(quiet, /class="file-well"/);
+  });
+
+  it('prints the handover date beside the lease dates, and a flag under them that does not darken the button', () => {
+    const inside = renderTenancyDetailPage(
+      sheet({
+        handoverDate: '2026-08-16',
+        canActivate: true,
+        checks: [{ rule: 'lease', passed: true }],
+      }),
+    );
+    const address =
+      inside.match(/class="b-address">([\s\S]*?)<\/p>/)?.[1] ?? '';
+    assert.match(address, /2026-09-01/);
+    assert.match(address, /2027-08-31/);
+    assert.match(address, /מסירה/);
+    assert.match(address, /2026-08-16/);
+    assert.doesNotMatch(inside, /class="flag"/);
+    assert.match(inside, /type="submit"/);
+    assert.doesNotMatch(inside, /disabled/);
+
+    const early = renderTenancyDetailPage(
+      sheet({
+        handoverDate: '2026-07-01',
+        canActivate: true,
+        checks: [{ rule: 'lease', passed: true }],
+        flags: [
+          {
+            rule: 'handover_outside_term',
+            handoverDate: '2026-07-01',
+            edge: 'early',
+          },
+        ],
+      }),
+    );
+    assert.match(early, /class="flag"/);
+    assert.match(early, /2026-07-01/);
+    assert.match(early, /קודם ביותר מ־30 יום לתחילת החוזה/);
+    assert.match(early, /אינו חוסם/);
+    assert.match(early, /type="submit"/);
+    assert.doesNotMatch(early, /disabled/);
+    const gate = early.split('מה נבדק')[1] ?? '';
+    assert.doesNotMatch(gate, /class="flag"/);
+    assert.doesNotMatch(gate, /אינו חוסם/);
+
+    const late = renderTenancyDetailPage(
+      sheet({
+        handoverDate: '2027-09-01',
+        flags: [
+          {
+            rule: 'handover_outside_term',
+            handoverDate: '2027-09-01',
+            edge: 'late',
+          },
+        ],
+      }),
+    );
+    assert.match(late, /אחרי סיום החוזה/);
   });
 });
 

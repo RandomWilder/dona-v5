@@ -74,22 +74,37 @@ export async function listTenancyDocumentFacts(
 ): Promise<TenancyDocumentFact[]> {
   const linked = await listLinkedDocuments(db, 'TENANCY', tenancyId);
   const protocols = linked.filter((doc) => doc.typeKey === 'handover_protocol');
-  const signed = new Set<string>();
+  const confirmed = new Map<string, string | null>();
   if (protocols.length > 0) {
-    const confirmed = await db.query<{ subject_id: string }>(
-      `SELECT subject_id FROM audit_log
+    const rows = await db.query<{
+      subject_id: string;
+      handover_date: string | null;
+    }>(
+      `SELECT DISTINCT ON (subject_id)
+              subject_id,
+              inputs->>'handoverDate' AS handover_date
+         FROM audit_log
         WHERE action = $1
           AND outcome = 'ok'
-          AND subject_id = ANY($2::text[])`,
+          AND subject_id = ANY($2::text[])
+        ORDER BY subject_id, at DESC`,
       [PROTOCOL_CONFIRM_ACTION, protocols.map((doc) => doc.documentId)],
     );
-    for (const row of confirmed.rows) signed.add(row.subject_id);
+    for (const row of rows.rows) {
+      confirmed.set(row.subject_id, row.handover_date);
+    }
   }
   return linked.map((doc) => ({
     typeKey: doc.typeKey,
     approved:
-      doc.typeKey === 'handover_protocol' ? signed.has(doc.documentId) : true,
+      doc.typeKey === 'handover_protocol'
+        ? confirmed.has(doc.documentId)
+        : true,
     validTo: doc.validTo,
+    handoverDate:
+      doc.typeKey === 'handover_protocol'
+        ? (confirmed.get(doc.documentId) ?? null)
+        : null,
   }));
 }
 

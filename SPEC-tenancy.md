@@ -323,7 +323,11 @@ call. `terminated_has_no_document` is not relaxed: the clock's kind keeps its sh
   by the clock or by `activateTenancy`; the register may still write historical `tenancy_party`
   rows onto an `ENDED` row because that is how a past household is loaded. A required document
   whose `valid_to` is strictly before today, on an `ACTIVE` letting, is a flag on the gate and
-  never a status change.
+  never a status change. **#160** adds `EARLY_HANDOVER_DAYS` (30) and a second flag,
+  `handover_outside_term`. The injected reader reports the confirmed handover date from the
+  protocol's approval row. The gate returns that date, and the flag when it falls strictly before
+  the lease start minus those 30 days or strictly after the lease end. It is not a check and it
+  does not move status. A missing date raises nothing.
   **#122 adds `listActiveLettingsInBuilding`.** An office inventory of who is let in a Building
   today, not the front door and not a second isolation join. It takes a Building id and the clock,
   and returns one row per Unit in that Building whose letting is `ACTIVE` and whose dates cover

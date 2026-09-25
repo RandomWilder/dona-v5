@@ -1,13 +1,16 @@
 // A5 — the activation gate and the person command that spends it. #106.
 //
 // Evidence-side facts arrive through an injected reader. This file imports no evidence module.
-import { type Clock, today as dayOf } from '../../kernel/clock.ts';
+import { addDays, type Clock, today as dayOf } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { requireText } from '../../kernel/validate.ts';
 import type { Queryable } from './types.ts';
 
 export const REQUIRED_FOR_ACTIVATION = ['lease', 'handover_protocol'] as const;
+
+/** Keys a few weeks early are ordinary. A handover before the start minus this many days is a flag. */
+export const EARLY_HANDOVER_DAYS = 30;
 
 export type RequiredActivationDocument =
   (typeof REQUIRED_FOR_ACTIVATION)[number];
@@ -16,6 +19,8 @@ export interface TenancyDocumentFact {
   typeKey: string;
   approved: boolean;
   validTo: string | null;
+  /** Set on an approved handover protocol, from A6's confirm. Absent otherwise. */
+  handoverDate: string | null;
 }
 
 export type TenancyDocumentsReader = (
@@ -56,15 +61,24 @@ export type ActivationCheck =
       blocking: BlockingLetting;
     };
 
-export interface ActivationFlag {
-  rule: 'lapsed_document';
-  typeKey: string;
-}
+export type ActivationFlag =
+  | {
+      rule: 'lapsed_document';
+      typeKey: string;
+    }
+  | {
+      rule: 'handover_outside_term';
+      handoverDate: string;
+      /** `early` is before the start minus `EARLY_HANDOVER_DAYS`; `late` is after the end. */
+      edge: 'early' | 'late';
+    };
 
 export interface ActivationGate {
   checks: ActivationCheck[];
   canActivate: boolean;
   activatableOn: string | null;
+  /** Confirmed handover date, when the letting holds an approved protocol that named one. */
+  handoverDate: string | null;
   flags: ActivationFlag[];
 }
 
@@ -164,7 +178,7 @@ export async function activationGate(
   const documentsPass = REQUIRED_FOR_ACTIVATION.every(
     (typeKey) => checks.find((check) => check.rule === typeKey)?.passed,
   );
-  const flags: ActivationFlag[] =
+  const lapsed: ActivationFlag[] =
     row.status === 'ACTIVE'
       ? REQUIRED_FOR_ACTIVATION.flatMap((typeKey) => {
           const fact = held(facts, typeKey);
@@ -178,6 +192,8 @@ export async function activationGate(
           return [];
         })
       : [];
+  const handoverDate = confirmedHandover(facts);
+  const outside = handoverOutside(handoverDate, row.start_date, row.end_date);
   return {
     checks,
     canActivate:
@@ -190,8 +206,32 @@ export async function activationGate(
       !startReached
         ? row.start_date
         : null,
-    flags,
+    handoverDate,
+    flags: outside ? [...lapsed, outside] : lapsed,
   };
+}
+
+function confirmedHandover(
+  facts: readonly TenancyDocumentFact[],
+): string | null {
+  const date = held(facts, 'handover_protocol')?.handoverDate;
+  if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  return null;
+}
+
+function handoverOutside(
+  handoverDate: string | null,
+  startDate: string,
+  endDate: string,
+): ActivationFlag | null {
+  if (handoverDate === null) return null;
+  if (handoverDate < addDays(startDate, -EARLY_HANDOVER_DAYS)) {
+    return { rule: 'handover_outside_term', handoverDate, edge: 'early' };
+  }
+  if (handoverDate > endDate) {
+    return { rule: 'handover_outside_term', handoverDate, edge: 'late' };
+  }
+  return null;
 }
 
 const EXCLUSION_VIOLATION = '23P01';

@@ -29,7 +29,10 @@ import {
   readSessionCookie,
   verifyCsrf,
 } from '../../staff/contract.ts';
-import { listLettingsForUnits } from '../../tenancy/contract.ts';
+import {
+  type ActivationFlag,
+  listLettingsForUnits,
+} from '../../tenancy/contract.ts';
 import { addCalendarYears, WARRANTY_YEARS } from './assets.ts';
 import { listEstateEvents } from './events.ts';
 import { importEstate, upsertUnitRow } from './importer.ts';
@@ -199,7 +202,8 @@ export interface EstateDeps {
     }[];
     canActivate: boolean;
     activatableOn: string | null;
-    flags: readonly { typeKey: string }[];
+    handoverDate: string | null;
+    flags: readonly ActivationFlag[];
   }>;
   activateTenancy: (
     db: Pool,
@@ -1519,6 +1523,7 @@ export function registerEstateRoutes(
           : {}),
       })),
       canActivate: gate.canActivate,
+      handoverDate: gate.handoverDate,
       mayEndEarly: can(request.staff?.role ?? null, 'tenancy.write'),
       mayWaive: can(request.staff?.role ?? null, 'tenancy.write'),
       mayFileProtocol: can(request.staff?.role ?? null, 'documents.write'),

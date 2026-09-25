@@ -331,15 +331,24 @@ does not pass. Protocols already linked when this rule landed are not grandfathe
 nobody confirmed is the gap, and the letting is listed on A4 under `handover_protocol` until
 someone confirms it. Confirming again is A6's existing no-op on the assets, and it writes the
 signature. A lease is unchanged: its TENANCY link is still its approval. `lease`, `start_reached`,
-`within_term` and `unit_free` are not waivable. When
+`within_term` and `unit_free` are not waivable. **#160.** The reader also reports the handover
+date A6 confirmed, the `handoverDate` on that same `evidence.confirm_protocol` row. The gate
+returns the date. When it falls strictly before `start_date` minus `EARLY_HANDOVER_DAYS` (30), or
+strictly after `end_date`, the gate returns a flag `handover_outside_term`. A date exactly thirty
+days before the start, or on the end date, is ordinary and raises nothing. The flag has the same
+standing as a lapsed document: it is not a check, it does not darken the button, and it does not
+move `tenancy.status`. A waiver, or a confirm that recorded no date, raises nothing. When
 `unit_free` fails, the gate names
 the blocking letting by id and dates only — never a party.
 
 **Screen:** `GET /estate/tenancies/:tenancyId` — one letting, reached by its identifier. Title
-(tenant name plus address and apartment number), status, the lease's dates, the documents it holds,
+(tenant name plus address and apartment number), status, the lease's dates, the confirmed
+handover date beside them, the documents it holds,
 what is missing, every gate check with its outcome, and the activate button. The household name and
 the status chip share one line, the way a building title does on נכסים, and the lease dates sit
-under them. The page prints the
+under them. The confirmed handover date is printed on that same line. When the gate returns
+`handover_outside_term`, one alert-coloured line sits under those dates. It names the date and
+which edge it crossed, and it says the flag does not block. It is not a row in מה נבדק. The page prints the
 gate's returned facts and re-derives none of the rules. The button is dark until `canActivate`; a
 dark button names every requirement the gate checked. When the only miss is the start date, the
 page states `activatableOn`. `unit_free` is one more row in מה נבדק, the same shape as the other
