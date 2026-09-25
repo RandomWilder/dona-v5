@@ -1,7 +1,7 @@
 // #149 — the mint plan for נכסים. Named sequences, then `importEstate`.
 import { KernelError } from '../../kernel/errors.ts';
 import { requireText } from '../../kernel/validate.ts';
-import type { SpacePlan, UnitPlan } from './plan.ts';
+import type { BuildingStatus, SpacePlan, UnitPlan } from './plan.ts';
 
 const MAX_COUNT = 999;
 
@@ -238,6 +238,23 @@ export function omitExisting(
     spaces,
     units: mint.units.filter((unit) => keptUnits.has(unit.unitNumber)),
   };
+}
+
+const LIST_STATUSES = ['ACTIVE', 'IN_CONSTRUCTION', 'EXITED'] as const;
+
+/** `GET /estate/inventory?status=`. Absent means the whole portfolio. */
+export function inventoryListStatus(query: unknown): BuildingStatus | null {
+  const raw = (query as { status?: unknown } | null)?.status;
+  if (raw === undefined || raw === '') {
+    return null;
+  }
+  if (
+    typeof raw === 'string' &&
+    (LIST_STATUSES as readonly string[]).includes(raw)
+  ) {
+    return raw as BuildingStatus;
+  }
+  throw new KernelError('invalid', 'status is not a building status');
 }
 
 export function mintAuditInputs(mint: InventoryMint): Record<string, unknown> {

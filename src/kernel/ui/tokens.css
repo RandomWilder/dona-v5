@@ -457,3 +457,603 @@ textarea {
     transition: none !important;
   }
 }
+
+/* נכסים list only. Rules stay under .glass-stage so other screens keep their buttons. */
+:root {
+  --color-ok-ink: #3d6150;
+  --color-ok-tint: #e8f1ec;
+  --glass-fill: rgba(255, 255, 255, 0.55);
+  --glass-fill-strong: rgba(255, 255, 255, 0.72);
+  --glass-hover: rgba(255, 255, 255, 0.35);
+  --glass-stroke: rgba(255, 255, 255, 0.75);
+  --meter-track: rgba(29, 31, 32, 0.1);
+  --ambient-accent: rgba(89, 128, 166, 0.42);
+  --ambient-ok: rgba(78, 122, 99, 0.28);
+  --ambient-warm: rgba(168, 90, 74, 0.18);
+  --radius-5: 22px;
+  --blur-glass: 22px;
+  --glass-saturate: 180%;
+  --text-stat: 26px;
+  --text-display: 28px;
+  --shadow-glass:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 2px rgba(29, 45, 61, 0.06),
+    0 10px 30px rgba(29, 45, 61, 0.1);
+  --shadow-glass-inner:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(29, 45, 61, 0.05);
+  --shadow-button:
+    0 1px 2px rgba(29, 45, 61, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.glass-stage {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  gap: var(--space-6);
+  interpolate-size: allow-keywords;
+}
+
+.glass-stage::before {
+  content: "";
+  position: absolute;
+  inset: calc(var(--space-6) * -1);
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      38rem 26rem at 88% 4%,
+      var(--ambient-accent),
+      transparent 70%
+    ),
+    radial-gradient(30rem 24rem at 6% 30%, var(--ambient-ok), transparent 70%),
+    radial-gradient(
+      34rem 26rem at 70% 96%,
+      var(--ambient-warm),
+      transparent 70%
+    ),
+    var(--color-bg);
+}
+
+.glass-stage .glass {
+  position: relative;
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: blur(var(--blur-glass))
+    saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--blur-glass)) saturate(var(--glass-saturate));
+  border: var(--size-hairline) solid var(--glass-stroke);
+  border-radius: var(--radius-5);
+  box-shadow: var(--shadow-glass);
+}
+
+.glass-stage .glass.is-raised {
+  background: var(--glass-fill-strong);
+  border-radius: var(--radius-4);
+  box-shadow: var(--shadow-glass-inner);
+}
+
+@supports not (
+    (backdrop-filter: blur(1px)) or
+    (-webkit-backdrop-filter: blur(1px))
+  ) {
+  .glass-stage .glass {
+    background: var(--color-surface-card);
+  }
+}
+
+.glass-stage .page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.glass-stage .page-head h1 {
+  font-size: var(--text-display);
+  font-weight: 600;
+  line-height: 1.1;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.glass-stage .page-head .lede {
+  max-inline-size: 36rem;
+}
+
+.glass-stage .btn {
+  gap: var(--space-2);
+  border-radius: var(--radius-pill);
+  transition:
+    background-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.glass-stage .btn svg {
+  inline-size: 18px;
+  block-size: 18px;
+  flex: none;
+}
+
+.glass-stage .btn-primary {
+  box-shadow: var(--shadow-button);
+}
+
+.glass-stage .btn-primary:hover {
+  background: var(--color-accent-deep);
+  border-color: var(--color-accent-deep);
+}
+
+.glass-stage .btn-secondary:hover {
+  background: var(--color-accent-tint);
+}
+
+.glass-stage .btn-glass {
+  border: var(--size-hairline) solid var(--glass-stroke);
+  background: var(--glass-fill-strong);
+  color: var(--color-accent-ink);
+  box-shadow: var(--shadow-glass-inner);
+}
+
+.glass-stage .btn-glass:hover {
+  background: var(--color-surface-card);
+}
+
+.glass-stage .btn-ghost {
+  border: var(--size-hairline) solid transparent;
+  background: transparent;
+  color: var(--color-accent-ink);
+}
+
+.glass-stage .btn-ghost:hover {
+  background: var(--glass-fill-strong);
+}
+
+.glass-stage .btn-sm {
+  min-height: var(--size-control-ops);
+  padding-inline: var(--space-3);
+  font-size: var(--text-base);
+}
+
+.glass-stage .btn:active {
+  transform: scale(0.98);
+}
+
+.glass-stage .stat-row {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.glass-stage .stat {
+  padding: var(--space-4) var(--space-5);
+  display: grid;
+  gap: var(--space-1);
+  align-content: start;
+}
+
+.glass-stage .stat-label {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.glass-stage .stat-value {
+  font-size: var(--text-stat);
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.glass-stage .meter {
+  display: block;
+  block-size: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--meter-track);
+  overflow: hidden;
+}
+
+.glass-stage .stat .meter {
+  margin-block-start: var(--space-2);
+}
+
+.glass-stage .meter > span {
+  display: block;
+  block-size: 100%;
+  inline-size: var(--p, 0%);
+  border-radius: inherit;
+  background: var(--color-ok);
+}
+
+.glass-stage .toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.glass-stage .segmented {
+  display: inline-flex;
+  padding: var(--space-1);
+  gap: var(--space-1);
+  border-radius: var(--radius-pill);
+}
+
+.glass-stage .segmented a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--size-control-ops);
+  padding-inline: var(--space-4);
+  border-radius: var(--radius-pill);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: var(--text-base);
+  font-weight: 500;
+}
+
+.glass-stage .segmented a:hover {
+  color: var(--color-text);
+}
+
+.glass-stage .segmented a[aria-current="true"] {
+  background: var(--color-surface-card);
+  color: var(--color-text);
+  box-shadow: var(--shadow-button);
+}
+
+.glass-stage .segmented .n {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+.glass-stage .chip {
+  gap: var(--space-1);
+}
+
+.glass-stage .chip.is-ok {
+  background: var(--color-ok-tint);
+  color: var(--color-ok-ink);
+}
+
+.glass-stage .chip.is-accent {
+  background: var(--color-accent-tint);
+  color: var(--color-accent-deep);
+}
+
+.glass-stage .chip.is-neutral {
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.glass-stage .dot {
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: var(--radius-pill);
+  flex: none;
+  background: currentColor;
+}
+
+.glass-stage .dot.is-hollow {
+  background: transparent;
+  border: 1.5px solid currentColor;
+}
+
+.glass-stage .drill-list {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.glass-stage .drill > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.glass-stage .drill > summary::-webkit-details-marker {
+  display: none;
+}
+
+.glass-stage .drill > summary:focus-visible {
+  outline-offset: calc(var(--size-focus) * -1);
+  border-radius: inherit;
+}
+
+.glass-stage .drill::details-content {
+  block-size: 0;
+  overflow: clip;
+  transition:
+    block-size 0.28s ease,
+    content-visibility 0.28s allow-discrete;
+}
+
+.glass-stage .drill[open]::details-content {
+  block-size: auto;
+}
+
+.glass-stage .chev {
+  inline-size: 20px;
+  block-size: 20px;
+  flex: none;
+  color: var(--color-text-muted);
+  rotate: 90deg;
+  transition: rotate 0.2s ease;
+}
+
+:dir(ltr) .glass-stage .chev {
+  rotate: -90deg;
+}
+
+.glass-stage .drill[open] > summary .chev {
+  rotate: 0deg;
+}
+
+.glass-stage .building > summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--radius-5);
+  min-height: var(--size-touch);
+}
+
+.glass-stage .building > summary:hover {
+  background: var(--glass-hover);
+}
+
+.glass-stage .b-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 600;
+}
+
+.glass-stage .b-address {
+  color: var(--color-text-muted);
+  margin: var(--space-1) 0 0;
+}
+
+.glass-stage .b-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-base);
+}
+
+.glass-stage .b-counts b {
+  color: var(--color-text);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.glass-stage .b-occ {
+  display: grid;
+  gap: var(--space-2);
+  inline-size: 11rem;
+  justify-items: stretch;
+}
+
+.glass-stage .b-occ-text {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.glass-stage .b-occ-text b {
+  color: var(--color-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.glass-stage .building-body {
+  display: grid;
+  gap: var(--space-3);
+  padding: 0 var(--space-6) var(--space-6);
+}
+
+.glass-stage .building-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: space-between;
+  align-items: center;
+  padding-block-start: var(--space-2);
+}
+
+.glass-stage .building-actions .group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.glass-stage .kind > summary {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  min-height: var(--size-touch);
+  border-radius: var(--radius-4);
+}
+
+.glass-stage .kind > summary:hover {
+  background: var(--glass-hover);
+}
+
+.glass-stage .kind-icon {
+  inline-size: 32px;
+  block-size: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-2);
+  background: var(--color-accent-tint);
+  color: var(--color-accent-ink);
+}
+
+.glass-stage .kind-icon svg {
+  inline-size: 18px;
+  block-size: 18px;
+}
+
+.glass-stage .kind-name {
+  font-weight: 500;
+}
+
+.glass-stage .kind-name .n {
+  color: var(--color-text-muted);
+  font-weight: 400;
+  margin-inline-start: var(--space-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.glass-stage .kind-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.glass-stage .kind-meta .meter {
+  inline-size: 5rem;
+}
+
+.glass-stage .kind-body {
+  padding: var(--space-1) var(--space-4) var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.glass-stage .tile-grid {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.glass-stage .tile-grid.is-named {
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+}
+
+.glass-stage .tile-grid.is-states {
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  grid-auto-rows: 7.5rem;
+}
+
+.glass-stage .space-tile {
+  display: grid;
+  gap: var(--space-1);
+  min-height: 60px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-3);
+  background: var(--color-surface-card);
+  border: var(--size-hairline) solid var(--color-divider-soft);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.glass-stage a.space-tile:hover {
+  box-shadow: var(--shadow-panel);
+  transform: translateY(-1px);
+}
+
+.glass-stage .space-tile .no {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.glass-stage .space-tile .state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.glass-stage .space-tile.is-occupied .state {
+  color: var(--color-ok-ink);
+}
+
+.glass-stage .space-tile.is-vacant {
+  background: transparent;
+  border: 1.5px dashed var(--color-accent);
+}
+
+.glass-stage .space-tile.is-vacant .state {
+  color: var(--color-accent-ink);
+}
+
+.glass-stage .space-tile .sub {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.glass-stage .tile-grid.is-states > li {
+  display: flex;
+  min-block-size: 0;
+}
+
+.glass-stage .tile-grid.is-states .space-tile {
+  flex: 1;
+  inline-size: 100%;
+  block-size: 100%;
+  min-block-size: 0;
+  align-content: start;
+  overflow: hidden;
+}
+
+.glass-stage .legend {
+  display: flex;
+  gap: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  align-items: center;
+}
+
+.glass-stage .legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.glass-stage .legend .is-ok {
+  color: var(--color-ok-ink);
+}
+
+.glass-stage .legend .is-accent {
+  color: var(--color-accent-ink);
+}
+
+@media (max-width: 839px) {
+  .glass-stage .building > summary {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: var(--space-4);
+  }
+
+  .glass-stage .b-occ {
+    grid-column: 2;
+    inline-size: auto;
+  }
+
+  .glass-stage .building-body {
+    padding: 0 var(--space-3) var(--space-4);
+  }
+
+  .glass-stage .kind-meta .meter {
+    display: none;
+  }
+}

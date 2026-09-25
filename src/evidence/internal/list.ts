@@ -7,6 +7,7 @@ import { SEARCH_LIMIT as ESTATE_SEARCH_LIMIT } from '../../estate/contract.ts';
 import { type ObjectStore, SIGN_READ_TTL_MS } from '../../kernel/objects.ts';
 import type { TenancyDocumentFact } from '../../tenancy/contract.ts';
 import type { FiledVerdict, LinkEntityType } from './documents.ts';
+import { PROTOCOL_CONFIRM_ACTION } from './seed.ts';
 import { parseStorageUri } from './storage-path.ts';
 import type { Queryable } from './types.ts';
 
@@ -63,18 +64,47 @@ const LIST_SQL = `
  * What a letting holds, for the activation gate. #106.
  *
  * Bound to the tenancy, not the unit: a handover protocol is per letting. A document on the
- * unit that was never confirmed onto this letting does not count. Linked is approved, for this
- * reader — the human act that wrote the TENANCY link is the confirmation.
+ * unit that was never confirmed onto this letting does not count. For a lease, the TENANCY link
+ * is the approval. For a handover protocol, #157, the approval is A6's confirm: the link is only
+ * the anchor.
  */
 export async function listTenancyDocumentFacts(
   db: Queryable,
   tenancyId: string,
 ): Promise<TenancyDocumentFact[]> {
   const linked = await listLinkedDocuments(db, 'TENANCY', tenancyId);
+  const protocols = linked.filter((doc) => doc.typeKey === 'handover_protocol');
+  const confirmed = new Map<string, string | null>();
+  if (protocols.length > 0) {
+    const rows = await db.query<{
+      subject_id: string;
+      handover_date: string | null;
+    }>(
+      `SELECT DISTINCT ON (subject_id)
+              subject_id,
+              inputs->>'handoverDate' AS handover_date
+         FROM audit_log
+        WHERE action = $1
+          AND outcome = 'ok'
+          AND subject_id = ANY($2::text[])
+        ORDER BY subject_id, at DESC`,
+      [PROTOCOL_CONFIRM_ACTION, protocols.map((doc) => doc.documentId)],
+    );
+    for (const row of rows.rows) {
+      confirmed.set(row.subject_id, row.handover_date);
+    }
+  }
   return linked.map((doc) => ({
     typeKey: doc.typeKey,
-    approved: true,
+    approved:
+      doc.typeKey === 'handover_protocol'
+        ? confirmed.has(doc.documentId)
+        : true,
     validTo: doc.validTo,
+    handoverDate:
+      doc.typeKey === 'handover_protocol'
+        ? (confirmed.get(doc.documentId) ?? null)
+        : null,
   }));
 }
 

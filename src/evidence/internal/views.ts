@@ -1058,7 +1058,11 @@ function filingDraft(screen: LeaseFilingScreen): Html {
     <ul class="missing">
       <li>
         <span class="chip">${draft.protocolPresent ? h`הוגש` : h`לא הוגש`}</span>
-        פרוטוקול מסירה
+        ${
+          draft.protocolPresent
+            ? h`פרוטוקול מסירה`
+            : h`<a href="/estate/tenancies/${draft.tenancyId}">פרוטוקול מסירה</a>`
+        }
       </li>
     </ul>
     <p class="lede">העלאה לאוויר — במסך החוזה. לא כאן.</p>

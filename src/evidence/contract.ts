@@ -187,6 +187,7 @@ export { SEARCH_PASSAGE_LIMIT, searchPassages } from './internal/search.ts';
 export type { ProtocolProposal, SeedDeps } from './internal/seed.ts';
 export {
   confirmProtocol,
+  PROTOCOL_CONFIRM_ACTION,
   proposeProtocol,
 } from './internal/seed.ts';
 export type { CatalogueReport } from './internal/seed-catalogue.ts';

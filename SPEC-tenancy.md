@@ -222,14 +222,15 @@ own first five years from it.
   copies an extracted value onto a typed column appends
   `(field, old → new, actor, source_document_id, extracted_field_id)` with `kind = 'amended'`.
 `source_document_id` is NOT NULL for that kind (`amended_names_its_document`) and that constraint
-is never dropped. `kind` is `amended | terminated | activated | extended | reassigned`. A clock-driven end is
+is never dropped. `kind` is `amended | terminated | activated | extended | reassigned | ended_early`. A clock-driven end is
 `terminated`; a person making a draft live is `activated`; a person taking the option is
-`extended`; a person moving the household's bay is `reassigned`. `terminated`, `activated` and
+`extended`; a person moving the household's bay is `reassigned`; a person ending a letting before
+its contractual end is `ended_early`. `terminated`, `activated` and
 `reassigned` carry a null `source_document_id` and
 `extracted_field_id` (`terminated_has_no_document` for the clock kind, `activated_has_no_document`
-for the person kind, `reassigned_has_no_document` for the bay). `extended` names a document when there is one and does not when there is
-not — no extra CHECK, because an option exercise is honestly either a signed notice or a phone
-call. UPDATE and DELETE are rejected
+for the person kind, `reassigned_has_no_document` for the bay). `extended` and `ended_early` name a document when there is one and do not when there is
+not — no extra CHECK, because both are honestly either a signed notice or a phone
+call. `terminated_has_no_document` is not relaxed: the clock's kind keeps its shape, and the person's early end is a different kind. UPDATE and DELETE are rejected
   (`restrict_violation`). `at` comes from the injected clock; there is no `DEFAULT now()`. `actor`
   is `-- pii`; a clock end snapshots `system`, not an operator. Register `upsertTenancy` does
   **not** write events — isolation dates from the import stay legal without a document.
@@ -250,11 +251,23 @@ call. UPDATE and DELETE are rejected
   `field = parking_space_id`. `unit.parking_space_id` does not move. A space of another kind, or
   in another building, is `invalid`. The same bay twice is a no-op. `reassignStorageSpace` is the
   ninth, the same shape for `tenancy.storage_space_id` / `STORAGE` / built storage.
+  `endTenancyEarly` is the tenth. It takes an `ACTIVE` letting, an `actual_move_out` on or before
+  the clock's day and inside the contractual term (`start_date` through `end_date`, inclusive), an
+  optional `notice_date` on or before that move-out, the person, and an optional source document.
+  Status becomes `TERMINATED_EARLY`. The contractual `end_date` does not move; `actual_move_out`
+  records the day they left and `notice_date` records the notice when there was one. The event is
+  `ended_early` with `field = status`, `ACTIVE → TERMINATED_EARLY`, and the person as actor. A
+  missing letting is `not_found`. Not `ACTIVE` is `invalid` (`this letting is not active`). A
+  move-out before `start_date` is `invalid` (`the move-out is before the lease starts`). A move-out
+  after `end_date` is `invalid` (`the move-out is after the contractual end`) — past the end, the
+  clock ends it. A move-out after the clock's day is `invalid` (`a future move-out is notice, not
+  an end`). A notice after the move-out is `invalid` (`the notice is after the move-out`). Because
+  `one_active_tenancy_per_unit` is partial on `ACTIVE`, the ended row no longer occupies the unit.
 - **No read model, and from 3.3 exactly one list plus one lookup.** *(Slice 6.5 adds a second list,
   `countIdentifierOverlap`, described at the end of this bullet.)* `contract.ts` exists from 2.4
   and exports the register importer's three write commands — `upsertTermsProfile`, `upsertTenancy` and
   `upsertTenancyParty` — plus `applyPromotedField` from 4.3, `exerciseOption` from #135, and
-  `reassignParkingSpace` from #146, and `reassignStorageSpace` from #148. `listUnitTenancies` joins them at 3.3.
+  `reassignParkingSpace` from #146, `reassignStorageSpace` from #148, and `endTenancyEarly` from #154. `listUnitTenancies` joins them at 3.3.
   Slice 4.6 added `findTermsProfileByName`: A2 must hang a draft on a profile that already exists and
   must not invent `standard`. A missing name is `null`, not an upsert. Slice 4.6b added
   `listTermsProfiles`: names only, ordered, so the confirm screen is a select of what already exists
@@ -269,17 +282,37 @@ call. UPDATE and DELETE are rejected
   no party and no name, and carries neither isolation predicate. Completeness is a query over saved
   rows plus an exception table — never a NOT NULL on `tenancy_party` and never a status column on
   `tenancy`. **#108:** the same query also surfaces every activation-gate miss as a named rule,
-  using the gate's own identifiers (`lease`, `handover_protocol`, `start_reached`, `within_term`)
+  using the gate's own identifiers (`lease`, `handover_protocol`, `start_reached`, `within_term`,
+  `unit_free`)
   and never a second copy of those predicates. The clock and the document reader are injected the
   way the gate already takes them. A tenancy whose every gate check passed is not listed for the
-  gate; the guarantor rule remains its own row. Only misses appear. The exception table still
-  excepts `guarantor` only. Slice 5.6 exports `expireDueTenancies` beside them. Slice 5.7 exports
+  gate; the guarantor rule remains its own row. Only misses appear. **#158** exports
+  `listActivationQueue` beside that query. It walks the same document-backed drafts and classifies
+  each from `activationGate`: `canActivate` is ready to press, oldest start first; a single miss of
+  `start_reached` whose `activatableOn` is on or before today plus `ACTIVATION_QUEUE_DAYS` (14) is
+  arming soon. The date a ready draft has been waiting is the lease start — the date the gate
+  reports as `activatableOn` before that day arrives. The query returns no party and no name. **#156** amends the rule that
+  gate misses are not excepted: `handover_protocol` may be waived for one letting. A recorded
+  waiver makes that check pass, and any row the letting still occupies on this queue carries who
+  recorded it, the office day, and the reason. The query stops listing the protocol miss. `lease`,
+  `start_reached`, `within_term` and `unit_free` stay unexcepted. Slice 5.6 exports `expireDueTenancies` beside them. Slice 5.7 exports
   `upsertObligationType`, `createObligation`, `getObligation` and `listObligationsForTenancy`.
   Slice 5.8 adds `listObligationTypes`. #106 exports `activationGate` and `activateTenancy`.
   `REQUIRED_FOR_ACTIVATION` is `['lease', 'handover_protocol']` — one constant, the only list. The
   gate returns every check with its outcome, passes included: one row per required type (held and
-  approved on the letting, or not), `start_reached`, `within_term`. A fully-approved future
-  letting reports `activatableOn` as the lease start date. `activateTenancy` refuses unless every
+  approved on the letting, or not), `start_reached`, `within_term`, `unit_free`. **#157:** for
+  `handover_protocol`, approved means A6's confirm was signed for that document. The reader reports
+  it from `evidence.confirm_protocol`. A link alone is not approval, including a protocol linked
+  before the signature existed. Those lettings are listed on A4. A lease stays approved by its
+  TENANCY link. `unit_free` passes
+  when no other `ACTIVE` letting on this unit overlaps this letting's inclusive date range — the
+  same range `one_active_tenancy_per_unit` excludes. A miss names that letting by id and dates only,
+  never a party. `unit_free` is not waivable. **#156:** `handover_protocol` is. A row in
+  `tenancy_completeness_exception` for that rule, and no approved protocol on the letting, makes
+  the check pass and carries `waived: { actor, at, reason }` — the person, the clock's instant, and
+  the written reason. An approved protocol still passes on its own and does not report a waiver.
+  A fully-approved future letting reports `activatableOn`
+  as the lease start date only when `unit_free` also passed. `activateTenancy` refuses unless every
   check passed, the row is `DRAFT`, and the actor is a name. Evidence-side facts arrive through an
   injected reader: **this module imports no evidence module**.
   **#107 adds `getTenancy` and `listTenancyParties`.** The sheet is estate's screen; these two
@@ -290,7 +323,11 @@ call. UPDATE and DELETE are rejected
   by the clock or by `activateTenancy`; the register may still write historical `tenancy_party`
   rows onto an `ENDED` row because that is how a past household is loaded. A required document
   whose `valid_to` is strictly before today, on an `ACTIVE` letting, is a flag on the gate and
-  never a status change.
+  never a status change. **#160** adds `EARLY_HANDOVER_DAYS` (30) and a second flag,
+  `handover_outside_term`. The injected reader reports the confirmed handover date from the
+  protocol's approval row. The gate returns that date, and the flag when it falls strictly before
+  the lease start minus those 30 days or strictly after the lease end. It is not a check and it
+  does not move status. A missing date raises nothing.
   **#122 adds `listActiveLettingsInBuilding`.** An office inventory of who is let in a Building
   today, not the front door and not a second isolation join. It takes a Building id and the clock,
   and returns one row per Unit in that Building whose letting is `ACTIVE` and whose dates cover
@@ -314,11 +351,14 @@ call. UPDATE and DELETE are rejected
   is foundation rule 1 expressed as a module boundary. The office roll of who is let in a Building
   today is `#122`'s, and it takes no phone. `listUnitTenancies` answers *which lettings
   does this flat have* — every status, ordered by date — for an administrator choosing which one a
-  lease belongs to. It takes a `unit_id` and never a phone number, it returns dates and a status and
-  **no party and no name**, it carries neither of the isolation join's temporal predicates, and
-  nothing decides what anybody may see from its result. A query here that answered "who is in this
-  unit today" would be the second copy of the join, and guard two exists because that is how the
-  constraint dies.
+  lease belongs to. It takes a `unit_id` and never a phone number, it returns dates, a status and
+  `notice_date`, and **no party and no name**. It carries neither of the isolation join's temporal
+  predicates, and nothing decides what anybody may see from its result. A query here that answered
+  "who is in this unit today" would be the second copy of the join, and guard two exists because
+  that is how the constraint dies.
+  **#159 adds `listLettingsForUnits`.** The same facts, for many units in one query: every status,
+  the dates, `notice_date`, `unit_id`, no party and no name, and no day predicate. Estate derives
+  the four Unit states from this read, from `resolveOccupiedUnits`, and from the clock.
 
   **Slice 6.5 adds `countIdentifierOverlap`, and it is the narrowest read in this module.** A2 has to
   rank a flat's lettings so an operator with a lease in their hand can be shown which one it probably
@@ -336,8 +376,10 @@ call. UPDATE and DELETE are rejected
   an identifier and the caller writes `evidence.match_identifier` for it** (SPEC.md, Security
   defaults); this module writes no audit line, because it does not know who asked.
 - **`tenancy_completeness_exception` (slice 4.8, `src/kernel/migrations/0020_tenancy_completeness.sql`).**
-  `(tenancy_id, rule)` unique. `rule` is `guarantor` today — gate misses are not excepted; they
-  clear when the gate passes. `at` comes from the injected clock; no
+  `(tenancy_id, rule)` unique. `rule` is `guarantor` or `handover_protocol` (#156). Other gate
+  misses are not excepted; they clear when the gate passes. The CHECK refuses `lease`,
+  `start_reached`, `within_term` and `unit_free`, and that refusal is the enforcement. `at` comes
+  from the injected clock; no
   `DEFAULT now()`. `actor` is `-- pii`, same standing as `tenancy_event.actor` until week 5 has
   staff. `reason` is required text, validated at the POST. A second insert of the same pair is a
   no-op. There is no completeness column and no CHECK that a tenancy has a guarantor.

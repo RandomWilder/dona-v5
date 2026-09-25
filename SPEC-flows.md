@@ -88,7 +88,12 @@ The schema already supports this exactly, which was verified rather than assumed
 - `one_active_tenancy_per_unit` is an exclusion constraint **partial on `status = 'ACTIVE'`**, so a
   `DRAFT` overlapping a live tenancy is permitted, and the constraint bites at precisely the right
   moment — promoting `DRAFT → ACTIVE` while the outgoing tenancy is still `ACTIVE` is rejected by the
-  database.
+  database. A person clears that block with `endTenancyEarly` (#154): the outgoing row becomes
+  `TERMINATED_EARLY`, its contractual `end_date` stays, and `actual_move_out` records the day they
+  left. The move-out is today or earlier — a future day is notice, not an end, and is not recorded
+  here. The event kind is `ended_early`, not the clock's `terminated`, so a signed notice can be
+  cited and a phone call can be recorded without one. Once the outgoing row is no longer `ACTIVE`,
+  the incoming draft can activate.
 - `src/scope/internal/isolation-join.ts` resolves the tenancy **active on a supplied date**
   (`status = 'ACTIVE' AND start_date <= $2 AND end_date >= $2`, the date passed as a parameter and
   never `CURRENT_DATE`). A departing tenant and an incoming one therefore cannot both answer for one
@@ -271,11 +276,21 @@ gate. What is missing is the rule id; the Hebrew on the screen is the same wordi
 page already uses for that id. Extra predicates are not a column on `tenancy`.
 **Exception:** a row in `tenancy_completeness_exception`, keyed `(tenancy_id, rule)`. Recording it
 clears the queue the way an addendum that writes a `GUARANTOR` does. A second record of the same
-pair is a no-op. It is not `tenancy.complete`.
+pair is a no-op. It is not `tenancy.complete`. **#156** widens `rule` to `guarantor` or
+`handover_protocol`. A waiver of the protocol clears that miss from this query. While the letting
+stays on the queue for another miss, that row shows the waiver — the reason, who recorded it, and
+the office day — as the protocol's resolution. `lease`, `start_reached`, `within_term` and
+`unit_free` are refused by the table's CHECK.
 **Screen:** `GET /estate/incomplete` — each row shows what is missing and the TENANCY-linked
 document it was expected in (a `lease` type wins when both a lease and an addendum are linked).
 No party names — a rule 5.2 kept rather than lifted when it put the screen behind a session, and 5.4
-kept again.
+kept again. **#158** puts two glass blocks above those rows, both read from `activationGate` and
+from no second copy of its checks. **מוכנות להפעלה** lists every document-backed `DRAFT` whose gate
+returns `canActivate`, oldest start first, each linking to its tenancy page. The chip reads מוכנה
+היום when the lease start is the office day, and מוכנה מאז that start when the day has passed
+unpressed — a missed press stays on the block. **נדלקות בקרוב** lists a draft whose only failing
+check is `start_reached` and whose `activatableOn` falls within `ACTIVATION_QUEUE_DAYS` (14). The
+chip names that date. Neither block carries a party name.
 **Resolution:** the administrator uploads the addendum (A3), or records the exception. The exception
 row's `actor` is the signed-in operator (slice 5.4), not a typed name and not the word `console`.
 **Module:** tenancy owns the query and the exception write (`listIncompleteTenancies`,
@@ -299,20 +314,67 @@ stated constant, and adding a third is a one-line change:
 REQUIRED_FOR_ACTIVATION = ['lease', 'handover_protocol']
 ```
 
-A tenancy becomes `ACTIVE` only when a person invokes the command and all four facts hold: an
-approved lease on the letting; an approved handover protocol on the letting; today is not before the
-lease's start date; today is not after its end date. The lease is the only document that defines
-those dates (`tenancy.start_date` / `tenancy.end_date`). Each refusal names its own reason. A
-handover protocol is **per letting**: it records that the tenant accepted the flat after inspecting
-it, and it is bound with `entity_type = 'TENANCY'`.
+A tenancy becomes `ACTIVE` only when a person invokes the command and all five facts hold: an
+approved lease on the letting; an approved handover protocol on the letting, or a recorded waiver
+of that protocol (#156); today is not before the
+lease's start date; today is not after its end date; and no other `ACTIVE` letting on this unit has
+a date range that overlaps this draft (`unit_free`). The overlap is the same inclusive range as
+`one_active_tenancy_per_unit`. The lease is the only document that defines those dates
+(`tenancy.start_date` / `tenancy.end_date`). Each refusal names its own reason. A handover protocol
+is **per letting**: it records that the tenant accepted the flat after inspecting it, and it is
+bound with `entity_type = 'TENANCY'`. **#156:** that protocol may be waived for one letting, by
+a named person, with a written reason. The gate then reports the check as passed and carries who,
+when, and why. **#157:** approval of that protocol is A6's confirm, not the link. The reader
+injected into the gate reports `approved` from an `audit_log` row — action
+`evidence.confirm_protocol`, outcome `ok`, subject the document. A TENANCY link without that row
+does not pass. Protocols already linked when this rule landed are not grandfathered: a protocol
+nobody confirmed is the gap, and the letting is listed on A4 under `handover_protocol` until
+someone confirms it. Confirming again is A6's existing no-op on the assets, and it writes the
+signature. A lease is unchanged: its TENANCY link is still its approval. `lease`, `start_reached`,
+`within_term` and `unit_free` are not waivable. **#160.** The reader also reports the handover
+date A6 confirmed, the `handoverDate` on that same `evidence.confirm_protocol` row. The gate
+returns the date. When it falls strictly before `start_date` minus `EARLY_HANDOVER_DAYS` (30), or
+strictly after `end_date`, the gate returns a flag `handover_outside_term`. A date exactly thirty
+days before the start, or on the end date, is ordinary and raises nothing. The flag has the same
+standing as a lapsed document: it is not a check, it does not darken the button, and it does not
+move `tenancy.status`. A waiver, or a confirm that recorded no date, raises nothing. When
+`unit_free` fails, the gate names
+the blocking letting by id and dates only — never a party.
 
 **Screen:** `GET /estate/tenancies/:tenancyId` — one letting, reached by its identifier. Title
-(tenant name plus address and apartment number), status, the lease's dates, the documents it holds,
-what is missing, every gate check with its outcome, and the activate button. The page prints the
+(tenant name plus address and apartment number), status, the lease's dates, the confirmed
+handover date beside them, the documents it holds,
+what is missing, every gate check with its outcome, and the activate button. The household name and
+the status chip share one line, the way a building title does on נכסים, and the lease dates sit
+under them. The confirmed handover date is printed on that same line. When the gate returns
+`handover_outside_term`, one alert-coloured line sits under those dates. It names the date and
+which edge it crossed, and it says the flag does not block. It is not a row in מה נבדק. The page prints the
 gate's returned facts and re-derives none of the rules. The button is dark until `canActivate`; a
 dark button names every requirement the gate checked. When the only miss is the start date, the
-page states `activatableOn`. `POST /estate/tenancies/:tenancyId/activate` is the person command
-(`tenancy.write`); the clock never posts it.
+page states `activatableOn`. `unit_free` is one more row in מה נבדק, the same shape as the other
+checks. A pass uses the occupied chip. A miss uses the alert chip and names the outgoing letting by
+its dates, with a link to that letting and — when the reader holds `tenancy.write` — a link to its
+end-early form. A missing protocol, for a reader who holds `tenancy.write`, carries the reason
+field and רשום ויתור on that same check row — the small secondary pill. After a waiver the chip
+reads ויתור (neutral, hollow dot) and the line under it is the reason, who recorded it, and the
+date. `POST /estate/tenancies/:tenancyId/waiver` records that row (`tenancy.write`); the actor is
+the signed-in operator and the instant is the clock's. **#157:** a `DRAFT` whose protocol check has
+not passed, for a reader who holds `documents.write`, carries the file well on that same check row.
+The button is הגשת פרוטוקול מסירה, the small glass button. There is no type menu and no letting
+menu. `POST /documents/tenancies/:tenancyId/protocol` locks the type to `handover_protocol`, writes
+the TENANCY anchor from the URL, and calls A1's `fileDocument`. A verified file redirects to A6's
+confirm. This page does not confirm the handover date. A protocol already on the letting and not
+yet signed links to that same confirm. A file the guard refuses is not stored, and the page says
+so. The activate button stays the primary pill and stays dark while any check fails,
+with the unmet requirements in muted type beside it. `POST /estate/tenancies/:tenancyId/activate`
+is the person command (`tenancy.write`); the clock never posts it.
+
+**An `ACTIVE` letting on that same page can be ended early (#154).** The form sits in a glass card:
+move-out and notice as a pair of dates, the notice letter as a file field, and the primary button
+סיום ההשכרה. Under the form, in muted type, a future move-out is notice, not an end.
+`POST /estate/tenancies/:tenancyId/end` is that person command, also `tenancy.write`. A file is
+filed as `termination_notice` on the letting and cited on the event; no file is a phone call, and
+the event still names the person.
 
 **The same GET is the tenancy card (#134).** Rent, its currency and the option end come from
 `tenancy`'s columns, because those copies exist. Everything else the lease said is an **approved**
@@ -324,8 +386,9 @@ masked. A tenant route, when it exists, needs a stance (#125).
 
 **Writes:** `DRAFT → ACTIVE`, and a `TenancyEvent` of kind `activated` naming who and when. No
 document on that event — the paper is already on the letting; the event records the human act.
-**Enforcement:** the gate first, then `one_active_tenancy_per_unit`. Promoting a draft that still
-overlaps a live tenancy is rejected by the database.
+**Enforcement:** the gate first, then `one_active_tenancy_per_unit`. The constraint is unchanged and
+remains the enforcement. `unit_free` is what makes that refusal legible before the press. Promoting
+a draft that still overlaps a live tenancy is rejected by the database.
 **Effect on the agent:** the incoming household resolves through the isolation join from that day
 and not before.
 
@@ -387,6 +450,9 @@ function `npm run seed:doctypes` calls, which is A8's open half used for real.
    no-op on the assets and a re-statement of the dates.
 5. תקופת הבדק is two calendar years from the confirmed handover date, matching the fixture the
    screens have shown since 1.11.
+6. **#157.** The confirm writes `evidence.confirm_protocol` for the document, naming the signed-in
+   operator. That row is what the activation gate treats as approval of a `handover_protocol`.
+   The confirm screen is unchanged.
 
 **Module:** evidence owns the reader and the confirm screen; estate owns the writes, because Asset
 is estate's table and a document module that updated `building.handover_date` would be writing
@@ -801,8 +867,10 @@ stay on A1 / A12 / **מסמכים**.
    to pair them. **A money pair missing its currency is marked here and approvable anyway**: this
    step attests what the page says, and the refusal belongs at promotion.
 4. **הטיוטה.** Named arrival in this tab: title, people, dates, and whether **פרוטוקול מסירה** is
-   missing or present. Facts only. No activate (A5 stays on the Tenancy screen). No protocol attach
-   (A6 stays). Copy: going live is a later act on the Tenancy.
+   missing or present. Present means the gate's approval — A6's confirm signed for that document —
+   not a bare link. Facts only. No activate (A5 stays on the Tenancy screen). No protocol attach.
+   When the protocol is missing, that line links to the tenancy page, which is where it is filed
+   (#157). Copy: going live is a later act on the Tenancy.
 5. **די היום.** File another (empty state of this tab) · open the Tenancy · open the Unit. Those
    last two are **links out**, by choice.
 
@@ -811,7 +879,8 @@ a link to the existing Tenancy. Duplicate bytes: news in this tab, link to the e
 a silent merge. Overlapping `ACTIVE` + `DRAFT` on one Unit remains ordinary.
 
 **What A16 does not do.** It does not classify. It does not hold bytes. It does not raise the file
-or OCR ceilings. It does not file a handover protocol or activate a Tenancy. It does not list
+or OCR ceilings. It does not file a handover protocol or activate a Tenancy. Its הטיוטה beat
+links to the tenancy page's upload and does not become that upload. It does not list
 unfinished filings. It does not change A12's auto-file-on-exact-one (that door still files the
 moment the address is unique). It does not retitle A15.
 
@@ -835,11 +904,18 @@ accepted.
 **Screen:** the ops-rail item **נכסים**. Portfolio list of every Building (imported ones included,
 with whatever Spaces they already have). Create uses A11's identity fields plus four counts (Units
 ≥ 1; parking, storage, elevators may be 0) and a first number for each counted kind except
-elevators. The building page lists every Space grouped by kind, with headline counts and a vacancy chip on
-each Unit, parking Space, and storage Space. Elevators and later shared Spaces have no chip. A
-vacant Unit is no letting that counts today; a vacant bay or storage room is no assigned place on
-such a letting. A built-bay or built-storage link does not occupy the Space. Rent and lease-end
-are not on this list.
+elevators. The building drill lists every Space grouped by kind, with headline counts. Each Unit is
+a tile in one of four derived states — פנויה, חוזה בטיוטה, מושכרת, בסיום — stored nowhere (#159).
+פנויה and חוזה בטיוטה are the dashed vacant tile; מושכרת and בסיום are the occupied tile. Tiles in
+that grid share one width and one height, and a second line (a waiting draft, or the ending date
+when that end is inside the sixty-day window) stays
+inside that height. A notice on a letting that ends later than the window is בסיום with no ending
+date on the line. A let Unit with a waiting draft stays מושכרת or בסיום and names the draft on
+that line. Headlines count a Unit vacant when no letting counts today, so a waiting draft is vacant.
+The Unit page uses the same four words. Parking and storage stay a vacancy chip: occupied or vacant,
+and a vacant bay or storage room is no assigned place on a letting that counts today. A built-bay or
+built-storage link does not occupy the Space. Elevators and later shared Spaces have no chip. The
+rows on a building's detail page keep the binary chip. Rent and lease-end are not on this list.
 
 **Writes:** one Building and the minted Spaces (and a Unit row per UNIT Space) through
 `importEstate`. Names are the bare integer sequence. Elevators are TECHNICAL Spaces `1`…`N`. No
@@ -861,7 +937,7 @@ Not a document promotion and not `estate_event`.
 item. בניינים routes and views are not edited.
 
 **Work items:** #149 (tab, create, mint, grouped list), #150 (derived vacancy), #151 (add, remove,
-shared Spaces).
+shared Spaces), #159 (four derived Unit states on the tiles and the Unit page).
 
 ## Open
 

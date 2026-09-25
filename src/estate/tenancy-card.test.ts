@@ -5,8 +5,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { h } from '../kernel/ui/html.ts';
-import type { FiledDocumentView, TenancySheet, UnitHit } from './contract.ts';
-import { renderTenancyDetailPage } from './contract.ts';
+import type {
+  FiledDocumentView,
+  IncompleteTenancyRow,
+  TenancySheet,
+  UnitHit,
+} from './contract.ts';
+import { renderIncompletePage, renderTenancyDetailPage } from './contract.ts';
 
 const unit: UnitHit = {
   unit_id: '44444444-4444-4444-8444-444444444444',
@@ -62,7 +67,11 @@ function sheet(over: Partial<TenancySheet> = {}): TenancySheet {
     ],
     checks: [],
     canActivate: false,
+    mayEndEarly: false,
+    mayWaive: false,
+    mayFileProtocol: false,
     activatableOn: null,
+    handoverDate: null,
     flags: [],
     csrf: 'csrf',
     nav: h``,
@@ -135,5 +144,341 @@ describe('estate · the tenancy card', () => {
       /action="\/estate\/tenancies\/55555555-5555-4555-8555-555555555555\/storage"/,
     );
     assert.match(html, /העברת מחסן/);
+  });
+
+  it('keeps activation dark and links the letting that blocks it', () => {
+    const blockingId = '99999999-9999-4999-8999-999999999999';
+    const checks = [
+      { rule: 'lease', passed: true },
+      { rule: 'handover_protocol', passed: true },
+      { rule: 'start_reached', passed: true },
+      { rule: 'within_term', passed: true },
+      {
+        rule: 'unit_free',
+        passed: false,
+        blocking: {
+          tenancyId: blockingId,
+          startDate: '2025-11-01',
+          endDate: '2026-10-31',
+        },
+      },
+    ];
+    const writer = renderTenancyDetailPage(
+      sheet({ checks, canActivate: false, mayEndEarly: true }),
+    );
+    assert.match(
+      writer,
+      /<button class="btn btn-primary" type="button" disabled>הפעלת ההשכרה<\/button>/,
+    );
+    assert.match(writer, /chip is-miss/);
+    assert.match(writer, /הדירה פנויה בתקופה/);
+    assert.match(writer, /2025-11-01 — 2026-10-31/);
+    assert.match(writer, new RegExp(`href="/estate/tenancies/${blockingId}"`));
+    assert.match(writer, /פתיחה/);
+    assert.match(
+      writer,
+      new RegExp(`href="/estate/tenancies/${blockingId}#end"`),
+    );
+    assert.match(writer, /סיום מוקדם/);
+    assert.match(writer, /דרישות שטרם התקיימו: הדירה פנויה בתקופה/);
+    assert.doesNotMatch(writer, /Tenant of/);
+
+    const reader = renderTenancyDetailPage(
+      sheet({ checks, canActivate: false, mayEndEarly: false }),
+    );
+    assert.match(reader, /פתיחה/);
+    assert.doesNotMatch(reader, /סיום מוקדם/);
+    assert.doesNotMatch(reader, /#end/);
+
+    const clear = renderTenancyDetailPage(
+      sheet({
+        checks: [{ rule: 'unit_free', passed: true }],
+        canActivate: true,
+        mayEndEarly: true,
+      }),
+    );
+    assert.match(clear, /chip is-ok/);
+    assert.match(clear, /הדירה פנויה בתקופה/);
+    assert.doesNotMatch(clear, /פתיחה/);
+    assert.doesNotMatch(clear, /disabled/);
+  });
+
+  it('shows a protocol waiver, and the reason field while the protocol is missing', () => {
+    const reason = 'אותו שוכר, חוזה חדש על אותה דירה';
+    const waived = renderTenancyDetailPage(
+      sheet({
+        mayWaive: true,
+        checks: [
+          {
+            rule: 'handover_protocol',
+            passed: true,
+            waived: {
+              actor: 'ops@tenancy-page.test',
+              at: '2026-09-24',
+              reason,
+            },
+          },
+        ],
+      }),
+    );
+    assert.match(waived, /chip is-neutral/);
+    assert.match(waived, /dot is-hollow/);
+    assert.match(waived, /ויתור/);
+    assert.match(waived, new RegExp(reason));
+    assert.match(waived, /ops@tenancy-page.test/);
+    assert.match(waived, /2026-09-24/);
+    assert.match(waived, /רשם:/);
+    assert.doesNotMatch(waived, /רשום ויתור/);
+
+    const missing = renderTenancyDetailPage(
+      sheet({
+        mayWaive: true,
+        checks: [{ rule: 'handover_protocol', passed: false }],
+      }),
+    );
+    assert.match(missing, /רשום ויתור/);
+    assert.match(missing, /btn btn-secondary btn-sm/);
+    assert.match(missing, /סיבת הוויתור/);
+    assert.match(
+      missing,
+      /action="\/estate\/tenancies\/55555555-5555-4555-8555-555555555555\/waiver"/,
+    );
+
+    const reader = renderTenancyDetailPage(
+      sheet({
+        mayWaive: false,
+        checks: [{ rule: 'handover_protocol', passed: false }],
+      }),
+    );
+    assert.doesNotMatch(reader, /רשום ויתור/);
+  });
+
+  it('offers the protocol upload on a draft, and the confirm once a file is held', () => {
+    const open = renderTenancyDetailPage(
+      sheet({
+        mayFileProtocol: true,
+        checks: [{ rule: 'handover_protocol', passed: false }],
+      }),
+    );
+    assert.match(open, /class="file-well"/);
+    assert.match(open, /הגשת פרוטוקול מסירה/);
+    assert.match(open, /btn btn-glass btn-sm/);
+    assert.match(open, /aria-label="פרוטוקול מסירה"/);
+    assert.match(
+      open,
+      /action="\/documents\/tenancies\/55555555-5555-4555-8555-555555555555\/protocol"/,
+    );
+    assert.doesNotMatch(open, /name="type"/);
+    assert.doesNotMatch(open, /name="tenancy"/);
+
+    const held = renderTenancyDetailPage(
+      sheet({
+        mayFileProtocol: true,
+        documents: [
+          {
+            documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            typeKey: 'handover_protocol',
+            labelHe: 'פרוטוקול מסירה',
+            ingestedAt: '2026-09-01',
+            validFrom: null,
+            validTo: null,
+            storageUri: 'gs://x/a',
+            verificationVerdict: 'verified',
+          },
+        ],
+        checks: [{ rule: 'handover_protocol', passed: false }],
+      }),
+    );
+    assert.match(held, /הוגש, תאריך המסירה טרם אושר/);
+    assert.match(
+      held,
+      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/seed"/,
+    );
+    assert.match(held, /טרם אושר/);
+    assert.doesNotMatch(held, /לא הוגש פרוטוקול מסירה/);
+
+    const scan = renderTenancyDetailPage(
+      sheet({
+        mayFileProtocol: true,
+        documents: [
+          {
+            documentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            typeKey: 'handover_protocol',
+            labelHe: 'פרוטוקול מסירה',
+            ingestedAt: '2026-09-01',
+            validFrom: null,
+            validTo: null,
+            storageUri: 'gs://x/a',
+            verificationVerdict: 'unverified',
+          },
+        ],
+        checks: [{ rule: 'handover_protocol', passed: false }],
+      }),
+    );
+    assert.match(scan, /אין בו טקסט לאישור תאריך המסירה/);
+    assert.doesNotMatch(scan, /\/seed/);
+
+    const quiet = renderTenancyDetailPage(
+      sheet({
+        mayFileProtocol: false,
+        checks: [{ rule: 'handover_protocol', passed: false }],
+      }),
+    );
+    assert.doesNotMatch(quiet, /הגשת פרוטוקול מסירה/);
+    assert.doesNotMatch(quiet, /class="file-well"/);
+  });
+
+  it('prints the handover date beside the lease dates, and a flag under them that does not darken the button', () => {
+    const inside = renderTenancyDetailPage(
+      sheet({
+        handoverDate: '2026-08-16',
+        canActivate: true,
+        checks: [{ rule: 'lease', passed: true }],
+      }),
+    );
+    const address =
+      inside.match(/class="b-address">([\s\S]*?)<\/p>/)?.[1] ?? '';
+    assert.match(address, /2026-09-01/);
+    assert.match(address, /2027-08-31/);
+    assert.match(address, /מסירה/);
+    assert.match(address, /2026-08-16/);
+    assert.doesNotMatch(inside, /class="flag"/);
+    assert.match(inside, /type="submit"/);
+    assert.doesNotMatch(inside, /disabled/);
+
+    const early = renderTenancyDetailPage(
+      sheet({
+        handoverDate: '2026-07-01',
+        canActivate: true,
+        checks: [{ rule: 'lease', passed: true }],
+        flags: [
+          {
+            rule: 'handover_outside_term',
+            handoverDate: '2026-07-01',
+            edge: 'early',
+          },
+        ],
+      }),
+    );
+    assert.match(early, /class="flag"/);
+    assert.match(early, /2026-07-01/);
+    assert.match(early, /קודם ביותר מ־30 יום לתחילת החוזה/);
+    assert.match(early, /אינו חוסם/);
+    assert.match(early, /type="submit"/);
+    assert.doesNotMatch(early, /disabled/);
+    const gate = early.split('מה נבדק')[1] ?? '';
+    assert.doesNotMatch(gate, /class="flag"/);
+    assert.doesNotMatch(gate, /אינו חוסם/);
+
+    const late = renderTenancyDetailPage(
+      sheet({
+        handoverDate: '2027-09-01',
+        flags: [
+          {
+            rule: 'handover_outside_term',
+            handoverDate: '2027-09-01',
+            edge: 'late',
+          },
+        ],
+      }),
+    );
+    assert.match(late, /אחרי סיום החוזה/);
+  });
+});
+
+describe('estate · the incomplete queue shows a protocol waiver', () => {
+  it('prints the waiver on the row that remains', () => {
+    const row: IncompleteTenancyRow = {
+      tenancy_id: '55555555-5555-4555-8555-555555555555',
+      unit_id: unit.unit_id,
+      unit_number: unit.unit_number,
+      building_id: unit.building_id,
+      building_name: unit.building_name,
+      city: unit.city,
+      start_date: '2026-10-01',
+      end_date: '2027-09-30',
+      status: 'DRAFT',
+      missing: 'start_reached',
+      expected_document_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      expected_document_label: 'חוזה שכירות',
+      protocolWaiver: {
+        actor: 'ops@tenancy-page.test',
+        at: '2026-09-24',
+        reason: 'אותו שוכר, חוזה חדש על אותה דירה',
+      },
+    };
+    const html = renderIncompletePage(
+      [row],
+      { ready: [], soon: [], withinDays: 14 },
+      'csrf',
+      h``,
+    );
+    assert.match(html, /chip is-neutral/);
+    assert.match(html, /dot is-hollow/);
+    assert.match(html, /ויתור/);
+    assert.match(html, /אותו שוכר, חוזה חדש על אותה דירה/);
+    assert.match(html, /ops@tenancy-page.test/);
+    assert.match(html, /2026-09-24/);
+    assert.match(html, /רשם:/);
+  });
+
+  it('prints a ready draft and an arming draft from the queue it is handed', () => {
+    const html = renderIncompletePage(
+      [],
+      {
+        ready: [
+          {
+            tenancy_id: '55555555-5555-4555-8555-555555555555',
+            unit_number: '12',
+            address_line: 'הרצל 14',
+            city: 'רמת גן',
+            start_date: '2026-09-15',
+            end_date: '2027-09-14',
+            ready_since: '2026-09-15',
+            missed: true,
+          },
+          {
+            tenancy_id: '66666666-6666-4666-8666-666666666666',
+            unit_number: '3',
+            address_line: 'ביאליק 8',
+            city: 'גבעתיים',
+            start_date: '2026-09-24',
+            end_date: '2027-09-23',
+            ready_since: '2026-09-24',
+            missed: false,
+          },
+        ],
+        soon: [
+          {
+            tenancy_id: '77777777-7777-4777-8777-777777777777',
+            unit_number: '7',
+            address_line: 'הרצל 14',
+            city: 'רמת גן',
+            start_date: '2026-10-01',
+            end_date: '2027-09-30',
+            activatable_on: '2026-10-01',
+          },
+        ],
+        withinDays: 21,
+      },
+      'csrf',
+      h``,
+    );
+    assert.match(html, /מוכנות להפעלה/);
+    assert.match(html, /chip is-accent/);
+    assert.match(html, /מוכנה מאז/);
+    assert.match(html, /chip is-ok/);
+    assert.match(html, /מוכנה היום/);
+    assert.match(html, /נדלקות בקרוב/);
+    assert.match(html, />21</);
+    assert.doesNotMatch(html, /נדלקות בקרוב \(14/);
+    assert.match(html, /chip is-neutral/);
+    assert.match(html, /dot is-hollow/);
+    assert.match(html, /נדלקת ב־/);
+    assert.match(
+      html,
+      /href="\/estate\/tenancies\/77777777-7777-4777-8777-777777777777"/,
+    );
+    assert.doesNotMatch(html, /שוכר/);
   });
 });

@@ -15,12 +15,17 @@
 // Lists and chips still get a state and a count. #107 hands names to one letting's sheet.
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
+import {
+  type ActivationFlag,
+  EARLY_HANDOVER_DAYS,
+} from '../../tenancy/contract.ts';
 import type { BuildingStatus, ConditionStatus } from './plan.ts';
 import type {
   BuildingDetail,
   BuildingSummary,
   ExpiringLease,
   InventorySpaceRow,
+  PortfolioSpaceRow,
   ProjectOption,
   SearchResults,
   UnassignedSpaceRow,
@@ -28,6 +33,11 @@ import type {
   UnitRow,
 } from './read-model.ts';
 import { SEARCH_LIMIT } from './read-model.ts';
+import {
+  UNIT_WORDS,
+  type UnitTileState,
+  type UnitWord,
+} from './unit-occupancy.ts';
 
 /**
  * Which units are let today, and by how many residents. `src/scope/` is the only thing that can
@@ -228,6 +238,22 @@ const styles = h`<style>
     align-items: center;
   }
   .queue-card input { min-height: var(--size-control-ops); flex: 1; min-width: 12rem; }
+  .queue-card .chip.is-neutral {
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    gap: var(--space-1);
+  }
+  .queue-card .dot {
+    inline-size: 8px;
+    block-size: 8px;
+    border-radius: var(--radius-pill);
+    flex: none;
+    background: currentColor;
+  }
+  .queue-card .dot.is-hollow {
+    background: transparent;
+    border: 1.5px solid currentColor;
+  }
   .change-log {
     display: grid;
     gap: var(--space-2);
@@ -457,8 +483,15 @@ const styles = h`<style>
       background: var(--color-surface);
     }
   }
-  .tenancy-head { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: baseline; }
-  .status.is-active { background: color-mix(in srgb, var(--color-ok) 14%, var(--color-surface-card)); color: var(--color-ok); }
+  .glass-stage .tenancy-sheet {
+    display: grid;
+    gap: var(--space-4);
+    padding: var(--space-5) var(--space-6);
+    margin-block-end: var(--space-5);
+  }
+  .glass-stage .who { display: grid; gap: var(--space-1); }
+  .glass-stage .flag { margin: 0; color: var(--color-alert); font-size: var(--text-sm); }
+  .tenancy-sheet h2 { font-size: var(--text-lg); font-weight: 600; margin: 0; }
   .term-found { color: var(--color-ok); }
   .term-missing { color: var(--color-alert); }
   .term-state { font-weight: 600; }
@@ -467,6 +500,18 @@ const styles = h`<style>
   .gate li { display: flex; gap: var(--space-3); align-items: baseline; flex-wrap: wrap; min-width: 0; }
   .gate .outcome { min-inline-size: 6rem; }
   .gate .why { color: var(--color-text-muted); font-size: var(--text-sm); }
+  .gate form {
+    flex-basis: 100%;
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .gate form input { min-height: var(--size-control-ops); flex: 1; min-width: 12rem; }
+  .glass-stage .chip.is-miss {
+    background: color-mix(in srgb, var(--color-alert) 12%, var(--color-surface-card));
+    color: var(--color-alert);
+  }
   .activate {
     display: flex;
     flex-wrap: wrap;
@@ -484,6 +529,25 @@ const styles = h`<style>
   .carried dt { color: var(--color-text-muted); font-size: var(--text-sm); min-inline-size: 9rem; margin: 0; }
   .carried dd { margin: 0; min-width: 0; }
   .carried .role { color: var(--color-text-muted); font-size: var(--text-xs); }
+  .glass-stage .sheet {
+    padding: var(--space-5) var(--space-6);
+    display: grid;
+    gap: var(--space-4);
+  }
+  .glass-stage .block-title { margin: 0; font-size: var(--text-lg); font-weight: 600; }
+  .glass-stage .q-list { display: grid; gap: var(--space-2); }
+  .glass-stage .q-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-4) var(--space-5);
+    color: inherit;
+    text-decoration: none;
+  }
+  .glass-stage a.q-row:hover { background: var(--glass-hover); }
+  .glass-stage .q-row .lede { margin: var(--space-1) 0 0; }
 </style>`;
 
 function page(title: string, body: Html, nav: Html): string {
@@ -590,44 +654,280 @@ export function renderBuildingsPage(
   return page('דונה דום — בניינים', body, nav);
 }
 
-export function renderInventoryPage(
-  buildings: BuildingSummary[],
-  nav: Html,
-  mayWrite = false,
-): string {
+const CHEV = h`<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
+const PLUS = h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>`;
+const TO_BUILDING = h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="m11 18-6-6 6-6"/></svg>`;
+
+const KIND_ICON: Record<string, Html> = {
+  UNIT: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg>`,
+  PARKING: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>`,
+  STORAGE: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5"/><path d="M12 13v8"/></svg>`,
+  TECHNICAL: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="m9 8 3-3 3 3"/><path d="m9 16 3 3 3-3"/></svg>`,
+  COMMON: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+  EXTERIOR: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-7"/><path d="M7 15h10l-5-12z"/></svg>`,
+};
+
+const TILE_WORD: Record<string, { on: string; off: string }> = {
+  PARKING: { on: 'תפוסה', off: 'פנויה' },
+  STORAGE: { on: 'תפוס', off: 'פנוי' },
+};
+
+const VACANT_TILE: UnitTileState = {
+  word: UNIT_WORDS.vacant,
+  vacant: true,
+  waitingStart: null,
+  endingOn: null,
+};
+
+function unitSub(state: UnitTileState): Html {
+  if (state.vacant && state.waitingStart) {
+    return h`<span class="sub">טיוטה מ־${ltr(state.waitingStart)} · ממתינה להפעלה</span>`;
+  }
+  if (state.endingOn && state.waitingStart) {
+    return h`<span class="sub">מסתיים ${ltr(state.endingOn)} · טיוטה נכנסת מ־${ltr(state.waitingStart)}</span>`;
+  }
+  if (state.endingOn) {
+    return h`<span class="sub">מסתיים ${ltr(state.endingOn)}</span>`;
+  }
+  if (state.waitingStart) {
+    return h`<span class="sub">טיוטה נכנסת מ־${ltr(state.waitingStart)}</span>`;
+  }
+  return h``;
+}
+
+const VACANT_PLURAL: Record<string, string> = {
+  UNIT: 'פנויות',
+  PARKING: 'פנויות',
+  STORAGE: 'פנויים',
+};
+
+const SUMMARY_KINDS = [
+  ['UNIT', 'דירות'],
+  ['PARKING', 'חניות'],
+  ['STORAGE', 'מחסנים'],
+] as const;
+
+const LIST_FILTERS: ReadonlyArray<readonly [BuildingStatus | null, string]> = [
+  [null, 'הכול'],
+  ['ACTIVE', 'פעיל'],
+  ['IN_CONSTRUCTION', 'בבנייה'],
+  ['EXITED', 'הסתיים'],
+];
+
+function shareOf(part: number, whole: number): number {
+  if (whole === 0) return 0;
+  return Math.round((part / whole) * 100);
+}
+
+function meter(part: number, whole: number, caption: string): Html {
+  return h`<span class="meter" role="img" aria-label="${caption}"><span style="--p:${shareOf(part, whole)}%"></span></span>`;
+}
+
+function statusChipClass(status: string): string {
+  if (status === 'ACTIVE') return 'chip is-ok';
+  if (status === 'IN_CONSTRUCTION') return 'chip is-accent';
+  return 'chip is-neutral';
+}
+
+function tileName(name: string): Html {
+  return /^\d+$/.test(name) ? ltr(name) : h`${name}`;
+}
+
+export function renderInventoryPage(screen: {
+  buildings: readonly BuildingSummary[];
+  spaces: readonly PortfolioSpaceRow[];
+  occupancy: OccupancyByUnit;
+  occupiedParking: ReadonlySet<string>;
+  occupiedStorage: ReadonlySet<string>;
+  states: ReadonlyMap<string, UnitTileState>;
+  nav: Html;
+  mayWrite?: boolean;
+  status?: BuildingStatus | null;
+}): string {
+  const current = screen.status ?? null;
+  const shown =
+    current === null
+      ? screen.buildings
+      : screen.buildings.filter((building) => building.status === current);
+  const shownIds = new Set(shown.map((building) => building.building_id));
+  const spacesOf = (buildingId: string) =>
+    screen.spaces.filter((space) => space.building_id === buildingId);
+  const isOccupied = (space: InventorySpaceRow): boolean => {
+    if (space.space_kind === 'UNIT')
+      return screen.occupancy.has(space.space_id);
+    if (space.space_kind === 'PARKING') {
+      return screen.occupiedParking.has(space.space_id);
+    }
+    if (space.space_kind === 'STORAGE') {
+      return screen.occupiedStorage.has(space.space_id);
+    }
+    return false;
+  };
+  const unitsOnScreen = screen.spaces.filter(
+    (space) => shownIds.has(space.building_id) && space.space_kind === 'UNIT',
+  );
+  const occupiedOnScreen = unitsOnScreen.filter((space) =>
+    screen.occupancy.has(space.space_id),
+  ).length;
+  const tile = (space: InventorySpaceRow): Html => {
+    if (space.space_kind === 'UNIT') {
+      const state = screen.states.get(space.space_id) ?? VACANT_TILE;
+      const cls = state.vacant
+        ? 'space-tile is-vacant'
+        : 'space-tile is-occupied';
+      const dot = state.vacant
+        ? h`<span class="dot is-hollow"></span>`
+        : h`<span class="dot"></span>`;
+      return h`<a class="${cls}" href="/estate/units/${space.space_id}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${state.word}</span>${unitSub(state)}</a>`;
+    }
+    const words = TILE_WORD[space.space_kind];
+    if (words) {
+      const on = isOccupied(space);
+      const cls = on ? 'space-tile is-occupied' : 'space-tile is-vacant';
+      const dot = on
+        ? h`<span class="dot"></span>`
+        : h`<span class="dot is-hollow"></span>`;
+      return h`<div class="${cls}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${words[on ? 'on' : 'off']}</span></div>`;
+    }
+    const sub =
+      space.space_kind === 'TECHNICAL'
+        ? /^\d+$/.test(space.name)
+          ? 'מעלית'
+          : 'חלל טכני'
+        : space.space_kind === 'COMMON'
+          ? 'שטח משותף'
+          : space.space_kind === 'EXTERIOR'
+            ? 'שטח חוץ'
+            : null;
+    return h`<div class="space-tile"><span class="no">${tileName(space.name)}</span>${
+      sub ? h`<span class="sub">${sub}</span>` : h``
+    }</div>`;
+  };
   const body = h`
-    <div>
-      <h1>נכסים</h1>
-      <p class="lede">
-        המלאי של כל בניין — דירות, חניות, מחסנים ומעליות — לפני שהנייר ממלא אותן.
-      </p>
+    <div class="glass-stage">
+      <header class="page-head">
+        <div>
+          <h1>נכסים</h1>
+          <p class="lede">המלאי של כל בניין — דירות, חניות, מחסנים ומעליות. פותחים בניין, יורדים לסוג, מגיעים לחלל.</p>
+        </div>
+        ${
+          screen.mayWrite
+            ? h`<a class="btn btn-primary" href="/estate/inventory/new">${PLUS}בניין חדש</a>`
+            : h``
+        }
+      </header>
+      <section class="stat-row" aria-label="סיכום">
+        <div class="stat glass"><span class="stat-label">בניינים</span><span class="stat-value">${ltr(shown.length)}</span></div>
+        <div class="stat glass"><span class="stat-label">יחידות דיור</span><span class="stat-value">${ltr(unitsOnScreen.length)}</span></div>
+        <div class="stat glass"><span class="stat-label">מאוכלסות היום</span><span class="stat-value">${ltr(occupiedOnScreen)}</span>${meter(occupiedOnScreen, unitsOnScreen.length, `${occupiedOnScreen} מתוך ${unitsOnScreen.length}`)}</div>
+        <div class="stat glass"><span class="stat-label">פנויות</span><span class="stat-value">${ltr(unitsOnScreen.length - occupiedOnScreen)}</span></div>
+      </section>
+      <div class="toolbar">
+        <nav class="segmented glass is-raised" aria-label="סינון לפי סטטוס">
+          ${LIST_FILTERS.map(([status, caption]) => {
+            const n = screen.buildings.filter(
+              (building) => status === null || building.status === status,
+            ).length;
+            const href =
+              status === null
+                ? '/estate/inventory'
+                : `/estate/inventory?status=${status}`;
+            return h`<a href="${href}" ${
+              status === current ? h`aria-current="true"` : h``
+            }>${caption} <span class="n">${ltr(n)}</span></a>`;
+          })}
+        </nav>
+        <div class="legend"><span class="is-ok"><span class="dot"></span>מושכרת / בסיום</span><span class="is-accent"><span class="dot is-hollow"></span>פנויה / חוזה בטיוטה</span></div>
+      </div>
       ${
-        mayWrite
-          ? h`<p class="form-actions">
-              <a class="btn btn-primary" href="/estate/inventory/new">בניין חדש</a>
-            </p>`
-          : h``
+        screen.buildings.length === 0
+          ? h`<p class="empty-state">אין עדיין בניינים במערכת.</p>`
+          : shown.length === 0
+            ? h`<p class="empty-state">אין בניינים בסטטוס זה.</p>`
+            : h`<div class="drill-list">
+                ${shown.map((building, index) => {
+                  const rows = spacesOf(building.building_id);
+                  const grouped = INVENTORY_KIND_ORDER.map((kind) => ({
+                    kind,
+                    rows: rows.filter((space) => space.space_kind === kind),
+                  })).filter((group) => group.rows.length > 0);
+                  const units = rows.filter(
+                    (space) => space.space_kind === 'UNIT',
+                  );
+                  const occupiedUnits = units.filter((space) =>
+                    screen.occupancy.has(space.space_id),
+                  ).length;
+                  return h`<details class="drill building glass" ${
+                    index === 0 ? h`open` : h``
+                  }>
+                    <summary>
+                      ${CHEV}
+                      <div>
+                        <p class="b-title"><span>${building.name}</span><span class="${statusChipClass(building.status)}">${label(BUILDING_STATUS, building.status)}</span></p>
+                        <p class="b-address">${building.address_line}, ${building.city}</p>
+                        <ul class="b-counts">
+                          ${SUMMARY_KINDS.map(([kind, caption]) => {
+                            const n = rows.filter(
+                              (space) => space.space_kind === kind,
+                            ).length;
+                            return n === 0
+                              ? h``
+                              : h`<li><b>${ltr(n)}</b> ${caption}</li>`;
+                          })}
+                        </ul>
+                      </div>
+                      <div class="b-occ">
+                        <span class="b-occ-text"><span>מאוכלסות היום</span><span><b>${ltr(occupiedUnits)}</b> / ${ltr(units.length)}</span></span>
+                        ${meter(occupiedUnits, units.length, `${occupiedUnits} מתוך ${units.length} דירות מאוכלסות`)}
+                      </div>
+                    </summary>
+                    <div class="building-body">
+                      ${grouped.map(
+                        (
+                          group,
+                          kindIndex,
+                        ) => h`<details class="drill kind glass is-raised" ${
+                          index === 0 && kindIndex === 0 ? h`open` : h``
+                        }>
+                          <summary>${CHEV}<span class="kind-icon">${KIND_ICON[group.kind] ?? h``}</span><span class="kind-name">${label(SPACE_KIND, group.kind)}<span class="n">${ltr(group.rows.length)}</span></span><span class="kind-meta">${
+                            VACANT_PLURAL[group.kind]
+                              ? h`${meter(
+                                  group.rows.filter((space) =>
+                                    isOccupied(space),
+                                  ).length,
+                                  group.rows.length,
+                                  `${group.rows.filter((space) => isOccupied(space)).length} מתוך ${group.rows.length}`,
+                                )}<span>${ltr(group.rows.filter((space) => !isOccupied(space)).length)} ${VACANT_PLURAL[group.kind]}</span>`
+                              : h``
+                          }</span></summary>
+                          <div class="kind-body"><ul class="${
+                            group.kind === 'UNIT'
+                              ? 'tile-grid is-states'
+                              : group.kind === 'PARKING' ||
+                                  group.kind === 'STORAGE'
+                                ? 'tile-grid'
+                                : 'tile-grid is-named'
+                          }">${group.rows.map((space) => h`<li>${tile(space)}</li>`)}</ul></div>
+                        </details>`,
+                      )}
+                      <div class="building-actions">
+                        ${
+                          screen.mayWrite
+                            ? h`<div class="group">
+                                <a class="btn btn-glass btn-sm" href="/estate/inventory/${building.building_id}#more-spaces">${PLUS}הוספת חללים</a>
+                                <a class="btn btn-ghost btn-sm" href="/estate/inventory/${building.building_id}#shared">${PLUS}מקום משותף</a>
+                              </div>`
+                            : h`<div class="group"></div>`
+                        }
+                        <a class="btn btn-secondary btn-sm" href="/estate/buildings/${building.building_id}">לדף הבניין${TO_BUILDING}</a>
+                      </div>
+                    </div>
+                  </details>`;
+                })}
+              </div>`
       }
-    </div>
-    ${
-      buildings.length === 0
-        ? h`<p class="empty-state">אין עדיין בניינים במערכת.</p>`
-        : h`<div class="row-list">
-            ${buildings.map(
-              (building) => h`<article class="row-card">
-                ${marker(building.status)}
-                <a class="card-link" href="/estate/inventory/${building.building_id}">
-                  <p class="card-title">
-                    <span>${building.name}</span>
-                    <span class="chip">${label(BUILDING_STATUS, building.status)}</span>
-                  </p>
-                  <p class="lede">${building.address_line}, ${building.city}</p>
-                </a>
-              </article>`,
-            )}
-          </div>`
-    }`;
-  return page('דונה דום — נכסים', body, nav);
+    </div>`;
+  return page('דונה דום — נכסים', body, screen.nav);
 }
 
 export function renderNewInventoryPage(screen: {
@@ -846,7 +1146,7 @@ export function renderInventoryBuildingPage(screen: {
     ${
       screen.write
         ? h`
-      <section>
+      <section id="more-spaces">
         <h2>הוספת חללים</h2>
         <form class="form-grid" method="post"
           action="/estate/inventory/${screen.building.building_id}/spaces">
@@ -891,7 +1191,7 @@ export function renderInventoryBuildingPage(screen: {
           </div>
         </form>
       </section>
-      <section>
+      <section id="shared">
         <h2>מקום משותף</h2>
         <form class="form-grid" method="post"
           action="/estate/inventory/${screen.building.building_id}/shared">
@@ -1526,7 +1826,7 @@ function changeLogPanel(events: readonly TenancyEventView[]): Html {
 
 export function renderUnitPage(
   unit: UnitHit,
-  residents: number | undefined,
+  word: UnitWord,
   documents: readonly FiledDocumentView[],
   nav: Html,
   promoted: readonly PromotedFieldView[] = [],
@@ -1538,7 +1838,7 @@ export function renderUnitPage(
       <a class="back" href="/estate/buildings/${unit.building_id}">← ${unit.building_name}</a>
       <h1>דירה ${ltr(unit.unit_number)}</h1>
       <p class="lede">${unit.building_name} · ${unit.address_line}, ${unit.city}</p>
-      <div class="chips">${occupancyChip(residents)}</div>
+      <div class="chips"><span class="chip">${word}</span></div>
       <p class="unit-actions">
         <a href="/documents/new?unit=${unit.unit_id}">הוספת מסמך</a>
       </p>
@@ -1841,6 +2141,7 @@ const GATE_LABEL: Record<string, string> = {
   handover_protocol: 'פרוטוקול מסירה מאושר',
   start_reached: 'היום אינו לפני תחילת החוזה',
   within_term: 'היום אינו אחרי סיום החוזה',
+  unit_free: 'הדירה פנויה בתקופה',
 };
 
 const DOC_LABEL: Record<string, string> = {
@@ -1861,6 +2162,73 @@ export interface IncompleteTenancyRow {
   missing: string;
   expected_document_id: string;
   expected_document_label: string;
+  protocolWaiver: {
+    actor: string;
+    at: string;
+    reason: string;
+  } | null;
+}
+
+/** #158. A draft the gate will activate, or one arming inside the named window. No party. */
+export interface ActivationQueueView {
+  ready: readonly {
+    tenancy_id: string;
+    unit_number: string;
+    address_line: string;
+    city: string;
+    start_date: string;
+    end_date: string;
+    ready_since: string;
+    missed: boolean;
+  }[];
+  soon: readonly {
+    tenancy_id: string;
+    unit_number: string;
+    address_line: string;
+    city: string;
+    start_date: string;
+    end_date: string;
+    activatable_on: string;
+  }[];
+  withinDays: number;
+}
+
+function activationPlace(row: {
+  tenancy_id: string;
+  unit_number: string;
+  address_line: string;
+  city: string;
+  start_date: string;
+  end_date: string;
+}): Html {
+  return h`<div>
+    <span>דירה ${ltr(row.unit_number)} · ${row.address_line}, ${row.city}</span>
+    <p class="lede">${ltr(`${row.start_date} — ${row.end_date}`)}</p>
+  </div>`;
+}
+
+function activationBlock(title: Html, body: Html): Html {
+  return h`<section class="glass sheet">
+    <h2 class="block-title">${title}</h2>
+    ${body}
+  </section>`;
+}
+
+function activationLink(
+  row: {
+    tenancy_id: string;
+    unit_number: string;
+    address_line: string;
+    city: string;
+    start_date: string;
+    end_date: string;
+  },
+  chip: Html,
+): Html {
+  return h`<a class="q-row glass is-raised" href="/estate/tenancies/${row.tenancy_id}">
+    ${activationPlace(row)}
+    ${chip}
+  </a>`;
 }
 
 /**
@@ -1868,9 +2236,12 @@ export interface IncompleteTenancyRow {
  *
  * A unit, dates, a missing-rule label and the document the rule was expected in. No party.
  * Gate-miss labels are the same wording as the tenancy page, so the two screens cannot disagree.
+ * #158 adds the two blocks above the misses. They print the queue they are handed and re-derive
+ * nothing.
  */
 export function renderIncompletePage(
   rows: readonly IncompleteTenancyRow[],
+  queue: ActivationQueueView,
   /**
    * The CSRF token for this session (slice 5.2). The one form on this screen carries it.
    *
@@ -1882,13 +2253,42 @@ export function renderIncompletePage(
   csrf: string,
   nav: Html,
 ): string {
+  const readyRows =
+    queue.ready.length === 0
+      ? h`<p class="lede">אין טיוטה מוכנה.</p>`
+      : h`<div class="q-list">
+          ${queue.ready.map((row) =>
+            activationLink(
+              row,
+              row.missed
+                ? h`<span class="chip is-accent"><span class="dot"></span>מוכנה מאז ${ltr(row.ready_since)}</span>`
+                : h`<span class="chip is-ok"><span class="dot"></span>מוכנה היום</span>`,
+            ),
+          )}
+        </div>`;
+  const soonRows =
+    queue.soon.length === 0
+      ? h`<p class="lede">אין בטווח.</p>`
+      : h`<div class="q-list">
+          ${queue.soon.map((row) =>
+            activationLink(
+              row,
+              h`<span class="chip is-neutral"><span class="dot is-hollow"></span>נדלקת ב־${ltr(row.activatable_on)}</span>`,
+            ),
+          )}
+        </div>`;
   const body = h`
-    <div>
-      <h1>חוזים לא שלמים</h1>
-      <p class="lede">
-        ${ltr(rows.length)} חוזים בתיק שממתינים להשלמה. מסמך משלים, או רישום חריג לערב.
-      </p>
-    </div>
+    <div class="glass-stage">
+    <header class="page-head">
+      <div>
+        <h1>חוזים לא שלמים</h1>
+        <p class="lede">
+          ${ltr(rows.length)} חוזים בתיק שממתינים להשלמה. מסמך משלים, או רישום חריג לערב.
+        </p>
+      </div>
+    </header>
+    ${activationBlock(h`מוכנות להפעלה`, readyRows)}
+    ${activationBlock(h`נדלקות בקרוב (${ltr(queue.withinDays)} יום)`, soonRows)}
     ${
       rows.length === 0
         ? h`<p class="empty-state">אין חוזים ממתינים להשלמה.</p>`
@@ -1917,6 +2317,14 @@ export function renderIncompletePage(
                   <a href="/documents/${row.expected_document_id}/read">${row.expected_document_label}</a>
                 </p>
                 ${
+                  row.protocolWaiver
+                    ? h`<p class="lede">
+                        <span class="chip is-neutral"><span class="dot is-hollow"></span>ויתור</span>
+                        "${row.protocolWaiver.reason}" · רשם: ${ltr(row.protocolWaiver.actor)} · ${ltr(row.protocolWaiver.at)}
+                      </p>`
+                    : ''
+                }
+                ${
                   row.missing === 'guarantor'
                     ? h`<form
                   method="post"
@@ -1939,7 +2347,8 @@ export function renderIncompletePage(
               </article>`;
             })}
           </div>`
-    }`;
+    }
+    </div>`;
   return page('דונה דום — חוזים לא שלמים', body, nav);
 }
 
@@ -1959,6 +2368,17 @@ export interface TenancyPersonView {
 export interface TenancyGateCheckView {
   rule: string;
   passed: boolean;
+  blocking?: {
+    tenancyId: string;
+    startDate: string;
+    endDate: string;
+  };
+  /** Set when this protocol check passed because a person waived it. */
+  waived?: {
+    actor: string;
+    at: string;
+    reason: string;
+  };
 }
 
 export interface CitedCaptureView {
@@ -1988,8 +2408,17 @@ export interface TenancySheet {
   captures: readonly CitedCaptureView[];
   checks: readonly TenancyGateCheckView[];
   canActivate: boolean;
+  /** Whether this reader holds `tenancy.write`, so a blocked row may link the end-early form. */
+  mayEndEarly: boolean;
+  /** Whether this reader holds `tenancy.write`, so a missing protocol may be waived. */
+  mayWaive: boolean;
+  /** Whether this reader holds `documents.write`, so a draft may file its protocol. */
+  mayFileProtocol: boolean;
+  /** A sentence from a protocol upload that did not reach confirm. */
+  protocolNotice?: string | null;
   activatableOn: string | null;
-  flags: readonly { typeKey: string }[];
+  handoverDate: string | null;
+  flags: readonly ActivationFlag[];
   csrf: string;
   nav: Html;
 }
@@ -2002,10 +2431,19 @@ function ofType(
 }
 
 function checkWhy(check: TenancyGateCheckView, sheet: TenancySheet): Html {
+  if (check.waived) {
+    return h`"${check.waived.reason}" · רשם: ${ltr(check.waived.actor)} · ${ltr(check.waived.at)}`;
+  }
   if (check.rule === 'lease' || check.rule === 'handover_protocol') {
     const held = ofType(sheet.documents, check.rule);
     if (check.passed && held) {
       return h`אושר ב־${ltr(held.ingestedAt)}`;
+    }
+    if (check.rule === 'handover_protocol' && held) {
+      if (held.verificationVerdict === 'unverified') {
+        return h`הוגש. אין בו טקסט לאישור תאריך המסירה`;
+      }
+      return h`הוגש, תאריך המסירה טרם אושר · <a href="/documents/${held.documentId}/seed">אישור תאריך המסירה</a>`;
     }
     return h`לא הוגש ${DOC_LABEL[check.rule] ?? check.rule} להשכרה הזו`;
   }
@@ -2019,7 +2457,78 @@ function checkWhy(check: TenancyGateCheckView, sheet: TenancySheet): Html {
       ? h`החוזה מסתיים ב־${ltr(sheet.endDate)}`
       : h`החוזה הסתיים ב־${ltr(sheet.endDate)}`;
   }
+  if (check.rule === 'unit_free' && !check.passed && check.blocking) {
+    const { tenancyId, startDate, endDate } = check.blocking;
+    const open = h`<a href="/estate/tenancies/${tenancyId}">פתיחה</a>`;
+    const end = sheet.mayEndEarly
+      ? h` · <a href="/estate/tenancies/${tenancyId}#end">סיום מוקדם</a>`
+      : h``;
+    return h`השכרה פעילה ${ltr(`${startDate} — ${endDate}`)} עדיין על הדירה · ${open}${end}`;
+  }
   return h``;
+}
+
+function checkChip(check: TenancyGateCheckView): Html {
+  if (check.waived) {
+    return h`<span class="chip is-neutral"><span class="dot is-hollow"></span>ויתור</span>`;
+  }
+  if (check.rule === 'unit_free') {
+    return h`<span class="chip ${check.passed ? 'is-ok' : 'is-miss'}"><span class="dot"></span>${check.passed ? 'עבר' : 'לא עבר'}</span>`;
+  }
+  return h`<span class="outcome term-state ${check.passed ? 'term-found' : 'term-missing'}">${check.passed ? 'עבר' : 'לא עבר'}</span>`;
+}
+
+function protocolUpload(
+  sheet: TenancySheet,
+  check: TenancyGateCheckView,
+): Html {
+  if (
+    sheet.status !== 'DRAFT' ||
+    check.rule !== 'handover_protocol' ||
+    check.passed ||
+    !sheet.mayFileProtocol
+  ) {
+    return h``;
+  }
+  return h`<form class="file-well" method="post" action="/documents/tenancies/${sheet.tenancyId}/protocol" enctype="multipart/form-data">
+    ${csrfInput(sheet.csrf)}
+    ${
+      sheet.protocolNotice
+        ? h`<p class="lede">${sheet.protocolNotice}</p>`
+        : h``
+    }
+    <input type="file" name="file" required aria-label="פרוטוקול מסירה" />
+    <button class="btn btn-glass btn-sm" type="submit">הגשת פרוטוקול מסירה</button>
+  </form>`;
+}
+
+function documentMark(doc: FiledDocumentView, sheet: TenancySheet): Html {
+  if (doc.typeKey !== 'handover_protocol') {
+    return h`<span class="term-state term-found">אושר</span>`;
+  }
+  const check = sheet.checks.find((row) => row.rule === 'handover_protocol');
+  if (check?.passed && !check.waived) {
+    return h`<span class="term-state term-found">אושר</span>`;
+  }
+  return h`<span class="term-state term-missing">טרם אושר</span>`;
+}
+
+function waiverForm(sheet: TenancySheet, check: TenancyGateCheckView): Html {
+  if (check.rule !== 'handover_protocol' || check.passed || !sheet.mayWaive) {
+    return h``;
+  }
+  return h`<form method="post" action="/estate/tenancies/${sheet.tenancyId}/waiver">
+    ${csrfInput(sheet.csrf)}
+    <input
+      name="reason"
+      type="text"
+      maxlength="200"
+      required
+      aria-label="סיבת הוויתור"
+      placeholder="סיבת הוויתור"
+    />
+    <button class="btn btn-secondary btn-sm" type="submit">רשום ויתור</button>
+  </form>`;
 }
 
 function missingItems(sheet: TenancySheet): Html {
@@ -2062,6 +2571,21 @@ function activateReasons(sheet: TenancySheet): Html {
     .map((check) => GATE_LABEL[check.rule] ?? check.rule)
     .join(', ');
   return h`<p class="reasons">דרישות שטרם התקיימו: ${names}.</p>`;
+}
+
+function handoverBeside(sheet: TenancySheet): Html {
+  if (!sheet.handoverDate) return h``;
+  return h` · מסירה ${ltr(sheet.handoverDate)}`;
+}
+
+function handoverFlag(sheet: TenancySheet): Html {
+  const flag = sheet.flags.find((row) => row.rule === 'handover_outside_term');
+  if (flag?.rule !== 'handover_outside_term') return h``;
+  const why =
+    flag.edge === 'early'
+      ? h`קודם ביותר מ־${String(EARLY_HANDOVER_DAYS)} יום לתחילת החוזה`
+      : h`אחרי סיום החוזה`;
+  return h`<p class="flag">דגל: תאריך המסירה בפרוטוקול (${ltr(flag.handoverDate)}) ${why}. אינו חוסם.</p>`;
 }
 
 function tenantsLine(people: readonly TenancyPersonView[]): Html {
@@ -2110,14 +2634,36 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
     : `${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${sheet.unit.unit_number}`;
   const lease = ofType(sheet.documents, 'lease');
   const active = sheet.status === 'ACTIVE';
+  const heading = primary
+    ? h`${primary.fullName} · ${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${ltr(sheet.unit.unit_number)}`
+    : h`${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${ltr(sheet.unit.unit_number)}`;
   const body = h`
-    <div>
-      <a class="back" href="/estate/units/${sheet.unit.unit_id}">← דירה ${ltr(sheet.unit.unit_number)}</a>
-      <div class="tenancy-head">
-        <h1>${primary ? h`${primary.fullName} · ${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${ltr(sheet.unit.unit_number)}` : h`${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${ltr(sheet.unit.unit_number)}`}</h1>
-        <span class="${active ? 'chip status is-active' : 'chip status'}">${label(TENANCY_STATUS, sheet.status)}</span>
+    <div class="glass-stage">
+    <div class="glass tenancy-sheet">
+      <div class="who">
+        <a class="back" href="/estate/units/${sheet.unit.unit_id}">← דירה ${ltr(sheet.unit.unit_number)}</a>
+        <h1 class="b-title"><span>${heading}</span>${tenancyChip(sheet.status)}</h1>
+        <p class="b-address"><span dir="ltr">${ltr(sheet.startDate)} — ${ltr(sheet.endDate)}</span>${handoverBeside(sheet)}</p>
+        ${handoverFlag(sheet)}
       </div>
-      <p class="lede">${ltr(sheet.startDate)} — ${ltr(sheet.endDate)}</p>
+      ${
+        active
+          ? h`<div>
+        <h2 id="end">סיום מוקדם</h2>
+        <p class="lede">הדיירים עוזבים לפני סוף החוזה. תאריך הסיום החוזי נשאר כפי שהוא. תאריך העזיבה נרשם לצדו.</p>
+      </div>
+      <form class="form-grid" method="post" action="/estate/tenancies/${sheet.tenancyId}/end" enctype="multipart/form-data">
+        ${csrfInput(sheet.csrf)}
+        <div class="form-pair">
+          <label class="form-row">תאריך עזיבה בפועל<input type="date" name="actual_move_out" required /></label>
+          <label class="form-row">תאריך הודעה (רשות)<input type="date" name="notice_date" /></label>
+        </div>
+        <label class="form-row">מכתב הודעה (רשות)<input type="file" name="file" /></label>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">סיום ההשכרה</button></div>
+      </form>
+      <p class="form-note">נרשם כאירוע: מי סיים, מתי, ועל סמך מה. עזיבה עתידית היא הודעה, לא סיום.</p>`
+          : h``
+      }
     </div>
 
     <section class="notice">
@@ -2135,7 +2681,7 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
               (doc) => h`<tr>
                 <td class="value"><a href="/documents/${doc.documentId}/${doc.typeKey === 'lease' ? 'fields' : 'read'}">${doc.labelHe}</a></td>
                 <td class="key">${ltr(doc.ingestedAt)}</td>
-                <td><span class="term-state term-found">אושר</span></td>
+                <td>${documentMark(doc, sheet)}</td>
               </tr>`,
             )}
           </tbody>
@@ -2200,16 +2746,18 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
     <section class="notice">
       <h2>מה נבדק</h2>
       ${
-        sheet.flags.length === 0
-          ? h``
-          : h`<p class="lede">מסמך שפג תוקפו מרים דגל ואינו מזיז את המצב.</p>`
+        sheet.flags.some((flag) => flag.rule === 'lapsed_document')
+          ? h`<p class="lede">מסמך שפג תוקפו מרים דגל ואינו מזיז את המצב.</p>`
+          : h``
       }
       <ul class="gate">
         ${sheet.checks.map(
           (check) => h`<li>
-            <span class="outcome term-state ${check.passed ? 'term-found' : 'term-missing'}">${check.passed ? 'עבר' : 'לא עבר'}</span>
+            ${checkChip(check)}
             <span>${GATE_LABEL[check.rule] ?? check.rule}</span>
             <span class="why">${checkWhy(check, sheet)}</span>
+            ${protocolUpload(sheet, check)}
+            ${waiverForm(sheet, check)}
           </li>`,
         )}
       </ul>
@@ -2268,6 +2816,18 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
     <div class="form-actions">
       <a class="btn btn-secondary" href="/documents/new?unit=${sheet.unit.unit_id}">הוספת מסמך</a>
       <a href="/estate/units/${sheet.unit.unit_id}">חזרה לדירה</a>
+    </div>
     </div>`;
   return page(`דונה דום — ${title}`, body, sheet.nav);
+}
+
+function tenancyChip(status: string): Html {
+  const name = label(TENANCY_STATUS, status);
+  if (status === 'ACTIVE') {
+    return h`<span class="chip is-ok"><span class="dot"></span>${name}</span>`;
+  }
+  if (status === 'DRAFT') {
+    return h`<span class="chip is-accent"><span class="dot is-hollow"></span>${name}</span>`;
+  }
+  return h`<span class="chip is-neutral">${name}</span>`;
 }

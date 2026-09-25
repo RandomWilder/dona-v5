@@ -416,6 +416,23 @@ headline counts and derived vacancy. Later growth and shrink live on that page:
 destination is `inventory`. This is not A13's `POST /estate/spaces/:spaceId/remove`, which still
 detaches a built bay or store.
 
+**The list is a drill-down of the same rows.** `GET /estate/inventory` still lists every Building.
+An optional `status` query of `ACTIVE`, `IN_CONSTRUCTION`, or `EXITED` narrows which buildings are
+drawn; any other value is `invalid`. The filter's own counts are the whole portfolio. Four
+headlines follow the buildings on screen: how many buildings, how many Units, how many of those
+Units are occupied today, and how many are vacant (units minus occupied). Each building opens into
+its kinds, and each kind into its Spaces. A kind with no Spaces is omitted. Elevators are not a
+count on the collapsed building line.
+
+Vacancy on a UNIT, PARKING, or STORAGE tile is the same derivation as the building page. On this
+list a store reads תפוס or פנוי. A numbered TECHNICAL Space is subtitled מעלית. A TECHNICAL Space
+with any other name keeps that name and is subtitled חלל טכני. COMMON and EXTERIOR tiles are the
+typed name plus the kind, and carry no vacancy. A UNIT tile links to that Unit's page. לדף הבניין
+links to the בניינים building page, which this list does not restyle. הוספת חללים and מקום משותף,
+for someone who may write, link to the forms already on `GET /estate/inventory/:buildingId`. That
+page stays the place a Space is added or removed. Rent and lease-end stay off the list. A viewer
+sees the drill and not those write links.
+
 **The write is still `importEstate`.** The POST rebuilds A11's identity plan and adds Spaces: UNIT,
 PARKING, and STORAGE named by the bare integer sequence from each kind's first number; TECHNICAL
 elevators named `1`…`N`. Each UNIT Space gets a Unit row, `READY`, rooms `0`, floor empty, no built
@@ -461,6 +478,30 @@ letting that counts today; a built-bay link does not occupy it. A vacant storage
 no assigned storage on a letting that counts today; built storage does not occupy it. Estate does
 not grow a second day predicate: the occupied-unit tenancy ids come from that injection, and
 assigned bay / assigned storage are read off those rows only.
+
+**#159 widens each Unit tile on the נכסים list, and the chip on the Unit page, to four derived
+states. None is stored.**
+
+- **פנויה** — no letting counts today, and no `DRAFT` is waiting.
+- **חוזה בטיוטה** — no letting counts today, and a `DRAFT` exists whose `end_date` is today or later.
+- **מושכרת** — a letting counts today.
+- **בסיום** — a letting counts today, and that letting's `end_date` falls inside
+  `EXPIRING_WINDOW_DAYS` (the same sixty days Q5 already uses), or the letting carries a
+  `notice_date`.
+
+A let Unit that also has a waiting draft stays **מושכרת**, or **בסיום** when the live letting is
+ending. The draft is a second line on the tile, not another state. The ending date is that second
+line only when `end_date` is inside the window. A `notice_date` on a letting whose end is later
+than the window is **בסיום** with no ending date on the line. פנויה and חוזה בטיוטה use the
+dashed vacant tile; מושכרת and בסיום use the occupied tile. Every Unit tile in the grid is the same
+width and the same height, and the second line stays inside that height. Vacancy headlines still
+count a Unit as vacant whenever nobody counts today, so חוזה בטיוטה is vacant. Parking and storage
+stay binary. The rows on `/estate/inventory/:buildingId` keep the binary chip.
+
+Counts today stays `resolveOccupiedUnits`. The draft, the `end_date` and the `notice_date` come from
+tenancy's `listLettingsForUnits`, which carries no day predicate. Estate applies the clock and
+`EXPIRING_WINDOW_DAYS` after that read. The Unit page prints the same four words. The resident-count
+chip on the building page is unchanged.
 
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
 `GET`/`POST /documents/new`, reached from a unit row on the building page. It went behind the session
@@ -517,7 +558,9 @@ apartment number), status, the lease's dates, the documents bound to the letting
 still misses, every check the gate returned, and the activate button. Estate renders; it does not
 own the gate. The composition root injects `getTenancy`, `listTenancyParties`, the party-name lookup,
 `activationGate`, `activateTenancy` and `listLinkedDocuments` for `TENANCY`. The page prints the
-gate's facts and does not re-evaluate the four rules. `POST /estate/tenancies/:tenancyId/activate`
+gate's facts and does not re-evaluate its checks. A failed `unit_free` row prints the blocking
+letting's dates and a link to it, and a link to that letting's end-early form only when the reader
+holds `tenancy.write`. It prints no party. `POST /estate/tenancies/:tenancyId/activate`
 asks for `tenancy.write`, as the completeness exception already does. Party names appear on this
 screen with no new permission; a later gate does not redraw it. Search, the occupancy chip, the
 buildings list and the incomplete queue still carry no name.

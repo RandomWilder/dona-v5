@@ -7,9 +7,11 @@ import {
   applyProtocolSeed,
   type ProtocolSeedResult,
 } from '../../estate/contract.ts';
+import type { AuditLog } from '../../kernel/audit.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
 import type { PdfText } from '../../kernel/pdf.ts';
+import { requireText } from '../../kernel/validate.ts';
 import { getFiledDocument } from './documents.ts';
 import {
   type HandoverProposal,
@@ -27,6 +29,9 @@ export interface SeedDeps {
   pdf: PdfText;
   bucket: string;
 }
+
+/** #157. The activation gate reads this row as approval of a handover protocol. */
+export const PROTOCOL_CONFIRM_ACTION = 'evidence.confirm_protocol';
 
 export interface ProtocolProposal {
   documentId: string;
@@ -72,8 +77,9 @@ export async function proposeProtocol(
 }
 
 export async function confirmProtocol(
-  deps: SeedDeps,
+  deps: SeedDeps & { audit: AuditLog },
   documentId: string,
+  confirmedBy: string,
 ): Promise<ProtocolSeedResult & { proposal: HandoverProposal }> {
   const proposed = await proposeProtocol(deps, documentId);
   const { proposal } = proposed;
@@ -90,6 +96,7 @@ export async function confirmProtocol(
     );
   }
   const kind = PROTOCOL_TYPE_KEYS[proposed.typeKey];
+  const actor = requireText(confirmedBy, 'confirmed_by', 200);
   const result = await applyProtocolSeed(deps.db, {
     kind,
     targetId: proposed.placeId,
@@ -97,5 +104,15 @@ export async function confirmProtocol(
     assets: proposal.assets,
     sourceDocumentId: documentId,
   });
+  await deps.audit.write(
+    {
+      actorKind: 'staff',
+      actorId: actor,
+      action: PROTOCOL_CONFIRM_ACTION,
+      subjectId: documentId,
+      inputs: { handoverDate: proposal.handoverDate },
+    },
+    { outcome: 'ok' },
+  );
   return { ...result, proposal };
 }

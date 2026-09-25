@@ -6,6 +6,7 @@
 // copy of the isolation join, and guard two exists because that is how the constraint dies.
 import type { Pool } from 'pg';
 import { type Clock, today as dayOf } from '../../kernel/clock.ts';
+import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
@@ -558,6 +559,98 @@ export interface ExerciseOptionSpec {
   tenancyId: string;
   actor: string;
   sourceDocumentId?: string | null;
+}
+
+export interface EndTenancyEarlySpec {
+  tenancyId: string;
+  actualMoveOut: string;
+  noticeDate?: string | null;
+  actor: string;
+  sourceDocumentId?: string | null;
+}
+
+/**
+ * End an ACTIVE letting before its contractual end. Same row, status
+ * `TERMINATED_EARLY`, `end_date` untouched. Event `ended_early`. A missing
+ * document is a phone call.
+ */
+export async function endTenancyEarly(
+  db: Queryable,
+  clock: Clock,
+  spec: EndTenancyEarlySpec,
+): Promise<void> {
+  const tenancyId = validId(spec.tenancyId, 'tenancy');
+  const actor = requireText(spec.actor, 'actor', 200);
+  const actualMoveOut = requireDate(spec.actualMoveOut);
+  const noticeDate =
+    spec.noticeDate === undefined ||
+    spec.noticeDate === null ||
+    spec.noticeDate === ''
+      ? null
+      : requireDate(spec.noticeDate);
+  const sourceDocumentId =
+    spec.sourceDocumentId === undefined || spec.sourceDocumentId === null
+      ? null
+      : validId(spec.sourceDocumentId, 'sourceDocumentId');
+  const today = dayOf(clock);
+
+  await inTransaction(db, async (tx) => {
+    const current = await tx.query<{
+      status: string;
+      start_date: string;
+      end_date: string;
+    }>(
+      `SELECT status,
+              start_date::text AS start_date,
+              end_date::text AS end_date
+         FROM tenancy WHERE tenancy_id = $1`,
+      [tenancyId],
+    );
+    const row = current.rows[0];
+    if (!row) {
+      throw new KernelError('not_found', 'tenancy not found');
+    }
+    if (row.status !== 'ACTIVE') {
+      throw new KernelError('invalid', 'this letting is not active');
+    }
+    if (actualMoveOut < row.start_date) {
+      throw new KernelError(
+        'invalid',
+        'the move-out is before the lease starts',
+      );
+    }
+    if (actualMoveOut > row.end_date) {
+      throw new KernelError(
+        'invalid',
+        'the move-out is after the contractual end',
+      );
+    }
+    if (actualMoveOut > today) {
+      throw new KernelError(
+        'invalid',
+        'a future move-out is notice, not an end',
+      );
+    }
+    if (noticeDate !== null && noticeDate > actualMoveOut) {
+      throw new KernelError('invalid', 'the notice is after the move-out');
+    }
+    await tx.query(
+      `UPDATE tenancy
+          SET status = 'TERMINATED_EARLY',
+              actual_move_out = $2::date,
+              notice_date = $3::date
+        WHERE tenancy_id = $1 AND status = 'ACTIVE'`,
+      [tenancyId, actualMoveOut, noticeDate],
+    );
+    await tx.query(
+      `INSERT INTO tenancy_event (
+         tenancy_event_id, tenancy_id, at, actor, kind, field,
+         old_value, new_value, source_document_id, extracted_field_id
+       ) VALUES ($1, $2, $3, $4, 'ended_early', 'status',
+                 'ACTIVE', 'TERMINATED_EARLY', $5, NULL)`,
+      [newId(), tenancyId, clock.now(), actor, sourceDocumentId],
+    );
+  });
 }
 
 /**

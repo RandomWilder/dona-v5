@@ -9,28 +9,37 @@
 // is where staff auth lands (tasks/roadmap.md); until then the rule these routes keep is that no
 // party name and no contact value reaches a response. The occupancy chip is a state and a count,
 // search never touches `party`, and Q5 shows a unit and a date.
+import multipart from '@fastify/multipart';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import type { ChromeDest } from '../../chrome.ts';
 import { createAuditLog } from '../../kernel/audit.ts';
-import type { Clock } from '../../kernel/clock.ts';
+import { type Clock, dayIn, today } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { Html } from '../../kernel/ui/html.ts';
 import { optionalText, requireText, validId } from '../../kernel/validate.ts';
 import { resolveOccupiedUnits } from '../../scope/contract.ts';
 import {
+  CSRF_FIELD,
   can,
   clearOfficeRetrievalThread,
   csrfFrom,
   loadOfficeRetrievalThread,
+  readSessionCookie,
+  verifyCsrf,
 } from '../../staff/contract.ts';
+import {
+  type ActivationFlag,
+  listLettingsForUnits,
+} from '../../tenancy/contract.ts';
 import { addCalendarYears, WARRANTY_YEARS } from './assets.ts';
 import { listEstateEvents } from './events.ts';
 import { importEstate, upsertUnitRow } from './importer.ts';
 import {
   inventoryAddFromForm,
   inventoryFromForm,
+  inventoryListStatus,
   mintAuditInputs,
   omitExisting,
   refuseExisting,
@@ -59,13 +68,16 @@ import {
   listInventorySpaces,
   listOccupiedAssignments,
   listParkingSpacesInBuilding,
+  listPortfolioSpaces,
   listProjects,
   listStorageSpacesInBuilding,
   type ProjectOption,
   searchEstate,
 } from './read-model.ts';
 import { removeInventorySpace, removeSpace } from './spaces.ts';
+import { UNIT_WORDS, type UnitTileState, unitTiles } from './unit-occupancy.ts';
 import {
+  type ActivationQueueView,
   type DocumentSearchHit,
   type FiledDocumentView,
   type IncompleteTenancyRow,
@@ -128,11 +140,12 @@ export interface EstateDeps {
   listIncompleteTenancies: (
     db: Pool,
   ) => Promise<readonly IncompleteTenancyRow[]>;
+  listActivationQueue: (db: Pool) => Promise<ActivationQueueView>;
   recordCompletenessException: (
     db: Pool,
     spec: {
       tenancyId: string;
-      rule: 'guarantor';
+      rule: 'guarantor' | 'handover_protocol';
       actor: string;
       reason: string;
       at: Date;
@@ -173,10 +186,24 @@ export interface EstateDeps {
     db: Pool,
     tenancyId: string,
   ) => Promise<{
-    checks: readonly { rule: string; passed: boolean }[];
+    checks: readonly {
+      rule: string;
+      passed: boolean;
+      blocking?: {
+        tenancyId: string;
+        startDate: string;
+        endDate: string;
+      };
+      waived?: {
+        actor: string;
+        at: Date;
+        reason: string;
+      };
+    }[];
     canActivate: boolean;
     activatableOn: string | null;
-    flags: readonly { typeKey: string }[];
+    handoverDate: string | null;
+    flags: readonly ActivationFlag[];
   }>;
   activateTenancy: (
     db: Pool,
@@ -190,6 +217,26 @@ export interface EstateDeps {
     db: Pool,
     spec: { tenancyId: string; storageSpaceId: string; actor: string },
   ) => Promise<void>;
+  endTenancyEarly: (
+    db: Pool,
+    spec: {
+      tenancyId: string;
+      actualMoveOut: string;
+      noticeDate: string | null;
+      actor: string;
+      sourceDocumentId: string | null;
+    },
+  ) => Promise<void>;
+  /**
+   * Files the optional notice letter. Injected from evidence so this module
+   * never imports it. Absent bytes are a phone call and never reach this.
+   */
+  fileTerminationNotice: (spec: {
+    tenancyId: string;
+    unitId: string;
+    bytes: Buffer;
+    filedBy: string;
+  }) => Promise<string>;
   /**
    * #114 / #121. Injected from evidence so this module never imports it. Bound is this Unit or
    * this Building.
@@ -343,10 +390,41 @@ function html(reply: { header: (k: string, v: string) => unknown }): void {
  */
 const READ = { config: { staff: 'estate.read' } } as const;
 const WRITE = { config: { staff: 'tenancy.write' } } as const;
+/**
+ * The notice letter is a file, so this body is a stream. The token is checked
+ * in the handler with the same `verifyCsrf` the hook uses. Same bound as the
+ * document upload.
+ */
+const END = {
+  config: { staff: 'tenancy.write', csrf: 'in-body' },
+} as const;
+const END_LIMITS = {
+  files: 1,
+  fileSize: 100 * 1024 * 1024,
+  fields: 8,
+  fieldSize: 200,
+} as const;
 /** Asking and clearing an office retrieval panel. No new permission — SPEC-staff.md. */
 const ASK = { config: { staff: 'documents.read' } } as const;
 
 const OFFICE_ASK_UNAVAILABLE = 'לא ניתן לענות עכשיו. נסו שוב בעוד רגע.';
+
+function protocolNoticeOf(request: FastifyRequest): string | null {
+  const raw = (request.query as { protocol?: string }).protocol;
+  if (raw === 'refused') {
+    return 'הקובץ אינו נראה כמו פרוטוקול מסירה. לא נשמר דבר.';
+  }
+  if (raw === 'too_large') {
+    return 'הקובץ גדול מכדי שנקרא אותו. לא נשמר דבר.';
+  }
+  if (raw === 'anchored') {
+    return 'הקובץ הזה כבר מתויק במקום אחר. לא נשמר דבר.';
+  }
+  if (raw === 'unverified') {
+    return 'הקובץ הוגש. אין בו טקסט לאישור תאריך המסירה.';
+  }
+  return null;
+}
 
 function officeAskNotice(request: FastifyRequest): string | undefined {
   const ask = (request.query as { ask?: string }).ask;
@@ -632,6 +710,21 @@ async function recordInventoryAdds(
   }
 }
 
+async function unitStates(
+  pool: Pool,
+  unitIds: readonly string[],
+  occupied: readonly { unit_id: string; tenancy_id: string }[],
+  clock: Clock,
+): Promise<Map<string, UnitTileState>> {
+  const lettings = await listLettingsForUnits(pool, unitIds);
+  return unitTiles({
+    unitIds,
+    occupied,
+    lettings,
+    today: today(clock),
+  });
+}
+
 export function registerEstateRoutes(
   app: FastifyInstance,
   deps: EstateDeps,
@@ -664,13 +757,39 @@ export function registerEstateRoutes(
   });
 
   app.get('/estate/inventory', READ, async (request, reply) => {
+    const status = inventoryListStatus(request.query);
     const buildings = await listBuildings(deps.pool);
-    html(reply);
-    return renderInventoryPage(
-      buildings,
-      deps.chrome(csrfFrom(request), 'inventory', mayFile(request)),
-      can(request.staff?.role ?? null, 'estate.write'),
+    const spaces = await listPortfolioSpaces(deps.pool);
+    const occupied = await resolveOccupiedUnits(deps.pool, null, deps.clock);
+    const assigned = await listOccupiedAssignments(
+      deps.pool,
+      occupied.map((unit) => unit.tenancy_id),
     );
+    const unitIds = spaces
+      .filter((space) => space.space_kind === 'UNIT')
+      .map((space) => space.space_id);
+    html(reply);
+    return renderInventoryPage({
+      buildings,
+      spaces,
+      occupancy: new Map(
+        occupied.map((unit) => [unit.unit_id, unit.occupants]),
+      ),
+      occupiedParking: new Set(
+        assigned.flatMap((row) =>
+          row.parking_space_id ? [row.parking_space_id] : [],
+        ),
+      ),
+      occupiedStorage: new Set(
+        assigned.flatMap((row) =>
+          row.storage_space_id ? [row.storage_space_id] : [],
+        ),
+      ),
+      states: await unitStates(deps.pool, unitIds, occupied, deps.clock),
+      nav: deps.chrome(csrfFrom(request), 'inventory', mayFile(request)),
+      mayWrite: can(request.staff?.role ?? null, 'estate.write'),
+      status,
+    });
   });
 
   app.get('/estate/inventory/new', ESTATE_WRITE, async (request, reply) => {
@@ -940,10 +1059,12 @@ export function registerEstateRoutes(
 
   app.get('/estate/incomplete', READ, async (request, reply) => {
     const rows = await deps.listIncompleteTenancies(deps.pool);
+    const queue = await deps.listActivationQueue(deps.pool);
     const csrf = csrfFrom(request);
     html(reply);
     return renderIncompletePage(
       rows,
+      queue,
       csrf,
       deps.chrome(csrf, 'incomplete', mayFile(request)),
     );
@@ -1213,9 +1334,15 @@ export function registerEstateRoutes(
     });
     const csrf = csrfFrom(request);
     html(reply);
+    const states = await unitStates(
+      deps.pool,
+      [unit.unit_id],
+      occupied,
+      deps.clock,
+    );
     return renderUnitPage(
       unit,
-      occupied[0]?.occupants,
+      states.get(unit.unit_id)?.word ?? UNIT_WORDS.vacant,
       documents,
       deps.chrome(csrf, 'estate', mayFile(request)),
       promoted,
@@ -1381,14 +1508,49 @@ export function registerEstateRoutes(
       people,
       documents,
       captures,
-      checks: gate.checks,
+      checks: gate.checks.map((check) => ({
+        rule: check.rule,
+        passed: check.passed,
+        ...(check.blocking ? { blocking: check.blocking } : {}),
+        ...(check.waived
+          ? {
+              waived: {
+                actor: check.waived.actor,
+                reason: check.waived.reason,
+                at: dayIn(check.waived.at, deps.clock.zone),
+              },
+            }
+          : {}),
+      })),
       canActivate: gate.canActivate,
+      handoverDate: gate.handoverDate,
+      mayEndEarly: can(request.staff?.role ?? null, 'tenancy.write'),
+      mayWaive: can(request.staff?.role ?? null, 'tenancy.write'),
+      mayFileProtocol: can(request.staff?.role ?? null, 'documents.write'),
+      protocolNotice: protocolNoticeOf(request),
       activatableOn: gate.activatableOn,
       flags: gate.flags,
       csrf,
       nav: deps.chrome(csrf, 'estate', mayFile(request)),
     });
   });
+
+  app.post<{ Params: { tenancyId: string } }>(
+    '/estate/tenancies/:tenancyId/waiver',
+    WRITE,
+    async (request, reply) => {
+      const tenancyId = validId(request.params.tenancyId, 'tenancyId');
+      const posted = request.body as { reason?: string };
+      await deps.recordCompletenessException(deps.pool, {
+        tenancyId,
+        rule: 'handover_protocol',
+        actor: requireText(request.staff?.email ?? '', 'actor', 200),
+        reason: requireText(posted.reason ?? '', 'reason', 200),
+        at: deps.clock.now(),
+      });
+      return reply.redirect(`/estate/tenancies/${tenancyId}`);
+    },
+  );
 
   app.post<{ Params: { tenancyId: string } }>(
     '/estate/tenancies/:tenancyId/activate',
@@ -1432,4 +1594,84 @@ export function registerEstateRoutes(
       return reply.redirect(`/estate/tenancies/${tenancyId}`);
     },
   );
+
+  app.register(async (scope) => {
+    await scope.register(multipart, { limits: END_LIMITS });
+    scope.post<{ Params: { tenancyId: string } }>(
+      '/estate/tenancies/:tenancyId/end',
+      END,
+      async (request, reply) => {
+        const tenancyId = validId(request.params.tenancyId, 'tenancyId');
+        const posted = await readEndForm(request);
+        verifyCsrf(
+          readSessionCookie(request.headers.cookie) ?? '',
+          posted.fields[CSRF_FIELD],
+        );
+        const notice = posted.fields.notice_date?.trim() ?? '';
+        let sourceDocumentId: string | null = null;
+        if (posted.bytes) {
+          const letting = await deps.getTenancy(deps.pool, tenancyId);
+          sourceDocumentId = await deps.fileTerminationNotice({
+            tenancyId,
+            unitId: letting.unit_id,
+            bytes: posted.bytes,
+            filedBy: requireStaffAccountId(request),
+          });
+        }
+        await deps.endTenancyEarly(deps.pool, {
+          tenancyId,
+          actualMoveOut: requireText(
+            posted.fields.actual_move_out,
+            'actual_move_out',
+            10,
+          ),
+          noticeDate:
+            notice === '' ? null : requireText(notice, 'notice_date', 10),
+          actor: requireText(request.staff?.email ?? '', 'actor', 200),
+          sourceDocumentId,
+        });
+        return reply.redirect(`/estate/tenancies/${tenancyId}`);
+      },
+    );
+  });
+}
+
+interface EndForm {
+  fields: Record<string, string>;
+  bytes: Buffer | null;
+}
+
+/**
+ * Dates, and a notice letter when one was chosen. An empty file part is a
+ * phone call. A second file is drained so the request cannot stall.
+ */
+async function readEndForm(request: {
+  parts: () => AsyncIterableIterator<
+    | { type: 'field'; fieldname: string; value: unknown }
+    | {
+        type: 'file';
+        fieldname: string;
+        file: { truncated: boolean };
+        toBuffer: () => Promise<Buffer>;
+      }
+  >;
+}): Promise<EndForm> {
+  const fields: Record<string, string> = {};
+  let bytes: Buffer | null = null;
+  for await (const part of request.parts()) {
+    if (part.type === 'file') {
+      const read = await part.toBuffer();
+      if (part.file.truncated) {
+        throw new KernelError('invalid', 'the file is larger than we accept', {
+          maxBytes: END_LIMITS.fileSize,
+        });
+      }
+      if (part.fieldname === 'file' && read.length > 0 && bytes === null) {
+        bytes = read;
+      }
+      continue;
+    }
+    fields[part.fieldname] = String(part.value);
+  }
+  return { fields, bytes };
 }

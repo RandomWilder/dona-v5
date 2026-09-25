@@ -18,6 +18,12 @@ export interface UnitLetting {
   start_date: string;
   end_date: string;
   status: string;
+  notice_date: string | null;
+}
+
+/** One letting on a named unit. Same facts as `UnitLetting`, so a page can ask once. #159. */
+export interface LettingOnUnit extends UnitLetting {
+  unit_id: string;
 }
 
 /** One letting, for the tenancy sheet. Dates, status, and the promoted copies. No party. #107, #134. */
@@ -44,11 +50,35 @@ export interface TenancyPartyRow {
 }
 
 /**
- * Every letting on one unit, newest first.
+ * Every letting on these units, newest start first within a unit. #159.
  *
- * Dates are cast to text in SQL for `read-model.ts`'s reason: `pg` hands a `date` back as a JS Date
- * at local midnight, and a date that moves a day when the server changes timezone is a bug that only
- * appears in production.
+ * Same question as `listUnitTenancies`, asked once for a page. Dates are cast to text so a
+ * `date` does not shift when the server's timezone changes. No day predicate: a caller that
+ * needs "still waiting" or "inside the expiring window" does that arithmetic on these dates
+ * and the clock.
+ */
+export async function listLettingsForUnits(
+  db: Queryable,
+  unitIds: readonly string[],
+): Promise<LettingOnUnit[]> {
+  if (unitIds.length === 0) return [];
+  const result = await db.query<LettingOnUnit>(
+    `SELECT tenancy_id,
+            unit_id,
+            start_date::text AS start_date,
+            end_date::text AS end_date,
+            notice_date::text AS notice_date,
+            status
+       FROM tenancy
+      WHERE unit_id = ANY($1::uuid[])
+      ORDER BY unit_id, start_date DESC`,
+    [[...unitIds]],
+  );
+  return result.rows;
+}
+
+/**
+ * Every letting on one unit, newest first.
  *
  * Every status, deliberately. A lease being filed against a tenancy that ended in March is an
  * ordinary act — the paperwork arrives after the letting does — and a list that showed only the
@@ -58,17 +88,14 @@ export async function listUnitTenancies(
   db: Queryable,
   unitId: string,
 ): Promise<UnitLetting[]> {
-  const result = await db.query<UnitLetting>(
-    `SELECT tenancy_id,
-            start_date::text AS start_date,
-            end_date::text AS end_date,
-            status
-       FROM tenancy
-      WHERE unit_id = $1
-      ORDER BY start_date DESC`,
-    [unitId],
-  );
-  return result.rows;
+  const rows = await listLettingsForUnits(db, [unitId]);
+  return rows.map((row) => ({
+    tenancy_id: row.tenancy_id,
+    start_date: row.start_date,
+    end_date: row.end_date,
+    status: row.status,
+    notice_date: row.notice_date,
+  }));
 }
 
 /**

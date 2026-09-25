@@ -5,7 +5,9 @@
 // 5.7 Obligation / ObligationType (`listObligationTypes` at 5.8 for the settings screen). Who a
 // phone reaches *today* is still `src/scope/`'s answer; `listUnitTenancies` answers which lettings
 // a flat has; `listIncompleteTenancies` answers which of those miss a named completeness rule (ערב,
-// and from #108 each activation-gate miss); `listTenancyEvents` answers what changed on those
+// and from #108 each activation-gate miss); `listActivationQueue` (#158) answers which drafts
+// the gate will activate today or within `ACTIVATION_QUEUE_DAYS`, still with no party;
+// `listTenancyEvents` answers what changed on those
 // lettings; `listActiveLettingsInBuilding` (#122) is the office inventory of Units let in a
 // Building today. None takes a phone.
 // SPEC-tenancy.md sets out the difference, because the line between the two is the module boundary.
@@ -15,6 +17,8 @@ export type {
   ActivationCheck,
   ActivationFlag,
   ActivationGate,
+  BlockingLetting,
+  ProtocolWaiver,
   RequiredActivationDocument,
   TenancyDocumentFact,
   TenancyDocumentsReader,
@@ -22,9 +26,11 @@ export type {
 export {
   activateTenancy,
   activationGate,
+  EARLY_HANDOVER_DAYS,
   REQUIRED_FOR_ACTIVATION,
 } from './internal/activation.ts';
 export type {
+  EndTenancyEarlySpec,
   ExerciseOptionSpec,
   PromotedFieldSpec,
   PromotedTenancyField,
@@ -37,6 +43,7 @@ export type {
 } from './internal/commands.ts';
 export {
   applyPromotedField,
+  endTenancyEarly,
   exerciseOption,
   expireDueTenancies,
   findTermsProfileByName,
@@ -50,11 +57,18 @@ export {
   upsertTermsProfile,
 } from './internal/commands.ts';
 export type {
+  ActivationQueue,
+  ActivationQueueDraft,
+  ArmingSoon,
   CompletenessExceptionSpec,
   CompletenessRule,
   IncompleteTenancy,
+  ProtocolWaiverView,
+  ReadyToActivate,
 } from './internal/completeness.ts';
 export {
+  ACTIVATION_QUEUE_DAYS,
+  listActivationQueue,
   listIncompleteTenancies,
   recordCompletenessException,
 } from './internal/completeness.ts';
@@ -62,6 +76,7 @@ export type { TenancyEventRow } from './internal/events.ts';
 export { listTenancyEvents } from './internal/events.ts';
 export type {
   ActiveLettingInBuilding,
+  LettingOnUnit,
   TenancyPartyRow,
   TenancyRow,
   UnitLetting,
@@ -70,6 +85,7 @@ export {
   countIdentifierOverlap,
   getTenancy,
   listActiveLettingsInBuilding,
+  listLettingsForUnits,
   listTenancyParties,
   listUnitTenancies,
 } from './internal/lettings.ts';

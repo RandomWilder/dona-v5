@@ -8,10 +8,14 @@
 // numbers are in tasks/evidence/4.8.md.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { listTenancyDocumentFacts } from '../../src/evidence/contract.ts';
+import {
+  listTenancyDocumentFacts,
+  PROTOCOL_CONFIRM_ACTION,
+} from '../../src/evidence/contract.ts';
 import { fixedClock } from '../../src/kernel/clock.ts';
 import { newId } from '../../src/kernel/ids.ts';
 import {
+  listActivationQueue,
   listIncompleteTenancies,
   REQUIRED_FOR_ACTIVATION,
   recordCompletenessException,
@@ -70,6 +74,14 @@ async function linkApproved(
      VALUES ($1, 'TENANCY', $2, 'EVIDENCE')`,
     [documentId, tenancyId],
   );
+  if (typeKey === 'handover_protocol') {
+    await db.query(
+      `INSERT INTO audit_log (
+         id, at, actor_kind, actor_id, action, subject_id, inputs, outcome
+       ) VALUES ($1, $2, 'staff', $3, $4, $5, '{}'::jsonb, 'ok')`,
+      [newId(), AT, 'policy@example.test', PROTOCOL_CONFIRM_ACTION, documentId],
+    );
+  }
   return documentId;
 }
 
@@ -408,6 +420,161 @@ describe('policy · gate misses join the incomplete-tenancy queue as named rules
         await addGuarantor(db, occupancy.tenancyId);
         const queue = await queueOf(db);
         assert.ok(!queue.some((row) => row.tenancy_id === occupancy.tenancyId));
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('stops listing a waived protocol, and a remaining miss carries who waived it', async (t) => {
+    const pool = await policyPool();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const onlyProtocol = await seedOccupancy(db, '1562', {
+          phone: '+972501110156',
+          contactFrom: '2026-01-01',
+          contactTo: null,
+          tenancyFrom: '2026-01-01',
+          tenancyTo: '2027-01-01',
+          status: 'DRAFT',
+        });
+        await linkApproved(db, onlyProtocol.tenancyId, 'lease');
+        await addGuarantor(db, onlyProtocol.tenancyId);
+        const reason = 'פרוטוקול קודם למערכת';
+        await recordCompletenessException(db, {
+          tenancyId: onlyProtocol.tenancyId,
+          rule: 'handover_protocol',
+          actor: 'אסף',
+          reason,
+          at: AT,
+        });
+
+        const waiting = await seedOccupancy(db, '1563', {
+          phone: '+972501110157',
+          contactFrom: '2026-10-01',
+          contactTo: null,
+          tenancyFrom: '2026-10-01',
+          tenancyTo: '2027-09-30',
+          status: 'DRAFT',
+        });
+        await linkApproved(db, waiting.tenancyId, 'lease');
+        await addGuarantor(db, waiting.tenancyId);
+        await recordCompletenessException(db, {
+          tenancyId: waiting.tenancyId,
+          rule: 'handover_protocol',
+          actor: 'אסף',
+          reason,
+          at: AT,
+        });
+
+        const queue = await queueOf(db);
+        assert.ok(
+          !queue.some((row) => row.tenancy_id === onlyProtocol.tenancyId),
+        );
+        const mine = queue.filter(
+          (row) => row.tenancy_id === waiting.tenancyId,
+        );
+        assert.deepEqual(
+          mine.map((row) => row.missing),
+          ['start_reached'],
+        );
+        assert.equal(mine[0]?.protocolWaiver?.actor, 'אסף');
+        assert.equal(mine[0]?.protocolWaiver?.reason, reason);
+        assert.equal(mine[0]?.protocolWaiver?.at, '2026-09-15');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+});
+
+describe('policy · the ready-to-activate queue reads the gate', () => {
+  it('moves a seeded draft from armed-soon to ready, and a missed day stays visible', async (t) => {
+    const pool = await policyPool();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const near = await seedOccupancy(db, '1581', {
+          phone: '+972501110158',
+          contactFrom: '2026-09-29',
+          contactTo: null,
+          tenancyFrom: '2026-09-29',
+          tenancyTo: '2027-09-28',
+          status: 'DRAFT',
+        });
+        const far = await seedOccupancy(db, '1582', {
+          phone: '+972501110159',
+          contactFrom: '2026-09-30',
+          contactTo: null,
+          tenancyFrom: '2026-09-30',
+          tenancyTo: '2027-09-29',
+          status: 'DRAFT',
+        });
+        await linkApproved(db, near.tenancyId, 'lease');
+        await linkApproved(db, near.tenancyId, 'handover_protocol');
+        await linkApproved(db, far.tenancyId, 'lease');
+        await linkApproved(db, far.tenancyId, 'handover_protocol');
+
+        const on = (day: string) =>
+          listActivationQueue(
+            db,
+            fixedClock(new Date(`${day}T09:00:00.000Z`)),
+            listTenancyDocumentFacts,
+          );
+
+        const mine = <T extends { tenancy_id: string }>(rows: readonly T[]) =>
+          rows.filter(
+            (row) =>
+              row.tenancy_id === near.tenancyId ||
+              row.tenancy_id === far.tenancyId,
+          );
+
+        const armed = await on('2026-09-15');
+        assert.equal(armed.withinDays, 14);
+        assert.deepEqual(
+          mine(armed.soon).map((row) => [row.tenancy_id, row.activatable_on]),
+          [[near.tenancyId, '2026-09-29']],
+        );
+        assert.deepEqual(mine(armed.ready), []);
+
+        const today = await on('2026-09-29');
+        assert.deepEqual(
+          mine(today.ready).map((row) => [
+            row.tenancy_id,
+            row.missed,
+            row.ready_since,
+          ]),
+          [[near.tenancyId, false, '2026-09-29']],
+        );
+        assert.deepEqual(
+          mine(today.soon).map((row) => [row.tenancy_id, row.activatable_on]),
+          [[far.tenancyId, '2026-09-30']],
+        );
+
+        const missed = await on('2026-09-30');
+        assert.deepEqual(
+          mine(missed.ready).map((row) => [
+            row.tenancy_id,
+            row.missed,
+            row.ready_since,
+          ]),
+          [
+            [near.tenancyId, true, '2026-09-29'],
+            [far.tenancyId, false, '2026-09-30'],
+          ],
+        );
+        assert.deepEqual(mine(missed.soon), []);
+
+        const printed = JSON.stringify(missed);
+        assert.equal(printed.includes('Tenant of 1581'), false);
+        assert.equal(printed.includes('Tenant of 1582'), false);
       });
     } finally {
       await pool.end();
