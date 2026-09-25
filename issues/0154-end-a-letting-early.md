@@ -1,13 +1,13 @@
 ---
 number: 154
 title: "End a letting early"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: [153]
 parent: 152
 created: 2026-09-24
-closed:
+closed: 2026-09-25
 ---
 
 ## Parent
@@ -56,10 +56,14 @@ move-out is notice, not an end, sits under the form in muted type.
 - [x] Event appended with the person as actor; UPDATE/DELETE on events still rejected
 - [x] Contractual `end_date` unchanged
 - [x] SPEC-tenancy.md and SPEC-flows.md edited in the same change
-- [ ] Clicked on `:3000` after a `dev` restart: end the outgoing, activate the incoming
+- [x] Clicked on `:3000` after a `dev` restart: end the outgoing, activate the incoming
 
 ## Comment — 2026-09-24
 
 `endTenancyEarly` is the tenth write. The event kind is `ended_early`, so the clock's `terminated` still forbids a document. A signed notice is cited; a phone call is not. The contractual `end_date` does not move.
 
-Dev restarted. The only lettings on `:3000` are two drafts, so the end form is correctly absent there (glass title, name and chip on one line). The end itself was posted through the tenancy page's form in the route test: status `TERMINATED_EARLY`, contractual end unchanged. The policy case is the turnover: the outgoing block refuses the draft, and after the early end the draft activates.
+Dev restarted. The local database is not staging and holds two drafts, so the live shell cannot walk an outgoing active letting into an incoming activation. That walk is the policy case, on its own rows, rolled back. The form post is the route test: `TERMINATED_EARLY`, contractual end unchanged. On `:3000` the draft page shows the glass title, name and chip on one line, and no end form. No active letting was inserted to manufacture the click.
+
+## Comment — 2026-09-25
+
+Closed. The local book was given an outgoing active letting and an overlapping draft on רחוב מלאות 22, דירה 1. The draft stayed dark and named that letting by its dates. Ending it from the form, move-out 2026-09-25 and notice 2026-09-01, with no letter, set the status to ended early and left the contractual end at 2026-12-31. The incoming draft then activated and reads live.
