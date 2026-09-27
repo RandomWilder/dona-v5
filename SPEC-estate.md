@@ -216,7 +216,9 @@ estate's fact. It lives at `src/index-page.ts`, beside `src/app.ts` which regist
 one screen in this system whose nav spans two modules and carries the sign-out form. **Slice 5.2b
 moved that bar off this module entirely**; **5.2c is the same rail as an ops sidebar**; **5.2d
 is that rail as a phone drawer**, still not this module's. Estate writes none of it. The
-composition root injects the chrome every signed-in screen carries.
+composition root injects the chrome every signed-in screen carries. **#162** adds a door,
+שכירויות, on that index and on the rail, immediately before חוזים לא שלמים. The index lede no
+longer says that no screen shows a tenant name. Phone numbers stay off every screen.
 
 **`GET /estate/search?q=` searches buildings and units, and deliberately not people.** A search that
 reached `party` would put a real person behind a route with no session, the week the register
@@ -241,6 +243,34 @@ either is the defect 2.6 wrote a test for.
 
 **`GET /estate/expiring` is Q5** — every ACTIVE lease in the portfolio ending inside sixty days, one
 indexed query, ordered by date. It shows a unit, a building and a date and **no party at all**.
+
+### שכירויות — the book of every letting (#162)
+
+**`GET /estate/tenancies`** lists every letting: drafts, including a draft with no filed document,
+live lettings, lettings that ended on their date, and lettings that ended early. The permission is
+`estate.read`, the same stance as the tenancy page. No new permission, no migration, no new column.
+
+Five sections, top to bottom, and an empty section keeps its title: מוכנה, טיוטה, ממתינה, פעיל,
+then עבר. The first four sort by oldest lease start first. עבר sorts by the day the household
+left, most recent first. An early ending uses the recorded move-out. A letting that ran its course
+uses the contract end. The row chip in עבר stays הסתיים or הופסק.
+
+A row is one sentence — the household, the street, the building number when the building has one,
+the city, the unit — plus the lease dates and one chip. No building number, that part is left out.
+The name is the primary tenant, otherwise the first person in the order the tenancy page already
+uses, otherwise the place alone. Drafts and past lettings are named too. Co-tenants stay off the
+row. The row opens the tenancy page. There is no activate button on it.
+
+While the letting is still a draft, the chip is a label read from `activationGate`, not a stored
+state and not a second copy of the gate's checks. מוכנה when the gate says the letting can be
+activated. ממתינה when the only failing check is that the start date has not arrived, including a
+start beyond fourteen days. Every other failure, including a missing protocol and a letting in the
+way, reads טיוטה. A live letting reads פעיל. The clock still never activates. The tenancy page
+heading uses the same sentence, including the building number when there is one. Its own chip stays
+the stored word, and the checks stay beside the press.
+
+[ADR-0011](docs/decisions/ADR-0011-the-tenancies-book-may-name-the-household.md) is why this list
+may name the household. Search, חוזים לא שלמים, and the נכסים tile stay nameless.
 
 **Q3 (what is overdue for inspection in this building) and Q7 (which bay is assigned to unit 12,
 and who serviced its gate motor)** landed as queries at 3.5, not as screens. Q3 is `Space → Asset
@@ -270,9 +300,10 @@ are let today, because deciding when a tenancy counts is what only that module m
 `countUnitsByBuilding` says *where* they are, because that is estate's own structure. The buildings
 list costs two queries rather than one per building.
 
-The chip is a state and a count and never a tenant's name, which is the rule every screen here keeps
-— including after 5.2, which was entitled to lift it behind the session and did not, and after 5.4,
-which reconsidered it while unlocking evidence provenance and kept it again.
+The chip is a state and a count and never a tenant's name, which is the rule these occupancy
+screens keep — including after 5.2, which was entitled to lift it behind the session and did not,
+and after 5.4, which reconsidered it while unlocking evidence provenance and kept it again.
+שכירויות (#162) is the exception, and only that list: [ADR-0011](docs/decisions/ADR-0011-the-tenancies-book-may-name-the-household.md).
 
 **These screens went behind the session at slice 5.2**, which closed the dated state this paragraph
 described from 1.11 to week 5. Staff auth is Google sign-in behind an allowlist (5.1, amended by

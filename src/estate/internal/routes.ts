@@ -5,10 +5,8 @@
 // omission: a JSON endpoint would have to be scoped before the screens could be shown to anybody,
 // and these screens are shown to nobody who is not in the room.
 //
-// **Nothing here has a session, and every screen is built so that it does not need one yet.** Week 5
-// is where staff auth lands (tasks/roadmap.md); until then the rule these routes keep is that no
-// party name and no contact value reaches a response. The occupancy chip is a state and a count,
-// search never touches `party`, and Q5 shows a unit and a date.
+// Every route is behind the session. Search never touches `party`, Q5 shows a unit and a date,
+// and no phone reaches a response. #162's book is the list allowed to name a household.
 import multipart from '@fastify/multipart';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
@@ -32,6 +30,7 @@ import {
 import {
   type ActivationFlag,
   listLettingsForUnits,
+  type TenancyBook,
 } from '../../tenancy/contract.ts';
 import { addCalendarYears, WARRANTY_YEARS } from './assets.ts';
 import { listEstateEvents } from './events.ts';
@@ -95,6 +94,7 @@ import {
   renderNewInventoryPage,
   renderNewUnitPage,
   renderSearchPage,
+  renderTenanciesPage,
   renderTenancyDetailPage,
   renderUnitPage,
   type TenancyEventView,
@@ -141,6 +141,8 @@ export interface EstateDeps {
     db: Pool,
   ) => Promise<readonly IncompleteTenancyRow[]>;
   listActivationQueue: (db: Pool) => Promise<ActivationQueueView>;
+  /** #162. Every letting, already sectioned. Estate prints it. */
+  listTenancyBook: (db: Pool) => Promise<TenancyBook>;
   recordCompletenessException: (
     db: Pool,
     spec: {
@@ -1461,6 +1463,15 @@ export function registerEstateRoutes(
         .send();
     },
   );
+
+  app.get('/estate/tenancies', READ, async (request, reply) => {
+    const book = await deps.listTenancyBook(deps.pool);
+    html(reply);
+    return renderTenanciesPage(
+      book,
+      deps.chrome(csrfFrom(request), 'tenancies', mayFile(request)),
+    );
+  });
 
   app.get('/estate/tenancies/:tenancyId', READ, async (request, reply) => {
     const tenancyId = validId(

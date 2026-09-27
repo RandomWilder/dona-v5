@@ -122,6 +122,7 @@ export {
   renderNewInventoryPage,
   renderNewUnitPage,
   renderSearchPage,
+  renderTenanciesPage,
   renderTenancyDetailPage,
   renderUnitPage,
 } from './internal/views.ts';

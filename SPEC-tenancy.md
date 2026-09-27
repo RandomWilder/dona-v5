@@ -291,7 +291,13 @@ call. `terminated_has_no_document` is not relaxed: the clock's kind keeps its sh
   each from `activationGate`: `canActivate` is ready to press, oldest start first; a single miss of
   `start_reached` whose `activatableOn` is on or before today plus `ACTIVATION_QUEUE_DAYS` (14) is
   arming soon. The date a ready draft has been waiting is the lease start — the date the gate
-  reports as `activatableOn` before that day arrives. The query returns no party and no name. **#156** amends the rule that
+  reports as `activatableOn` before that day arrives. The query returns no party and no name. **#162** exports `listTenancyBook` beside it. Every
+letting is in the book, including a draft with no filed document. A draft's section is a reading
+of `activationGate` and of nothing else: `canActivate` is מוכנה, a single miss of `start_reached`
+is ממתינה with no fourteen-day window, and every other miss is טיוטה. `ACTIVE` is פעיל. `ENDED`
+and `TERMINATED_EARLY` are עבר, sorted by the recorded move-out when the ending was early and by
+the contract end otherwise, most recent first. The household name is the primary tenant, otherwise
+the first person in `listTenancyParties`' order, otherwise none. No phone. **#156** amends the rule that
   gate misses are not excepted: `handover_protocol` may be waived for one letting. A recorded
   waiver makes that check pass, and any row the letting still occupies on this queue carries who
   recorded it, the office day, and the reason. The query stops listing the protocol miss. `lease`,

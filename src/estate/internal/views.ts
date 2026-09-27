@@ -13,11 +13,14 @@
 //
 // **Four screens from 2.6, and one rule across the browsable ones: no name and no number.**
 // Lists and chips still get a state and a count. #107 hands names to one letting's sheet.
+// #162's book is the list allowed to name the household (ADR-0011). Phone numbers stay off.
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import {
   type ActivationFlag,
   EARLY_HANDOVER_DAYS,
+  type TenancyBook,
+  type TenancyBookRow,
 } from '../../tenancy/contract.ts';
 import type { BuildingStatus, ConditionStatus } from './plan.ts';
 import type {
@@ -2621,22 +2624,125 @@ function optionLine(optionEndDate: string | null): Html {
   return optionEndDate === null ? h`—` : ltr(optionEndDate);
 }
 
+function lettingTitle(row: {
+  household_name: string | null;
+  address_line: string;
+  building_number?: string | null;
+  city: string;
+  unit_number: string;
+}): string {
+  const number =
+    row.building_number != null && row.building_number !== ''
+      ? `, בניין ${row.building_number}`
+      : '';
+  const place = `${row.address_line}${number}, ${row.city} · דירה ${row.unit_number}`;
+  return row.household_name ? `${row.household_name} · ${place}` : place;
+}
+
+function lettingSentence(row: {
+  household_name: string | null;
+  address_line: string;
+  building_number?: string | null;
+  city: string;
+  unit_number: string;
+}): Html {
+  const number =
+    row.building_number != null && row.building_number !== ''
+      ? h`, בניין ${ltr(row.building_number)}`
+      : h``;
+  const place = h`${row.address_line}${number}, ${row.city} · דירה ${ltr(row.unit_number)}`;
+  return row.household_name ? h`${row.household_name} · ${place}` : place;
+}
+
+const BOOK_WORD: Record<TenancyBookRow['chip'], string> = {
+  ready: 'מוכנה',
+  draft: 'טיוטה',
+  waiting: 'ממתינה',
+  active: 'פעיל',
+  ended: 'הסתיים',
+  stopped: 'הופסק',
+};
+
+const BOOK_SECTIONS: readonly (readonly [keyof TenancyBook, string])[] = [
+  ['ready', 'מוכנה'],
+  ['draft', 'טיוטה'],
+  ['waiting', 'ממתינה'],
+  ['active', 'פעיל'],
+  ['past', 'עבר'],
+];
+
+function bookChip(chip: TenancyBookRow['chip']): Html {
+  const word = BOOK_WORD[chip];
+  if (chip === 'ready' || chip === 'active') {
+    return h`<span class="chip is-ok"><span class="dot"></span>${word}</span>`;
+  }
+  if (chip === 'draft') {
+    return h`<span class="chip is-accent"><span class="dot is-hollow"></span>${word}</span>`;
+  }
+  if (chip === 'waiting') {
+    return h`<span class="chip is-neutral"><span class="dot is-hollow"></span>${word}</span>`;
+  }
+  return h`<span class="chip is-neutral">${word}</span>`;
+}
+
+/**
+ * #162. Every letting. Prints the book it is handed. Does not read the gate.
+ */
+export function renderTenanciesPage(book: TenancyBook, nav: Html): string {
+  const body = h`
+    <div class="glass-stage">
+    <header class="page-head">
+      <div>
+        <h1>שכירויות</h1>
+        <p class="lede">כל ההשכרות בתיק.</p>
+      </div>
+    </header>
+    ${BOOK_SECTIONS.map(([key, title]) => {
+      const rows = book[key];
+      return h`<section class="glass sheet">
+        <h2 class="block-title">${title}</h2>
+        ${
+          rows.length === 0
+            ? h``
+            : h`<div class="q-list">
+                ${rows.map(
+                  (
+                    row,
+                  ) => h`<a class="q-row glass is-raised" href="/estate/tenancies/${row.tenancy_id}">
+                    <div>
+                      <span>${lettingSentence(row)}</span>
+                      <p class="lede">${ltr(`${row.start_date} — ${row.end_date}`)}</p>
+                    </div>
+                    ${bookChip(row.chip)}
+                  </a>`,
+                )}
+              </div>`
+        }
+      </section>`;
+    })}
+    </div>`;
+  return page('דונה דום — שכירויות', body, nav);
+}
+
 /**
  * A5 — one letting. #107. The card under the render-only rule: #134.
  * Prints the gate; does not re-run it. Prints every capture it is handed; does not inspect values.
  */
 export function renderTenancyDetailPage(sheet: TenancySheet): string {
-  const primary =
-    sheet.people.find((person) => person.role === 'PRIMARY_TENANT') ??
+  const person =
+    sheet.people.find((row) => row.role === 'PRIMARY_TENANT') ??
     sheet.people[0];
-  const title = primary
-    ? `${primary.fullName} · ${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${sheet.unit.unit_number}`
-    : `${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${sheet.unit.unit_number}`;
+  const place = {
+    household_name: person?.fullName ? person.fullName : null,
+    address_line: sheet.unit.address_line,
+    building_number: sheet.unit.building_number,
+    city: sheet.unit.city,
+    unit_number: sheet.unit.unit_number,
+  };
+  const title = lettingTitle(place);
   const lease = ofType(sheet.documents, 'lease');
   const active = sheet.status === 'ACTIVE';
-  const heading = primary
-    ? h`${primary.fullName} · ${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${ltr(sheet.unit.unit_number)}`
-    : h`${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${ltr(sheet.unit.unit_number)}`;
+  const heading = lettingSentence(place);
   const body = h`
     <div class="glass-stage">
     <div class="glass tenancy-sheet">

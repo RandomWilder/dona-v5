@@ -19,8 +19,9 @@ import { KernelError } from '../kernel/errors.ts';
 import { createFakeExtractor } from '../kernel/extraction.ts';
 import { newId } from '../kernel/ids.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
+import { h } from '../kernel/ui/html.ts';
 import type { EstatePlan } from './contract.ts';
-import { importEstate } from './contract.ts';
+import { importEstate, renderTenanciesPage } from './contract.ts';
 
 // Slice 5.2: these routes are behind the session now, so the suite holds one. What it asserts is
 // unchanged — what changed is that a request without this cookie never reaches the assertion.
@@ -2724,3 +2725,522 @@ describe('estate · the tenancy page', () => {
     }
   });
 });
+
+const BOOK_CITY = 'עיר שכירויות';
+const BOOK_STREET = 'רחוב הספר 4';
+const BOOK_BARE = 'רחוב בלי מספר 8';
+const BOOK_PROJECT = 'TEST-BOOK';
+const BOOK_DOMAIN = 'tenancies-book.test';
+const BOOK_AT = new Date('2026-09-27T09:00:00.000Z');
+const BOOK_NUMBER = '206';
+
+function bookFlats(count: number): {
+  spaces: EstatePlan['buildings'][number]['spaces'];
+  units: EstatePlan['buildings'][number]['units'];
+} {
+  const spaces = [];
+  const units = [];
+  for (let n = 1; n <= count; n++) {
+    const name = `דירה ${n}`;
+    spaces.push({ kind: 'UNIT' as const, name, floor: '1', accessNote: null });
+    units.push({
+      spaceName: name,
+      unitNumber: String(n),
+      rooms: 3,
+      areaSqm: 70,
+      hasMamad: false,
+      parkingSpaceName: null,
+      storageSpaceName: null,
+      warrantyEndDate: null,
+      conditionStatus: 'READY' as const,
+    });
+  }
+  return { spaces, units };
+}
+
+const numbered = bookFlats(12);
+
+const bookPlan: EstatePlan = {
+  projects: [
+    {
+      name: 'מכרז שכירויות',
+      projectCode: BOOK_PROJECT,
+      tenderRef: null,
+      status: 'ACTIVE',
+    },
+  ],
+  buildings: [
+    {
+      name: 'בניין ממוספר',
+      addressLine: BOOK_STREET,
+      city: BOOK_CITY,
+      projectCode: BOOK_PROJECT,
+      handoverDate: '2025-03-01',
+      warrantyEndDate: '2027-03-01',
+      status: 'ACTIVE',
+      buildingNumber: BOOK_NUMBER,
+      spaces: numbered.spaces,
+      units: numbered.units,
+    },
+    {
+      name: 'בניין בלי מספר',
+      addressLine: BOOK_BARE,
+      city: BOOK_CITY,
+      projectCode: BOOK_PROJECT,
+      handoverDate: '2025-03-01',
+      warrantyEndDate: '2027-03-01',
+      status: 'ACTIVE',
+      spaces: [{ kind: 'UNIT', name: 'דירה ב', floor: '1', accessNote: null }],
+      units: [
+        {
+          spaceName: 'דירה ב',
+          unitNumber: 'ב',
+          rooms: 2,
+          areaSqm: 50,
+          hasMamad: false,
+          parkingSpaceName: null,
+          storageSpaceName: null,
+          warrantyEndDate: null,
+          conditionStatus: 'READY',
+        },
+      ],
+    },
+  ],
+};
+
+function bookTitles(html: string): string[] {
+  return [...html.matchAll(/<h2 class="block-title">([^<]*)<\/h2>/g)].map(
+    (match) => (match[1] ?? '').trim(),
+  );
+}
+
+describe('estate · שכירויות', () => {
+  it('keeps every section title when the book is empty', () => {
+    const html = renderTenanciesPage(
+      { ready: [], draft: [], waiting: [], active: [], past: [] },
+      h``,
+    );
+    assert.deepEqual(bookTitles(html), [
+      'מוכנה',
+      'טיוטה',
+      'ממתינה',
+      'פעיל',
+      'עבר',
+    ]);
+    assert.doesNotMatch(html, /<a class="q-row/);
+    assert.doesNotMatch(html, /הפעלת/);
+    assert.doesNotMatch(html, /מוכנה היום|מוכנה מאז|נדלקת/);
+  });
+
+  it('lists every letting in five sections, and the tenancy page uses the same sentence', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(BOOK_AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    await signOutAll(pool, BOOK_DOMAIN);
+    await bookCleanup(pool);
+    const who = await signIn(pool, clock, {
+      email: `ops@${BOOK_DOMAIN}`,
+      role: 'VIEWER',
+    });
+    const client = asOperator(app, who);
+    try {
+      await importEstate(pool, bookPlan);
+      const profile = await pool.query<{ terms_profile_id: string }>(
+        `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)
+         ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+         RETURNING terms_profile_id`,
+        [newId(), `book-${BOOK_PROJECT}`],
+      );
+      const profileId = profile.rows[0]?.terms_profile_id ?? '';
+      const db = pool;
+
+      async function unitOf(
+        address: string,
+        unitNumber: string,
+      ): Promise<string> {
+        const found = await db.query<{ unit_id: string }>(
+          `SELECT u.unit_id FROM unit u
+             JOIN space s ON s.space_id = u.unit_id
+             JOIN building b ON b.building_id = s.building_id
+            WHERE b.city = $1 AND b.address_line = $2 AND u.unit_number = $3`,
+          [BOOK_CITY, address, unitNumber],
+        );
+        return found.rows[0]?.unit_id ?? '';
+      }
+
+      async function grant(spec: {
+        address: string;
+        unit: string;
+        start: string;
+        end: string;
+        status: 'DRAFT' | 'ACTIVE' | 'ENDED' | 'TERMINATED_EARLY';
+        moveOut?: string;
+        name?: string;
+        role?: 'PRIMARY_TENANT' | 'CO_TENANT';
+        co?: string;
+        papers?: 'full' | 'lease';
+      }): Promise<string> {
+        const tenancyId = newId();
+        await db.query(
+          `INSERT INTO tenancy (
+             tenancy_id, unit_id, start_date, end_date, status,
+             terms_profile_id, actual_move_out
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            tenancyId,
+            await unitOf(spec.address, spec.unit),
+            spec.start,
+            spec.end,
+            spec.status,
+            profileId,
+            spec.moveOut ?? null,
+          ],
+        );
+        const attach = async (
+          fullName: string,
+          role: 'PRIMARY_TENANT' | 'CO_TENANT',
+        ) => {
+          const partyId = newId();
+          await db.query(
+            `INSERT INTO party (party_id, party_kind, full_name)
+             VALUES ($1, 'PERSON', $2)`,
+            [partyId, fullName],
+          );
+          await db.query(
+            `INSERT INTO tenancy_party (tenancy_id, party_id, role, is_service_contact)
+             VALUES ($1, $2, $3, true)`,
+            [tenancyId, partyId, role],
+          );
+        };
+        if (spec.name) await attach(spec.name, spec.role ?? 'PRIMARY_TENANT');
+        if (spec.co) await attach(spec.co, 'CO_TENANT');
+        if (spec.papers === 'lease' || spec.papers === 'full') {
+          await linkType(db, tenancyId, 'lease', 'חוזה שכירות');
+        }
+        if (spec.papers === 'full') {
+          await linkType(db, tenancyId, 'handover_protocol', 'פרוטוקול מסירה');
+        }
+        return tenancyId;
+      }
+
+      const readyEarly = await grant({
+        address: BOOK_STREET,
+        unit: '1',
+        start: '2026-08-01',
+        end: '2027-07-31',
+        status: 'DRAFT',
+        name: 'אבי מוכן',
+        papers: 'full',
+      });
+      await grant({
+        address: BOOK_STREET,
+        unit: '2',
+        start: '2026-09-01',
+        end: '2027-08-31',
+        status: 'DRAFT',
+        name: 'נועה מוכנה',
+        papers: 'full',
+      });
+      await grant({
+        address: BOOK_STREET,
+        unit: '3',
+        start: '2026-01-01',
+        end: '2026-12-31',
+        status: 'DRAFT',
+        name: 'דנה טיוטה',
+        papers: 'lease',
+      });
+      await grant({
+        address: BOOK_STREET,
+        unit: '4',
+        start: '2026-02-01',
+        end: '2026-12-31',
+        status: 'DRAFT',
+        name: 'בלי נייר',
+      });
+      await grant({
+        address: BOOK_STREET,
+        unit: '5',
+        start: '2026-03-01',
+        end: '2026-12-31',
+        status: 'DRAFT',
+        name: 'ראשון בלי ראשי',
+        role: 'CO_TENANT',
+      });
+      await grant({
+        address: BOOK_STREET,
+        unit: '6',
+        start: '2026-10-01',
+        end: '2027-09-30',
+        status: 'DRAFT',
+        name: 'רם ממתין',
+        papers: 'full',
+      });
+      await grant({
+        address: BOOK_STREET,
+        unit: '7',
+        start: '2026-12-01',
+        end: '2027-11-30',
+        status: 'DRAFT',
+        name: 'מאיה ממתינה',
+        papers: 'full',
+      });
+      const live = await grant({
+        address: BOOK_STREET,
+        unit: '8',
+        start: '2026-03-15',
+        end: '2027-03-14',
+        status: 'ACTIVE',
+        name: 'יוסי פעיל',
+        co: 'שותף נסתר',
+      });
+      await grant({
+        address: BOOK_STREET,
+        unit: '9',
+        start: '2026-06-01',
+        end: '2027-05-31',
+        status: 'ACTIVE',
+        name: 'שרה פעילה',
+      });
+      await grant({
+        address: BOOK_STREET,
+        unit: '11',
+        start: '2025-07-01',
+        end: '2026-06-30',
+        status: 'ENDED',
+        name: 'יוני הסתיים',
+      });
+      await grant({
+        address: BOOK_STREET,
+        unit: '12',
+        start: '2025-01-01',
+        end: '2026-12-31',
+        status: 'TERMINATED_EARLY',
+        moveOut: '2026-03-15',
+        name: 'מרץ הופסק',
+      });
+      const nameless = await grant({
+        address: BOOK_BARE,
+        unit: 'ב',
+        start: '2026-04-01',
+        end: '2026-12-31',
+        status: 'DRAFT',
+      });
+
+      const index = await client.inject({ method: 'GET', url: '/' });
+      assert.equal(index.statusCode, 200);
+      const cards = [
+        ...index.body.matchAll(/class="card-link" href="([^"]+)"/g),
+      ].map((match) => match[1]);
+      const cardAt = cards.indexOf('/estate/tenancies');
+      assert.equal(cards[cardAt + 1], '/estate/incomplete');
+      assert.doesNotMatch(index.body, /אינם מציגים שמות דיירים/);
+      assert.match(index.body, /מספרי טלפון אינם מוצגים באף מסך/);
+
+      const book = await client.inject({
+        method: 'GET',
+        url: '/estate/tenancies',
+      });
+      assert.equal(book.statusCode, 200);
+      const nav = [
+        ...book.body.matchAll(/class="nav-item" href="([^"]+)"/g),
+      ].map((match) => match[1]);
+      const navAt = nav.indexOf('/estate/tenancies');
+      assert.equal(nav[navAt + 1], '/estate/incomplete');
+      assert.deepEqual(bookTitles(book.body), [
+        'מוכנה',
+        'טיוטה',
+        'ממתינה',
+        'פעיל',
+        'עבר',
+      ]);
+      assert.doesNotMatch(book.body, /הפעלת|\/activate/);
+      assert.doesNotMatch(book.body, /מוכנה היום|מוכנה מאז|נדלקת/);
+      assert.doesNotMatch(book.body, /שותף נסתר/);
+
+      const row = (needle: string): string => {
+        const at = book.body.indexOf(needle);
+        assert.ok(at >= 0, needle);
+        const start = book.body.lastIndexOf('<a class="q-row', at);
+        const end = book.body.indexOf('</a>', at);
+        assert.ok(start >= 0 && end > start, needle);
+        return book.body.slice(start, end);
+      };
+      const earlier = (first: string, second: string) => {
+        const a = book.body.indexOf(first);
+        const b = book.body.indexOf(second);
+        assert.ok(a >= 0 && b > a, `${first} before ${second}`);
+      };
+
+      const avi = row('אבי מוכן');
+      assert.match(avi, new RegExp(`/estate/tenancies/${readyEarly}`));
+      assert.match(
+        avi,
+        /אבי מוכן · רחוב הספר 4, בניין <span dir="ltr">206<\/span>, עיר שכירויות · דירה <span dir="ltr">1<\/span>/,
+      );
+      assert.match(avi, /2026-08-01 — 2027-07-31/);
+      assert.match(avi, />מוכנה</);
+      assert.doesNotMatch(avi, /טיוטה|ממתינה/);
+      earlier('אבי מוכן', 'נועה מוכנה');
+
+      const dana = row('דנה טיוטה');
+      assert.match(dana, />טיוטה</);
+      earlier('דנה טיוטה', 'בלי נייר');
+      earlier('בלי נייר', 'ראשון בלי ראשי');
+      earlier('ראשון בלי ראשי', BOOK_BARE);
+      const bare = row(BOOK_BARE);
+      assert.match(bare, new RegExp(`/estate/tenancies/${nameless}`));
+      assert.match(
+        bare,
+        /רחוב בלי מספר 8, עיר שכירויות · דירה <span dir="ltr">ב<\/span>/,
+      );
+      assert.doesNotMatch(bare, /בניין/);
+
+      const ram = row('רם ממתין');
+      assert.match(ram, />ממתינה</);
+      const maya = row('מאיה ממתינה');
+      assert.match(maya, />ממתינה</);
+      assert.match(maya, /2026-12-01/);
+      earlier('רם ממתין', 'מאיה ממתינה');
+
+      assert.match(row('יוסי פעיל'), />פעיל</);
+      earlier('יוסי פעיל', 'שרה פעילה');
+      assert.match(row('יוני הסתיים'), />הסתיים</);
+      assert.match(row('מרץ הופסק'), />הופסק</);
+      earlier('יוני הסתיים', 'מרץ הופסק');
+
+      const still = await pool.query<{ status: string }>(
+        'SELECT status FROM tenancy WHERE tenancy_id = $1',
+        [readyEarly],
+      );
+      assert.equal(still.rows[0]?.status, 'DRAFT');
+
+      const page = await client.inject({
+        method: 'GET',
+        url: `/estate/tenancies/${readyEarly}`,
+      });
+      assert.equal(page.statusCode, 200);
+      assert.match(
+        page.body,
+        /אבי מוכן · רחוב הספר 4, בניין <span dir="ltr">206<\/span>, עיר שכירויות · דירה <span dir="ltr">1<\/span>/,
+      );
+      assert.match(page.body, /מה נבדק/);
+      assert.match(page.body, /הפעלת ההשכרה/);
+      assert.match(page.body, />טיוטה</);
+      assert.doesNotMatch(page.body, /מוכנה/);
+
+      const barePage = await client.inject({
+        method: 'GET',
+        url: `/estate/tenancies/${nameless}`,
+      });
+      assert.match(
+        barePage.body,
+        /רחוב בלי מספר 8, עיר שכירויות · דירה <span dir="ltr">ב<\/span>/,
+      );
+      assert.doesNotMatch(barePage.body, /בניין/);
+
+      const household = await client.inject({
+        method: 'GET',
+        url: `/estate/tenancies/${live}`,
+      });
+      assert.match(household.body, /יוסי פעיל/);
+      assert.match(household.body, /שותף נסתר/);
+    } finally {
+      await bookCleanup(pool);
+      await signOutAll(pool, BOOK_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+});
+
+async function bookCleanup(pool: import('pg').Pool): Promise<void> {
+  await pool.query(
+    'ALTER TABLE tenancy_event DISABLE TRIGGER tenancy_event_is_append_only',
+  );
+  try {
+    const inCity = `SELECT t.tenancy_id FROM tenancy t
+      JOIN space s ON s.space_id = t.unit_id
+      JOIN building b ON b.building_id = s.building_id
+      WHERE b.city = $1`;
+    const docs = await pool.query<{ document_id: string }>(
+      `SELECT document_id FROM document_link
+        WHERE entity_type = 'TENANCY' AND entity_id IN (${inCity})`,
+      [BOOK_CITY],
+    );
+    const documentIds = docs.rows.map((row) => row.document_id);
+    await pool.query(
+      `DELETE FROM tenancy_event WHERE tenancy_id IN (${inCity})`,
+      [BOOK_CITY],
+    );
+    await pool.query(
+      `DELETE FROM tenancy_party WHERE tenancy_id IN (${inCity})`,
+      [BOOK_CITY],
+    );
+    await pool.query(
+      `DELETE FROM document_link
+        WHERE entity_type = 'TENANCY' AND entity_id IN (${inCity})`,
+      [BOOK_CITY],
+    );
+    await pool.query(
+      `DELETE FROM tenancy_completeness_exception WHERE tenancy_id IN (${inCity})`,
+      [BOOK_CITY],
+    );
+    await pool.query(`DELETE FROM tenancy WHERE tenancy_id IN (${inCity})`, [
+      BOOK_CITY,
+    ]);
+    if (documentIds.length > 0) {
+      await pool.query(
+        'DELETE FROM audit_log WHERE subject_id = ANY($1::text[])',
+        [documentIds],
+      );
+      await pool.query(
+        'DELETE FROM document WHERE document_id = ANY($1::uuid[])',
+        [documentIds],
+      );
+    }
+    await pool.query('DELETE FROM party WHERE full_name = ANY($1::text[])', [
+      [
+        'אבי מוכן',
+        'נועה מוכנה',
+        'דנה טיוטה',
+        'בלי נייר',
+        'ראשון בלי ראשי',
+        'רם ממתין',
+        'מאיה ממתינה',
+        'יוסי פעיל',
+        'שותף נסתר',
+        'שרה פעילה',
+        'יוני הסתיים',
+        'מרץ הופסק',
+      ],
+    ]);
+    await pool.query(
+      `DELETE FROM unit WHERE unit_id IN (
+         SELECT space_id FROM space s
+         JOIN building b ON b.building_id = s.building_id
+         WHERE b.city = $1)`,
+      [BOOK_CITY],
+    );
+    await pool.query(
+      `DELETE FROM space WHERE building_id IN (
+         SELECT building_id FROM building WHERE city = $1)`,
+      [BOOK_CITY],
+    );
+    await pool.query('DELETE FROM building WHERE city = $1', [BOOK_CITY]);
+    await pool.query('DELETE FROM terms_profile WHERE name = $1', [
+      `book-${BOOK_PROJECT}`,
+    ]);
+    await pool.query('DELETE FROM project WHERE project_code = $1', [
+      BOOK_PROJECT,
+    ]);
+  } finally {
+    await pool.query(
+      'ALTER TABLE tenancy_event ENABLE TRIGGER tenancy_event_is_append_only',
+    );
+  }
+}

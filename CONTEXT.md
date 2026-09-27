@@ -44,7 +44,7 @@ different; writing a lease's bay number onto the Unit is the same class of error
 |---|---|
 | **Party** | A person or company. Never "user", never "customer". |
 | **PartyContact** | A phone or email, valid over a date range. The join starts here. |
-| **Tenancy** | A contract over a Unit, active over a date range. |
+| **Tenancy** | The letting of a Unit over a date range, draft or live. Not the lease, and not the set of documents that belong to it. |
 | **Option** | A clause letting a Tenancy run past its initial term. **Exercising** it extends the same Tenancy — it never ends one and never starts another, because the household and the flat do not change. Distinct from a renewal that creates a new letting, and from `end_date`, which the exercise moves. |
 | **TenancyParty** | A Party's role in a Tenancy. |
 | **Guarantor** (**ערב**) | A role. Never receives service information — `is_service_contact` is forced false by a database constraint, not a form default. |

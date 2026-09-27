@@ -342,7 +342,8 @@ move `tenancy.status`. A waiver, or a confirm that recorded no date, raises noth
 the blocking letting by id and dates only — never a party.
 
 **Screen:** `GET /estate/tenancies/:tenancyId` — one letting, reached by its identifier. Title
-(tenant name plus address and apartment number), status, the lease's dates, the confirmed
+(the same sentence as שכירויות: tenant name, street, building number when the building has one,
+city, and apartment number), status, the lease's dates, the confirmed
 handover date beside them, the documents it holds,
 what is missing, every gate check with its outcome, and the activate button. The household name and
 the status chip share one line, the way a building title does on נכסים, and the lease dates sit
@@ -368,6 +369,15 @@ yet signed links to that same confirm. A file the guard refuses is not stored, a
 so. The activate button stays the primary pill and stays dark while any check fails,
 with the unmet requirements in muted type beside it. `POST /estate/tenancies/:tenancyId/activate`
 is the person command (`tenancy.write`); the clock never posts it.
+
+**The book (#162).** `GET /estate/tenancies` is every letting, reached from the rail and from the
+home index, both immediately before חוזים לא שלמים. The same `estate.read` that opens the tenancy
+page opens the book. Five sections keep their titles even when empty: מוכנה, טיוטה, ממתינה, פעיל,
+עבר. A draft's chip is a label on the gate, not a new status: מוכנה when `canActivate` is true,
+ממתינה when the only miss is `start_reached` (a start beyond fourteen days included), טיוטה for
+every other miss. The stored status stays `DRAFT` until a person presses, and the press stays on
+the tenancy page. The page's own chip stays the stored word. The index no longer claims that no
+screen shows a tenant name. Phone numbers stay off every screen, including this one.
 
 **An `ACTIVE` letting on that same page can be ended early (#154).** The form sits in a glass card:
 move-out and notice as a pair of dates, the notice letter as a file field, and the primary button

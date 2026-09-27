@@ -82,6 +82,16 @@ export interface ActivationGate {
   flags: ActivationFlag[];
 }
 
+/** #162. A draft's book chip, read off the gate. Not a stored status. */
+export type DraftLabel = 'ready' | 'waiting' | 'draft';
+
+export function draftLabel(gate: ActivationGate): DraftLabel {
+  if (gate.canActivate) return 'ready';
+  const open = gate.checks.filter((check) => !check.passed);
+  if (open.length === 1 && open[0]?.rule === 'start_reached') return 'waiting';
+  return 'draft';
+}
+
 export interface ActivateTenancySpec {
   tenancyId: string;
   actor: string;

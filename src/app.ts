@@ -84,6 +84,7 @@ import {
   listActivationQueue,
   listIncompleteTenancies,
   listObligationTypes,
+  listTenancyBook,
   listTenancyEvents,
   listTenancyParties,
   reassignParkingSpace,
@@ -464,6 +465,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       listIncompleteTenancies(db, clock, listTenancyDocumentFacts),
     listActivationQueue: (db) =>
       listActivationQueue(db, clock, listTenancyDocumentFacts),
+    listTenancyBook: (db) =>
+      listTenancyBook(db, clock, listTenancyDocumentFacts),
     recordCompletenessException,
     getTenancy,
     listTenancyParties,
