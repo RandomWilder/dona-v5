@@ -678,24 +678,12 @@ const TILE_WORD: Record<string, { on: string; off: string }> = {
 const VACANT_TILE: UnitTileState = {
   word: UNIT_WORDS.vacant,
   vacant: true,
-  waitingStart: null,
-  endingOn: null,
+  lines: [],
 };
 
-function unitSub(state: UnitTileState): Html {
-  if (state.vacant && state.waitingStart) {
-    return h`<span class="sub">טיוטה מ־${ltr(state.waitingStart)} · ממתינה להפעלה</span>`;
-  }
-  if (state.endingOn && state.waitingStart) {
-    return h`<span class="sub">מסתיים ${ltr(state.endingOn)} · טיוטה נכנסת מ־${ltr(state.waitingStart)}</span>`;
-  }
-  if (state.endingOn) {
-    return h`<span class="sub">מסתיים ${ltr(state.endingOn)}</span>`;
-  }
-  if (state.waitingStart) {
-    return h`<span class="sub">טיוטה נכנסת מ־${ltr(state.waitingStart)}</span>`;
-  }
-  return h``;
+function tileLetting(line: UnitTileState['lines'][number]): Html {
+  if (line.chip === null) return h``;
+  return h`<span class="letting">${bookChip(line.chip)}${ltr(`${line.start} — ${line.end}`)}</span>`;
 }
 
 const VACANT_PLURAL: Record<string, string> = {
@@ -781,7 +769,7 @@ export function renderInventoryPage(screen: {
       const dot = state.vacant
         ? h`<span class="dot is-hollow"></span>`
         : h`<span class="dot"></span>`;
-      return h`<a class="${cls}" href="/estate/units/${space.space_id}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${state.word}</span>${unitSub(state)}</a>`;
+      return h`<a class="${cls}" href="/estate/units/${space.space_id}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${state.word}</span>${state.lines.map(tileLetting)}</a>`;
     }
     const words = TILE_WORD[space.space_kind];
     if (words) {
@@ -840,7 +828,7 @@ export function renderInventoryPage(screen: {
             }>${caption} <span class="n">${ltr(n)}</span></a>`;
           })}
         </nav>
-        <div class="legend"><span class="is-ok"><span class="dot"></span>מושכרת / בסיום</span><span class="is-accent"><span class="dot is-hollow"></span>פנויה / חוזה בטיוטה</span></div>
+        <div class="legend"><span class="is-ok"><span class="dot"></span>מושכרת</span><span class="is-accent"><span class="dot is-hollow"></span>פנויה</span></div>
       </div>
       ${
         screen.buildings.length === 0

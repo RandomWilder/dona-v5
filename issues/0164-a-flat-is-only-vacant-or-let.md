@@ -1,13 +1,13 @@
 ---
 number: 164
 title: "A flat is only פנויה or מושכרת"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent: 161
 created: 2026-09-27
-closed:
+closed: 2026-09-27
 ---
 
 ## Parent
@@ -24,16 +24,20 @@ The estate spec and the flows spec are edited in the same change, before the scr
 
 ## Acceptance criteria
 
-- [ ] A flat reads only פנויה or מושכרת, on the tile and on the unit page
-- [ ] A waiting draft does not stop a flat reading פנויה; an ending soon does not stop it reading מושכרת
-- [ ] חוזה בטיוטה and בסיום are gone as names for the flat
-- [ ] חוזים מסתיימים is unchanged, and vacancy headlines still count a flat as vacant when nobody counts today
-- [ ] The tile stays nameless and shows the chip and lease dates of the letting that counts today and of the next draft
-- [ ] The past is not on the tile; two drafts put the earlier start on the tile
-- [ ] Tiles stay equal in size; parking and storage are unchanged
-- [ ] The estate spec and the flows spec are edited in the same change
-- [ ] Clicked on the dev server after a restart
+- [x] A flat reads only פנויה or מושכרת, on the tile and on the unit page
+- [x] A waiting draft does not stop a flat reading פנויה; an ending soon does not stop it reading מושכרת
+- [x] חוזה בטיוטה and בסיום are gone as names for the flat
+- [x] חוזים מסתיימים is unchanged, and vacancy headlines still count a flat as vacant when nobody counts today
+- [x] The tile stays nameless and shows the chip and lease dates of the letting that counts today and of the next draft
+- [x] The past is not on the tile; two drafts put the earlier start on the tile
+- [x] Tiles stay equal in size; parking and storage are unchanged
+- [x] The estate spec and the flows spec are edited in the same change
+- [x] Clicked on the dev server after a restart
 
 ## Blocked by
 
 None. Can start immediately.
+
+## Comment — 2026-09-27
+
+Closed. A flat on נכסים is only פנויה or מושכרת, on the tile and on the unit page. The tile stays nameless and shows the chip and lease dates of the letting that counts today and of the earlier draft. Dev restarted. On `:3000` a let flat reads מושכרת with פעיל and its dates, a vacant flat with two drafts reads פנויה and only the earlier draft (מוכנה), and both drafts remain on שכירויות. Parking still reads פנויה. Tiles in the open grid measured 261×105. חוזים מסתיימים still opens and counts the sixty-day window.

@@ -29,6 +29,7 @@ import {
 } from '../../staff/contract.ts';
 import {
   type ActivationFlag,
+  draftLabel,
   listLettingsForUnits,
   type TenancyBook,
 } from '../../tenancy/contract.ts';
@@ -74,7 +75,12 @@ import {
   searchEstate,
 } from './read-model.ts';
 import { removeInventorySpace, removeSpace } from './spaces.ts';
-import { UNIT_WORDS, type UnitTileState, unitTiles } from './unit-occupancy.ts';
+import {
+  type TileLine,
+  UNIT_WORDS,
+  type UnitTileState,
+  unitTiles,
+} from './unit-occupancy.ts';
 import {
   type ActivationQueueView,
   type DocumentSearchHit,
@@ -712,19 +718,50 @@ async function recordInventoryAdds(
   }
 }
 
+function draftChip(
+  deps: EstateDeps,
+): (tenancyId: string) => Promise<TileLine['chip']> {
+  return async (tenancyId) =>
+    draftLabel(await deps.activationGate(deps.pool, tenancyId));
+}
+
 async function unitStates(
   pool: Pool,
   unitIds: readonly string[],
   occupied: readonly { unit_id: string; tenancy_id: string }[],
   clock: Clock,
+  labelDraft: (tenancyId: string) => Promise<TileLine['chip']>,
 ): Promise<Map<string, UnitTileState>> {
   const lettings = await listLettingsForUnits(pool, unitIds);
-  return unitTiles({
+  const states = unitTiles({
     unitIds,
     occupied,
     lettings,
     today: today(clock),
   });
+  const pending: TileLine[] = [];
+  for (const state of states.values()) {
+    for (const line of state.lines) {
+      if (line.chip === null) pending.push(line);
+    }
+  }
+  await Promise.all(
+    pending.map(async (line) => {
+      try {
+        line.chip = await labelDraft(line.tenancyId);
+      } catch (error) {
+        // Another request can remove the draft between the list and the gate.
+        // One missing letting does not fail the page.
+        if (!(error instanceof KernelError) || error.code !== 'not_found') {
+          throw error;
+        }
+      }
+    }),
+  );
+  for (const state of states.values()) {
+    state.lines = state.lines.filter((line) => line.chip !== null);
+  }
+  return states;
 }
 
 export function registerEstateRoutes(
@@ -787,7 +824,13 @@ export function registerEstateRoutes(
           row.storage_space_id ? [row.storage_space_id] : [],
         ),
       ),
-      states: await unitStates(deps.pool, unitIds, occupied, deps.clock),
+      states: await unitStates(
+        deps.pool,
+        unitIds,
+        occupied,
+        deps.clock,
+        draftChip(deps),
+      ),
       nav: deps.chrome(csrfFrom(request), 'inventory', mayFile(request)),
       mayWrite: can(request.staff?.role ?? null, 'estate.write'),
       status,
@@ -1341,6 +1384,7 @@ export function registerEstateRoutes(
       [unit.unit_id],
       occupied,
       deps.clock,
+      draftChip(deps),
     );
     return renderUnitPage(
       unit,

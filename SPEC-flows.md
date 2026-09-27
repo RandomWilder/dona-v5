@@ -917,17 +917,19 @@ accepted.
 with whatever Spaces they already have). Create uses A11's identity fields plus four counts (Units
 ≥ 1; parking, storage, elevators may be 0) and a first number for each counted kind except
 elevators. The building drill lists every Space grouped by kind, with headline counts. Each Unit is
-a tile in one of four derived states — פנויה, חוזה בטיוטה, מושכרת, בסיום — stored nowhere (#159).
-פנויה and חוזה בטיוטה are the dashed vacant tile; מושכרת and בסיום are the occupied tile. Tiles in
-that grid share one width and one height, and a second line (a waiting draft, or the ending date
-when that end is inside the sixty-day window) stays
-inside that height. A notice on a letting that ends later than the window is בסיום with no ending
-date on the line. A let Unit with a waiting draft stays מושכרת or בסיום and names the draft on
-that line. Headlines count a Unit vacant when no letting counts today, so a waiting draft is vacant.
-The Unit page uses the same four words. Parking and storage stay a vacancy chip: occupied or vacant,
+a tile that is only פנויה or מושכרת, stored nowhere (#164). פנויה means no letting counts
+today, including when a draft is waiting. מושכרת means a letting counts today, including when that
+letting ends soon or carries a notice. חוזה בטיוטה and בסיום are not names for the flat. The tile
+stays nameless. Under the word it shows the chip and the lease dates of the letting that counts
+today, and of the next draft when there is one. The chip is the same label as on שכירויות. The
+next draft is the earliest start among drafts that have not ended. A second draft stays in the book
+and is not on the tile. The past is not on the tile. Tiles in that grid share one width and one
+height. The legend is the two words. Headlines count a Unit vacant when no letting counts today, so
+a waiting draft is vacant. חוזים מסתיימים still lists a live letting that ends inside its window.
+The Unit page uses the same two words. Parking and storage stay a vacancy chip: occupied or vacant,
 and a vacant bay or storage room is no assigned place on a letting that counts today. A built-bay or
 built-storage link does not occupy the Space. Elevators and later shared Spaces have no chip. The
-rows on a building's detail page keep the binary chip. Rent and lease-end are not on this list.
+rows on a building's detail page keep the binary chip. Rent is not on this list.
 
 **Writes:** one Building and the minted Spaces (and a Unit row per UNIT Space) through
 `importEstate`. Names are the bare integer sequence. Elevators are TECHNICAL Spaces `1`…`N`. No
@@ -949,7 +951,8 @@ Not a document promotion and not `estate_event`.
 item. בניינים routes and views are not edited.
 
 **Work items:** #149 (tab, create, mint, grouped list), #150 (derived vacancy), #151 (add, remove,
-shared Spaces), #159 (four derived Unit states on the tiles and the Unit page).
+shared Spaces), #159 (four derived Unit states, retired by #164), #164 (a flat is only פנויה or
+מושכרת; the tile shows the letting that counts today and the next draft).
 
 ## Open
 
