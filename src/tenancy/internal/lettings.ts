@@ -352,7 +352,7 @@ function toRow(place: BookPlace, chip: BookChip): TenancyBookRow {
 }
 
 /**
- * Every letting, for שכירויות. #162.
+ * Every letting, for שכירויות. #162. Pass a unit to read that flat only (#165).
  *
  * Draft chips are `draftLabel` on `activationGate`. Nothing else decides them, and nothing is
  * stored. A draft with no filed document is still a row: the gate reads the miss.
@@ -361,6 +361,7 @@ export async function listTenancyBook(
   db: Queryable,
   clock: Clock,
   documents: TenancyDocumentsReader,
+  unitId?: string,
 ): Promise<TenancyBook> {
   const places = await db.query<BookPlace>(
     `SELECT t.tenancy_id,
@@ -390,7 +391,9 @@ export async function listTenancyBook(
        FROM tenancy t
        JOIN unit u ON u.unit_id = t.unit_id
        JOIN space s ON s.space_id = u.unit_id
-       JOIN building b ON b.building_id = s.building_id`,
+       JOIN building b ON b.building_id = s.building_id
+      WHERE $1::uuid IS NULL OR t.unit_id = $1`,
+    [unitId ?? null],
   );
   const book: TenancyBook = {
     ready: [],

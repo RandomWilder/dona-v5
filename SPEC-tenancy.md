@@ -297,7 +297,9 @@ of `activationGate` and of nothing else: `canActivate` is מוכנה, a single m
 is ממתינה with no fourteen-day window, and every other miss is טיוטה. `ACTIVE` is פעיל. `ENDED`
 and `TERMINATED_EARLY` are עבר, sorted by the recorded move-out when the ending was early and by
 the contract end otherwise, most recent first. The household name is the primary tenant, otherwise
-the first person in `listTenancyParties`' order, otherwise none. No phone. **#156** amends the rule that
+the first person in `listTenancyParties`' order, otherwise none. No phone. **#165** passes one unit
+into that same read. The sections, the chips, the sort, and the name rule do not change. Estate
+prints the rows as one list and shows the name only on the letting that counts today. **#156** amends the rule that
   gate misses are not excepted: `handover_protocol` may be waived for one letting. A recorded
   waiver makes that check pass, and any row the letting still occupies on this queue carries who
   recorded it, the office day, and the reason. The query stops listing the protocol miss. `lease`,

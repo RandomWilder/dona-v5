@@ -303,7 +303,9 @@ list costs two queries rather than one per building.
 The chip is a state and a count and never a tenant's name, which is the rule these occupancy
 screens keep — including after 5.2, which was entitled to lift it behind the session and did not,
 and after 5.4, which reconsidered it while unlocking evidence provenance and kept it again.
-שכירויות (#162) is the exception, and only that list: [ADR-0011](docs/decisions/ADR-0011-the-tenancies-book-may-name-the-household.md).
+שכירויות (#162) names every row. The unit page (#165) names only the letting that counts today.
+Both are [ADR-0011](docs/decisions/ADR-0011-the-tenancies-book-may-name-the-household.md).
+Search, חוזים לא שלמים, and the נכסים tile stay nameless.
 
 **These screens went behind the session at slice 5.2**, which closed the dated state this paragraph
 described from 1.11 to week 5. Staff auth is Google sign-in behind an allowlist (5.1, amended by
@@ -537,6 +539,17 @@ Counts today stays `resolveOccupiedUnits`. The dates come from tenancy's `listLe
 which carries no day predicate. Estate applies the clock after that read. The Unit page prints the
 same two words. The resident-count chip on the building page is unchanged.
 
+**#165. The unit page lists that flat's lettings.** One list, no section titles, in the book's
+order: מוכנה, then טיוטה, then ממתינה, then פעיל, then the past, most recently left first. The
+first four sort by oldest lease start first, the same way שכירויות does. Each row carries the same
+chip as שכירויות and opens the tenancy page. Only the letting that counts today shows the main
+tenant's name — the primary tenant, otherwise the first person on the letting. Drafts and past
+lettings are a chip and the lease dates. They do not repeat the address. A vacant flat shows no
+tenant name, even when a draft is waiting. Co-tenants stay on the tenancy page. The heading
+includes the building number when the building has one, in the same sentence the book uses, and
+leaves that part out when it does not. The documents already on the page stay. The list is the
+book read for this unit, not a second classification.
+
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
 `GET`/`POST /documents/new`, reached from a unit row on the building page. It went behind the session
 at 5.2 with everything else, and its bounds are stated in full by
@@ -553,7 +566,8 @@ the second copy estate exists to prevent. **`GET /estate/units/:unitId` is the t
 added**: that same header, the occupancy chip, the upload link, and the documents panel. Slice 4.4
 adds the **promoted values** on that page: each stamped date is a link through to the page of the
 read screen it was read from. **Slice 5.5 adds the change log** — old → new, the operator email, the source
-document — from `listTenancyEvents`, injected the same way. Empty is legal. Never a tenant's name.
+document — from `listTenancyEvents`, injected the same way. Empty is legal. **#165** is the
+only name on this page, and only on the letting that counts today.
 **Slice 5.6:** a clock-driven end is `ACTIVE → ENDED`, actor `system`, and no document link. The
 unit page calls `expireDueTenancies` (injected from tenancy) against the clock before it reads the
 log, so opening the sheet is what closes a lease whose date has passed — not a hidden job.

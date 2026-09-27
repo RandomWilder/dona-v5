@@ -6,7 +6,8 @@
 // and these screens are shown to nobody who is not in the room.
 //
 // Every route is behind the session. Search never touches `party`, Q5 shows a unit and a date,
-// and no phone reaches a response. #162's book is the list allowed to name a household.
+// and no phone reaches a response. #162's book names every household. #165's unit list names
+// only the letting that counts today.
 import multipart from '@fastify/multipart';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
@@ -105,6 +106,7 @@ import {
   renderUnitPage,
   type TenancyEventView,
   type TenancyPersonView,
+  type UnitLettingView,
 } from './views.ts';
 
 export interface EstateDeps {
@@ -147,8 +149,8 @@ export interface EstateDeps {
     db: Pool,
   ) => Promise<readonly IncompleteTenancyRow[]>;
   listActivationQueue: (db: Pool) => Promise<ActivationQueueView>;
-  /** #162. Every letting, already sectioned. Estate prints it. */
-  listTenancyBook: (db: Pool) => Promise<TenancyBook>;
+  /** #162. Every letting, already sectioned. #165 passes one unit. Estate prints it. */
+  listTenancyBook: (db: Pool, unitId?: string) => Promise<TenancyBook>;
   recordCompletenessException: (
     db: Pool,
     spec: {
@@ -716,6 +718,29 @@ async function recordInventoryAdds(
       { outcome: 'ok' },
     );
   }
+}
+
+/** #165. The book's sections, in order, with a name only on the letting that counts today. */
+function unitPageLettings(
+  book: TenancyBook,
+  liveTenancyId: string | null,
+): UnitLettingView[] {
+  return [
+    ...book.ready,
+    ...book.draft,
+    ...book.waiting,
+    ...book.active,
+    ...book.past,
+  ].map((row) => ({
+    tenancy_id: row.tenancy_id,
+    start_date: row.start_date,
+    end_date: row.end_date,
+    chip: row.chip,
+    household_name:
+      liveTenancyId !== null && row.tenancy_id === liveTenancyId
+        ? row.household_name
+        : null,
+  }));
 }
 
 function draftChip(
@@ -1386,6 +1411,7 @@ export function registerEstateRoutes(
       deps.clock,
       draftChip(deps),
     );
+    const book = await deps.listTenancyBook(deps.pool, unit.unit_id);
     return renderUnitPage(
       unit,
       states.get(unit.unit_id)?.word ?? UNIT_WORDS.vacant,
@@ -1401,6 +1427,11 @@ export function registerEstateRoutes(
           id: unit.unit_id,
         },
         csrf,
+      ),
+      unitPageLettings(
+        book,
+        occupied.find((row) => row.unit_id === unit.unit_id)?.tenancy_id ??
+          null,
       ),
     );
   });

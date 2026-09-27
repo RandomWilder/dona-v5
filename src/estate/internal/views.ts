@@ -13,7 +13,8 @@
 //
 // **Four screens from 2.6, and one rule across the browsable ones: no name and no number.**
 // Lists and chips still get a state and a count. #107 hands names to one letting's sheet.
-// #162's book is the list allowed to name the household (ADR-0011). Phone numbers stay off.
+// #162's book names every household. #165's unit list names only the live letting (ADR-0011).
+// Phone numbers stay off.
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import {
@@ -196,6 +197,7 @@ const styles = h`<style>
   }
   .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
   .unit-actions { margin: var(--space-3) 0 0; }
+  .unit-lettings { margin-block: var(--space-6); }
   /* Issue 140 — taking a bay off a flat. The issue number is written without its number sign here:
      tests/ui/tokens.test.ts refuses a hex colour anywhere in a rendered screen, and three digits
      behind a hash is one. It sits inside the <dd> holding the number it removes, so it is
@@ -1815,6 +1817,32 @@ function changeLogPanel(events: readonly TenancyEventView[]): Html {
   </section>`;
 }
 
+/** #165. One row of the unit page's letting list. The name is set only for the live letting. */
+export interface UnitLettingView {
+  tenancy_id: string;
+  household_name: string | null;
+  start_date: string;
+  end_date: string;
+  chip: TenancyBookRow['chip'];
+}
+
+function unitLettingList(rows: readonly UnitLettingView[]): Html {
+  if (rows.length === 0) return h``;
+  return h`<div class="glass-stage unit-lettings"><div class="q-list">
+    ${rows.map(
+      (
+        row,
+      ) => h`<a class="q-row glass is-raised" href="/estate/tenancies/${row.tenancy_id}">
+        <div>
+          ${row.household_name ? h`<span>${row.household_name}</span>` : h``}
+          <p class="lede">${ltr(`${row.start_date} — ${row.end_date}`)}</p>
+        </div>
+        ${bookChip(row.chip)}
+      </a>`,
+    )}
+  </div></div>`;
+}
+
 export function renderUnitPage(
   unit: UnitHit,
   word: UnitWord,
@@ -1823,17 +1851,26 @@ export function renderUnitPage(
   promoted: readonly PromotedFieldView[] = [],
   events: readonly TenancyEventView[] = [],
   retrieval?: OfficeRetrievalView,
+  lettings: readonly UnitLettingView[] = [],
 ): string {
+  const heading = lettingSentence({
+    household_name: null,
+    address_line: unit.address_line,
+    building_number: unit.building_number,
+    city: unit.city,
+    unit_number: unit.unit_number,
+  });
   const sheet = h`
     <div>
       <a class="back" href="/estate/buildings/${unit.building_id}">← ${unit.building_name}</a>
-      <h1>דירה ${ltr(unit.unit_number)}</h1>
-      <p class="lede">${unit.building_name} · ${unit.address_line}, ${unit.city}</p>
+      <h1>${heading}</h1>
+      <p class="lede">${unit.building_name}</p>
       <div class="chips"><span class="chip">${word}</span></div>
       <p class="unit-actions">
         <a href="/documents/new?unit=${unit.unit_id}">הוספת מסמך</a>
       </p>
     </div>
+    ${unitLettingList(lettings)}
     ${promotedPanel(promoted)}
     ${changeLogPanel(events)}
     ${documentsPanel(documents, 'מסמכים')}`;

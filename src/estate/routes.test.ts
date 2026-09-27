@@ -3158,7 +3158,391 @@ describe('estate · שכירויות', () => {
   });
 });
 
-async function bookCleanup(pool: import('pg').Pool): Promise<void> {
+const UNIT_CITY = 'עיר דף דירה';
+const UNIT_STREET = 'רחוב הדף 4';
+const UNIT_BARE = 'רחוב הדף 8';
+const UNIT_PROJECT = 'TEST-UNIT-PAGE';
+const UNIT_DOMAIN = 'unit-page.test';
+const UNIT_NUMBER = '206';
+const UNIT_PARTIES = [
+  'דייר טיוטה מוקדם',
+  'דייר טיוטה מאוחר',
+  'דייר ממתין בדף',
+  'דייר פעיל בדף',
+  'שותף בדף',
+  'דייר הסתיים בדף',
+  'דייר הופסק בדף',
+  'דייר מוכן בדף',
+  'דייר טיוטה בדף',
+];
+
+describe('estate · the unit page lists its lettings', () => {
+  it('lists that flat in the book order, and names only the live letting', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const db = pool;
+    const clock = fixedClock(BOOK_AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    await signOutAll(pool, UNIT_DOMAIN);
+    await bookCleanup(pool, UNIT_SCOPE);
+    const who = await signIn(pool, clock, {
+      email: `ops@${UNIT_DOMAIN}`,
+      role: 'VIEWER',
+    });
+    const client = asOperator(app, who);
+    try {
+      await importEstate(pool, unitPagePlan);
+      const profile = await pool.query<{ terms_profile_id: string }>(
+        `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)
+         ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+         RETURNING terms_profile_id`,
+        [newId(), UNIT_SCOPE.profile],
+      );
+      const profileId = profile.rows[0]?.terms_profile_id ?? '';
+
+      async function unitOf(
+        address: string,
+        unitNumber: string,
+      ): Promise<string> {
+        const found = await db.query<{ unit_id: string }>(
+          `SELECT u.unit_id FROM unit u
+             JOIN space s ON s.space_id = u.unit_id
+             JOIN building b ON b.building_id = s.building_id
+            WHERE b.city = $1 AND b.address_line = $2 AND u.unit_number = $3`,
+          [UNIT_CITY, address, unitNumber],
+        );
+        return found.rows[0]?.unit_id ?? '';
+      }
+
+      async function grant(spec: {
+        address: string;
+        unit: string;
+        start: string;
+        end: string;
+        status: 'DRAFT' | 'ACTIVE' | 'ENDED' | 'TERMINATED_EARLY';
+        moveOut?: string;
+        name?: string;
+        co?: string;
+        papers?: 'full' | 'lease';
+      }): Promise<string> {
+        const tenancyId = newId();
+        await db.query(
+          `INSERT INTO tenancy (
+             tenancy_id, unit_id, start_date, end_date, status,
+             terms_profile_id, actual_move_out
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            tenancyId,
+            await unitOf(spec.address, spec.unit),
+            spec.start,
+            spec.end,
+            spec.status,
+            profileId,
+            spec.moveOut ?? null,
+          ],
+        );
+        const attach = async (
+          fullName: string,
+          role: 'PRIMARY_TENANT' | 'CO_TENANT',
+        ) => {
+          const partyId = newId();
+          await db.query(
+            `INSERT INTO party (party_id, party_kind, full_name)
+             VALUES ($1, 'PERSON', $2)`,
+            [partyId, fullName],
+          );
+          await db.query(
+            `INSERT INTO tenancy_party (tenancy_id, party_id, role, is_service_contact)
+             VALUES ($1, $2, $3, true)`,
+            [tenancyId, partyId, role],
+          );
+        };
+        if (spec.name) await attach(spec.name, 'PRIMARY_TENANT');
+        if (spec.co) await attach(spec.co, 'CO_TENANT');
+        if (spec.papers === 'lease' || spec.papers === 'full') {
+          await linkType(db, tenancyId, 'lease', 'חוזה שכירות');
+        }
+        if (spec.papers === 'full') {
+          await linkType(db, tenancyId, 'handover_protocol', 'פרוטוקול מסירה');
+        }
+        return tenancyId;
+      }
+
+      const earlyDraft = await grant({
+        address: UNIT_STREET,
+        unit: '1',
+        start: '2025-01-01',
+        end: '2025-06-01',
+        status: 'DRAFT',
+        name: 'דייר טיוטה מוקדם',
+      });
+      const laterDraft = await grant({
+        address: UNIT_STREET,
+        unit: '1',
+        start: '2026-02-01',
+        end: '2026-02-28',
+        status: 'DRAFT',
+        name: 'דייר טיוטה מאוחר',
+      });
+      const waiting = await grant({
+        address: UNIT_STREET,
+        unit: '1',
+        start: '2027-06-01',
+        end: '2028-05-31',
+        status: 'DRAFT',
+        name: 'דייר ממתין בדף',
+        papers: 'full',
+      });
+      const live = await grant({
+        address: UNIT_STREET,
+        unit: '1',
+        start: '2026-03-15',
+        end: '2027-03-14',
+        status: 'ACTIVE',
+        name: 'דייר פעיל בדף',
+        co: 'שותף בדף',
+      });
+      const ended = await grant({
+        address: UNIT_STREET,
+        unit: '1',
+        start: '2023-01-01',
+        end: '2025-08-01',
+        status: 'ENDED',
+        name: 'דייר הסתיים בדף',
+      });
+      const stopped = await grant({
+        address: UNIT_STREET,
+        unit: '1',
+        start: '2023-06-01',
+        end: '2025-12-31',
+        status: 'TERMINATED_EARLY',
+        moveOut: '2025-04-01',
+        name: 'דייר הופסק בדף',
+      });
+      const ready = await grant({
+        address: UNIT_BARE,
+        unit: 'ב',
+        start: '2026-08-01',
+        end: '2027-07-31',
+        status: 'DRAFT',
+        name: 'דייר מוכן בדף',
+        papers: 'full',
+      });
+      const bareDraft = await grant({
+        address: UNIT_BARE,
+        unit: 'ב',
+        start: '2026-01-01',
+        end: '2026-06-30',
+        status: 'DRAFT',
+        name: 'דייר טיוטה בדף',
+        papers: 'lease',
+      });
+
+      const letId = await unitOf(UNIT_STREET, '1');
+      const bareId = await unitOf(UNIT_BARE, 'ב');
+      const page = await client.inject({
+        method: 'GET',
+        url: `/estate/units/${letId}`,
+      });
+      assert.equal(page.statusCode, 200);
+      assert.match(page.body, /<span class="chip">מושכרת<\/span>/);
+      assert.match(
+        page.body,
+        /רחוב הדף 4, בניין <span dir="ltr">206<\/span>, עיר דף דירה · דירה <span dir="ltr">1<\/span>/,
+      );
+      assert.doesNotMatch(page.body, /<h2 class="block-title">/);
+      assert.match(page.body, /<h2>מסמכים<\/h2>/);
+      assert.match(page.body, /אין מסמכים בתיק זה עדיין/);
+      assert.match(page.body, new RegExp(`/documents/new\\?unit=${letId}`));
+      assert.match(page.body, /דייר פעיל בדף/);
+      assert.doesNotMatch(page.body, /שותף בדף/);
+      assert.doesNotMatch(
+        page.body,
+        /דייר טיוטה מוקדם|דייר טיוטה מאוחר|דייר ממתין בדף|דייר הסתיים בדף|דייר הופסק בדף/,
+      );
+
+      const rows = [...page.body.matchAll(/<a class="q-row[\s\S]*?<\/a>/g)].map(
+        (match) => match[0],
+      );
+      const chipOf = (row: string) =>
+        row.match(/>(טיוטה|ממתינה|פעיל|הסתיים|הופסק|מוכנה)</)?.[1] ?? '';
+      assert.deepEqual(rows.map(chipOf), [
+        'טיוטה',
+        'טיוטה',
+        'ממתינה',
+        'פעיל',
+        'הסתיים',
+        'הופסק',
+      ]);
+      assert.match(
+        rows[0] ?? '',
+        new RegExp(`/estate/tenancies/${earlyDraft}`),
+      );
+      assert.match(rows[0] ?? '', /2025-01-01 — 2025-06-01/);
+      assert.match(rows[0] ?? '', /chip is-accent[\s\S]*טיוטה/);
+      assert.match(
+        rows[1] ?? '',
+        new RegExp(`/estate/tenancies/${laterDraft}`),
+      );
+      assert.match(rows[1] ?? '', /2026-02-01 — 2026-02-28/);
+      assert.match(rows[2] ?? '', new RegExp(`/estate/tenancies/${waiting}`));
+      assert.match(rows[2] ?? '', /2027-06-01 — 2028-05-31/);
+      assert.match(rows[2] ?? '', /is-hollow[\s\S]*ממתינה/);
+      assert.match(rows[3] ?? '', new RegExp(`/estate/tenancies/${live}`));
+      assert.match(rows[3] ?? '', /דייר פעיל בדף/);
+      assert.match(rows[3] ?? '', /2026-03-15 — 2027-03-14/);
+      assert.match(rows[3] ?? '', /chip is-ok[\s\S]*פעיל/);
+      assert.match(rows[4] ?? '', new RegExp(`/estate/tenancies/${ended}`));
+      assert.match(rows[4] ?? '', /2023-01-01 — 2025-08-01/);
+      assert.match(rows[4] ?? '', />הסתיים</);
+      assert.match(rows[5] ?? '', new RegExp(`/estate/tenancies/${stopped}`));
+      assert.match(rows[5] ?? '', /2023-06-01 — 2025-12-31/);
+      assert.match(rows[5] ?? '', />הופסק</);
+      for (const row of rows) {
+        assert.doesNotMatch(row, /רחוב הדף|דירה|בניין/);
+      }
+
+      const vacant = await client.inject({
+        method: 'GET',
+        url: `/estate/units/${bareId}`,
+      });
+      assert.equal(vacant.statusCode, 200);
+      assert.match(vacant.body, /<span class="chip">פנויה<\/span>/);
+      assert.match(
+        vacant.body,
+        /רחוב הדף 8, עיר דף דירה · דירה <span dir="ltr">ב<\/span>/,
+      );
+      assert.doesNotMatch(vacant.body, /רחוב הדף 8, בניין/);
+      assert.doesNotMatch(vacant.body, /דייר מוכן בדף|דייר טיוטה בדף/);
+      assert.doesNotMatch(vacant.body, /<h2 class="block-title">/);
+      assert.match(vacant.body, /<h2>מסמכים<\/h2>/);
+      const bareRows = [
+        ...vacant.body.matchAll(/<a class="q-row[\s\S]*?<\/a>/g),
+      ].map((match) => match[0]);
+      assert.deepEqual(bareRows.map(chipOf), ['מוכנה', 'טיוטה']);
+      assert.match(bareRows[0] ?? '', new RegExp(`/estate/tenancies/${ready}`));
+      assert.match(bareRows[0] ?? '', /2026-08-01 — 2027-07-31/);
+      assert.match(bareRows[0] ?? '', /chip is-ok[\s\S]*מוכנה/);
+      assert.match(
+        bareRows[1] ?? '',
+        new RegExp(`/estate/tenancies/${bareDraft}`),
+      );
+      assert.match(bareRows[1] ?? '', /2026-01-01 — 2026-06-30/);
+      for (const row of bareRows) {
+        assert.doesNotMatch(row, /רחוב הדף|דירה|בניין/);
+      }
+    } finally {
+      await bookCleanup(pool, UNIT_SCOPE);
+      await signOutAll(pool, UNIT_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+});
+
+const BOOK_PARTIES = [
+  'אבי מוכן',
+  'נועה מוכנה',
+  'דנה טיוטה',
+  'בלי נייר',
+  'ראשון בלי ראשי',
+  'רם ממתין',
+  'מאיה ממתינה',
+  'יוסי פעיל',
+  'שותף נסתר',
+  'שרה פעילה',
+  'יוני הסתיים',
+  'מרץ הופסק',
+];
+
+interface LettingFixture {
+  city: string;
+  parties: readonly string[];
+  profile: string;
+  project: string;
+}
+
+const BOOK_SCOPE: LettingFixture = {
+  city: BOOK_CITY,
+  parties: BOOK_PARTIES,
+  profile: `book-${BOOK_PROJECT}`,
+  project: BOOK_PROJECT,
+};
+
+const UNIT_SCOPE: LettingFixture = {
+  city: UNIT_CITY,
+  parties: UNIT_PARTIES,
+  profile: `unit-${UNIT_PROJECT}`,
+  project: UNIT_PROJECT,
+};
+
+function oneFlat(unitNumber: string, spaceName: string) {
+  return {
+    spaces: [
+      { kind: 'UNIT' as const, name: spaceName, floor: '1', accessNote: null },
+    ],
+    units: [
+      {
+        spaceName,
+        unitNumber,
+        rooms: 3,
+        areaSqm: 70,
+        hasMamad: false,
+        parkingSpaceName: null,
+        storageSpaceName: null,
+        warrantyEndDate: null,
+        conditionStatus: 'READY' as const,
+      },
+    ],
+  };
+}
+
+const numberedFlat = oneFlat('1', 'דירה 1');
+const bareFlat = oneFlat('ב', 'דירה ב');
+
+const unitPagePlan: EstatePlan = {
+  projects: [
+    {
+      name: 'מכרז דף דירה',
+      projectCode: UNIT_PROJECT,
+      tenderRef: null,
+      status: 'ACTIVE',
+    },
+  ],
+  buildings: [
+    {
+      name: 'בית ממוספר',
+      addressLine: UNIT_STREET,
+      city: UNIT_CITY,
+      projectCode: UNIT_PROJECT,
+      handoverDate: '2025-03-01',
+      warrantyEndDate: '2027-03-01',
+      status: 'ACTIVE',
+      buildingNumber: UNIT_NUMBER,
+      spaces: numberedFlat.spaces,
+      units: numberedFlat.units,
+    },
+    {
+      name: 'בית בלי מספר',
+      addressLine: UNIT_BARE,
+      city: UNIT_CITY,
+      projectCode: UNIT_PROJECT,
+      handoverDate: '2025-03-01',
+      warrantyEndDate: '2027-03-01',
+      status: 'ACTIVE',
+      spaces: bareFlat.spaces,
+      units: bareFlat.units,
+    },
+  ],
+};
+
+async function bookCleanup(
+  pool: import('pg').Pool,
+  scope: LettingFixture = BOOK_SCOPE,
+): Promise<void> {
   await pool.query(
     'ALTER TABLE tenancy_event DISABLE TRIGGER tenancy_event_is_append_only',
   );
@@ -3167,31 +3551,32 @@ async function bookCleanup(pool: import('pg').Pool): Promise<void> {
       JOIN space s ON s.space_id = t.unit_id
       JOIN building b ON b.building_id = s.building_id
       WHERE b.city = $1`;
+    const city = scope.city;
     const docs = await pool.query<{ document_id: string }>(
       `SELECT document_id FROM document_link
         WHERE entity_type = 'TENANCY' AND entity_id IN (${inCity})`,
-      [BOOK_CITY],
+      [city],
     );
     const documentIds = docs.rows.map((row) => row.document_id);
     await pool.query(
       `DELETE FROM tenancy_event WHERE tenancy_id IN (${inCity})`,
-      [BOOK_CITY],
+      [city],
     );
     await pool.query(
       `DELETE FROM tenancy_party WHERE tenancy_id IN (${inCity})`,
-      [BOOK_CITY],
+      [city],
     );
     await pool.query(
       `DELETE FROM document_link
         WHERE entity_type = 'TENANCY' AND entity_id IN (${inCity})`,
-      [BOOK_CITY],
+      [city],
     );
     await pool.query(
       `DELETE FROM tenancy_completeness_exception WHERE tenancy_id IN (${inCity})`,
-      [BOOK_CITY],
+      [city],
     );
     await pool.query(`DELETE FROM tenancy WHERE tenancy_id IN (${inCity})`, [
-      BOOK_CITY,
+      city,
     ]);
     if (documentIds.length > 0) {
       await pool.query(
@@ -3204,39 +3589,26 @@ async function bookCleanup(pool: import('pg').Pool): Promise<void> {
       );
     }
     await pool.query('DELETE FROM party WHERE full_name = ANY($1::text[])', [
-      [
-        'אבי מוכן',
-        'נועה מוכנה',
-        'דנה טיוטה',
-        'בלי נייר',
-        'ראשון בלי ראשי',
-        'רם ממתין',
-        'מאיה ממתינה',
-        'יוסי פעיל',
-        'שותף נסתר',
-        'שרה פעילה',
-        'יוני הסתיים',
-        'מרץ הופסק',
-      ],
+      scope.parties,
     ]);
     await pool.query(
       `DELETE FROM unit WHERE unit_id IN (
          SELECT space_id FROM space s
          JOIN building b ON b.building_id = s.building_id
          WHERE b.city = $1)`,
-      [BOOK_CITY],
+      [city],
     );
     await pool.query(
       `DELETE FROM space WHERE building_id IN (
          SELECT building_id FROM building WHERE city = $1)`,
-      [BOOK_CITY],
+      [city],
     );
-    await pool.query('DELETE FROM building WHERE city = $1', [BOOK_CITY]);
+    await pool.query('DELETE FROM building WHERE city = $1', [city]);
     await pool.query('DELETE FROM terms_profile WHERE name = $1', [
-      `book-${BOOK_PROJECT}`,
+      scope.profile,
     ]);
     await pool.query('DELETE FROM project WHERE project_code = $1', [
-      BOOK_PROJECT,
+      scope.project,
     ]);
   } finally {
     await pool.query(

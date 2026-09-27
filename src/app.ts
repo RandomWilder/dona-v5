@@ -465,8 +465,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       listIncompleteTenancies(db, clock, listTenancyDocumentFacts),
     listActivationQueue: (db) =>
       listActivationQueue(db, clock, listTenancyDocumentFacts),
-    listTenancyBook: (db) =>
-      listTenancyBook(db, clock, listTenancyDocumentFacts),
+    listTenancyBook: (db, unitId) =>
+      listTenancyBook(db, clock, listTenancyDocumentFacts, unitId),
     recordCompletenessException,
     getTenancy,
     listTenancyParties,

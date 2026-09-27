@@ -926,8 +926,15 @@ next draft is the earliest start among drafts that have not ended. A second draf
 and is not on the tile. The past is not on the tile. Tiles in that grid share one width and one
 height. The legend is the two words. Headlines count a Unit vacant when no letting counts today, so
 a waiting draft is vacant. חוזים מסתיימים still lists a live letting that ends inside its window.
-The Unit page uses the same two words. Parking and storage stay a vacancy chip: occupied or vacant,
-and a vacant bay or storage room is no assigned place on a letting that counts today. A built-bay or
+The Unit page uses the same two words. **#165.** That page lists the flat's lettings in one list,
+with no section titles, in the book's order: מוכנה, then טיוטה, then ממתינה, then פעיל, then the
+past, most recently left first. Each row carries the same chip as שכירויות and opens the tenancy
+page. Only the letting that counts today shows the main tenant's name. Drafts and past lettings
+are a chip and the lease dates, and do not repeat the address. A vacant flat shows no tenant name,
+even when a draft is waiting. Co-tenants stay on the tenancy page. The heading includes the
+building number when the building has one. The documents already on the page stay. Parking and
+storage stay a vacancy chip: occupied or vacant, and a vacant bay or storage room is no assigned
+place on a letting that counts today. A built-bay or
 built-storage link does not occupy the Space. Elevators and later shared Spaces have no chip. The
 rows on a building's detail page keep the binary chip. Rent is not on this list.
 
@@ -952,7 +959,8 @@ item. בניינים routes and views are not edited.
 
 **Work items:** #149 (tab, create, mint, grouped list), #150 (derived vacancy), #151 (add, remove,
 shared Spaces), #159 (four derived Unit states, retired by #164), #164 (a flat is only פנויה or
-מושכרת; the tile shows the letting that counts today and the next draft).
+מושכרת; the tile shows the letting that counts today and the next draft), #165 (the unit page
+lists that flat's lettings, and names only the one that counts today).
 
 ## Open
 
