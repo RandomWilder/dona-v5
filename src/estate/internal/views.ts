@@ -2276,7 +2276,7 @@ export function renderIncompletePage(
           ${queue.soon.map((row) =>
             activationLink(
               row,
-              h`<span class="chip is-neutral"><span class="dot is-hollow"></span>נדלקת ב־${ltr(row.activatable_on)}</span>`,
+              h`<span class="chip is-neutral"><span class="dot is-hollow"></span>ממתינה ${ltr(row.activatable_on)}</span>`,
             ),
           )}
         </div>`;

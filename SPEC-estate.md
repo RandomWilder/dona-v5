@@ -617,7 +617,10 @@ query of `tenancy_event`.
 portfolio operations list, a unit and a date and a missing-rule label, and no party. Completeness
 is tenancy's query; the POST that records an exception is tenancy's write (guarantor only); both
 are injected. **#108:** each gate miss is a row on this same screen, labelled with the gate's
-rule, never a second list. The root index and the rail gain a fourth link. The index lived here until **5.2 moved it to
+rule, never a second list. **#163:** the waiting block keeps the title נדלקות בקרוב and the
+fourteen-day window. Its chip reads ממתינה and still shows the date. מוכנה היום and מוכנה מאז
+stay on the ready block. A draft with no filed document stays off this list, and the list still
+names no household. The root index and the rail gain a fourth link. The index lived here until **5.2 moved it to
 `src/index-page.ts`**, on the schedule 2.6 set for it. **5.2b took the remaining private nav with
 it**; **5.2c did not give it back**. This module's screens receive the composition root's chrome.
 

@@ -1,13 +1,13 @@
 ---
 number: 163
 title: "The work list calls a waiting draft ממתינה"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent: 161
 created: 2026-09-27
-closed:
+closed: 2026-09-27
 ---
 
 ## Parent
@@ -26,15 +26,19 @@ The estate spec and the flows spec are edited in the same change, before the scr
 
 ## Acceptance criteria
 
-- [ ] The waiting chip reads ממתינה and still shows the date
-- [ ] The block title stays נדלקות בקרוב, and the fourteen-day window is unchanged
-- [ ] A waiting draft outside that window stays off the block
-- [ ] מוכנה היום and מוכנה מאז stay on the ready block
-- [ ] The list still shows no household name
-- [ ] A draft with no filed document stays off the list
-- [ ] The estate spec and the flows spec are edited in the same change
-- [ ] Clicked on the dev server after a restart
+- [x] The waiting chip reads ממתינה and still shows the date
+- [x] The block title stays נדלקות בקרוב, and the fourteen-day window is unchanged
+- [x] A waiting draft outside that window stays off the block
+- [x] מוכנה היום and מוכנה מאז stay on the ready block
+- [x] The list still shows no household name
+- [x] A draft with no filed document stays off the list
+- [x] The estate spec and the flows spec are edited in the same change
+- [x] Clicked on the dev server after a restart
 
 ## Blocked by
 
 None. Can start immediately.
+
+## Comment — 2026-09-27
+
+Closed. The waiting chip on חוזים לא שלמים reads ממתינה and still shows the date. The block title stays נדלקות בקרוב, and the window stays fourteen days. Dev restarted. On `:3000` the ready block shows מוכנה מאז 2026-01-01 and that row opens its tenancy page. נדלקות בקרוב (14 יום) is empty — nothing local starts inside the window — so the chip itself is the render test, including the date 2026-10-01. A draft that starts in February 2027 stays on the miss list and off that block. The list still names no household.

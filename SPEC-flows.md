@@ -289,8 +289,10 @@ from no second copy of its checks. **מוכנות להפעלה** lists every doc
 returns `canActivate`, oldest start first, each linking to its tenancy page. The chip reads מוכנה
 היום when the lease start is the office day, and מוכנה מאז that start when the day has passed
 unpressed — a missed press stays on the block. **נדלקות בקרוב** lists a draft whose only failing
-check is `start_reached` and whose `activatableOn` falls within `ACTIVATION_QUEUE_DAYS` (14). The
-chip names that date. Neither block carries a party name.
+check is `start_reached` and whose `activatableOn` falls within `ACTIVATION_QUEUE_DAYS` (14). A
+start further out stays off this block. The block title stays. **#163:** the chip reads ממתינה
+and still shows that date. מוכנה היום and מוכנה מאז stay on the ready block of this list.
+Neither block carries a party name. A draft with no filed document stays off the list.
 **Resolution:** the administrator uploads the addendum (A3), or records the exception. The exception
 row's `actor` is the signed-in operator (slice 5.4), not a typed name and not the word `console`.
 **Module:** tenancy owns the query and the exception write (`listIncompleteTenancies`,
