@@ -947,7 +947,7 @@ textarea {
 
 .glass-stage .tile-grid.is-states {
   grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
-  grid-auto-rows: 7.5rem;
+  grid-auto-rows: 9rem;
 }
 
 .glass-stage .space-tile {
@@ -1016,6 +1016,12 @@ textarea {
 .glass-stage .space-tile .letting .chip {
   padding-block: 0;
   padding-inline: var(--space-2);
+}
+
+.glass-stage .space-tile .letting .who {
+  flex-basis: 100%;
+  color: var(--color-text);
+  font-weight: 600;
 }
 
 .glass-stage .tile-grid.is-states > li {

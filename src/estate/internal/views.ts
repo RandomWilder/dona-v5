@@ -14,6 +14,7 @@
 // **Four screens from 2.6, and one rule across the browsable ones: no name and no number.**
 // Lists and chips still get a state and a count. #107 hands names to one letting's sheet.
 // #162's book names every household. #165's unit list names only the live letting (ADR-0011).
+// The נכסים tile shows that household's last name under the live dates (ADR-0012).
 // Phone numbers stay off.
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
@@ -683,9 +684,18 @@ const VACANT_TILE: UnitTileState = {
   lines: [],
 };
 
+function lastName(full: string | null): string | null {
+  const trimmed = full?.trim();
+  if (!trimmed) return null;
+  return trimmed.split(/\s+/).at(-1) ?? null;
+}
+
 function tileLetting(line: UnitTileState['lines'][number]): Html {
   if (line.chip === null) return h``;
-  return h`<span class="letting">${bookChip(line.chip)}${ltr(`${line.start} — ${line.end}`)}</span>`;
+  const who = line.chip === 'active' ? lastName(line.household_name) : null;
+  return h`<span class="letting">${bookChip(line.chip)}${ltr(`${line.start} — ${line.end}`)}${
+    who ? h`<span class="who">${who}</span>` : h``
+  }</span>`;
 }
 
 const VACANT_PLURAL: Record<string, string> = {
@@ -2591,7 +2601,7 @@ function activateReasons(sheet: TenancySheet): Html {
   if (sheet.activatableOn) {
     return h`<p class="reasons">
       כל המסמכים הנדרשים אושרו. <span class="arms">הכפתור נדלק ב־${ltr(sheet.activatableOn)}</span>,
-      יום תחילת החוזה. עד אז ההשכרה היא טיוטה, ואיש אינו רואה את הדיירים.
+      יום תחילת החוזה. עד אז ההשכרה היא טיוטה.
     </p>`;
   }
   const failed = sheet.checks.filter((check) => !check.passed);

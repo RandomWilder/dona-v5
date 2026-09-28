@@ -354,8 +354,9 @@ under them. The confirmed handover date is printed on that same line. When the g
 which edge it crossed, and it says the flag does not block. It is not a row in מה נבדק. The page prints the
 gate's returned facts and re-derives none of the rules. The button is dark until `canActivate`; a
 dark button names every requirement the gate checked. When the only miss is the start date, the
-page states `activatableOn`. `unit_free` is one more row in מה נבדק, the same shape as the other
-checks. A pass uses the occupied chip. A miss uses the alert chip and names the outgoing letting by
+page states `activatableOn` and says the letting stays a draft until that date. It does not say
+the household is unseen: שכירויות names the draft. `unit_free` is one more row in מה נבדק, the same
+shape as the other checks. A pass uses the occupied chip. A miss uses the alert chip and names the outgoing letting by
 its dates, with a link to that letting and — when the reader holds `tenancy.write` — a link to its
 end-early form. A missing protocol, for a reader who holds `tenancy.write`, carries the reason
 field and רשום ויתור on that same check row — the small secondary pill. After a waiver the chip
@@ -919,9 +920,12 @@ with whatever Spaces they already have). Create uses A11's identity fields plus 
 elevators. The building drill lists every Space grouped by kind, with headline counts. Each Unit is
 a tile that is only פנויה or מושכרת, stored nowhere (#164). פנויה means no letting counts
 today, including when a draft is waiting. מושכרת means a letting counts today, including when that
-letting ends soon or carries a notice. חוזה בטיוטה and בסיום are not names for the flat. The tile
-stays nameless. Under the word it shows the chip and the lease dates of the letting that counts
-today, and of the next draft when there is one. The chip is the same label as on שכירויות. The
+letting ends soon or carries a notice. חוזה בטיוטה and בסיום are not names for the flat. Under
+the word it shows the chip and the lease dates of the letting that counts today, and of the next
+draft when there is one. Under the dates of the letting that counts today it shows that household's
+last name — the last word of the name שכירויות already uses, or the whole name when it is one
+word. A draft's dates carry no name. A vacant tile stays nameless. Co-tenants stay off the tile.
+The chip is the same label as on שכירויות. The
 next draft is the earliest start among drafts that have not ended. A second draft stays in the book
 and is not on the tile. The past is not on the tile. Tiles in that grid share one width and one
 height. The legend is the two words. Headlines count a Unit vacant when no letting counts today, so

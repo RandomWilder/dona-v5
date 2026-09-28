@@ -955,6 +955,13 @@ describe('estate · נכסים, tab create and mint', () => {
         /<div class="legend"><span class="is-ok"><span class="dot"><\/span>מושכרת<\/span><span class="is-accent"><span class="dot is-hollow"><\/span>פנויה<\/span><\/div>/,
       );
       assert.doesNotMatch(block, new RegExp(partyName));
+      assert.match(tileOf('12'), /2026-01-01 — 2026-10-30[\s\S]{0,120}tenant/);
+      assert.doesNotMatch(
+        tileOf('12').split('2026-11-01 — 2027-10-31')[1] ?? '',
+        /tenant/,
+      );
+      assert.doesNotMatch(tileOf('10'), /tenant/);
+      assert.doesNotMatch(tileOf('11'), /tenant/);
       const vacant = tileOf('10');
       assert.match(vacant, /space-tile is-vacant/);
       assert.match(vacant, />פנויה</);

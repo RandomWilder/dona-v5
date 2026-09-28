@@ -29,6 +29,8 @@ export interface UnitLetting {
 /** One letting on a named unit. Same facts as `UnitLetting`, so a page can ask once. #159. */
 export interface LettingOnUnit extends UnitLetting {
   unit_id: string;
+  /** Primary tenant, otherwise the first person. Null when the letting has no household. */
+  household_name: string | null;
 }
 
 /** One letting, for the tenancy sheet. Dates, status, and the promoted copies. No party. #107, #134. */
@@ -60,8 +62,28 @@ export interface TenancyPartyRow {
  * Same question as `listUnitTenancies`, asked once for a page. Dates are cast to text so a
  * `date` does not shift when the server's timezone changes. No day predicate: a caller that
  * needs "still waiting" or "inside the expiring window" does that arithmetic on these dates
- * and the clock.
+ * and the clock. `household_name` is the person the book already names, so the נכסים tile can
+ * show the last word. `listUnitTenancies` still drops it.
  */
+/** The person שכירויות names. The alias is one of the two queries in this file. */
+function householdNameSql(tenancy: 'tenancy' | 't'): string {
+  return `(
+              SELECT p.full_name
+                FROM tenancy_party tp
+                JOIN party p ON p.party_id = tp.party_id
+               WHERE tp.tenancy_id = ${tenancy}.tenancy_id
+               ORDER BY CASE tp.role
+                          WHEN 'PRIMARY_TENANT' THEN 0
+                          WHEN 'CO_TENANT' THEN 1
+                          WHEN 'OCCUPANT' THEN 2
+                          WHEN 'GUARANTOR' THEN 3
+                          ELSE 4
+                        END,
+                        tp.party_id
+               LIMIT 1
+            )`;
+}
+
 export async function listLettingsForUnits(
   db: Queryable,
   unitIds: readonly string[],
@@ -73,7 +95,8 @@ export async function listLettingsForUnits(
             start_date::text AS start_date,
             end_date::text AS end_date,
             notice_date::text AS notice_date,
-            status
+            status,
+            ${householdNameSql('tenancy')} AS household_name
        FROM tenancy
       WHERE unit_id = ANY($1::uuid[])
       ORDER BY unit_id, start_date DESC`,
@@ -373,21 +396,7 @@ export async function listTenancyBook(
             b.address_line,
             b.city,
             b.building_number,
-            (
-              SELECT p.full_name
-                FROM tenancy_party tp
-                JOIN party p ON p.party_id = tp.party_id
-               WHERE tp.tenancy_id = t.tenancy_id
-               ORDER BY CASE tp.role
-                          WHEN 'PRIMARY_TENANT' THEN 0
-                          WHEN 'CO_TENANT' THEN 1
-                          WHEN 'OCCUPANT' THEN 2
-                          WHEN 'GUARANTOR' THEN 3
-                          ELSE 4
-                        END,
-                        tp.party_id
-               LIMIT 1
-            ) AS household_name
+            ${householdNameSql('t')} AS household_name
        FROM tenancy t
        JOIN unit u ON u.unit_id = t.unit_id
        JOIN space s ON s.space_id = u.unit_id

@@ -270,7 +270,9 @@ heading uses the same sentence, including the building number when there is one.
 the stored word, and the checks stay beside the press.
 
 [ADR-0011](docs/decisions/ADR-0011-the-tenancies-book-may-name-the-household.md) is why this list
-may name the household. Search, חוזים לא שלמים, and the נכסים tile stay nameless.
+may name the household. Search and חוזים לא שלמים stay nameless. The נכסים tile shows only the
+last name of the household that counts today
+([ADR-0012](docs/decisions/ADR-0012-the-nekasim-tile-shows-the-current-last-name.md)).
 
 **Q3 (what is overdue for inspection in this building) and Q7 (which bay is assigned to unit 12,
 and who serviced its gate motor)** landed as queries at 3.5, not as screens. Q3 is `Space → Asset
@@ -305,7 +307,8 @@ screens keep — including after 5.2, which was entitled to lift it behind the s
 and after 5.4, which reconsidered it while unlocking evidence provenance and kept it again.
 שכירויות (#162) names every row. The unit page (#165) names only the letting that counts today.
 Both are [ADR-0011](docs/decisions/ADR-0011-the-tenancies-book-may-name-the-household.md).
-Search, חוזים לא שלמים, and the נכסים tile stay nameless.
+Search and חוזים לא שלמים stay nameless. The נכסים tile shows the current household's last name
+([ADR-0012](docs/decisions/ADR-0012-the-nekasim-tile-shows-the-current-last-name.md)).
 
 **These screens went behind the session at slice 5.2**, which closed the dated state this paragraph
 described from 1.11 to week 5. Staff auth is Google sign-in behind an allowlist (5.1, amended by
@@ -520,9 +523,13 @@ the flat.
 - **מושכרת** — a letting counts today. An ending date inside `EXPIRING_WINDOW_DAYS`, or a
   `notice_date`, does not change the word.
 
-The ending date stays on the letting. The tile stays nameless. Under the flat's word it shows the
+The ending date stays on the letting. Under the flat's word it shows the
 chip and the lease dates (start and end) of the letting that counts today, and of the next draft
-when there is one. The chip is the same label as on שכירויות: טיוטה, ממתינה, מוכנה, or פעיל. The
+when there is one. Under the dates of the letting that counts today it shows that household's last
+name: the last word of the name שכירויות already uses (the primary tenant, otherwise the first
+person), and the whole name when it is one word. A draft's dates on the same tile carry no name. A
+vacant tile stays nameless, including when a draft is waiting. Co-tenants and the full name stay
+off the tile. The chip is the same label as on שכירויות: טיוטה, ממתינה, מוכנה, or פעיל. The
 letting that counts today is פעיל. A draft's chip is `draftLabel` on the activation gate, not a
 second copy of the checks. The next draft is the `DRAFT` whose `end_date` is today or later and
 whose `start_date` is the earliest. A second draft stays in the book and is not on the tile. A

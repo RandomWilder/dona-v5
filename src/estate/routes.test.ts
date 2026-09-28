@@ -2448,6 +2448,9 @@ describe('estate · the tenancy page', () => {
       assert.equal(page.statusCode, 200);
       assert.match(page.body, /הכפתור נדלק ב־/);
       assert.match(page.body, /2026-11-01/);
+      assert.match(page.body, /עד אז ההשכרה היא טיוטה\./);
+      assert.doesNotMatch(page.body, /איש אינו רואה/);
+      assert.match(page.body, new RegExp(A5_TENANT));
       assert.match(page.body, /disabled/);
     } finally {
       await a5Cleanup(pool);

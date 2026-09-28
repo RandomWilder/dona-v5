@@ -21,6 +21,8 @@ export interface TileLine {
   end: string;
   /** Null until the gate labels a draft. The letting that counts today is פעיל. */
   chip: TileChip | null;
+  /** Set only for the letting that counts today. The tile prints the last word. */
+  household_name: string | null;
 }
 
 export interface UnitTileState {
@@ -39,12 +41,17 @@ function nextDraft(
     .sort((left, right) => left.start_date.localeCompare(right.start_date))[0];
 }
 
-function lineOf(row: LettingOnUnit, chip: TileChip | null): TileLine {
+function lineOf(
+  row: LettingOnUnit,
+  chip: TileChip | null,
+  householdName: string | null,
+): TileLine {
   return {
     tenancyId: row.tenancy_id,
     start: row.start_date,
     end: row.end_date,
     chip,
+    household_name: householdName,
   };
 }
 
@@ -55,7 +62,7 @@ function oneUnit(input: {
   today: string;
 }): UnitTileState {
   const draft = nextDraft(input.lettings, input.today);
-  const draftLine = draft ? lineOf(draft, null) : null;
+  const draftLine = draft ? lineOf(draft, null, null) : null;
   if (!input.countsToday) {
     return {
       word: UNIT_WORDS.vacant,
@@ -64,7 +71,7 @@ function oneUnit(input: {
     };
   }
   const live = input.lettings.find((row) => row.tenancy_id === input.tenancyId);
-  const lines = live ? [lineOf(live, 'active')] : [];
+  const lines = live ? [lineOf(live, 'active', live.household_name)] : [];
   if (draftLine) lines.push(draftLine);
   return {
     word: UNIT_WORDS.let,

@@ -365,8 +365,12 @@ prints the rows as one list and shows the name only on the letting that counts t
   "who is in this unit today" would be the second copy of the join, and guard two exists because
   that is how the constraint dies.
   **#159 adds `listLettingsForUnits`.** The same facts, for many units in one query: every status,
-  the dates, `notice_date`, `unit_id`, no party and no name, and no day predicate. Estate derives
-  the four Unit states from this read, from `resolveOccupiedUnits`, and from the clock.
+  the dates, `notice_date`, `unit_id`, and no day predicate. It also returns `household_name`: the
+  primary tenant, otherwise the first person in the order the tenancy page already uses, otherwise
+  null — the same person שכירויות names. No phone, no party id, no co-tenant. Estate shows only
+  the last word of that name, and only under the dates of the letting that counts today, on the
+  נכסים tile. `listUnitTenancies` still returns no name. Estate derives the Unit word from this
+  read, from `resolveOccupiedUnits`, and from the clock.
 
   **Slice 6.5 adds `countIdentifierOverlap`, and it is the narrowest read in this module.** A2 has to
   rank a flat's lettings so an operator with a lease in their hand can be shown which one it probably
