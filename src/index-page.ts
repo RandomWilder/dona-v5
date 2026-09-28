@@ -58,7 +58,7 @@ export function renderIndexPage(screen: IndexScreen): string {
   const body = h`
     <div>
       <h1>דונה דום · ניהול נכסים</h1>
-      <p class="lede">נתוני הדגמה. המסכים אינם מציגים שמות דיירים או מספרי טלפון.</p>
+      <p class="lede">נתוני הדגמה. מספרי טלפון אינם מוצגים באף מסך.</p>
     </div>
     <div class="index-list">
       <article class="row-card">
@@ -73,6 +73,13 @@ export function renderIndexPage(screen: IndexScreen): string {
         <a class="card-link" href="/estate/expiring">
           <p class="card-title"><span>חוזים מסתיימים</span></p>
           <p class="lede">כל החוזים בתיק המסתיימים ב־60 הימים הקרובים, לפי תאריך.</p>
+        </a>
+      </article>
+      <article class="row-card">
+        ${marker('is-ok')}
+        <a class="card-link" href="/estate/tenancies">
+          <p class="card-title"><span>שכירויות</span></p>
+          <p class="lede">כל ההשכרות בתיק, עם שם הדייר.</p>
         </a>
       </article>
       <article class="row-card">

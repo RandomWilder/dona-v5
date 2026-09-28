@@ -422,7 +422,7 @@ describe('estate · the incomplete queue shows a protocol waiver', () => {
     assert.match(html, /רשם:/);
   });
 
-  it('prints a ready draft and an arming draft from the queue it is handed', () => {
+  it('prints a ready draft and a waiting draft from the queue it is handed', () => {
     const html = renderIncompletePage(
       [],
       {
@@ -474,7 +474,8 @@ describe('estate · the incomplete queue shows a protocol waiver', () => {
     assert.doesNotMatch(html, /נדלקות בקרוב \(14/);
     assert.match(html, /chip is-neutral/);
     assert.match(html, /dot is-hollow/);
-    assert.match(html, /נדלקת ב־/);
+    assert.match(html, /ממתינה <span dir="ltr">2026-10-01<\/span>/);
+    assert.doesNotMatch(html, /נדלקת/);
     assert.match(
       html,
       /href="\/estate\/tenancies\/77777777-7777-4777-8777-777777777777"/,

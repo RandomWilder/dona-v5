@@ -13,11 +13,16 @@
 //
 // **Four screens from 2.6, and one rule across the browsable ones: no name and no number.**
 // Lists and chips still get a state and a count. #107 hands names to one letting's sheet.
+// #162's book names every household. #165's unit list names only the live letting (ADR-0011).
+// The נכסים tile shows that household's last name under the live dates (ADR-0012).
+// Phone numbers stay off.
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import {
   type ActivationFlag,
   EARLY_HANDOVER_DAYS,
+  type TenancyBook,
+  type TenancyBookRow,
 } from '../../tenancy/contract.ts';
 import type { BuildingStatus, ConditionStatus } from './plan.ts';
 import type {
@@ -193,6 +198,7 @@ const styles = h`<style>
   }
   .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
   .unit-actions { margin: var(--space-3) 0 0; }
+  .unit-lettings { margin-block: var(--space-6); }
   /* Issue 140 — taking a bay off a flat. The issue number is written without its number sign here:
      tests/ui/tokens.test.ts refuses a hex colour anywhere in a rendered screen, and three digits
      behind a hash is one. It sits inside the <dd> holding the number it removes, so it is
@@ -675,24 +681,21 @@ const TILE_WORD: Record<string, { on: string; off: string }> = {
 const VACANT_TILE: UnitTileState = {
   word: UNIT_WORDS.vacant,
   vacant: true,
-  waitingStart: null,
-  endingOn: null,
+  lines: [],
 };
 
-function unitSub(state: UnitTileState): Html {
-  if (state.vacant && state.waitingStart) {
-    return h`<span class="sub">טיוטה מ־${ltr(state.waitingStart)} · ממתינה להפעלה</span>`;
-  }
-  if (state.endingOn && state.waitingStart) {
-    return h`<span class="sub">מסתיים ${ltr(state.endingOn)} · טיוטה נכנסת מ־${ltr(state.waitingStart)}</span>`;
-  }
-  if (state.endingOn) {
-    return h`<span class="sub">מסתיים ${ltr(state.endingOn)}</span>`;
-  }
-  if (state.waitingStart) {
-    return h`<span class="sub">טיוטה נכנסת מ־${ltr(state.waitingStart)}</span>`;
-  }
-  return h``;
+function lastName(full: string | null): string | null {
+  const trimmed = full?.trim();
+  if (!trimmed) return null;
+  return trimmed.split(/\s+/).at(-1) ?? null;
+}
+
+function tileLetting(line: UnitTileState['lines'][number]): Html {
+  if (line.chip === null) return h``;
+  const who = line.chip === 'active' ? lastName(line.household_name) : null;
+  return h`<span class="letting">${bookChip(line.chip)}${ltr(`${line.start} — ${line.end}`)}${
+    who ? h`<span class="who">${who}</span>` : h``
+  }</span>`;
 }
 
 const VACANT_PLURAL: Record<string, string> = {
@@ -778,7 +781,7 @@ export function renderInventoryPage(screen: {
       const dot = state.vacant
         ? h`<span class="dot is-hollow"></span>`
         : h`<span class="dot"></span>`;
-      return h`<a class="${cls}" href="/estate/units/${space.space_id}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${state.word}</span>${unitSub(state)}</a>`;
+      return h`<a class="${cls}" href="/estate/units/${space.space_id}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${state.word}</span>${state.lines.map(tileLetting)}</a>`;
     }
     const words = TILE_WORD[space.space_kind];
     if (words) {
@@ -837,7 +840,7 @@ export function renderInventoryPage(screen: {
             }>${caption} <span class="n">${ltr(n)}</span></a>`;
           })}
         </nav>
-        <div class="legend"><span class="is-ok"><span class="dot"></span>מושכרת / בסיום</span><span class="is-accent"><span class="dot is-hollow"></span>פנויה / חוזה בטיוטה</span></div>
+        <div class="legend"><span class="is-ok"><span class="dot"></span>מושכרת</span><span class="is-accent"><span class="dot is-hollow"></span>פנויה</span></div>
       </div>
       ${
         screen.buildings.length === 0
@@ -1824,6 +1827,32 @@ function changeLogPanel(events: readonly TenancyEventView[]): Html {
   </section>`;
 }
 
+/** #165. One row of the unit page's letting list. The name is set only for the live letting. */
+export interface UnitLettingView {
+  tenancy_id: string;
+  household_name: string | null;
+  start_date: string;
+  end_date: string;
+  chip: TenancyBookRow['chip'];
+}
+
+function unitLettingList(rows: readonly UnitLettingView[]): Html {
+  if (rows.length === 0) return h``;
+  return h`<div class="glass-stage unit-lettings"><div class="q-list">
+    ${rows.map(
+      (
+        row,
+      ) => h`<a class="q-row glass is-raised" href="/estate/tenancies/${row.tenancy_id}">
+        <div>
+          ${row.household_name ? h`<span>${row.household_name}</span>` : h``}
+          <p class="lede">${ltr(`${row.start_date} — ${row.end_date}`)}</p>
+        </div>
+        ${bookChip(row.chip)}
+      </a>`,
+    )}
+  </div></div>`;
+}
+
 export function renderUnitPage(
   unit: UnitHit,
   word: UnitWord,
@@ -1832,17 +1861,26 @@ export function renderUnitPage(
   promoted: readonly PromotedFieldView[] = [],
   events: readonly TenancyEventView[] = [],
   retrieval?: OfficeRetrievalView,
+  lettings: readonly UnitLettingView[] = [],
 ): string {
+  const heading = lettingSentence({
+    household_name: null,
+    address_line: unit.address_line,
+    building_number: unit.building_number,
+    city: unit.city,
+    unit_number: unit.unit_number,
+  });
   const sheet = h`
     <div>
       <a class="back" href="/estate/buildings/${unit.building_id}">← ${unit.building_name}</a>
-      <h1>דירה ${ltr(unit.unit_number)}</h1>
-      <p class="lede">${unit.building_name} · ${unit.address_line}, ${unit.city}</p>
+      <h1>${heading}</h1>
+      <p class="lede">${unit.building_name}</p>
       <div class="chips"><span class="chip">${word}</span></div>
       <p class="unit-actions">
         <a href="/documents/new?unit=${unit.unit_id}">הוספת מסמך</a>
       </p>
     </div>
+    ${unitLettingList(lettings)}
     ${promotedPanel(promoted)}
     ${changeLogPanel(events)}
     ${documentsPanel(documents, 'מסמכים')}`;
@@ -2273,7 +2311,7 @@ export function renderIncompletePage(
           ${queue.soon.map((row) =>
             activationLink(
               row,
-              h`<span class="chip is-neutral"><span class="dot is-hollow"></span>נדלקת ב־${ltr(row.activatable_on)}</span>`,
+              h`<span class="chip is-neutral"><span class="dot is-hollow"></span>ממתינה ${ltr(row.activatable_on)}</span>`,
             ),
           )}
         </div>`;
@@ -2563,7 +2601,7 @@ function activateReasons(sheet: TenancySheet): Html {
   if (sheet.activatableOn) {
     return h`<p class="reasons">
       כל המסמכים הנדרשים אושרו. <span class="arms">הכפתור נדלק ב־${ltr(sheet.activatableOn)}</span>,
-      יום תחילת החוזה. עד אז ההשכרה היא טיוטה, ואיש אינו רואה את הדיירים.
+      יום תחילת החוזה. עד אז ההשכרה היא טיוטה.
     </p>`;
   }
   const failed = sheet.checks.filter((check) => !check.passed);
@@ -2621,22 +2659,125 @@ function optionLine(optionEndDate: string | null): Html {
   return optionEndDate === null ? h`—` : ltr(optionEndDate);
 }
 
+function lettingTitle(row: {
+  household_name: string | null;
+  address_line: string;
+  building_number?: string | null;
+  city: string;
+  unit_number: string;
+}): string {
+  const number =
+    row.building_number != null && row.building_number !== ''
+      ? `, בניין ${row.building_number}`
+      : '';
+  const place = `${row.address_line}${number}, ${row.city} · דירה ${row.unit_number}`;
+  return row.household_name ? `${row.household_name} · ${place}` : place;
+}
+
+function lettingSentence(row: {
+  household_name: string | null;
+  address_line: string;
+  building_number?: string | null;
+  city: string;
+  unit_number: string;
+}): Html {
+  const number =
+    row.building_number != null && row.building_number !== ''
+      ? h`, בניין ${ltr(row.building_number)}`
+      : h``;
+  const place = h`${row.address_line}${number}, ${row.city} · דירה ${ltr(row.unit_number)}`;
+  return row.household_name ? h`${row.household_name} · ${place}` : place;
+}
+
+const BOOK_WORD: Record<TenancyBookRow['chip'], string> = {
+  ready: 'מוכנה',
+  draft: 'טיוטה',
+  waiting: 'ממתינה',
+  active: 'פעיל',
+  ended: 'הסתיים',
+  stopped: 'הופסק',
+};
+
+const BOOK_SECTIONS: readonly (readonly [keyof TenancyBook, string])[] = [
+  ['ready', 'מוכנה'],
+  ['draft', 'טיוטה'],
+  ['waiting', 'ממתינה'],
+  ['active', 'פעיל'],
+  ['past', 'עבר'],
+];
+
+function bookChip(chip: TenancyBookRow['chip']): Html {
+  const word = BOOK_WORD[chip];
+  if (chip === 'ready' || chip === 'active') {
+    return h`<span class="chip is-ok"><span class="dot"></span>${word}</span>`;
+  }
+  if (chip === 'draft') {
+    return h`<span class="chip is-accent"><span class="dot is-hollow"></span>${word}</span>`;
+  }
+  if (chip === 'waiting') {
+    return h`<span class="chip is-neutral"><span class="dot is-hollow"></span>${word}</span>`;
+  }
+  return h`<span class="chip is-neutral">${word}</span>`;
+}
+
+/**
+ * #162. Every letting. Prints the book it is handed. Does not read the gate.
+ */
+export function renderTenanciesPage(book: TenancyBook, nav: Html): string {
+  const body = h`
+    <div class="glass-stage">
+    <header class="page-head">
+      <div>
+        <h1>שכירויות</h1>
+        <p class="lede">כל ההשכרות בתיק.</p>
+      </div>
+    </header>
+    ${BOOK_SECTIONS.map(([key, title]) => {
+      const rows = book[key];
+      return h`<section class="glass sheet">
+        <h2 class="block-title">${title}</h2>
+        ${
+          rows.length === 0
+            ? h``
+            : h`<div class="q-list">
+                ${rows.map(
+                  (
+                    row,
+                  ) => h`<a class="q-row glass is-raised" href="/estate/tenancies/${row.tenancy_id}">
+                    <div>
+                      <span>${lettingSentence(row)}</span>
+                      <p class="lede">${ltr(`${row.start_date} — ${row.end_date}`)}</p>
+                    </div>
+                    ${bookChip(row.chip)}
+                  </a>`,
+                )}
+              </div>`
+        }
+      </section>`;
+    })}
+    </div>`;
+  return page('דונה דום — שכירויות', body, nav);
+}
+
 /**
  * A5 — one letting. #107. The card under the render-only rule: #134.
  * Prints the gate; does not re-run it. Prints every capture it is handed; does not inspect values.
  */
 export function renderTenancyDetailPage(sheet: TenancySheet): string {
-  const primary =
-    sheet.people.find((person) => person.role === 'PRIMARY_TENANT') ??
+  const person =
+    sheet.people.find((row) => row.role === 'PRIMARY_TENANT') ??
     sheet.people[0];
-  const title = primary
-    ? `${primary.fullName} · ${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${sheet.unit.unit_number}`
-    : `${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${sheet.unit.unit_number}`;
+  const place = {
+    household_name: person?.fullName ? person.fullName : null,
+    address_line: sheet.unit.address_line,
+    building_number: sheet.unit.building_number,
+    city: sheet.unit.city,
+    unit_number: sheet.unit.unit_number,
+  };
+  const title = lettingTitle(place);
   const lease = ofType(sheet.documents, 'lease');
   const active = sheet.status === 'ACTIVE';
-  const heading = primary
-    ? h`${primary.fullName} · ${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${ltr(sheet.unit.unit_number)}`
-    : h`${sheet.unit.address_line}, ${sheet.unit.city} · דירה ${ltr(sheet.unit.unit_number)}`;
+  const heading = lettingSentence(place);
   const body = h`
     <div class="glass-stage">
     <div class="glass tenancy-sheet">

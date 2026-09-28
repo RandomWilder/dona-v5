@@ -216,7 +216,9 @@ estate's fact. It lives at `src/index-page.ts`, beside `src/app.ts` which regist
 one screen in this system whose nav spans two modules and carries the sign-out form. **Slice 5.2b
 moved that bar off this module entirely**; **5.2c is the same rail as an ops sidebar**; **5.2d
 is that rail as a phone drawer**, still not this module's. Estate writes none of it. The
-composition root injects the chrome every signed-in screen carries.
+composition root injects the chrome every signed-in screen carries. **#162** adds a door,
+שכירויות, on that index and on the rail, immediately before חוזים לא שלמים. The index lede no
+longer says that no screen shows a tenant name. Phone numbers stay off every screen.
 
 **`GET /estate/search?q=` searches buildings and units, and deliberately not people.** A search that
 reached `party` would put a real person behind a route with no session, the week the register
@@ -241,6 +243,36 @@ either is the defect 2.6 wrote a test for.
 
 **`GET /estate/expiring` is Q5** — every ACTIVE lease in the portfolio ending inside sixty days, one
 indexed query, ordered by date. It shows a unit, a building and a date and **no party at all**.
+
+### שכירויות — the book of every letting (#162)
+
+**`GET /estate/tenancies`** lists every letting: drafts, including a draft with no filed document,
+live lettings, lettings that ended on their date, and lettings that ended early. The permission is
+`estate.read`, the same stance as the tenancy page. No new permission, no migration, no new column.
+
+Five sections, top to bottom, and an empty section keeps its title: מוכנה, טיוטה, ממתינה, פעיל,
+then עבר. The first four sort by oldest lease start first. עבר sorts by the day the household
+left, most recent first. An early ending uses the recorded move-out. A letting that ran its course
+uses the contract end. The row chip in עבר stays הסתיים or הופסק.
+
+A row is one sentence — the household, the street, the building number when the building has one,
+the city, the unit — plus the lease dates and one chip. No building number, that part is left out.
+The name is the primary tenant, otherwise the first person in the order the tenancy page already
+uses, otherwise the place alone. Drafts and past lettings are named too. Co-tenants stay off the
+row. The row opens the tenancy page. There is no activate button on it.
+
+While the letting is still a draft, the chip is a label read from `activationGate`, not a stored
+state and not a second copy of the gate's checks. מוכנה when the gate says the letting can be
+activated. ממתינה when the only failing check is that the start date has not arrived, including a
+start beyond fourteen days. Every other failure, including a missing protocol and a letting in the
+way, reads טיוטה. A live letting reads פעיל. The clock still never activates. The tenancy page
+heading uses the same sentence, including the building number when there is one. Its own chip stays
+the stored word, and the checks stay beside the press.
+
+[ADR-0011](docs/decisions/ADR-0011-the-tenancies-book-may-name-the-household.md) is why this list
+may name the household. Search and חוזים לא שלמים stay nameless. The נכסים tile shows only the
+last name of the household that counts today
+([ADR-0012](docs/decisions/ADR-0012-the-nekasim-tile-shows-the-current-last-name.md)).
 
 **Q3 (what is overdue for inspection in this building) and Q7 (which bay is assigned to unit 12,
 and who serviced its gate motor)** landed as queries at 3.5, not as screens. Q3 is `Space → Asset
@@ -270,9 +302,13 @@ are let today, because deciding when a tenancy counts is what only that module m
 `countUnitsByBuilding` says *where* they are, because that is estate's own structure. The buildings
 list costs two queries rather than one per building.
 
-The chip is a state and a count and never a tenant's name, which is the rule every screen here keeps
-— including after 5.2, which was entitled to lift it behind the session and did not, and after 5.4,
-which reconsidered it while unlocking evidence provenance and kept it again.
+The chip is a state and a count and never a tenant's name, which is the rule these occupancy
+screens keep — including after 5.2, which was entitled to lift it behind the session and did not,
+and after 5.4, which reconsidered it while unlocking evidence provenance and kept it again.
+שכירויות (#162) names every row. The unit page (#165) names only the letting that counts today.
+Both are [ADR-0011](docs/decisions/ADR-0011-the-tenancies-book-may-name-the-household.md).
+Search and חוזים לא שלמים stay nameless. The נכסים tile shows the current household's last name
+([ADR-0012](docs/decisions/ADR-0012-the-nekasim-tile-shows-the-current-last-name.md)).
 
 **These screens went behind the session at slice 5.2**, which closed the dated state this paragraph
 described from 1.11 to week 5. Staff auth is Google sign-in behind an allowlist (5.1, amended by
@@ -470,7 +506,7 @@ The create POST replies `303` to that Building's נכסים page. Later add and 
 **Vacancy is derived on every load, stored nowhere (#150).** Headlines name each kind's count, plus
 vacant Units, vacant parking, and vacant storage. Each UNIT, PARKING, and STORAGE row carries a
 vacancy chip. Elevators and later COMMON / EXTERIOR / extra TECHNICAL rows do not: the chip means
-assignment, not existence. Rent and lease-end stay off this list.
+assignment, not existence. Rent stays off this list. Lease dates are on the Unit tile, with the letting.
 
 A vacant Unit is a Unit with no letting that counts today — the same `resolveOccupiedUnits`
 injection the occupancy chip already uses. A vacant parking Space is one with no assigned bay on a
@@ -479,29 +515,47 @@ no assigned storage on a letting that counts today; built storage does not occup
 not grow a second day predicate: the occupied-unit tenancy ids come from that injection, and
 assigned bay / assigned storage are read off those rows only.
 
-**#159 widens each Unit tile on the נכסים list, and the chip on the Unit page, to four derived
-states. None is stored.**
+**#164. A Unit on the נכסים list, and the chip on the Unit page, is only פנויה or מושכרת.
+Neither word is stored.** #159's four names are retired: חוזה בטיוטה and בסיום are not names for
+the flat.
 
-- **פנויה** — no letting counts today, and no `DRAFT` is waiting.
-- **חוזה בטיוטה** — no letting counts today, and a `DRAFT` exists whose `end_date` is today or later.
-- **מושכרת** — a letting counts today.
-- **בסיום** — a letting counts today, and that letting's `end_date` falls inside
-  `EXPIRING_WINDOW_DAYS` (the same sixty days Q5 already uses), or the letting carries a
-  `notice_date`.
+- **פנויה** — no letting counts today. A waiting draft does not change the word.
+- **מושכרת** — a letting counts today. An ending date inside `EXPIRING_WINDOW_DAYS`, or a
+  `notice_date`, does not change the word.
 
-A let Unit that also has a waiting draft stays **מושכרת**, or **בסיום** when the live letting is
-ending. The draft is a second line on the tile, not another state. The ending date is that second
-line only when `end_date` is inside the window. A `notice_date` on a letting whose end is later
-than the window is **בסיום** with no ending date on the line. פנויה and חוזה בטיוטה use the
-dashed vacant tile; מושכרת and בסיום use the occupied tile. Every Unit tile in the grid is the same
-width and the same height, and the second line stays inside that height. Vacancy headlines still
-count a Unit as vacant whenever nobody counts today, so חוזה בטיוטה is vacant. Parking and storage
-stay binary. The rows on `/estate/inventory/:buildingId` keep the binary chip.
+The ending date stays on the letting. Under the flat's word it shows the
+chip and the lease dates (start and end) of the letting that counts today, and of the next draft
+when there is one. Under the dates of the letting that counts today it shows that household's last
+name: the last word of the name שכירויות already uses (the primary tenant, otherwise the first
+person), and the whole name when it is one word. A draft's dates on the same tile carry no name. A
+vacant tile stays nameless, including when a draft is waiting. Co-tenants and the full name stay
+off the tile. The chip is the same label as on שכירויות: טיוטה, ממתינה, מוכנה, or פעיל. The
+letting that counts today is פעיל. A draft's chip is `draftLabel` on the activation gate, not a
+second copy of the checks. The next draft is the `DRAFT` whose `end_date` is today or later and
+whose `start_date` is the earliest. A second draft stays in the book and is not on the tile. A
+letting that has ended — `ENDED`, `TERMINATED_EARLY`, or a draft whose `end_date` is before today —
+is not on the tile.
 
-Counts today stays `resolveOccupiedUnits`. The draft, the `end_date` and the `notice_date` come from
-tenancy's `listLettingsForUnits`, which carries no day predicate. Estate applies the clock and
-`EXPIRING_WINDOW_DAYS` after that read. The Unit page prints the same four words. The resident-count
-chip on the building page is unchanged.
+פנויה uses the dashed vacant tile; מושכרת uses the occupied tile. Every Unit tile in the grid is
+the same width and the same height. The legend is those two words. Vacancy headlines still count a
+Unit as vacant whenever nobody counts today, so a waiting draft is vacant. Parking and storage stay
+binary. The rows on `/estate/inventory/:buildingId` keep the binary chip. חוזים מסתיימים is
+unchanged: a live letting whose end falls inside the window is still listed there.
+
+Counts today stays `resolveOccupiedUnits`. The dates come from tenancy's `listLettingsForUnits`,
+which carries no day predicate. Estate applies the clock after that read. The Unit page prints the
+same two words. The resident-count chip on the building page is unchanged.
+
+**#165. The unit page lists that flat's lettings.** One list, no section titles, in the book's
+order: מוכנה, then טיוטה, then ממתינה, then פעיל, then the past, most recently left first. The
+first four sort by oldest lease start first, the same way שכירויות does. Each row carries the same
+chip as שכירויות and opens the tenancy page. Only the letting that counts today shows the main
+tenant's name — the primary tenant, otherwise the first person on the letting. Drafts and past
+lettings are a chip and the lease dates. They do not repeat the address. A vacant flat shows no
+tenant name, even when a draft is waiting. Co-tenants stay on the tenancy page. The heading
+includes the building number when the building has one, in the same sentence the book uses, and
+leaves that part out when it does not. The documents already on the page stay. The list is the
+book read for this unit, not a second classification.
 
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
 `GET`/`POST /documents/new`, reached from a unit row on the building page. It went behind the session
@@ -519,7 +573,8 @@ the second copy estate exists to prevent. **`GET /estate/units/:unitId` is the t
 added**: that same header, the occupancy chip, the upload link, and the documents panel. Slice 4.4
 adds the **promoted values** on that page: each stamped date is a link through to the page of the
 read screen it was read from. **Slice 5.5 adds the change log** — old → new, the operator email, the source
-document — from `listTenancyEvents`, injected the same way. Empty is legal. Never a tenant's name.
+document — from `listTenancyEvents`, injected the same way. Empty is legal. **#165** is the
+only name on this page, and only on the letting that counts today.
 **Slice 5.6:** a clock-driven end is `ACTIVE → ENDED`, actor `system`, and no document link. The
 unit page calls `expireDueTenancies` (injected from tenancy) against the clock before it reads the
 log, so opening the sheet is what closes a lease whose date has passed — not a hidden job.
@@ -586,7 +641,10 @@ query of `tenancy_event`.
 portfolio operations list, a unit and a date and a missing-rule label, and no party. Completeness
 is tenancy's query; the POST that records an exception is tenancy's write (guarantor only); both
 are injected. **#108:** each gate miss is a row on this same screen, labelled with the gate's
-rule, never a second list. The root index and the rail gain a fourth link. The index lived here until **5.2 moved it to
+rule, never a second list. **#163:** the waiting block keeps the title נדלקות בקרוב and the
+fourteen-day window. Its chip reads ממתינה and still shows the date. מוכנה היום and מוכנה מאז
+stay on the ready block. A draft with no filed document stays off this list, and the list still
+names no household. The root index and the rail gain a fourth link. The index lived here until **5.2 moved it to
 `src/index-page.ts`**, on the schedule 2.6 set for it. **5.2b took the remaining private nav with
 it**; **5.2c did not give it back**. This module's screens receive the composition root's chrome.
 

@@ -291,7 +291,15 @@ call. `terminated_has_no_document` is not relaxed: the clock's kind keeps its sh
   each from `activationGate`: `canActivate` is ready to press, oldest start first; a single miss of
   `start_reached` whose `activatableOn` is on or before today plus `ACTIVATION_QUEUE_DAYS` (14) is
   arming soon. The date a ready draft has been waiting is the lease start — the date the gate
-  reports as `activatableOn` before that day arrives. The query returns no party and no name. **#156** amends the rule that
+  reports as `activatableOn` before that day arrives. The query returns no party and no name. **#162** exports `listTenancyBook` beside it. Every
+letting is in the book, including a draft with no filed document. A draft's section is a reading
+of `activationGate` and of nothing else: `canActivate` is מוכנה, a single miss of `start_reached`
+is ממתינה with no fourteen-day window, and every other miss is טיוטה. `ACTIVE` is פעיל. `ENDED`
+and `TERMINATED_EARLY` are עבר, sorted by the recorded move-out when the ending was early and by
+the contract end otherwise, most recent first. The household name is the primary tenant, otherwise
+the first person in `listTenancyParties`' order, otherwise none. No phone. **#165** passes one unit
+into that same read. The sections, the chips, the sort, and the name rule do not change. Estate
+prints the rows as one list and shows the name only on the letting that counts today. **#156** amends the rule that
   gate misses are not excepted: `handover_protocol` may be waived for one letting. A recorded
   waiver makes that check pass, and any row the letting still occupies on this queue carries who
   recorded it, the office day, and the reason. The query stops listing the protocol miss. `lease`,
@@ -357,8 +365,12 @@ call. `terminated_has_no_document` is not relaxed: the clock's kind keeps its sh
   "who is in this unit today" would be the second copy of the join, and guard two exists because
   that is how the constraint dies.
   **#159 adds `listLettingsForUnits`.** The same facts, for many units in one query: every status,
-  the dates, `notice_date`, `unit_id`, no party and no name, and no day predicate. Estate derives
-  the four Unit states from this read, from `resolveOccupiedUnits`, and from the clock.
+  the dates, `notice_date`, `unit_id`, and no day predicate. It also returns `household_name`: the
+  primary tenant, otherwise the first person in the order the tenancy page already uses, otherwise
+  null — the same person שכירויות names. No phone, no party id, no co-tenant. Estate shows only
+  the last word of that name, and only under the dates of the letting that counts today, on the
+  נכסים tile. `listUnitTenancies` still returns no name. Estate derives the Unit word from this
+  read, from `resolveOccupiedUnits`, and from the clock.
 
   **Slice 6.5 adds `countIdentifierOverlap`, and it is the narrowest read in this module.** A2 has to
   rank a flat's lettings so an operator with a lease in their hand can be shown which one it probably

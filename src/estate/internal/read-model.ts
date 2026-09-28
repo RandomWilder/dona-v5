@@ -268,6 +268,11 @@ export interface UnitHit {
   building_name: string;
   address_line: string;
   city: string;
+  /**
+   * Present when the row was read by `getUnit`. Search hits do not carry it.
+   * Absent means the sentence leaves the building number out.
+   */
+  building_number?: string | null;
 }
 
 /**
@@ -285,7 +290,8 @@ export async function getUnit(db: Queryable, unitId: string): Promise<UnitHit> {
             b.building_id,
             b.name AS building_name,
             b.address_line,
-            b.city
+            b.city,
+            b.building_number
      FROM unit u
      JOIN space s ON s.space_id = u.unit_id
      JOIN building b ON b.building_id = s.building_id

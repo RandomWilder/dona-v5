@@ -11,6 +11,11 @@
 //     with names except `GUARANTOR`, and does not restate the isolation join.
 import { type Clock, today as dayOf } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
+import {
+  activationGate,
+  draftLabel,
+  type TenancyDocumentsReader,
+} from './activation.ts';
 import type { Queryable } from './types.ts';
 
 export interface UnitLetting {
@@ -24,6 +29,8 @@ export interface UnitLetting {
 /** One letting on a named unit. Same facts as `UnitLetting`, so a page can ask once. #159. */
 export interface LettingOnUnit extends UnitLetting {
   unit_id: string;
+  /** Primary tenant, otherwise the first person. Null when the letting has no household. */
+  household_name: string | null;
 }
 
 /** One letting, for the tenancy sheet. Dates, status, and the promoted copies. No party. #107, #134. */
@@ -55,8 +62,28 @@ export interface TenancyPartyRow {
  * Same question as `listUnitTenancies`, asked once for a page. Dates are cast to text so a
  * `date` does not shift when the server's timezone changes. No day predicate: a caller that
  * needs "still waiting" or "inside the expiring window" does that arithmetic on these dates
- * and the clock.
+ * and the clock. `household_name` is the person the book already names, so the נכסים tile can
+ * show the last word. `listUnitTenancies` still drops it.
  */
+/** The person שכירויות names. The alias is one of the two queries in this file. */
+function householdNameSql(tenancy: 'tenancy' | 't'): string {
+  return `(
+              SELECT p.full_name
+                FROM tenancy_party tp
+                JOIN party p ON p.party_id = tp.party_id
+               WHERE tp.tenancy_id = ${tenancy}.tenancy_id
+               ORDER BY CASE tp.role
+                          WHEN 'PRIMARY_TENANT' THEN 0
+                          WHEN 'CO_TENANT' THEN 1
+                          WHEN 'OCCUPANT' THEN 2
+                          WHEN 'GUARANTOR' THEN 3
+                          ELSE 4
+                        END,
+                        tp.party_id
+               LIMIT 1
+            )`;
+}
+
 export async function listLettingsForUnits(
   db: Queryable,
   unitIds: readonly string[],
@@ -68,7 +95,8 @@ export async function listLettingsForUnits(
             start_date::text AS start_date,
             end_date::text AS end_date,
             notice_date::text AS notice_date,
-            status
+            status,
+            ${householdNameSql('tenancy')} AS household_name
        FROM tenancy
       WHERE unit_id = ANY($1::uuid[])
       ORDER BY unit_id, start_date DESC`,
@@ -273,4 +301,140 @@ export async function countIdentifierOverlap(
   return new Map(
     result.rows.map((row) => [row.tenancy_id, Number(row.matched)]),
   );
+}
+
+export type BookChip =
+  | 'ready'
+  | 'draft'
+  | 'waiting'
+  | 'active'
+  | 'ended'
+  | 'stopped';
+
+/** One row of שכירויות. The name is one person, or none. No phone. #162. */
+export interface TenancyBookRow {
+  tenancy_id: string;
+  household_name: string | null;
+  address_line: string;
+  building_number: string | null;
+  city: string;
+  unit_number: string;
+  start_date: string;
+  end_date: string;
+  chip: BookChip;
+}
+
+export interface TenancyBook {
+  ready: TenancyBookRow[];
+  draft: TenancyBookRow[];
+  waiting: TenancyBookRow[];
+  active: TenancyBookRow[];
+  past: TenancyBookRow[];
+}
+
+interface BookPlace {
+  tenancy_id: string;
+  status: string;
+  start_date: string;
+  end_date: string;
+  actual_move_out: string | null;
+  unit_number: string;
+  address_line: string;
+  city: string;
+  building_number: string | null;
+  household_name: string | null;
+}
+
+function byStart(a: TenancyBookRow, b: TenancyBookRow): number {
+  return (
+    a.start_date.localeCompare(b.start_date) ||
+    a.tenancy_id.localeCompare(b.tenancy_id)
+  );
+}
+
+function leftOn(place: BookPlace): string {
+  if (place.status === 'TERMINATED_EARLY' && place.actual_move_out) {
+    return place.actual_move_out;
+  }
+  return place.end_date;
+}
+
+function toRow(place: BookPlace, chip: BookChip): TenancyBookRow {
+  const name = place.household_name?.trim();
+  return {
+    tenancy_id: place.tenancy_id,
+    household_name: name ? name : null,
+    address_line: place.address_line,
+    building_number: place.building_number,
+    city: place.city,
+    unit_number: place.unit_number,
+    start_date: place.start_date,
+    end_date: place.end_date,
+    chip,
+  };
+}
+
+/**
+ * Every letting, for שכירויות. #162. Pass a unit to read that flat only (#165).
+ *
+ * Draft chips are `draftLabel` on `activationGate`. Nothing else decides them, and nothing is
+ * stored. A draft with no filed document is still a row: the gate reads the miss.
+ */
+export async function listTenancyBook(
+  db: Queryable,
+  clock: Clock,
+  documents: TenancyDocumentsReader,
+  unitId?: string,
+): Promise<TenancyBook> {
+  const places = await db.query<BookPlace>(
+    `SELECT t.tenancy_id,
+            t.status,
+            t.start_date::text AS start_date,
+            t.end_date::text AS end_date,
+            t.actual_move_out::text AS actual_move_out,
+            u.unit_number,
+            b.address_line,
+            b.city,
+            b.building_number,
+            ${householdNameSql('t')} AS household_name
+       FROM tenancy t
+       JOIN unit u ON u.unit_id = t.unit_id
+       JOIN space s ON s.space_id = u.unit_id
+       JOIN building b ON b.building_id = s.building_id
+      WHERE $1::uuid IS NULL OR t.unit_id = $1`,
+    [unitId ?? null],
+  );
+  const book: TenancyBook = {
+    ready: [],
+    draft: [],
+    waiting: [],
+    active: [],
+    past: [],
+  };
+  const past: { row: TenancyBookRow; left: string }[] = [];
+  for (const place of places.rows) {
+    if (place.status === 'DRAFT') {
+      const gate = await activationGate(db, clock, place.tenancy_id, documents);
+      const label = draftLabel(gate);
+      book[label].push(toRow(place, label));
+      continue;
+    }
+    if (place.status === 'ACTIVE') {
+      book.active.push(toRow(place, 'active'));
+      continue;
+    }
+    const chip = place.status === 'TERMINATED_EARLY' ? 'stopped' : 'ended';
+    past.push({ row: toRow(place, chip), left: leftOn(place) });
+  }
+  book.ready.sort(byStart);
+  book.draft.sort(byStart);
+  book.waiting.sort(byStart);
+  book.active.sort(byStart);
+  past.sort(
+    (a, b) =>
+      b.left.localeCompare(a.left) ||
+      a.row.tenancy_id.localeCompare(b.row.tenancy_id),
+  );
+  book.past = past.map((entry) => entry.row);
+  return book;
 }

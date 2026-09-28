@@ -1,29 +1,38 @@
-// Four Unit states on נכסים and the Unit page. #159.
+// A flat on נכסים is only פנויה or מושכרת. #164.
 //
 // Counts-today is already decided by `resolveOccupiedUnits`. This file only reads the dates
 // tenancy already returned and the clock. It does not query, and it does not decide whether a
-// letting covers today.
-import { addDays } from '../../kernel/clock.ts';
+// letting covers today. A draft's chip is filled afterwards from the activation gate.
 import type { LettingOnUnit } from '../../tenancy/contract.ts';
-import { EXPIRING_WINDOW_DAYS } from './read-model.ts';
 
 export const UNIT_WORDS = {
   vacant: 'פנויה',
-  draft: 'חוזה בטיוטה',
   let: 'מושכרת',
-  ending: 'בסיום',
 } as const;
 
 export type UnitWord = (typeof UNIT_WORDS)[keyof typeof UNIT_WORDS];
 
+/** The four labels שכירויות already prints. Past chips are not on a tile. */
+export type TileChip = 'ready' | 'waiting' | 'draft' | 'active';
+
+export interface TileLine {
+  tenancyId: string;
+  start: string;
+  end: string;
+  /** Null until the gate labels a draft. The letting that counts today is פעיל. */
+  chip: TileChip | null;
+  /** Set only for the letting that counts today. The tile prints the last word. */
+  household_name: string | null;
+}
+
 export interface UnitTileState {
   word: UnitWord;
   vacant: boolean;
-  waitingStart: string | null;
-  endingOn: string | null;
+  /** The letting that counts today, then the next draft. The past is absent. */
+  lines: TileLine[];
 }
 
-function waitingDraft(
+function nextDraft(
   lettings: readonly LettingOnUnit[],
   today: string,
 ): LettingOnUnit | undefined {
@@ -32,38 +41,42 @@ function waitingDraft(
     .sort((left, right) => left.start_date.localeCompare(right.start_date))[0];
 }
 
+function lineOf(
+  row: LettingOnUnit,
+  chip: TileChip | null,
+  householdName: string | null,
+): TileLine {
+  return {
+    tenancyId: row.tenancy_id,
+    start: row.start_date,
+    end: row.end_date,
+    chip,
+    household_name: householdName,
+  };
+}
+
 function oneUnit(input: {
   countsToday: boolean;
   tenancyId: string | null;
   lettings: readonly LettingOnUnit[];
   today: string;
-  windowEnd: string;
 }): UnitTileState {
-  const waiting = waitingDraft(input.lettings, input.today);
+  const draft = nextDraft(input.lettings, input.today);
+  const draftLine = draft ? lineOf(draft, null, null) : null;
   if (!input.countsToday) {
-    if (waiting) {
-      return {
-        word: UNIT_WORDS.draft,
-        vacant: true,
-        waitingStart: waiting.start_date,
-        endingOn: null,
-      };
-    }
     return {
       word: UNIT_WORDS.vacant,
       vacant: true,
-      waitingStart: null,
-      endingOn: null,
+      lines: draftLine ? [draftLine] : [],
     };
   }
   const live = input.lettings.find((row) => row.tenancy_id === input.tenancyId);
-  const inWindow = live !== undefined && live.end_date <= input.windowEnd;
-  const ending = inWindow || (live !== undefined && live.notice_date !== null);
+  const lines = live ? [lineOf(live, 'active', live.household_name)] : [];
+  if (draftLine) lines.push(draftLine);
   return {
-    word: ending ? UNIT_WORDS.ending : UNIT_WORDS.let,
+    word: UNIT_WORDS.let,
     vacant: false,
-    waitingStart: waiting?.start_date ?? null,
-    endingOn: inWindow && live ? live.end_date : null,
+    lines,
   };
 }
 
@@ -83,7 +96,6 @@ export function unitTiles(input: {
   const occupiedBy = new Map(
     input.occupied.map((row) => [row.unit_id, row.tenancy_id]),
   );
-  const windowEnd = addDays(input.today, EXPIRING_WINDOW_DAYS);
   const states = new Map<string, UnitTileState>();
   for (const unitId of input.unitIds) {
     states.set(
@@ -93,7 +105,6 @@ export function unitTiles(input: {
         tenancyId: occupiedBy.get(unitId) ?? null,
         lettings: byUnit.get(unitId) ?? [],
         today: input.today,
-        windowEnd,
       }),
     );
   }

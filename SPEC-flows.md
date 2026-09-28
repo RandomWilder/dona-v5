@@ -289,8 +289,10 @@ from no second copy of its checks. **מוכנות להפעלה** lists every doc
 returns `canActivate`, oldest start first, each linking to its tenancy page. The chip reads מוכנה
 היום when the lease start is the office day, and מוכנה מאז that start when the day has passed
 unpressed — a missed press stays on the block. **נדלקות בקרוב** lists a draft whose only failing
-check is `start_reached` and whose `activatableOn` falls within `ACTIVATION_QUEUE_DAYS` (14). The
-chip names that date. Neither block carries a party name.
+check is `start_reached` and whose `activatableOn` falls within `ACTIVATION_QUEUE_DAYS` (14). A
+start further out stays off this block. The block title stays. **#163:** the chip reads ממתינה
+and still shows that date. מוכנה היום and מוכנה מאז stay on the ready block of this list.
+Neither block carries a party name. A draft with no filed document stays off the list.
 **Resolution:** the administrator uploads the addendum (A3), or records the exception. The exception
 row's `actor` is the signed-in operator (slice 5.4), not a typed name and not the word `console`.
 **Module:** tenancy owns the query and the exception write (`listIncompleteTenancies`,
@@ -342,7 +344,8 @@ move `tenancy.status`. A waiver, or a confirm that recorded no date, raises noth
 the blocking letting by id and dates only — never a party.
 
 **Screen:** `GET /estate/tenancies/:tenancyId` — one letting, reached by its identifier. Title
-(tenant name plus address and apartment number), status, the lease's dates, the confirmed
+(the same sentence as שכירויות: tenant name, street, building number when the building has one,
+city, and apartment number), status, the lease's dates, the confirmed
 handover date beside them, the documents it holds,
 what is missing, every gate check with its outcome, and the activate button. The household name and
 the status chip share one line, the way a building title does on נכסים, and the lease dates sit
@@ -351,8 +354,9 @@ under them. The confirmed handover date is printed on that same line. When the g
 which edge it crossed, and it says the flag does not block. It is not a row in מה נבדק. The page prints the
 gate's returned facts and re-derives none of the rules. The button is dark until `canActivate`; a
 dark button names every requirement the gate checked. When the only miss is the start date, the
-page states `activatableOn`. `unit_free` is one more row in מה נבדק, the same shape as the other
-checks. A pass uses the occupied chip. A miss uses the alert chip and names the outgoing letting by
+page states `activatableOn` and says the letting stays a draft until that date. It does not say
+the household is unseen: שכירויות names the draft. `unit_free` is one more row in מה נבדק, the same
+shape as the other checks. A pass uses the occupied chip. A miss uses the alert chip and names the outgoing letting by
 its dates, with a link to that letting and — when the reader holds `tenancy.write` — a link to its
 end-early form. A missing protocol, for a reader who holds `tenancy.write`, carries the reason
 field and רשום ויתור on that same check row — the small secondary pill. After a waiver the chip
@@ -368,6 +372,15 @@ yet signed links to that same confirm. A file the guard refuses is not stored, a
 so. The activate button stays the primary pill and stays dark while any check fails,
 with the unmet requirements in muted type beside it. `POST /estate/tenancies/:tenancyId/activate`
 is the person command (`tenancy.write`); the clock never posts it.
+
+**The book (#162).** `GET /estate/tenancies` is every letting, reached from the rail and from the
+home index, both immediately before חוזים לא שלמים. The same `estate.read` that opens the tenancy
+page opens the book. Five sections keep their titles even when empty: מוכנה, טיוטה, ממתינה, פעיל,
+עבר. A draft's chip is a label on the gate, not a new status: מוכנה when `canActivate` is true,
+ממתינה when the only miss is `start_reached` (a start beyond fourteen days included), טיוטה for
+every other miss. The stored status stays `DRAFT` until a person presses, and the press stays on
+the tenancy page. The page's own chip stays the stored word. The index no longer claims that no
+screen shows a tenant name. Phone numbers stay off every screen, including this one.
 
 **An `ACTIVE` letting on that same page can be ended early (#154).** The form sits in a glass card:
 move-out and notice as a pair of dates, the notice letter as a file field, and the primary button
@@ -905,17 +918,29 @@ accepted.
 with whatever Spaces they already have). Create uses A11's identity fields plus four counts (Units
 ≥ 1; parking, storage, elevators may be 0) and a first number for each counted kind except
 elevators. The building drill lists every Space grouped by kind, with headline counts. Each Unit is
-a tile in one of four derived states — פנויה, חוזה בטיוטה, מושכרת, בסיום — stored nowhere (#159).
-פנויה and חוזה בטיוטה are the dashed vacant tile; מושכרת and בסיום are the occupied tile. Tiles in
-that grid share one width and one height, and a second line (a waiting draft, or the ending date
-when that end is inside the sixty-day window) stays
-inside that height. A notice on a letting that ends later than the window is בסיום with no ending
-date on the line. A let Unit with a waiting draft stays מושכרת or בסיום and names the draft on
-that line. Headlines count a Unit vacant when no letting counts today, so a waiting draft is vacant.
-The Unit page uses the same four words. Parking and storage stay a vacancy chip: occupied or vacant,
-and a vacant bay or storage room is no assigned place on a letting that counts today. A built-bay or
+a tile that is only פנויה or מושכרת, stored nowhere (#164). פנויה means no letting counts
+today, including when a draft is waiting. מושכרת means a letting counts today, including when that
+letting ends soon or carries a notice. חוזה בטיוטה and בסיום are not names for the flat. Under
+the word it shows the chip and the lease dates of the letting that counts today, and of the next
+draft when there is one. Under the dates of the letting that counts today it shows that household's
+last name — the last word of the name שכירויות already uses, or the whole name when it is one
+word. A draft's dates carry no name. A vacant tile stays nameless. Co-tenants stay off the tile.
+The chip is the same label as on שכירויות. The
+next draft is the earliest start among drafts that have not ended. A second draft stays in the book
+and is not on the tile. The past is not on the tile. Tiles in that grid share one width and one
+height. The legend is the two words. Headlines count a Unit vacant when no letting counts today, so
+a waiting draft is vacant. חוזים מסתיימים still lists a live letting that ends inside its window.
+The Unit page uses the same two words. **#165.** That page lists the flat's lettings in one list,
+with no section titles, in the book's order: מוכנה, then טיוטה, then ממתינה, then פעיל, then the
+past, most recently left first. Each row carries the same chip as שכירויות and opens the tenancy
+page. Only the letting that counts today shows the main tenant's name. Drafts and past lettings
+are a chip and the lease dates, and do not repeat the address. A vacant flat shows no tenant name,
+even when a draft is waiting. Co-tenants stay on the tenancy page. The heading includes the
+building number when the building has one. The documents already on the page stay. Parking and
+storage stay a vacancy chip: occupied or vacant, and a vacant bay or storage room is no assigned
+place on a letting that counts today. A built-bay or
 built-storage link does not occupy the Space. Elevators and later shared Spaces have no chip. The
-rows on a building's detail page keep the binary chip. Rent and lease-end are not on this list.
+rows on a building's detail page keep the binary chip. Rent is not on this list.
 
 **Writes:** one Building and the minted Spaces (and a Unit row per UNIT Space) through
 `importEstate`. Names are the bare integer sequence. Elevators are TECHNICAL Spaces `1`…`N`. No
@@ -937,7 +962,9 @@ Not a document promotion and not `estate_event`.
 item. בניינים routes and views are not edited.
 
 **Work items:** #149 (tab, create, mint, grouped list), #150 (derived vacancy), #151 (add, remove,
-shared Spaces), #159 (four derived Unit states on the tiles and the Unit page).
+shared Spaces), #159 (four derived Unit states, retired by #164), #164 (a flat is only פנויה or
+מושכרת; the tile shows the letting that counts today and the next draft), #165 (the unit page
+lists that flat's lettings, and names only the one that counts today).
 
 ## Open
 

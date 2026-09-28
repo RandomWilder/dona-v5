@@ -844,7 +844,7 @@ describe('estate · נכסים, tab create and mint', () => {
     }
   });
 
-  it('derives four unit states on the נכסים tiles and the unit page', async (t) => {
+  it('a flat on נכסים is only פנויה or מושכרת', async (t) => {
     const pool = await migratedPoolOrNull();
     if (!pool) {
       t.skip(skipReason);
@@ -896,7 +896,7 @@ describe('estate · נכסים, tab create and mint', () => {
         name: string,
         start: string,
         end: string,
-        status: 'ACTIVE' | 'DRAFT',
+        status: 'ACTIVE' | 'DRAFT' | 'ENDED',
         notice: string | null = null,
       ) => {
         const tenancyId = newId();
@@ -915,11 +915,14 @@ describe('estate · נכסים, tab create and mint', () => {
           );
         }
       };
-      // A draft whose end is already past does not wait.
+      // A draft whose end is already past is not on the tile.
       await grant('10', '2025-01-01', '2026-09-23', 'DRAFT');
       await grant('11', '2026-09-24', '2027-09-23', 'DRAFT');
+      // The later draft stays in the book and is not the one on the tile.
+      await grant('11', '2028-01-01', '2028-12-31', 'DRAFT');
       await grant('12', '2026-01-01', '2026-10-30', 'ACTIVE');
       await grant('12', '2026-11-01', '2027-10-31', 'DRAFT');
+      await grant('13', '2010-01-01', '2015-12-31', 'ENDED');
       await grant('13', '2020-01-01', '2099-12-31', 'ACTIVE');
       await grant('14', '2020-01-01', '2099-12-31', 'ACTIVE');
       await grant('14', '2027-01-01', '2027-12-31', 'DRAFT');
@@ -946,48 +949,64 @@ describe('estate · נכסים, tab create and mint', () => {
         const close = block.indexOf('</a>', at);
         return block.slice(open, close + 4);
       };
+      assert.doesNotMatch(list.body, /חוזה בטיוטה|בסיום/);
+      assert.match(
+        list.body,
+        /<div class="legend"><span class="is-ok"><span class="dot"><\/span>מושכרת<\/span><span class="is-accent"><span class="dot is-hollow"><\/span>פנויה<\/span><\/div>/,
+      );
+      assert.doesNotMatch(block, new RegExp(partyName));
+      assert.match(tileOf('12'), /2026-01-01 — 2026-10-30[\s\S]{0,120}tenant/);
+      assert.doesNotMatch(
+        tileOf('12').split('2026-11-01 — 2027-10-31')[1] ?? '',
+        /tenant/,
+      );
+      assert.doesNotMatch(tileOf('10'), /tenant/);
+      assert.doesNotMatch(tileOf('11'), /tenant/);
       const vacant = tileOf('10');
       assert.match(vacant, /space-tile is-vacant/);
       assert.match(vacant, />פנויה</);
-      assert.doesNotMatch(vacant, /class="sub"/);
+      assert.doesNotMatch(vacant, /class="chip|2025-01-01/);
       const waiting = tileOf('11');
       assert.match(waiting, /space-tile is-vacant/);
-      assert.match(waiting, />חוזה בטיוטה</);
-      assert.match(
-        waiting,
-        /טיוטה מ־<span dir="ltr">2026-09-24<\/span> · ממתינה להפעלה/,
-      );
+      assert.match(waiting, />פנויה</);
+      assert.match(waiting, /chip is-accent[\s\S]*טיוטה/);
+      assert.match(waiting, /2026-09-24 — 2027-09-23/);
+      assert.doesNotMatch(waiting, /2028-01-01/);
+      assert.equal(waiting.match(/class="chip /g)?.length, 1);
       const ending = tileOf('12');
       assert.match(ending, /space-tile is-occupied/);
-      assert.match(ending, />בסיום</);
-      assert.match(
-        ending,
-        /מסתיים <span dir="ltr">2026-10-30<\/span> · טיוטה נכנסת מ־<span dir="ltr">2026-11-01<\/span>/,
-      );
+      assert.match(ending, />מושכרת</);
+      assert.match(ending, /chip is-ok[\s\S]*פעיל/);
+      assert.match(ending, /2026-01-01 — 2026-10-30/);
+      assert.match(ending, /chip is-accent[\s\S]*טיוטה/);
+      assert.match(ending, /2026-11-01 — 2027-10-31/);
       const letOut = tileOf('13');
       assert.match(letOut, /space-tile is-occupied/);
       assert.match(letOut, />מושכרת</);
-      assert.doesNotMatch(letOut, /class="sub"/);
+      assert.match(letOut, /chip is-ok[\s\S]*פעיל/);
+      assert.match(letOut, /2020-01-01 — 2099-12-31/);
+      assert.doesNotMatch(letOut, /2010-01-01|2015-12-31/);
+      assert.equal(letOut.match(/class="chip /g)?.length, 1);
       const turnover = tileOf('14');
       assert.match(turnover, /space-tile is-occupied/);
       assert.match(turnover, />מושכרת</);
-      assert.doesNotMatch(turnover, />בסיום</);
-      assert.match(
-        turnover,
-        /טיוטה נכנסת מ־<span dir="ltr">2027-01-01<\/span>/,
-      );
+      assert.match(turnover, /chip is-ok[\s\S]*פעיל/);
+      assert.match(turnover, /2020-01-01 — 2099-12-31/);
+      assert.match(turnover, /chip is-accent[\s\S]*טיוטה/);
+      assert.match(turnover, /2027-01-01 — 2027-12-31/);
       const noticed = tileOf('15');
       assert.match(noticed, /space-tile is-occupied/);
-      assert.match(noticed, />בסיום</);
-      assert.doesNotMatch(noticed, /מסתיים/);
-      assert.doesNotMatch(noticed, /טיוטה נכנסת/);
+      assert.match(noticed, />מושכרת</);
+      assert.match(noticed, /chip is-ok[\s\S]*פעיל/);
+      assert.match(noticed, /2020-01-01 — 2099-12-31/);
       const onTheWindow = tileOf('16');
-      assert.match(onTheWindow, />בסיום</);
-      assert.match(onTheWindow, /2026-11-23/);
+      assert.match(onTheWindow, />מושכרת</);
+      assert.match(onTheWindow, /chip is-ok[\s\S]*פעיל/);
+      assert.match(onTheWindow, /2026-01-01 — 2026-11-23/);
       const pastTheWindow = tileOf('17');
       assert.match(pastTheWindow, />מושכרת</);
-      assert.doesNotMatch(pastTheWindow, />בסיום</);
-      assert.doesNotMatch(pastTheWindow, /class="sub"/);
+      assert.match(pastTheWindow, /chip is-ok[\s\S]*פעיל/);
+      assert.match(pastTheWindow, /2026-01-01 — 2026-11-24/);
 
       const detail = await client.inject({
         method: 'GET',
@@ -1001,14 +1020,37 @@ describe('estate · נכסים, tab create and mint', () => {
       );
       assert.doesNotMatch(detail.body, /חוזה בטיוטה|מושכרת|בסיום/);
 
+      const expiring = await client.inject({
+        method: 'GET',
+        url: '/estate/expiring',
+      });
+      assert.equal(expiring.statusCode, 200);
+      const expiringHere = expiring.body
+        .split('<article')
+        .filter((card) => card.includes('בניין נכסים'));
+      const expiringCard = (unitNo: string) =>
+        expiringHere.find((card) => card.includes(`>${unitNo}<`)) ?? '';
+      assert.match(expiringCard('12'), /2026-10-30/);
+      assert.match(expiringCard('16'), /2026-11-23/);
+      assert.equal(expiringCard('17'), '');
+      assert.equal(expiringCard('15'), '');
+
+      const book = await client.inject({
+        method: 'GET',
+        url: '/estate/tenancies',
+      });
+      assert.equal(book.statusCode, 200);
+      assert.match(book.body, /2026-09-24 — 2027-09-23/);
+      assert.match(book.body, /2028-01-01 — 2028-12-31/);
+
       for (const [name, word] of [
         ['10', 'פנויה'],
-        ['11', 'חוזה בטיוטה'],
-        ['12', 'בסיום'],
+        ['11', 'פנויה'],
+        ['12', 'מושכרת'],
         ['13', 'מושכרת'],
         ['14', 'מושכרת'],
-        ['15', 'בסיום'],
-        ['16', 'בסיום'],
+        ['15', 'מושכרת'],
+        ['16', 'מושכרת'],
         ['17', 'מושכרת'],
       ] as const) {
         const page = await client.inject({
@@ -1020,6 +1062,7 @@ describe('estate · נכסים, tab create and mint', () => {
           page.body,
           new RegExp(`<span class="chip">${word}</span>`),
         );
+        assert.doesNotMatch(page.body, /חוזה בטיוטה|בסיום/);
       }
     } finally {
       await cleanup(pool);

@@ -35,6 +35,7 @@ import {
   renderNewInventoryPage,
   renderNewUnitPage,
   renderSearchPage,
+  renderTenanciesPage,
   renderTenancyDetailPage,
   renderUnitPage,
 } from '../../src/estate/contract.ts';
@@ -288,6 +289,7 @@ const NAV_INVENTORY = signedInChrome(CSRF, 'inventory', true);
 const NAV_SEARCH = signedInChrome(CSRF, 'search', true);
 const NAV_EXPIRING = signedInChrome(CSRF, 'expiring', true);
 const NAV_INCOMPLETE = signedInChrome(CSRF, 'incomplete', true);
+const NAV_TENANCIES = signedInChrome(CSRF, 'tenancies', true);
 const NAV_STAFF = signedInChrome(CSRF, 'staff', true);
 const NAV_DOCUMENTS = signedInChrome(CSRF, 'documents', true);
 const NAV_FILING = signedInChrome(CSRF, 'filing', true);
@@ -974,6 +976,44 @@ const SCREENS: Array<[string, () => string]> = [
   [
     'estate · leases ending, none',
     () => renderExpiringPage([], 60, NAV_EXPIRING),
+  ],
+  [
+    'estate · tenancies book',
+    () =>
+      renderTenanciesPage(
+        {
+          ready: [
+            {
+              tenancy_id: '55555555-5555-4555-8555-555555555555',
+              household_name: TENANT_NAME,
+              address_line: 'רקפת 12',
+              building_number: '206',
+              city: 'שוהם',
+              unit_number: '4',
+              start_date: '2026-08-01',
+              end_date: '2027-07-31',
+              chip: 'ready',
+            },
+          ],
+          draft: [],
+          waiting: [],
+          active: [],
+          past: [
+            {
+              tenancy_id: '66666666-6666-4666-8666-666666666666',
+              household_name: null,
+              address_line: 'האלון 8',
+              building_number: null,
+              city: 'שוהם',
+              unit_number: '2',
+              start_date: '2024-01-01',
+              end_date: '2025-12-31',
+              chip: 'ended',
+            },
+          ],
+        },
+        NAV_TENANCIES,
+      ),
   ],
   [
     'estate · incomplete tenancies',
@@ -2500,12 +2540,15 @@ describe('shared UI tokens', () => {
       'documents · confirm a lease, an existing letting pre-selected',
       'documents · confirm an addendum',
       // **#107.** One letting, reached by its identifier. The title carries a name so an
-      // administrator can recognise it. Lists still do not.
+      // administrator can recognise it.
       'estate · one tenancy, blocked',
       'estate · one tenancy, arms on a date',
       'estate · one tenancy, open',
       'documents · lease filing, thin reading',
       'documents · lease filing, draft arrival',
+      // **#162.** שכירויות is the list allowed to name the household. ADR-0011. Search,
+      // the work list, and the נכסים tile stay off this list.
+      'estate · tenancies book',
     ];
     // **The two write receipts were on that list until this case was first run, and came off it.**
     // `renderTenancyWrittenPage` says `partiesWritten` and not who: once the confirm is done the
