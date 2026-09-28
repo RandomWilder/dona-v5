@@ -1,13 +1,13 @@
 ---
 number: 161
 title: "שכירויות: the book of every letting"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent:
 created: 2026-09-27
-closed:
+closed: 2026-09-28
 ---
 
 ## Problem Statement
@@ -106,3 +106,7 @@ A name on the נכסים tile. Moving the activate press onto a row. A new store
 The tile stays nameless in this work. A later change can put a name on it. Nothing here depends on that staying true.
 
 The tenancy page chip stays the stored word. The derived chips are the labels on the book, the unit list, the tile, and the work list's waiting rows. The checks on the tenancy page remain the explanation.
+
+## Comment — 2026-09-28
+
+Closed. Tickets 162, 163, 164, and 165 are filed. שכירויות lists every letting, the work list says ממתינה, a flat is only פנויה or מושכרת, and the unit page lists that flat's lettings. A name on the נכסים tile was out of scope here; that later change is ADR-0012.
