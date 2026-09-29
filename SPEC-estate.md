@@ -451,7 +451,8 @@ building number — and an absent optional fact is left out. The Spaces are the 
 section per kind, flats first and open, rendered by the list's tile. A flat tile adds floor, rooms
 and area from the unit row; a missing floor or area is left out of that line. Bays and stores no
 flat points at are listed with A13's remove control, and the section is hidden when empty. The
-building's linked documents are listed as on the old building page. For `estate.write`, דירה חדשה
+building's linked documents are listed as on the old building page. A signed-in holder of
+`documents.read` sees the building's document Q&A panel on this page (#121). For `estate.write`, דירה חדשה
 opens A13 for this building, and עריכת המלאי sits collapsed at the bottom: the per-space remove,
 הוספת חללים, and מקום משותף, posting what they post today. Arriving at `#more-spaces` or `#shared`
 opens that section. הוספת מסמך, for a viewer who holds `documents.write`, opens `/documents/new`.
@@ -609,14 +610,23 @@ asking and clearing are `documents.read`. All-buildings, search, expiring, incom
 sheet, documents, settings and queues do not render the Unit panel and do not keep a leftover
 bound.
 
-**#121 is the same panel on the Building page.** `GET /estate/buildings/:buildingId` grows the
-same split for a signed-in holder of `documents.read`. The post runs the office-turn command
-bound to this Building (the office bag: that Building's paper, every Unit in it, those Units'
-lettings) and redirects to the same GET. The same `unavailable` 303 as the Unit panel: stay on
-this Building, paint the frozen Hebrew notice, do not dump `{ code, message }` on the POST URL.
-Clear wipes only this account's thread for this Building. A Unit thread and a Building thread for the same staff account stay distinct. CSRF and
-a session on both posts; VIEWER may ask; no new permission. **#123:** a Building-bound turn may
-list who is let today as well as search Passages; the panel is unchanged. The buildings list, Unit
+**#121 is the same panel on the Building page, and on the נכסים building page.** A signed-in
+holder of `documents.read` sees the same split on `GET /estate/buildings/:buildingId` and on
+`GET /estate/inventory/:buildingId`. Someone without that permission sees it on neither. The post
+runs the office-turn command bound to this Building (the office bag: that Building's paper, every
+Unit in it, those Units' lettings). On the old page the posts stay
+`POST /estate/buildings/:buildingId/office-turn` and
+`POST /estate/buildings/:buildingId/office-thread`, and they redirect to that GET. On the נכסים
+page the posts are `POST /estate/inventory/:buildingId/office-turn` and
+`POST /estate/inventory/:buildingId/office-thread`, and they redirect to that GET. The panel's
+form actions are the page it is painted on. The thread is one per account and Building, so a turn
+started on either page is the turn the other page shows. The same `unavailable` 303 as the Unit
+panel: stay on the page that was posted, with `ask=unavailable`, paint the frozen Hebrew notice,
+leave the thread unchanged, and do not dump `{ code, message }` on the POST URL. Clear wipes only
+this account's thread for this Building and returns to the page that was posted. A Unit thread
+and a Building thread for the same staff account stay distinct. CSRF and a session on both posts;
+VIEWER may ask; no new permission. **#123:** a Building-bound turn may list who is let today as
+well as search Passages; the panel is unchanged. The buildings list, the נכסים list, the Unit
 page (which keeps its own panel), letting sheet, documents, settings and queues do not render a
 Building panel and do not keep a leftover Building bound.
 

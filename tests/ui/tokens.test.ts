@@ -630,6 +630,7 @@ const SCREENS: Array<[string, () => string]> = [
     () =>
       renderBuildingPage(detail, occupancy, NAV, [], undefined, {
         csrf: CSRF,
+        path: `/estate/buildings/${building.building_id}`,
         bound: { kind: 'building', id: building.building_id },
         thread: [
           {
@@ -684,6 +685,7 @@ const SCREENS: Array<[string, () => string]> = [
     () =>
       renderUnitPage(hit, 'מושכרת', [filed], NAV, [], [], {
         csrf: CSRF,
+        path: `/estate/units/${hit.unit_id}`,
         bound: { kind: 'unit', id: hit.unit_id },
         thread: [
           {
@@ -2891,6 +2893,7 @@ describe('shared UI tokens', () => {
   it('paints cited answers under the unit retrieval panel', () => {
     const html = renderUnitPage(hit, 'מושכרת', [filed], NAV, [], [], {
       csrf: CSRF,
+      path: `/estate/units/${hit.unit_id}`,
       bound: { kind: 'unit', id: hit.unit_id },
       thread: [
         {
@@ -2930,6 +2933,7 @@ describe('shared UI tokens', () => {
   it('paints cited answers under the building retrieval panel', () => {
     const html = renderBuildingPage(detail, occupancy, NAV, [], undefined, {
       csrf: CSRF,
+      path: `/estate/buildings/${building.building_id}`,
       bound: { kind: 'building', id: building.building_id },
       thread: [
         {

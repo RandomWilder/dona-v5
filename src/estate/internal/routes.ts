@@ -368,6 +368,7 @@ async function officeRetrieval(
   request: FastifyRequest,
   bound: { kind: 'unit' | 'building'; id: string },
   csrf: string,
+  path: string,
 ): Promise<OfficeRetrievalView | undefined> {
   if (!can(request.staff?.role ?? null, 'documents.read')) {
     return undefined;
@@ -375,7 +376,7 @@ async function officeRetrieval(
   const staffAccountId = request.staff?.staffAccountId;
   if (!staffAccountId) return undefined;
   const thread = await loadOfficeRetrievalThread(pool, staffAccountId, bound);
-  return { csrf, bound, thread, notice: officeAskNotice(request) };
+  return { csrf, bound, thread, notice: officeAskNotice(request), path };
 }
 
 function html(reply: { header: (k: string, v: string) => unknown }): void {
@@ -995,6 +996,16 @@ export function registerEstateRoutes(
         write: can(request.staff?.role ?? null, 'estate.write')
           ? { csrf }
           : undefined,
+        retrieval: await officeRetrieval(
+          deps.pool,
+          request,
+          {
+            kind: 'building',
+            id: detail.building.building_id,
+          },
+          csrf,
+          `/estate/inventory/${detail.building.building_id}`,
+        ),
       });
     },
   );
@@ -1389,6 +1400,7 @@ export function registerEstateRoutes(
           id: detail.building.building_id,
         },
         csrf,
+        `/estate/buildings/${detail.building.building_id}`,
       ),
     );
   });
@@ -1445,6 +1457,7 @@ export function registerEstateRoutes(
           id: unit.unit_id,
         },
         csrf,
+        `/estate/units/${unit.unit_id}`,
       ),
       unitPageLettings(
         book,
@@ -1504,57 +1517,68 @@ export function registerEstateRoutes(
     },
   );
 
-  app.post<{ Params: { buildingId: string } }>(
-    '/estate/buildings/:buildingId/office-turn',
-    ASK,
-    async (request, reply) => {
-      const buildingId = validId(request.params.buildingId, 'buildingId');
-      await getBuilding(deps.pool, buildingId);
-      const posted = request.body as { question?: string };
-      try {
-        await deps.runOfficeTurn({
-          staffAccountId: requireStaffAccountId(request),
-          bound: { kind: 'building', id: buildingId },
-          question: requireText(posted.question, 'question', 2000),
-        });
-      } catch (error) {
-        if (error instanceof KernelError && error.code === 'unavailable') {
-          return reply
-            .code(303)
-            .header(
-              'location',
-              `/estate/buildings/${buildingId}?ask=unavailable`,
-            )
-            .send();
+  /**
+   * #121. One Building thread, two pages. The return path is the page that was posted.
+   */
+  function registerBuildingOffice(
+    turn: string,
+    clear: string,
+    back: (buildingId: string) => string,
+  ): void {
+    app.post<{ Params: { buildingId: string } }>(
+      turn,
+      ASK,
+      async (request, reply) => {
+        const buildingId = validId(request.params.buildingId, 'buildingId');
+        await getBuilding(deps.pool, buildingId);
+        const posted = request.body as { question?: string };
+        try {
+          await deps.runOfficeTurn({
+            staffAccountId: requireStaffAccountId(request),
+            bound: { kind: 'building', id: buildingId },
+            question: requireText(posted.question, 'question', 2000),
+          });
+        } catch (error) {
+          if (error instanceof KernelError && error.code === 'unavailable') {
+            return reply
+              .code(303)
+              .header('location', `${back(buildingId)}?ask=unavailable`)
+              .send();
+          }
+          throw error;
         }
-        throw error;
-      }
-      return reply
-        .code(303)
-        .header('location', `/estate/buildings/${buildingId}`)
-        .send();
-    },
-  );
+        return reply.code(303).header('location', back(buildingId)).send();
+      },
+    );
 
-  app.post<{ Params: { buildingId: string } }>(
+    app.post<{ Params: { buildingId: string } }>(
+      clear,
+      ASK,
+      async (request, reply) => {
+        const buildingId = validId(request.params.buildingId, 'buildingId');
+        await getBuilding(deps.pool, buildingId);
+        await clearOfficeRetrievalThread(
+          deps.pool,
+          requireStaffAccountId(request),
+          {
+            kind: 'building',
+            id: buildingId,
+          },
+        );
+        return reply.code(303).header('location', back(buildingId)).send();
+      },
+    );
+  }
+
+  registerBuildingOffice(
+    '/estate/buildings/:buildingId/office-turn',
     '/estate/buildings/:buildingId/office-thread',
-    ASK,
-    async (request, reply) => {
-      const buildingId = validId(request.params.buildingId, 'buildingId');
-      await getBuilding(deps.pool, buildingId);
-      await clearOfficeRetrievalThread(
-        deps.pool,
-        requireStaffAccountId(request),
-        {
-          kind: 'building',
-          id: buildingId,
-        },
-      );
-      return reply
-        .code(303)
-        .header('location', `/estate/buildings/${buildingId}`)
-        .send();
-    },
+    (buildingId) => `/estate/buildings/${buildingId}`,
+  );
+  registerBuildingOffice(
+    '/estate/inventory/:buildingId/office-turn',
+    '/estate/inventory/:buildingId/office-thread',
+    (buildingId) => `/estate/inventory/${buildingId}`,
   );
 
   app.get('/estate/tenancies', READ, async (request, reply) => {

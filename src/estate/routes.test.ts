@@ -936,6 +936,296 @@ describe('estate · building retrieval panel', () => {
 });
 
 // ---------------------------------------------------------------------------------------------
+// #169. The same Building thread on the נכסים building page. Old building posts stay where they are.
+// ---------------------------------------------------------------------------------------------
+
+describe('estate · inventory building retrieval panel', () => {
+  it('asks on the נכסים page, shares the Building thread with the old page, and clears only that thread', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      embedder: createFakeEmbedder(embeddingColumnDimensions),
+      extractor: createFakeExtractor((request) => {
+        if (request.name === 'office_tools') {
+          return { search: true, list: false };
+        }
+        return { answers: false, text: '', hit_indexes: [] };
+      }),
+    });
+    await signOutAll(pool, ASK_DOMAIN);
+    await askCleanup(pool);
+    const viewer = await signIn(pool, systemClock, {
+      email: `view@${ASK_DOMAIN}`,
+      role: 'VIEWER',
+    });
+    const other = await signIn(pool, systemClock, {
+      email: `ops@${ASK_DOMAIN}`,
+      role: 'OPERATOR',
+    });
+    const asViewer = asOperator(app, viewer);
+    const asOther = asOperator(app, other);
+    try {
+      await importEstate(pool, askPlan);
+      const place = await pool.query<{
+        unit_id: string;
+        building_id: string;
+      }>(
+        `SELECT u.unit_id, b.building_id FROM unit u
+         JOIN space s ON s.space_id = u.unit_id
+         JOIN building b ON b.building_id = s.building_id
+         WHERE b.city = $1 AND b.address_line = $2`,
+        [ASK_CITY, ASK_ADDRESS],
+      );
+      const unitId = place.rows[0]?.unit_id ?? '';
+      const buildingId = place.rows[0]?.building_id ?? '';
+      const inventoryPath = `/estate/inventory/${buildingId}`;
+      const buildingPath = `/estate/buildings/${buildingId}`;
+      const unitPath = `/estate/units/${unitId}`;
+      const askUrl = `${inventoryPath}/office-turn`;
+      const clearUrl = `${inventoryPath}/office-thread`;
+      const here = 'מי המתגורר בבניין?';
+      const there = 'מה מספר הגוש?';
+      const unitQuestion = 'מה דמי השכירות?';
+
+      const shown = await asViewer.inject({
+        method: 'GET',
+        url: inventoryPath,
+      });
+      assert.equal(shown.statusCode, 200);
+      assert.match(shown.body, /data-office-retrieval="building"/);
+      assert.doesNotMatch(shown.body, /data-office-retrieval="unit"/);
+      assert.match(
+        shown.body,
+        new RegExp(`action="${inventoryPath}/office-turn"`),
+      );
+      assert.doesNotMatch(
+        shown.body,
+        new RegExp(`action="${buildingPath}/office-turn"`),
+      );
+
+      const list = await asViewer.inject({
+        method: 'GET',
+        url: '/estate/inventory',
+      });
+      assert.equal(list.statusCode, 200);
+      assert.doesNotMatch(list.body, /data-office-retrieval="building"/);
+
+      const anon = await app.inject({
+        method: 'POST',
+        url: askUrl,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(here)}`,
+      });
+      assert.equal(anon.statusCode, 303);
+      assert.equal(anon.headers.location, '/staff/login');
+
+      const noToken = await app.inject({
+        method: 'POST',
+        url: askUrl,
+        headers: {
+          cookie: viewer.cookie,
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        payload: `question=${encodeURIComponent(here)}`,
+      });
+      assert.equal(noToken.statusCode, 403);
+
+      const asked = await asViewer.inject({
+        method: 'POST',
+        url: askUrl,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(here)}`,
+      });
+      assert.equal(asked.statusCode, 303, asked.body.slice(0, 400));
+      assert.equal(asked.headers.location, inventoryPath);
+
+      const painted = await asViewer.inject({
+        method: 'GET',
+        url: inventoryPath,
+      });
+      assert.equal(painted.statusCode, 200);
+      assert.match(painted.body, /מי המתגורר בבניין\?/);
+      assert.match(painted.body, /אין במסמכים האלה תשובה לשאלה הזו/);
+
+      const oldPage = await asViewer.inject({
+        method: 'GET',
+        url: buildingPath,
+      });
+      assert.match(oldPage.body, /מי המתגורר בבניין\?/);
+      assert.match(
+        oldPage.body,
+        new RegExp(`action="${buildingPath}/office-turn"`),
+      );
+
+      const askedThere = await asViewer.inject({
+        method: 'POST',
+        url: `${buildingPath}/office-turn`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(there)}`,
+      });
+      assert.equal(askedThere.statusCode, 303, askedThere.body.slice(0, 400));
+      assert.equal(askedThere.headers.location, buildingPath);
+
+      const back = await asViewer.inject({
+        method: 'GET',
+        url: inventoryPath,
+      });
+      assert.match(back.body, /מי המתגורר בבניין\?/);
+      assert.match(back.body, /מה מספר הגוש\?/);
+
+      const unitAsked = await asViewer.inject({
+        method: 'POST',
+        url: `${unitPath}/office-turn`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(unitQuestion)}`,
+      });
+      assert.equal(unitAsked.statusCode, 303, unitAsked.body.slice(0, 400));
+      assert.equal(unitAsked.headers.location, unitPath);
+
+      const unitPage = await asViewer.inject({
+        method: 'GET',
+        url: unitPath,
+      });
+      assert.match(unitPage.body, /data-office-retrieval="unit"/);
+      assert.match(unitPage.body, /מה דמי השכירות\?/);
+      assert.doesNotMatch(unitPage.body, /מי המתגורר בבניין\?/);
+      assert.match(
+        unitPage.body,
+        new RegExp(`action="${unitPath}/office-turn"`),
+      );
+
+      const inventoryAfterUnit = await asViewer.inject({
+        method: 'GET',
+        url: inventoryPath,
+      });
+      assert.doesNotMatch(inventoryAfterUnit.body, /מה דמי השכירות\?/);
+
+      const neighbour = await asOther.inject({
+        method: 'GET',
+        url: inventoryPath,
+      });
+      assert.equal(neighbour.statusCode, 200);
+      assert.doesNotMatch(neighbour.body, /מי המתגורר בבניין\?/);
+
+      const cleared = await asViewer.inject({
+        method: 'POST',
+        url: clearUrl,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: '',
+      });
+      assert.equal(cleared.statusCode, 303, cleared.body.slice(0, 400));
+      assert.equal(cleared.headers.location, inventoryPath);
+      const after = await asViewer.inject({
+        method: 'GET',
+        url: inventoryPath,
+      });
+      assert.doesNotMatch(after.body, /מי המתגורר בבניין\?/);
+      assert.doesNotMatch(after.body, /מה מספר הגוש\?/);
+      const oldAfter = await asViewer.inject({
+        method: 'GET',
+        url: buildingPath,
+      });
+      assert.doesNotMatch(oldAfter.body, /מי המתגורר בבניין\?/);
+      const unitAfter = await asViewer.inject({
+        method: 'GET',
+        url: unitPath,
+      });
+      assert.match(unitAfter.body, /מה דמי השכירות\?/);
+    } finally {
+      await askCleanup(pool);
+      await signOutAll(pool, ASK_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('stays on the נכסים page when the office cannot answer, and leaves the thread', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const working = buildApp({
+      pool,
+      version: '9.9.9-test',
+      embedder: createFakeEmbedder(embeddingColumnDimensions),
+      extractor: createFakeExtractor((request) => {
+        if (request.name === 'office_tools') {
+          return { search: true, list: false };
+        }
+        return { answers: false, text: '', hit_indexes: [] };
+      }),
+    });
+    const failing = buildApp({
+      pool,
+      version: '9.9.9-test',
+      embedder: createFakeEmbedder(embeddingColumnDimensions),
+      extractor: createFakeExtractor(() => {
+        throw new KernelError('unavailable', 'the extraction call failed');
+      }),
+    });
+    await signOutAll(pool, ASK_DOMAIN);
+    await askCleanup(pool);
+    const viewer = await signIn(pool, systemClock, {
+      email: `view@${ASK_DOMAIN}`,
+      role: 'VIEWER',
+    });
+    const asWorking = asOperator(working, viewer);
+    const asFailing = asOperator(failing, viewer);
+    try {
+      await importEstate(pool, askPlan);
+      const place = await pool.query<{ building_id: string }>(
+        `SELECT b.building_id FROM building b
+         WHERE b.city = $1 AND b.address_line = $2`,
+        [ASK_CITY, ASK_ADDRESS],
+      );
+      const buildingId = place.rows[0]?.building_id ?? '';
+      const inventoryPath = `/estate/inventory/${buildingId}`;
+      const kept = 'מי המתגורר בבניין?';
+      const dropped = 'כמה דירות מאוכלסות?';
+
+      const asked = await asWorking.inject({
+        method: 'POST',
+        url: `${inventoryPath}/office-turn`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(kept)}`,
+      });
+      assert.equal(asked.statusCode, 303, asked.body.slice(0, 400));
+
+      const missed = await asFailing.inject({
+        method: 'POST',
+        url: `${inventoryPath}/office-turn`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(dropped)}`,
+      });
+      assert.equal(missed.statusCode, 303, missed.body.slice(0, 400));
+      assert.equal(missed.headers.location, `${inventoryPath}?ask=unavailable`);
+      assert.doesNotMatch(missed.body, /"code":"unavailable"/);
+
+      const painted = await asWorking.inject({
+        method: 'GET',
+        url: `${inventoryPath}?ask=unavailable`,
+      });
+      assert.equal(painted.statusCode, 200);
+      assert.match(painted.body, /לא ניתן לענות עכשיו/);
+      assert.match(painted.body, /מי המתגורר בבניין\?/);
+      assert.doesNotMatch(painted.body, /כמה דירות מאוכלסות/);
+    } finally {
+      await askCleanup(pool);
+      await signOutAll(pool, ASK_DOMAIN);
+      await working.close();
+      await failing.close();
+      await pool.end();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
 // **Slice 6.1 — flow A11.** An admin creates a building from a screen, which nobody could do until
 // this slice: every building in this system arrived through `npm run import:register` or a fixture.
 //

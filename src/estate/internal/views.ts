@@ -1287,6 +1287,7 @@ export function renderInventoryBuildingPage(screen: {
   nav: Html;
   mayFile?: boolean;
   write?: { csrf: string };
+  retrieval?: OfficeRetrievalView;
 }): string {
   const grouped = groupSpaces(screen.spaces);
   const byUnit = new Map(screen.units.map((unit) => [unit.unit_id, unit]));
@@ -1350,7 +1351,11 @@ export function renderInventoryBuildingPage(screen: {
           : h``
       }
     </div>`;
-  return page(`דונה דום — ${screen.building.name}`, body, screen.nav);
+  const sheet =
+    screen.retrieval === undefined
+      ? body
+      : h`<div class="unit-sheet">${retrievalSplit(body, screen.retrieval)}</div>`;
+  return page(`דונה דום — ${screen.building.name}`, sheet, screen.nav);
 }
 
 /**
@@ -2003,6 +2008,7 @@ export function renderUnitPage(
 
 export interface OfficeRetrievalView {
   csrf: string;
+  path: string;
   bound: { kind: 'unit' | 'building'; id: string };
   thread: readonly {
     question: string;
@@ -2021,12 +2027,8 @@ export interface OfficeRetrievalView {
 export type UnitRetrievalView = OfficeRetrievalView;
 
 function retrievalSplit(sheet: Html, retrieval: OfficeRetrievalView): Html {
-  const prefix =
-    retrieval.bound.kind === 'unit'
-      ? `/estate/units/${retrieval.bound.id}`
-      : `/estate/buildings/${retrieval.bound.id}`;
-  const ask = `${prefix}/office-turn`;
-  const clear = `${prefix}/office-thread`;
+  const ask = `${retrieval.path}/office-turn`;
+  const clear = `${retrieval.path}/office-thread`;
   const toggleId = `${retrieval.bound.kind}-retrieval-toggle`;
   return h`
     <input type="checkbox" id="${toggleId}" class="unit-retrieval-toggle" checked />
