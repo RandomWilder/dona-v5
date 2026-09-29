@@ -2100,7 +2100,7 @@ async function anchorScreen(
   if (anchor.kind === 'BUILDING') {
     const detail = await getBuilding(deps.pool, anchor.id);
     return {
-      href: `/estate/buildings/${detail.building.building_id}`,
+      href: `/estate/inventory/${detail.building.building_id}`,
       unitNumber: null,
       buildingName: detail.building.name,
       addressLine: detail.building.address_line,

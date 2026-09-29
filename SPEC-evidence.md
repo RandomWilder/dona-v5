@@ -365,7 +365,8 @@ anchor already exists, on the row, and is already unique — it was simply never
 read.
 
 **Filing bytes that are already on file against a *different* place is refused.** The refusal names
-the place the document is already anchored to. No `document` row is updated, no `document_link` is
+the place the document is already anchored to, and links to it: a unit to the unit page, a building
+to that building's נכסים page (`/estate/inventory/:buildingId`). No `document` row is updated, no `document_link` is
 added, and no object is written — the same statement 3.3 makes about a caught upload, for a
 different cause. Filing them against the **same** place is unchanged: a no-op on the document row,
 plus whatever link the caller came to add.
@@ -442,6 +443,13 @@ bound a different quantity and an authenticated operator can still post a runawa
   behind F6 and arrive at the pilot-preparation step of the method; that ordering is what keeps this
   window empty rather than merely supervised.
 
+**#171. Leaving a document screen returns to the נכסים building page.** Back, ביטול, and
+חזרה לבניין on the unit upload, the filed receipt, the protocol proposal, the seeded page, and the
+read screen go to `/estate/inventory/:buildingId`. The fields screen does the same when the document
+has no unit; with a unit it still returns to the unit page. A refusal that names a building the
+bytes are already anchored to links to that same page. Links into A11 and A13 that carry the filing
+walk are unchanged.
+
 **Declaring a *new draft* tenancy at upload is slice 4.6, flow A2.** A draft is never an empty shell —
 unit, dates and at least one tenant — and `upsertParty` requires a ת.ז., which at 4.6 a lease had no
 way to carry, so A2 called `createParty` instead (name only, no identity match). **Amended at 6.5:**
@@ -513,7 +521,9 @@ have cost an OCR call or a pdf parse per view; from #103 `/documents/:id/read` p
 passages and neither screen re-reads the file), and **the declarations it lists are the ones governing the day the extraction ran**, never
 today's — a field declared this morning is not something last month's lease failed to carry. 7.3
 also **moved the `קדם` buttons off the read overlay**: two screens writing the same row is how the
-two drift into disagreeing about which one is the flow.
+two drift into disagreeing about which one is the flow. **#171.** When the document has no unit, the
+back link goes to that building's נכסים page, `/estate/inventory/:buildingId`. With a unit it still
+returns to the unit page.
 
 **#109 redraws the ledger from the #100 paint.** The table leads. Every value row carries the page
 it was read from. The reading's quality verdict sits in the head — `טובה` when at least one field
@@ -683,7 +693,8 @@ Creating a building from the refusal is a second request, posted by an admin, th
 validation; the document is filed on a third. Nothing in the create path shortens the read → resolve →
 file order, and nothing holds the bytes across any of it.
 
-**The receipt names what was read and where it landed.** `renderFiledPage` was written for A1, where a
+**The receipt names what was read and where it landed.** Back and חזרה לבניין go to that building's
+נכסים page, `/estate/inventory/:buildingId`. `renderFiledPage` was written for A1, where a
 human had already chosen the flat and the only interesting fact was the verdict. On A12 nobody chose:
 so the receipt leads with the address, the town and the apartment number the reader read, and the flat
 the document is now anchored to. On the candidate branch there is no reading — the operator picked —
@@ -1020,7 +1031,9 @@ next screen is a proposal, not a done page. A deterministic reader runs over the
 `documentText` the guard already produced and proposes a handover date, an apartment number
 (unit-level) and the appliances whose Hebrew names appear in the file.
 
-**The confirm page recomputes the proposal from the stored bytes.** There is no staging table: the
+**The confirm page recomputes the proposal from the stored bytes.** Back, ביטול, and חזרה לבניין on
+the proposal and on the seeded page go to that building's נכסים page, `/estate/inventory/:buildingId`.
+There is no staging table: the
 document is immutable and the reader is a pure function, so holding a copy between GET and POST
 would be a second fact that can disagree with the first. A2's equivalent for a model-based proposal
 is the same idea over capture: recompute from `extracted_field` plus the unit the document was filed
@@ -1189,7 +1202,8 @@ deleted the overlay.** `GET /documents/:id/read` shows the per-page text, the qu
 the page number beside each extracted value — never a page image, never a word box, never a field
 box. The OCR request runs in imageless mode. **From 6.6 the transcript is shown only to a viewer
 holding `party.national_id.read`.** **Which page** is a query (`?page=`, 1-based, matching the stored
-field). Clicking a promoted value is 4.4's.
+field). Clicking a promoted value is 4.4's. Back and חזרה לבניין on this screen go to that
+building's נכסים page, `/estate/inventory/:buildingId`.
 
 **#103 keeps the reading.** `readForVerdict` remains the only decision point that chooses native text
 versus OCR **for the verdict**. Its output fans out to three destinations: the verdict, the extracted
