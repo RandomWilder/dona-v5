@@ -1222,11 +1222,19 @@ describe('estate · נכסים, tab create and mint', () => {
       });
       assert.equal(filed.statusCode, 409);
       assert.match(filed.json().message, /document/);
-      await pool.query('DELETE FROM document_link WHERE document_id = $1', [
-        documentId,
-      ]);
-      await pool.query('DELETE FROM document WHERE document_id = $1', [
-        documentId,
+      // The type key is stable across runs. A crashed earlier run can leave a
+      // document under it, and the upsert above returns that same type, so
+      // every document of it — and its links — has to go before the type can.
+      const filedTypeId = type.rows[0]?.document_type_id;
+      await pool.query(
+        `DELETE FROM document_link
+          WHERE document_id IN (
+            SELECT document_id FROM document WHERE document_type_id = $1
+          )`,
+        [filedTypeId],
+      );
+      await pool.query('DELETE FROM document WHERE document_type_id = $1', [
+        filedTypeId,
       ]);
       await pool.query('DELETE FROM document_type WHERE type_key = $1', [
         filedType,
