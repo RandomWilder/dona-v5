@@ -400,7 +400,7 @@ assigned to it, is a `conflict` naming which, and only `PARKING` and `STORAGE` m
 is a Space and is the unit's own row, R2). This is the only delete of a `space` outside the operator
 purge, and it exists because the rows 4.6 already wrote otherwise have no forward path: a real bay
 number arriving later would leave a second `PARKING` space in the building with nothing to say which
-is real.
+is real. The POST replies `303` to that building's נכסים page.
 
 **It is keyed on the Space and not on a Unit, and the building page lists what nothing points at.**
 Those are one decision. An operator writing the real number *before* deleting the placeholder
@@ -444,13 +444,25 @@ rows.
 
 **Routes.** `GET /estate/inventory` (`estate.read`) lists every Building. `GET /estate/inventory/new`
 and `POST /estate/inventory` (`estate.write`, including the GET) create one and mint its Spaces.
-`GET /estate/inventory/:buildingId` (`estate.read`) lists those Spaces grouped by kind, with
-headline counts and derived vacancy. Later growth and shrink live on that page:
+`GET /estate/inventory/:buildingId` (`estate.read`) is the building page. It shows the building's
+name, status and address, and four headlines: flats, how many are let today, vacant flats, and
+vacant parking. Under that, the building's facts — handover, end of warranty, tender, gush, helka,
+building number — and an absent optional fact is left out. The Spaces are the list's drill, one
+section per kind, flats first and open, rendered by the list's tile. A flat tile adds floor, rooms
+and area from the unit row; a missing floor or area is left out of that line. Bays and stores no
+flat points at are listed with A13's remove control, and the section is hidden when empty. The
+building's linked documents are listed as on the old building page. For `estate.write`, דירה חדשה
+opens A13 for this building, and עריכת המלאי sits collapsed at the bottom: the per-space remove,
+הוספת חללים, and מקום משותף, posting what they post today. Arriving at `#more-spaces` or `#shared`
+opens that section. הוספת מסמך, for a viewer who holds `documents.write`, opens `/documents/new`.
+A viewer without `estate.write` sees none of the write controls.
+
+Later growth and shrink still live on that page:
 `POST /estate/inventory/:buildingId/spaces` (count + first number; elevators count only),
 `POST /estate/inventory/:buildingId/shared` (kind + typed name), and
-`POST /estate/inventory/spaces/:spaceId/remove`. Those three are `estate.write`. The rail
-destination is `inventory`. This is not A13's `POST /estate/spaces/:spaceId/remove`, which still
-detaches a built bay or store.
+`POST /estate/inventory/spaces/:spaceId/remove`. Those three are `estate.write` and reply `303`
+to this page. A13's `POST /estate/spaces/:spaceId/remove` still detaches a built bay or store, and
+replies `303` to this page. The rail destination is `inventory`.
 
 **The list is a drill-down of the same rows.** `GET /estate/inventory` still lists every Building.
 An optional `status` query of `ACTIVE`, `IN_CONSTRUCTION`, or `EXITED` narrows which buildings are
@@ -503,9 +515,10 @@ and the message names which. Nothing is detached and nothing cascades.
 
 The create POST replies `303` to that Building's נכסים page. Later add and remove do the same.
 
-**Vacancy is derived on every load, stored nowhere (#150).** Headlines name each kind's count, plus
-vacant Units, vacant parking, and vacant storage. Each UNIT, PARKING, and STORAGE row carries a
-vacancy chip. Elevators and later COMMON / EXTERIOR / extra TECHNICAL rows do not: the chip means
+**Vacancy is derived on every load, stored nowhere (#150).** The list's building line names each
+kind's count except elevators. The building page's four headlines are flats, how many are let today,
+vacant flats, and vacant parking. A UNIT, PARKING, or STORAGE tile carries the vacant or occupied
+word. Elevators and later COMMON / EXTERIOR / extra TECHNICAL rows do not: the word means
 assignment, not existence. Rent stays off this list. Lease dates are on the Unit tile, with the letting.
 
 A vacant Unit is a Unit with no letting that counts today — the same `resolveOccupiedUnits`
@@ -539,7 +552,7 @@ is not on the tile.
 פנויה uses the dashed vacant tile; מושכרת uses the occupied tile. Every Unit tile in the grid is
 the same width and the same height. The legend is those two words. Vacancy headlines still count a
 Unit as vacant whenever nobody counts today, so a waiting draft is vacant. Parking and storage stay
-binary. The rows on `/estate/inventory/:buildingId` keep the binary chip. חוזים מסתיימים is
+binary. The rows on `/estate/inventory/:buildingId` are those same tiles. חוזים מסתיימים is
 unchanged: a live letting whose end falls inside the window is still listed there.
 
 Counts today stays `resolveOccupiedUnits`. The dates come from tenancy's `listLettingsForUnits`,

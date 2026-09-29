@@ -965,15 +965,33 @@ export function registerEstateRoutes(
           row.storage_space_id ? [row.storage_space_id] : [],
         ),
       );
+      const documents = await deps.listLinkedDocuments(
+        deps.pool,
+        'BUILDING',
+        detail.building.building_id,
+      );
       html(reply);
       const csrf = csrfFrom(request);
       return renderInventoryBuildingPage({
         building: detail.building,
         spaces,
+        units: detail.units,
+        unassigned: detail.unassigned,
         occupancy,
         occupiedParking,
         occupiedStorage,
+        states: await unitStates(
+          deps.pool,
+          spaces
+            .filter((space) => space.space_kind === 'UNIT')
+            .map((space) => space.space_id),
+          occupied,
+          deps.clock,
+          draftChip(deps),
+        ),
+        documents,
         nav: deps.chrome(csrf, 'inventory', mayFile(request)),
+        mayFile: mayFile(request),
         write: can(request.staff?.role ?? null, 'estate.write')
           ? { csrf }
           : undefined,
@@ -1325,7 +1343,7 @@ export function registerEstateRoutes(
       // the three things this write should have changed.
       return reply
         .code(303)
-        .header('location', `/estate/buildings/${buildingId}`)
+        .header('location', `/estate/inventory/${buildingId}`)
         .send();
     },
   );

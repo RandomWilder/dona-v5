@@ -616,6 +616,10 @@ const SCREENS: Array<[string, () => string]> = [
         occupancy: occupancy,
         occupiedParking: new Set(['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb']),
         occupiedStorage: new Set(),
+        units: [],
+        unassigned: [],
+        states: new Map(),
+        documents: [],
         nav: NAV_INVENTORY,
         write: { csrf: CSRF },
       }),
@@ -2989,21 +2993,35 @@ describe('shared UI tokens', () => {
       occupancy: new Map(),
       occupiedParking: new Set(['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb']),
       occupiedStorage: new Set(),
+      units: [],
+      unassigned: [],
+      states: new Map(),
+      documents: [],
       nav: NAV_INVENTORY,
     });
-    assert.match(html, /דירות פנויות · <span dir="ltr">1<\/span>/);
-    assert.match(html, /חניות פנויות · <span dir="ltr">0<\/span>/);
     assert.match(
       html,
-      /<span dir="ltr">10<\/span><span class="chip">פנויה<\/span>/,
+      /דירות פנויות<\/span><span class="stat-value"><span dir="ltr">1<\/span>/,
     );
     assert.match(
       html,
-      /<span dir="ltr">50<\/span><span class="chip">תפוסה<\/span>/,
+      /חניות פנויות<\/span><span class="stat-value"><span dir="ltr">0<\/span>/,
     );
-    const technical = html.split('<h2>חללים טכניים</h2>')[1] ?? '';
+    assert.match(
+      html,
+      /<span class="no"><span dir="ltr">10<\/span><\/span><span class="state"><span class="dot is-hollow"><\/span>פנויה<\/span>/,
+    );
+    assert.match(
+      html,
+      /<span class="no"><span dir="ltr">50<\/span><\/span><span class="state"><span class="dot"><\/span>תפוסה<\/span>/,
+    );
+    const technical =
+      html.split('חללים טכניים<span class="n"')[1]?.split('<details')[0] ?? '';
+    assert.notEqual(technical, '');
     assert.doesNotMatch(technical, /chip/);
-    const shared = html.split('<h2>שטחים משותפים</h2>')[1] ?? '';
+    const shared =
+      html.split('שטחים משותפים<span class="n"')[1]?.split('<details')[0] ?? '';
+    assert.notEqual(shared, '');
     assert.doesNotMatch(shared, /chip/);
     assert.doesNotMatch(html, /דמי שכירות/);
     assert.doesNotMatch(html, /תום חוזה/);

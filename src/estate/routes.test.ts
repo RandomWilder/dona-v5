@@ -1787,7 +1787,7 @@ describe('estate · A13, an administrator adds an apartment', () => {
         payload: new URLSearchParams({ _csrf: admin.csrf }).toString(),
       });
       assert.equal(removed.statusCode, 303);
-      assert.equal(removed.headers.location, `/estate/buildings/${buildingId}`);
+      assert.equal(removed.headers.location, `/estate/inventory/${buildingId}`);
       const after = await pool.query<{ space_kind: string; name: string }>(
         `SELECT space_kind, name FROM space WHERE building_id = $1
           ORDER BY space_kind`,
