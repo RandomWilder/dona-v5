@@ -34,6 +34,9 @@ workbook is right and this file is a bug.
   **#150 derived vacancy** on that page from the occupancy injection and the assigned bay /
   assigned storage on those lettings. **#151 added later add, remove, and shared Spaces** on that
   same page. בניינים routes and views are unchanged.
+  **#170** sends the unit page's back link, the נכסים list's לדף הבניין, a search hit that
+  opens a building, and A11 and A13's back, cancel, and ordinary save to נכסים. The filing
+  walk still continues from A11 into A13. The old list and the old building page keep their links.
 
 ## The shape, and why it is this one
 
@@ -231,8 +234,9 @@ contain them, while a building name or an address narrows to one building and ma
 **Slice 3.6 grew it by a documents half rather than forking a second search.** The documents query
 lives in evidence (`searchDocuments`) and is injected here, because evidence already imports estate
 and the other direction would be a cycle. It matches a type label, a unit number, a building name or
-address — never a city, never a party, never the file's text. A unit hit links to the unit page, not
-the building, so a 72-flat building is not the find path.
+address — never a city, never a party, never the file's text. A building hit links to that
+building's נכסים page, `/estate/inventory/:buildingId`. A document hit opens the document. A
+unit hit links to the unit page, not the building, so a 72-flat building is not the find path.
 
 The term is trimmed, capped at 80 characters, and its **LIKE metacharacters are escaped**. A bound
 parameter is not the same thing as a safe pattern: unescaped, a lone `%` matches the whole portfolio
@@ -365,9 +369,11 @@ on the building row, not values a lease establishes. A11 always writes what the 
 including null. An importer that omits the fields leaves whatever is already on the row, so a
 register re-run does not wipe a number an operator typed.
 
-The POST replies `303` to `/estate`. `importEstate` returns a report and no ids — a plan-shaped
-caller already knows its own shape — and the buildings list is where a new building is looked for
-anyway.
+The back link and ביטול go to `/estate/inventory`. The POST replies `303` to `/estate/inventory`
+when the form is not carrying the filing walk. When it is, the POST still replies `303` into A13
+for that building, with the walk's query, exactly as before. `importEstate` returns a report and
+no ids — a plan-shaped caller already knows its own shape — and נכסים is where a new building is
+looked for.
 
 ### The second — `GET /estate/buildings/:buildingId/units/new` and `POST …/units` (6.2)
 
@@ -432,15 +438,17 @@ the workbook's Israeli convention is 3, 3.5, 4, and `numeric` would otherwise ac
 `text` input carried until Postgres refused it as `unavailable`. The unit-level `warranty_end_date`
 is optional and blank means *the building's date applies* (R14) rather than *no warranty*.
 
-The POST replies `303` to the building page, which is where the space count, the unit card and the
-פנויה chip are — the acceptance bar's own wording, and the three things the write should have
-changed.
+The back link and ביטול go to that building's נכסים page. The POST replies `303` to
+`/estate/inventory/:buildingId` when the form is not carrying the filing walk, which is where the
+space count, the unit card and the פנויה chip are. When it is carrying the walk, the POST still
+replies `303` to the document screen with the new flat as the anchor.
 
 ### נכסים — inventory list, create, and mint (#149)
 
-A second estate tab, beside בניינים. All inventory work lives only here. בניינים keeps A11 and A13
-as they are. The same Building / Space / Unit rows appear under both tabs because they are the same
-rows.
+A second estate tab, beside בניינים. All inventory work lives only here. A11 and A13 stay on their
+routes. Their back link, ביטול, and the redirect after a save that is not the filing walk land on
+נכסים. The old בניינים list and the old building page keep their own links. The same Building /
+Space / Unit rows appear under both tabs because they are the same rows.
 
 **Routes.** `GET /estate/inventory` (`estate.read`) lists every Building. `GET /estate/inventory/new`
 and `POST /estate/inventory` (`estate.write`, including the GET) create one and mint its Spaces.
@@ -477,7 +485,7 @@ Vacancy on a UNIT, PARKING, or STORAGE tile is the same derivation as the buildi
 list a store reads תפוס or פנוי. A numbered TECHNICAL Space is subtitled מעלית. A TECHNICAL Space
 with any other name keeps that name and is subtitled חלל טכני. COMMON and EXTERIOR tiles are the
 typed name plus the kind, and carry no vacancy. A UNIT tile links to that Unit's page. לדף הבניין
-links to the בניינים building page, which this list does not restyle. הוספת חללים and מקום משותף,
+links to that building's נכסים page, `/estate/inventory/:buildingId`. הוספת חללים and מקום משותף,
 for someone who may write, link to the forms already on `GET /estate/inventory/:buildingId`. That
 page stays the place a Space is added or removed. Rent and lease-end stay off the list. A viewer
 sees the drill and not those write links.
@@ -584,7 +592,9 @@ not behind the login.
 already uses — a unit number and the building it is in, and no party. Evidence asks for it to render
 the unit an upload is being filed against; a document screen inventing its own unit query would be
 the second copy estate exists to prevent. **`GET /estate/units/:unitId` is the thin unit page 3.6
-added**: that same header, the occupancy chip, the upload link, and the documents panel. Slice 4.4
+added**: that same header, the occupancy chip, the upload link, and the documents panel. **#170.**
+The back link goes to that building's נכסים page, `/estate/inventory/:buildingId`, and is still
+labelled with the building name. Slice 4.4
 adds the **promoted values** on that page: each stamped date is a link through to the page of the
 read screen it was read from. **Slice 5.5 adds the change log** — old → new, the operator email, the source
 document — from `listTenancyEvents`, injected the same way. Empty is legal. **#165** is the

@@ -1243,7 +1243,7 @@ export function registerEstateRoutes(
           .send();
       }
     }
-    return reply.code(303).header('location', '/estate').send();
+    return reply.code(303).header('location', '/estate/inventory').send();
   });
 
   // **Slice 6.2, flow A13.** Same stance on both halves, and `new` is again a static segment
@@ -1324,7 +1324,7 @@ export function registerEstateRoutes(
       }
       return reply
         .code(303)
-        .header('location', `/estate/buildings/${buildingId}`)
+        .header('location', `/estate/inventory/${buildingId}`)
         .send();
     },
   );

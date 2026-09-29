@@ -163,6 +163,16 @@ describe('estate · the routes', () => {
           assert.match(response.body, /דירה <span dir="ltr">12A<\/span>/);
           assert.match(response.body, /מסמכים/);
           assert.match(response.body, /אין מסמכים בתיק זה עדיין/);
+          assert.match(
+            response.body,
+            new RegExp(
+              `href="/estate/inventory/${buildingId}"[^>]*>← בניין בדיקה`,
+            ),
+          );
+          assert.doesNotMatch(
+            response.body,
+            new RegExp(`href="/estate/buildings/${buildingId}"`),
+          );
           assert.doesNotMatch(response.body, /יומן שינויים/);
           assert.match(
             response.body,
@@ -210,6 +220,14 @@ describe('estate · the routes', () => {
           /text\/html; charset=utf-8/,
         );
         assert.match(found.body, /בניין בדיקה/);
+        assert.match(
+          found.body,
+          new RegExp(`href="/estate/inventory/${buildingId}"`),
+        );
+        assert.doesNotMatch(
+          found.body,
+          new RegExp(`href="/estate/buildings/${buildingId}"`),
+        );
         assert.doesNotMatch(found.body, /data-office-retrieval="unit"/);
         assert.doesNotMatch(found.body, /data-office-retrieval="building"/);
       });
@@ -1289,6 +1307,8 @@ describe('estate · A11, an administrator creates a building', () => {
       assert.match(form.body, /action="\/estate\/buildings"/);
       assert.match(form.body, new RegExp(`value="${admin.csrf}"`));
       assert.match(form.body, /ללא פרויקט/);
+      assert.match(form.body, /<a class="back" href="\/estate\/inventory">/);
+      assert.match(form.body, /<a href="\/estate\/inventory">ביטול<\/a>/);
 
       const created = await client.inject({
         method: 'POST',
@@ -1297,7 +1317,7 @@ describe('estate · A11, an administrator creates a building', () => {
         payload: a11Form(),
       });
       assert.equal(created.statusCode, 303);
-      assert.equal(created.headers.location, '/estate');
+      assert.equal(created.headers.location, '/estate/inventory');
 
       const first = await pool.query<{ building_id: string }>(
         'SELECT building_id FROM building WHERE city = $1',
@@ -1358,6 +1378,48 @@ describe('estate · A11, an administrator creates a building', () => {
       assert.equal(blankParcel.rows[0]?.gush, null);
       assert.equal(blankParcel.rows[0]?.helka, null);
       assert.equal(blankParcel.rows[0]?.building_number, null);
+    } finally {
+      await a11Cleanup(pool);
+      await signOutAll(pool, A11_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('carrying the filing walk still continues into the new apartment', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({ pool, version: '9.9.9-test' });
+    await signOutAll(pool, A11_DOMAIN);
+    await a11Cleanup(pool);
+    const admin = await signIn(pool, systemClock, {
+      email: `admin@${A11_DOMAIN}`,
+      role: 'ADMIN',
+    });
+    const client = asOperator(app, admin);
+    try {
+      const created = await client.inject({
+        method: 'POST',
+        url: '/estate/buildings',
+        headers: FORM,
+        payload: a11Form({
+          unit_number: '4',
+          type: 'lease',
+          next: 'intake',
+        }),
+      });
+      assert.equal(created.statusCode, 303);
+      const row = await pool.query<{ building_id: string }>(
+        'SELECT building_id FROM building WHERE city = $1',
+        [A11_CITY],
+      );
+      assert.equal(
+        created.headers.location,
+        `/estate/buildings/${row.rows[0]?.building_id}/units/new?next=intake&type=lease&unit_number=4`,
+      );
     } finally {
       await a11Cleanup(pool);
       await signOutAll(pool, A11_DOMAIN);
@@ -1676,6 +1738,18 @@ describe('estate · A13, an administrator adds an apartment', () => {
       );
       assert.match(form.body, new RegExp(`value="${admin.csrf}"`));
       assert.match(form.body, /בניין A13/);
+      assert.match(
+        form.body,
+        new RegExp(`href="/estate/inventory/${buildingId}"[^>]*>← בניין A13`),
+      );
+      assert.match(
+        form.body,
+        new RegExp(`href="/estate/inventory/${buildingId}">ביטול`),
+      );
+      assert.doesNotMatch(
+        form.body,
+        new RegExp(`href="/estate/buildings/${buildingId}"`),
+      );
 
       const created = await client.inject({
         method: 'POST',
@@ -1684,7 +1758,7 @@ describe('estate · A13, an administrator adds an apartment', () => {
         payload: a13Form(),
       });
       assert.equal(created.statusCode, 303);
-      assert.equal(created.headers.location, `/estate/buildings/${buildingId}`);
+      assert.equal(created.headers.location, `/estate/inventory/${buildingId}`);
 
       // **One flat and one space (#140).** The `UNIT` space is named by the bare unit number, which
       // is what `src/register/internal/importer.ts` passes — two writers spelling it two ways would

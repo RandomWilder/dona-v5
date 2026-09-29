@@ -839,7 +839,14 @@ describe('estate · נכסים, tab create and mint', () => {
         /<span dir="ltr">1<\/span><\/span><span class="sub">מעלית<\/span>/,
       );
       assert.doesNotMatch(block, /דמי שכירות/);
-      assert.match(block, new RegExp(`/estate/buildings/${buildingId}`));
+      assert.match(
+        block,
+        new RegExp(`href="/estate/inventory/${buildingId}"[^>]*>לדף הבניין`),
+      );
+      assert.doesNotMatch(
+        block,
+        new RegExp(`href="/estate/buildings/${buildingId}"`),
+      );
       assert.match(
         block,
         new RegExp(`/estate/inventory/${buildingId}#more-spaces`),

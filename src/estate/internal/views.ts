@@ -970,7 +970,7 @@ export function renderInventoryPage(screen: {
                               </div>`
                             : h`<div class="group"></div>`
                         }
-                        <a class="btn btn-secondary btn-sm" href="/estate/buildings/${building.building_id}">לדף הבניין${TO_BUILDING}</a>
+                        <a class="btn btn-secondary btn-sm" href="/estate/inventory/${building.building_id}">לדף הבניין${TO_BUILDING}</a>
                       </div>
                     </div>
                   </details>`;
@@ -1417,7 +1417,7 @@ function carried(carry: NewBuildingScreen['carry']): Html {
 export function renderNewBuildingPage(screen: NewBuildingScreen): string {
   const body = h`
     <div>
-      <a class="back" href="/estate">← בניינים</a>
+      <a class="back" href="/estate/inventory">← נכסים</a>
       <h1>בניין חדש</h1>
       <p class="lede">
         מפעיל מתייק נייר; מנהל מעצב את הנכס. המסך הזה פתוח למנהל בלבד.
@@ -1514,7 +1514,7 @@ export function renderNewBuildingPage(screen: NewBuildingScreen): string {
       </div>
       <div class="form-actions">
         <button class="btn btn-primary" type="submit">יצירת בניין</button>
-        <a href="/estate">ביטול</a>
+        <a href="/estate/inventory">ביטול</a>
       </div>
     </form>
     <p class="form-note">
@@ -1554,7 +1554,7 @@ export function renderNewUnitPage(screen: NewUnitScreen): string {
   const { building } = screen;
   const body = h`
     <div>
-      <a class="back" href="/estate/buildings/${building.building_id}">← ${building.name}</a>
+      <a class="back" href="/estate/inventory/${building.building_id}">← ${building.name}</a>
       <h1>דירה חדשה</h1>
       <p class="lede">${building.name} · ${building.address_line}, ${building.city}</p>
     </div>
@@ -1640,7 +1640,7 @@ export function renderNewUnitPage(screen: NewUnitScreen): string {
       </div>
       <div class="form-actions">
         <button class="btn btn-primary" type="submit">הוספת דירה</button>
-        <a href="/estate/buildings/${building.building_id}">ביטול</a>
+        <a href="/estate/inventory/${building.building_id}">ביטול</a>
       </div>
     </form>
     <p class="form-note">
@@ -1987,7 +1987,7 @@ export function renderUnitPage(
   });
   const sheet = h`
     <div>
-      <a class="back" href="/estate/buildings/${unit.building_id}">← ${unit.building_name}</a>
+      <a class="back" href="/estate/inventory/${unit.building_id}">← ${unit.building_name}</a>
       <h1>${heading}</h1>
       <p class="lede">${unit.building_name}</p>
       <div class="chips"><span class="chip">${word}</span></div>
@@ -2196,7 +2196,7 @@ export function renderSearchPage(
               ${results.buildings.map(
                 (building) => h`<article class="row-card">
                   ${marker(building.status)}
-                  <a class="card-link" href="/estate/buildings/${building.building_id}">
+                  <a class="card-link" href="/estate/inventory/${building.building_id}">
                     <p class="card-title">
                       <span>${building.name}</span>
                       <span class="chip">${label(BUILDING_STATUS, building.status)}</span>
