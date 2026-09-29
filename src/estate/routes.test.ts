@@ -106,7 +106,10 @@ describe('estate · the routes', () => {
       await t.test('the root is an index of the screens', async () => {
         const response = await client.inject({ method: 'GET', url: '/' });
         assert.equal(response.statusCode, 200);
-        assert.match(response.body, /href="\/estate"/);
+        assert.match(response.body, /href="\/estate\/inventory"/);
+        assert.match(response.body, />נכסים</);
+        assert.doesNotMatch(response.body, /href="\/estate"/);
+        assert.doesNotMatch(response.body, /nav-label">בניינים</);
         assert.match(response.body, /href="\/estate\/expiring"/);
         assert.match(response.body, /href="\/estate\/incomplete"/);
         assert.match(response.body, /href="\/estate\/search"/);

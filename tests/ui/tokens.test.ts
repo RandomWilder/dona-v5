@@ -2203,7 +2203,8 @@ describe('shared UI tokens', () => {
       assert.match(html, /id="nav-toggle"/, name);
       assert.match(html, /class="ops-menu"/, name);
       assert.match(html, />תפריט</, name);
-      assert.match(html, /href="\/estate"/, name);
+      assert.doesNotMatch(html, /data-dest="estate"/, name);
+      assert.doesNotMatch(html, /nav-label">בניינים</, name);
       assert.match(html, /href="\/estate\/inventory"/, name);
       assert.match(html, />נכסים</, name);
       assert.match(html, /href="\/estate\/expiring"/, name);
@@ -2247,8 +2248,32 @@ describe('shared UI tokens', () => {
       if (name.startsWith('root · index') || name.startsWith('root · ia')) {
         assert.equal(marked.length, 0, name);
       } else {
-        assert.equal(marked.length, 1, name);
+        assert.ok(marked.length <= 1, name);
       }
+    }
+    // The mark is a property of the rail, not of whichever screen the registry handed it.
+    // Every destination that has an item marks that item. The hidden buildings destination
+    // marks nothing, and the index marks nothing.
+    for (const dest of [
+      'inventory',
+      'documents',
+      'filing',
+      'expiring',
+      'tenancies',
+      'incomplete',
+      'search',
+      'staff',
+      'calls',
+      'settings',
+    ] as const) {
+      const rail = String(signedInChrome(CSRF, dest, true));
+      assert.match(rail, new RegExp(`data-dest="${dest}" aria-current="page"`));
+      assert.equal(rail.match(/aria-current="page"/g)?.length, 1, dest);
+    }
+    for (const dest of ['estate', 'index'] as const) {
+      const rail = String(signedInChrome(CSRF, dest, true));
+      assert.equal(rail.match(/aria-current="page"/g)?.length ?? 0, 0, dest);
+      assert.doesNotMatch(rail, /data-dest="estate"/);
     }
   });
 

@@ -63,9 +63,9 @@ export function renderIndexPage(screen: IndexScreen): string {
     <div class="index-list">
       <article class="row-card">
         ${marker('is-ok')}
-        <a class="card-link" href="/estate">
-          <p class="card-title"><span>בניינים</span></p>
-          <p class="lede">כל הבניינים, מספר היחידות בכל אחד וכמה מהן מאוכלסות היום.</p>
+        <a class="card-link" href="/estate/inventory">
+          <p class="card-title"><span>נכסים</span></p>
+          <p class="lede">המלאי של כל בניין — דירות, חניות, מחסנים ומעליות.</p>
         </a>
       </article>
       <article class="row-card">

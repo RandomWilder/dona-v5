@@ -33,10 +33,16 @@ workbook is right and this file is a bug.
   Writes go through `importEstate`. First mint writes one `estate.inventory_mint` audit line.
   **#150 derived vacancy** on that page from the occupancy injection and the assigned bay /
   assigned storage on those lettings. **#151 added later add, remove, and shared Spaces** on that
-  same page. בניינים routes and views are unchanged.
+  same page.
   **#170** sends the unit page's back link, the נכסים list's לדף הבניין, a search hit that
   opens a building, and A11 and A13's back, cancel, and ordinary save to נכסים. The filing
-  walk still continues from A11 into A13. The old list and the old building page keep their links.
+  walk still continues from A11 into A13.
+  **#172 hides בניינים.** The rail drops that item, the home card opens נכסים, and a row on
+  חוזים מסתיימים opens that building's נכסים page. `/estate` and `/estate/buildings/:id` stay
+  registered, served, and tested, with their posts. They are linked from nowhere except each
+  other and A11/A13. The flat page, A11, and A13 mark נכסים on the rail. A letting marks
+  שכירויות. The old list and the old building page name the removed item and mark nothing.
+  The נכסים building page is the one building page.
 
 ## The shape, and why it is this one
 
@@ -222,6 +228,8 @@ is that rail as a phone drawer**, still not this module's. Estate writes none of
 composition root injects the chrome every signed-in screen carries. **#162** adds a door,
 שכירויות, on that index and on the rail, immediately before חוזים לא שלמים. The index lede no
 longer says that no screen shows a tenant name. Phone numbers stay off every screen.
+**#172** drops בניינים from that rail. נכסים is the only estate tab. The home card opens
+`/estate/inventory` and is worded for נכסים.
 
 **`GET /estate/search?q=` searches buildings and units, and deliberately not people.** A search that
 reached `party` would put a real person behind a route with no session, the week the register
@@ -247,6 +255,7 @@ either is the defect 2.6 wrote a test for.
 
 **`GET /estate/expiring` is Q5** — every ACTIVE lease in the portfolio ending inside sixty days, one
 indexed query, ordered by date. It shows a unit, a building and a date and **no party at all**.
+A row opens that building's נכסים page, `/estate/inventory/:buildingId`.
 
 ### שכירויות — the book of every letting (#162)
 
@@ -445,10 +454,13 @@ replies `303` to the document screen with the new flat as the anchor.
 
 ### נכסים — inventory list, create, and mint (#149)
 
-A second estate tab, beside בניינים. All inventory work lives only here. A11 and A13 stay on their
-routes. Their back link, ביטול, and the redirect after a save that is not the filing walk land on
-נכסים. The old בניינים list and the old building page keep their own links. The same Building /
-Space / Unit rows appear under both tabs because they are the same rows.
+The only estate tab, and the one building page. בניינים is hidden (#172): `/estate` and
+`/estate/buildings/:id` stay registered and served, with their posts, and they are linked from
+nowhere except each other and A11/A13. The rail has no בניינים item. The home card opens
+`/estate/inventory` and is worded for נכסים. All inventory work lives only here. A11 and A13 stay
+on their routes. Their back link, ביטול, and the redirect after a save that is not the filing walk
+land on נכסים. The old list and the old building page keep their own links to each other. The same
+Building / Space / Unit rows appear under both, because they are the same rows.
 
 **Routes.** `GET /estate/inventory` (`estate.read`) lists every Building. `GET /estate/inventory/new`
 and `POST /estate/inventory` (`estate.write`, including the GET) create one and mint its Spaces.

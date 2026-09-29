@@ -253,10 +253,12 @@ describe('estate · נכסים, tab create and mint', () => {
     try {
       const rail = await client.inject({ method: 'GET', url: '/estate' });
       assert.equal(rail.statusCode, 200);
-      assert.match(rail.body, />בניינים</);
+      assert.match(rail.body, /<h1>בניינים<\/h1>/);
+      assert.doesNotMatch(rail.body, /nav-label">בניינים</);
+      assert.doesNotMatch(rail.body, /data-dest="estate"/);
       assert.match(rail.body, /href="\/estate\/inventory"/);
       assert.match(rail.body, />נכסים</);
-      assert.match(rail.body, /href="\/estate"/);
+      assert.doesNotMatch(rail.body, /href="\/estate"/);
 
       const form = await client.inject({
         method: 'GET',

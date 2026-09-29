@@ -63,8 +63,10 @@ export function signedInChrome(
   dest: ChromeDest,
   mayFile: boolean,
 ): Html {
+  // **#172.** בניינים is hidden: served, linked from nowhere except the old pages and
+  // A11/A13. `estate` stays a destination so those pages can ask for a current item and
+  // find none. נכסים is the only estate tab.
   return h`<nav aria-label="יעדי דלפק">
-    ${item('estate', '/estate', 'בניינים', dest, h`<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18" /><path d="M6 12h12" /><path d="M6 16h12" /><path d="M10 6h.01" /><path d="M14 6h.01" />`)}
     ${item('inventory', '/estate/inventory', 'נכסים', dest, h`<path d="M3 3h8v8H3z" /><path d="M13 3h8v8h-8z" /><path d="M3 13h8v8H3z" /><path d="M13 13h8v8h-8z" />`)}
     ${
       mayFile

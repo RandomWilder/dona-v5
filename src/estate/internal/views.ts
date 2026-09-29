@@ -2261,7 +2261,7 @@ export function renderExpiringPage(
             ${leases.map(
               (lease) => h`<article class="row-card">
                 ${marker(lease.days_left <= 14 ? 'ALERT' : 'ACTIVE')}
-                <a class="card-link" href="/estate/buildings/${lease.building_id}">
+                <a class="card-link" href="/estate/inventory/${lease.building_id}">
                   <p class="card-title">
                     <span class="unit-no">דירה ${ltr(lease.unit_number)}</span>
                     <span>${lease.building_name}</span>

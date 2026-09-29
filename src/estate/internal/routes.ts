@@ -1202,7 +1202,7 @@ export function registerEstateRoutes(
       optionalText(blankToNull(query.city), 'city', 120) ?? undefined;
     html(reply);
     return renderNewBuildingPage({
-      nav: deps.chrome(csrf, 'estate', mayFile(request)),
+      nav: deps.chrome(csrf, 'inventory', mayFile(request)),
       csrf,
       projects,
       // **Slice 6.9.** The name defaults to the street, because A12 read a street and never a
@@ -1261,7 +1261,7 @@ export function registerEstateRoutes(
       const carry = carryFromQuery(request);
       html(reply);
       return renderNewUnitPage({
-        nav: deps.chrome(csrf, 'estate', mayFile(request)),
+        nav: deps.chrome(csrf, 'inventory', mayFile(request)),
         csrf,
         building,
         prefill: carry.unitNumber ? { unitNumber: carry.unitNumber } : {},
@@ -1446,7 +1446,7 @@ export function registerEstateRoutes(
       unit,
       states.get(unit.unit_id)?.word ?? UNIT_WORDS.vacant,
       documents,
-      deps.chrome(csrf, 'estate', mayFile(request)),
+      deps.chrome(csrf, 'inventory', mayFile(request)),
       promoted,
       events,
       await officeRetrieval(
@@ -1659,7 +1659,7 @@ export function registerEstateRoutes(
       activatableOn: gate.activatableOn,
       flags: gate.flags,
       csrf,
-      nav: deps.chrome(csrf, 'estate', mayFile(request)),
+      nav: deps.chrome(csrf, 'tenancies', mayFile(request)),
     });
   });
 
