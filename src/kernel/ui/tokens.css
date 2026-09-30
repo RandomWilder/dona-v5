@@ -1024,20 +1024,6 @@ textarea {
   font-weight: 600;
 }
 
-.glass-stage .tile-grid.is-states > li {
-  display: flex;
-  min-block-size: 0;
-}
-
-.glass-stage .tile-grid.is-states .space-tile {
-  flex: 1;
-  inline-size: 100%;
-  block-size: 100%;
-  min-block-size: 0;
-  align-content: start;
-  overflow: hidden;
-}
-
 .glass-stage .legend {
   display: flex;
   gap: var(--space-4);
@@ -1098,6 +1084,20 @@ textarea {
   border-radius: var(--radius-3);
   background: var(--color-surface-card);
   border: var(--size-hairline) solid var(--color-divider-soft);
+}
+
+.glass-stage .tile-grid.is-states > li {
+  display: flex;
+  min-block-size: 0;
+}
+
+.glass-stage .tile-grid.is-states .space-tile {
+  flex: 1;
+  inline-size: 100%;
+  block-size: 100%;
+  min-block-size: 0;
+  align-content: start;
+  overflow: hidden;
 }
 
 .glass-stage .manage > summary {
