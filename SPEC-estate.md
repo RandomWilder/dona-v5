@@ -33,7 +33,16 @@ workbook is right and this file is a bug.
   Writes go through `importEstate`. First mint writes one `estate.inventory_mint` audit line.
   **#150 derived vacancy** on that page from the occupancy injection and the assigned bay /
   assigned storage on those lettings. **#151 added later add, remove, and shared Spaces** on that
-  same page. בניינים routes and views are unchanged.
+  same page.
+  **#170** sends the unit page's back link, the נכסים list's לדף הבניין, a search hit that
+  opens a building, and A11 and A13's back, cancel, and ordinary save to נכסים. The filing
+  walk still continues from A11 into A13.
+  **#172 hides בניינים.** The rail drops that item, the home card opens נכסים, and a row on
+  חוזים מסתיימים opens that building's נכסים page. `/estate` and `/estate/buildings/:id` stay
+  registered, served, and tested, with their posts. They are linked from nowhere except each
+  other and A11/A13. The flat page, A11, and A13 mark נכסים on the rail. A letting marks
+  שכירויות. The old list and the old building page name the removed item and mark nothing.
+  The נכסים building page is the one building page.
 
 ## The shape, and why it is this one
 
@@ -219,6 +228,8 @@ is that rail as a phone drawer**, still not this module's. Estate writes none of
 composition root injects the chrome every signed-in screen carries. **#162** adds a door,
 שכירויות, on that index and on the rail, immediately before חוזים לא שלמים. The index lede no
 longer says that no screen shows a tenant name. Phone numbers stay off every screen.
+**#172** drops בניינים from that rail. נכסים is the only estate tab. The home card opens
+`/estate/inventory` and is worded for נכסים.
 
 **`GET /estate/search?q=` searches buildings and units, and deliberately not people.** A search that
 reached `party` would put a real person behind a route with no session, the week the register
@@ -231,8 +242,9 @@ contain them, while a building name or an address narrows to one building and ma
 **Slice 3.6 grew it by a documents half rather than forking a second search.** The documents query
 lives in evidence (`searchDocuments`) and is injected here, because evidence already imports estate
 and the other direction would be a cycle. It matches a type label, a unit number, a building name or
-address — never a city, never a party, never the file's text. A unit hit links to the unit page, not
-the building, so a 72-flat building is not the find path.
+address — never a city, never a party, never the file's text. A building hit links to that
+building's נכסים page, `/estate/inventory/:buildingId`. A document hit opens the document. A
+unit hit links to the unit page, not the building, so a 72-flat building is not the find path.
 
 The term is trimmed, capped at 80 characters, and its **LIKE metacharacters are escaped**. A bound
 parameter is not the same thing as a safe pattern: unescaped, a lone `%` matches the whole portfolio
@@ -243,6 +255,7 @@ either is the defect 2.6 wrote a test for.
 
 **`GET /estate/expiring` is Q5** — every ACTIVE lease in the portfolio ending inside sixty days, one
 indexed query, ordered by date. It shows a unit, a building and a date and **no party at all**.
+A row opens that building's נכסים page, `/estate/inventory/:buildingId`.
 
 ### שכירויות — the book of every letting (#162)
 
@@ -365,9 +378,11 @@ on the building row, not values a lease establishes. A11 always writes what the 
 including null. An importer that omits the fields leaves whatever is already on the row, so a
 register re-run does not wipe a number an operator typed.
 
-The POST replies `303` to `/estate`. `importEstate` returns a report and no ids — a plan-shaped
-caller already knows its own shape — and the buildings list is where a new building is looked for
-anyway.
+The back link and ביטול go to `/estate/inventory`. The POST replies `303` to `/estate/inventory`
+when the form is not carrying the filing walk. When it is, the POST still replies `303` into A13
+for that building, with the walk's query, exactly as before. `importEstate` returns a report and
+no ids — a plan-shaped caller already knows its own shape — and נכסים is where a new building is
+looked for.
 
 ### The second — `GET /estate/buildings/:buildingId/units/new` and `POST …/units` (6.2)
 
@@ -400,7 +415,7 @@ assigned to it, is a `conflict` naming which, and only `PARKING` and `STORAGE` m
 is a Space and is the unit's own row, R2). This is the only delete of a `space` outside the operator
 purge, and it exists because the rows 4.6 already wrote otherwise have no forward path: a real bay
 number arriving later would leave a second `PARKING` space in the building with nothing to say which
-is real.
+is real. The POST replies `303` to that building's נכסים page.
 
 **It is keyed on the Space and not on a Unit, and the building page lists what nothing points at.**
 Those are one decision. An operator writing the real number *before* deleting the placeholder
@@ -432,25 +447,43 @@ the workbook's Israeli convention is 3, 3.5, 4, and `numeric` would otherwise ac
 `text` input carried until Postgres refused it as `unavailable`. The unit-level `warranty_end_date`
 is optional and blank means *the building's date applies* (R14) rather than *no warranty*.
 
-The POST replies `303` to the building page, which is where the space count, the unit card and the
-פנויה chip are — the acceptance bar's own wording, and the three things the write should have
-changed.
+The back link and ביטול go to that building's נכסים page. The POST replies `303` to
+`/estate/inventory/:buildingId` when the form is not carrying the filing walk, which is where the
+space count, the unit card and the פנויה chip are. When it is carrying the walk, the POST still
+replies `303` to the document screen with the new flat as the anchor.
 
 ### נכסים — inventory list, create, and mint (#149)
 
-A second estate tab, beside בניינים. All inventory work lives only here. בניינים keeps A11 and A13
-as they are. The same Building / Space / Unit rows appear under both tabs because they are the same
-rows.
+The only estate tab, and the one building page. בניינים is hidden (#172): `/estate` and
+`/estate/buildings/:id` stay registered and served, with their posts, and they are linked from
+nowhere except each other and A11/A13. The rail has no בניינים item. The home card opens
+`/estate/inventory` and is worded for נכסים. All inventory work lives only here. A11 and A13 stay
+on their routes. Their back link, ביטול, and the redirect after a save that is not the filing walk
+land on נכסים. The old list and the old building page keep their own links to each other. The same
+Building / Space / Unit rows appear under both, because they are the same rows.
 
 **Routes.** `GET /estate/inventory` (`estate.read`) lists every Building. `GET /estate/inventory/new`
 and `POST /estate/inventory` (`estate.write`, including the GET) create one and mint its Spaces.
-`GET /estate/inventory/:buildingId` (`estate.read`) lists those Spaces grouped by kind, with
-headline counts and derived vacancy. Later growth and shrink live on that page:
+`GET /estate/inventory/:buildingId` (`estate.read`) is the building page. It shows the building's
+name, status and address, and four headlines: flats, how many are let today, vacant flats, and
+vacant parking. Under that, the building's facts — handover, end of warranty, tender, gush, helka,
+building number — and an absent optional fact is left out. The Spaces are the list's drill, one
+section per kind, flats first and open, rendered by the list's tile. A flat tile adds floor, rooms
+and area from the unit row; a missing floor or area is left out of that line. Bays and stores no
+flat points at are listed with A13's remove control, and the section is hidden when empty. The
+building's linked documents are listed as on the old building page. A signed-in holder of
+`documents.read` sees the building's document Q&A panel on this page (#121). For `estate.write`, דירה חדשה
+opens A13 for this building, and עריכת המלאי sits collapsed at the bottom: the per-space remove,
+הוספת חללים, and מקום משותף, posting what they post today. Arriving at `#more-spaces` or `#shared`
+opens that section. הוספת מסמך, for a viewer who holds `documents.write`, opens `/documents/new`.
+A viewer without `estate.write` sees none of the write controls.
+
+Later growth and shrink still live on that page:
 `POST /estate/inventory/:buildingId/spaces` (count + first number; elevators count only),
 `POST /estate/inventory/:buildingId/shared` (kind + typed name), and
-`POST /estate/inventory/spaces/:spaceId/remove`. Those three are `estate.write`. The rail
-destination is `inventory`. This is not A13's `POST /estate/spaces/:spaceId/remove`, which still
-detaches a built bay or store.
+`POST /estate/inventory/spaces/:spaceId/remove`. Those three are `estate.write` and reply `303`
+to this page. A13's `POST /estate/spaces/:spaceId/remove` still detaches a built bay or store, and
+replies `303` to this page. The rail destination is `inventory`.
 
 **The list is a drill-down of the same rows.** `GET /estate/inventory` still lists every Building.
 An optional `status` query of `ACTIVE`, `IN_CONSTRUCTION`, or `EXITED` narrows which buildings are
@@ -464,7 +497,7 @@ Vacancy on a UNIT, PARKING, or STORAGE tile is the same derivation as the buildi
 list a store reads תפוס or פנוי. A numbered TECHNICAL Space is subtitled מעלית. A TECHNICAL Space
 with any other name keeps that name and is subtitled חלל טכני. COMMON and EXTERIOR tiles are the
 typed name plus the kind, and carry no vacancy. A UNIT tile links to that Unit's page. לדף הבניין
-links to the בניינים building page, which this list does not restyle. הוספת חללים and מקום משותף,
+links to that building's נכסים page, `/estate/inventory/:buildingId`. הוספת חללים and מקום משותף,
 for someone who may write, link to the forms already on `GET /estate/inventory/:buildingId`. That
 page stays the place a Space is added or removed. Rent and lease-end stay off the list. A viewer
 sees the drill and not those write links.
@@ -503,9 +536,10 @@ and the message names which. Nothing is detached and nothing cascades.
 
 The create POST replies `303` to that Building's נכסים page. Later add and remove do the same.
 
-**Vacancy is derived on every load, stored nowhere (#150).** Headlines name each kind's count, plus
-vacant Units, vacant parking, and vacant storage. Each UNIT, PARKING, and STORAGE row carries a
-vacancy chip. Elevators and later COMMON / EXTERIOR / extra TECHNICAL rows do not: the chip means
+**Vacancy is derived on every load, stored nowhere (#150).** The list's building line names each
+kind's count except elevators. The building page's four headlines are flats, how many are let today,
+vacant flats, and vacant parking. A UNIT, PARKING, or STORAGE tile carries the vacant or occupied
+word. Elevators and later COMMON / EXTERIOR / extra TECHNICAL rows do not: the word means
 assignment, not existence. Rent stays off this list. Lease dates are on the Unit tile, with the letting.
 
 A vacant Unit is a Unit with no letting that counts today — the same `resolveOccupiedUnits`
@@ -539,7 +573,7 @@ is not on the tile.
 פנויה uses the dashed vacant tile; מושכרת uses the occupied tile. Every Unit tile in the grid is
 the same width and the same height. The legend is those two words. Vacancy headlines still count a
 Unit as vacant whenever nobody counts today, so a waiting draft is vacant. Parking and storage stay
-binary. The rows on `/estate/inventory/:buildingId` keep the binary chip. חוזים מסתיימים is
+binary. The rows on `/estate/inventory/:buildingId` are those same tiles. חוזים מסתיימים is
 unchanged: a live letting whose end falls inside the window is still listed there.
 
 Counts today stays `resolveOccupiedUnits`. The dates come from tenancy's `listLettingsForUnits`,
@@ -570,7 +604,9 @@ not behind the login.
 already uses — a unit number and the building it is in, and no party. Evidence asks for it to render
 the unit an upload is being filed against; a document screen inventing its own unit query would be
 the second copy estate exists to prevent. **`GET /estate/units/:unitId` is the thin unit page 3.6
-added**: that same header, the occupancy chip, the upload link, and the documents panel. Slice 4.4
+added**: that same header, the occupancy chip, the upload link, and the documents panel. **#170.**
+The back link goes to that building's נכסים page, `/estate/inventory/:buildingId`, and is still
+labelled with the building name. Slice 4.4
 adds the **promoted values** on that page: each stamped date is a link through to the page of the
 read screen it was read from. **Slice 5.5 adds the change log** — old → new, the operator email, the source
 document — from `listTenancyEvents`, injected the same way. Empty is legal. **#165** is the
@@ -596,14 +632,23 @@ asking and clearing are `documents.read`. All-buildings, search, expiring, incom
 sheet, documents, settings and queues do not render the Unit panel and do not keep a leftover
 bound.
 
-**#121 is the same panel on the Building page.** `GET /estate/buildings/:buildingId` grows the
-same split for a signed-in holder of `documents.read`. The post runs the office-turn command
-bound to this Building (the office bag: that Building's paper, every Unit in it, those Units'
-lettings) and redirects to the same GET. The same `unavailable` 303 as the Unit panel: stay on
-this Building, paint the frozen Hebrew notice, do not dump `{ code, message }` on the POST URL.
-Clear wipes only this account's thread for this Building. A Unit thread and a Building thread for the same staff account stay distinct. CSRF and
-a session on both posts; VIEWER may ask; no new permission. **#123:** a Building-bound turn may
-list who is let today as well as search Passages; the panel is unchanged. The buildings list, Unit
+**#121 is the same panel on the Building page, and on the נכסים building page.** A signed-in
+holder of `documents.read` sees the same split on `GET /estate/buildings/:buildingId` and on
+`GET /estate/inventory/:buildingId`. Someone without that permission sees it on neither. The post
+runs the office-turn command bound to this Building (the office bag: that Building's paper, every
+Unit in it, those Units' lettings). On the old page the posts stay
+`POST /estate/buildings/:buildingId/office-turn` and
+`POST /estate/buildings/:buildingId/office-thread`, and they redirect to that GET. On the נכסים
+page the posts are `POST /estate/inventory/:buildingId/office-turn` and
+`POST /estate/inventory/:buildingId/office-thread`, and they redirect to that GET. The panel's
+form actions are the page it is painted on. The thread is one per account and Building, so a turn
+started on either page is the turn the other page shows. The same `unavailable` 303 as the Unit
+panel: stay on the page that was posted, with `ask=unavailable`, paint the frozen Hebrew notice,
+leave the thread unchanged, and do not dump `{ code, message }` on the POST URL. Clear wipes only
+this account's thread for this Building and returns to the page that was posted. A Unit thread
+and a Building thread for the same staff account stay distinct. CSRF and a session on both posts;
+VIEWER may ask; no new permission. **#123:** a Building-bound turn may list who is let today as
+well as search Passages; the panel is unchanged. The buildings list, the נכסים list, the Unit
 page (which keeps its own panel), letting sheet, documents, settings and queues do not render a
 Building panel and do not keep a leftover Building bound.
 

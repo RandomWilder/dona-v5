@@ -368,6 +368,7 @@ async function officeRetrieval(
   request: FastifyRequest,
   bound: { kind: 'unit' | 'building'; id: string },
   csrf: string,
+  path: string,
 ): Promise<OfficeRetrievalView | undefined> {
   if (!can(request.staff?.role ?? null, 'documents.read')) {
     return undefined;
@@ -375,7 +376,7 @@ async function officeRetrieval(
   const staffAccountId = request.staff?.staffAccountId;
   if (!staffAccountId) return undefined;
   const thread = await loadOfficeRetrievalThread(pool, staffAccountId, bound);
-  return { csrf, bound, thread, notice: officeAskNotice(request) };
+  return { csrf, bound, thread, notice: officeAskNotice(request), path };
 }
 
 function html(reply: { header: (k: string, v: string) => unknown }): void {
@@ -965,18 +966,46 @@ export function registerEstateRoutes(
           row.storage_space_id ? [row.storage_space_id] : [],
         ),
       );
+      const documents = await deps.listLinkedDocuments(
+        deps.pool,
+        'BUILDING',
+        detail.building.building_id,
+      );
       html(reply);
       const csrf = csrfFrom(request);
       return renderInventoryBuildingPage({
         building: detail.building,
         spaces,
+        units: detail.units,
+        unassigned: detail.unassigned,
         occupancy,
         occupiedParking,
         occupiedStorage,
+        states: await unitStates(
+          deps.pool,
+          spaces
+            .filter((space) => space.space_kind === 'UNIT')
+            .map((space) => space.space_id),
+          occupied,
+          deps.clock,
+          draftChip(deps),
+        ),
+        documents,
         nav: deps.chrome(csrf, 'inventory', mayFile(request)),
+        mayFile: mayFile(request),
         write: can(request.staff?.role ?? null, 'estate.write')
           ? { csrf }
           : undefined,
+        retrieval: await officeRetrieval(
+          deps.pool,
+          request,
+          {
+            kind: 'building',
+            id: detail.building.building_id,
+          },
+          csrf,
+          `/estate/inventory/${detail.building.building_id}`,
+        ),
       });
     },
   );
@@ -1173,7 +1202,7 @@ export function registerEstateRoutes(
       optionalText(blankToNull(query.city), 'city', 120) ?? undefined;
     html(reply);
     return renderNewBuildingPage({
-      nav: deps.chrome(csrf, 'estate', mayFile(request)),
+      nav: deps.chrome(csrf, 'inventory', mayFile(request)),
       csrf,
       projects,
       // **Slice 6.9.** The name defaults to the street, because A12 read a street and never a
@@ -1214,7 +1243,7 @@ export function registerEstateRoutes(
           .send();
       }
     }
-    return reply.code(303).header('location', '/estate').send();
+    return reply.code(303).header('location', '/estate/inventory').send();
   });
 
   // **Slice 6.2, flow A13.** Same stance on both halves, and `new` is again a static segment
@@ -1232,7 +1261,7 @@ export function registerEstateRoutes(
       const carry = carryFromQuery(request);
       html(reply);
       return renderNewUnitPage({
-        nav: deps.chrome(csrf, 'estate', mayFile(request)),
+        nav: deps.chrome(csrf, 'inventory', mayFile(request)),
         csrf,
         building,
         prefill: carry.unitNumber ? { unitNumber: carry.unitNumber } : {},
@@ -1295,7 +1324,7 @@ export function registerEstateRoutes(
       }
       return reply
         .code(303)
-        .header('location', `/estate/buildings/${buildingId}`)
+        .header('location', `/estate/inventory/${buildingId}`)
         .send();
     },
   );
@@ -1325,7 +1354,7 @@ export function registerEstateRoutes(
       // the three things this write should have changed.
       return reply
         .code(303)
-        .header('location', `/estate/buildings/${buildingId}`)
+        .header('location', `/estate/inventory/${buildingId}`)
         .send();
     },
   );
@@ -1371,6 +1400,7 @@ export function registerEstateRoutes(
           id: detail.building.building_id,
         },
         csrf,
+        `/estate/buildings/${detail.building.building_id}`,
       ),
     );
   });
@@ -1416,7 +1446,7 @@ export function registerEstateRoutes(
       unit,
       states.get(unit.unit_id)?.word ?? UNIT_WORDS.vacant,
       documents,
-      deps.chrome(csrf, 'estate', mayFile(request)),
+      deps.chrome(csrf, 'inventory', mayFile(request)),
       promoted,
       events,
       await officeRetrieval(
@@ -1427,6 +1457,7 @@ export function registerEstateRoutes(
           id: unit.unit_id,
         },
         csrf,
+        `/estate/units/${unit.unit_id}`,
       ),
       unitPageLettings(
         book,
@@ -1486,57 +1517,68 @@ export function registerEstateRoutes(
     },
   );
 
-  app.post<{ Params: { buildingId: string } }>(
-    '/estate/buildings/:buildingId/office-turn',
-    ASK,
-    async (request, reply) => {
-      const buildingId = validId(request.params.buildingId, 'buildingId');
-      await getBuilding(deps.pool, buildingId);
-      const posted = request.body as { question?: string };
-      try {
-        await deps.runOfficeTurn({
-          staffAccountId: requireStaffAccountId(request),
-          bound: { kind: 'building', id: buildingId },
-          question: requireText(posted.question, 'question', 2000),
-        });
-      } catch (error) {
-        if (error instanceof KernelError && error.code === 'unavailable') {
-          return reply
-            .code(303)
-            .header(
-              'location',
-              `/estate/buildings/${buildingId}?ask=unavailable`,
-            )
-            .send();
+  /**
+   * #121. One Building thread, two pages. The return path is the page that was posted.
+   */
+  function registerBuildingOffice(
+    turn: string,
+    clear: string,
+    back: (buildingId: string) => string,
+  ): void {
+    app.post<{ Params: { buildingId: string } }>(
+      turn,
+      ASK,
+      async (request, reply) => {
+        const buildingId = validId(request.params.buildingId, 'buildingId');
+        await getBuilding(deps.pool, buildingId);
+        const posted = request.body as { question?: string };
+        try {
+          await deps.runOfficeTurn({
+            staffAccountId: requireStaffAccountId(request),
+            bound: { kind: 'building', id: buildingId },
+            question: requireText(posted.question, 'question', 2000),
+          });
+        } catch (error) {
+          if (error instanceof KernelError && error.code === 'unavailable') {
+            return reply
+              .code(303)
+              .header('location', `${back(buildingId)}?ask=unavailable`)
+              .send();
+          }
+          throw error;
         }
-        throw error;
-      }
-      return reply
-        .code(303)
-        .header('location', `/estate/buildings/${buildingId}`)
-        .send();
-    },
-  );
+        return reply.code(303).header('location', back(buildingId)).send();
+      },
+    );
 
-  app.post<{ Params: { buildingId: string } }>(
+    app.post<{ Params: { buildingId: string } }>(
+      clear,
+      ASK,
+      async (request, reply) => {
+        const buildingId = validId(request.params.buildingId, 'buildingId');
+        await getBuilding(deps.pool, buildingId);
+        await clearOfficeRetrievalThread(
+          deps.pool,
+          requireStaffAccountId(request),
+          {
+            kind: 'building',
+            id: buildingId,
+          },
+        );
+        return reply.code(303).header('location', back(buildingId)).send();
+      },
+    );
+  }
+
+  registerBuildingOffice(
+    '/estate/buildings/:buildingId/office-turn',
     '/estate/buildings/:buildingId/office-thread',
-    ASK,
-    async (request, reply) => {
-      const buildingId = validId(request.params.buildingId, 'buildingId');
-      await getBuilding(deps.pool, buildingId);
-      await clearOfficeRetrievalThread(
-        deps.pool,
-        requireStaffAccountId(request),
-        {
-          kind: 'building',
-          id: buildingId,
-        },
-      );
-      return reply
-        .code(303)
-        .header('location', `/estate/buildings/${buildingId}`)
-        .send();
-    },
+    (buildingId) => `/estate/buildings/${buildingId}`,
+  );
+  registerBuildingOffice(
+    '/estate/inventory/:buildingId/office-turn',
+    '/estate/inventory/:buildingId/office-thread',
+    (buildingId) => `/estate/inventory/${buildingId}`,
   );
 
   app.get('/estate/tenancies', READ, async (request, reply) => {
@@ -1617,7 +1659,7 @@ export function registerEstateRoutes(
       activatableOn: gate.activatableOn,
       flags: gate.flags,
       csrf,
-      nav: deps.chrome(csrf, 'estate', mayFile(request)),
+      nav: deps.chrome(csrf, 'tenancies', mayFile(request)),
     });
   });
 

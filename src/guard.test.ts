@@ -169,6 +169,8 @@ describe('every route in the application', () => {
       'POST /estate/units/:unitId/office-thread',
       'POST /estate/buildings/:buildingId/office-turn',
       'POST /estate/buildings/:buildingId/office-thread',
+      'POST /estate/inventory/:buildingId/office-turn',
+      'POST /estate/inventory/:buildingId/office-thread',
       // Slice 6.3, flow A12. The document-first post. `GET /documents/new` is already above and
       // covers both of its screens — the same URL serves the unit-first form and the intake one.
       'POST /documents/intake',
@@ -532,6 +534,10 @@ describe('dev mockups', () => {
       () => renderMockup('building-new-that-is-not-painted', 'csrf'),
       /not found/,
     );
+  });
+
+  it('does not serve the building paint after the page is wired', () => {
+    assert.throws(() => renderMockup('building', 'csrf'), /not found/);
   });
 
   it('does not serve the lease-filing paint after the journey is wired', () => {

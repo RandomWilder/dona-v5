@@ -123,9 +123,11 @@ here:
 - **UI is self-contained HTML plus `/ui/tokens.css`, and nothing else.** No bundler, no framework.
   Hebrew is RTL through logical properties (`margin-inline-start`, never `margin-left`), so one
   stylesheet serves both directions. **From slice 5.2c, every signed-in screen carries the same
-  ops sidebar** — buildings, expiring, incomplete, search, staff, calls, settings, and sign-out — built once at the
+  ops sidebar** — נכסים, documents, lease filing, expiring, tenancies, incomplete, search, staff, calls, settings, and sign-out — built once at the
   composition root and injected, because the kernel may not learn a route and a module may not own
-  another module's. The current destination is marked on the rail. The login screen has none of
+  another module's. The current destination is marked on the rail. בניינים is not an item: a screen
+  that still names that destination marks nothing. Documents and lease filing are on the rail only
+  for a role that may file. The login screen has none of
   those links and no sidebar. **From 5.2d the shell is a phone first:** below 840px the rail is a
   drawer behind a menu control in that same shell, so a new screen inherits the drawer by calling
   `renderPage` with `nav` and never draws its own. Still no client JavaScript: the open state is a

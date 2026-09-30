@@ -271,6 +271,248 @@ describe('evidence · the upload route', () => {
         assert.doesNotMatch(visible, /05\d[- ]?\d{7}/);
       });
 
+      await t.test(
+        'document screens return to the נכסים building page',
+        async () => {
+          const foundBuilding = await pool.query<{ building_id: string }>(
+            `SELECT building_id FROM building
+              WHERE city = $1 AND address_line = $2`,
+            [CITY, ADDRESS],
+          );
+          const buildingId = foundBuilding.rows[0]?.building_id ?? '';
+          assert.ok(buildingId);
+          const inventory = `/estate/inventory/${buildingId}`;
+          const oldPage = `/estate/buildings/${buildingId}`;
+
+          const paths = (html: string): string[] =>
+            [...html.matchAll(/href="([^"]*)"/g)].map((match) => {
+              const href = (match[1] ?? '').replaceAll('&amp;', '&');
+              return href.split(/[?#]/)[0] ?? href;
+            });
+          const assertNoOldBuilding = (
+            html: string,
+            location?: string,
+          ): void => {
+            for (const href of paths(html)) {
+              assert.notEqual(href, oldPage);
+            }
+            if (location) {
+              assert.notEqual(location.split(/[?#]/)[0], oldPage);
+            }
+          };
+
+          const uploadPage = await as(lease).inject({
+            method: 'GET',
+            url: `/documents/new?unit=${unitId}`,
+          });
+          assert.equal(uploadPage.statusCode, 200);
+          assert.match(
+            uploadPage.body,
+            new RegExp(`class="back" href="${inventory}"`),
+          );
+          assert.match(
+            uploadPage.body,
+            new RegExp(`href="${inventory}">ביטול`),
+          );
+          assertNoOldBuilding(uploadPage.body, uploadPage.headers.location);
+
+          const blankBytes = pdfBytes(`return-blank-${Date.now()}`);
+          hashes.push(documentFileHash(blankBytes));
+          const filed = await as(blank).inject({
+            method: 'POST',
+            url: '/documents',
+            ...upload(
+              { unit: unitId, type: 'lease', tenancy: '' },
+              { filename: 'blank.pdf', bytes: blankBytes },
+            ),
+          });
+          assert.equal(filed.statusCode, 200, filed.body.slice(0, 400));
+          assert.match(filed.body, /המסמך נשמר/);
+          assert.match(
+            filed.body,
+            new RegExp(`class="back" href="${inventory}"`),
+          );
+          assert.match(
+            filed.body,
+            new RegExp(`href="${inventory}">חזרה לבניין`),
+          );
+          assertNoOldBuilding(filed.body, filed.headers.location);
+
+          const filedRow = await pool.query<{ document_id: string }>(
+            'SELECT document_id FROM document WHERE file_hash = $1',
+            [documentFileHash(blankBytes)],
+          );
+          const blankId = filedRow.rows[0]?.document_id ?? '';
+          assert.ok(blankId);
+          const read = await as(lease).inject({
+            method: 'GET',
+            url: `/documents/${blankId}/read`,
+          });
+          assert.equal(read.statusCode, 200, read.body.slice(0, 400));
+          assert.match(
+            read.body,
+            new RegExp(`class="back" href="${inventory}"`),
+          );
+          assert.match(
+            read.body,
+            new RegExp(`href="${inventory}">חזרה לבניין`),
+          );
+          assertNoOldBuilding(read.body, read.headers.location);
+
+          const unitFields = await as(lease).inject({
+            method: 'GET',
+            url: `/documents/${blankId}/fields`,
+          });
+          assert.equal(
+            unitFields.statusCode,
+            200,
+            unitFields.body.slice(0, 400),
+          );
+          assert.match(
+            unitFields.body,
+            new RegExp(`class="back" href="/estate/units/${unitId}"`),
+          );
+          assertNoOldBuilding(unitFields.body, unitFields.headers.location);
+
+          const protocol = appFor(specimen('handover-protocol.md'));
+          extraApps.push(protocol);
+          const protocolBytes = pdfBytes(`return-protocol-${Date.now()}`);
+          hashes.push(documentFileHash(protocolBytes));
+          const proposed = await as(protocol).inject({
+            method: 'POST',
+            url: '/documents',
+            ...upload(
+              { unit: unitId, type: 'handover_protocol', tenancy: '' },
+              { filename: 'protocol.pdf', bytes: protocolBytes },
+            ),
+          });
+          assert.equal(proposed.statusCode, 302, proposed.body.slice(0, 400));
+          const seedUrl = String(proposed.headers.location);
+          assert.match(seedUrl, /\/documents\/[0-9a-f-]{36}\/seed$/);
+          assertNoOldBuilding('', seedUrl);
+          const seed = await as(protocol).inject({
+            method: 'GET',
+            url: seedUrl,
+          });
+          assert.equal(seed.statusCode, 200, seed.body.slice(0, 400));
+          assert.match(seed.body, /אישור מסירה/);
+          assert.match(
+            seed.body,
+            new RegExp(`class="back" href="${inventory}"`),
+          );
+          assert.match(seed.body, new RegExp(`href="${inventory}">ביטול`));
+          assertNoOldBuilding(seed.body, seed.headers.location);
+
+          const seeded = await as(protocol).inject({
+            method: 'POST',
+            url: seedUrl,
+            payload: new URLSearchParams({ csrf: who.csrf }).toString(),
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          });
+          assert.equal(seeded.statusCode, 200, seeded.body.slice(0, 400));
+          assert.match(seeded.body, /המסירה נרשמה/);
+          assert.match(
+            seeded.body,
+            new RegExp(`class="back" href="${inventory}"`),
+          );
+          assert.match(
+            seeded.body,
+            new RegExp(`href="${inventory}">חזרה לבניין`),
+          );
+          assertNoOldBuilding(seeded.body, seeded.headers.location);
+
+          const buildingAndLeaseText =
+            'מסירת הבניין מהיזם מערכות הבניין מועד המסירה: 2024-06-01 ' +
+            'חוזה שכירות הדירה תקופת השכירות';
+          const buildingPaper = appFor(buildingAndLeaseText);
+          extraApps.push(buildingPaper);
+          const buildingBytes = pdfBytes(`return-building-${Date.now()}`);
+          hashes.push(documentFileHash(buildingBytes));
+          const buildingFiled = await as(buildingPaper).inject({
+            method: 'POST',
+            url: '/documents',
+            ...upload(
+              {
+                unit: unitId,
+                type: 'building_handover_protocol',
+                tenancy: '',
+              },
+              { filename: 'building.pdf', bytes: buildingBytes },
+            ),
+          });
+          assert.equal(
+            buildingFiled.statusCode,
+            302,
+            buildingFiled.body.slice(0, 400),
+          );
+          const buildingSeed = String(buildingFiled.headers.location);
+          assert.match(buildingSeed, /\/seed$/);
+          assertNoOldBuilding('', buildingSeed);
+          const buildingDocumentId = /\/documents\/([0-9a-f-]{36})\/seed/.exec(
+            buildingSeed,
+          )?.[1];
+          assert.ok(buildingDocumentId);
+          const fields = await as(buildingPaper).inject({
+            method: 'GET',
+            url: `/documents/${buildingDocumentId}/fields`,
+          });
+          assert.equal(fields.statusCode, 200, fields.body.slice(0, 400));
+          assert.match(
+            fields.body,
+            new RegExp(`class="back" href="${inventory}"`),
+          );
+          assert.doesNotMatch(fields.body, /href="\/estate\/units\//);
+          assertNoOldBuilding(fields.body, fields.headers.location);
+          const buildingRead = await as(buildingPaper).inject({
+            method: 'GET',
+            url: `/documents/${buildingDocumentId}/read`,
+          });
+          assert.equal(
+            buildingRead.statusCode,
+            200,
+            buildingRead.body.slice(0, 400),
+          );
+          assert.match(
+            buildingRead.body,
+            new RegExp(`href="${inventory}">חזרה לבניין`),
+          );
+          assertNoOldBuilding(buildingRead.body, buildingRead.headers.location);
+
+          const repeated = await as(buildingPaper).inject({
+            method: 'POST',
+            url: '/documents',
+            ...upload(
+              { unit: unitId, type: 'lease', tenancy: '' },
+              { filename: 'building.pdf', bytes: buildingBytes },
+            ),
+          });
+          assert.equal(repeated.statusCode, 422, repeated.body.slice(0, 400));
+          assert.match(repeated.body, /הקובץ הזה כבר מתויק/);
+          assert.match(repeated.body, new RegExp(`href="${inventory}"`));
+          assertNoOldBuilding(repeated.body, repeated.headers.location);
+
+          // The cases below count this unit's documents, so these rows cannot
+          // stay. An asset pointing at the protocol also blocks deleting it.
+          const filedIds = [blankId, buildingDocumentId];
+          const protocolId = /\/documents\/([0-9a-f-]{36})\/seed/.exec(
+            seedUrl,
+          )?.[1];
+          if (protocolId) filedIds.push(protocolId);
+          await pool.query(
+            `DELETE FROM asset WHERE source_document_id = ANY($1::uuid[])`,
+            [filedIds],
+          );
+          await pool.query(
+            `DELETE FROM document_link WHERE document_id = ANY($1::uuid[])`,
+            [filedIds],
+          );
+          await pool.query(
+            `DELETE FROM document WHERE document_id = ANY($1::uuid[])`,
+            [filedIds],
+          );
+        },
+      );
+
       await t.test('files a lease declared as a lease', async () => {
         const body = upload(
           { unit: unitId, type: 'lease', tenancy: '' },
@@ -688,6 +930,13 @@ describe('evidence · the upload route', () => {
         },
       );
     } finally {
+      await pool
+        .query(
+          `DELETE FROM asset WHERE source_document_id IN (
+             SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
+          [`gs://${BUCKET}/%`],
+        )
+        .catch(() => {});
       for (const hash of hashes) {
         await pool
           .query(
@@ -731,6 +980,15 @@ describe('evidence · the upload route', () => {
           )
           .catch(() => {});
       }
+      await pool
+        .query(
+          `DELETE FROM asset WHERE space_id IN (
+             SELECT space_id FROM space s
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [CITY, ADDRESS],
+        )
+        .catch(() => {});
       await pool
         .query(
           `DELETE FROM unit WHERE unit_id IN (

@@ -200,7 +200,10 @@ describe('estate · נכסים, tab create and mint', () => {
       assert.match(listed.body, /<span dir="ltr">13<\/span>/);
       assert.match(listed.body, /<span dir="ltr">14<\/span>/);
       assert.match(listed.body, /<span dir="ltr">52<\/span>/);
-      assert.match(listed.body, /דירות · <span dir="ltr">5<\/span>/);
+      assert.match(
+        listed.body,
+        /דירות<span class="n"><span dir="ltr">5<\/span>/,
+      );
 
       const collision = await client.inject({
         method: 'POST',
@@ -250,10 +253,12 @@ describe('estate · נכסים, tab create and mint', () => {
     try {
       const rail = await client.inject({ method: 'GET', url: '/estate' });
       assert.equal(rail.statusCode, 200);
-      assert.match(rail.body, />בניינים</);
+      assert.match(rail.body, /<h1>בניינים<\/h1>/);
+      assert.doesNotMatch(rail.body, /nav-label">בניינים</);
+      assert.doesNotMatch(rail.body, /data-dest="estate"/);
       assert.match(rail.body, /href="\/estate\/inventory"/);
       assert.match(rail.body, />נכסים</);
-      assert.match(rail.body, /href="\/estate"/);
+      assert.doesNotMatch(rail.body, /href="\/estate"/);
 
       const form = await client.inject({
         method: 'GET',
@@ -368,25 +373,44 @@ describe('estate · נכסים, tab create and mint', () => {
       assert.match(detail.body, /<span dir="ltr">10<\/span>/);
       assert.match(detail.body, /<span dir="ltr">50<\/span>/);
       assert.match(detail.body, /<span dir="ltr">7<\/span>/);
-      assert.match(detail.body, /דירות · <span dir="ltr">3<\/span>/);
-      assert.match(detail.body, /דירות פנויות · <span dir="ltr">3<\/span>/);
-      assert.match(detail.body, /חניות · <span dir="ltr">2<\/span>/);
-      assert.match(detail.body, /חניות פנויות · <span dir="ltr">2<\/span>/);
-      assert.match(detail.body, /מחסנים · <span dir="ltr">1<\/span>/);
-      assert.match(detail.body, /מחסנים פנויים · <span dir="ltr">1<\/span>/);
       assert.match(
         detail.body,
-        /<span dir="ltr">10<\/span><span class="chip">פנויה<\/span>/,
+        /דירות<span class="n"><span dir="ltr">3<\/span>/,
       );
       assert.match(
         detail.body,
-        /<span dir="ltr">50<\/span><span class="chip">פנויה<\/span>/,
+        /דירות פנויות<\/span><span class="stat-value"><span dir="ltr">3<\/span>/,
       );
       assert.match(
         detail.body,
-        /<span dir="ltr">7<\/span><span class="chip">פנויה<\/span>/,
+        /חניות<span class="n"><span dir="ltr">2<\/span>/,
       );
-      const technical = detail.body.split('<h2>חללים טכניים</h2>')[1] ?? '';
+      assert.match(
+        detail.body,
+        /חניות פנויות<\/span><span class="stat-value"><span dir="ltr">2<\/span>/,
+      );
+      assert.match(
+        detail.body,
+        /מחסנים<span class="n"><span dir="ltr">1<\/span>/,
+      );
+      assert.match(detail.body, /<span dir="ltr">1<\/span> פנויים/);
+      assert.match(
+        detail.body,
+        /<span class="no"><span dir="ltr">10<\/span><\/span><span class="state"><span class="dot is-hollow"><\/span>פנויה<\/span>/,
+      );
+      assert.match(
+        detail.body,
+        /<span class="no"><span dir="ltr">50<\/span><\/span><span class="state"><span class="dot is-hollow"><\/span>פנויה<\/span>/,
+      );
+      assert.match(
+        detail.body,
+        /<span class="no"><span dir="ltr">7<\/span><\/span><span class="state"><span class="dot is-hollow"><\/span>פנוי<\/span>/,
+      );
+      const technical =
+        detail.body
+          .split('חללים טכניים<span class="n"')[1]
+          ?.split('<details')[0] ?? '';
+      assert.notEqual(technical, '');
       assert.doesNotMatch(technical, /chip/);
       assert.doesNotMatch(detail.body, /דמי שכירות/);
       assert.doesNotMatch(detail.body, /תום חוזה/);
@@ -594,9 +618,13 @@ describe('estate · נכסים, tab create and mint', () => {
         url: `/estate/inventory/${buildingId}`,
       });
       assert.equal(detail.statusCode, 200);
-      assert.match(detail.body, /<span dir="ltr">12A<\/span>/);
+      assert.match(detail.body, /<span class="no">12A<\/span>/);
       assert.match(detail.body, /לובי/);
-      const shared = detail.body.split('<h2>שטחים משותפים</h2>')[1] ?? '';
+      const shared =
+        detail.body
+          .split('שטחים משותפים<span class="n"')[1]
+          ?.split('<details')[0] ?? '';
+      assert.notEqual(shared, '');
       assert.doesNotMatch(shared, /chip/);
       assert.doesNotMatch(detail.body, /הוספת חללים/);
       assert.doesNotMatch(detail.body, /מקום משותף/);
@@ -736,36 +764,42 @@ describe('estate · נכסים, tab create and mint', () => {
         url: `/estate/inventory/${buildingId}`,
       });
       assert.equal(page.statusCode, 200);
-      assert.match(page.body, /דירות פנויות · <span dir="ltr">2<\/span>/);
-      assert.match(page.body, /חניות פנויות · <span dir="ltr">1<\/span>/);
-      assert.match(page.body, /מחסנים פנויים · <span dir="ltr">1<\/span>/);
       assert.match(
         page.body,
-        /<span dir="ltr">10<\/span><span class="chip">מאוכלסת<\/span>/,
+        /דירות פנויות<\/span><span class="stat-value"><span dir="ltr">2<\/span>/,
       );
       assert.match(
         page.body,
-        /<span dir="ltr">11<\/span><span class="chip">פנויה<\/span>/,
+        /חניות פנויות<\/span><span class="stat-value"><span dir="ltr">1<\/span>/,
+      );
+      assert.match(page.body, /<span dir="ltr">1<\/span> פנויים/);
+      assert.match(
+        page.body,
+        /<span class="no"><span dir="ltr">10<\/span><\/span><span class="state"><span class="dot"><\/span>מושכרת<\/span>/,
       );
       assert.match(
         page.body,
-        /<span dir="ltr">12<\/span><span class="chip">פנויה<\/span>/,
+        /<span class="no"><span dir="ltr">11<\/span><\/span><span class="state"><span class="dot is-hollow"><\/span>פנויה<\/span>/,
       );
       assert.match(
         page.body,
-        /<span dir="ltr">50<\/span><span class="chip">תפוסה<\/span>/,
+        /<span class="no"><span dir="ltr">12<\/span><\/span><span class="state"><span class="dot is-hollow"><\/span>פנויה<\/span>/,
       );
       assert.match(
         page.body,
-        /<span dir="ltr">51<\/span><span class="chip">פנויה<\/span>/,
+        /<span class="no"><span dir="ltr">50<\/span><\/span><span class="state"><span class="dot"><\/span>תפוסה<\/span>/,
       );
       assert.match(
         page.body,
-        /<span dir="ltr">7<\/span><span class="chip">תפוסה<\/span>/,
+        /<span class="no"><span dir="ltr">51<\/span><\/span><span class="state"><span class="dot is-hollow"><\/span>פנויה<\/span>/,
       );
       assert.match(
         page.body,
-        /<span dir="ltr">8<\/span><span class="chip">פנויה<\/span>/,
+        /<span class="no"><span dir="ltr">7<\/span><\/span><span class="state"><span class="dot"><\/span>תפוס<\/span>/,
+      );
+      assert.match(
+        page.body,
+        /<span class="no"><span dir="ltr">8<\/span><\/span><span class="state"><span class="dot is-hollow"><\/span>פנוי<\/span>/,
       );
       assert.doesNotMatch(page.body, /דמי שכירות/);
 
@@ -807,7 +841,14 @@ describe('estate · נכסים, tab create and mint', () => {
         /<span dir="ltr">1<\/span><\/span><span class="sub">מעלית<\/span>/,
       );
       assert.doesNotMatch(block, /דמי שכירות/);
-      assert.match(block, new RegExp(`/estate/buildings/${buildingId}`));
+      assert.match(
+        block,
+        new RegExp(`href="/estate/inventory/${buildingId}"[^>]*>לדף הבניין`),
+      );
+      assert.doesNotMatch(
+        block,
+        new RegExp(`href="/estate/buildings/${buildingId}"`),
+      );
       assert.match(
         block,
         new RegExp(`/estate/inventory/${buildingId}#more-spaces`),
@@ -1013,12 +1054,15 @@ describe('estate · נכסים, tab create and mint', () => {
         url: `/estate/inventory/${buildingId}`,
       });
       assert.equal(detail.statusCode, 200);
-      assert.match(detail.body, /דירות פנויות · <span dir="ltr">2<\/span>/);
       assert.match(
         detail.body,
-        /<span dir="ltr">13<\/span><span class="chip">מאוכלסת<\/span>/,
+        /דירות פנויות<\/span><span class="stat-value"><span dir="ltr">2<\/span>/,
       );
-      assert.doesNotMatch(detail.body, /חוזה בטיוטה|מושכרת|בסיום/);
+      assert.match(
+        detail.body,
+        /<span class="no"><span dir="ltr">13<\/span><\/span><span class="state"><span class="dot"><\/span>מושכרת<\/span>/,
+      );
+      assert.doesNotMatch(detail.body, /חוזה בטיוטה|בסיום|מאוכלסת/);
 
       const expiring = await client.inject({
         method: 'GET',
@@ -1222,11 +1266,19 @@ describe('estate · נכסים, tab create and mint', () => {
       });
       assert.equal(filed.statusCode, 409);
       assert.match(filed.json().message, /document/);
-      await pool.query('DELETE FROM document_link WHERE document_id = $1', [
-        documentId,
-      ]);
-      await pool.query('DELETE FROM document WHERE document_id = $1', [
-        documentId,
+      // The type key is stable across runs. A crashed earlier run can leave a
+      // document under it, and the upsert above returns that same type, so
+      // every document of it — and its links — has to go before the type can.
+      const filedTypeId = type.rows[0]?.document_type_id;
+      await pool.query(
+        `DELETE FROM document_link
+          WHERE document_id IN (
+            SELECT document_id FROM document WHERE document_type_id = $1
+          )`,
+        [filedTypeId],
+      );
+      await pool.query('DELETE FROM document WHERE document_type_id = $1', [
+        filedTypeId,
       ]);
       await pool.query('DELETE FROM document_type WHERE type_key = $1', [
         filedType,
@@ -1384,9 +1436,12 @@ describe('estate · נכסים, tab create and mint', () => {
         }).toString(),
       });
       assert.equal(pump.statusCode, 303);
-      const shared = page.body.split('<h2>שטחים משותפים</h2>')[1] ?? '';
+      const shared =
+        page.body
+          .split('שטחים משותפים<span class="n"')[1]
+          ?.split('<details')[0] ?? '';
       assert.match(shared, /לובי/);
-      assert.doesNotMatch(shared.split('<h2>')[0] ?? shared, /chip/);
+      assert.doesNotMatch(shared, /chip/);
       const list = await client.inject({
         method: 'GET',
         url: '/estate/inventory',
@@ -1498,6 +1553,222 @@ describe('estate · נכסים, tab create and mint', () => {
       );
       assert.equal(events.rowCount, 0);
     } finally {
+      await cleanup(pool);
+      await signOutAll(pool, DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('the נכסים building page carries the building', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({ pool, version: '9.9.9-test' });
+    await signOutAll(pool, DOMAIN);
+    await cleanup(pool);
+    const admin = await signIn(pool, systemClock, {
+      email: `page@${DOMAIN}`,
+      role: 'ADMIN',
+    });
+    const operator = await signIn(pool, systemClock, {
+      email: `page-ops@${DOMAIN}`,
+      role: 'OPERATOR',
+    });
+    const viewer = await signIn(pool, systemClock, {
+      email: `page-view@${DOMAIN}`,
+      role: 'VIEWER',
+    });
+    const client = asOperator(app, admin);
+    const typeKey = `inventory-page-${DOMAIN}`;
+    try {
+      const created = await client.inject({
+        method: 'POST',
+        url: '/estate/inventory',
+        headers: FORM,
+        payload: mintForm({
+          warranty_end_date: '2028-03-01',
+          gush: '10812',
+          helka: '77',
+          building_number: '12',
+          unit_count: '2',
+          unit_first: '1',
+          parking_count: '1',
+          parking_first: '101',
+          storage_count: '0',
+          storage_first: '',
+          elevator_count: '0',
+        }),
+      });
+      assert.equal(created.statusCode, 303);
+      const buildingId = String(created.headers.location ?? '')
+        .split('/')
+        .at(-1);
+      const units = await pool.query<{ space_id: string; name: string }>(
+        `SELECT space_id, name FROM space
+          WHERE building_id = $1 AND space_kind = 'UNIT'
+          ORDER BY name`,
+        [buildingId],
+      );
+      const full = units.rows.find((row) => row.name === '1');
+      const sparse = units.rows.find((row) => row.name === '2');
+      assert.ok(full && sparse);
+      await pool.query(`UPDATE space SET floor = '2' WHERE space_id = $1`, [
+        full.space_id,
+      ]);
+      await pool.query(
+        `UPDATE unit SET rooms = 3.5, area_sqm = 72.5 WHERE unit_id = $1`,
+        [full.space_id],
+      );
+      const bay = await pool.query<{ space_id: string }>(
+        `SELECT space_id FROM space
+          WHERE building_id = $1 AND space_kind = 'PARKING'`,
+        [buildingId],
+      );
+      const bayId = bay.rows[0]?.space_id ?? '';
+      const type = await pool.query<{ document_type_id: string }>(
+        `INSERT INTO document_type (
+           document_type_id, type_key, label_he, label_en, verification_terms, is_active
+         ) VALUES ($1, $2, 'טופס 4', NULL, NULL, true)
+         ON CONFLICT (type_key) DO UPDATE SET label_he = EXCLUDED.label_he
+         RETURNING document_type_id`,
+        [newId(), typeKey],
+      );
+      const documentId = newId();
+      await pool.query(
+        `INSERT INTO document (
+           document_id, document_type_id, storage_uri, file_hash,
+           ingested_at, verification_verdict
+         ) VALUES ($1, $2, $3, $4, $5, 'unguarded')`,
+        [
+          documentId,
+          type.rows[0]?.document_type_id,
+          `gs://x/${documentId}.pdf`,
+          `hash-${documentId}`,
+          new Date('2021-03-10T12:00:00Z'),
+        ],
+      );
+      await pool.query(
+        `INSERT INTO document_link (document_id, entity_type, entity_id, link_role)
+         VALUES ($1, 'BUILDING', $2, 'EVIDENCE')`,
+        [documentId, buildingId],
+      );
+
+      const page = await client.inject({
+        method: 'GET',
+        url: `/estate/inventory/${buildingId}`,
+      });
+      assert.equal(page.statusCode, 200);
+      assert.match(page.body, /href="\/estate\/inventory">← נכסים/);
+      assert.match(page.body, /<h1>[^<]*בניין נכסים/);
+      assert.match(page.body, /class="chip is-ok"[^>]*>פעיל/);
+      assert.match(page.body, /רחוב נכסים 9, עיר נכסים/);
+      assert.match(
+        page.body,
+        new RegExp(
+          `href="/estate/buildings/${buildingId}/units/new"[^>]*>[\\s\\S]*דירה חדשה`,
+        ),
+      );
+      assert.match(page.body, /href="\/documents\/new"[^>]*>הוספת מסמך/);
+      assert.match(page.body, /יחידות דיור<\/span><span class="stat-value"/);
+      assert.match(page.body, /מאוכלסות היום/);
+      assert.match(page.body, /דירות פנויות<\/span><span class="stat-value"/);
+      assert.match(page.body, /חניות פנויות<\/span><span class="stat-value"/);
+      assert.match(page.body, /פרטי הבניין/);
+      assert.match(page.body, /מסירה/);
+      assert.match(page.body, /2025-03-01/);
+      assert.match(page.body, /תום תקופת הבדק/);
+      assert.match(page.body, /2028-03-01/);
+      assert.match(page.body, /גוש/);
+      assert.match(page.body, /10812/);
+      assert.match(page.body, /חלקה/);
+      assert.match(page.body, />77</);
+      assert.match(page.body, /מספר בניין/);
+      assert.doesNotMatch(page.body, /<dt>מכרז<\/dt>/);
+      const tileOf = (unitId: string) =>
+        page.body
+          .split(`href="/estate/units/${unitId}"`)[1]
+          ?.split('</a>')[0] ?? '';
+      const flat = tileOf(full.space_id);
+      assert.match(
+        flat,
+        /קומה[\s\S]*2[\s\S]*3\.5[\s\S]*חד׳[\s\S]*72\.5[\s\S]*מ״ר/,
+      );
+      const bare = tileOf(sparse.space_id);
+      assert.match(bare, /0[\s\S]*חד׳/);
+      assert.doesNotMatch(bare ?? '', /קומה|מ״ר/);
+      assert.match(
+        page.body,
+        new RegExp(`href="/estate/units/${full.space_id}"`),
+      );
+      assert.match(
+        page.body,
+        /<details class="drill kind glass is-raised" open>[\s\S]*דירות/,
+      );
+      assert.match(page.body, /חניות ומחסנים ללא שיוך/);
+      assert.match(
+        page.body,
+        new RegExp(`action="/estate/spaces/${bayId}/remove"`),
+      );
+      assert.match(page.body, /מסמכי הבניין/);
+      assert.match(page.body, /טופס 4/);
+      assert.match(
+        page.body,
+        new RegExp(`href="/documents/${documentId}/read"`),
+      );
+      assert.match(page.body, /<details class="manage glass">/);
+      assert.doesNotMatch(page.body, /<details class="manage glass" open>/);
+      const manage = page.body.split('<details class="manage glass">')[1] ?? '';
+      assert.match(manage, /id="more-spaces"/);
+      assert.match(manage, /id="shared"/);
+      assert.match(
+        manage,
+        new RegExp(`/estate/inventory/spaces/${full.space_id}/remove`),
+      );
+
+      const removed = await client.inject({
+        method: 'POST',
+        url: `/estate/spaces/${bayId}/remove`,
+        headers: FORM,
+        payload: '',
+      });
+      assert.equal(removed.statusCode, 303);
+      assert.equal(removed.headers.location, `/estate/inventory/${buildingId}`);
+
+      const filed = await asOperator(app, operator).inject({
+        method: 'GET',
+        url: `/estate/inventory/${buildingId}`,
+      });
+      assert.match(filed.body, /הוספת מסמך/);
+      assert.doesNotMatch(filed.body, /דירה חדשה/);
+      assert.doesNotMatch(filed.body, /עריכת המלאי/);
+
+      const reading = await asOperator(app, viewer).inject({
+        method: 'GET',
+        url: `/estate/inventory/${buildingId}`,
+      });
+      assert.doesNotMatch(reading.body, /דירה חדשה/);
+      assert.doesNotMatch(reading.body, /הוספת מסמך/);
+      assert.doesNotMatch(reading.body, /עריכת המלאי/);
+      assert.doesNotMatch(reading.body, /הסרה/);
+    } finally {
+      await pool.query(
+        `DELETE FROM document_link WHERE document_id IN (
+           SELECT d.document_id FROM document d
+           JOIN document_type t ON t.document_type_id = d.document_type_id
+           WHERE t.type_key = $1)`,
+        [typeKey],
+      );
+      await pool.query(
+        `DELETE FROM document WHERE document_type_id IN (
+           SELECT document_type_id FROM document_type WHERE type_key = $1)`,
+        [typeKey],
+      );
+      await pool.query('DELETE FROM document_type WHERE type_key = $1', [
+        typeKey,
+      ]);
       await cleanup(pool);
       await signOutAll(pool, DOMAIN);
       await app.close();

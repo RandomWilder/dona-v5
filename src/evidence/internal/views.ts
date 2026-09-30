@@ -308,7 +308,7 @@ export function renderUploadPage(screen: UploadScreen): string {
   const { unit, types, lettings } = screen;
   const body = h`
     <div>
-      <a class="back" href="/estate/buildings/${unit.building_id}">← ${unit.building_name}</a>
+      <a class="back" href="/estate/inventory/${unit.building_id}">← ${unit.building_name}</a>
       <h1>הוספת מסמך</h1>
       ${unitLine(unit)}
     </div>
@@ -367,7 +367,7 @@ export function renderUploadPage(screen: UploadScreen): string {
       </div>
       <div class="form-actions">
         <button class="btn btn-primary" type="submit">שמירת המסמך</button>
-        <a href="/estate/buildings/${unit.building_id}">ביטול</a>
+        <a href="/estate/inventory/${unit.building_id}">ביטול</a>
       </div>
     </form>`;
   return shell(
@@ -1320,7 +1320,7 @@ export function renderFiledPage(screen: FiledScreen): string {
   const { unit, type, verification } = screen;
   const body = h`
     <div>
-      <a class="back" href="/estate/buildings/${unit.building_id}">← ${unit.building_name}</a>
+      <a class="back" href="/estate/inventory/${unit.building_id}">← ${unit.building_name}</a>
       <h1>המסמך נשמר</h1>
       ${unitLine(unit)}
     </div>
@@ -1387,7 +1387,7 @@ export function renderFiledPage(screen: FiledScreen): string {
           : h``
       }
       <a class="btn btn-secondary" href="/documents/new?unit=${unit.unit_id}">הוספת מסמך נוסף</a>
-      <a href="/estate/buildings/${unit.building_id}">חזרה לבניין</a>
+      <a href="/estate/inventory/${unit.building_id}">חזרה לבניין</a>
     </div>`;
   return shell('דונה דום — המסמך נשמר', body, screen.nav);
 }
@@ -1409,7 +1409,7 @@ export interface SeedScreen {
 }
 
 export function renderSeedPage(screen: SeedScreen): string {
-  const back = `/estate/buildings/${screen.buildingId}`;
+  const back = `/estate/inventory/${screen.buildingId}`;
   const body = h`
     <div>
       <a class="back" href="${back}">← ${screen.buildingName}</a>
@@ -1469,7 +1469,7 @@ export interface SeededScreen {
 }
 
 export function renderSeededPage(screen: SeededScreen): string {
-  const back = `/estate/buildings/${screen.buildingId}`;
+  const back = `/estate/inventory/${screen.buildingId}`;
   const body = h`
     <div>
       <a class="back" href="${back}">← ${screen.buildingName}</a>
@@ -1638,7 +1638,7 @@ function extractedSection(screen: ReadScreen) {
 }
 
 export function renderReadPage(screen: ReadScreen): string {
-  const back = `/estate/buildings/${screen.buildingId}`;
+  const back = `/estate/inventory/${screen.buildingId}`;
   // **The transcript is withheld below the permission. Slice 6.6, rewritten at #102.** 6.5 found an
   // operator reading a ת.ז. off a word-box `title`. There is no overlay now. The per-page text is
   // this system's transcription of the paper, so it is shown only when `mayReadIdentifiers` is true.
@@ -2373,7 +2373,7 @@ function valueCell(screen: FieldsScreen, row: ExtractedRow): Html {
 export function renderFieldsPage(screen: FieldsScreen): string {
   const back = screen.unitId
     ? `/estate/units/${screen.unitId}`
-    : `/estate/buildings/${screen.buildingId}`;
+    : `/estate/inventory/${screen.buildingId}`;
   const shown = screen.mayReadIdentifiers
     ? screen.rows
     : screen.rows.filter((row) => !isIdentifierField(row.fieldKey));

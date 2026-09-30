@@ -106,7 +106,10 @@ describe('estate · the routes', () => {
       await t.test('the root is an index of the screens', async () => {
         const response = await client.inject({ method: 'GET', url: '/' });
         assert.equal(response.statusCode, 200);
-        assert.match(response.body, /href="\/estate"/);
+        assert.match(response.body, /href="\/estate\/inventory"/);
+        assert.match(response.body, />נכסים</);
+        assert.doesNotMatch(response.body, /href="\/estate"/);
+        assert.doesNotMatch(response.body, /nav-label">בניינים</);
         assert.match(response.body, /href="\/estate\/expiring"/);
         assert.match(response.body, /href="\/estate\/incomplete"/);
         assert.match(response.body, /href="\/estate\/search"/);
@@ -163,6 +166,16 @@ describe('estate · the routes', () => {
           assert.match(response.body, /דירה <span dir="ltr">12A<\/span>/);
           assert.match(response.body, /מסמכים/);
           assert.match(response.body, /אין מסמכים בתיק זה עדיין/);
+          assert.match(
+            response.body,
+            new RegExp(
+              `href="/estate/inventory/${buildingId}"[^>]*>← בניין בדיקה`,
+            ),
+          );
+          assert.doesNotMatch(
+            response.body,
+            new RegExp(`href="/estate/buildings/${buildingId}"`),
+          );
           assert.doesNotMatch(response.body, /יומן שינויים/);
           assert.match(
             response.body,
@@ -210,6 +223,14 @@ describe('estate · the routes', () => {
           /text\/html; charset=utf-8/,
         );
         assert.match(found.body, /בניין בדיקה/);
+        assert.match(
+          found.body,
+          new RegExp(`href="/estate/inventory/${buildingId}"`),
+        );
+        assert.doesNotMatch(
+          found.body,
+          new RegExp(`href="/estate/buildings/${buildingId}"`),
+        );
         assert.doesNotMatch(found.body, /data-office-retrieval="unit"/);
         assert.doesNotMatch(found.body, /data-office-retrieval="building"/);
       });
@@ -936,6 +957,296 @@ describe('estate · building retrieval panel', () => {
 });
 
 // ---------------------------------------------------------------------------------------------
+// #169. The same Building thread on the נכסים building page. Old building posts stay where they are.
+// ---------------------------------------------------------------------------------------------
+
+describe('estate · inventory building retrieval panel', () => {
+  it('asks on the נכסים page, shares the Building thread with the old page, and clears only that thread', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      embedder: createFakeEmbedder(embeddingColumnDimensions),
+      extractor: createFakeExtractor((request) => {
+        if (request.name === 'office_tools') {
+          return { search: true, list: false };
+        }
+        return { answers: false, text: '', hit_indexes: [] };
+      }),
+    });
+    await signOutAll(pool, ASK_DOMAIN);
+    await askCleanup(pool);
+    const viewer = await signIn(pool, systemClock, {
+      email: `view@${ASK_DOMAIN}`,
+      role: 'VIEWER',
+    });
+    const other = await signIn(pool, systemClock, {
+      email: `ops@${ASK_DOMAIN}`,
+      role: 'OPERATOR',
+    });
+    const asViewer = asOperator(app, viewer);
+    const asOther = asOperator(app, other);
+    try {
+      await importEstate(pool, askPlan);
+      const place = await pool.query<{
+        unit_id: string;
+        building_id: string;
+      }>(
+        `SELECT u.unit_id, b.building_id FROM unit u
+         JOIN space s ON s.space_id = u.unit_id
+         JOIN building b ON b.building_id = s.building_id
+         WHERE b.city = $1 AND b.address_line = $2`,
+        [ASK_CITY, ASK_ADDRESS],
+      );
+      const unitId = place.rows[0]?.unit_id ?? '';
+      const buildingId = place.rows[0]?.building_id ?? '';
+      const inventoryPath = `/estate/inventory/${buildingId}`;
+      const buildingPath = `/estate/buildings/${buildingId}`;
+      const unitPath = `/estate/units/${unitId}`;
+      const askUrl = `${inventoryPath}/office-turn`;
+      const clearUrl = `${inventoryPath}/office-thread`;
+      const here = 'מי המתגורר בבניין?';
+      const there = 'מה מספר הגוש?';
+      const unitQuestion = 'מה דמי השכירות?';
+
+      const shown = await asViewer.inject({
+        method: 'GET',
+        url: inventoryPath,
+      });
+      assert.equal(shown.statusCode, 200);
+      assert.match(shown.body, /data-office-retrieval="building"/);
+      assert.doesNotMatch(shown.body, /data-office-retrieval="unit"/);
+      assert.match(
+        shown.body,
+        new RegExp(`action="${inventoryPath}/office-turn"`),
+      );
+      assert.doesNotMatch(
+        shown.body,
+        new RegExp(`action="${buildingPath}/office-turn"`),
+      );
+
+      const list = await asViewer.inject({
+        method: 'GET',
+        url: '/estate/inventory',
+      });
+      assert.equal(list.statusCode, 200);
+      assert.doesNotMatch(list.body, /data-office-retrieval="building"/);
+
+      const anon = await app.inject({
+        method: 'POST',
+        url: askUrl,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(here)}`,
+      });
+      assert.equal(anon.statusCode, 303);
+      assert.equal(anon.headers.location, '/staff/login');
+
+      const noToken = await app.inject({
+        method: 'POST',
+        url: askUrl,
+        headers: {
+          cookie: viewer.cookie,
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        payload: `question=${encodeURIComponent(here)}`,
+      });
+      assert.equal(noToken.statusCode, 403);
+
+      const asked = await asViewer.inject({
+        method: 'POST',
+        url: askUrl,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(here)}`,
+      });
+      assert.equal(asked.statusCode, 303, asked.body.slice(0, 400));
+      assert.equal(asked.headers.location, inventoryPath);
+
+      const painted = await asViewer.inject({
+        method: 'GET',
+        url: inventoryPath,
+      });
+      assert.equal(painted.statusCode, 200);
+      assert.match(painted.body, /מי המתגורר בבניין\?/);
+      assert.match(painted.body, /אין במסמכים האלה תשובה לשאלה הזו/);
+
+      const oldPage = await asViewer.inject({
+        method: 'GET',
+        url: buildingPath,
+      });
+      assert.match(oldPage.body, /מי המתגורר בבניין\?/);
+      assert.match(
+        oldPage.body,
+        new RegExp(`action="${buildingPath}/office-turn"`),
+      );
+
+      const askedThere = await asViewer.inject({
+        method: 'POST',
+        url: `${buildingPath}/office-turn`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(there)}`,
+      });
+      assert.equal(askedThere.statusCode, 303, askedThere.body.slice(0, 400));
+      assert.equal(askedThere.headers.location, buildingPath);
+
+      const back = await asViewer.inject({
+        method: 'GET',
+        url: inventoryPath,
+      });
+      assert.match(back.body, /מי המתגורר בבניין\?/);
+      assert.match(back.body, /מה מספר הגוש\?/);
+
+      const unitAsked = await asViewer.inject({
+        method: 'POST',
+        url: `${unitPath}/office-turn`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(unitQuestion)}`,
+      });
+      assert.equal(unitAsked.statusCode, 303, unitAsked.body.slice(0, 400));
+      assert.equal(unitAsked.headers.location, unitPath);
+
+      const unitPage = await asViewer.inject({
+        method: 'GET',
+        url: unitPath,
+      });
+      assert.match(unitPage.body, /data-office-retrieval="unit"/);
+      assert.match(unitPage.body, /מה דמי השכירות\?/);
+      assert.doesNotMatch(unitPage.body, /מי המתגורר בבניין\?/);
+      assert.match(
+        unitPage.body,
+        new RegExp(`action="${unitPath}/office-turn"`),
+      );
+
+      const inventoryAfterUnit = await asViewer.inject({
+        method: 'GET',
+        url: inventoryPath,
+      });
+      assert.doesNotMatch(inventoryAfterUnit.body, /מה דמי השכירות\?/);
+
+      const neighbour = await asOther.inject({
+        method: 'GET',
+        url: inventoryPath,
+      });
+      assert.equal(neighbour.statusCode, 200);
+      assert.doesNotMatch(neighbour.body, /מי המתגורר בבניין\?/);
+
+      const cleared = await asViewer.inject({
+        method: 'POST',
+        url: clearUrl,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: '',
+      });
+      assert.equal(cleared.statusCode, 303, cleared.body.slice(0, 400));
+      assert.equal(cleared.headers.location, inventoryPath);
+      const after = await asViewer.inject({
+        method: 'GET',
+        url: inventoryPath,
+      });
+      assert.doesNotMatch(after.body, /מי המתגורר בבניין\?/);
+      assert.doesNotMatch(after.body, /מה מספר הגוש\?/);
+      const oldAfter = await asViewer.inject({
+        method: 'GET',
+        url: buildingPath,
+      });
+      assert.doesNotMatch(oldAfter.body, /מי המתגורר בבניין\?/);
+      const unitAfter = await asViewer.inject({
+        method: 'GET',
+        url: unitPath,
+      });
+      assert.match(unitAfter.body, /מה דמי השכירות\?/);
+    } finally {
+      await askCleanup(pool);
+      await signOutAll(pool, ASK_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('stays on the נכסים page when the office cannot answer, and leaves the thread', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const working = buildApp({
+      pool,
+      version: '9.9.9-test',
+      embedder: createFakeEmbedder(embeddingColumnDimensions),
+      extractor: createFakeExtractor((request) => {
+        if (request.name === 'office_tools') {
+          return { search: true, list: false };
+        }
+        return { answers: false, text: '', hit_indexes: [] };
+      }),
+    });
+    const failing = buildApp({
+      pool,
+      version: '9.9.9-test',
+      embedder: createFakeEmbedder(embeddingColumnDimensions),
+      extractor: createFakeExtractor(() => {
+        throw new KernelError('unavailable', 'the extraction call failed');
+      }),
+    });
+    await signOutAll(pool, ASK_DOMAIN);
+    await askCleanup(pool);
+    const viewer = await signIn(pool, systemClock, {
+      email: `view@${ASK_DOMAIN}`,
+      role: 'VIEWER',
+    });
+    const asWorking = asOperator(working, viewer);
+    const asFailing = asOperator(failing, viewer);
+    try {
+      await importEstate(pool, askPlan);
+      const place = await pool.query<{ building_id: string }>(
+        `SELECT b.building_id FROM building b
+         WHERE b.city = $1 AND b.address_line = $2`,
+        [ASK_CITY, ASK_ADDRESS],
+      );
+      const buildingId = place.rows[0]?.building_id ?? '';
+      const inventoryPath = `/estate/inventory/${buildingId}`;
+      const kept = 'מי המתגורר בבניין?';
+      const dropped = 'כמה דירות מאוכלסות?';
+
+      const asked = await asWorking.inject({
+        method: 'POST',
+        url: `${inventoryPath}/office-turn`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(kept)}`,
+      });
+      assert.equal(asked.statusCode, 303, asked.body.slice(0, 400));
+
+      const missed = await asFailing.inject({
+        method: 'POST',
+        url: `${inventoryPath}/office-turn`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(dropped)}`,
+      });
+      assert.equal(missed.statusCode, 303, missed.body.slice(0, 400));
+      assert.equal(missed.headers.location, `${inventoryPath}?ask=unavailable`);
+      assert.doesNotMatch(missed.body, /"code":"unavailable"/);
+
+      const painted = await asWorking.inject({
+        method: 'GET',
+        url: `${inventoryPath}?ask=unavailable`,
+      });
+      assert.equal(painted.statusCode, 200);
+      assert.match(painted.body, /לא ניתן לענות עכשיו/);
+      assert.match(painted.body, /מי המתגורר בבניין\?/);
+      assert.doesNotMatch(painted.body, /כמה דירות מאוכלסות/);
+    } finally {
+      await askCleanup(pool);
+      await signOutAll(pool, ASK_DOMAIN);
+      await working.close();
+      await failing.close();
+      await pool.end();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
 // **Slice 6.1 — flow A11.** An admin creates a building from a screen, which nobody could do until
 // this slice: every building in this system arrived through `npm run import:register` or a fixture.
 //
@@ -999,6 +1310,8 @@ describe('estate · A11, an administrator creates a building', () => {
       assert.match(form.body, /action="\/estate\/buildings"/);
       assert.match(form.body, new RegExp(`value="${admin.csrf}"`));
       assert.match(form.body, /ללא פרויקט/);
+      assert.match(form.body, /<a class="back" href="\/estate\/inventory">/);
+      assert.match(form.body, /<a href="\/estate\/inventory">ביטול<\/a>/);
 
       const created = await client.inject({
         method: 'POST',
@@ -1007,7 +1320,7 @@ describe('estate · A11, an administrator creates a building', () => {
         payload: a11Form(),
       });
       assert.equal(created.statusCode, 303);
-      assert.equal(created.headers.location, '/estate');
+      assert.equal(created.headers.location, '/estate/inventory');
 
       const first = await pool.query<{ building_id: string }>(
         'SELECT building_id FROM building WHERE city = $1',
@@ -1068,6 +1381,48 @@ describe('estate · A11, an administrator creates a building', () => {
       assert.equal(blankParcel.rows[0]?.gush, null);
       assert.equal(blankParcel.rows[0]?.helka, null);
       assert.equal(blankParcel.rows[0]?.building_number, null);
+    } finally {
+      await a11Cleanup(pool);
+      await signOutAll(pool, A11_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('carrying the filing walk still continues into the new apartment', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({ pool, version: '9.9.9-test' });
+    await signOutAll(pool, A11_DOMAIN);
+    await a11Cleanup(pool);
+    const admin = await signIn(pool, systemClock, {
+      email: `admin@${A11_DOMAIN}`,
+      role: 'ADMIN',
+    });
+    const client = asOperator(app, admin);
+    try {
+      const created = await client.inject({
+        method: 'POST',
+        url: '/estate/buildings',
+        headers: FORM,
+        payload: a11Form({
+          unit_number: '4',
+          type: 'lease',
+          next: 'intake',
+        }),
+      });
+      assert.equal(created.statusCode, 303);
+      const row = await pool.query<{ building_id: string }>(
+        'SELECT building_id FROM building WHERE city = $1',
+        [A11_CITY],
+      );
+      assert.equal(
+        created.headers.location,
+        `/estate/buildings/${row.rows[0]?.building_id}/units/new?next=intake&type=lease&unit_number=4`,
+      );
     } finally {
       await a11Cleanup(pool);
       await signOutAll(pool, A11_DOMAIN);
@@ -1386,6 +1741,18 @@ describe('estate · A13, an administrator adds an apartment', () => {
       );
       assert.match(form.body, new RegExp(`value="${admin.csrf}"`));
       assert.match(form.body, /בניין A13/);
+      assert.match(
+        form.body,
+        new RegExp(`href="/estate/inventory/${buildingId}"[^>]*>← בניין A13`),
+      );
+      assert.match(
+        form.body,
+        new RegExp(`href="/estate/inventory/${buildingId}">ביטול`),
+      );
+      assert.doesNotMatch(
+        form.body,
+        new RegExp(`href="/estate/buildings/${buildingId}"`),
+      );
 
       const created = await client.inject({
         method: 'POST',
@@ -1394,7 +1761,7 @@ describe('estate · A13, an administrator adds an apartment', () => {
         payload: a13Form(),
       });
       assert.equal(created.statusCode, 303);
-      assert.equal(created.headers.location, `/estate/buildings/${buildingId}`);
+      assert.equal(created.headers.location, `/estate/inventory/${buildingId}`);
 
       // **One flat and one space (#140).** The `UNIT` space is named by the bare unit number, which
       // is what `src/register/internal/importer.ts` passes — two writers spelling it two ways would
@@ -1787,7 +2154,7 @@ describe('estate · A13, an administrator adds an apartment', () => {
         payload: new URLSearchParams({ _csrf: admin.csrf }).toString(),
       });
       assert.equal(removed.statusCode, 303);
-      assert.equal(removed.headers.location, `/estate/buildings/${buildingId}`);
+      assert.equal(removed.headers.location, `/estate/inventory/${buildingId}`);
       const after = await pool.query<{ space_kind: string; name: string }>(
         `SELECT space_kind, name FROM space WHERE building_id = $1
           ORDER BY space_kind`,

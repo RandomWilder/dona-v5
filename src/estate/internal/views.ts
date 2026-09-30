@@ -736,6 +736,123 @@ function tileName(name: string): Html {
   return /^\d+$/.test(name) ? ltr(name) : h`${name}`;
 }
 
+const INVENTORY_KIND_ORDER = [
+  'UNIT',
+  'PARKING',
+  'STORAGE',
+  'TECHNICAL',
+  'COMMON',
+  'EXTERIOR',
+] as const;
+
+interface InventoryTiles {
+  occupancy: OccupancyByUnit;
+  occupiedParking: ReadonlySet<string>;
+  occupiedStorage: ReadonlySet<string>;
+  states: ReadonlyMap<string, UnitTileState>;
+}
+
+function spaceOccupied(
+  space: InventorySpaceRow,
+  screen: InventoryTiles,
+): boolean {
+  if (space.space_kind === 'UNIT') return screen.occupancy.has(space.space_id);
+  if (space.space_kind === 'PARKING') {
+    return screen.occupiedParking.has(space.space_id);
+  }
+  if (space.space_kind === 'STORAGE') {
+    return screen.occupiedStorage.has(space.space_id);
+  }
+  return false;
+}
+
+function groupSpaces(spaces: readonly InventorySpaceRow[]): {
+  kind: string;
+  rows: InventorySpaceRow[];
+}[] {
+  return INVENTORY_KIND_ORDER.map((kind) => ({
+    kind,
+    rows: spaces.filter((space) => space.space_kind === kind),
+  })).filter((group) => group.rows.length > 0);
+}
+
+/** One tile. The list and the building page share it. `sub` is the flat's measure line. */
+function spaceTile(
+  space: InventorySpaceRow,
+  screen: InventoryTiles,
+  sub: Html = h``,
+): Html {
+  if (space.space_kind === 'UNIT') {
+    const state = screen.states.get(space.space_id) ?? VACANT_TILE;
+    const cls = state.vacant
+      ? 'space-tile is-vacant'
+      : 'space-tile is-occupied';
+    const dot = state.vacant
+      ? h`<span class="dot is-hollow"></span>`
+      : h`<span class="dot"></span>`;
+    return h`<a class="${cls}" href="/estate/units/${space.space_id}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${state.word}</span>${sub}${state.lines.map(tileLetting)}</a>`;
+  }
+  const words = TILE_WORD[space.space_kind];
+  if (words) {
+    const on = spaceOccupied(space, screen);
+    const cls = on ? 'space-tile is-occupied' : 'space-tile is-vacant';
+    const dot = on
+      ? h`<span class="dot"></span>`
+      : h`<span class="dot is-hollow"></span>`;
+    return h`<div class="${cls}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${words[on ? 'on' : 'off']}</span></div>`;
+  }
+  const named =
+    space.space_kind === 'TECHNICAL'
+      ? /^\d+$/.test(space.name)
+        ? 'מעלית'
+        : 'חלל טכני'
+      : space.space_kind === 'COMMON'
+        ? 'שטח משותף'
+        : space.space_kind === 'EXTERIOR'
+          ? 'שטח חוץ'
+          : null;
+  return h`<div class="space-tile"><span class="no">${tileName(space.name)}</span>${
+    named ? h`<span class="sub">${named}</span>` : h``
+  }</div>`;
+}
+
+function kindDrill(
+  group: { kind: string; rows: readonly InventorySpaceRow[] },
+  screen: InventoryTiles,
+  open: boolean,
+  subFor: (space: InventorySpaceRow) => Html = () => h``,
+): Html {
+  const occupied = group.rows.filter((space) =>
+    spaceOccupied(space, screen),
+  ).length;
+  const vacantWord = VACANT_PLURAL[group.kind];
+  const grid =
+    group.kind === 'UNIT'
+      ? 'tile-grid is-states'
+      : group.kind === 'PARKING' || group.kind === 'STORAGE'
+        ? 'tile-grid'
+        : 'tile-grid is-named';
+  return h`<details class="drill kind glass is-raised" ${open ? h`open` : h``}>
+    <summary>${CHEV}<span class="kind-icon">${KIND_ICON[group.kind] ?? h``}</span><span class="kind-name">${label(SPACE_KIND, group.kind)}<span class="n">${ltr(group.rows.length)}</span></span><span class="kind-meta">${
+      vacantWord
+        ? h`${meter(occupied, group.rows.length, `${occupied} מתוך ${group.rows.length}`)}<span>${ltr(group.rows.length - occupied)} ${vacantWord}</span>`
+        : h``
+    }</span></summary>
+    <div class="kind-body"><ul class="${grid}">${group.rows.map((space) => h`<li>${spaceTile(space, screen, subFor(space))}</li>`)}</ul></div>
+  </details>`;
+}
+
+function unitMeasure(unit: UnitRow | undefined): Html {
+  if (!unit) return h``;
+  const bits: Html[] = [];
+  if (unit.floor) bits.push(h`קומה ${ltr(unit.floor)}`);
+  bits.push(h`${ltr(unit.rooms)} חד׳`);
+  if (unit.area_sqm) bits.push(h`${ltr(unit.area_sqm)} מ״ר`);
+  let line = bits[0] ?? h``;
+  for (const bit of bits.slice(1)) line = h`${line} · ${bit}`;
+  return h`<span class="sub">${line}</span>`;
+}
+
 export function renderInventoryPage(screen: {
   buildings: readonly BuildingSummary[];
   spaces: readonly PortfolioSpaceRow[];
@@ -755,57 +872,12 @@ export function renderInventoryPage(screen: {
   const shownIds = new Set(shown.map((building) => building.building_id));
   const spacesOf = (buildingId: string) =>
     screen.spaces.filter((space) => space.building_id === buildingId);
-  const isOccupied = (space: InventorySpaceRow): boolean => {
-    if (space.space_kind === 'UNIT')
-      return screen.occupancy.has(space.space_id);
-    if (space.space_kind === 'PARKING') {
-      return screen.occupiedParking.has(space.space_id);
-    }
-    if (space.space_kind === 'STORAGE') {
-      return screen.occupiedStorage.has(space.space_id);
-    }
-    return false;
-  };
   const unitsOnScreen = screen.spaces.filter(
     (space) => shownIds.has(space.building_id) && space.space_kind === 'UNIT',
   );
   const occupiedOnScreen = unitsOnScreen.filter((space) =>
     screen.occupancy.has(space.space_id),
   ).length;
-  const tile = (space: InventorySpaceRow): Html => {
-    if (space.space_kind === 'UNIT') {
-      const state = screen.states.get(space.space_id) ?? VACANT_TILE;
-      const cls = state.vacant
-        ? 'space-tile is-vacant'
-        : 'space-tile is-occupied';
-      const dot = state.vacant
-        ? h`<span class="dot is-hollow"></span>`
-        : h`<span class="dot"></span>`;
-      return h`<a class="${cls}" href="/estate/units/${space.space_id}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${state.word}</span>${state.lines.map(tileLetting)}</a>`;
-    }
-    const words = TILE_WORD[space.space_kind];
-    if (words) {
-      const on = isOccupied(space);
-      const cls = on ? 'space-tile is-occupied' : 'space-tile is-vacant';
-      const dot = on
-        ? h`<span class="dot"></span>`
-        : h`<span class="dot is-hollow"></span>`;
-      return h`<div class="${cls}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${words[on ? 'on' : 'off']}</span></div>`;
-    }
-    const sub =
-      space.space_kind === 'TECHNICAL'
-        ? /^\d+$/.test(space.name)
-          ? 'מעלית'
-          : 'חלל טכני'
-        : space.space_kind === 'COMMON'
-          ? 'שטח משותף'
-          : space.space_kind === 'EXTERIOR'
-            ? 'שטח חוץ'
-            : null;
-    return h`<div class="space-tile"><span class="no">${tileName(space.name)}</span>${
-      sub ? h`<span class="sub">${sub}</span>` : h``
-    }</div>`;
-  };
   const body = h`
     <div class="glass-stage">
       <header class="page-head">
@@ -850,10 +922,7 @@ export function renderInventoryPage(screen: {
             : h`<div class="drill-list">
                 ${shown.map((building, index) => {
                   const rows = spacesOf(building.building_id);
-                  const grouped = INVENTORY_KIND_ORDER.map((kind) => ({
-                    kind,
-                    rows: rows.filter((space) => space.space_kind === kind),
-                  })).filter((group) => group.rows.length > 0);
+                  const grouped = groupSpaces(rows);
                   const units = rows.filter(
                     (space) => space.space_kind === 'UNIT',
                   );
@@ -885,33 +954,12 @@ export function renderInventoryPage(screen: {
                       </div>
                     </summary>
                     <div class="building-body">
-                      ${grouped.map(
-                        (
+                      ${grouped.map((group, kindIndex) =>
+                        kindDrill(
                           group,
-                          kindIndex,
-                        ) => h`<details class="drill kind glass is-raised" ${
-                          index === 0 && kindIndex === 0 ? h`open` : h``
-                        }>
-                          <summary>${CHEV}<span class="kind-icon">${KIND_ICON[group.kind] ?? h``}</span><span class="kind-name">${label(SPACE_KIND, group.kind)}<span class="n">${ltr(group.rows.length)}</span></span><span class="kind-meta">${
-                            VACANT_PLURAL[group.kind]
-                              ? h`${meter(
-                                  group.rows.filter((space) =>
-                                    isOccupied(space),
-                                  ).length,
-                                  group.rows.length,
-                                  `${group.rows.filter((space) => isOccupied(space)).length} מתוך ${group.rows.length}`,
-                                )}<span>${ltr(group.rows.filter((space) => !isOccupied(space)).length)} ${VACANT_PLURAL[group.kind]}</span>`
-                              : h``
-                          }</span></summary>
-                          <div class="kind-body"><ul class="${
-                            group.kind === 'UNIT'
-                              ? 'tile-grid is-states'
-                              : group.kind === 'PARKING' ||
-                                  group.kind === 'STORAGE'
-                                ? 'tile-grid'
-                                : 'tile-grid is-named'
-                          }">${group.rows.map((space) => h`<li>${tile(space)}</li>`)}</ul></div>
-                        </details>`,
+                          screen,
+                          index === 0 && kindIndex === 0,
+                        ),
                       )}
                       <div class="building-actions">
                         ${
@@ -922,7 +970,7 @@ export function renderInventoryPage(screen: {
                               </div>`
                             : h`<div class="group"></div>`
                         }
-                        <a class="btn btn-secondary btn-sm" href="/estate/buildings/${building.building_id}">לדף הבניין${TO_BUILDING}</a>
+                        <a class="btn btn-secondary btn-sm" href="/estate/inventory/${building.building_id}">לדף הבניין${TO_BUILDING}</a>
                       </div>
                     </div>
                   </details>`;
@@ -1057,190 +1105,257 @@ export function renderNewInventoryPage(screen: {
   return page('דונה דום — בניין חדש', body, screen.nav);
 }
 
-const INVENTORY_KIND_ORDER = [
-  'UNIT',
-  'PARKING',
-  'STORAGE',
-  'TECHNICAL',
-  'COMMON',
-  'EXTERIOR',
-] as const;
+function inventoryFacts(building: BuildingSummary): Html {
+  if (
+    !building.handover_date &&
+    !building.warranty_end_date &&
+    !building.project_code &&
+    !building.gush &&
+    !building.helka &&
+    !building.building_number
+  ) {
+    return h``;
+  }
+  return h`<section class="card glass" aria-labelledby="facts-h">
+    <h2 id="facts-h">פרטי הבניין</h2>
+    <dl class="facts">
+      ${
+        building.handover_date
+          ? h`<div><dt>מסירה</dt><dd>${ltr(building.handover_date)}</dd></div>`
+          : h``
+      }
+      ${
+        building.warranty_end_date
+          ? h`<div><dt>תום תקופת הבדק</dt><dd>${ltr(building.warranty_end_date)}</dd></div>`
+          : h``
+      }
+      ${
+        building.project_code
+          ? h`<div><dt>מכרז</dt><dd>${building.project_name} · ${ltr(building.project_code)}</dd></div>`
+          : h``
+      }
+      ${
+        building.gush
+          ? h`<div><dt>גוש</dt><dd>${ltr(building.gush)}</dd></div>`
+          : h``
+      }
+      ${
+        building.helka
+          ? h`<div><dt>חלקה</dt><dd>${ltr(building.helka)}</dd></div>`
+          : h``
+      }
+      ${
+        building.building_number
+          ? h`<div><dt>מספר בניין</dt><dd>${ltr(building.building_number)}</dd></div>`
+          : h``
+      }
+    </dl>
+  </section>`;
+}
+
+const SPARE_WORD: Record<string, string> = {
+  PARKING: 'חניה',
+  STORAGE: 'מחסן',
+};
+
+function sparePanel(
+  spaces: readonly UnassignedSpaceRow[],
+  write?: { csrf: string },
+): Html {
+  if (spaces.length === 0) return h``;
+  return h`<section class="card glass" aria-labelledby="spare-h">
+    <h2 id="spare-h">חניות ומחסנים ללא שיוך</h2>
+    <p class="lede">
+      אינם משויכים לאף דירה. חניה פנויה היא מצב רגיל; שם שאינו מופיע בתכניות אפשר להסיר.
+    </p>
+    <ul class="spare-list">
+      ${spaces.map((space) => {
+        const word = SPARE_WORD[space.space_kind] ?? space.space_kind;
+        return h`<li><span>${word} ${tileName(space.name)}</span>${
+          write ? removeSpaceForm(space.space_id, write.csrf, word) : h``
+        }</li>`;
+      })}
+    </ul>
+  </section>`;
+}
+
+function inventoryManage(
+  buildingId: string,
+  spaces: readonly InventorySpaceRow[],
+  csrf: string,
+): Html {
+  return h`<details class="manage glass">
+    <summary>עריכת המלאי</summary>
+    <div class="manage-body">
+      <div>
+        <h3>הסרת חלל</h3>
+        <ul class="remove-list">
+          ${spaces.map((space) => {
+            const word =
+              space.space_kind === 'UNIT'
+                ? 'דירה'
+                : (SPARE_WORD[space.space_kind] ?? '');
+            return h`<li><span>${word ? h`${word} ` : h``}${tileName(space.name)}</span>
+              <form class="remove-space" method="post"
+                action="/estate/inventory/spaces/${space.space_id}/remove">
+                ${csrfInput(csrf)}
+                <button class="btn-link" type="submit" aria-label="הסרת ${space.name}">הסרה</button>
+              </form>
+            </li>`;
+          })}
+        </ul>
+      </div>
+      <form class="form-grid" id="more-spaces" method="post"
+        action="/estate/inventory/${buildingId}/spaces">
+        <h3>הוספת חללים</h3>
+        ${csrfInput(csrf)}
+        <div class="form-pair">
+          <div class="form-row">
+            <label for="unit_count">דירות</label>
+            <input id="unit_count" name="unit_count" type="number" min="0" max="999" step="1" value="0" required />
+          </div>
+          <div class="form-row">
+            <label for="unit_first">מספר ראשון</label>
+            <input id="unit_first" name="unit_first" type="number" min="0" step="1" />
+          </div>
+        </div>
+        <div class="form-pair">
+          <div class="form-row">
+            <label for="parking_count">חניות</label>
+            <input id="parking_count" name="parking_count" type="number" min="0" max="999" step="1" value="0" required />
+          </div>
+          <div class="form-row">
+            <label for="parking_first">מספר ראשון</label>
+            <input id="parking_first" name="parking_first" type="number" min="0" step="1" />
+          </div>
+        </div>
+        <div class="form-pair">
+          <div class="form-row">
+            <label for="storage_count">מחסנים</label>
+            <input id="storage_count" name="storage_count" type="number" min="0" max="999" step="1" value="0" required />
+          </div>
+          <div class="form-row">
+            <label for="storage_first">מספר ראשון</label>
+            <input id="storage_first" name="storage_first" type="number" min="0" step="1" />
+          </div>
+        </div>
+        <div class="form-row">
+          <label for="elevator_count">מעליות</label>
+          <input id="elevator_count" name="elevator_count" type="number" min="0" max="999" step="1" value="0" required />
+          <p class="hint">ממשיכות את השמות הטכניים הקיימים. אפס מדלג.</p>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">הוספה</button>
+        </div>
+      </form>
+      <form class="form-grid" id="shared" method="post"
+        action="/estate/inventory/${buildingId}/shared">
+        <h3>מקום משותף</h3>
+        ${csrfInput(csrf)}
+        <div class="form-pair">
+          <div class="form-row">
+            <label for="space_kind">סוג</label>
+            <select id="space_kind" name="space_kind" required>
+              <option value="COMMON">שטח משותף</option>
+              <option value="EXTERIOR">שטח חוץ</option>
+              <option value="TECHNICAL">חלל טכני</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="shared_name">שם</label>
+            <input id="shared_name" name="name" type="text" maxlength="64" required />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">הוספה</button>
+        </div>
+      </form>
+    </div>
+  </details>`;
+}
 
 export function renderInventoryBuildingPage(screen: {
   building: BuildingSummary;
   spaces: readonly InventorySpaceRow[];
+  units: readonly UnitRow[];
+  unassigned: readonly UnassignedSpaceRow[];
   occupancy: OccupancyByUnit;
   occupiedParking: ReadonlySet<string>;
   occupiedStorage: ReadonlySet<string>;
+  states: ReadonlyMap<string, UnitTileState>;
+  documents: readonly FiledDocumentView[];
   nav: Html;
+  mayFile?: boolean;
   write?: { csrf: string };
+  retrieval?: OfficeRetrievalView;
 }): string {
-  const grouped = INVENTORY_KIND_ORDER.map((kind) => ({
-    kind,
-    rows: screen.spaces.filter((space) => space.space_kind === kind),
-  })).filter((group) => group.rows.length > 0);
+  const grouped = groupSpaces(screen.spaces);
+  const byUnit = new Map(screen.units.map((unit) => [unit.unit_id, unit]));
   const unitRows = screen.spaces.filter((space) => space.space_kind === 'UNIT');
   const parkingRows = screen.spaces.filter(
     (space) => space.space_kind === 'PARKING',
   );
-  const storageRows = screen.spaces.filter(
-    (space) => space.space_kind === 'STORAGE',
-  );
-  const vacantUnits = unitRows.filter(
-    (space) => !screen.occupancy.has(space.space_id),
+  const letToday = unitRows.filter((space) =>
+    screen.occupancy.has(space.space_id),
   ).length;
+  const vacantUnits = unitRows.length - letToday;
   const vacantParking = parkingRows.filter(
     (space) => !screen.occupiedParking.has(space.space_id),
   ).length;
-  const vacantStorage = storageRows.filter(
-    (space) => !screen.occupiedStorage.has(space.space_id),
-  ).length;
-  const headlines = [
-    ...grouped.map((group) => ({
-      label: label(SPACE_KIND, group.kind),
-      n: group.rows.length,
-    })),
-    ...(unitRows.length > 0 ? [{ label: 'דירות פנויות', n: vacantUnits }] : []),
-    ...(parkingRows.length > 0
-      ? [{ label: 'חניות פנויות', n: vacantParking }]
-      : []),
-    ...(storageRows.length > 0
-      ? [{ label: 'מחסנים פנויים', n: vacantStorage }]
-      : []),
-  ];
   const body = h`
-    <div>
+    <div class="glass-stage">
       <a class="back" href="/estate/inventory">← נכסים</a>
-      <h1>${screen.building.name}</h1>
-      <p class="lede">${screen.building.address_line}, ${screen.building.city}</p>
+      <header class="page-head">
+        <div>
+          <div class="b-title"><h1>${screen.building.name}</h1><span class="${statusChipClass(screen.building.status)}">${label(BUILDING_STATUS, screen.building.status)}</span></div>
+          <p class="lede">${screen.building.address_line}, ${screen.building.city}</p>
+        </div>
+        <div class="head-actions">
+          ${
+            screen.write
+              ? h`<a class="btn btn-primary" href="/estate/buildings/${screen.building.building_id}/units/new">${PLUS}דירה חדשה</a>`
+              : h``
+          }
+          ${
+            screen.mayFile
+              ? h`<a class="btn btn-secondary" href="/documents/new">הוספת מסמך</a>`
+              : h``
+          }
+        </div>
+      </header>
+      <section class="stat-row" aria-label="סיכום">
+        <div class="stat glass"><span class="stat-label">יחידות דיור</span><span class="stat-value">${ltr(unitRows.length)}</span></div>
+        <div class="stat glass"><span class="stat-label">מאוכלסות היום</span><span class="stat-value">${ltr(letToday)}</span>${meter(letToday, unitRows.length, `${letToday} מתוך ${unitRows.length}`)}</div>
+        <div class="stat glass"><span class="stat-label">דירות פנויות</span><span class="stat-value">${ltr(vacantUnits)}</span></div>
+        <div class="stat glass"><span class="stat-label">חניות פנויות</span><span class="stat-value">${ltr(vacantParking)}</span></div>
+      </section>
+      ${inventoryFacts(screen.building)}
       ${
-        headlines.length === 0
-          ? h``
-          : h`<div class="chips">${headlines.map(
-              (item) =>
-                h`<span class="chip">${item.label} · ${ltr(item.n)}</span>`,
+        grouped.length === 0
+          ? h`<p class="empty-state">אין עדיין חללים בבניין זה.</p>`
+          : h`<div class="drill-list">${grouped.map((group) =>
+              kindDrill(group, screen, group.kind === 'UNIT', (space) =>
+                unitMeasure(byUnit.get(space.space_id)),
+              ),
             )}</div>`
       }
-    </div>
-    ${
-      grouped.length === 0
-        ? h`<p class="empty-state">אין עדיין חללים בבניין זה.</p>`
-        : grouped.map(
-            (group) => h`<section>
-              <h2>${label(SPACE_KIND, group.kind)}</h2>
-              <ul class="index-list">
-                ${group.rows.map(
-                  (space) =>
-                    h`<li>${ltr(space.name)}${inventoryVacancyChip(space, screen)}${
-                      screen.write
-                        ? h`<form class="remove-space" method="post"
-                              action="/estate/inventory/spaces/${space.space_id}/remove">
-                            ${csrfInput(screen.write.csrf)}
-                            <button class="btn-link" type="submit"
-                              aria-label="הסרת ${space.name}">הסרה</button>
-                          </form>`
-                        : h``
-                    }</li>`,
-                )}
-              </ul>
-            </section>`,
-          )
-    }
-    ${
-      screen.write
-        ? h`
-      <section id="more-spaces">
-        <h2>הוספת חללים</h2>
-        <form class="form-grid" method="post"
-          action="/estate/inventory/${screen.building.building_id}/spaces">
-          ${csrfInput(screen.write.csrf)}
-          <div class="form-pair">
-            <div class="form-row">
-              <label for="unit_count">דירות</label>
-              <input id="unit_count" name="unit_count" type="number" min="0" max="999" step="1" value="0" required />
-            </div>
-            <div class="form-row">
-              <label for="unit_first">מספר ראשון</label>
-              <input id="unit_first" name="unit_first" type="number" min="0" step="1" />
-            </div>
-          </div>
-          <div class="form-pair">
-            <div class="form-row">
-              <label for="parking_count">חניות</label>
-              <input id="parking_count" name="parking_count" type="number" min="0" max="999" step="1" value="0" required />
-            </div>
-            <div class="form-row">
-              <label for="parking_first">מספר ראשון</label>
-              <input id="parking_first" name="parking_first" type="number" min="0" step="1" />
-            </div>
-          </div>
-          <div class="form-pair">
-            <div class="form-row">
-              <label for="storage_count">מחסנים</label>
-              <input id="storage_count" name="storage_count" type="number" min="0" max="999" step="1" value="0" required />
-            </div>
-            <div class="form-row">
-              <label for="storage_first">מספר ראשון</label>
-              <input id="storage_first" name="storage_first" type="number" min="0" step="1" />
-            </div>
-          </div>
-          <div class="form-row">
-            <label for="elevator_count">מעליות</label>
-            <input id="elevator_count" name="elevator_count" type="number" min="0" max="999" step="1" value="0" required />
-            <p class="hint">ממשיכות את השמות הטכניים הקיימים. אפס מדלג.</p>
-          </div>
-          <div class="form-actions">
-            <button class="btn btn-primary" type="submit">הוספה</button>
-          </div>
-        </form>
-      </section>
-      <section id="shared">
-        <h2>מקום משותף</h2>
-        <form class="form-grid" method="post"
-          action="/estate/inventory/${screen.building.building_id}/shared">
-          ${csrfInput(screen.write.csrf)}
-          <div class="form-pair">
-            <div class="form-row">
-              <label for="space_kind">סוג</label>
-              <select id="space_kind" name="space_kind" required>
-                <option value="COMMON">שטח משותף</option>
-                <option value="EXTERIOR">שטח חוץ</option>
-                <option value="TECHNICAL">חלל טכני</option>
-              </select>
-            </div>
-            <div class="form-row">
-              <label for="shared_name">שם</label>
-              <input id="shared_name" name="name" type="text" maxlength="64" required />
-            </div>
-          </div>
-          <div class="form-actions">
-            <button class="btn btn-primary" type="submit">הוספה</button>
-          </div>
-        </form>
-      </section>`
-        : h``
-    }`;
-  return page(`דונה דום — ${screen.building.name}`, body, screen.nav);
-}
-
-function inventoryVacancyChip(
-  space: InventorySpaceRow,
-  screen: {
-    occupancy: OccupancyByUnit;
-    occupiedParking: ReadonlySet<string>;
-    occupiedStorage: ReadonlySet<string>;
-  },
-): Html {
-  if (space.space_kind === 'UNIT') {
-    return h`<span class="chip">${screen.occupancy.has(space.space_id) ? 'מאוכלסת' : 'פנויה'}</span>`;
-  }
-  if (space.space_kind === 'PARKING') {
-    return h`<span class="chip">${screen.occupiedParking.has(space.space_id) ? 'תפוסה' : 'פנויה'}</span>`;
-  }
-  if (space.space_kind === 'STORAGE') {
-    return h`<span class="chip">${screen.occupiedStorage.has(space.space_id) ? 'תפוסה' : 'פנויה'}</span>`;
-  }
-  return h``;
+      ${sparePanel(screen.unassigned, screen.write)}
+      ${documentsPanel(screen.documents, 'מסמכי הבניין')}
+      ${
+        screen.write
+          ? inventoryManage(
+              screen.building.building_id,
+              screen.spaces,
+              screen.write.csrf,
+            )
+          : h``
+      }
+    </div>`;
+  const sheet =
+    screen.retrieval === undefined
+      ? body
+      : h`<div class="unit-sheet">${retrievalSplit(body, screen.retrieval)}</div>`;
+  return page(`דונה דום — ${screen.building.name}`, sheet, screen.nav);
 }
 
 /**
@@ -1302,7 +1417,7 @@ function carried(carry: NewBuildingScreen['carry']): Html {
 export function renderNewBuildingPage(screen: NewBuildingScreen): string {
   const body = h`
     <div>
-      <a class="back" href="/estate">← בניינים</a>
+      <a class="back" href="/estate/inventory">← נכסים</a>
       <h1>בניין חדש</h1>
       <p class="lede">
         מפעיל מתייק נייר; מנהל מעצב את הנכס. המסך הזה פתוח למנהל בלבד.
@@ -1399,7 +1514,7 @@ export function renderNewBuildingPage(screen: NewBuildingScreen): string {
       </div>
       <div class="form-actions">
         <button class="btn btn-primary" type="submit">יצירת בניין</button>
-        <a href="/estate">ביטול</a>
+        <a href="/estate/inventory">ביטול</a>
       </div>
     </form>
     <p class="form-note">
@@ -1439,7 +1554,7 @@ export function renderNewUnitPage(screen: NewUnitScreen): string {
   const { building } = screen;
   const body = h`
     <div>
-      <a class="back" href="/estate/buildings/${building.building_id}">← ${building.name}</a>
+      <a class="back" href="/estate/inventory/${building.building_id}">← ${building.name}</a>
       <h1>דירה חדשה</h1>
       <p class="lede">${building.name} · ${building.address_line}, ${building.city}</p>
     </div>
@@ -1525,7 +1640,7 @@ export function renderNewUnitPage(screen: NewUnitScreen): string {
       </div>
       <div class="form-actions">
         <button class="btn btn-primary" type="submit">הוספת דירה</button>
-        <a href="/estate/buildings/${building.building_id}">ביטול</a>
+        <a href="/estate/inventory/${building.building_id}">ביטול</a>
       </div>
     </form>
     <p class="form-note">
@@ -1872,7 +1987,7 @@ export function renderUnitPage(
   });
   const sheet = h`
     <div>
-      <a class="back" href="/estate/buildings/${unit.building_id}">← ${unit.building_name}</a>
+      <a class="back" href="/estate/inventory/${unit.building_id}">← ${unit.building_name}</a>
       <h1>${heading}</h1>
       <p class="lede">${unit.building_name}</p>
       <div class="chips"><span class="chip">${word}</span></div>
@@ -1893,6 +2008,7 @@ export function renderUnitPage(
 
 export interface OfficeRetrievalView {
   csrf: string;
+  path: string;
   bound: { kind: 'unit' | 'building'; id: string };
   thread: readonly {
     question: string;
@@ -1911,12 +2027,8 @@ export interface OfficeRetrievalView {
 export type UnitRetrievalView = OfficeRetrievalView;
 
 function retrievalSplit(sheet: Html, retrieval: OfficeRetrievalView): Html {
-  const prefix =
-    retrieval.bound.kind === 'unit'
-      ? `/estate/units/${retrieval.bound.id}`
-      : `/estate/buildings/${retrieval.bound.id}`;
-  const ask = `${prefix}/office-turn`;
-  const clear = `${prefix}/office-thread`;
+  const ask = `${retrieval.path}/office-turn`;
+  const clear = `${retrieval.path}/office-thread`;
   const toggleId = `${retrieval.bound.kind}-retrieval-toggle`;
   return h`
     <input type="checkbox" id="${toggleId}" class="unit-retrieval-toggle" checked />
@@ -2084,7 +2196,7 @@ export function renderSearchPage(
               ${results.buildings.map(
                 (building) => h`<article class="row-card">
                   ${marker(building.status)}
-                  <a class="card-link" href="/estate/buildings/${building.building_id}">
+                  <a class="card-link" href="/estate/inventory/${building.building_id}">
                     <p class="card-title">
                       <span>${building.name}</span>
                       <span class="chip">${label(BUILDING_STATUS, building.status)}</span>
@@ -2149,7 +2261,7 @@ export function renderExpiringPage(
             ${leases.map(
               (lease) => h`<article class="row-card">
                 ${marker(lease.days_left <= 14 ? 'ALERT' : 'ACTIVE')}
-                <a class="card-link" href="/estate/buildings/${lease.building_id}">
+                <a class="card-link" href="/estate/inventory/${lease.building_id}">
                   <p class="card-title">
                     <span class="unit-no">דירה ${ltr(lease.unit_number)}</span>
                     <span>${lease.building_name}</span>

@@ -616,6 +616,10 @@ const SCREENS: Array<[string, () => string]> = [
         occupancy: occupancy,
         occupiedParking: new Set(['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb']),
         occupiedStorage: new Set(),
+        units: [],
+        unassigned: [],
+        states: new Map(),
+        documents: [],
         nav: NAV_INVENTORY,
         write: { csrf: CSRF },
       }),
@@ -626,6 +630,7 @@ const SCREENS: Array<[string, () => string]> = [
     () =>
       renderBuildingPage(detail, occupancy, NAV, [], undefined, {
         csrf: CSRF,
+        path: `/estate/buildings/${building.building_id}`,
         bound: { kind: 'building', id: building.building_id },
         thread: [
           {
@@ -680,6 +685,7 @@ const SCREENS: Array<[string, () => string]> = [
     () =>
       renderUnitPage(hit, 'מושכרת', [filed], NAV, [], [], {
         csrf: CSRF,
+        path: `/estate/units/${hit.unit_id}`,
         bound: { kind: 'unit', id: hit.unit_id },
         thread: [
           {
@@ -2197,7 +2203,8 @@ describe('shared UI tokens', () => {
       assert.match(html, /id="nav-toggle"/, name);
       assert.match(html, /class="ops-menu"/, name);
       assert.match(html, />תפריט</, name);
-      assert.match(html, /href="\/estate"/, name);
+      assert.doesNotMatch(html, /data-dest="estate"/, name);
+      assert.doesNotMatch(html, /nav-label">בניינים</, name);
       assert.match(html, /href="\/estate\/inventory"/, name);
       assert.match(html, />נכסים</, name);
       assert.match(html, /href="\/estate\/expiring"/, name);
@@ -2241,8 +2248,32 @@ describe('shared UI tokens', () => {
       if (name.startsWith('root · index') || name.startsWith('root · ia')) {
         assert.equal(marked.length, 0, name);
       } else {
-        assert.equal(marked.length, 1, name);
+        assert.ok(marked.length <= 1, name);
       }
+    }
+    // The mark is a property of the rail, not of whichever screen the registry handed it.
+    // Every destination that has an item marks that item. The hidden buildings destination
+    // marks nothing, and the index marks nothing.
+    for (const dest of [
+      'inventory',
+      'documents',
+      'filing',
+      'expiring',
+      'tenancies',
+      'incomplete',
+      'search',
+      'staff',
+      'calls',
+      'settings',
+    ] as const) {
+      const rail = String(signedInChrome(CSRF, dest, true));
+      assert.match(rail, new RegExp(`data-dest="${dest}" aria-current="page"`));
+      assert.equal(rail.match(/aria-current="page"/g)?.length, 1, dest);
+    }
+    for (const dest of ['estate', 'index'] as const) {
+      const rail = String(signedInChrome(CSRF, dest, true));
+      assert.equal(rail.match(/aria-current="page"/g)?.length ?? 0, 0, dest);
+      assert.doesNotMatch(rail, /data-dest="estate"/);
     }
   });
 
@@ -2887,6 +2918,7 @@ describe('shared UI tokens', () => {
   it('paints cited answers under the unit retrieval panel', () => {
     const html = renderUnitPage(hit, 'מושכרת', [filed], NAV, [], [], {
       csrf: CSRF,
+      path: `/estate/units/${hit.unit_id}`,
       bound: { kind: 'unit', id: hit.unit_id },
       thread: [
         {
@@ -2926,6 +2958,7 @@ describe('shared UI tokens', () => {
   it('paints cited answers under the building retrieval panel', () => {
     const html = renderBuildingPage(detail, occupancy, NAV, [], undefined, {
       csrf: CSRF,
+      path: `/estate/buildings/${building.building_id}`,
       bound: { kind: 'building', id: building.building_id },
       thread: [
         {
@@ -2989,21 +3022,35 @@ describe('shared UI tokens', () => {
       occupancy: new Map(),
       occupiedParking: new Set(['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb']),
       occupiedStorage: new Set(),
+      units: [],
+      unassigned: [],
+      states: new Map(),
+      documents: [],
       nav: NAV_INVENTORY,
     });
-    assert.match(html, /דירות פנויות · <span dir="ltr">1<\/span>/);
-    assert.match(html, /חניות פנויות · <span dir="ltr">0<\/span>/);
     assert.match(
       html,
-      /<span dir="ltr">10<\/span><span class="chip">פנויה<\/span>/,
+      /דירות פנויות<\/span><span class="stat-value"><span dir="ltr">1<\/span>/,
     );
     assert.match(
       html,
-      /<span dir="ltr">50<\/span><span class="chip">תפוסה<\/span>/,
+      /חניות פנויות<\/span><span class="stat-value"><span dir="ltr">0<\/span>/,
     );
-    const technical = html.split('<h2>חללים טכניים</h2>')[1] ?? '';
+    assert.match(
+      html,
+      /<span class="no"><span dir="ltr">10<\/span><\/span><span class="state"><span class="dot is-hollow"><\/span>פנויה<\/span>/,
+    );
+    assert.match(
+      html,
+      /<span class="no"><span dir="ltr">50<\/span><\/span><span class="state"><span class="dot"><\/span>תפוסה<\/span>/,
+    );
+    const technical =
+      html.split('חללים טכניים<span class="n"')[1]?.split('<details')[0] ?? '';
+    assert.notEqual(technical, '');
     assert.doesNotMatch(technical, /chip/);
-    const shared = html.split('<h2>שטחים משותפים</h2>')[1] ?? '';
+    const shared =
+      html.split('שטחים משותפים<span class="n"')[1]?.split('<details')[0] ?? '';
+    assert.notEqual(shared, '');
     assert.doesNotMatch(shared, /chip/);
     assert.doesNotMatch(html, /דמי שכירות/);
     assert.doesNotMatch(html, /תום חוזה/);

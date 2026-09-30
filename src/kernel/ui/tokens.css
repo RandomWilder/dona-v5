@@ -1024,20 +1024,6 @@ textarea {
   font-weight: 600;
 }
 
-.glass-stage .tile-grid.is-states > li {
-  display: flex;
-  min-block-size: 0;
-}
-
-.glass-stage .tile-grid.is-states .space-tile {
-  flex: 1;
-  inline-size: 100%;
-  block-size: 100%;
-  min-block-size: 0;
-  align-content: start;
-  overflow: hidden;
-}
-
 .glass-stage .legend {
   display: flex;
   gap: var(--space-4);
@@ -1058,6 +1044,87 @@ textarea {
 
 .glass-stage .legend .is-accent {
   color: var(--color-accent-ink);
+}
+
+.glass-stage .head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.glass-stage .card {
+  padding: var(--space-5) var(--space-6);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.glass-stage .card h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.glass-stage .spare-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.glass-stage .spare-list li,
+.glass-stage .remove-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-3);
+  background: var(--color-surface-card);
+  border: var(--size-hairline) solid var(--color-divider-soft);
+}
+
+.glass-stage .tile-grid.is-states > li {
+  display: flex;
+  min-block-size: 0;
+}
+
+.glass-stage .tile-grid.is-states .space-tile {
+  flex: 1;
+  inline-size: 100%;
+  block-size: 100%;
+  min-block-size: 0;
+  align-content: start;
+  overflow: hidden;
+}
+
+.glass-stage .manage > summary {
+  padding: var(--space-4) var(--space-5);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.glass-stage .manage .manage-body {
+  padding: 0 var(--space-5) var(--space-5);
+  display: grid;
+  gap: var(--space-5);
+}
+
+.glass-stage .manage h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.glass-stage .remove-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 @media (max-width: 839px) {
