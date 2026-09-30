@@ -16,7 +16,12 @@
 //
 // **No client JavaScript, here as everywhere.** The type list is a `<select>` the server filled from
 // the catalogue, the file input is a file input, and the page works with scripting switched off.
-import type { UnitHit } from '../../estate/contract.ts';
+import {
+  renderUncarriedReason,
+  UNCARRIED_MARK,
+  type UncarriedReason,
+  type UnitHit,
+} from '../../estate/contract.ts';
 import { IDENTIFIER_MASK } from '../../kernel/identifier.ts';
 import { onlineOcrByteLimit } from '../../kernel/ocr.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
@@ -883,6 +888,10 @@ export interface LeaseFilingScreen {
   pageCount?: number;
   pagesRead?: number;
   readingPending?: boolean;
+  /** Approved mapped rows that are not on the column, keyed by extracted field. #175. A null reason is the mark alone. */
+  uncarried?: Readonly<Record<string, UncarriedReason | null>>;
+  /** `estate.write`. A missing bay is a link to later-add only for that reader. #176. */
+  mayAddInventory?: boolean;
 }
 
 function filingApproveControl(
@@ -909,6 +918,19 @@ function filingApproveControl(
   </td>`;
 }
 
+function uncarriedNote(
+  uncarried: Readonly<Record<string, UncarriedReason | null>> | undefined,
+  extractedFieldId: string,
+  mayAdd: boolean,
+): Html | null {
+  if (!uncarried || !Object.hasOwn(uncarried, extractedFieldId)) return null;
+  const reason = uncarried[extractedFieldId];
+  const sentence = reason
+    ? h` · ${renderUncarriedReason(reason, mayAdd)}`
+    : h``;
+  return h`${UNCARRIED_MARK}${sentence}`;
+}
+
 function readingGroupOf(fieldKey: string): number {
   const at = READING_GROUPS.findIndex((group) => group.keys.has(fieldKey));
   return at === -1 ? READING_GROUPS.length : at;
@@ -933,8 +955,15 @@ function filingReadingRow(
   const half = missingCurrency(row, rows)
     ? h`<span class="role is-half">חסר מטבע</span>`
     : h``;
+  const note = uncarriedNote(
+    screen.uncarried,
+    row.extractedFieldId,
+    screen.mayAddInventory === true,
+  );
   return h`<tr>
-    <td>${row.labelHe}${nameRole(row, rows)}${half}</td>
+    <td>${row.labelHe}${nameRole(row, rows)}${half}${
+      note ? h`<span class="role">${note}</span>` : h``
+    }</td>
     <td>${
       row.fieldKey.endsWith('_date')
         ? excerpt(ltr(row.value))
@@ -2254,6 +2283,10 @@ export interface FieldsScreen {
   overwrite?: { extractedFieldId: string; existingValue: string };
   pageCount?: number;
   pagesRead?: number;
+  /** Approved mapped rows that are not on the column, keyed by extracted field. #175. A null reason is the mark alone. */
+  uncarried?: Readonly<Record<string, UncarriedReason | null>>;
+  /** `estate.write`. A missing bay is a link to later-add only for that reader. #176. */
+  mayAddInventory: boolean;
 }
 
 const MASK = IDENTIFIER_MASK;
@@ -2473,8 +2506,9 @@ export function renderFieldsPage(screen: FieldsScreen): string {
     <details class="prose-fold">
       <summary>מה בדיוק עושה «אישור», ומה ההבדל בינו לבין «קידום»</summary>
       <p>
-      «אישור» אינו «קידום». אישור אומר שהקריאה נכונה ונשמר על שורת המסמך; קידום מעתיק ערך לעמודה
-      מוקלדת של ההשכרה, ויש לו יעד רק לשני התאריכים. ערך שנקרא לעולם אינו נמחק — תיקון נכתב לצדו.
+      «אישור» של שדה ממופה בחוזה נושא אותו אל ההשכרה, ברגע שההשכרה קיימת. «קידום» נשאר
+      להחלפת ערך שכבר עומד על העמודה, ולערך שהאישור לא הצליח לשאת. ערך שנקרא לעולם אינו
+      נמחק — תיקון נכתב לצדו.
       <strong>קידום מחייב אישור תחילה</strong>, והערך שמועתק הוא הערך שאושר: שורה שלא נחתמה אינה
       מוצגת כאן לקידום.
       </p>
@@ -2486,8 +2520,14 @@ export function renderFieldsPage(screen: FieldsScreen): string {
               screen.overwrite?.extractedFieldId === row.extractedFieldId
                 ? screen.overwrite
                 : undefined;
+            const note = uncarriedNote(
+              screen.uncarried,
+              row.extractedFieldId,
+              screen.mayAddInventory,
+            );
             return h`<form class="form-actions" method="post" action="/documents/${screen.documentId}/promote">
           ${csrfInput(screen.csrf)}
+          ${note ? h`<p class="lede">${note}</p>` : h``}
           ${
             overwrite
               ? h`<p class="lede">העמודה כבר נושאת ${ltr(overwrite.existingValue)}. החלפה היא החלטה, לא ניסיון שני.</p>

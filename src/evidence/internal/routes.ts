@@ -19,7 +19,9 @@ import {
   getBuilding,
   getUnit,
   searchEstate,
+  type UncarriedReason,
   type UnitHit,
+  uncarriedOnDocument,
   upsertUnitRow,
   WARRANTY_YEARS,
 } from '../../estate/contract.ts';
@@ -583,6 +585,17 @@ export function registerDocumentRoutes(
       ...extras,
     });
 
+  const uncarriedReasons = async (
+    documentId: string,
+  ): Promise<Record<string, UncarriedReason | null>> => {
+    const rows = await uncarriedOnDocument(deps.pool, documentId);
+    const out: Record<string, UncarriedReason | null> = {};
+    for (const row of rows) {
+      out[row.extractedFieldId] = row.reason;
+    }
+    return out;
+  };
+
   const tenancyBoundTo = async (documentId: string): Promise<string | null> => {
     const found = await deps.pool.query<{ entity_id: string }>(
       `SELECT entity_id FROM document_link
@@ -660,6 +673,8 @@ export function registerDocumentRoutes(
       mayApprove: can(request.staff?.role ?? null, 'documents.write'),
       ...pageCoverage(filed),
       readingPending: await extractWorkIsOpen(deps.pool, documentId),
+      uncarried: await uncarriedReasons(documentId),
+      mayAddInventory: can(request.staff?.role ?? null, 'estate.write'),
       ...(clash ? { conflictTenancyId: clash } : {}),
     };
   };
@@ -1626,6 +1641,8 @@ export function registerDocumentRoutes(
       unread,
       mayReadIdentifiers: mayReadIdentifiers(request),
       mayApprove: can(request.staff?.role ?? null, 'documents.write'),
+      mayAddInventory: can(request.staff?.role ?? null, 'estate.write'),
+      uncarried: await uncarriedReasons(documentId),
       ...pageCoverage(filed),
       ...extra,
     };
@@ -1798,6 +1815,15 @@ export function registerDocumentRoutes(
               },
             }),
           );
+        }
+        if (
+          error instanceof KernelError &&
+          error.code === 'invalid' &&
+          (error.details?.absent === 'PARKING' ||
+            error.details?.absent === 'STORAGE')
+        ) {
+          html(reply);
+          return renderFieldsPage(await fieldsScreen(request, documentId, {}));
         }
         throw error;
       }

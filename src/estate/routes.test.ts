@@ -2827,7 +2827,7 @@ describe('estate · the tenancy page', () => {
     }
   });
 
-  it('shows rent from the tenancy row and cites approved captures only', async (t) => {
+  it('shows the column rent, an approved rent that was not carried, and no unsigned row', async (t) => {
     const pool = await migratedPoolOrNull();
     if (!pool) {
       t.skip(skipReason);
@@ -2957,7 +2957,9 @@ describe('estate · the tenancy page', () => {
         new RegExp(`href="/documents/${documentId}/read\\?page=3"`),
       );
       assert.doesNotMatch(page.body, /UNAPPROVED-SECRET/);
-      assert.doesNotMatch(page.body, />9999</);
+      assert.match(page.body, />9999</);
+      assert.match(page.body, /מאושר, לא הועבר להשכרה/);
+      assert.match(page.body, /החצי השני של דמי השכירות טרם אושר/);
     } finally {
       await pool.query('ALTER TABLE extracted_field DISABLE TRIGGER USER');
       try {

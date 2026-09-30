@@ -39,6 +39,7 @@ import {
   listOverdueInspections,
   listUnitParkingAssets,
   searchEstate,
+  uncarriedOnTenancy,
 } from './contract.ts';
 import { shohamPlan } from './fixtures/shoham.ts';
 
@@ -509,9 +510,72 @@ describe('estate · approved captures for one letting', () => {
            VALUES ($1, $2, 'tenancy.rent_amount')`,
           [newId(), rentId],
         );
+        const optionId = await declareField(
+          db,
+          documentId,
+          'option_end_date',
+          'תום האופציה',
+        );
+        const bayId = await declareField(
+          db,
+          documentId,
+          'parking_space_number',
+          'מספר חניה',
+        );
+        const storeId = await declareField(
+          db,
+          documentId,
+          'storage_space_number',
+          'מספר מחסן',
+        );
+        const roomsId = await declareField(
+          db,
+          documentId,
+          'rooms',
+          'מספר חדרים',
+        );
+        const floorId = await declareField(db, documentId, 'floor', 'קומה');
+        for (const [fieldId, target] of [
+          [optionId, 'tenancy.option_end_date'],
+          [bayId, 'tenancy.parking_space_id'],
+          [storeId, 'tenancy.storage_space_id'],
+          [roomsId, 'unit.rooms'],
+          [floorId, 'space.floor'],
+        ] as const) {
+          await db.query(
+            `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
+             VALUES ($1, $2, $3)`,
+            [newId(), fieldId, target],
+          );
+        }
+        const place = await db.query<{ building_id: string }>(
+          `SELECT s.building_id
+             FROM tenancy t
+             JOIN space s ON s.space_id = t.unit_id
+            WHERE t.tenancy_id = $1`,
+          [tenancyId],
+        );
+        const buildingId = place.rows[0]?.building_id ?? '';
+        const storeSpace = newId();
+        await db.query(
+          `INSERT INTO space (space_id, building_id, space_kind, name)
+           VALUES ($1, $2, 'STORAGE', '505')`,
+          [storeSpace, buildingId],
+        );
+        await db.query(
+          `UPDATE tenancy
+              SET option_end_date = '2030-01-01', storage_space_id = $2
+            WHERE tenancy_id = $1`,
+          [tenancyId, storeSpace],
+        );
         await capture(db, documentId, depositId, '12000', 3, true);
         await capture(db, documentId, secretId, 'UNAPPROVED-SECRET', 2, false);
         await capture(db, documentId, rentId, '9999', 1, true);
+        await capture(db, documentId, optionId, '2031-09-11', 7, true);
+        await capture(db, documentId, bayId, '552', 7, true);
+        await capture(db, documentId, storeId, '505', 7, true);
+        await capture(db, documentId, roomsId, '9', 7, true);
+        await capture(db, documentId, floorId, '3', 7, true);
         const rows = await listApprovedCapturesForTenancy(db, tenancyId);
         assert.deepEqual(
           rows.map((row) => ({
@@ -529,6 +593,33 @@ describe('estate · approved captures for one letting', () => {
             },
           ],
         );
+        const pending = await uncarriedOnTenancy(db, tenancyId);
+        const byKey = new Map(pending.map((row) => [row.fieldKey, row]));
+        assert.equal(byKey.get('unsigned_note'), undefined);
+        assert.equal(byKey.get('deposit_amount'), undefined);
+        assert.deepEqual(byKey.get('rent_amount')?.reason, {
+          kind: 'rent-half',
+        });
+        assert.equal(byKey.get('rent_amount')?.value, '9999');
+        assert.equal(byKey.get('rent_amount')?.page, 1);
+        assert.deepEqual(byKey.get('option_end_date')?.reason, {
+          kind: 'held',
+          held: '2030-01-01',
+        });
+        assert.deepEqual(byKey.get('parking_space_number')?.reason, {
+          kind: 'missing-space',
+          number: '552',
+          buildingId,
+          buildingName: 'card-building',
+          space: 'PARKING',
+        });
+        assert.equal(byKey.get('storage_space_number'), undefined);
+        assert.deepEqual(byKey.get('rooms')?.reason, {
+          kind: 'held',
+          held: '3.5',
+        });
+        assert.equal(byKey.get('floor')?.value, '3');
+        assert.equal(byKey.get('floor')?.reason, null);
       });
     } finally {
       await pool.end();

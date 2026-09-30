@@ -4,6 +4,50 @@ import { requireText } from '../../kernel/validate.ts';
 import type { BuildingStatus, SpacePlan, UnitPlan } from './plan.ts';
 
 const MAX_COUNT = 999;
+const FIRST_MAX = 99_999;
+
+/** A first number the later-add form will accept, or null when it will not. */
+export function acceptedFirstNumber(value: string): string | null {
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  if (parsed > FIRST_MAX) return null;
+  return String(parsed);
+}
+
+export interface LaterAddPrefill {
+  parkingCount: number;
+  parkingFirst: string;
+  storageCount: number;
+  storageFirst: string;
+  open: boolean;
+}
+
+function queryInt(value: unknown, max: number): number | null {
+  if (typeof value !== 'string') return null;
+  const accepted = acceptedFirstNumber(value);
+  if (accepted === null || Number(accepted) > max) return null;
+  return Number(accepted);
+}
+
+/** Query on the Building page. Anything the form would refuse is left at the empty default. */
+export function laterAddPrefill(query: unknown): LaterAddPrefill {
+  const form = (query ?? {}) as Record<string, unknown>;
+  const parkingCount = queryInt(form.parking_count, MAX_COUNT) ?? 0;
+  const storageCount = queryInt(form.storage_count, MAX_COUNT) ?? 0;
+  const parkingFirst = queryInt(form.parking_first, FIRST_MAX);
+  const storageFirst = queryInt(form.storage_first, FIRST_MAX);
+  return {
+    parkingCount,
+    parkingFirst:
+      parkingCount > 0 && parkingFirst !== null ? String(parkingFirst) : '',
+    storageCount,
+    storageFirst:
+      storageCount > 0 && storageFirst !== null ? String(storageFirst) : '',
+    open:
+      (parkingCount > 0 && parkingFirst !== null) ||
+      (storageCount > 0 && storageFirst !== null),
+  };
+}
 
 export interface InventoryMint {
   spaces: SpacePlan[];

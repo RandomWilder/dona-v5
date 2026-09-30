@@ -93,6 +93,13 @@ export {
 } from './internal/read-model.ts';
 export type { EstateDeps } from './internal/routes.ts';
 export { registerEstateRoutes } from './internal/routes.ts';
+export type { UncarriedField, UncarriedReason } from './internal/uncarried.ts';
+export {
+  renderUncarriedReason,
+  UNCARRIED_MARK,
+  uncarriedOnDocument,
+  uncarriedOnTenancy,
+} from './internal/uncarried.ts';
 export type {
   ActivationQueueView,
   CitedCaptureView,

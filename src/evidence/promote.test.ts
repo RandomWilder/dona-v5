@@ -792,6 +792,7 @@ describe('evidence · promote an extracted field', () => {
       unread: [],
       mayReadIdentifiers: false,
       mayApprove: true,
+      mayAddInventory: false,
     });
     // **Slice 7.4: unsigned, so no button.** `READINGS` carries no approval stamp, and a promotion
     // now requires one — a `קדם` whose only outcome is a refusal is not a control.
@@ -820,6 +821,7 @@ describe('evidence · promote an extracted field', () => {
       unread: [],
       mayReadIdentifiers: false,
       mayApprove: true,
+      mayAddInventory: false,
     });
     assert.match(signed, /קדם · תחילת תקופת השכירות/);
     // An unmapped field is capturable, listed, signable — and still has nowhere to be promoted to.
@@ -848,6 +850,7 @@ describe('evidence · promote an extracted field', () => {
       unread: [],
       mayReadIdentifiers: false,
       mayApprove: true,
+      mayAddInventory: false,
       overwrite: {
         extractedFieldId: READINGS[0]?.extractedFieldId ?? '',
         existingValue: '3.5',
@@ -894,6 +897,7 @@ describe('evidence · promote an extracted field', () => {
       unread: [],
       mayReadIdentifiers: false,
       mayApprove: false,
+      mayAddInventory: false,
       ...coverage,
     });
     assert.match(ledger, /15 מתוך 21/);

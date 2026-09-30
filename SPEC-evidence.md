@@ -532,6 +532,18 @@ was measured, `לא נמדדה` when every field arrived with no score, which is
 the field carries (`tenant_name` is a tenant, `guarantor_name` is a guarantor who is never a service
 contact). Amounts are ordinary rows: after #101 they are.
 
+**#175.** An approved mapped row that has not been carried shows, beside its `קדם`, the mark
+*מאושר, לא הועבר להשכרה* and, when there is one, the same reason the letting page shows. The
+reason is read from current state — the other rent half, a bay or storage number that is not a
+Space in the Building, a different value already on the column or the Unit — and nothing is stored.
+When none of those is the case, the mark stands alone. A16's reading step shows that mark and that
+sentence, and no `קדם` button.
+
+**#176.** Pressing `קדם` while that bay or storage number is still not a Space in the Building
+re-renders this ledger with the sentence beside the row. The answer is the ledger, not a 400. The
+lease does not create the Space. Once an administrator has added it on the נכסים page, the same
+`קדם` carries the number onto the letting.
+
 ### The declaration becomes editable — `POST /documents/types/:typeKey/fields` (slice 7.2)
 
 Flow **A14**. The tab's landing showed the declaration at 7.1 and wrote nothing; this is the write
@@ -768,7 +780,8 @@ journey does not load it. Reveal, promote, and `אישור כל מה שלא סו
 **Track B widens beat 3 from those four rows to the declared set**, and changes nothing else about
 it. It is still one row per value, one אישור, one optional correction; reveal, promote and bulk
 approval stay off this screen, because this journey ends in a draft letting and the ledger remains
-the door for everything else. The five beats are unchanged — המסמך · הדירה · הקריאה · הטיוטה · די
+the door for everything else. An approved row that cannot be carried shows the same reason the
+ledger shows beside `קדם`, and still no button. The five beats are unchanged — המסמך · הדירה · הקריאה · הטיוטה · די
 היום — and everything here lands inside beats 3 and 4. The beats are named for what the operator is
 doing, and reading a lease and signing the reading are one sitting; splitting them would turn the
 workspace the office asked for into two.
@@ -1064,7 +1077,10 @@ confirm page **recomputes from those rows plus `getUnit`**. There is no staging 
 confirms each proposed person's role and selects an existing `terms_profile` from the list tenancy
 already holds, evidence calls `createParty` or `upsertParty`, `upsertTenancy`, `upsertTenancyParty`
 and `promoteExtractedField`. The name is never typed and never invented: an empty list shows that fact
-and withholds the write. Dates, rent and the option end become truth through FieldPromotion.
+and withholds the write. Establishing the draft carries every approved mapped field through
+FieldPromotion: the dates, rent as a pair, the option end, the assigned bay, the assigned storage,
+and rooms and floor on the Unit. A mapped field approved once the letting is bound is carried at
+that approval. A carry that cannot land leaves the row uncarried and does not undo the approval.
 Names do not get a promotion target: party provenance is a `PARTY` / `SIGNATORY` link and the
 `evidence.confirm_lease` audit line.
 
@@ -1493,8 +1509,9 @@ matrix could read cannot be added by seeding a catalogue field.
   **incapable** of becoming business truth: the command returns `invalid` and no typed row moves.
   **From 7.3 those fields are attestable even though they are not promotable** — the approval stamp
   is the verb that reaches them — and from 7.4 a promotion copies `approved_value`, which by then
-  is the only value a promotable row can have. A2's confirm still promotes dates, rent and the
-  option end only: auto-promoting `rooms` would trip occupancy on every confirm.
+  is the only value a promotable row can have. Establishing a lease draft carries every approved
+  mapped field. Rooms and floor land when the Unit holds nothing different; a different value
+  already on the column is left uncarried, so the establishing step does not overwrite a flat's facts.
 - **R9.** Nothing in `src/policy/`, `src/scope/` or `src/calls/` may mention `extracted_field`.
   Isolation, responsibility and the state machine read typed columns. A contract test scans those
   trees.
@@ -1601,11 +1618,15 @@ branched on. Promoting those fields so a screen can render them would spend the 
 display problem.
 
 **`GET /estate/tenancies/:tenancyId` reads approved captures in estate's read model and view.** Rent,
-its currency and the option end come from `tenancy`'s columns. Every other approved capture on paper
-bound to that letting is shown and cited (`/documents/:id/read?page=N`). Unapproved values do not
-appear. Declarations that already have a promotion target do not appear as captures — the typed
-column is their display. The view does not branch on a capture value. Nothing here lives in
-`src/tenancy/internal/` or `src/evidence/internal/`. R9 stays the scan it was.
+its currency, the option end, the assigned bay and the assigned storage come from the letting's
+columns when those columns are set. An approved value that has a promotion target and has not been
+carried is shown anyway: on the fixed row when the column is empty, and beside the column's value
+when that value differs, with the page it was read from and the mark *מאושר, לא הועבר להשכרה*. The
+reason is computed on read — no column and no migration. Rooms and floor appear in the captures
+list with the same mark when uncarried. `—` means nothing was approved. Every other approved
+capture on paper bound to that letting is shown and cited (`/documents/:id/read?page=N`).
+Unapproved values do not appear. The view does not branch on a capture value. Nothing here lives
+in `src/tenancy/internal/` or `src/evidence/internal/`. R9 stays the scan it was.
 
 This screen is the administrator stance. The day it acquires a tenant route, it needs a stance
 (#125).

@@ -24,6 +24,7 @@ import {
   type TenancyBook,
   type TenancyBookRow,
 } from '../../tenancy/contract.ts';
+import type { LaterAddPrefill } from './inventory.ts';
 import type { BuildingStatus, ConditionStatus } from './plan.ts';
 import type {
   BuildingDetail,
@@ -38,6 +39,11 @@ import type {
   UnitRow,
 } from './read-model.ts';
 import { SEARCH_LIMIT } from './read-model.ts';
+import {
+  renderUncarriedReason,
+  UNCARRIED_MARK,
+  type UncarriedReason,
+} from './uncarried.ts';
 import {
   UNIT_WORDS,
   type UnitTileState,
@@ -1183,8 +1189,9 @@ function inventoryManage(
   buildingId: string,
   spaces: readonly InventorySpaceRow[],
   csrf: string,
+  add: LaterAddPrefill,
 ): Html {
-  return h`<details class="manage glass">
+  return h`<details class="manage glass"${add.open ? h` open` : h``}>
     <summary>עריכת המלאי</summary>
     <div class="manage-body">
       <div>
@@ -1222,21 +1229,21 @@ function inventoryManage(
         <div class="form-pair">
           <div class="form-row">
             <label for="parking_count">חניות</label>
-            <input id="parking_count" name="parking_count" type="number" min="0" max="999" step="1" value="0" required />
+            <input id="parking_count" name="parking_count" type="number" min="0" max="999" step="1" value="${String(add.parkingCount)}" required />
           </div>
           <div class="form-row">
             <label for="parking_first">מספר ראשון</label>
-            <input id="parking_first" name="parking_first" type="number" min="0" step="1" />
+            <input id="parking_first" name="parking_first" type="number" min="0" step="1" value="${add.parkingFirst}" />
           </div>
         </div>
         <div class="form-pair">
           <div class="form-row">
             <label for="storage_count">מחסנים</label>
-            <input id="storage_count" name="storage_count" type="number" min="0" max="999" step="1" value="0" required />
+            <input id="storage_count" name="storage_count" type="number" min="0" max="999" step="1" value="${String(add.storageCount)}" required />
           </div>
           <div class="form-row">
             <label for="storage_first">מספר ראשון</label>
-            <input id="storage_first" name="storage_first" type="number" min="0" step="1" />
+            <input id="storage_first" name="storage_first" type="number" min="0" step="1" value="${add.storageFirst}" />
           </div>
         </div>
         <div class="form-row">
@@ -1287,6 +1294,7 @@ export function renderInventoryBuildingPage(screen: {
   nav: Html;
   mayFile?: boolean;
   write?: { csrf: string };
+  add?: LaterAddPrefill;
   retrieval?: OfficeRetrievalView;
 }): string {
   const grouped = groupSpaces(screen.spaces);
@@ -1347,6 +1355,13 @@ export function renderInventoryBuildingPage(screen: {
               screen.building.building_id,
               screen.spaces,
               screen.write.csrf,
+              screen.add ?? {
+                parkingCount: 0,
+                parkingFirst: '',
+                storageCount: 0,
+                storageFirst: '',
+                open: false,
+              },
             )
           : h``
       }
@@ -2536,6 +2551,16 @@ export interface CitedCaptureView {
   labelHe: string;
   value: string;
   page: number;
+  /** Approved, and not on the column or the Unit. The mark is printed; the reason may be absent. */
+  uncarried?: boolean;
+  reason?: UncarriedReason | null;
+}
+
+export interface UncarriedCite {
+  documentId: string;
+  value: string;
+  page: number;
+  reason: UncarriedReason | null;
 }
 
 export interface TenancySheet {
@@ -2556,6 +2581,11 @@ export interface TenancySheet {
   people: readonly TenancyPersonView[];
   documents: readonly FiledDocumentView[];
   captures: readonly CitedCaptureView[];
+  /** Approved rent that is not on the column. Empty when the column is the whole story. */
+  uncarriedRent?: readonly UncarriedCite[];
+  uncarriedOption?: readonly UncarriedCite[];
+  uncarriedBay?: readonly UncarriedCite[];
+  uncarriedStorage?: readonly UncarriedCite[];
   checks: readonly TenancyGateCheckView[];
   canActivate: boolean;
   /** Whether this reader holds `tenancy.write`, so a blocked row may link the end-early form. */
@@ -2564,6 +2594,8 @@ export interface TenancySheet {
   mayWaive: boolean;
   /** Whether this reader holds `documents.write`, so a draft may file its protocol. */
   mayFileProtocol: boolean;
+  /** Whether this reader holds `estate.write`, so a missing bay may link to later-add. */
+  mayAddInventory: boolean;
   /** A sentence from a protocol upload that did not reach confirm. */
   protocolNotice?: string | null;
   activatableOn: string | null;
@@ -2765,6 +2797,33 @@ function rentLine(amount: string | null, currency: string | null): Html {
   if (amount === null) return ltr(currency ?? '');
   if (currency === null) return ltr(amount);
   return h`${ltr(amount)} ${ltr(currency)}`;
+}
+
+function uncarriedReason(
+  reason: UncarriedReason | null | undefined,
+  mayAdd: boolean,
+): Html {
+  if (!reason) return h``;
+  return h` · ${renderUncarriedReason(reason, mayAdd)}`;
+}
+
+function uncarriedCite(row: UncarriedCite, mayAdd: boolean): Html {
+  return h`<a href="/documents/${row.documentId}/read?page=${String(row.page)}">${ltr(row.value)}</a> · עמוד ${ltr(row.page)} · ${UNCARRIED_MARK}${uncarriedReason(row.reason, mayAdd)}`;
+}
+
+function carriedFact(
+  column: Html,
+  pending: readonly UncarriedCite[] | undefined,
+  empty: boolean,
+  mayAdd: boolean,
+): Html {
+  const rows = pending ?? [];
+  if (rows.length === 0) return column;
+  const cites = rows.map(
+    (row, index) => h`${index === 0 ? h`` : h` `}${uncarriedCite(row, mayAdd)}`,
+  );
+  if (empty) return h`${cites}`;
+  return h`${column} ${cites}`;
 }
 
 function optionLine(optionEndDate: string | null): Html {
@@ -2970,24 +3029,48 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
         </div>
         <div>
           <dt>דמי שכירות</dt>
-          <dd>${rentLine(sheet.rentAmount, sheet.rentCurrency)}</dd>
+          <dd>${carriedFact(
+            rentLine(sheet.rentAmount, sheet.rentCurrency),
+            sheet.uncarriedRent,
+            sheet.rentAmount === null && sheet.rentCurrency === null,
+            sheet.mayAddInventory,
+          )}</dd>
         </div>
         <div>
           <dt>תום האופציה</dt>
-          <dd>${optionLine(sheet.optionEndDate)}</dd>
+          <dd>${carriedFact(
+            optionLine(sheet.optionEndDate),
+            sheet.uncarriedOption,
+            sheet.optionEndDate === null,
+            sheet.mayAddInventory,
+          )}</dd>
         </div>
         <div>
           <dt>חניה משויכת</dt>
-          <dd>${sheet.parkingName ? ltr(sheet.parkingName) : h`—`}</dd>
+          <dd>${carriedFact(
+            sheet.parkingName ? ltr(sheet.parkingName) : h`—`,
+            sheet.uncarriedBay,
+            sheet.parkingName === null,
+            sheet.mayAddInventory,
+          )}</dd>
         </div>
         <div>
           <dt>מחסן משויך</dt>
-          <dd>${sheet.storageName ? ltr(sheet.storageName) : h`—`}</dd>
+          <dd>${carriedFact(
+            sheet.storageName ? ltr(sheet.storageName) : h`—`,
+            sheet.uncarriedStorage,
+            sheet.storageName === null,
+            sheet.mayAddInventory,
+          )}</dd>
         </div>
         ${sheet.captures.map(
           (row) => h`<div>
             <dt>${row.labelHe}</dt>
-            <dd><a href="/documents/${row.documentId}/read?page=${String(row.page)}">${ltr(row.value)}</a> · עמוד ${ltr(row.page)}</dd>
+            <dd><a href="/documents/${row.documentId}/read?page=${String(row.page)}">${ltr(row.value)}</a> · עמוד ${ltr(row.page)}${
+              row.uncarried
+                ? h` · ${UNCARRIED_MARK}${uncarriedReason(row.reason, sheet.mayAddInventory)}`
+                : h``
+            }</dd>
           </div>`,
         )}
       </dl>
