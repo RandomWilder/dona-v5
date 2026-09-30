@@ -258,3 +258,7 @@ Closed. All three children are closed. Approving a mapped field on a lease carri
 - [#176](0176-a-missing-bay-routes-to-inventory-add.md) — a missing bay routes to later-add.
 
 The screen was not clicked on :3000. The app asks for a Google sign-in, and filing a made-up lease into the local database was refused. The letting page, the ledger, the reading step and קדם were read through the approval routes. An approved rent or option end that never landed — nothing blocking it, as on the 30 Sep lease — shows the mark on the letting, beside קדם, and on the reading step, with no extra sentence. The staging letting from 30 Sep 2026 is carried by the director after this ships, once bay 552 and storage 505 are added through A17. No next child.
+
+## Comment — 2026-09-30
+
+The director reviewed and clicked `:3000`. Dev has no model and no reader, so a new upload cannot be proved there. The filing path is proved on staging, on a new upload, once this revision is serving.
