@@ -889,6 +889,8 @@ export interface LeaseFilingScreen {
   readingPending?: boolean;
   /** Approved rows that cannot be carried, keyed by extracted field. #175. */
   uncarried?: Readonly<Record<string, UncarriedReason>>;
+  /** `estate.write`. A missing bay is a link to later-add only for that reader. #176. */
+  mayAddInventory?: boolean;
 }
 
 function filingApproveControl(
@@ -942,7 +944,9 @@ function filingReadingRow(
   const stuck = screen.uncarried?.[row.extractedFieldId];
   return h`<tr>
     <td>${row.labelHe}${nameRole(row, rows)}${half}${
-      stuck ? h`<span class="role">${renderUncarriedReason(stuck)}</span>` : h``
+      stuck
+        ? h`<span class="role">${renderUncarriedReason(stuck, screen.mayAddInventory === true)}</span>`
+        : h``
     }</td>
     <td>${
       row.fieldKey.endsWith('_date')
@@ -2265,6 +2269,8 @@ export interface FieldsScreen {
   pagesRead?: number;
   /** Approved rows that cannot be carried, keyed by extracted field. #175. */
   uncarried?: Readonly<Record<string, UncarriedReason>>;
+  /** `estate.write`. A missing bay is a link to later-add only for that reader. #176. */
+  mayAddInventory: boolean;
 }
 
 const MASK = IDENTIFIER_MASK;
@@ -2502,7 +2508,9 @@ export function renderFieldsPage(screen: FieldsScreen): string {
             return h`<form class="form-actions" method="post" action="/documents/${screen.documentId}/promote">
           ${csrfInput(screen.csrf)}
           ${
-            stuck ? h`<p class="lede">${renderUncarriedReason(stuck)}</p>` : h``
+            stuck
+              ? h`<p class="lede">${renderUncarriedReason(stuck, screen.mayAddInventory)}</p>`
+              : h``
           }
           ${
             overwrite

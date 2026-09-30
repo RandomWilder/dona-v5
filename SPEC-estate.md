@@ -672,7 +672,13 @@ behind `—`. When the column is empty, the row shows the approved value, a link
 read from, and the mark *מאושר, לא הועבר להשכרה*, with a reason computed on read from current
 state and stored nowhere: the other rent half is not approved; the named number is not a parking or
 storage Space in this Building, and the sentence names the number and the Building; the column
-already holds a different value, and the sentence names it. When the column already holds a
+already holds a different value, and the sentence names it. **#176.** When the reader holds
+`estate.write`, that missing-Space sentence is a link to the Building's נכסים later-add: one Space
+of that kind, first number the named one, and the add section open. A number the form cannot take
+links to the add section with nothing preselected. A reader without `estate.write` sees the
+sentence and no link. The later-add form reads `parking_count`, `parking_first`, `storage_count`
+and `storage_first` from the query when they are integers it already accepts, and ignores the rest.
+The lease does not create the Space. When the column already holds a
 different value, that value stays and the approved one is shown beside it with the same mark.
 Rooms and floor land on the Unit, so they stay out of those fixed rows and appear in the captures
 list with the same mark when uncarried; a Unit that already holds a different rooms or floor is

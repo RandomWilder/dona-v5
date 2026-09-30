@@ -412,7 +412,9 @@ export async function applyPromotedField(
       name: value,
     });
     if (!place) {
-      throw new KernelError('invalid', assigned.missing);
+      throw new KernelError('invalid', assigned.missing, {
+        absent: assigned.kind,
+      });
     }
     if (current.spaceId !== place.spaceId) {
       if (field === 'parking_space_id') {

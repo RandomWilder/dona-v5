@@ -41,6 +41,7 @@ import {
   inventoryAddFromForm,
   inventoryFromForm,
   inventoryListStatus,
+  laterAddPrefill,
   mintAuditInputs,
   omitExisting,
   refuseExisting,
@@ -1040,6 +1041,7 @@ export function registerEstateRoutes(
         write: can(request.staff?.role ?? null, 'estate.write')
           ? { csrf }
           : undefined,
+        add: laterAddPrefill(request.query),
         retrieval: await officeRetrieval(
           deps.pool,
           request,
@@ -1726,6 +1728,7 @@ export function registerEstateRoutes(
       mayEndEarly: can(request.staff?.role ?? null, 'tenancy.write'),
       mayWaive: can(request.staff?.role ?? null, 'tenancy.write'),
       mayFileProtocol: can(request.staff?.role ?? null, 'documents.write'),
+      mayAddInventory: can(request.staff?.role ?? null, 'estate.write'),
       protocolNotice: protocolNoticeOf(request),
       activatableOn: gate.activatableOn,
       flags: gate.flags,

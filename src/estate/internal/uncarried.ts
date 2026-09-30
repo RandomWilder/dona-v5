@@ -7,6 +7,7 @@
 // name the same fact.
 import { KernelError } from '../../kernel/errors.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
+import { acceptedFirstNumber } from './inventory.ts';
 import type { Queryable } from './plan.ts';
 
 export type UncarriedReason =
@@ -15,6 +16,7 @@ export type UncarriedReason =
   | {
       kind: 'missing-space';
       number: string;
+      buildingId: string;
       buildingName: string;
       space: 'PARKING' | 'STORAGE';
     };
@@ -54,8 +56,28 @@ const RENT_SIBLING: Record<string, { fieldKey: string; target: string }> = {
 
 const ltr = (value: string): Html => h`<span dir="ltr">${value}</span>`;
 
-/** The one-sentence reason, for the letting page, the ledger and the reading step. */
-export function renderUncarriedReason(reason: UncarriedReason): Html {
+function missingSpaceHref(reason: {
+  number: string;
+  buildingId: string;
+  space: 'PARKING' | 'STORAGE';
+}): Html {
+  const section = h`/estate/inventory/${reason.buildingId}#more-spaces`;
+  const first = acceptedFirstNumber(reason.number);
+  if (first === null) return section;
+  if (reason.space === 'PARKING') {
+    return h`/estate/inventory/${reason.buildingId}?parking_count=1&parking_first=${first}#more-spaces`;
+  }
+  return h`/estate/inventory/${reason.buildingId}?storage_count=1&storage_first=${first}#more-spaces`;
+}
+
+/**
+ * The one-sentence reason, for the letting page, the ledger and the reading step.
+ * `mayAdd` is `estate.write`: only then is a missing bay or store a link to later-add.
+ */
+export function renderUncarriedReason(
+  reason: UncarriedReason,
+  mayAdd = false,
+): Html {
   if (reason.kind === 'rent-half') {
     return h`החצי השני של דמי השכירות טרם אושר.`;
   }
@@ -64,7 +86,9 @@ export function renderUncarriedReason(reason: UncarriedReason): Html {
   }
   const noun = reason.space === 'PARKING' ? 'חניה' : 'מחסן';
   const verb = reason.space === 'PARKING' ? 'אינה' : 'אינו';
-  return h`${ltr(reason.number)} ${verb} ${noun} ב${reason.buildingName}.`;
+  const sentence = h`${ltr(reason.number)} ${verb} ${noun} ב${reason.buildingName}.`;
+  if (!mayAdd) return sentence;
+  return h`<a href="${missingSpaceHref(reason)}">${sentence}</a>`;
 }
 
 interface RawRow {
@@ -325,6 +349,7 @@ function decide(
         reason: {
           kind: 'missing-space',
           number: row.value,
+          buildingId: place.buildingId,
           buildingName: place.buildingName,
           space,
         },

@@ -70,6 +70,7 @@ function sheet(over: Partial<TenancySheet> = {}): TenancySheet {
     mayEndEarly: false,
     mayWaive: false,
     mayFileProtocol: false,
+    mayAddInventory: false,
     activatableOn: null,
     handoverDate: null,
     flags: [],
@@ -127,6 +128,7 @@ describe('estate · the tenancy card', () => {
             reason: {
               kind: 'missing-space',
               number: '552',
+              buildingId: unit.building_id,
               buildingName: 'הרב קוק 50',
               space: 'PARKING',
             },

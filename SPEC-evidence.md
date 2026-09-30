@@ -537,6 +537,11 @@ the letting page shows. The reason is read from current state — the other rent
 storage number that is not a Space in the Building, a different value already on the column or the
 Unit — and nothing is stored. A16's reading step shows that sentence and no `קדם` button.
 
+**#176.** Pressing `קדם` while that bay or storage number is still not a Space in the Building
+re-renders this ledger with the sentence beside the row. The answer is the ledger, not a 400. The
+lease does not create the Space. Once an administrator has added it on the נכסים page, the same
+`קדם` carries the number onto the letting.
+
 ### The declaration becomes editable — `POST /documents/types/:typeKey/fields` (slice 7.2)
 
 Flow **A14**. The tab's landing showed the declaration at 7.1 and wrote nothing; this is the write

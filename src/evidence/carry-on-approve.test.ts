@@ -72,6 +72,10 @@ interface Carry {
     headers: { location?: string };
   }>;
   get: (url: string) => Promise<{ statusCode: number; body: string }>;
+  getAs: (
+    who: SignedIn,
+    url: string,
+  ) => Promise<{ statusCode: number; body: string }>;
   rowId: (documentId: string, fieldKey: string) => Promise<string>;
   tenancyId: () => Promise<string>;
   fileBoundLease: (marker: string) => Promise<string>;
@@ -272,6 +276,8 @@ async function withCarry(
       post,
       get: (url) =>
         asOperator(app as never, who).inject({ method: 'GET', url }),
+      getAs: (reader, url) =>
+        asOperator(app as never, reader).inject({ method: 'GET', url }),
       rowId,
       tenancyId: async () => {
         const letting = await pool.query<{ tenancy_id: string }>(
@@ -694,6 +700,180 @@ describe('evidence · approving a mapped lease field carries it', {
           );
           assert.equal(audit.rows[0]?.n, '0');
         }
+      },
+    );
+    if (!ran) t.skip(skipReason);
+  });
+
+  it('a missing bay links to later-add, and קדם stays on the ledger until the bay exists', async (t) => {
+    const address = 'נשיאה 176';
+    const bay = '999';
+    const store = '707';
+    const ran = await withCarry(
+      {
+        tag: 'a176miss',
+        city: 'עיר נשיאה ו',
+        address,
+        findings: [
+          ...opening(address),
+          { field_key: 'parking_space_number', value: bay, word_ids: [8] },
+          { field_key: 'storage_space_number', value: store, word_ids: [9] },
+        ],
+      },
+      async (carry) => {
+        await approveOpening(carry);
+        for (const key of ['parking_space_number', 'storage_space_number']) {
+          const stamped = await carry.post(
+            `/documents/${carry.documentId}/fields/approve`,
+            { extracted_field_id: await carry.rowId(carry.documentId, key) },
+          );
+          assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
+        }
+        const place = await carry.pool.query<{ id: string }>(
+          `SELECT building_id AS id FROM space WHERE space_id = $1`,
+          [carry.unitId],
+        );
+        const buildingId = place.rows[0]?.id ?? '';
+        assert.ok(buildingId);
+        const bayHref = `/estate/inventory/${buildingId}?parking_count=1&parking_first=${bay}#more-spaces`;
+        const storeHref = `/estate/inventory/${buildingId}?storage_count=1&storage_first=${store}#more-spaces`;
+        const tenancyId = await carry.tenancyId();
+        const letting = await carry.get(`/estate/tenancies/${tenancyId}`);
+        assert.equal(letting.statusCode, 200);
+        assert.match(letting.body, /אינה חניה ב/);
+        assert.match(letting.body, /אינו מחסן ב/);
+        assert.match(letting.body, new RegExp(bayHref.replace(/[?]/g, '\\?')));
+        assert.match(
+          letting.body,
+          new RegExp(storeHref.replace(/[?]/g, '\\?')),
+        );
+        const ledger = await carry.get(`/documents/${carry.documentId}/fields`);
+        assert.equal(ledger.statusCode, 200);
+        assert.match(ledger.body, new RegExp(bayHref.replace(/[?]/g, '\\?')));
+        assert.match(ledger.body, new RegExp(storeHref.replace(/[?]/g, '\\?')));
+
+        const viewer = await signIn(carry.pool, fixedClock(ON), {
+          email: 'viewer@a176miss.test',
+          role: 'VIEWER',
+        });
+        const hiddenLetting = await carry.getAs(
+          viewer,
+          `/estate/tenancies/${tenancyId}`,
+        );
+        const hiddenLedger = await carry.getAs(
+          viewer,
+          `/documents/${carry.documentId}/fields`,
+        );
+        assert.match(hiddenLetting.body, /אינה חניה ב/);
+        assert.match(hiddenLedger.body, /אינו מחסן ב/);
+        assert.doesNotMatch(hiddenLetting.body, /parking_count=1/);
+        assert.doesNotMatch(hiddenLedger.body, /storage_count=1/);
+
+        const named = async (kind: string, name: string) => {
+          const rows = await carry.pool.query<{ n: string }>(
+            `SELECT count(*)::text AS n FROM space
+              WHERE building_id = $1 AND space_kind = $2 AND name = $3`,
+            [buildingId, kind, name],
+          );
+          return rows.rows[0]?.n ?? '0';
+        };
+        assert.equal(await named('PARKING', bay), '0');
+        assert.equal(await named('STORAGE', store), '0');
+
+        const stuck = await carry.post(
+          `/documents/${carry.documentId}/promote`,
+          {
+            extracted_field_id: await carry.rowId(
+              carry.documentId,
+              'parking_space_number',
+            ),
+          },
+        );
+        assert.equal(stuck.statusCode, 200, stuck.body.slice(0, 300));
+        assert.match(stuck.body, /אינה חניה ב/);
+        assert.match(stuck.body, /קדם/);
+        assert.doesNotMatch(stuck.body, /"code"/);
+        assert.equal((await column(carry)).parking_name, null);
+        assert.equal(await named('PARKING', bay), '0');
+        const refused = await carry.pool.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM audit_log
+            WHERE action = 'evidence.promote_field' AND subject_id = $1`,
+          [await carry.rowId(carry.documentId, 'parking_space_number')],
+        );
+        assert.equal(refused.rows[0]?.n, '0');
+
+        const form = await carry.get(
+          `/estate/inventory/${buildingId}?parking_count=1&parking_first=${bay}`,
+        );
+        assert.equal(form.statusCode, 200);
+        assert.match(form.body, /<details class="manage glass" open>/);
+        assert.match(form.body, /id="parking_count"[^>]*value="1"/);
+        assert.match(form.body, /id="parking_first"[^>]*value="999"/);
+        assert.match(form.body, /id="storage_count"[^>]*value="0"/);
+
+        const addedBay = await carry.post(
+          `/estate/inventory/${buildingId}/spaces`,
+          {
+            unit_count: '0',
+            parking_count: '1',
+            parking_first: bay,
+            storage_count: '0',
+            elevator_count: '0',
+          },
+        );
+        assert.equal(addedBay.statusCode, 303, addedBay.body.slice(0, 300));
+        assert.equal(await named('PARKING', bay), '1');
+
+        const carriedBay = await carry.post(
+          `/documents/${carry.documentId}/promote`,
+          {
+            extracted_field_id: await carry.rowId(
+              carry.documentId,
+              'parking_space_number',
+            ),
+          },
+        );
+        assert.equal(carriedBay.statusCode, 302, carriedBay.body.slice(0, 300));
+        assert.equal((await column(carry)).parking_name, bay);
+
+        const storeForm = await carry.get(
+          `/estate/inventory/${buildingId}?storage_count=1&storage_first=${store}`,
+        );
+        assert.match(storeForm.body, /id="storage_count"[^>]*value="1"/);
+        assert.match(storeForm.body, /id="storage_first"[^>]*value="707"/);
+        const addedStore = await carry.post(
+          `/estate/inventory/${buildingId}/spaces`,
+          {
+            unit_count: '0',
+            parking_count: '0',
+            storage_count: '1',
+            storage_first: store,
+            elevator_count: '0',
+          },
+        );
+        assert.equal(addedStore.statusCode, 303, addedStore.body.slice(0, 300));
+        const carriedStore = await carry.post(
+          `/documents/${carry.documentId}/promote`,
+          {
+            extracted_field_id: await carry.rowId(
+              carry.documentId,
+              'storage_space_number',
+            ),
+          },
+        );
+        assert.equal(
+          carriedStore.statusCode,
+          302,
+          carriedStore.body.slice(0, 300),
+        );
+        assert.equal((await column(carry)).storage_name, store);
+        assert.equal(await named('STORAGE', store), '1');
+
+        const landed = await carry.get(`/estate/tenancies/${tenancyId}`);
+        assert.match(landed.body, /חניה משויכת[\s\S]{0,200}999/);
+        assert.match(landed.body, /מחסן משויך[\s\S]{0,200}707/);
+        assert.doesNotMatch(landed.body, /parking_count=1/);
+        assert.doesNotMatch(landed.body, /מאושר, לא הועבר להשכרה/);
       },
     );
     if (!ran) t.skip(skipReason);

@@ -956,7 +956,9 @@ rows on a building's detail page keep the binary chip. Rent is not on this list.
 `importEstate`. Names are the bare integer sequence. Elevators are TECHNICAL Spaces `1`…`N`. No
 stub Asset. No stored occupancy. No הצמדה pairing. Re-posting the address updates that Building.
 Later add uses the same count + first-number rule (elevators: count, continuing existing TECHNICAL
-integer names) and refuses a colliding name without overwrite. Later remove deletes an unreferenced
+integer names) and refuses a colliding name without overwrite. **#176.** A missing bay or storage
+number on a lease links here, for a reader who holds `estate.write`, with that kind's count at one
+and its first number the named one, when the form can take that number. Later remove deletes an unreferenced
 Space and refuses, naming why, when a letting, built bay, built storage, Asset, or document still
 points at it. Shared places are kind + typed name onto the same list. No rename-in-place.
 

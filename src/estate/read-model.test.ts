@@ -609,6 +609,7 @@ describe('estate · approved captures for one letting', () => {
         assert.deepEqual(byKey.get('parking_space_number')?.reason, {
           kind: 'missing-space',
           number: '552',
+          buildingId,
           buildingName: 'card-building',
           space: 'PARKING',
         });

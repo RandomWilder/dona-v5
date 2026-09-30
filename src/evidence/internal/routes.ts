@@ -674,6 +674,7 @@ export function registerDocumentRoutes(
       ...pageCoverage(filed),
       readingPending: await extractWorkIsOpen(deps.pool, documentId),
       uncarried: await uncarriedReasons(documentId),
+      mayAddInventory: can(request.staff?.role ?? null, 'estate.write'),
       ...(clash ? { conflictTenancyId: clash } : {}),
     };
   };
@@ -1640,6 +1641,7 @@ export function registerDocumentRoutes(
       unread,
       mayReadIdentifiers: mayReadIdentifiers(request),
       mayApprove: can(request.staff?.role ?? null, 'documents.write'),
+      mayAddInventory: can(request.staff?.role ?? null, 'estate.write'),
       uncarried: await uncarriedReasons(documentId),
       ...pageCoverage(filed),
       ...extra,
@@ -1813,6 +1815,15 @@ export function registerDocumentRoutes(
               },
             }),
           );
+        }
+        if (
+          error instanceof KernelError &&
+          error.code === 'invalid' &&
+          (error.details?.absent === 'PARKING' ||
+            error.details?.absent === 'STORAGE')
+        ) {
+          html(reply);
+          return renderFieldsPage(await fieldsScreen(request, documentId, {}));
         }
         throw error;
       }
