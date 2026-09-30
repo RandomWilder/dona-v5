@@ -587,11 +587,11 @@ export function registerDocumentRoutes(
 
   const uncarriedReasons = async (
     documentId: string,
-  ): Promise<Record<string, UncarriedReason>> => {
+  ): Promise<Record<string, UncarriedReason | null>> => {
     const rows = await uncarriedOnDocument(deps.pool, documentId);
-    const out: Record<string, UncarriedReason> = {};
+    const out: Record<string, UncarriedReason | null> = {};
     for (const row of rows) {
-      if (row.reason) out[row.extractedFieldId] = row.reason;
+      out[row.extractedFieldId] = row.reason;
     }
     return out;
   };

@@ -1217,4 +1217,75 @@ describe('evidence · an approved value that is not on the letting says so', {
     );
     if (!ran) t.skip(skipReason);
   });
+
+  it('says an approved rent and option end that never landed, on the letting and beside קדם', async (t) => {
+    const address = 'נשיאה 173';
+    const ran = await withCarry(
+      {
+        tag: 'a173stuck',
+        city: 'עיר נשיאה ט',
+        address,
+        findings: [
+          ...opening(address),
+          { field_key: 'rent_amount', value: RENT, word_ids: [5] },
+          { field_key: 'rent_currency', value: CURRENCY, word_ids: [6] },
+          { field_key: 'option_end_date', value: OPTION, word_ids: [7] },
+        ],
+      },
+      async (carry) => {
+        for (const key of ['rent_amount', 'rent_currency', 'option_end_date']) {
+          await carry.post(`/documents/filing/${carry.documentId}/approve`, {
+            extracted_field_id: await carry.rowId(carry.documentId, key),
+          });
+        }
+        const reading = await carry.get(
+          `/documents/filing/${carry.documentId}`,
+        );
+        assert.match(reading.body, new RegExp(MARK));
+        assert.match(reading.body, new RegExp(RENT));
+        assert.match(reading.body, new RegExp(OPTION));
+        assert.doesNotMatch(reading.body, />קדם/);
+
+        await approveOpening(carry);
+        assert.equal((await column(carry)).rent_amount, RENT);
+        assert.equal((await column(carry)).option_end_date, OPTION);
+
+        const tenancyId = await carry.tenancyId();
+        const ids = await Promise.all(
+          ['rent_amount', 'rent_currency', 'option_end_date'].map((key) =>
+            carry.rowId(carry.documentId, key),
+          ),
+        );
+        await inTransaction(carry.pool, async (db) => {
+          await db.query("SELECT set_config('dona.promoting', 'on', true)");
+          await db.query(
+            `UPDATE extracted_field
+                SET promoted_to = NULL, promoted_by = NULL, promoted_at = NULL
+              WHERE extracted_field_id = ANY($1::uuid[])`,
+            [ids],
+          );
+          await db.query(
+            `UPDATE tenancy
+                SET rent_amount = NULL, rent_currency = NULL, option_end_date = NULL
+              WHERE tenancy_id = $1`,
+            [tenancyId],
+          );
+        });
+
+        const page = await carry.get(`/estate/tenancies/${tenancyId}`);
+        assert.match(page.body, new RegExp(RENT));
+        assert.match(page.body, new RegExp(OPTION));
+        assert.match(page.body, new RegExp(MARK));
+        assert.doesNotMatch(page.body, /<dt>דמי שכירות<\/dt>\s*<dd>—/);
+        assert.doesNotMatch(page.body, /<dt>תום האופציה<\/dt>\s*<dd>—/);
+
+        const ledger = await carry.get(`/documents/${carry.documentId}/fields`);
+        assert.match(ledger.body, new RegExp(MARK));
+        assert.match(ledger.body, new RegExp(RENT));
+        assert.match(ledger.body, new RegExp(OPTION));
+        assert.match(ledger.body, />קדם/);
+      },
+    );
+    if (!ran) t.skip(skipReason);
+  });
 });

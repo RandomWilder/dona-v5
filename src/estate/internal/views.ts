@@ -39,7 +39,11 @@ import type {
   UnitRow,
 } from './read-model.ts';
 import { SEARCH_LIMIT } from './read-model.ts';
-import { renderUncarriedReason, type UncarriedReason } from './uncarried.ts';
+import {
+  renderUncarriedReason,
+  UNCARRIED_MARK,
+  type UncarriedReason,
+} from './uncarried.ts';
 import {
   UNIT_WORDS,
   type UnitTileState,
@@ -2794,8 +2798,6 @@ function rentLine(amount: string | null, currency: string | null): Html {
   if (currency === null) return ltr(amount);
   return h`${ltr(amount)} ${ltr(currency)}`;
 }
-
-const UNCARRIED_MARK = 'מאושר, לא הועבר להשכרה';
 
 function uncarriedReason(
   reason: UncarriedReason | null | undefined,

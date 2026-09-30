@@ -54,6 +54,9 @@ const RENT_SIBLING: Record<string, { fieldKey: string; target: string }> = {
   },
 };
 
+/** The mark on an approved value that is not on the letting. The reason, when there is one, follows it. */
+export const UNCARRIED_MARK = 'מאושר, לא הועבר להשכרה';
+
 const ltr = (value: string): Html => h`<span dir="ltr">${value}</span>`;
 
 function missingSpaceHref(reason: {

@@ -18,6 +18,7 @@
 // the catalogue, the file input is a file input, and the page works with scripting switched off.
 import {
   renderUncarriedReason,
+  UNCARRIED_MARK,
   type UncarriedReason,
   type UnitHit,
 } from '../../estate/contract.ts';
@@ -887,8 +888,8 @@ export interface LeaseFilingScreen {
   pageCount?: number;
   pagesRead?: number;
   readingPending?: boolean;
-  /** Approved rows that cannot be carried, keyed by extracted field. #175. */
-  uncarried?: Readonly<Record<string, UncarriedReason>>;
+  /** Approved mapped rows that are not on the column, keyed by extracted field. #175. A null reason is the mark alone. */
+  uncarried?: Readonly<Record<string, UncarriedReason | null>>;
   /** `estate.write`. A missing bay is a link to later-add only for that reader. #176. */
   mayAddInventory?: boolean;
 }
@@ -917,6 +918,19 @@ function filingApproveControl(
   </td>`;
 }
 
+function uncarriedNote(
+  uncarried: Readonly<Record<string, UncarriedReason | null>> | undefined,
+  extractedFieldId: string,
+  mayAdd: boolean,
+): Html | null {
+  if (!uncarried || !Object.hasOwn(uncarried, extractedFieldId)) return null;
+  const reason = uncarried[extractedFieldId];
+  const sentence = reason
+    ? h` · ${renderUncarriedReason(reason, mayAdd)}`
+    : h``;
+  return h`${UNCARRIED_MARK}${sentence}`;
+}
+
 function readingGroupOf(fieldKey: string): number {
   const at = READING_GROUPS.findIndex((group) => group.keys.has(fieldKey));
   return at === -1 ? READING_GROUPS.length : at;
@@ -941,12 +955,14 @@ function filingReadingRow(
   const half = missingCurrency(row, rows)
     ? h`<span class="role is-half">חסר מטבע</span>`
     : h``;
-  const stuck = screen.uncarried?.[row.extractedFieldId];
+  const note = uncarriedNote(
+    screen.uncarried,
+    row.extractedFieldId,
+    screen.mayAddInventory === true,
+  );
   return h`<tr>
     <td>${row.labelHe}${nameRole(row, rows)}${half}${
-      stuck
-        ? h`<span class="role">${renderUncarriedReason(stuck, screen.mayAddInventory === true)}</span>`
-        : h``
+      note ? h`<span class="role">${note}</span>` : h``
     }</td>
     <td>${
       row.fieldKey.endsWith('_date')
@@ -2267,8 +2283,8 @@ export interface FieldsScreen {
   overwrite?: { extractedFieldId: string; existingValue: string };
   pageCount?: number;
   pagesRead?: number;
-  /** Approved rows that cannot be carried, keyed by extracted field. #175. */
-  uncarried?: Readonly<Record<string, UncarriedReason>>;
+  /** Approved mapped rows that are not on the column, keyed by extracted field. #175. A null reason is the mark alone. */
+  uncarried?: Readonly<Record<string, UncarriedReason | null>>;
   /** `estate.write`. A missing bay is a link to later-add only for that reader. #176. */
   mayAddInventory: boolean;
 }
@@ -2504,14 +2520,14 @@ export function renderFieldsPage(screen: FieldsScreen): string {
               screen.overwrite?.extractedFieldId === row.extractedFieldId
                 ? screen.overwrite
                 : undefined;
-            const stuck = screen.uncarried?.[row.extractedFieldId];
+            const note = uncarriedNote(
+              screen.uncarried,
+              row.extractedFieldId,
+              screen.mayAddInventory,
+            );
             return h`<form class="form-actions" method="post" action="/documents/${screen.documentId}/promote">
           ${csrfInput(screen.csrf)}
-          ${
-            stuck
-              ? h`<p class="lede">${renderUncarriedReason(stuck, screen.mayAddInventory)}</p>`
-              : h``
-          }
+          ${note ? h`<p class="lede">${note}</p>` : h``}
           ${
             overwrite
               ? h`<p class="lede">העמודה כבר נושאת ${ltr(overwrite.existingValue)}. החלפה היא החלטה, לא ניסיון שני.</p>

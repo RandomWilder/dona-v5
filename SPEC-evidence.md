@@ -532,10 +532,12 @@ was measured, `לא נמדדה` when every field arrived with no score, which is
 the field carries (`tenant_name` is a tenant, `guarantor_name` is a guarantor who is never a service
 contact). Amounts are ordinary rows: after #101 they are.
 
-**#175.** An approved mapped row that has not been carried shows, beside its `קדם`, the same reason
-the letting page shows. The reason is read from current state — the other rent half, a bay or
-storage number that is not a Space in the Building, a different value already on the column or the
-Unit — and nothing is stored. A16's reading step shows that sentence and no `קדם` button.
+**#175.** An approved mapped row that has not been carried shows, beside its `קדם`, the mark
+*מאושר, לא הועבר להשכרה* and, when there is one, the same reason the letting page shows. The
+reason is read from current state — the other rent half, a bay or storage number that is not a
+Space in the Building, a different value already on the column or the Unit — and nothing is stored.
+When none of those is the case, the mark stands alone. A16's reading step shows that mark and that
+sentence, and no `קדם` button.
 
 **#176.** Pressing `קדם` while that bay or storage number is still not a Space in the Building
 re-renders this ledger with the sentence beside the row. The answer is the ledger, not a 400. The

@@ -96,6 +96,7 @@ export { registerEstateRoutes } from './internal/routes.ts';
 export type { UncarriedField, UncarriedReason } from './internal/uncarried.ts';
 export {
   renderUncarriedReason,
+  UNCARRIED_MARK,
   uncarriedOnDocument,
   uncarriedOnTenancy,
 } from './internal/uncarried.ts';

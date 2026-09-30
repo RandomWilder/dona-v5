@@ -672,7 +672,8 @@ behind `—`. When the column is empty, the row shows the approved value, a link
 read from, and the mark *מאושר, לא הועבר להשכרה*, with a reason computed on read from current
 state and stored nowhere: the other rent half is not approved; the named number is not a parking or
 storage Space in this Building, and the sentence names the number and the Building; the column
-already holds a different value, and the sentence names it. **#176.** When the reader holds
+already holds a different value, and the sentence names it. When none of those is the case, the
+mark stands alone. **#176.** When the reader holds
 `estate.write`, that missing-Space sentence is a link to the Building's נכסים later-add: one Space
 of that kind, first number the named one, and the add section open. A number the form cannot take
 links to the add section with nothing preselected. A reader without `estate.write` sees the
