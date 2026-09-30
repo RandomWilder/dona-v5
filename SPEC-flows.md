@@ -809,11 +809,17 @@ verb. **Approving is a stamp on the evidence row; promoting is still the copy on
    dataset this flow exists to produce. A viewer who *may* read one still has to ask: the row is
    flagged for everybody, so a ת.ז. is revealed and signed on its own or not at all.
 
-**What A15 does not do.** It does not promote — a promotion is still 4.3's command, and 7.4 ruled
-that its targets stay the two dates. **What 7.4 did change is the direction of the dependency: a
-promotion now requires the stamp this flow writes**, and copies `approved_value`. A2's and A3's
-confirm screens write that stamp themselves for the dates they promote, so the operator who never
-opens the ledger is still signing what the reader produced — on a screen that shows it. It does not create a row for a
+**What A15 does not do.** It does not leave a mapped field on a `lease` approved and uncarried once
+a letting is bound. Approval of a mapped `lease` field carries it, by 4.3's promotion command, with
+the approver as the promoter. The approval that first establishes the draft carries every mapped
+field already approved, not only the two dates. A carry that cannot land — the other rent half still
+unapproved, a bay or storage number that is not a Space in the Building, a different value already on
+the column or the Unit — leaves that row uncarried and does not fail the approval: the approve route
+redirects as it does today. `lease_amendment` is untouched; A3's confirm still signs and carries
+`new_end_date`. **What 7.4 still holds is the direction of the dependency: a promotion requires the
+stamp this flow writes**, and copies `approved_value`. A2's and A3's confirm screens write that stamp
+themselves for the dates they promote, so the operator who never opens the ledger is still signing
+what the reader produced — on a screen that shows it. It does not create a row for a
 declaration the reader found nothing for: an `extracted_field` with no page and no bbox is refused by
 `0017`, and whether a hand-typed value is evidence at all is a ruling and not a button. It does not
 change what the reader looks for — that is A14, one screen earlier.
@@ -869,12 +875,15 @@ stay on A1 / A12 / **מסמכים**.
    disabled create door.
 3. **הקריאה.** New screens under this tab, not `/documents/:id/fields`. The stamps that **open** a
    letting: names and dates (the required reading). Not a clone of A15's full ledger, bulk
-   approve-rest, promote, or reveal. Those remain on A15 for every other door. Approving those stamps
+   approve-rest, a `קדם` button, or reveal. Those remain on A15. Approving those stamps
    writes the draft **at the same moment as #110 / A2** — unit, dates, at least one tenant, from the
    approved reading. This tab then shows beat 4. It does not teleport to the Tenancy page.
-   **Track B widens this step to the whole declared set** and changes none of the sentence above:
-   still one row per value, one אישור, one optional correction, and still no reveal, promote or
-   bulk approval. The rows are **grouped in the view** — dates, money, people, place — which is a
+   **Track B widens this step to the whole declared set** and changes none of the sentence above
+   except the promote clause: still one row per value, one אישור, one optional correction, and still
+   no reveal, no `קדם` button, and no bulk approval. **Approving a mapped field on a `lease` carries
+   it** when a letting is bound, and the approval that first establishes the draft carries every
+   mapped field already approved — the same rule as A15. A carry that cannot land does not fail the
+   approval. The rows are **grouped in the view** — dates, money, people, place — which is a
    thing the screen does and not a thing the catalogue declares. **The household is read by role**,
    so an identifier arrives already attached to the name it belongs to and no step asks an operator
    to pair them. **A money pair missing its currency is marked here and approvable anyway**: this

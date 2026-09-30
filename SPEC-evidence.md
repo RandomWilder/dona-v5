@@ -1064,7 +1064,10 @@ confirm page **recomputes from those rows plus `getUnit`**. There is no staging 
 confirms each proposed person's role and selects an existing `terms_profile` from the list tenancy
 already holds, evidence calls `createParty` or `upsertParty`, `upsertTenancy`, `upsertTenancyParty`
 and `promoteExtractedField`. The name is never typed and never invented: an empty list shows that fact
-and withholds the write. Dates, rent and the option end become truth through FieldPromotion.
+and withholds the write. Establishing the draft carries every approved mapped field through
+FieldPromotion: the dates, rent as a pair, the option end, the assigned bay, the assigned storage,
+and rooms and floor on the Unit. A mapped field approved once the letting is bound is carried at
+that approval. A carry that cannot land leaves the row uncarried and does not undo the approval.
 Names do not get a promotion target: party provenance is a `PARTY` / `SIGNATORY` link and the
 `evidence.confirm_lease` audit line.
 
@@ -1493,8 +1496,9 @@ matrix could read cannot be added by seeding a catalogue field.
   **incapable** of becoming business truth: the command returns `invalid` and no typed row moves.
   **From 7.3 those fields are attestable even though they are not promotable** — the approval stamp
   is the verb that reaches them — and from 7.4 a promotion copies `approved_value`, which by then
-  is the only value a promotable row can have. A2's confirm still promotes dates, rent and the
-  option end only: auto-promoting `rooms` would trip occupancy on every confirm.
+  is the only value a promotable row can have. Establishing a lease draft carries every approved
+  mapped field. Rooms and floor land when the Unit holds nothing different; a different value
+  already on the column is left uncarried, so the establishing step does not overwrite a flat's facts.
 - **R9.** Nothing in `src/policy/`, `src/scope/` or `src/calls/` may mention `extracted_field`.
   Isolation, responsibility and the state machine read typed columns. A contract test scans those
   trees.

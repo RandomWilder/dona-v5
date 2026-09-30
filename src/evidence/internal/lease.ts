@@ -749,7 +749,46 @@ export function leaseReadingIsReady(rows: readonly ExtractedRow[]): boolean {
 }
 
 /**
- * After the ledger is stamped, write the draft. Returns null when the reading is not ready yet.
+ * Carry every approved, mapped, still-uncarried row on a lease.
+ *
+ * Each row is its own promotion. A `conflict` or `invalid` from one row — the
+ * other rent half, a bay that is not a Space, a column that already holds
+ * something else — leaves that row uncarried and does not fail the approval
+ * that asked for the carry. `lease_amendment` never reaches here.
+ */
+async function carryApprovedLease(
+  deps: LeaseDeps,
+  spec: { documentId: string; promotedBy: string },
+): Promise<void> {
+  const rows = await listExtractedFields(deps.db, spec.documentId);
+  for (const row of rows) {
+    if (row.approvedAt === null || row.promotionTarget === null) continue;
+    if (row.promotedTo !== null) continue;
+    try {
+      await promoteExtractedField(
+        { db: deps.db, audit: deps.audit, clock: deps.clock },
+        {
+          extractedFieldId: row.extractedFieldId,
+          promotedBy: spec.promotedBy,
+        },
+      );
+    } catch (error) {
+      if (
+        error instanceof KernelError &&
+        (error.code === 'conflict' || error.code === 'invalid')
+      ) {
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
+/**
+ * After the ledger is stamped, write the draft when the reading is ready, then
+ * carry every approved mapped field. A lease already bound to a letting carries
+ * on this approval and returns null, so the approve route redirects as before.
+ * Anything that is not a lease returns null and carries nothing.
  */
 export async function establishApprovedLease(
   deps: LeaseDeps,
@@ -760,19 +799,28 @@ export async function establishApprovedLease(
   if (filed.typeKey !== 'lease') {
     return null;
   }
-  if ((await tenancyLinkOf(deps.db, documentId)) !== null) {
-    return null;
+  const linked = await tenancyLinkOf(deps.db, documentId);
+  if (linked === null) {
+    const rows = await listExtractedFields(deps.db, documentId);
+    if (!leaseReadingIsReady(rows)) {
+      return null;
+    }
+    const confirmed = await confirmLeaseTenancy(deps, {
+      documentId,
+      confirmedBy: spec.confirmedBy,
+      roles: {},
+    });
+    await carryApprovedLease(deps, {
+      documentId,
+      promotedBy: spec.confirmedBy,
+    });
+    return confirmed.tenancyId;
   }
-  const rows = await listExtractedFields(deps.db, documentId);
-  if (!leaseReadingIsReady(rows)) {
-    return null;
-  }
-  const confirmed = await confirmLeaseTenancy(deps, {
+  await carryApprovedLease(deps, {
     documentId,
-    confirmedBy: spec.confirmedBy,
-    roles: {},
+    promotedBy: spec.confirmedBy,
   });
-  return confirmed.tenancyId;
+  return null;
 }
 
 export async function confirmLeaseTenancy(
