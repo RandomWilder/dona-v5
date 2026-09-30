@@ -85,6 +85,7 @@ async function withCarry(
     findings: Finding[];
     otherFindings?: Finding[];
     rooms?: number;
+    unitFloor?: string | null;
   },
   run: (carry: Carry) => Promise<void>,
 ): Promise<boolean> {
@@ -201,7 +202,12 @@ async function withCarry(
         warrantyEndDate: '2027-03-01',
         status: 'ACTIVE',
         spaces: [
-          { kind: 'UNIT', name: 'דירה 13', floor: null, accessNote: null },
+          {
+            kind: 'UNIT',
+            name: 'דירה 13',
+            floor: spec.unitFloor ?? null,
+            accessNote: null,
+          },
           { kind: 'PARKING', name: BAY, floor: null, accessNote: null },
           { kind: 'STORAGE', name: STORE, floor: null, accessNote: null },
         ],
@@ -807,6 +813,226 @@ describe('evidence · approving a mapped lease field carries it', {
         });
         assert.equal(replaced.statusCode, 302, replaced.body.slice(0, 300));
         assert.equal((await column(carry)).rent_amount, '6000');
+      },
+    );
+    if (!ran) t.skip(skipReason);
+  });
+});
+
+const MARK = 'מאושר, לא הועבר להשכרה';
+const HALF = 'החצי השני של דמי השכירות טרם אושר';
+
+describe('evidence · an approved value that is not on the letting says so', {
+  concurrency: false,
+}, () => {
+  it('shows the approved rent and why the other half is missing, then drops the mark once both land', async (t) => {
+    const address = 'נשיאה 175א';
+    const ran = await withCarry(
+      {
+        tag: 'a175half',
+        city: 'עיר נשיאה ו',
+        address,
+        findings: [
+          ...opening(address),
+          { field_key: 'rent_amount', value: RENT, word_ids: [5] },
+          { field_key: 'rent_currency', value: CURRENCY, word_ids: [6] },
+        ],
+      },
+      async (carry) => {
+        const amount = await carry.rowId(carry.documentId, 'rent_amount');
+        const stamped = await carry.post(
+          `/documents/filing/${carry.documentId}/approve`,
+          { extracted_field_id: amount },
+        );
+        assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
+        const reading = await carry.get(
+          `/documents/filing/${carry.documentId}`,
+        );
+        assert.equal(reading.statusCode, 200);
+        assert.match(reading.body, new RegExp(HALF));
+        assert.match(reading.body, new RegExp(RENT));
+        assert.doesNotMatch(reading.body, />קדם/);
+
+        await approveOpening(carry);
+        const tenancyId = await carry.tenancyId();
+        const page = await carry.get(`/estate/tenancies/${tenancyId}`);
+        assert.equal(page.statusCode, 200);
+        assert.match(page.body, new RegExp(RENT));
+        assert.match(page.body, new RegExp(MARK));
+        assert.match(page.body, new RegExp(HALF));
+        assert.match(
+          page.body,
+          new RegExp(`/documents/${carry.documentId}/read\\?page=`),
+        );
+        assert.equal((await column(carry)).rent_amount, null);
+
+        const ledger = await carry.get(`/documents/${carry.documentId}/fields`);
+        assert.match(ledger.body, new RegExp(HALF));
+        assert.match(ledger.body, />קדם/);
+
+        const currency = await carry.post(
+          `/documents/${carry.documentId}/fields/approve`,
+          {
+            extracted_field_id: await carry.rowId(
+              carry.documentId,
+              'rent_currency',
+            ),
+          },
+        );
+        assert.equal(currency.statusCode, 302, currency.body.slice(0, 300));
+        const carried = await carry.get(`/estate/tenancies/${tenancyId}`);
+        assert.match(carried.body, new RegExp(RENT));
+        assert.match(carried.body, new RegExp(CURRENCY));
+        assert.doesNotMatch(carried.body, new RegExp(MARK));
+        assert.doesNotMatch(carried.body, new RegExp(HALF));
+        assert.equal((await column(carry)).rent_amount, RENT);
+        assert.equal((await column(carry)).rent_currency, CURRENCY);
+      },
+    );
+    if (!ran) t.skip(skipReason);
+  });
+
+  it('names a bay and a storage room that are not in the building', async (t) => {
+    const address = 'נשיאה 175ב';
+    const tag = 'a175bay';
+    const ran = await withCarry(
+      {
+        tag,
+        city: 'עיר נשיאה ז',
+        address,
+        findings: [
+          ...opening(address),
+          { field_key: 'parking_space_number', value: '999', word_ids: [5] },
+          { field_key: 'storage_space_number', value: '404', word_ids: [6] },
+        ],
+      },
+      async (carry) => {
+        for (const key of ['parking_space_number', 'storage_space_number']) {
+          const stamped = await carry.post(
+            `/documents/filing/${carry.documentId}/approve`,
+            { extracted_field_id: await carry.rowId(carry.documentId, key) },
+          );
+          assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
+        }
+        const reading = await carry.get(
+          `/documents/filing/${carry.documentId}`,
+        );
+        assert.match(reading.body, /999/);
+        assert.match(reading.body, /אינה חניה ב/);
+        assert.match(reading.body, new RegExp(`בניין ${tag}`));
+        assert.match(reading.body, /404/);
+        assert.match(reading.body, /אינו מחסן ב/);
+        assert.doesNotMatch(reading.body, />קדם/);
+
+        await approveOpening(carry);
+        const page = await carry.get(
+          `/estate/tenancies/${await carry.tenancyId()}`,
+        );
+        assert.match(page.body, new RegExp(MARK));
+        assert.match(page.body, /999/);
+        assert.match(page.body, /אינה חניה ב/);
+        assert.match(page.body, new RegExp(`בניין ${tag}`));
+        assert.match(page.body, /404/);
+        assert.match(page.body, /אינו מחסן ב/);
+        assert.equal((await column(carry)).parking_name, null);
+        assert.equal((await column(carry)).storage_name, null);
+
+        const ledger = await carry.get(`/documents/${carry.documentId}/fields`);
+        assert.match(ledger.body, /אינה חניה ב/);
+        assert.match(ledger.body, /אינו מחסן ב/);
+        assert.match(ledger.body, />קדם/);
+      },
+    );
+    if (!ran) t.skip(skipReason);
+  });
+
+  it('names the value already held, and the mark is gone once קדם carries it', async (t) => {
+    const address = 'נשיאה 175ג';
+    const ran = await withCarry(
+      {
+        tag: 'a175held',
+        city: 'עיר נשיאה ח',
+        address,
+        unitFloor: '1',
+        findings: [
+          ...opening(address),
+          { field_key: 'rent_amount', value: RENT, word_ids: [5] },
+          { field_key: 'rent_currency', value: CURRENCY, word_ids: [6] },
+          { field_key: 'option_end_date', value: OPTION, word_ids: [7] },
+          { field_key: 'rooms', value: '9', word_ids: [8] },
+          { field_key: 'floor', value: '3', word_ids: [9] },
+          {
+            field_key: 'deposit_amount',
+            value: 'UNAPPROVED-SECRET',
+            word_ids: [10],
+          },
+        ],
+        otherFindings: [
+          ...opening(address),
+          { field_key: 'rent_amount', value: '6000', word_ids: [5] },
+          { field_key: 'rent_currency', value: CURRENCY, word_ids: [6] },
+          { field_key: 'option_end_date', value: '2032-01-01', word_ids: [7] },
+        ],
+      },
+      async (carry) => {
+        for (const key of ['rent_amount', 'rent_currency', 'option_end_date']) {
+          await carry.post(`/documents/filing/${carry.documentId}/approve`, {
+            extracted_field_id: await carry.rowId(carry.documentId, key),
+          });
+        }
+        await approveOpening(carry);
+        for (const key of ['rooms', 'floor']) {
+          const stamped = await carry.post(
+            `/documents/${carry.documentId}/fields/approve`,
+            { extracted_field_id: await carry.rowId(carry.documentId, key) },
+          );
+          assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
+        }
+        const second = await carry.fileBoundLease('SECOND-LEASE');
+        for (const key of ['rent_amount', 'rent_currency', 'option_end_date']) {
+          const stamped = await carry.post(
+            `/documents/${second}/fields/approve`,
+            {
+              extracted_field_id: await carry.rowId(second, key),
+            },
+          );
+          assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
+        }
+
+        const page = await carry.get(
+          `/estate/tenancies/${await carry.tenancyId()}`,
+        );
+        assert.match(page.body, /6000/);
+        assert.match(page.body, /2032-01-01/);
+        assert.match(page.body, new RegExp(MARK));
+        assert.match(page.body, /העמודה כבר נושאת/);
+        assert.match(page.body, new RegExp(RENT));
+        assert.match(page.body, new RegExp(OPTION));
+        assert.match(page.body, /מספר חדרים/);
+        assert.match(page.body, />9</);
+        assert.match(page.body, /קומה/);
+        assert.doesNotMatch(page.body, /UNAPPROVED-SECRET/);
+        assert.equal((await column(carry)).rent_amount, RENT);
+        assert.equal((await column(carry)).option_end_date, OPTION);
+
+        const ledger = await carry.get(`/documents/${second}/fields`);
+        assert.match(ledger.body, /העמודה כבר נושאת/);
+        assert.match(ledger.body, />קדם/);
+
+        const replaced = await carry.post(`/documents/${second}/promote`, {
+          extracted_field_id: await carry.rowId(second, 'rent_amount'),
+          supersede: '1',
+        });
+        assert.equal(replaced.statusCode, 302, replaced.body.slice(0, 300));
+        const after = await carry.get(
+          `/estate/tenancies/${await carry.tenancyId()}`,
+        );
+        assert.equal((await column(carry)).rent_amount, '6000');
+        assert.match(after.body, /6000/);
+        assert.doesNotMatch(
+          after.body,
+          new RegExp(`העמודה כבר נושאת[\\s\\S]{0,80}${RENT}`),
+        );
       },
     );
     if (!ran) t.skip(skipReason);

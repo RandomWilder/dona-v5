@@ -76,6 +76,7 @@ import {
   searchEstate,
 } from './read-model.ts';
 import { removeInventorySpace, removeSpace } from './spaces.ts';
+import { type UncarriedField, uncarriedOnTenancy } from './uncarried.ts';
 import {
   type TileLine,
   UNIT_WORDS,
@@ -106,6 +107,7 @@ import {
   renderUnitPage,
   type TenancyEventView,
   type TenancyPersonView,
+  type UncarriedCite,
   type UnitLettingView,
 } from './views.ts';
 
@@ -419,6 +421,48 @@ const END_LIMITS = {
 const ASK = { config: { staff: 'documents.read' } } as const;
 
 const OFFICE_ASK_UNAVAILABLE = 'לא ניתן לענות עכשיו. נסו שוב בעוד רגע.';
+
+function cite(row: UncarriedField): UncarriedCite {
+  return {
+    documentId: row.documentId,
+    value: row.value,
+    page: row.page,
+    reason: row.reason,
+  };
+}
+
+function rentCites(rows: readonly UncarriedField[]): UncarriedCite[] {
+  const amounts = rows.filter((row) => row.target === 'tenancy.rent_amount');
+  const currencies = rows.filter(
+    (row) => row.target === 'tenancy.rent_currency',
+  );
+  const paired = new Set<string>();
+  const out: UncarriedCite[] = [];
+  for (const amount of amounts) {
+    const currency = currencies.find(
+      (row) => row.documentId === amount.documentId,
+    );
+    if (currency) paired.add(currency.extractedFieldId);
+    out.push({
+      documentId: amount.documentId,
+      value: currency ? `${amount.value} ${currency.value}` : amount.value,
+      page: amount.page,
+      reason: amount.reason ?? currency?.reason ?? null,
+    });
+  }
+  for (const currency of currencies) {
+    if (paired.has(currency.extractedFieldId)) continue;
+    out.push(cite(currency));
+  }
+  return out;
+}
+
+function citesFor(
+  rows: readonly UncarriedField[],
+  target: string,
+): UncarriedCite[] {
+  return rows.filter((row) => row.target === target).map(cite);
+}
 
 function protocolNoticeOf(request: FastifyRequest): string | null {
   const raw = (request.query as { protocol?: string }).protocol;
@@ -1597,15 +1641,23 @@ export function registerEstateRoutes(
     );
     const letting = await deps.getTenancy(deps.pool, tenancyId);
     const unit = await getUnit(deps.pool, letting.unit_id);
-    const [members, documents, gate, captures, parkingOptions, storageOptions] =
-      await Promise.all([
-        deps.listTenancyParties(deps.pool, tenancyId),
-        deps.listLinkedDocuments(deps.pool, 'TENANCY', tenancyId),
-        deps.activationGate(deps.pool, tenancyId),
-        listApprovedCapturesForTenancy(deps.pool, tenancyId),
-        listParkingSpacesInBuilding(deps.pool, unit.building_id),
-        listStorageSpacesInBuilding(deps.pool, unit.building_id),
-      ]);
+    const [
+      members,
+      documents,
+      gate,
+      captures,
+      pending,
+      parkingOptions,
+      storageOptions,
+    ] = await Promise.all([
+      deps.listTenancyParties(deps.pool, tenancyId),
+      deps.listLinkedDocuments(deps.pool, 'TENANCY', tenancyId),
+      deps.activationGate(deps.pool, tenancyId),
+      listApprovedCapturesForTenancy(deps.pool, tenancyId),
+      uncarriedOnTenancy(deps.pool, tenancyId),
+      listParkingSpacesInBuilding(deps.pool, unit.building_id),
+      listStorageSpacesInBuilding(deps.pool, unit.building_id),
+    ]);
     const names = await deps.listPartyNames(
       deps.pool,
       members.map((member) => member.party_id),
@@ -1635,7 +1687,26 @@ export function registerEstateRoutes(
       unit,
       people,
       documents,
-      captures,
+      captures: [
+        ...captures,
+        ...pending
+          .filter(
+            (row) =>
+              row.target === 'unit.rooms' || row.target === 'space.floor',
+          )
+          .map((row) => ({
+            documentId: row.documentId,
+            labelHe: row.labelHe,
+            value: row.value,
+            page: row.page,
+            uncarried: true,
+            reason: row.reason,
+          })),
+      ],
+      uncarriedRent: rentCites(pending),
+      uncarriedOption: citesFor(pending, 'tenancy.option_end_date'),
+      uncarriedBay: citesFor(pending, 'tenancy.parking_space_id'),
+      uncarriedStorage: citesFor(pending, 'tenancy.storage_space_id'),
       checks: gate.checks.map((check) => ({
         rule: check.rule,
         passed: check.passed,

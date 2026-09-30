@@ -665,13 +665,22 @@ asks for `tenancy.write`, as the completeness exception already does. Party name
 screen with no new permission; a later gate does not redraw it. Search, the occupancy chip, the
 buildings list and the incomplete queue still carry no name.
 
-**The card reads two kinds of fact (#134).** Rent, rent currency and option end come off
-`tenancy`'s own columns via `getTenancy`. The rest of what the lease said is listed from
-`listApprovedCapturesForTenancy` in this module's read model: approved `ExtractedField` rows on
-paper linked to this letting, excluding declarations that already have a promotion target, each
-cited to the page it was read from. Unapproved rows are not in the list. The view prints every row
-it is handed and does not inspect a capture's value. This is the administrator stance; identifiers
-render as printed.
+**The card reads two kinds of fact (#134).** Rent, rent currency, the option end, the assigned bay
+and the assigned storage come off the letting's own columns via `getTenancy` when those columns are
+set. An approved row that has a promotion target and is not stamped `promoted_to` is not hidden
+behind `—`. When the column is empty, the row shows the approved value, a link to the page it was
+read from, and the mark *מאושר, לא הועבר להשכרה*, with a reason computed on read from current
+state and stored nowhere: the other rent half is not approved; the named number is not a parking or
+storage Space in this Building, and the sentence names the number and the Building; the column
+already holds a different value, and the sentence names it. When the column already holds a
+different value, that value stays and the approved one is shown beside it with the same mark.
+Rooms and floor land on the Unit, so they stay out of those fixed rows and appear in the captures
+list with the same mark when uncarried; a Unit that already holds a different rooms or floor is
+named in the reason. `—` means nothing approved. The rest of what the lease said — declarations
+with no promotion target — is listed from `listApprovedCapturesForTenancy`: approved rows on paper
+linked to this letting, each cited to the page it was read from. Unapproved rows are not in the
+list. The view prints every row it is handed and does not inspect a capture's value. This is the
+administrator stance; identifiers render as printed.
 
 **The documents listed on these screens are injected, not imported.** `EstateDeps` carries
 `listLinkedDocuments`, `searchDocuments` and (from 4.4) `listPromotedFieldsForUnit` from evidence's

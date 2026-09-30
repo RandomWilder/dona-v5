@@ -16,7 +16,11 @@
 //
 // **No client JavaScript, here as everywhere.** The type list is a `<select>` the server filled from
 // the catalogue, the file input is a file input, and the page works with scripting switched off.
-import type { UnitHit } from '../../estate/contract.ts';
+import {
+  renderUncarriedReason,
+  type UncarriedReason,
+  type UnitHit,
+} from '../../estate/contract.ts';
 import { IDENTIFIER_MASK } from '../../kernel/identifier.ts';
 import { onlineOcrByteLimit } from '../../kernel/ocr.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
@@ -883,6 +887,8 @@ export interface LeaseFilingScreen {
   pageCount?: number;
   pagesRead?: number;
   readingPending?: boolean;
+  /** Approved rows that cannot be carried, keyed by extracted field. #175. */
+  uncarried?: Readonly<Record<string, UncarriedReason>>;
 }
 
 function filingApproveControl(
@@ -933,8 +939,11 @@ function filingReadingRow(
   const half = missingCurrency(row, rows)
     ? h`<span class="role is-half">חסר מטבע</span>`
     : h``;
+  const stuck = screen.uncarried?.[row.extractedFieldId];
   return h`<tr>
-    <td>${row.labelHe}${nameRole(row, rows)}${half}</td>
+    <td>${row.labelHe}${nameRole(row, rows)}${half}${
+      stuck ? h`<span class="role">${renderUncarriedReason(stuck)}</span>` : h``
+    }</td>
     <td>${
       row.fieldKey.endsWith('_date')
         ? excerpt(ltr(row.value))
@@ -2254,6 +2263,8 @@ export interface FieldsScreen {
   overwrite?: { extractedFieldId: string; existingValue: string };
   pageCount?: number;
   pagesRead?: number;
+  /** Approved rows that cannot be carried, keyed by extracted field. #175. */
+  uncarried?: Readonly<Record<string, UncarriedReason>>;
 }
 
 const MASK = IDENTIFIER_MASK;
@@ -2487,8 +2498,12 @@ export function renderFieldsPage(screen: FieldsScreen): string {
               screen.overwrite?.extractedFieldId === row.extractedFieldId
                 ? screen.overwrite
                 : undefined;
+            const stuck = screen.uncarried?.[row.extractedFieldId];
             return h`<form class="form-actions" method="post" action="/documents/${screen.documentId}/promote">
           ${csrfInput(screen.csrf)}
+          ${
+            stuck ? h`<p class="lede">${renderUncarriedReason(stuck)}</p>` : h``
+          }
           ${
             overwrite
               ? h`<p class="lede">העמודה כבר נושאת ${ltr(overwrite.existingValue)}. החלפה היא החלטה, לא ניסיון שני.</p>

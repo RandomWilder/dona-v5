@@ -883,7 +883,8 @@ stay on A1 / A12 / **מסמכים**.
    no reveal, no `קדם` button, and no bulk approval. **Approving a mapped field on a `lease` carries
    it** when a letting is bound, and the approval that first establishes the draft carries every
    mapped field already approved — the same rule as A15. A carry that cannot land does not fail the
-   approval. The rows are **grouped in the view** — dates, money, people, place — which is a
+   approval, and the reading step says why in the same sentence the ledger shows beside `קדם`,
+   still with no button. The rows are **grouped in the view** — dates, money, people, place — which is a
    thing the screen does and not a thing the catalogue declares. **The household is read by role**,
    so an identifier arrives already attached to the name it belongs to and no step asks an operator
    to pair them. **A money pair missing its currency is marked here and approvable anyway**: this

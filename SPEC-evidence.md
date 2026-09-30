@@ -532,6 +532,11 @@ was measured, `לא נמדדה` when every field arrived with no score, which is
 the field carries (`tenant_name` is a tenant, `guarantor_name` is a guarantor who is never a service
 contact). Amounts are ordinary rows: after #101 they are.
 
+**#175.** An approved mapped row that has not been carried shows, beside its `קדם`, the same reason
+the letting page shows. The reason is read from current state — the other rent half, a bay or
+storage number that is not a Space in the Building, a different value already on the column or the
+Unit — and nothing is stored. A16's reading step shows that sentence and no `קדם` button.
+
 ### The declaration becomes editable — `POST /documents/types/:typeKey/fields` (slice 7.2)
 
 Flow **A14**. The tab's landing showed the declaration at 7.1 and wrote nothing; this is the write
@@ -768,7 +773,8 @@ journey does not load it. Reveal, promote, and `אישור כל מה שלא סו
 **Track B widens beat 3 from those four rows to the declared set**, and changes nothing else about
 it. It is still one row per value, one אישור, one optional correction; reveal, promote and bulk
 approval stay off this screen, because this journey ends in a draft letting and the ledger remains
-the door for everything else. The five beats are unchanged — המסמך · הדירה · הקריאה · הטיוטה · די
+the door for everything else. An approved row that cannot be carried shows the same reason the
+ledger shows beside `קדם`, and still no button. The five beats are unchanged — המסמך · הדירה · הקריאה · הטיוטה · די
 היום — and everything here lands inside beats 3 and 4. The beats are named for what the operator is
 doing, and reading a lease and signing the reading are one sitting; splitting them would turn the
 workspace the office asked for into two.
@@ -1605,11 +1611,15 @@ branched on. Promoting those fields so a screen can render them would spend the 
 display problem.
 
 **`GET /estate/tenancies/:tenancyId` reads approved captures in estate's read model and view.** Rent,
-its currency and the option end come from `tenancy`'s columns. Every other approved capture on paper
-bound to that letting is shown and cited (`/documents/:id/read?page=N`). Unapproved values do not
-appear. Declarations that already have a promotion target do not appear as captures — the typed
-column is their display. The view does not branch on a capture value. Nothing here lives in
-`src/tenancy/internal/` or `src/evidence/internal/`. R9 stays the scan it was.
+its currency, the option end, the assigned bay and the assigned storage come from the letting's
+columns when those columns are set. An approved value that has a promotion target and has not been
+carried is shown anyway: on the fixed row when the column is empty, and beside the column's value
+when that value differs, with the page it was read from and the mark *מאושר, לא הועבר להשכרה*. The
+reason is computed on read — no column and no migration. Rooms and floor appear in the captures
+list with the same mark when uncarried. `—` means nothing was approved. Every other approved
+capture on paper bound to that letting is shown and cited (`/documents/:id/read?page=N`).
+Unapproved values do not appear. The view does not branch on a capture value. Nothing here lives
+in `src/tenancy/internal/` or `src/evidence/internal/`. R9 stays the scan it was.
 
 This screen is the administrator stance. The day it acquires a tenant route, it needs a stance
 (#125).

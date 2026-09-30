@@ -19,7 +19,9 @@ import {
   getBuilding,
   getUnit,
   searchEstate,
+  type UncarriedReason,
   type UnitHit,
+  uncarriedOnDocument,
   upsertUnitRow,
   WARRANTY_YEARS,
 } from '../../estate/contract.ts';
@@ -583,6 +585,17 @@ export function registerDocumentRoutes(
       ...extras,
     });
 
+  const uncarriedReasons = async (
+    documentId: string,
+  ): Promise<Record<string, UncarriedReason>> => {
+    const rows = await uncarriedOnDocument(deps.pool, documentId);
+    const out: Record<string, UncarriedReason> = {};
+    for (const row of rows) {
+      if (row.reason) out[row.extractedFieldId] = row.reason;
+    }
+    return out;
+  };
+
   const tenancyBoundTo = async (documentId: string): Promise<string | null> => {
     const found = await deps.pool.query<{ entity_id: string }>(
       `SELECT entity_id FROM document_link
@@ -660,6 +673,7 @@ export function registerDocumentRoutes(
       mayApprove: can(request.staff?.role ?? null, 'documents.write'),
       ...pageCoverage(filed),
       readingPending: await extractWorkIsOpen(deps.pool, documentId),
+      uncarried: await uncarriedReasons(documentId),
       ...(clash ? { conflictTenancyId: clash } : {}),
     };
   };
@@ -1626,6 +1640,7 @@ export function registerDocumentRoutes(
       unread,
       mayReadIdentifiers: mayReadIdentifiers(request),
       mayApprove: can(request.staff?.role ?? null, 'documents.write'),
+      uncarried: await uncarriedReasons(documentId),
       ...pageCoverage(filed),
       ...extra,
     };

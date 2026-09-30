@@ -96,6 +96,96 @@ describe('estate · the tenancy card', () => {
     assert.doesNotMatch(html, /9999/);
   });
 
+  it('shows an approved value that is not on the letting, and why', () => {
+    const html = renderTenancyDetailPage(
+      sheet({
+        rentAmount: null,
+        rentCurrency: null,
+        optionEndDate: '2030-01-01',
+        storageName: '24',
+        uncarriedRent: [
+          {
+            documentId: lease.documentId,
+            value: '5200',
+            page: 7,
+            reason: { kind: 'rent-half' },
+          },
+        ],
+        uncarriedOption: [
+          {
+            documentId: lease.documentId,
+            value: '2031-09-11',
+            page: 7,
+            reason: { kind: 'held', held: '2030-01-01' },
+          },
+        ],
+        uncarriedBay: [
+          {
+            documentId: lease.documentId,
+            value: '552',
+            page: 7,
+            reason: {
+              kind: 'missing-space',
+              number: '552',
+              buildingName: 'הרב קוק 50',
+              space: 'PARKING',
+            },
+          },
+        ],
+        uncarriedStorage: [
+          {
+            documentId: lease.documentId,
+            value: '505',
+            page: 7,
+            reason: { kind: 'held', held: '24' },
+          },
+        ],
+        captures: [
+          {
+            documentId: lease.documentId,
+            labelHe: 'סכום הפיקדון',
+            value: '12000',
+            page: 3,
+          },
+          {
+            documentId: lease.documentId,
+            labelHe: 'מספר חדרים',
+            value: '4',
+            page: 7,
+            uncarried: true,
+            reason: { kind: 'held', held: '3.5' },
+          },
+          {
+            documentId: lease.documentId,
+            labelHe: 'קומה',
+            value: '3',
+            page: 7,
+            uncarried: true,
+            reason: null,
+          },
+        ],
+      }),
+    );
+    assert.match(html, /5200/);
+    assert.match(html, /מאושר, לא הועבר להשכרה/);
+    assert.match(html, /החצי השני של דמי השכירות טרם אושר/);
+    assert.match(
+      html,
+      /href="\/documents\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\/read\?page=7"/,
+    );
+    assert.match(html, /2031-09-11/);
+    assert.match(html, /העמודה כבר נושאת/);
+    assert.match(html, /2030-01-01/);
+    assert.match(html, /552/);
+    assert.match(html, /אינה חניה ב/);
+    assert.match(html, /הרב קוק 50/);
+    assert.match(html, /505/);
+    assert.match(html, /מספר חדרים/);
+    assert.match(html, /3\.5/);
+    assert.match(html, /קומה/);
+    assert.doesNotMatch(html, /<dt>דמי שכירות<\/dt>\s*<dd>—/);
+  });
+
   it('offers a reassignment when the building has parking spaces', () => {
     const html = renderTenancyDetailPage(
       sheet({
