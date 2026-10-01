@@ -124,8 +124,11 @@ import {
   proposeProtocol,
 } from './seed.ts';
 import {
-  type documentContentTypes,
+  type DocumentExtension,
+  documentContentTypes,
   documentFileHash,
+  intakeObjectPath,
+  intakeReadingPath,
   sniffExtension,
 } from './storage-path.ts';
 import { pageText as textOfPage } from './verify.ts';
@@ -682,23 +685,69 @@ export function registerDocumentRoutes(
   app.get('/documents/filing', NEW, async (request, reply) => {
     html(reply);
     const query = String((request.query as { q?: string }).q ?? '');
-    if (query === '') {
-      return leaseFiling(request, { beat: 'file' });
+    const held = String((request.query as { held?: string }).held ?? '');
+    if (held === '') {
+      if (query === '') {
+        return leaseFiling(request, { beat: 'file' });
+      }
+      const found = await searchEstate(deps.pool, query);
+      return leaseFiling(request, {
+        beat: 'place',
+        reading: {
+          addressLine: null,
+          city: null,
+          apartmentNumber: null,
+          annexDeferral: false,
+        },
+        candidates: found.units,
+        candidateTotal: found.units.length,
+        query,
+        mayCreate: mayShapeTheEstate(request),
+        building: null,
+      });
     }
-    const found = await searchEstate(deps.pool, query);
+    const hold = await loadHold(deps, held);
+    const reading = readPlace(hold.reading.text);
+    const unread = hold.reading.ocrOutcome === 'too_large';
+    if (query !== '') {
+      const found = await searchEstate(deps.pool, query);
+      return leaseFiling(request, {
+        beat: 'place',
+        held,
+        unread,
+        reading,
+        candidates: found.units,
+        candidateTotal: found.units.length,
+        query,
+        mayCreate: mayShapeTheEstate(request),
+        building: null,
+      });
+    }
+    const resolved = await resolvePlace(deps.pool, reading);
+    if (!resolved.unit) {
+      return leaseFiling(request, {
+        beat: 'place',
+        held,
+        unread,
+        reading,
+        candidates: resolved.candidates,
+        candidateTotal: resolved.total,
+        query: reading.addressLine ?? '',
+        mayCreate: mayShapeTheEstate(request),
+        building: resolved.building
+          ? {
+              building_id: resolved.building.building_id,
+              name: resolved.building.name,
+            }
+          : null,
+      });
+    }
     return leaseFiling(request, {
       beat: 'place',
-      reading: {
-        addressLine: null,
-        city: null,
-        apartmentNumber: null,
-        annexDeferral: false,
-      },
-      candidates: found.units,
-      candidateTotal: found.units.length,
-      query,
-      mayCreate: mayShapeTheEstate(request),
-      building: null,
+      held,
+      unread,
+      matched: resolved.unit,
+      reading,
     });
   });
 
@@ -778,6 +827,7 @@ export function registerDocumentRoutes(
 
   app.post('/documents/filing/place', PLACE, async (request, reply) => {
     const body = (request.body as Form | undefined) ?? {};
+    const heldHash = body.held ? String(body.held) : undefined;
     const unitNumber = requireText(body.unit_number, 'unit_number', 32);
     const addressLine = requireText(body.address_line, 'address_line', 200);
     const city = requireText(body.city, 'city', 120);
@@ -785,21 +835,21 @@ export function registerDocumentRoutes(
       ? validId(body.building, 'building')
       : null;
     const handover = today(deps.clock);
-    const held = askedBuilding
+    const heldBuilding = askedBuilding
       ? (await getBuilding(deps.pool, askedBuilding)).building
       : null;
     const written = await inTransaction(deps.pool, (db) =>
       upsertUnitRow(db, {
         project: null,
-        building: held
+        building: heldBuilding
           ? {
-              name: held.name,
-              addressLine: held.address_line,
-              city: held.city,
-              projectCode: held.project_code,
-              handoverDate: held.handover_date,
-              warrantyEndDate: held.warranty_end_date,
-              status: held.status as BuildingStatus,
+              name: heldBuilding.name,
+              addressLine: heldBuilding.address_line,
+              city: heldBuilding.city,
+              projectCode: heldBuilding.project_code,
+              handoverDate: heldBuilding.handover_date,
+              warrantyEndDate: heldBuilding.warranty_end_date,
+              status: heldBuilding.status as BuildingStatus,
             }
           : {
               name: addressLine,
@@ -830,12 +880,16 @@ export function registerDocumentRoutes(
     html(reply);
     return leaseFiling(request, {
       beat: 'place',
+      ...(heldHash ? { held: heldHash } : {}),
       candidates: [unit],
       candidateTotal: 1,
       chosenUnitId: unit.unit_id,
       mayCreate: true,
-      building: held
-        ? { building_id: held.building_id, name: held.name }
+      building: heldBuilding
+        ? {
+            building_id: heldBuilding.building_id,
+            name: heldBuilding.name,
+          }
         : null,
       reading: {
         addressLine,
@@ -847,7 +901,8 @@ export function registerDocumentRoutes(
   });
 
   app.post('/documents/filing', FILING, async (request, reply) => {
-    const { fields, bytes } = await readUpload(request);
+    const uploaded = await readUpload(request, true);
+    const { fields } = uploaded;
     verifyCsrf(sessionTokenOf(request), fields[CSRF_FIELD]);
     const operator = requireOperator(request);
     await boundTheCaller(deps, operator);
@@ -856,11 +911,8 @@ export function registerDocumentRoutes(
     if (!type) {
       throw new KernelError('invalid', 'that is not a document type');
     }
-    const extension = sniffExtension(bytes);
-    const chosen = fields.unit ? validId(fields.unit, 'unit') : null;
-    const fileHash = documentFileHash(bytes);
 
-    const paintRefusal = async (
+    const paint = async (
       code: number,
       extras: Omit<LeaseFilingScreen, 'nav' | 'csrf'>,
     ) => {
@@ -869,44 +921,64 @@ export function registerDocumentRoutes(
       return leaseFiling(request, extras);
     };
 
-    const existing = await findDocumentByHash(deps.pool, fileHash);
-    const documentHref = existing
-      ? `/documents/${existing.documentId}/read`
-      : undefined;
+    let bytes: Buffer;
+    let extension: DocumentExtension;
+    let fileHash: string;
+    let read: DocumentReading;
 
-    const read = await intakeReading(
-      deps,
-      bytes,
-      extension,
-      type.verificationTerms,
-    );
-    if (read.ocrOutcome === 'too_large') {
-      await createAuditLog(deps.pool, deps.clock).write(
-        {
-          actorKind: 'staff',
-          actorId: operator,
-          actorRole: request.staff?.role ?? undefined,
-          action: 'evidence.intake_unresolved',
-          inputs: {
-            typeKey: type.typeKey,
-            extension,
-            bytes: bytes.length,
-            fileHash,
-            candidates: 0,
-            ocr: read.ocrOutcome,
-            pages: read.native.length,
+    if (uploaded.held) {
+      const hold = await loadHold(deps, fields.held ?? '');
+      bytes = hold.bytes;
+      extension = hold.extension;
+      fileHash = fields.held ?? '';
+      read = hold.reading;
+    } else {
+      bytes = uploaded.bytes;
+      extension = sniffExtension(bytes);
+      fileHash = documentFileHash(bytes);
+      const existing = await findDocumentByHash(deps.pool, fileHash);
+      if (existing) {
+        return paint(422, {
+          beat: 'file',
+          refused: {
+            type,
+            verification: {
+              verdict: 'unverified',
+              matchedTerms: [],
+              missingTerms: [],
+            },
+            reason: 'anchored',
+            documentHref: `/documents/${existing.documentId}/read`,
           },
-        },
-        { outcome: 'ok' },
+        });
+      }
+      await deps.objects.put(
+        intakeObjectPath(fileHash, extension),
+        bytes,
+        documentContentTypes[extension],
       );
-      return paintRefusal(422, {
-        beat: 'file',
-        tooLargeBytes: bytes.length,
-      });
+      read = await intakeReading(
+        deps,
+        bytes,
+        extension,
+        type.verificationTerms,
+      );
+      await deps.objects.put(
+        intakeReadingPath(fileHash),
+        Buffer.from(JSON.stringify({ extension, reading: read })),
+        'application/json',
+      );
     }
-    if (read.verification.verdict === 'refused') {
-      return paintRefusal(422, {
+
+    const chosen = fields.unit ? validId(fields.unit, 'unit') : null;
+    const unread = read.ocrOutcome === 'too_large';
+    const reading = readPlace(read.text);
+    const heldScreen = { held: fileHash, ...(unread ? { unread: true } : {}) };
+
+    if (read.verification.verdict === 'refused' && !unread) {
+      return paint(422, {
         beat: 'file',
+        ...heldScreen,
         refused: {
           type,
           verification: read.verification,
@@ -914,17 +986,7 @@ export function registerDocumentRoutes(
         },
       });
     }
-    if (existing) {
-      return paintRefusal(422, {
-        beat: 'file',
-        refused: {
-          type,
-          verification: read.verification,
-          reason: 'anchored',
-          documentHref,
-        },
-      });
-    }
+
     if (chosen) {
       const unit = await getUnit(deps.pool, chosen);
       const result = await fileDocument(await filingDeps(deps), {
@@ -934,22 +996,29 @@ export function registerDocumentRoutes(
         tenancyId: null,
         filedBy: operator,
         reading: read,
+        ...(unread ? { fileUnread: true } : {}),
       });
       html(reply);
       if (!result.filed) {
         reply.code(422);
         return leaseFiling(request, {
           beat: 'file',
+          ...heldScreen,
           refused: {
             type,
             verification: result.verification,
             reason: result.refusal,
+            ...(result.anchoredTo
+              ? {
+                  documentHref: `/documents/${(await findDocumentByHash(deps.pool, fileHash))?.documentId ?? ''}/read`,
+                }
+              : {}),
           },
         });
       }
       return reply.redirect(`/documents/filing/${result.documentId}`);
     }
-    const reading = readPlace(read.text);
+
     const resolved = await resolvePlace(deps.pool, reading);
     if (!resolved.unit) {
       await createAuditLog(deps.pool, deps.clock).write(
@@ -973,8 +1042,9 @@ export function registerDocumentRoutes(
         },
         { outcome: 'ok' },
       );
-      return paintRefusal(422, {
+      return paint(422, {
         beat: 'place',
+        ...heldScreen,
         reading,
         candidates: resolved.candidates,
         candidateTotal: resolved.total,
@@ -991,6 +1061,7 @@ export function registerDocumentRoutes(
     html(reply);
     return leaseFiling(request, {
       beat: 'place',
+      ...heldScreen,
       matched: resolved.unit,
       reading,
     });
@@ -1980,6 +2051,8 @@ export function registerDocumentRoutes(
 interface Upload {
   fields: Record<string, string>;
   bytes: Buffer;
+  /** The post names a held upload instead of attaching the file again. */
+  held: boolean;
 }
 
 /**
@@ -2025,17 +2098,20 @@ function formBody(request: FastifyRequest): Record<string, string> {
  * multipart. What is left is the two routes whose bodies really are streams, and they are exactly
  * the two the composition root exempts from the CSRF `preHandler`.
  */
-async function readUpload(request: {
-  parts: () => AsyncIterableIterator<
-    | { type: 'field'; fieldname: string; value: unknown }
-    | {
-        type: 'file';
-        fieldname: string;
-        file: { truncated: boolean };
-        toBuffer: () => Promise<Buffer>;
-      }
-  >;
-}): Promise<Upload> {
+async function readUpload(
+  request: {
+    parts: () => AsyncIterableIterator<
+      | { type: 'field'; fieldname: string; value: unknown }
+      | {
+          type: 'file';
+          fieldname: string;
+          file: { truncated: boolean };
+          toBuffer: () => Promise<Buffer>;
+        }
+    >;
+  },
+  allowHold = false,
+): Promise<Upload> {
   const fields: Record<string, string> = {};
   let bytes: Buffer | null = null;
   for await (const part of request.parts()) {
@@ -2053,10 +2129,70 @@ async function readUpload(request: {
     }
     fields[part.fieldname] = String(part.value);
   }
+  const held =
+    allowHold &&
+    !bytes &&
+    typeof fields.held === 'string' &&
+    /^[0-9a-f]{64}$/.test(fields.held);
+  if (held) {
+    return { fields, bytes: Buffer.alloc(0), held: true };
+  }
   if (!bytes || bytes.length === 0) {
     throw new KernelError('invalid', 'no file was attached');
   }
-  return { fields, bytes };
+  return { fields, bytes, held: false };
+}
+
+const heldOutcomes = new Set([
+  'not_needed',
+  'ok',
+  'partial',
+  'unconfigured',
+  'failed',
+  'too_large',
+]);
+
+async function loadHold(
+  deps: DocumentDeps,
+  fileHash: string,
+): Promise<{
+  bytes: Buffer;
+  extension: DocumentExtension;
+  reading: DocumentReading;
+}> {
+  let parsed: unknown;
+  try {
+    const stored = await deps.objects.read(intakeReadingPath(fileHash));
+    parsed = JSON.parse(stored.bytes.toString('utf8'));
+  } catch {
+    throw new KernelError('invalid', 'that upload is not held');
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    throw new KernelError('invalid', 'that upload is not held');
+  }
+  const row = parsed as { extension?: unknown; reading?: DocumentReading };
+  const extension = row.extension;
+  const reading = row.reading;
+  if (
+    typeof extension !== 'string' ||
+    !reading ||
+    typeof reading.text !== 'string' ||
+    typeof reading.ocrOutcome !== 'string' ||
+    !heldOutcomes.has(reading.ocrOutcome) ||
+    !Array.isArray(reading.native) ||
+    !Array.isArray(reading.pages) ||
+    !reading.verification
+  ) {
+    throw new KernelError('invalid', 'that upload is not held');
+  }
+  const file = await deps.objects.read(
+    intakeObjectPath(fileHash, extension as DocumentExtension),
+  );
+  return {
+    bytes: file.bytes,
+    extension: extension as DocumentExtension,
+    reading,
+  };
 }
 
 /**

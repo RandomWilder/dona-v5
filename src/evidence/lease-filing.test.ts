@@ -2,11 +2,13 @@
 //
 // Highest seam is HTTP against the new tab. Command guts (place reader, fileDocument, type
 // guard, OCR ceiling, upsertUnitRow, draft from approved reading, same-Unit-and-start conflict)
-// stay proved where they already are. This suite proves the sequence: confirm-then-file,
-// pick/search/create, thin reading → טיוטה on this tab, paper marks, that A12 still files on
-// exact one, and that the paint is gone.
+// stay proved where they already are. This suite proves the sequence: the file is kept, then
+// confirm-then-file without attaching it again, pick/search/create carry the hold, a fat scan
+// is read in a smaller piece, thin reading → טיוטה on this tab, paper marks, that A12 still
+// files on exact one, and that the paint is gone.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { PDFDocument, PDFName, PDFRawStream } from 'pdf-lib';
 import { specimenDocuments } from '../../evals/fixtures/specimen-clauses.ts';
 import {
   asOperator,
@@ -31,6 +33,7 @@ import {
   documentFileHash,
 } from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
+import { intakeObjectPath } from './internal/storage-path.ts';
 
 const CITY = 'עיר תיוק חוזה';
 const ADDRESS = 'הבילויים 10';
@@ -93,6 +96,24 @@ const leasing = (address: string) =>
 
 const pdfBytes = (marker: string): Buffer =>
   Buffer.from(`%PDF-1.4\n% ${marker}\n`, 'latin1');
+
+/** A real PDF whose pages stay large, so a slice is smaller than the file. */
+const bulkyPdf = async (
+  pageCount: number,
+  pageBytes: number,
+): Promise<Buffer> => {
+  const doc = await PDFDocument.create();
+  for (let i = 0; i < pageCount; i++) {
+    const page = doc.addPage([200, 200]);
+    const data = new Uint8Array(pageBytes);
+    for (let at = 0; at < pageBytes; at++) {
+      data[at] = (at * 17 + i) & 255;
+    }
+    const stream = PDFRawStream.of(doc.context.obj({}), data);
+    page.node.set(PDFName.of('Contents'), doc.context.register(stream));
+  }
+  return Buffer.from(await doc.save({ useObjectStreams: false }));
+};
 
 const plan: EstatePlan = {
   projects: [
@@ -349,6 +370,8 @@ describe('evidence · A16 file a lease in one workspace', {
           assert.doesNotMatch(response.body, /name="type"/);
           assert.match(response.body, /class="filing-beats"/);
           assert.match(response.body, /class="file-well"/);
+          assert.match(response.body, /הקובץ נשמר מיד/);
+          assert.doesNotMatch(response.body, /נשמר רק אחרי שהדירה אושרה/);
           assert.deepEqual(paperMarks(response.body), []);
           assert.match(response.body, /המסמך/);
           assert.match(response.body, /הדירה/);
@@ -406,6 +429,8 @@ describe('evidence · A16 file a lease in one workspace', {
           });
           assert.equal(seen.statusCode, 200, seen.body.slice(0, 400));
           assert.match(seen.body, /דירה אחת/);
+          assert.match(seen.body, /הקובץ נשמר/);
+          assert.doesNotMatch(seen.body, /עדיין לא נשמר דבר/);
           const marks = paperMarks(seen.body);
           assert.ok(marks.some((mark) => mark.includes(ADDRESS)));
           assert.ok(marks.some((mark) => mark.includes(CITY)));
@@ -413,21 +438,23 @@ describe('evidence · A16 file a lease in one workspace', {
           assert.ok(marks.every((mark) => !/נקראה|בתיק|המשך/.test(mark)));
           assert.match(seen.body, /class="file-well"/);
           assert.match(seen.body, new RegExp(`value="${unitNine}"`));
-          assert.match(seen.body, /type="file"/);
+          assert.match(seen.body, /הקובץ נשמר/);
+          assert.doesNotMatch(seen.body, /type="file"/);
           assert.doesNotMatch(seen.body, /type="radio"/);
           assert.doesNotMatch(seen.body, /חיפוש דירה אחרת/);
           assert.doesNotMatch(seen.body, /יצירת הבניין/);
           assert.doesNotMatch(seen.body, /מה נקרא מן המסמך/);
           assert.equal(await documentsHere(), before);
-          assert.equal(puts, putsBefore, 'no object was written');
+          const held = documentFileHash(pdfBytes('a16 one'));
+          assert.match(seen.body, new RegExp(`name="held" value="${held}"`));
+          assert.equal(puts, putsBefore + 2);
+          const stored = await objects.read(intakeObjectPath(held, 'pdf'));
+          assert.equal(stored.bytes.length, pdfBytes('a16 one').length);
 
           const filed = await as(here).inject({
             method: 'POST',
             url: '/documents/filing',
-            ...upload(
-              { unit: unitNine },
-              { filename: 'שכירות.pdf', bytes: pdfBytes('a16 one') },
-            ),
+            ...upload({ held, unit: unitNine }, null),
           });
           assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
           assert.match(
@@ -450,7 +477,7 @@ describe('evidence · A16 file a lease in one workspace', {
       );
 
       await t.test(
-        'a file that is not a lease refuses on this tab and writes nothing',
+        'a file that is not a lease is kept and is not filed',
         async () => {
           const before = await documentsHere();
           const putsBefore = puts;
@@ -465,14 +492,15 @@ describe('evidence · A16 file a lease in one workspace', {
           assert.equal(response.statusCode, 422);
           assert.match(response.body, /תיוק חוזה/);
           assert.match(response.body, /אינו נראה כמו/);
-          assert.match(response.body, /type="file"/);
+          assert.match(response.body, /תיוק של קובץ אחר/);
+          assert.doesNotMatch(response.body, /type="file"/);
           assert.equal(await documentsHere(), before);
-          assert.equal(puts, putsBefore);
+          assert.equal(puts, putsBefore + 2);
         },
       );
 
       await t.test(
-        'a scan the reader cannot carry refuses on this tab and writes nothing',
+        'a scan the reader cannot open is kept, and naming a flat files it unread',
         async () => {
           const before = await documentsHere();
           const putsBefore = puts;
@@ -492,11 +520,75 @@ describe('evidence · A16 file a lease in one workspace', {
           });
           assert.equal(response.statusCode, 422);
           assert.match(response.body, /גדול מכדי/);
-          assert.match(response.body, /class="file-well"/);
+          assert.match(response.body, /הקובץ נשמר/);
           assert.deepEqual(paperMarks(response.body), []);
-          assert.match(response.body, /type="file"/);
+          assert.doesNotMatch(response.body, /type="file"/);
           assert.equal(await documentsHere(), before);
-          assert.equal(puts, putsBefore);
+          assert.equal(puts, putsBefore + 2);
+          const held = documentFileHash(
+            Buffer.concat([
+              pdfBytes('a16 huge'),
+              Buffer.alloc(onlineOcrByteLimit, 0x20),
+            ]),
+          );
+          const filed = await as(huge).inject({
+            method: 'POST',
+            url: '/documents/filing',
+            ...upload({ held, unit: unitNine }, null),
+          });
+          assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
+          assert.equal((await documentsHere()) - before, 1);
+        },
+      );
+
+      await t.test(
+        'a fat scan is read in a smaller piece and filed from the hold',
+        async () => {
+          const before = await documentsHere();
+          const fat = await bulkyPdf(2, 8 * 1024 * 1024);
+          assert.ok(fat.length > onlineOcrByteLimit);
+          let sent = 0;
+          const inner = createFakeOcrText([
+            leasing(`${ADDRESS}, ${CITY}, דירה 9`),
+            'עמוד שני',
+          ]);
+          const fatApp = buildApp({
+            pool,
+            version: '9.9.9-test',
+            clock: fixedClock(AT),
+            objects: counted,
+            pdf: createFakePdfText(['סריקה בלי טופס', 'עמוד שני']),
+            ocr: {
+              describe: () => 'fake',
+              pages: async (bytes, mime, version, selected) => {
+                sent = bytes.length;
+                return inner.pages(bytes, mime, version, selected);
+              },
+            },
+            bucket: BUCKET,
+          });
+          apps.push(fatApp);
+          const seen = await as(fatApp).inject({
+            method: 'POST',
+            url: '/documents/filing',
+            ...upload({}, { filename: 'fat.pdf', bytes: fat }),
+          });
+          assert.equal(seen.statusCode, 200, seen.body.slice(0, 500));
+          assert.match(seen.body, /דירה אחת/);
+          assert.doesNotMatch(seen.body, /גדול מכדי/);
+          assert.doesNotMatch(seen.body, /type="file"/);
+          assert.ok(sent > 0);
+          assert.ok(sent <= onlineOcrByteLimit);
+          assert.ok(sent < fat.length);
+          assert.equal(await documentsHere(), before);
+          const held = documentFileHash(fat);
+          const filed = await as(fatApp).inject({
+            method: 'POST',
+            url: '/documents/filing',
+            ...upload({ held, unit: unitNine }, null),
+          });
+          assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
+          assert.equal((await documentsHere()) - before, 1);
         },
       );
 
@@ -533,7 +625,7 @@ describe('evidence · A16 file a lease in one workspace', {
       );
 
       await t.test(
-        'several Units: the sentence, a list to pick, then attach again files',
+        'several Units: the sentence, a list to pick, then the held file is filed',
         async () => {
           const before = await documentsHere();
           const putsBefore = puts;
@@ -556,18 +648,18 @@ describe('evidence · A16 file a lease in one workspace', {
           assert.match(many.body, new RegExp(`value="${unitNine}"`));
           assert.match(many.body, new RegExp(`value="${unitTen}"`));
           assert.match(many.body, /חיפוש דירה/);
-          assert.match(many.body, /type="file"/);
+          assert.match(many.body, /הקובץ נשמר/);
+          assert.doesNotMatch(many.body, /type="file"/);
           assert.doesNotMatch(many.body, /\/estate\/buildings\/new/);
           assert.equal(await documentsHere(), before);
-          assert.equal(puts, putsBefore);
+          const held = documentFileHash(pdfBytes('a16 several'));
+          assert.match(many.body, new RegExp(`name="held" value="${held}"`));
+          assert.equal(puts, putsBefore + 2);
 
           const filed = await as(several).inject({
             method: 'POST',
             url: '/documents/filing',
-            ...upload(
-              { unit: unitTen },
-              { filename: 'several.pdf', bytes: pdfBytes('a16 several') },
-            ),
+            ...upload({ held, unit: unitTen }, null),
           });
           assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
           assert.match(
@@ -599,7 +691,8 @@ describe('evidence · A16 file a lease in one workspace', {
           assert.ok(marks.some((mark) => mark.includes(NONE_CITY)));
           assert.ok(marks.every((mark) => !/אינה בתיק/.test(mark)));
           assert.match(none.body, /חיפוש דירה/);
-          assert.match(none.body, /type="file"/);
+          assert.match(none.body, /הקובץ נשמר/);
+          assert.doesNotMatch(none.body, /type="file"/);
           assert.doesNotMatch(none.body, /\/estate\/buildings\/new/);
 
           const deferred = await as(annex).inject({
@@ -627,9 +720,10 @@ describe('evidence · A16 file a lease in one workspace', {
           assert.equal(blank.statusCode, 422);
           assert.match(blank.body, /לא נקראה כתובת/);
           assert.match(blank.body, /חיפוש דירה/);
+          assert.match(blank.body, /הקובץ נשמר/);
           assert.doesNotMatch(blank.body, /יצירת הבניין/);
           assert.equal(await documentsHere(), before);
-          assert.equal(puts, putsBefore);
+          assert.equal(puts, putsBefore + 6);
         },
       );
 
@@ -685,7 +779,7 @@ describe('evidence · A16 file a lease in one workspace', {
       );
 
       await t.test(
-        'estate-write creates a Building and Unit on this step, prefilled, then attach files',
+        'estate-write creates a Building and Unit on this step, then the held file is filed',
         async () => {
           const before = await documentsHere();
           const putsBefore = puts;
@@ -704,12 +798,16 @@ describe('evidence · A16 file a lease in one workspace', {
           assert.doesNotMatch(seen.body, /\/estate\/buildings\/new/);
           assert.doesNotMatch(seen.body, /handover_date/);
           assert.equal(await documentsHere(), before);
-          assert.equal(puts, putsBefore);
+          const held =
+            /name="held" value="([0-9a-f]{64})"/.exec(seen.body)?.[1] ?? '';
+          assert.equal(held, documentFileHash(createBytes));
+          assert.equal(puts, putsBefore + 2);
 
           const created = await as(elsewhere).inject({
             method: 'POST',
             url: '/documents/filing/place',
             payload: new URLSearchParams({
+              held,
               address_line: NONE_STREET,
               city: NONE_CITY,
               unit_number: '3',
@@ -720,7 +818,8 @@ describe('evidence · A16 file a lease in one workspace', {
           });
           assert.equal(created.statusCode, 200, created.body.slice(0, 400));
           assert.match(created.body, /הדירה נוצרה/);
-          assert.match(created.body, /type="file"/);
+          assert.match(created.body, /הקובץ נשמר/);
+          assert.doesNotMatch(created.body, /type="file"/);
           assert.match(created.body, /type="radio"/);
           assert.doesNotMatch(created.body, /\/estate\/buildings\//);
           const createdUnit =
@@ -729,15 +828,12 @@ describe('evidence · A16 file a lease in one workspace', {
             '';
           assert.ok(createdUnit);
           assert.equal(await documentsHere(), before);
-          assert.equal(puts, putsBefore);
+          assert.equal(puts, putsBefore + 2);
 
           const filed = await as(elsewhere).inject({
             method: 'POST',
             url: '/documents/filing',
-            ...upload(
-              { unit: createdUnit },
-              { filename: 'create.pdf', bytes: createBytes },
-            ),
+            ...upload({ held, unit: createdUnit }, null),
           });
           assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
           assert.match(

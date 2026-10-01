@@ -189,16 +189,33 @@ export async function ocrNamedPages(
   version: string,
   pages?: readonly number[],
 ): Promise<{ pages: PdfPage[]; bytes: Buffer; skipped: boolean }> {
-  const payload = await bytesForOcrSlice(bytes, pages);
-  if (payload.length > onlineOcrByteLimit) {
-    return { pages: [], bytes: payload, skipped: true };
+  // No page list and the file itself fits: send it whole, as a short scan always was.
+  if (!pages || pages.length === 0) {
+    if (bytes.length > onlineOcrByteLimit) {
+      return { pages: [], bytes, skipped: true };
+    }
+    const result = await ocr.pages(bytes, mimeType, version);
+    return { bytes, skipped: false, pages: result.pages };
   }
-  const result = await ocr.pages(payload, mimeType, version, pages);
-  return {
-    bytes: payload,
-    skipped: false,
-    pages: pages ? stampOriginalPages(result.pages, pages) : result.pages,
-  };
+  // A piece over the reader's call is shortened until it fits. One page that is itself over
+  // the bound is the only size refusal left — fewer pages is not available.
+  let span = [...pages];
+  while (span.length > 0) {
+    const payload = await bytesForOcrSlice(bytes, span);
+    if (payload.length <= onlineOcrByteLimit) {
+      const result = await ocr.pages(payload, mimeType, version, span);
+      return {
+        bytes: payload,
+        skipped: false,
+        pages: stampOriginalPages(result.pages, span),
+      };
+    }
+    if (span.length === 1) {
+      return { pages: [], bytes: payload, skipped: true };
+    }
+    span = span.slice(0, Math.max(1, Math.floor(span.length / 2)));
+  }
+  return { pages: [], bytes, skipped: true };
 }
 
 export async function readRemainingSlices(
@@ -211,12 +228,18 @@ export async function readRemainingSlices(
   pageCount: number,
   already: readonly PdfPage[],
 ): Promise<PdfPage[]> {
-  const readThrough = already.reduce(
+  let readThrough = already.reduce(
     (max, page) => Math.max(max, page.number),
     0,
   );
   const pages = [...already];
-  for (const slice of pageSlices(pageCount, readThrough)) {
+  // The window is recomputed from the pages actually read. A slice that had to be shortened
+  // must not jump past the pages it left behind.
+  while (readThrough < pageCount) {
+    const slice = pageSlices(pageCount, readThrough)[0];
+    if (!slice) {
+      break;
+    }
     const result = await ocrNamedPages(
       deps.ocr,
       bytes,
@@ -224,10 +247,18 @@ export async function readRemainingSlices(
       deps.ocrVersion,
       slice,
     );
-    if (result.skipped) {
+    if (result.skipped || result.pages.length === 0) {
       break;
     }
     pages.push(...result.pages);
+    const next = result.pages.reduce(
+      (max, page) => Math.max(max, page.number),
+      readThrough,
+    );
+    if (next <= readThrough) {
+      break;
+    }
+    readThrough = next;
   }
   return pages;
 }
@@ -290,11 +321,17 @@ export async function readForVerdict(
     return reading;
   }
   // **A long document is read in part rather than not at all. Slice 6.8 / #137.** The opening
-  // pages answer both questions being asked here. Each call is a slice of at most fifteen pages
-  // cut from the PDF; the remainder is the work queue's. `pagesRead` keeps `verified` honest.
-  const selected =
-    native.length > onlineOcrPageLimit
-      ? Array.from({ length: onlineOcrPageLimit }, (_, at) => at + 1)
+  // pages answer both questions being asked here. Each call is a slice of at most fifteen pages,
+  // cut further when that slice is still over the reader's call. The remainder is the work
+  // queue's. `pagesRead` keeps `verified` honest. A file over the call with fifteen pages or
+  // fewer is cut the same way — page count alone does not make it fit.
+  const opening =
+    native.length > onlineOcrPageLimit ||
+    (input.bytes.length > onlineOcrByteLimit && native.length > 0)
+      ? Array.from(
+          { length: Math.min(native.length, onlineOcrPageLimit) },
+          (_, at) => at + 1,
+        )
       : undefined;
   let pages: PdfPage[];
   try {
@@ -303,12 +340,11 @@ export async function readForVerdict(
       input.bytes,
       documentContentTypes[input.extension],
       deps.ocrVersion,
-      selected,
+      opening,
     );
     if (result.skipped) {
-      // **No call that would fit.** After #137 the bound is on the slice. A first slice that
-      // still will not fit is refused, because the alternative is a verdict about pages nobody
-      // sent.
+      // **No call that would fit.** One page is still over the reader's call. Fewer pages is
+      // not available, so nothing was read.
       return { ...reading, ocrOutcome: 'too_large' };
     }
     pages = result.pages;
@@ -318,14 +354,15 @@ export async function readForVerdict(
     return { ...reading, ocrOutcome: 'failed' };
   }
   const text = documentText(pages);
+  const partial = native.length > pages.length;
   return {
     text,
     native,
     ocr: pages,
     pages: pages.length > 0 ? pages : native,
     verification: verifyDeclaredType(text || null, input.verificationTerms),
-    ocrOutcome: selected ? 'partial' : 'ok',
-    ...(selected ? { pagesRead: selected.length } : {}),
+    ocrOutcome: partial ? 'partial' : 'ok',
+    ...(partial ? { pagesRead: pages.length } : {}),
   };
 }
 
@@ -467,8 +504,12 @@ async function readBytes(
   }
   try {
     const selected =
-      nativeCount > onlineOcrPageLimit
-        ? Array.from({ length: onlineOcrPageLimit }, (_, at) => at + 1)
+      nativeCount > onlineOcrPageLimit ||
+      (bytes.length > onlineOcrByteLimit && nativeCount > 0)
+        ? Array.from(
+            { length: Math.min(nativeCount, onlineOcrPageLimit) },
+            (_, at) => at + 1,
+          )
         : undefined;
     const result = await ocrNamedPages(
       deps.ocr,

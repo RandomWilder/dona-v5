@@ -159,6 +159,36 @@ export function documentObjectPath(spec: ObjectPathSpec): string {
   return `${segment}/${placeId}/${spec.typeKey}/${spec.fileHash}.${spec.extension}`;
 }
 
+/**
+ * Where a lease-filing upload waits until a flat is known.
+ *
+ * Not a place and not a document. The document path cannot be written yet, because it is the flat
+ * and the flat is what the reading is for. The leaf is the hash, so putting the same file twice is
+ * the same object. The reading taken off those bytes sits beside them, under `.reading.json`, so a
+ * later step on the tab does not attach the file again and does not read it again.
+ */
+export function intakeObjectPath(
+  fileHash: string,
+  extension: DocumentExtension,
+): string {
+  if (!fileHashPattern.test(fileHash)) {
+    throw new KernelError('invalid', 'file hash is not a sha256 digest');
+  }
+  if (!(documentExtensions as readonly string[]).includes(extension)) {
+    throw new KernelError('invalid', 'file extension is not one we store', {
+      accepted: documentExtensions.join(', '),
+    });
+  }
+  return `intake/${fileHash}.${extension}`;
+}
+
+export function intakeReadingPath(fileHash: string): string {
+  if (!fileHashPattern.test(fileHash)) {
+    throw new KernelError('invalid', 'file hash is not a sha256 digest');
+  }
+  return `intake/${fileHash}.reading.json`;
+}
+
 /** `gs://<bucket>/<path>` — what `document.storage_uri` holds. */
 export function documentStorageUri(bucket: string, path: string): string {
   if (!bucketPattern.test(bucket)) {
