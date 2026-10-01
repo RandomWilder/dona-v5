@@ -51,6 +51,7 @@ export {
   listTermsProfiles,
   occupantOfAssignedBay,
   occupantOfAssignedStorage,
+  occupantOfSecondAssignedBay,
   reassignParkingSpace,
   reassignStorageSpace,
   upsertTenancy,

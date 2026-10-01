@@ -60,7 +60,7 @@ export function isIdentifierField(fieldKey: string): boolean {
 
 /** Mapping instructions. A change here is a prompt change and runs the golden set. */
 export const EXTRACT_INSTRUCTIONS =
-  'Fill the declared fields from the numbered words. Return word_ids that support each value. Never invent coordinates. On a Hebrew lease, דירה מספר is apartment_number only; בניין מספר is building_number, not the house number in address. Address is street, house number and city — not the flat number as the house number. parking_space_number is the bay printed as חניה שמספרה, digits only, not a storage room. DATE values are ISO YYYY-MM-DD only, never Hebrew month names and never dd/mm/yyyy.';
+  'Fill the declared fields from the numbered words. Return word_ids that support each value. Never invent coordinates. On a Hebrew lease, דירה מספר is apartment_number only; בניין מספר is building_number, not the house number in address. Address is street, house number and city — not the flat number as the house number. parking_space_number is the bay printed as חניה שמספרה, digits only, not a storage room. When that phrase prints two or more numbers separated by a plus or a comma, parking_space_number is the first and second_parking_space_number is the second, each digits only, in printed order; a third number is not a field. One number leaves second_parking_space_number empty. DATE values are ISO YYYY-MM-DD only, never Hebrew month names and never dd/mm/yyyy.';
 
 export interface MeasuredWord {
   id: number;
@@ -431,6 +431,98 @@ export interface MappedFinding {
   confidence: number | null;
 }
 
+/** Two or more digit-groups separated by a comma or a plus. A hyphen is not a list. */
+function digitGroups(value: string): string[] | null {
+  const parts = value.split(/[,+]/).map((part) => part.trim());
+  if (parts.length < 2) return null;
+  if (!parts.every((part) => /^\d+$/.test(part))) return null;
+  return parts;
+}
+
+/**
+ * A glued parking value becomes two lines before it is stored. The first group stays
+ * `parking_space_number`. The second group is `second_parking_space_number`. A third group
+ * is dropped. One number is left as it was read. A second line that is itself a glued list
+ * keeps that list's second group. A second line that is only a later group of the first
+ * line's list is replaced by the second group. A glued second line with no first line is
+ * split the same way.
+ */
+function expandSecondBay(
+  mapped: MappedFinding[],
+  fields: readonly DocumentTypeFieldRow[],
+): MappedFinding[] {
+  const parkingField = fields.find(
+    (field) => field.fieldKey === 'parking_space_number',
+  );
+  const secondField = fields.find(
+    (field) => field.fieldKey === 'second_parking_space_number',
+  );
+  if (!secondField) return mapped;
+  const index = mapped.findIndex(
+    (row) => row.field.fieldKey === 'parking_space_number',
+  );
+  const secondIndex = mapped.findIndex(
+    (row) => row.field.fieldKey === 'second_parking_space_number',
+  );
+  if (index < 0) {
+    const held = secondIndex >= 0 ? mapped[secondIndex] : undefined;
+    const parts = held ? digitGroups(held.value) : null;
+    const first = parts?.[0];
+    const second = parts?.[1];
+    if (!held || !first || !second || !parkingField) return mapped;
+    const next = mapped.slice();
+    next[secondIndex] = { ...held, value: second };
+    next.push({
+      field: parkingField,
+      value: first,
+      page: held.page,
+      bbox: held.bbox,
+      confidence: held.confidence,
+    });
+    return next;
+  }
+  const source = mapped[index];
+  if (!source) return mapped;
+  const parts = digitGroups(source.value);
+  const first = parts?.[0];
+  const second = parts?.[1];
+  if (!first || !second) {
+    const held = secondIndex >= 0 ? mapped[secondIndex] : undefined;
+    const bay = held ? digitGroups(held.value)?.[1] : undefined;
+    if (!held || !bay) return mapped;
+    const next = mapped.slice();
+    next[secondIndex] = { ...held, value: bay };
+    return next;
+  }
+  const next = mapped.map((row, at) =>
+    at === index ? { ...row, value: first } : row,
+  );
+  const existing = next.findIndex(
+    (row) => row.field.fieldKey === 'second_parking_space_number',
+  );
+  if (existing < 0) {
+    next.push({
+      field: secondField,
+      value: second,
+      page: source.page,
+      bbox: source.bbox,
+      confidence: source.confidence,
+    });
+    return next;
+  }
+  const held = next[existing];
+  if (!held) return next;
+  const tail = parts.slice(2);
+  if (
+    digitGroups(held.value) ||
+    held.value === source.value ||
+    tail.includes(held.value)
+  ) {
+    next[existing] = { ...held, value: second };
+  }
+  return next;
+}
+
 /**
  * Ask the model to fill the declared fields from the numbered words, and capture what comes back.
  *
@@ -499,7 +591,7 @@ export async function mapFieldsFromWords(
         : Math.min(...selected.map((word) => word.confidence as number)),
     });
   }
-  return mapped;
+  return expandSecondBay(mapped, input.fields);
 }
 
 export async function extractFiledDocument(

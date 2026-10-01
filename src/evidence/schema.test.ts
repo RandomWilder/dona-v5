@@ -1242,7 +1242,6 @@ describe('the acceptance bar — a new type costs no DDL', () => {
       ['apartment_type', 'TEXT'],
       ['has_storage', 'BOOLEAN'],
       ['storage_space_number', 'TEXT'],
-      ['parking_space_number', 'TEXT'],
     ] as const) {
       const field = live(fieldKey);
       assert.ok(field, `${fieldKey} is declared on the lease`);
@@ -1250,6 +1249,21 @@ describe('the acceptance bar — a new type costs no DDL', () => {
       assert.equal(field?.valueType, valueType);
       assert.equal(field?.effectiveFrom, '2026-09-22');
     }
+
+    const parking = (lease?.fields ?? []).filter(
+      (field) => field.fieldKey === 'parking_space_number',
+    );
+    assert.equal(parking.length, 2);
+    assert.equal(parking[0]?.effectiveFrom, '2026-09-22');
+    assert.equal(parking[0]?.effectiveTo, '2026-09-30');
+    const parkingNow = live('parking_space_number');
+    assert.equal(parkingNow?.effectiveFrom, '2026-10-01');
+    assert.equal(parkingNow?.isRequired, false);
+    const secondBay = live('second_parking_space_number');
+    assert.equal(secondBay?.valueType, 'TEXT');
+    assert.equal(secondBay?.isRequired, false);
+    assert.equal(secondBay?.effectiveFrom, '2026-10-01');
+    assert.equal(secondBay?.labelHe, 'חניה שנייה');
 
     assert.equal(live('security_structure'), undefined);
     assert.equal(live('index_base_month'), undefined);
@@ -1281,6 +1295,17 @@ describe('the acceptance bar — a new type costs no DDL', () => {
       const nextKeys = next.map((field) => field.fieldKey);
       assert.equal(nextKeys.includes('gush'), true);
       assert.equal(nextKeys.includes('parking_space_number'), true);
+      assert.equal(nextKeys.includes('second_parking_space_number'), false);
+
+      const twoBays = await documentTypeFields(db, 'lease', '2026-10-01');
+      const twoBayKeys = twoBays.map((field) => field.fieldKey);
+      assert.equal(twoBayKeys.includes('parking_space_number'), true);
+      assert.equal(twoBayKeys.includes('second_parking_space_number'), true);
+      assert.equal(
+        twoBays.filter((field) => field.fieldKey === 'parking_space_number')
+          .length,
+        1,
+      );
     });
   });
 

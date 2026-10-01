@@ -37,6 +37,7 @@ const SHOWN = [
   'tenancy.rent_currency',
   'tenancy.option_end_date',
   'tenancy.parking_space_id',
+  'tenancy.second_parking_space_id',
   'tenancy.storage_space_id',
   'unit.rooms',
   'space.floor',
@@ -109,6 +110,7 @@ interface Place {
   rentCurrency: string | null;
   optionEndDate: string | null;
   parkingName: string | null;
+  secondParkingName: string | null;
   storageName: string | null;
   rooms: string | null;
   floor: string | null;
@@ -165,6 +167,7 @@ async function placeForTenancy(
     rentCurrency: string | null;
     optionEndDate: string | null;
     parkingName: string | null;
+    secondParkingName: string | null;
     storageName: string | null;
     rooms: string | null;
     floor: string | null;
@@ -175,6 +178,7 @@ async function placeForTenancy(
             t.rent_currency AS "rentCurrency",
             t.option_end_date::text AS "optionEndDate",
             park.name AS "parkingName",
+            second_park.name AS "secondParkingName",
             store.name AS "storageName",
             u.rooms::text AS rooms,
             unit_space.floor,
@@ -185,6 +189,7 @@ async function placeForTenancy(
        JOIN unit u ON u.unit_id = t.unit_id
        JOIN building b ON b.building_id = unit_space.building_id
        LEFT JOIN space park ON park.space_id = t.parking_space_id
+       LEFT JOIN space second_park ON second_park.space_id = t.second_parking_space_id
        LEFT JOIN space store ON store.space_id = t.storage_space_id
       WHERE t.tenancy_id = $1`,
     [tenancyId],
@@ -221,6 +226,7 @@ async function placeForUnit(
     rentCurrency: null,
     optionEndDate: null,
     parkingName: null,
+    secondParkingName: null,
     storageName: null,
     rooms: row.rooms,
     floor: row.floor,
@@ -304,6 +310,8 @@ function heldValue(target: string, place: Place): string | null {
   if (target === 'tenancy.rent_currency') return place.rentCurrency;
   if (target === 'tenancy.option_end_date') return place.optionEndDate;
   if (target === 'tenancy.parking_space_id') return place.parkingName;
+  if (target === 'tenancy.second_parking_space_id')
+    return place.secondParkingName;
   if (target === 'tenancy.storage_space_id') return place.storageName;
   if (target === 'unit.rooms') return place.rooms;
   if (target === 'space.floor') return place.floor;
@@ -339,10 +347,11 @@ function decide(
   }
   if (
     row.target === 'tenancy.parking_space_id' ||
+    row.target === 'tenancy.second_parking_space_id' ||
     row.target === 'tenancy.storage_space_id'
   ) {
     const space =
-      row.target === 'tenancy.parking_space_id' ? 'PARKING' : 'STORAGE';
+      row.target === 'tenancy.storage_space_id' ? 'STORAGE' : 'PARKING';
     const found = place.spaces.some(
       (candidate) => candidate.kind === space && candidate.name === row.value,
     );

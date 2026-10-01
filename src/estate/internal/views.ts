@@ -2573,6 +2573,8 @@ export interface TenancySheet {
   optionEndDate: string | null;
   parkingSpaceId: string | null;
   parkingName: string | null;
+  /** Set only when the lease named a second bay. A one-bay letting omits the line. */
+  secondParkingName?: string | null;
   parkingOptions: readonly { space_id: string; name: string }[];
   storageSpaceId: string | null;
   storageName: string | null;
@@ -2585,6 +2587,7 @@ export interface TenancySheet {
   uncarriedRent?: readonly UncarriedCite[];
   uncarriedOption?: readonly UncarriedCite[];
   uncarriedBay?: readonly UncarriedCite[];
+  uncarriedSecondBay?: readonly UncarriedCite[];
   uncarriedStorage?: readonly UncarriedCite[];
   checks: readonly TenancyGateCheckView[];
   canActivate: boolean;
@@ -3054,6 +3057,20 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
             sheet.mayAddInventory,
           )}</dd>
         </div>
+        ${
+          (sheet.secondParkingName ?? null) !== null ||
+          (sheet.uncarriedSecondBay?.length ?? 0) > 0
+            ? h`<div>
+          <dt>חניה שנייה</dt>
+          <dd>${carriedFact(
+            sheet.secondParkingName ? ltr(sheet.secondParkingName) : h`—`,
+            sheet.uncarriedSecondBay,
+            (sheet.secondParkingName ?? null) === null,
+            sheet.mayAddInventory,
+          )}</dd>
+        </div>`
+            : h``
+        }
         <div>
           <dt>מחסן משויך</dt>
           <dd>${carriedFact(

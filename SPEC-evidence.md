@@ -1044,7 +1044,10 @@ those two; it still does not establish the land.
 | `apartment_type` | TEXT | A tender typology and a drawing title-block, not a column. Captured and scored so the baseline says whether the reader can see a title block at all. |
 | `has_storage` | BOOLEAN | A reading, not a column. Derived on the estate side from `unit.storage_space_id IS NOT NULL`. |
 | `storage_space_number` | TEXT | Promotes to `tenancy.storage_space_id` through a `TENANCY` link. Never to `unit.storage_space_id`. Occupied when assigned storage is set, whoever wrote it. A name that is not a `STORAGE` Space in this Building refuses that write only. |
-| `parking_space_number` | TEXT | Promotes to `tenancy.parking_space_id` through a `TENANCY` link. Never to `unit.parking_space_id`. Occupied when the assigned bay is set, whoever wrote it. |
+| `parking_space_number` | TEXT | Promotes to `tenancy.parking_space_id` through a `TENANCY` link. Never to `unit.parking_space_id`. Occupied when the assigned bay is set, whoever wrote it. When the captured value is two or more digit-groups separated by a comma or a plus, only the first group is stored here. |
+| `second_parking_space_number` | TEXT | Promotes to `tenancy.second_parking_space_id` through a `TENANCY` link. Never to `unit.parking_space_id` and never onto the first assigned bay. The second digit-group of a parking value split as above, in printed order. A third group is not stored. One number leaves this field with no row. Occupied when the second assigned bay is set, whoever wrote it, and that occupancy is this column only. |
+
+**#179.** A parking value of two or more digit-groups separated by a comma or a plus is stored as two lines before anyone approves it. The separator may have spaces around it. Printed order is the order of the lines. Each line is digits only. A hyphen is not a list. `EXTRACT_INSTRUCTIONS` say the same thing, so a new reading returns two findings; the split still runs, because a plus may already have been stored as a comma in one string. A glued pair is therefore not a value on the ledger. The Hebrew label on the second line is not the label on the first.
 
 **The parcel keys are declared so they extract and score; they are not promotion targets.** A lease
 does not establish the land. The typed columns on `building` (#143) are the source of truth. The
@@ -1505,8 +1508,7 @@ matrix could read cannot be added by seeding a catalogue field.
 - **`field_promotion`** — one mapping per declaration. `document_type_field_id` is unique: a field
   promotes to at most one column. `target` is a CHECK enum. Extending it is a migration. Mapping
   *rows* are seed data, applied by the same function as the catalogue, because they point at ids that
-  only exist after `seed:doctypes`. After #146 the enum is the six `tenancy.*` copies (the assigned
-  bay is the sixth) plus `unit.rooms` and `space.floor`. `gush`, `helka` and `building_number` stay
+  only exist after `seed:doctypes`. After #179 the enum is `tenancy.start_date`, `tenancy.end_date`, `tenancy.rent_amount`, `tenancy.rent_currency`, `tenancy.option_end_date`, `tenancy.parking_space_id`, `tenancy.second_parking_space_id`, `tenancy.storage_space_id`, `unit.rooms` and `space.floor`. `gush`, `helka` and `building_number` stay
   off it.
 - **Stamp on `extracted_field`.** `promoted_to`, `promoted_by`, `promoted_at` — nullable until a
   promotion succeeds. `promoted_by` is `-- pii`: it names the operator who signed the copy. It stays
@@ -1609,8 +1611,8 @@ find none and overwrite the typed value.
 **A non-null estate column is occupied, whoever wrote it.** A promotion onto it refuses and names the
 existing value. An operator with the lease in front of them may `supersede`, and that is the record
 of who decided. There is no provenance column. Tenancy occupancy is unchanged **except the assigned
-bay and assigned storage**: `tenancy.parking_space_id` and `tenancy.storage_space_id` are occupied
-when set, whoever wrote it, because a reassignment writes the column with no extracted-field stamp.
+bay, the second assigned bay and assigned storage**: `tenancy.parking_space_id`, `tenancy.second_parking_space_id` and `tenancy.storage_space_id` are occupied
+when set, whoever wrote it. A reassignment writes the first bay with no extracted-field stamp. The second assigned bay has no reassign command; occupancy is still the column, and it does not occupy the first bay.
 The estate definition lives
 on estate's contract (`occupantOfEstateColumn`) so the promotion family consumes it rather than
 re-deriving it, and so evidence issues no estate SQL. #141 widens `field_promotion.target` by
@@ -1637,8 +1639,8 @@ branched on. Promoting those fields so a screen can render them would spend the 
 display problem.
 
 **`GET /estate/tenancies/:tenancyId` reads approved captures in estate's read model and view.** Rent,
-its currency, the option end, the assigned bay and the assigned storage come from the letting's
-columns when those columns are set. An approved value that has a promotion target and has not been
+its currency, the option end, the assigned bay, the second assigned bay and the assigned storage come from the letting's
+columns when those columns are set. The second assigned bay is its own line, and the line is omitted when the lease named one bay. An approved value that has a promotion target and has not been
 carried is shown anyway: on the fixed row when the column is empty, and beside the column's value
 when that value differs, with the page it was read from and the mark *מאושר, לא הועבר להשכרה*. The
 reason is computed on read — no column and no migration. Rooms and floor appear in the captures
