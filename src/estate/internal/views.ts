@@ -2573,9 +2573,13 @@ export interface TenancySheet {
   optionEndDate: string | null;
   parkingSpaceId: string | null;
   parkingName: string | null;
+  /** Set only when the lease named a second bay. A one-bay letting omits the line. */
+  secondParkingName?: string | null;
   parkingOptions: readonly { space_id: string; name: string }[];
   storageSpaceId: string | null;
   storageName: string | null;
+  /** Set only when the lease named a second room. A one-room letting omits the line. */
+  secondStorageName?: string | null;
   storageOptions: readonly { space_id: string; name: string }[];
   unit: UnitHit;
   people: readonly TenancyPersonView[];
@@ -2585,7 +2589,9 @@ export interface TenancySheet {
   uncarriedRent?: readonly UncarriedCite[];
   uncarriedOption?: readonly UncarriedCite[];
   uncarriedBay?: readonly UncarriedCite[];
+  uncarriedSecondBay?: readonly UncarriedCite[];
   uncarriedStorage?: readonly UncarriedCite[];
+  uncarriedSecondStorage?: readonly UncarriedCite[];
   checks: readonly TenancyGateCheckView[];
   canActivate: boolean;
   /** Whether this reader holds `tenancy.write`, so a blocked row may link the end-early form. */
@@ -3054,6 +3060,20 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
             sheet.mayAddInventory,
           )}</dd>
         </div>
+        ${
+          (sheet.secondParkingName ?? null) !== null ||
+          (sheet.uncarriedSecondBay?.length ?? 0) > 0
+            ? h`<div>
+          <dt>חניה שנייה</dt>
+          <dd>${carriedFact(
+            sheet.secondParkingName ? ltr(sheet.secondParkingName) : h`—`,
+            sheet.uncarriedSecondBay,
+            (sheet.secondParkingName ?? null) === null,
+            sheet.mayAddInventory,
+          )}</dd>
+        </div>`
+            : h``
+        }
         <div>
           <dt>מחסן משויך</dt>
           <dd>${carriedFact(
@@ -3063,6 +3083,20 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
             sheet.mayAddInventory,
           )}</dd>
         </div>
+        ${
+          (sheet.secondStorageName ?? null) !== null ||
+          (sheet.uncarriedSecondStorage?.length ?? 0) > 0
+            ? h`<div>
+          <dt>מחסן שני</dt>
+          <dd>${carriedFact(
+            sheet.secondStorageName ? ltr(sheet.secondStorageName) : h`—`,
+            sheet.uncarriedSecondStorage,
+            (sheet.secondStorageName ?? null) === null,
+            sheet.mayAddInventory,
+          )}</dd>
+        </div>`
+            : h``
+        }
         ${sheet.captures.map(
           (row) => h`<div>
             <dt>${row.labelHe}</dt>

@@ -178,8 +178,12 @@ export interface EstateDeps {
     option_end_date: string | null;
     parking_space_id: string | null;
     parking_name: string | null;
+    second_parking_space_id: string | null;
+    second_parking_name: string | null;
     storage_space_id: string | null;
     storage_name: string | null;
+    second_storage_space_id: string | null;
+    second_storage_name: string | null;
   }>;
   listTenancyParties: (
     db: Pool,
@@ -463,6 +467,34 @@ function citesFor(
   target: string,
 ): UncarriedCite[] {
   return rows.filter((row) => row.target === target).map(cite);
+}
+
+/** Both assigned bays occupy a parking Space. A null column occupies nothing. */
+function parkingHeld(
+  rows: readonly {
+    parking_space_id: string | null;
+    second_parking_space_id: string | null;
+  }[],
+): string[] {
+  return rows.flatMap((row) =>
+    [row.parking_space_id, row.second_parking_space_id].filter(
+      (id): id is string => id !== null,
+    ),
+  );
+}
+
+/** Both assigned storage rooms occupy a storage Space. A null column occupies nothing. */
+function storageHeld(
+  rows: readonly {
+    storage_space_id: string | null;
+    second_storage_space_id: string | null;
+  }[],
+): string[] {
+  return rows.flatMap((row) =>
+    [row.storage_space_id, row.second_storage_space_id].filter(
+      (id): id is string => id !== null,
+    ),
+  );
 }
 
 function protocolNoticeOf(request: FastifyRequest): string | null {
@@ -885,16 +917,8 @@ export function registerEstateRoutes(
       occupancy: new Map(
         occupied.map((unit) => [unit.unit_id, unit.occupants]),
       ),
-      occupiedParking: new Set(
-        assigned.flatMap((row) =>
-          row.parking_space_id ? [row.parking_space_id] : [],
-        ),
-      ),
-      occupiedStorage: new Set(
-        assigned.flatMap((row) =>
-          row.storage_space_id ? [row.storage_space_id] : [],
-        ),
-      ),
+      occupiedParking: new Set(parkingHeld(assigned)),
+      occupiedStorage: new Set(storageHeld(assigned)),
       states: await unitStates(
         deps.pool,
         unitIds,
@@ -1001,16 +1025,8 @@ export function registerEstateRoutes(
         deps.pool,
         occupied.map((unit) => unit.tenancy_id),
       );
-      const occupiedParking = new Set(
-        assigned.flatMap((row) =>
-          row.parking_space_id ? [row.parking_space_id] : [],
-        ),
-      );
-      const occupiedStorage = new Set(
-        assigned.flatMap((row) =>
-          row.storage_space_id ? [row.storage_space_id] : [],
-        ),
-      );
+      const occupiedParking = new Set(parkingHeld(assigned));
+      const occupiedStorage = new Set(storageHeld(assigned));
       const documents = await deps.listLinkedDocuments(
         deps.pool,
         'BUILDING',
@@ -1682,6 +1698,8 @@ export function registerEstateRoutes(
       optionEndDate: letting.option_end_date,
       parkingSpaceId: letting.parking_space_id,
       parkingName: letting.parking_name,
+      secondParkingName: letting.second_parking_name,
+      secondStorageName: letting.second_storage_name,
       parkingOptions,
       storageSpaceId: letting.storage_space_id,
       storageName: letting.storage_name,
@@ -1708,7 +1726,12 @@ export function registerEstateRoutes(
       uncarriedRent: rentCites(pending),
       uncarriedOption: citesFor(pending, 'tenancy.option_end_date'),
       uncarriedBay: citesFor(pending, 'tenancy.parking_space_id'),
+      uncarriedSecondBay: citesFor(pending, 'tenancy.second_parking_space_id'),
       uncarriedStorage: citesFor(pending, 'tenancy.storage_space_id'),
+      uncarriedSecondStorage: citesFor(
+        pending,
+        'tenancy.second_storage_space_id',
+      ),
       checks: gate.checks.map((check) => ({
         rule: check.rule,
         passed: check.passed,

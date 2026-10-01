@@ -31,6 +31,8 @@ import {
   applyPromotedField as applyTenancyPromotedField,
   occupantOfAssignedBay,
   occupantOfAssignedStorage,
+  occupantOfSecondAssignedBay,
+  occupantOfSecondAssignedStorage,
   type PromotedTenancyField,
 } from '../../tenancy/contract.ts';
 import type { Queryable } from './types.ts';
@@ -62,8 +64,42 @@ const TENANCY_FIELD: Record<string, PromotedTenancyField> = {
   'tenancy.rent_currency': 'rent_currency',
   'tenancy.option_end_date': 'option_end_date',
   'tenancy.parking_space_id': 'parking_space_id',
+  'tenancy.second_parking_space_id': 'second_parking_space_id',
   'tenancy.storage_space_id': 'storage_space_id',
+  'tenancy.second_storage_space_id': 'second_storage_space_id',
 };
+
+type AssignedTenancyField =
+  | 'parking_space_id'
+  | 'second_parking_space_id'
+  | 'storage_space_id'
+  | 'second_storage_space_id';
+
+function isAssignedTenancyField(
+  field: PromotedTenancyField | undefined,
+): field is AssignedTenancyField {
+  return (
+    field === 'parking_space_id' ||
+    field === 'second_parking_space_id' ||
+    field === 'storage_space_id' ||
+    field === 'second_storage_space_id'
+  );
+}
+
+async function assignedName(
+  db: Queryable,
+  tenancyId: string,
+  field: AssignedTenancyField,
+): Promise<string | null> {
+  if (field === 'parking_space_id') return occupantOfAssignedBay(db, tenancyId);
+  if (field === 'second_parking_space_id') {
+    return occupantOfSecondAssignedBay(db, tenancyId);
+  }
+  if (field === 'second_storage_space_id') {
+    return occupantOfSecondAssignedStorage(db, tenancyId);
+  }
+  return occupantOfAssignedStorage(db, tenancyId);
+}
 
 const ESTATE_FIELD: Record<string, PromotedEstateField> = {
   'unit.rooms': 'rooms',
@@ -175,15 +211,11 @@ export async function promoteExtractedField(
     // it was signed. The same reason the trigger looks only at a row that is gaining the stamp.
     if (row.promoted_to === row.target) {
       if (
-        (tenancyField === 'parking_space_id' ||
-          tenancyField === 'storage_space_id') &&
+        isAssignedTenancyField(tenancyField) &&
         tenancyId &&
         row.value !== null
       ) {
-        const assigned =
-          tenancyField === 'parking_space_id'
-            ? await occupantOfAssignedBay(db, tenancyId)
-            : await occupantOfAssignedStorage(db, tenancyId);
+        const assigned = await assignedName(db, tenancyId, tenancyField);
         if (assigned !== null && assigned !== row.value) {
           if (!supersede) {
             throw new KernelError(
@@ -371,14 +403,12 @@ export async function promoteExtractedField(
         [tenancyId, copy.target, skipIds],
       );
       const held = occupant.rows[0];
-      const assignedField =
-        copy.field === 'parking_space_id' || copy.field === 'storage_space_id';
-      const assigned = assignedField
-        ? copy.field === 'parking_space_id'
-          ? await occupantOfAssignedBay(db, tenancyId)
-          : await occupantOfAssignedStorage(db, tenancyId)
+      const assigned = isAssignedTenancyField(copy.field)
+        ? await assignedName(db, tenancyId, copy.field)
         : null;
-      const occupyingValue = assignedField ? assigned : (held?.value ?? null);
+      const occupyingValue = isAssignedTenancyField(copy.field)
+        ? assigned
+        : (held?.value ?? null);
       if (
         occupyingValue !== null &&
         occupyingValue !== copy.value &&
@@ -386,12 +416,14 @@ export async function promoteExtractedField(
       ) {
         throw new KernelError(
           'conflict',
-          assignedField
+          isAssignedTenancyField(copy.field)
             ? `that column already carries ${occupyingValue}`
             : `that column already carries ${held?.value} from document ${held?.document_id}`,
           {
             existingValue: occupyingValue,
-            sourceDocumentId: assignedField ? undefined : held?.document_id,
+            sourceDocumentId: isAssignedTenancyField(copy.field)
+              ? undefined
+              : held?.document_id,
           },
         );
       }

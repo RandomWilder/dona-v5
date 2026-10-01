@@ -45,8 +45,12 @@ export interface TenancyRow {
   option_end_date: string | null;
   parking_space_id: string | null;
   parking_name: string | null;
+  second_parking_space_id: string | null;
+  second_parking_name: string | null;
   storage_space_id: string | null;
   storage_name: string | null;
+  second_storage_space_id: string | null;
+  second_storage_name: string | null;
 }
 
 /** Who is on the letting, as ids and roles. The name lives in `party`. #107. */
@@ -144,11 +148,17 @@ export async function getTenancy(
             option_end_date::text AS option_end_date,
             tenancy.parking_space_id,
             p.name AS parking_name,
+            tenancy.second_parking_space_id,
+            second_park.name AS second_parking_name,
             tenancy.storage_space_id,
-            s.name AS storage_name
+            s.name AS storage_name,
+            tenancy.second_storage_space_id,
+            second_store.name AS second_storage_name
        FROM tenancy
        LEFT JOIN space p ON p.space_id = tenancy.parking_space_id
+       LEFT JOIN space second_park ON second_park.space_id = tenancy.second_parking_space_id
        LEFT JOIN space s ON s.space_id = tenancy.storage_space_id
+       LEFT JOIN space second_store ON second_store.space_id = tenancy.second_storage_space_id
       WHERE tenancy_id = $1`,
     [tenancyId],
   );

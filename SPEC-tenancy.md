@@ -76,12 +76,30 @@ Promotion of a lease's `parking_space_number` lands here, never on the built bay
 assigned bay is occupied whoever wrote it — a typed reassignment must not be overwritten by a
 later copy off the paper unless the operator said supersede.
 
+**#179 adds a second assigned bay.** `second_parking_space_id` is nullable and points at a
+`PARKING` space by the same composite-key technique. It is the second bay this household holds
+when the lease names two. The first column stays the first bay. Promotion of
+`second_parking_space_number` lands here, never on the built bay and never on
+`parking_space_id`. A name that is not a `PARKING` space in the Building refuses that line
+only. The first bay being set does not occupy this column, and this column being set does not
+occupy the first. There is no reassign command for the second line. A lease that names one bay
+leaves the column null, and the letting page draws no empty second line.
+
 **#148 adds assigned storage the same way.** `storage_space_id` is nullable and points at a
 `STORAGE` space. Promotion of `storage_space_number` lands here, never on built storage
 (`unit.storage_space_id`). A printed number that matches no `STORAGE` space in the Building
 refuses that write only; the rest of approve may succeed and the lease does not mint a Space.
 `reassignStorageSpace` is the ninth write command: same `reassigned` kind, no source document.
 A non-null assigned-storage column is occupied whoever wrote it.
+
+**#180 adds a second assigned storage.** `second_storage_space_id` is nullable and points at a
+`STORAGE` space by the same composite-key technique. It is the second storage room this household
+holds when the lease names two. The first column stays the first room. Promotion of
+`second_storage_space_number` lands here, never on built storage and never on
+`storage_space_id`. A name that is not a `STORAGE` space in the Building refuses that line
+only. The first room being set does not occupy this column, and this column being set does not
+occupy the first. There is no reassign command for the second line. A lease that names one room
+leaves the column null, and the letting page draws no empty second line.
 
 **No `-- pii` marker on any column**, and that is a claim the guard checks rather than a claim this
 file makes: nothing here is person-shaped. The people are in `party`, reached through

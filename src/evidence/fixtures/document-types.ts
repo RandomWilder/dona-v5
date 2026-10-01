@@ -61,8 +61,12 @@ const SCHEMA_V5 = '2026-09-21';
 // Ticket #144. Place facts the lease recites; parcel keys are cross-checks, not promotion
 // targets. #141 mapped rooms and floor.
 const SCHEMA_V6 = '2026-09-22';
+// Ticket #179. The second bay number, and the parking hint that names it as the first of two.
+// Ticket #180. The second storage number, on the same day, the same split.
+const SCHEMA_V7 = '2026-10-01';
 // Inclusive windows: close the superseded declaration the day before the successor opens.
 const LAST_DAY_BEFORE_V5 = '2026-09-20';
+const LAST_DAY_BEFORE_V7 = '2026-09-30';
 const ISO_DATE_HINT = 'YYYY-MM-DD. Not Hebrew month names and not dd/mm/yyyy.';
 
 function field(
@@ -398,7 +402,23 @@ export const seedDocumentTypes: SeedDocumentType[] = [
         'TEXT',
         false,
         'מספר המחסן אם מודפס. מחסן בלי מספר אינו מחזיר ערך. לא מספר חניה.',
-        { from: SCHEMA_V6 },
+        { from: SCHEMA_V6, to: LAST_DAY_BEFORE_V7 },
+      ),
+      field(
+        'storage_space_number',
+        'מספר מחסן',
+        'TEXT',
+        false,
+        'מספר המחסן המשויך להשכרה. ספרות בלבד. כשמודפסים שני מספרים מופרדים בפלוס או בפסיק, זה הראשון. מחסן בלי מספר אינו מחזיר ערך. לא מספר חניה.',
+        { from: SCHEMA_V7 },
+      ),
+      field(
+        'second_storage_space_number',
+        'מחסן שני',
+        'TEXT',
+        false,
+        'המספר השני כשמודפסים שני מספרי מחסן מופרדים בפלוס או בפסיק, בסדר המודפס. ספרות בלבד. אין ערך כשיש מספר אחד. לא מספר חניה.',
+        { from: SCHEMA_V7 },
       ),
       field(
         'parking_space_number',
@@ -406,7 +426,23 @@ export const seedDocumentTypes: SeedDocumentType[] = [
         'TEXT',
         false,
         'מספר החניה המשויכת להשכרה. ספרות בלבד. לא מספר מחסן ולא מספר דירה.',
-        { from: SCHEMA_V6 },
+        { from: SCHEMA_V6, to: LAST_DAY_BEFORE_V7 },
+      ),
+      field(
+        'parking_space_number',
+        'מספר חניה',
+        'TEXT',
+        false,
+        'מספר החניה המשויכת להשכרה. ספרות בלבד. כשמודפסים שני מספרים מופרדים בפלוס או בפסיק, זה הראשון. לא מספר מחסן ולא מספר דירה.',
+        { from: SCHEMA_V7 },
+      ),
+      field(
+        'second_parking_space_number',
+        'חניה שנייה',
+        'TEXT',
+        false,
+        'המספר השני כשמודפסים שני מספרי חניה מופרדים בפלוס או בפסיק, בסדר המודפס. ספרות בלבד. אין ערך כשיש מספר אחד. לא מספר מחסן.',
+        { from: SCHEMA_V7 },
       ),
     ],
   },

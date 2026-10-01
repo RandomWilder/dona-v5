@@ -143,9 +143,12 @@ describe('evidence · promote an extracted field', () => {
           `SELECT count(*)::text AS n FROM field_promotion`,
         );
         // start_date, end_date, new_end_date — two effective_from rows each (R18) — plus the
-        // three track B copies, #141's rooms and floor, #146's assigned bay, and #148's
-        // assigned storage (one SCHEMA_V6 row each).
-        assert.equal(mappings.rows[0]?.n, '13');
+        // three track B copies, #141's rooms and floor, #146's assigned bay, #148's
+        // assigned storage, #179's second parking declaration, the parking hint
+        // re-opened at SCHEMA_V7 (the closed SCHEMA_V6 row keeps its mapping),
+        // #180's second storage declaration, and the storage hint re-opened the
+        // same day (the closed SCHEMA_V6 row keeps its mapping).
+        assert.equal(mappings.rows[0]?.n, '17');
         const extras = await db.query<{ n: string }>(
           `SELECT count(*)::text AS n FROM field_promotion p
              JOIN document_type_field f
