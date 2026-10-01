@@ -8,6 +8,12 @@
 // Modules are wired here and nowhere else, through their contract.ts. registerUiAssets has existed
 // since the 1.4 kernel lift with nothing to serve; this is the slice that gives it a page to serve
 // the stylesheet to.
+
+import {
+  createServer as createHttp2Server,
+  type Http2ServerRequest,
+  type Http2ServerResponse,
+} from 'node:http2';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import { signedInChrome } from './chrome.ts';
@@ -129,6 +135,29 @@ export interface AppDeps {
    * revision must not serve a second product beside the live screens.
    */
   devMockups?: boolean;
+  /**
+   * Cleartext HTTP/2. **Set only by `serve.ts` when `K_SERVICE` is present.**
+   *
+   * Cloud Run caps an HTTP/1 request at 32 MiB and answers with its own page before this process
+   * runs. The upload bound is 100 MB (SPEC-evidence.md). End-to-end HTTP/2 is what makes that bound
+   * the one the hosted service follows. Local `npm run dev` leaves this unset and stays HTTP/1.
+   */
+  http2?: boolean;
+}
+
+/**
+ * Megabytes of HTTP/2 session buffer.
+ *
+ * Node's default is 10, which is under the upload bound: a scan the parser is still copying can
+ * close the session. 128 sits above 100 MB and inside the 2 GiB the revision is given for that scan.
+ */
+export const h2cSessionMib = 128;
+
+/** The cleartext HTTP/2 server Cloud Run talks to once `--use-http2` is set. */
+export function createH2cServer(
+  handler: (req: Http2ServerRequest, res: Http2ServerResponse) => void,
+): ReturnType<typeof createHttp2Server> {
+  return createHttp2Server({ maxSessionMemory: h2cSessionMib }, handler);
 }
 
 /**
@@ -176,7 +205,21 @@ function declaredStance(config: unknown): Stance | undefined {
 }
 
 export function buildApp(deps: AppDeps): FastifyInstance {
-  const app = Fastify({ logger: false });
+  const app = (
+    deps.http2
+      ? Fastify({
+          logger: false,
+          http2: true,
+          serverFactory: (handler) =>
+            createH2cServer(
+              handler as (
+                req: Http2ServerRequest,
+                res: Http2ServerResponse,
+              ) => void,
+            ),
+        })
+      : Fastify({ logger: false })
+  ) as FastifyInstance;
 
   const staffDeps: StaffDeps = {
     pool: deps.pool,

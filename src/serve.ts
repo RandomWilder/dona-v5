@@ -23,6 +23,9 @@ import {
 
 const host = process.env.HOST ?? '0.0.0.0';
 const port = Number(process.env.PORT ?? 8080);
+// Cloud Run sets K_SERVICE. That is the only place the 32 MiB HTTP/1 cap exists, and the only
+// place this process speaks cleartext HTTP/2 to get out from under it. A laptop has no such cap.
+const http2 = Boolean(process.env.K_SERVICE);
 
 // No localhost fallback: createPool refuses a missing DATABASE_URL (kernel/db.ts). A production
 // service that quietly falls back to a developer's database is worse than one that will not boot.
@@ -79,10 +82,12 @@ const app = buildApp({
   staffBaseUrl: process.env.STAFF_BASE_URL,
   staffHostedDomain: configuredHostedDomain(),
   devMockups: (process.env.VERSION ?? '0.0.0-dev').endsWith('-dev'),
+  http2,
 });
 
 await app.listen({ host, port });
 console.log(`dona-v5: http://127.0.0.1:${port}/health`);
+console.log(`http: ${http2 ? 'h2c' : 'h1'}`);
 console.log(`docs: ${objects.describe()}`);
 console.log(`ocr: ${ocr.describe()}`);
 console.log(`extract: ${extractor.describe()}`);

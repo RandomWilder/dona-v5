@@ -320,8 +320,14 @@ nothing outside it writes a document row.
   a slice, so a 100 MB scan is readable in fifteens as long as each slice fits. A first slice that
   still will not fit is refused with a sentence and writes nothing — the alternative is a verdict
   about pages nobody sent. The upload bound is **100 MB** (`LIMITS.fileSize`), chosen for scans as
-  a runaway ceiling, not as an unbounded store. The `document.verification_verdict` CHECK still
-  holds three values: nothing carrying this outcome reaches a row.
+  a runaway ceiling, not as an unbounded store. **That bound is what the hosted service accepts.**
+  Cloud Run refuses an HTTP/1 request above 32 MiB at its own edge — the English page "Request
+  Entity Too Large" — before this process runs and before the parser or the Hebrew refusal can
+  answer. Staging and production therefore speak HTTP/2 end to end, and the process listens in
+  cleartext HTTP/2 when it is that service. The revision is given 2 GiB so a 100 MB scan can sit in
+  memory while it is sliced. Local `npm run dev` stays HTTP/1, where there is no 32 MiB edge. The
+  `document.verification_verdict` CHECK still holds three values: nothing carrying this outcome
+  reaches a row.
 
 ### A refused upload leaves no row — the question slice 3.1 left open
 

@@ -107,6 +107,9 @@ jobs:
           if [[ -n "${{ steps.ocr.outputs.processor }}" ]]; then
             ENV_VARS="$ENV_VARS,DOCUMENT_AI_PROCESSOR=${{ steps.ocr.outputs.processor }}"
           fi
+          # HTTP/1 stops a body at 32 MiB, under the 100 MB upload bound. HTTP/2 removes that
+          # cap; 2Gi is room for one such scan while it is sliced. The process speaks h2c only
+          # when K_SERVICE is set. Both flags have to stay, or the next revision is the English page.
           gcloud run deploy "$SERVICE" \
             --image "$IMAGE:$SHA" \
             --region "$REGION" \
@@ -116,6 +119,8 @@ jobs:
             --set-secrets "DATABASE_URL=staging-database-url:latest,OPENAI_API_KEY=staging-openai-api-key:latest,GOOGLE_OAUTH_CLIENT_ID=staging-google-oauth-client-id:latest,GOOGLE_OAUTH_CLIENT_SECRET=staging-google-oauth-client-secret:latest" \
             --update-env-vars "$ENV_VARS" \
             --allow-unauthenticated \
+            --use-http2 \
+            --memory 2Gi \
             --min-instances 0 \
             --max-instances 3 \
             --quiet

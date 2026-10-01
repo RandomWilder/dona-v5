@@ -171,6 +171,11 @@ prod:     full CI re-run against the tagged commit → migrations → deploy →
   ask a lease question, assert a citation is present — plus the emergency path, which must route to
   the duty phone with no model call in between. "Deployed but silently broken" is the failure this
   exists to make impossible.
+- **The service speaks HTTP/2, and the revision has 2 GiB.** Cloud Run caps an HTTP/1 body at
+  32 MiB and answers with its own English page, under the 100 MB upload bound. `--use-http2` is what
+  removes that cap; the container listens in cleartext HTTP/2 only when `K_SERVICE` is set, so a
+  laptop stays HTTP/1. Both flags are on every deploy. Dropping either one puts the English page
+  back, or points HTTP/2 at a process that does not speak it.
 - **`npm run dev` does not reload.** Node loads the process once. A browser refresh is not a new
   revision. After any change to a screen or a write path, **stop the listener and start
   `npm run dev` again**, then click the path on `:3000` before merge. Tests `inject` the current

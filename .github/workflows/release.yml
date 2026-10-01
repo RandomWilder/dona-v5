@@ -110,6 +110,8 @@ jobs:
           if [[ -n "${{ steps.ocr.outputs.processor }}" ]]; then
             ENV_VARS="$ENV_VARS,DOCUMENT_AI_PROCESSOR=${{ steps.ocr.outputs.processor }}"
           fi
+          # Same bound as staging: HTTP/2 so a body up to 100 MB is not refused at 32 MiB,
+          # and 2Gi so that scan can be held while it is sliced.
           gcloud run deploy "$SERVICE" \
             --image "$IMAGE:$SHA" \
             --region "$REGION" \
@@ -119,6 +121,8 @@ jobs:
             --set-secrets "DATABASE_URL=prod-database-url:latest" \
             --update-env-vars "$ENV_VARS" \
             --allow-unauthenticated \
+            --use-http2 \
+            --memory 2Gi \
             --min-instances 1 \
             --max-instances 5 \
             --quiet
