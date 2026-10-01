@@ -32,6 +32,7 @@ import {
   occupantOfAssignedBay,
   occupantOfAssignedStorage,
   occupantOfSecondAssignedBay,
+  occupantOfSecondAssignedStorage,
   type PromotedTenancyField,
 } from '../../tenancy/contract.ts';
 import type { Queryable } from './types.ts';
@@ -65,12 +66,14 @@ const TENANCY_FIELD: Record<string, PromotedTenancyField> = {
   'tenancy.parking_space_id': 'parking_space_id',
   'tenancy.second_parking_space_id': 'second_parking_space_id',
   'tenancy.storage_space_id': 'storage_space_id',
+  'tenancy.second_storage_space_id': 'second_storage_space_id',
 };
 
 type AssignedTenancyField =
   | 'parking_space_id'
   | 'second_parking_space_id'
-  | 'storage_space_id';
+  | 'storage_space_id'
+  | 'second_storage_space_id';
 
 function isAssignedTenancyField(
   field: PromotedTenancyField | undefined,
@@ -78,7 +81,8 @@ function isAssignedTenancyField(
   return (
     field === 'parking_space_id' ||
     field === 'second_parking_space_id' ||
-    field === 'storage_space_id'
+    field === 'storage_space_id' ||
+    field === 'second_storage_space_id'
   );
 }
 
@@ -90,6 +94,9 @@ async function assignedName(
   if (field === 'parking_space_id') return occupantOfAssignedBay(db, tenancyId);
   if (field === 'second_parking_space_id') {
     return occupantOfSecondAssignedBay(db, tenancyId);
+  }
+  if (field === 'second_storage_space_id') {
+    return occupantOfSecondAssignedStorage(db, tenancyId);
   }
   return occupantOfAssignedStorage(db, tenancyId);
 }

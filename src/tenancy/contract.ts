@@ -52,6 +52,7 @@ export {
   occupantOfAssignedBay,
   occupantOfAssignedStorage,
   occupantOfSecondAssignedBay,
+  occupantOfSecondAssignedStorage,
   reassignParkingSpace,
   reassignStorageSpace,
   upsertTenancy,

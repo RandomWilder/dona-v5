@@ -725,6 +725,7 @@ export async function listOccupiedAssignments(
     parking_space_id: string | null;
     second_parking_space_id: string | null;
     storage_space_id: string | null;
+    second_storage_space_id: string | null;
   }[]
 > {
   if (tenancyIds.length === 0) {
@@ -734,8 +735,10 @@ export async function listOccupiedAssignments(
     parking_space_id: string | null;
     second_parking_space_id: string | null;
     storage_space_id: string | null;
+    second_storage_space_id: string | null;
   }>(
-    `SELECT parking_space_id, second_parking_space_id, storage_space_id
+    `SELECT parking_space_id, second_parking_space_id,
+            storage_space_id, second_storage_space_id
        FROM tenancy
       WHERE tenancy_id = ANY($1::uuid[])`,
     [[...tenancyIds]],

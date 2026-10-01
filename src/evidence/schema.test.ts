@@ -1241,7 +1241,6 @@ describe('the acceptance bar — a new type costs no DDL', () => {
       ['building_number', 'TEXT'],
       ['apartment_type', 'TEXT'],
       ['has_storage', 'BOOLEAN'],
-      ['storage_space_number', 'TEXT'],
     ] as const) {
       const field = live(fieldKey);
       assert.ok(field, `${fieldKey} is declared on the lease`);
@@ -1264,6 +1263,21 @@ describe('the acceptance bar — a new type costs no DDL', () => {
     assert.equal(secondBay?.isRequired, false);
     assert.equal(secondBay?.effectiveFrom, '2026-10-01');
     assert.equal(secondBay?.labelHe, 'חניה שנייה');
+
+    const storage = (lease?.fields ?? []).filter(
+      (field) => field.fieldKey === 'storage_space_number',
+    );
+    assert.equal(storage.length, 2);
+    assert.equal(storage[0]?.effectiveFrom, '2026-09-22');
+    assert.equal(storage[0]?.effectiveTo, '2026-09-30');
+    const storageNow = live('storage_space_number');
+    assert.equal(storageNow?.effectiveFrom, '2026-10-01');
+    assert.equal(storageNow?.isRequired, false);
+    const secondStore = live('second_storage_space_number');
+    assert.equal(secondStore?.valueType, 'TEXT');
+    assert.equal(secondStore?.isRequired, false);
+    assert.equal(secondStore?.effectiveFrom, '2026-10-01');
+    assert.equal(secondStore?.labelHe, 'מחסן שני');
 
     assert.equal(live('security_structure'), undefined);
     assert.equal(live('index_base_month'), undefined);
@@ -1296,13 +1310,21 @@ describe('the acceptance bar — a new type costs no DDL', () => {
       assert.equal(nextKeys.includes('gush'), true);
       assert.equal(nextKeys.includes('parking_space_number'), true);
       assert.equal(nextKeys.includes('second_parking_space_number'), false);
+      assert.equal(nextKeys.includes('storage_space_number'), true);
+      assert.equal(nextKeys.includes('second_storage_space_number'), false);
 
       const twoBays = await documentTypeFields(db, 'lease', '2026-10-01');
       const twoBayKeys = twoBays.map((field) => field.fieldKey);
       assert.equal(twoBayKeys.includes('parking_space_number'), true);
       assert.equal(twoBayKeys.includes('second_parking_space_number'), true);
+      assert.equal(twoBayKeys.includes('second_storage_space_number'), true);
       assert.equal(
         twoBays.filter((field) => field.fieldKey === 'parking_space_number')
+          .length,
+        1,
+      );
+      assert.equal(
+        twoBays.filter((field) => field.fieldKey === 'storage_space_number')
           .length,
         1,
       );

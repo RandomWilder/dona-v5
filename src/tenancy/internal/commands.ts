@@ -186,7 +186,8 @@ export type PromotedTenancyField =
   | 'option_end_date'
   | 'parking_space_id'
   | 'second_parking_space_id'
-  | 'storage_space_id';
+  | 'storage_space_id'
+  | 'second_storage_space_id';
 
 export interface PromotedFieldSpec {
   tenancyId: string;
@@ -233,12 +234,16 @@ const PROMOTED_COLUMN: Record<PromotedTenancyField, string> = {
   parking_space_id: 'parking_space_id',
   second_parking_space_id: 'second_parking_space_id',
   storage_space_id: 'storage_space_id',
+  second_storage_space_id: 'second_storage_space_id',
 };
 
 type AssignedSpaceKind = 'PARKING' | 'STORAGE';
 
 const ASSIGNED_SPACE: Record<
-  'parking_space_id' | 'second_parking_space_id' | 'storage_space_id',
+  | 'parking_space_id'
+  | 'second_parking_space_id'
+  | 'storage_space_id'
+  | 'second_storage_space_id',
   { kind: AssignedSpaceKind; empty: string; missing: string }
 > = {
   parking_space_id: {
@@ -252,6 +257,11 @@ const ASSIGNED_SPACE: Record<
     missing: 'that parking space is not in this building',
   },
   storage_space_id: {
+    kind: 'STORAGE',
+    empty: 'that storage space is empty',
+    missing: 'that storage space is not in this building',
+  },
+  second_storage_space_id: {
     kind: 'STORAGE',
     empty: 'that storage space is empty',
     missing: 'that storage space is not in this building',
@@ -313,10 +323,15 @@ async function assignedPlace(
              FROM tenancy t
              LEFT JOIN space p ON p.space_id = t.second_parking_space_id
             WHERE t.tenancy_id = $1`
-        : `SELECT t.storage_space_id AS space_id, p.name, t.unit_id
-             FROM tenancy t
-             LEFT JOIN space p ON p.space_id = t.storage_space_id
-            WHERE t.tenancy_id = $1`,
+        : field === 'storage_space_id'
+          ? `SELECT t.storage_space_id AS space_id, p.name, t.unit_id
+               FROM tenancy t
+               LEFT JOIN space p ON p.space_id = t.storage_space_id
+              WHERE t.tenancy_id = $1`
+          : `SELECT t.second_storage_space_id AS space_id, p.name, t.unit_id
+               FROM tenancy t
+               LEFT JOIN space p ON p.space_id = t.second_storage_space_id
+              WHERE t.tenancy_id = $1`,
     [tenancyId],
   );
   const row = current.rows[0];
@@ -388,6 +403,22 @@ export async function occupantOfSecondAssignedBay(
   return row.name;
 }
 
+/** The second assigned storage's printed name, or null when none is set. Occupied whoever wrote it. */
+export async function occupantOfSecondAssignedStorage(
+  db: Queryable,
+  tenancyId: string,
+): Promise<string | null> {
+  const row = await assignedPlace(
+    db,
+    validId(tenancyId, 'tenancy'),
+    'second_storage_space_id',
+  );
+  if (!row) {
+    throw new KernelError('not_found', 'tenancy not found');
+  }
+  return row.name;
+}
+
 /** Assigned storage's printed name, or null when none is set. Occupied whoever wrote it. */
 export async function occupantOfAssignedStorage(
   db: Queryable,
@@ -418,7 +449,8 @@ export async function applyPromotedField(
   if (
     spec.field === 'parking_space_id' ||
     spec.field === 'second_parking_space_id' ||
-    spec.field === 'storage_space_id'
+    spec.field === 'storage_space_id' ||
+    spec.field === 'second_storage_space_id'
   ) {
     const field = spec.field;
     const assigned = ASSIGNED_SPACE[field];
@@ -445,9 +477,14 @@ export async function applyPromotedField(
           `UPDATE tenancy SET second_parking_space_id = $2 WHERE tenancy_id = $1`,
           [spec.tenancyId, place.spaceId],
         );
-      } else {
+      } else if (field === 'storage_space_id') {
         await db.query(
           `UPDATE tenancy SET storage_space_id = $2 WHERE tenancy_id = $1`,
+          [spec.tenancyId, place.spaceId],
+        );
+      } else {
+        await db.query(
+          `UPDATE tenancy SET second_storage_space_id = $2 WHERE tenancy_id = $1`,
           [spec.tenancyId, place.spaceId],
         );
       }

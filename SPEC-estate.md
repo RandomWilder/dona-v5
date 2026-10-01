@@ -545,7 +545,8 @@ assignment, not existence. Rent stays off this list. Lease dates are on the Unit
 A vacant Unit is a Unit with no letting that counts today — the same `resolveOccupiedUnits`
 injection the occupancy chip already uses. A vacant parking Space is one with no assigned bay and no second assigned bay on a
 letting that counts today; a built-bay link does not occupy it. A vacant storage Space is one with
-no assigned storage on a letting that counts today; built storage does not occupy it. Estate does
+no assigned storage and no second assigned storage on a letting that counts today; built storage
+does not occupy it. Estate does
 not grow a second day predicate: the occupied-unit tenancy ids come from that injection, and
 assigned bay / assigned storage are read off those rows only.
 

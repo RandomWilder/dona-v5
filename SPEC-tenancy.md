@@ -92,6 +92,15 @@ refuses that write only; the rest of approve may succeed and the lease does not 
 `reassignStorageSpace` is the ninth write command: same `reassigned` kind, no source document.
 A non-null assigned-storage column is occupied whoever wrote it.
 
+**#180 adds a second assigned storage.** `second_storage_space_id` is nullable and points at a
+`STORAGE` space by the same composite-key technique. It is the second storage room this household
+holds when the lease names two. The first column stays the first room. Promotion of
+`second_storage_space_number` lands here, never on built storage and never on
+`storage_space_id`. A name that is not a `STORAGE` space in the Building refuses that line
+only. The first room being set does not occupy this column, and this column being set does not
+occupy the first. There is no reassign command for the second line. A lease that names one room
+leaves the column null, and the letting page draws no empty second line.
+
 **No `-- pii` marker on any column**, and that is a claim the guard checks rather than a claim this
 file makes: nothing here is person-shaped. The people are in `party`, reached through
 `tenancy_party.party_id`.

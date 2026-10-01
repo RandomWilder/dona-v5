@@ -88,7 +88,8 @@ export async function removeSpace(
             (SELECT count(*)::text FROM tenancy t
               WHERE t.parking_space_id = $1
                  OR t.second_parking_space_id = $1
-                 OR t.storage_space_id = $1) AS lettings`,
+                 OR t.storage_space_id = $1
+                 OR t.second_storage_space_id = $1) AS lettings`,
     [spaceId],
   );
   const blocked = held.rows[0];
@@ -172,7 +173,8 @@ export async function removeInventorySpace(
               WHERE t.unit_id = $1
                  OR t.parking_space_id = $1
                  OR t.second_parking_space_id = $1
-                 OR t.storage_space_id = $1) AS lettings,
+                 OR t.storage_space_id = $1
+                 OR t.second_storage_space_id = $1) AS lettings,
             (SELECT count(*)::text FROM unit u
               WHERE u.parking_space_id = $1 OR u.storage_space_id = $1) AS built,
             (SELECT count(*)::text FROM asset a WHERE a.space_id = $1) AS assets,

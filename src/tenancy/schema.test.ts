@@ -497,6 +497,8 @@ describe('tenancy · the rest of the schema', () => {
             'rent_currency',
             'second_parking_kind',
             'second_parking_space_id',
+            'second_storage_kind',
+            'second_storage_space_id',
             'start_date',
             'status',
             'storage_kind',
@@ -632,6 +634,23 @@ describe('tenancy · the rest of the schema', () => {
               [tenancyId],
             );
             assert.equal(row.rows[0]?.storage_space_id, room);
+            await rejects(db, FOREIGN_KEY_VIOLATION, () =>
+              db.query(
+                `UPDATE tenancy SET second_storage_space_id = $2 WHERE tenancy_id = $1`,
+                [tenancyId, lobby],
+              ),
+            );
+            await db.query(
+              `UPDATE tenancy SET second_storage_space_id = $2 WHERE tenancy_id = $1`,
+              [tenancyId, room],
+            );
+            const second = await db.query<{
+              second_storage_space_id: string;
+            }>(
+              'SELECT second_storage_space_id FROM tenancy WHERE tenancy_id = $1',
+              [tenancyId],
+            );
+            assert.equal(second.rows[0]?.second_storage_space_id, room);
           });
         },
       );
