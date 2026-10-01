@@ -124,6 +124,13 @@ export interface IntakeRequest {
    * seeding and importer paths that call this function have no session and never will.
    */
   filedBy?: string;
+  /**
+   * File a scan whose single page the reader cannot open, once a person has named the flat.
+   *
+   * תיוק חוזה only. Every other door leaves this unset, and a `too_large` reading still writes
+   * nothing. The row is `unverified`: nobody has seen the page, and a person anchored it anyway.
+   */
+  fileUnread?: boolean;
 }
 
 /**
@@ -228,9 +235,10 @@ export async function fileDocument(
     },
   };
 
-  if (reading.ocrOutcome === 'too_large') {
+  if (reading.ocrOutcome === 'too_large' && request.fileUnread !== true) {
     // Refused rather than filed. Nothing was read off this file and nothing could be, so a row
-    // would carry a verdict about a document nobody has seen a page of.
+    // would carry a verdict about a document nobody has seen a page of. תיוק חוזה is the
+    // exception, and only after a person has named the flat.
     await deps.audit.write(line, {
       outcome: 'error',
       code: 'invalid',
@@ -239,7 +247,19 @@ export async function fileDocument(
     return { filed: false, verification, refusal: 'too_large' };
   }
 
-  if (verification.verdict === 'refused') {
+  const filingVerification =
+    reading.ocrOutcome === 'too_large'
+      ? {
+          verdict: 'unverified' as const,
+          matchedTerms: [],
+          missingTerms: verification.missingTerms,
+        }
+      : verification;
+
+  if (
+    reading.ocrOutcome !== 'too_large' &&
+    filingVerification.verdict === 'refused'
+  ) {
     await deps.audit.write(line, {
       outcome: 'error',
       code: 'invalid',
@@ -302,9 +322,17 @@ export async function fileDocument(
     driveFileId: null,
     validFrom: request.validFrom ?? null,
     validTo: request.validTo ?? null,
-    verificationVerdict: verification.verdict,
+    verificationVerdict:
+      filingVerification.verdict === 'refused'
+        ? 'unverified'
+        : filingVerification.verdict,
     uploadedBy: request.filedBy ?? null,
-    ...(pageCount > 0 ? { pageCount, pagesRead } : {}),
+    ...(pageCount > 0
+      ? {
+          pageCount,
+          pagesRead: reading.ocrOutcome === 'too_large' ? 0 : pagesRead,
+        }
+      : {}),
   };
   const filed = await ingestDocument(deps.db, spec, deps.clock.now());
   await linkDocument(deps.db, {
@@ -326,11 +354,20 @@ export async function fileDocument(
   }
 
   await deps.audit.write(
-    { ...line, inputs: { ...line.inputs, documentId: filed.id } },
+    {
+      ...line,
+      inputs: {
+        ...line.inputs,
+        documentId: filed.id,
+        verdict: filingVerification.verdict,
+      },
+    },
     { outcome: 'ok' },
   );
 
-  const remainder = pageCount > pagesRead;
+  const filedPagesRead = reading.ocrOutcome === 'too_large' ? 0 : pagesRead;
+  const filedPages = reading.ocrOutcome === 'too_large' ? [] : reading.pages;
+  const remainder = pageCount > filedPagesRead;
   if (remainder && deps.work && ocrConfigured(deps.ocr) && deps.ocrVersion) {
     bindExtractWork(deps);
     await deps.work.schedule({
@@ -340,7 +377,7 @@ export async function fileDocument(
         documentId: filed.id,
         remainder: true,
         pageCount,
-        pages: reading.pages,
+        pages: filedPages,
       },
       intentKey: extractIntentKey(filed.id),
     });
@@ -352,9 +389,9 @@ export async function fileDocument(
           request.bytes,
           extension,
           pageCount,
-          reading.pages,
+          filedPages,
         )
-      : reading.pages;
+      : filedPages;
     await extractAfterFile(deps, filed.id, pages);
     if (embedderConfigured(deps.embedder)) {
       await writeDocumentPassages(deps.db, filed.id, pages, deps.embedder);
@@ -366,7 +403,7 @@ export async function fileDocument(
     documentId: filed.id,
     inserted: filed.inserted,
     storageUri,
-    verification,
+    verification: filingVerification,
   };
 }
 

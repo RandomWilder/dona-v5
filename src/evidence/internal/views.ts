@@ -756,6 +756,11 @@ function filingCreateOffer(
   return h`<form class="form-grid" method="post" action="/documents/filing/place">
     ${csrfInput(screen.csrf)}
     ${
+      screen.held
+        ? h`<input type="hidden" name="held" value="${screen.held}" />`
+        : h``
+    }
+    ${
       screen.building
         ? h`<input type="hidden" name="building" value="${screen.building.building_id}" />`
         : h``
@@ -780,8 +785,11 @@ function filingCreateOffer(
       }</button>
     </div>
     <p class="hint">
-      מה שנקרא מהמסמך הוא נקודת ההתחלה וניתן לתקן. אחרי היצירה יש לצרף את הקובץ שוב — שום דבר אינו
-      נשמר בין הניסיונות.
+      ${
+        screen.held
+          ? h`מה שנקרא מהמסמך הוא נקודת ההתחלה וניתן לתקן. הקובץ נשמר.`
+          : h`מה שנקרא מהמסמך הוא נקודת ההתחלה וניתן לתקן. אחרי היצירה יש לצרף את הקובץ שוב — שום דבר אינו נשמר בין הניסיונות.`
+      }
     </p>
   </form>`;
 }
@@ -872,6 +880,10 @@ export interface LeaseFilingScreen {
   query?: string;
   mayCreate?: boolean;
   chosenUnitId?: string;
+  /** The held upload's hash. Set once the file is kept. The file input does not come back. */
+  held?: string;
+  /** One page is over the reader's call. The file is kept and can be filed unread. */
+  unread?: boolean;
   tooLargeBytes?: number;
   refused?: {
     type: DocumentTypeRow;
@@ -1122,8 +1134,15 @@ function filingLede(screen: LeaseFilingScreen): Html {
 }
 
 export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
-  const tooLong =
-    screen.tooLargeBytes === undefined
+  const tooLong = screen.unread
+    ? h`<section class="notice">
+          <h2>הקובץ גדול מכדי שנקרא אותו</h2>
+          <p class="lede">
+            <strong>הקובץ נשמר.</strong> עמוד אחד גדול מכדי שהקורא יפתח אותו. בחרו דירה, והמסמך
+            יתויק בלי קריאה.
+          </p>
+        </section>`
+    : screen.tooLargeBytes === undefined
       ? h``
       : h`<section class="notice">
           <h2>הקובץ גדול מכדי שנקרא אותו</h2>
@@ -1163,7 +1182,11 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
           <h2>${filingHeadline(screen.reading, screen.candidateTotal ?? 0)}</h2>
           ${placeFacts(screen.reading, screen.building, excerpt)}
           <p class="lede">
-            <strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום. בחרו דירה, חפשו, או צרפו שוב.
+            ${
+              screen.held
+                ? h`<strong>הקובץ נשמר.</strong> בחרו דירה, חפשו, או צרו אותה — אין צורך לצרף אותו שוב.`
+                : h`<strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום. בחרו דירה, חפשו, או צרפו שוב.`
+            }
           </p>
           ${filingCreateOffer(screen, screen.reading)}
         </section>`
@@ -1172,7 +1195,11 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
     ? h`<section class="notice">
         <h2>הדירה נוצרה</h2>
         <p class="lede">
-          הדירה מסומנת למטה. צרפו את הקובץ שוב — הוא לא נשמר בין הניסיונות — ותייקו.
+          ${
+            screen.held
+              ? h`הדירה מסומנת למטה. <strong>הקובץ נשמר.</strong> תייקו.`
+              : h`הדירה מסומנת למטה. צרפו את הקובץ שוב — הוא לא נשמר בין הניסיונות — ותייקו.`
+          }
         </p>
       </section>`
     : h``;
@@ -1208,8 +1235,17 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
   const attach =
     screen.beat === 'read' || screen.beat === 'draft'
       ? h``
-      : h`<form class="file-well" method="post" action="/documents/filing" enctype="multipart/form-data">
+      : screen.held && screen.refused?.reason === 'terms'
+        ? h`<p class="form-note"><a href="/documents/filing">תיוק של קובץ אחר</a></p>`
+        : screen.held && !screen.matched && candidates.length === 0
+          ? h``
+          : h`<form class="file-well" method="post" action="/documents/filing" enctype="multipart/form-data">
           ${csrfInput(screen.csrf)}
+          ${
+            screen.held
+              ? h`<input type="hidden" name="held" value="${screen.held}" />`
+              : h``
+          }
           ${
             screen.matched
               ? h`<input type="hidden" name="unit" value="${screen.matched.unit_id}" />`
@@ -1247,16 +1283,22 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
               : h``
           }
           <span class="chip">חוזה שכירות</span>
-          <label for="file">הקובץ</label>
+          ${
+            screen.held
+              ? h``
+              : h`<label for="file">הקובץ</label>
           <input id="file" name="file" type="file" required
-            accept="${documentExtensions.map((ext) => `.${ext}`).join(',')}" />
+            accept="${documentExtensions.map((ext) => `.${ext}`).join(',')}" />`
+          }
           <p class="hint">
             ${
-              screen.matched
-                ? h`נשאר על הצעד עד המשך. נשמר רק אחרי אישור הדירה.`
-                : candidates.length > 0
-                  ? h`יש לצרף שוב. נשמר רק אחרי שהדירה אושרה.`
-                  : h`עד 100 מ״ב. נשמר רק אחרי שהדירה אושרה.`
+              screen.held
+                ? h`הקובץ נשמר. נרשם אחרי אישור הדירה.`
+                : screen.matched
+                  ? h`נשאר על הצעד עד המשך. נשמר רק אחרי אישור הדירה.`
+                  : candidates.length > 0
+                    ? h`יש לצרף שוב. נשמר רק אחרי שהדירה אושרה.`
+                    : h`עד 100 מ״ב. נשמר רק אחרי שהדירה אושרה.`
             }
           </p>
           <div class="form-actions">
@@ -1274,6 +1316,11 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
       ? h``
       : screen.reading !== undefined || candidates.length > 0
         ? h`<form class="form-grid" method="get" action="/documents/filing">
+            ${
+              screen.held
+                ? h`<input type="hidden" name="held" value="${screen.held}" />`
+                : h``
+            }
             <div class="form-row">
               <label for="q">חיפוש דירה</label>
               <input class="field" id="q" name="q" type="search" value="${

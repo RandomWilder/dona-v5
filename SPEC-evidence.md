@@ -317,9 +317,11 @@ nothing outside it writes a document row.
   scan is three slices.)*
 - **`too_large` is a refusal and never a stored verdict (slice 6.8, restated at #137).** The bound
   Document AI sets is on the **request** (~20 MiB, file base64-encoded). After #137 that request is
-  a slice, so a 100 MB scan is readable in fifteens as long as each slice fits. A first slice that
-  still will not fit is refused with a sentence and writes nothing — the alternative is a verdict
-  about pages nobody sent. The upload bound is **100 MB** (`LIMITS.fileSize`), chosen for scans as
+  a slice, so a 100 MB scan is readable in pieces as long as each piece fits. A piece that is still
+  over the bound is cut down by pages until it fits. One page that is itself over the bound is the
+  refusal: no call is made, and on every door but תיוק חוזה nothing is written — the alternative is
+  a verdict about pages nobody sent. תיוק חוזה keeps that file and files it unread once a person
+  names the flat (A16). The upload bound is **100 MB** (`LIMITS.fileSize`), chosen for scans as
   a runaway ceiling, not as an unbounded store. **That bound is what the hosted service accepts.**
   Cloud Run refuses an HTTP/1 request above 32 MiB at its own edge — the English page "Request
   Entity Too Large" — before this process runs and before the parser or the Hebrew refusal can
@@ -756,24 +758,35 @@ moment the address is unique.
 no type menu, an attach well, and the five beats as status — not as links. A VIEWER never sees the
 item.
 
-**`POST /documents/filing`** reads the place the way A12 does (`readForVerdict` → `readPlace` →
-`resolvePlace`). **Exact one Unit is shown, then Continue files.** The first post writes no row and
-no object. Continue is a second post of the same file with that Unit, and only then does
-`fileDocument` run. Nothing is held between the two posts. Type is `lease` at the edge; a posted
+**`POST /documents/filing`** keeps the file, then reads it. The door is unchanged and it runs first:
+over 100 MB, a kind this system does not store, and bytes already on file all refuse with nothing
+kept. A duplicate names the existing Document and links to it. Anything that passes is written once
+under `intake/<file hash>.<ext>` — not a place, not a document, and the same hash put twice is the
+same object. The reading taken off those bytes is kept beside them, so a later step on this tab
+does not attach the file again and does not read it again. Type is `lease` at the edge; a posted
 type is ignored.
 
-**Wrong file, a scan the online reader cannot carry, and bytes already on file** refuse on this
-tab with a sentence, write nothing, and re-arm the file input. Duplicate bytes name the existing
-Document and link to it. **Not exactly one Unit** stays here with A12's sentence for that cause, a
-re-armed file input, the candidate list, and estate search (`GET /documents/filing?q=`). Picking a
-candidate and attaching again is the second post of the same file, still `fileDocument`.
+**Then the place is read** the way A12 does (`readForVerdict` → `readPlace` → `resolvePlace`).
+**Exact one Unit is shown, then Continue files** through `fileDocument`, posting the hold and the
+Unit, not the file. The document row is written then, under that flat, and not before. **Not
+exactly one Unit** stays here with A12's sentence for that cause, the candidate list, and estate
+search (`GET /documents/filing?q=&held=`). The file input does not come back. Picking a candidate
+files the hold. A file that fails the lease terms is kept and is not filed; the empty tab is how a
+different file is attached.
+
+**A slice the reader cannot carry is shortened by pages until it fits**, here and on the pages read
+after filing. One page that is itself over that bound is still kept. The screen says the reader
+could not open it, and once a person names the flat `fileDocument` files it unread. Other doors
+still refuse that case and write nothing.
 
 **Create is on this step**, not on A11 or A13's screens. `POST /documents/filing/place` is
 `estate.write` and calls `upsertUnitRow` — the same command A11/A13 use. Street, city and apartment
-are prefilled from the reading and editable. What the paper does not name (handover, rooms) is
-filled as today's date, two years of warranty, one room, `READY`, so the tab stays the three fields
-the paint showed. Then attach again: nothing is held. An operator sees pick and search only — no
-disabled create control, and the create post refuses them. A11/A13 screens are untouched.
+are prefilled from the reading and editable, and the hold comes with them. What the paper does not
+name (handover, rooms) is filled as today's date, two years of warranty, one room, `READY`, so the
+tab stays the three fields the paint showed. The new flat comes back selected, and filing it posts
+the hold. An operator sees pick and search only — no disabled create control, and the create post
+refuses them. A11/A13 screens are untouched. The hold is not deleted: this bucket cannot delete,
+and the document's own copy lives under the flat.
 
 **After a successful file** the operator is still on this tab: `GET /documents/filing/:documentId`.
 That URL is this journey's, not `/documents/:id/fields` and not a Tenancy page. Refresh keeps it.
@@ -848,8 +861,8 @@ intake has already cost a read and possibly an OCR call.
 when a processor is configured — a scan whose address nobody can read resolves to zero candidates
 rather than to a 503. Until 6.8 the condition was *no text layer at all*, which is why the demo's
 CamScanner layer was never overruled. A document longer than the online call takes has its first
-pages read; a file larger than the call carries is refused with the size sentence rather than offered
-a candidate list it could never have narrowed.
+pages read. A slice over the call is shortened until it fits; a single page that still will not fit
+is kept on this tab and filed unread once a flat is named, rather than discarded.
 
 **It runs once, from slice 6.4.** Until then the same scan was read twice — once here for the place
 reader and once inside `fileDocument`, whose own verdict comes back `unverified` on a page with no
