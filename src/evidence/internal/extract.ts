@@ -442,9 +442,11 @@ function digitGroups(value: string): string[] | null {
 /**
  * A glued parking or storage value becomes two lines before it is stored. The first group
  * stays on the first field. The second group is the second field. A third group is dropped.
- * One number is left as it was read. A second line that is itself a glued list keeps that
- * list's second group. A second line that is only a later group of the first line's list is
- * replaced by the second group. A glued second line with no first line is split the same way.
+ * One number is left as it was read. A second line that repeats the whole list keeps
+ * that list's second group. A second line that is the remaining numbers keeps its own
+ * first group, and a further number is dropped. A second line that is only a later
+ * group of the first line's list is replaced by the second group. A glued second line
+ * with no first line is split the same way.
  */
 function expandSecondLine(
   mapped: MappedFinding[],
@@ -483,10 +485,14 @@ function expandSecondLine(
   const second = parts?.[1];
   if (!first || !second) {
     const held = secondIndex >= 0 ? mapped[secondIndex] : undefined;
-    const later = held ? digitGroups(held.value)?.[1] : undefined;
-    if (!held || !later) return mapped;
+    const heldParts = held ? digitGroups(held.value) : null;
+    const picked =
+      heldParts && heldParts[0] === source.value
+        ? heldParts[1]
+        : heldParts?.[0];
+    if (!held || !picked) return mapped;
     const next = mapped.slice();
-    next[secondIndex] = { ...held, value: later };
+    next[secondIndex] = { ...held, value: picked };
     return next;
   }
   const next = mapped.map((row, at) =>

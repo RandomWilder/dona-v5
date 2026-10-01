@@ -1876,6 +1876,57 @@ describe('evidence · a lease that names two bays assigns each', {
     );
     if (!onlySecond) t.skip(skipReason);
   });
+
+  it('a second line that lists the remaining numbers keeps the next one', async (t) => {
+    const address = 'שתי חניות 12';
+    const ran = await withCarry(
+      {
+        tag: 'a179tail',
+        city: 'עיר שתי חניות יב',
+        address,
+        on: ON_SECOND_BAY,
+        parking: ['234', '237', '240'],
+        findings: [
+          ...opening(address),
+          { field_key: 'parking_space_number', value: '234', word_ids: [8] },
+          {
+            field_key: 'second_parking_space_number',
+            value: '237,240',
+            word_ids: [9],
+          },
+        ],
+      },
+      async (carry) => {
+        const lines = await bayLines(carry, carry.documentId);
+        assert.deepEqual(
+          lines.map((line) => `${line.key}=${line.value}`),
+          ['parking_space_number=234', 'second_parking_space_number=237'],
+        );
+        const third = await carry.pool.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM extracted_field
+            WHERE document_id = $1 AND value = '240'`,
+          [carry.documentId],
+        );
+        assert.equal(third.rows[0]?.n, '0');
+        await approveOpening(carry);
+        await approveMapped(carry, carry.documentId, 'parking_space_number');
+        await approveMapped(
+          carry,
+          carry.documentId,
+          'second_parking_space_number',
+        );
+        const row = await column(carry);
+        assert.equal(row.parking_name, '234');
+        assert.equal(row.second_parking_name, '237');
+        const page = await carry.get(
+          `/estate/tenancies/${await carry.tenancyId()}`,
+        );
+        assert.match(page.body, /חניה משויכת[\s\S]{0,200}234/);
+        assert.match(page.body, /חניה שנייה[\s\S]{0,200}237/);
+      },
+    );
+    if (!ran) t.skip(skipReason);
+  });
 });
 
 async function storageLines(
