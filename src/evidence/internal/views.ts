@@ -1128,7 +1128,9 @@ function filingLede(screen: LeaseFilingScreen): Html {
       : h`החוזה בתיק. הקריאה בטאב הזה.`;
   }
   if (screen.matched) {
-    return h`נקראה כתובת. עדיין לא נשמר דבר.`;
+    return screen.held
+      ? h`נקראה כתובת. הקובץ נשמר. הרישום אחרי המשך.`
+      : h`נקראה כתובת. עדיין לא נשמר דבר.`;
   }
   return h`חוזה אחד. הדירה מן הכתובת שעל הדף.`;
 }
@@ -1298,7 +1300,7 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
                   ? h`נשאר על הצעד עד המשך. נשמר רק אחרי אישור הדירה.`
                   : candidates.length > 0
                     ? h`יש לצרף שוב. נשמר רק אחרי שהדירה אושרה.`
-                    : h`עד 100 מ״ב. נשמר רק אחרי שהדירה אושרה.`
+                    : h`עד 100 מ״ב. הקובץ נשמר מיד, והרישום אחרי אישור הדירה.`
             }
           </p>
           <div class="form-actions">

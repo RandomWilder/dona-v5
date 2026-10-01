@@ -370,6 +370,8 @@ describe('evidence · A16 file a lease in one workspace', {
           assert.doesNotMatch(response.body, /name="type"/);
           assert.match(response.body, /class="filing-beats"/);
           assert.match(response.body, /class="file-well"/);
+          assert.match(response.body, /הקובץ נשמר מיד/);
+          assert.doesNotMatch(response.body, /נשמר רק אחרי שהדירה אושרה/);
           assert.deepEqual(paperMarks(response.body), []);
           assert.match(response.body, /המסמך/);
           assert.match(response.body, /הדירה/);
@@ -427,6 +429,8 @@ describe('evidence · A16 file a lease in one workspace', {
           });
           assert.equal(seen.statusCode, 200, seen.body.slice(0, 400));
           assert.match(seen.body, /דירה אחת/);
+          assert.match(seen.body, /הקובץ נשמר/);
+          assert.doesNotMatch(seen.body, /עדיין לא נשמר דבר/);
           const marks = paperMarks(seen.body);
           assert.ok(marks.some((mark) => mark.includes(ADDRESS)));
           assert.ok(marks.some((mark) => mark.includes(CITY)));
