@@ -108,6 +108,10 @@ export interface ServiceCall {
   /** The sorter's Category. Not the one a person set, and it does not move the call. */
   proposal: CallCategory | null;
   sorterLabel: SorterLabel | null;
+  /** The model that produced the proposal. Null when there was no verdict. */
+  sorterModel: string | null;
+  /** The prompt version that produced the proposal. */
+  sorterPrompt: string | null;
   /** Returned to the filtered list. Not closed, and not in the open list. */
   returned: boolean;
 }
@@ -218,6 +222,8 @@ export interface OpenIntakeCallSpec {
   /** Set when a person rescues a filtered message. The door passes null. */
   openedBy: string | null;
   actorRole?: string | null;
+  sorterModel: string | null;
+  sorterPrompt: string | null;
 }
 
 export interface ReturnCallSpec {
@@ -370,6 +376,8 @@ interface CallRow {
   predecessor_description: string | null;
   returned_at: Date | null;
   returner_label: string | null;
+  sorter_model: string | null;
+  sorter_prompt: string | null;
 }
 
 const CALL_SELECT = `SELECT sc.service_call_id, sc.source_channel, sc.state, sc.description,
@@ -393,7 +401,7 @@ const CALL_SELECT = `SELECT sc.service_call_id, sc.source_channel, sc.state, sc.
             proposed.label_he AS proposed_label_he,
             proposed.is_active AS proposed_active,
             sc.predecessor_id, predecessor.description AS predecessor_description,
-            sc.returned_at,
+            sc.returned_at, sc.sorter_model, sc.sorter_prompt,
             COALESCE(
               NULLIF(btrim(returner.display_name), ''),
               returner.email
@@ -454,6 +462,8 @@ function toCall(row: CallRow): ServiceCall {
       row.proposed_active,
     ),
     sorterLabel: sorterLabelOf(row.sorter_label),
+    sorterModel: row.sorter_model,
+    sorterPrompt: row.sorter_prompt,
     returned: row.returned_at !== null,
   };
 }
@@ -626,6 +636,8 @@ export async function openCall(
     summary: null,
     proposal: null,
     sorterLabel: null,
+    sorterModel: null,
+    sorterPrompt: null,
     returned: false,
   };
 }
@@ -709,8 +721,9 @@ export async function openIntakeCall(
          (service_call_id, source_channel, state, description, sender_label,
           sender_unknown, opened_at, opened_by, emergency, emergency_by,
           to_review, sorter_label, sorter_summary, proposed_category_id,
-          predecessor_id)
-       VALUES ($1, $2, 'NEW', $3, $4, false, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+          predecessor_id, sorter_model, sorter_prompt)
+       VALUES ($1, $2, 'NEW', $3, $4, false, $5, $6, $7, $8, $9, $10, $11, $12,
+               $13, $14, $15)`,
       [
         id,
         sourceChannel,
@@ -725,6 +738,8 @@ export async function openIntakeCall(
         summary,
         proposedCategoryId,
         predecessorId,
+        spec.sorterModel,
+        spec.sorterPrompt,
       ],
     );
     if (spec.emergency) {

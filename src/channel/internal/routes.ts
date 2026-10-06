@@ -28,6 +28,8 @@ export interface ChannelDeps {
     openCalls?: number,
   ) => Html;
   devIntake: boolean;
+  /** The real sorter. Absent, the form picks the verdict itself. */
+  sorter?: Sorter;
 }
 
 const STAFF = { config: { staff: 'estate.read' } } as const;
@@ -82,6 +84,9 @@ function sorterFor(form: Record<string, unknown>): Sorter {
         summary: summary === '' ? null : summary,
       };
     },
+    async translate() {
+      return { bodyHe: null };
+    },
   };
 }
 
@@ -105,6 +110,7 @@ async function formPage(
     categories,
     stored,
     refusal,
+    chooseVerdict: deps.sorter === undefined,
   });
 }
 
@@ -139,7 +145,7 @@ export function registerChannelRoutes(
         deps.pool,
         deps.clock,
         {
-          sorter: sorterFor(form),
+          sorter: deps.sorter ?? sorterFor(form),
           matchesEmergency: emergencyMatch(deps.pool),
         },
         message,

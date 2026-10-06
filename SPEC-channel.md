@@ -40,9 +40,10 @@ the thread has an open call, on that call's timeline. It is not an incoming requ
 not check it for an emergency, does not sort it, and never opens a call from it. Manual PHONE and
 WALK_IN entries are calls' own and do not pass through this door.
 
-**A dev-only form** pushes a fabricated message through this door, and the person at the form picks
-the verdict the fake sorter returns, so the path can be clicked before a mailbox or a number is
-connected. The form is registered only on a `-dev` process. A stamped revision does not serve it.
+**A dev-only form** pushes a fabricated message through this door. When no sorter is
+configured, the person at the form picks the verdict, so the path can be clicked before a key is
+present. When the sorter is configured, the form sends the message through it. The form is
+registered only on a `-dev` process. A stamped revision does not serve it.
 
 **Nothing from before the connection day is imported.** Coexistence's history webhook is
 acknowledged and discarded. A mailbox is read from the cursor it starts at.
@@ -54,12 +55,17 @@ acknowledged and discarded. A mailbox is read from the cursor it starts at.
 - **translate** fills `body_he` when the message is not in Hebrew. The translation is for display
   and is never input to a decision.
 
-**A fake in tests; OpenAI on staging and in production**, with the model id in configuration. The
-sorter sees the message's subject and text only, and no store. Its output reaches the office only,
-so identifiers are not masked (ADR-0006).
+**A fake in tests; OpenAI on staging and in production**, with the model id in the `sorter.model`
+row, read per call. The prompt version sits beside the prompt. The sorter sees the message's
+subject and text only, and no store: the door hands it the active Category list, and it does not
+read one. Its output reaches the office only, so identifiers are not masked (ADR-0006).
 
-**A sorter failure never drops a message.** It becomes a ServiceCall marked "to review", with no
-summary.
+A Category the model names that is not on the active list is stored as no Category. The model id
+and the prompt version are stored on the verdict, on the call and on the message.
+
+**A sorter failure never drops a message.** Sort timing out, or any error from it, becomes a
+ServiceCall marked "to review", with no summary. Translate timing out leaves `body_he` empty and
+does not change that verdict.
 
 **Any change to the sorter's prompt, model id or the Category list runs the full golden set.** The
 golden set's messages are fabricated, never a real tenant's.

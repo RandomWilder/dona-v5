@@ -46,6 +46,7 @@ export interface NoiseMessage {
   body: string;
   sender: string;
   at: Date;
+  bodyHe: string | null;
 }
 
 export interface CallsDeps {
@@ -302,6 +303,7 @@ async function filteredPage(
         id: row.id,
         title: row.title,
         body: row.body,
+        bodyHe: row.bodyHe,
         sender: row.sender,
         sorterLabel: 'noise' as const,
       },
@@ -313,6 +315,7 @@ async function filteredPage(
         id: row.id,
         title: row.title,
         body: row.title,
+        bodyHe: null,
         sender: senderOf(row.senderLabel, row.senderUnknown),
         sorterLabel: row.sorterLabel,
       },

@@ -1,5 +1,5 @@
-// The channel module's public surface. #186 is the intake door and a fake
-// sorter. Adapters, translation and the real sorter are later tickets.
+// The channel module's public surface. #186 is the intake door. #187 is the
+// sorter on OpenAI, and translation. Adapters are later tickets.
 
 export type {
   IncomingAttachment,
@@ -7,10 +7,13 @@ export type {
   IntakeDeps,
   IntakeOutcome,
   NoiseMessage,
+  SortCategory,
   Sorter,
   SortInput,
   SortVerdict,
   StoredMessage,
+  TranslateInput,
+  Translation,
 } from './internal/door.ts';
 export {
   emergencyMatch,
@@ -19,7 +22,7 @@ export {
   receiveIncoming,
   rescueNoise,
 } from './internal/door.ts';
-
 export type { ChannelDeps } from './internal/routes.ts';
 export { registerChannelRoutes } from './internal/routes.ts';
+export { createSorter, SORTER_PROMPT_VERSION } from './internal/sorter.ts';
 export { renderIntakeForm } from './internal/views.ts';

@@ -112,6 +112,9 @@ describe('channel · the filtered list and the dev door', () => {
             async sort() {
               return { label: 'noise', categoryCode: null, summary: null };
             },
+            async translate() {
+              return { bodyHe: 'עלון פרסומת' };
+            },
           },
           matchesEmergency: async () => false,
         },
@@ -131,6 +134,8 @@ describe('channel · the filtered list and the dev door', () => {
       assert.match(filtered.body, /ניוזלטר של החנות/);
       assert.match(filtered.body, /data-sorter="noise"/);
       assert.match(filtered.body, /הצלה/);
+      assert.match(filtered.body, /data-translation="yes"/);
+      assert.match(filtered.body, /עלון פרסומת/);
 
       const rescued = await client.inject({
         method: 'POST',
@@ -219,6 +224,9 @@ describe('channel · the filtered list and the dev door', () => {
       sorter: {
         async sort() {
           return CALL;
+        },
+        async translate() {
+          return { bodyHe: null };
         },
       },
       matchesEmergency: async () => false,
@@ -338,6 +346,42 @@ describe('channel · the filtered list and the dev door', () => {
         url: '/calls?review=1',
       });
       assert.match(list.body, /ברז נוטף/);
+
+      const russian = await receiveIncoming(
+        pool,
+        clock,
+        {
+          sorter: {
+            async sort() {
+              return {
+                label: 'call' as const,
+                categoryCode: 'PLUMBING',
+                summary: 'נזילה בברז',
+              };
+            },
+            async translate() {
+              return { bodyHe: 'הברז במטבח מטפטף' };
+            },
+          },
+          matchesEmergency: async () => false,
+        },
+        incoming(domain, {
+          externalMessageId: 'ru',
+          externalThreadId: 'ru',
+          subject: null,
+          body: 'На кухне течёт кран',
+        }),
+      );
+      assert.equal(russian.kind, 'call');
+      if (russian.kind !== 'call') return;
+      const translated = await client.inject({
+        method: 'GET',
+        url: `/calls/${russian.callId}`,
+      });
+      assert.match(translated.body, /נזילה בברז/);
+      assert.match(translated.body, /data-translation="yes"/);
+      assert.match(translated.body, /הברז במטבח מטפטף/);
+      assert.match(translated.body, /На кухне течёт кран/);
     } finally {
       await cleanup(pool, domain);
       await pool.end();

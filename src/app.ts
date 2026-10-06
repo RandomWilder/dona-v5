@@ -29,6 +29,7 @@ import {
   listNoiseMessages,
   registerChannelRoutes,
   rescueNoise,
+  type Sorter,
 } from './channel/contract.ts';
 import { signedInChrome } from './chrome.ts';
 import { renderMockup } from './dev-mockups.ts';
@@ -150,6 +151,11 @@ export interface AppDeps {
    * revision must not serve a second product beside the live screens.
    */
   devMockups?: boolean;
+  /**
+   * The real sorter. Absent in tests, which inject a fake at the door.
+   * Present on staging and in production, where the dev form uses it too.
+   */
+  sorter?: Sorter;
   /**
    * Cleartext HTTP/2. **Set only by `serve.ts` when `K_SERVICE` is present.**
    *
@@ -662,6 +668,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     clock,
     chrome: signedInChrome,
     devIntake: deps.devMockups === true,
+    sorter: deps.sorter,
   });
   registerDocumentRoutes(app, {
     pool: deps.pool,

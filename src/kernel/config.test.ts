@@ -8,7 +8,9 @@ import {
   readEmbeddingSettings,
   readExtractionSettings,
   readOcrSettings,
+  readSorterSettings,
   type Settings,
+  sorterSettingKeys,
 } from './config.ts';
 import type { KernelError } from './errors.ts';
 import { migratedPoolOrNull, skipReason } from './pg-support.ts';
@@ -138,9 +140,27 @@ describe('settings', () => {
       assert.deepEqual(await readOcrSettings(createSettings(pool)), {
         processorVersion: 'pretrained-ocr-v2.1-2024-08-07',
       });
+      assert.deepEqual(await readSorterSettings(createSettings(pool)), {
+        model: 'gpt-5.6-luna',
+      });
     } finally {
       await pool.end();
     }
+  });
+
+  it('defaults the sorter model when the row is missing', async () => {
+    assert.deepEqual(await readSorterSettings(settingsOf({})), {
+      model: 'gpt-5.6-luna',
+    });
+  });
+
+  it('takes the sorter model from the row', async () => {
+    assert.deepEqual(
+      await readSorterSettings(
+        settingsOf({ [sorterSettingKeys.model]: 'some-other-model' }),
+      ),
+      { model: 'some-other-model' },
+    );
   });
 
   it('defaults extraction effort to medium when the row is missing', async () => {

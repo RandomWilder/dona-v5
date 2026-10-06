@@ -11,6 +11,8 @@ export interface IntakeFormScreen {
   categories: readonly CategoryRow[];
   stored: boolean;
   refusal?: string;
+  /** False when the real sorter reads the message. The form then does not pick. */
+  chooseVerdict?: boolean;
 }
 
 const styles = h`<style>
@@ -34,13 +36,41 @@ export function renderIntakeForm(screen: IntakeFormScreen): string {
       ? h``
       : h`<p class="refusal">${screen.refusal}</p>`;
   const stored = screen.stored ? h`<p class="lede">נשמרה, בלי קריאה.</p>` : h``;
+  const choose = screen.chooseVerdict !== false;
+  const verdict = choose
+    ? h`<fieldset class="choice">
+          <legend>פסק המסווג</legend>
+          <label><input type="radio" name="verdict" value="call" required /> קריאה</label>
+          <label><input type="radio" name="verdict" value="unsure" /> לא בטוח</label>
+          <label><input type="radio" name="verdict" value="noise" /> רעש</label>
+          <label><input type="radio" name="verdict" value="failure" /> כשל</label>
+        </fieldset>
+        <div class="field">
+          <label for="intake-category">הצעת קטגוריה</label>
+          <select id="intake-category" name="category">
+            <option value="">בלי</option>
+            ${screen.categories.map(
+              (category) =>
+                h`<option value="${category.code}">${category.labelHe}</option>`,
+            )}
+          </select>
+        </div>
+        <div class="field">
+          <label for="intake-summary">סיכום</label>
+          <input id="intake-summary" name="summary" type="text" maxlength="500" autocomplete="off" />
+        </div>`
+    : h`<p class="lede">המסווג יקרא את ההודעה.</p>`;
   const body = h`
     <div class="intake glass-stage">
       <header class="page-head">
         <div>
           <p class="back"><a href="/calls">קריאות</a></p>
           <h1>הודעת בדיקה</h1>
-          <p class="lede">רק בסביבת פיתוח. המסווג כאן הוא בחירה, לא מודל.</p>
+          <p class="lede">${
+            choose
+              ? 'רק בסביבת פיתוח. המסווג כאן הוא בחירה, לא מודל.'
+              : 'רק בסביבת פיתוח. המסווג קורא את ההודעה.'
+          }</p>
           ${stored}
         </div>
       </header>
@@ -72,27 +102,7 @@ export function renderIntakeForm(screen: IntakeFormScreen): string {
           <label for="intake-file">שם קובץ</label>
           <input id="intake-file" name="file" type="text" maxlength="200" autocomplete="off" />
         </div>
-        <fieldset class="choice">
-          <legend>פסק המסווג</legend>
-          <label><input type="radio" name="verdict" value="call" required /> קריאה</label>
-          <label><input type="radio" name="verdict" value="unsure" /> לא בטוח</label>
-          <label><input type="radio" name="verdict" value="noise" /> רעש</label>
-          <label><input type="radio" name="verdict" value="failure" /> כשל</label>
-        </fieldset>
-        <div class="field">
-          <label for="intake-category">הצעת קטגוריה</label>
-          <select id="intake-category" name="category">
-            <option value="">בלי</option>
-            ${screen.categories.map(
-              (category) =>
-                h`<option value="${category.code}">${category.labelHe}</option>`,
-            )}
-          </select>
-        </div>
-        <div class="field">
-          <label for="intake-summary">סיכום</label>
-          <input id="intake-summary" name="summary" type="text" maxlength="500" autocomplete="off" />
-        </div>
+        ${verdict}
         <label><input type="checkbox" name="echo" value="1" /> הד מהמשרד</label>
         <button class="btn btn-primary" type="submit">שליחה</button>
       </form>

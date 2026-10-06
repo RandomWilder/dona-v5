@@ -30,13 +30,19 @@ future growth.
 
 ## Acceptance criteria
 
-- [ ] Staging sorts and translates with OpenAI; tests still use the fake
-- [ ] A verdict whose Category is not on the active list is stored as no Category
-- [ ] Model id and prompt version are on every verdict
-- [ ] A timeout or an error yields a "to review" call with no summary
-- [ ] The golden set runs, its pass rate is recorded, and none of its messages is a real tenant's
+- [x] Staging sorts and translates with OpenAI; tests still use the fake
+- [x] A verdict whose Category is not on the active list is stored as no Category
+- [x] Model id and prompt version are on every verdict
+- [x] A timeout or an error yields a "to review" call with no summary
+- [x] The golden set runs, its pass rate is recorded, and none of its messages is a real tenant's
 - [ ] Clicked on staging: a fabricated message in Russian shows a Hebrew translation and a summary
 
 ## Blocked by
 
 - #186 — The intake door, with the sorter faked
+
+## Comment — 2026-10-06
+
+The sorter is OpenAI when a key is configured, and a fake in tests. Sort returns call, unsure, or noise, a category from the active list, and a Hebrew summary. A category that is not on that list is stored as none. Translate fills the Hebrew text when the message is not Hebrew, and a failure there does not change the verdict. A timeout or any error from sort opens a call to review with no summary. The model id is the sorter.model row, read per call. The prompt version is sorter-1, stored with the model id on the call and on the message.
+
+The golden set is fourteen fabricated messages, in Hebrew, English, Russian, Arabic, and one mix. Run against the configured model it passed 14/14. The dev form still lets a person pick the verdict when no key is configured. When a key is configured, that form sends the message through the sorter. A stamped revision does not serve the form, so the staging click is still open.

@@ -191,6 +191,24 @@ export async function readClockSettings(
   return { zone };
 }
 
+export const sorterSettingKeys = {
+  model: 'sorter.model',
+} as const;
+
+export interface SorterSettings {
+  model: string;
+}
+
+// Read per call, like the extraction model. A verdict records the id it was
+// sorted with, so changing the row does not rewrite an older message, and a
+// model the account cannot serve is fixed without a deploy.
+export async function readSorterSettings(
+  settings: Settings,
+): Promise<SorterSettings> {
+  const model = await settings.text(sorterSettingKeys.model, 'gpt-5.6-luna');
+  return { model };
+}
+
 export const ocrSettingKeys = {
   processorVersion: 'ocr.processor_version',
 } as const;

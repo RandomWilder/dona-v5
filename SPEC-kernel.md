@@ -159,6 +159,11 @@ already stored, so changing it is a migration and a re-embed anyway.
 when it changes — and the failure it guards is different in kind: a model id the account cannot
 serve makes every extraction fail, and the fix has to be one row rather than a deploy.
 
+`sorter.model` is read **per call** on the same argument. It names the model that sorts and
+translates an incoming message. The prompt version is code, beside the prompt, because changing
+the prompt is a change to this repository and runs the golden set. A verdict records both, so a
+later edit of the row does not rewrite what an older message was sorted with.
+
 `ocr.processor_version` is read **per call** on the same argument: a processor version is not
 compiled into any column, and pinning a bad one must be fixable with a row. The processor *id* is
 environment, like `DOCS_BUCKET` — it names a GCP resource, not a tunable.

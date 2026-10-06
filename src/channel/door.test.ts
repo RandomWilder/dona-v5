@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import {
   exitCall,
   getCall,
+  listCategories,
   listOpenCalls,
   saveEmergencySettings,
 } from '../calls/contract.ts';
@@ -20,6 +21,7 @@ import {
   listMessagesOnCall,
   listNoiseMessages,
   receiveIncoming,
+  rescueNoise,
   type Sorter,
   type SortVerdict,
 } from './contract.ts';
@@ -49,9 +51,17 @@ function counting(verdict: SortVerdict | 'throw', seen: string[]): Sorter {
   return {
     async sort(input) {
       seen.push('sorter');
-      assert.deepEqual(Object.keys(input).sort(), ['body', 'subject']);
+      assert.deepEqual(Object.keys(input).sort(), [
+        'body',
+        'categories',
+        'subject',
+      ]);
       if (verdict === 'throw') throw new Error('sorter down');
       return verdict;
+    },
+    async translate(input) {
+      assert.deepEqual(Object.keys(input).sort(), ['body', 'subject']);
+      return { bodyHe: null };
     },
   };
 }
@@ -587,6 +597,250 @@ describe('channel · the intake door', () => {
         );
         assert.equal(onKept[1]?.attachments[0]?.fileName, 'leak.jpg');
         assert.equal(onCopy.length, 0);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('stores no category when the verdict names one that is not active', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const outcome = await receiveIncoming(
+          db,
+          fixedClock(AT),
+          {
+            sorter: {
+              async sort() {
+                return {
+                  label: 'call' as const,
+                  categoryCode: 'NOT_A_TRADE',
+                  summary: 'משהו בבית',
+                  modelId: 'gpt-test',
+                  promptVersion: 'sorter-1',
+                };
+              },
+              async translate() {
+                return { bodyHe: null };
+              },
+            },
+            matchesEmergency: async () => false,
+          },
+          incoming({ externalMessageId: 'bad-cat', externalThreadId: 't-bad' }),
+        );
+        assert.equal(outcome.kind, 'call');
+        if (outcome.kind !== 'call') return;
+        const call = await getCall(db, outcome.callId);
+        assert.equal(call?.proposal, null);
+        assert.equal(call?.summary, 'משהו בבית');
+        assert.equal(call?.sorterModel, 'gpt-test');
+        assert.equal(call?.sorterPrompt, 'sorter-1');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('records the model and the prompt, and keeps them when a filtered message is rescued', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const active = await listCategories(db, { activeOnly: true });
+        const outcome = await receiveIncoming(
+          db,
+          clock,
+          {
+            sorter: {
+              async sort(input) {
+                assert.deepEqual(
+                  input.categories.map((row) => row.code),
+                  active.map((row) => row.code),
+                );
+                return {
+                  label: 'noise' as const,
+                  categoryCode: null,
+                  summary: null,
+                  modelId: 'gpt-test',
+                  promptVersion: 'sorter-1',
+                };
+              },
+              async translate(input) {
+                assert.deepEqual(Object.keys(input).sort(), [
+                  'body',
+                  'subject',
+                ]);
+                return { bodyHe: null };
+              },
+            },
+            matchesEmergency: async () => false,
+          },
+          incoming({
+            externalMessageId: 'noise-stamp',
+            externalThreadId: 't-stamp',
+            body: 'מבצע של החנות',
+          }),
+        );
+        assert.equal(outcome.kind, 'filtered');
+        if (outcome.kind !== 'filtered') return;
+        const aside = await listNoiseMessages(db);
+        const mine = aside.find((row) => row.id === outcome.messageId);
+        assert.equal(mine?.sorterModel, 'gpt-test');
+        assert.equal(mine?.sorterPrompt, 'sorter-1');
+
+        const { account } = await addOperator(db, clock, {
+          email: 'ops@door-stamp.test',
+          role: 'OPERATOR',
+        });
+        const rescued = await rescueNoise(db, clock, {
+          messageId: outcome.messageId,
+          actorId: account.staffAccountId,
+        });
+        const call = await getCall(db, rescued.callId);
+        assert.equal(call?.sorterLabel, 'noise');
+        assert.equal(call?.sorterModel, 'gpt-test');
+        assert.equal(call?.sorterPrompt, 'sorter-1');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('keeps a Hebrew translation beside the original', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const outcome = await receiveIncoming(
+          db,
+          fixedClock(AT),
+          {
+            sorter: {
+              async sort() {
+                return {
+                  label: 'call' as const,
+                  categoryCode: 'PLUMBING',
+                  summary: 'נזילה בברז',
+                };
+              },
+              async translate() {
+                return { bodyHe: 'הברז במטבח מטפטף' };
+              },
+            },
+            matchesEmergency: async () => false,
+          },
+          incoming({
+            externalMessageId: 'ru-1',
+            externalThreadId: 't-ru',
+            subject: null,
+            body: 'На кухне течёт кран',
+          }),
+        );
+        assert.equal(outcome.kind, 'call');
+        if (outcome.kind !== 'call') return;
+        const call = await getCall(db, outcome.callId);
+        assert.equal(call?.summary, 'נזילה בברז');
+        assert.equal(call?.toReview, false);
+        const messages = await listMessagesOnCall(db, outcome.callId);
+        assert.equal(messages[0]?.body, 'На кухне течёт кран');
+        assert.equal(messages[0]?.bodyHe, 'הברז במטבח מטפטף');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('opens a call to review with no summary when sorting fails, and still keeps a translation', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const outcome = await receiveIncoming(
+          db,
+          fixedClock(AT),
+          {
+            sorter: {
+              async sort() {
+                throw new Error('timed out');
+              },
+              async translate() {
+                return { bodyHe: 'הברז במטבח מטפטף' };
+              },
+            },
+            matchesEmergency: async () => false,
+          },
+          incoming({
+            externalMessageId: 'timeout-1',
+            externalThreadId: 't-timeout',
+            subject: 'Кран',
+            body: 'На кухне течёт кран',
+          }),
+        );
+        assert.equal(outcome.kind, 'call');
+        if (outcome.kind !== 'call') return;
+        const call = await getCall(db, outcome.callId);
+        assert.equal(call?.toReview, true);
+        assert.equal(call?.summary, null);
+        assert.equal(call?.sorterModel, null);
+        assert.equal(call?.sorterPrompt, null);
+        assert.equal(call?.state, 'NEW');
+        const messages = await listMessagesOnCall(db, outcome.callId);
+        assert.equal(messages[0]?.bodyHe, 'הברז במטבח מטפטף');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('does not change the verdict when translation fails', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const outcome = await receiveIncoming(
+          db,
+          fixedClock(AT),
+          {
+            sorter: {
+              async sort() {
+                return CALL;
+              },
+              async translate() {
+                throw new Error('timed out');
+              },
+            },
+            matchesEmergency: async () => false,
+          },
+          incoming({
+            externalMessageId: 'tr-fail',
+            externalThreadId: 't-tr-fail',
+          }),
+        );
+        assert.equal(outcome.kind, 'call');
+        if (outcome.kind !== 'call') return;
+        const call = await getCall(db, outcome.callId);
+        assert.equal(call?.toReview, false);
+        assert.equal(call?.summary, 'נזילה בצינור');
+        const messages = await listMessagesOnCall(db, outcome.callId);
+        assert.equal(messages[0]?.bodyHe, null);
       });
     } finally {
       await pool.end();

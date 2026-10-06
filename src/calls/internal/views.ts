@@ -29,6 +29,7 @@ export interface TimelineMessage {
   id: string;
   at: Date;
   body: string;
+  bodyHe: string | null;
   subject: string | null;
   echo: boolean;
   attachments: readonly { fileName: string }[];
@@ -39,6 +40,7 @@ export interface FilteredRow {
   id: string;
   title: string;
   body: string;
+  bodyHe: string | null;
   sender: string;
   sorterLabel: SorterLabel | null;
 }
@@ -381,7 +383,11 @@ function messageLine(message: TimelineMessage): Html {
       ? h``
       : h` ${message.attachments.map((file) => h`<span data-file="${file.fileName}">קובץ: ${file.fileName}</span>`)}`;
   const who = message.echo ? 'הד מהמשרד' : 'הודעה';
-  return h`<li data-kind="MESSAGE" data-echo="${echo}" data-message="${message.id}"><span class="message">${who} · ${subject}${message.body}${files}</span> · ${whenLabel(message.at)}</li>`;
+  const translation =
+    message.bodyHe === null
+      ? h``
+      : h` <span data-translation="yes">תרגום: ${message.bodyHe}</span>`;
+  return h`<li data-kind="MESSAGE" data-echo="${echo}" data-message="${message.id}"><span class="message">${who} · ${subject}${message.body}${translation}${files}</span> · ${whenLabel(message.at)}</li>`;
 }
 
 function timelineOf(
@@ -673,9 +679,13 @@ function filteredRow(row: FilteredRow, csrf: string): Html {
     row.kind === 'call'
       ? h`<input type="hidden" name="call_id" value="${row.id}" />`
       : h`<input type="hidden" name="message_id" value="${row.id}" />`;
+  const translation =
+    row.bodyHe === null
+      ? h``
+      : h` <span data-translation="yes">תרגום: ${row.bodyHe}</span>`;
   return h`<article class="call" data-filtered="${row.kind}" data-filtered-id="${row.id}">
     <p class="call-main">${title}</p>
-    <p class="message">${row.body}</p>
+    <p class="message">${row.body}${translation}</p>
     <p class="call-meta">
       ${sorterLabel(row.sorterLabel)}
       ${office}

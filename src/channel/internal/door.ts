@@ -51,19 +51,38 @@ export interface IncomingMessage {
   echo?: boolean;
 }
 
+export interface SortCategory {
+  code: string;
+  label: string;
+}
+
 export interface SortInput {
   subject: string;
   body: string;
+  categories: readonly SortCategory[];
+}
+
+export interface TranslateInput {
+  subject: string;
+  body: string;
+}
+
+export interface Translation {
+  /** Null when the message is already Hebrew. */
+  bodyHe: string | null;
 }
 
 export interface SortVerdict {
   label: SorterLabel;
   categoryCode: string | null;
   summary: string | null;
+  modelId?: string | null;
+  promptVersion?: string | null;
 }
 
 export interface Sorter {
   sort(input: SortInput): Promise<SortVerdict>;
+  translate(input: TranslateInput): Promise<Translation>;
 }
 
 export interface IntakeDeps {
@@ -82,6 +101,8 @@ export interface StoredMessage {
   id: string;
   at: Date;
   body: string;
+  /** The Hebrew rendering, when the message was not Hebrew. */
+  bodyHe: string | null;
   subject: string | null;
   echo: boolean;
   attachments: readonly { fileName: string }[];
@@ -91,8 +112,11 @@ export interface NoiseMessage {
   id: string;
   title: string;
   body: string;
+  bodyHe: string | null;
   sender: string;
   at: Date;
+  sorterModel: string | null;
+  sorterPrompt: string | null;
 }
 
 interface Normalized {
@@ -122,6 +146,8 @@ interface ReadyVerdict {
   label: SorterLabel;
   categoryCode: string | null;
   summary: string | null;
+  modelId: string | null;
+  promptVersion: string | null;
 }
 
 /** The real emergency check. Tests that must prove the order pass their own. */
@@ -151,6 +177,7 @@ export async function receiveIncoming(
   if (raced) return raced;
 
   const emergency = await deps.matchesEmergency(messageText(message));
+  const bodyHe = await askTranslator(deps.sorter, message);
   const thread = await threadOf(db, message);
   if (thread.openCallId !== null) {
     const attached = await settleAttach(
@@ -159,11 +186,12 @@ export async function receiveIncoming(
       messageId,
       thread.openCallId,
       emergency,
+      bodyHe,
     );
     if (attached) return attached;
   }
 
-  const verdict = await askSorter(deps.sorter, message);
+  const verdict = await askSorter(db, deps.sorter, message);
   const predecessorId =
     thread.openCallId === null
       ? thread.predecessorId
@@ -176,6 +204,7 @@ export async function receiveIncoming(
     emergency,
     verdict,
     predecessorId,
+    bodyHe,
   );
 }
 
@@ -188,11 +217,13 @@ export async function listMessagesOnCall(
     message_id: string;
     received_at: Date;
     body_original: string;
+    body_he: string | null;
     subject: string | null;
     is_echo: boolean;
     attachments: unknown;
   }>(
-    `SELECT message_id, received_at, body_original, subject, is_echo, attachments
+    `SELECT message_id, received_at, body_original, body_he, subject, is_echo,
+            attachments
        FROM message
       WHERE service_call_id = $1
       ORDER BY received_at, message_id`,
@@ -202,6 +233,7 @@ export async function listMessagesOnCall(
     id: row.message_id,
     at: row.received_at,
     body: row.body_original,
+    bodyHe: row.body_he,
     subject: row.subject,
     echo: row.is_echo,
     attachments: fileNames(row.attachments),
@@ -217,8 +249,12 @@ export async function listNoiseMessages(
     body_original: string;
     sender_address: string;
     received_at: Date;
+    body_he: string | null;
+    sorter_model: string | null;
+    sorter_prompt: string | null;
   }>(
-    `SELECT message_id, subject, body_original, sender_address, received_at
+    `SELECT message_id, subject, body_original, body_he, sender_address,
+            received_at, sorter_model, sorter_prompt
        FROM message
       WHERE service_call_id IS NULL
         AND NOT is_echo
@@ -231,6 +267,9 @@ export async function listNoiseMessages(
     body: row.body_original,
     sender: row.sender_address,
     at: row.received_at,
+    bodyHe: row.body_he,
+    sorterModel: row.sorter_model,
+    sorterPrompt: row.sorter_prompt,
   }));
 }
 
@@ -256,9 +295,12 @@ export async function rescueNoise(
       sorter_label: string | null;
       sorter_summary: string | null;
       proposed_category_id: string | null;
+      sorter_model: string | null;
+      sorter_prompt: string | null;
     }>(
       `SELECT source_channel, sender_address, subject, body_original, is_echo,
-              service_call_id, sorter_label, sorter_summary, proposed_category_id
+              service_call_id, sorter_label, sorter_summary, proposed_category_id,
+              sorter_model, sorter_prompt
          FROM message
         WHERE message_id = $1
         FOR UPDATE`,
@@ -291,6 +333,8 @@ export async function rescueNoise(
       predecessorId: null,
       openedBy: actorId,
       actorRole: spec.actorRole,
+      sorterModel: row.sorter_model,
+      sorterPrompt: row.sorter_prompt,
     });
     await tx.query(
       `UPDATE message SET service_call_id = $2 WHERE message_id = $1`,
@@ -395,19 +439,49 @@ function firstLine(body: string): string {
   return line.slice(0, 120);
 }
 
+async function askTranslator(
+  sorter: Sorter,
+  message: Normalized,
+): Promise<string | null> {
+  try {
+    const result = await sorter.translate({
+      subject: message.subject ?? '',
+      body: message.body,
+    });
+    if (result === null || typeof result !== 'object') return null;
+    if (typeof result.bodyHe !== 'string') return null;
+    const text = result.bodyHe.trim();
+    return text === '' ? null : text.slice(0, BODY_MAX);
+  } catch {
+    return null;
+  }
+}
+
 async function askSorter(
+  db: Queryable,
   sorter: Sorter,
   message: Normalized,
 ): Promise<ReadyVerdict | null> {
+  const categories = await listCategories(db, { activeOnly: true });
   try {
     const verdict = await sorter.sort({
       subject: message.subject ?? '',
       body: message.body,
+      categories: categories.map((row) => ({
+        code: row.code,
+        label: row.labelHe,
+      })),
     });
     return readyVerdict(verdict);
   } catch {
     return null;
   }
+}
+
+function clip(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  return text === '' ? null : text.slice(0, 200);
 }
 
 function readyVerdict(value: SortVerdict): ReadyVerdict | null {
@@ -428,7 +502,13 @@ function readyVerdict(value: SortVerdict): ReadyVerdict | null {
     typeof value.categoryCode === 'string' && value.categoryCode.trim() !== ''
       ? value.categoryCode.trim().toUpperCase()
       : null;
-  return { label: value.label, categoryCode, summary };
+  return {
+    label: value.label,
+    categoryCode,
+    summary,
+    modelId: clip(value.modelId),
+    promptVersion: clip(value.promptVersion),
+  };
 }
 
 function isSettled(row: StoredRow): boolean {
@@ -588,14 +668,17 @@ async function settleAttach(
   messageId: string,
   callId: string,
   emergency: boolean,
+  bodyHe: string | null,
 ): Promise<IntakeOutcome | null> {
   return inTransaction(db, async (tx) => {
     const row = await lockMessage(tx, messageId);
     if (isSettled(row)) return outcomeOf(row);
     if (!(await callIsAttachable(tx, callId))) return null;
     await tx.query(
-      `UPDATE message SET service_call_id = $2 WHERE message_id = $1`,
-      [messageId, callId],
+      `UPDATE message
+          SET service_call_id = $2, body_he = $3
+        WHERE message_id = $1`,
+      [messageId, callId, bodyHe],
     );
     if (emergency) await flagCallByTerms(tx, clock, callId);
     return { kind: 'attached', messageId, callId };
@@ -610,6 +693,7 @@ async function settleVerdict(
   emergency: boolean,
   verdict: ReadyVerdict | null,
   predecessorId: string | null,
+  bodyHe: string | null,
 ): Promise<IntakeOutcome> {
   const noise = verdict?.label === 'noise' && !emergency;
   return inTransaction(db, async (tx) => {
@@ -622,9 +706,19 @@ async function settleVerdict(
         `UPDATE message
             SET sorter_label = 'noise',
                 sorter_summary = $2,
-                proposed_category_id = $3
+                proposed_category_id = $3,
+                body_he = $4,
+                sorter_model = $5,
+                sorter_prompt = $6
           WHERE message_id = $1`,
-        [messageId, verdict.summary, categoryId],
+        [
+          messageId,
+          verdict.summary,
+          categoryId,
+          bodyHe,
+          verdict.modelId,
+          verdict.promptVersion,
+        ],
       );
       return { kind: 'filtered', messageId };
     }
@@ -648,13 +742,18 @@ async function settleVerdict(
       predecessorId,
       openedBy: null,
       actorRole: null,
+      sorterModel: verdict?.modelId ?? null,
+      sorterPrompt: verdict?.promptVersion ?? null,
     });
     await tx.query(
       `UPDATE message
           SET service_call_id = $2,
               sorter_label = $3,
               sorter_summary = $4,
-              proposed_category_id = $5
+              proposed_category_id = $5,
+              body_he = $6,
+              sorter_model = $7,
+              sorter_prompt = $8
         WHERE message_id = $1`,
       [
         messageId,
@@ -662,6 +761,9 @@ async function settleVerdict(
         verdict?.label ?? null,
         verdict?.summary ?? null,
         categoryId,
+        bodyHe,
+        verdict?.modelId ?? null,
+        verdict?.promptVersion ?? null,
       ],
     );
     return { kind: 'call', messageId, callId: call.id };

@@ -1,7 +1,13 @@
+import { listCategories } from '../src/calls/contract.ts';
+import {
+  createSorter,
+  SORTER_PROMPT_VERSION,
+} from '../src/channel/contract.ts';
 import { systemClock, today } from '../src/kernel/clock.ts';
 import {
   createSettings,
   readExtractionSettings,
+  readSorterSettings,
 } from '../src/kernel/config.ts';
 import { createConfiguredExtractor } from '../src/kernel/extraction.ts';
 import { migratedPoolOrNull } from '../src/kernel/pg-support.ts';
@@ -11,6 +17,7 @@ import {
   runExtractionGoldenSet,
 } from './extraction.ts';
 import { formatReport, loadCases, runCases } from './runner.ts';
+import { runSorterGoldenSet } from './sorter.ts';
 import { officeTurnSubject, placeholderSubject } from './subject.ts';
 
 // CI entry point (`npm run evals`). Non-zero exit blocks the merge, exactly
@@ -109,6 +116,34 @@ if (extraction && pool) {
   );
 }
 
+let sorterFailed = 0;
+if (keyed && pool && extraction) {
+  const sorterSettings = await readSorterSettings(createSettings(pool));
+  const categories = await listCategories(pool, { activeOnly: true });
+  console.log(
+    `sorter: model ${sorterSettings.model} · prompt ${SORTER_PROMPT_VERSION}`,
+  );
+  const sorterRun = await runSorterGoldenSet({
+    sorter: createSorter({
+      extractor: createConfiguredExtractor(),
+      model: async () => sorterSettings.model,
+    }),
+    categories: categories.map((row) => ({
+      code: row.code,
+      label: row.labelHe,
+    })),
+  });
+  console.log(`sorter: ${sorterRun.passed}/${sorterRun.total} passed`);
+  for (const failure of sorterRun.failures) {
+    console.log(`  ✘ ${failure}`);
+  }
+  sorterFailed = sorterRun.failures.length;
+} else {
+  console.log(
+    'sorter: not run — the golden set needs OPENAI_API_KEY and a database.',
+  );
+}
+
 let corpus: Corpus | null = null;
 if (pool) {
   corpus = await buildCorpus(pool);
@@ -136,4 +171,6 @@ await pool?.end();
 // Both halves block the merge, and each says which it was. An extraction failure is a value the
 // reader invented, an identity the paper refuses, or accuracy below the ratchet — never a miss on
 // its own, which moves a percentage and nothing else.
-if (report.failed > 0 || extractionFailed > 0) process.exitCode = 1;
+if (report.failed > 0 || extractionFailed > 0 || sorterFailed > 0) {
+  process.exitCode = 1;
+}

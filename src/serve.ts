@@ -3,11 +3,13 @@
 // of it with --env-file-if-exists, neither of which overrides a variable already set in the shell —
 // which is why v3's hand-written .env loader (src/dev.ts) is not lifted.
 import { buildApp } from './app.ts';
+import { createSorter, SORTER_PROMPT_VERSION } from './channel/contract.ts';
 import { zonedClock } from './kernel/clock.ts';
 import {
   createSettings,
   readClockSettings,
   readEmbeddingSettings,
+  readSorterSettings,
 } from './kernel/config.ts';
 import { createPool } from './kernel/db.ts';
 import { createConfiguredEmbedder } from './kernel/embeddings.ts';
@@ -26,6 +28,7 @@ const port = Number(process.env.PORT ?? 8080);
 // Cloud Run sets K_SERVICE. That is the only place the 32 MiB HTTP/1 cap exists, and the only
 // place this process speaks cleartext HTTP/2 to get out from under it. A laptop has no such cap.
 const http2 = Boolean(process.env.K_SERVICE);
+const sorterOn = (process.env.OPENAI_API_KEY?.trim().length ?? 0) > 0;
 
 // No localhost fallback: createPool refuses a missing DATABASE_URL (kernel/db.ts). A production
 // service that quietly falls back to a developer's database is worse than one that will not boot.
@@ -83,6 +86,12 @@ const app = buildApp({
   staffHostedDomain: configuredHostedDomain(),
   devMockups: (process.env.VERSION ?? '0.0.0-dev').endsWith('-dev'),
   http2,
+  sorter: sorterOn
+    ? createSorter({
+        extractor,
+        model: async () => (await readSorterSettings(settings)).model,
+      })
+    : undefined,
 });
 
 await app.listen({ host, port });
@@ -91,6 +100,13 @@ console.log(`http: ${http2 ? 'h2c' : 'h1'}`);
 console.log(`docs: ${objects.describe()}`);
 console.log(`ocr: ${ocr.describe()}`);
 console.log(`extract: ${extractor.describe()}`);
+console.log(
+  `sorter: ${
+    sorterOn
+      ? `${(await readSorterSettings(settings)).model} · ${SORTER_PROMPT_VERSION}`
+      : 'unconfigured'
+  }`,
+);
 console.log(`embed: ${embedder.describe()}`);
 console.log(`identity: ${identity.describe()}`);
 console.log(`clock: ${clock.zone}`);
