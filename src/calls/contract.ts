@@ -5,6 +5,7 @@
 // is written by that command and no command changes it.
 // #183 identifies the requester, sets the Category, and reads one call.
 // #184 closes a call by one of the four Exits.
+// #186 opens a call from the intake door and returns one to the filtered list.
 
 export type {
   CallCategory,
@@ -25,23 +26,35 @@ export type {
   IdentifyCallSpec,
   ManualChannel,
   OpenCallSpec,
+  OpenIntakeCallSpec,
+  ReturnCallSpec,
+  ReturnedCall,
   SaveEmergencySettingsSpec,
   ServiceCall,
   ServiceCallDetail,
   SetCategorySpec,
+  SorterLabel,
   SourceChannel,
 } from './internal/commands.ts';
 export {
+  ADDRESS_MAX,
+  callIsAttachable,
   clearEmergency,
   countOpenCalls,
+  DESCRIPTION_MAX,
   exitCall,
+  flagCallByTerms,
   flagEmergency,
   getCall,
   identifyCall,
   listCategories,
   listOpenCalls,
+  listReturnedCalls,
   openCall,
+  openIntakeCall,
   readEmergencySettings,
+  restoreReturnedCall,
+  returnToFiltered,
   saveEmergencySettings,
   setCallCategory,
   upsertCategory,
@@ -61,5 +74,14 @@ declare module 'fastify' {
 
 export type { CallsDeps } from './internal/routes.ts';
 export { registerCallsRoutes } from './internal/routes.ts';
-export type { CallScreen, CallsScreen } from './internal/views.ts';
-export { renderCallPage, renderCallsPage } from './internal/views.ts';
+export type {
+  CallScreen,
+  CallsScreen,
+  FilteredRow,
+  TimelineMessage,
+} from './internal/views.ts';
+export {
+  renderCallPage,
+  renderCallsPage,
+  renderFilteredPage,
+} from './internal/views.ts';

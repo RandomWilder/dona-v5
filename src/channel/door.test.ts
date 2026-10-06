@@ -1,0 +1,541 @@
+// #186. The door's contract, against Postgres, with the sorter injected.
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import {
+  exitCall,
+  getCall,
+  listOpenCalls,
+  saveEmergencySettings,
+} from '../calls/contract.ts';
+import { fixedClock } from '../kernel/clock.ts';
+import {
+  inRolledBackTransaction,
+  migratedPoolOrNull,
+  skipReason,
+} from '../kernel/pg-support.ts';
+import { addOperator } from '../staff/contract.ts';
+import {
+  emergencyMatch,
+  type IncomingMessage,
+  listMessagesOnCall,
+  listNoiseMessages,
+  receiveIncoming,
+  type Sorter,
+  type SortVerdict,
+} from './contract.ts';
+
+const AT = new Date('2026-10-06T12:00:00.000Z');
+
+const CALL: SortVerdict = {
+  label: 'call',
+  categoryCode: 'PLUMBING',
+  summary: 'נזילה בצינור',
+};
+
+function incoming(over: Partial<IncomingMessage> = {}): IncomingMessage {
+  return {
+    sourceChannel: 'EMAIL',
+    externalMessageId: 'msg-1',
+    externalThreadId: 'thread-1',
+    senderAddress: 'tenant@door.test',
+    receivedAt: AT,
+    subject: 'נזילה',
+    body: 'יש נזילה במטבח',
+    ...over,
+  };
+}
+
+function counting(verdict: SortVerdict | 'throw', seen: string[]): Sorter {
+  return {
+    async sort(input) {
+      seen.push('sorter');
+      assert.deepEqual(Object.keys(input).sort(), ['body', 'subject']);
+      if (verdict === 'throw') throw new Error('sorter down');
+      return verdict;
+    },
+  };
+}
+
+describe('channel · the intake door', () => {
+  it('stores one message when the same external id arrives twice', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const seen: string[] = [];
+        const deps = {
+          sorter: counting(CALL, seen),
+          matchesEmergency: async () => false,
+        };
+        const first = await receiveIncoming(db, clock, deps, incoming());
+        const second = await receiveIncoming(db, clock, deps, incoming());
+        assert.equal(first.kind, 'call');
+        assert.equal(second.kind, 'duplicate');
+        if (first.kind !== 'call' || second.kind !== 'duplicate') return;
+        assert.equal(second.callId, first.callId);
+        assert.deepEqual(seen, ['sorter']);
+        const messages = await listMessagesOnCall(db, first.callId);
+        assert.equal(messages.length, 1);
+        assert.equal(messages[0]?.body, 'יש נזילה במטבח');
+        assert.equal(messages[0]?.attachments.length, 0);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('flags an emergency before the sorter is called', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const seen: string[] = [];
+        const outcome = await receiveIncoming(
+          db,
+          clock,
+          {
+            sorter: counting(CALL, seen),
+            matchesEmergency: async () => {
+              seen.push('emergency');
+              return true;
+            },
+          },
+          incoming({
+            externalMessageId: 'em-order',
+            body: 'יש שריפה בדירה',
+          }),
+        );
+        assert.deepEqual(seen, ['emergency', 'sorter']);
+        assert.equal(outcome.kind, 'call');
+        if (outcome.kind !== 'call') return;
+        const call = await getCall(db, outcome.callId);
+        assert.equal(call?.emergency.flagged, true);
+        if (call?.emergency.flagged) assert.equal(call.emergency.by, 'terms');
+        assert.equal(call?.state, 'NEW');
+        assert.equal(call?.toReview, false);
+        assert.equal(call?.requester, null);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('flags a real emergency term, and the sorter still runs after', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const { account } = await addOperator(db, clock, {
+          email: 'ops@door-emergency.test',
+          role: 'OPERATOR',
+        });
+        await saveEmergencySettings(db, clock, {
+          termsText: 'שריפה',
+          phone: '000-000-0000',
+          hours: 'תמיד',
+          actorId: account.staffAccountId,
+        });
+        const seen: string[] = [];
+        const outcome = await receiveIncoming(
+          db,
+          clock,
+          {
+            sorter: counting(CALL, seen),
+            matchesEmergency: emergencyMatch(db),
+          },
+          incoming({
+            externalMessageId: 'em-real',
+            body: 'יש שריפה בדירה',
+          }),
+        );
+        assert.deepEqual(seen, ['sorter']);
+        assert.equal(outcome.kind, 'call');
+        if (outcome.kind !== 'call') return;
+        const call = await getCall(db, outcome.callId);
+        assert.equal(call?.emergency.flagged, true);
+        if (call?.emergency.flagged) assert.equal(call.emergency.by, 'terms');
+        assert.equal(call?.summary, 'נזילה בצינור');
+        assert.equal(call?.proposal?.code, 'PLUMBING');
+        assert.equal(call?.proposal?.labelHe, 'אינסטלציה');
+        assert.equal(call?.category, null);
+        assert.equal(call?.state, 'NEW');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('attaches to an open call, and opens a linked call when that call is closed', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const { account } = await addOperator(db, clock, {
+          email: 'ops@door-thread.test',
+          role: 'OPERATOR',
+        });
+        const seen: string[] = [];
+        const deps = {
+          sorter: counting(CALL, seen),
+          matchesEmergency: async () => false,
+        };
+        const first = await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({ externalMessageId: 'th-1', externalThreadId: 'thread-a' }),
+        );
+        const second = await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            externalMessageId: 'th-2',
+            externalThreadId: 'thread-a',
+            body: 'עוד תמונה של הנזילה',
+            receivedAt: new Date(AT.getTime() + 60_000),
+          }),
+        );
+        assert.equal(first.kind, 'call');
+        assert.equal(second.kind, 'attached');
+        if (first.kind !== 'call' || second.kind !== 'attached') return;
+        assert.equal(second.callId, first.callId);
+        assert.deepEqual(seen, ['sorter']);
+        const onFirst = await listMessagesOnCall(db, first.callId);
+        assert.deepEqual(
+          onFirst.map((message) => message.body),
+          ['יש נזילה במטבח', 'עוד תמונה של הנזילה'],
+        );
+
+        await exitCall(db, clock, {
+          callId: first.callId,
+          kind: 'ANSWERED',
+          note: 'טופל',
+          actorId: account.staffAccountId,
+        });
+        const third = await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            externalMessageId: 'th-3',
+            externalThreadId: 'thread-a',
+            body: 'חזרו המים',
+            receivedAt: new Date(AT.getTime() + 120_000),
+          }),
+        );
+        assert.equal(third.kind, 'call');
+        if (third.kind !== 'call') return;
+        assert.notEqual(third.callId, first.callId);
+        const opened = await getCall(db, third.callId);
+        assert.equal(opened?.predecessor?.id, first.callId);
+        assert.equal(opened?.state, 'NEW');
+        assert.deepEqual(seen, ['sorter', 'sorter']);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('lands a call, an unsure verdict, noise, and a sorter that throws', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const call = await receiveIncoming(
+          db,
+          clock,
+          {
+            sorter: counting(CALL, []),
+            matchesEmergency: async () => false,
+          },
+          incoming({ externalMessageId: 'v-call', externalThreadId: 't-call' }),
+        );
+        assert.equal(call.kind, 'call');
+        if (call.kind !== 'call') return;
+        const opened = await getCall(db, call.callId);
+        assert.equal(opened?.state, 'NEW');
+        assert.equal(opened?.toReview, false);
+        assert.equal(opened?.sorterLabel, 'call');
+        assert.equal(opened?.summary, 'נזילה בצינור');
+
+        const unsure = await receiveIncoming(
+          db,
+          clock,
+          {
+            sorter: counting(
+              { label: 'unsure', categoryCode: 'LOCKS', summary: 'אולי מנעול' },
+              [],
+            ),
+            matchesEmergency: async () => false,
+          },
+          incoming({
+            externalMessageId: 'v-unsure',
+            externalThreadId: 't-unsure',
+          }),
+        );
+        assert.equal(unsure.kind, 'call');
+        if (unsure.kind !== 'call') return;
+        const review = await getCall(db, unsure.callId);
+        assert.equal(review?.toReview, true);
+        assert.equal(review?.state, 'NEW');
+        assert.equal(review?.summary, 'אולי מנעול');
+        assert.equal(review?.proposal?.code, 'LOCKS');
+
+        const noise = await receiveIncoming(
+          db,
+          clock,
+          {
+            sorter: counting(
+              { label: 'noise', categoryCode: null, summary: null },
+              [],
+            ),
+            matchesEmergency: async () => false,
+          },
+          incoming({
+            externalMessageId: 'v-noise',
+            externalThreadId: 't-noise',
+            body: 'מבצע השבוע',
+          }),
+        );
+        assert.equal(noise.kind, 'filtered');
+        if (noise.kind !== 'filtered') return;
+        const listed = await listOpenCalls(db);
+        assert.equal(
+          listed.some((row) => row.description === 'מבצע השבוע'),
+          false,
+        );
+        const aside = await listNoiseMessages(db);
+        const mine = aside.find((row) => row.id === noise.messageId);
+        assert.equal(mine?.body, 'מבצע השבוע');
+
+        const thrown = await receiveIncoming(
+          db,
+          clock,
+          {
+            sorter: counting('throw', []),
+            matchesEmergency: async () => false,
+          },
+          incoming({
+            externalMessageId: 'v-throw',
+            externalThreadId: 't-throw',
+            subject: 'לא ברור',
+            body: 'משהו קרה',
+          }),
+        );
+        assert.equal(thrown.kind, 'call');
+        if (thrown.kind !== 'call') return;
+        const recovered = await getCall(db, thrown.callId);
+        assert.equal(recovered?.toReview, true);
+        assert.equal(recovered?.summary, null);
+        assert.equal(recovered?.state, 'NEW');
+        assert.equal(recovered?.description, 'לא ברור');
+        const kept = await listMessagesOnCall(db, thrown.callId);
+        assert.equal(kept[0]?.body, 'משהו קרה');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('does not filter a message that matches an emergency term', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const outcome = await receiveIncoming(
+          db,
+          clock,
+          {
+            sorter: counting(
+              { label: 'noise', categoryCode: null, summary: null },
+              [],
+            ),
+            matchesEmergency: async () => true,
+          },
+          incoming({
+            externalMessageId: 'em-noise',
+            externalThreadId: 't-em-noise',
+            body: 'שריפה בבניין',
+          }),
+        );
+        assert.equal(outcome.kind, 'call');
+        if (outcome.kind !== 'call') return;
+        const call = await getCall(db, outcome.callId);
+        assert.equal(call?.emergency.flagged, true);
+        assert.equal(call?.toReview, true);
+        const aside = await listNoiseMessages(db);
+        assert.equal(
+          aside.some((row) => row.body === 'שריפה בבניין'),
+          false,
+        );
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('stores an echo on the open call and never opens one', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const seen: string[] = [];
+        const deps = {
+          sorter: counting(CALL, seen),
+          matchesEmergency: async () => {
+            seen.push('emergency');
+            return true;
+          },
+        };
+        const opened = await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            externalMessageId: 'echo-open',
+            externalThreadId: 'thread-echo',
+          }),
+        );
+        assert.equal(opened.kind, 'call');
+        if (opened.kind !== 'call') return;
+        const echo = await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            externalMessageId: 'echo-1',
+            externalThreadId: 'thread-echo',
+            body: 'שריפה? לא, נסגר.',
+            echo: true,
+          }),
+        );
+        assert.equal(echo.kind, 'echo');
+        if (echo.kind !== 'echo') return;
+        assert.equal(echo.callId, opened.callId);
+        const messages = await listMessagesOnCall(db, opened.callId);
+        const echoed = messages.find(
+          (message) => message.body === 'שריפה? לא, נסגר.',
+        );
+        assert.equal(echoed?.echo, true);
+        const alone = await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            externalMessageId: 'echo-2',
+            externalThreadId: 'thread-echo-new',
+            echo: true,
+            body: 'שריפה',
+          }),
+        );
+        assert.equal(alone.kind, 'echo');
+        if (alone.kind !== 'echo') return;
+        assert.equal(alone.callId, null);
+        const open = await listOpenCalls(db);
+        assert.equal(
+          open.some(
+            (call) =>
+              call.id !== opened.callId &&
+              call.summary === 'נזילה בצינור' &&
+              call.description.includes('שריפה'),
+          ),
+          false,
+        );
+        assert.deepEqual(seen, ['emergency', 'sorter']);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('moves a duplicate call’s messages onto the call it repeats', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const { account } = await addOperator(db, clock, {
+          email: 'ops@door-dup.test',
+          role: 'OPERATOR',
+        });
+        const deps = {
+          sorter: counting(CALL, []),
+          matchesEmergency: async () => false,
+        };
+        const kept = await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            externalMessageId: 'dup-kept',
+            externalThreadId: 'thread-kept',
+            body: 'הקריאה שנשארת',
+          }),
+        );
+        const copy = await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            externalMessageId: 'dup-copy',
+            externalThreadId: 'thread-copy',
+            body: 'הקריאה הכפולה',
+            receivedAt: new Date(AT.getTime() + 60_000),
+            attachments: [{ fileName: 'leak.jpg' }],
+          }),
+        );
+        assert.equal(kept.kind, 'call');
+        assert.equal(copy.kind, 'call');
+        if (kept.kind !== 'call' || copy.kind !== 'call') return;
+        await exitCall(db, clock, {
+          callId: copy.callId,
+          kind: 'DUPLICATE',
+          duplicateOf: kept.callId,
+          actorId: account.staffAccountId,
+        });
+        const onKept = await listMessagesOnCall(db, kept.callId);
+        const onCopy = await listMessagesOnCall(db, copy.callId);
+        assert.deepEqual(
+          onKept.map((message) => message.body),
+          ['הקריאה שנשארת', 'הקריאה הכפולה'],
+        );
+        assert.equal(onKept[1]?.attachments[0]?.fileName, 'leak.jpg');
+        assert.equal(onCopy.length, 0);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+});

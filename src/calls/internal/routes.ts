@@ -26,11 +26,27 @@ import {
   identifyCall,
   listCategories,
   listOpenCalls,
+  listReturnedCalls,
   type OpenCallSpec,
   openCall,
+  restoreReturnedCall,
+  returnToFiltered,
   setCallCategory,
 } from './commands.ts';
-import { renderCallPage, renderCallsPage } from './views.ts';
+import {
+  renderCallPage,
+  renderCallsPage,
+  renderFilteredPage,
+  type TimelineMessage,
+} from './views.ts';
+
+export interface NoiseMessage {
+  id: string;
+  title: string;
+  body: string;
+  sender: string;
+  at: Date;
+}
 
 export interface CallsDeps {
   pool: Pool;
@@ -41,6 +57,15 @@ export interface CallsDeps {
     mayFile: boolean,
     openCalls?: number,
   ) => Html;
+  /** `-dev` only. The fabricated-message form. */
+  devIntake?: boolean;
+  messagesOnCall?: (callId: string) => Promise<readonly TimelineMessage[]>;
+  listNoise?: () => Promise<readonly NoiseMessage[]>;
+  rescueNoise?: (spec: {
+    messageId: string;
+    actorId: string;
+    actorRole?: string | null;
+  }) => Promise<{ callId: string }>;
 }
 
 const STAFF = { config: { staff: 'estate.read' } } as const;
@@ -61,6 +86,7 @@ function listFilter(query: unknown): {
   state?: CallState;
   categoryId?: string;
   emergency?: boolean;
+  toReview?: boolean;
 } {
   const form = formOf(query);
   const state = textOf(form.state);
@@ -69,6 +95,7 @@ function listFilter(query: unknown): {
     state?: CallState;
     categoryId?: string;
     emergency?: boolean;
+    toReview?: boolean;
   } = {};
   if ((CALL_STATES as readonly string[]).includes(state)) {
     filter.state = state as CallState;
@@ -82,6 +109,7 @@ function listFilter(query: unknown): {
     }
   }
   if (textOf(form.emergency) === '1') filter.emergency = true;
+  if (textOf(form.review) === '1') filter.toReview = true;
   return filter;
 }
 
@@ -112,6 +140,13 @@ function refusalHe(error: KernelError): string {
     return 'לא ניתן לסגור קריאה שנקבעה.';
   }
   if (field === 'exit') return 'יש לבחור יציאה.';
+  if (field === 'call' && reason === 'returned') {
+    return 'הקריאה כבר במסוננות.';
+  }
+  if (field === 'call' && reason === 'open') {
+    return 'הקריאה אינה במסוננות.';
+  }
+  if (field === 'message') return 'אפשר להציל רק הודעה מסוננת.';
   if (typeof field === 'string' && field in REFUSAL) {
     return REFUSAL[field] ?? 'לא ניתן לרשום את הקריאה.';
   }
@@ -191,6 +226,8 @@ async function callsPage(
     state: filter.state ?? null,
     categoryId: filter.categoryId ?? null,
     emergency: filter.emergency === true,
+    toReview: filter.toReview === true,
+    devIntake: deps.devIntake === true,
     now: deps.clock.now(),
     refusal,
   });
@@ -219,6 +256,7 @@ async function callPage(
   ]);
   const role = request.staff?.role ?? null;
   const csrf = csrfFrom(request);
+  const messages = deps.messagesOnCall ? await deps.messagesOnCall(callId) : [];
   return renderCallPage({
     nav: deps.chrome(
       csrf,
@@ -236,10 +274,64 @@ async function callPage(
     query: searching ? query : query.length > 80 ? '' : query,
     dupQuery: canExit(call.state) && dup.length <= 80 ? dup : '',
     dupMatches,
+    messages,
     now: deps.clock.now(),
     refusal:
       refusal ??
       (query.length > 80 || dup.length > 80 ? 'החיפוש ארוך מדי.' : undefined),
+  });
+}
+
+function senderOf(label: string | null, unknown: boolean): string {
+  if (unknown || label === null || label.trim() === '') return 'לא ידוע';
+  return label;
+}
+
+async function filteredPage(
+  deps: CallsDeps,
+  request: FastifyRequest,
+  refusal?: string,
+): Promise<string> {
+  const noise = deps.listNoise ? await deps.listNoise() : [];
+  const returned = await listReturnedCalls(deps.pool);
+  const ranked = [
+    ...noise.map((row) => ({
+      at: row.at.getTime(),
+      row: {
+        kind: 'message' as const,
+        id: row.id,
+        title: row.title,
+        body: row.body,
+        sender: row.sender,
+        sorterLabel: 'noise' as const,
+      },
+    })),
+    ...returned.map((row) => ({
+      at: row.at.getTime(),
+      row: {
+        kind: 'call' as const,
+        id: row.id,
+        title: row.title,
+        body: row.title,
+        sender: senderOf(row.senderLabel, row.senderUnknown),
+        sorterLabel: row.sorterLabel,
+      },
+    })),
+  ];
+  ranked.sort((a, b) => b.at - a.at);
+  const rows = ranked.map((item) => item.row);
+  const role = request.staff?.role ?? null;
+  const csrf = csrfFrom(request);
+  return renderFilteredPage({
+    nav: deps.chrome(
+      csrf,
+      'calls',
+      can(role, 'documents.write'),
+      request.openCalls,
+    ),
+    csrf,
+    rows,
+    refusal,
   });
 }
 
@@ -250,6 +342,54 @@ export function registerCallsRoutes(
   app.get('/calls', STAFF, async (request, reply) => {
     html(reply);
     return callsPage(deps, request);
+  });
+
+  app.get('/calls/filtered', STAFF, async (request, reply) => {
+    html(reply);
+    return filteredPage(deps, request);
+  });
+
+  app.post('/calls/filtered', STAFF, async (request, reply) => {
+    const staff = staffOf(request);
+    const form = formOf(request.body);
+    const messageId = textOf(form.message_id);
+    const callId = textOf(form.call_id);
+    try {
+      if (messageId !== '') {
+        if (!deps.rescueNoise) {
+          throw new KernelError('invalid', 'message cannot be rescued', {
+            field: 'message',
+          });
+        }
+        const rescued = await deps.rescueNoise({
+          messageId,
+          actorId: staff.staffAccountId,
+          actorRole: staff.role,
+        });
+        return reply
+          .code(303)
+          .header('location', `/calls/${rescued.callId}`)
+          .send();
+      }
+      if (callId !== '') {
+        await restoreReturnedCall(deps.pool, deps.clock, {
+          callId,
+          actorId: staff.staffAccountId,
+          actorRole: staff.role,
+        });
+        return reply.code(303).header('location', `/calls/${callId}`).send();
+      }
+      throw new KernelError('invalid', 'nothing to rescue', {
+        field: 'message',
+      });
+    } catch (error) {
+      if (!(error instanceof KernelError) || error.code === 'not_allowed') {
+        throw error;
+      }
+      html(reply);
+      reply.code(error.code === 'not_found' ? 404 : 400);
+      return filteredPage(deps, request, refusalHe(error));
+    }
   });
 
   app.post('/calls', STAFF, async (request, reply) => {
@@ -338,6 +478,27 @@ export function registerCallsRoutes(
       actorRole: staff.role,
     });
     return reply.code(303).header('location', `/calls/${callId}`).send();
+  });
+
+  app.post('/calls/:id/return', STAFF, async (request, reply) => {
+    const staff = staffOf(request);
+    const callId = callIdOf(request.params);
+    try {
+      await returnToFiltered(deps.pool, deps.clock, {
+        callId,
+        actorId: staff.staffAccountId,
+        actorRole: staff.role,
+      });
+      return reply.code(303).header('location', '/calls/filtered').send();
+    } catch (error) {
+      if (!(error instanceof KernelError) || error.code === 'not_allowed') {
+        throw error;
+      }
+      if (error.code === 'not_found') throw error;
+      html(reply);
+      reply.code(400);
+      return callPage(deps, request, callId, refusalHe(error));
+    }
   });
 
   app.post('/calls/:id/exit', STAFF, async (request, reply) => {

@@ -216,6 +216,8 @@ const PII_COLUMNS = new Set([
   // #182. The name an office worker types for the person who phoned or walked in,
   // or leaves null when they mark the sender unknown.
   'sender_label',
+  // #186. The address on an incoming message, before anyone has identified a Party.
+  'sender_address',
   'birth_date',
   'date_of_birth',
   'iban',
@@ -247,6 +249,10 @@ const PII_QUALIFIED_COLUMNS = new Set([
   'tenancy_event.actor',
   'office_retrieval_turn.question',
   'office_retrieval_turn.answer',
+  // #186. The message as it arrived, its subject, and a file name on it.
+  'message.subject',
+  'message.body_original',
+  'message.attachments',
 ]);
 
 // Two shapes, because a column arrives two ways. A definition inside CREATE TABLE starts the line;

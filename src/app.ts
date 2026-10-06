@@ -24,6 +24,12 @@ import {
   saveEmergencySettings,
   upsertCategory,
 } from './calls/contract.ts';
+import {
+  listMessagesOnCall,
+  listNoiseMessages,
+  registerChannelRoutes,
+  rescueNoise,
+} from './channel/contract.ts';
 import { signedInChrome } from './chrome.ts';
 import { renderMockup } from './dev-mockups.ts';
 import { registerEstateRoutes } from './estate/contract.ts';
@@ -646,6 +652,16 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     pool: deps.pool,
     clock,
     chrome: signedInChrome,
+    devIntake: deps.devMockups === true,
+    messagesOnCall: (callId) => listMessagesOnCall(deps.pool, callId),
+    listNoise: () => listNoiseMessages(deps.pool),
+    rescueNoise: (spec) => rescueNoise(deps.pool, clock, spec),
+  });
+  registerChannelRoutes(app, {
+    pool: deps.pool,
+    clock,
+    chrome: signedInChrome,
+    devIntake: deps.devMockups === true,
   });
   registerDocumentRoutes(app, {
     pool: deps.pool,

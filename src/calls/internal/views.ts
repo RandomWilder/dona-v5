@@ -1,6 +1,6 @@
 // The קריאות screens. #182 is the list and the manual entry. #183 is one call:
 // its timeline, identifying the requester, and setting the trade. #184 closes
-// it by an Exit.
+// it by an Exit. #186 adds the filtered list, the messages, and return.
 //
 // Server-rendered, no client JavaScript. The rail count is the open-call count
 // for the whole office, passed in by the route, so a filter does not shrink it.
@@ -21,8 +21,27 @@ import {
   SENDER_MAX,
   type ServiceCall,
   type ServiceCallDetail,
+  type SorterLabel,
   type SourceChannel,
 } from './commands.ts';
+
+export interface TimelineMessage {
+  id: string;
+  at: Date;
+  body: string;
+  subject: string | null;
+  echo: boolean;
+  attachments: readonly { fileName: string }[];
+}
+
+export interface FilteredRow {
+  kind: 'message' | 'call';
+  id: string;
+  title: string;
+  body: string;
+  sender: string;
+  sorterLabel: SorterLabel | null;
+}
 
 export interface CallsScreen {
   nav: Html;
@@ -32,7 +51,16 @@ export interface CallsScreen {
   state: CallState | null;
   categoryId: string | null;
   emergency: boolean;
+  toReview: boolean;
+  devIntake: boolean;
   now: Date;
+  refusal?: string;
+}
+
+export interface FilteredScreen {
+  nav: Html;
+  csrf: string;
+  rows: readonly FilteredRow[];
   refusal?: string;
 }
 
@@ -45,6 +73,7 @@ export interface CallScreen {
   query: string;
   dupQuery: string;
   dupMatches: readonly { id: string; description: string }[];
+  messages: readonly TimelineMessage[];
   now: Date;
   refusal?: string;
 }
@@ -72,6 +101,12 @@ const EXIT_HE: Record<ExitKind, string> = {
   FORWARDED: 'הועברה',
   DUPLICATE: 'כפולה',
   CANCELLED: 'בוטלה',
+};
+
+const SORTER_HE: Record<SorterLabel, string> = {
+  call: 'קריאה',
+  unsure: 'לא בטוח',
+  noise: 'רעש',
 };
 
 const FILTER_STATES = CALL_STATES.filter((state) => state !== 'CLOSED');
@@ -134,6 +169,7 @@ const styles = h`<style>
     padding-inline-start: 1.25rem;
   }
   .calls .back { margin: 0; }
+  .calls .message { white-space: pre-wrap; overflow-wrap: anywhere; }
 </style>`;
 
 function ageLabel(openedAt: Date, now: Date): string {
@@ -179,14 +215,22 @@ function callRow(call: ServiceCall, now: Date): Html {
   const emergency = call.emergency.flagged
     ? h`<span class="chip">חירום</span>`
     : h``;
+  const review = call.toReview ? h`<span class="chip">לבדיקה</span>` : h``;
+  const proposal =
+    call.proposal === null || call.category !== null
+      ? h``
+      : h`<span class="chip" data-proposal="${call.proposal.code}">הצעה: ${call.proposal.labelHe}</span>`;
   const marked = call.emergency.flagged ? 'true' : 'false';
-  return h`<article class="call" data-call="${call.id}" data-channel="${call.sourceChannel}" data-call-state="${call.state}" data-emergency="${marked}">
+  const reviewing = call.toReview ? 'true' : 'false';
+  return h`<article class="call" data-call="${call.id}" data-channel="${call.sourceChannel}" data-call-state="${call.state}" data-emergency="${marked}" data-review="${reviewing}">
     <p class="call-main"><a href="/calls/${call.id}">${call.description}</a></p>
     <p class="call-meta">
       <span class="chip">${CHANNEL_HE[call.sourceChannel]}</span>
       <span class="chip">${STATE_HE[call.state]}</span>
       ${category}
+      ${proposal}
       ${emergency}
+      ${review}
       <span>${sender}</span>
       <span>${ageLabel(call.openedAt, now)}</span>
     </p>
@@ -220,6 +264,12 @@ function filters(screen: CallsScreen): Html {
         <option value="1" ${selected(screen.emergency)}>חירום</option>
       </select>
     </label>
+    <label>לבדיקה
+      <select name="review">
+        <option value="" ${selected(!screen.toReview)}>הכל</option>
+        <option value="1" ${selected(screen.toReview)}>לבדיקה</option>
+      </select>
+    </label>
     <button class="btn" type="submit">סינון</button>
   </form>`;
 }
@@ -230,7 +280,13 @@ export function renderCallsPage(screen: CallsScreen): string {
       ? h``
       : h`<p class="refusal">${screen.refusal}</p>`;
   const filtered =
-    screen.state !== null || screen.categoryId !== null || screen.emergency;
+    screen.state !== null ||
+    screen.categoryId !== null ||
+    screen.emergency ||
+    screen.toReview;
+  const devLink = screen.devIntake
+    ? h`<a href="/dev/intake">הודעת בדיקה</a>`
+    : h``;
   const list =
     screen.calls.length === 0
       ? h`<p class="lede">${filtered ? 'אין קריאות תואמות.' : 'אין קריאות פתוחות.'}</p>`
@@ -240,7 +296,7 @@ export function renderCallsPage(screen: CallsScreen): string {
       <header class="page-head">
         <div>
           <h1>קריאות</h1>
-          <p class="lede">טלפון או הגעה. בלי מסווג.</p>
+          <p class="lede">טלפון או הגעה. בלי מסווג. <a href="/calls/filtered">מסוננות</a> ${devLink}</p>
         </div>
       </header>
       <form class="glass call-form" method="post" action="/calls">
@@ -309,6 +365,38 @@ function eventLine(event: CallTransition): Html {
     return h`<li data-kind="DUPLICATE">כפולה של ${event.duplicateOf?.description} · ${who}</li>`;
   }
   return h`<li data-kind="CANCELLED">בוטלה · ${event.note} · ${who}</li>`;
+}
+
+function sorterLabel(label: SorterLabel | null): Html {
+  if (label === null) return h``;
+  return h`<span data-sorter="${label}">מסווג: ${SORTER_HE[label]}</span>`;
+}
+
+function messageLine(message: TimelineMessage): Html {
+  const echo = message.echo ? 'true' : 'false';
+  const subject =
+    message.subject === null ? h`` : h`<span>נושא: ${message.subject}</span> `;
+  const files =
+    message.attachments.length === 0
+      ? h``
+      : h` ${message.attachments.map((file) => h`<span data-file="${file.fileName}">קובץ: ${file.fileName}</span>`)}`;
+  const who = message.echo ? 'הד מהמשרד' : 'הודעה';
+  return h`<li data-kind="MESSAGE" data-echo="${echo}" data-message="${message.id}"><span class="message">${who} · ${subject}${message.body}${files}</span> · ${whenLabel(message.at)}</li>`;
+}
+
+function timelineOf(
+  events: readonly CallTransition[],
+  messages: readonly TimelineMessage[],
+): Html {
+  const items: { at: number; html: Html }[] = [];
+  for (const event of events) {
+    items.push({ at: event.at.getTime(), html: eventLine(event) });
+  }
+  for (const message of messages) {
+    items.push({ at: message.at.getTime() - 0.5, html: messageLine(message) });
+  }
+  items.sort((a, b) => a.at - b.at);
+  return h`${items.map((item) => item.html)}`;
 }
 
 function emergencyLabel(call: ServiceCall): string {
@@ -455,6 +543,30 @@ function exitFacts(screen: CallScreen): Html {
     ${other}`;
 }
 
+function returnForm(screen: CallScreen): Html {
+  const call = screen.call;
+  if (call.state === 'CLOSED') return h``;
+  if (call.returned) {
+    return h`<section class="glass sheet">
+      <h2>מסוננות</h2>
+      <p class="lede">הוחזרה. ${sorterLabel(call.sorterLabel)} <span data-office="returned">משרד: הוחזר</span>${call.returnedBy === null ? h`` : h` · ${call.returnedBy}`}</p>
+      <form method="post" action="/calls/filtered">
+        ${csrfInput(screen.csrf)}
+        <input type="hidden" name="call_id" value="${call.id}" />
+        <button class="btn btn-primary" type="submit">הצלה</button>
+      </form>
+    </section>`;
+  }
+  return h`<section class="glass sheet">
+    <h2>לא קריאה</h2>
+    <p class="lede">יוצאת מהרשימה בלי להיסגר. הסימון של המסווג נשאר.</p>
+    <form method="post" action="/calls/${call.id}/return">
+      ${csrfInput(screen.csrf)}
+      <button class="btn" type="submit">החזרה למסוננות</button>
+    </form>
+  </section>`;
+}
+
 function repeatedBy(screen: CallScreen): Html {
   if (screen.call.repeatedBy.length === 0) return h``;
   return h`<section class="glass sheet">
@@ -477,6 +589,25 @@ export function renderCallPage(screen: CallScreen): string {
   const requester = call.requester?.name ?? 'טרם זוהה';
   const category = call.category?.labelHe ?? 'טרם נבחרה';
   const sender = call.sender.kind === 'unknown' ? 'לא ידוע' : call.sender.name;
+  const proposal =
+    call.proposal === null
+      ? h``
+      : h`<div><dt>הצעה</dt><dd data-proposal="${call.proposal.code}">${call.proposal.labelHe}</dd></div>`;
+  const summary =
+    call.summary === null
+      ? h``
+      : h`<div><dt>סיכום</dt><dd data-summary="${call.summary}">${call.summary}</dd></div>`;
+  const review = call.toReview
+    ? h`<div><dt>לבדיקה</dt><dd data-review="true">כן</dd></div>`
+    : h``;
+  const sorted =
+    call.sorterLabel === null
+      ? h``
+      : h`<div><dt>מסווג</dt><dd>${sorterLabel(call.sorterLabel)}</dd></div>`;
+  const earlier =
+    call.predecessor === null
+      ? h``
+      : h`<div><dt>המשך של</dt><dd><a data-predecessor="${call.predecessor.id}" href="/calls/${call.predecessor.id}">${call.predecessor.description}</a></dd></div>`;
   const step =
     call.state === 'NEW'
       ? identifyForm(screen)
@@ -500,6 +631,11 @@ export function renderCallPage(screen: CallScreen): string {
           <div><dt>נרשם</dt><dd>${sender}</dd></div>
           <div><dt>פונה</dt><dd>${requester}</dd></div>
           <div><dt>קטגוריה</dt><dd>${category}</dd></div>
+          ${proposal}
+          ${summary}
+          ${sorted}
+          ${review}
+          ${earlier}
           <div><dt>גיל</dt><dd>${ageLabel(call.openedAt, screen.now)}</dd></div>
           <div><dt>חירום</dt><dd data-emergency="${call.emergency.flagged ? 'true' : 'false'}">${emergencyLabel(call)}</dd></div>
           ${exitFacts(screen)}
@@ -507,15 +643,76 @@ export function renderCallPage(screen: CallScreen): string {
       </section>
       <section class="glass sheet">
         <h2>מהלך</h2>
-        <ol class="timeline">${call.timeline.map(eventLine)}</ol>
+        <ol class="timeline">${timelineOf(call.timeline, screen.messages)}</ol>
       </section>
       ${repeatedBy(screen)}
       ${emergencyForm(screen)}
       ${step}
       ${closing}
+      ${returnForm(screen)}
     </div>`;
   return renderPage({
     title: 'קריאה — דונה דום',
+    styles,
+    nav: screen.nav,
+    body,
+  });
+}
+
+function filteredRow(row: FilteredRow, csrf: string): Html {
+  const office =
+    row.kind === 'call'
+      ? h` <span data-office="returned">משרד: הוחזר</span>`
+      : h``;
+  const title =
+    row.kind === 'call'
+      ? h`<a href="/calls/${row.id}">${row.title}</a>`
+      : h`<span>${row.title}</span>`;
+  const hidden =
+    row.kind === 'call'
+      ? h`<input type="hidden" name="call_id" value="${row.id}" />`
+      : h`<input type="hidden" name="message_id" value="${row.id}" />`;
+  return h`<article class="call" data-filtered="${row.kind}" data-filtered-id="${row.id}">
+    <p class="call-main">${title}</p>
+    <p class="message">${row.body}</p>
+    <p class="call-meta">
+      ${sorterLabel(row.sorterLabel)}
+      ${office}
+      <span>${row.sender}</span>
+    </p>
+    <form method="post" action="/calls/filtered">
+      ${csrfInput(csrf)}
+      ${hidden}
+      <button class="btn btn-primary" type="submit">הצלה</button>
+    </form>
+  </article>`;
+}
+
+export function renderFilteredPage(screen: FilteredScreen): string {
+  const refusal =
+    screen.refusal === undefined
+      ? h``
+      : h`<p class="refusal">${screen.refusal}</p>`;
+  const list =
+    screen.rows.length === 0
+      ? h`<p class="lede">אין הודעות מסוננות.</p>`
+      : h`<div class="call-list">${screen.rows.map((row) => filteredRow(row, screen.csrf))}</div>`;
+  const body = h`
+    <div class="calls glass-stage">
+      <header class="page-head">
+        <div>
+          <p class="back"><a href="/calls">קריאות</a></p>
+          <h1>מסוננות</h1>
+          <p class="lede">מה שהמסווג הניח בצד, ומה שהמשרד החזיר.</p>
+        </div>
+      </header>
+      ${refusal}
+      <section class="glass sheet">
+        ${list}
+      </section>
+    </div>`;
+  return renderPage({
+    title: 'מסוננות — דונה דום',
     styles,
     nav: screen.nav,
     body,

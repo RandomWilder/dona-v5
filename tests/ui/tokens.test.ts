@@ -2019,6 +2019,11 @@ const SCREENS: Array<[string, () => string]> = [
             requester: null,
             category: null,
             emergency: { flagged: true, by: 'terms' },
+            toReview: false,
+            summary: null,
+            proposal: null,
+            sorterLabel: null,
+            returned: false,
           },
           {
             id: '44444444-4444-4444-8444-444444444444',
@@ -2038,6 +2043,11 @@ const SCREENS: Array<[string, () => string]> = [
               active: true,
             },
             emergency: { flagged: false },
+            toReview: false,
+            summary: null,
+            proposal: null,
+            sorterLabel: null,
+            returned: false,
           },
         ],
         categories: [
@@ -2052,6 +2062,8 @@ const SCREENS: Array<[string, () => string]> = [
         state: null,
         categoryId: null,
         emergency: false,
+        toReview: false,
+        devIntake: false,
       }),
   ],
   [
@@ -2064,6 +2076,7 @@ const SCREENS: Array<[string, () => string]> = [
         query: 'יעל',
         dupQuery: '',
         dupMatches: [],
+        messages: [],
         matches: [
           {
             id: '66666666-6666-4666-8666-666666666666',
@@ -2081,8 +2094,15 @@ const SCREENS: Array<[string, () => string]> = [
           requester: null,
           category: null,
           emergency: { flagged: false },
+          toReview: false,
+          summary: null,
+          proposal: null,
+          sorterLabel: null,
+          returned: false,
           exit: null,
           repeatedBy: [],
+          predecessor: null,
+          returnedBy: null,
           timeline: [
             {
               kind: 'OPENED',
@@ -2107,6 +2127,7 @@ const SCREENS: Array<[string, () => string]> = [
         query: '',
         dupQuery: '',
         dupMatches: [],
+        messages: [],
         matches: [],
         categories: [
           {
@@ -2135,8 +2156,15 @@ const SCREENS: Array<[string, () => string]> = [
             actorId: '77777777-7777-4777-8777-777777777777',
             actorLabel: 'yael@example.test',
           },
+          toReview: false,
+          summary: null,
+          proposal: null,
+          sorterLabel: null,
+          returned: false,
           exit: null,
           repeatedBy: [],
+          predecessor: null,
+          returnedBy: null,
           timeline: [
             {
               kind: 'OPENED',

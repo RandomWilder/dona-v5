@@ -23,12 +23,23 @@ echo of something the office sent. The door then runs in this order:
 4. **Thread.** A message on a thread with an open ServiceCall attaches to it and stops. A thread
    whose call is closed opens a new call linked to the old one.
 5. **Identify** the sender through `scope`'s isolation join: phone or email, valid today.
+   **Not in #186.** That step is #189. Until then the door leaves every call in NEW with the raw
+   sender address and no Party.
 6. **Sort.** Noise becomes a Filtered message. A call, or an unsure verdict, becomes a ServiceCall in
    NEW, with an unsure verdict marked "to review".
 
-**An echo** (a message the receptionist sent from the phone) is stored on the conversation and the
-call's timeline and never opens a call. Manual PHONE and WALK_IN entries are calls' own and do not
-pass through this door.
+**A match is never filtered.** The emergency check has already run. When the text matches, a noise
+verdict or a sorter failure still opens a flagged ServiceCall in NEW, marked "to review" unless the
+verdict was a plain call. An emergency does not become a Filtered message.
+
+**An echo** (a message the receptionist sent from the phone) is stored on the conversation and, when
+the thread has an open call, on that call's timeline. It is not an incoming request: the door does
+not check it for an emergency, does not sort it, and never opens a call from it. Manual PHONE and
+WALK_IN entries are calls' own and do not pass through this door.
+
+**A dev-only form** pushes a fabricated message through this door, and the person at the form picks
+the verdict the fake sorter returns, so the path can be clicked before a mailbox or a number is
+connected. The form is registered only on a `-dev` process. A stamped revision does not serve it.
 
 **Nothing from before the connection day is imported.** Coexistence's history webhook is
 acknowledged and discarded. A mailbox is read from the cursor it starts at.

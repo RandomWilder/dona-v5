@@ -14,7 +14,14 @@ Shared conventions live in [SPEC.md](SPEC.md) and are not repeated here. The voc
 
 **The state machine is deterministic and no model decides a transition** (foundation rule 3).
 Every transition is a command a person issues, or a timer this module owns. The sorter's proposal
-is stored on the call and displayed; no command reads it to decide anything.
+is stored on the call and displayed; no command reads it to decide anything. **"To review" is a
+mark, not a state.** The door sets it when the sorter is unsure or fails, and when an emergency
+term matched and the verdict was not a plain call. No command reads the mark to choose a
+transition.
+
+**An intake call** (EMAIL or WHATSAPP) is opened by the door with no staff account. The list shows
+the raw sender address until a person identifies the requester. A call opened by hand still names
+the staff account that logged it.
 
 **A ServiceCall is any request that reached the office**, on any Source channel: `WHATSAPP · EMAIL ·
 PHONE · WALK_IN`, set once at intake and never changed. A question is a ServiceCall, closed by the

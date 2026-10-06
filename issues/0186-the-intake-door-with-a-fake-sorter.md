@@ -1,13 +1,13 @@
 ---
 number: 186
 title: The intake door, with the sorter faked
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: [183, 185]
 parent: 181
 created: 2026-10-06
-closed:
+closed: 2026-10-06
 ---
 
 ## Parent
@@ -39,15 +39,21 @@ it until the identification ticket.
 
 ## Acceptance criteria
 
-- [ ] The door's contract is tested with an injected fake sorter, against real Postgres
-- [ ] The same external message id delivered twice is stored once
-- [ ] A message matching an emergency term is flagged before the sorter is called; a test proves the sorter was not called first
-- [ ] Threading attaches to an open call, and opens a linked new call when the thread's call is closed
-- [ ] Call, unsure and noise verdicts each land where SPEC-channel.md says; a throwing sorter yields a "to review" call
-- [ ] An echo never opens a call
-- [ ] Rescue and return to filtered work from the screen and keep the labels described
-- [ ] Duplicate moves the messages
-- [ ] A dev-only way to push a fabricated message through the door exists, so the path is clickable on `:3000`
+- [x] The door's contract is tested with an injected fake sorter, against real Postgres
+- [x] The same external message id delivered twice is stored once
+- [x] A message matching an emergency term is flagged before the sorter is called; a test proves the sorter was not called first
+- [x] Threading attaches to an open call, and opens a linked new call when the thread's call is closed
+- [x] Call, unsure and noise verdicts each land where SPEC-channel.md says; a throwing sorter yields a "to review" call
+- [x] An echo never opens a call
+- [x] Rescue and return to filtered work from the screen and keep the labels described
+- [x] Duplicate moves the messages
+- [x] A dev-only way to push a fabricated message through the door exists, so the path is clickable on `:3000`
+
+## Comment — 2026-10-06
+
+Closed after review. The door takes one normalised message, stores it once, checks an emergency before the sorter, and either attaches to the open call on that thread or opens a new call in NEW linked to the closed one. A call verdict keeps the proposed category and Hebrew summary beside the call; they do not become the call's category and they do not move it out of NEW. Unsure, and a sorter that throws, open a call marked for review. Noise is filtered unless the text matches an emergency term, in which case it is still a flagged call. An echo is stored and never opens a call. The filtered list rescues a message into a call and returns a call without closing it, keeping the sorter's label beside הוחזר. A duplicate exit moves that call's messages onto the one it repeats. Identification and the duty reply are later tickets.
+
+Clicked on `:3000` after a restart: the dev form sent an email, the call opened in NEW with the proposal and the message (including the file name) on the timeline, and the filtered list rendered empty. The test call was removed afterwards.
 
 ## Blocked by
 

@@ -1,6 +1,7 @@
 // Opening a service call by hand, then identifying the requester, setting the
 // trade, and closing it by an Exit. #182 opened the call. #183 is the two
-// commands after that. #184 closes it before a visit.
+// commands after that. #184 closes it before a visit. #186 opens one from the
+// intake door, with no staff account, and returns one to the filtered list.
 //
 // PHONE and WALK_IN skip the sorter. The channel is written once; nothing in this
 // module updates it, and the database trigger refuses a later write that tries.
@@ -64,6 +65,11 @@ export type ManualChannel = (typeof MANUAL_CHANNELS)[number];
 
 export type CallSender = { kind: 'named'; name: string } | { kind: 'unknown' };
 
+export type SorterLabel = 'call' | 'unsure' | 'noise';
+
+export const INTAKE_CHANNELS = ['WHATSAPP', 'EMAIL'] as const;
+export type IntakeChannel = (typeof INTAKE_CHANNELS)[number];
+
 export interface CallParty {
   id: string;
   name: string;
@@ -96,6 +102,14 @@ export interface ServiceCall {
   requester: CallParty | null;
   category: CallCategory | null;
   emergency: EmergencyMark;
+  /** A mark, not a state. Unsure, a sorter failure, or an emergency the sorter did not call a call. */
+  toReview: boolean;
+  summary: string | null;
+  /** The sorter's Category. Not the one a person set, and it does not move the call. */
+  proposal: CallCategory | null;
+  sorterLabel: SorterLabel | null;
+  /** Returned to the filtered list. Not closed, and not in the open list. */
+  returned: boolean;
 }
 
 export type TransitionKind =
@@ -140,6 +154,10 @@ export interface ServiceCallDetail extends ServiceCall {
   exit: CallExit | null;
   /** Calls that named this one as the call they repeat. */
   repeatedBy: readonly CallLink[];
+  /** The closed call this one continues, when the thread's call was already closed. */
+  predecessor: CallLink | null;
+  /** Who returned it to the filtered list, when it was returned. */
+  returnedBy: string | null;
 }
 
 export interface OpenCallSpec {
@@ -184,6 +202,37 @@ export interface CallListFilter {
   state?: CallState;
   categoryId?: string;
   emergency?: boolean;
+  toReview?: boolean;
+}
+
+export interface OpenIntakeCallSpec {
+  sourceChannel: string;
+  description: string;
+  senderAddress: string;
+  emergency: boolean;
+  toReview: boolean;
+  sorterLabel: SorterLabel | null;
+  summary: string | null;
+  proposedCategoryId: string | null;
+  predecessorId: string | null;
+  /** Set when a person rescues a filtered message. The door passes null. */
+  openedBy: string | null;
+  actorRole?: string | null;
+}
+
+export interface ReturnCallSpec {
+  callId: string;
+  actorId: string;
+  actorRole?: string | null;
+}
+
+export interface ReturnedCall {
+  id: string;
+  title: string;
+  senderLabel: string | null;
+  senderUnknown: boolean;
+  sorterLabel: SorterLabel | null;
+  at: Date;
 }
 
 export interface EmergencySettings {
@@ -218,6 +267,7 @@ export interface CategoryRow {
 
 export const DESCRIPTION_MAX = 4000;
 export const SENDER_MAX = 200;
+export const ADDRESS_MAX = 320;
 export const NOTE_MAX = 2000;
 export const DEPARTMENT_MAX = 120;
 
@@ -289,8 +339,8 @@ interface CallRow {
   sender_label: string | null;
   sender_unknown: boolean;
   opened_at: Date;
-  opened_by: string;
-  opener_label: string;
+  opened_by: string | null;
+  opener_label: string | null;
   requester_party_id: string | null;
   requester_name: string | null;
   category_id: string | null;
@@ -309,6 +359,17 @@ interface CallRow {
   emergency_by: string | null;
   emergency_actor: string | null;
   emergency_actor_label: string | null;
+  to_review: boolean;
+  sorter_label: string | null;
+  sorter_summary: string | null;
+  proposed_category_id: string | null;
+  proposed_code: string | null;
+  proposed_label_he: string | null;
+  proposed_active: boolean | null;
+  predecessor_id: string | null;
+  predecessor_description: string | null;
+  returned_at: Date | null;
+  returner_label: string | null;
 }
 
 const CALL_SELECT = `SELECT sc.service_call_id, sc.source_channel, sc.state, sc.description,
@@ -326,14 +387,44 @@ const CALL_SELECT = `SELECT sc.service_call_id, sc.source_channel, sc.state, sc.
             COALESCE(
               NULLIF(btrim(flagger.display_name), ''),
               flagger.email
-            ) AS emergency_actor_label
+            ) AS emergency_actor_label,
+            sc.to_review, sc.sorter_label, sc.sorter_summary,
+            sc.proposed_category_id, proposed.code AS proposed_code,
+            proposed.label_he AS proposed_label_he,
+            proposed.is_active AS proposed_active,
+            sc.predecessor_id, predecessor.description AS predecessor_description,
+            sc.returned_at,
+            COALESCE(
+              NULLIF(btrim(returner.display_name), ''),
+              returner.email
+            ) AS returner_label
        FROM service_call sc
-       JOIN staff_account opener ON opener.staff_account_id = sc.opened_by
+       LEFT JOIN staff_account opener ON opener.staff_account_id = sc.opened_by
        LEFT JOIN party requester ON requester.party_id = sc.requester_party_id
        LEFT JOIN call_category category ON category.category_id = sc.category_id
+       LEFT JOIN call_category proposed ON proposed.category_id = sc.proposed_category_id
+       LEFT JOIN service_call predecessor ON predecessor.service_call_id = sc.predecessor_id
        LEFT JOIN service_call other ON other.service_call_id = sc.duplicate_of
        LEFT JOIN staff_account closer ON closer.staff_account_id = sc.closed_by
-       LEFT JOIN staff_account flagger ON flagger.staff_account_id = sc.emergency_actor`;
+       LEFT JOIN staff_account flagger ON flagger.staff_account_id = sc.emergency_actor
+       LEFT JOIN staff_account returner ON returner.staff_account_id = sc.returned_by`;
+
+function categoryOf(
+  id: string | null,
+  code: string | null,
+  label: string | null,
+  active: boolean | null,
+): CallCategory | null {
+  if (id === null || code === null || label === null || active === null) {
+    return null;
+  }
+  return { id, code, labelHe: label, active };
+}
+
+function sorterLabelOf(value: string | null): SorterLabel | null {
+  if (value === 'call' || value === 'unsure' || value === 'noise') return value;
+  return null;
+}
 
 function toCall(row: CallRow): ServiceCall {
   return {
@@ -347,19 +438,23 @@ function toCall(row: CallRow): ServiceCall {
       row.requester_party_id === null || row.requester_name === null
         ? null
         : { id: row.requester_party_id, name: row.requester_name },
-    category:
-      row.category_id === null ||
-      row.category_code === null ||
-      row.category_label_he === null ||
-      row.category_active === null
-        ? null
-        : {
-            id: row.category_id,
-            code: row.category_code,
-            labelHe: row.category_label_he,
-            active: row.category_active,
-          },
+    category: categoryOf(
+      row.category_id,
+      row.category_code,
+      row.category_label_he,
+      row.category_active,
+    ),
     emergency: emergencyOf(row),
+    toReview: row.to_review,
+    summary: row.sorter_summary,
+    proposal: categoryOf(
+      row.proposed_category_id,
+      row.proposed_code,
+      row.proposed_label_he,
+      row.proposed_active,
+    ),
+    sorterLabel: sorterLabelOf(row.sorter_label),
+    returned: row.returned_at !== null,
   };
 }
 
@@ -424,11 +519,12 @@ interface LockedCall {
   requester_party_id: string | null;
   category_id: string | null;
   emergency: boolean;
+  returned_at: Date | null;
 }
 
 async function lockCall(db: Queryable, id: string): Promise<LockedCall> {
   const { rows } = await db.query<LockedCall>(
-    `SELECT state, requester_party_id, category_id, emergency
+    `SELECT state, requester_party_id, category_id, emergency, returned_at
        FROM service_call
       WHERE service_call_id = $1
       FOR UPDATE`,
@@ -526,12 +622,316 @@ export async function openCall(
     requester: null,
     category: null,
     emergency: flagged ? { flagged: true, by: 'terms' } : { flagged: false },
+    toReview: false,
+    summary: null,
+    proposal: null,
+    sorterLabel: null,
+    returned: false,
   };
+}
+
+function summaryOf(value: string | null): string | null {
+  if (value === null) return null;
+  const summary = value.trim();
+  if (summary.length === 0 || summary.length > DESCRIPTION_MAX) {
+    throw new KernelError('invalid', 'summary is not a short text', {
+      field: 'summary',
+    });
+  }
+  return summary;
+}
+
+function intakeChannel(value: string): IntakeChannel {
+  for (const channel of INTAKE_CHANNELS) {
+    if (value === channel) return channel;
+  }
+  throw new KernelError('invalid', 'channel is not an intake channel', {
+    field: 'channel',
+  });
+}
+
+/**
+ * Opens a call from the intake door. The emergency flag is the door's
+ * decision, already made, and this command only records it. A person rescuing
+ * a filtered message passes their staff account; the door passes none.
+ */
+export async function openIntakeCall(
+  db: Queryable,
+  clock: Clock,
+  spec: OpenIntakeCallSpec,
+): Promise<ServiceCall> {
+  const sourceChannel = intakeChannel(spec.sourceChannel);
+  const description = requiredText(
+    spec.description,
+    'description',
+    DESCRIPTION_MAX,
+  );
+  const senderLabel = requiredText(spec.senderAddress, 'sender', ADDRESS_MAX);
+  const openedBy =
+    spec.openedBy === null ? null : validId(spec.openedBy, 'openedBy');
+  const predecessorId =
+    spec.predecessorId === null
+      ? null
+      : validId(spec.predecessorId, 'predecessor');
+  const proposedCategoryId =
+    spec.proposedCategoryId === null
+      ? null
+      : validId(spec.proposedCategoryId, 'category');
+  const summary = summaryOf(spec.summary);
+  const id = newId(clock);
+  const openedAt = clock.now();
+
+  await inTransaction(db, async (tx) => {
+    if (predecessorId !== null) {
+      const found = await tx.query<{ state: string }>(
+        `SELECT state FROM service_call WHERE service_call_id = $1`,
+        [predecessorId],
+      );
+      if (found.rows[0]?.state !== 'CLOSED') {
+        throw new KernelError('invalid', 'predecessor is not a closed call', {
+          field: 'predecessor',
+        });
+      }
+    }
+    if (proposedCategoryId !== null) {
+      const found = await tx.query(
+        `SELECT 1 FROM call_category WHERE category_id = $1`,
+        [proposedCategoryId],
+      );
+      if (!found.rows[0]) {
+        throw new KernelError('invalid', 'category not found', {
+          field: 'category',
+        });
+      }
+    }
+    await tx.query(
+      `INSERT INTO service_call
+         (service_call_id, source_channel, state, description, sender_label,
+          sender_unknown, opened_at, opened_by, emergency, emergency_by,
+          to_review, sorter_label, sorter_summary, proposed_category_id,
+          predecessor_id)
+       VALUES ($1, $2, 'NEW', $3, $4, false, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        id,
+        sourceChannel,
+        description,
+        senderLabel,
+        openedAt,
+        openedBy,
+        spec.emergency,
+        spec.emergency ? 'TERMS' : null,
+        spec.toReview,
+        spec.sorterLabel,
+        summary,
+        proposedCategoryId,
+        predecessorId,
+      ],
+    );
+    if (spec.emergency) {
+      await tx.query(
+        `INSERT INTO service_call_transition
+           (transition_id, service_call_id, kind, actor_id, at, setter)
+         VALUES ($1, $2, 'FLAGGED', NULL, $3, 'TERMS')`,
+        [newId(clock), id, openedAt],
+      );
+    }
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: openedBy === null ? 'system' : 'staff',
+        actorId: openedBy ?? undefined,
+        actorRole: spec.actorRole ?? undefined,
+        action: openedBy === null ? 'calls.intake' : 'calls.rescue',
+        subjectId: id,
+        inputs: {
+          sourceChannel,
+          emergency: spec.emergency ? 'terms' : null,
+          toReview: spec.toReview,
+          sorterLabel: spec.sorterLabel,
+        },
+      },
+      { outcome: 'ok' },
+    );
+  });
+
+  const opened = await getCall(db, id);
+  if (!opened) throw new KernelError('not_found', 'call not found');
+  return opened;
+}
+
+/**
+ * Whether a message on this thread can attach. The row is locked, so the
+ * caller is already inside the transaction that will write the message.
+ */
+export async function callIsAttachable(
+  db: Queryable,
+  callId: string,
+): Promise<boolean> {
+  const id = validId(callId, 'call');
+  const { rows } = await db.query<{
+    state: string;
+    returned_at: Date | null;
+  }>(
+    `SELECT state, returned_at
+       FROM service_call
+      WHERE service_call_id = $1
+      FOR UPDATE`,
+    [id],
+  );
+  const row = rows[0];
+  if (!row || !isState(row.state)) return false;
+  return row.state !== 'CLOSED' && row.returned_at === null;
+}
+
+/** Flags an open call from a later message. A flag already set is left as it is. */
+export async function flagCallByTerms(
+  db: Queryable,
+  clock: Clock,
+  callId: string,
+): Promise<void> {
+  const id = validId(callId, 'call');
+  await inTransaction(db, async (tx) => {
+    const current = await lockCall(tx, id);
+    if (current.emergency) return;
+    if (current.state === 'CLOSED' || current.returned_at !== null) return;
+    const at = clock.now();
+    await tx.query(
+      `UPDATE service_call
+          SET emergency = true, emergency_by = 'TERMS', emergency_actor = NULL
+        WHERE service_call_id = $1`,
+      [id],
+    );
+    await tx.query(
+      `INSERT INTO service_call_transition
+         (transition_id, service_call_id, kind, actor_id, at, setter)
+       VALUES ($1, $2, 'FLAGGED', NULL, $3, 'TERMS')`,
+      [newId(clock), id, at],
+    );
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'system',
+        action: 'calls.emergency.flag',
+        subjectId: id,
+        inputs: { by: 'terms' },
+      },
+      { outcome: 'ok' },
+    );
+  });
+}
+
+/**
+ * Not an Exit. The call leaves the open list and the rail, and it is not
+ * closed, so it counts in no closed figure. The sorter's label stays.
+ */
+export async function returnToFiltered(
+  db: Queryable,
+  clock: Clock,
+  spec: ReturnCallSpec,
+): Promise<ServiceCallDetail> {
+  const callId = idOf(spec.callId, 'call');
+  const actorId = idOf(spec.actorId, 'actor');
+  await inTransaction(db, async (tx) => {
+    const current = await lockCall(tx, callId);
+    if (current.state === 'CLOSED') {
+      throw new KernelError('invalid', 'a closed call is not returned', {
+        field: 'state',
+        reason: 'closed',
+      });
+    }
+    if (current.returned_at !== null) {
+      throw new KernelError('invalid', 'call is already filtered', {
+        field: 'call',
+        reason: 'returned',
+      });
+    }
+    await tx.query(
+      `UPDATE service_call
+          SET returned_at = $2, returned_by = $3, office_label = 'returned'
+        WHERE service_call_id = $1`,
+      [callId, clock.now(), actorId],
+    );
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'staff',
+        actorId,
+        actorRole: spec.actorRole ?? undefined,
+        action: 'calls.return',
+        subjectId: callId,
+        inputs: {},
+      },
+      { outcome: 'ok' },
+    );
+  });
+  return requireDetail(db, callId);
+}
+
+/** A returned call comes back onto the open list. The same call, not a second one. */
+export async function restoreReturnedCall(
+  db: Queryable,
+  clock: Clock,
+  spec: ReturnCallSpec,
+): Promise<ServiceCallDetail> {
+  const callId = idOf(spec.callId, 'call');
+  const actorId = idOf(spec.actorId, 'actor');
+  await inTransaction(db, async (tx) => {
+    const current = await lockCall(tx, callId);
+    if (current.returned_at === null) {
+      throw new KernelError('invalid', 'call is not filtered', {
+        field: 'call',
+        reason: 'open',
+      });
+    }
+    await tx.query(
+      `UPDATE service_call
+          SET returned_at = NULL, returned_by = NULL, office_label = NULL
+        WHERE service_call_id = $1`,
+      [callId],
+    );
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'staff',
+        actorId,
+        actorRole: spec.actorRole ?? undefined,
+        action: 'calls.rescue',
+        subjectId: callId,
+        inputs: {},
+      },
+      { outcome: 'ok' },
+    );
+  });
+  return requireDetail(db, callId);
+}
+
+export async function listReturnedCalls(
+  db: Queryable,
+): Promise<ReturnedCall[]> {
+  const { rows } = await db.query<{
+    service_call_id: string;
+    description: string;
+    sender_label: string | null;
+    sender_unknown: boolean;
+    sorter_label: string | null;
+    returned_at: Date;
+  }>(
+    `SELECT service_call_id, description, sender_label, sender_unknown,
+            sorter_label, returned_at
+       FROM service_call
+      WHERE returned_at IS NOT NULL
+      ORDER BY returned_at DESC, service_call_id DESC`,
+  );
+  return rows.map((row) => ({
+    id: row.service_call_id,
+    title: row.description,
+    senderLabel: row.sender_label,
+    senderUnknown: row.sender_unknown,
+    sorterLabel: sorterLabelOf(row.sorter_label),
+    at: row.returned_at,
+  }));
 }
 
 export async function countOpenCalls(db: Queryable): Promise<number> {
   const { rows } = await db.query<{ n: number }>(
-    `SELECT count(*)::int AS n FROM service_call WHERE state <> 'CLOSED'`,
+    `SELECT count(*)::int AS n FROM service_call
+      WHERE state <> 'CLOSED' AND returned_at IS NULL`,
   );
   return rows[0]?.n ?? 0;
 }
@@ -546,14 +946,17 @@ export async function listOpenCalls(
       ? null
       : validId(filter.categoryId, 'category');
   const emergency = filter.emergency ?? null;
+  const toReview = filter.toReview ?? null;
   const { rows } = await db.query<CallRow>(
     `${CALL_SELECT}
       WHERE sc.state = COALESCE($1::text, sc.state)
         AND ($1::text IS NOT NULL OR sc.state <> 'CLOSED')
+        AND sc.returned_at IS NULL
         AND ($2::uuid IS NULL OR sc.category_id = $2)
         AND ($3::boolean IS NULL OR sc.emergency = $3)
+        AND ($4::boolean IS NULL OR sc.to_review = $4)
       ORDER BY sc.emergency DESC, sc.opened_at DESC, sc.service_call_id DESC`,
-    [state, categoryId, emergency],
+    [state, categoryId, emergency, toReview],
   );
   return rows.map(toCall);
 }
@@ -618,7 +1021,7 @@ export async function getCall(
     kind: 'OPENED',
     at: row.opened_at,
     actorId: row.opened_by,
-    actorLabel: row.opener_label,
+    actorLabel: row.opener_label ?? 'קליטה',
     partyName: null,
     categoryLabel: null,
     flagBy: null,
@@ -671,6 +1074,14 @@ export async function getCall(
       id: link.service_call_id,
       description: link.description,
     })),
+    predecessor:
+      row.predecessor_id === null || row.predecessor_description === null
+        ? null
+        : {
+            id: row.predecessor_id,
+            description: row.predecessor_description,
+          },
+    returnedBy: row.returner_label,
   };
 }
 
