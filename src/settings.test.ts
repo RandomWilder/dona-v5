@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { asOperator, signIn, signOutAll } from '../tests/support/session.ts';
 import { buildApp } from './app.ts';
+import {
+  readEmergencySettings,
+  saveEmergencySettings,
+} from './calls/contract.ts';
 import { systemClock } from './kernel/clock.ts';
 import { newId } from './kernel/ids.ts';
 import { migratedPoolOrNull, skipReason } from './kernel/pg-support.ts';
@@ -55,6 +59,7 @@ describe('settings · catalogues', () => {
         /action="\/settings\/obligation-types"/,
       );
       assert.doesNotMatch(viewerGet.body, /action="\/settings\/categories"/);
+      assert.doesNotMatch(viewerGet.body, /action="\/settings\/emergency"/);
       assert.doesNotMatch(viewerGet.body, /asset_type/);
 
       const refused = await asOps.inject({
@@ -188,6 +193,84 @@ describe('settings · catalogues', () => {
         [`TEST_CAT_${suffix}`.toUpperCase()],
       );
       await signOutAll(pool, DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('an admin edits the emergency terms, the duty phone and the hours, and a new call uses them', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const suffix = newId().slice(24);
+    const term = `חירוםבדיקה${suffix}`;
+    const domain = 'settings-emergency.test';
+    const before = await readEmergencySettings(pool);
+    const app = buildApp({ pool, version: '9.9.9-test' });
+    await signOutAll(pool, domain);
+    const admin = await signIn(pool, systemClock, {
+      email: `duty@${domain}`,
+      role: 'ADMIN',
+    });
+    const asAdmin = asOperator(app, admin);
+    try {
+      const saved = await asAdmin.inject({
+        method: 'POST',
+        url: '/settings/emergency',
+        ...form({
+          emergency_terms: `${before.termsText}\n${term}`,
+          duty_phone: '111-222-3333',
+          duty_hours: 'בדיקה 09:00–17:00',
+        }),
+      });
+      assert.equal(saved.statusCode, 303);
+      assert.equal(saved.headers.location, '/settings?saved=emergency');
+
+      const page = await asAdmin.inject({
+        method: 'GET',
+        url: '/settings?saved=emergency',
+      });
+      assert.equal(page.statusCode, 200);
+      assert.match(page.body, new RegExp(term));
+      assert.match(page.body, /111-222-3333/);
+      assert.match(page.body, /בדיקה 09:00–17:00/);
+      assert.match(page.body, /נשמר/);
+
+      const opened = await asAdmin.inject({
+        method: 'POST',
+        url: '/calls',
+        ...form({
+          channel: 'PHONE',
+          description: `יש ${term} עכשיו`,
+          sender: 'unknown',
+        }),
+      });
+      assert.equal(opened.statusCode, 303);
+      const list = await asAdmin.inject({ method: 'GET', url: '/calls' });
+      const article = list.body
+        .split('<article class="call"')
+        .find((part) => part.includes(term));
+      assert.ok(article);
+      assert.match(article, /data-emergency="true"/);
+    } finally {
+      await saveEmergencySettings(pool, systemClock, {
+        termsText: before.termsText,
+        phone: before.phone,
+        hours: before.hours,
+        actorId: admin.staffAccountId,
+        actorRole: 'ADMIN',
+      });
+      await pool.query(
+        `DELETE FROM service_call_transition WHERE service_call_id IN
+           (SELECT service_call_id FROM service_call WHERE opened_by = $1)`,
+        [admin.staffAccountId],
+      );
+      await pool.query('DELETE FROM service_call WHERE opened_by = $1', [
+        admin.staffAccountId,
+      ]);
+      await signOutAll(pool, domain);
       await app.close();
       await pool.end();
     }

@@ -18,8 +18,10 @@ import {
   CALL_STATES,
   type CallState,
   canExit,
+  clearEmergency,
   exitCall,
   findCallsByDescription,
+  flagEmergency,
   getCall,
   identifyCall,
   listCategories,
@@ -58,11 +60,16 @@ function html(reply: FastifyReply): void {
 function listFilter(query: unknown): {
   state?: CallState;
   categoryId?: string;
+  emergency?: boolean;
 } {
   const form = formOf(query);
   const state = textOf(form.state);
   const category = textOf(form.category);
-  const filter: { state?: CallState; categoryId?: string } = {};
+  const filter: {
+    state?: CallState;
+    categoryId?: string;
+    emergency?: boolean;
+  } = {};
   if ((CALL_STATES as readonly string[]).includes(state)) {
     filter.state = state as CallState;
   }
@@ -74,6 +81,7 @@ function listFilter(query: unknown): {
       // list still opens.
     }
   }
+  if (textOf(form.emergency) === '1') filter.emergency = true;
   return filter;
 }
 
@@ -182,6 +190,7 @@ async function callsPage(
     categories,
     state: filter.state ?? null,
     categoryId: filter.categoryId ?? null,
+    emergency: filter.emergency === true,
     now: deps.clock.now(),
     refusal,
   });
@@ -311,6 +320,24 @@ export function registerCallsRoutes(
       reply.code(error.code === 'not_found' ? 404 : 400);
       return callPage(deps, request, callId, refusalHe(error));
     }
+  });
+
+  app.post('/calls/:id/emergency', STAFF, async (request, reply) => {
+    const staff = staffOf(request);
+    const callId = callIdOf(request.params);
+    const action = textOf(formOf(request.body).action);
+    if (action !== 'flag' && action !== 'clear') {
+      html(reply);
+      reply.code(400);
+      return callPage(deps, request, callId, 'יש לבחור סימון חירום.');
+    }
+    const command = action === 'clear' ? clearEmergency : flagEmergency;
+    await command(deps.pool, deps.clock, {
+      callId,
+      actorId: staff.staffAccountId,
+      actorRole: staff.role,
+    });
+    return reply.code(303).header('location', `/calls/${callId}`).send();
   });
 
   app.post('/calls/:id/exit', STAFF, async (request, reply) => {

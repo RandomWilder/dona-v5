@@ -15,7 +15,11 @@
 // read beside the screen that shows what the reader looks for, and this screen is the catalogue's
 // index rather than a place any of it is worked on.
 
-import type { CategoryRow, CategorySpec } from './calls/contract.ts';
+import type {
+  CategoryRow,
+  CategorySpec,
+  EmergencySettings,
+} from './calls/contract.ts';
 import { signedInChrome } from './chrome.ts';
 import type { DocumentTypeRow, DocumentTypeSpec } from './evidence/contract.ts';
 import { KernelError } from './kernel/errors.ts';
@@ -39,7 +43,8 @@ export interface SettingsScreen {
   obligations: readonly ObligationTypeRow[];
   documents: readonly DocumentTypeRow[];
   categories: readonly CategoryRow[];
-  saved?: 'obligation' | 'document' | 'category';
+  emergency: EmergencySettings;
+  saved?: 'obligation' | 'document' | 'category' | 'emergency';
 }
 
 const styles = h`<style>
@@ -101,6 +106,35 @@ function obligationForm(csrf: string): Html {
       <input type="checkbox" name="is_active" value="true" checked />
       פעיל
     </label>
+    <button class="btn btn-primary" type="submit">שמירה</button>
+  </form>`;
+}
+
+function emergencyForm(screen: SettingsScreen): Html {
+  const duty = screen.emergency;
+  if (!screen.mayWrite) {
+    return h`<dl class="facts">
+      <div><dt>מונחים</dt><dd>${duty.termsText}</dd></div>
+      <div><dt>טלפון כונן</dt><dd dir="ltr">${duty.phone}</dd></div>
+      <div><dt>שעות כונן</dt><dd>${duty.hours}</dd></div>
+    </dl>`;
+  }
+  return h`<form class="settings-form" method="post" action="/settings/emergency">
+    ${csrfInput(screen.csrf)}
+    <h2>כונן ומונחי חירום</h2>
+    <p class="lede">שורה לכל מונח. נכנס לתוקף בלי העלאה.</p>
+    <div class="field">
+      <label for="em-terms">מונחים</label>
+      <textarea id="em-terms" name="emergency_terms" rows="6" maxlength="4000">${duty.termsText}</textarea>
+    </div>
+    <div class="field">
+      <label for="em-phone">טלפון כונן</label>
+      <input id="em-phone" name="duty_phone" type="text" dir="ltr" required maxlength="40" value="${duty.phone}" />
+    </div>
+    <div class="field">
+      <label for="em-hours">שעות כונן</label>
+      <input id="em-hours" name="duty_hours" type="text" required maxlength="200" value="${duty.hours}" />
+    </div>
     <button class="btn btn-primary" type="submit">שמירה</button>
   </form>`;
 }
@@ -172,6 +206,10 @@ export function renderSettingsPage(screen: SettingsScreen): string {
         <p class="lede">קטלוגים. סוג נכס אינו כאן. מטריצת ההרשאות אינה כאן.</p>
         ${saved}
       </div>
+      <section class="settings-block">
+        <h2>חירום</h2>
+        ${emergencyForm(screen)}
+      </section>
       <section class="settings-block">
         <h2>קטגוריות לקריאות</h2>
         <div class="row-list">
@@ -280,6 +318,18 @@ export function parseObligationTypeForm(body: unknown): ObligationTypeSpec {
     defaultResponsibleParty: responsibleParty(body),
     requiresEvidence: checked(body, 'requires_evidence'),
     isActive: checked(body, 'is_active'),
+  };
+}
+
+export function parseEmergencyForm(body: unknown): {
+  termsText: string;
+  phone: string;
+  hours: string;
+} {
+  return {
+    termsText: optionalField(body, 'emergency_terms', 4000) ?? '',
+    phone: field(body, 'duty_phone', 40),
+    hours: field(body, 'duty_hours', 200),
   };
 }
 

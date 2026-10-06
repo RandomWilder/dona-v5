@@ -2018,6 +2018,7 @@ const SCREENS: Array<[string, () => string]> = [
             openedAt: new Date('2026-10-06T10:00:00.000Z'),
             requester: null,
             category: null,
+            emergency: { flagged: true, by: 'terms' },
           },
           {
             id: '44444444-4444-4444-8444-444444444444',
@@ -2036,6 +2037,7 @@ const SCREENS: Array<[string, () => string]> = [
               labelHe: 'מנעולים',
               active: true,
             },
+            emergency: { flagged: false },
           },
         ],
         categories: [
@@ -2049,6 +2051,7 @@ const SCREENS: Array<[string, () => string]> = [
         ],
         state: null,
         categoryId: null,
+        emergency: false,
       }),
   ],
   [
@@ -2077,6 +2080,7 @@ const SCREENS: Array<[string, () => string]> = [
           openedAt: new Date('2026-10-06T10:00:00.000Z'),
           requester: null,
           category: null,
+          emergency: { flagged: false },
           exit: null,
           repeatedBy: [],
           timeline: [
@@ -2087,6 +2091,7 @@ const SCREENS: Array<[string, () => string]> = [
               actorLabel: 'yael@example.test',
               partyName: null,
               categoryLabel: null,
+              flagBy: null,
             },
           ],
         },
@@ -2124,6 +2129,12 @@ const SCREENS: Array<[string, () => string]> = [
             name: 'יעל כהן',
           },
           category: null,
+          emergency: {
+            flagged: true,
+            by: 'staff',
+            actorId: '77777777-7777-4777-8777-777777777777',
+            actorLabel: 'yael@example.test',
+          },
           exit: null,
           repeatedBy: [],
           timeline: [
@@ -2134,6 +2145,7 @@ const SCREENS: Array<[string, () => string]> = [
               actorLabel: 'yael@example.test',
               partyName: null,
               categoryLabel: null,
+              flagBy: null,
             },
             {
               kind: 'IDENTIFIED',
@@ -2142,6 +2154,7 @@ const SCREENS: Array<[string, () => string]> = [
               actorLabel: 'yael@example.test',
               partyName: 'יעל כהן',
               categoryLabel: null,
+              flagBy: null,
             },
           ],
         },
@@ -2185,6 +2198,12 @@ const SCREENS: Array<[string, () => string]> = [
             isActive: true,
           },
         ],
+        emergency: {
+          terms: ['הצפה', 'שריפה'],
+          termsText: 'הצפה\nשריפה',
+          phone: '000-000-0000',
+          hours: 'טרם נקבעו',
+        },
       }),
   ],
   [
@@ -2198,6 +2217,12 @@ const SCREENS: Array<[string, () => string]> = [
         obligations: [],
         documents: [],
         categories: [],
+        emergency: {
+          terms: ['הצפה'],
+          termsText: 'הצפה',
+          phone: '000-000-0000',
+          hours: 'טרם נקבעו',
+        },
       }),
   ],
 ];

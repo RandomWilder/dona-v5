@@ -19,7 +19,9 @@ import type { Pool } from 'pg';
 import {
   countOpenCalls,
   listCategories,
+  readEmergencySettings,
   registerCallsRoutes,
+  saveEmergencySettings,
   upsertCategory,
 } from './calls/contract.ts';
 import { signedInChrome } from './chrome.ts';
@@ -68,6 +70,7 @@ import { listPartyNames } from './parties/contract.ts';
 import {
   parseCategoryForm,
   parseDocumentTypeForm,
+  parseEmergencyForm,
   parseObligationTypeForm,
   renderSettingsPage,
 } from './settings-page.ts';
@@ -410,7 +413,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       openCalls?: number;
     },
     reply: { header: (name: string, value: string) => unknown },
-    saved?: 'obligation' | 'document' | 'category',
+    saved?: 'obligation' | 'document' | 'category' | 'emergency',
   ) => {
     stubHeaders(reply);
     const role = request.staff?.role ?? null;
@@ -423,6 +426,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       obligations: await listObligationTypes(deps.pool),
       documents: await listDocumentTypes(deps.pool, { activeOnly: false }),
       categories: await listCategories(deps.pool),
+      emergency: await readEmergencySettings(deps.pool),
       saved,
     });
   };
@@ -432,7 +436,10 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     return settingsPage(
       request,
       reply,
-      saved === 'obligation' || saved === 'document' || saved === 'category'
+      saved === 'obligation' ||
+        saved === 'document' ||
+        saved === 'category' ||
+        saved === 'emergency'
         ? saved
         : undefined,
     );
@@ -462,6 +469,20 @@ export function buildApp(deps: AppDeps): FastifyInstance {
         .send();
     },
   );
+  app.post('/settings/emergency', SETTINGS_WRITE, async (request, reply) => {
+    const staff = request.staff;
+    if (staff == null) throw new KernelError('not_allowed', 'not_allowed');
+    const clock = deps.clock ?? systemClock;
+    await saveEmergencySettings(deps.pool, clock, {
+      ...parseEmergencyForm(request.body),
+      actorId: staff.staffAccountId,
+      actorRole: staff.role,
+    });
+    return reply
+      .code(303)
+      .header('location', '/settings?saved=emergency')
+      .send();
+  });
   app.post('/settings/categories', SETTINGS_WRITE, async (request, reply) => {
     await upsertCategory(deps.pool, parseCategoryForm(request.body));
     return reply

@@ -14,6 +14,7 @@ import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
+import { emergencyTermMatches } from './emergency.ts';
 import type { Queryable } from './types.ts';
 
 export const SOURCE_CHANNELS = [
@@ -75,6 +76,16 @@ export interface CallCategory {
   active: boolean;
 }
 
+export type EmergencyMark =
+  | { flagged: false }
+  | { flagged: true; by: 'terms' }
+  | {
+      flagged: true;
+      by: 'staff';
+      actorId: string;
+      actorLabel: string;
+    };
+
 export interface ServiceCall {
   id: string;
   sourceChannel: SourceChannel;
@@ -84,9 +95,16 @@ export interface ServiceCall {
   openedAt: Date;
   requester: CallParty | null;
   category: CallCategory | null;
+  emergency: EmergencyMark;
 }
 
-export type TransitionKind = 'OPENED' | 'IDENTIFIED' | 'TRIAGED' | ExitKind;
+export type TransitionKind =
+  | 'OPENED'
+  | 'IDENTIFIED'
+  | 'TRIAGED'
+  | 'FLAGGED'
+  | 'CLEARED'
+  | ExitKind;
 
 export interface CallLink {
   id: string;
@@ -106,10 +124,12 @@ export interface CallExit {
 export interface CallTransition {
   kind: TransitionKind;
   at: Date;
-  actorId: string;
+  actorId: string | null;
   actorLabel: string;
   partyName: string | null;
   categoryLabel: string | null;
+  /** Set on a FLAGGED event: the terms, or the staff account. */
+  flagBy: 'terms' | 'staff' | null;
   note?: string | null;
   department?: string | null;
   duplicateOf?: CallLink | null;
@@ -144,6 +164,12 @@ export interface SetCategorySpec {
   actorRole?: string | null;
 }
 
+export interface EmergencyActorSpec {
+  callId: string;
+  actorId: string;
+  actorRole?: string | null;
+}
+
 export interface ExitCallSpec {
   callId: string;
   kind: string;
@@ -157,6 +183,22 @@ export interface ExitCallSpec {
 export interface CallListFilter {
   state?: CallState;
   categoryId?: string;
+  emergency?: boolean;
+}
+
+export interface EmergencySettings {
+  terms: readonly string[];
+  termsText: string;
+  phone: string;
+  hours: string;
+}
+
+export interface SaveEmergencySettingsSpec {
+  termsText: string;
+  phone: string;
+  hours: string;
+  actorId: string;
+  actorRole?: string | null;
 }
 
 export interface CategorySpec {
@@ -263,6 +305,10 @@ interface CallRow {
   closed_at: Date | null;
   closed_by: string | null;
   closer_label: string | null;
+  emergency: boolean;
+  emergency_by: string | null;
+  emergency_actor: string | null;
+  emergency_actor_label: string | null;
 }
 
 const CALL_SELECT = `SELECT sc.service_call_id, sc.source_channel, sc.state, sc.description,
@@ -275,13 +321,19 @@ const CALL_SELECT = `SELECT sc.service_call_id, sc.source_channel, sc.state, sc.
             sc.exit_kind, sc.exit_note, sc.exit_department,
             sc.duplicate_of, other.description AS duplicate_description,
             sc.closed_at, sc.closed_by,
-            COALESCE(NULLIF(btrim(closer.display_name), ''), closer.email) AS closer_label
+            COALESCE(NULLIF(btrim(closer.display_name), ''), closer.email) AS closer_label,
+            sc.emergency, sc.emergency_by, sc.emergency_actor,
+            COALESCE(
+              NULLIF(btrim(flagger.display_name), ''),
+              flagger.email
+            ) AS emergency_actor_label
        FROM service_call sc
        JOIN staff_account opener ON opener.staff_account_id = sc.opened_by
        LEFT JOIN party requester ON requester.party_id = sc.requester_party_id
        LEFT JOIN call_category category ON category.category_id = sc.category_id
        LEFT JOIN service_call other ON other.service_call_id = sc.duplicate_of
-       LEFT JOIN staff_account closer ON closer.staff_account_id = sc.closed_by`;
+       LEFT JOIN staff_account closer ON closer.staff_account_id = sc.closed_by
+       LEFT JOIN staff_account flagger ON flagger.staff_account_id = sc.emergency_actor`;
 
 function toCall(row: CallRow): ServiceCall {
   return {
@@ -307,7 +359,26 @@ function toCall(row: CallRow): ServiceCall {
             labelHe: row.category_label_he,
             active: row.category_active,
           },
+    emergency: emergencyOf(row),
   };
+}
+
+function emergencyOf(row: CallRow): EmergencyMark {
+  if (!row.emergency || row.emergency_by === null) return { flagged: false };
+  if (row.emergency_by === 'TERMS') return { flagged: true, by: 'terms' };
+  if (
+    row.emergency_by === 'STAFF' &&
+    row.emergency_actor !== null &&
+    row.emergency_actor_label !== null
+  ) {
+    return {
+      flagged: true,
+      by: 'staff',
+      actorId: row.emergency_actor,
+      actorLabel: row.emergency_actor_label,
+    };
+  }
+  return { flagged: false };
 }
 
 function isExitKind(value: string): value is ExitKind {
@@ -352,11 +423,12 @@ interface LockedCall {
   state: CallState;
   requester_party_id: string | null;
   category_id: string | null;
+  emergency: boolean;
 }
 
 async function lockCall(db: Queryable, id: string): Promise<LockedCall> {
   const { rows } = await db.query<LockedCall>(
-    `SELECT state, requester_party_id, category_id
+    `SELECT state, requester_party_id, category_id, emergency
        FROM service_call
       WHERE service_call_id = $1
       FOR UPDATE`,
@@ -398,12 +470,14 @@ export async function openCall(
   const id = newId(clock);
   const openedAt = clock.now();
 
-  await inTransaction(db, async (tx) => {
+  const flagged = await inTransaction(db, async (tx) => {
+    const settings = await readEmergencySettings(tx);
+    const byTerms = emergencyTermMatches(description, settings.terms);
     await tx.query(
       `INSERT INTO service_call
          (service_call_id, source_channel, state, description, sender_label,
-          sender_unknown, opened_at, opened_by)
-       VALUES ($1, $2, 'NEW', $3, $4, $5, $6, $7)`,
+          sender_unknown, opened_at, opened_by, emergency, emergency_by)
+       VALUES ($1, $2, 'NEW', $3, $4, $5, $6, $7, $8, $9)`,
       [
         id,
         sourceChannel,
@@ -412,8 +486,18 @@ export async function openCall(
         senderUnknown,
         openedAt,
         openedBy,
+        byTerms,
+        byTerms ? 'TERMS' : null,
       ],
     );
+    if (byTerms) {
+      await tx.query(
+        `INSERT INTO service_call_transition
+           (transition_id, service_call_id, kind, actor_id, at, setter)
+         VALUES ($1, $2, 'FLAGGED', NULL, $3, 'TERMS')`,
+        [newId(clock), id, openedAt],
+      );
+    }
     await createAuditLog(tx, clock).write(
       {
         actorKind: 'staff',
@@ -424,10 +508,12 @@ export async function openCall(
         inputs: {
           sourceChannel,
           sender: senderUnknown ? 'unknown' : 'named',
+          emergency: byTerms ? 'terms' : null,
         },
       },
       { outcome: 'ok' },
     );
+    return byTerms;
   });
 
   return {
@@ -439,6 +525,7 @@ export async function openCall(
     openedAt,
     requester: null,
     category: null,
+    emergency: flagged ? { flagged: true, by: 'terms' } : { flagged: false },
   };
 }
 
@@ -458,13 +545,15 @@ export async function listOpenCalls(
     filter.categoryId === undefined
       ? null
       : validId(filter.categoryId, 'category');
+  const emergency = filter.emergency ?? null;
   const { rows } = await db.query<CallRow>(
     `${CALL_SELECT}
       WHERE sc.state = COALESCE($1::text, sc.state)
         AND ($1::text IS NOT NULL OR sc.state <> 'CLOSED')
         AND ($2::uuid IS NULL OR sc.category_id = $2)
-      ORDER BY sc.opened_at DESC, sc.service_call_id DESC`,
-    [state, categoryId],
+        AND ($3::boolean IS NULL OR sc.emergency = $3)
+      ORDER BY sc.emergency DESC, sc.opened_at DESC, sc.service_call_id DESC`,
+    [state, categoryId, emergency],
   );
   return rows.map(toCall);
 }
@@ -483,8 +572,9 @@ export async function getCall(
   const events = await db.query<{
     kind: string;
     at: Date;
-    actor_id: string;
-    actor_label: string;
+    actor_id: string | null;
+    actor_label: string | null;
+    setter: string | null;
     party_name: string | null;
     category_label: string | null;
     note: string | null;
@@ -492,20 +582,25 @@ export async function getCall(
     duplicate_of: string | null;
     duplicate_description: string | null;
   }>(
-    `SELECT t.kind, t.at, t.actor_id,
+    `SELECT t.kind, t.at, t.actor_id, t.setter,
             COALESCE(NULLIF(btrim(actor.display_name), ''), actor.email) AS actor_label,
             party.full_name AS party_name,
             category.label_he AS category_label,
             t.note, t.department, t.duplicate_of,
             dup.description AS duplicate_description
        FROM service_call_transition t
-       JOIN staff_account actor ON actor.staff_account_id = t.actor_id
+       LEFT JOIN staff_account actor ON actor.staff_account_id = t.actor_id
        LEFT JOIN party ON party.party_id = t.party_id
        LEFT JOIN call_category category ON category.category_id = t.category_id
        LEFT JOIN service_call dup ON dup.service_call_id = t.duplicate_of
       WHERE t.service_call_id = $1
       ORDER BY t.at,
-               CASE t.kind WHEN 'IDENTIFIED' THEN 1 WHEN 'TRIAGED' THEN 2 ELSE 3 END,
+               CASE t.kind
+                 WHEN 'FLAGGED' THEN 1
+                 WHEN 'IDENTIFIED' THEN 2
+                 WHEN 'TRIAGED' THEN 3
+                 ELSE 4
+               END,
                t.transition_id`,
     [id],
   );
@@ -526,23 +621,37 @@ export async function getCall(
     actorLabel: row.opener_label,
     partyName: null,
     categoryLabel: null,
+    flagBy: null,
   };
   const timeline: CallTransition[] = [opened];
   for (const event of events.rows) {
-    const kind =
-      event.kind === 'IDENTIFIED' || event.kind === 'TRIAGED'
-        ? event.kind
-        : isExitKind(event.kind)
+    const flagged =
+      event.kind === 'FLAGGED' &&
+      (event.setter === 'TERMS' || event.setter === 'STAFF');
+    const cleared = event.kind === 'CLEARED' && event.actor_id !== null;
+    const kind = flagged
+      ? 'FLAGGED'
+      : cleared
+        ? 'CLEARED'
+        : event.kind === 'IDENTIFIED' || event.kind === 'TRIAGED'
           ? event.kind
-          : null;
+          : isExitKind(event.kind)
+            ? event.kind
+            : null;
     if (kind === null) continue;
     timeline.push({
       kind,
       at: event.at,
       actorId: event.actor_id,
-      actorLabel: event.actor_label,
+      actorLabel: event.actor_label ?? '',
       partyName: event.party_name,
       categoryLabel: event.category_label,
+      flagBy:
+        kind === 'FLAGGED'
+          ? event.setter === 'TERMS'
+            ? 'terms'
+            : 'staff'
+          : null,
       note: event.note,
       department: event.department,
       duplicateOf:
@@ -721,6 +830,77 @@ function present(value: string | null, field: 'note' | 'department'): string {
   return value;
 }
 
+async function recordEmergency(
+  db: Queryable,
+  clock: Clock,
+  spec: EmergencyActorSpec,
+  action: 'flag' | 'clear',
+): Promise<ServiceCallDetail> {
+  const callId = idOf(spec.callId, 'call');
+  const actorId = idOf(spec.actorId, 'actor');
+  await inTransaction(db, async (tx) => {
+    const current = await lockCall(tx, callId);
+    const flagging = action === 'flag';
+    if (current.emergency === flagging) return;
+    const at = clock.now();
+    if (flagging) {
+      await tx.query(
+        `UPDATE service_call
+            SET emergency = true, emergency_by = 'STAFF', emergency_actor = $2
+          WHERE service_call_id = $1`,
+        [callId, actorId],
+      );
+      await tx.query(
+        `INSERT INTO service_call_transition
+           (transition_id, service_call_id, kind, actor_id, at, setter)
+         VALUES ($1, $2, 'FLAGGED', $3, $4, 'STAFF')`,
+        [newId(clock), callId, actorId, at],
+      );
+    } else {
+      await tx.query(
+        `UPDATE service_call
+            SET emergency = false, emergency_by = NULL, emergency_actor = NULL
+          WHERE service_call_id = $1`,
+        [callId],
+      );
+      await tx.query(
+        `INSERT INTO service_call_transition
+           (transition_id, service_call_id, kind, actor_id, at)
+         VALUES ($1, $2, 'CLEARED', $3, $4)`,
+        [newId(clock), callId, actorId, at],
+      );
+    }
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'staff',
+        actorId,
+        actorRole: spec.actorRole ?? undefined,
+        action: flagging ? 'calls.emergency.flag' : 'calls.emergency.clear',
+        subjectId: callId,
+        inputs: {},
+      },
+      { outcome: 'ok' },
+    );
+  });
+  return requireDetail(db, callId);
+}
+
+export function flagEmergency(
+  db: Queryable,
+  clock: Clock,
+  spec: EmergencyActorSpec,
+): Promise<ServiceCallDetail> {
+  return recordEmergency(db, clock, spec, 'flag');
+}
+
+export function clearEmergency(
+  db: Queryable,
+  clock: Clock,
+  spec: EmergencyActorSpec,
+): Promise<ServiceCallDetail> {
+  return recordEmergency(db, clock, spec, 'clear');
+}
+
 /**
  * Closes a call by one Exit. The reason is whatever that Exit requires: a
  * note, a department and a note, or another call. A closed call stays closed.
@@ -866,6 +1046,119 @@ export async function findCallsByDescription(
     id: row.service_call_id,
     description: row.description,
   }));
+}
+
+const EMERGENCY_TERMS_KEY = 'calls.emergency_terms';
+const DUTY_PHONE_KEY = 'calls.duty_phone';
+const DUTY_HOURS_KEY = 'calls.duty_hours';
+
+// Placeholders, the same sentences the migration seeds. A missing row — a
+// database mid-migration — must not take opening a call down.
+const TERMS_FALLBACK = 'הצפה\nשריפה\nדליפת גז\nתקוע במעלית\nקצר חשמלי';
+const PHONE_FALLBACK = '000-000-0000';
+const HOURS_FALLBACK = 'טרם נקבעו';
+const TERMS_MAX = 4000;
+const PHONE_MAX = 40;
+const HOURS_MAX = 200;
+
+function splitTerms(text: string): string[] {
+  return text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+function storedText(
+  value: unknown,
+  key: string,
+  fallback: string,
+  allowEmpty: boolean,
+): string {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value !== 'string') {
+    throw new KernelError('invalid', `setting ${key} is not text`, { key });
+  }
+  if (value.length === 0) return allowEmpty ? '' : fallback;
+  return value;
+}
+
+export async function readEmergencySettings(
+  db: Queryable,
+): Promise<EmergencySettings> {
+  const { rows } = await db.query<{ key: string; value: unknown }>(
+    `SELECT key, value FROM config_settings WHERE key = ANY($1::text[])`,
+    [[EMERGENCY_TERMS_KEY, DUTY_PHONE_KEY, DUTY_HOURS_KEY]],
+  );
+  const byKey = new Map(rows.map((row) => [row.key, row.value]));
+  const termsText = storedText(
+    byKey.get(EMERGENCY_TERMS_KEY),
+    EMERGENCY_TERMS_KEY,
+    TERMS_FALLBACK,
+    true,
+  );
+  return {
+    terms: splitTerms(termsText),
+    termsText,
+    phone: storedText(
+      byKey.get(DUTY_PHONE_KEY),
+      DUTY_PHONE_KEY,
+      PHONE_FALLBACK,
+      false,
+    ),
+    hours: storedText(
+      byKey.get(DUTY_HOURS_KEY),
+      DUTY_HOURS_KEY,
+      HOURS_FALLBACK,
+      false,
+    ),
+  };
+}
+
+async function writeSetting(
+  db: Queryable,
+  clock: Clock,
+  key: string,
+  value: string,
+): Promise<void> {
+  await db.query(
+    `INSERT INTO config_settings (key, value, updated_at)
+     VALUES ($1, $2::jsonb, $3)
+     ON CONFLICT (key) DO UPDATE
+       SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`,
+    [key, JSON.stringify(value), clock.now()],
+  );
+}
+
+export async function saveEmergencySettings(
+  db: Queryable,
+  clock: Clock,
+  spec: SaveEmergencySettingsSpec,
+): Promise<EmergencySettings> {
+  const actorId = validId(spec.actorId, 'actor');
+  const phone = requireText(spec.phone, 'phone', PHONE_MAX);
+  const hours = requireText(spec.hours, 'hours', HOURS_MAX);
+  const raw = spec.termsText.trim();
+  if (raw.length > TERMS_MAX) {
+    throw new KernelError('invalid', 'terms are too long', { field: 'terms' });
+  }
+  const terms = splitTerms(raw);
+  const termsText = terms.join('\n');
+  await inTransaction(db, async (tx) => {
+    await writeSetting(tx, clock, EMERGENCY_TERMS_KEY, termsText);
+    await writeSetting(tx, clock, DUTY_PHONE_KEY, phone);
+    await writeSetting(tx, clock, DUTY_HOURS_KEY, hours);
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'staff',
+        actorId,
+        actorRole: spec.actorRole ?? undefined,
+        action: 'calls.emergency.settings',
+        inputs: { terms: terms.length },
+      },
+      { outcome: 'ok' },
+    );
+  });
+  return { terms, termsText, phone, hours };
 }
 
 function categoryCode(value: string): string {

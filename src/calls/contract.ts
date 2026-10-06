@@ -17,27 +17,40 @@ export type {
   CallTransition,
   CategoryRow,
   CategorySpec,
+  EmergencyActorSpec,
+  EmergencyMark,
+  EmergencySettings,
   ExitCallSpec,
   ExitKind,
   IdentifyCallSpec,
   ManualChannel,
   OpenCallSpec,
+  SaveEmergencySettingsSpec,
   ServiceCall,
   ServiceCallDetail,
   SetCategorySpec,
   SourceChannel,
 } from './internal/commands.ts';
 export {
+  clearEmergency,
   countOpenCalls,
   exitCall,
+  flagEmergency,
   getCall,
   identifyCall,
   listCategories,
   listOpenCalls,
   openCall,
+  readEmergencySettings,
+  saveEmergencySettings,
   setCallCategory,
   upsertCategory,
 } from './internal/commands.ts';
+export type { DutyContact } from './internal/emergency.ts';
+export {
+  composeDutyReply,
+  emergencyTermMatches,
+} from './internal/emergency.ts';
 
 declare module 'fastify' {
   interface FastifyRequest {

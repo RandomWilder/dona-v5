@@ -104,6 +104,8 @@ be met. Editable at `/settings` without a deploy.
 | **ServiceCall** (**קריאה**) | A request that reached the office through a **Source channel**. A question is a ServiceCall too, closed by an exit. The requester is identified, never presumed: an unknown sender's call waits in NEW for the office. Has a state machine, with no AI in it. Not "ticket", not "inquiry". |
 | **Source channel** | How a ServiceCall arrived: `WHATSAPP · EMAIL · PHONE · WALK_IN`. Set once, at intake. |
 | **Category** | The trade a ServiceCall needs — plumbing, electrical, A/C, locks, gates and the like, plus administrative. Dona Dom's list. Distinct from `asset_type`, which is what the call is filed against. |
+| **Emergency** | A ServiceCall flagged because its text contains an emergency term, or because a person flagged it. The flag records which. Pinned first in קריאות. Not a state, and no model sets it. |
+| **Duty contact** | The duty phone number and the duty hours. Editable at `/settings`. The fixed emergency reply is composed from these rows. |
 | **Exit** | A ServiceCall closed by a person, with a reason, before a Visit: **Answered** (a question, settled), **Forwarded** (a legitimate request another department owns — finance, legal — named on the call), **Duplicate** (linked to the call it repeats), **Cancelled** (the requester withdrew). Not "rejected", and a call with no exit reason is not closed. |
 | **Filtered message** | An incoming message the sorter judged not to be a ServiceCall. Kept, never deleted, and the office can turn it into one. |
 | **Visit** | A contractor or operator attending. |

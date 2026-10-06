@@ -14,11 +14,38 @@ function form(fields: Record<string, string>): string {
   return new URLSearchParams(fields).toString();
 }
 
+function callId(html: string, description: string): string | undefined {
+  const at = html.indexOf(`>${description}</a>`);
+  if (at < 0) return undefined;
+  const links = html.slice(0, at).match(/href="\/calls\/([0-9a-f-]{36})"/g);
+  return links?.at(-1)?.match(/([0-9a-f-]{36})/)?.[1];
+}
+
+function emergencyMark(html: string, description: string): string | undefined {
+  const at = html.indexOf(`>${description}</a>`);
+  if (at < 0) return undefined;
+  return html
+    .slice(Math.max(0, at - 400), at)
+    .match(/data-emergency="(true|false)"/g)
+    ?.at(-1)
+    ?.match(/true|false/)?.[0];
+}
+
 async function cleanup(pool: import('pg').Pool, domain: string): Promise<void> {
   await pool.query(
-    `DELETE FROM service_call_transition WHERE service_call_id IN
-       (SELECT service_call_id FROM service_call WHERE opened_by IN
-          (SELECT staff_account_id FROM staff_account WHERE email LIKE $1))`,
+    `UPDATE service_call
+        SET emergency = false, emergency_by = NULL, emergency_actor = NULL
+      WHERE emergency_actor IN
+        (SELECT staff_account_id FROM staff_account WHERE email LIKE $1)`,
+    [`%@${domain}`],
+  );
+  await pool.query(
+    `DELETE FROM service_call_transition
+      WHERE actor_id IN
+          (SELECT staff_account_id FROM staff_account WHERE email LIKE $1)
+         OR service_call_id IN
+          (SELECT service_call_id FROM service_call WHERE opened_by IN
+             (SELECT staff_account_id FROM staff_account WHERE email LIKE $1))`,
     [`%@${domain}`],
   );
   await pool.query(
@@ -34,7 +61,7 @@ async function cleanup(pool: import('pg').Pool, domain: string): Promise<void> {
     [`%@${domain}`],
   );
   await pool.query(
-    `DELETE FROM audit_log WHERE action IN ('calls.open', 'calls.identify', 'calls.triage', 'calls.exit')
+    `DELETE FROM audit_log WHERE action IN ('calls.open', 'calls.identify', 'calls.triage', 'calls.exit', 'calls.emergency.flag', 'calls.emergency.clear')
        AND actor_id IN
        (SELECT staff_account_id::text FROM staff_account WHERE email LIKE $1)`,
     [`%@${domain}`],
@@ -500,6 +527,109 @@ describe('calls · the קריאות tab', () => {
       });
       assert.match(originalPage.body, /נזילה שוב/);
       assert.match(originalPage.body, /data-call-state="NEW"/);
+    } finally {
+      await cleanup(pool, domain);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('pins a flagged call in red, filters on the flag, and clears it by hand', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    const domain = 'calls-routes-emergency.test';
+    await cleanup(pool, domain);
+    const who = await signIn(pool, clock, {
+      email: `ops@${domain}`,
+      role: 'OPERATOR',
+    });
+    const client = asOperator(app, who);
+    try {
+      const flagged = await client.inject({
+        method: 'POST',
+        url: '/calls',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({
+          channel: 'PHONE',
+          description: 'יש השריפה בדירה',
+          sender: 'unknown',
+        }),
+      });
+      assert.equal(flagged.statusCode, 303);
+      const plain = await client.inject({
+        method: 'POST',
+        url: '/calls',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({
+          channel: 'WALK_IN',
+          description: 'נזילה רגילה לבדיקה',
+          sender: 'unknown',
+        }),
+      });
+      assert.equal(plain.statusCode, 303);
+
+      const list = await client.inject({ method: 'GET', url: '/calls' });
+      assert.equal(list.statusCode, 200);
+      const emergencyAt = list.body.indexOf('יש השריפה בדירה');
+      const plainAt = list.body.indexOf('נזילה רגילה לבדיקה');
+      assert.ok(emergencyAt >= 0 && plainAt > emergencyAt);
+      assert.match(list.body, /color: var\(--color-alert\)/);
+
+      const filtered = await client.inject({
+        method: 'GET',
+        url: '/calls?emergency=1',
+      });
+      assert.match(filtered.body, /יש השריפה בדירה/);
+      assert.doesNotMatch(filtered.body, /נזילה רגילה לבדיקה/);
+
+      assert.equal(emergencyMark(list.body, 'יש השריפה בדירה'), 'true');
+      assert.equal(emergencyMark(list.body, 'נזילה רגילה לבדיקה'), 'false');
+      const emergencyId = callId(list.body, 'יש השריפה בדירה');
+      assert.ok(emergencyId);
+      const page = await client.inject({
+        method: 'GET',
+        url: `/calls/${emergencyId}`,
+      });
+      assert.match(page.body, /המונחים/);
+      const cleared = await client.inject({
+        method: 'POST',
+        url: `/calls/${emergencyId}/emergency`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({ action: 'clear' }),
+      });
+      assert.equal(cleared.statusCode, 303);
+      const after = await client.inject({
+        method: 'GET',
+        url: `/calls/${emergencyId}`,
+      });
+      assert.match(after.body, /data-emergency="false"/);
+      assert.match(after.body, /הוסר סימון חירום/);
+
+      const plainId = callId(list.body, 'נזילה רגילה לבדיקה');
+      assert.ok(plainId);
+      const plainPage = await client.inject({
+        method: 'GET',
+        url: `/calls/${plainId}`,
+      });
+      assert.match(plainPage.body, /נזילה רגילה לבדיקה/);
+      const marked = await client.inject({
+        method: 'POST',
+        url: `/calls/${plainId}/emergency`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({ action: 'flag' }),
+      });
+      assert.equal(marked.statusCode, 303);
+      const handed = await client.inject({
+        method: 'GET',
+        url: `/calls/${plainId}`,
+      });
+      assert.match(handed.body, /data-emergency="true"/);
+      assert.match(handed.body, new RegExp(who.email));
     } finally {
       await cleanup(pool, domain);
       await app.close();

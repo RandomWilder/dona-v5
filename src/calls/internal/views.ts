@@ -31,6 +31,7 @@ export interface CallsScreen {
   categories: readonly CategoryRow[];
   state: CallState | null;
   categoryId: string | null;
+  emergency: boolean;
   now: Date;
   refusal?: string;
 }
@@ -111,6 +112,11 @@ const styles = h`<style>
     padding-block: var(--space-3);
     border-block-end: var(--size-hairline) solid var(--color-divider-soft);
   }
+  .calls .call[data-emergency="true"],
+  .calls .call[data-emergency="true"] .call-main a,
+  .calls .call[data-emergency="true"] .call-meta {
+    color: var(--color-alert);
+  }
   .calls .call-main { margin: 0; }
   .calls .call-meta {
     display: flex;
@@ -170,12 +176,17 @@ function callRow(call: ServiceCall, now: Date): Html {
     call.category === null
       ? h``
       : h`<span class="chip">${call.category.labelHe}</span>`;
-  return h`<article class="call" data-call="${call.id}" data-channel="${call.sourceChannel}" data-call-state="${call.state}">
+  const emergency = call.emergency.flagged
+    ? h`<span class="chip">חירום</span>`
+    : h``;
+  const marked = call.emergency.flagged ? 'true' : 'false';
+  return h`<article class="call" data-call="${call.id}" data-channel="${call.sourceChannel}" data-call-state="${call.state}" data-emergency="${marked}">
     <p class="call-main"><a href="/calls/${call.id}">${call.description}</a></p>
     <p class="call-meta">
       <span class="chip">${CHANNEL_HE[call.sourceChannel]}</span>
       <span class="chip">${STATE_HE[call.state]}</span>
       ${category}
+      ${emergency}
       <span>${sender}</span>
       <span>${ageLabel(call.openedAt, now)}</span>
     </p>
@@ -203,6 +214,12 @@ function filters(screen: CallsScreen): Html {
         )}
       </select>
     </label>
+    <label>חירום
+      <select name="emergency">
+        <option value="" ${selected(!screen.emergency)}>הכל</option>
+        <option value="1" ${selected(screen.emergency)}>חירום</option>
+      </select>
+    </label>
     <button class="btn" type="submit">סינון</button>
   </form>`;
 }
@@ -212,7 +229,8 @@ export function renderCallsPage(screen: CallsScreen): string {
     screen.refusal === undefined
       ? h``
       : h`<p class="refusal">${screen.refusal}</p>`;
-  const filtered = screen.state !== null || screen.categoryId !== null;
+  const filtered =
+    screen.state !== null || screen.categoryId !== null || screen.emergency;
   const list =
     screen.calls.length === 0
       ? h`<p class="lede">${filtered ? 'אין קריאות תואמות.' : 'אין קריאות פתוחות.'}</p>`
@@ -274,6 +292,13 @@ function eventLine(event: CallTransition): Html {
   if (event.kind === 'TRIAGED') {
     return h`<li data-kind="TRIAGED">קטגוריה ${event.categoryLabel} · ${who}</li>`;
   }
+  if (event.kind === 'FLAGGED') {
+    const setter = event.flagBy === 'terms' ? 'המונחים' : event.actorLabel;
+    return h`<li data-kind="FLAGGED">סומנה חירום · ${setter} · ${when}</li>`;
+  }
+  if (event.kind === 'CLEARED') {
+    return h`<li data-kind="CLEARED">הוסר סימון חירום · ${who}</li>`;
+  }
   if (event.kind === 'ANSWERED') {
     return h`<li data-kind="ANSWERED">נענתה · ${event.note} · ${who}</li>`;
   }
@@ -284,6 +309,26 @@ function eventLine(event: CallTransition): Html {
     return h`<li data-kind="DUPLICATE">כפולה של ${event.duplicateOf?.description} · ${who}</li>`;
   }
   return h`<li data-kind="CANCELLED">בוטלה · ${event.note} · ${who}</li>`;
+}
+
+function emergencyLabel(call: ServiceCall): string {
+  if (!call.emergency.flagged) return 'לא';
+  if (call.emergency.by === 'terms') return 'המונחים';
+  return call.emergency.actorLabel;
+}
+
+function emergencyForm(screen: CallScreen): Html {
+  const call = screen.call;
+  const action = call.emergency.flagged ? 'clear' : 'flag';
+  const label = call.emergency.flagged ? 'הסרת סימון חירום' : 'סימון חירום';
+  return h`<section class="glass sheet">
+    <h2>חירום</h2>
+    <form method="post" action="/calls/${call.id}/emergency">
+      ${csrfInput(screen.csrf)}
+      <input type="hidden" name="action" value="${action}" />
+      <button class="btn btn-primary" type="submit">${label}</button>
+    </form>
+  </section>`;
 }
 
 function identifyForm(screen: CallScreen): Html {
@@ -456,6 +501,7 @@ export function renderCallPage(screen: CallScreen): string {
           <div><dt>פונה</dt><dd>${requester}</dd></div>
           <div><dt>קטגוריה</dt><dd>${category}</dd></div>
           <div><dt>גיל</dt><dd>${ageLabel(call.openedAt, screen.now)}</dd></div>
+          <div><dt>חירום</dt><dd data-emergency="${call.emergency.flagged ? 'true' : 'false'}">${emergencyLabel(call)}</dd></div>
           ${exitFacts(screen)}
         </dl>
       </section>
@@ -464,6 +510,7 @@ export function renderCallPage(screen: CallScreen): string {
         <ol class="timeline">${call.timeline.map(eventLine)}</ol>
       </section>
       ${repeatedBy(screen)}
+      ${emergencyForm(screen)}
       ${step}
       ${closing}
     </div>`;

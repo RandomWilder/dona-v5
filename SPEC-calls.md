@@ -56,9 +56,18 @@ call is never reopened.
 
 **Emergency.** A call is flagged an emergency by a deterministic match against the emergency terms,
 before any model reads the message (foundation rule 5), or by hand. A person can also clear a flag.
-The flag records who or what set it. An emergency-flagged call is pinned first in the tab. On EMAIL
-and WHATSAPP the flag sends one fixed reply with the duty phone number, composed from the duty
-contact rows with no model involved. Its wording is the director's to approve.
+The flag records who or what set it: the terms, or the staff account that flagged it. Clearing a
+flag records that staff account too. An emergency-flagged call is pinned first in the tab, marked
+red, and the list filters on the flag.
+
+The match is a substring, after case-folding and after niqqud and invisible marks are stripped.
+Any one term is enough. A Hebrew term inside a longer word matches, because a prefix is not a word
+boundary. A term in another language matches the same way. The match calls no model.
+
+On EMAIL and WHATSAPP the flag sends one fixed reply with the duty phone number, composed from the
+duty contact rows with no model involved. The composer is a pure function of those rows. The
+sentence it returns is a placeholder until the director approves the text. Sending the reply is the
+channel's.
 
 **Category** is the trade a call needs. It is an admin-managed list of rows, deactivated and never
 deleted, seeded with a placeholder list until Dona Dom supplies theirs. It is distinct from
