@@ -53,9 +53,11 @@ golden set's messages are fabricated, never a real tenant's.
 ## Adapters
 
 **Outlook is the client's inbox and is built first**, through Microsoft Graph:
-- An app registration in Dona Dom's Microsoft 365 tenant, holding the application permission
-  `Mail.Read` limited to the one shared mailbox. **Read-only by construction**: nothing here can
-  delete, move or mark mail as read.
+- An app registration in Dona Dom's Microsoft 365 tenant, holding the application permissions
+  `Mail.Read` and `Mail.Send`, both limited to the one shared mailbox by Exchange Online's RBAC for
+  Applications. **Nothing here can delete, move or mark mail as read.** `Mail.Send` exists for one
+  message only: the fixed emergency reply, which lands in that mailbox's Sent Items like any reply
+  the office sends (decided 6 Oct 2026).
 - Polled with a delta query every one to two minutes, with the cursor stored.
 - Threading comes from the conversation id.
 - Staging reads a test mailbox. Production reads the real one. Granting admin consent is the

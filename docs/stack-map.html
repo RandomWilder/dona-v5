@@ -776,11 +776,11 @@
         </div>
         <div>
           <h5>The rule</h5>
-          <p><strong>Read-only by construction.</strong> The app registration holds <code>Mail.Read</code> on that one mailbox and nothing else, so the platform cannot delete, move or mark mail as read, and the mailbox stays the record it is today. It is not a new vendor: the mail is already with Dona Dom's own provider. Admin consent is Dona Dom's to grant.</p>
+          <p><strong>It reads, and sends one thing.</strong> The app registration holds <code>Mail.Read</code> and <code>Mail.Send</code>, both scoped to that one mailbox and nothing else. The only email the platform sends is the fixed emergency reply with the duty number, and it lands in Sent Items like any office reply. The platform cannot delete, move or mark mail as read, and the mailbox stays the record it is today. It is not a new vendor: the mail is already with Dona Dom's own provider. Admin consent is Dona Dom's to grant.</p>
         </div>
       </div>
       <div class="svc-foot">
-        <span>DIRECTION <b>inbound only</b></span>
+        <span>DIRECTION <b>inbound; out only the emergency reply</b></span>
         <span>STANDBY <b>a Gmail adapter, built and wired to nothing</b></span>
       </div>
     </div>

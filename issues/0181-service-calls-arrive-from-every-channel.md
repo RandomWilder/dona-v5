@@ -30,7 +30,8 @@ Every incoming message, whatever its channel, goes through one intake door. Each
 ServiceCall the office works in the קריאות tab, or a Filtered message the office can rescue.
 
 - **The office can enter phone and walk-in calls on a short form.**
-- **The shared Outlook inbox is read by the system**, read-only. Gmail is built as a standby adapter
+- **The shared Outlook inbox is read by the system.** The only thing it sends from that mailbox is the
+  fixed emergency reply; it never deletes, moves or marks mail. Gmail is built as a standby adapter
   behind the same interface and is not wired to a mailbox.
 - **The office WhatsApp number is connected by coexistence.** The receptionist keeps the phone, and
   every 1-on-1 chat on it also reaches the system.
@@ -248,9 +249,11 @@ WhatsApp intake runs on real traffic.
 ### Adapters
 
 - **Outlook first, through Microsoft Graph.**
-  - An app registration in Dona Dom's Microsoft 365 tenant, with the application permission
-    `Mail.Read` limited to the one shared mailbox. **Read-only by construction**: the system cannot
-    delete, move or mark mail as read.
+  - An app registration in Dona Dom's Microsoft 365 tenant, with the application permissions
+    `Mail.Read` and `Mail.Send`, both limited to the one shared mailbox by Exchange Online's RBAC
+    for Applications. The system cannot delete, move or mark mail as read. **`Mail.Send` is for the
+    fixed emergency reply only** (added 6 Oct 2026 at the ticket breakdown, because that reply on
+    EMAIL needs it).
   - Polled with a delta query on a short schedule, every one to two minutes. Webhooks are not used in
     V1.
   - Threading comes from the conversation id. Attachments are fetched with the message.
