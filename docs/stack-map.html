@@ -297,7 +297,8 @@
     </div>
     <div class="stamp">
       ISSUED <b>2 Sep 2026</b><br>
-      VENDORS <b>4 that matter</b><br>
+      REVISED <b>6 Oct 2026</b><br>
+      VENDORS <b>3 that matter</b><br>
       REGION <b>me-west1 · Tel Aviv</b><br>
       RUN COST <b>≈ $200–450 / mo pilot</b><br>
       AT SCALE <b>≈ $750–1,850 / mo</b>
@@ -309,12 +310,12 @@
     <div class="sechead">
       <span class="secnum">01 — THE MAP</span>
       <h2>What the system is made of</h2>
-      <p>The application is ours. Almost everything underneath it is rented. This page exists so that fact is visible before anyone signs anything — and so the four vendors that genuinely matter are separated from the eight that are commodities.</p>
+      <p>The application is ours. Almost everything underneath it is rented. This page exists so that fact is visible before anyone signs anything — and so the three vendors that genuinely matter are separated from the eight that are commodities.</p>
     </div>
 
     <figure>
       <div class="figbody">
-        <svg viewBox="0 0 1120 706" role="img" aria-label="System dependency map. People — tenants, providers and the operations team — reach the platform through WhatsApp or a browser. The application runs on Google Cloud Platform in the Tel Aviv region as three services over Postgres, object storage and secrets. It calls out to three third-party services: OpenAI for language, speech and embeddings; Google Document AI for optical character recognition of scanned documents; and an OTP provider for phone verification. Meta's WhatsApp Business Platform carries the messages. Priority ERP and the operational tools sit at the edges. Everything drawn in orange is outside our control.">
+        <svg viewBox="0 0 1120 706" role="img" aria-label="System dependency map. People — tenants, providers and the operations team — reach the platform through WhatsApp or a browser. The application runs on Google Cloud Platform in the Tel Aviv region as three services over Postgres, object storage and secrets. It calls out to three third-party services: OpenAI for language, speech and embeddings; Google Document AI for optical character recognition of scanned documents. Meta's WhatsApp Business Platform carries the messages, and the one-time codes as WhatsApp authentication templates, so there is no separate OTP provider. Priority ERP and the operational tools sit at the edges. Everything drawn in orange is outside our control.">
           <defs>
             <marker id="smA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
@@ -426,8 +427,8 @@
           <text class="sub" x="806" y="470">word boxes · per-word confidence · signatures</text>
 
           <rect class="n-ext" x="790" y="498" width="300" height="56" rx="2"/>
-          <text class="n-label ext" x="940" y="522" text-anchor="middle">OTP delivery</text>
-          <text class="sub ext" x="940" y="538" text-anchor="middle">phone → party binding · SMS fallback</text>
+          <text class="n-label ext" x="940" y="522" text-anchor="middle">One-time codes — via Meta</text>
+          <text class="sub ext" x="940" y="538" text-anchor="middle">WhatsApp auth template · no SMS provider</text>
 
           <!-- crossings: one riser, three branches -->
           <path class="e-line ext" d="M762,244 V526"/>
@@ -481,7 +482,7 @@
           <text class="sub" x="778" y="680">people</text>
         </svg>
       </div>
-      <figcaption><b>Figure 1 — The dependency map.</b> Anything drawn in orange is a service we rent and cannot fix ourselves. Everything inside the dashed boundary is code we write, running on infrastructure we rent. Note what the map does <em>not</em> show: no ticketing SaaS, no CRM, no payment processor, no chatbot platform. Four vendors carry real weight — Google, OpenAI, Meta, and whoever delivers one-time codes — and only one of them is genuinely hard to replace. Note also that reading a document takes two of them: Document AI gets the marks off the page, OpenAI decides what they mean.</figcaption>
+      <figcaption><b>Figure 1 — The dependency map.</b> Anything drawn in orange is a service we rent and cannot fix ourselves. Everything inside the dashed boundary is code we write, running on infrastructure we rent. Note what the map does <em>not</em> show: no ticketing SaaS, no CRM, no payment processor, no chatbot platform. Three vendors carry real weight — Google, OpenAI and Meta, which since 6 Oct 2026 also delivers the one-time codes — and only one of them is genuinely hard to replace. Note also that reading a document takes two of them: Document AI gets the marks off the page, OpenAI decides what they mean.</figcaption>
     </figure>
   </section>
 
@@ -649,6 +650,7 @@
             <li><b>Schema mapping.</b> Turning the OCR output — text, positions, confidences — plus the page image into the schema the flow already declared. Extraction proposes; a person promotes.</li>
             <li><b>Speech-to-text.</b> Voice notes in Hebrew, Russian, Arabic, French and English. Israeli tradesmen answer in voice notes — this is table stakes, not a nice-to-have.</li>
             <li><b>Embeddings.</b> Retrieval over the self-help knowledge base and past resolved calls, stored in the Postgres we already pay for.</li>
+            <li><b>Sorting and translation.</b> Every incoming email and WhatsApp message is read by the sorter, which proposes whether it is a service call, its category and a Hebrew summary, and translates a message in another language. It proposes; the office decides.</li>
           </ul>
         </div>
         <div>
@@ -688,19 +690,19 @@
             <li><b>Message templates</b> for anything we initiate outside the 24-hour reply window: a provider offer, an appointment reminder, a document request.</li>
           </ul>
           <h5 style="margin-top:16px">What it needs from Dona Dom</h5>
-          <p>Meta Business verification against the company's legal registration, a dedicated phone number that is not anyone's personal mobile, display-name approval, and each template reviewed before first use.</p>
+          <p>Meta Business verification against the company's legal registration, display-name approval, and each template reviewed before first use. <strong>The number is the office's existing WhatsApp number</strong>, kept on the receptionist's office phone in the WhatsApp Business app and connected to the Cloud API at the same time (coexistence). The phone must be used at least every 14 days or Meta disconnects it.</p>
         </div>
         <div>
           <h5>Why this one</h5>
           <p>There is no alternative worth discussing. WhatsApp is where Israeli tenants and tradesmen already are, and the entire architecture rests on providers changing nothing about their habits. An SMS or app-based channel would be cheaper and would not be used.</p>
           <h5 style="margin-top:16px">Direct or through a reseller</h5>
-          <p>Go <strong>direct on the Cloud API</strong>. Business Solution Providers add a per-message markup and a layer between us and the message log for convenience we do not need. Keep a BSP in reserve only if verification stalls.</p>
+          <p>Go <strong>direct on the Cloud API, with Dona Dom as its own Tech Provider</strong> in its own Business Manager — coexistence onboarding needs a Tech Provider or a Solution Partner, and this way no third party sits between the office and Meta. Business Solution Providers add a per-message markup and a further processor of every message. Keep a BSP in reserve only if App Review stalls (decided 6 Oct 2026).</p>
         </div>
       </div>
       <div class="svc-foot">
         <span>ALTERNATIVES <b>none credible</b></span>
         <span>SWITCHING COST <b>high — but message history stays in our database</b></span>
-        <span>LEAD TIME <b>4–6 weeks, bureaucratic</b></span>
+        <span>LEAD TIME <b>4–6 weeks, bureaucratic — App Review alone ran 17–20 days in mid-2026</b></span>
       </div>
     </div>
 
@@ -716,7 +718,7 @@
     <div class="svc">
       <div class="svc-head">
         <h4>One-time code delivery</h4>
-        <span class="who ext">Third party · low volume</span>
+        <span class="who ext">Meta template · low volume</span>
       </div>
       <div class="svc-body">
         <div>
@@ -725,12 +727,12 @@
         </div>
         <div>
           <h5>Recommendation</h5>
-          <p><strong>Send the code as a WhatsApp authentication template first, SMS only as fallback.</strong> The thing we need to bind is <em>this phone's WhatsApp</em>, because that is what will carry every future conversation — so delivering the code through that exact channel proves precisely the right thing, and costs one already-approved template.</p>
-          <p>SMS fallback covers tenants without WhatsApp and number changes: a local Israeli gateway (Inforu, Cellact) is cheapest for Israeli numbers; Twilio Verify is simpler to integrate and handles code lifecycle for us, at a higher per-message price.</p>
+          <p><strong>Send the code as a WhatsApp authentication template, and only that.</strong> The thing we need to bind is <em>this phone's WhatsApp</em>, because that is what will carry every future conversation — so delivering the code through that exact channel proves precisely the right thing, and costs one approved template, about $0.005 in Israel.</p>
+          <p><strong>No SMS fallback, decided 6 Oct 2026.</strong> A tenant without WhatsApp never reaches the agent, so there is nothing to bind; a changed number receives its code on its own WhatsApp. Dropping the fallback removes a processor that would have seen tenants' phone numbers. If one is ever needed, it is one adapter: a local Israeli gateway (Inforu, Cellact) is cheapest, Twilio Verify the simplest.</p>
         </div>
       </div>
       <div class="svc-foot">
-        <span>ALTERNATIVES <b>Twilio Verify · Inforu · Cellact · Firebase Phone Auth</b></span>
+        <span>IF SMS IS EVER NEEDED <b>Inforu · Cellact · Twilio Verify</b></span>
         <span>SWITCHING COST <b>very low — one adapter</b></span>
         <span>VOLUME <b>~1,500 first-time + churn</b></span>
       </div>
@@ -759,6 +761,27 @@
       <div class="svc-foot">
         <span>DIRECTION <b>inbound only</b></span>
         <span>OPEN <b>API availability · IT contact · who masters the unit register</b></span>
+      </div>
+    </div>
+
+    <div class="svc is-own">
+      <div class="svc-head">
+        <h4>Microsoft 365 — the shared Outlook inbox</h4>
+        <span class="who own">Dona Dom · existing</span>
+      </div>
+      <div class="svc-body">
+        <div>
+          <h5>What we use it for</h5>
+          <p>Tenants write to one shared inbox. The platform reads it through Microsoft Graph, every minute or two, and each new email becomes a service call or a filtered message in the קריאות tab, beside WhatsApp, phone and walk-in calls.</p>
+        </div>
+        <div>
+          <h5>The rule</h5>
+          <p><strong>Read-only by construction.</strong> The app registration holds <code>Mail.Read</code> on that one mailbox and nothing else, so the platform cannot delete, move or mark mail as read, and the mailbox stays the record it is today. It is not a new vendor: the mail is already with Dona Dom's own provider. Admin consent is Dona Dom's to grant.</p>
+        </div>
+      </div>
+      <div class="svc-foot">
+        <span>DIRECTION <b>inbound only</b></span>
+        <span>STANDBY <b>a Gmail adapter, built and wired to nothing</b></span>
       </div>
     </div>
 
@@ -817,7 +840,7 @@
           <tr><td><b>Google Document AI</b></td><td>pages sent through OCR — the cheap general processor, not Form Parser</td><td class="num">&lt; $5</td><td class="num">$10 – 40</td></tr>
           <tr><td><b>OpenAI</b></td><td>conversations, schema mapping, minutes transcribed</td><td class="num">$30 – 90</td><td class="num">$190 – 520</td></tr>
           <tr><td><b>WhatsApp — Meta</b></td><td>template messages we initiate; tenant-initiated service conversations are free</td><td class="num">$10 – 40</td><td class="num">$80 – 300</td></tr>
-          <tr><td><b>OTP delivery</b></td><td>one code per enrolment, plus number changes</td><td class="num">&lt; $10</td><td class="num">$20 – 60</td></tr>
+          <tr><td><b>One-time codes — Meta</b></td><td>authentication templates, about $0.005 each in Israel; one per enrolment, plus number changes</td><td class="num">&lt; $5</td><td class="num">&lt; $10</td></tr>
           <tr><td><b>Sentry · email · CI</b></td><td>seats and volume; mostly flat</td><td class="num">$30 – 60</td><td class="num">$50 – 100</td></tr>
           <tr class="total"><td>Total, per month</td><td>excluding development, VAT, and staff time</td><td class="num">≈ $200 – 450</td><td class="num">≈ $750 – 1,850</td></tr>
         </tbody>
@@ -865,9 +888,9 @@
             <td>The contract is narrow — an image goes in, text with boxes and confidences comes out — so Azure Document Intelligence is a genuine substitute. The risk here is not lock-in but quality: Hebrew handwriting is the axis on which engines actually differ, and it should be tested on real Dona Dom scans before the choice is fixed.</td>
           </tr>
           <tr>
-            <td><b>OTP delivery</b></td>
+            <td><b>One-time codes</b></td>
             <td><span class="lock lo">Low</span></td>
-            <td>One adapter behind one interface. Genuinely a day's work to replace.</td>
+            <td>They ride Meta's templates, so they add no vendor. An SMS gateway, if one is ever wanted, is one adapter behind one interface — a day's work.</td>
           </tr>
           <tr>
             <td><b>Sentry · email · CI</b></td>
@@ -915,7 +938,7 @@
     <div class="asks">
       <div>
         <h4>Who owns the Meta Business account and the WhatsApp number?</h4>
-        <p>It must be Dona Dom's legal entity and a company-controlled number — never a developer's account or anyone's personal mobile. Getting this wrong is painful to unwind after templates are approved. Start verification the week the project is approved.</p>
+        <p>Dona Dom's legal entity, in its own Business Manager, acting as its own Tech Provider — never a developer's account. The number is the office's existing WhatsApp number on the receptionist's office phone, connected by coexistence. Still open: whether the Business Manager exists and is verified. Getting this wrong is painful to unwind after templates are approved.</p>
       </div>
       <div>
         <h4>Whose cloud account does this run in?</h4>
@@ -942,7 +965,7 @@
 
   <footer>
     <span>Dona Dom · Tenant Service Platform</span>
-    <span>Stack Map · 2 Sep 2026</span>
+    <span>Stack Map · 2 Sep 2026 · revised 6 Oct 2026</span>
     <span>Estimates from published pricing · verify at contract</span>
   </footer>
 
