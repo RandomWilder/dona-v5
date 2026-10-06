@@ -30,7 +30,7 @@ export const CALL_STATES = [
 ] as const;
 export type CallState = (typeof CALL_STATES)[number];
 
-const MANUAL_CHANNELS = ['PHONE', 'WALK_IN'] as const;
+export const MANUAL_CHANNELS = ['PHONE', 'WALK_IN'] as const;
 export type ManualChannel = (typeof MANUAL_CHANNELS)[number];
 
 export type CallSender = { kind: 'named'; name: string } | { kind: 'unknown' };
@@ -70,8 +70,17 @@ function requiredText(
 }
 
 function manualChannel(value: string): ManualChannel {
-  if (value === 'PHONE' || value === 'WALK_IN') return value;
+  for (const channel of MANUAL_CHANNELS) {
+    if (value === channel) return channel;
+  }
   return refuse('channel');
+}
+
+function senderOf(unknown: boolean, label: string | null): CallSender {
+  if (unknown || label === null || label.trim().length === 0) {
+    return { kind: 'unknown' };
+  }
+  return { kind: 'named', name: label.trim() };
 }
 
 interface CallRow {
@@ -90,9 +99,7 @@ function toCall(row: CallRow): ServiceCall {
     sourceChannel: row.source_channel,
     state: row.state,
     description: row.description,
-    sender: row.sender_unknown
-      ? { kind: 'unknown' }
-      : { kind: 'named', name: row.sender_label ?? '' },
+    sender: senderOf(row.sender_unknown, row.sender_label),
     openedAt: row.opened_at,
   };
 }
@@ -154,12 +161,16 @@ export async function openCall(
     sourceChannel,
     state: 'NEW',
     description,
-    sender:
-      senderLabel === null
-        ? { kind: 'unknown' }
-        : { kind: 'named', name: senderLabel },
+    sender: senderOf(senderUnknown, senderLabel),
     openedAt,
   };
+}
+
+export async function countOpenCalls(db: Queryable): Promise<number> {
+  const { rows } = await db.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM service_call WHERE state <> 'CLOSED'`,
+  );
+  return rows[0]?.n ?? 0;
 }
 
 export async function listOpenCalls(db: Queryable): Promise<ServiceCall[]> {

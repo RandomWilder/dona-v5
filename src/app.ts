@@ -16,7 +16,7 @@ import {
 } from 'node:http2';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
-import { registerCallsRoutes } from './calls/contract.ts';
+import { countOpenCalls, registerCallsRoutes } from './calls/contract.ts';
 import { signedInChrome } from './chrome.ts';
 import { renderMockup } from './dev-mockups.ts';
 import { registerEstateRoutes } from './estate/contract.ts';
@@ -294,6 +294,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
         request,
         stance ?? 'estate.read',
       );
+      request.openCalls = await countOpenCalls(deps.pool);
     } catch (error) {
       // Not signed in is not a refusal: it is somebody who has not signed in, and it goes to the
       // login screen. A session whose account lost its role is a refusal, and it is byte-identical
@@ -381,6 +382,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     return renderIndexPage({
       csrf: csrfFrom(request),
       mayFile: can(request.staff?.role ?? null, 'documents.write'),
+      openCalls: request.openCalls,
     });
   });
 
@@ -396,7 +398,11 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   const SETTINGS_WRITE = { config: { staff: 'settings.write' } } as const;
 
   const settingsPage = async (
-    request: { staff?: { role: Role | null } | null; csrf?: string | null },
+    request: {
+      staff?: { role: Role | null } | null;
+      csrf?: string | null;
+      openCalls?: number;
+    },
     reply: { header: (name: string, value: string) => unknown },
     saved?: 'obligation' | 'document',
   ) => {
@@ -406,6 +412,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       csrf: csrfFrom(request),
       mayWrite: can(role, 'settings.write'),
       mayFile: can(role, 'documents.write'),
+      openCalls: request.openCalls,
       state: 'wired',
       obligations: await listObligationTypes(deps.pool),
       documents: await listDocumentTypes(deps.pool, { activeOnly: false }),

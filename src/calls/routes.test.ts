@@ -88,6 +88,19 @@ describe('calls · the קריאות tab', () => {
       assert.equal(Number(badge?.[1]), rows);
       assert.ok(rows >= 2);
 
+      const home = await client.inject({ method: 'GET', url: '/' });
+      assert.equal(home.statusCode, 200);
+      const homeBadge = home.body.match(/data-open-calls="(\d+)"/);
+      assert.equal(Number(homeBadge?.[1]), rows);
+
+      const inventory = await client.inject({
+        method: 'GET',
+        url: '/estate/inventory',
+      });
+      assert.equal(inventory.statusCode, 200);
+      const inventoryBadge = inventory.body.match(/data-open-calls="(\d+)"/);
+      assert.equal(Number(inventoryBadge?.[1]), rows);
+
       const { rows: audit } = await pool.query<{ actor_id: string }>(
         `SELECT actor_id FROM audit_log
           WHERE action = 'calls.open' AND actor_id = $1`,

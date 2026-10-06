@@ -168,7 +168,12 @@ export interface DocumentDeps {
    * Slice 5.2b, and **`mayFile` from 6.9**: the rail's documents destination is gated on
    * `documents.write`, so the caller passes the stance rather than the rail guessing it.
    */
-  chrome: (csrf: string, dest: ChromeDest, mayFile: boolean) => Html;
+  chrome: (
+    csrf: string,
+    dest: ChromeDest,
+    mayFile: boolean,
+    openCalls?: number,
+  ) => Html;
 }
 
 /**
@@ -261,6 +266,7 @@ function chromeOf(
     csrfFrom(request),
     dest,
     can(request.staff?.role ?? null, 'documents.write'),
+    request.openCalls,
   );
 }
 

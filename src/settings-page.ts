@@ -31,6 +31,8 @@ export interface SettingsScreen {
   mayWrite: boolean;
   /** Whether this role may file a document — the rail's one gated destination (slice 6.9). */
   mayFile: boolean;
+  /** Open ServiceCalls, for the rail count. Absent when the page is rendered outside a request. */
+  openCalls?: number;
   state: 'wired' | 'painted';
   obligations: readonly ObligationTypeRow[];
   documents: readonly DocumentTypeRow[];
@@ -175,7 +177,12 @@ export function renderSettingsPage(screen: SettingsScreen): string {
   return renderPage({
     title: 'הגדרות — דונה דום',
     styles,
-    nav: signedInChrome(screen.csrf, 'settings', screen.mayFile),
+    nav: signedInChrome(
+      screen.csrf,
+      'settings',
+      screen.mayFile,
+      screen.openCalls,
+    ),
     body,
   });
 }

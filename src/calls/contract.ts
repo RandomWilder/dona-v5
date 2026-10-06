@@ -12,7 +12,19 @@ export type {
   ServiceCall,
   SourceChannel,
 } from './internal/commands.ts';
-export { listOpenCalls, openCall } from './internal/commands.ts';
+export {
+  countOpenCalls,
+  listOpenCalls,
+  openCall,
+} from './internal/commands.ts';
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    /** Open ServiceCalls, counted once per signed-in request for the rail. */
+    openCalls?: number;
+  }
+}
+
 export type { CallsDeps } from './internal/routes.ts';
 export { registerCallsRoutes } from './internal/routes.ts';
 export type { CallsScreen } from './internal/views.ts';

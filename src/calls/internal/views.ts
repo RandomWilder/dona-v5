@@ -8,6 +8,7 @@ import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import {
   type CallState,
   DESCRIPTION_MAX,
+  MANUAL_CHANNELS,
   SENDER_MAX,
   type ServiceCall,
   type SourceChannel,
@@ -132,8 +133,10 @@ export function renderCallsPage(screen: CallsScreen): string {
         ${refusal}
         <fieldset class="choice">
           <legend>ערוץ</legend>
-          <label><input type="radio" name="channel" value="PHONE" required /> טלפון</label>
-          <label><input type="radio" name="channel" value="WALK_IN" /> הגעה</label>
+          ${MANUAL_CHANNELS.map(
+            (channel, index) =>
+              h`<label><input type="radio" name="channel" value="${channel}" ${index === 0 ? h`required` : h``} /> ${CHANNEL_HE[channel]}</label>`,
+          )}
         </fieldset>
         <div class="field">
           <label for="call-description">תיאור</label>

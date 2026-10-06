@@ -33,6 +33,8 @@ export interface IndexScreen {
    * default type-checks everywhere and is only ever found by clicking.
    */
   mayFile: boolean;
+  /** Open ServiceCalls, for the rail count. Absent when the page is rendered outside a request. */
+  openCalls?: number;
 }
 
 const styles = h`<style>
@@ -132,7 +134,7 @@ export function renderIndexPage(screen: IndexScreen): string {
   return renderPage({
     title: 'דונה דום — ניהול נכסים',
     styles,
-    nav: signedInChrome(screen.csrf, 'index', screen.mayFile),
+    nav: signedInChrome(screen.csrf, 'index', screen.mayFile, screen.openCalls),
     body,
   });
 }

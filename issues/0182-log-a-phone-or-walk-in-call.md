@@ -1,13 +1,13 @@
 ---
 number: 182
 title: Log a phone or walk-in call and see it in קריאות
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent: 181
 created: 2026-10-06
-closed:
+closed: 2026-10-06
 ---
 
 ## Parent
@@ -48,3 +48,7 @@ None (can start immediately).
 The open list and the phone / walk-in form are in. A phone call and a walk-in land in NEW, the form refuses a missing channel, description, or sender choice, and the channel cannot be changed afterwards. The rail count on קריאות matches the list. Each create is audited with the staff account.
 
 The restarted server on `:3000` accepted both entries and showed them with the count. The browser tab itself stops at Google sign-in, so that check was a signed-in session against the live process, not a click through the login screen. Staging is still after merge. Other screens' rails do not show the count yet.
+
+## Comment — 2026-10-06
+
+Closed after review. The list, the refusal, the fixed channel and the staff audit held. The open-call count was only drawn while קריאות was the current page, which missed the parent story that the count is visible from any screen. It is now counted once per signed-in request and passed into the rail everywhere; the list page still uses the length of its own rows, and a request to the index and to נכסים shows the same number. A stored sender with no name reads as unknown. Staging is still after merge.

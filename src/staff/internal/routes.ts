@@ -69,7 +69,12 @@ export interface StaffDeps {
    * Slice 5.2b. Built at the composition root. Login screens do not receive it. **`mayFile` from
    * 6.9**: the rail's documents destination is gated on `documents.write`.
    */
-  chrome: (csrf: string, dest: ChromeDest, mayFile: boolean) => Html;
+  chrome: (
+    csrf: string,
+    dest: ChromeDest,
+    mayFile: boolean,
+    openCalls?: number,
+  ) => Html;
 }
 
 function html(reply: FastifyReply): void {
@@ -320,6 +325,7 @@ export function registerStaffRoutes(
           csrf,
           'staff',
           can(request.staff?.role ?? null, 'documents.write'),
+          request.openCalls,
         ),
         csrf,
         email: session.email,
@@ -356,6 +362,7 @@ export function registerStaffRoutes(
           csrf,
           'staff',
           can(request.staff?.role ?? null, 'documents.write'),
+          request.openCalls,
         ),
         csrf,
         email: session.email,
