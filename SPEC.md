@@ -85,8 +85,8 @@ Follows the workbook's entities, not v3's ([docs/from-v3.md](docs/from-v3.md) Ti
 | `scope` | — the isolation join and nothing else | parties, tenancy, estate |
 | `register` | — the register file and nothing else | estate, parties, tenancy, scope |
 | `policy` | responsibility matrix · SLA · escalation | estate, tenancy |
-| `calls` | ServiceCall · Visit · the state machine | scope, policy |
-| `channel` | Conversation · Message · the WhatsApp adapter | scope, calls |
+| `calls` | ServiceCall · Visit · Category · Filtered message · the state machine | scope, policy, parties |
+| `channel` | Conversation · Message · the intake door · the Outlook, Gmail and WhatsApp adapters | scope, calls, parties, evidence |
 
 No cycles. `Project` sits above `Building` and is optional (`Building.project_id` nullable).
 
@@ -263,18 +263,18 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
 
   | Third party | What it sees | From |
   |---|---|---|
-  | **OpenAI** | Passage text sent for embedding, and document text sent for comprehension | Today, through the CI-only `OPENAI_API_KEY` — authored fixture text with no personal data in it. Tenant text from week 4. |
+  | **OpenAI** | Passage text sent for embedding, and document text sent for comprehension; from #181, the subject and text of every incoming email and WhatsApp message, sent to the sorter and for translation | Today, through the CI-only `OPENAI_API_KEY` — authored fixture text with no personal data in it. Tenant text from week 4. |
   | **Google Cloud** | Document bytes for OCR (Document AI, ADR-0002, imageless mode, processor location **`eu`** — Document AI does not serve `me-west1`); every stored document and row (Cloud Storage, Cloud SQL) as processor | Week 4 for OCR (slice 4.1); today for storage |
-  | **Meta — WhatsApp Cloud API** | Every message either end of a conversation sends | Week 9 |
-  | **Twilio** | The OTP message and the mobile number it goes to, as the SMS fallback | Week 9 |
+  | **Meta — WhatsApp Cloud API** | Every message either end of a conversation sends, including what the receptionist sends from the office phone under coexistence (ADR-0013) | #181, staging on Meta's test number first |
+  | **Microsoft 365 — Dona Dom's own** | The shared mailbox, read through Graph with `Mail.Read` on that one mailbox. Not a new processor: the mail is already Dona Dom's provider's | #181 |
   | **Anthropic** | This repository, read by Claude Code as it is built | Today, **development-time only**. It never sees tenant text, and the mechanism that makes that true is that tier 2 never enters the repo — `.gitignore`, the bucket, and this rule, not an assurance. |
 
   Naming them is the engineering half of ADR-0004. The other half is the owner's, is tracked as **F6**
   on [docs/fuses.md](docs/fuses.md), and is owed **before the tier-2 corpus lands**. As of
   2026-09-06 it is three named acts and not an open question: execute OpenAI's DPA, confirm Google
   Cloud's is in force, and publish the notice to data subjects drafted at
-  [docs/data-subject-notice.draft.md](docs/data-subject-notice.draft.md). Meta's and Twilio's terms
-  arrive with week 9's channel work; **Anthropic needs no instrument**, because this repository never
+  [docs/data-subject-notice.draft.md](docs/data-subject-notice.draft.md). Meta's terms arrive with the
+  channel work (#181, ADR-0013), and Twilio left this table there before it was ever called; **Anthropic needs no instrument**, because this repository never
   holds a tenant document — which is a mechanism with tests behind it, and the day it stops being one
   that row changes before the data moves.
 
