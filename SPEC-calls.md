@@ -39,7 +39,9 @@ and appear on the call's timeline with the staff account that issued them.
 reason:
 - **Answered**: a note.
 - **Forwarded**: the department that owns it (finance, legal and the like) and a note.
-- **Duplicate**: the call it repeats. Its messages move to that call.
+- **Duplicate**: the call it repeats. The two are linked both ways. Its messages move onto that
+  call when the intake door exists; a call logged by hand carries none, so the link is the whole
+  of the exit until then.
 - **Cancelled**: a note.
 
 A call with no Exit reason is not closed.
@@ -79,7 +81,8 @@ The קריאות page lists open calls with their Source channel, state, Categor
 the goal, emergency and "to review" marks. It filters on each of those. It has a manual-entry form
 for PHONE and WALK_IN with three required fields (channel, description, and a sender or "unknown")
 and no sorter, a call page with the full timeline of messages, attachments and transitions, and a
-filtered list. The rail shows the open-call count beside קריאות. The page is server-rendered with no
+filtered list. The rail shows the open-call count beside קריאות. A closed call leaves that
+count and the open list, and a closed filter shows it. The page is server-rendered with no
 client JavaScript and follows the approved stakeholder mockup.
 
 ## Not yet

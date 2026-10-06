@@ -1,4 +1,5 @@
 // The קריאות routes. #182 is the list and the manual entry. #183 is one call.
+// #184 closes it.
 //
 // All of them are `estate.read`, which every signed-in role holds. V1 has no
 // calls permission of its own: every staff member may log a call, identify the
@@ -16,6 +17,9 @@ import { can, csrfFrom, NOT_ALLOWED, type Role } from '../../staff/contract.ts';
 import {
   CALL_STATES,
   type CallState,
+  canExit,
+  exitCall,
+  findCallsByDescription,
   getCall,
   identifyCall,
   listCategories,
@@ -59,10 +63,7 @@ function listFilter(query: unknown): {
   const state = textOf(form.state);
   const category = textOf(form.category);
   const filter: { state?: CallState; categoryId?: string } = {};
-  if (
-    (CALL_STATES as readonly string[]).includes(state) &&
-    state !== 'CLOSED'
-  ) {
+  if ((CALL_STATES as readonly string[]).includes(state)) {
     filter.state = state as CallState;
   }
   if (category !== '') {
@@ -90,6 +91,19 @@ function refusalHe(error: KernelError): string {
     return 'אפשר לבחור רק קטגוריה פעילה.';
   }
   if (field === 'category') return 'יש לבחור קטגוריה.';
+  if (field === 'note') return 'יש לכתוב סיבה.';
+  if (field === 'department') return 'יש לציין את המחלקה.';
+  if (field === 'duplicate' && reason === 'self') {
+    return 'קריאה אינה יכולה לחזור על עצמה.';
+  }
+  if (field === 'duplicate') return 'יש לבחור קריאה קיימת.';
+  if (field === 'state' && reason === 'closed') {
+    return 'קריאה סגורה אינה משתנה.';
+  }
+  if (field === 'state' && reason === 'exit') {
+    return 'לא ניתן לסגור קריאה שנקבעה.';
+  }
+  if (field === 'exit') return 'יש לבחור יציאה.';
   if (typeof field === 'string' && field in REFUSAL) {
     return REFUSAL[field] ?? 'לא ניתן לרשום את הקריאה.';
   }
@@ -182,11 +196,17 @@ async function callPage(
   const call = await getCall(deps.pool, callId);
   if (!call) throw new KernelError('not_found', 'call not found');
   const query = textOf(formOf(request.query).q).trim();
+  const dup = textOf(formOf(request.query).dup).trim();
   const searching =
     call.state === 'NEW' && query.length > 0 && query.length <= 80;
-  const [categories, matches] = await Promise.all([
+  const dupSearching =
+    canExit(call.state) && dup.length > 0 && dup.length <= 80;
+  const [categories, matches, dupMatches] = await Promise.all([
     listCategories(deps.pool, { activeOnly: call.state !== 'NEW' }),
     searching ? findPartiesByName(deps.pool, query) : Promise.resolve([]),
+    dupSearching
+      ? findCallsByDescription(deps.pool, dup, callId)
+      : Promise.resolve([]),
   ]);
   const role = request.staff?.role ?? null;
   const csrf = csrfFrom(request);
@@ -205,8 +225,12 @@ async function callPage(
       name: party.full_name,
     })),
     query: searching ? query : query.length > 80 ? '' : query,
+    dupQuery: canExit(call.state) && dup.length <= 80 ? dup : '',
+    dupMatches,
     now: deps.clock.now(),
-    refusal: refusal ?? (query.length > 80 ? 'החיפוש ארוך מדי.' : undefined),
+    refusal:
+      refusal ??
+      (query.length > 80 || dup.length > 80 ? 'החיפוש ארוך מדי.' : undefined),
   });
 }
 
@@ -281,6 +305,34 @@ export function registerCallsRoutes(
         throw error;
       }
       if (error.code === 'not_found' && error.details?.field !== 'category') {
+        throw error;
+      }
+      html(reply);
+      reply.code(error.code === 'not_found' ? 404 : 400);
+      return callPage(deps, request, callId, refusalHe(error));
+    }
+  });
+
+  app.post('/calls/:id/exit', STAFF, async (request, reply) => {
+    const staff = staffOf(request);
+    const callId = callIdOf(request.params);
+    const form = formOf(request.body);
+    try {
+      await exitCall(deps.pool, deps.clock, {
+        callId,
+        kind: textOf(form.exit),
+        note: textOf(form.note),
+        department: textOf(form.department),
+        duplicateOf: textOf(form.duplicate_of),
+        actorId: staff.staffAccountId,
+        actorRole: staff.role,
+      });
+      return reply.code(303).header('location', `/calls/${callId}`).send();
+    } catch (error) {
+      if (!(error instanceof KernelError) || error.code === 'not_allowed') {
+        throw error;
+      }
+      if (error.code === 'not_found' && error.details?.field !== 'duplicate') {
         throw error;
       }
       html(reply);

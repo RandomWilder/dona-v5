@@ -1,5 +1,6 @@
-// Opening a service call by hand, then identifying the requester and setting
-// the trade. #182 opened the call. #183 is the two commands after that.
+// Opening a service call by hand, then identifying the requester, setting the
+// trade, and closing it by an Exit. #182 opened the call. #183 is the two
+// commands after that. #184 closes it before a visit.
 //
 // PHONE and WALK_IN skip the sorter. The channel is written once; nothing in this
 // module updates it, and the database trigger refuses a later write that tries.
@@ -35,6 +36,28 @@ export const CALL_STATES = [
 ] as const;
 export type CallState = (typeof CALL_STATES)[number];
 
+export const EXIT_KINDS = [
+  'ANSWERED',
+  'FORWARDED',
+  'DUPLICATE',
+  'CANCELLED',
+] as const;
+export type ExitKind = (typeof EXIT_KINDS)[number];
+
+/** Any state before SCHEDULED. A visit has not been set, so an Exit can close it. */
+const EXITABLE_STATES = [
+  'NEW',
+  'IDENTIFIED',
+  'TRIAGED',
+  'RESPONSIBILITY_SET',
+  'WINDOWS_COLLECTED',
+  'OFFERED',
+] as const satisfies readonly CallState[];
+
+export function canExit(state: CallState): boolean {
+  return (EXITABLE_STATES as readonly string[]).includes(state);
+}
+
 export const MANUAL_CHANNELS = ['PHONE', 'WALK_IN'] as const;
 export type ManualChannel = (typeof MANUAL_CHANNELS)[number];
 
@@ -63,7 +86,22 @@ export interface ServiceCall {
   category: CallCategory | null;
 }
 
-export type TransitionKind = 'OPENED' | 'IDENTIFIED' | 'TRIAGED';
+export type TransitionKind = 'OPENED' | 'IDENTIFIED' | 'TRIAGED' | ExitKind;
+
+export interface CallLink {
+  id: string;
+  description: string;
+}
+
+export interface CallExit {
+  kind: ExitKind;
+  note: string | null;
+  department: string | null;
+  duplicateOf: CallLink | null;
+  at: Date;
+  actorId: string;
+  actorLabel: string;
+}
 
 export interface CallTransition {
   kind: TransitionKind;
@@ -72,10 +110,16 @@ export interface CallTransition {
   actorLabel: string;
   partyName: string | null;
   categoryLabel: string | null;
+  note?: string | null;
+  department?: string | null;
+  duplicateOf?: CallLink | null;
 }
 
 export interface ServiceCallDetail extends ServiceCall {
   timeline: readonly CallTransition[];
+  exit: CallExit | null;
+  /** Calls that named this one as the call they repeat. */
+  repeatedBy: readonly CallLink[];
 }
 
 export interface OpenCallSpec {
@@ -96,6 +140,16 @@ export interface IdentifyCallSpec {
 export interface SetCategorySpec {
   callId: string;
   categoryId: string;
+  actorId: string;
+  actorRole?: string | null;
+}
+
+export interface ExitCallSpec {
+  callId: string;
+  kind: string;
+  note?: string | null;
+  department?: string | null;
+  duplicateOf?: string | null;
   actorId: string;
   actorRole?: string | null;
 }
@@ -122,6 +176,8 @@ export interface CategoryRow {
 
 export const DESCRIPTION_MAX = 4000;
 export const SENDER_MAX = 200;
+export const NOTE_MAX = 2000;
+export const DEPARTMENT_MAX = 120;
 
 const CATEGORY_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 
@@ -199,6 +255,14 @@ interface CallRow {
   category_code: string | null;
   category_label_he: string | null;
   category_active: boolean | null;
+  exit_kind: string | null;
+  exit_note: string | null;
+  exit_department: string | null;
+  duplicate_of: string | null;
+  duplicate_description: string | null;
+  closed_at: Date | null;
+  closed_by: string | null;
+  closer_label: string | null;
 }
 
 const CALL_SELECT = `SELECT sc.service_call_id, sc.source_channel, sc.state, sc.description,
@@ -207,11 +271,17 @@ const CALL_SELECT = `SELECT sc.service_call_id, sc.source_channel, sc.state, sc.
             sc.requester_party_id, requester.full_name AS requester_name,
             sc.category_id, category.code AS category_code,
             category.label_he AS category_label_he,
-            category.is_active AS category_active
+            category.is_active AS category_active,
+            sc.exit_kind, sc.exit_note, sc.exit_department,
+            sc.duplicate_of, other.description AS duplicate_description,
+            sc.closed_at, sc.closed_by,
+            COALESCE(NULLIF(btrim(closer.display_name), ''), closer.email) AS closer_label
        FROM service_call sc
        JOIN staff_account opener ON opener.staff_account_id = sc.opened_by
        LEFT JOIN party requester ON requester.party_id = sc.requester_party_id
-       LEFT JOIN call_category category ON category.category_id = sc.category_id`;
+       LEFT JOIN call_category category ON category.category_id = sc.category_id
+       LEFT JOIN service_call other ON other.service_call_id = sc.duplicate_of
+       LEFT JOIN staff_account closer ON closer.staff_account_id = sc.closed_by`;
 
 function toCall(row: CallRow): ServiceCall {
   return {
@@ -237,6 +307,37 @@ function toCall(row: CallRow): ServiceCall {
             labelHe: row.category_label_he,
             active: row.category_active,
           },
+  };
+}
+
+function isExitKind(value: string): value is ExitKind {
+  for (const kind of EXIT_KINDS) {
+    if (value === kind) return true;
+  }
+  return false;
+}
+
+function exitOf(row: CallRow): CallExit | null {
+  if (
+    row.exit_kind === null ||
+    row.closed_at === null ||
+    row.closed_by === null ||
+    row.closer_label === null ||
+    !isExitKind(row.exit_kind)
+  ) {
+    return null;
+  }
+  return {
+    kind: row.exit_kind,
+    note: row.exit_note,
+    department: row.exit_department,
+    duplicateOf:
+      row.duplicate_of === null || row.duplicate_description === null
+        ? null
+        : { id: row.duplicate_of, description: row.duplicate_description },
+    at: row.closed_at,
+    actorId: row.closed_by,
+    actorLabel: row.closer_label,
   };
 }
 
@@ -359,8 +460,8 @@ export async function listOpenCalls(
       : validId(filter.categoryId, 'category');
   const { rows } = await db.query<CallRow>(
     `${CALL_SELECT}
-      WHERE sc.state <> 'CLOSED'
-        AND ($1::text IS NULL OR sc.state = $1)
+      WHERE sc.state = COALESCE($1::text, sc.state)
+        AND ($1::text IS NOT NULL OR sc.state <> 'CLOSED')
         AND ($2::uuid IS NULL OR sc.category_id = $2)
       ORDER BY sc.opened_at DESC, sc.service_call_id DESC`,
     [state, categoryId],
@@ -380,25 +481,42 @@ export async function getCall(
   const row = rows[0];
   if (!row) return null;
   const events = await db.query<{
-    kind: 'IDENTIFIED' | 'TRIAGED';
+    kind: string;
     at: Date;
     actor_id: string;
     actor_label: string;
     party_name: string | null;
     category_label: string | null;
+    note: string | null;
+    department: string | null;
+    duplicate_of: string | null;
+    duplicate_description: string | null;
   }>(
     `SELECT t.kind, t.at, t.actor_id,
             COALESCE(NULLIF(btrim(actor.display_name), ''), actor.email) AS actor_label,
             party.full_name AS party_name,
-            category.label_he AS category_label
+            category.label_he AS category_label,
+            t.note, t.department, t.duplicate_of,
+            dup.description AS duplicate_description
        FROM service_call_transition t
        JOIN staff_account actor ON actor.staff_account_id = t.actor_id
        LEFT JOIN party ON party.party_id = t.party_id
        LEFT JOIN call_category category ON category.category_id = t.category_id
+       LEFT JOIN service_call dup ON dup.service_call_id = t.duplicate_of
       WHERE t.service_call_id = $1
       ORDER BY t.at,
                CASE t.kind WHEN 'IDENTIFIED' THEN 1 WHEN 'TRIAGED' THEN 2 ELSE 3 END,
                t.transition_id`,
+    [id],
+  );
+  const links = await db.query<{
+    service_call_id: string;
+    description: string;
+  }>(
+    `SELECT service_call_id, description
+       FROM service_call
+      WHERE duplicate_of = $1
+      ORDER BY closed_at, service_call_id`,
     [id],
   );
   const opened: CallTransition = {
@@ -409,19 +527,41 @@ export async function getCall(
     partyName: null,
     categoryLabel: null,
   };
+  const timeline: CallTransition[] = [opened];
+  for (const event of events.rows) {
+    const kind =
+      event.kind === 'IDENTIFIED' || event.kind === 'TRIAGED'
+        ? event.kind
+        : isExitKind(event.kind)
+          ? event.kind
+          : null;
+    if (kind === null) continue;
+    timeline.push({
+      kind,
+      at: event.at,
+      actorId: event.actor_id,
+      actorLabel: event.actor_label,
+      partyName: event.party_name,
+      categoryLabel: event.category_label,
+      note: event.note,
+      department: event.department,
+      duplicateOf:
+        event.duplicate_of === null || event.duplicate_description === null
+          ? null
+          : {
+              id: event.duplicate_of,
+              description: event.duplicate_description,
+            },
+    });
+  }
   return {
     ...toCall(row),
-    timeline: [
-      opened,
-      ...events.rows.map((event) => ({
-        kind: event.kind,
-        at: event.at,
-        actorId: event.actor_id,
-        actorLabel: event.actor_label,
-        partyName: event.party_name,
-        categoryLabel: event.category_label,
-      })),
-    ],
+    timeline,
+    exit: exitOf(row),
+    repeatedBy: links.rows.map((link) => ({
+      id: link.service_call_id,
+      description: link.description,
+    })),
   };
 }
 
@@ -549,6 +689,183 @@ export async function setCallCategory(
     );
   });
   return requireDetail(db, callId);
+}
+
+function exitKindOf(value: string): ExitKind {
+  for (const kind of EXIT_KINDS) {
+    if (value === kind) return kind;
+  }
+  throw new KernelError('invalid', 'exit is not one of the four', {
+    field: 'exit',
+  });
+}
+
+function trimmed(
+  value: string | null | undefined,
+  field: 'note' | 'department',
+  max: number,
+): string | null {
+  if (value == null) return null;
+  const text = value.trim();
+  if (text.length === 0) return null;
+  if (text.length > max) {
+    throw new KernelError('invalid', `${field} is too long`, { field });
+  }
+  return text;
+}
+
+function present(value: string | null, field: 'note' | 'department'): string {
+  if (value === null) {
+    throw new KernelError('invalid', `${field} is required`, { field });
+  }
+  return value;
+}
+
+/**
+ * Closes a call by one Exit. The reason is whatever that Exit requires: a
+ * note, a department and a note, or another call. A closed call stays closed.
+ */
+export async function exitCall(
+  db: Queryable,
+  clock: Clock,
+  spec: ExitCallSpec,
+): Promise<ServiceCallDetail> {
+  const callId = idOf(spec.callId, 'call');
+  const actorId = idOf(spec.actorId, 'actor');
+  const kind = exitKindOf(spec.kind);
+  const note = trimmed(spec.note, 'note', NOTE_MAX);
+  const department = trimmed(spec.department, 'department', DEPARTMENT_MAX);
+  let duplicateOf: string | null = null;
+  if (kind === 'ANSWERED' || kind === 'CANCELLED') {
+    present(note, 'note');
+  } else if (kind === 'FORWARDED') {
+    present(note, 'note');
+    present(department, 'department');
+  } else {
+    const raw = spec.duplicateOf?.trim() ?? '';
+    if (raw.length === 0) {
+      throw new KernelError('invalid', 'duplicate names the other call', {
+        field: 'duplicate',
+      });
+    }
+    duplicateOf = idOf(raw, 'duplicate');
+    if (duplicateOf === callId) {
+      throw new KernelError('invalid', 'a call cannot repeat itself', {
+        field: 'duplicate',
+        reason: 'self',
+      });
+    }
+  }
+  const storedNote = kind === 'DUPLICATE' ? note : present(note, 'note');
+  const storedDepartment = kind === 'FORWARDED' ? department : null;
+  const storedDuplicate = kind === 'DUPLICATE' ? duplicateOf : null;
+
+  await inTransaction(db, async (tx) => {
+    const current = await lockCall(tx, callId);
+    if (current.state === 'CLOSED') {
+      throw new KernelError('invalid', 'a closed call cannot change', {
+        field: 'state',
+        reason: 'closed',
+      });
+    }
+    if (!canExit(current.state)) {
+      throw new KernelError(
+        'invalid',
+        'an exit is only from a state before it is scheduled',
+        { field: 'state', reason: 'exit' },
+      );
+    }
+    if (storedDuplicate !== null) {
+      const found = await tx.query(
+        `SELECT 1 FROM service_call WHERE service_call_id = $1`,
+        [storedDuplicate],
+      );
+      if (!found.rows[0]) {
+        throw new KernelError('not_found', 'call not found', {
+          field: 'duplicate',
+        });
+      }
+    }
+    const at = clock.now();
+    await tx.query(
+      `UPDATE service_call
+          SET state = 'CLOSED', exit_kind = $2, exit_note = $3,
+              exit_department = $4, duplicate_of = $5,
+              closed_at = $6, closed_by = $7
+        WHERE service_call_id = $1`,
+      [
+        callId,
+        kind,
+        storedNote,
+        storedDepartment,
+        storedDuplicate,
+        at,
+        actorId,
+      ],
+    );
+    await tx.query(
+      `INSERT INTO service_call_transition
+         (transition_id, service_call_id, kind, actor_id, at, note, department,
+          duplicate_of)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        newId(clock),
+        callId,
+        kind,
+        actorId,
+        at,
+        storedNote,
+        storedDepartment,
+        storedDuplicate,
+      ],
+    );
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'staff',
+        actorId,
+        actorRole: spec.actorRole ?? undefined,
+        action: 'calls.exit',
+        subjectId: callId,
+        inputs: {
+          kind,
+          department: storedDepartment,
+          duplicateOf: storedDuplicate,
+        },
+      },
+      { outcome: 'ok' },
+    );
+  });
+  return requireDetail(db, callId);
+}
+
+const CALL_SEARCH_LIMIT = 8;
+
+/** Other calls whose description matches, for naming the one a duplicate repeats. */
+export async function findCallsByDescription(
+  db: Queryable,
+  query: string,
+  exceptId: string,
+): Promise<CallLink[]> {
+  const trimmedQuery = query.trim();
+  if (trimmedQuery.length === 0 || trimmedQuery.length > 80) return [];
+  const except = validId(exceptId, 'call');
+  const pattern = `%${trimmedQuery.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+  const { rows } = await db.query<{
+    service_call_id: string;
+    description: string;
+  }>(
+    `SELECT service_call_id, description
+       FROM service_call
+      WHERE service_call_id <> $1
+        AND description ILIKE $2 ESCAPE '\\'
+      ORDER BY opened_at DESC, service_call_id DESC
+      LIMIT $3`,
+    [except, pattern, CALL_SEARCH_LIMIT],
+  );
+  return rows.map((row) => ({
+    id: row.service_call_id,
+    description: row.description,
+  }));
 }
 
 function categoryCode(value: string): string {

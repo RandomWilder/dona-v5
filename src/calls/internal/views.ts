@@ -1,5 +1,6 @@
 // The קריאות screens. #182 is the list and the manual entry. #183 is one call:
-// its timeline, identifying the requester, and setting the trade.
+// its timeline, identifying the requester, and setting the trade. #184 closes
+// it by an Exit.
 //
 // Server-rendered, no client JavaScript. The rail count is the open-call count
 // for the whole office, passed in by the route, so a filter does not shrink it.
@@ -11,8 +12,12 @@ import {
   type CallState,
   type CallTransition,
   type CategoryRow,
+  canExit,
+  DEPARTMENT_MAX,
   DESCRIPTION_MAX,
+  type ExitKind,
   MANUAL_CHANNELS,
+  NOTE_MAX,
   SENDER_MAX,
   type ServiceCall,
   type ServiceCallDetail,
@@ -37,6 +42,8 @@ export interface CallScreen {
   categories: readonly CategoryRow[];
   matches: readonly { id: string; name: string }[];
   query: string;
+  dupQuery: string;
+  dupMatches: readonly { id: string; description: string }[];
   now: Date;
   refusal?: string;
 }
@@ -57,6 +64,13 @@ const STATE_HE: Record<CallState, string> = {
   OFFERED: 'הוצעה',
   SCHEDULED: 'נקבעה',
   CLOSED: 'סגורה',
+};
+
+const EXIT_HE: Record<ExitKind, string> = {
+  ANSWERED: 'נענתה',
+  FORWARDED: 'הועברה',
+  DUPLICATE: 'כפולה',
+  CANCELLED: 'בוטלה',
 };
 
 const FILTER_STATES = CALL_STATES.filter((state) => state !== 'CLOSED');
@@ -177,6 +191,7 @@ function filters(screen: CallsScreen): Html {
           (state) =>
             h`<option value="${state}" ${selected(screen.state === state)}>${STATE_HE[state]}</option>`,
         )}
+        <option value="CLOSED" ${selected(screen.state === 'CLOSED')}>סגורות</option>
       </select>
     </label>
     <label>קטגוריה
@@ -234,7 +249,7 @@ export function renderCallsPage(screen: CallsScreen): string {
         <button class="btn btn-primary" type="submit">רישום</button>
       </form>
       <section class="glass sheet">
-        <h2>פתוחות</h2>
+        <h2>${screen.state === 'CLOSED' ? 'סגורות' : 'פתוחות'}</h2>
         ${filters(screen)}
         ${list}
       </section>
@@ -249,13 +264,26 @@ export function renderCallsPage(screen: CallsScreen): string {
 
 function eventLine(event: CallTransition): Html {
   const when = whenLabel(event.at);
+  const who = `${event.actorLabel} · ${when}`;
   if (event.kind === 'OPENED') {
-    return h`<li data-kind="OPENED">נפתחה · ${event.actorLabel} · ${when}</li>`;
+    return h`<li data-kind="OPENED">נפתחה · ${who}</li>`;
   }
   if (event.kind === 'IDENTIFIED') {
-    return h`<li data-kind="IDENTIFIED">זוהתה · ${event.partyName} · ${event.actorLabel} · ${when}</li>`;
+    return h`<li data-kind="IDENTIFIED">זוהתה · ${event.partyName} · ${who}</li>`;
   }
-  return h`<li data-kind="TRIAGED">קטגוריה ${event.categoryLabel} · ${event.actorLabel} · ${when}</li>`;
+  if (event.kind === 'TRIAGED') {
+    return h`<li data-kind="TRIAGED">קטגוריה ${event.categoryLabel} · ${who}</li>`;
+  }
+  if (event.kind === 'ANSWERED') {
+    return h`<li data-kind="ANSWERED">נענתה · ${event.note} · ${who}</li>`;
+  }
+  if (event.kind === 'FORWARDED') {
+    return h`<li data-kind="FORWARDED">הועברה אל ${event.department} · ${event.note} · ${who}</li>`;
+  }
+  if (event.kind === 'DUPLICATE') {
+    return h`<li data-kind="DUPLICATE">כפולה של ${event.duplicateOf?.description} · ${who}</li>`;
+  }
+  return h`<li data-kind="CANCELLED">בוטלה · ${event.note} · ${who}</li>`;
 }
 
 function identifyForm(screen: CallScreen): Html {
@@ -318,6 +346,83 @@ function categoryForm(screen: CallScreen): Html {
   </section>`;
 }
 
+function exitForm(screen: CallScreen): Html {
+  const matches =
+    screen.dupQuery === ''
+      ? h``
+      : screen.dupMatches.length === 0
+        ? h`<p class="lede">אין התאמה.</p>`
+        : h`<fieldset class="choice">
+            <legend>הקריאה שזו חוזרת עליה</legend>
+            ${screen.dupMatches.map(
+              (call) =>
+                h`<label><input type="radio" name="duplicate_of" value="${call.id}" /> ${call.description}</label>`,
+            )}
+          </fieldset>`;
+  return h`<section class="glass sheet">
+    <h2>סגירה</h2>
+    <form class="filters" method="get" action="/calls/${screen.call.id}">
+      <label>חיפוש קריאה
+        <input name="dup" type="text" value="${screen.dupQuery}" maxlength="80" autocomplete="off" />
+      </label>
+      <button class="btn" type="submit">חיפוש</button>
+    </form>
+    <form method="post" action="/calls/${screen.call.id}/exit">
+      ${csrfInput(screen.csrf)}
+      <fieldset class="choice">
+        <legend>יציאה</legend>
+        ${(Object.keys(EXIT_HE) as ExitKind[]).map(
+          (kind, index) =>
+            h`<label><input type="radio" name="exit" value="${kind}" ${index === 0 ? h`required` : h``} /> ${EXIT_HE[kind]}</label>`,
+        )}
+      </fieldset>
+      <div class="field">
+        <label for="exit-note">סיבה</label>
+        <textarea id="exit-note" name="note" rows="3" maxlength="${NOTE_MAX}"></textarea>
+      </div>
+      <div class="field">
+        <label for="exit-department">מחלקה</label>
+        <input id="exit-department" name="department" type="text" maxlength="${DEPARTMENT_MAX}" autocomplete="off" />
+      </div>
+      ${matches}
+      <button class="btn btn-primary" type="submit">סגירה</button>
+    </form>
+  </section>`;
+}
+
+function exitFacts(screen: CallScreen): Html {
+  const exit = screen.call.exit;
+  if (exit === null) return h``;
+  const note =
+    exit.note === null ? h`` : h`<div><dt>סיבה</dt><dd>${exit.note}</dd></div>`;
+  const department =
+    exit.department === null
+      ? h``
+      : h`<div><dt>מחלקה</dt><dd>${exit.department}</dd></div>`;
+  const other =
+    exit.duplicateOf === null
+      ? h``
+      : h`<div><dt>חוזרת על</dt><dd><a href="/calls/${exit.duplicateOf.id}">${exit.duplicateOf.description}</a></dd></div>`;
+  return h`
+    <div><dt>יציאה</dt><dd>${EXIT_HE[exit.kind]}</dd></div>
+    ${note}
+    ${department}
+    ${other}`;
+}
+
+function repeatedBy(screen: CallScreen): Html {
+  if (screen.call.repeatedBy.length === 0) return h``;
+  return h`<section class="glass sheet">
+    <h2>חוזרות על קריאה זו</h2>
+    <ul class="timeline">
+      ${screen.call.repeatedBy.map(
+        (call) =>
+          h`<li><a href="/calls/${call.id}">${call.description}</a></li>`,
+      )}
+    </ul>
+  </section>`;
+}
+
 export function renderCallPage(screen: CallScreen): string {
   const call = screen.call;
   const refusal =
@@ -327,8 +432,13 @@ export function renderCallPage(screen: CallScreen): string {
   const requester = call.requester?.name ?? 'טרם זוהה';
   const category = call.category?.labelHe ?? 'טרם נבחרה';
   const sender = call.sender.kind === 'unknown' ? 'לא ידוע' : call.sender.name;
-  const action =
-    call.state === 'NEW' ? identifyForm(screen) : categoryForm(screen);
+  const step =
+    call.state === 'NEW'
+      ? identifyForm(screen)
+      : call.state === 'IDENTIFIED' || call.state === 'TRIAGED'
+        ? categoryForm(screen)
+        : h``;
+  const closing = canExit(call.state) ? exitForm(screen) : h``;
   const body = h`
     <div class="calls glass-stage" data-call-state="${call.state}">
       <header class="page-head">
@@ -346,13 +456,16 @@ export function renderCallPage(screen: CallScreen): string {
           <div><dt>פונה</dt><dd>${requester}</dd></div>
           <div><dt>קטגוריה</dt><dd>${category}</dd></div>
           <div><dt>גיל</dt><dd>${ageLabel(call.openedAt, screen.now)}</dd></div>
+          ${exitFacts(screen)}
         </dl>
       </section>
       <section class="glass sheet">
         <h2>מהלך</h2>
         <ol class="timeline">${call.timeline.map(eventLine)}</ol>
       </section>
-      ${action}
+      ${repeatedBy(screen)}
+      ${step}
+      ${closing}
     </div>`;
   return renderPage({
     title: 'קריאה — דונה דום',

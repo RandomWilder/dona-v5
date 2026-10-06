@@ -22,12 +22,19 @@ async function cleanup(pool: import('pg').Pool, domain: string): Promise<void> {
     [`%@${domain}`],
   );
   await pool.query(
+    `DELETE FROM service_call
+      WHERE duplicate_of IS NOT NULL
+        AND opened_by IN
+          (SELECT staff_account_id FROM staff_account WHERE email LIKE $1)`,
+    [`%@${domain}`],
+  );
+  await pool.query(
     `DELETE FROM service_call WHERE opened_by IN
        (SELECT staff_account_id FROM staff_account WHERE email LIKE $1)`,
     [`%@${domain}`],
   );
   await pool.query(
-    `DELETE FROM audit_log WHERE action IN ('calls.open', 'calls.identify', 'calls.triage')
+    `DELETE FROM audit_log WHERE action IN ('calls.open', 'calls.identify', 'calls.triage', 'calls.exit')
        AND actor_id IN
        (SELECT staff_account_id::text FROM staff_account WHERE email LIKE $1)`,
     [`%@${domain}`],
@@ -338,6 +345,163 @@ describe('calls · the קריאות tab', () => {
     } finally {
       await cleanup(pool, domain);
       await pool.query('DELETE FROM party WHERE party_id = $1', [party.id]);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('closes a call by an exit, drops it from the open list, and links a duplicate both ways', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    const domain = 'calls-routes-exit.test';
+    await cleanup(pool, domain);
+    const who = await signIn(pool, clock, {
+      email: `ops@${domain}`,
+      role: 'OPERATOR',
+    });
+    const client = asOperator(app, who);
+    try {
+      for (const description of ['שאלה לסוגר', 'נזילה מקורית']) {
+        const created = await client.inject({
+          method: 'POST',
+          url: '/calls',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          payload: form({
+            channel: 'PHONE',
+            description,
+            sender: 'unknown',
+          }),
+        });
+        assert.equal(created.statusCode, 303);
+      }
+      const listed = await client.inject({ method: 'GET', url: '/calls' });
+      const questionId = listed.body.match(
+        /href="\/calls\/([0-9a-f-]{36})">שאלה לסוגר/,
+      )?.[1];
+      const originalId = listed.body.match(
+        /href="\/calls\/([0-9a-f-]{36})">נזילה מקורית/,
+      )?.[1];
+      assert.ok(questionId);
+      assert.ok(originalId);
+      const openBadge = Number(
+        listed.body.match(/data-open-calls="(\d+)"/)?.[1],
+      );
+
+      const page = await client.inject({
+        method: 'GET',
+        url: `/calls/${questionId}`,
+      });
+      assert.match(page.body, /name="exit"/);
+      assert.match(page.body, /נענתה/);
+      assert.match(page.body, /הועברה/);
+      assert.match(page.body, /כפולה/);
+      assert.match(page.body, /בוטלה/);
+
+      const refused = await client.inject({
+        method: 'POST',
+        url: `/calls/${questionId}/exit`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({ exit: 'ANSWERED', note: '   ' }),
+      });
+      assert.equal(refused.statusCode, 400);
+      assert.match(refused.body, /יש לכתוב סיבה/);
+      assert.match(refused.body, /data-call-state="NEW"/);
+
+      const closed = await client.inject({
+        method: 'POST',
+        url: `/calls/${questionId}/exit`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({ exit: 'ANSWERED', note: 'עניתי בטלפון' }),
+      });
+      assert.equal(closed.statusCode, 303);
+
+      const after = await client.inject({ method: 'GET', url: '/calls' });
+      const afterBadge = Number(
+        after.body.match(/data-open-calls="(\d+)"/)?.[1],
+      );
+      assert.equal(afterBadge, openBadge - 1);
+      assert.equal(afterBadge, after.body.match(/data-call="/g)?.length ?? 0);
+      assert.doesNotMatch(after.body, /שאלה לסוגר/);
+      assert.match(after.body, /נזילה מקורית/);
+
+      const closedList = await client.inject({
+        method: 'GET',
+        url: '/calls?state=CLOSED',
+      });
+      assert.match(closedList.body, /שאלה לסוגר/);
+      assert.match(closedList.body, /סגורות/);
+      assert.equal(
+        Number(closedList.body.match(/data-open-calls="(\d+)"/)?.[1]),
+        afterBadge,
+      );
+      const home = await client.inject({ method: 'GET', url: '/' });
+      assert.equal(
+        Number(home.body.match(/data-open-calls="(\d+)"/)?.[1]),
+        afterBadge,
+      );
+
+      const closedPage = await client.inject({
+        method: 'GET',
+        url: `/calls/${questionId}`,
+      });
+      assert.match(closedPage.body, /data-call-state="CLOSED"/);
+      assert.match(closedPage.body, /נענתה/);
+      assert.match(closedPage.body, /עניתי בטלפון/);
+      assert.match(closedPage.body, /ops@calls-routes-exit\.test/);
+      assert.doesNotMatch(closedPage.body, /name="exit"/);
+      assert.doesNotMatch(closedPage.body, /לא שומר איש קשר/);
+
+      const again = await client.inject({
+        method: 'POST',
+        url: '/calls',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({
+          channel: 'WALK_IN',
+          description: 'נזילה שוב',
+          sender: 'unknown',
+        }),
+      });
+      assert.equal(again.statusCode, 303);
+      const withAgain = await client.inject({ method: 'GET', url: '/calls' });
+      const againId = withAgain.body.match(
+        /href="\/calls\/([0-9a-f-]{36})">נזילה שוב/,
+      )?.[1];
+      assert.ok(againId);
+      const found = await client.inject({
+        method: 'GET',
+        url: `/calls/${againId}?dup=${encodeURIComponent('מקורית')}`,
+      });
+      assert.match(found.body, new RegExp(`value="${originalId}"`));
+
+      const linked = await client.inject({
+        method: 'POST',
+        url: `/calls/${againId}/exit`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({ exit: 'DUPLICATE', duplicate_of: originalId }),
+      });
+      assert.equal(linked.statusCode, 303);
+      const duplicatePage = await client.inject({
+        method: 'GET',
+        url: `/calls/${againId}`,
+      });
+      assert.match(duplicatePage.body, /כפולה/);
+      assert.match(
+        duplicatePage.body,
+        new RegExp(`href="/calls/${originalId}"`),
+      );
+      const originalPage = await client.inject({
+        method: 'GET',
+        url: `/calls/${originalId}`,
+      });
+      assert.match(originalPage.body, /נזילה שוב/);
+      assert.match(originalPage.body, /data-call-state="NEW"/);
+    } finally {
+      await cleanup(pool, domain);
       await app.close();
       await pool.end();
     }

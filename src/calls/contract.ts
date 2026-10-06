@@ -4,9 +4,12 @@
 // #182 opens a phone or walk-in call and lists what is open. The source channel
 // is written by that command and no command changes it.
 // #183 identifies the requester, sets the Category, and reads one call.
+// #184 closes a call by one of the four Exits.
 
 export type {
   CallCategory,
+  CallExit,
+  CallLink,
   CallListFilter,
   CallParty,
   CallSender,
@@ -14,6 +17,8 @@ export type {
   CallTransition,
   CategoryRow,
   CategorySpec,
+  ExitCallSpec,
+  ExitKind,
   IdentifyCallSpec,
   ManualChannel,
   OpenCallSpec,
@@ -24,6 +29,7 @@ export type {
 } from './internal/commands.ts';
 export {
   countOpenCalls,
+  exitCall,
   getCall,
   identifyCall,
   listCategories,

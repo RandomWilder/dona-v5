@@ -2059,6 +2059,8 @@ const SCREENS: Array<[string, () => string]> = [
         csrf: CSRF,
         now: new Date('2026-10-06T12:00:00.000Z'),
         query: 'יעל',
+        dupQuery: '',
+        dupMatches: [],
         matches: [
           {
             id: '66666666-6666-4666-8666-666666666666',
@@ -2075,6 +2077,8 @@ const SCREENS: Array<[string, () => string]> = [
           openedAt: new Date('2026-10-06T10:00:00.000Z'),
           requester: null,
           category: null,
+          exit: null,
+          repeatedBy: [],
           timeline: [
             {
               kind: 'OPENED',
@@ -2096,6 +2100,8 @@ const SCREENS: Array<[string, () => string]> = [
         csrf: CSRF,
         now: new Date('2026-10-06T12:30:00.000Z'),
         query: '',
+        dupQuery: '',
+        dupMatches: [],
         matches: [],
         categories: [
           {
@@ -2118,6 +2124,8 @@ const SCREENS: Array<[string, () => string]> = [
             name: 'יעל כהן',
           },
           category: null,
+          exit: null,
+          repeatedBy: [],
           timeline: [
             {
               kind: 'OPENED',
