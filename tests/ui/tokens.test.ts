@@ -13,6 +13,7 @@
 // here rather than copy this file — the second copy is how a guard dies.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { renderCallsPage } from '../../src/calls/contract.ts';
 // The root index is the composition root's screen from 5.2, not estate's. It is in this registry
 // under the same rule as every other screen: rendered here, asserted on the bytes.
 import { signedInChrome } from '../../src/chrome.ts';
@@ -65,7 +66,6 @@ import {
   renderLoginPage,
   renderStaffHomePage,
 } from '../../src/staff/contract.ts';
-import { CALLS_STUB, renderStubPage } from '../../src/stub-page.ts';
 import type { UnitLetting } from '../../src/tenancy/contract.ts';
 
 const building: BuildingSummary = {
@@ -293,6 +293,7 @@ const NAV_TENANCIES = signedInChrome(CSRF, 'tenancies', true);
 const NAV_STAFF = signedInChrome(CSRF, 'staff', true);
 const NAV_DOCUMENTS = signedInChrome(CSRF, 'documents', true);
 const NAV_FILING = signedInChrome(CSRF, 'filing', true);
+const NAV_CALLS = signedInChrome(CSRF, 'calls', true, 1);
 
 /**
  * **The read overlay at a stance. Slice 6.4.**
@@ -2000,8 +2001,32 @@ const SCREENS: Array<[string, () => string]> = [
       }),
   ],
   [
-    'root · calls stub',
-    () => renderStubPage({ csrf: CSRF, mayFile: true }, CALLS_STUB, 'wired'),
+    'calls · open list',
+    () =>
+      renderCallsPage({
+        nav: NAV_CALLS,
+        csrf: CSRF,
+        now: new Date('2026-10-06T12:00:00.000Z'),
+        refusal: 'יש לבחור טלפון או הגעה.',
+        calls: [
+          {
+            id: '33333333-3333-4333-8333-333333333333',
+            sourceChannel: 'PHONE',
+            state: 'NEW',
+            description: 'נזילה במטבח',
+            sender: { kind: 'named', name: 'יעל כהן' },
+            openedAt: new Date('2026-10-06T10:00:00.000Z'),
+          },
+          {
+            id: '44444444-4444-4444-8444-444444444444',
+            sourceChannel: 'WALK_IN',
+            state: 'NEW',
+            description: 'מפתח תקוע',
+            sender: { kind: 'unknown' },
+            openedAt: new Date('2026-10-06T11:00:00.000Z'),
+          },
+        ],
+      }),
   ],
   [
     'root · settings, admin',
@@ -2394,16 +2419,6 @@ describe('shared UI tokens', () => {
     }
   });
 
-  it('names the owner on an unbuilt destination', () => {
-    const calls = renderStubPage(
-      { csrf: CSRF, mayFile: true },
-      CALLS_STUB,
-      'wired',
-    );
-    assert.match(calls, /data-state="wired"/);
-    assert.match(calls, /שבוע 7 · סלייס 7.2/);
-  });
-
   // Asserted over the **wired** settings screens in the registry. It was asserted against the
   // painted A9 variant until 6.1, which put the only copy of a live guard on a mockup — and a
   // mockup is deleted the day the flow it painted is wired (CLAUDE.md; the guard that enforced
@@ -2584,6 +2599,9 @@ describe('shared UI tokens', () => {
       // **#162.** שכירויות is the list allowed to name the household. ADR-0011. Search,
       // the work list, and the נכסים tile stay off this list.
       'estate · tenancies book',
+      // **#182.** The open-call list shows the sender the office typed, or "לא ידוע".
+      // SPEC-calls.md: the tab lists the requester. That name is the call, not a household roll.
+      'calls · open list',
     ];
     // **The two write receipts were on that list until this case was first run, and came off it.**
     // `renderTenancyWrittenPage` says `partiesWritten` and not who: once the confirm is done the

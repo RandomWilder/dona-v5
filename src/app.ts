@@ -16,6 +16,7 @@ import {
 } from 'node:http2';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
+import { registerCallsRoutes } from './calls/contract.ts';
 import { signedInChrome } from './chrome.ts';
 import { renderMockup } from './dev-mockups.ts';
 import { registerEstateRoutes } from './estate/contract.ts';
@@ -80,7 +81,6 @@ import {
   type StaffDeps,
   verifyCsrf,
 } from './staff/contract.ts';
-import { CALLS_STUB, renderStubPage } from './stub-page.ts';
 import {
   activateTenancy,
   activationGate,
@@ -392,22 +392,6 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     reply.header('x-content-type-options', 'nosniff');
   };
 
-  app.get(
-    '/calls',
-    { config: { staff: 'estate.read' } },
-    async (request, reply) => {
-      stubHeaders(reply);
-      return renderStubPage(
-        {
-          csrf: csrfFrom(request),
-          mayFile: can(request.staff?.role ?? null, 'documents.write'),
-        },
-        CALLS_STUB,
-        'wired',
-      );
-    },
-  );
-
   const SETTINGS_READ = { config: { staff: 'estate.read' } } as const;
   const SETTINGS_WRITE = { config: { staff: 'settings.write' } } as const;
 
@@ -614,6 +598,11 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   // Slice 5.1, and from 5.2 no longer the only routes behind a session: every route this
   // application registers declares a stance above, and the hook calls `requireStaff` once.
   registerStaffRoutes(app, staffDeps);
+  registerCallsRoutes(app, {
+    pool: deps.pool,
+    clock,
+    chrome: signedInChrome,
+  });
   registerDocumentRoutes(app, {
     pool: deps.pool,
     clock,

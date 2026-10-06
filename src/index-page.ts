@@ -115,10 +115,10 @@ export function renderIndexPage(screen: IndexScreen): string {
         </a>
       </article>
       <article class="row-card">
-        ${marker('is-alert')}
+        ${marker('is-ok')}
         <a class="card-link" href="/calls">
           <p class="card-title"><span>קריאות</span></p>
-          <p class="lede">שבוע 7 · סלייס 7.2</p>
+          <p class="lede">רישום טלפון או הגעה, והקריאות הפתוחות.</p>
         </a>
       </article>
       <article class="row-card">

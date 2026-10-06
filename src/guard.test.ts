@@ -151,6 +151,7 @@ describe('every route in the application', () => {
       'GET /documents/filing',
       'GET /documents/filing/:documentId',
       'GET /calls',
+      'POST /calls',
       'GET /settings',
       'POST /documents',
       'POST /documents/tenancies/:tenancyId/protocol',

@@ -31,14 +31,20 @@ SPEC-calls.md is the requirement; edit it first if anything here turns out to di
 
 ## Acceptance criteria
 
-- [ ] A PHONE call and a WALK_IN call entered on the form appear in the list in NEW, each with its channel marker
-- [ ] The form refuses an entry missing the channel, the description, or a sender-or-unknown choice
-- [ ] Source channel cannot be changed after creation, through the contract or the screen
-- [ ] The rail shows the open-call count beside קריאות, and it matches the list
-- [ ] Every create is audited with the staff account
-- [ ] Contract tests run against real Postgres; HTTP tests cover the form and the list
+- [x] A PHONE call and a WALK_IN call entered on the form appear in the list in NEW, each with its channel marker
+- [x] The form refuses an entry missing the channel, the description, or a sender-or-unknown choice
+- [x] Source channel cannot be changed after creation, through the contract or the screen
+- [x] The rail shows the open-call count beside קריאות, and it matches the list
+- [x] Every create is audited with the staff account
+- [x] Contract tests run against real Postgres; HTTP tests cover the form and the list
 - [ ] Clicked on `:3000` after a restart, and on staging after merge
 
 ## Blocked by
 
 None (can start immediately).
+
+## Comment — 2026-10-06
+
+The open list and the phone / walk-in form are in. A phone call and a walk-in land in NEW, the form refuses a missing channel, description, or sender choice, and the channel cannot be changed afterwards. The rail count on קריאות matches the list. Each create is audited with the staff account.
+
+The restarted server on `:3000` accepted both entries and showed them with the count. The browser tab itself stops at Google sign-in, so that check was a signed-in session against the live process, not a click through the login screen. Staging is still after merge. Other screens' rails do not show the count yet.

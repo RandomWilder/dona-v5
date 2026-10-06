@@ -213,6 +213,9 @@ const PII_COLUMNS = new Set([
   // 2.4, `promoted_by` at 4.3 and this one -- and each time the rule held: the list learns the name
   // it met, rather than the guard learning a pattern it will be wrong about.
   'display_name',
+  // #182. The name an office worker types for the person who phoned or walked in,
+  // or leaves null when they mark the sender unknown.
+  'sender_label',
   'birth_date',
   'date_of_birth',
   'iban',
