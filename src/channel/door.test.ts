@@ -128,6 +128,60 @@ describe('channel · the intake door', () => {
     }
   });
 
+  it('keeps the message when the emergency check throws, and the next delivery finishes it', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const seen: string[] = [];
+        let checks = 0;
+        const message = incoming({
+          externalMessageId: 'keep-1',
+          externalThreadId: 'keep-t',
+          body: 'יש נזילה במטבח',
+        });
+        const deps = {
+          sorter: counting(CALL, seen),
+          matchesEmergency: async () => {
+            checks += 1;
+            if (checks === 1) throw new Error('terms unread');
+            return false;
+          },
+        };
+        await assert.rejects(
+          () => receiveIncoming(db, clock, deps, message),
+          /terms unread/,
+        );
+        const held = await db.query<{
+          service_call_id: string | null;
+        }>(
+          `SELECT service_call_id FROM message
+            WHERE source_channel = 'EMAIL' AND external_message_id = 'keep-1'`,
+        );
+        assert.equal(held.rows.length, 1);
+        assert.equal(held.rows[0]?.service_call_id, null);
+        assert.deepEqual(seen, []);
+
+        const finished = await receiveIncoming(db, clock, deps, message);
+        assert.equal(finished.kind, 'call');
+        if (finished.kind !== 'call') return;
+        assert.deepEqual(seen, ['sorter']);
+        const messages = await listMessagesOnCall(db, finished.callId);
+        assert.equal(messages.length, 1);
+        assert.equal(messages[0]?.body, 'יש נזילה במטבח');
+        const again = await receiveIncoming(db, clock, deps, message);
+        assert.equal(again.kind, 'duplicate');
+        assert.deepEqual(seen, ['sorter']);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
   it('flags a real emergency term, and the sorter still runs after', async (t) => {
     const pool = await migratedPoolOrNull();
     if (!pool) {

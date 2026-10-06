@@ -1,11 +1,12 @@
 // The intake door. #186.
 //
-// Every channel will hand this one shape. The order is the spec's: a message
-// is stored once, an emergency is decided before the sorter is asked, a thread
-// with an open call stops there, and only then does a verdict become a call
-// or a filtered message. Identifying the sender is #189, so a call opened
-// here waits in NEW. An echo is the office's own message: stored, not sorted,
-// and never a new call.
+// Every channel will hand this one shape. The order is the spec's: the message
+// is stored once, before the emergency check, so a failed check leaves it
+// held. An emergency is decided before the sorter is asked. A thread with an
+// open call stops there, and only then does a verdict become a call or a
+// filtered message. A later delivery of a held message finishes that one row.
+// Identifying the sender is #189, so a call opened here waits in NEW. An echo
+// is the office's own message: stored, not sorted, and never a new call.
 
 import {
   ADDRESS_MAX,
@@ -140,18 +141,22 @@ export async function receiveIncoming(
   raw: IncomingMessage,
 ): Promise<IntakeOutcome> {
   const message = normalize(raw);
-  const already = await lookup(db, message);
+  const already = await settledOutcome(db, message);
   if (already) return already;
 
   if (message.echo) return storeEcho(db, clock, message);
 
+  const messageId = await ensureMessage(db, clock, message);
+  const raced = await settledOutcome(db, message);
+  if (raced) return raced;
+
   const emergency = await deps.matchesEmergency(messageText(message));
   const thread = await threadOf(db, message);
   if (thread.openCallId !== null) {
-    const attached = await storeAttach(
+    const attached = await settleAttach(
       db,
       clock,
-      message,
+      messageId,
       thread.openCallId,
       emergency,
     );
@@ -163,7 +168,15 @@ export async function receiveIncoming(
     thread.openCallId === null
       ? thread.predecessorId
       : (await threadOf(db, message)).predecessorId;
-  return storeVerdict(db, clock, message, emergency, verdict, predecessorId);
+  return settleVerdict(
+    db,
+    clock,
+    message,
+    messageId,
+    emergency,
+    verdict,
+    predecessorId,
+  );
 }
 
 export async function listMessagesOnCall(
@@ -418,19 +431,49 @@ function readyVerdict(value: SortVerdict): ReadyVerdict | null {
   return { label: value.label, categoryCode, summary };
 }
 
-async function lookup(
+function isSettled(row: StoredRow): boolean {
+  return (
+    row.is_echo || row.service_call_id !== null || row.sorter_label !== null
+  );
+}
+
+async function lookupRow(
   db: Queryable,
   message: Normalized,
-): Promise<IntakeOutcome | null> {
+): Promise<StoredRow | null> {
   const { rows } = await db.query<StoredRow>(
     `SELECT message_id, service_call_id, is_echo, sorter_label
        FROM message
       WHERE source_channel = $1 AND external_message_id = $2`,
     [message.sourceChannel, message.externalMessageId],
   );
-  const row = rows[0];
-  if (!row) return null;
+  return rows[0] ?? null;
+}
+
+/** A held row has no call and no verdict yet. The next delivery finishes it. */
+async function settledOutcome(
+  db: Queryable,
+  message: Normalized,
+): Promise<IntakeOutcome | null> {
+  const row = await lookupRow(db, message);
+  if (!row || !isSettled(row)) return null;
   return outcomeOf(row);
+}
+
+async function lockMessage(
+  db: Queryable,
+  messageId: string,
+): Promise<StoredRow> {
+  const { rows } = await db.query<StoredRow>(
+    `SELECT message_id, service_call_id, is_echo, sorter_label
+       FROM message
+      WHERE message_id = $1
+      FOR UPDATE`,
+    [messageId],
+  );
+  const row = rows[0];
+  if (!row) throw new KernelError('conflict', 'message was not stored');
+  return row;
 }
 
 function outcomeOf(row: StoredRow): IntakeOutcome {
@@ -485,13 +528,34 @@ async function threadOf(
   };
 }
 
+async function ensureMessage(
+  db: Queryable,
+  clock: Clock,
+  message: Normalized,
+): Promise<string> {
+  return inTransaction(db, async (tx) => {
+    const existing = await lookupRow(tx, message);
+    if (existing) return existing.message_id;
+    const messageId = await insertMessage(tx, clock, message, {
+      callId: null,
+      label: null,
+      summary: null,
+      categoryId: null,
+    });
+    if (messageId) return messageId;
+    const raced = await lookupRow(tx, message);
+    if (raced) return raced.message_id;
+    throw new KernelError('conflict', 'message was not stored');
+  });
+}
+
 async function storeEcho(
   db: Queryable,
   clock: Clock,
   message: Normalized,
 ): Promise<IntakeOutcome> {
   return inTransaction(db, async (tx) => {
-    const already = await lookup(tx, message);
+    const already = await settledOutcome(tx, message);
     if (already) return already;
     const thread = await threadOf(tx, message);
     const callId =
@@ -506,7 +570,7 @@ async function storeEcho(
       categoryId: null,
     });
     if (messageId === null) {
-      const raced = await lookup(tx, message);
+      const raced = await settledOutcome(tx, message);
       if (raced) return raced;
       throw new KernelError('conflict', 'message was not stored');
     }
@@ -514,59 +578,54 @@ async function storeEcho(
   });
 }
 
-async function storeAttach(
+/**
+ * Links the held message to the open call. Null means that call can no
+ * longer take it, so the door goes on to sort.
+ */
+async function settleAttach(
   db: Queryable,
   clock: Clock,
-  message: Normalized,
+  messageId: string,
   callId: string,
   emergency: boolean,
 ): Promise<IntakeOutcome | null> {
   return inTransaction(db, async (tx) => {
-    const already = await lookup(tx, message);
-    if (already) return already;
+    const row = await lockMessage(tx, messageId);
+    if (isSettled(row)) return outcomeOf(row);
     if (!(await callIsAttachable(tx, callId))) return null;
-    const messageId = await insertMessage(tx, clock, message, {
-      callId,
-      label: null,
-      summary: null,
-      categoryId: null,
-    });
-    if (messageId === null) {
-      const raced = await lookup(tx, message);
-      if (raced) return raced;
-      throw new KernelError('conflict', 'message was not stored');
-    }
+    await tx.query(
+      `UPDATE message SET service_call_id = $2 WHERE message_id = $1`,
+      [messageId, callId],
+    );
     if (emergency) await flagCallByTerms(tx, clock, callId);
     return { kind: 'attached', messageId, callId };
   });
 }
 
-async function storeVerdict(
+async function settleVerdict(
   db: Queryable,
   clock: Clock,
   message: Normalized,
+  messageId: string,
   emergency: boolean,
   verdict: ReadyVerdict | null,
   predecessorId: string | null,
 ): Promise<IntakeOutcome> {
   const noise = verdict?.label === 'noise' && !emergency;
   return inTransaction(db, async (tx) => {
-    const already = await lookup(tx, message);
-    if (already) return already;
+    const row = await lockMessage(tx, messageId);
+    if (isSettled(row)) return outcomeOf(row);
     const categoryId =
       verdict === null ? null : await categoryIdOf(tx, verdict.categoryCode);
     if (noise && verdict) {
-      const messageId = await insertMessage(tx, clock, message, {
-        callId: null,
-        label: 'noise',
-        summary: verdict.summary,
-        categoryId,
-      });
-      if (messageId === null) {
-        const raced = await lookup(tx, message);
-        if (raced) return raced;
-        throw new KernelError('conflict', 'message was not stored');
-      }
+      await tx.query(
+        `UPDATE message
+            SET sorter_label = 'noise',
+                sorter_summary = $2,
+                proposed_category_id = $3
+          WHERE message_id = $1`,
+        [messageId, verdict.summary, categoryId],
+      );
       return { kind: 'filtered', messageId };
     }
     const toReview =
@@ -590,15 +649,21 @@ async function storeVerdict(
       openedBy: null,
       actorRole: null,
     });
-    const messageId = await insertMessage(tx, clock, message, {
-      callId: call.id,
-      label: verdict?.label ?? null,
-      summary: verdict?.summary ?? null,
-      categoryId,
-    });
-    if (messageId === null) {
-      throw new KernelError('conflict', 'message was not stored');
-    }
+    await tx.query(
+      `UPDATE message
+          SET service_call_id = $2,
+              sorter_label = $3,
+              sorter_summary = $4,
+              proposed_category_id = $5
+        WHERE message_id = $1`,
+      [
+        messageId,
+        call.id,
+        verdict?.label ?? null,
+        verdict?.summary ?? null,
+        categoryId,
+      ],
+    );
     return { kind: 'call', messageId, callId: call.id };
   });
 }

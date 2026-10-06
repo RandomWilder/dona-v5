@@ -16,8 +16,11 @@ delivers into one normalised incoming message: Source channel, external message 
 or conversation id, sender address, received time, subject, body, attachments, and whether it is an
 echo of something the office sent. The door then runs in this order:
 
-1. **De-duplicate** on the external message id.
-2. **Store the Message.**
+1. **De-duplicate** on the external message id. A message already stored and finished is the same
+   message again. A message stored and not yet finished — the emergency check threw, or the process
+   stopped before a verdict — is finished by this delivery, not stored a second time.
+2. **Store the Message.** This happens before the emergency check and before the sorter, so a
+   failure there leaves the message held.
 3. **Check for an emergency**, deterministically and before any model call (foundation rule 5). The
    flag and the fixed duty reply are calls' to perform.
 4. **Thread.** A message on a thread with an open ServiceCall attaches to it and stops. A thread

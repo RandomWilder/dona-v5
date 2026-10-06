@@ -59,6 +59,10 @@ Clicked on `:3000` after a restart: the dev form sent an email, the call opened 
 
 A returned call was still offered the four Exits, and saving one was refused because a returned call cannot be closed. The page now offers rescue instead, and leaves the exits until the call is back on the open list. The filtered list and the dev intake form are in the screen registry. The Hebrew body column is marked as the same personal text as the original.
 
+## Comment — 2026-10-06
+
+The door stored the message only after the emergency check, so a check that threw lost it. The message is now stored first. The same delivery again finishes that one row: one call, and the sorter runs once. A returned call put back on the open list keeps the sorter's label; the office's "returned" mark is cleared because the call is no longer returned, which is what the mark means.
+
 ## Blocked by
 
 - #183 — Call page: identify the sender by hand and set a Category
