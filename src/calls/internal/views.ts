@@ -56,6 +56,8 @@ export interface CallsScreen {
   toReview: boolean;
   devIntake: boolean;
   now: Date;
+  /** The shared mailbox has not been read successfully for an hour. */
+  mailboxWarning?: boolean;
   refusal?: string;
 }
 
@@ -142,7 +144,8 @@ const styles = h`<style>
   .calls .choice legend { padding: 0; }
   .calls .choice label,
   .calls .filters label { display: inline-flex; gap: var(--space-2); align-items: center; }
-  .calls .refusal { margin: 0; color: var(--color-alert); }
+  .calls .refusal,
+  .calls .mailbox-warning { margin: 0; color: var(--color-alert); }
   .calls .call {
     display: grid;
     gap: var(--space-2);
@@ -289,6 +292,9 @@ export function renderCallsPage(screen: CallsScreen): string {
   const devLink = screen.devIntake
     ? h`<a href="/dev/intake">הודעת בדיקה</a>`
     : h``;
+  const mailbox = screen.mailboxWarning
+    ? h`<p class="mailbox-warning" role="status">תיבת הדואר לא נקראה כבר שעה.</p>`
+    : h``;
   const list =
     screen.calls.length === 0
       ? h`<p class="lede">${filtered ? 'אין קריאות תואמות.' : 'אין קריאות פתוחות.'}</p>`
@@ -301,6 +307,7 @@ export function renderCallsPage(screen: CallsScreen): string {
           <p class="lede">טלפון או הגעה. בלי מסווג. <a href="/calls/filtered">מסוננות</a> ${devLink}</p>
         </div>
       </header>
+      ${mailbox}
       <form class="glass call-form" method="post" action="/calls">
         ${csrfInput(screen.csrf)}
         <h2>רישום קריאה</h2>

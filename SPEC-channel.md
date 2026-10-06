@@ -78,10 +78,15 @@ golden set's messages are fabricated, never a real tenant's.
   Applications. **Nothing here can delete, move or mark mail as read.** `Mail.Send` exists for one
   message only: the fixed emergency reply, which lands in that mailbox's Sent Items like any reply
   the office sends (decided 6 Oct 2026).
-- Polled with a delta query every one to two minutes, with the cursor stored.
+- Polled with a delta query every one to two minutes, with the cursor stored. The first read
+  asks for a cursor as of now and imports nothing earlier. The cursor is stored only after that
+  page has been handed to the door.
 - Threading comes from the conversation id.
 - Staging reads a test mailbox. Production reads the real one. Granting admin consent is the
-  director's act.
+  director's act. The process polls only when the tenant, the application, its secret and the
+  mailbox are all set; otherwise it boots unconfigured and the tab stays quiet. An hour without
+  a successful read, once it is polling, shows a warning on the קריאות list, and a successful
+  read clears it.
 
 **Gmail is a standby**: the same interface, the Gmail API with the `gmail.readonly` scope, tested on
 recorded payloads, and wired to no mailbox.

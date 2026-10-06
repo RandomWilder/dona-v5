@@ -2,7 +2,7 @@
 number: 188
 title: Outlook: the staging test mailbox arrives in the tab
 status: open
-labels: [ready-for-agent]
+labels: [ready-for-human]
 assignee:
 blocked_by: [186]
 parent: 181
@@ -32,11 +32,17 @@ and admin consent, which is the director's act.
 
 ## Acceptance criteria
 
-- [ ] The adapter normalises recorded Graph payloads, including a reply on the same conversation and an email with an attachment
-- [ ] The delta cursor survives a restart: nothing read twice, nothing skipped
-- [ ] A failed read for an hour shows the mailbox warning; a successful read clears it
-- [ ] Nothing in the adapter can delete, move or mark mail as read
+- [x] The adapter normalises recorded Graph payloads, including a reply on the same conversation and an email with an attachment
+- [x] The delta cursor survives a restart: nothing read twice, nothing skipped
+- [x] A failed read for an hour shows the mailbox warning; a successful read clears it
+- [x] Nothing in the adapter can delete, move or mark mail as read
 - [ ] Clicked on staging: an email sent to the test mailbox appears in the tab within two minutes, and a reply on its thread attaches to the same call
+
+## Comment — 2026-10-06
+
+The adapter is in. Recorded Graph payloads become incoming mail, a reply keeps the conversation id, and an attachment keeps its name. The delta cursor is stored after each page is handed on, so a restart neither replays nor skips, and the first read asks for a cursor as of now. An hour without a successful read warns on the קריאות list; a success clears it. The process only GETs mail. It stays off, and the tab stays quiet, until all four settings are present.
+
+Left for the director: the staging test mailbox, the app registration with Mail.Read scoped to it, admin consent, then `./infra/set-secret.sh staging` for graph-tenant-id, graph-client-id, graph-client-secret, and graph-mailbox. The next staging deploy mounts whichever of those exist. Staging still scales to zero and throttles CPU when idle, so the poll runs when the process has CPU — opening the tab wakes it. An unattended two-minute read needs a minimum instance and CPU always allocated, which spends money. Production is not mounted.
 
 ## Blocked by
 

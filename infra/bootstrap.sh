@@ -58,6 +58,15 @@ OPENAI_SECRET="$ENV-openai-api-key"
 # row they write carries no credential at all.
 OAUTH_ID_SECRET="$ENV-google-oauth-client-id"
 OAUTH_SECRET_SECRET="$ENV-google-oauth-client-secret"
+
+# #188. Staging only. The Outlook adapter reads one test mailbox. These four
+# are the director's act — the app registration, admin consent, and the
+# mailbox — and they arrive through set-secret.sh. Production is a later
+# ticket, so this script does not grant or mention them there.
+GRAPH_TENANT_SECRET="$ENV-graph-tenant-id"
+GRAPH_CLIENT_SECRET="$ENV-graph-client-id"
+GRAPH_SECRET_SECRET="$ENV-graph-client-secret"
+GRAPH_MAILBOX_SECRET="$ENV-graph-mailbox"
 DOCS_BUCKET="$PROJECT-$ENV-docs"
 RUNTIME_SA="app-$ENV"
 DEPLOY_SA="deploy-$ENV"
@@ -241,6 +250,19 @@ for secret in "$OAUTH_ID_SECRET" "$OAUTH_SECRET_SECRET"; do
   fi
 done
 
+if [ "$ENV" = staging ]; then
+  say "Outlook mailbox — the director's act, not this script"
+  # #188. An app registration in Dona Dom's Microsoft 365 tenant, Mail.Read
+  # scoped to one mailbox, and admin consent. This script cannot do any of
+  # that. Staging mounts the four secrets when they exist.
+  echo "  app:      Mail.Read, scoped to the one mailbox, admin consent"
+  echo "  then:     ./infra/set-secret.sh $ENV graph-tenant-id"
+  echo "            ./infra/set-secret.sh $ENV graph-client-id"
+  echo "            ./infra/set-secret.sh $ENV graph-client-secret"
+  echo "            ./infra/set-secret.sh $ENV graph-mailbox"
+  echo "  boot:     outlook: unconfigured until all four are mounted"
+fi
+
 say "Service accounts"
 for sa in "$RUNTIME_SA" "$DEPLOY_SA"; do
   gcloud iam service-accounts describe "$sa@$PROJECT.iam.gserviceaccount.com" \
@@ -254,7 +276,12 @@ done
 gcloud projects add-iam-policy-binding "$PROJECT" \
   --member "serviceAccount:$RUNTIME_EMAIL" \
   --role roles/cloudsql.client --condition=None >/dev/null
-for secret in "$SECRET" "$OPENAI_SECRET" "$OAUTH_ID_SECRET" "$OAUTH_SECRET_SECRET"; do
+BIND_SECRETS=("$SECRET" "$OPENAI_SECRET" "$OAUTH_ID_SECRET" "$OAUTH_SECRET_SECRET")
+if [ "$ENV" = staging ]; then
+  BIND_SECRETS+=("$GRAPH_TENANT_SECRET" "$GRAPH_CLIENT_SECRET" \
+    "$GRAPH_SECRET_SECRET" "$GRAPH_MAILBOX_SECRET")
+fi
+for secret in "${BIND_SECRETS[@]}"; do
   # The model key may not exist yet -- a fresh environment has no OpenAI key
   # until someone runs set-secret.sh, and that is not an error worth failing a
   # bootstrap over. The deploy will mount it when it is there; until then the

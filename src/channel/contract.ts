@@ -1,5 +1,5 @@
 // The channel module's public surface. #186 is the intake door. #187 is the
-// sorter on OpenAI, and translation. Adapters are later tickets.
+// sorter on OpenAI, and translation. #188 is the Outlook adapter.
 
 export type {
   IncomingAttachment,
@@ -22,6 +22,16 @@ export {
   receiveIncoming,
   rescueNoise,
 } from './internal/door.ts';
+export type { GraphFetch, OutlookReader } from './internal/outlook.ts';
+export {
+  createGraphReader,
+  graphMailboxFrom,
+  mailboxWarning,
+  normaliseOutlookMessage,
+  OUTLOOK_POLL_MS,
+  pollOutlook,
+  startOutlookPolling,
+} from './internal/outlook.ts';
 export type { ChannelDeps } from './internal/routes.ts';
 export { registerChannelRoutes } from './internal/routes.ts';
 export { createSorter, SORTER_PROMPT_VERSION } from './internal/sorter.ts';

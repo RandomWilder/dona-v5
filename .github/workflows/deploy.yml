@@ -110,13 +110,29 @@ jobs:
           # HTTP/1 stops a body at 32 MiB, under the 100 MB upload bound. HTTP/2 removes that
           # cap; 2Gi is room for one such scan while it is sliced. The process speaks h2c only
           # when K_SERVICE is set. Both flags have to stay, or the next revision is the English page.
+          # Outlook (#188) mounts only the secrets that exist, so a staging deploy
+          # before the director has created the test mailbox still rolls. All four
+          # have to be present or the process boots outlook: unconfigured.
+          SECRETS="DATABASE_URL=staging-database-url:latest,OPENAI_API_KEY=staging-openai-api-key:latest,GOOGLE_OAUTH_CLIENT_ID=staging-google-oauth-client-id:latest,GOOGLE_OAUTH_CLIENT_SECRET=staging-google-oauth-client-secret:latest"
+          add_secret() {
+            local env_name="$1" secret_name="$2"
+            if gcloud secrets describe "$secret_name" --project "$PROJECT" >/dev/null 2>&1; then
+              SECRETS="$SECRETS,${env_name}=${secret_name}:latest"
+            else
+              echo "outlook: $secret_name is missing — mailbox stays unconfigured" >&2
+            fi
+          }
+          add_secret GRAPH_TENANT_ID staging-graph-tenant-id
+          add_secret GRAPH_CLIENT_ID staging-graph-client-id
+          add_secret GRAPH_CLIENT_SECRET staging-graph-client-secret
+          add_secret GRAPH_MAILBOX staging-graph-mailbox
           gcloud run deploy "$SERVICE" \
             --image "$IMAGE:$SHA" \
             --region "$REGION" \
             --project "$PROJECT" \
             --service-account "app-staging@$PROJECT.iam.gserviceaccount.com" \
             --add-cloudsql-instances "$PROJECT:$REGION:dona-staging" \
-            --set-secrets "DATABASE_URL=staging-database-url:latest,OPENAI_API_KEY=staging-openai-api-key:latest,GOOGLE_OAUTH_CLIENT_ID=staging-google-oauth-client-id:latest,GOOGLE_OAUTH_CLIENT_SECRET=staging-google-oauth-client-secret:latest" \
+            --set-secrets "$SECRETS" \
             --update-env-vars "$ENV_VARS" \
             --allow-unauthenticated \
             --use-http2 \

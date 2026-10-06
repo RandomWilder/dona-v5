@@ -67,6 +67,8 @@ export interface CallsDeps {
     actorId: string;
     actorRole?: string | null;
   }) => Promise<{ callId: string }>;
+  /** True when the shared mailbox has not been read for an hour. */
+  mailboxWarning?: () => Promise<boolean>;
 }
 
 const STAFF = { config: { staff: 'estate.read' } } as const;
@@ -212,9 +214,10 @@ async function callsPage(
   refusal?: string,
 ): Promise<string> {
   const filter = listFilter(request.query);
-  const [calls, categories] = await Promise.all([
+  const [calls, categories, mailboxWarning] = await Promise.all([
     listOpenCalls(deps.pool, filter),
     listCategories(deps.pool),
+    deps.mailboxWarning ? deps.mailboxWarning() : Promise.resolve(false),
   ]);
   const role = request.staff?.role ?? null;
   const csrf = csrfFrom(request);
@@ -230,6 +233,7 @@ async function callsPage(
     toReview: filter.toReview === true,
     devIntake: deps.devIntake === true,
     now: deps.clock.now(),
+    mailboxWarning,
     refusal,
   });
 }

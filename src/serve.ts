@@ -3,7 +3,15 @@
 // of it with --env-file-if-exists, neither of which overrides a variable already set in the shell —
 // which is why v3's hand-written .env loader (src/dev.ts) is not lifted.
 import { buildApp } from './app.ts';
-import { createSorter, SORTER_PROMPT_VERSION } from './channel/contract.ts';
+import {
+  createGraphReader,
+  createSorter,
+  emergencyMatch,
+  graphMailboxFrom,
+  receiveIncoming,
+  SORTER_PROMPT_VERSION,
+  startOutlookPolling,
+} from './channel/contract.ts';
 import { zonedClock } from './kernel/clock.ts';
 import {
   createSettings,
@@ -29,6 +37,7 @@ const port = Number(process.env.PORT ?? 8080);
 // place this process speaks cleartext HTTP/2 to get out from under it. A laptop has no such cap.
 const http2 = Boolean(process.env.K_SERVICE);
 const sorterOn = (process.env.OPENAI_API_KEY?.trim().length ?? 0) > 0;
+const outlook = graphMailboxFrom(process.env);
 
 // No localhost fallback: createPool refuses a missing DATABASE_URL (kernel/db.ts). A production
 // service that quietly falls back to a developer's database is worse than one that will not boot.
@@ -63,6 +72,43 @@ const embedder = createConfiguredEmbedder(
 );
 const work = createWorkRunner(pool);
 work.start();
+const sorter = sorterOn
+  ? createSorter({
+      extractor,
+      model: async () => (await readSorterSettings(settings)).model,
+    })
+  : undefined;
+if (outlook) {
+  startOutlookPolling({
+    db: pool,
+    clock,
+    reader: createGraphReader(outlook),
+    deliver: async (message) => {
+      await receiveIncoming(
+        pool,
+        clock,
+        {
+          sorter: sorter ?? {
+            async sort() {
+              throw new Error('sorter unconfigured');
+            },
+            async translate() {
+              return { bodyHe: null };
+            },
+          },
+          matchesEmergency: emergencyMatch(pool),
+        },
+        message,
+      );
+    },
+    onError(error) {
+      console.error(
+        'outlook: read failed',
+        error instanceof Error ? error.message : 'unknown',
+      );
+    },
+  });
+}
 
 // The deploy stamps the commit it built (slice 1.6). Locally the honest answer is that it is a
 // working copy, not a release.
@@ -86,12 +132,7 @@ const app = buildApp({
   staffHostedDomain: configuredHostedDomain(),
   devMockups: (process.env.VERSION ?? '0.0.0-dev').endsWith('-dev'),
   http2,
-  sorter: sorterOn
-    ? createSorter({
-        extractor,
-        model: async () => (await readSorterSettings(settings)).model,
-      })
-    : undefined,
+  sorter,
 });
 
 await app.listen({ host, port });
@@ -110,3 +151,4 @@ console.log(
 console.log(`embed: ${embedder.describe()}`);
 console.log(`identity: ${identity.describe()}`);
 console.log(`clock: ${clock.zone}`);
+console.log(`outlook: ${outlook ? 'configured' : 'unconfigured'}`);

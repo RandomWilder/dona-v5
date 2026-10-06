@@ -25,8 +25,10 @@ import {
   upsertCategory,
 } from './calls/contract.ts';
 import {
+  graphMailboxFrom,
   listMessagesOnCall,
   listNoiseMessages,
+  mailboxWarning,
   registerChannelRoutes,
   rescueNoise,
   type Sorter,
@@ -662,6 +664,10 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     messagesOnCall: (callId) => listMessagesOnCall(deps.pool, callId),
     listNoise: () => listNoiseMessages(deps.pool),
     rescueNoise: (spec) => rescueNoise(deps.pool, clock, spec),
+    mailboxWarning: () =>
+      graphMailboxFrom(process.env)
+        ? mailboxWarning(deps.pool, clock)
+        : Promise.resolve(false),
   });
   registerChannelRoutes(app, {
     pool: deps.pool,
