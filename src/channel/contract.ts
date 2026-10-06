@@ -22,3 +22,4 @@ export {
 
 export type { ChannelDeps } from './internal/routes.ts';
 export { registerChannelRoutes } from './internal/routes.ts';
+export { renderIntakeForm } from './internal/views.ts';

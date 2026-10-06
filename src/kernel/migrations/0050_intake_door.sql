@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS message (
   subject text,
   -- pii — the message as it arrived.
   body_original text NOT NULL,
+  -- pii — the same message, in Hebrew, once translated.
   body_he text,
   is_echo boolean NOT NULL,
   -- pii — a file name can name a person.

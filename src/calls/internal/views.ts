@@ -614,7 +614,8 @@ export function renderCallPage(screen: CallScreen): string {
       : call.state === 'IDENTIFIED' || call.state === 'TRIAGED'
         ? categoryForm(screen)
         : h``;
-  const closing = canExit(call.state) ? exitForm(screen) : h``;
+  const closing =
+    canExit(call.state) && !call.returned ? exitForm(screen) : h``;
   const body = h`
     <div class="calls glass-stage" data-call-state="${call.state}">
       <header class="page-head">

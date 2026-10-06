@@ -164,6 +164,13 @@ describe('channel · the filtered list and the dev door', () => {
       });
       assert.equal(returned.statusCode, 303);
       assert.equal(returned.headers.location, '/calls/filtered');
+      const returnedPage = await client.inject({
+        method: 'GET',
+        url: `/calls/${callId}`,
+      });
+      assert.equal(returnedPage.statusCode, 200);
+      assert.match(returnedPage.body, /הוחזרה/);
+      assert.doesNotMatch(returnedPage.body, /name="exit"/);
       const aside = await client.inject({
         method: 'GET',
         url: '/calls/filtered',

@@ -13,7 +13,12 @@
 // here rather than copy this file — the second copy is how a guard dies.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { renderCallPage, renderCallsPage } from '../../src/calls/contract.ts';
+import {
+  renderCallPage,
+  renderCallsPage,
+  renderFilteredPage,
+} from '../../src/calls/contract.ts';
+import { renderIntakeForm } from '../../src/channel/contract.ts';
 // The root index is the composition root's screen from 5.2, not estate's. It is in this registry
 // under the same rule as every other screen: rendered here, asserted on the bytes.
 import { signedInChrome } from '../../src/chrome.ts';
@@ -2186,6 +2191,42 @@ const SCREENS: Array<[string, () => string]> = [
             },
           ],
         },
+      }),
+  ],
+  [
+    'calls · filtered',
+    () =>
+      renderFilteredPage({
+        nav: NAV_CALLS,
+        csrf: CSRF,
+        rows: [
+          {
+            kind: 'message',
+            id: '88888888-8888-4888-8888-888888888888',
+            title: 'ניוזלטר',
+            body: 'מבצע של החנות',
+            sender: 'shop@example.test',
+            sorterLabel: 'noise',
+          },
+        ],
+      }),
+  ],
+  [
+    'calls · dev intake',
+    () =>
+      renderIntakeForm({
+        nav: NAV_CALLS,
+        csrf: CSRF,
+        categories: [
+          {
+            id: '55555555-5555-4555-8555-555555555555',
+            code: 'PLUMBING',
+            labelHe: 'אינסטלציה',
+            labelEn: null,
+            isActive: true,
+          },
+        ],
+        stored: false,
       }),
   ],
   [

@@ -252,6 +252,7 @@ const PII_QUALIFIED_COLUMNS = new Set([
   // #186. The message as it arrived, its subject, and a file name on it.
   'message.subject',
   'message.body_original',
+  'message.body_he',
   'message.attachments',
 ]);
 

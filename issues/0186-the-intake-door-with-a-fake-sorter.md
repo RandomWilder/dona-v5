@@ -55,6 +55,10 @@ Closed after review. The door takes one normalised message, stores it once, chec
 
 Clicked on `:3000` after a restart: the dev form sent an email, the call opened in NEW with the proposal and the message (including the file name) on the timeline, and the filtered list rendered empty. The test call was removed afterwards.
 
+## Comment — 2026-10-06
+
+A returned call was still offered the four Exits, and saving one was refused because a returned call cannot be closed. The page now offers rescue instead, and leaves the exits until the call is back on the open list. The filtered list and the dev intake form are in the screen registry. The Hebrew body column is marked as the same personal text as the original.
+
 ## Blocked by
 
 - #183 — Call page: identify the sender by hand and set a Category
