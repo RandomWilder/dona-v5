@@ -16,7 +16,12 @@ import {
 } from 'node:http2';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
-import { countOpenCalls, registerCallsRoutes } from './calls/contract.ts';
+import {
+  countOpenCalls,
+  listCategories,
+  registerCallsRoutes,
+  upsertCategory,
+} from './calls/contract.ts';
 import { signedInChrome } from './chrome.ts';
 import { renderMockup } from './dev-mockups.ts';
 import { registerEstateRoutes } from './estate/contract.ts';
@@ -61,6 +66,7 @@ import { registerFormBodies } from './kernel/ui/forms.ts';
 import type { WorkRunner } from './kernel/work.ts';
 import { listPartyNames } from './parties/contract.ts';
 import {
+  parseCategoryForm,
   parseDocumentTypeForm,
   parseObligationTypeForm,
   renderSettingsPage,
@@ -404,7 +410,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       openCalls?: number;
     },
     reply: { header: (name: string, value: string) => unknown },
-    saved?: 'obligation' | 'document',
+    saved?: 'obligation' | 'document' | 'category',
   ) => {
     stubHeaders(reply);
     const role = request.staff?.role ?? null;
@@ -416,6 +422,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       state: 'wired',
       obligations: await listObligationTypes(deps.pool),
       documents: await listDocumentTypes(deps.pool, { activeOnly: false }),
+      categories: await listCategories(deps.pool),
       saved,
     });
   };
@@ -425,7 +432,9 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     return settingsPage(
       request,
       reply,
-      saved === 'obligation' || saved === 'document' ? saved : undefined,
+      saved === 'obligation' || saved === 'document' || saved === 'category'
+        ? saved
+        : undefined,
     );
   });
   app.post(
@@ -453,6 +462,13 @@ export function buildApp(deps: AppDeps): FastifyInstance {
         .send();
     },
   );
+  app.post('/settings/categories', SETTINGS_WRITE, async (request, reply) => {
+    await upsertCategory(deps.pool, parseCategoryForm(request.body));
+    return reply
+      .code(303)
+      .header('location', '/settings?saved=category')
+      .send();
+  });
 
   // Slice 6.1: the flow is read off `mockups/<flow>.html` rather than named in a condition, so the
   // file guard four scans is the file the director clicks and no paint can hide in TypeScript.

@@ -21,3 +21,28 @@ export async function listPartyNames(
   );
   return result.rows;
 }
+
+const NAME_LIMIT = 20;
+
+/**
+ * Parties whose name matches, for a person picking one. Returns the name and
+ * the id and nothing else — no contact and no identifier, same as
+ * `listPartyNames`. The match is the name only.
+ */
+export async function findPartiesByName(
+  db: Queryable,
+  query: string,
+): Promise<PartyName[]> {
+  const trimmed = query.trim();
+  if (trimmed.length === 0 || trimmed.length > 80) return [];
+  const pattern = `%${trimmed.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+  const result = await db.query<PartyName>(
+    `SELECT party_id, full_name
+       FROM party
+      WHERE full_name ILIKE $1 ESCAPE '\\'
+      ORDER BY full_name, party_id
+      LIMIT $2`,
+    [pattern, NAME_LIMIT],
+  );
+  return result.rows;
+}

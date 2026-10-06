@@ -20,5 +20,5 @@ export {
   upsertPartyContact,
 } from './internal/commands.ts';
 export type { PartyName } from './internal/lookup.ts';
-export { listPartyNames } from './internal/lookup.ts';
+export { findPartiesByName, listPartyNames } from './internal/lookup.ts';
 export type { Queryable } from './internal/types.ts';

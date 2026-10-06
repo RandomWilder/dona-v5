@@ -238,6 +238,7 @@ describe('a request with no session', () => {
         '/documents/11111111-1111-4111-8111-111111111111/seed',
         '/documents/11111111-1111-4111-8111-111111111111/tenancy',
         '/calls',
+        '/calls/33333333-3333-4333-8333-333333333333',
         '/settings',
       ]) {
         const response = await app.inject({ method: 'GET', url });

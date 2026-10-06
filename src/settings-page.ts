@@ -6,14 +6,16 @@
 // `asset_type` (estate's kinds are not a setting). Secret names wait; `settings.write` is who may
 // change a reference when that editor arrives.
 //
-// Type rows only. Natural key is the upsert identity: posting an existing `code` or `type_key` is an
-// edit, never a second row.
+// Type rows only, plus the call Category list (#183). Natural key is the upsert identity: posting
+// an existing `code` or `type_key` is an edit, never a second row. Category is the trade a call
+// needs. It is not `asset_type`.
 //
 // **A field schema was a seed until slice 7.2 and is now a row an ADMIN writes** — at `/documents`,
 // flow A14, under this same `settings.write`. Deliberately not a third card here: a declaration is
 // read beside the screen that shows what the reader looks for, and this screen is the catalogue's
 // index rather than a place any of it is worked on.
 
+import type { CategoryRow, CategorySpec } from './calls/contract.ts';
 import { signedInChrome } from './chrome.ts';
 import type { DocumentTypeRow, DocumentTypeSpec } from './evidence/contract.ts';
 import { KernelError } from './kernel/errors.ts';
@@ -36,7 +38,8 @@ export interface SettingsScreen {
   state: 'wired' | 'painted';
   obligations: readonly ObligationTypeRow[];
   documents: readonly DocumentTypeRow[];
-  saved?: 'obligation' | 'document';
+  categories: readonly CategoryRow[];
+  saved?: 'obligation' | 'document' | 'category';
 }
 
 const styles = h`<style>
@@ -102,6 +105,31 @@ function obligationForm(csrf: string): Html {
   </form>`;
 }
 
+function categoryForm(csrf: string): Html {
+  return h`<form class="settings-form" method="post" action="/settings/categories">
+    ${csrfInput(csrf)}
+    <h2>קטגוריה חדשה</h2>
+    <p class="lede">קוד קיים מעדכן את השורה. אין מחיקה — רק כיבוי. זה לא סוג נכס.</p>
+    <div class="field">
+      <label for="cat-code">קוד</label>
+      <input id="cat-code" name="code" type="text" dir="ltr" required maxlength="64" />
+    </div>
+    <div class="field">
+      <label for="cat-he">שם בעברית</label>
+      <input id="cat-he" name="label_he" type="text" required maxlength="120" />
+    </div>
+    <div class="field">
+      <label for="cat-en">שם באנגלית</label>
+      <input id="cat-en" name="label_en" type="text" dir="ltr" maxlength="120" />
+    </div>
+    <label class="check">
+      <input type="checkbox" name="is_active" value="true" checked />
+      פעיל
+    </label>
+    <button class="btn btn-primary" type="submit">שמירה</button>
+  </form>`;
+}
+
 function documentForm(csrf: string): Html {
   return h`<form class="settings-form" method="post" action="/settings/document-types">
     ${csrfInput(csrf)}
@@ -136,13 +164,28 @@ export function renderSettingsPage(screen: SettingsScreen): string {
   const saved = screen.saved === undefined ? h`` : h`<p class="lede">נשמר.</p>`;
   const writeOb = screen.mayWrite ? obligationForm(screen.csrf) : h``;
   const writeDoc = screen.mayWrite ? documentForm(screen.csrf) : h``;
+  const writeCat = screen.mayWrite ? categoryForm(screen.csrf) : h``;
   const body = h`
     <div class="settings" data-state="${screen.state}">
       <div>
         <h1>הגדרות</h1>
-        <p class="lede">שני קטלוגים. סוג נכס אינו כאן. מטריצת ההרשאות אינה כאן.</p>
+        <p class="lede">קטלוגים. סוג נכס אינו כאן. מטריצת ההרשאות אינה כאן.</p>
         ${saved}
       </div>
+      <section class="settings-block">
+        <h2>קטגוריות לקריאות</h2>
+        <div class="row-list">
+          ${screen.categories.map(
+            (row) => h`<article class="type-card">
+              <h2><span dir="ltr">${row.code}</span> · ${row.labelHe}</h2>
+              <dl class="facts">
+                <div><dt>מצב</dt><dd>${active(row.isActive)}</dd></div>
+              </dl>
+            </article>`,
+          )}
+        </div>
+        ${writeCat}
+      </section>
       <section class="settings-block">
         <h2>התחייבויות</h2>
         <div class="row-list">
@@ -236,6 +279,15 @@ export function parseObligationTypeForm(body: unknown): ObligationTypeSpec {
     labelEn: optionalField(body, 'label_en', 120),
     defaultResponsibleParty: responsibleParty(body),
     requiresEvidence: checked(body, 'requires_evidence'),
+    isActive: checked(body, 'is_active'),
+  };
+}
+
+export function parseCategoryForm(body: unknown): CategorySpec {
+  return {
+    code: field(body, 'code', 64),
+    labelHe: field(body, 'label_he', 120),
+    labelEn: optionalField(body, 'label_en', 120),
     isActive: checked(body, 'is_active'),
   };
 }

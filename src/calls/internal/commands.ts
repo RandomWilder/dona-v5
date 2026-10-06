@@ -1,13 +1,18 @@
-// Opening a service call by hand. #182.
+// Opening a service call by hand, then identifying the requester and setting
+// the trade. #182 opened the call. #183 is the two commands after that.
 //
 // PHONE and WALK_IN skip the sorter. The channel is written once; nothing in this
 // module updates it, and the database trigger refuses a later write that tries.
+// Identifying links this call to one party and writes no contact. A guarantor
+// who is not a service contact is refused by the database, not by this file
+// hiding the name.
 import { createAuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
-import { validId } from '../../kernel/validate.ts';
+import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
+import { requireText, validId } from '../../kernel/validate.ts';
 import type { Queryable } from './types.ts';
 
 export const SOURCE_CHANNELS = [
@@ -35,6 +40,18 @@ export type ManualChannel = (typeof MANUAL_CHANNELS)[number];
 
 export type CallSender = { kind: 'named'; name: string } | { kind: 'unknown' };
 
+export interface CallParty {
+  id: string;
+  name: string;
+}
+
+export interface CallCategory {
+  id: string;
+  code: string;
+  labelHe: string;
+  active: boolean;
+}
+
 export interface ServiceCall {
   id: string;
   sourceChannel: SourceChannel;
@@ -42,6 +59,23 @@ export interface ServiceCall {
   description: string;
   sender: CallSender;
   openedAt: Date;
+  requester: CallParty | null;
+  category: CallCategory | null;
+}
+
+export type TransitionKind = 'OPENED' | 'IDENTIFIED' | 'TRIAGED';
+
+export interface CallTransition {
+  kind: TransitionKind;
+  at: Date;
+  actorId: string;
+  actorLabel: string;
+  partyName: string | null;
+  categoryLabel: string | null;
+}
+
+export interface ServiceCallDetail extends ServiceCall {
+  timeline: readonly CallTransition[];
 }
 
 export interface OpenCallSpec {
@@ -52,8 +86,44 @@ export interface OpenCallSpec {
   actorRole?: string | null;
 }
 
+export interface IdentifyCallSpec {
+  callId: string;
+  partyId: string;
+  actorId: string;
+  actorRole?: string | null;
+}
+
+export interface SetCategorySpec {
+  callId: string;
+  categoryId: string;
+  actorId: string;
+  actorRole?: string | null;
+}
+
+export interface CallListFilter {
+  state?: CallState;
+  categoryId?: string;
+}
+
+export interface CategorySpec {
+  code: string;
+  labelHe: string;
+  labelEn: string | null;
+  isActive: boolean;
+}
+
+export interface CategoryRow {
+  id: string;
+  code: string;
+  labelHe: string;
+  labelEn: string | null;
+  isActive: boolean;
+}
+
 export const DESCRIPTION_MAX = 4000;
 export const SENDER_MAX = 200;
+
+const CATEGORY_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 
 function refuse(field: 'channel' | 'description' | 'sender'): never {
   throw new KernelError('invalid', `${field} is required`, { field });
@@ -83,6 +153,36 @@ function senderOf(unknown: boolean, label: string | null): CallSender {
   return { kind: 'named', name: label.trim() };
 }
 
+function idOf(value: string, field: string): string {
+  try {
+    return validId(value, field);
+  } catch (error) {
+    if (error instanceof KernelError && error.code === 'invalid') {
+      throw new KernelError('invalid', `${field} is not an id`, {
+        field,
+        reason: 'id',
+      });
+    }
+    throw error;
+  }
+}
+
+interface PgError {
+  code?: string;
+  message?: string;
+}
+
+function pgError(error: unknown): PgError {
+  if (error !== null && typeof error === 'object') {
+    const row = error as { code?: unknown; message?: unknown };
+    return {
+      code: typeof row.code === 'string' ? row.code : undefined,
+      message: typeof row.message === 'string' ? row.message : undefined,
+    };
+  }
+  return {};
+}
+
 interface CallRow {
   service_call_id: string;
   source_channel: SourceChannel;
@@ -91,7 +191,27 @@ interface CallRow {
   sender_label: string | null;
   sender_unknown: boolean;
   opened_at: Date;
+  opened_by: string;
+  opener_label: string;
+  requester_party_id: string | null;
+  requester_name: string | null;
+  category_id: string | null;
+  category_code: string | null;
+  category_label_he: string | null;
+  category_active: boolean | null;
 }
+
+const CALL_SELECT = `SELECT sc.service_call_id, sc.source_channel, sc.state, sc.description,
+            sc.sender_label, sc.sender_unknown, sc.opened_at, sc.opened_by,
+            COALESCE(NULLIF(btrim(opener.display_name), ''), opener.email) AS opener_label,
+            sc.requester_party_id, requester.full_name AS requester_name,
+            sc.category_id, category.code AS category_code,
+            category.label_he AS category_label_he,
+            category.is_active AS category_active
+       FROM service_call sc
+       JOIN staff_account opener ON opener.staff_account_id = sc.opened_by
+       LEFT JOIN party requester ON requester.party_id = sc.requester_party_id
+       LEFT JOIN call_category category ON category.category_id = sc.category_id`;
 
 function toCall(row: CallRow): ServiceCall {
   return {
@@ -101,7 +221,60 @@ function toCall(row: CallRow): ServiceCall {
     description: row.description,
     sender: senderOf(row.sender_unknown, row.sender_label),
     openedAt: row.opened_at,
+    requester:
+      row.requester_party_id === null || row.requester_name === null
+        ? null
+        : { id: row.requester_party_id, name: row.requester_name },
+    category:
+      row.category_id === null ||
+      row.category_code === null ||
+      row.category_label_he === null ||
+      row.category_active === null
+        ? null
+        : {
+            id: row.category_id,
+            code: row.category_code,
+            labelHe: row.category_label_he,
+            active: row.category_active,
+          },
   };
+}
+
+function isState(value: string): value is CallState {
+  for (const state of CALL_STATES) {
+    if (value === state) return true;
+  }
+  return false;
+}
+
+interface LockedCall {
+  state: CallState;
+  requester_party_id: string | null;
+  category_id: string | null;
+}
+
+async function lockCall(db: Queryable, id: string): Promise<LockedCall> {
+  const { rows } = await db.query<LockedCall>(
+    `SELECT state, requester_party_id, category_id
+       FROM service_call
+      WHERE service_call_id = $1
+      FOR UPDATE`,
+    [id],
+  );
+  const row = rows[0];
+  if (!row || !isState(row.state)) {
+    throw new KernelError('not_found', 'call not found');
+  }
+  return row;
+}
+
+async function requireDetail(
+  db: Queryable,
+  id: string,
+): Promise<ServiceCallDetail> {
+  const detail = await getCall(db, id);
+  if (!detail) throw new KernelError('not_found', 'call not found');
+  return detail;
 }
 
 export async function openCall(
@@ -163,6 +336,8 @@ export async function openCall(
     description,
     sender: senderOf(senderUnknown, senderLabel),
     openedAt,
+    requester: null,
+    category: null,
   };
 }
 
@@ -173,13 +348,273 @@ export async function countOpenCalls(db: Queryable): Promise<number> {
   return rows[0]?.n ?? 0;
 }
 
-export async function listOpenCalls(db: Queryable): Promise<ServiceCall[]> {
+export async function listOpenCalls(
+  db: Queryable,
+  filter: CallListFilter = {},
+): Promise<ServiceCall[]> {
+  const state = filter.state ?? null;
+  const categoryId =
+    filter.categoryId === undefined
+      ? null
+      : validId(filter.categoryId, 'category');
   const { rows } = await db.query<CallRow>(
-    `SELECT service_call_id, source_channel, state, description, sender_label,
-            sender_unknown, opened_at
-       FROM service_call
-      WHERE state <> 'CLOSED'
-      ORDER BY opened_at DESC, service_call_id DESC`,
+    `${CALL_SELECT}
+      WHERE sc.state <> 'CLOSED'
+        AND ($1::text IS NULL OR sc.state = $1)
+        AND ($2::uuid IS NULL OR sc.category_id = $2)
+      ORDER BY sc.opened_at DESC, sc.service_call_id DESC`,
+    [state, categoryId],
   );
   return rows.map(toCall);
+}
+
+export async function getCall(
+  db: Queryable,
+  callId: string,
+): Promise<ServiceCallDetail | null> {
+  const id = validId(callId, 'call');
+  const { rows } = await db.query<CallRow>(
+    `${CALL_SELECT} WHERE sc.service_call_id = $1`,
+    [id],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const events = await db.query<{
+    kind: 'IDENTIFIED' | 'TRIAGED';
+    at: Date;
+    actor_id: string;
+    actor_label: string;
+    party_name: string | null;
+    category_label: string | null;
+  }>(
+    `SELECT t.kind, t.at, t.actor_id,
+            COALESCE(NULLIF(btrim(actor.display_name), ''), actor.email) AS actor_label,
+            party.full_name AS party_name,
+            category.label_he AS category_label
+       FROM service_call_transition t
+       JOIN staff_account actor ON actor.staff_account_id = t.actor_id
+       LEFT JOIN party ON party.party_id = t.party_id
+       LEFT JOIN call_category category ON category.category_id = t.category_id
+      WHERE t.service_call_id = $1
+      ORDER BY t.at,
+               CASE t.kind WHEN 'IDENTIFIED' THEN 1 WHEN 'TRIAGED' THEN 2 ELSE 3 END,
+               t.transition_id`,
+    [id],
+  );
+  const opened: CallTransition = {
+    kind: 'OPENED',
+    at: row.opened_at,
+    actorId: row.opened_by,
+    actorLabel: row.opener_label,
+    partyName: null,
+    categoryLabel: null,
+  };
+  return {
+    ...toCall(row),
+    timeline: [
+      opened,
+      ...events.rows.map((event) => ({
+        kind: event.kind,
+        at: event.at,
+        actorId: event.actor_id,
+        actorLabel: event.actor_label,
+        partyName: event.party_name,
+        categoryLabel: event.category_label,
+      })),
+    ],
+  };
+}
+
+export async function identifyCall(
+  db: Queryable,
+  clock: Clock,
+  spec: IdentifyCallSpec,
+): Promise<ServiceCallDetail> {
+  const callId = idOf(spec.callId, 'call');
+  const partyId = idOf(spec.partyId, 'party');
+  const actorId = idOf(spec.actorId, 'actor');
+  await inTransaction(db, async (tx) => {
+    const current = await lockCall(tx, callId);
+    if (current.state !== 'NEW') {
+      throw new KernelError('invalid', 'only a new call can be identified', {
+        field: 'state',
+        reason: 'identify',
+      });
+    }
+    await tx.query('SAVEPOINT identify_call');
+    try {
+      await tx.query(
+        `UPDATE service_call
+            SET state = 'IDENTIFIED', requester_party_id = $2
+          WHERE service_call_id = $1`,
+        [callId, partyId],
+      );
+      await tx.query('RELEASE SAVEPOINT identify_call');
+    } catch (error) {
+      await tx.query('ROLLBACK TO SAVEPOINT identify_call');
+      const pg = pgError(error);
+      if (pg.code === '23514' && pg.message?.includes('guarantor') === true) {
+        throw new KernelError(
+          'invalid',
+          'a guarantor cannot be the requester',
+          { field: 'party', reason: 'guarantor' },
+        );
+      }
+      if (pg.code === '23503') {
+        throw new KernelError('not_found', 'party not found', {
+          field: 'party',
+        });
+      }
+      throw error;
+    }
+    await tx.query(
+      `INSERT INTO service_call_transition
+         (transition_id, service_call_id, kind, actor_id, at, party_id)
+       VALUES ($1, $2, 'IDENTIFIED', $3, $4, $5)`,
+      [newId(clock), callId, actorId, clock.now(), partyId],
+    );
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'staff',
+        actorId,
+        actorRole: spec.actorRole ?? undefined,
+        action: 'calls.identify',
+        subjectId: callId,
+        inputs: { partyId },
+      },
+      { outcome: 'ok' },
+    );
+  });
+  return requireDetail(db, callId);
+}
+
+export async function setCallCategory(
+  db: Queryable,
+  clock: Clock,
+  spec: SetCategorySpec,
+): Promise<ServiceCallDetail> {
+  const callId = idOf(spec.callId, 'call');
+  const categoryId = idOf(spec.categoryId, 'category');
+  const actorId = idOf(spec.actorId, 'actor');
+  await inTransaction(db, async (tx) => {
+    const current = await lockCall(tx, callId);
+    if (current.state !== 'IDENTIFIED' && current.state !== 'TRIAGED') {
+      throw new KernelError(
+        'invalid',
+        'a category is set once the requester is known',
+        { field: 'state', reason: 'category' },
+      );
+    }
+    if (current.state === 'TRIAGED' && current.category_id === categoryId) {
+      return;
+    }
+    const chosen = await tx.query<{ is_active: boolean }>(
+      `SELECT is_active FROM call_category WHERE category_id = $1`,
+      [categoryId],
+    );
+    const category = chosen.rows[0];
+    if (!category) {
+      throw new KernelError('not_found', 'category not found', {
+        field: 'category',
+      });
+    }
+    if (!category.is_active) {
+      throw new KernelError('invalid', 'only an active category can be set', {
+        field: 'category',
+        reason: 'inactive',
+      });
+    }
+    await tx.query(
+      `UPDATE service_call
+          SET state = 'TRIAGED', category_id = $2
+        WHERE service_call_id = $1`,
+      [callId, categoryId],
+    );
+    await tx.query(
+      `INSERT INTO service_call_transition
+         (transition_id, service_call_id, kind, actor_id, at, category_id)
+       VALUES ($1, $2, 'TRIAGED', $3, $4, $5)`,
+      [newId(clock), callId, actorId, clock.now(), categoryId],
+    );
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'staff',
+        actorId,
+        actorRole: spec.actorRole ?? undefined,
+        action: 'calls.triage',
+        subjectId: callId,
+        inputs: { categoryId },
+      },
+      { outcome: 'ok' },
+    );
+  });
+  return requireDetail(db, callId);
+}
+
+function categoryCode(value: string): string {
+  const code = value.trim().toUpperCase();
+  if (!CATEGORY_CODE.test(code)) {
+    throw new KernelError('invalid', 'code is not a category code', {
+      field: 'code',
+    });
+  }
+  return code;
+}
+
+/**
+ * Adds a category, or updates the one holding this `code`.
+ *
+ * **There is no delete.** A category is deactivated and never deleted: calls
+ * that already carry it keep it, and the trigger refuses the DELETE.
+ */
+export async function upsertCategory(
+  db: Queryable,
+  spec: CategorySpec,
+): Promise<UpsertResult> {
+  const code = categoryCode(spec.code);
+  const labelHe = requireText(spec.labelHe, 'label_he', 120);
+  const labelEn =
+    spec.labelEn === null ? null : requireText(spec.labelEn, 'label_en', 120);
+  const result = await db.query<{ category_id: string; inserted: boolean }>(
+    `INSERT INTO call_category (category_id, code, label_he, label_en, is_active)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (code) DO UPDATE
+       SET label_he = EXCLUDED.label_he,
+           label_en = EXCLUDED.label_en,
+           is_active = EXCLUDED.is_active
+     RETURNING category_id, ${INSERTED}`,
+    [newId(), code, labelHe, labelEn, spec.isActive],
+  );
+  const row = result.rows[0];
+  if (!row) {
+    throw new KernelError('conflict', 'category upsert returned no row');
+  }
+  return { id: row.category_id, inserted: row.inserted };
+}
+
+export async function listCategories(
+  db: Queryable,
+  options: { activeOnly?: boolean } = {},
+): Promise<CategoryRow[]> {
+  const activeOnly = options.activeOnly === true;
+  const { rows } = await db.query<{
+    category_id: string;
+    code: string;
+    label_he: string;
+    label_en: string | null;
+    is_active: boolean;
+  }>(
+    `SELECT category_id, code, label_he, label_en, is_active
+       FROM call_category
+      WHERE ($1::boolean = false OR is_active)
+      ORDER BY code`,
+    [activeOnly],
+  );
+  return rows.map((row) => ({
+    id: row.category_id,
+    code: row.code,
+    labelHe: row.label_he,
+    labelEn: row.label_en,
+    isActive: row.is_active,
+  }));
 }

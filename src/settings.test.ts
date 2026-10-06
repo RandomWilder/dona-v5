@@ -54,6 +54,7 @@ describe('settings · catalogues', () => {
         viewerGet.body,
         /action="\/settings\/obligation-types"/,
       );
+      assert.doesNotMatch(viewerGet.body, /action="\/settings\/categories"/);
       assert.doesNotMatch(viewerGet.body, /asset_type/);
 
       const refused = await asOps.inject({
@@ -118,6 +119,56 @@ describe('settings · catalogues', () => {
       // failures in 20 runs before this line came out, and the matching bytes were the token every
       // time. A second copy of a guard is how a guard dies (`tests/ui/tokens.test.ts`'s own rule);
       // this copy was also reading bytes the first copy deliberately controls.
+
+      const catCode = `TEST_CAT_${suffix}`.toUpperCase();
+      const refusedCat = await asOps.inject({
+        method: 'POST',
+        url: '/settings/categories',
+        ...form({
+          code: catCode,
+          label_he: 'לא',
+        }),
+      });
+      assert.equal(refusedCat.statusCode, 403);
+
+      const addCat = await asAdmin.inject({
+        method: 'POST',
+        url: '/settings/categories',
+        ...form({
+          code: catCode,
+          label_he: 'צבע',
+          label_en: 'Paint',
+          is_active: 'true',
+        }),
+      });
+      assert.equal(addCat.statusCode, 303);
+      assert.equal(addCat.headers.location, '/settings?saved=category');
+      const saved = await asAdmin.inject({
+        method: 'GET',
+        url: '/settings?saved=category',
+      });
+      assert.match(saved.body, new RegExp(catCode));
+      assert.match(saved.body, /צבע/);
+      assert.match(saved.body, /אינסטלציה/);
+      assert.match(saved.body, /action="\/settings\/categories"/);
+      assert.doesNotMatch(saved.body, /asset_type/);
+
+      const off = await asAdmin.inject({
+        method: 'POST',
+        url: '/settings/categories',
+        ...form({
+          code: catCode,
+          label_he: 'צבע',
+        }),
+      });
+      assert.equal(off.statusCode, 303);
+      const retired = await asAdmin.inject({ method: 'GET', url: '/settings' });
+      assert.match(retired.body, new RegExp(catCode));
+      const card = retired.body
+        .split('<article class="type-card">')
+        .find((part) => part.includes(catCode));
+      assert.ok(card);
+      assert.match(card, /לא פעיל/);
     } finally {
       await pool.query('DELETE FROM document_type WHERE type_key = $1', [
         typeKey,
@@ -127,9 +178,14 @@ describe('settings · catalogues', () => {
       // up the way the line above does, and a long-lived local database accumulates one row per run
       // that the settings screen then lists as פעיל. Deactivating is the path an administrator has,
       // and it is the one the test takes. CI gets a fresh container and never sees either.
+      // `call_category` refuses a delete the same way.
       await pool.query(
         'UPDATE obligation_type SET is_active = false WHERE code = $1',
         [obCode],
+      );
+      await pool.query(
+        'UPDATE call_category SET is_active = false WHERE code = $1',
+        [`TEST_CAT_${suffix}`.toUpperCase()],
       );
       await signOutAll(pool, DOMAIN);
       await app.close();

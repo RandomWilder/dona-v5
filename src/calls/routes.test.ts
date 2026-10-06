@@ -5,6 +5,7 @@ import { asOperator, signIn, signOutAll } from '../../tests/support/session.ts';
 import { buildApp } from '../app.ts';
 import { fixedClock } from '../kernel/clock.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
+import { createParty } from '../parties/contract.ts';
 
 const AT = new Date('2026-10-06T12:00:00.000Z');
 const HALF_HOUR = 30 * 60 * 1000;
@@ -15,12 +16,19 @@ function form(fields: Record<string, string>): string {
 
 async function cleanup(pool: import('pg').Pool, domain: string): Promise<void> {
   await pool.query(
+    `DELETE FROM service_call_transition WHERE service_call_id IN
+       (SELECT service_call_id FROM service_call WHERE opened_by IN
+          (SELECT staff_account_id FROM staff_account WHERE email LIKE $1))`,
+    [`%@${domain}`],
+  );
+  await pool.query(
     `DELETE FROM service_call WHERE opened_by IN
        (SELECT staff_account_id FROM staff_account WHERE email LIKE $1)`,
     [`%@${domain}`],
   );
   await pool.query(
-    `DELETE FROM audit_log WHERE action = 'calls.open' AND actor_id IN
+    `DELETE FROM audit_log WHERE action IN ('calls.open', 'calls.identify', 'calls.triage')
+       AND actor_id IN
        (SELECT staff_account_id::text FROM staff_account WHERE email LIKE $1)`,
     [`%@${domain}`],
   );
@@ -221,6 +229,115 @@ describe('calls · the קריאות tab', () => {
       assert.doesNotMatch(row, /<input|<select|<textarea/);
     } finally {
       await cleanup(pool, domain);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('opens a call, identifies the requester, sets a category, and filters', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    const domain = 'calls-routes-page.test';
+    await cleanup(pool, domain);
+    const who = await signIn(pool, clock, {
+      email: `ops@${domain}`,
+      role: 'OPERATOR',
+    });
+    const client = asOperator(app, who);
+    const party = await createParty(pool, {
+      kind: 'PERSON',
+      fullName: 'יעל מזוהה',
+      preferredLanguage: 'he',
+    });
+    try {
+      const created = await client.inject({
+        method: 'POST',
+        url: '/calls',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({
+          channel: 'PHONE',
+          description: 'נזילה לזיהוי',
+          sender: 'unknown',
+        }),
+      });
+      assert.equal(created.statusCode, 303);
+      const list = await client.inject({ method: 'GET', url: '/calls' });
+      assert.match(list.body, /name="state"/);
+      assert.match(list.body, /name="category"/);
+      assert.match(list.body, /אינסטלציה/);
+      const callId = list.body.match(
+        /href="\/calls\/([0-9a-f-]{36})">נזילה לזיהוי/,
+      )?.[1];
+      assert.ok(callId);
+
+      const page = await client.inject({
+        method: 'GET',
+        url: `/calls/${callId}`,
+      });
+      assert.equal(page.statusCode, 200);
+      assert.doesNotMatch(page.body, /<script/);
+      assert.match(page.body, /נזילה לזיהוי/);
+      assert.match(page.body, /נפתחה/);
+      assert.match(page.body, /ops@calls-routes-page\.test/);
+      assert.match(page.body, /לא שומר איש קשר/);
+
+      const found = await client.inject({
+        method: 'GET',
+        url: `/calls/${callId}?q=${encodeURIComponent('יעל מזוהה')}`,
+      });
+      assert.match(found.body, /יעל מזוהה/);
+      const identified = await client.inject({
+        method: 'POST',
+        url: `/calls/${callId}/identify`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({ party_id: party.id }),
+      });
+      assert.equal(identified.statusCode, 303);
+      const afterId = await client.inject({
+        method: 'GET',
+        url: `/calls/${callId}`,
+      });
+      assert.match(afterId.body, /data-call-state="IDENTIFIED"/);
+      assert.match(afterId.body, /זוהתה/);
+      assert.match(afterId.body, /יעל מזוהה/);
+      const plumbing = afterId.body.match(
+        /<option value="([0-9a-f-]{36})"[^>]*>אינסטלציה<\/option>/,
+      )?.[1];
+      assert.ok(plumbing);
+
+      const triaged = await client.inject({
+        method: 'POST',
+        url: `/calls/${callId}/category`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({ category_id: plumbing }),
+      });
+      assert.equal(triaged.statusCode, 303);
+      const afterCat = await client.inject({
+        method: 'GET',
+        url: `/calls/${callId}`,
+      });
+      assert.match(afterCat.body, /data-call-state="TRIAGED"/);
+      assert.match(afterCat.body, /קטגוריה אינסטלציה/);
+      assert.match(afterCat.body, /מוינה/);
+
+      const filtered = await client.inject({
+        method: 'GET',
+        url: `/calls?state=TRIAGED&category=${plumbing}`,
+      });
+      assert.match(filtered.body, /נזילה לזיהוי/);
+      const others = await client.inject({
+        method: 'GET',
+        url: '/calls?state=NEW',
+      });
+      assert.doesNotMatch(others.body, /נזילה לזיהוי/);
+    } finally {
+      await cleanup(pool, domain);
+      await pool.query('DELETE FROM party WHERE party_id = $1', [party.id]);
       await app.close();
       await pool.end();
     }

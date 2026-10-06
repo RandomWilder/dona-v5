@@ -26,6 +26,15 @@ PartyContact is a separate, explicit act ("save this contact") through parties' 
 mistaken identification must not route the next message from that address to the wrong household.
 A guarantor's contact never identifies a requester for service (foundation rule 7).
 
+Hand identification is a command on that one call. It sets the requester and moves NEW →
+IDENTIFIED, and it writes no PartyContact. The database rejects the link when the party is a
+guarantor and is not a service contact on any tenancy. A party who is a service contact can be
+the requester even if they also guarantee another lease, and a party on no lease can — an owner,
+a neighbour, a contractor. Setting a Category is the next command and moves IDENTIFIED →
+TRIAGED; a later change of Category stays on TRIAGED. Only an active Category can be chosen.
+Deactivating a Category leaves it on the calls that already carry it. Both commands are audited
+and appear on the call's timeline with the staff account that issued them.
+
 **The four Exits** close a call before a Visit, from any state before SCHEDULED, and each requires a
 reason:
 - **Answered**: a note.
