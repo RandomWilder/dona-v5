@@ -26,11 +26,17 @@ import type { Clock } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
+import type { ObjectStore } from '../../kernel/objects.ts';
 import { optionalText, requireText, validId } from '../../kernel/validate.ts';
 import {
   resolveUnitsByEmail,
   resolveUnitsByPhone,
 } from '../../scope/contract.ts';
+import {
+  keepAttachmentBytes,
+  type ListedAttachment,
+  listedAttachments,
+} from './attachments.ts';
 import type { Queryable } from './types.ts';
 
 const BODY_MAX = 100_000;
@@ -43,6 +49,8 @@ export interface IncomingAttachment {
   fileName: string;
   contentType?: string | null;
   byteSize?: number | null;
+  /** The file itself, when the adapter fetched it. Not stored in the row. */
+  bytes?: Buffer;
 }
 
 export interface IncomingMessage {
@@ -94,6 +102,8 @@ export interface Sorter {
 export interface IntakeDeps {
   sorter: Sorter;
   matchesEmergency: (text: string) => Promise<boolean>;
+  /** Where an attachment's bytes are kept. Required when a message carries any. */
+  objects?: ObjectStore;
 }
 
 export type IntakeOutcome =
@@ -111,7 +121,7 @@ export interface StoredMessage {
   bodyHe: string | null;
   subject: string | null;
   echo: boolean;
-  attachments: readonly { fileName: string }[];
+  attachments: readonly ListedAttachment[];
 }
 
 export interface NoiseMessage {
@@ -137,6 +147,7 @@ interface Normalized {
     fileName: string;
     contentType: string | null;
     byteSize: number | null;
+    bytes: Buffer | null;
   }[];
   echo: boolean;
 }
@@ -176,9 +187,9 @@ export async function receiveIncoming(
   const already = await settledOutcome(db, message);
   if (already) return already;
 
-  if (message.echo) return storeEcho(db, clock, message);
+  if (message.echo) return storeEcho(db, clock, deps.objects, message);
 
-  const messageId = await ensureMessage(db, clock, message);
+  const messageId = await ensureMessage(db, clock, deps.objects, message);
   const raced = await settledOutcome(db, message);
   if (raced) return raced;
 
@@ -242,7 +253,7 @@ export async function listMessagesOnCall(
     bodyHe: row.body_he,
     subject: row.subject,
     echo: row.is_echo,
-    attachments: fileNames(row.attachments),
+    attachments: listedAttachments(row.attachments),
   }));
 }
 
@@ -417,10 +428,12 @@ function attachmentsOf(
         field: 'attachments',
       });
     }
+    const bytes = bufferOf(item.bytes);
     return {
       fileName: requireText(item.fileName, 'fileName', FILE_NAME_MAX),
       contentType: optionalText(item.contentType, 'contentType', 200),
-      byteSize: byteSize ?? null,
+      byteSize: bytes === null ? (byteSize ?? null) : bytes.length,
+      bytes,
     };
   });
 }
@@ -617,12 +630,13 @@ async function threadOf(
 async function ensureMessage(
   db: Queryable,
   clock: Clock,
+  objects: ObjectStore | undefined,
   message: Normalized,
 ): Promise<string> {
   return inTransaction(db, async (tx) => {
     const existing = await lookupRow(tx, message);
     if (existing) return existing.message_id;
-    const messageId = await insertMessage(tx, clock, message, {
+    const messageId = await insertMessage(tx, clock, objects, message, {
       callId: null,
       label: null,
       summary: null,
@@ -638,6 +652,7 @@ async function ensureMessage(
 async function storeEcho(
   db: Queryable,
   clock: Clock,
+  objects: ObjectStore | undefined,
   message: Normalized,
 ): Promise<IntakeOutcome> {
   return inTransaction(db, async (tx) => {
@@ -649,7 +664,7 @@ async function storeEcho(
       (await callIsAttachable(tx, thread.openCallId))
         ? thread.openCallId
         : null;
-    const messageId = await insertMessage(tx, clock, message, {
+    const messageId = await insertMessage(tx, clock, objects, message, {
       callId,
       label: null,
       summary: null,
@@ -817,9 +832,18 @@ async function categoryIdOf(
   return categories.find((row) => row.code === code)?.id ?? null;
 }
 
+function bufferOf(value: unknown): Buffer | null {
+  if (value == null) return null;
+  if (Buffer.isBuffer(value)) return value;
+  throw new KernelError('invalid', 'attachment is not a file', {
+    field: 'attachments',
+  });
+}
+
 async function insertMessage(
   db: Queryable,
   clock: Clock,
+  objects: ObjectStore | undefined,
   message: Normalized,
   link: {
     callId: string | null;
@@ -829,6 +853,12 @@ async function insertMessage(
   },
 ): Promise<string | null> {
   const conversationId = await conversationOf(db, clock, message);
+  const messageId = newId(clock);
+  const attachments = await keepAttachmentBytes(
+    objects,
+    messageId,
+    message.attachments,
+  );
   const { rows } = await db.query<{ message_id: string }>(
     `INSERT INTO message
        (message_id, conversation_id, source_channel, external_message_id,
@@ -839,7 +869,7 @@ async function insertMessage(
      ON CONFLICT (source_channel, external_message_id) DO NOTHING
      RETURNING message_id`,
     [
-      newId(clock),
+      messageId,
       conversationId,
       message.sourceChannel,
       message.externalMessageId,
@@ -848,7 +878,7 @@ async function insertMessage(
       message.subject,
       message.body,
       message.echo,
-      JSON.stringify(message.attachments),
+      JSON.stringify(attachments),
       link.callId,
       link.label,
       link.summary,
@@ -879,20 +909,4 @@ async function conversationOf(
   const row = found.rows[0];
   if (!row) throw new KernelError('conflict', 'conversation was not stored');
   return row.conversation_id;
-}
-
-function fileNames(value: unknown): { fileName: string }[] {
-  if (!Array.isArray(value)) return [];
-  const names: { fileName: string }[] = [];
-  for (const item of value) {
-    if (
-      item !== null &&
-      typeof item === 'object' &&
-      'fileName' in item &&
-      typeof item.fileName === 'string'
-    ) {
-      names.push({ fileName: item.fileName });
-    }
-  }
-  return names;
 }

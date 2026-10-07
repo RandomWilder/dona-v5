@@ -117,8 +117,14 @@ recorded payloads, and wired to no mailbox.
   a primary device inactive for about 14 days. A mailbox that has not been read successfully for an
   hour raises a warning too.
 
-**Attachments** stay on their Message and show on the call. The office may file one as an Unassigned
-document through evidence's filing path, which is the only way an attachment becomes a Document.
+**Attachments** stay on their Message and show on the call. The bytes are kept with the message, so
+the call shows the file's name, type and size and the office can open it without the mailbox. A
+file the mailbox marks as embedded in the message is not an attachment. The office may file one as
+an Unassigned document through evidence's filing path, which is the only way an attachment becomes
+a Document. Filing declares the type and anchors the file to the unit the isolation join names,
+when that address is exactly one household, and leaves the document with no tenancy link. A
+guarantor's contact is not a match. Filing that same attachment again is that document, not a
+second one. A file this system does not store is refused.
 
 ## Later
 

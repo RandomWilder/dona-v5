@@ -97,6 +97,7 @@ if (outlook) {
             },
           },
           matchesEmergency: emergencyMatch(pool),
+          objects,
         },
         message,
       );

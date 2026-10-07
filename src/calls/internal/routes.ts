@@ -73,6 +73,24 @@ export interface CallsDeps {
   mailboxWarning?: () => Promise<boolean>;
   /** #198. The Outlook secret is near expiry, or its expiry is unknown. */
   secretWarning?: () => SecretNotice | null;
+  /** #190. The bytes of one attachment on a call. */
+  openAttachment?: (spec: {
+    callId: string;
+    messageId: string;
+    index: number;
+  }) => Promise<{ bytes: Buffer; contentType: string; fileName: string }>;
+  /** #190. File one attachment as an Unassigned document. */
+  fileAttachment?: (spec: {
+    callId: string;
+    messageId: string;
+    index: number;
+    typeKey: string;
+    actorId: string;
+    actorRole?: string | null;
+  }) => Promise<{ documentId: string }>;
+  documentTypes?: () => Promise<
+    readonly { typeKey: string; labelHe: string }[]
+  >;
 }
 
 const STAFF = { config: { staff: 'estate.read' } } as const;
@@ -81,6 +99,10 @@ const REFUSAL: Record<string, string> = {
   channel: 'יש לבחור טלפון או הגעה.',
   description: 'יש לכתוב תיאור.',
   sender: 'יש לציין את הפונה, או לסמן שלא ידוע.',
+  place: 'אי אפשר לתייק עד שהפונה הוא דייר אחד.',
+  type: 'הקובץ אינו מתאים לסוג שנבחר.',
+  file: 'אין קובץ לתייק.',
+  anchored: 'הקובץ כבר מתויק במקום אחר.',
 };
 
 function html(reply: FastifyReply): void {
@@ -190,6 +212,33 @@ function callIdOf(params: unknown): string {
   }
 }
 
+function contentDisposition(inline: boolean, fileName: string): string {
+  const ascii = fileName.replace(/[^A-Za-z0-9._ -]/g, '').trim() || 'file';
+  const utf8 = encodeURIComponent(fileName);
+  const kind = inline ? 'inline' : 'attachment';
+  return `${kind}; filename="${ascii}"; filename*=UTF-8''${utf8}`;
+}
+
+function messageIdOf(params: unknown): string {
+  const id = (params as { messageId?: unknown }).messageId;
+  if (typeof id !== 'string') {
+    throw new KernelError('not_found', 'attachment not found');
+  }
+  try {
+    return validId(id, 'message');
+  } catch {
+    throw new KernelError('not_found', 'attachment not found');
+  }
+}
+
+function indexOf(params: unknown): number {
+  const raw = (params as { index?: unknown }).index;
+  if (typeof raw !== 'string' || !/^[0-9]+$/.test(raw)) {
+    throw new KernelError('not_found', 'attachment not found');
+  }
+  return Number(raw);
+}
+
 function formOf(body: unknown): Record<string, unknown> {
   return body !== null && typeof body === 'object'
     ? (body as Record<string, unknown>)
@@ -266,16 +315,18 @@ async function callPage(
     call.state === 'NEW' && query.length > 0 && query.length <= 80;
   const dupSearching =
     canExit(call.state) && dup.length > 0 && dup.length <= 80;
-  const [categories, matches, dupMatches] = await Promise.all([
-    listCategories(deps.pool, { activeOnly: call.state !== 'NEW' }),
-    searching ? findPartiesByName(deps.pool, query) : Promise.resolve([]),
-    dupSearching
-      ? findCallsByDescription(deps.pool, dup, callId)
-      : Promise.resolve([]),
-  ]);
+  const [categories, matches, dupMatches, messages, documentTypes] =
+    await Promise.all([
+      listCategories(deps.pool, { activeOnly: call.state !== 'NEW' }),
+      searching ? findPartiesByName(deps.pool, query) : Promise.resolve([]),
+      dupSearching
+        ? findCallsByDescription(deps.pool, dup, callId)
+        : Promise.resolve([]),
+      deps.messagesOnCall ? deps.messagesOnCall(callId) : Promise.resolve([]),
+      deps.documentTypes ? deps.documentTypes() : Promise.resolve([]),
+    ]);
   const role = request.staff?.role ?? null;
   const csrf = csrfFrom(request);
-  const messages = deps.messagesOnCall ? await deps.messagesOnCall(callId) : [];
   return renderCallPage({
     nav: deps.chrome(
       csrf,
@@ -294,6 +345,8 @@ async function callPage(
     dupQuery: canExit(call.state) && dup.length <= 80 ? dup : '',
     dupMatches,
     messages,
+    mayFile: can(role, 'documents.write'),
+    documentTypes,
     now: deps.clock.now(),
     refusal:
       refusal ??
@@ -432,6 +485,63 @@ export function registerCallsRoutes(
     html(reply);
     return callPage(deps, request, callIdOf(request.params));
   });
+
+  app.get(
+    '/calls/:id/messages/:messageId/files/:index',
+    STAFF,
+    async (request, reply) => {
+      if (!deps.openAttachment) {
+        throw new KernelError('not_found', 'attachment not found');
+      }
+      const file = await deps.openAttachment({
+        callId: callIdOf(request.params),
+        messageId: messageIdOf(request.params),
+        index: indexOf(request.params),
+      });
+      const inline =
+        file.contentType === 'application/pdf' ||
+        file.contentType.startsWith('image/');
+      reply.header('content-type', file.contentType);
+      reply.header(
+        'content-disposition',
+        contentDisposition(inline, file.fileName),
+      );
+      reply.header('cache-control', 'no-store');
+      reply.header('x-content-type-options', 'nosniff');
+      return reply.send(file.bytes);
+    },
+  );
+
+  app.post(
+    '/calls/:id/messages/:messageId/files/:index',
+    STAFF,
+    async (request, reply) => {
+      const staff = staffOf(request);
+      const callId = callIdOf(request.params);
+      if (!can(staff.role, 'documents.write') || !deps.fileAttachment) {
+        throw new KernelError('not_allowed', NOT_ALLOWED);
+      }
+      try {
+        await deps.fileAttachment({
+          callId,
+          messageId: messageIdOf(request.params),
+          index: indexOf(request.params),
+          typeKey: textOf(formOf(request.body).type_key),
+          actorId: staff.staffAccountId,
+          actorRole: staff.role,
+        });
+        return reply.code(303).header('location', `/calls/${callId}`).send();
+      } catch (error) {
+        if (!(error instanceof KernelError) || error.code === 'not_allowed') {
+          throw error;
+        }
+        if (error.code === 'not_found') throw error;
+        html(reply);
+        reply.code(400);
+        return callPage(deps, request, callId, refusalHe(error));
+      }
+    },
+  );
 
   app.post('/calls/:id/identify', STAFF, async (request, reply) => {
     const staff = staffOf(request);

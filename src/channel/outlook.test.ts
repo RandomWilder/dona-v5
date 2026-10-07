@@ -142,6 +142,25 @@ describe('channel · outlook', { concurrency: false }, () => {
     ]);
   });
 
+  it('keeps an attachment’s bytes and skips an image embedded in the message', () => {
+    const pdf = Buffer.from('%PDF-1.4\n');
+    const message = normaliseOutlookMessage(WITH_FILE, [
+      { ...FILE, contentBytes: pdf.toString('base64') },
+      {
+        ...FILE,
+        id: 'att-logo',
+        name: 'logo.png',
+        isInline: true,
+        contentBytes: pdf.toString('base64'),
+      },
+    ]);
+    assert.ok(message);
+    assert.equal(message.attachments?.length, 1);
+    assert.equal(message.attachments?.[0]?.fileName, 'cheshbon.pdf');
+    assert.equal(message.attachments?.[0]?.byteSize, pdf.length);
+    assert.equal(message.attachments?.[0]?.bytes?.equals(pdf), true);
+  });
+
   it('keeps an email that is only an attachment', () => {
     const message = normaliseOutlookMessage(
       {
@@ -338,7 +357,13 @@ describe('channel · outlook', { concurrency: false }, () => {
           assert.doesNotMatch(call.url, /\/move/);
           assert.equal(call.url.includes('isRead'), false);
         }
-        assert.ok(mail.some((call) => call.url.includes('/attachments')));
+        assert.ok(
+          mail.some(
+            (call) =>
+              call.url.includes('/attachments') &&
+              call.url.includes('contentBytes'),
+          ),
+        );
         assert.equal(
           calls.some(
             (call) => call.method === 'PATCH' || call.method === 'DELETE',

@@ -32,7 +32,14 @@ export interface TimelineMessage {
   bodyHe: string | null;
   subject: string | null;
   echo: boolean;
-  attachments: readonly { fileName: string }[];
+  attachments: readonly {
+    fileName: string;
+    contentType: string | null;
+    byteSize: number | null;
+    index: number;
+    openable: boolean;
+    documentId: string | null;
+  }[];
 }
 
 export interface FilteredRow {
@@ -86,6 +93,9 @@ export interface CallScreen {
   dupMatches: readonly { id: string; description: string }[];
   messages: readonly TimelineMessage[];
   now: Date;
+  /** Staff who may file a document. The button is absent otherwise. */
+  mayFile?: boolean;
+  documentTypes?: readonly { typeKey: string; labelHe: string }[];
   refusal?: string;
 }
 
@@ -182,6 +192,12 @@ const styles = h`<style>
   }
   .calls .back { margin: 0; }
   .calls .message { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .calls .file {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: center;
+  }
 </style>`;
 
 function ageLabel(openedAt: Date, now: Date): string {
@@ -393,32 +409,77 @@ function sorterLabel(label: SorterLabel | null): Html {
   return h`<span data-sorter="${label}">מסווג: ${SORTER_HE[label]}</span>`;
 }
 
-function messageLine(message: TimelineMessage): Html {
+function messageLine(screen: CallScreen, message: TimelineMessage): Html {
   const echo = message.echo ? 'true' : 'false';
   const subject =
     message.subject === null ? h`` : h`<span>נושא: ${message.subject}</span> `;
   const files =
     message.attachments.length === 0
       ? h``
-      : h` ${message.attachments.map((file) => h`<span data-file="${file.fileName}">קובץ: ${file.fileName}</span>`)}`;
+      : h` ${message.attachments.map((file) => fileBlock(screen, message.id, file))}`;
   const who = message.echo ? 'הד מהמשרד' : 'הודעה';
   const translation =
     message.bodyHe === null
       ? h``
       : h` <span data-translation="yes">תרגום: ${message.bodyHe}</span>`;
-  return h`<li data-kind="MESSAGE" data-echo="${echo}" data-message="${message.id}"><span class="message">${who} · ${subject}${message.body}${translation}${files}</span> · ${whenLabel(message.at)}</li>`;
+  return h`<li data-kind="MESSAGE" data-echo="${echo}" data-message="${message.id}"><span class="message">${who} · ${subject}${message.body}${translation}</span>${files} · ${whenLabel(message.at)}</li>`;
 }
 
-function timelineOf(
-  events: readonly CallTransition[],
-  messages: readonly TimelineMessage[],
+function fileBlock(
+  screen: CallScreen,
+  messageId: string,
+  file: TimelineMessage['attachments'][number],
 ): Html {
+  const type =
+    file.contentType === null
+      ? h``
+      : h` · <span data-type="${file.contentType}">${file.contentType}</span>`;
+  const size =
+    file.byteSize === null
+      ? h``
+      : h` · <span data-size="${String(file.byteSize)}">${String(file.byteSize)}</span>`;
+  const callId = screen.call.id;
+  const open = file.openable
+    ? h` <a href="/calls/${callId}/messages/${messageId}/files/${String(file.index)}">פתיחה</a>`
+    : h``;
+  const filed =
+    file.documentId === null
+      ? fileForm(screen, messageId, file)
+      : h` <a href="/documents/${file.documentId}/read" data-document="${file.documentId}">לא מתוייק</a>`;
+  return h`<div class="file" data-file="${file.fileName}">קובץ: ${file.fileName}${type}${size}${open}${filed}</div>`;
+}
+
+function fileForm(
+  screen: CallScreen,
+  messageId: string,
+  file: TimelineMessage['attachments'][number],
+): Html {
+  const types = screen.documentTypes ?? [];
+  if (screen.mayFile !== true || !file.openable || types.length === 0) {
+    return h``;
+  }
+  return h` <form method="post" action="/calls/${screen.call.id}/messages/${messageId}/files/${String(file.index)}">
+    ${csrfInput(screen.csrf)}
+    <select name="type_key" required>
+      <option value="">סוג</option>
+      ${types.map(
+        (type) => h`<option value="${type.typeKey}">${type.labelHe}</option>`,
+      )}
+    </select>
+    <button class="btn" type="submit">תייק כמסמך</button>
+  </form>`;
+}
+
+function timelineOf(screen: CallScreen): Html {
   const items: { at: number; html: Html }[] = [];
-  for (const event of events) {
+  for (const event of screen.call.timeline) {
     items.push({ at: event.at.getTime(), html: eventLine(event) });
   }
-  for (const message of messages) {
-    items.push({ at: message.at.getTime() - 0.5, html: messageLine(message) });
+  for (const message of screen.messages) {
+    items.push({
+      at: message.at.getTime() - 0.5,
+      html: messageLine(screen, message),
+    });
   }
   items.sort((a, b) => a.at - b.at);
   return h`${items.map((item) => item.html)}`;
@@ -693,7 +754,7 @@ export function renderCallPage(screen: CallScreen): string {
       </section>
       <section class="glass sheet">
         <h2>מהלך</h2>
-        <ol class="timeline">${timelineOf(call.timeline, screen.messages)}</ol>
+        <ol class="timeline">${timelineOf(screen)}</ol>
       </section>
       ${repeatedBy(screen)}
       ${emergencyForm(screen)}

@@ -279,7 +279,7 @@ async function listAttachments(
   let url: string | null =
     `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}` +
     `/messages/${encodeURIComponent(messageId)}/attachments` +
-    '?$select=name,contentType,size,isInline';
+    '?$select=id,name,contentType,size,isInline,contentBytes';
   for (let page = 0; url !== null && page < 10; page += 1) {
     const body = objectOf(await graphGet(fetchImpl, url, token));
     if (Array.isArray(body.value)) files.push(...body.value);
@@ -377,17 +377,27 @@ function attachmentsOf(
   const files = [];
   for (const item of attachments) {
     const row = objectOf(item);
+    if (row.isInline === true) continue;
     const fileName = stringOf(row.name).trim();
     if (fileName === '') continue;
     const contentType = stringOf(row.contentType).trim();
-    const byteSize = typeof row.size === 'number' ? row.size : null;
+    const bytes = bytesOf(row);
+    const declared = typeof row.size === 'number' ? row.size : null;
     files.push({
       fileName,
       contentType: contentType === '' ? null : contentType,
-      byteSize,
+      byteSize: bytes === null ? declared : bytes.length,
+      ...(bytes === null ? {} : { bytes }),
     });
   }
   return files;
+}
+
+function bytesOf(row: Record<string, unknown>): Buffer | null {
+  const raw = stringOf(row.contentBytes).replace(/\s/g, '');
+  if (raw === '') return null;
+  const bytes = Buffer.from(raw, 'base64');
+  return bytes.length === 0 ? null : bytes;
 }
 
 function textOf(body: Record<string, unknown>): string {

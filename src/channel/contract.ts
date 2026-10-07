@@ -1,6 +1,7 @@
 // The channel module's public surface. #186 is the intake door. #187 is the
 // sorter on OpenAI, and translation. #188 is the Outlook adapter.
 
+export { fileAttachment, readAttachment } from './internal/attachments.ts';
 export type {
   IncomingAttachment,
   IncomingMessage,

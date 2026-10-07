@@ -64,6 +64,7 @@ introducing one fails the build. Say "the scope", not "the tenant's permissions"
 | Term | Means |
 |---|---|
 | **Document** | A file that arrived. |
+| **Unassigned document** (**לא מתוייק**) | A Document of a type that belongs to a Tenancy, not yet linked to one. Kept, readable and viewable as the file it is; it becomes assigned when an administrator binds it to a Tenancy under a declared type — a new draft or an existing one. Not "unfiled", not "held", not "unplaced". |
 | **DocumentType** | A row, not a code path. New types cost no migration. |
 | **DocumentTypeField** | A field declared on a type. Also a row. |
 | **Passage** | One page of a Document, as text. Written once, when the document is read — at filing, or by the archive sweep for rows that have none. Never re-derived from the bytes after that. Identifiers stay in the text. Masking is a read, not a write. |

@@ -25,10 +25,12 @@ import {
   upsertCategory,
 } from './calls/contract.ts';
 import {
+  fileAttachment as fileCallAttachment,
   graphMailboxFrom,
   listMessagesOnCall,
   listNoiseMessages,
   mailboxWarning,
+  readAttachment,
   registerChannelRoutes,
   rescueNoise,
   type Sorter,
@@ -672,6 +674,16 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     secretWarning: () => {
       const outlook = graphMailboxFrom(process.env);
       return outlook ? secretWarning(outlook, clock) : null;
+    },
+    openAttachment: (spec) => readAttachment(deps.pool, objects, spec),
+    fileAttachment: (spec) =>
+      fileCallAttachment(deps.pool, clock, { objects, pdf, bucket }, spec),
+    documentTypes: async () => {
+      const types = await listDocumentTypes(deps.pool, { activeOnly: true });
+      return types.map((type) => ({
+        typeKey: type.typeKey,
+        labelHe: type.labelHe,
+      }));
     },
   });
   registerChannelRoutes(app, {
