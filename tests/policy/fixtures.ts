@@ -40,6 +40,11 @@ export type TenancyRole =
 
 export interface OccupancySpec {
   phone: string;
+  /**
+   * An email contact over the same period as the phone. Stored as given: the caller passes the
+   * normalised form, and the join folds the address it is asked.
+   */
+  email?: string;
   /** PartyContact.valid_from — the first temporal predicate's lower bound. */
   contactFrom: string;
   /** PartyContact.valid_to. Null is "still current", which is the whole hazard. */
@@ -137,6 +142,14 @@ export async function seedOccupancy(
      VALUES ($1, $2, 'PHONE', $3, true, $4, $5)`,
     [newId(), partyId, spec.phone, spec.contactFrom, spec.contactTo],
   );
+  if (spec.email !== undefined) {
+    await db.query(
+      `INSERT INTO party_contact (contact_id, party_id, channel, value, is_primary,
+                                  valid_from, valid_to)
+       VALUES ($1, $2, 'EMAIL', $3, false, $4, $5)`,
+      [newId(), partyId, spec.email, spec.contactFrom, spec.contactTo],
+    );
+  }
   // Which maintenance annex governs this lease. A NOT NULL foreign key in the workbook, so every
   // seeded tenancy needs one.
   //

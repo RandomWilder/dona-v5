@@ -25,15 +25,19 @@ echo of something the office sent. The door then runs in this order:
    flag and the fixed duty reply are calls' to perform.
 4. **Thread.** A message on a thread with an open ServiceCall attaches to it and stops. A thread
    whose call is closed opens a new call linked to the old one.
-5. **Identify** the sender through `scope`'s isolation join: phone or email, valid today.
-   **Not in #186.** That step is #189. Until then the door leaves every call in NEW with the raw
-   sender address and no Party.
-6. **Sort.** Noise becomes a Filtered message. A call, or an unsure verdict, becomes a ServiceCall in
-   NEW, with an unsure verdict marked "to review".
+5. **Sort.** Noise becomes a Filtered message. A call, or an unsure verdict, becomes a ServiceCall
+   in NEW, with an unsure verdict marked "to review".
+6. **Identify** that new call through `scope`'s isolation join: phone or email, valid today.
+   Exactly one party moves it to IDENTIFIED. No party, or more than one, leaves it in NEW with the
+   raw address. A guarantor's contact is not a match. A message that attaches to an open call does
+   not identify again. An address the join cannot read — a phone that is not a number, an email
+   with no `@` — is no match, and the message is still kept. Identification follows the sort
+   because only a new call has a state to move.
 
 **A match is never filtered.** The emergency check has already run. When the text matches, a noise
-verdict or a sorter failure still opens a flagged ServiceCall in NEW, marked "to review" unless the
-verdict was a plain call. An emergency does not become a Filtered message.
+verdict or a sorter failure still opens a flagged ServiceCall, marked "to review" unless the
+verdict was a plain call. Identification then runs as on any new call. An emergency does not
+become a Filtered message.
 
 **An echo** (a message the receptionist sent from the phone) is stored on the conversation and, when
 the thread has an open call, on that call's timeline. It is not an incoming request: the door does

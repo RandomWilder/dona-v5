@@ -13,14 +13,15 @@ Shared conventions live in [SPEC.md](SPEC.md) and are not repeated here. The voc
 ## What is settled
 
 **The state machine is deterministic and no model decides a transition** (foundation rule 3).
-Every transition is a command a person issues, or a timer this module owns. The sorter's proposal
+Every transition is a command a person issues, a timer this module owns, or the door
+identifying exactly one party from the sender's address. The sorter's proposal
 is stored on the call and displayed; no command reads it to decide anything. **"To review" is a
 mark, not a state.** The door sets it when the sorter is unsure or fails, and when an emergency
 term matched and the verdict was not a plain call. No command reads the mark to choose a
 transition.
 
 **An intake call** (EMAIL or WHATSAPP) is opened by the door with no staff account. The list shows
-the raw sender address until a person identifies the requester. A call opened by hand still names
+the raw sender address until the requester is identified. A call opened by hand still names
 the staff account that logged it.
 
 **A ServiceCall is any request that reached the office**, on any Source channel: `WHATSAPP · EMAIL ·
@@ -41,6 +42,18 @@ a neighbour, a contractor. Setting a Category is the next command and moves IDEN
 TRIAGED; a later change of Category stays on TRIAGED. Only an active Category can be chosen.
 Deactivating a Category leaves it on the calls that already carry it. Both commands are audited
 and appear on the call's timeline with the staff account that issued them.
+
+**The door identifies from the address.** When the isolation join returns exactly one party, the
+door moves that new call NEW → IDENTIFIED with no staff account. The timeline names the address
+match, not a person. No party, or more than one, leaves the call in NEW. One party who is on two
+units is one match: the requester is a party.
+
+**Save this contact** is a command on a call a person identified, when the sender is an email
+address or a WhatsApp number. It adds that address to the requester as a PartyContact, through
+parties' contract, valid from today, and it is audited. The next message from that address is
+then identified by the door. Identifying by hand does not do this, and a call the door identified
+from an address already on file is not offered the command. An address that already belongs to
+someone else today is refused. One the requester already holds is left as it is.
 
 **The four Exits** close a call before a Visit, from any state before SCHEDULED, and each requires a
 reason:

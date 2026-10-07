@@ -16,7 +16,10 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { fixedClock } from '../../src/kernel/clock.ts';
 import { newId } from '../../src/kernel/ids.ts';
-import { resolveUnitsByPhone } from '../../src/scope/contract.ts';
+import {
+  resolveUnitsByEmail,
+  resolveUnitsByPhone,
+} from '../../src/scope/contract.ts';
 import { seedOccupancy, seedUnit } from './fixtures.ts';
 import {
   inRolledBackTransaction,
@@ -38,6 +41,8 @@ const TODAY = fixedClock(new Date('2026-09-05T00:00:00Z'));
 // to hit; the rule is 2.4's, applied to suites rather than only to register fixtures.
 const TENANT_PHONE = '+972501113344';
 const GUARANTOR_PHONE = '+972509998877';
+const GUARANTOR_EMAIL_TENANT_PHONE = '+972501890301';
+const GUARANTOR_EMAIL = 'parent@guarantor-189.test';
 
 describe('policy · a guarantor is never a service contact', () => {
   it('is rejected by the database, not defaulted politely', async (t) => {
@@ -186,6 +191,50 @@ describe('policy · a guarantor is never a service contact', () => {
             [tenancy.tenancyId],
           );
           assert.equal(reachable.rows[0]?.count, '3');
+        }),
+      );
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('does not resolve a guarantor’s own address', async (t) => {
+    const pool = await policyPool();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await pendingUntilSchema(t, POLICY_RELATIONS, () =>
+        inRolledBackTransaction(pool, async (db) => {
+          const tenancy = await seedOccupancy(db, '1893', {
+            phone: GUARANTOR_EMAIL_TENANT_PHONE,
+            contactFrom: '2026-01-01',
+            contactTo: null,
+            tenancyFrom: '2026-01-01',
+            tenancyTo: '2027-01-01',
+          });
+          const guarantorId = newId();
+          await db.query(
+            `INSERT INTO party (party_id, party_kind, full_name)
+             VALUES ($1, 'PERSON', 'ערב — the co-signing parent')`,
+            [guarantorId],
+          );
+          await db.query(
+            `INSERT INTO party_contact (contact_id, party_id, channel, value, is_primary,
+                                        valid_from, valid_to)
+             VALUES ($1, $2, 'EMAIL', $3, true, '2026-01-01', NULL)`,
+            [newId(), guarantorId, GUARANTOR_EMAIL],
+          );
+          await db.query(
+            `INSERT INTO tenancy_party (tenancy_id, party_id, role, is_service_contact)
+             VALUES ($1, $2, 'GUARANTOR', false)`,
+            [tenancy.tenancyId, guarantorId],
+          );
+          assert.deepEqual(
+            await resolveUnitsByEmail(db, GUARANTOR_EMAIL, TODAY),
+            [],
+          );
         }),
       );
     } finally {

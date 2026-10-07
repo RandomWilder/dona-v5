@@ -9,12 +9,14 @@
 // who is not a service contact is refused by the database, not by this file
 // hiding the name.
 import { createAuditLog } from '../../kernel/audit.ts';
-import type { Clock } from '../../kernel/clock.ts';
+import { type Clock, today } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
+import { upsertPartyContact } from '../../parties/contract.ts';
+import { normaliseEmail, normalisePhone } from '../../scope/contract.ts';
 import { emergencyTermMatches } from './emergency.ts';
 import type { Queryable } from './types.ts';
 
@@ -175,6 +177,17 @@ export interface OpenCallSpec {
 export interface IdentifyCallSpec {
   callId: string;
   partyId: string;
+  actorId: string;
+  actorRole?: string | null;
+}
+
+export interface IdentifyByAddressSpec {
+  callId: string;
+  partyId: string;
+}
+
+export interface SaveSenderContactSpec {
+  callId: string;
   actorId: string;
   actorRole?: string | null;
 }
@@ -1061,7 +1074,10 @@ export async function getCall(
       kind,
       at: event.at,
       actorId: event.actor_id,
-      actorLabel: event.actor_label ?? '',
+      actorLabel:
+        event.kind === 'IDENTIFIED' && event.setter === 'ADDRESS'
+          ? 'הכתובת'
+          : (event.actor_label ?? ''),
       partyName: event.party_name,
       categoryLabel: event.category_label,
       flagBy:
@@ -1100,6 +1116,46 @@ export async function getCall(
   };
 }
 
+/** Sets the requester on a new call. The caller writes the transition and the audit. */
+async function linkRequester(
+  db: Queryable,
+  callId: string,
+  partyId: string,
+): Promise<void> {
+  const current = await lockCall(db, callId);
+  if (current.state !== 'NEW') {
+    throw new KernelError('invalid', 'only a new call can be identified', {
+      field: 'state',
+      reason: 'identify',
+    });
+  }
+  await db.query('SAVEPOINT link_requester');
+  try {
+    await db.query(
+      `UPDATE service_call
+          SET state = 'IDENTIFIED', requester_party_id = $2
+        WHERE service_call_id = $1`,
+      [callId, partyId],
+    );
+    await db.query('RELEASE SAVEPOINT link_requester');
+  } catch (error) {
+    await db.query('ROLLBACK TO SAVEPOINT link_requester');
+    const pg = pgError(error);
+    if (pg.code === '23514' && pg.message?.includes('guarantor') === true) {
+      throw new KernelError('invalid', 'a guarantor cannot be the requester', {
+        field: 'party',
+        reason: 'guarantor',
+      });
+    }
+    if (pg.code === '23503') {
+      throw new KernelError('not_found', 'party not found', {
+        field: 'party',
+      });
+    }
+    throw error;
+  }
+}
+
 export async function identifyCall(
   db: Queryable,
   clock: Clock,
@@ -1109,39 +1165,7 @@ export async function identifyCall(
   const partyId = idOf(spec.partyId, 'party');
   const actorId = idOf(spec.actorId, 'actor');
   await inTransaction(db, async (tx) => {
-    const current = await lockCall(tx, callId);
-    if (current.state !== 'NEW') {
-      throw new KernelError('invalid', 'only a new call can be identified', {
-        field: 'state',
-        reason: 'identify',
-      });
-    }
-    await tx.query('SAVEPOINT identify_call');
-    try {
-      await tx.query(
-        `UPDATE service_call
-            SET state = 'IDENTIFIED', requester_party_id = $2
-          WHERE service_call_id = $1`,
-        [callId, partyId],
-      );
-      await tx.query('RELEASE SAVEPOINT identify_call');
-    } catch (error) {
-      await tx.query('ROLLBACK TO SAVEPOINT identify_call');
-      const pg = pgError(error);
-      if (pg.code === '23514' && pg.message?.includes('guarantor') === true) {
-        throw new KernelError(
-          'invalid',
-          'a guarantor cannot be the requester',
-          { field: 'party', reason: 'guarantor' },
-        );
-      }
-      if (pg.code === '23503') {
-        throw new KernelError('not_found', 'party not found', {
-          field: 'party',
-        });
-      }
-      throw error;
-    }
+    await linkRequester(tx, callId, partyId);
     await tx.query(
       `INSERT INTO service_call_transition
          (transition_id, service_call_id, kind, actor_id, at, party_id)
@@ -1161,6 +1185,158 @@ export async function identifyCall(
     );
   });
   return requireDetail(db, callId);
+}
+
+/**
+ * The door's identify step. No staff account: the timeline names the address
+ * match. One party, already resolved by the isolation join.
+ */
+export async function identifyByAddress(
+  db: Queryable,
+  clock: Clock,
+  spec: IdentifyByAddressSpec,
+): Promise<ServiceCallDetail> {
+  const callId = idOf(spec.callId, 'call');
+  const partyId = idOf(spec.partyId, 'party');
+  await inTransaction(db, async (tx) => {
+    await linkRequester(tx, callId, partyId);
+    await tx.query(
+      `INSERT INTO service_call_transition
+         (transition_id, service_call_id, kind, actor_id, at, party_id, setter)
+       VALUES ($1, $2, 'IDENTIFIED', NULL, $3, $4, 'ADDRESS')`,
+      [newId(clock), callId, clock.now(), partyId],
+    );
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'system',
+        action: 'calls.identify',
+        subjectId: callId,
+        inputs: { partyId, by: 'address' },
+      },
+      { outcome: 'ok' },
+    );
+  });
+  return requireDetail(db, callId);
+}
+
+/**
+ * Adds the call's sender address to the requester. A person identified the
+ * call first; this command is the separate act that writes the contact.
+ */
+export async function saveSenderContact(
+  db: Queryable,
+  clock: Clock,
+  spec: SaveSenderContactSpec,
+): Promise<ServiceCallDetail> {
+  const callId = idOf(spec.callId, 'call');
+  const actorId = idOf(spec.actorId, 'actor');
+  await inTransaction(db, async (tx) => {
+    const current = await lockCall(tx, callId);
+    if (current.requester_party_id === null) {
+      throw new KernelError('invalid', 'the requester is not identified', {
+        field: 'state',
+        reason: 'contact',
+      });
+    }
+    const identifiedByPerson = await tx.query(
+      `SELECT 1 FROM service_call_transition
+        WHERE service_call_id = $1
+          AND kind = 'IDENTIFIED'
+          AND actor_id IS NOT NULL`,
+      [callId],
+    );
+    if (!identifiedByPerson.rows[0]) {
+      throw new KernelError('invalid', 'only a person saves a contact', {
+        field: 'state',
+        reason: 'contact',
+      });
+    }
+    const sender = await tx.query<{
+      source_channel: string;
+      sender_label: string | null;
+      sender_unknown: boolean;
+    }>(
+      `SELECT source_channel, sender_label, sender_unknown
+         FROM service_call
+        WHERE service_call_id = $1`,
+      [callId],
+    );
+    const row = sender.rows[0];
+    if (!row || row.sender_unknown || row.sender_label === null) {
+      throw new KernelError('invalid', 'this call has no address to save', {
+        field: 'sender',
+        reason: 'contact',
+      });
+    }
+    const contact = contactOf(row.source_channel, row.sender_label);
+    try {
+      await tx.query('SAVEPOINT save_sender_contact');
+      await upsertPartyContact(tx, {
+        partyId: current.requester_party_id,
+        channel: contact.channel,
+        value: contact.value,
+        isPrimary: false,
+        validFrom: today(clock),
+        validTo: null,
+        verifiedAt: null,
+      });
+      await tx.query('RELEASE SAVEPOINT save_sender_contact');
+    } catch (error) {
+      await tx.query('ROLLBACK TO SAVEPOINT save_sender_contact');
+      const pg = pgError(error);
+      if (pg.code === '23P01') {
+        const holders = await tx.query<{ party_id: string }>(
+          `SELECT DISTINCT party_id
+             FROM party_contact
+            WHERE channel = $1 AND value = $2`,
+          [contact.channel, contact.value],
+        );
+        const someoneElse = holders.rows.some(
+          (holder) => holder.party_id !== current.requester_party_id,
+        );
+        if (someoneElse || holders.rows.length === 0) {
+          throw new KernelError(
+            'invalid',
+            'that address already belongs to someone',
+            { field: 'sender', reason: 'taken' },
+          );
+        }
+      } else {
+        throw error;
+      }
+    }
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'staff',
+        actorId,
+        actorRole: spec.actorRole ?? undefined,
+        action: 'calls.save_contact',
+        subjectId: callId,
+        inputs: {
+          partyId: current.requester_party_id,
+          channel: contact.channel,
+        },
+      },
+      { outcome: 'ok' },
+    );
+  });
+  return requireDetail(db, callId);
+}
+
+function contactOf(
+  sourceChannel: string,
+  sender: string,
+): { channel: 'EMAIL' | 'PHONE'; value: string } {
+  if (sourceChannel === 'EMAIL') {
+    return { channel: 'EMAIL', value: normaliseEmail(sender) };
+  }
+  if (sourceChannel === 'WHATSAPP') {
+    return { channel: 'PHONE', value: normalisePhone(sender) };
+  }
+  throw new KernelError('invalid', 'this call has no address to save', {
+    field: 'sender',
+    reason: 'contact',
+  });
 }
 
 export async function setCallCategory(

@@ -5,8 +5,9 @@
 // held. An emergency is decided before the sorter is asked. A thread with an
 // open call stops there, and only then does a verdict become a call or a
 // filtered message. A later delivery of a held message finishes that one row.
-// Identifying the sender is #189, so a call opened here waits in NEW. An echo
-// is the office's own message: stored, not sorted, and never a new call.
+// One party from the isolation join moves a new call to IDENTIFIED. None, or
+// more than one, leaves it in NEW. An echo is the office's own message:
+// stored, not sorted, and never a new call.
 
 import {
   ADDRESS_MAX,
@@ -15,6 +16,7 @@ import {
   emergencyTermMatches,
   flagCallByTerms,
   getCall,
+  identifyByAddress,
   listCategories,
   openIntakeCall,
   readEmergencySettings,
@@ -25,6 +27,10 @@ import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { optionalText, requireText, validId } from '../../kernel/validate.ts';
+import {
+  resolveUnitsByEmail,
+  resolveUnitsByPhone,
+} from '../../scope/contract.ts';
 import type { Queryable } from './types.ts';
 
 const BODY_MAX = 100_000;
@@ -726,6 +732,7 @@ async function settleVerdict(
       verdict === null ||
       verdict.label === 'unsure' ||
       (emergency && verdict.label !== 'call');
+    const parties = await partiesFor(tx, clock, message);
     const call = await openIntakeCall(tx, clock, {
       sourceChannel: message.sourceChannel,
       description: heading(
@@ -745,6 +752,12 @@ async function settleVerdict(
       sorterModel: verdict?.modelId ?? null,
       sorterPrompt: verdict?.promptVersion ?? null,
     });
+    if (parties.length === 1 && parties[0] !== undefined) {
+      await identifyByAddress(tx, clock, {
+        callId: call.id,
+        partyId: parties[0],
+      });
+    }
     await tx.query(
       `UPDATE message
           SET service_call_id = $2,
@@ -768,6 +781,31 @@ async function settleVerdict(
     );
     return { kind: 'call', messageId, callId: call.id };
   });
+}
+
+async function partiesFor(
+  db: Queryable,
+  clock: Clock,
+  message: Normalized,
+): Promise<string[]> {
+  try {
+    const rows =
+      message.sourceChannel === 'EMAIL'
+        ? await resolveUnitsByEmail(db, message.senderAddress, clock, {
+            actor: { actorKind: 'system' },
+          })
+        : await resolveUnitsByPhone(db, message.senderAddress, clock, {
+            actor: { actorKind: 'system' },
+          });
+    const ids: string[] = [];
+    for (const row of rows) {
+      if (!ids.includes(row.party_id)) ids.push(row.party_id);
+    }
+    return ids;
+  } catch (error) {
+    if (error instanceof KernelError && error.code === 'invalid') return [];
+    throw error;
+  }
 }
 
 async function categoryIdOf(

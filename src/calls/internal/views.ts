@@ -474,6 +474,29 @@ function identifyForm(screen: CallScreen): Html {
   </section>`;
 }
 
+function canSaveContact(call: ServiceCallDetail): boolean {
+  if (call.returned) return false;
+  if (call.sender.kind === 'unknown') return false;
+  if (call.sourceChannel !== 'EMAIL' && call.sourceChannel !== 'WHATSAPP') {
+    return false;
+  }
+  return call.timeline.some(
+    (event) => event.kind === 'IDENTIFIED' && event.actorId !== null,
+  );
+}
+
+function saveContactForm(screen: CallScreen): Html {
+  if (!canSaveContact(screen.call)) return h``;
+  return h`<section class="glass sheet">
+    <h2>שמירת איש קשר</h2>
+    <p class="lede">ההודעה הבאה מהכתובת הזו תזוהה. הזיהוי עצמו לא שומר.</p>
+    <form method="post" action="/calls/${screen.call.id}/contact">
+      ${csrfInput(screen.csrf)}
+      <button class="btn btn-primary" type="submit">שמירת איש קשר</button>
+    </form>
+  </section>`;
+}
+
 function categoryForm(screen: CallScreen): Html {
   const current = screen.call.category;
   const held =
@@ -639,6 +662,7 @@ export function renderCallPage(screen: CallScreen): string {
       : call.state === 'IDENTIFIED' || call.state === 'TRIAGED'
         ? categoryForm(screen)
         : h``;
+  const saving = saveContactForm(screen);
   const closing =
     canExit(call.state) && !call.returned ? exitForm(screen) : h``;
   const body = h`
@@ -674,6 +698,7 @@ export function renderCallPage(screen: CallScreen): string {
       ${repeatedBy(screen)}
       ${emergencyForm(screen)}
       ${step}
+      ${saving}
       ${closing}
       ${returnForm(screen)}
     </div>`;

@@ -31,6 +31,7 @@ import {
   openCall,
   restoreReturnedCall,
   returnToFiltered,
+  saveSenderContact,
   setCallCategory,
 } from './commands.ts';
 import {
@@ -128,6 +129,15 @@ function refusalHe(error: KernelError): string {
   if (field === 'party') return 'יש לבחור אדם מהרשימה.';
   if (field === 'state' && reason === 'category') {
     return 'יש לזהות את הפונה לפני בחירת קטגוריה.';
+  }
+  if (field === 'state' && reason === 'contact') {
+    return 'שמירת איש קשר היא אחרי זיהוי בידי אדם.';
+  }
+  if (field === 'sender' && reason === 'taken') {
+    return 'הכתובת כבר שייכת למישהו אחר.';
+  }
+  if (field === 'sender' && reason === 'contact') {
+    return 'אין כתובת לשמור.';
   }
   if (field === 'category' && reason === 'inactive') {
     return 'אפשר לבחור רק קטגוריה פעילה.';
@@ -444,6 +454,27 @@ export function registerCallsRoutes(
       }
       html(reply);
       reply.code(error.code === 'not_found' ? 404 : 400);
+      return callPage(deps, request, callId, refusalHe(error));
+    }
+  });
+
+  app.post('/calls/:id/contact', STAFF, async (request, reply) => {
+    const staff = staffOf(request);
+    const callId = callIdOf(request.params);
+    try {
+      await saveSenderContact(deps.pool, deps.clock, {
+        callId,
+        actorId: staff.staffAccountId,
+        actorRole: staff.role,
+      });
+      return reply.code(303).header('location', `/calls/${callId}`).send();
+    } catch (error) {
+      if (!(error instanceof KernelError) || error.code === 'not_allowed') {
+        throw error;
+      }
+      if (error.code === 'not_found') throw error;
+      html(reply);
+      reply.code(400);
       return callPage(deps, request, callId, refusalHe(error));
     }
   });

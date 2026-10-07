@@ -66,6 +66,12 @@ each*. Two of them are this module's.
   appears rather than vanishing.
 - **Q2 — this phone number just messaged us, which unit, if any?** `resolveUnitsByPhone(db, phone,
   clock)`. The isolation join, and the answer is frequently *none*, which is the point.
+- **Q2 for an address — this email just arrived, which unit, if any?** `resolveUnitsByEmail(db,
+  email, clock)`. The same join with `channel = 'EMAIL'`. The address is trimmed and lowercased
+  here before it is compared, and a contact saved from a call is stored in that same form, so
+  `Ada@House.test` and `ada@house.test` are one address. An empty address, or one with no `@`,
+  raises `invalid` rather than resolving to nobody: a scope of nothing stays reserved for a real
+  miss. The audit line is the phone line's — the party reached and how many rows, never the address.
 
 Both read `occupancy` and neither restates the join.
 

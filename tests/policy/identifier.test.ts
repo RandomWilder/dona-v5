@@ -23,9 +23,11 @@ import { fileURLToPath } from 'node:url';
 import { fixedClock } from '../../src/kernel/clock.ts';
 import { hasIdentifierRun } from '../../src/kernel/identifier.ts';
 import {
+  EMAIL_ISOLATION_JOIN_SQL,
   ISOLATION_JOIN_SQL,
   resolveOccupiedUnits,
   resolvePartiesInUnit,
+  resolveUnitsByEmail,
   resolveUnitsByPhone,
 } from '../../src/scope/contract.ts';
 import { seedExtractedIdentifier, seedOccupancy } from './fixtures.ts';
@@ -76,6 +78,7 @@ describe('policy · an identifier reaches nothing an agent is served', () => {
           const onPaper = anIdentifier();
           const tenant = await seedOccupancy(db, '12', {
             phone: TENANT_PHONE,
+            email: 'tenant@identifier-scope.test',
             contactFrom: '2026-01-01',
             contactTo: null,
             tenancyFrom: '2026-01-01',
@@ -91,6 +94,14 @@ describe('policy · an identifier reaches nothing an agent is served', () => {
             [
               'resolveUnitsByPhone',
               await resolveUnitsByPhone(db, TENANT_PHONE, TODAY),
+            ],
+            [
+              'resolveUnitsByEmail',
+              await resolveUnitsByEmail(
+                db,
+                'tenant@identifier-scope.test',
+                TODAY,
+              ),
             ],
             [
               'resolvePartiesInUnit',
@@ -123,6 +134,8 @@ describe('policy · an identifier reaches nothing an agent is served', () => {
     // `scripts/guards.ts` guard two already forbids anyone outside `src/scope/` from restating.
     assert.equal(ISOLATION_JOIN_SQL.includes('national_id'), false);
     assert.equal(ISOLATION_JOIN_SQL.includes('extracted_field'), false);
+    assert.equal(EMAIL_ISOLATION_JOIN_SQL.includes('national_id'), false);
+    assert.equal(EMAIL_ISOLATION_JOIN_SQL.includes('extracted_field'), false);
   });
 });
 

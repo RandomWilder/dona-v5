@@ -11,7 +11,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { fixedClock } from '../../src/kernel/clock.ts';
-import { resolveUnitsByPhone } from '../../src/scope/contract.ts';
+import {
+  resolveUnitsByEmail,
+  resolveUnitsByPhone,
+} from '../../src/scope/contract.ts';
 import { seedOccupancy, seedUnit } from './fixtures.ts';
 import {
   inRolledBackTransaction,
@@ -27,6 +30,12 @@ const TODAY = fixedClock(new Date('2026-09-05T00:00:00Z'));
 const TENANT_PHONE = '+972501112233';
 const NEIGHBOUR_PHONE = '+972504445566';
 const NEXT_TENANT_PHONE = '+972507778899';
+// Its own numbers and addresses. This file runs beside the guarantor case, and a shared contact
+// value waits inside the exclusion constraint.
+const EMAIL_PHONE = '+972501890101';
+const CLOSED_EMAIL_PHONE = '+972501890102';
+const TENANT_EMAIL = 'tenant@isolation-email.test';
+const CLOSED_EMAIL = 'closed@isolation-email.test';
 
 describe('policy · the five-hop isolation join', () => {
   it('resolves a current tenant to their own unit, and to no other', async (t) => {
@@ -206,6 +215,68 @@ describe('policy · the five-hop isolation join', () => {
 const HANDOVER = fixedClock(new Date('2026-09-14T21:30:00Z'));
 const OUTGOING_PHONE = '+972502223344';
 const INCOMING_PHONE = '+972503334455';
+
+describe('policy · the email isolation join', () => {
+  it('resolves a current address to that tenant’s unit, in either case', async (t) => {
+    const pool = await policyPool();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await pendingUntilSchema(t, POLICY_RELATIONS, () =>
+        inRolledBackTransaction(pool, async (db) => {
+          const mine = await seedOccupancy(db, '1891', {
+            phone: EMAIL_PHONE,
+            email: TENANT_EMAIL,
+            contactFrom: '2026-01-01',
+            contactTo: null,
+            tenancyFrom: '2026-01-01',
+            tenancyTo: '2027-01-01',
+          });
+          const scope = await resolveUnitsByEmail(
+            db,
+            'Tenant@Isolation-Email.test',
+            TODAY,
+          );
+          assert.equal(scope.length, 1);
+          assert.equal(scope[0]?.unit_id, mine.unitId);
+          assert.equal(scope[0]?.party_id, mine.partyId);
+        }),
+      );
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('drops an address whose contact has closed', async (t) => {
+    const pool = await policyPool();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await pendingUntilSchema(t, POLICY_RELATIONS, () =>
+        inRolledBackTransaction(pool, async (db) => {
+          await seedOccupancy(db, '1892', {
+            phone: CLOSED_EMAIL_PHONE,
+            email: CLOSED_EMAIL,
+            contactFrom: '2026-01-01',
+            contactTo: '2026-06-30',
+            tenancyFrom: '2026-01-01',
+            tenancyTo: '2027-01-01',
+          });
+          assert.deepEqual(
+            await resolveUnitsByEmail(db, CLOSED_EMAIL, TODAY),
+            [],
+          );
+        }),
+      );
+    } finally {
+      await pool.end();
+    }
+  });
+});
 
 describe('policy · the join asks about the office day', () => {
   it('at 00:30 IDT resolves the tenancy that starts today, not the one that ended yesterday', async (t) => {
