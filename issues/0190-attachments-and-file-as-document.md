@@ -1,13 +1,13 @@
 ---
 number: 190
 title: Attachments on the call, and "file as document"
-status: open
-labels: [ready-for-human]
+status: closed
+labels: [ready-for-agent]
 assignee:
 blocked_by: [188]
 parent: 181
 created: 2026-10-06
-closed:
+closed: 2026-10-07
 ---
 
 ## Parent
@@ -34,6 +34,10 @@ An attachment stays on its message. The call shows the name, the type and the si
 A file the mailbox marks as embedded is not an attachment. A file whose bytes were not fetched is shown and cannot be opened or filed. A PDF whose text does not carry the chosen type's words is refused; a scan with no text layer is filed unverified.
 
 Left for the director: the staging click, an email to the test mailbox carrying a PDF of a fabricated document. That click waits on the same mailbox as #188.
+
+## Comment — 2026-10-07
+
+Closed. The three code criteria are met and the work is on this branch. The staging click stays unchecked: it needs the test mailbox from #188, which is still waiting on Dona Dom's administrator. That click does not hold the next ticket.
 
 ## Blocked by
 
