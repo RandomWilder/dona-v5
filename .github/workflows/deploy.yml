@@ -112,20 +112,23 @@ jobs:
           # when K_SERVICE is set. Both flags have to stay, or the next revision is the English page.
           # Outlook (#188) mounts only the secrets that exist, so a staging deploy
           # before the director has created the test mailbox still rolls. All four
-          # have to be present or the process boots outlook: unconfigured.
+          # have to be present or the process boots outlook: unconfigured. The
+          # fifth, the secret's expiry date (#198), is optional: without it the
+          # calls list warns that the expiry is unknown.
           SECRETS="DATABASE_URL=staging-database-url:latest,OPENAI_API_KEY=staging-openai-api-key:latest,GOOGLE_OAUTH_CLIENT_ID=staging-google-oauth-client-id:latest,GOOGLE_OAUTH_CLIENT_SECRET=staging-google-oauth-client-secret:latest"
           add_secret() {
             local env_name="$1" secret_name="$2"
             if gcloud secrets describe "$secret_name" --project "$PROJECT" >/dev/null 2>&1; then
               SECRETS="$SECRETS,${env_name}=${secret_name}:latest"
             else
-              echo "outlook: $secret_name is missing — mailbox stays unconfigured" >&2
+              echo "outlook: $secret_name is missing — not mounted" >&2
             fi
           }
           add_secret GRAPH_TENANT_ID staging-graph-tenant-id
           add_secret GRAPH_CLIENT_ID staging-graph-client-id
           add_secret GRAPH_CLIENT_SECRET staging-graph-client-secret
           add_secret GRAPH_MAILBOX staging-graph-mailbox
+          add_secret GRAPH_SECRET_EXPIRES staging-graph-secret-expires
           gcloud run deploy "$SERVICE" \
             --image "$IMAGE:$SHA" \
             --region "$REGION" \

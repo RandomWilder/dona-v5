@@ -32,6 +32,7 @@ import {
   registerChannelRoutes,
   rescueNoise,
   type Sorter,
+  secretWarning,
 } from './channel/contract.ts';
 import { signedInChrome } from './chrome.ts';
 import { renderMockup } from './dev-mockups.ts';
@@ -668,6 +669,10 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       graphMailboxFrom(process.env)
         ? mailboxWarning(deps.pool, clock)
         : Promise.resolve(false),
+    secretWarning: () => {
+      const outlook = graphMailboxFrom(process.env);
+      return outlook ? secretWarning(outlook, clock) : null;
+    },
   });
   registerChannelRoutes(app, {
     pool: deps.pool,

@@ -59,14 +59,16 @@ OPENAI_SECRET="$ENV-openai-api-key"
 OAUTH_ID_SECRET="$ENV-google-oauth-client-id"
 OAUTH_SECRET_SECRET="$ENV-google-oauth-client-secret"
 
-# #188. Staging only. The Outlook adapter reads one test mailbox. These four
-# are the director's act — the app registration, admin consent, and the
-# mailbox — and they arrive through set-secret.sh. Production is a later
-# ticket, so this script does not grant or mention them there.
+# #188. Staging only. The Outlook adapter reads one test mailbox. The app
+# registration and its Exchange role are done by Dona Dom's administrator, and
+# the four values (and #198's expiry date) arrive through set-secret.sh.
+# Production is a later ticket, so this script does not grant or mention them
+# there.
 GRAPH_TENANT_SECRET="$ENV-graph-tenant-id"
 GRAPH_CLIENT_SECRET="$ENV-graph-client-id"
 GRAPH_SECRET_SECRET="$ENV-graph-client-secret"
 GRAPH_MAILBOX_SECRET="$ENV-graph-mailbox"
+GRAPH_EXPIRES_SECRET="$ENV-graph-secret-expires"
 DOCS_BUCKET="$PROJECT-$ENV-docs"
 RUNTIME_SA="app-$ENV"
 DEPLOY_SA="deploy-$ENV"
@@ -252,14 +254,16 @@ done
 
 if [ "$ENV" = staging ]; then
   say "Outlook mailbox — the director's act, not this script"
-  # #188. An app registration in Dona Dom's Microsoft 365 tenant, Mail.Read
-  # scoped to one mailbox, and admin consent. This script cannot do any of
-  # that. Staging mounts the four secrets when they exist.
-  echo "  app:      Mail.Read, scoped to the one mailbox, admin consent"
+  # #188. An app registration in Dona Dom's Microsoft 365 tenant, and the
+  # Exchange role Application Mail.Read scoped to one mailbox, done by Dona
+  # Dom's administrator. This script cannot do any of that. Staging mounts the
+  # secrets when they exist.
+  echo "  app:      Exchange Application Mail.Read, scoped to the one mailbox"
   echo "  then:     ./infra/set-secret.sh $ENV graph-tenant-id"
   echo "            ./infra/set-secret.sh $ENV graph-client-id"
   echo "            ./infra/set-secret.sh $ENV graph-client-secret"
   echo "            ./infra/set-secret.sh $ENV graph-mailbox"
+  echo "            ./infra/set-secret.sh $ENV graph-secret-expires   (YYYY-MM-DD)"
   echo "  boot:     outlook: unconfigured until all four are mounted"
 fi
 
@@ -279,7 +283,7 @@ gcloud projects add-iam-policy-binding "$PROJECT" \
 BIND_SECRETS=("$SECRET" "$OPENAI_SECRET" "$OAUTH_ID_SECRET" "$OAUTH_SECRET_SECRET")
 if [ "$ENV" = staging ]; then
   BIND_SECRETS+=("$GRAPH_TENANT_SECRET" "$GRAPH_CLIENT_SECRET" \
-    "$GRAPH_SECRET_SECRET" "$GRAPH_MAILBOX_SECRET")
+    "$GRAPH_SECRET_SECRET" "$GRAPH_MAILBOX_SECRET" "$GRAPH_EXPIRES_SECRET")
 fi
 for secret in "${BIND_SECRETS[@]}"; do
   # The model key may not exist yet -- a fresh environment has no OpenAI key

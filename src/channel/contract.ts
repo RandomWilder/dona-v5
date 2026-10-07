@@ -22,7 +22,11 @@ export {
   receiveIncoming,
   rescueNoise,
 } from './internal/door.ts';
-export type { GraphFetch, OutlookReader } from './internal/outlook.ts';
+export type {
+  GraphFetch,
+  OutlookReader,
+  SecretWarning,
+} from './internal/outlook.ts';
 export {
   createGraphReader,
   graphMailboxFrom,
@@ -30,6 +34,7 @@ export {
   normaliseOutlookMessage,
   OUTLOOK_POLL_MS,
   pollOutlook,
+  secretWarning,
   startOutlookPolling,
 } from './internal/outlook.ts';
 export type { ChannelDeps } from './internal/routes.ts';

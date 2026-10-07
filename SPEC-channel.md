@@ -77,16 +77,28 @@ golden set's messages are fabricated, never a real tenant's.
   `Mail.Read` and `Mail.Send`, both limited to the one shared mailbox by Exchange Online's RBAC for
   Applications. **Nothing here can delete, move or mark mail as read.** `Mail.Send` exists for one
   message only: the fixed emergency reply, which lands in that mailbox's Sent Items like any reply
-  the office sends (decided 6 Oct 2026).
+  the office sends (decided 6 Oct 2026). The pilot grants `Mail.Read` only; `Mail.Send` is a second
+  request to Dona Dom's administrator, made with the emergency reply. No mail permission is granted
+  in Entra: access is the Exchange role assignment alone, which reaches the mailbox's folders but not
+  the directory, so the adapter never looks up a user.
 - Polled with a delta query every one to two minutes, with the cursor stored. The first read
   asks for a cursor as of now and imports nothing earlier. The cursor is stored only after that
-  page has been handed to the door.
+  page has been handed to the door. Graph names the inbox by its folder id in the link it returns,
+  in path form or as `mailfolders('…')`, and that link is what is stored. It must still be an inbox
+  message delta on `graph.microsoft.com` for this mailbox. Any other link is refused and not requested.
+  When the link names the user by id, the inbox's folder id is the check, since a folder id belongs
+  to one mailbox.
 - Threading comes from the conversation id.
-- Staging reads a test mailbox. Production reads the real one. Granting admin consent is the
-  director's act. The process polls only when the tenant, the application, its secret and the
-  mailbox are all set; otherwise it boots unconfigured and the tab stays quiet. An hour without
-  a successful read, once it is polling, shows a warning on the קריאות list, and a successful
-  read clears it.
+- Staging reads a test mailbox. Production reads the real one. The app registration and the
+  Exchange role assignment are done by Dona Dom's Microsoft 365 administrator. The process polls
+  only when the tenant, the application, its secret and the mailbox are all set; otherwise it
+  boots unconfigured and the tab stays quiet. An hour without a successful read, once it is
+  polling, shows a warning on the קריאות list, and a successful read clears it.
+- The client secret lasts 24 months. Its expiry date is stored with it, and from 30 days before
+  that date the קריאות list shows a warning to renew it. Renewing is a new secret and its new date,
+  nothing else.
+  A configured mailbox with no expiry date, or one that is not a date, shows a warning that the
+  expiry is unknown, so a missing date is never silent.
 
 **Gmail is a standby**: the same interface, the Gmail API with the `gmail.readonly` scope, tested on
 recorded payloads, and wired to no mailbox.

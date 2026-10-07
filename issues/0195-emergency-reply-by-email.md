@@ -22,6 +22,9 @@ model involved. It uses `Mail.Send`, scoped to that one mailbox and used for thi
 6 Oct 2026). The reply lands in Sent Items like any office reply and appears on the call's timeline.
 Its wording is the director's to approve; until then staging sends the placeholder.
 
+Needs from outside the repo: the pilot grant (#188) is `Mail.Read` only. Before this can be clicked,
+Dona Dom's administrator adds the Exchange role Application Mail.Send on the same one-mailbox scope.
+
 ## Acceptance criteria
 
 - [ ] A flagged email produces exactly one reply on its thread, from the staging test mailbox

@@ -7,12 +7,14 @@
 // link is stored only after the page has been handed to the door, so a
 // restart resumes there.
 
-import type { Clock } from '../../kernel/clock.ts';
+import { addDays, type Clock, today } from '../../kernel/clock.ts';
 import type { IncomingMessage } from './door.ts';
 import type { Queryable } from './types.ts';
 
 const CURSOR_ID = 'outlook';
 const HOUR_MS = 60 * 60 * 1000;
+/** #198. The secret warns this many days before it expires. */
+const SECRET_WARN_DAYS = 30;
 /** Inside the one-to-two minute window the spec allows. */
 export const OUTLOOK_POLL_MS = 90_000;
 
@@ -39,7 +41,13 @@ export interface GraphMailbox {
   clientId: string;
   clientSecret: string;
   mailbox: string;
+  /** #198. The secret's expiry, `YYYY-MM-DD`, or null when unset or not a date. */
+  secretExpires: string | null;
 }
+
+export type SecretWarning =
+  | { kind: 'renew'; expires: string }
+  | { kind: 'unknown' };
 
 export interface GraphResponse {
   ok: boolean;
@@ -71,7 +79,34 @@ export function graphMailboxFrom(
   ) {
     return null;
   }
-  return { tenantId, clientId, clientSecret, mailbox };
+  return {
+    tenantId,
+    clientId,
+    clientSecret,
+    mailbox,
+    secretExpires: calendarDate(env.GRAPH_SECRET_EXPIRES?.trim() ?? ''),
+  };
+}
+
+/** From 30 days before the secret expires, and whenever its date is unknown. */
+export function secretWarning(
+  config: GraphMailbox,
+  clock: Clock,
+): SecretWarning | null {
+  if (config.secretExpires === null) return { kind: 'unknown' };
+  if (today(clock) < addDays(config.secretExpires, -SECRET_WARN_DAYS)) {
+    return null;
+  }
+  return { kind: 'renew', expires: config.secretExpires };
+}
+
+function calendarDate(value: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+    ? value
+    : null;
 }
 
 export function createGraphReader(
@@ -79,6 +114,23 @@ export function createGraphReader(
   fetchImpl: GraphFetch = defaultGraphFetch,
 ): OutlookReader {
   const mailbox = config.mailbox.trim();
+  let inboxFolderId: string | null = null;
+  // Exchange's Mail.Read reaches this mailbox's folders but not the
+  // directory, so a link naming the user by id is checked by the inbox's
+  // folder id, which belongs to this mailbox alone.
+  const assertInboxDelta = async (link: string, token: string) => {
+    const cursor = readDeltaLink(link);
+    if (isNamedInbox(cursor, mailbox)) return;
+    if (cursor.folder.toLowerCase() === 'inbox') {
+      throw new Error('outlook cursor is not the inbox delta');
+    }
+    if (inboxFolderId === null) {
+      inboxFolderId = await readInboxFolderId(fetchImpl, mailbox, token);
+    }
+    if (cursor.folder !== inboxFolderId) {
+      throw new Error('outlook cursor is not the inbox delta');
+    }
+  };
   return {
     async start() {
       const token = await accessToken(config, fetchImpl);
@@ -89,12 +141,14 @@ export function createGraphReader(
       const body = await graphGet(fetchImpl, url, token);
       const link = stringOf(objectOf(body)['@odata.deltaLink']);
       if (link === '') throw new Error('graph did not return a cursor');
-      assertInboxDelta(link);
+      await assertInboxDelta(link, token);
       return { link };
     },
     async page(link) {
-      assertInboxDelta(link);
+      // A link that is not a Graph inbox delta is refused before a token is asked for.
+      readDeltaLink(link);
       const token = await accessToken(config, fetchImpl);
+      await assertInboxDelta(link, token);
       const body = objectOf(await graphGet(fetchImpl, link, token));
       const value = Array.isArray(body.value) ? body.value : [];
       const items: OutlookItem[] = [];
@@ -123,11 +177,11 @@ export function createGraphReader(
       const delta = stringOf(body['@odata.deltaLink']);
       const next = stringOf(body['@odata.nextLink']);
       if (delta !== '') {
-        assertInboxDelta(delta);
+        await assertInboxDelta(delta, token);
         return { items, link: delta, roundComplete: true };
       }
       if (next !== '') {
-        assertInboxDelta(next);
+        await assertInboxDelta(next, token);
         return { items, link: next, roundComplete: false };
       }
       throw new Error('graph page had no cursor');
@@ -135,22 +189,51 @@ export function createGraphReader(
   };
 }
 
-function assertInboxDelta(link: string): void {
+const DELTA_PATH =
+  /^\/v1\.0\/users(?:\/([^/]+)|\('([^']*)'\))\/mailfolders(?:\/([^/]+)|\('([^']*)'\))\/messages\/delta$/i;
+
+function readDeltaLink(link: string): { user: string; folder: string } {
   let url: URL;
   try {
     url = new URL(link);
   } catch {
     throw new Error('outlook cursor is not a link');
   }
-  const path = decodeURIComponent(url.pathname);
+  const match = decodeURIComponent(url.pathname).match(DELTA_PATH);
+  const user = match?.[1] ?? match?.[2] ?? '';
+  const folder = match?.[3] ?? match?.[4] ?? '';
   if (
     url.protocol !== 'https:' ||
     url.hostname !== 'graph.microsoft.com' ||
-    !path.includes('/users/') ||
-    !path.endsWith('/mailFolders/inbox/messages/delta')
+    user === '' ||
+    folder === ''
   ) {
     throw new Error('outlook cursor is not the inbox delta');
   }
+  return { user, folder };
+}
+
+function isNamedInbox(
+  cursor: { user: string; folder: string },
+  mailbox: string,
+): boolean {
+  return (
+    cursor.user.toLowerCase() === mailbox.toLowerCase() &&
+    cursor.folder.toLowerCase() === 'inbox'
+  );
+}
+
+async function readInboxFolderId(
+  fetchImpl: GraphFetch,
+  mailbox: string,
+  token: string,
+): Promise<string> {
+  const url =
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}` +
+    '/mailFolders/inbox?$select=id';
+  const id = stringOf(objectOf(await graphGet(fetchImpl, url, token)).id);
+  if (id === '') throw new Error('graph did not name the inbox');
+  return id;
 }
 
 function isComplete(row: Record<string, unknown>): boolean {

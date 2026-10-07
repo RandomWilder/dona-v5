@@ -18,10 +18,13 @@ import {
   OUTLOOK_POLL_MS,
   type OutlookReader,
   pollOutlook,
+  secretWarning,
 } from './contract.ts';
 
 const HOUR = 60 * 60 * 1000;
 const MAILBOX_WARNING = 'תיבת הדואר לא נקראה כבר שעה.';
+const SECRET_RENEW = 'יש לבקש סוד חדש';
+const SECRET_UNKNOWN = 'תאריך התפוגה של הסוד לא הוגדר';
 
 const MAILBOX = 'box@test';
 const CURSOR =
@@ -91,6 +94,7 @@ describe('channel · outlook', { concurrency: false }, () => {
       clientId: 'client',
       clientSecret: 'secret',
       mailbox: 'box@test',
+      secretExpires: null,
     });
     assert.equal(graphMailboxFrom({}), null);
     assert.equal(graphMailboxFrom({ ...full, GRAPH_CLIENT_SECRET: ' ' }), null);
@@ -347,6 +351,113 @@ describe('channel · outlook', { concurrency: false }, () => {
     }
   });
 
+  it('stores the cursor Graph returns when it names the inbox by folder id', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const folderId = 'AQMkADNkNAAAgEMAAAA';
+    const graphCursor =
+      "https://graph.microsoft.com/v1.0/users/box@test/mailfolders('AQMkADNkNAAAgEMAAAA')/messages/delta?$deltatoken=GwcBoTmPuoGNlgXgF1nyUNMXY";
+    const calls: string[] = [];
+    const fetchImpl: GraphFetch = async (url) => {
+      calls.push(url);
+      if (url.startsWith('https://login.microsoftonline.com/')) {
+        return jsonResponse({ access_token: 'tok', expires_in: 3600 });
+      }
+      if (url.includes('$deltatoken=latest')) {
+        return jsonResponse({
+          value: [OLD],
+          '@odata.deltaLink': graphCursor,
+        });
+      }
+      if (url.includes('/mailFolders/inbox')) {
+        return jsonResponse({ id: folderId });
+      }
+      if (url === graphCursor) {
+        return jsonResponse({
+          value: [FIRST],
+          '@odata.deltaLink': graphCursor,
+        });
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(new Date('2026-10-06T12:00:00.000Z'));
+        const reader = createGraphReader(graphConfig(), fetchImpl);
+        const handed: string[] = [];
+        const deliver = async (message: { externalMessageId: string }) => {
+          handed.push(message.externalMessageId);
+        };
+        await pollOutlook(db, clock, reader, deliver);
+        assert.deepEqual(handed, []);
+        await pollOutlook(db, clock, reader, deliver);
+        assert.deepEqual(handed, ['AAMkAG-first']);
+        assert.ok(calls.includes(graphCursor));
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('stores the cursor when Graph rewrites the mailbox to its id', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const userId = '48d31887-5fad-4d73-a9f5-3c356e68a038';
+    const folderId = 'AQMkADNkNAAAgEMAAAA';
+    const graphCursor = `https://graph.microsoft.com/v1.0/users/${userId}/mailFolders/${folderId}/messages/delta?$deltatoken=P4lmXpjPRrjB6haA`;
+    const calls: string[] = [];
+    const fetchImpl: GraphFetch = async (url) => {
+      calls.push(url);
+      if (url.startsWith('https://login.microsoftonline.com/')) {
+        return jsonResponse({ access_token: 'tok', expires_in: 3600 });
+      }
+      if (url.includes('$deltatoken=latest')) {
+        return jsonResponse({
+          value: [],
+          '@odata.deltaLink': graphCursor,
+        });
+      }
+      if (url.includes('/mailFolders/inbox')) {
+        return jsonResponse({ id: folderId });
+      }
+      if (url === graphCursor) {
+        return jsonResponse({
+          value: [FIRST],
+          '@odata.deltaLink': graphCursor,
+        });
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(new Date('2026-10-06T12:00:00.000Z'));
+        const reader = createGraphReader(graphConfig(), fetchImpl);
+        const handed: string[] = [];
+        const deliver = async (message: { externalMessageId: string }) => {
+          handed.push(message.externalMessageId);
+        };
+        await pollOutlook(db, clock, reader, deliver);
+        assert.deepEqual(handed, []);
+        await pollOutlook(db, clock, reader, deliver);
+        assert.deepEqual(handed, ['AAMkAG-first']);
+        assert.ok(calls.includes(graphCursor));
+        // Mail.Read scoped by Exchange cannot read the directory.
+        assert.equal(
+          calls.some((url) => /\/users\/[^/?]+\?/.test(url)),
+          false,
+        );
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
   it('does not follow a cursor that is not the inbox delta', async () => {
     const calls: string[] = [];
     const fetchImpl: GraphFetch = async (url) => {
@@ -360,14 +471,25 @@ describe('channel · outlook', { concurrency: false }, () => {
           '@odata.deltaLink': 'https://evil.example/messages',
         });
       }
+      if (url.includes('/mailFolders/inbox')) {
+        return jsonResponse({ id: 'AQMkADNkNAAAgEMAAAA' });
+      }
       throw new Error(`fetched ${url}`);
     };
     const reader = createGraphReader(graphConfig(), fetchImpl);
     await assert.rejects(() => reader.start(), /inbox delta/);
+    const otherFolder =
+      'https://graph.microsoft.com/v1.0/users/box@test/mailFolders/AAMkOTHER/messages/delta?$deltatoken=no';
+    const otherMailbox =
+      'https://graph.microsoft.com/v1.0/users/someone-else@test/mailFolders/inbox/messages/delta?$deltatoken=no';
     await assert.rejects(
       () => reader.page('https://evil.example/messages'),
       /inbox delta/,
     );
+    await assert.rejects(() => reader.page(otherFolder), /inbox delta/);
+    await assert.rejects(() => reader.page(otherMailbox), /inbox delta/);
+    assert.equal(calls.includes(otherFolder), false);
+    assert.equal(calls.includes(otherMailbox), false);
     assert.equal(
       calls.some((url) => url.includes('evil.example')),
       false,
@@ -457,6 +579,121 @@ describe('channel · outlook', { concurrency: false }, () => {
     }
   });
 
+  it('reads the secret expiry date with the mailbox, and only a real date', () => {
+    const env = {
+      GRAPH_TENANT_ID: 'tenant',
+      GRAPH_CLIENT_ID: 'client',
+      GRAPH_CLIENT_SECRET: 'secret',
+      GRAPH_MAILBOX: 'box@test',
+    };
+    assert.equal(graphMailboxFrom(env)?.secretExpires, null);
+    assert.equal(
+      graphMailboxFrom({ ...env, GRAPH_SECRET_EXPIRES: ' 2028-10-07 ' })
+        ?.secretExpires,
+      '2028-10-07',
+    );
+    for (const bad of [
+      '2028-02-30',
+      '07.10.2028',
+      '2028-10-07T00:00',
+      'soon',
+    ]) {
+      assert.equal(
+        graphMailboxFrom({ ...env, GRAPH_SECRET_EXPIRES: bad })?.secretExpires,
+        null,
+        bad,
+      );
+    }
+    assert.equal(
+      graphMailboxFrom({ GRAPH_SECRET_EXPIRES: '2028-10-07' }),
+      null,
+    );
+  });
+
+  it('warns from 30 days before the secret expires, and when the date is unknown', () => {
+    const config = { ...graphConfig(), secretExpires: '2028-10-07' };
+    // Office days, not UTC days: Israel is UTC+3 in September.
+    const at = (iso: string) => fixedClock(new Date(iso));
+    assert.equal(secretWarning(config, at('2028-09-06T20:59:59.000Z')), null);
+    assert.deepEqual(secretWarning(config, at('2028-09-06T21:00:00.000Z')), {
+      kind: 'renew',
+      expires: '2028-10-07',
+    });
+    assert.deepEqual(secretWarning(config, at('2028-11-01T00:00:00.000Z')), {
+      kind: 'renew',
+      expires: '2028-10-07',
+    });
+    assert.deepEqual(
+      secretWarning(
+        { ...config, secretExpires: null },
+        at('2026-10-07T00:00:00.000Z'),
+      ),
+      { kind: 'unknown' },
+    );
+  });
+
+  it('shows the secret warning on the קריאות tab only when a mailbox is configured', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(new Date('2028-09-27T09:00:00.000Z'));
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    const keys = [
+      'GRAPH_TENANT_ID',
+      'GRAPH_CLIENT_ID',
+      'GRAPH_CLIENT_SECRET',
+      'GRAPH_MAILBOX',
+      'GRAPH_SECRET_EXPIRES',
+    ] as const;
+    const savedEnv = Object.fromEntries(
+      keys.map((key) => [key, process.env[key]]),
+    );
+    const domain = 'outlook-secret.test';
+    await signOutAll(pool, domain);
+    const who = await signIn(pool, clock, {
+      email: `ops@${domain}`,
+      role: 'OPERATOR',
+    });
+    const client = asOperator(app, who);
+    try {
+      for (const key of keys) delete process.env[key];
+      const off = await client.inject({ method: 'GET', url: '/calls' });
+      assert.equal(off.statusCode, 200);
+      assert.equal(off.body.includes(SECRET_RENEW), false);
+      assert.equal(off.body.includes(SECRET_UNKNOWN), false);
+
+      process.env.GRAPH_TENANT_ID = 'tenant';
+      process.env.GRAPH_CLIENT_ID = 'client';
+      process.env.GRAPH_CLIENT_SECRET = 'secret';
+      process.env.GRAPH_MAILBOX = 'box@test';
+      const unknown = await client.inject({ method: 'GET', url: '/calls' });
+      assert.equal(unknown.body.includes(SECRET_UNKNOWN), true);
+
+      process.env.GRAPH_SECRET_EXPIRES = '2028-10-07';
+      const renew = await client.inject({ method: 'GET', url: '/calls' });
+      assert.equal(renew.body.includes(SECRET_RENEW), true);
+      assert.equal(renew.body.includes('07.10.2028'), true);
+
+      process.env.GRAPH_SECRET_EXPIRES = '2028-09-20';
+      const expired = await client.inject({ method: 'GET', url: '/calls' });
+      assert.equal(expired.body.includes('פג ב-20.09.2028'), true);
+
+      process.env.GRAPH_SECRET_EXPIRES = '2029-10-07';
+      const fine = await client.inject({ method: 'GET', url: '/calls' });
+      assert.equal(fine.body.includes(SECRET_RENEW), false);
+      assert.equal(fine.body.includes(SECRET_UNKNOWN), false);
+    } finally {
+      for (const [key, value] of Object.entries(savedEnv)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      await signOutAll(pool, domain);
+      await pool.end();
+    }
+  });
+
   it('shows the mailbox warning on the קריאות tab, and a successful read clears it', async (t) => {
     const pool = await migratedPoolOrNull();
     if (!pool) {
@@ -528,6 +765,7 @@ function graphConfig() {
     clientId: 'client-id',
     clientSecret: 'client-secret',
     mailbox: MAILBOX,
+    secretExpires: null,
   };
 }
 

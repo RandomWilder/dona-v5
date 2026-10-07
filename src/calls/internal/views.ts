@@ -4,7 +4,7 @@
 //
 // Server-rendered, no client JavaScript. The rail count is the open-call count
 // for the whole office, passed in by the route, so a filter does not shrink it.
-import { DEFAULT_ZONE } from '../../kernel/clock.ts';
+import { DEFAULT_ZONE, dayIn } from '../../kernel/clock.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import {
@@ -58,8 +58,15 @@ export interface CallsScreen {
   now: Date;
   /** The shared mailbox has not been read successfully for an hour. */
   mailboxWarning?: boolean;
+  /** #198. The mailbox's secret is near expiry, or its expiry is unknown. */
+  secretWarning?: SecretNotice | null;
   refusal?: string;
 }
+
+/** Mirrors channel's `SecretWarning`: channel imports calls, so calls cannot import it back. */
+export type SecretNotice =
+  | { kind: 'renew'; expires: string }
+  | { kind: 'unknown' };
 
 export interface FilteredScreen {
   nav: Html;
@@ -295,6 +302,10 @@ export function renderCallsPage(screen: CallsScreen): string {
   const mailbox = screen.mailboxWarning
     ? h`<p class="mailbox-warning" role="status">תיבת הדואר לא נקראה כבר שעה.</p>`
     : h``;
+  const secret = secretNotice(
+    screen.secretWarning ?? null,
+    dayIn(screen.now, DEFAULT_ZONE),
+  );
   const list =
     screen.calls.length === 0
       ? h`<p class="lede">${filtered ? 'אין קריאות תואמות.' : 'אין קריאות פתוחות.'}</p>`
@@ -308,6 +319,7 @@ export function renderCallsPage(screen: CallsScreen): string {
         </div>
       </header>
       ${mailbox}
+      ${secret}
       <form class="glass call-form" method="post" action="/calls">
         ${csrfInput(screen.csrf)}
         <h2>רישום קריאה</h2>
@@ -735,4 +747,18 @@ export function renderFilteredPage(screen: FilteredScreen): string {
     nav: screen.nav,
     body,
   });
+}
+
+function secretNotice(notice: SecretNotice | null, today: string): Html {
+  if (notice === null) return h``;
+  if (notice.kind === 'unknown') {
+    return h`<p class="mailbox-warning" role="status">תיבת הדואר: תאריך התפוגה של הסוד לא הוגדר.</p>`;
+  }
+  const [year, month, day] = notice.expires.split('-');
+  const date = `${day}.${month}.${year}`;
+  const state =
+    notice.expires < today
+      ? `תוקף הסוד של תיבת הדואר פג ב-${date}.`
+      : `הסוד של תיבת הדואר בתוקף עד ${date}.`;
+  return h`<p class="mailbox-warning" role="status">${state} יש לבקש סוד חדש ממנהל Microsoft 365.</p>`;
 }

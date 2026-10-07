@@ -37,6 +37,7 @@ import {
   renderCallPage,
   renderCallsPage,
   renderFilteredPage,
+  type SecretNotice,
   type TimelineMessage,
 } from './views.ts';
 
@@ -69,6 +70,8 @@ export interface CallsDeps {
   }) => Promise<{ callId: string }>;
   /** True when the shared mailbox has not been read for an hour. */
   mailboxWarning?: () => Promise<boolean>;
+  /** #198. The Outlook secret is near expiry, or its expiry is unknown. */
+  secretWarning?: () => SecretNotice | null;
 }
 
 const STAFF = { config: { staff: 'estate.read' } } as const;
@@ -234,6 +237,7 @@ async function callsPage(
     devIntake: deps.devIntake === true,
     now: deps.clock.now(),
     mailboxWarning,
+    secretWarning: deps.secretWarning ? deps.secretWarning() : null,
     refusal,
   });
 }
