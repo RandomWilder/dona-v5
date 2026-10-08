@@ -22,7 +22,8 @@ echo of something the office sent. The door then runs in this order:
 2. **Store the Message.** This happens before the emergency check and before the sorter, so a
    failure there leaves the message held.
 3. **Check for an emergency**, deterministically and before any model call (foundation rule 5). The
-   flag and the fixed duty reply are calls' to perform.
+   flag is calls' to perform. The fixed duty reply is composed by calls, and the channel sends it
+   before a model is asked to read the message.
 4. **Thread.** A message on a thread with an open ServiceCall attaches to it and stops. A thread
    whose call is closed opens a new call linked to the old one.
 5. **Sort.** Noise becomes a Filtered message. A call, or an unsure verdict, becomes a ServiceCall
@@ -120,6 +121,12 @@ recorded payloads, and wired to no mailbox.
   a primary device inactive for about 14 days. The clock starts when the adapter is configured, and
   an echo clears the warning. A mailbox that has not been read successfully for an hour raises a
   warning too.
+- **Emergency reply.** When the terms flag a WhatsApp call, the channel sends one session message
+  on that conversation — the fixed duty reply calls composed — inside the 24-hour window the
+  inbound message opened. It is not a template. No model writes it. It is stored on the call's
+  timeline and audited. A second emergency message on the same open call does not send another. A
+  call flagged by hand sends nothing. PHONE and WALK_IN send nothing. The sentence stays the
+  placeholder until the director approves the wording.
 
 **Attachments** stay on their Message and show on the call. The bytes are kept with the message, so
 the call shows the file's name, type and size and the office can open it without the mailbox. A

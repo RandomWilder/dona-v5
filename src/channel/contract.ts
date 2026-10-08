@@ -1,6 +1,6 @@
 // The channel module's public surface. #186 is the intake door. #187 is the
 // sorter on OpenAI, and translation. #188 is the Outlook adapter. #193 is
-// WhatsApp on Meta's test number.
+// WhatsApp on Meta's test number. #194 is the emergency reply on that number.
 
 export { fileAttachment, readAttachment } from './internal/attachments.ts';
 export type {

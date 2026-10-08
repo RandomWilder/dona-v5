@@ -12,6 +12,7 @@
 import {
   ADDRESS_MAX,
   callIsAttachable,
+  composeDutyReply,
   DESCRIPTION_MAX,
   emergencyTermMatches,
   flagCallByTerms,
@@ -22,6 +23,7 @@ import {
   readEmergencySettings,
   type SorterLabel,
 } from '../../calls/contract.ts';
+import { createAuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
@@ -99,11 +101,24 @@ export interface Sorter {
   translate(input: TranslateInput): Promise<Translation>;
 }
 
+export interface DutyReply {
+  to: string;
+  body: string;
+}
+
 export interface IntakeDeps {
   sorter: Sorter;
   matchesEmergency: (text: string) => Promise<boolean>;
   /** Where an attachment's bytes are kept. Required when a message carries any. */
   objects?: ObjectStore;
+  /**
+   * Sends the fixed duty reply on WhatsApp. Absent, an emergency is still
+   * flagged and nothing is sent — email's send is a later ticket, and the
+   * dev form has no Meta number.
+   */
+  replyOnWhatsapp?: (
+    reply: DutyReply,
+  ) => Promise<{ externalMessageId: string }>;
 }
 
 export type IntakeOutcome =
@@ -184,6 +199,17 @@ export async function receiveIncoming(
   raw: IncomingMessage,
 ): Promise<IntakeOutcome> {
   const message = normalize(raw);
+  const outcome = await intake(db, clock, deps, message);
+  await recordDutyReply(db, clock, message, outcome);
+  return outcome;
+}
+
+async function intake(
+  db: Queryable,
+  clock: Clock,
+  deps: IntakeDeps,
+  message: Normalized,
+): Promise<IntakeOutcome> {
   const already = await settledOutcome(db, message);
   if (already) return already;
 
@@ -194,8 +220,17 @@ export async function receiveIncoming(
   if (raced) return raced;
 
   const emergency = await deps.matchesEmergency(messageText(message));
-  const bodyHe = await askTranslator(deps.sorter, message);
   const thread = await threadOf(db, message);
+  await prepareDutyReply(
+    db,
+    clock,
+    deps,
+    message,
+    messageId,
+    emergency,
+    thread.openCallId,
+  );
+  const bodyHe = await askTranslator(deps.sorter, message);
   if (thread.openCallId !== null) {
     const attached = await settleAttach(
       db,
@@ -223,6 +258,230 @@ export async function receiveIncoming(
     predecessorId,
     bodyHe,
   );
+}
+
+/** Claimed, not yet accepted by Meta. A real id replaces it. */
+const DUTY_REPLY_PENDING = '';
+
+/**
+ * Sends the duty reply before the translator or the sorter run. The inbound
+ * row keeps Meta's id, and an open call is marked before the send, so a
+ * second delivery does not send again. A blank claim is a send that never
+ * finished: the next delivery takes it and sends. A hand-flagged call, and a
+ * call that already has its reply, send nothing.
+ */
+async function prepareDutyReply(
+  db: Queryable,
+  clock: Clock,
+  deps: IntakeDeps,
+  message: Normalized,
+  messageId: string,
+  emergency: boolean,
+  openCallId: string | null,
+): Promise<void> {
+  const send = deps.replyOnWhatsapp;
+  if (!send || !emergency || message.sourceChannel !== 'WHATSAPP') return;
+  const to = whatsappTo(message.senderAddress);
+  if (to === null) return;
+
+  const claimedAt = clock.now();
+  const body = await inTransaction(db, async (tx) => {
+    if (openCallId !== null && !(await dutyReplyOwed(tx, openCallId))) {
+      return null;
+    }
+    const held = await tx.query<{ duty_reply_id: string | null }>(
+      `SELECT duty_reply_id FROM message WHERE message_id = $1 FOR UPDATE`,
+      [messageId],
+    );
+    const current = held.rows[0]?.duty_reply_id ?? null;
+    if (current !== null && current !== DUTY_REPLY_PENDING) return null;
+    await tx.query(
+      `UPDATE message SET duty_reply_id = $2 WHERE message_id = $1`,
+      [messageId, DUTY_REPLY_PENDING],
+    );
+    if (openCallId !== null) {
+      await tx.query(
+        `UPDATE service_call
+            SET duty_reply_at = $2
+          WHERE service_call_id = $1
+            AND duty_reply_at IS NULL`,
+        [openCallId, claimedAt],
+      );
+    }
+    const settings = await readEmergencySettings(tx);
+    return composeDutyReply({ phone: settings.phone, hours: settings.hours });
+  });
+  if (body === null) return;
+
+  let externalMessageId: string;
+  try {
+    const sent = await send({ to, body });
+    externalMessageId = requireText(
+      sent.externalMessageId,
+      'externalMessageId',
+      EXTERNAL_ID_MAX,
+    );
+  } catch (error) {
+    await releaseDutyClaim(db, messageId, openCallId, claimedAt);
+    throw error;
+  }
+
+  await db.query(
+    `UPDATE message
+        SET duty_reply_id = $2
+      WHERE message_id = $1
+        AND duty_reply_id = $3`,
+    [messageId, externalMessageId, DUTY_REPLY_PENDING],
+  );
+  await insertMessage(
+    db,
+    clock,
+    undefined,
+    {
+      sourceChannel: 'WHATSAPP',
+      externalMessageId,
+      externalThreadId: message.externalThreadId,
+      senderAddress: 'WHATSAPP',
+      receivedAt: claimedAt,
+      subject: null,
+      body,
+      attachments: [],
+      echo: true,
+    },
+    {
+      callId: openCallId,
+      label: null,
+      summary: null,
+      categoryId: null,
+    },
+  );
+}
+
+async function releaseDutyClaim(
+  db: Queryable,
+  messageId: string,
+  openCallId: string | null,
+  claimedAt: Date,
+): Promise<void> {
+  await inTransaction(db, async (tx) => {
+    await tx.query(
+      `UPDATE message
+          SET duty_reply_id = NULL
+        WHERE message_id = $1
+          AND duty_reply_id = $2`,
+      [messageId, DUTY_REPLY_PENDING],
+    );
+    if (openCallId === null) return;
+    await tx.query(
+      `UPDATE service_call
+          SET duty_reply_at = NULL
+        WHERE service_call_id = $1
+          AND duty_reply_at = $2`,
+      [openCallId, claimedAt],
+    );
+  });
+}
+
+async function dutyReplyOwed(db: Queryable, callId: string): Promise<boolean> {
+  const { rows } = await db.query<{
+    source_channel: string;
+    emergency: boolean;
+    emergency_by: string | null;
+    duty_reply_at: Date | null;
+    state: string;
+    returned_at: Date | null;
+  }>(
+    `SELECT source_channel, emergency, emergency_by, duty_reply_at, state,
+            returned_at
+       FROM service_call
+      WHERE service_call_id = $1
+      FOR UPDATE`,
+    [callId],
+  );
+  const call = rows[0];
+  if (!call) return false;
+  if (call.source_channel !== 'WHATSAPP') return false;
+  if (call.state === 'CLOSED' || call.returned_at !== null) return false;
+  if (call.duty_reply_at !== null) return false;
+  if (call.emergency && call.emergency_by !== 'TERMS') return false;
+  return true;
+}
+
+function whatsappTo(address: string): string | null {
+  const digits = address.replace(/\D/g, '');
+  if (!/^\d{8,15}$/.test(digits)) return null;
+  const compact = address.replace(/[\s\-().+]/g, '');
+  if (compact !== digits) return null;
+  return digits;
+}
+
+/** Stores the reply already accepted by Meta on the call, once. */
+async function recordDutyReply(
+  db: Queryable,
+  clock: Clock,
+  message: Normalized,
+  outcome: IntakeOutcome,
+): Promise<void> {
+  if (message.echo || message.sourceChannel !== 'WHATSAPP') return;
+  const callId = outcome.kind === 'filtered' ? null : outcome.callId;
+  if (callId === null) return;
+  const found = await db.query<{ duty_reply_id: string | null }>(
+    `SELECT duty_reply_id
+       FROM message
+      WHERE source_channel = $1
+        AND external_message_id = $2`,
+    [message.sourceChannel, message.externalMessageId],
+  );
+  const wamid = found.rows[0]?.duty_reply_id ?? null;
+  if (wamid === null || wamid === DUTY_REPLY_PENDING) return;
+
+  await inTransaction(db, async (tx) => {
+    await tx.query(
+      `UPDATE service_call
+          SET duty_reply_at = $2
+        WHERE service_call_id = $1
+          AND duty_reply_at IS NULL
+          AND source_channel = 'WHATSAPP'
+          AND emergency = true
+          AND emergency_by = 'TERMS'`,
+      [callId, clock.now()],
+    );
+    await tx.query(
+      `UPDATE message
+          SET service_call_id = $2
+        WHERE source_channel = 'WHATSAPP'
+          AND external_message_id = $1
+          AND is_echo
+          AND service_call_id IS NULL`,
+      [wamid, callId],
+    );
+    const onCall = await tx.query(
+      `SELECT 1 FROM message
+        WHERE source_channel = 'WHATSAPP'
+          AND external_message_id = $1
+          AND service_call_id = $2
+          AND is_echo`,
+      [wamid, callId],
+    );
+    if (!onCall.rows[0]) return;
+    const audited = await tx.query(
+      `SELECT 1 FROM audit_log
+        WHERE action = 'channel.duty_reply'
+          AND subject_id = $1
+          AND outcome = 'ok'`,
+      [callId],
+    );
+    if (audited.rows[0]) return;
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'system',
+        action: 'channel.duty_reply',
+        subjectId: callId,
+        inputs: { channel: 'WHATSAPP' },
+      },
+      { outcome: 'ok' },
+    );
+  });
 }
 
 export async function listMessagesOnCall(

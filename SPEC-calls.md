@@ -87,7 +87,10 @@ boundary. A term in another language matches the same way. The match calls no mo
 On EMAIL and WHATSAPP the flag sends one fixed reply with the duty phone number, composed from the
 duty contact rows with no model involved. The composer is a pure function of those rows. The
 sentence it returns is a placeholder until the director approves the text. Sending the reply is the
-channel's.
+channel's. On WHATSAPP that send is one session message on the same conversation, inside the
+24-hour window the inbound message opened, once for that call, and it happens before a model reads
+the message. A hand flag sends nothing. PHONE and WALK_IN send nothing. The reply is on the call's
+timeline and audited.
 
 **Category** is the trade a call needs. It is an admin-managed list of rows, deactivated and never
 deleted, seeded with a placeholder list until Dona Dom supplies theirs. It is distinct from

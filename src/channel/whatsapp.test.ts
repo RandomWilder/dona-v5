@@ -5,6 +5,10 @@ import { describe, it } from 'node:test';
 import type { Pool } from 'pg';
 import { asOperator, signIn, signOutAll } from '../../tests/support/session.ts';
 import { buildApp } from '../app.ts';
+import {
+  readEmergencySettings,
+  saveEmergencySettings,
+} from '../calls/contract.ts';
 import { fixedClock } from '../kernel/clock.ts';
 import { createMemoryStore } from '../kernel/objects.ts';
 import {
@@ -694,6 +698,179 @@ describe('channel · whatsapp', { concurrency: false }, () => {
       assert.equal(hidden.body.includes(WARNING), false);
     } finally {
       await cleanup(pool);
+      await pool.end();
+    }
+  });
+
+  it('sends one session reply when a message is flagged, and shows it on the call', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(new Date('2026-10-08T09:00:00.000Z'));
+    const thread = '972599001197';
+    const sender = '+972599001197';
+    const sentence =
+      'קריאת חירום. להתקשר לכונן: 050-194-0000. שעות כונן: א׳–ה׳ 08:00–20:00.';
+    const posts: {
+      url: string;
+      init?: {
+        method?: string;
+        body?: string;
+        headers?: Record<string, string>;
+      };
+    }[] = [];
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      clock,
+      sorter,
+      whatsappFetch: async (url, init) => {
+        posts.push({ url, init });
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return { messages: [{ id: 'wamid.t194.reply' }] };
+          },
+          async bytes() {
+            return Buffer.alloc(0);
+          },
+        };
+      },
+    });
+    const before = await readEmergencySettings(pool);
+    const who = await signIn(pool, clock, {
+      email: 'reply@whatsapp.test',
+      role: 'OPERATOR',
+    });
+    await saveEmergencySettings(pool, clock, {
+      termsText: 'שריפה',
+      phone: '050-194-0000',
+      hours: 'א׳–ה׳ 08:00–20:00',
+      actorId: who.staffAccountId,
+    });
+    try {
+      await withEnv(async () => {
+        const inbound = envelope('messages', {
+          messages: [
+            {
+              from: thread,
+              id: 'wamid.t194.in',
+              timestamp: '1759752900',
+              type: 'text',
+              text: { body: 'יש שריפה בדירה' },
+            },
+          ],
+        });
+        const body = JSON.stringify(inbound);
+        const posted = await app.inject({
+          method: 'POST',
+          url: '/webhooks/whatsapp',
+          headers: {
+            'content-type': 'application/json',
+            'x-hub-signature-256': sign(body),
+          },
+          payload: body,
+        });
+        assert.equal(posted.statusCode, 200);
+        assert.equal(posts.length, 1);
+        assert.equal(
+          posts[0]?.url,
+          `https://graph.facebook.com/v25.0/${PHONE_ID}/messages`,
+        );
+        assert.equal(posts[0]?.init?.method, 'POST');
+        assert.equal(posts[0]?.init?.headers?.Authorization, `Bearer ${TOKEN}`);
+        assert.deepEqual(JSON.parse(posts[0]?.init?.body ?? '{}'), {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: thread,
+          type: 'text',
+          text: { preview_url: false, body: sentence },
+        });
+
+        const again = envelope('messages', {
+          messages: [
+            {
+              from: thread,
+              id: 'wamid.t194.in2',
+              timestamp: '1759753000',
+              type: 'text',
+              text: { body: 'עדיין שריפה' },
+            },
+          ],
+        });
+        const second = JSON.stringify(again);
+        const repeated = await app.inject({
+          method: 'POST',
+          url: '/webhooks/whatsapp',
+          headers: {
+            'content-type': 'application/json',
+            'x-hub-signature-256': sign(second),
+          },
+          payload: second,
+        });
+        assert.equal(repeated.statusCode, 200);
+        assert.equal(posts.length, 1);
+
+        const { rows } = await pool.query<{ service_call_id: string }>(
+          `SELECT service_call_id FROM service_call WHERE sender_label = $1`,
+          [sender],
+        );
+        assert.equal(rows.length, 1);
+        const callId = rows[0]?.service_call_id;
+        assert.ok(callId);
+        const messages = await listMessagesOnCall(pool, callId ?? '');
+        const reply = messages.find((message) => message.echo);
+        assert.equal(reply?.body, sentence);
+        const page = await asOperator(app, who).inject({
+          method: 'GET',
+          url: `/calls/${callId}`,
+        });
+        assert.equal(page.statusCode, 200);
+        assert.equal(page.body.includes(sentence), true);
+        assert.equal(page.body.includes('data-echo="true"'), true);
+      });
+    } finally {
+      await saveEmergencySettings(pool, clock, {
+        termsText: before.termsText,
+        phone: before.phone,
+        hours: before.hours,
+        actorId: who.staffAccountId,
+      });
+      await pool.query(
+        `DELETE FROM message
+          WHERE conversation_id IN (
+            SELECT conversation_id FROM conversation
+             WHERE source_channel = 'WHATSAPP' AND external_thread_id = $1
+          )`,
+        [thread],
+      );
+      await pool.query(
+        `DELETE FROM service_call_transition
+          WHERE service_call_id IN (
+            SELECT service_call_id FROM service_call WHERE sender_label = $1
+          )`,
+        [sender],
+      );
+      await pool.query(
+        `DELETE FROM audit_log
+          WHERE subject_id IN (
+            SELECT service_call_id::text FROM service_call WHERE sender_label = $1
+          )
+             OR actor_id = $2`,
+        [sender, who.staffAccountId],
+      );
+      await pool.query(`DELETE FROM service_call WHERE sender_label = $1`, [
+        sender,
+      ]);
+      await pool.query(
+        `DELETE FROM conversation
+          WHERE source_channel = 'WHATSAPP' AND external_thread_id = $1`,
+        [thread],
+      );
+      await signOutAll(pool, 'whatsapp.test');
       await pool.end();
     }
   });

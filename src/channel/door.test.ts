@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   exitCall,
+  flagEmergency,
   getCall,
   listCategories,
   listOpenCalls,
+  openCall,
   saveEmergencySettings,
 } from '../calls/contract.ts';
 import { fixedClock } from '../kernel/clock.ts';
@@ -841,6 +843,353 @@ describe('channel · the intake door', () => {
         assert.equal(call?.summary, 'נזילה בצינור');
         const messages = await listMessagesOnCall(db, outcome.callId);
         assert.equal(messages[0]?.bodyHe, null);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('sends the duty sentence on a flagged WhatsApp message before any model, once', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const { account } = await addOperator(db, clock, {
+          email: 'duty@door-reply.test',
+          role: 'OPERATOR',
+        });
+        await saveEmergencySettings(db, clock, {
+          termsText: 'שריפה',
+          phone: '050-194-0000',
+          hours: 'א׳–ה׳ 08:00–20:00',
+          actorId: account.staffAccountId,
+        });
+        const seen: string[] = [];
+        const sent: { to: string; body: string }[] = [];
+        const deps = {
+          sorter: {
+            async sort() {
+              seen.push('sorter');
+              return {
+                label: 'call' as const,
+                categoryCode: null,
+                summary: 'סיכום מהמודל',
+              };
+            },
+            async translate() {
+              seen.push('translate');
+              return { bodyHe: null };
+            },
+          },
+          matchesEmergency: emergencyMatch(db),
+          replyOnWhatsapp: async (reply: { to: string; body: string }) => {
+            seen.push('reply');
+            sent.push(reply);
+            return { externalMessageId: 'wamid.duty.194' };
+          },
+        };
+        const outcome = await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            sourceChannel: 'WHATSAPP',
+            externalMessageId: 'wa-194-1',
+            externalThreadId: '972599001194',
+            senderAddress: '+972599001194',
+            subject: null,
+            body: 'יש שריפה בדירה',
+          }),
+        );
+        assert.equal(outcome.kind, 'call');
+        if (outcome.kind !== 'call') return;
+        assert.deepEqual(seen, ['reply', 'translate', 'sorter']);
+        assert.deepEqual(sent, [
+          {
+            to: '972599001194',
+            body: 'קריאת חירום. להתקשר לכונן: 050-194-0000. שעות כונן: א׳–ה׳ 08:00–20:00.',
+          },
+        ]);
+        const messages = await listMessagesOnCall(db, outcome.callId);
+        const reply = messages.find((message) => message.echo);
+        assert.equal(
+          reply?.body,
+          'קריאת חירום. להתקשר לכונן: 050-194-0000. שעות כונן: א׳–ה׳ 08:00–20:00.',
+        );
+        const { rows } = await db.query<{ action: string }>(
+          `SELECT action FROM audit_log
+            WHERE subject_id = $1 AND action = 'channel.duty_reply'`,
+          [outcome.callId],
+        );
+        assert.deepEqual(
+          rows.map((row) => row.action),
+          ['channel.duty_reply'],
+        );
+
+        await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            sourceChannel: 'WHATSAPP',
+            externalMessageId: 'wa-194-2',
+            externalThreadId: '972599001194',
+            senderAddress: '+972599001194',
+            subject: null,
+            body: 'עדיין שריפה',
+          }),
+        );
+        assert.equal(sent.length, 1);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('sends nothing for a hand flag, a phone or walk-in call, or an email', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const { account } = await addOperator(db, clock, {
+          email: 'hand@door-reply.test',
+          role: 'OPERATOR',
+        });
+        await saveEmergencySettings(db, clock, {
+          termsText: 'שריפה',
+          phone: '050-194-0000',
+          hours: 'א׳–ה׳ 08:00–20:00',
+          actorId: account.staffAccountId,
+        });
+        const sent: string[] = [];
+        const deps = {
+          sorter: counting(CALL, []),
+          matchesEmergency: emergencyMatch(db),
+          replyOnWhatsapp: async () => {
+            sent.push('sent');
+            return { externalMessageId: 'wamid.duty.no' };
+          },
+        };
+
+        const opened = await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            sourceChannel: 'WHATSAPP',
+            externalMessageId: 'wa-hand-1',
+            externalThreadId: '972599001195',
+            senderAddress: '+972599001195',
+            subject: null,
+            body: 'נזילה רגילה',
+          }),
+        );
+        assert.equal(opened.kind, 'call');
+        if (opened.kind !== 'call') return;
+        await flagEmergency(db, clock, {
+          callId: opened.callId,
+          actorId: account.staffAccountId,
+          actorRole: 'OPERATOR',
+        });
+        await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            sourceChannel: 'WHATSAPP',
+            externalMessageId: 'wa-hand-2',
+            externalThreadId: '972599001195',
+            senderAddress: '+972599001195',
+            subject: null,
+            body: 'יש שריפה בדירה',
+          }),
+        );
+
+        const emailed = await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            sourceChannel: 'EMAIL',
+            externalMessageId: 'mail-194',
+            externalThreadId: 'mail-thread-194',
+            senderAddress: 'tenant@door-reply.test',
+            body: 'יש שריפה בדירה',
+          }),
+        );
+        assert.equal(emailed.kind, 'call');
+        if (emailed.kind !== 'call') return;
+        const emailedCall = await getCall(db, emailed.callId);
+        assert.equal(emailedCall?.emergency.flagged, true);
+
+        for (const sourceChannel of ['PHONE', 'WALK_IN'] as const) {
+          const call = await openCall(db, clock, {
+            sourceChannel,
+            description: 'יש שריפה בדירה',
+            sender: { kind: 'unknown' },
+            openedBy: account.staffAccountId,
+          });
+          const { rows } = await db.query<{ n: string }>(
+            `SELECT count(*)::text AS n FROM audit_log
+              WHERE subject_id = $1 AND action = 'channel.duty_reply'`,
+            [call.id],
+          );
+          assert.equal(rows[0]?.n, '0');
+          assert.equal((await listMessagesOnCall(db, call.id)).length, 0);
+        }
+
+        assert.deepEqual(sent, []);
+        const { rows } = await db.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM audit_log
+            WHERE action = 'channel.duty_reply'
+              AND subject_id IN ($1, $2)`,
+          [opened.callId, emailed.callId],
+        );
+        assert.equal(rows[0]?.n, '0');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('sends the duty reply when a later WhatsApp message flags the open call', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const { account } = await addOperator(db, clock, {
+          email: 'later@door-reply.test',
+          role: 'OPERATOR',
+        });
+        await saveEmergencySettings(db, clock, {
+          termsText: 'שריפה',
+          phone: '050-194-0000',
+          hours: 'א׳–ה׳ 08:00–20:00',
+          actorId: account.staffAccountId,
+        });
+        const sent: { to: string; body: string }[] = [];
+        const deps = {
+          sorter: counting(CALL, []),
+          matchesEmergency: emergencyMatch(db),
+          replyOnWhatsapp: async (reply: { to: string; body: string }) => {
+            sent.push(reply);
+            return { externalMessageId: 'wamid.duty.later' };
+          },
+        };
+        const opened = await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            sourceChannel: 'WHATSAPP',
+            externalMessageId: 'wa-later-1',
+            externalThreadId: '972599001196',
+            senderAddress: '+972599001196',
+            subject: null,
+            body: 'נזילה רגילה',
+          }),
+        );
+        assert.equal(opened.kind, 'call');
+        if (opened.kind !== 'call') return;
+        assert.deepEqual(sent, []);
+        const flagged = await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            sourceChannel: 'WHATSAPP',
+            externalMessageId: 'wa-later-2',
+            externalThreadId: '972599001196',
+            senderAddress: '+972599001196',
+            subject: null,
+            body: 'יש שריפה בדירה',
+          }),
+        );
+        assert.equal(flagged.kind, 'attached');
+        if (flagged.kind !== 'attached') return;
+        assert.equal(flagged.callId, opened.callId);
+        assert.deepEqual(sent, [
+          {
+            to: '972599001196',
+            body: 'קריאת חירום. להתקשר לכונן: 050-194-0000. שעות כונן: א׳–ה׳ 08:00–20:00.',
+          },
+        ]);
+        const call = await getCall(db, opened.callId);
+        assert.equal(call?.emergency.flagged, true);
+        if (call?.emergency.flagged) assert.equal(call.emergency.by, 'terms');
+        const messages = await listMessagesOnCall(db, opened.callId);
+        assert.equal(messages.filter((message) => message.echo).length, 1);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('sends again when Meta refused the first reply', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const { account } = await addOperator(db, clock, {
+          email: 'retry@door-reply.test',
+          role: 'OPERATOR',
+        });
+        await saveEmergencySettings(db, clock, {
+          termsText: 'שריפה',
+          phone: '050-194-0000',
+          hours: 'א׳–ה׳ 08:00–20:00',
+          actorId: account.staffAccountId,
+        });
+        let attempts = 0;
+        const message = incoming({
+          sourceChannel: 'WHATSAPP',
+          externalMessageId: 'wa-retry-1',
+          externalThreadId: '972599001198',
+          senderAddress: '+972599001198',
+          subject: null,
+          body: 'יש שריפה בדירה',
+        });
+        const deps = {
+          sorter: counting(CALL, []),
+          matchesEmergency: emergencyMatch(db),
+          replyOnWhatsapp: async () => {
+            attempts += 1;
+            if (attempts === 1) throw new Error('meta down');
+            return { externalMessageId: 'wamid.duty.retry' };
+          },
+        };
+        await assert.rejects(
+          () => receiveIncoming(db, clock, deps, message),
+          /meta down/,
+        );
+        const outcome = await receiveIncoming(db, clock, deps, message);
+        assert.equal(outcome.kind, 'call');
+        if (outcome.kind !== 'call') return;
+        assert.equal(attempts, 2);
+        const messages = await listMessagesOnCall(db, outcome.callId);
+        assert.equal(messages.filter((row) => row.echo).length, 1);
+        const { rows } = await db.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM audit_log
+            WHERE subject_id = $1 AND action = 'channel.duty_reply'`,
+          [outcome.callId],
+        );
+        assert.equal(rows[0]?.n, '1');
       });
     } finally {
       await pool.end();

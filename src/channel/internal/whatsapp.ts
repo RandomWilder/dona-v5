@@ -51,7 +51,11 @@ export interface WhatsappResponse {
 
 export type WhatsappFetch = (
   url: string,
-  init?: { headers?: Record<string, string> },
+  init?: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+  },
 ) => Promise<WhatsappResponse>;
 
 interface WhatsappIntake {
@@ -76,7 +80,11 @@ declare module 'fastify' {
 }
 
 const defaultFetch: WhatsappFetch = async (url, init) => {
-  const response = await fetch(url, { headers: init?.headers });
+  const response = await fetch(url, {
+    method: init?.method,
+    headers: init?.headers,
+    body: init?.body,
+  });
   return {
     ok: response.ok,
     status: response.status,
@@ -266,6 +274,7 @@ export function registerWhatsappWebhook(
       deps.fetch ?? defaultFetch,
     );
     const sorter = deps.sorter ?? unconfiguredSorter();
+    const fetchImpl = deps.fetch ?? defaultFetch;
     let storedEcho = false;
     for (const message of batch.messages) {
       await receiveIncoming(
@@ -275,6 +284,8 @@ export function registerWhatsappWebhook(
           sorter,
           matchesEmergency: emergencyMatch(deps.pool),
           objects: deps.objects,
+          replyOnWhatsapp: (reply) =>
+            sendWhatsappReply(config, fetchImpl, reply),
         },
         message,
       );
@@ -283,6 +294,50 @@ export function registerWhatsappWebhook(
     if (storedEcho) await noteWhatsappEcho(deps.pool, deps.clock);
     return { ok: true };
   });
+}
+
+/**
+ * The one send. A session message, not a template: the inbound message has
+ * just opened the 24-hour window. Nothing else in this module posts to Meta.
+ */
+export async function sendWhatsappReply(
+  config: WhatsappConfig,
+  fetchImpl: WhatsappFetch,
+  reply: { to: string; body: string },
+): Promise<{ externalMessageId: string }> {
+  if (!/^\d{8,15}$/.test(reply.to)) {
+    throw new KernelError('invalid', 'whatsapp recipient is not a number');
+  }
+  const body = reply.body.trim();
+  if (body === '' || body.length > 4096) {
+    throw new KernelError('invalid', 'whatsapp reply is not a short text');
+  }
+  const url =
+    `https://graph.facebook.com/${WHATSAPP_GRAPH_VERSION}/` +
+    `${config.phoneNumberId}/messages`;
+  const response = await fetchImpl(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: reply.to,
+      type: 'text',
+      text: { preview_url: false, body },
+    }),
+  });
+  if (!response.ok) {
+    throw new KernelError('unavailable', 'whatsapp reply was not sent');
+  }
+  const payload = objectOf(await response.json());
+  const id = stringOf(objectOf(arrayOf(payload.messages)[0]).id);
+  if (id === '') {
+    throw new KernelError('unavailable', 'whatsapp reply was not sent');
+  }
+  return { externalMessageId: id };
 }
 
 function unconfiguredSorter(): Sorter {
