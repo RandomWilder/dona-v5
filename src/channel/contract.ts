@@ -38,6 +38,8 @@ export {
   secretWarning,
   startOutlookPolling,
 } from './internal/outlook.ts';
+export type { SweepReport } from './internal/retention.ts';
+export { sweepFilteredMessages } from './internal/retention.ts';
 export type { ChannelDeps } from './internal/routes.ts';
 export { registerChannelRoutes } from './internal/routes.ts';
 export { createSorter, SORTER_PROMPT_VERSION } from './internal/sorter.ts';

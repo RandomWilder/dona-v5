@@ -107,7 +107,13 @@ amber. A threshold above a year of minutes is refused. A save is audited and is 
 request, so it takes effect with no deploy.
 
 **Filtered messages** are kept for 6 months and then deleted by a scheduled sweep, unless rescued
-into a call. The originals stay in the mailbox and on the phone whatever this module keeps.
+into a call. Six months is counted from when the message arrived. A message exactly that old is
+kept. A call returned to filtered is a filtered message again, counted from the return: once that
+return is older than 6 months the sweep deletes the call's messages, and the call record stays,
+still marked returned. The sweep deletes nothing else. It reports how many messages it deleted,
+and a second run deletes nothing. It runs once a day on staging. The originals stay in the mailbox
+and on the phone whatever this module keeps. The document bucket has no delete, so a filtered
+message's attachment bytes stay there until a person removes them.
 
 **Every write is audited** with the staff account that made it. In V1 every signed-in staff member
 may perform every action on calls.

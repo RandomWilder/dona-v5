@@ -114,6 +114,7 @@ gcloud services enable \
   iamcredentials.googleapis.com \
   sts.googleapis.com \
   documentai.googleapis.com \
+  cloudscheduler.googleapis.com \
   --project "$PROJECT"
 
 say "Artifact Registry (shared by both environments)"
@@ -305,11 +306,31 @@ done
 # rather than in power; scoping run.admin per service is slice 8.4 on
 # tasks/roadmap.md (it can only be bound after the service exists, and the
 # services exist from 1.6).
-for role in roles/run.admin roles/artifactregistry.writer roles/iam.serviceAccountUser; do
+DEPLOY_ROLES=(roles/run.admin roles/artifactregistry.writer roles/iam.serviceAccountUser)
+# #192. Staging's deploy creates the daily filtered-message sweep. Prod does
+# not run that schedule, so prod's deploy identity is not granted it.
+if [ "$ENV" = staging ]; then
+  DEPLOY_ROLES+=(roles/cloudscheduler.admin)
+fi
+for role in "${DEPLOY_ROLES[@]}"; do
   gcloud projects add-iam-policy-binding "$PROJECT" \
     --member "serviceAccount:$DEPLOY_EMAIL" \
     --role "$role" --condition=None >/dev/null
 done
+
+# Cloud Scheduler mints the OAuth token that starts the sweep job, as the
+# runtime account. Enabling the API does not always create that agent before
+# the binding below, so create it first. `identity` is still on the beta track.
+if [ "$ENV" = staging ]; then
+  gcloud beta services identity create \
+    --service=cloudscheduler.googleapis.com \
+    --project "$PROJECT" >/dev/null
+  gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_EMAIL" \
+    --member "serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-cloudscheduler.iam.gserviceaccount.com" \
+    --role roles/iam.serviceAccountTokenCreator \
+    --project "$PROJECT" >/dev/null
+  echo "  Cloud Scheduler may mint tokens for $RUNTIME_SA (filtered-message sweep)"
+fi
 
 say "Private document store gs://$DOCS_BUCKET"
 # Real lease PDFs live here: tenant names, government ID numbers, phone

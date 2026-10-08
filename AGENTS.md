@@ -8,6 +8,7 @@
   `npm run migrate` applies `src/kernel/migrations/` as a Cloud Run job before a revision serves;
   `seed` · `import:register` · `seed:register` · `register:generate` · `seed:doctypes` ·
   `seed:obligation-types` · `passages:sweep` · `specimens:capture` are in no workflow, on purpose.
+  `filtered:sweep` deletes Filtered messages older than 6 months; staging runs it once a day.
 - **Two required gates** plus `npm run guards`: `test:policy` (nothing a model may decide) and `evals`
   (the agent). Beside them, gating nothing: `measure` · `measure:scale`. CI sets `REQUIRE_*=1` — a
   silent skip is a failure.

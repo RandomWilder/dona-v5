@@ -108,7 +108,7 @@ be met. Editable at `/settings` without a deploy.
 | **Emergency** | A ServiceCall flagged because its text contains an emergency term, or because a person flagged it. The flag records which. Pinned first in קריאות. Not a state, and no model sets it. |
 | **Duty contact** | The duty phone number and the duty hours. Editable at `/settings`. The fixed emergency reply is composed from these rows. |
 | **Exit** | A ServiceCall closed by a person, with a reason, before a Visit: **Answered** (a question, settled), **Forwarded** (a legitimate request another department owns — finance, legal — named on the call), **Duplicate** (linked to the call it repeats), **Cancelled** (the requester withdrew). Not "rejected", and a call with no exit reason is not closed. |
-| **Filtered message** | An incoming message the sorter judged not to be a ServiceCall. Kept, never deleted, and the office can turn it into one. |
+| **Filtered message** | An incoming message the sorter judged not to be a ServiceCall. Kept for 6 months, then deleted unless the office has turned it into a call. Sent back to filtered, the six months start again from the return; the call record stays. |
 | **Visit** | A contractor or operator attending. |
 | **Responsibility** | **Ternary**: tenant / operator / **contractor**. Never binary. |
 | **תקופת הבדק** | The warranty period. With `asset_in_warranty` true, the answer is the contractor. |
