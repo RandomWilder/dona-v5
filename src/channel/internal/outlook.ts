@@ -1,6 +1,7 @@
-// #188. Outlook, through Microsoft Graph. This ticket only reads. Mail.Send
-// is the emergency reply, which is a later ticket, and nothing here deletes,
-// moves, or marks mail as read.
+// #188. Outlook, through Microsoft Graph. Reading never deletes, moves, or
+// marks mail as read. #195. Mail.Send is one function, used for the fixed
+// emergency reply and nothing else. The reply is posted on that message, so
+// it stays on the thread and lands in the mailbox's Sent Items.
 //
 // A mailbox is read from the cursor it starts at. The first read asks Graph
 // for a delta link as of now and imports nothing that arrived earlier. The
@@ -8,7 +9,7 @@
 // restart resumes there.
 
 import { addDays, type Clock, today } from '../../kernel/clock.ts';
-import type { IncomingMessage } from './door.ts';
+import type { EmailDutyReply, IncomingMessage } from './door.ts';
 import type { Queryable } from './types.ts';
 
 const CURSOR_ID = 'outlook';
@@ -314,6 +315,42 @@ async function accessToken(
   const token = stringOf(objectOf(await response.json()).access_token);
   if (token === '') throw new Error('graph sign-in returned no token');
   return token;
+}
+
+/**
+ * The one mail send. A reply on the inbound message, from this mailbox only.
+ * Graph answers 202 and returns no id, so the id we keep names that inbound.
+ */
+export async function sendOutlookReply(
+  config: GraphMailbox,
+  reply: EmailDutyReply,
+  fetchImpl: GraphFetch = defaultGraphFetch,
+): Promise<{ externalMessageId: string }> {
+  const messageId = reply.messageId.trim();
+  const text = reply.body.trim();
+  if (
+    messageId === '' ||
+    messageId !== reply.messageId ||
+    /\s/.test(messageId) ||
+    `reply:${messageId}`.length > 500 ||
+    text === ''
+  ) {
+    throw new Error('outlook reply was not sent');
+  }
+  const token = await accessToken(config, fetchImpl);
+  const url =
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(config.mailbox)}` +
+    `/messages/${encodeURIComponent(messageId)}/reply`;
+  const response = await fetchImpl(url, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ comment: text }),
+  });
+  if (!response.ok) throw new Error('outlook reply was not sent');
+  return { externalMessageId: `reply:${messageId}` };
 }
 
 async function graphGet(

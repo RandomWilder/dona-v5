@@ -10,6 +10,7 @@ import {
   graphMailboxFrom,
   receiveIncoming,
   SORTER_PROMPT_VERSION,
+  sendOutlookReply,
   startOutlookPolling,
   watchWhatsapp,
   whatsappFrom,
@@ -102,6 +103,7 @@ if (outlook) {
           },
           matchesEmergency: emergencyMatch(pool),
           objects,
+          replyOnEmail: (reply) => sendOutlookReply(outlook, reply),
         },
         message,
       );

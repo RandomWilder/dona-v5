@@ -1,6 +1,7 @@
 // The channel module's public surface. #186 is the intake door. #187 is the
 // sorter on OpenAI, and translation. #188 is the Outlook adapter. #193 is
 // WhatsApp on Meta's test number. #194 is the emergency reply on that number.
+// #195 is the emergency reply on the shared mailbox.
 
 export { fileAttachment, readAttachment } from './internal/attachments.ts';
 export type {
@@ -37,6 +38,7 @@ export {
   OUTLOOK_POLL_MS,
   pollOutlook,
   secretWarning,
+  sendOutlookReply,
   startOutlookPolling,
 } from './internal/outlook.ts';
 export type { SweepReport } from './internal/retention.ts';

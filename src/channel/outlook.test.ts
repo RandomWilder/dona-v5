@@ -1,6 +1,9 @@
 // #188. The Outlook adapter, on recorded Graph payloads. No test calls Microsoft.
 import assert from 'node:assert/strict';
+import { glob, readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { asOperator, signIn, signOutAll } from '../../tests/support/session.ts';
 import { buildApp } from '../app.ts';
 import { fixedClock } from '../kernel/clock.ts';
@@ -19,6 +22,7 @@ import {
   type OutlookReader,
   pollOutlook,
   secretWarning,
+  sendOutlookReply,
 } from './contract.ts';
 
 const HOUR = 60 * 60 * 1000;
@@ -781,6 +785,147 @@ describe('channel · outlook', { concurrency: false }, () => {
       await signOutAll(pool, domain);
       await pool.end();
     }
+  });
+});
+
+describe('outlook · the duty reply', () => {
+  it('replies once on the configured mailbox thread', async () => {
+    const calls: {
+      url: string;
+      method: string;
+      body: string | null;
+      authorization: string | null;
+    }[] = [];
+    const fetchImpl: GraphFetch = async (url, init) => {
+      calls.push({
+        url,
+        method: init?.method ?? 'GET',
+        body: init?.body ?? null,
+        authorization: init?.headers?.authorization ?? null,
+      });
+      if (url.startsWith('https://login.microsoftonline.com/')) {
+        return jsonResponse({ access_token: 'tok' });
+      }
+      return {
+        ok: true,
+        status: 202,
+        async json() {
+          return {};
+        },
+      };
+    };
+    const sent = await sendOutlookReply(
+      graphConfig(),
+      {
+        messageId: 'AAMkAG-first',
+        body: 'קריאת חירום. להתקשר לכונן: 050-195-0000. שעות כונן: א׳–ה׳ 08:00–20:00.',
+      },
+      fetchImpl,
+    );
+    const mail = calls.filter((call) =>
+      call.url.startsWith('https://graph.microsoft.com/'),
+    );
+    assert.equal(mail.length, 1);
+    assert.equal(
+      mail[0]?.url,
+      'https://graph.microsoft.com/v1.0/users/box%40test/messages/AAMkAG-first/reply',
+    );
+    assert.equal(mail[0]?.method, 'POST');
+    assert.equal(mail[0]?.authorization, 'Bearer tok');
+    assert.deepEqual(JSON.parse(mail[0]?.body ?? ''), {
+      comment:
+        'קריאת חירום. להתקשר לכונן: 050-195-0000. שעות כונן: א׳–ה׳ 08:00–20:00.',
+    });
+    assert.equal(sent.externalMessageId, 'reply:AAMkAG-first');
+  });
+
+  it('sends nothing when Graph refuses, and nothing else in the process can send mail', async () => {
+    const calls: string[] = [];
+    const fetchImpl: GraphFetch = async (url) => {
+      calls.push(url);
+      if (url.startsWith('https://login.microsoftonline.com/')) {
+        return jsonResponse({ access_token: 'tok' });
+      }
+      return {
+        ok: false,
+        status: 403,
+        async json() {
+          return {};
+        },
+      };
+    };
+    await assert.rejects(
+      () =>
+        sendOutlookReply(
+          graphConfig(),
+          { messageId: 'AAMkAG-first', body: 'קריאת חירום.' },
+          fetchImpl,
+        ),
+      /outlook reply was not sent/,
+    );
+    await assert.rejects(
+      () =>
+        sendOutlookReply(
+          graphConfig(),
+          { messageId: 'AAMkAG-first', body: '  ' },
+          fetchImpl,
+        ),
+      /outlook reply was not sent/,
+    );
+    assert.equal(
+      calls.filter((url) => url.startsWith('https://graph.microsoft.com/'))
+        .length,
+      1,
+    );
+
+    const root = path.dirname(fileURLToPath(import.meta.url));
+    const src = path.dirname(root);
+    const replyFiles: string[] = [];
+    const sendMailFiles: string[] = [];
+    const callers: string[] = [];
+    for await (const entry of glob('**/*.ts', { cwd: src })) {
+      if (entry.endsWith('.test.ts')) continue;
+      const source = await readFile(path.join(src, entry), 'utf8');
+      if (source.includes('/reply')) replyFiles.push(entry);
+      if (source.includes('sendMail')) sendMailFiles.push(entry);
+      if (source.includes('sendOutlookReply')) callers.push(entry);
+    }
+    assert.deepEqual(replyFiles, ['channel/internal/outlook.ts']);
+    assert.deepEqual(sendMailFiles, []);
+    assert.deepEqual(callers.sort(), [
+      'channel/contract.ts',
+      'channel/internal/outlook.ts',
+      'serve.ts',
+    ]);
+  });
+
+  it('keeps a slashed message id inside this mailbox', async () => {
+    const calls: string[] = [];
+    const fetchImpl: GraphFetch = async (url) => {
+      calls.push(url);
+      if (url.startsWith('https://login.microsoftonline.com/')) {
+        return jsonResponse({ access_token: 'tok' });
+      }
+      return {
+        ok: true,
+        status: 202,
+        async json() {
+          return {};
+        },
+      };
+    };
+    await sendOutlookReply(
+      graphConfig(),
+      { messageId: 'AAMkAG+195/abc=', body: 'קריאת חירום.' },
+      fetchImpl,
+    );
+    const mail = calls.find((url) =>
+      url.startsWith('https://graph.microsoft.com/'),
+    );
+    assert.equal(
+      mail,
+      'https://graph.microsoft.com/v1.0/users/box%40test/messages/AAMkAG%2B195%2Fabc%3D/reply',
+    );
   });
 });
 

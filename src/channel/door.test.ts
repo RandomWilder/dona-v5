@@ -950,7 +950,7 @@ describe('channel · the intake door', () => {
     }
   });
 
-  it('sends nothing for a hand flag, a phone or walk-in call, or an email', async (t) => {
+  it('sends nothing for a hand flag or a phone or walk-in call', async (t) => {
     const pool = await migratedPoolOrNull();
     if (!pool) {
       t.skip(skipReason);
@@ -1190,6 +1190,301 @@ describe('channel · the intake door', () => {
           [outcome.callId],
         );
         assert.equal(rows[0]?.n, '1');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('sends one reply on a flagged email thread, and not a second', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const { account } = await addOperator(db, clock, {
+          email: 'mail@door-reply.test',
+          role: 'OPERATOR',
+        });
+        await saveEmergencySettings(db, clock, {
+          termsText: 'שריפה',
+          phone: '050-195-0000',
+          hours: 'א׳–ה׳ 08:00–20:00',
+          actorId: account.staffAccountId,
+        });
+        const seen: string[] = [];
+        const sent: { messageId: string; body: string }[] = [];
+        const deps = {
+          sorter: {
+            async sort() {
+              seen.push('sorter');
+              return {
+                label: 'call' as const,
+                categoryCode: null,
+                summary: 'סיכום מהמודל',
+              };
+            },
+            async translate() {
+              seen.push('translate');
+              return { bodyHe: null };
+            },
+          },
+          matchesEmergency: emergencyMatch(db),
+          replyOnEmail: async (reply: { messageId: string; body: string }) => {
+            seen.push('reply');
+            sent.push(reply);
+            return { externalMessageId: `reply:${reply.messageId}` };
+          },
+        };
+        const outcome = await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            externalMessageId: 'AAMkAG-195-1',
+            externalThreadId: 'AAQkAG-thread-195',
+            senderAddress: 'tenant@door-reply.test',
+            subject: 'שריפה',
+            body: 'יש שריפה בדירה',
+          }),
+        );
+        assert.equal(outcome.kind, 'call');
+        if (outcome.kind !== 'call') return;
+        assert.deepEqual(seen, ['reply', 'translate', 'sorter']);
+        assert.deepEqual(sent, [
+          {
+            messageId: 'AAMkAG-195-1',
+            body: 'קריאת חירום. להתקשר לכונן: 050-195-0000. שעות כונן: א׳–ה׳ 08:00–20:00.',
+          },
+        ]);
+        const messages = await listMessagesOnCall(db, outcome.callId);
+        const reply = messages.find((message) => message.echo);
+        assert.equal(
+          reply?.body,
+          'קריאת חירום. להתקשר לכונן: 050-195-0000. שעות כונן: א׳–ה׳ 08:00–20:00.',
+        );
+        const { rows } = await db.query<{ action: string; channel: string }>(
+          `SELECT action, inputs->>'channel' AS channel FROM audit_log
+            WHERE subject_id = $1 AND action = 'channel.duty_reply'`,
+          [outcome.callId],
+        );
+        assert.deepEqual(
+          rows.map((row) => row.action),
+          ['channel.duty_reply'],
+        );
+        assert.deepEqual(
+          rows.map((row) => row.channel),
+          ['EMAIL'],
+        );
+
+        await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            externalMessageId: 'AAMkAG-195-2',
+            externalThreadId: 'AAQkAG-thread-195',
+            senderAddress: 'tenant@door-reply.test',
+            subject: 'שריפה',
+            body: 'עדיין שריפה',
+          }),
+        );
+        assert.equal(sent.length, 1);
+        assert.equal(
+          (await listMessagesOnCall(db, outcome.callId)).filter(
+            (message) => message.echo,
+          ).length,
+          1,
+        );
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('sends nothing when an email call was flagged by hand', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const { account } = await addOperator(db, clock, {
+          email: 'mail-hand@door-reply.test',
+          role: 'OPERATOR',
+        });
+        await saveEmergencySettings(db, clock, {
+          termsText: 'שריפה',
+          phone: '050-195-0000',
+          hours: 'א׳–ה׳ 08:00–20:00',
+          actorId: account.staffAccountId,
+        });
+        const sent: string[] = [];
+        const deps = {
+          sorter: counting(CALL, []),
+          matchesEmergency: emergencyMatch(db),
+          replyOnEmail: async () => {
+            sent.push('sent');
+            return { externalMessageId: 'reply:hand' };
+          },
+        };
+        const opened = await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            externalMessageId: 'AAMkAG-hand-1',
+            externalThreadId: 'AAQkAG-thread-hand',
+            senderAddress: 'tenant@door-reply.test',
+            body: 'נזילה רגילה',
+          }),
+        );
+        assert.equal(opened.kind, 'call');
+        if (opened.kind !== 'call') return;
+        await flagEmergency(db, clock, {
+          callId: opened.callId,
+          actorId: account.staffAccountId,
+          actorRole: 'OPERATOR',
+        });
+        await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            externalMessageId: 'AAMkAG-hand-2',
+            externalThreadId: 'AAQkAG-thread-hand',
+            senderAddress: 'tenant@door-reply.test',
+            body: 'יש שריפה בדירה',
+          }),
+        );
+        assert.deepEqual(sent, []);
+        const messages = await listMessagesOnCall(db, opened.callId);
+        assert.equal(messages.filter((message) => message.echo).length, 0);
+        const { rows } = await db.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM audit_log
+            WHERE subject_id = $1 AND action = 'channel.duty_reply'`,
+          [opened.callId],
+        );
+        assert.equal(rows[0]?.n, '0');
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('sends the duty reply when a later email flags the open call', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const { account } = await addOperator(db, clock, {
+          email: 'mail-later@door-reply.test',
+          role: 'OPERATOR',
+        });
+        await saveEmergencySettings(db, clock, {
+          termsText: 'שריפה',
+          phone: '050-195-0000',
+          hours: 'א׳–ה׳ 08:00–20:00',
+          actorId: account.staffAccountId,
+        });
+        const sent: string[] = [];
+        const deps = {
+          sorter: counting(CALL, []),
+          matchesEmergency: emergencyMatch(db),
+          replyOnEmail: async (reply: { messageId: string; body: string }) => {
+            sent.push(reply.messageId);
+            return { externalMessageId: `reply:${reply.messageId}` };
+          },
+        };
+        const opened = await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            externalMessageId: 'AAMkAG-later-1',
+            externalThreadId: 'AAQkAG-thread-later',
+            senderAddress: 'tenant@door-reply.test',
+            body: 'נזילה רגילה',
+          }),
+        );
+        assert.equal(opened.kind, 'call');
+        if (opened.kind !== 'call') return;
+        assert.deepEqual(sent, []);
+        const flagged = await receiveIncoming(
+          db,
+          clock,
+          deps,
+          incoming({
+            externalMessageId: 'AAMkAG-later-2',
+            externalThreadId: 'AAQkAG-thread-later',
+            senderAddress: 'tenant@door-reply.test',
+            body: 'יש שריפה בדירה',
+          }),
+        );
+        assert.equal(flagged.kind, 'attached');
+        assert.deepEqual(sent, ['AAMkAG-later-2']);
+        const messages = await listMessagesOnCall(db, opened.callId);
+        assert.equal(messages.filter((message) => message.echo).length, 1);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('sends the email reply again when the first send was refused', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const { account } = await addOperator(db, clock, {
+          email: 'mail-retry@door-reply.test',
+          role: 'OPERATOR',
+        });
+        await saveEmergencySettings(db, clock, {
+          termsText: 'שריפה',
+          phone: '050-195-0000',
+          hours: 'א׳–ה׳ 08:00–20:00',
+          actorId: account.staffAccountId,
+        });
+        let attempts = 0;
+        const message = incoming({
+          externalMessageId: 'AAMkAG-retry',
+          externalThreadId: 'AAQkAG-thread-retry',
+          senderAddress: 'tenant@door-reply.test',
+          body: 'יש שריפה בדירה',
+        });
+        const deps = {
+          sorter: counting(CALL, []),
+          matchesEmergency: emergencyMatch(db),
+          replyOnEmail: async () => {
+            attempts += 1;
+            if (attempts === 1) throw new Error('graph down');
+            return { externalMessageId: 'reply:AAMkAG-retry' };
+          },
+        };
+        await assert.rejects(
+          () => receiveIncoming(db, clock, deps, message),
+          /graph down/,
+        );
+        const outcome = await receiveIncoming(db, clock, deps, message);
+        assert.equal(outcome.kind, 'call');
+        if (outcome.kind !== 'call') return;
+        assert.equal(attempts, 2);
+        const messages = await listMessagesOnCall(db, outcome.callId);
+        assert.equal(messages.filter((row) => row.echo).length, 1);
       });
     } finally {
       await pool.end();

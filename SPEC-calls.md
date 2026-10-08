@@ -89,7 +89,9 @@ duty contact rows with no model involved. The composer is a pure function of tho
 sentence it returns is a placeholder until the director approves the text. Sending the reply is the
 channel's. On WHATSAPP that send is one session message on the same conversation, inside the
 24-hour window the inbound message opened, once for that call, and it happens before a model reads
-the message. A hand flag sends nothing. PHONE and WALK_IN send nothing. The reply is on the call's
+the message. On EMAIL that send is one reply on the same thread, from the shared mailbox, once for
+that call, before a model reads the message. It uses Mail.Send and lands in that mailbox's Sent
+Items. A hand flag sends nothing. PHONE and WALK_IN send nothing. The reply is on the call's
 timeline and audited.
 
 **Category** is the trade a call needs. It is an admin-managed list of rows, deactivated and never
