@@ -1,7 +1,8 @@
 // The channel module's public surface. #186 is the intake door. #187 is the
 // sorter on OpenAI, and translation. #188 is the Outlook adapter. #193 is
 // WhatsApp on Meta's test number. #194 is the emergency reply on that number.
-// #195 is the emergency reply on the shared mailbox.
+// #195 is the emergency reply on the shared mailbox. #196 is the Gmail
+// standby: recorded payloads only, wired to no mailbox.
 
 export { fileAttachment, readAttachment } from './internal/attachments.ts';
 export type {
@@ -25,6 +26,7 @@ export {
   receiveIncoming,
   rescueNoise,
 } from './internal/door.ts';
+export { GMAIL_SCOPE, normaliseGmailMessage } from './internal/gmail.ts';
 export type {
   GraphFetch,
   OutlookReader,
