@@ -2072,6 +2072,8 @@ const SCREENS: Array<[string, () => string]> = [
         categoryId: null,
         emergency: false,
         toReview: false,
+        band: null,
+        goal: { amberMinutes: 240, redMinutes: 1440 },
         devIntake: false,
       }),
   ],
@@ -2086,6 +2088,7 @@ const SCREENS: Array<[string, () => string]> = [
         dupQuery: '',
         dupMatches: [],
         messages: [],
+        goal: { amberMinutes: 240, redMinutes: 1440 },
         matches: [
           {
             id: '66666666-6666-4666-8666-666666666666',
@@ -2139,6 +2142,7 @@ const SCREENS: Array<[string, () => string]> = [
         dupQuery: '',
         dupMatches: [],
         messages: [],
+        goal: { amberMinutes: 240, redMinutes: 1440 },
         matches: [],
         categories: [
           {
@@ -2282,6 +2286,7 @@ const SCREENS: Array<[string, () => string]> = [
           phone: '000-000-0000',
           hours: 'טרם נקבעו',
         },
+        goal: { amberMinutes: 240, redMinutes: 1440 },
       }),
   ],
   [
@@ -2301,6 +2306,7 @@ const SCREENS: Array<[string, () => string]> = [
           phone: '000-000-0000',
           hours: 'טרם נקבעו',
         },
+        goal: { amberMinutes: 240, redMinutes: 1440 },
       }),
   ],
 ];

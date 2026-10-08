@@ -29,6 +29,8 @@ import {
   listReturnedCalls,
   type OpenCallSpec,
   openCall,
+  readResponseGoal,
+  responseGoalBand,
   restoreReturnedCall,
   returnToFiltered,
   saveSenderContact,
@@ -116,15 +118,18 @@ function listFilter(query: unknown): {
   categoryId?: string;
   emergency?: boolean;
   toReview?: boolean;
+  band?: 'amber' | 'red';
 } {
   const form = formOf(query);
   const state = textOf(form.state);
   const category = textOf(form.category);
+  const band = textOf(form.goal);
   const filter: {
     state?: CallState;
     categoryId?: string;
     emergency?: boolean;
     toReview?: boolean;
+    band?: 'amber' | 'red';
   } = {};
   if ((CALL_STATES as readonly string[]).includes(state)) {
     filter.state = state as CallState;
@@ -139,6 +144,7 @@ function listFilter(query: unknown): {
   }
   if (textOf(form.emergency) === '1') filter.emergency = true;
   if (textOf(form.review) === '1') filter.toReview = true;
+  if (band === 'amber' || band === 'red') filter.band = band;
   return filter;
 }
 
@@ -276,11 +282,21 @@ async function callsPage(
   refusal?: string,
 ): Promise<string> {
   const filter = listFilter(request.query);
-  const [calls, categories, mailboxWarning] = await Promise.all([
+  const now = deps.clock.now();
+  const [listed, categories, mailboxWarning, goal] = await Promise.all([
     listOpenCalls(deps.pool, filter),
     listCategories(deps.pool),
     deps.mailboxWarning ? deps.mailboxWarning() : Promise.resolve(false),
+    readResponseGoal(deps.pool),
   ]);
+  const calls =
+    filter.band === undefined
+      ? listed
+      : listed.filter(
+          (call) =>
+            responseGoalBand(call.state, call.openedAt, now, goal) ===
+            filter.band,
+        );
   const role = request.staff?.role ?? null;
   const csrf = csrfFrom(request);
   const mayFile = can(role, 'documents.write');
@@ -293,8 +309,10 @@ async function callsPage(
     categoryId: filter.categoryId ?? null,
     emergency: filter.emergency === true,
     toReview: filter.toReview === true,
+    band: filter.band ?? null,
+    goal,
     devIntake: deps.devIntake === true,
-    now: deps.clock.now(),
+    now,
     mailboxWarning,
     secretWarning: deps.secretWarning ? deps.secretWarning() : null,
     refusal,
@@ -315,7 +333,7 @@ async function callPage(
     call.state === 'NEW' && query.length > 0 && query.length <= 80;
   const dupSearching =
     canExit(call.state) && dup.length > 0 && dup.length <= 80;
-  const [categories, matches, dupMatches, messages, documentTypes] =
+  const [categories, matches, dupMatches, messages, documentTypes, goal] =
     await Promise.all([
       listCategories(deps.pool, { activeOnly: call.state !== 'NEW' }),
       searching ? findPartiesByName(deps.pool, query) : Promise.resolve([]),
@@ -324,6 +342,7 @@ async function callPage(
         : Promise.resolve([]),
       deps.messagesOnCall ? deps.messagesOnCall(callId) : Promise.resolve([]),
       deps.documentTypes ? deps.documentTypes() : Promise.resolve([]),
+      readResponseGoal(deps.pool),
     ]);
   const role = request.staff?.role ?? null;
   const csrf = csrfFrom(request);
@@ -345,6 +364,7 @@ async function callPage(
     dupQuery: canExit(call.state) && dup.length <= 80 ? dup : '',
     dupMatches,
     messages,
+    goal,
     mayFile: can(role, 'documents.write'),
     documentTypes,
     now: deps.clock.now(),

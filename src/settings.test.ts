@@ -60,6 +60,7 @@ describe('settings · catalogues', () => {
       );
       assert.doesNotMatch(viewerGet.body, /action="\/settings\/categories"/);
       assert.doesNotMatch(viewerGet.body, /action="\/settings\/emergency"/);
+      assert.doesNotMatch(viewerGet.body, /action="\/settings\/response-goal"/);
       assert.doesNotMatch(viewerGet.body, /asset_type/);
 
       const refused = await asOps.inject({

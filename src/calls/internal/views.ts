@@ -8,6 +8,7 @@ import { DEFAULT_ZONE, dayIn } from '../../kernel/clock.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import {
+  ageMinutes,
   CALL_STATES,
   type CallState,
   type CallTransition,
@@ -18,6 +19,9 @@ import {
   type ExitKind,
   MANUAL_CHANNELS,
   NOTE_MAX,
+  type ResponseBand,
+  type ResponseGoal,
+  responseGoalBand,
   SENDER_MAX,
   type ServiceCall,
   type ServiceCallDetail,
@@ -61,6 +65,8 @@ export interface CallsScreen {
   categoryId: string | null;
   emergency: boolean;
   toReview: boolean;
+  band: ResponseBand | null;
+  goal: ResponseGoal;
   devIntake: boolean;
   now: Date;
   /** The shared mailbox has not been read successfully for an hour. */
@@ -92,6 +98,7 @@ export interface CallScreen {
   dupQuery: string;
   dupMatches: readonly { id: string; description: string }[];
   messages: readonly TimelineMessage[];
+  goal: ResponseGoal;
   now: Date;
   /** Staff who may file a document. The button is absent otherwise. */
   mayFile?: boolean;
@@ -128,6 +135,11 @@ const SORTER_HE: Record<SorterLabel, string> = {
   call: 'קריאה',
   unsure: 'לא בטוח',
   noise: 'רעש',
+};
+
+const BAND_HE: Record<ResponseBand, string> = {
+  amber: 'כתום',
+  red: 'אדום',
 };
 
 const FILTER_STATES = CALL_STATES.filter((state) => state !== 'CLOSED');
@@ -174,6 +186,10 @@ const styles = h`<style>
   .calls .call[data-emergency="true"] .call-meta {
     color: var(--color-alert);
   }
+  .calls .call-meta [data-goal="amber"],
+  .calls .facts [data-goal="amber"] { color: var(--color-caution); }
+  .calls .call-meta [data-goal="red"],
+  .calls .facts [data-goal="red"] { color: var(--color-alert); }
   .calls .call-main { margin: 0; }
   .calls .call-meta {
     display: flex;
@@ -201,10 +217,7 @@ const styles = h`<style>
 </style>`;
 
 function ageLabel(openedAt: Date, now: Date): string {
-  const minutes = Math.max(
-    0,
-    Math.floor((now.getTime() - openedAt.getTime()) / 60_000),
-  );
+  const minutes = ageMinutes(openedAt, now);
   if (minutes < 1) return 'עכשיו';
   if (minutes === 1) return 'דקה';
   if (minutes < 60) return `${minutes} דקות`;
@@ -232,7 +245,11 @@ function selected(on: boolean): Html {
   return on ? h`selected` : h``;
 }
 
-function callRow(call: ServiceCall, now: Date): Html {
+function goalChip(band: ResponseBand): Html {
+  return h`<span class="chip" data-goal="${band}">${BAND_HE[band]}</span>`;
+}
+
+function callRow(call: ServiceCall, screen: CallsScreen): Html {
   const sender =
     call.requester?.name ??
     (call.sender.kind === 'unknown' ? 'לא ידוע' : call.sender.name);
@@ -250,6 +267,13 @@ function callRow(call: ServiceCall, now: Date): Html {
       : h`<span class="chip" data-proposal="${call.proposal.code}">הצעה: ${call.proposal.labelHe}</span>`;
   const marked = call.emergency.flagged ? 'true' : 'false';
   const reviewing = call.toReview ? 'true' : 'false';
+  const band = responseGoalBand(
+    call.state,
+    call.openedAt,
+    screen.now,
+    screen.goal,
+  );
+  const goal = band === null ? h`` : goalChip(band);
   return h`<article class="call" data-call="${call.id}" data-channel="${call.sourceChannel}" data-call-state="${call.state}" data-emergency="${marked}" data-review="${reviewing}">
     <p class="call-main"><a href="/calls/${call.id}">${call.description}</a></p>
     <p class="call-meta">
@@ -260,7 +284,8 @@ function callRow(call: ServiceCall, now: Date): Html {
       ${emergency}
       ${review}
       <span>${sender}</span>
-      <span>${ageLabel(call.openedAt, now)}</span>
+      <span>${ageLabel(call.openedAt, screen.now)}</span>
+      ${goal}
     </p>
   </article>`;
 }
@@ -298,6 +323,13 @@ function filters(screen: CallsScreen): Html {
         <option value="1" ${selected(screen.toReview)}>לבדיקה</option>
       </select>
     </label>
+    <label>יעד
+      <select name="goal">
+        <option value="" ${selected(screen.band === null)}>הכל</option>
+        <option value="amber" ${selected(screen.band === 'amber')}>${BAND_HE.amber}</option>
+        <option value="red" ${selected(screen.band === 'red')}>${BAND_HE.red}</option>
+      </select>
+    </label>
     <button class="btn" type="submit">סינון</button>
   </form>`;
 }
@@ -311,7 +343,8 @@ export function renderCallsPage(screen: CallsScreen): string {
     screen.state !== null ||
     screen.categoryId !== null ||
     screen.emergency ||
-    screen.toReview;
+    screen.toReview ||
+    screen.band !== null;
   const devLink = screen.devIntake
     ? h`<a href="/dev/intake">הודעת בדיקה</a>`
     : h``;
@@ -325,7 +358,7 @@ export function renderCallsPage(screen: CallsScreen): string {
   const list =
     screen.calls.length === 0
       ? h`<p class="lede">${filtered ? 'אין קריאות תואמות.' : 'אין קריאות פתוחות.'}</p>`
-      : h`<div class="call-list">${screen.calls.map((call) => callRow(call, screen.now))}</div>`;
+      : h`<div class="call-list">${screen.calls.map((call) => callRow(call, screen))}</div>`;
   const body = h`
     <div class="calls glass-stage">
       <header class="page-head">
@@ -689,6 +722,18 @@ function repeatedBy(screen: CallScreen): Html {
   </section>`;
 }
 
+function ageFact(screen: CallScreen): Html {
+  const age = ageLabel(screen.call.openedAt, screen.now);
+  const band = responseGoalBand(
+    screen.call.state,
+    screen.call.openedAt,
+    screen.now,
+    screen.goal,
+  );
+  if (band === null) return h`<div><dt>גיל</dt><dd>${age}</dd></div>`;
+  return h`<div><dt>גיל</dt><dd data-goal="${band}">${age} · ${BAND_HE[band]}</dd></div>`;
+}
+
 export function renderCallPage(screen: CallScreen): string {
   const call = screen.call;
   const refusal =
@@ -747,7 +792,7 @@ export function renderCallPage(screen: CallScreen): string {
           ${sorted}
           ${review}
           ${earlier}
-          <div><dt>גיל</dt><dd>${ageLabel(call.openedAt, screen.now)}</dd></div>
+          ${ageFact(screen)}
           <div><dt>חירום</dt><dd data-emergency="${call.emergency.flagged ? 'true' : 'false'}">${emergencyLabel(call)}</dd></div>
           ${exitFacts(screen)}
         </dl>

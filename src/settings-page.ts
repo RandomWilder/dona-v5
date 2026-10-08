@@ -19,6 +19,7 @@ import type {
   CategoryRow,
   CategorySpec,
   EmergencySettings,
+  ResponseGoal,
 } from './calls/contract.ts';
 import { signedInChrome } from './chrome.ts';
 import type { DocumentTypeRow, DocumentTypeSpec } from './evidence/contract.ts';
@@ -44,7 +45,8 @@ export interface SettingsScreen {
   documents: readonly DocumentTypeRow[];
   categories: readonly CategoryRow[];
   emergency: EmergencySettings;
-  saved?: 'obligation' | 'document' | 'category' | 'emergency';
+  goal: ResponseGoal;
+  saved?: 'obligation' | 'document' | 'category' | 'emergency' | 'goal';
 }
 
 const styles = h`<style>
@@ -139,6 +141,30 @@ function emergencyForm(screen: SettingsScreen): Html {
   </form>`;
 }
 
+function goalForm(screen: SettingsScreen): Html {
+  const goal = screen.goal;
+  if (!screen.mayWrite) {
+    return h`<dl class="facts">
+      <div><dt>כתום</dt><dd>${String(goal.amberMinutes)} דקות</dd></div>
+      <div><dt>אדום</dt><dd>${String(goal.redMinutes)} דקות</dd></div>
+    </dl>`;
+  }
+  return h`<form class="settings-form" method="post" action="/settings/response-goal">
+    ${csrfInput(screen.csrf)}
+    <h2>יעד מענה פנימי</h2>
+    <p class="lede">דקות שלמות. לא מוצג לדייר. נכנס לתוקף בלי העלאה.</p>
+    <div class="field">
+      <label for="goal-amber">כתום (דקות)</label>
+      <input id="goal-amber" name="amber_minutes" type="text" inputmode="numeric" dir="ltr" required maxlength="6" value="${String(goal.amberMinutes)}" />
+    </div>
+    <div class="field">
+      <label for="goal-red">אדום (דקות)</label>
+      <input id="goal-red" name="red_minutes" type="text" inputmode="numeric" dir="ltr" required maxlength="6" value="${String(goal.redMinutes)}" />
+    </div>
+    <button class="btn btn-primary" type="submit">שמירה</button>
+  </form>`;
+}
+
 function categoryForm(csrf: string): Html {
   return h`<form class="settings-form" method="post" action="/settings/categories">
     ${csrfInput(csrf)}
@@ -209,6 +235,10 @@ export function renderSettingsPage(screen: SettingsScreen): string {
       <section class="settings-block">
         <h2>חירום</h2>
         ${emergencyForm(screen)}
+      </section>
+      <section class="settings-block">
+        <h2>יעד מענה</h2>
+        ${goalForm(screen)}
       </section>
       <section class="settings-block">
         <h2>קטגוריות לקריאות</h2>
@@ -318,6 +348,26 @@ export function parseObligationTypeForm(body: unknown): ObligationTypeSpec {
     defaultResponsibleParty: responsibleParty(body),
     requiresEvidence: checked(body, 'requires_evidence'),
     isActive: checked(body, 'is_active'),
+  };
+}
+
+function wholeMinutesField(body: unknown, name: string, field: string): number {
+  const raw = (body as Form | undefined)?.[name];
+  if (typeof raw !== 'string' || !/^\d{1,6}$/.test(raw.trim())) {
+    throw new KernelError('invalid', `${field} must be whole minutes`, {
+      field,
+    });
+  }
+  return Number(raw.trim());
+}
+
+export function parseResponseGoalForm(body: unknown): {
+  amberMinutes: number;
+  redMinutes: number;
+} {
+  return {
+    amberMinutes: wholeMinutesField(body, 'amber_minutes', 'amber'),
+    redMinutes: wholeMinutesField(body, 'red_minutes', 'red'),
   };
 }
 

@@ -20,8 +20,10 @@ import {
   countOpenCalls,
   listCategories,
   readEmergencySettings,
+  readResponseGoal,
   registerCallsRoutes,
   saveEmergencySettings,
+  saveResponseGoal,
   upsertCategory,
 } from './calls/contract.ts';
 import {
@@ -84,6 +86,7 @@ import {
   parseDocumentTypeForm,
   parseEmergencyForm,
   parseObligationTypeForm,
+  parseResponseGoalForm,
   renderSettingsPage,
 } from './settings-page.ts';
 import {
@@ -430,7 +433,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       openCalls?: number;
     },
     reply: { header: (name: string, value: string) => unknown },
-    saved?: 'obligation' | 'document' | 'category' | 'emergency',
+    saved?: 'obligation' | 'document' | 'category' | 'emergency' | 'goal',
   ) => {
     stubHeaders(reply);
     const role = request.staff?.role ?? null;
@@ -444,6 +447,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       documents: await listDocumentTypes(deps.pool, { activeOnly: false }),
       categories: await listCategories(deps.pool),
       emergency: await readEmergencySettings(deps.pool),
+      goal: await readResponseGoal(deps.pool),
       saved,
     });
   };
@@ -456,7 +460,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       saved === 'obligation' ||
         saved === 'document' ||
         saved === 'category' ||
-        saved === 'emergency'
+        saved === 'emergency' ||
+        saved === 'goal'
         ? saved
         : undefined,
     );
@@ -500,6 +505,21 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       .header('location', '/settings?saved=emergency')
       .send();
   });
+  app.post(
+    '/settings/response-goal',
+    SETTINGS_WRITE,
+    async (request, reply) => {
+      const staff = request.staff;
+      if (staff == null) throw new KernelError('not_allowed', 'not_allowed');
+      const clock = deps.clock ?? systemClock;
+      await saveResponseGoal(deps.pool, clock, {
+        ...parseResponseGoalForm(request.body),
+        actorId: staff.staffAccountId,
+        actorRole: staff.role,
+      });
+      return reply.code(303).header('location', '/settings?saved=goal').send();
+    },
+  );
   app.post('/settings/categories', SETTINGS_WRITE, async (request, reply) => {
     await upsertCategory(deps.pool, parseCategoryForm(request.body));
     return reply

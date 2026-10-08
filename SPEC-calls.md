@@ -98,6 +98,14 @@ terms), the duty phone number and hours, the Category list, and the amber and re
 the internal response goal. The goal is internal and is shown to no tenant. A promise to tenants is
 an SLA, and it is the director's decision when one is made.
 
+**The response goal** is two whole-minute thresholds, amber then red. Placeholders, until Dona Dom
+supplies theirs, are 240 and 1440. Age is whole minutes since the call opened. A call older than
+amber, and not older than red, shows amber. A call older than red shows red. A call exactly as old
+as a threshold has not passed it. A closed call shows neither, on the list and on its own page. The
+list filters on the band, and the amber filter does not include red. Red must be greater than
+amber. A threshold above a year of minutes is refused. A save is audited and is read on the next
+request, so it takes effect with no deploy.
+
 **Filtered messages** are kept for 6 months and then deleted by a scheduled sweep, unless rescued
 into a call. The originals stay in the mailbox and on the phone whatever this module keeps.
 

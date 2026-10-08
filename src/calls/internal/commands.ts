@@ -269,6 +269,21 @@ export interface SaveEmergencySettingsSpec {
   actorRole?: string | null;
 }
 
+/** Whole minutes. Amber is the first band; red is the later one. */
+export interface ResponseGoal {
+  amberMinutes: number;
+  redMinutes: number;
+}
+
+export interface SaveResponseGoalSpec {
+  amberMinutes: number;
+  redMinutes: number;
+  actorId: string;
+  actorRole?: string | null;
+}
+
+export type ResponseBand = 'amber' | 'red';
+
 export interface CategorySpec {
   code: string;
   labelHe: string;
@@ -1720,7 +1735,7 @@ async function writeSetting(
   db: Queryable,
   clock: Clock,
   key: string,
-  value: string,
+  value: string | number,
 ): Promise<void> {
   await db.query(
     `INSERT INTO config_settings (key, value, updated_at)
@@ -1761,6 +1776,93 @@ export async function saveEmergencySettings(
     );
   });
   return { terms, termsText, phone, hours };
+}
+
+const AMBER_KEY = 'calls.response_amber_minutes';
+const RED_KEY = 'calls.response_red_minutes';
+const AMBER_FALLBACK = 240;
+const RED_FALLBACK = 1440;
+const GOAL_MINUTES_MAX = 60 * 24 * 365;
+
+/** Whole minutes since the call opened. The same count the list's age uses. */
+export function ageMinutes(openedAt: Date, now: Date): number {
+  return Math.max(0, Math.floor((now.getTime() - openedAt.getTime()) / 60_000));
+}
+
+/**
+ * Amber, then red. Exactly on a threshold has not passed it. A closed call
+ * is neither, whatever its age.
+ */
+export function responseGoalBand(
+  state: CallState,
+  openedAt: Date,
+  now: Date,
+  goal: ResponseGoal,
+): ResponseBand | null {
+  if (state === 'CLOSED') return null;
+  const age = ageMinutes(openedAt, now);
+  if (age > goal.redMinutes) return 'red';
+  if (age > goal.amberMinutes) return 'amber';
+  return null;
+}
+
+function wholeMinutes(value: number, field: string): number {
+  if (!Number.isInteger(value) || value < 0 || value > GOAL_MINUTES_MAX) {
+    throw new KernelError('invalid', `${field} must be whole minutes`, {
+      field,
+    });
+  }
+  return value;
+}
+
+function storedMinutes(value: unknown, fallback: number): number {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
+    return value;
+  }
+  throw new KernelError('invalid', 'response goal is not whole minutes');
+}
+
+export async function readResponseGoal(db: Queryable): Promise<ResponseGoal> {
+  const { rows } = await db.query<{ key: string; value: unknown }>(
+    `SELECT key, value FROM config_settings WHERE key = ANY($1::text[])`,
+    [[AMBER_KEY, RED_KEY]],
+  );
+  const byKey = new Map(rows.map((row) => [row.key, row.value]));
+  return {
+    amberMinutes: storedMinutes(byKey.get(AMBER_KEY), AMBER_FALLBACK),
+    redMinutes: storedMinutes(byKey.get(RED_KEY), RED_FALLBACK),
+  };
+}
+
+export async function saveResponseGoal(
+  db: Queryable,
+  clock: Clock,
+  spec: SaveResponseGoalSpec,
+): Promise<ResponseGoal> {
+  const actorId = validId(spec.actorId, 'actor');
+  const amberMinutes = wholeMinutes(spec.amberMinutes, 'amber');
+  const redMinutes = wholeMinutes(spec.redMinutes, 'red');
+  if (redMinutes <= amberMinutes) {
+    throw new KernelError('invalid', 'red must be older than amber', {
+      field: 'red',
+    });
+  }
+  await inTransaction(db, async (tx) => {
+    await writeSetting(tx, clock, AMBER_KEY, amberMinutes);
+    await writeSetting(tx, clock, RED_KEY, redMinutes);
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'staff',
+        actorId,
+        actorRole: spec.actorRole ?? undefined,
+        action: 'calls.response_goal',
+        inputs: { amberMinutes, redMinutes },
+      },
+      { outcome: 'ok' },
+    );
+  });
+  return { amberMinutes, redMinutes };
 }
 
 function categoryCode(value: string): string {
