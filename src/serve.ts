@@ -11,6 +11,8 @@ import {
   receiveIncoming,
   SORTER_PROMPT_VERSION,
   startOutlookPolling,
+  watchWhatsapp,
+  whatsappFrom,
 } from './channel/contract.ts';
 import { zonedClock } from './kernel/clock.ts';
 import {
@@ -38,6 +40,7 @@ const port = Number(process.env.PORT ?? 8080);
 const http2 = Boolean(process.env.K_SERVICE);
 const sorterOn = (process.env.OPENAI_API_KEY?.trim().length ?? 0) > 0;
 const outlook = graphMailboxFrom(process.env);
+const whatsapp = whatsappFrom(process.env);
 
 // No localhost fallback: createPool refuses a missing DATABASE_URL (kernel/db.ts). A production
 // service that quietly falls back to a developer's database is worse than one that will not boot.
@@ -78,6 +81,7 @@ const sorter = sorterOn
       model: async () => (await readSorterSettings(settings)).model,
     })
   : undefined;
+if (whatsapp) await watchWhatsapp(pool, clock);
 if (outlook) {
   startOutlookPolling({
     db: pool,
@@ -153,3 +157,4 @@ console.log(`embed: ${embedder.describe()}`);
 console.log(`identity: ${identity.describe()}`);
 console.log(`clock: ${clock.zone}`);
 console.log(`outlook: ${outlook ? 'configured' : 'unconfigured'}`);
+console.log(`whatsapp: ${whatsapp ? 'configured' : 'unconfigured'}`);

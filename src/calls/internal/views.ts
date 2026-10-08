@@ -71,6 +71,8 @@ export interface CallsScreen {
   now: Date;
   /** The shared mailbox has not been read successfully for an hour. */
   mailboxWarning?: boolean;
+  /** #193. No echo from the office phone for seven days. */
+  whatsappWarning?: boolean;
   /** #198. The mailbox's secret is near expiry, or its expiry is unknown. */
   secretWarning?: SecretNotice | null;
   refusal?: string;
@@ -351,6 +353,9 @@ export function renderCallsPage(screen: CallsScreen): string {
   const mailbox = screen.mailboxWarning
     ? h`<p class="mailbox-warning" role="status">תיבת הדואר לא נקראה כבר שעה.</p>`
     : h``;
+  const echoWarning = screen.whatsappWarning
+    ? h`<p class="mailbox-warning" role="status">אין הד מהטלפון כבר שבעה ימים. וואטסאפ עלול להתנתק.</p>`
+    : h``;
   const secret = secretNotice(
     screen.secretWarning ?? null,
     dayIn(screen.now, DEFAULT_ZONE),
@@ -368,6 +373,7 @@ export function renderCallsPage(screen: CallsScreen): string {
         </div>
       </header>
       ${mailbox}
+      ${echoWarning}
       ${secret}
       <form class="glass call-form" method="post" action="/calls">
         ${csrfInput(screen.csrf)}

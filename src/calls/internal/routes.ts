@@ -75,6 +75,8 @@ export interface CallsDeps {
   mailboxWarning?: () => Promise<boolean>;
   /** #198. The Outlook secret is near expiry, or its expiry is unknown. */
   secretWarning?: () => SecretNotice | null;
+  /** #193. No echo from the office phone for seven days. */
+  whatsappWarning?: () => Promise<boolean>;
   /** #190. The bytes of one attachment on a call. */
   openAttachment?: (spec: {
     callId: string;
@@ -283,12 +285,14 @@ async function callsPage(
 ): Promise<string> {
   const filter = listFilter(request.query);
   const now = deps.clock.now();
-  const [listed, categories, mailboxWarning, goal] = await Promise.all([
-    listOpenCalls(deps.pool, filter),
-    listCategories(deps.pool),
-    deps.mailboxWarning ? deps.mailboxWarning() : Promise.resolve(false),
-    readResponseGoal(deps.pool),
-  ]);
+  const [listed, categories, mailboxWarning, goal, echoWarning] =
+    await Promise.all([
+      listOpenCalls(deps.pool, filter),
+      listCategories(deps.pool),
+      deps.mailboxWarning ? deps.mailboxWarning() : Promise.resolve(false),
+      readResponseGoal(deps.pool),
+      deps.whatsappWarning ? deps.whatsappWarning() : Promise.resolve(false),
+    ]);
   const calls =
     filter.band === undefined
       ? listed
@@ -314,6 +318,7 @@ async function callsPage(
     devIntake: deps.devIntake === true,
     now,
     mailboxWarning,
+    whatsappWarning: echoWarning,
     secretWarning: deps.secretWarning ? deps.secretWarning() : null,
     refusal,
   });

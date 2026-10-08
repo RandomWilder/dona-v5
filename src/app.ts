@@ -37,6 +37,9 @@ import {
   rescueNoise,
   type Sorter,
   secretWarning,
+  type WhatsappFetch,
+  whatsappFrom,
+  whatsappWarning,
 } from './channel/contract.ts';
 import { signedInChrome } from './chrome.ts';
 import { renderMockup } from './dev-mockups.ts';
@@ -172,6 +175,8 @@ export interface AppDeps {
    * the one the hosted service follows. Local `npm run dev` leaves this unset and stays HTTP/1.
    */
   http2?: boolean;
+  /** WhatsApp media download. Absent, the webhook calls Meta. */
+  whatsappFetch?: WhatsappFetch;
 }
 
 /**
@@ -695,6 +700,10 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       const outlook = graphMailboxFrom(process.env);
       return outlook ? secretWarning(outlook, clock) : null;
     },
+    whatsappWarning: () =>
+      whatsappFrom(process.env)
+        ? whatsappWarning(deps.pool, clock)
+        : Promise.resolve(false),
     openAttachment: (spec) => readAttachment(deps.pool, objects, spec),
     fileAttachment: (spec) =>
       fileCallAttachment(deps.pool, clock, { objects, pdf, bucket }, spec),
@@ -712,6 +721,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     chrome: signedInChrome,
     devIntake: deps.devMockups === true,
     sorter: deps.sorter,
+    objects,
+    whatsappFetch: deps.whatsappFetch,
   });
   registerDocumentRoutes(app, {
     pool: deps.pool,

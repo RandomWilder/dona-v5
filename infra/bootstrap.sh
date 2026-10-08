@@ -69,6 +69,14 @@ GRAPH_CLIENT_SECRET="$ENV-graph-client-id"
 GRAPH_SECRET_SECRET="$ENV-graph-client-secret"
 GRAPH_MAILBOX_SECRET="$ENV-graph-mailbox"
 GRAPH_EXPIRES_SECRET="$ENV-graph-secret-expires"
+
+# #193. Staging only. WhatsApp on Meta's developer test number. The four
+# values arrive through set-secret.sh. Production is a later ticket, so this
+# script does not grant or mention them there.
+WHATSAPP_SECRET_SECRET="$ENV-whatsapp-app-secret"
+WHATSAPP_VERIFY_SECRET="$ENV-whatsapp-verify-token"
+WHATSAPP_TOKEN_SECRET="$ENV-whatsapp-access-token"
+WHATSAPP_PHONE_SECRET="$ENV-whatsapp-phone-number-id"
 DOCS_BUCKET="$PROJECT-$ENV-docs"
 RUNTIME_SA="app-$ENV"
 DEPLOY_SA="deploy-$ENV"
@@ -266,6 +274,17 @@ if [ "$ENV" = staging ]; then
   echo "            ./infra/set-secret.sh $ENV graph-mailbox"
   echo "            ./infra/set-secret.sh $ENV graph-secret-expires   (YYYY-MM-DD)"
   echo "  boot:     outlook: unconfigured until all four are mounted"
+
+  say "WhatsApp test number — the director's act, not this script"
+  # #193. Meta's developer test number, so the adapter can be clicked before
+  # App Review. This script cannot create the Meta app. Staging mounts the
+  # secrets when they exist.
+  echo "  then:     ./infra/set-secret.sh $ENV whatsapp-app-secret"
+  echo "            ./infra/set-secret.sh $ENV whatsapp-verify-token"
+  echo "            ./infra/set-secret.sh $ENV whatsapp-access-token"
+  echo "            ./infra/set-secret.sh $ENV whatsapp-phone-number-id"
+  echo "  boot:     whatsapp: unconfigured until all four are mounted"
+  echo "  webhook:  <service>/webhooks/whatsapp"
 fi
 
 say "Service accounts"
@@ -284,7 +303,9 @@ gcloud projects add-iam-policy-binding "$PROJECT" \
 BIND_SECRETS=("$SECRET" "$OPENAI_SECRET" "$OAUTH_ID_SECRET" "$OAUTH_SECRET_SECRET")
 if [ "$ENV" = staging ]; then
   BIND_SECRETS+=("$GRAPH_TENANT_SECRET" "$GRAPH_CLIENT_SECRET" \
-    "$GRAPH_SECRET_SECRET" "$GRAPH_MAILBOX_SECRET" "$GRAPH_EXPIRES_SECRET")
+    "$GRAPH_SECRET_SECRET" "$GRAPH_MAILBOX_SECRET" "$GRAPH_EXPIRES_SECRET" \
+    "$WHATSAPP_SECRET_SECRET" "$WHATSAPP_VERIFY_SECRET" \
+    "$WHATSAPP_TOKEN_SECRET" "$WHATSAPP_PHONE_SECRET")
 fi
 for secret in "${BIND_SECRETS[@]}"; do
   # The model key may not exist yet -- a fresh environment has no OpenAI key

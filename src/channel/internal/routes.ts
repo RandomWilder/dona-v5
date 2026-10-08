@@ -1,5 +1,6 @@
-// The dev-only door. #186. Adapters are later tickets; until then a person
-// on a `-dev` process can push a fabricated message and pick the verdict.
+// The dev-only door (#186) and the WhatsApp webhook (#193). The form is
+// registered only on a `-dev` process. The webhook is always registered, and
+// it refuses every request until WhatsApp is configured.
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
@@ -8,6 +9,7 @@ import type { ChromeDest } from '../../chrome.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
+import type { ObjectStore } from '../../kernel/objects.ts';
 import type { Html } from '../../kernel/ui/html.ts';
 import { can, csrfFrom } from '../../staff/contract.ts';
 import {
@@ -17,6 +19,8 @@ import {
   type Sorter,
 } from './door.ts';
 import { renderIntakeForm } from './views.ts';
+import type { WhatsappFetch } from './whatsapp.ts';
+import { registerWhatsappWebhook } from './whatsapp.ts';
 
 export interface ChannelDeps {
   pool: Pool;
@@ -30,6 +34,9 @@ export interface ChannelDeps {
   devIntake: boolean;
   /** The real sorter. Absent, the form picks the verdict itself. */
   sorter?: Sorter;
+  objects?: ObjectStore;
+  /** Media download. Absent, the webhook calls Meta. */
+  whatsappFetch?: WhatsappFetch;
 }
 
 const STAFF = { config: { staff: 'estate.read' } } as const;
@@ -118,6 +125,13 @@ export function registerChannelRoutes(
   app: FastifyInstance,
   deps: ChannelDeps,
 ): void {
+  registerWhatsappWebhook(app, {
+    pool: deps.pool,
+    clock: deps.clock,
+    objects: deps.objects,
+    sorter: deps.sorter,
+    fetch: deps.whatsappFetch,
+  });
   if (!deps.devIntake) return;
 
   app.get('/dev/intake', STAFF, async (request, reply) => {

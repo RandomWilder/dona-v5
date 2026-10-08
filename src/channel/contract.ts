@@ -1,5 +1,6 @@
 // The channel module's public surface. #186 is the intake door. #187 is the
-// sorter on OpenAI, and translation. #188 is the Outlook adapter.
+// sorter on OpenAI, and translation. #188 is the Outlook adapter. #193 is
+// WhatsApp on Meta's test number.
 
 export { fileAttachment, readAttachment } from './internal/attachments.ts';
 export type {
@@ -44,3 +45,11 @@ export type { ChannelDeps } from './internal/routes.ts';
 export { registerChannelRoutes } from './internal/routes.ts';
 export { createSorter, SORTER_PROMPT_VERSION } from './internal/sorter.ts';
 export { renderIntakeForm } from './internal/views.ts';
+export type { WhatsappConfig, WhatsappFetch } from './internal/whatsapp.ts';
+export {
+  noteWhatsappEcho,
+  readWhatsappWebhook,
+  watchWhatsapp,
+  whatsappFrom,
+  whatsappWarning,
+} from './internal/whatsapp.ts';

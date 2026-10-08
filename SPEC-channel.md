@@ -110,12 +110,16 @@ recorded payloads, and wired to no mailbox.
 **WhatsApp is the Cloud API with coexistence** (ADR-0013):
 - The office number stays on the receptionist's phone in the WhatsApp Business app, and every 1-on-1
   chat on it reaches the door.
-- Inbound messages and `smb_message_echoes` are consumed. Webhook signatures are verified, and media
-  is fetched on receipt.
+- Inbound messages and `smb_message_echoes` are consumed. Webhook signatures are verified, and an
+  unsigned or wrongly signed webhook is rejected. Media is fetched on receipt and stays on the
+  Message. The `history` webhook is acknowledged and discarded.
+- The process accepts webhooks only when the app secret, the verify token, the access token and the
+  phone number id are all set. Otherwise it boots unconfigured and the tab stays quiet.
 - **Staging uses Meta's developer test number**, so the adapter is built before App Review finishes.
 - **Connection health**: no echo for 7 days raises a warning in the tab, ahead of Meta disconnecting
-  a primary device inactive for about 14 days. A mailbox that has not been read successfully for an
-  hour raises a warning too.
+  a primary device inactive for about 14 days. The clock starts when the adapter is configured, and
+  an echo clears the warning. A mailbox that has not been read successfully for an hour raises a
+  warning too.
 
 **Attachments** stay on their Message and show on the call. The bytes are kept with the message, so
 the call shows the file's name, type and size and the office can open it without the mailbox. A
