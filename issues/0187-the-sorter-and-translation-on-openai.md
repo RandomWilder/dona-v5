@@ -46,3 +46,7 @@ future growth.
 The sorter is OpenAI when a key is configured, and a fake in tests. Sort returns call, unsure, or noise, a category from the active list, and a Hebrew summary. A category that is not on that list is stored as none. Translate fills the Hebrew text when the message is not Hebrew, and a failure there does not change the verdict. A timeout or any error from sort opens a call to review with no summary. The model id is the sorter.model row, read per call. The prompt version is sorter-1, stored with the model id on the call and on the message.
 
 The golden set is fourteen fabricated messages, in Hebrew, English, Russian, Arabic, and one mix. Run against the configured model it passed 14/14. The dev form still lets a person pick the verdict when no key is configured. When a key is configured, that form sends the message through the sorter. A stamped revision does not serve the form, so the staging click is still open.
+
+## Comment — 2026-10-11
+
+CI on gpt-5.6-luna with sorter-1 passed 12/14. A hedge about a possible fault was labelled a call, and a message that never said what it wanted was labelled noise. The instructions now say a guess with no request is unsure, and unsure is never noise. The prompt version is sorter-2. The same fourteen messages passed 14/14, and the retrieval golden set passed 10/10. The staging click is still open.

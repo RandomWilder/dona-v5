@@ -15,7 +15,7 @@ import type {
 } from './door.ts';
 
 /** Bump when the instructions change. A verdict records the value. */
-export const SORTER_PROMPT_VERSION = 'sorter-1';
+export const SORTER_PROMPT_VERSION = 'sorter-2';
 
 const SORT_INSTRUCTIONS = [
   'You sort one message for a residential property office in Israel.',
@@ -24,9 +24,11 @@ const SORT_INSTRUCTIONS = [
   '',
   'label is "call" when a person asks the office to do, fix, check, or',
   'explain something about a home or the building. A question is a call.',
+  'A guess that a fault might exist, with no request, is not a call.',
   'label is "noise" when the message is advertising, an automatic notice,',
-  'a greeting with nothing to do, or not for this office.',
-  'label is "unsure" when a person could reasonably read it either way.',
+  'or clearly not for this office.',
+  'label is "unsure" when the person has not said what they want, or hedges',
+  'about whether anything is wrong. Unsure is never noise.',
   '',
   'categoryCode is one of the codes in the message, or null when none fits',
   'or the label is noise. Do not invent a code.',
