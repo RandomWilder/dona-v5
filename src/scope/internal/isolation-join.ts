@@ -17,6 +17,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { type ActorKind, createAuditLog } from '../../kernel/audit.ts';
 import { type Clock, today } from '../../kernel/clock.ts';
+import { normaliseEmail } from './email.ts';
 import { normalisePhone } from './phone.ts';
 
 // The view both questions read. A constant rather than a literal in two query strings: the name is
@@ -122,16 +123,24 @@ const TENANCY_ACTIVE_TODAY = `status = 'ACTIVE'
 // by a database constraint at 2.2, and this is where that constraint is *spent*. Leaving it out
 // would mean a guarantor resolving to a unit and the constraint protecting nothing at the only point
 // that reads it.
-export const ISOLATION_JOIN_SQL = `
+function isolationJoinSql(channel: 'PHONE' | 'EMAIL'): string {
+  return `
   SELECT tenancy_id, unit_id, unit_number, party_id
   FROM ${OCCUPANCY_VIEW}
-  WHERE channel = 'PHONE'
+  WHERE channel = '${channel}'
     AND contact_value = $1
     AND ${CONTACT_VALID_TODAY}
     AND ${TENANCY_ACTIVE_TODAY}
     AND is_service_contact
   ORDER BY unit_id
 `;
+}
+
+export const ISOLATION_JOIN_SQL = isolationJoinSql('PHONE');
+
+// The email form of the same join. #189. One function builds both, so the temporal predicates and
+// the guarantor exclusion cannot drift between a number and an address.
+export const EMAIL_ISOLATION_JOIN_SQL = isolationJoinSql('EMAIL');
 
 // **Q1 — who lives in unit 12 today?** The workbook's four hops, and DISTINCT because the view fans
 // a party out over their contact rows and this question is about people, not about numbers.
@@ -258,6 +267,29 @@ export async function resolveUnitsByPhone(
     null,
     async () => {
       const result = await db.query<ScopedUnit>(ISOLATION_JOIN_SQL, [
+        value,
+        today(clock),
+      ]);
+      return result.rows;
+    },
+  );
+}
+
+export async function resolveUnitsByEmail(
+  db: Queryable,
+  email: string,
+  clock: Clock,
+  options: ScopeOptions = {},
+): Promise<ScopedUnit[]> {
+  const value = normaliseEmail(email);
+  return audited(
+    db,
+    clock,
+    options,
+    'scope.resolve_by_email',
+    null,
+    async () => {
+      const result = await db.query<ScopedUnit>(EMAIL_ISOLATION_JOIN_SQL, [
         value,
         today(clock),
       ]);

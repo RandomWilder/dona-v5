@@ -33,6 +33,8 @@ export interface IndexScreen {
    * default type-checks everywhere and is only ever found by clicking.
    */
   mayFile: boolean;
+  /** Open ServiceCalls, for the rail count. Absent when the page is rendered outside a request. */
+  openCalls?: number;
 }
 
 const styles = h`<style>
@@ -115,10 +117,10 @@ export function renderIndexPage(screen: IndexScreen): string {
         </a>
       </article>
       <article class="row-card">
-        ${marker('is-alert')}
+        ${marker('is-ok')}
         <a class="card-link" href="/calls">
           <p class="card-title"><span>קריאות</span></p>
-          <p class="lede">שבוע 7 · סלייס 7.2</p>
+          <p class="lede">רישום טלפון או הגעה, והקריאות הפתוחות.</p>
         </a>
       </article>
       <article class="row-card">
@@ -132,7 +134,7 @@ export function renderIndexPage(screen: IndexScreen): string {
   return renderPage({
     title: 'דונה דום — ניהול נכסים',
     styles,
-    nav: signedInChrome(screen.csrf, 'index', screen.mayFile),
+    nav: signedInChrome(screen.csrf, 'index', screen.mayFile, screen.openCalls),
     body,
   });
 }

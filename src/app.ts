@@ -16,6 +16,31 @@ import {
 } from 'node:http2';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
+import {
+  countOpenCalls,
+  listCategories,
+  readEmergencySettings,
+  readResponseGoal,
+  registerCallsRoutes,
+  saveEmergencySettings,
+  saveResponseGoal,
+  upsertCategory,
+} from './calls/contract.ts';
+import {
+  fileAttachment as fileCallAttachment,
+  graphMailboxFrom,
+  listMessagesOnCall,
+  listNoiseMessages,
+  mailboxWarning,
+  readAttachment,
+  registerChannelRoutes,
+  rescueNoise,
+  type Sorter,
+  secretWarning,
+  type WhatsappFetch,
+  whatsappFrom,
+  whatsappWarning,
+} from './channel/contract.ts';
 import { signedInChrome } from './chrome.ts';
 import { renderMockup } from './dev-mockups.ts';
 import { registerEstateRoutes } from './estate/contract.ts';
@@ -60,8 +85,11 @@ import { registerFormBodies } from './kernel/ui/forms.ts';
 import type { WorkRunner } from './kernel/work.ts';
 import { listPartyNames } from './parties/contract.ts';
 import {
+  parseCategoryForm,
   parseDocumentTypeForm,
+  parseEmergencyForm,
   parseObligationTypeForm,
+  parseResponseGoalForm,
   renderSettingsPage,
 } from './settings-page.ts';
 import {
@@ -80,7 +108,6 @@ import {
   type StaffDeps,
   verifyCsrf,
 } from './staff/contract.ts';
-import { CALLS_STUB, renderStubPage } from './stub-page.ts';
 import {
   activateTenancy,
   activationGate,
@@ -136,6 +163,11 @@ export interface AppDeps {
    */
   devMockups?: boolean;
   /**
+   * The real sorter. Absent in tests, which inject a fake at the door.
+   * Present on staging and in production, where the dev form uses it too.
+   */
+  sorter?: Sorter;
+  /**
    * Cleartext HTTP/2. **Set only by `serve.ts` when `K_SERVICE` is present.**
    *
    * Cloud Run caps an HTTP/1 request at 32 MiB and answers with its own page before this process
@@ -143,6 +175,8 @@ export interface AppDeps {
    * the one the hosted service follows. Local `npm run dev` leaves this unset and stays HTTP/1.
    */
   http2?: boolean;
+  /** WhatsApp media download. Absent, the webhook calls Meta. */
+  whatsappFetch?: WhatsappFetch;
 }
 
 /**
@@ -294,6 +328,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
         request,
         stance ?? 'estate.read',
       );
+      request.openCalls = await countOpenCalls(deps.pool);
     } catch (error) {
       // Not signed in is not a refusal: it is somebody who has not signed in, and it goes to the
       // login screen. A session whose account lost its role is a refusal, and it is byte-identical
@@ -381,6 +416,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     return renderIndexPage({
       csrf: csrfFrom(request),
       mayFile: can(request.staff?.role ?? null, 'documents.write'),
+      openCalls: request.openCalls,
     });
   });
 
@@ -392,29 +428,17 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     reply.header('x-content-type-options', 'nosniff');
   };
 
-  app.get(
-    '/calls',
-    { config: { staff: 'estate.read' } },
-    async (request, reply) => {
-      stubHeaders(reply);
-      return renderStubPage(
-        {
-          csrf: csrfFrom(request),
-          mayFile: can(request.staff?.role ?? null, 'documents.write'),
-        },
-        CALLS_STUB,
-        'wired',
-      );
-    },
-  );
-
   const SETTINGS_READ = { config: { staff: 'estate.read' } } as const;
   const SETTINGS_WRITE = { config: { staff: 'settings.write' } } as const;
 
   const settingsPage = async (
-    request: { staff?: { role: Role | null } | null; csrf?: string | null },
+    request: {
+      staff?: { role: Role | null } | null;
+      csrf?: string | null;
+      openCalls?: number;
+    },
     reply: { header: (name: string, value: string) => unknown },
-    saved?: 'obligation' | 'document',
+    saved?: 'obligation' | 'document' | 'category' | 'emergency' | 'goal',
   ) => {
     stubHeaders(reply);
     const role = request.staff?.role ?? null;
@@ -422,9 +446,13 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       csrf: csrfFrom(request),
       mayWrite: can(role, 'settings.write'),
       mayFile: can(role, 'documents.write'),
+      openCalls: request.openCalls,
       state: 'wired',
       obligations: await listObligationTypes(deps.pool),
       documents: await listDocumentTypes(deps.pool, { activeOnly: false }),
+      categories: await listCategories(deps.pool),
+      emergency: await readEmergencySettings(deps.pool),
+      goal: await readResponseGoal(deps.pool),
       saved,
     });
   };
@@ -434,7 +462,13 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     return settingsPage(
       request,
       reply,
-      saved === 'obligation' || saved === 'document' ? saved : undefined,
+      saved === 'obligation' ||
+        saved === 'document' ||
+        saved === 'category' ||
+        saved === 'emergency' ||
+        saved === 'goal'
+        ? saved
+        : undefined,
     );
   });
   app.post(
@@ -462,6 +496,42 @@ export function buildApp(deps: AppDeps): FastifyInstance {
         .send();
     },
   );
+  app.post('/settings/emergency', SETTINGS_WRITE, async (request, reply) => {
+    const staff = request.staff;
+    if (staff == null) throw new KernelError('not_allowed', 'not_allowed');
+    const clock = deps.clock ?? systemClock;
+    await saveEmergencySettings(deps.pool, clock, {
+      ...parseEmergencyForm(request.body),
+      actorId: staff.staffAccountId,
+      actorRole: staff.role,
+    });
+    return reply
+      .code(303)
+      .header('location', '/settings?saved=emergency')
+      .send();
+  });
+  app.post(
+    '/settings/response-goal',
+    SETTINGS_WRITE,
+    async (request, reply) => {
+      const staff = request.staff;
+      if (staff == null) throw new KernelError('not_allowed', 'not_allowed');
+      const clock = deps.clock ?? systemClock;
+      await saveResponseGoal(deps.pool, clock, {
+        ...parseResponseGoalForm(request.body),
+        actorId: staff.staffAccountId,
+        actorRole: staff.role,
+      });
+      return reply.code(303).header('location', '/settings?saved=goal').send();
+    },
+  );
+  app.post('/settings/categories', SETTINGS_WRITE, async (request, reply) => {
+    await upsertCategory(deps.pool, parseCategoryForm(request.body));
+    return reply
+      .code(303)
+      .header('location', '/settings?saved=category')
+      .send();
+  });
 
   // Slice 6.1: the flow is read off `mockups/<flow>.html` rather than named in a condition, so the
   // file guard four scans is the file the director clicks and no paint can hide in TypeScript.
@@ -614,6 +684,46 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   // Slice 5.1, and from 5.2 no longer the only routes behind a session: every route this
   // application registers declares a stance above, and the hook calls `requireStaff` once.
   registerStaffRoutes(app, staffDeps);
+  registerCallsRoutes(app, {
+    pool: deps.pool,
+    clock,
+    chrome: signedInChrome,
+    devIntake: deps.devMockups === true,
+    messagesOnCall: (callId) => listMessagesOnCall(deps.pool, callId),
+    listNoise: () => listNoiseMessages(deps.pool),
+    rescueNoise: (spec) => rescueNoise(deps.pool, clock, spec),
+    mailboxWarning: () =>
+      graphMailboxFrom(process.env)
+        ? mailboxWarning(deps.pool, clock)
+        : Promise.resolve(false),
+    secretWarning: () => {
+      const outlook = graphMailboxFrom(process.env);
+      return outlook ? secretWarning(outlook, clock) : null;
+    },
+    whatsappWarning: () =>
+      whatsappFrom(process.env)
+        ? whatsappWarning(deps.pool, clock)
+        : Promise.resolve(false),
+    openAttachment: (spec) => readAttachment(deps.pool, objects, spec),
+    fileAttachment: (spec) =>
+      fileCallAttachment(deps.pool, clock, { objects, pdf, bucket }, spec),
+    documentTypes: async () => {
+      const types = await listDocumentTypes(deps.pool, { activeOnly: true });
+      return types.map((type) => ({
+        typeKey: type.typeKey,
+        labelHe: type.labelHe,
+      }));
+    },
+  });
+  registerChannelRoutes(app, {
+    pool: deps.pool,
+    clock,
+    chrome: signedInChrome,
+    devIntake: deps.devMockups === true,
+    sorter: deps.sorter,
+    objects,
+    whatsappFetch: deps.whatsappFetch,
+  });
   registerDocumentRoutes(app, {
     pool: deps.pool,
     clock,

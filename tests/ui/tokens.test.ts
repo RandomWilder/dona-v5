@@ -13,6 +13,12 @@
 // here rather than copy this file — the second copy is how a guard dies.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import {
+  renderCallPage,
+  renderCallsPage,
+  renderFilteredPage,
+} from '../../src/calls/contract.ts';
+import { renderIntakeForm } from '../../src/channel/contract.ts';
 // The root index is the composition root's screen from 5.2, not estate's. It is in this registry
 // under the same rule as every other screen: rendered here, asserted on the bytes.
 import { signedInChrome } from '../../src/chrome.ts';
@@ -65,7 +71,6 @@ import {
   renderLoginPage,
   renderStaffHomePage,
 } from '../../src/staff/contract.ts';
-import { CALLS_STUB, renderStubPage } from '../../src/stub-page.ts';
 import type { UnitLetting } from '../../src/tenancy/contract.ts';
 
 const building: BuildingSummary = {
@@ -293,6 +298,7 @@ const NAV_TENANCIES = signedInChrome(CSRF, 'tenancies', true);
 const NAV_STAFF = signedInChrome(CSRF, 'staff', true);
 const NAV_DOCUMENTS = signedInChrome(CSRF, 'documents', true);
 const NAV_FILING = signedInChrome(CSRF, 'filing', true);
+const NAV_CALLS = signedInChrome(CSRF, 'calls', true, 1);
 
 /**
  * **The read overlay at a stance. Slice 6.4.**
@@ -2000,8 +2006,241 @@ const SCREENS: Array<[string, () => string]> = [
       }),
   ],
   [
-    'root · calls stub',
-    () => renderStubPage({ csrf: CSRF, mayFile: true }, CALLS_STUB, 'wired'),
+    'calls · open list',
+    () =>
+      renderCallsPage({
+        nav: NAV_CALLS,
+        csrf: CSRF,
+        now: new Date('2026-10-06T12:00:00.000Z'),
+        refusal: 'יש לבחור טלפון או הגעה.',
+        calls: [
+          {
+            id: '33333333-3333-4333-8333-333333333333',
+            sourceChannel: 'PHONE',
+            state: 'NEW',
+            description: 'נזילה במטבח',
+            sender: { kind: 'named', name: 'יעל כהן' },
+            openedAt: new Date('2026-10-06T10:00:00.000Z'),
+            requester: null,
+            category: null,
+            emergency: { flagged: true, by: 'terms' },
+            toReview: false,
+            summary: null,
+            proposal: null,
+            sorterLabel: null,
+            sorterModel: null,
+            sorterPrompt: null,
+            returned: false,
+          },
+          {
+            id: '44444444-4444-4444-8444-444444444444',
+            sourceChannel: 'WALK_IN',
+            state: 'TRIAGED',
+            description: 'מפתח תקוע',
+            sender: { kind: 'unknown' },
+            openedAt: new Date('2026-10-06T11:00:00.000Z'),
+            requester: {
+              id: '66666666-6666-4666-8666-666666666666',
+              name: 'יעל כהן',
+            },
+            category: {
+              id: '55555555-5555-4555-8555-555555555555',
+              code: 'LOCKS',
+              labelHe: 'מנעולים',
+              active: true,
+            },
+            emergency: { flagged: false },
+            toReview: false,
+            summary: null,
+            proposal: null,
+            sorterLabel: null,
+            sorterModel: null,
+            sorterPrompt: null,
+            returned: false,
+          },
+        ],
+        categories: [
+          {
+            id: '55555555-5555-4555-8555-555555555555',
+            code: 'LOCKS',
+            labelHe: 'מנעולים',
+            labelEn: null,
+            isActive: true,
+          },
+        ],
+        state: null,
+        categoryId: null,
+        emergency: false,
+        toReview: false,
+        band: null,
+        goal: { amberMinutes: 240, redMinutes: 1440 },
+        devIntake: false,
+      }),
+  ],
+  [
+    'calls · one call, new',
+    () =>
+      renderCallPage({
+        nav: NAV_CALLS,
+        csrf: CSRF,
+        now: new Date('2026-10-06T12:00:00.000Z'),
+        query: 'יעל',
+        dupQuery: '',
+        dupMatches: [],
+        messages: [],
+        goal: { amberMinutes: 240, redMinutes: 1440 },
+        matches: [
+          {
+            id: '66666666-6666-4666-8666-666666666666',
+            name: 'יעל כהן',
+          },
+        ],
+        categories: [],
+        call: {
+          id: '33333333-3333-4333-8333-333333333333',
+          sourceChannel: 'PHONE',
+          state: 'NEW',
+          description: 'נזילה במטבח',
+          sender: { kind: 'named', name: 'יעל כהן' },
+          openedAt: new Date('2026-10-06T10:00:00.000Z'),
+          requester: null,
+          category: null,
+          emergency: { flagged: false },
+          toReview: false,
+          summary: null,
+          proposal: null,
+          sorterLabel: null,
+          sorterModel: null,
+          sorterPrompt: null,
+          returned: false,
+          exit: null,
+          repeatedBy: [],
+          predecessor: null,
+          returnedBy: null,
+          timeline: [
+            {
+              kind: 'OPENED',
+              at: new Date('2026-10-06T10:00:00.000Z'),
+              actorId: '77777777-7777-4777-8777-777777777777',
+              actorLabel: 'yael@example.test',
+              partyName: null,
+              categoryLabel: null,
+              flagBy: null,
+            },
+          ],
+        },
+      }),
+  ],
+  [
+    'calls · one call, identified',
+    () =>
+      renderCallPage({
+        nav: NAV_CALLS,
+        csrf: CSRF,
+        now: new Date('2026-10-06T12:30:00.000Z'),
+        query: '',
+        dupQuery: '',
+        dupMatches: [],
+        messages: [],
+        goal: { amberMinutes: 240, redMinutes: 1440 },
+        matches: [],
+        categories: [
+          {
+            id: '55555555-5555-4555-8555-555555555555',
+            code: 'LOCKS',
+            labelHe: 'מנעולים',
+            labelEn: null,
+            isActive: true,
+          },
+        ],
+        call: {
+          id: '33333333-3333-4333-8333-333333333333',
+          sourceChannel: 'PHONE',
+          state: 'IDENTIFIED',
+          description: 'נזילה במטבח',
+          sender: { kind: 'unknown' },
+          openedAt: new Date('2026-10-06T10:00:00.000Z'),
+          requester: {
+            id: '66666666-6666-4666-8666-666666666666',
+            name: 'יעל כהן',
+          },
+          category: null,
+          emergency: {
+            flagged: true,
+            by: 'staff',
+            actorId: '77777777-7777-4777-8777-777777777777',
+            actorLabel: 'yael@example.test',
+          },
+          toReview: false,
+          summary: null,
+          proposal: null,
+          sorterLabel: null,
+          sorterModel: null,
+          sorterPrompt: null,
+          returned: false,
+          exit: null,
+          repeatedBy: [],
+          predecessor: null,
+          returnedBy: null,
+          timeline: [
+            {
+              kind: 'OPENED',
+              at: new Date('2026-10-06T10:00:00.000Z'),
+              actorId: '77777777-7777-4777-8777-777777777777',
+              actorLabel: 'yael@example.test',
+              partyName: null,
+              categoryLabel: null,
+              flagBy: null,
+            },
+            {
+              kind: 'IDENTIFIED',
+              at: new Date('2026-10-06T12:00:00.000Z'),
+              actorId: '77777777-7777-4777-8777-777777777777',
+              actorLabel: 'yael@example.test',
+              partyName: 'יעל כהן',
+              categoryLabel: null,
+              flagBy: null,
+            },
+          ],
+        },
+      }),
+  ],
+  [
+    'calls · filtered',
+    () =>
+      renderFilteredPage({
+        nav: NAV_CALLS,
+        csrf: CSRF,
+        rows: [
+          {
+            kind: 'message',
+            id: '88888888-8888-4888-8888-888888888888',
+            title: 'ניוזלטר',
+            body: 'מבצע של החנות',
+            bodyHe: null,
+            sender: 'shop@example.test',
+            sorterLabel: 'noise',
+          },
+        ],
+      }),
+  ],
+  [
+    'calls · dev intake',
+    () =>
+      renderIntakeForm({
+        nav: NAV_CALLS,
+        csrf: CSRF,
+        categories: [
+          {
+            id: '55555555-5555-4555-8555-555555555555',
+            code: 'PLUMBING',
+            labelHe: 'אינסטלציה',
+            labelEn: null,
+            isActive: true,
+          },
+        ],
+        stored: false,
+      }),
   ],
   [
     'root · settings, admin',
@@ -2032,6 +2271,22 @@ const SCREENS: Array<[string, () => string]> = [
             isActive: true,
           },
         ],
+        categories: [
+          {
+            id: '55555555-5555-4555-8555-555555555555',
+            code: 'PLUMBING',
+            labelHe: 'אינסטלציה',
+            labelEn: null,
+            isActive: true,
+          },
+        ],
+        emergency: {
+          terms: ['הצפה', 'שריפה'],
+          termsText: 'הצפה\nשריפה',
+          phone: '000-000-0000',
+          hours: 'טרם נקבעו',
+        },
+        goal: { amberMinutes: 240, redMinutes: 1440 },
       }),
   ],
   [
@@ -2044,6 +2299,14 @@ const SCREENS: Array<[string, () => string]> = [
         state: 'wired',
         obligations: [],
         documents: [],
+        categories: [],
+        emergency: {
+          terms: ['הצפה'],
+          termsText: 'הצפה',
+          phone: '000-000-0000',
+          hours: 'טרם נקבעו',
+        },
+        goal: { amberMinutes: 240, redMinutes: 1440 },
       }),
   ],
 ];
@@ -2394,16 +2657,6 @@ describe('shared UI tokens', () => {
     }
   });
 
-  it('names the owner on an unbuilt destination', () => {
-    const calls = renderStubPage(
-      { csrf: CSRF, mayFile: true },
-      CALLS_STUB,
-      'wired',
-    );
-    assert.match(calls, /data-state="wired"/);
-    assert.match(calls, /שבוע 7 · סלייס 7.2/);
-  });
-
   // Asserted over the **wired** settings screens in the registry. It was asserted against the
   // painted A9 variant until 6.1, which put the only copy of a live guard on a mockup — and a
   // mockup is deleted the day the flow it painted is wired (CLAUDE.md; the guard that enforced
@@ -2584,6 +2837,13 @@ describe('shared UI tokens', () => {
       // **#162.** שכירויות is the list allowed to name the household. ADR-0011. Search,
       // the work list, and the נכסים tile stay off this list.
       'estate · tenancies book',
+      // **#182.** The open-call list shows the sender the office typed, or "לא ידוע".
+      // SPEC-calls.md: the tab lists the requester. That name is the call, not a household roll.
+      'calls · open list',
+      // **#183.** One call. The page names the requester the office linked, and the search
+      // that finds them. SPEC-calls.md: identifying a sender links that call and nothing else.
+      'calls · one call, new',
+      'calls · one call, identified',
     ];
     // **The two write receipts were on that list until this case was first run, and came off it.**
     // `renderTenancyWrittenPage` says `partiesWritten` and not who: once the confirm is done the

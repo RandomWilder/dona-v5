@@ -6,14 +6,21 @@
 // `asset_type` (estate's kinds are not a setting). Secret names wait; `settings.write` is who may
 // change a reference when that editor arrives.
 //
-// Type rows only. Natural key is the upsert identity: posting an existing `code` or `type_key` is an
-// edit, never a second row.
+// Type rows only, plus the call Category list (#183). Natural key is the upsert identity: posting
+// an existing `code` or `type_key` is an edit, never a second row. Category is the trade a call
+// needs. It is not `asset_type`.
 //
 // **A field schema was a seed until slice 7.2 and is now a row an ADMIN writes** — at `/documents`,
 // flow A14, under this same `settings.write`. Deliberately not a third card here: a declaration is
 // read beside the screen that shows what the reader looks for, and this screen is the catalogue's
 // index rather than a place any of it is worked on.
 
+import type {
+  CategoryRow,
+  CategorySpec,
+  EmergencySettings,
+  ResponseGoal,
+} from './calls/contract.ts';
 import { signedInChrome } from './chrome.ts';
 import type { DocumentTypeRow, DocumentTypeSpec } from './evidence/contract.ts';
 import { KernelError } from './kernel/errors.ts';
@@ -31,10 +38,15 @@ export interface SettingsScreen {
   mayWrite: boolean;
   /** Whether this role may file a document — the rail's one gated destination (slice 6.9). */
   mayFile: boolean;
+  /** Open ServiceCalls, for the rail count. Absent when the page is rendered outside a request. */
+  openCalls?: number;
   state: 'wired' | 'painted';
   obligations: readonly ObligationTypeRow[];
   documents: readonly DocumentTypeRow[];
-  saved?: 'obligation' | 'document';
+  categories: readonly CategoryRow[];
+  emergency: EmergencySettings;
+  goal: ResponseGoal;
+  saved?: 'obligation' | 'document' | 'category' | 'emergency' | 'goal';
 }
 
 const styles = h`<style>
@@ -100,6 +112,84 @@ function obligationForm(csrf: string): Html {
   </form>`;
 }
 
+function emergencyForm(screen: SettingsScreen): Html {
+  const duty = screen.emergency;
+  if (!screen.mayWrite) {
+    return h`<dl class="facts">
+      <div><dt>מונחים</dt><dd>${duty.termsText}</dd></div>
+      <div><dt>טלפון כונן</dt><dd dir="ltr">${duty.phone}</dd></div>
+      <div><dt>שעות כונן</dt><dd>${duty.hours}</dd></div>
+    </dl>`;
+  }
+  return h`<form class="settings-form" method="post" action="/settings/emergency">
+    ${csrfInput(screen.csrf)}
+    <h2>כונן ומונחי חירום</h2>
+    <p class="lede">שורה לכל מונח. נכנס לתוקף בלי העלאה.</p>
+    <div class="field">
+      <label for="em-terms">מונחים</label>
+      <textarea id="em-terms" name="emergency_terms" rows="6" maxlength="4000">${duty.termsText}</textarea>
+    </div>
+    <div class="field">
+      <label for="em-phone">טלפון כונן</label>
+      <input id="em-phone" name="duty_phone" type="text" dir="ltr" required maxlength="40" value="${duty.phone}" />
+    </div>
+    <div class="field">
+      <label for="em-hours">שעות כונן</label>
+      <input id="em-hours" name="duty_hours" type="text" required maxlength="200" value="${duty.hours}" />
+    </div>
+    <button class="btn btn-primary" type="submit">שמירה</button>
+  </form>`;
+}
+
+function goalForm(screen: SettingsScreen): Html {
+  const goal = screen.goal;
+  if (!screen.mayWrite) {
+    return h`<dl class="facts">
+      <div><dt>כתום</dt><dd>${String(goal.amberMinutes)} דקות</dd></div>
+      <div><dt>אדום</dt><dd>${String(goal.redMinutes)} דקות</dd></div>
+    </dl>`;
+  }
+  return h`<form class="settings-form" method="post" action="/settings/response-goal">
+    ${csrfInput(screen.csrf)}
+    <h2>יעד מענה פנימי</h2>
+    <p class="lede">דקות שלמות. לא מוצג לדייר. נכנס לתוקף בלי העלאה.</p>
+    <div class="field">
+      <label for="goal-amber">כתום (דקות)</label>
+      <input id="goal-amber" name="amber_minutes" type="text" inputmode="numeric" dir="ltr" required maxlength="6" value="${String(goal.amberMinutes)}" />
+    </div>
+    <div class="field">
+      <label for="goal-red">אדום (דקות)</label>
+      <input id="goal-red" name="red_minutes" type="text" inputmode="numeric" dir="ltr" required maxlength="6" value="${String(goal.redMinutes)}" />
+    </div>
+    <button class="btn btn-primary" type="submit">שמירה</button>
+  </form>`;
+}
+
+function categoryForm(csrf: string): Html {
+  return h`<form class="settings-form" method="post" action="/settings/categories">
+    ${csrfInput(csrf)}
+    <h2>קטגוריה חדשה</h2>
+    <p class="lede">קוד קיים מעדכן את השורה. אין מחיקה — רק כיבוי. זה לא סוג נכס.</p>
+    <div class="field">
+      <label for="cat-code">קוד</label>
+      <input id="cat-code" name="code" type="text" dir="ltr" required maxlength="64" />
+    </div>
+    <div class="field">
+      <label for="cat-he">שם בעברית</label>
+      <input id="cat-he" name="label_he" type="text" required maxlength="120" />
+    </div>
+    <div class="field">
+      <label for="cat-en">שם באנגלית</label>
+      <input id="cat-en" name="label_en" type="text" dir="ltr" maxlength="120" />
+    </div>
+    <label class="check">
+      <input type="checkbox" name="is_active" value="true" checked />
+      פעיל
+    </label>
+    <button class="btn btn-primary" type="submit">שמירה</button>
+  </form>`;
+}
+
 function documentForm(csrf: string): Html {
   return h`<form class="settings-form" method="post" action="/settings/document-types">
     ${csrfInput(csrf)}
@@ -134,13 +224,36 @@ export function renderSettingsPage(screen: SettingsScreen): string {
   const saved = screen.saved === undefined ? h`` : h`<p class="lede">נשמר.</p>`;
   const writeOb = screen.mayWrite ? obligationForm(screen.csrf) : h``;
   const writeDoc = screen.mayWrite ? documentForm(screen.csrf) : h``;
+  const writeCat = screen.mayWrite ? categoryForm(screen.csrf) : h``;
   const body = h`
     <div class="settings" data-state="${screen.state}">
       <div>
         <h1>הגדרות</h1>
-        <p class="lede">שני קטלוגים. סוג נכס אינו כאן. מטריצת ההרשאות אינה כאן.</p>
+        <p class="lede">קטלוגים. סוג נכס אינו כאן. מטריצת ההרשאות אינה כאן.</p>
         ${saved}
       </div>
+      <section class="settings-block">
+        <h2>חירום</h2>
+        ${emergencyForm(screen)}
+      </section>
+      <section class="settings-block">
+        <h2>יעד מענה</h2>
+        ${goalForm(screen)}
+      </section>
+      <section class="settings-block">
+        <h2>קטגוריות לקריאות</h2>
+        <div class="row-list">
+          ${screen.categories.map(
+            (row) => h`<article class="type-card">
+              <h2><span dir="ltr">${row.code}</span> · ${row.labelHe}</h2>
+              <dl class="facts">
+                <div><dt>מצב</dt><dd>${active(row.isActive)}</dd></div>
+              </dl>
+            </article>`,
+          )}
+        </div>
+        ${writeCat}
+      </section>
       <section class="settings-block">
         <h2>התחייבויות</h2>
         <div class="row-list">
@@ -175,7 +288,12 @@ export function renderSettingsPage(screen: SettingsScreen): string {
   return renderPage({
     title: 'הגדרות — דונה דום',
     styles,
-    nav: signedInChrome(screen.csrf, 'settings', screen.mayFile),
+    nav: signedInChrome(
+      screen.csrf,
+      'settings',
+      screen.mayFile,
+      screen.openCalls,
+    ),
     body,
   });
 }
@@ -229,6 +347,47 @@ export function parseObligationTypeForm(body: unknown): ObligationTypeSpec {
     labelEn: optionalField(body, 'label_en', 120),
     defaultResponsibleParty: responsibleParty(body),
     requiresEvidence: checked(body, 'requires_evidence'),
+    isActive: checked(body, 'is_active'),
+  };
+}
+
+function wholeMinutesField(body: unknown, name: string, field: string): number {
+  const raw = (body as Form | undefined)?.[name];
+  if (typeof raw !== 'string' || !/^\d{1,6}$/.test(raw.trim())) {
+    throw new KernelError('invalid', `${field} must be whole minutes`, {
+      field,
+    });
+  }
+  return Number(raw.trim());
+}
+
+export function parseResponseGoalForm(body: unknown): {
+  amberMinutes: number;
+  redMinutes: number;
+} {
+  return {
+    amberMinutes: wholeMinutesField(body, 'amber_minutes', 'amber'),
+    redMinutes: wholeMinutesField(body, 'red_minutes', 'red'),
+  };
+}
+
+export function parseEmergencyForm(body: unknown): {
+  termsText: string;
+  phone: string;
+  hours: string;
+} {
+  return {
+    termsText: optionalField(body, 'emergency_terms', 4000) ?? '',
+    phone: field(body, 'duty_phone', 40),
+    hours: field(body, 'duty_hours', 200),
+  };
+}
+
+export function parseCategoryForm(body: unknown): CategorySpec {
+  return {
+    code: field(body, 'code', 64),
+    labelHe: field(body, 'label_he', 120),
+    labelEn: optionalField(body, 'label_en', 120),
     isActive: checked(body, 'is_active'),
   };
 }

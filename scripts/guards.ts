@@ -213,6 +213,11 @@ const PII_COLUMNS = new Set([
   // 2.4, `promoted_by` at 4.3 and this one -- and each time the rule held: the list learns the name
   // it met, rather than the guard learning a pattern it will be wrong about.
   'display_name',
+  // #182. The name an office worker types for the person who phoned or walked in,
+  // or leaves null when they mark the sender unknown.
+  'sender_label',
+  // #186. The address on an incoming message, before anyone has identified a Party.
+  'sender_address',
   'birth_date',
   'date_of_birth',
   'iban',
@@ -244,6 +249,11 @@ const PII_QUALIFIED_COLUMNS = new Set([
   'tenancy_event.actor',
   'office_retrieval_turn.question',
   'office_retrieval_turn.answer',
+  // #186. The message as it arrived, its subject, and a file name on it.
+  'message.subject',
+  'message.body_original',
+  'message.body_he',
+  'message.attachments',
 ]);
 
 // Two shapes, because a column arrives two ways. A definition inside CREATE TABLE starts the line;

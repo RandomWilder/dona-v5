@@ -123,11 +123,11 @@ describe('every route in the application', () => {
       .map(([route]) => route)
       .sort();
 
-    // **The whole public surface of this system, enumerated.** Four routes, and every one of them
+    // **The whole public surface of this system, enumerated.** Every one of them
     // is a route somebody with no session must be able to reach: the liveness probe, the assets the
     // login screen itself loads, the login screen, the redirect to Google, the callback that mints
-    // the first session, and the way out. Anything else appearing in this list is the regression
-    // this slice exists to make loud.
+    // the first session, the way out, and Meta's WhatsApp webhook. Anything else appearing in this
+    // list is the regression this slice exists to make loud.
     assert.deepEqual(open, [
       'GET /health',
       'GET /staff/auth/callback',
@@ -135,7 +135,9 @@ describe('every route in the application', () => {
       'GET /staff/login',
       'GET /ui/fonts/:file',
       'GET /ui/tokens.css',
+      'GET /webhooks/whatsapp',
       'POST /staff/logout',
+      'POST /webhooks/whatsapp',
     ]);
 
     // And the seven the slice is named for are not among them.
@@ -151,6 +153,7 @@ describe('every route in the application', () => {
       'GET /documents/filing',
       'GET /documents/filing/:documentId',
       'GET /calls',
+      'POST /calls',
       'GET /settings',
       'POST /documents',
       'POST /documents/tenancies/:tenancyId/protocol',
@@ -237,6 +240,7 @@ describe('a request with no session', () => {
         '/documents/11111111-1111-4111-8111-111111111111/seed',
         '/documents/11111111-1111-4111-8111-111111111111/tenancy',
         '/calls',
+        '/calls/33333333-3333-4333-8333-333333333333',
         '/settings',
       ]) {
         const response = await app.inject({ method: 'GET', url });

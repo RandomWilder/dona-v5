@@ -1,6 +1,7 @@
 # Notice to data subjects — draft
 
-**Status: draft, and not published.** This file exists so that fuse **F6**'s second half stops being
+**Status: draft, and not published.** Revised 2026-10-06 for #181: incoming email joins the
+channels, Microsoft 365 joins the table, and Twilio leaves it (ADR-0013). This file exists so that fuse **F6**'s second half stops being
 an unbounded ask and becomes a document with a reviewer. It was written by an agent, it is **not legal
 advice**, and it must be reviewed by counsel and by the owner before it is shown to a tenant. What it
 does is name every element the notice has to contain, fill in the ones the system already determines,
@@ -27,8 +28,8 @@ The blanks marked `⟨…⟩` are the owner's — they are facts about the compa
 
 ### מה אנחנו אוספים
 פרטי הזיהוי והקשר שלך, פרטי הדירה והבניין, מסמכי השכירות הנוגעים אליך (חוזה, פרוטוקול מסירה,
-ערבות, אישור ביטוח, חיובי ארנונה), תוכן הפניות שאתה שולח אלינו והתשובות שניתנו לך, ומועדי הביקורים
-שנקבעו בעקבותיהן.
+ערבות, אישור ביטוח, חיובי ארנונה), תוכן הפניות שאתה שולח אלינו — בוואטסאפ, בדוא"ל, בטלפון או
+במשרד — והתשובות שניתנו לך, ומועדי הביקורים שנקבעו בעקבותיהן.
 
 ### לשם מה
 כדי לנהל את השכירות, לענות על שאלותיך על סמך המסמכים שלך, לתאם טיפול בתקלות, ולעמוד בחובות
@@ -45,9 +46,9 @@ The blanks marked `⟨…⟩` are the owner's — they are facts about the compa
 | הגורם | מה הוא רואה | לשם מה |
 |---|---|---|
 | Google Cloud | מסמכים, רשומות ותמונות עמוד | אחסון, מסד הנתונים, והפקת טקסט ממסמך סרוק |
-| OpenAI | טקסט מתוך המסמכים והשאלות שנשאלו | הפקת התשובה ואיתור הסעיף הרלוונטי |
-| Meta — WhatsApp | תוכן ההודעות שנשלחות ומתקבלות בערוץ זה | קיום השיחה עצמה |
-| Twilio | מספר הטלפון והודעת קוד האימות | אימות זהות כאשר אין ערוץ WhatsApp |
+| OpenAI | טקסט מתוך המסמכים והשאלות שנשאלו; תוכן הודעות הדוא"ל והוואטסאפ הנכנסות | הפקת התשובה ואיתור הסעיף הרלוונטי; מיון הפנייה ותרגומה לעברית לצוות המשרד |
+| Meta — WhatsApp | תוכן ההודעות שנשלחות ומתקבלות בערוץ זה, וקוד האימות | קיום השיחה עצמה ואימות הזהות |
+| Microsoft 365 | הודעות הדוא"ל שנשלחות לתיבת הפניות שלנו | תיבת הדוא"ל של המשרד, שהמערכת קוראת, ושולחת ממנה רק את תשובת החירום הקבועה |
 
 איננו מוכרים מידע אישי ואיננו מעבירים אותו למטרות שיווק של צד שלישי.
 
@@ -74,7 +75,8 @@ your rights of access, correction and deletion, and the regulator you may compla
    some controllers and the answer is the owner's, not the system's.
 2. **The retention period**, which is a legal answer and not an engineering one. The system will
    enforce whatever number is given here; today nothing enforces a number because no number exists.
-3. **Cross-border transfer.** OpenAI and Anthropic are outside Israel; Google Cloud stores in
+3. **Cross-border transfer.** OpenAI and Anthropic are outside Israel, and so is Meta; Microsoft 365
+   is Dona Dom's own mailbox provider, so its location is whatever Dona Dom's tenant already uses; Google Cloud stores in
    `me-west1` but its processing is not exclusively Israeli. Confirm the basis, and confirm that the
    transfer clauses in each processor's addendum are the ones being relied on.
 4. **How the notice reaches a tenant** — at signature, in the tenancy agreement, on first contact

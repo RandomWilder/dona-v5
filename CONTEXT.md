@@ -11,8 +11,10 @@ they win wherever the two could be read as disagreeing. Decisions are in `docs/d
 **Dona Dom** — the operator. ~1,500 long-term rental apartments under **דירה להשכיר** tenders.
 **The agent** — the WhatsApp-facing model, on both ends of a service call. **The office retrieval
 model** — the model on an **office retrieval thread**. Neither is a brain: both act only through
-documented module commands, never by writing a store query. Distinct from each other. **The office**
-— the humans who supervise exceptions.
+documented module commands, never by writing a store query. Distinct from each other. **The sorter**
+(**המסווג**) — the model that reads one incoming message and proposes whether it is a ServiceCall,
+its **Category** and a Hebrew summary. It replies to nobody and reaches no store; distinct from the
+agent. **The office** — the humans who supervise exceptions.
 
 ## Place
 
@@ -62,6 +64,7 @@ introducing one fails the build. Say "the scope", not "the tenant's permissions"
 | Term | Means |
 |---|---|
 | **Document** | A file that arrived. |
+| **Unassigned document** (**לא מתוייק**) | A Document of a type that belongs to a Tenancy, not yet linked to one. Kept, readable and viewable as the file it is; it becomes assigned when an administrator binds it to a Tenancy under a declared type — a new draft or an existing one. Not "unfiled", not "held", not "unplaced". |
 | **DocumentType** | A row, not a code path. New types cost no migration. |
 | **DocumentTypeField** | A field declared on a type. Also a row. |
 | **Passage** | One page of a Document, as text. Written once, when the document is read — at filing, or by the archive sweep for rows that have none. Never re-derived from the bytes after that. Identifiers stay in the text. Masking is a read, not a write. |
@@ -99,7 +102,13 @@ be met. Editable at `/settings` without a deploy.
 
 | Term | Means |
 |---|---|
-| **ServiceCall** | A request from a tenant. Has a state machine, with no AI in it. |
+| **ServiceCall** (**קריאה**) | A request that reached the office through a **Source channel**. A question is a ServiceCall too, closed by an exit. The requester is identified, never presumed: an unknown sender's call waits in NEW for the office. Has a state machine, with no AI in it. Not "ticket", not "inquiry". |
+| **Source channel** | How a ServiceCall arrived: `WHATSAPP · EMAIL · PHONE · WALK_IN`. Set once, at intake. |
+| **Category** | The trade a ServiceCall needs — plumbing, electrical, A/C, locks, gates and the like, plus administrative. Dona Dom's list. Distinct from `asset_type`, which is what the call is filed against. |
+| **Emergency** | A ServiceCall flagged because its text contains an emergency term, or because a person flagged it. The flag records which. Pinned first in קריאות. Not a state, and no model sets it. |
+| **Duty contact** | The duty phone number and the duty hours. Editable at `/settings`. The fixed emergency reply is composed from these rows. |
+| **Exit** | A ServiceCall closed by a person, with a reason, before a Visit: **Answered** (a question, settled), **Forwarded** (a legitimate request another department owns — finance, legal — named on the call), **Duplicate** (linked to the call it repeats), **Cancelled** (the requester withdrew). Not "rejected", and a call with no exit reason is not closed. |
+| **Filtered message** | An incoming message the sorter judged not to be a ServiceCall. Kept for 6 months, then deleted unless the office has turned it into a call. Sent back to filtered, the six months start again from the return; the call record stays. |
 | **Visit** | A contractor or operator attending. |
 | **Responsibility** | **Ternary**: tenant / operator / **contractor**. Never binary. |
 | **תקופת הבדק** | The warranty period. With `asset_in_warranty` true, the answer is the contractor. |

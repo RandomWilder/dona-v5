@@ -121,7 +121,12 @@ export interface EstateDeps {
    * and the kernel may not name anyone's. **`mayFile` from 6.9**: the rail's documents destination
    * is gated on `documents.write`, so the caller passes the stance rather than the rail guessing it.
    */
-  chrome: (csrf: string, dest: ChromeDest, mayFile: boolean) => Html;
+  chrome: (
+    csrf: string,
+    dest: ChromeDest,
+    mayFile: boolean,
+    openCalls?: number,
+  ) => Html;
   /**
    * Slice 3.6 / 4.4. Injected from evidence so this module never imports it — evidence already
    * imports estate, and the other direction would be a cycle. Structural: the composition root
@@ -889,7 +894,12 @@ export function registerEstateRoutes(
       occupied.map((unit) => unit.unit_id),
     );
     html(reply);
-    const nav = deps.chrome(csrfFrom(request), 'estate', mayFile(request));
+    const nav = deps.chrome(
+      csrfFrom(request),
+      'estate',
+      mayFile(request),
+      request.openCalls,
+    );
     return renderBuildingsPage(
       buildings,
       byBuilding,
@@ -926,7 +936,12 @@ export function registerEstateRoutes(
         deps.clock,
         draftChip(deps),
       ),
-      nav: deps.chrome(csrfFrom(request), 'inventory', mayFile(request)),
+      nav: deps.chrome(
+        csrfFrom(request),
+        'inventory',
+        mayFile(request),
+        request.openCalls,
+      ),
       mayWrite: can(request.staff?.role ?? null, 'estate.write'),
       status,
     });
@@ -937,7 +952,7 @@ export function registerEstateRoutes(
     const csrf = csrfFrom(request);
     html(reply);
     return renderNewInventoryPage({
-      nav: deps.chrome(csrf, 'inventory', mayFile(request)),
+      nav: deps.chrome(csrf, 'inventory', mayFile(request), request.openCalls),
       csrf,
       projects,
     });
@@ -1052,7 +1067,12 @@ export function registerEstateRoutes(
           draftChip(deps),
         ),
         documents,
-        nav: deps.chrome(csrf, 'inventory', mayFile(request)),
+        nav: deps.chrome(
+          csrf,
+          'inventory',
+          mayFile(request),
+          request.openCalls,
+        ),
         mayFile: mayFile(request),
         write: can(request.staff?.role ?? null, 'estate.write')
           ? { csrf }
@@ -1204,7 +1224,12 @@ export function registerEstateRoutes(
         documents: documents.documents,
         truncated: estate.truncated || documents.truncated,
       },
-      deps.chrome(csrfFrom(request), 'search', mayFile(request)),
+      deps.chrome(
+        csrfFrom(request),
+        'search',
+        mayFile(request),
+        request.openCalls,
+      ),
     );
   });
 
@@ -1214,7 +1239,12 @@ export function registerEstateRoutes(
     return renderExpiringPage(
       leases,
       EXPIRING_WINDOW_DAYS,
-      deps.chrome(csrfFrom(request), 'expiring', mayFile(request)),
+      deps.chrome(
+        csrfFrom(request),
+        'expiring',
+        mayFile(request),
+        request.openCalls,
+      ),
     );
   });
 
@@ -1227,7 +1257,7 @@ export function registerEstateRoutes(
       rows,
       queue,
       csrf,
-      deps.chrome(csrf, 'incomplete', mayFile(request)),
+      deps.chrome(csrf, 'incomplete', mayFile(request), request.openCalls),
     );
   });
 
@@ -1264,7 +1294,7 @@ export function registerEstateRoutes(
       optionalText(blankToNull(query.city), 'city', 120) ?? undefined;
     html(reply);
     return renderNewBuildingPage({
-      nav: deps.chrome(csrf, 'inventory', mayFile(request)),
+      nav: deps.chrome(csrf, 'inventory', mayFile(request), request.openCalls),
       csrf,
       projects,
       // **Slice 6.9.** The name defaults to the street, because A12 read a street and never a
@@ -1323,7 +1353,12 @@ export function registerEstateRoutes(
       const carry = carryFromQuery(request);
       html(reply);
       return renderNewUnitPage({
-        nav: deps.chrome(csrf, 'inventory', mayFile(request)),
+        nav: deps.chrome(
+          csrf,
+          'inventory',
+          mayFile(request),
+          request.openCalls,
+        ),
         csrf,
         building,
         prefill: carry.unitNumber ? { unitNumber: carry.unitNumber } : {},
@@ -1448,7 +1483,7 @@ export function registerEstateRoutes(
     return renderBuildingPage(
       detail,
       occupancy,
-      deps.chrome(csrf, 'estate', mayFile(request)),
+      deps.chrome(csrf, 'estate', mayFile(request), request.openCalls),
       documents,
       // Slice 6.2: the door to A13's screen, rendered for a viewer who may walk through it and for
       // nobody else — the buildings list's rule, one level down. Issue 140 hangs the remove
@@ -1508,7 +1543,7 @@ export function registerEstateRoutes(
       unit,
       states.get(unit.unit_id)?.word ?? UNIT_WORDS.vacant,
       documents,
-      deps.chrome(csrf, 'inventory', mayFile(request)),
+      deps.chrome(csrf, 'inventory', mayFile(request), request.openCalls),
       promoted,
       events,
       await officeRetrieval(
@@ -1648,7 +1683,12 @@ export function registerEstateRoutes(
     html(reply);
     return renderTenanciesPage(
       book,
-      deps.chrome(csrfFrom(request), 'tenancies', mayFile(request)),
+      deps.chrome(
+        csrfFrom(request),
+        'tenancies',
+        mayFile(request),
+        request.openCalls,
+      ),
     );
   });
 
@@ -1756,7 +1796,7 @@ export function registerEstateRoutes(
       activatableOn: gate.activatableOn,
       flags: gate.flags,
       csrf,
-      nav: deps.chrome(csrf, 'tenancies', mayFile(request)),
+      nav: deps.chrome(csrf, 'tenancies', mayFile(request), request.openCalls),
     });
   });
 

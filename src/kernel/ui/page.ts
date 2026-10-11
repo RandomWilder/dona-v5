@@ -82,6 +82,11 @@ const shell = h`<style>
     width: var(--space-5);
     height: var(--space-5);
   }
+  .nav-count {
+    margin-inline-start: auto;
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+  }
   .ops-footer {
     margin-block-start: auto;
     padding-block: var(--space-4);

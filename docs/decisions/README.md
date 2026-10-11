@@ -35,6 +35,7 @@ for a week the register and the decision disagreed about whether three of four d
 | [0010](ADR-0010-office-building-bound-is-not-tenant-building-paper.md) | The office **Building retrieval bound** is the wide bag; tenant stance cannot use it; later tenant rules use **Building paper** only | accepted |
 | [0011](ADR-0011-the-tenancies-book-may-name-the-household.md) | **שכירויות** is the first list allowed to name a household; the Unit page names only the live letting; search and the work list stay nameless | accepted — the tile sentence is superseded by 0012 |
 | [0012](ADR-0012-the-nekasim-tile-shows-the-current-last-name.md) | The נכסים tile shows the last name of the household that counts today, under that letting's dates | accepted |
+| [0013](ADR-0013-whatsapp-arrives-by-coexistence.md) | WhatsApp arrives by coexistence, with Dona Dom as its own Tech Provider; no BSP, no unofficial client, no SMS provider | accepted |
 
 **A1–A10 in [archive/tasks-w1-7/plan.md](../../archive/tasks-w1-7/plan.md) are numbered as they will
 become ADRs.** They are decisions of record already; they become files here as the work that
