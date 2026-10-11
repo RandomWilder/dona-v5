@@ -16,10 +16,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { signedInChrome } from './chrome.ts';
+import { createAuditLog } from './kernel/audit.ts';
 import { type Clock, today } from './kernel/clock.ts';
 import { KernelError } from './kernel/errors.ts';
 import { type Html, h } from './kernel/ui/html.ts';
-import { renderPage } from './kernel/ui/page.ts';
+import { csrfInput, renderPage } from './kernel/ui/page.ts';
 import { validId } from './kernel/validate.ts';
 import type {
   DirectoryParty,
@@ -27,7 +28,12 @@ import type {
   PartyProfile,
   ProfileContact,
 } from './parties/contract.ts';
-import { readPartyProfile, searchParties } from './parties/contract.ts';
+import {
+  readPartyNationalId,
+  readPartyProfile,
+  searchParties,
+  setPartyNationalId,
+} from './parties/contract.ts';
 import { normaliseEmail, normalisePhone } from './scope/contract.ts';
 import { can, csrfFrom } from './staff/contract.ts';
 import type { PartyTenancyRole } from './tenancy/contract.ts';
@@ -53,7 +59,8 @@ const styles = h`<style>
   }
   .party-search label { display: grid; gap: var(--space-1); flex: 1 1 16rem; }
   .party-search input,
-  .party-search select {
+  .party-search select,
+  .party-id input {
     min-height: var(--size-control);
     padding-inline: var(--space-3);
     border: var(--size-hairline) solid var(--color-divider);
@@ -61,6 +68,9 @@ const styles = h`<style>
     background: var(--color-surface-card);
     font: inherit;
   }
+  .party-id { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: end; }
+  .party-id label { display: grid; gap: var(--space-1); }
+  .party-refusal { margin: 0; color: var(--color-alert); }
   .party-labels { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
   a.chip { text-decoration: none; }
   .party-contacts { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
@@ -88,19 +98,31 @@ export interface DirectoryScreen {
   csrf: string;
   mayFile: boolean;
   mayReadParties: boolean;
+  mayReadNationalId?: boolean;
   openCalls?: number;
   query: string;
+  /** An administrator searched by ת.ז. The typed value is not on the page. */
+  nationalIdSearch?: boolean;
   label: LabelFilter | null;
   rows: readonly (DirectoryParty & PartyLabels)[];
+}
+
+interface NationalIdConflict {
+  partyId: string;
+  fullName: string;
 }
 
 export interface ProfileScreen {
   csrf: string;
   mayFile: boolean;
   mayReadParties: boolean;
+  mayReadNationalId?: boolean;
   openCalls?: number;
   profile: PartyProfile;
   labels: PartyLabels;
+  /** The stored value, this request only. Absent on the ordinary profile. */
+  revealedNationalId?: string | null;
+  nationalIdConflict?: NationalIdConflict | null;
 }
 
 const LABEL_FILTERS: readonly LabelFilter[] = [
@@ -243,6 +265,14 @@ async function labelsByParty(
   return byParty;
 }
 
+/**
+ * A ת.ז. probe: one to nine digits once separators are gone, and not a phone the door accepts.
+ * The match itself is the database's fold. This only chooses which read to ask for.
+ */
+function isNationalIdProbe(query: string): boolean {
+  return /^[0-9]{1,9}$/.test(query.replace(/[\s\-./]/g, ''));
+}
+
 /** What the box asked, turned into the one read the contract accepts. */
 export function directoryQuery(raw: string): DirectoryQuery {
   const query = raw.trim();
@@ -258,6 +288,7 @@ export function directoryQuery(raw: string): DirectoryQuery {
   } catch (error) {
     if (!(error instanceof KernelError)) throw error;
   }
+  if (isNationalIdProbe(query)) return { kind: 'nationalId', value: query };
   return {
     kind: 'name',
     words: query.split(/\s+/).filter((word) => word.length > 0),
@@ -347,6 +378,12 @@ export function renderPartyDirectory(screen: DirectoryScreen): string {
             </tbody>
           </table>
         </div>`;
+  const placeholder = screen.mayReadNationalId
+    ? 'שם, טלפון, דוא״ל או ת.ז.'
+    : 'שם, טלפון או דוא״ל';
+  const searchedById = screen.nationalIdSearch
+    ? h`<p class="lede">חיפוש לפי ת.ז.</p>`
+    : h``;
   const body = h`<div class="glass-stage party-directory">
     <header class="page-head">
       <h1>אנשי קשר</h1>
@@ -354,11 +391,12 @@ export function renderPartyDirectory(screen: DirectoryScreen): string {
     </header>
     <form class="glass party-search" method="get" action="/parties">
       <label>חיפוש
-        <input id="party-q" type="search" name="q" value="${screen.query}" placeholder="שם, טלפון או דוא״ל" autocomplete="off" maxlength="${QUERY_MAX}" />
+        <input id="party-q" type="search" name="q" value="${screen.query}" placeholder="${placeholder}" autocomplete="off" maxlength="${QUERY_MAX}" />
       </label>
       ${labelSelect(screen.label)}
       <button class="btn" type="submit">חיפוש</button>
     </form>
+    ${searchedById}
     <div class="glass">${rows}</div>
   </div>`;
   return renderPage({
@@ -369,21 +407,71 @@ export function renderPartyDirectory(screen: DirectoryScreen): string {
   });
 }
 
-function identity(profile: PartyProfile): Html {
+function maskedSuffix(suffix: string): string {
+  return `${'•'.repeat(5)}${suffix}`;
+}
+
+function nationalIdValue(screen: ProfileScreen): Html {
+  const revealed = screen.revealedNationalId;
+  if (typeof revealed === 'string' && revealed !== '') {
+    return h`<bdi dir="ltr">${revealed}</bdi>`;
+  }
+  const suffix = screen.profile.nationalIdSuffix;
+  if (suffix === null || suffix === '') return h`—`;
+  return h`<bdi dir="ltr">${maskedSuffix(suffix)}</bdi>`;
+}
+
+function nationalIdControls(screen: ProfileScreen): Html {
+  if (screen.mayReadNationalId !== true) return h``;
+  const partyId = screen.profile.partyId;
+  const reveal =
+    screen.profile.nationalIdSuffix === null ||
+    (typeof screen.revealedNationalId === 'string' &&
+      screen.revealedNationalId !== '')
+      ? h``
+      : h`<form method="post" action="/parties/${partyId}/national-id/reveal">
+          ${csrfInput(screen.csrf)}
+          <button class="btn btn-secondary" type="submit">גילוי</button>
+        </form>`;
+  const clash = screen.nationalIdConflict;
+  const refusal =
+    clash === undefined || clash === null
+      ? h``
+      : clash.partyId === ''
+        ? h`<p class="party-refusal">הת.ז. כבר רשומה על איש קשר אחר.</p>`
+        : h`<p class="party-refusal">הת.ז. כבר רשומה על <a href="/parties/${clash.partyId}">${clash.fullName}</a>.</p>`;
+  return h`${refusal}
+    ${reveal}
+    <form class="party-id" method="post" action="/parties/${partyId}/national-id">
+      ${csrfInput(screen.csrf)}
+      <label>ת.ז.
+        <input name="identifier" autocomplete="off" maxlength="64" />
+      </label>
+      <button class="btn" type="submit">שמירה</button>
+    </form>`;
+}
+
+function identity(screen: ProfileScreen): Html {
+  const profile = screen.profile;
   const language = h`<div><dt>שפה</dt><dd>${LANGUAGE_HE[profile.language]}</dd></div>`;
+  const identifier = h`<div><dt>ת.ז.</dt><dd>${nationalIdValue(screen)}</dd></div>`;
   if (profile.kind === 'COMPANY') {
     return h`<dl class="facts">
       <div><dt>שם משפטי</dt><dd>${profile.legalName ?? '—'}</dd></div>
       <div><dt>סוג</dt><dd>חברה</dd></div>
       ${language}
-    </dl>`;
+      ${identifier}
+    </dl>
+    ${nationalIdControls(screen)}`;
   }
   return h`<dl class="facts">
     <div><dt>שם פרטי</dt><dd>${profile.givenName ?? '—'}</dd></div>
     <div><dt>שם משפחה</dt><dd>${profile.familyName ?? '—'}</dd></div>
     <div><dt>סוג</dt><dd>אדם</dd></div>
     ${language}
-  </dl>`;
+    ${identifier}
+  </dl>
+  ${nationalIdControls(screen)}`;
 }
 
 function contacts(rows: readonly ProfileContact[]): Html {
@@ -409,7 +497,7 @@ export function renderPartyProfile(screen: ProfileScreen): string {
     </header>
     <section class="glass">
       <h2>זהות</h2>
-      ${identity(profile)}
+      ${identity(screen)}
     </section>
     <section class="glass">
       <h2>תוויות</h2>
@@ -438,6 +526,7 @@ function screenOf(request: FastifyRequest): {
   csrf: string;
   mayFile: boolean;
   mayReadParties: boolean;
+  mayReadNationalId: boolean;
   openCalls?: number;
 } {
   const role = request.staff?.role ?? null;
@@ -445,8 +534,44 @@ function screenOf(request: FastifyRequest): {
     csrf: csrfFrom(request),
     mayFile: can(role, 'documents.write'),
     mayReadParties: can(role, 'party.read'),
+    mayReadNationalId: can(role, 'party.national_id.read'),
     openCalls: request.openCalls,
   };
+}
+
+function formField(body: unknown, name: string): string {
+  if (body === null || typeof body !== 'object') {
+    throw new KernelError('invalid', 'that form carried no fields');
+  }
+  const value = (body as Record<string, unknown>)[name];
+  return typeof value === 'string' ? value : '';
+}
+
+function conflictOf(error: KernelError): NationalIdConflict | null {
+  const partyId = error.details?.partyId;
+  const fullName = error.details?.fullName;
+  if (typeof partyId !== 'string' || typeof fullName !== 'string') return null;
+  return { partyId, fullName };
+}
+
+async function audit(
+  deps: { pool: Pool; clock: Clock },
+  request: FastifyRequest,
+  action: string,
+  inputs: Record<string, unknown>,
+  subjectId?: string,
+): Promise<void> {
+  await createAuditLog(deps.pool, deps.clock).write(
+    {
+      actorKind: 'staff',
+      actorId: request.staff?.staffAccountId,
+      actorRole: request.staff?.role ?? undefined,
+      action,
+      subjectId,
+      inputs,
+    },
+    { outcome: 'ok' },
+  );
 }
 
 export function registerPartyDirectoryRoutes(
@@ -454,12 +579,41 @@ export function registerPartyDirectoryRoutes(
   deps: { pool: Pool; clock: Clock },
 ): void {
   const READ = { config: { staff: 'party.read' } } as const;
+  const IDENTIFIER = { config: { staff: 'party.national_id.read' } } as const;
+
+  async function opened(
+    request: FastifyRequest,
+    partyId: string,
+  ): Promise<ProfileScreen> {
+    const profile = await readPartyProfile(deps.pool, partyId);
+    if (!profile) throw new KernelError('not_found', 'route not found');
+    const byParty = await labelsByParty(deps.pool, deps.clock, [
+      profile.partyId,
+    ]);
+    return {
+      ...screenOf(request),
+      profile,
+      labels: byParty.get(profile.partyId) ?? NO_LABELS,
+    };
+  }
 
   app.get('/parties', READ, async (request, reply) => {
     html(reply);
     const raw = asked(request.query);
     const label = askedLabel(request.query);
-    const found = await searchParties(deps.pool, directoryQuery(raw));
+    const parsed = directoryQuery(raw);
+    if (
+      parsed.kind === 'nationalId' &&
+      !can(request.staff?.role ?? null, 'party.national_id.read')
+    ) {
+      throw new KernelError('not_allowed', 'not_allowed');
+    }
+    const found = await searchParties(deps.pool, parsed);
+    if (parsed.kind === 'nationalId') {
+      await audit(deps, request, 'parties.national_id.search', {
+        partyIds: found.map((row) => row.partyId).sort(),
+      });
+    }
     const byParty = await labelsByParty(
       deps.pool,
       deps.clock,
@@ -470,9 +624,11 @@ export function registerPartyDirectoryRoutes(
       if (!carries(label, labels)) return [];
       return [{ ...row, ...labels }];
     });
+    const byIdentifier = parsed.kind === 'nationalId';
     return renderPartyDirectory({
       ...screenOf(request),
-      query: raw.trim().slice(0, QUERY_MAX),
+      query: byIdentifier ? '' : raw.trim().slice(0, QUERY_MAX),
+      nationalIdSearch: byIdentifier,
       label,
       rows,
     });
@@ -483,16 +639,68 @@ export function registerPartyDirectoryRoutes(
     READ,
     async (request, reply) => {
       html(reply);
-      const profile = await readPartyProfile(
-        deps.pool,
-        validId(request.params.partyId, 'party'),
+      return renderPartyProfile(
+        await opened(request, validId(request.params.partyId, 'party')),
       );
-      if (!profile) throw new KernelError('not_found', 'route not found');
-      const byParty = await labelsByParty(deps.pool, deps.clock, [
-        profile.partyId,
-      ]);
-      const labels = byParty.get(profile.partyId) ?? NO_LABELS;
-      return renderPartyProfile({ ...screenOf(request), profile, labels });
+    },
+  );
+
+  app.post<{ Params: { partyId: string } }>(
+    '/parties/:partyId/national-id/reveal',
+    IDENTIFIER,
+    async (request, reply) => {
+      const partyId = validId(request.params.partyId, 'party');
+      const value = await readPartyNationalId(deps.pool, partyId);
+      if (value !== null) {
+        await audit(
+          deps,
+          request,
+          'parties.national_id.reveal',
+          { partyId },
+          partyId,
+        );
+      }
+      html(reply);
+      return renderPartyProfile({
+        ...(await opened(request, partyId)),
+        revealedNationalId: value,
+      });
+    },
+  );
+
+  app.post<{ Params: { partyId: string } }>(
+    '/parties/:partyId/national-id',
+    IDENTIFIER,
+    async (request, reply) => {
+      const partyId = validId(request.params.partyId, 'party');
+      try {
+        await setPartyNationalId(
+          deps.pool,
+          partyId,
+          formField(request.body, 'identifier'),
+        );
+      } catch (error) {
+        if (error instanceof KernelError && error.code === 'conflict') {
+          html(reply);
+          reply.code(409);
+          return renderPartyProfile({
+            ...(await opened(request, partyId)),
+            nationalIdConflict: conflictOf(error) ?? {
+              partyId: '',
+              fullName: '',
+            },
+          });
+        }
+        throw error;
+      }
+      await audit(
+        deps,
+        request,
+        'parties.national_id.write',
+        { partyId, field: 'national_id' },
+        partyId,
+      );
+      return reply.code(303).header('location', `/parties/${partyId}`).send();
     },
   );
 }

@@ -1,9 +1,14 @@
-// The directory and the profile. #202.
+// The directory and the profile. #202. The identifier, #204.
 //
 // Both reads name who exists. Neither answers who is reachable on a number today — that is
-// still `src/scope/`'s join — and neither statement selects `national_id`. A phone or an email
-// arrives already normalised: the composition root runs the door's normalisers, and a second
-// copy here is the one that would drift.
+// still `src/scope/`'s join. The profile returns a four-character suffix of the normalised
+// identifier and does not return the column. `readPartyNationalId` is the one statement that
+// reads `national_id`, and only the reveal route calls it. A phone or an email arrives already
+// normalised: the composition root runs the door's normalisers, and a second copy here is the
+// one that would drift. A ת.ז. is not normalised here either: the search compares
+// `party_national_id_key`, which is the database's fold.
+
+import { KernelError } from '../../kernel/errors.ts';
 import type {
   ContactChannel,
   PartyKind,
@@ -23,7 +28,8 @@ export type DirectoryQuery =
   | { kind: 'all' }
   | { kind: 'name'; words: readonly string[] }
   | { kind: 'phone'; value: string }
-  | { kind: 'email'; value: string };
+  | { kind: 'email'; value: string }
+  | { kind: 'nationalId'; value: string };
 
 export interface ProfileContact {
   channel: ContactChannel;
@@ -41,6 +47,8 @@ export interface PartyProfile {
   legalName: string | null;
   fullName: string;
   language: PreferredLanguage;
+  /** Last four characters of the normalised identifier. Null when the party has none. */
+  nationalIdSuffix: string | null;
   contacts: ProfileContact[];
 }
 
@@ -60,6 +68,7 @@ interface ProfileRow {
   legal_name: string | null;
   full_name: string;
   preferred_language: string;
+  national_id_suffix: string | null;
 }
 
 interface ContactRow {
@@ -93,6 +102,7 @@ function channel(value: string): ContactChannel {
  * A name matches a whole word of the display name, which is the given and family name or the
  * legal name. A fragment of a word matches nothing. A phone or an email matches a contact
  * whether or not it is still open. The row's phone and email are the open primaries.
+ * A ת.ז. matches `party_national_id_key` for either registry. The row still carries no identifier.
  */
 export async function searchParties(
   db: Queryable,
@@ -102,6 +112,7 @@ export async function searchParties(
   const phone = query.kind === 'phone' ? query.value : null;
   const email = query.kind === 'email' ? query.value : null;
   const words = query.kind === 'name' ? [...query.words] : null;
+  const nationalId = query.kind === 'nationalId' ? query.value : null;
   const result = await db.query<DirectoryRow>(
     `SELECT p.party_id,
             p.full_name,
@@ -150,8 +161,12 @@ export async function searchParties(
                     AND lower(n.word) = lower(q.word)
                )
             ))
+        AND ($4::text IS NULL OR p.national_id_key IN (
+              party_national_id_key('PERSON', $4),
+              party_national_id_key('COMPANY', $4)
+            ))
       ORDER BY p.full_name, p.party_id`,
-    [phone, email, words],
+    [phone, email, words, nationalId],
   );
   return result.rows.map((row) => ({
     partyId: row.party_id,
@@ -162,14 +177,22 @@ export async function searchParties(
   }));
 }
 
-/** One party and every contact it held. Null when the id names nobody. No identifier. */
+/**
+ * One party and every contact it held. Null when the id names nobody.
+ *
+ * The suffix is four characters of the normalised identifier. The column stays in the database.
+ */
 export async function readPartyProfile(
   db: Queryable,
   partyId: string,
 ): Promise<PartyProfile | null> {
   const party = await db.query<ProfileRow>(
     `SELECT party_id, party_kind, given_name, family_name, legal_name,
-            full_name, preferred_language
+            full_name, preferred_language,
+            CASE
+              WHEN national_id_key IS NULL THEN NULL
+              ELSE right(split_part(national_id_key, ':', 2), 4)
+            END AS national_id_suffix
        FROM party
       WHERE party_id = $1`,
     [partyId],
@@ -192,6 +215,7 @@ export async function readPartyProfile(
     legalName: row.legal_name,
     fullName: row.full_name,
     language: language(row.preferred_language),
+    nationalIdSuffix: row.national_id_suffix,
     contacts: contacts.rows.map((contact) => ({
       channel: channel(contact.channel),
       value: contact.value,
@@ -200,4 +224,24 @@ export async function readPartyProfile(
       validTo: contact.valid_to,
     })),
   };
+}
+
+/**
+ * The stored identifier. The one read of the column.
+ *
+ * Null when the party has none. Throws when the id names nobody. The value is pii: the reveal
+ * route is the caller, and it writes the audit line. This function does not.
+ */
+export async function readPartyNationalId(
+  db: Queryable,
+  partyId: string,
+): Promise<string | null> {
+  const result = await db.query<{ national_id: string | null }>(
+    `SELECT national_id FROM party WHERE party_id = $1`,
+    [partyId],
+  );
+  if (result.rows.length === 0) {
+    throw new KernelError('not_found', 'party not found');
+  }
+  return result.rows[0]?.national_id ?? null;
 }

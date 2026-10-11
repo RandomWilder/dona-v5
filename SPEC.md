@@ -228,6 +228,12 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   exception. The pattern both read is `IDENTIFIER_RUN` in `src/kernel/identifier.ts`, one spelling,
   boundary-anchored so a UUID, a file hash, a base64 data URI and an ISO date cannot fire it —
   week 5 closed on the opposite mistake, a `/05\d/` that read a CSRF token's own hex.
+- **#204. The profile shows a masked suffix, and that is not a disclosure of the value.** Anyone
+  who can open a party's profile sees the last four characters of the normalised identifier, with
+  bullets before them. A party with none shows a dash. That suffix is not access-logged. The full
+  value stays behind `party.national_id.read`: revealing it, searching the directory by one, and
+  writing one are that permission, and each writes an audit line that does not carry the value.
+  The directory never shows the suffix. The policy case is `tests/policy/party-national-id.test.ts`.
 - **The staff credential is Google's; the session is ours** (slice 5.1, amended at 5.1b —
   `SPEC-staff.md`, ADR-0005). No password hash and no second-factor secret exist in this schema.
   **What this system asserts is an allowlist and not a factor**: only an email that already has a

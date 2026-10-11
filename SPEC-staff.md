@@ -199,11 +199,12 @@ for a role that holds the permission.
 
 `party.read` is the אנשי קשר tab (`GET /parties` and `GET /parties/:partyId`, #202). A viewer holds neither it nor `party.write`, so the tab is absent from the rail and both routes refuse. `party.write` is granted to the same two roles and has no route yet: correcting a name, a contact or a new party arrives on later tickets, and the permission is named once so those routes do not invent a second word.
 
-`party.national_id.read` is here and unused, and that is on purpose: `SPEC.md`'s security default
-says `national_id` is **admin-only, unreachable by any agent tool, and access-logged**, and the
-"admin-only" half needs a permission to name before **5.3** can write the policy case that enforces
-the "unreachable" half. A permission with no reader is a smaller lie than a security default with no
-vocabulary.
+`party.national_id.read` is ADMIN only. It was named before it had a reader, because `SPEC.md`'s
+security default says `national_id` is **admin-only, unreachable by any agent tool, and
+access-logged**, and the "admin-only" half needs a permission to name. The document reveal reads it
+(slice 7.3). **#204** adds the profile: revealing a party's ת.ז., searching the directory by one, and
+writing one are all this permission, and an operator who posts any of the three is refused by the
+route. `party.write` does not cover them.
 
 ---
 

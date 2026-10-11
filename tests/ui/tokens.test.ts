@@ -2362,6 +2362,7 @@ const SCREENS: Array<[string, () => string]> = [
           legalName: null,
           fullName: 'דנה לוי',
           language: 'he',
+          nationalIdSuffix: null,
           contacts: [
             {
               channel: 'PHONE',

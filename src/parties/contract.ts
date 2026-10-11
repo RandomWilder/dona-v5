@@ -17,6 +17,7 @@ export type {
 export {
   countDistinctIdentifiers,
   createParty,
+  setPartyNationalId,
   upsertParty,
   upsertPartyContact,
 } from './internal/commands.ts';
@@ -26,7 +27,11 @@ export type {
   PartyProfile,
   ProfileContact,
 } from './internal/directory.ts';
-export { readPartyProfile, searchParties } from './internal/directory.ts';
+export {
+  readPartyNationalId,
+  readPartyProfile,
+  searchParties,
+} from './internal/directory.ts';
 export type { PartyName } from './internal/lookup.ts';
 export { findPartiesByName, listPartyNames } from './internal/lookup.ts';
 export type { Queryable } from './internal/types.ts';

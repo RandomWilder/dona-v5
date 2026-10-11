@@ -12,7 +12,7 @@
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
-import { requireText } from '../../kernel/validate.ts';
+import { requireText, validId } from '../../kernel/validate.ts';
 import type { Queryable } from './types.ts';
 
 export type PartyKind = 'PERSON' | 'COMPANY';
@@ -183,6 +183,62 @@ export async function upsertParty(
     throw new KernelError('conflict', 'party upsert returned no row');
   }
   return { id: row.party_id, inserted: row.inserted };
+}
+
+const UNIQUE_VIOLATION = '23505';
+
+function pgCode(error: unknown): string | undefined {
+  if (error !== null && typeof error === 'object' && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Sets one party's identifier. The generated key is the uniqueness: a value another party
+ * already holds is a conflict naming that party, and this row is left as it was. The message
+ * and the details carry no identifier.
+ */
+export async function setPartyNationalId(
+  db: Queryable,
+  partyId: string,
+  nationalId: string,
+): Promise<void> {
+  const id = validId(partyId, 'party');
+  const value = requireText(nationalId, 'national_id', 64);
+  const existing = await db.query<{ party_kind: string }>(
+    `SELECT party_kind FROM party WHERE party_id = $1`,
+    [id],
+  );
+  const kind = existing.rows[0]?.party_kind;
+  if (!kind) throw new KernelError('not_found', 'party not found');
+  try {
+    const updated = await db.query(
+      `UPDATE party SET national_id = $2 WHERE party_id = $1`,
+      [id, value],
+    );
+    if (updated.rowCount === 0) {
+      throw new KernelError('not_found', 'party not found');
+    }
+  } catch (error) {
+    if (!(error instanceof KernelError) && pgCode(error) === UNIQUE_VIOLATION) {
+      const holder = await db.query<{ party_id: string; full_name: string }>(
+        `SELECT party_id, full_name
+           FROM party
+          WHERE national_id_key = party_national_id_key($1, $2)
+            AND party_id <> $3`,
+        [kind, value, id],
+      );
+      const other = holder.rows[0];
+      throw new KernelError('conflict', 'that identifier is already held', {
+        ...(other
+          ? { partyId: other.party_id, fullName: other.full_name }
+          : {}),
+      });
+    }
+    throw error;
+  }
 }
 
 /**

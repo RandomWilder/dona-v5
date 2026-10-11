@@ -1,6 +1,7 @@
 // #202. The אנשי קשר tab, driven the way the office drives it: a signed-in role
-// opens the list, searches, and reads a profile. Nothing here calls the parties
-// module except to put a row in place first.
+// opens the list, searches, and reads a profile. #204 adds the ת.ז.: masked,
+// revealed, searched and written. Nothing here calls the parties module except
+// to put a row in place first.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { asOperator, signIn, signOutAll } from '../tests/support/session.ts';
@@ -57,6 +58,76 @@ async function cleanup(pool: import('pg').Pool): Promise<void> {
     [COMPANY, SECRET],
   );
   await signOutAll(pool, DOMAIN);
+}
+
+async function unusedIdentifier(pool: import('pg').Pool): Promise<string> {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const digits = crypto.randomUUID().replace(/\D/g, '');
+    const nine = digits.slice(-9).padStart(9, '7');
+    const nationalId = nine.startsWith('0') ? `7${nine.slice(1)}` : nine;
+    const taken = await pool.query(
+      `SELECT 1 FROM party
+        WHERE national_id_key = party_national_id_key('PERSON', $1)
+           OR national_id_key = party_national_id_key('COMPANY', $1)`,
+      [nationalId],
+    );
+    if (taken.rowCount === 0) return nationalId;
+  }
+  throw new Error('could not allocate an identifier');
+}
+
+async function unusedLeadingZero(
+  pool: import('pg').Pool,
+): Promise<{ stored: string; dropped: string }> {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const digits = crypto.randomUUID().replace(/\D/g, '');
+    const eight = digits.slice(-8).padStart(8, '3');
+    const dropped = eight.startsWith('0') ? `3${eight.slice(1)}` : eight;
+    const stored = `0${dropped}`;
+    const taken = await pool.query(
+      `SELECT 1 FROM party
+        WHERE national_id_key = party_national_id_key('PERSON', $1)`,
+      [stored],
+    );
+    if (taken.rowCount === 0) return { stored, dropped };
+  }
+  throw new Error('could not allocate an identifier');
+}
+
+async function audits(
+  pool: import('pg').Pool,
+  action: string,
+  actorId: string,
+): Promise<
+  {
+    actor_role: string | null;
+    subject_id: string | null;
+    inputs: string;
+  }[]
+> {
+  const result = await pool.query<{
+    actor_role: string | null;
+    subject_id: string | null;
+    inputs: string;
+  }>(
+    `SELECT actor_role, subject_id, inputs::text AS inputs
+       FROM audit_log
+      WHERE action = $1 AND actor_id = $2
+      ORDER BY at`,
+    [action, actorId],
+  );
+  return result.rows;
+}
+
+async function storedId(
+  pool: import('pg').Pool,
+  partyId: string,
+): Promise<string | null> {
+  const result = await pool.query<{ national_id: string | null }>(
+    `SELECT national_id FROM party WHERE party_id = $1`,
+    [partyId],
+  );
+  return result.rows[0]?.national_id ?? null;
 }
 
 describe('parties · the אנשי קשר tab', { concurrency: false }, () => {
@@ -190,8 +261,9 @@ describe('parties · the אנשי קשר tab', { concurrency: false }, () => {
       });
       assert.equal(adminProfile.statusCode, 200);
       assert.match(adminProfile.body, /נסתר202/);
+      assert.match(adminProfile.body, /•••••3c1a/);
+      assert.match(adminProfile.body, /גילוי/);
       assert.doesNotMatch(adminProfile.body, new RegExp(SECRET));
-      assert.doesNotMatch(adminProfile.body, /••••/);
       assert.doesNotMatch(adminProfile.body, /national_id/);
 
       const asViewer = asOperator(app, viewer);
@@ -431,8 +503,11 @@ describe('parties · the אנשי קשר tab', { concurrency: false }, () => {
       });
       assert.equal(hidden.statusCode, 200);
       assert.match(hidden.body, /נסתר202/);
+      assert.match(hidden.body, /ת\.ז\./);
+      assert.match(hidden.body, /•••••3c1a/);
       assert.doesNotMatch(hidden.body, new RegExp(SECRET));
-      assert.doesNotMatch(hidden.body, /••••/);
+      assert.doesNotMatch(hidden.body, /גילוי/);
+      assert.doesNotMatch(hidden.body, /national-id/);
     } finally {
       await cleanup(pool);
       await pool.end();
@@ -701,6 +776,311 @@ describe('parties · the אנשי קשר tab', { concurrency: false }, () => {
       assert.equal(stillActive.rows[0]?.status, 'ACTIVE');
     } finally {
       await cleanupLabels(pool);
+      await pool.end();
+    }
+  });
+
+  it('masks, reveals, searches and writes a ת.ז., and refuses an operator', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    const admin = await signIn(pool, clock, {
+      email: `admin-id@${DOMAIN}`,
+      role: 'ADMIN',
+    });
+    const operator = await signIn(pool, clock, {
+      email: `ops-id@${DOMAIN}`,
+      role: 'OPERATOR',
+    });
+    const nationalId = await unusedIdentifier(pool);
+    const leading = await unusedLeadingZero(pool);
+    const held = await upsertParty(pool, {
+      kind: 'PERSON',
+      givenName: 'ספרות204',
+      familyName: 'מזהה204',
+      nationalId,
+      preferredLanguage: 'he',
+    });
+    const dropped = await upsertParty(pool, {
+      kind: 'PERSON',
+      givenName: 'אפס204',
+      familyName: 'מזהה204',
+      nationalId: leading.stored,
+      preferredLanguage: 'he',
+    });
+    const blank = await createParty(pool, {
+      kind: 'PERSON',
+      givenName: 'ריק204',
+      familyName: 'מזהה204',
+      preferredLanguage: 'he',
+    });
+    const companyNumber = await unusedIdentifier(pool);
+    const firm = await upsertParty(pool, {
+      kind: 'COMPANY',
+      legalName: 'חברה204 בע״מ',
+      nationalId: companyNumber,
+      preferredLanguage: 'he',
+    });
+    const line = await createParty(pool, {
+      kind: 'PERSON',
+      givenName: 'קו204',
+      familyName: 'מזהה204',
+      preferredLanguage: 'he',
+    });
+    const landlineTail = crypto
+      .randomUUID()
+      .replace(/\D/g, '')
+      .slice(-7)
+      .padStart(7, '4');
+    const landlineNumber = `03-${landlineTail.slice(0, 3)}-${landlineTail.slice(3)}`;
+    assert.equal(held.inserted, true);
+    assert.equal(dropped.inserted, true);
+    assert.equal(firm.inserted, true);
+    await upsertPartyContact(pool, {
+      partyId: line.id,
+      channel: 'PHONE',
+      value: normalisePhone(landlineNumber),
+      isPrimary: true,
+      validFrom: '2024-01-01',
+      validTo: null,
+      verifiedAt: null,
+    });
+    const asAdmin = asOperator(app, admin);
+    const asOps = asOperator(app, operator);
+    const post = {
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    };
+    try {
+      const directory = await asAdmin.inject({
+        method: 'GET',
+        url: '/parties',
+      });
+      assert.equal(directory.body.includes(nationalId), false);
+      assert.doesNotMatch(directory.body, /•••••/);
+
+      for (const typed of [
+        `${nationalId.slice(0, 3)}-${nationalId.slice(3, 6)}-${nationalId.slice(6)}`,
+        `${nationalId.slice(0, 3)} ${nationalId.slice(3, 6)} ${nationalId.slice(6)}`,
+        nationalId,
+      ]) {
+        const found = await asAdmin.inject({
+          method: 'GET',
+          url: `/parties?q=${encodeURIComponent(typed)}`,
+        });
+        assert.equal(found.statusCode, 200, typed);
+        assert.match(found.body, /ספרות204/, typed);
+        assert.doesNotMatch(found.body, /אפס204/, typed);
+        assert.equal(found.body.includes(nationalId), false, typed);
+        assert.equal(found.body.includes(typed), false, typed);
+        assert.doesNotMatch(found.body, /•••••/, typed);
+        assert.match(found.body, /חיפוש לפי ת\.ז\./);
+      }
+      const byCompany = await asAdmin.inject({
+        method: 'GET',
+        url: `/parties?q=${encodeURIComponent(companyNumber)}`,
+      });
+      assert.equal(byCompany.statusCode, 200);
+      assert.match(byCompany.body, /חברה204/);
+      assert.equal(byCompany.body.includes(companyNumber), false);
+
+      const empty = await asOps.inject({
+        method: 'GET',
+        url: `/parties/${blank.id}`,
+      });
+      assert.equal(empty.statusCode, 200);
+      assert.match(empty.body, /<dt>ת\.ז\.<\/dt><dd>—<\/dd>/);
+      assert.doesNotMatch(empty.body, /גילוי/);
+      assert.doesNotMatch(empty.body, /national-id/);
+
+      const byDropped = await asAdmin.inject({
+        method: 'GET',
+        url: `/parties?q=${encodeURIComponent(leading.dropped)}`,
+      });
+      assert.equal(byDropped.statusCode, 200);
+      assert.match(byDropped.body, /אפס204/);
+      assert.equal(byDropped.body.includes(leading.stored), false);
+      assert.equal(byDropped.body.includes(leading.dropped), false);
+
+      const searched = await audits(
+        pool,
+        'parties.national_id.search',
+        admin.staffAccountId,
+      );
+      assert.ok(searched.length >= 4);
+      for (const row of searched) {
+        assert.equal(row.actor_role, 'ADMIN');
+        assert.equal(row.inputs.includes(nationalId), false);
+        assert.equal(row.inputs.includes(leading.stored), false);
+        assert.equal(row.inputs.includes(leading.dropped), false);
+        assert.equal(row.inputs.includes(companyNumber), false);
+      }
+      assert.equal(
+        searched.some((row) => row.inputs.includes(firm.id)),
+        true,
+      );
+      assert.equal(
+        searched.some((row) => row.inputs.includes(held.id)),
+        true,
+      );
+      assert.equal(
+        searched.some((row) => row.inputs.includes(dropped.id)),
+        true,
+      );
+
+      const opsSearch = await asOps.inject({
+        method: 'GET',
+        url: `/parties?q=${encodeURIComponent(nationalId)}`,
+      });
+      assert.equal(opsSearch.statusCode, 403);
+      assert.equal(opsSearch.body.includes(nationalId), false);
+      const opsAudits = await audits(
+        pool,
+        'parties.national_id.search',
+        operator.staffAccountId,
+      );
+      assert.equal(opsAudits.length, 0);
+
+      const landline = await asOps.inject({
+        method: 'GET',
+        url: `/parties?q=${encodeURIComponent(landlineNumber)}`,
+      });
+      assert.equal(landline.statusCode, 200);
+      assert.match(landline.body, /קו204/);
+
+      const opsReveal = await asOps.inject({
+        method: 'POST',
+        url: `/parties/${held.id}/national-id/reveal`,
+        ...post,
+        payload: '',
+      });
+      assert.equal(opsReveal.statusCode, 403);
+      assert.equal(opsReveal.body.includes(nationalId), false);
+      assert.equal(
+        (
+          await audits(
+            pool,
+            'parties.national_id.reveal',
+            operator.staffAccountId,
+          )
+        ).length,
+        0,
+      );
+
+      const revealed = await asAdmin.inject({
+        method: 'POST',
+        url: `/parties/${held.id}/national-id/reveal`,
+        ...post,
+        payload: '',
+      });
+      assert.equal(revealed.statusCode, 200);
+      assert.equal(revealed.body.includes(nationalId), true);
+      const revealAudit = await audits(
+        pool,
+        'parties.national_id.reveal',
+        admin.staffAccountId,
+      );
+      assert.equal(revealAudit.length, 1);
+      assert.equal(revealAudit[0]?.actor_role, 'ADMIN');
+      assert.equal(revealAudit[0]?.subject_id, held.id);
+      assert.equal(revealAudit[0]?.inputs.includes(nationalId), false);
+      assert.equal(revealAudit[0]?.inputs.includes(held.id), true);
+
+      const opsWrite = await asOps.inject({
+        method: 'POST',
+        url: `/parties/${blank.id}/national-id`,
+        ...post,
+        payload: `identifier=${encodeURIComponent(nationalId)}`,
+      });
+      assert.equal(opsWrite.statusCode, 403);
+      assert.equal(opsWrite.body.includes(nationalId), false);
+      assert.equal(await storedId(pool, blank.id), null);
+
+      const hyphenated = `${nationalId.slice(0, 3)}-${nationalId.slice(3, 6)}-${nationalId.slice(6)}`;
+      const clash = await asAdmin.inject({
+        method: 'POST',
+        url: `/parties/${blank.id}/national-id`,
+        ...post,
+        payload: `identifier=${encodeURIComponent(hyphenated)}`,
+      });
+      assert.equal(clash.statusCode, 409);
+      assert.match(clash.body, /הת\.ז\. כבר רשומה על/);
+      assert.match(clash.body, new RegExp(`href="/parties/${held.id}"`));
+      assert.match(clash.body, /ספרות204/);
+      assert.equal(clash.body.includes(nationalId), false);
+      assert.equal(clash.body.includes(hyphenated), false);
+      assert.equal(await storedId(pool, blank.id), null);
+      assert.equal(
+        (await audits(pool, 'parties.national_id.write', admin.staffAccountId))
+          .length,
+        0,
+      );
+
+      const fresh = await unusedIdentifier(pool);
+      const saved = await asAdmin.inject({
+        method: 'POST',
+        url: `/parties/${blank.id}/national-id`,
+        ...post,
+        payload: `identifier=${encodeURIComponent(fresh)}`,
+      });
+      assert.equal(saved.statusCode, 303);
+      assert.equal(saved.headers.location, `/parties/${blank.id}`);
+      assert.equal(await storedId(pool, blank.id), fresh);
+      const written = await audits(
+        pool,
+        'parties.national_id.write',
+        admin.staffAccountId,
+      );
+      assert.equal(written.length, 1);
+      assert.equal(written[0]?.actor_role, 'ADMIN');
+      assert.equal(written[0]?.subject_id, blank.id);
+      assert.equal(written[0]?.inputs.includes(fresh), false);
+      assert.match(written[0]?.inputs ?? '', /national_id/);
+      const after = await asAdmin.inject({
+        method: 'GET',
+        url: `/parties/${blank.id}`,
+      });
+      assert.equal(after.statusCode, 200);
+      assert.match(after.body, new RegExp(`•••••${fresh.slice(-4)}`));
+      assert.equal(after.body.includes(fresh), false);
+
+      const corrected = `${fresh.slice(0, 3)}-${fresh.slice(3, 6)}-${fresh.slice(6)}`;
+      const again = await asAdmin.inject({
+        method: 'POST',
+        url: `/parties/${blank.id}/national-id`,
+        ...post,
+        payload: `identifier=${encodeURIComponent(corrected)}`,
+      });
+      assert.equal(again.statusCode, 303);
+      assert.equal(await storedId(pool, blank.id), corrected);
+      const keys = await pool.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM party
+          WHERE national_id_key = party_national_id_key('PERSON', $1)`,
+        [fresh],
+      );
+      assert.equal(keys.rows[0]?.n, '1');
+    } finally {
+      await pool.query(
+        `DELETE FROM audit_log
+          WHERE action IN (
+            'parties.national_id.search',
+            'parties.national_id.reveal',
+            'parties.national_id.write'
+          )
+            AND actor_id = ANY($1::text[])`,
+        [[admin.staffAccountId, operator.staffAccountId]],
+      );
+      await pool.query(
+        `DELETE FROM party_contact
+          WHERE party_id IN (SELECT party_id FROM party WHERE family_name = 'מזהה204')`,
+      );
+      await pool.query(
+        `DELETE FROM party WHERE family_name = 'מזהה204' OR legal_name = 'חברה204 בע״מ'`,
+      );
+      await signOutAll(pool, DOMAIN);
       await pool.end();
     }
   });
