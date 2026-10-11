@@ -9,6 +9,7 @@
 // the estate importer's shape at 1.11 and for its reasons: the id is *proposed*, so on a second run
 // Postgres returns the id already there, and `DO UPDATE` rather than `DO NOTHING` because DO NOTHING
 // returns no row and an import correcting a typo in a name should correct it.
+import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
@@ -187,6 +188,42 @@ export async function upsertParty(
 
 const UNIQUE_VIOLATION = '23505';
 const CHECK_VIOLATION = '23514';
+const EXCLUSION_VIOLATION = '23P01';
+const FOREIGN_KEY_VIOLATION = '23503';
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A real calendar day. A shape that is not a day is refused here, not by a cast. */
+function calendarDay(value: string): string {
+  const day = value.trim();
+  if (!ISO_DATE.test(day)) {
+    throw new KernelError('invalid', 'the date is not a day');
+  }
+  const year = Number(day.slice(0, 4));
+  const month = Number(day.slice(5, 7));
+  const dayOfMonth = Number(day.slice(8, 10));
+  const utc = new Date(Date.UTC(year, month - 1, dayOfMonth));
+  if (
+    utc.getUTCFullYear() !== year ||
+    utc.getUTCMonth() !== month - 1 ||
+    utc.getUTCDate() !== dayOfMonth
+  ) {
+    throw new KernelError('invalid', 'the date is not a day');
+  }
+  return day;
+}
+
+function contactChannel(value: string): ContactChannel {
+  if (value === 'PHONE' || value === 'EMAIL') return value;
+  throw new KernelError('invalid', 'channel is not a contact channel');
+}
+
+function optionalLabel(value: string | null): string | null {
+  if (value === null) return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  return requireText(trimmed, 'label', 80);
+}
 
 const LANGUAGES = ['he', 'ar', 'ru', 'fr', 'en'] as const;
 
@@ -370,6 +407,170 @@ export async function upsertPartyContact(
     throw new KernelError('conflict', 'party contact upsert returned no row');
   }
   return { id: row.contact_id, inserted: row.inserted };
+}
+
+/**
+ * The other party, if any, whose contact overlaps an open period starting on `validFrom`.
+ * The exclusion constraint is what refuses the row. This only names who already holds it.
+ */
+async function holderOf(
+  db: Queryable,
+  channel: ContactChannel,
+  value: string,
+  validFrom: string,
+  partyId: string,
+): Promise<{ partyId: string; fullName: string; open: boolean } | null> {
+  const found = await db.query<{
+    party_id: string;
+    full_name: string;
+    open: boolean;
+  }>(
+    `SELECT p.party_id, p.full_name, bool_or(c.valid_to IS NULL) AS open
+       FROM party_contact c
+       JOIN party p ON p.party_id = c.party_id
+      WHERE c.channel = $1
+        AND c.value = $2
+        AND c.party_id <> $4
+        AND daterange(c.valid_from, c.valid_to, '[]')
+            && daterange($3::date, NULL, '[]')
+      GROUP BY p.party_id, p.full_name
+      ORDER BY p.full_name
+      LIMIT 1`,
+    [channel, value, validFrom, partyId],
+  );
+  const other = found.rows[0];
+  if (!other) return null;
+  return {
+    partyId: other.party_id,
+    fullName: other.full_name,
+    open: other.open,
+  };
+}
+
+/**
+ * Adds one open contact. The value is stored as given: the caller has already folded a phone
+ * or an email. A value another party holds on any day of the new period is a conflict naming
+ * that party, and this insert is not kept.
+ */
+export async function addPartyContact(
+  db: Queryable,
+  spec: {
+    partyId: string;
+    channel: string;
+    value: string;
+    label: string | null;
+    validFrom: string;
+  },
+): Promise<{ contactId: string; channel: ContactChannel }> {
+  const partyId = validId(spec.partyId, 'party');
+  const channel = contactChannel(spec.channel);
+  const value = requireText(spec.value, 'value', 320);
+  const label = optionalLabel(spec.label);
+  const validFrom = calendarDay(spec.validFrom);
+  const contactId = newId();
+  return inTransaction(db, async (tx) => {
+    await tx.query('SAVEPOINT add_party_contact');
+    try {
+      await tx.query(
+        `INSERT INTO party_contact
+           (contact_id, party_id, channel, value, label, is_primary,
+            valid_from, valid_to, verified_at)
+         VALUES ($1, $2, $3, $4, $5, false, $6, NULL, NULL)`,
+        [contactId, partyId, channel, value, label, validFrom],
+      );
+      await tx.query('RELEASE SAVEPOINT add_party_contact');
+      return { contactId, channel };
+    } catch (error) {
+      await tx.query('ROLLBACK TO SAVEPOINT add_party_contact');
+      if (
+        pgCode(error) === EXCLUSION_VIOLATION ||
+        pgCode(error) === UNIQUE_VIOLATION
+      ) {
+        const holder = await holderOf(tx, channel, value, validFrom, partyId);
+        throw new KernelError(
+          'conflict',
+          'that number is already held',
+          holder ?? {},
+        );
+      }
+      if (pgCode(error) === FOREIGN_KEY_VIOLATION) {
+        throw new KernelError('not_found', 'party not found');
+      }
+      if (pgCode(error) === CHECK_VIOLATION) {
+        throw new KernelError('invalid', 'that contact cannot be stored');
+      }
+      throw error;
+    }
+  });
+}
+
+/**
+ * Marks one open contact as the primary of its channel. The other open primaries of that
+ * channel stop being primary, which is what lets the directory row show this one. A closed
+ * contact is not a primary the list can show.
+ */
+export async function setPrimaryPartyContact(
+  db: Queryable,
+  spec: { partyId: string; contactId: string },
+): Promise<{ contactId: string; channel: ContactChannel }> {
+  const partyId = validId(spec.partyId, 'party');
+  const contactId = validId(spec.contactId, 'contact');
+  const updated = await db.query<{ channel: string }>(
+    `WITH chosen AS (
+       SELECT contact_id, channel
+         FROM party_contact
+        WHERE contact_id = $1
+          AND party_id = $2
+          AND valid_to IS NULL
+     ),
+     cleared AS (
+       UPDATE party_contact
+          SET is_primary = false
+        WHERE party_id = $2
+          AND valid_to IS NULL
+          AND is_primary
+          AND channel = (SELECT channel FROM chosen)
+          AND contact_id <> $1
+     )
+     UPDATE party_contact
+        SET is_primary = true
+      WHERE contact_id = (SELECT contact_id FROM chosen)
+      RETURNING channel`,
+    [contactId, partyId],
+  );
+  const row = updated.rows[0];
+  if (!row) {
+    throw new KernelError('invalid', 'that contact cannot be primary');
+  }
+  return { contactId, channel: contactChannel(row.channel) };
+}
+
+/**
+ * Closes one open contact on a date. The row stays. The date is the last day the value
+ * identifies this party; the day after, it identifies nobody. There is no delete.
+ */
+export async function closePartyContact(
+  db: Queryable,
+  spec: { partyId: string; contactId: string; validTo: string },
+): Promise<{ contactId: string; channel: ContactChannel }> {
+  const partyId = validId(spec.partyId, 'party');
+  const contactId = validId(spec.contactId, 'contact');
+  const validTo = calendarDay(spec.validTo);
+  const updated = await db.query<{ channel: string }>(
+    `UPDATE party_contact
+        SET valid_to = $3::date
+      WHERE contact_id = $1
+        AND party_id = $2
+        AND valid_to IS NULL
+        AND valid_from <= $3::date
+      RETURNING channel`,
+    [contactId, partyId, validTo],
+  );
+  const row = updated.rows[0];
+  if (!row) {
+    throw new KernelError('invalid', 'that contact cannot be closed');
+  }
+  return { contactId, channel: contactChannel(row.channel) };
 }
 
 /**

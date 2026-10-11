@@ -15,9 +15,12 @@ export type {
   PreferredLanguage,
 } from './internal/commands.ts';
 export {
+  addPartyContact,
+  closePartyContact,
   countDistinctIdentifiers,
   createParty,
   setPartyNationalId,
+  setPrimaryPartyContact,
   updatePartyIdentity,
   upsertParty,
   upsertPartyContact,

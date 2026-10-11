@@ -1,14 +1,14 @@
 <!--
-  Painted flow: party-directory (#201). The directory, the profile (#202) and the
-  identity edit (#205) are wired. What remains is the screens later tickets still
-  have to build.
+  Painted flow: party-directory (#201). The directory, the profile (#202), the
+  identity edit (#205) and the contact edits (#206) are wired. What remains is
+  the screens later tickets still have to build.
   Served at /dev/mockups/party-directory. Later tickets delete their screen from this file;
   the last one deletes the file.
 -->
 <style>
   .party .screen { display: none; }
   .party .screen:target { display: grid; gap: var(--space-6); }
-  .party:not(:has(.screen:target)) #contact-add { display: grid; gap: var(--space-6); }
+  .party:not(:has(.screen:target)) #create-person { display: grid; gap: var(--space-6); }
 
   .party .paint-bar {
     display: grid;
@@ -30,11 +30,7 @@
     text-decoration: none;
   }
   .party .paint-map a:hover { color: var(--color-text); }
-  .party:not(:has(.screen:target)) .paint-map a[href="#contact-add"],
-  .party:has(#contact-add:target) .paint-map a[href="#contact-add"],
-  .party:has(#contact-held:target) .paint-map a[href="#contact-held"],
-  .party:has(#contact-primary:target) .paint-map a[href="#contact-primary"],
-  .party:has(#contact-close:target) .paint-map a[href="#contact-close"],
+  .party:not(:has(.screen:target)) .paint-map a[href="#create-person"],
   .party:has(#create-person:target) .paint-map a[href="#create-person"],
   .party:has(#create-person-refused:target) .paint-map a[href="#create-person-refused"],
   .party:has(#create-company:target) .paint-map a[href="#create-company"],
@@ -196,110 +192,12 @@
       <label for="stance-operator">תצוגת מפעיל</label>
     </div>
     <nav class="paint-map" aria-label="מסכי ההדמיה">
-      <a href="#contact-add">הוספת קשר</a>
-      <a href="#contact-held">קשר תפוס</a>
-      <a href="#contact-primary">קשר ראשי</a>
-      <a href="#contact-close">סגירת קשר</a>
       <a href="#create-person">אדם חדש</a>
       <a href="#create-person-refused">סירוב אדם</a>
       <a href="#create-company">חברה חדשה</a>
       <a href="#create-company-refused">סירוב חברה</a>
     </nav>
   </div>
-
-  <section id="contact-add" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="/parties">דנה לוי</a></p>
-        <h1>הוספת קשר</h1>
-      </div>
-    </header>
-    <div class="glass sheet">
-      <div class="stack">
-        <fieldset class="choice">
-          <legend>ערוץ</legend>
-          <label><input type="radio" name="channel" checked /> טלפון</label>
-          <label><input type="radio" name="channel" /> דוא״ל</label>
-        </fieldset>
-        <div class="field">
-          <label for="contact-value">מספר או כתובת</label>
-          <input id="contact-value" type="text" value="052-100-1088" autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="contact-label">תווית</label>
-          <input id="contact-label" type="text" value="" placeholder="למשל יוסי – סדרן" autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="contact-from">בתוקף מ־</label>
-          <input id="contact-from" type="date" value="2026-10-11" />
-        </div>
-        <p class="row-actions">
-          <a class="btn btn-primary" href="/parties">שמירה</a>
-          <a class="btn btn-secondary" href="#contact-held">מספר שמישהו אחר מחזיק</a>
-        </p>
-      </div>
-    </div>
-  </section>
-
-  <section id="contact-held" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#contact-add">הוספת קשר</a></p>
-        <h1>הוספת קשר</h1>
-      </div>
-    </header>
-    <div class="glass sheet">
-      <p class="refusal">המספר פתוח אצל <a href="/parties">יוסף בן דוד</a>.</p>
-      <div class="stack">
-        <div class="field">
-          <label for="held-value">מספר</label>
-          <input id="held-value" type="text" value="052-100-1002" autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="held-from">בתוקף מ־</label>
-          <input id="held-from" type="date" value="2026-10-11" />
-        </div>
-        <p class="row-actions"><a class="btn btn-secondary" href="#contact-add">חזרה</a></p>
-      </div>
-    </div>
-  </section>
-
-  <section id="contact-primary" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="/parties">דנה לוי</a></p>
-        <h1>קשר ראשי</h1>
-      </div>
-    </header>
-    <div class="glass sheet">
-      <fieldset class="choice">
-        <legend>הקשר שאנשים צריכים להשתמש בו</legend>
-        <label><input type="radio" name="primary" checked /> <bdi dir="ltr">052-100-1001</bdi> · ראשי עכשיו</label>
-        <label><input type="radio" name="primary" /> <bdi dir="ltr">dana.levi@example.com</bdi></label>
-      </fieldset>
-      <p class="row-actions"><a class="btn btn-primary" href="/parties">שמירה</a></p>
-    </div>
-  </section>
-
-  <section id="contact-close" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="/parties">דנה לוי</a></p>
-        <h1>סגירת קשר</h1>
-      </div>
-    </header>
-    <div class="glass sheet">
-      <div class="stack">
-        <p><bdi dir="ltr">052-100-1001</bdi> · פתוח · ראשי</p>
-        <div class="field">
-          <label for="close-on">נסגר ב־</label>
-          <input id="close-on" type="date" value="2026-10-11" />
-        </div>
-        <p class="hint">המספר נשאר בפרופיל. מהתאריך הזה הוא לא מזהה את האדם בדלת, ואפשר לרשום אותו על מישהו אחר.</p>
-        <p class="row-actions"><a class="btn btn-primary" href="/parties">סגירה</a></p>
-      </div>
-    </div>
-  </section>
 
   <section id="create-person" class="screen">
     <header class="page-head">

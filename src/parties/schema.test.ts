@@ -400,6 +400,7 @@ describe('parties · the rest of the schema', () => {
             'channel',
             'contact_id',
             'is_primary',
+            'label',
             'party_id',
             'valid_from',
             'valid_to',
@@ -493,6 +494,53 @@ describe('parties · the rest of the schema', () => {
                 [newId()],
               ),
             );
+          });
+        },
+      );
+
+      // #206. A short name for who answers, optional, and not a second party.
+      await t.test(
+        'a contact can carry a label, and the column is optional',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            const partyId = newId();
+            await db.query(
+              `INSERT INTO party (party_id, party_kind, family_name)
+             VALUES ($1, 'PERSON', 'דנה כהן')`,
+              [partyId],
+            );
+            const labelled = newId();
+            await db.query(
+              `INSERT INTO party_contact (contact_id, party_id, channel, value, is_primary,
+                                        valid_from, label)
+             VALUES ($1, $2, 'PHONE', '+972522061111', true, '2026-01-01', 'יוסי – סדרן')`,
+              [labelled, partyId],
+            );
+            const plain = newId();
+            await db.query(
+              `INSERT INTO party_contact (contact_id, party_id, channel, value, is_primary,
+                                        valid_from)
+             VALUES ($1, $2, 'EMAIL', 'dana@example.test', false, '2026-01-01')`,
+              [plain, partyId],
+            );
+            const rows = await db.query<{
+              contact_id: string;
+              label: string | null;
+              is_nullable: string;
+            }>(
+              `SELECT c.contact_id, c.label, i.is_nullable
+               FROM party_contact c
+               JOIN information_schema.columns i
+                 ON i.table_schema = 'public'
+                AND i.table_name = 'party_contact'
+                AND i.column_name = 'label'
+              WHERE c.party_id = $1`,
+              [partyId],
+            );
+            const byId = new Map(rows.rows.map((row) => [row.contact_id, row]));
+            assert.equal(byId.get(labelled)?.label, 'יוסי – סדרן');
+            assert.equal(byId.get(plain)?.label, null);
+            assert.equal(byId.get(labelled)?.is_nullable, 'YES');
           });
         },
       );

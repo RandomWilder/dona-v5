@@ -2335,6 +2335,7 @@ const SCREENS: Array<[string, () => string]> = [
             primaryPhone: '+972521111111',
             primaryEmail: 'dana@example.test',
             language: 'he',
+            formerNumber: false,
             holdsRole: true,
             labels: [
               {
@@ -2366,8 +2367,10 @@ const SCREENS: Array<[string, () => string]> = [
           sameName: [],
           contacts: [
             {
+              contactId: '55555555-5555-4555-8555-555555555555',
               channel: 'PHONE',
               value: '+972521111111',
+              label: null,
               isPrimary: true,
               validFrom: '2024-03-01',
               validTo: null,

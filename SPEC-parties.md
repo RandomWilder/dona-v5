@@ -32,14 +32,15 @@ timestamp — `verified_at` — has no `DEFAULT now()`: it is written by the inj
 | Table | Columns |
 |---|---|
 | `party` | `party_id` PK · `party_kind` · `given_name?` · `family_name?` · `legal_name?` · `full_name` · `national_id?` · `preferred_language` |
-| `party_contact` | `contact_id` PK · `party_id` FK → party · `channel` · `value` · `is_primary` · `valid_from` · `valid_to?` · `verified_at?` |
+| `party_contact` | `contact_id` PK · `party_id` FK → party · `channel` · `value` · `label?` · `is_primary` · `valid_from` · `valid_to?` · `verified_at?` |
 
 Vocabularies: `party.party_kind` = `PERSON · COMPANY`; `party.preferred_language` = `he · ar · ru ·
 fr · en`; `party_contact.channel` = `PHONE · EMAIL`.
 
-`given_name`, `family_name`, `legal_name`, `full_name`, `national_id` and `party_contact.value` are
-commented `-- pii`. Guard three sees the name columns and `national_id` by name; **`party_contact.value`
-is not among the bare names, and the guard was taught to see it** — below.
+`given_name`, `family_name`, `legal_name`, `full_name`, `national_id`, `party_contact.value` and
+`party_contact.label` are commented `-- pii`. Guard three sees the name columns and `national_id` by
+name; **`party_contact.value` and `party_contact.label` are not among the bare names, and the guard
+was taught to see them** — below.
 
 **#200. A name is stored in parts, and `full_name` is computed.** A `PERSON` has a `family_name` and
 no `legal_name`; `given_name` is null when the person is known by one name. A `COMPANY` has a
@@ -152,7 +153,7 @@ constraint already rejected.
 
 **#202, administrator stance only.** An operator or an administrator opens **אנשי קשר** and sees every party. Search is one box. A word of a person's given name or family name, or of a company's legal name, finds that party — a whole word, so a fragment of a name does not. A phone finds the party in whatever form the door already accepts, because the composition root runs `normalisePhone` from `src/scope/` before this module is asked, and the same function is the one the inbound lookup uses. An email finds the party regardless of case, folded by `normaliseEmail` at that same root. A match includes a contact that has since been closed. The row shows the display name, the labels with their unit, the open primary phone, the open primary email and the language, and links to the profile.
 
-The profile shows the given name and the family name, or the legal name, the kind, the language, every label linked to its tenancy, and every contact the party ever held, open and closed, with the dates it held them. It edits nothing of the contacts.
+The profile shows the given name and the family name, or the legal name, the kind, the language, every label linked to its tenancy, and every contact the party ever held, open and closed, with the dates it held them. Contact edits are #206.
 
 **#203. A label is what the party is to us today, computed on every load and stored nowhere.** The tenancy contract returns each party's roles with each tenancy's status, dates and unit (`listRolesForParties`). This module does not learn them, and it does not decide which letting counts today. The composition root does, from those facts and the clock, and the reading is the isolation join's: the letting is `ACTIVE` and the clock's day falls inside the term, both ends inclusive. That is the same reading the occupancy view is filtered with, and it is not a second predicate — the query that returns the roles carries no day. The day after the term, a letting whose status is `ENDED`, and a letting ended early are past, including on the day after the term while the row is still `ACTIVE`, because the directory does not close lettings. A `DRAFT` is a draft tenancy. A guarantor is a guarantor on every tenancy state and never a tenant; the label carries that tenancy's state — פעיל when it counts today, טיוטה when it is a draft, עבר when it has ended, ended early, or the day is past the term. An occupant is named דייר, distinct from שוכר ראשי and שוכר נוסף. A party on several tenancies carries every label that applies. A party on no tenancy is אין קשר. The directory filters by those labels, and a filter combines with the search: the result is the parties that carry the label and match the box. A letting that is `ACTIVE` and has not started is not a current tenant, not a past tenant, and not אין קשר. The directory shows a dash for that party, the same mark as a missing phone, and none of the filters return them. No column, view or table stores a label or a tenancy state on the party. The service-provider label is #208.
 
@@ -166,7 +167,9 @@ Adding or correcting a ת.ז. is `POST /parties/:partyId/national-id`, the same 
 
 The directory and profile reads stay on this module's contract. The profile read includes the other parties who share the display name. The profile statement returns the four-character suffix and does not return the column. The reveal command is the one statement that reads `national_id`, and only the reveal route calls it. The write sets the column and leaves the key to the database. The identity update writes the name columns for the party's kind and leaves `full_name` generated. The page is composed at the composition root (`src/party-directory.ts`), so a later section from tenancy, estate or calls is added there, and the history is read there too: the audit log is the kernel's, and this module does not read it. The actor's name on a history row is the staff account's display name, or the email when there is none. This module still depends on the kernel only, and it still does not answer who is reachable on a number today — that remains `src/scope/`'s join. Listing a closed number here is not a scope.
 
-`party.read` guards the directory and the profile. `party.write` guards `POST /parties/:partyId`. Correcting a contact or creating a party arrives later and reuses the word. The reveal, the ת.ז. search and the ת.ז. write are `party.national_id.read`, not `party.write`. A viewer holds neither `party.read` nor `party.write`, the tab is not shown, and those routes refuse.
+**#206.** An operator adds a phone or an email to a party, starting today or on a date they give, with an optional label such as "יוסי – סדרן". A phone typed in any local form is stored in the international form: the composition root runs `normalisePhone` before this module is asked, the same function the door uses. An email is folded by `normaliseEmail` at that same root. The command stores the value it is given and does not fold it again. `party_contact.label` is nullable free text, `-- pii`, and the profile shows it. Marking a contact primary is what the directory row shows: the row's phone and email stay the open primaries, and the mark clears the other open primary of that channel. There is still no uniqueness constraint on `is_primary`. Closing a contact sets `valid_to` and keeps the row. There is no delete. The end date is the last day the number identifies anyone; from the day after, the isolation join resolves it to no unit. That is the recycled-number case with the close as the step that produces it, and it is a policy case beside that one, asserted through the scope contract. A value another party holds on any day of the new contact's period is refused, naming that party, and nothing is written. The exclusion constraint remains the rule; the command reads the other party back so the page can name them. Once a contact is closed, the same value can be added to its new holder from the following day — the day the periods stop overlapping. A phone search already matches a closed contact; the directory marks that match as a former number when no open contact of that value remains. Each add, primary change and close writes one audit row — `parties.contact.add`, `parties.contact.primary`, `parties.contact.close` — with the actor, the role, the party id, the contact id and the channel. The value and the label are not on that row. The posts are `POST /parties/:partyId/contacts`, `POST /parties/:partyId/contacts/:contactId/primary` and `POST /parties/:partyId/contacts/:contactId/close`, guarded by `party.write`. A viewer is refused.
+
+`party.read` guards the directory and the profile. `party.write` guards `POST /parties/:partyId` and the three contact posts. Creating a party by hand arrives later and reuses the word. The reveal, the ת.ז. search and the ת.ז. write are `party.national_id.read`, not `party.write`. A viewer holds neither `party.read` nor `party.write`, the tab is not shown, and those routes refuse.
 
 ## What is deliberately not here
 
@@ -239,7 +242,9 @@ and adding `value` to the list would fire on `config_settings.value` in `0002_ke
 
 The guard now tracks the enclosing `CREATE TABLE` while it scans, so its list can carry qualified
 entries (`party_contact.value`) beside bare ones. Its own comment said *"a column this list misses is
-added to it when it is met"*; this is the first one met, and the rule stayed the rule.
+added to it when it is met"*; this is the first one met, and the rule stayed the rule. **#206 taught
+it `party_contact.label` the same way.** `label` is a word other tables will use for something that
+is not a person, so the bare name stays off the list and the qualified name is what asks for the marker.
 
 ## Open
 
@@ -249,6 +254,7 @@ added to it when it is met"*; this is the first one met, and the rule stayed the
   deferring a key that 2.6 needs at volume. What the designed file cannot answer is whether the real
   export carries an identifier on every row; that is slice 2.5's, with the export in hand.
 - **Whether a company party needs a contact person.** A `COMPANY` party with a `full_name` of the
-  company and a `party_contact` of whoever answers the phone works today. If the operator needs the
-  contact's own name recorded, that is a person party and a relationship between them, and it is a
+  company and a `party_contact` of whoever answers the phone works today. #206 records a short label
+  on that contact and does not make the person who answers a party. If the operator needs the
+  contact's own record, that is a person party and a relationship between them, and it is a
   workbook change before it is a migration.

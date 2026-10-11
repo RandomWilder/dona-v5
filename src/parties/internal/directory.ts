@@ -22,6 +22,8 @@ export interface DirectoryParty {
   primaryPhone: string | null;
   primaryEmail: string | null;
   language: PreferredLanguage;
+  /** A phone search matched a closed contact and no open one. */
+  formerNumber: boolean;
 }
 
 export type DirectoryQuery =
@@ -32,8 +34,10 @@ export type DirectoryQuery =
   | { kind: 'nationalId'; value: string };
 
 export interface ProfileContact {
+  contactId: string;
   channel: ContactChannel;
   value: string;
+  label: string | null;
   isPrimary: boolean;
   validFrom: string;
   validTo: string | null;
@@ -65,6 +69,7 @@ interface DirectoryRow {
   preferred_language: string;
   primary_phone: string | null;
   primary_email: string | null;
+  former_number: boolean;
 }
 
 interface ProfileRow {
@@ -79,8 +84,10 @@ interface ProfileRow {
 }
 
 interface ContactRow {
+  contact_id: string;
   channel: string;
   value: string;
+  label: string | null;
   is_primary: boolean;
   valid_from: string;
   valid_to: string | null;
@@ -108,7 +115,8 @@ function channel(value: string): ContactChannel {
  *
  * A name matches a whole word of the display name, which is the given and family name or the
  * legal name. A fragment of a word matches nothing. A phone or an email matches a contact
- * whether or not it is still open. The row's phone and email are the open primaries.
+ * whether or not it is still open. A phone match that is only a closed contact is a former
+ * number. The row's phone and email are the open primaries.
  * A ת.ז. matches `party_national_id_key` for either registry. The row still carries no identifier.
  */
 export async function searchParties(
@@ -125,7 +133,17 @@ export async function searchParties(
             p.full_name,
             p.preferred_language,
             phone.value AS primary_phone,
-            email.value AS primary_email
+            email.value AS primary_email,
+            CASE
+              WHEN $1::text IS NULL THEN false
+              ELSE COALESCE((
+                SELECT bool_and(c.valid_to IS NOT NULL)
+                  FROM party_contact c
+                 WHERE c.party_id = p.party_id
+                   AND c.channel = 'PHONE'
+                   AND c.value = $1
+              ), false)
+            END AS former_number
        FROM party p
        LEFT JOIN LATERAL (
          SELECT value
@@ -181,6 +199,7 @@ export async function searchParties(
     primaryPhone: row.primary_phone,
     primaryEmail: row.primary_email,
     language: language(row.preferred_language),
+    formerNumber: row.former_number,
   }));
 }
 
@@ -215,8 +234,8 @@ export async function readPartyProfile(
     [row.full_name, row.party_id],
   );
   const contacts = await db.query<ContactRow>(
-    `SELECT channel, value, is_primary, valid_from::text AS valid_from,
-            valid_to::text AS valid_to
+    `SELECT contact_id, channel, value, label, is_primary,
+            valid_from::text AS valid_from, valid_to::text AS valid_to
        FROM party_contact
       WHERE party_id = $1
       ORDER BY (valid_to IS NULL) DESC, valid_from DESC, channel, contact_id`,
@@ -236,8 +255,10 @@ export async function readPartyProfile(
       fullName: other.full_name,
     })),
     contacts: contacts.rows.map((contact) => ({
+      contactId: contact.contact_id,
       channel: channel(contact.channel),
       value: contact.value,
+      label: contact.label,
       isPrimary: contact.is_primary,
       validFrom: contact.valid_from,
       validTo: contact.valid_to,

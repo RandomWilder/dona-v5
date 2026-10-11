@@ -1,4 +1,4 @@
-// The אנשי קשר tab. #202. Labels are composed here. #203.
+// The אנשי קשר tab. #202. Labels are composed here. #203. Contacts are edited here. #206.
 //
 // It lives beside `src/index-page.ts` and `src/settings-page.ts` because the profile is assembled
 // here, at the composition root. Later tickets add a tenancy section, an estate section and a
@@ -30,10 +30,13 @@ import type {
   ProfileContact,
 } from './parties/contract.ts';
 import {
+  addPartyContact,
+  closePartyContact,
   readPartyNationalId,
   readPartyProfile,
   searchParties,
   setPartyNationalId,
+  setPrimaryPartyContact,
   updatePartyIdentity,
 } from './parties/contract.ts';
 import { normaliseEmail, normalisePhone } from './scope/contract.ts';
@@ -62,7 +65,9 @@ const styles = h`<style>
   .party-search label { display: grid; gap: var(--space-1); flex: 1 1 16rem; }
   .party-search input,
   .party-search select,
-  .party-id input {
+  .party-id input,
+  .party-contact-add input,
+  .party-contacts input {
     min-height: var(--size-control);
     padding-inline: var(--space-3);
     border: var(--size-hairline) solid var(--color-divider);
@@ -75,8 +80,13 @@ const styles = h`<style>
   .party-refusal { margin: 0; color: var(--color-alert); }
   .party-labels { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
   a.chip { text-decoration: none; }
-  .party-contacts { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+  .party-contacts { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
   .party-contacts li { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
+  .party-contact-add { display: grid; gap: var(--space-3); max-inline-size: var(--size-form-max); }
+  .party-contact-add label,
+  .party-contacts label { display: grid; gap: var(--space-1); }
+  .party-choice { display: flex; flex-wrap: wrap; gap: var(--space-4); border: 0; margin: 0; padding: 0; }
+  .party-choice label { display: inline-flex; gap: var(--space-2); align-items: center; }
 </style>`;
 
 type TermState = 'current' | 'past' | 'draft';
@@ -129,6 +139,17 @@ export interface ProfileScreen {
   /** Why the last correction was refused. The row was not changed. */
   refusal?: string | null;
   history?: readonly ProfileHistory[];
+  /** The clock's day. A contact date left blank means this day. */
+  day?: string;
+  /** The other party who already holds the number. Empty id: this party holds it. */
+  contactHeld?: { partyId: string; fullName: string; open?: boolean } | null;
+  contactRefusal?: string | null;
+  contactDraft?: {
+    channel: string;
+    value: string;
+    label: string;
+    validFrom: string;
+  };
 }
 
 interface ProfileHistory {
@@ -382,7 +403,7 @@ export function renderPartyDirectory(screen: DirectoryScreen): string {
                 (row) => h`<tr>
                   <td><a href="/parties/${row.partyId}">${row.fullName}</a></td>
                   <td>${labelMarks(row, false)}</td>
-                  <td>${blank(row.primaryPhone)}</td>
+                  <td>${blank(row.primaryPhone)}${row.formerNumber ? h` <span>מספר לשעבר</span>` : h``}</td>
                   <td>${blank(row.primaryEmail)}</td>
                   <td>${LANGUAGE_HE[row.language]}</td>
                 </tr>`,
@@ -572,6 +593,32 @@ function sameNameHint(profile: PartyProfile): Html {
   </p>`;
 }
 
+const CONTACT_ACTION_HE: Record<string, string> = {
+  'parties.contact.add': 'הוספת קשר',
+  'parties.contact.primary': 'קשר ראשי',
+  'parties.contact.close': 'סגירת קשר',
+};
+
+const CHANNEL_HE: Record<string, string> = {
+  PHONE: 'טלפון',
+  EMAIL: 'דוא״ל',
+};
+
+function historyWhat(
+  action: string,
+  inputs: Record<string, unknown>,
+): string[] {
+  const contact = CONTACT_ACTION_HE[action];
+  if (contact !== undefined) {
+    const channel =
+      typeof inputs.channel === 'string'
+        ? CHANNEL_HE[inputs.channel]
+        : undefined;
+    return channel === undefined ? [contact] : [contact, channel];
+  }
+  return namedFields(inputs);
+}
+
 function historyList(rows: readonly ProfileHistory[]): Html {
   if (rows.length === 0) return h`<p class="lede">אין שינויים.</p>`;
   return h`<ul class="party-contacts">
@@ -585,18 +632,85 @@ function historyList(rows: readonly ProfileHistory[]): Html {
   </ul>`;
 }
 
-function contacts(rows: readonly ProfileContact[]): Html {
-  if (rows.length === 0) return h`<p class="lede">אין פרטי קשר.</p>`;
-  return h`<ul class="party-contacts">
-    ${rows.map(
-      (contact) => h`<li>
-        ${blank(contact.value)}
-        <span>${contact.validTo === null ? 'פתוח' : 'סגור'}</span>
-        ${contact.isPrimary ? h`<span>ראשי</span>` : h``}
-        <span dir="ltr">${dates(contact)}</span>
-      </li>`,
-    )}
-  </ul>`;
+function contactActions(screen: ProfileScreen, contact: ProfileContact): Html {
+  const partyId = screen.profile.partyId;
+  const primary = contact.isPrimary
+    ? h``
+    : h`<form method="post" action="/parties/${partyId}/contacts/${contact.contactId}/primary">
+        ${csrfInput(screen.csrf)}
+        <button class="btn btn-secondary" type="submit">סמן כראשי</button>
+      </form>`;
+  return h`${primary}
+    <form method="post" action="/parties/${partyId}/contacts/${contact.contactId}/close">
+      ${csrfInput(screen.csrf)}
+      <label>נסגר ב־
+        <input name="valid_to" type="date" value="${screen.day ?? ''}" />
+      </label>
+      <button class="btn btn-secondary" type="submit">סגירה</button>
+    </form>`;
+}
+
+function addContact(screen: ProfileScreen): Html {
+  if (screen.mayWriteParty !== true) return h``;
+  const partyId = screen.profile.partyId;
+  const draft = screen.contactDraft;
+  const email = draft?.channel === 'EMAIL';
+  const held = screen.contactHeld;
+  const heldNote =
+    held === undefined || held === null
+      ? h``
+      : held.partyId === ''
+        ? h`<p class="party-refusal">המספר כבר רשום כאן.</p>`
+        : h`<p class="party-refusal">${held.open === false ? 'המספר רשום על' : 'המספר פתוח אצל'} <a href="/parties/${held.partyId}">${held.fullName}</a>.</p>`;
+  const refusal =
+    screen.contactRefusal === undefined ||
+    screen.contactRefusal === null ||
+    screen.contactRefusal === ''
+      ? h``
+      : h`<p class="party-refusal">${screen.contactRefusal}</p>`;
+  return h`<form class="party-contact-add" method="post" action="/parties/${partyId}/contacts">
+    ${csrfInput(screen.csrf)}
+    ${heldNote}
+    ${refusal}
+    <fieldset class="party-choice">
+      <legend>ערוץ</legend>
+      <label><input type="radio" name="channel" value="PHONE"${email ? h`` : h` checked`} /> טלפון</label>
+      <label><input type="radio" name="channel" value="EMAIL"${email ? h` checked` : h``} /> דוא״ל</label>
+    </fieldset>
+    <label>מספר או כתובת
+      <input name="value" value="${draft?.value ?? ''}" autocomplete="off" maxlength="320" required />
+    </label>
+    <label>תווית
+      <input name="label" value="${draft?.label ?? ''}" placeholder="למשל יוסי – סדרן" autocomplete="off" maxlength="80" />
+    </label>
+    <label>בתוקף מ־
+      <input name="valid_from" type="date" value="${draft?.validFrom || screen.day || ''}" />
+    </label>
+    <button class="btn" type="submit">שמירה</button>
+  </form>`;
+}
+
+function contacts(screen: ProfileScreen): Html {
+  const rows = screen.profile.contacts;
+  const writing = screen.mayWriteParty === true;
+  const list =
+    rows.length === 0
+      ? h``
+      : h`<ul class="party-contacts">
+          ${rows.map(
+            (contact) => h`<li>
+              ${blank(contact.value)}
+              ${contact.label ? h`<span>${contact.label}</span>` : h``}
+              <span>${contact.validTo === null ? 'פתוח' : 'סגור'}</span>
+              ${contact.isPrimary ? h`<span>ראשי</span>` : h``}
+              <span dir="ltr">${dates(contact)}</span>
+              ${writing && contact.validTo === null ? contactActions(screen, contact) : h``}
+            </li>`,
+          )}
+        </ul>`;
+  if (rows.length === 0 && !writing)
+    return h`<p class="lede">אין פרטי קשר.</p>`;
+  return h`${addContact(screen)}${list}`;
 }
 
 export function renderPartyProfile(screen: ProfileScreen): string {
@@ -617,7 +731,7 @@ export function renderPartyProfile(screen: ProfileScreen): string {
     </section>
     <section class="glass">
       <h2>פרטי קשר</h2>
-      ${contacts(profile.contacts)}
+      ${contacts(screen)}
     </section>
     <section class="glass" id="party-history">
       <h2>היסטוריה</h2>
@@ -663,6 +777,42 @@ function formField(body: unknown, name: string): string {
   }
   const value = (body as Record<string, unknown>)[name];
   return typeof value === 'string' ? value : '';
+}
+
+interface ContactDraft {
+  channel: string;
+  value: string;
+  label: string;
+  validFrom: string;
+}
+
+function contactDraft(body: unknown, day: string): ContactDraft {
+  const from = formField(body, 'valid_from').trim();
+  return {
+    channel: formField(body, 'channel') === 'EMAIL' ? 'EMAIL' : 'PHONE',
+    value: formField(body, 'value'),
+    label: formField(body, 'label'),
+    validFrom: from === '' ? day : from,
+  };
+}
+
+function contactRefusal(error: KernelError): string {
+  if (
+    error.message === 'phone is not a valid E.164 number' ||
+    error.message === 'phone is required'
+  ) {
+    return 'המספר אינו תקין.';
+  }
+  if (error.message === 'email is not an address') return 'הכתובת אינה תקינה.';
+  if (error.message === 'the date is not a day') return 'התאריך אינו יום.';
+  if (error.message.startsWith('label ')) return 'התווית ארוכה מדי.';
+  if (error.message === 'that contact cannot be closed') {
+    return 'אי אפשר לסגור את הקשר.';
+  }
+  if (error.message === 'that contact cannot be primary') {
+    return 'אי אפשר לסמן את הקשר כראשי.';
+  }
+  return 'אי אפשר לשמור את הקשר.';
 }
 
 function conflictOf(error: KernelError): NationalIdConflict | null {
@@ -723,7 +873,7 @@ export function registerPartyDirectoryRoutes(
       ]),
     );
     const history = recorded.map((row) => {
-      const what = namedFields(row.inputs);
+      const what = historyWhat(row.action, row.inputs);
       return {
         who:
           (row.actorId !== null ? whoOf.get(row.actorId) : undefined) ??
@@ -738,6 +888,7 @@ export function registerPartyDirectoryRoutes(
       profile,
       labels: byParty.get(profile.partyId) ?? NO_LABELS,
       history,
+      day: today(deps.clock),
     };
   }
 
@@ -887,6 +1038,154 @@ export function registerPartyDirectoryRoutes(
         { partyId, field: 'national_id' },
         partyId,
       );
+      return reply.code(303).header('location', `/parties/${partyId}`).send();
+    },
+  );
+
+  async function contactFailed(
+    error: unknown,
+    request: FastifyRequest,
+    reply: FastifyReply,
+    partyId: string,
+    draft?: ContactDraft,
+  ): Promise<string> {
+    if (!(error instanceof KernelError)) throw error;
+    if (error.code !== 'conflict' && error.code !== 'invalid') throw error;
+    html(reply);
+    const screen = await opened(request, partyId);
+    if (error.code === 'conflict') {
+      reply.code(409);
+      const partyId = error.details?.partyId;
+      const fullName = error.details?.fullName;
+      return renderPartyProfile({
+        ...screen,
+        contactHeld:
+          typeof partyId === 'string' && typeof fullName === 'string'
+            ? { partyId, fullName, open: error.details?.open === true }
+            : { partyId: '', fullName: '' },
+        contactDraft: draft,
+      });
+    }
+    reply.code(400);
+    return renderPartyProfile({
+      ...screen,
+      contactRefusal: contactRefusal(error),
+      contactDraft: draft,
+    });
+  }
+
+  app.post<{ Params: { partyId: string } }>(
+    '/parties/:partyId/contacts',
+    WRITE,
+    async (request, reply) => {
+      const partyId = validId(request.params.partyId, 'party');
+      const day = today(deps.clock);
+      const draft = contactDraft(request.body, day);
+      try {
+        const value =
+          draft.channel === 'EMAIL'
+            ? normaliseEmail(draft.value)
+            : normalisePhone(draft.value);
+        await inTransaction(deps.pool, async (db) => {
+          const added = await addPartyContact(db, {
+            partyId,
+            channel: draft.channel,
+            value,
+            label: draft.label,
+            validFrom: draft.validFrom,
+          });
+          await createAuditLog(db, deps.clock).write(
+            {
+              actorKind: 'staff',
+              actorId: request.staff?.staffAccountId,
+              actorRole: request.staff?.role ?? undefined,
+              action: 'parties.contact.add',
+              subjectId: partyId,
+              inputs: {
+                partyId,
+                contactId: added.contactId,
+                channel: added.channel,
+              },
+            },
+            { outcome: 'ok' },
+          );
+        });
+      } catch (error) {
+        return contactFailed(error, request, reply, partyId, draft);
+      }
+      return reply.code(303).header('location', `/parties/${partyId}`).send();
+    },
+  );
+
+  app.post<{ Params: { partyId: string; contactId: string } }>(
+    '/parties/:partyId/contacts/:contactId/primary',
+    WRITE,
+    async (request, reply) => {
+      const partyId = validId(request.params.partyId, 'party');
+      const contactId = validId(request.params.contactId, 'contact');
+      try {
+        await inTransaction(deps.pool, async (db) => {
+          const marked = await setPrimaryPartyContact(db, {
+            partyId,
+            contactId,
+          });
+          await createAuditLog(db, deps.clock).write(
+            {
+              actorKind: 'staff',
+              actorId: request.staff?.staffAccountId,
+              actorRole: request.staff?.role ?? undefined,
+              action: 'parties.contact.primary',
+              subjectId: partyId,
+              inputs: {
+                partyId,
+                contactId: marked.contactId,
+                channel: marked.channel,
+              },
+            },
+            { outcome: 'ok' },
+          );
+        });
+      } catch (error) {
+        return contactFailed(error, request, reply, partyId);
+      }
+      return reply.code(303).header('location', `/parties/${partyId}`).send();
+    },
+  );
+
+  app.post<{ Params: { partyId: string; contactId: string } }>(
+    '/parties/:partyId/contacts/:contactId/close',
+    WRITE,
+    async (request, reply) => {
+      const partyId = validId(request.params.partyId, 'party');
+      const contactId = validId(request.params.contactId, 'contact');
+      const posted = formField(request.body, 'valid_to').trim();
+      const validTo = posted === '' ? today(deps.clock) : posted;
+      try {
+        await inTransaction(deps.pool, async (db) => {
+          const closed = await closePartyContact(db, {
+            partyId,
+            contactId,
+            validTo,
+          });
+          await createAuditLog(db, deps.clock).write(
+            {
+              actorKind: 'staff',
+              actorId: request.staff?.staffAccountId,
+              actorRole: request.staff?.role ?? undefined,
+              action: 'parties.contact.close',
+              subjectId: partyId,
+              inputs: {
+                partyId,
+                contactId: closed.contactId,
+                channel: closed.channel,
+              },
+            },
+            { outcome: 'ok' },
+          );
+        });
+      } catch (error) {
+        return contactFailed(error, request, reply, partyId);
+      }
       return reply.code(303).header('location', `/parties/${partyId}`).send();
     },
   );
