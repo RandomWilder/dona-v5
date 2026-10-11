@@ -176,6 +176,7 @@ export interface DocumentDeps {
     csrf: string,
     dest: ChromeDest,
     mayFile: boolean,
+    mayReadParties: boolean,
     openCalls?: number,
   ) => Html;
 }
@@ -270,6 +271,7 @@ function chromeOf(
     csrfFrom(request),
     dest,
     can(request.staff?.role ?? null, 'documents.write'),
+    can(request.staff?.role ?? null, 'party.read'),
     request.openCalls,
   );
 }

@@ -148,6 +148,16 @@ constraint as its target and an `EXCLUDE` constraint cannot be one — and it si
 exclusion constraint above rather than competing with it: every pair it rejects, the exclusion
 constraint already rejected.
 
+## The directory and the profile
+
+**#202, administrator stance only.** An operator or an administrator opens **אנשי קשר** and sees every party. Search is one box. A word of a person's given name or family name, or of a company's legal name, finds that party — a whole word, so a fragment of a name does not. A phone finds the party in whatever form the door already accepts, because the composition root runs `normalisePhone` from `src/scope/` before this module is asked, and the same function is the one the inbound lookup uses. An email finds the party regardless of case, folded by `normaliseEmail` at that same root. A match includes a contact that has since been closed. The row shows the display name, the open primary phone, the open primary email and the language, and links to the profile.
+
+The profile shows the given name and the family name, or the legal name, the kind, the language, and every contact the party ever held, open and closed, with the dates it held them. It shows no `national_id`, masked or plain, and it edits nothing.
+
+Both reads are on this module's contract and the statements select no `national_id` column. The page is composed at the composition root (`src/party-directory.ts`), so a later section from tenancy, estate or calls is added there. This module still depends on the kernel only, and it still does not answer who is reachable on a number today — that remains `src/scope/`'s join. Listing a closed number here is not a scope.
+
+`party.read` guards the two routes. `party.write` is granted to the same roles and has no route on this page; the corrections arrive later and reuse the word rather than inventing one. A viewer holds neither, the tab is not shown, and the routes refuse.
+
 ## What is deliberately not here
 
 - **No uniqueness on `is_primary`, and 2.4 confirmed it rather than revisiting it.** "At most one
@@ -155,13 +165,13 @@ constraint already rejected.
   register carries one contact per row and does not say which of a party's numbers is primary, so a
   partial unique index would fail an import that touched two rows in the wrong order, on a rule
   nobody asked for.
-- **No read model.** `contract.ts` exists from 2.4 and exports two write commands — `upsertParty`
+- **Writes, and two reads that are not the directory.** `contract.ts` exists from 2.4 and exports two write commands — `upsertParty`
   and `upsertPartyContact` — because the register importer is the caller 2.1 predicted. Slice 4.6
   added `createParty` for flow A2: a lease names a person and often no ת.ז., so an upsert on
   `national_id_key` would be an insert wearing an upsert's name. `createParty` is always an insert
   (`national_id` null). Two calls with the same name are two people. **Slice 5.5 kept that:** 0
   nameless parties in the generated portfolio, so no count that would justify matching a name.
-  There is still no screen over this module. **#107 adds `listPartyNames`**, the narrowest read
+  **#107 adds `listPartyNames`**, the narrowest read
   the tenancy page is allowed: ids in, `party_id` and `full_name` out, never a contact and never a
   `national_id`. Who is reachable on a number is still `src/scope/`'s answer. Evidence calls the
   write commands after a human confirms the role, and never matches a name across tenancies.
@@ -182,8 +192,9 @@ constraint already rejected.
   household comes out a member short of the paper. The comparison cannot be made on the strings —
   `312345678` and `312-345-678` are two strings and one person, which is the whole reason
   `national_id_key` exists — so the fold makes it, in one statement, and **a number comes back**.
-  This is not the read model this module still does not have: it reads no row and asks what a value
-  *would* key on, never who exists. Who is reachable on a number is still `src/scope/`'s answer.
+  It reads no row and asks what a value *would* key on, never who exists. The directory above is
+  the read that names who exists. Who is reachable on a number today is still `src/scope/`'s
+  answer.
 
   **The normalisation still lives in the database, and now has a name.** Slice 6.5 adds
   `party_national_id_key(party_kind, national_id)`, an `IMMUTABLE` function holding the same fold the

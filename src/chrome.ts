@@ -28,8 +28,7 @@ export type ChromeDest =
   | 'staff'
   | 'calls'
   | 'settings'
-  // **#201.** Painted, not wired. The item exists only while this destination is current,
-  // so the mockup's rail shows אנשי קשר beside the real tabs and no other screen links to it.
+  // **#202.** The אנשי קשר tab. Shown only when the role holds `party.read`.
   | 'parties';
 
 function icon(drawing: Html): Html {
@@ -65,11 +64,16 @@ function item(
  * **The other six are ungated and three of them should not be** — `settings` is `settings.write` and
  * ADMIN-only, `staff` and `calls` are their own question. That is older than this slice and is not
  * widened by it; it is written up in `tasks/evidence/6.9.md` for the director.
+ *
+ * **`mayReadParties` is required, for `mayFile`'s reason.** #202. A default would type-check at
+ * every existing call and hide the tab from an operator, or — if the default were true — show it
+ * to a viewer. The route refuses either way; the rail is not the refusal.
  */
 export function signedInChrome(
   csrf: string,
   dest: ChromeDest,
   mayFile: boolean,
+  mayReadParties: boolean,
   openCalls?: number,
 ): Html {
   // **#172.** בניינים is hidden: served, linked from nowhere except the old pages and
@@ -103,10 +107,10 @@ export function signedInChrome(
     ${item('incomplete', '/estate/incomplete', 'חוזים לא שלמים', dest, h`<path d="m9 12 2 2 4-4" /><circle cx="12" cy="12" r="9" />`)}
     ${item('search', '/estate/search', 'חיפוש', dest, h`<circle cx="11" cy="11" r="7" /><path d="m20 20-3-3" />`)}
     ${
-      dest === 'parties'
+      mayReadParties
         ? item(
             'parties',
-            '/dev/mockups/party-directory',
+            '/parties',
             'אנשי קשר',
             dest,
             h`<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />`,

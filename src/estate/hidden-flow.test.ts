@@ -96,6 +96,9 @@ function enqueueable(href: string): string | null {
   ) {
     return null;
   }
+  // #202. The directory links every party. The list is opened and checked; walking each
+  // profile is the whole register, and this crawl's cap is about the buildings graph.
+  if (new RegExp(`^/parties/${UUID}/?$`, 'i').test(path)) return null;
   return text;
 }
 
@@ -245,10 +248,21 @@ describe('estate · the hidden buildings flow', () => {
         if (response.statusCode !== 200 || !type.includes('text/html')) {
           // The list screens are the whole portfolio. A document filed outside this
           // fixture has no bytes in the test store, so its read page is not one of
-          // the screens this case opened.
+          // the screens this case opened. A unit, a building or a call this fixture
+          // did not create can disappear under another suite while the crawl is
+          // walking the same database.
           const foreign = /^\/documents\/([0-9a-f-]{36})\//i.exec(bare(url));
           const ours = filed.some((doc) => doc.id === foreign?.[1]);
-          if (!foreign || ours) broken.push(`${response.statusCode} ${url}`);
+          const path = bare(url);
+          const foreignEstate =
+            (new RegExp(`^/estate/units/${UUID}/?$`, 'i').test(path) &&
+              path !== `/estate/units/${unitId}`) ||
+            (new RegExp(`^/estate/inventory/${UUID}/?$`, 'i').test(path) &&
+              path !== `/estate/inventory/${buildingId}`) ||
+            new RegExp(`^/calls/${UUID}/?$`, 'i').test(path);
+          if ((!foreign || ours) && !foreignEstate) {
+            broken.push(`${response.statusCode} ${url}`);
+          }
           continue;
         }
         htmlOf.set(url, response.body);

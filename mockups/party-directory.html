@@ -1,12 +1,13 @@
 <!--
-  Painted flow: party-directory (#201). Unwired. Every name, number and address is invented.
+  Painted flow: party-directory (#201). The directory and the profile are wired (#202);
+  what remains is the screens those later tickets still have to build.
   Served at /dev/mockups/party-directory. Later tickets delete their screen from this file;
   the last one deletes the file.
 -->
 <style>
   .party .screen { display: none; }
   .party .screen:target { display: grid; gap: var(--space-6); }
-  .party:not(:has(.screen:target)) #directory { display: grid; gap: var(--space-6); }
+  .party:not(:has(.screen:target)) #edit { display: grid; gap: var(--space-6); }
 
   .party .paint-bar {
     display: grid;
@@ -28,11 +29,7 @@
     text-decoration: none;
   }
   .party .paint-map a:hover { color: var(--color-text); }
-  .party:not(:has(.screen:target)) .paint-map a[href="#directory"],
-  .party:has(#directory:target) .paint-map a[href="#directory"],
-  .party:has(#profile:target) .paint-map a[href="#profile"],
-  .party:has(#profile-company:target) .paint-map a[href="#profile-company"],
-  .party:has(#profile-abu:target) .paint-map a[href="#profile-abu"],
+  .party:not(:has(.screen:target)) .paint-map a[href="#edit"],
   .party:has(#edit:target) .paint-map a[href="#edit"],
   .party:has(#edit-clash:target) .paint-map a[href="#edit-clash"],
   .party:has(#contact-add:target) .paint-map a[href="#contact-add"],
@@ -202,10 +199,6 @@
       <label for="stance-operator">תצוגת מפעיל</label>
     </div>
     <nav class="paint-map" aria-label="מסכי ההדמיה">
-      <a href="#directory">רשימה</a>
-      <a href="#profile">פרופיל</a>
-      <a href="#profile-company">חברה</a>
-      <a href="#profile-abu">שם יחיד</a>
       <a href="#edit">עריכה</a>
       <a href="#edit-clash">מזהה תפוס</a>
       <a href="#contact-add">הוספת קשר</a>
@@ -219,524 +212,10 @@
     </nav>
   </div>
 
-  <section id="directory" class="screen">
-    <header class="page-head">
-      <div>
-        <h1>אנשי קשר</h1>
-        <p class="lede">כל מי שהמערכת מכירה. בלי ליד.</p>
-      </div>
-      <p class="row-actions">
-        <a class="btn btn-primary" href="#create-person">אדם חדש</a>
-        <a class="btn btn-secondary" href="#create-company">חברה חדשה</a>
-      </p>
-    </header>
-
-    <div class="filters">
-      <input class="sr" type="radio" name="party-label" id="lab-all" checked />
-      <input class="sr" type="radio" name="party-label" id="lab-current" />
-      <input class="sr" type="radio" name="party-label" id="lab-past" />
-      <input class="sr" type="radio" name="party-label" id="lab-draft" />
-      <input class="sr" type="radio" name="party-label" id="lab-guarantor" />
-      <input class="sr" type="radio" name="party-label" id="lab-provider" />
-      <input class="sr" type="radio" name="party-label" id="lab-none" />
-      <input class="sr" type="checkbox" id="lab-former" />
-
-      <div class="glass sheet">
-        <div class="search-line">
-          <div class="field">
-            <label for="party-q">חיפוש</label>
-            <input id="party-q" type="search" placeholder="שם, טלפון או דוא״ל" autocomplete="off" />
-          </div>
-          <label class="btn btn-secondary" for="lab-former">התאמה ל־<bdi dir="ltr">052-100-1099</bdi></label>
-        </div>
-        <p class="former-note">ההתאמה היא למספר שכבר נסגר, לא למספר הפתוח.</p>
-      </div>
-
-      <nav class="segmented glass is-raised" aria-label="סינון לפי תווית">
-        <label for="lab-all">הכל <span class="n">11</span></label>
-        <label for="lab-current">דייר נוכחי <span class="n">3</span></label>
-        <label for="lab-past">דייר לשעבר <span class="n">1</span></label>
-        <label for="lab-draft">טיוטת שכירות <span class="n">1</span></label>
-        <label for="lab-guarantor">ערב <span class="n">2</span></label>
-        <label for="lab-provider">ספק שירות <span class="n">3</span></label>
-        <label for="lab-none">בלי קשר <span class="n">2</span></label>
-      </nav>
-
-      <div class="glass sheet table-wrap">
-        <table class="grid-table">
-          <thead>
-            <tr>
-              <th>שם</th>
-              <th>תוויות</th>
-              <th>טלפון</th>
-              <th>דוא״ל</th>
-              <th>שפה</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr class="party-row is-former" data-labels="current guarantor">
-              <td><a class="name" href="#profile">דנה לוי</a></td>
-              <td>
-                <p class="labels">
-                  <a class="chip is-ok" href="#tenancy-12">דייר נוכחי · שוכר ראשי · דירה 12</a>
-                  <a class="chip" href="#tenancy-9">ערב · פעילה · דירה 9</a>
-                </p>
-              </td>
-              <td>
-                <span class="primary-hit"><bdi dir="ltr">052-100-1001</bdi></span>
-                <span class="former-hit"><bdi dir="ltr">052-100-1099</bdi> <span class="chip is-former">מספר לשעבר</span></span>
-              </td>
-              <td><bdi dir="ltr">dana.levi@example.com</bdi></td>
-              <td>עברית</td>
-            </tr>
-            <tr class="party-row" data-labels="current">
-              <td><a class="name" href="#profile-yosef">יוסף בן דוד</a></td>
-              <td><p class="labels"><a class="chip is-ok" href="#tenancy-4">דייר נוכחי · שוכר ראשי · דירה 4</a></p></td>
-              <td><bdi dir="ltr">052-100-1002</bdi></td>
-              <td><bdi dir="ltr">yosef.bendavid@example.com</bdi></td>
-              <td>עברית</td>
-            </tr>
-            <tr class="party-row" data-labels="past">
-              <td><a class="name" href="#profile-abu">אבו חמד</a></td>
-              <td><p class="labels"><a class="chip is-neutral" href="#tenancy-7">דייר לשעבר · שוכר ראשי · דירה 7</a></p></td>
-              <td><bdi dir="ltr">052-100-1003</bdi></td>
-              <td>—</td>
-              <td>ערבית</td>
-            </tr>
-            <tr class="party-row" data-labels="current">
-              <td><a class="name" href="#profile-maria">מריה דה סילבה</a></td>
-              <td><p class="labels"><a class="chip is-ok" href="#tenancy-12">נוכחי · דייר · דירה 12</a></p></td>
-              <td><bdi dir="ltr">052-100-1004</bdi></td>
-              <td><bdi dir="ltr">maria.dasilva@example.com</bdi></td>
-              <td>רוסית</td>
-            </tr>
-            <tr class="party-row" data-labels="provider">
-              <td><a class="name" href="#profile-company">מיזוג הדגמה בע״מ</a></td>
-              <td><p class="labels"><span class="chip is-accent">ספק שירות · קבלן</span></p></td>
-              <td><bdi dir="ltr">03-555-0100</bdi></td>
-              <td><bdi dir="ltr">dispatch@example.com</bdi></td>
-              <td>עברית</td>
-            </tr>
-            <tr class="party-row" data-labels="provider">
-              <td><a class="name" href="#profile-crew">צוות הבית הדגמה</a></td>
-              <td><p class="labels"><span class="chip is-accent">ספק שירות · צוות פנימי</span></p></td>
-              <td><bdi dir="ltr">03-555-0101</bdi></td>
-              <td><bdi dir="ltr">crew@example.com</bdi></td>
-              <td>עברית</td>
-            </tr>
-            <tr class="party-row" data-labels="provider">
-              <td><a class="name" href="#profile-warranty">בדק הדגמה בע״מ</a></td>
-              <td><p class="labels"><span class="chip is-accent">ספק שירות · אחריות יזם</span></p></td>
-              <td><bdi dir="ltr">03-555-0102</bdi></td>
-              <td>—</td>
-              <td>עברית</td>
-            </tr>
-            <tr class="party-row" data-labels="draft">
-              <td><a class="name" href="#profile-noa">נועה פרץ</a></td>
-              <td><p class="labels"><a class="chip" href="#tenancy-15">טיוטת שכירות · שוכר נוסף · דירה 15</a></p></td>
-              <td><bdi dir="ltr">052-100-1005</bdi></td>
-              <td><bdi dir="ltr">noa.peretz@example.com</bdi></td>
-              <td>עברית</td>
-            </tr>
-            <tr class="party-row" data-labels="guarantor">
-              <td><a class="name" href="#profile-yitzhak">יצחק לוי</a></td>
-              <td><p class="labels"><a class="chip" href="#tenancy-12">ערב · פעילה · דירה 12</a></p></td>
-              <td><bdi dir="ltr">052-100-1006</bdi></td>
-              <td><bdi dir="ltr">yitzhak.levi@example.com</bdi></td>
-              <td>עברית</td>
-            </tr>
-            <tr class="party-row" data-labels="none">
-              <td><a class="name" href="#profile-rachel">רחל אביב</a></td>
-              <td><p class="labels"><span class="chip is-neutral">בלי קשר</span></p></td>
-              <td><bdi dir="ltr">052-100-1007</bdi></td>
-              <td>—</td>
-              <td>עברית</td>
-            </tr>
-            <tr class="party-row" data-labels="none">
-              <td><a class="name" href="#profile-dana-2">דנה לוי</a></td>
-              <td><p class="labels"><span class="chip is-neutral">בלי קשר</span></p></td>
-              <td><bdi dir="ltr">054-200-2002</bdi></td>
-              <td><bdi dir="ltr">dana.other@example.com</bdi></td>
-              <td>עברית</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <section id="profile" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#directory">אנשי קשר</a></p>
-        <h1>דנה לוי</h1>
-        <p class="hint">עוד איש קשר באותו שם: <a href="#profile-dana-2">דנה לוי</a></p>
-      </div>
-      <p class="row-actions">
-        <a class="btn btn-secondary" href="#edit">עריכת שם</a>
-        <a class="btn btn-secondary" href="#contact-add">הוספת קשר</a>
-        <a class="btn btn-secondary" href="#contact-primary">קשר ראשי</a>
-        <a class="btn btn-secondary" href="#contact-close">סגירת קשר</a>
-      </p>
-    </header>
-    <input class="sr" type="radio" name="reveal" id="id-masked" checked />
-    <input class="sr" type="radio" name="reveal" id="id-open" />
-    <section class="glass sheet">
-      <h2>זהות</h2>
-      <dl class="facts">
-        <div><dt>שם פרטי</dt><dd>דנה</dd></div>
-        <div><dt>שם משפחה</dt><dd>לוי</dd></div>
-        <div><dt>סוג</dt><dd>אדם</dd></div>
-        <div><dt>שפה</dt><dd>עברית</dd></div>
-        <div class="admin-only">
-          <dt>ת.ז.</dt>
-          <dd>
-            <span class="id-masked mono">••••018</span>
-            <span class="id-open mono">000000018</span>
-            <label class="btn btn-secondary btn-sm" for="id-open">חשיפה</label>
-            <label class="btn btn-ghost btn-sm hide-until-open" for="id-masked">הסתרה</label>
-          </dd>
-        </div>
-      </dl>
-      <p class="operator-note">למפעיל אין הרשאה לראות ת.ז.</p>
-    </section>
-    <section class="glass sheet">
-      <h2>תוויות</h2>
-      <p class="labels">
-        <a class="chip is-ok" href="#tenancy-12">דייר נוכחי · שוכר ראשי · דירה 12</a>
-        <a class="chip" href="#tenancy-9">ערב · פעילה · דירה 9</a>
-      </p>
-    </section>
-    <section class="glass sheet">
-      <h2>פרטי קשר</h2>
-      <ul class="contact-list">
-        <li>
-          <bdi dir="ltr">052-100-1001</bdi>
-          <span class="chip is-ok">פתוח</span>
-          <span class="chip is-accent">ראשי</span>
-          <span>מ־1 במרץ 2024</span>
-        </li>
-        <li>
-          <bdi dir="ltr">dana.levi@example.com</bdi>
-          <span class="chip is-ok">פתוח</span>
-          <span>מ־1 במרץ 2024</span>
-        </li>
-        <li>
-          <bdi dir="ltr">052-100-1099</bdi>
-          <span class="chip is-neutral">סגור</span>
-          <span>1 בינו׳ 2022 – 1 במרץ 2025</span>
-          <span>אישי</span>
-        </li>
-      </ul>
-    </section>
-    <section class="glass sheet">
-      <h2>קריאות</h2>
-      <ol class="plain-list">
-        <li><a href="#call-leak">נזילה במטבח</a> <span>2 באוק׳ 2026, 14:10 · פתוחה</span></li>
-        <li><a href="#call-key">מפתח ללובי</a> <span>18 בספט׳ 2026, 09:02 · סגורה</span></li>
-      </ol>
-    </section>
-    <section class="glass sheet">
-      <h2>היסטוריית עריכה</h2>
-      <ol class="plain-list">
-        <li>11 באוק׳ 2026, 09:40 · נועה מור, אדמין · שפה · עברית</li>
-        <li>3 במרץ 2025, 16:05 · יוסי כהן, מפעיל · סגירת מספר · טלפון</li>
-        <li>1 במרץ 2024, 11:12 · ייבוא · נוצר מהמרשם</li>
-      </ol>
-    </section>
-  </section>
-
-  <section id="profile-yosef" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#directory">אנשי קשר</a></p>
-        <h1>יוסף בן דוד</h1>
-      </div>
-    </header>
-    <section class="glass sheet">
-      <h2>זהות</h2>
-      <dl class="facts">
-        <div><dt>שם פרטי</dt><dd>יוסף</dd></div>
-        <div><dt>שם משפחה</dt><dd>בן דוד</dd></div>
-        <div><dt>סוג</dt><dd>אדם</dd></div>
-        <div><dt>שפה</dt><dd>עברית</dd></div>
-      </dl>
-      <p class="labels"><a class="chip is-ok" href="#tenancy-4">דייר נוכחי · שוכר ראשי · דירה 4</a></p>
-    </section>
-    <section class="glass sheet">
-      <h2>פרטי קשר</h2>
-      <ul class="contact-list">
-        <li><bdi dir="ltr">052-100-1002</bdi> <span class="chip is-ok">פתוח</span> <span class="chip is-accent">ראשי</span> <span>מ־1 בינו׳ 2023</span></li>
-        <li><bdi dir="ltr">yosef.bendavid@example.com</bdi> <span class="chip is-ok">פתוח</span> <span>מ־1 בינו׳ 2023</span></li>
-      </ul>
-    </section>
-  </section>
-
-  <section id="profile-abu" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#directory">אנשי קשר</a></p>
-        <h1>אבו חמד</h1>
-      </div>
-      <a class="btn btn-secondary" href="#edit-abu">עריכת שם</a>
-    </header>
-    <section class="glass sheet">
-      <h2>זהות</h2>
-      <dl class="facts">
-        <div><dt>שם פרטי</dt><dd>—</dd></div>
-        <div><dt>שם משפחה</dt><dd>אבו חמד</dd></div>
-        <div><dt>סוג</dt><dd>אדם</dd></div>
-        <div><dt>שפה</dt><dd>ערבית</dd></div>
-      </dl>
-      <p class="labels"><a class="chip is-neutral" href="#tenancy-7">דייר לשעבר · שוכר ראשי · דירה 7</a></p>
-    </section>
-    <section class="glass sheet">
-      <h2>פרטי קשר</h2>
-      <ul class="contact-list">
-        <li><bdi dir="ltr">052-100-1003</bdi> <span class="chip is-ok">פתוח</span> <span class="chip is-accent">ראשי</span> <span>מ־1 ביוני 2020</span></li>
-      </ul>
-    </section>
-  </section>
-
-  <section id="profile-maria" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#directory">אנשי קשר</a></p>
-        <h1>מריה דה סילבה</h1>
-      </div>
-    </header>
-    <section class="glass sheet">
-      <h2>זהות</h2>
-      <dl class="facts">
-        <div><dt>שם פרטי</dt><dd>מריה</dd></div>
-        <div><dt>שם משפחה</dt><dd>דה סילבה</dd></div>
-        <div><dt>סוג</dt><dd>אדם</dd></div>
-        <div><dt>שפה</dt><dd>רוסית</dd></div>
-      </dl>
-      <p class="labels"><a class="chip is-ok" href="#tenancy-12">נוכחי · דייר · דירה 12</a></p>
-      <p class="hint">דייר בדירה, לא שוכר על החוזה.</p>
-    </section>
-  </section>
-
-  <section id="profile-company" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#directory">אנשי קשר</a></p>
-        <h1>מיזוג הדגמה בע״מ</h1>
-      </div>
-      <a class="btn btn-secondary" href="#edit-company">עריכת שם</a>
-    </header>
-    <section class="glass sheet">
-      <h2>זהות</h2>
-      <dl class="facts">
-        <div><dt>שם משפטי</dt><dd>מיזוג הדגמה בע״מ</dd></div>
-        <div><dt>סוג</dt><dd>חברה</dd></div>
-        <div><dt>שפה</dt><dd>עברית</dd></div>
-      </dl>
-      <p class="labels"><span class="chip is-accent">ספק שירות · קבלן</span></p>
-    </section>
-    <section class="glass sheet">
-      <h2>פרטי קשר</h2>
-      <ul class="contact-list">
-        <li>
-          <bdi dir="ltr">03-555-0100</bdi>
-          <span class="chip is-ok">פתוח</span>
-          <span class="chip is-accent">ראשי</span>
-          <span>יוסי – סדרן</span>
-          <span>מ־1 בינו׳ 2024</span>
-        </li>
-        <li><bdi dir="ltr">dispatch@example.com</bdi> <span class="chip is-ok">פתוח</span> <span>מ־1 בינו׳ 2024</span></li>
-      </ul>
-    </section>
-    <section class="glass sheet" id="provider">
-      <h2>ספק שירות</h2>
-      <div class="stack">
-        <div class="field">
-          <label for="provider-kind">סוג</label>
-          <select id="provider-kind">
-            <option>צוות פנימי</option>
-            <option selected>קבלן</option>
-            <option>אחריות יזם</option>
-          </select>
-        </div>
-        <p class="row-actions"><a class="btn btn-primary" href="#profile-company">שמירה</a></p>
-      </div>
-    </section>
-  </section>
-
-  <section id="profile-crew" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#directory">אנשי קשר</a></p>
-        <h1>צוות הבית הדגמה</h1>
-      </div>
-    </header>
-    <section class="glass sheet">
-      <dl class="facts">
-        <div><dt>שם משפטי</dt><dd>צוות הבית הדגמה</dd></div>
-        <div><dt>סוג</dt><dd>חברה</dd></div>
-        <div><dt>שפה</dt><dd>עברית</dd></div>
-      </dl>
-      <p class="labels"><span class="chip is-accent">ספק שירות · צוות פנימי</span></p>
-    </section>
-  </section>
-
-  <section id="profile-warranty" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#directory">אנשי קשר</a></p>
-        <h1>בדק הדגמה בע״מ</h1>
-      </div>
-    </header>
-    <section class="glass sheet">
-      <dl class="facts">
-        <div><dt>שם משפטי</dt><dd>בדק הדגמה בע״מ</dd></div>
-        <div><dt>סוג</dt><dd>חברה</dd></div>
-        <div><dt>שפה</dt><dd>עברית</dd></div>
-      </dl>
-      <p class="labels"><span class="chip is-accent">ספק שירות · אחריות יזם</span></p>
-    </section>
-  </section>
-
-  <section id="profile-noa" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#directory">אנשי קשר</a></p>
-        <h1>נועה פרץ</h1>
-      </div>
-      <a class="btn btn-secondary" href="#edit-clash">עריכת שם</a>
-    </header>
-    <section class="glass sheet">
-      <dl class="facts">
-        <div><dt>שם פרטי</dt><dd>נועה</dd></div>
-        <div><dt>שם משפחה</dt><dd>פרץ</dd></div>
-        <div><dt>שפה</dt><dd>עברית</dd></div>
-      </dl>
-      <p class="labels"><a class="chip" href="#tenancy-15">טיוטת שכירות · שוכר נוסף · דירה 15</a></p>
-    </section>
-  </section>
-
-  <section id="profile-yitzhak" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#directory">אנשי קשר</a></p>
-        <h1>יצחק לוי</h1>
-      </div>
-    </header>
-    <section class="glass sheet">
-      <dl class="facts">
-        <div><dt>שם פרטי</dt><dd>יצחק</dd></div>
-        <div><dt>שם משפחה</dt><dd>לוי</dd></div>
-        <div><dt>שפה</dt><dd>עברית</dd></div>
-      </dl>
-      <p class="labels"><a class="chip" href="#tenancy-12">ערב · פעילה · דירה 12</a></p>
-      <p class="hint">ערב, לא דייר.</p>
-    </section>
-  </section>
-
-  <section id="profile-rachel" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#directory">אנשי קשר</a></p>
-        <h1>רחל אביב</h1>
-      </div>
-    </header>
-    <section class="glass sheet">
-      <p class="labels"><span class="chip is-neutral">בלי קשר</span></p>
-      <p class="hint">שכן שנשאר אחרי קריאה. בלי דירה.</p>
-      <ul class="contact-list">
-        <li><bdi dir="ltr">052-100-1007</bdi> <span class="chip is-ok">פתוח</span> <span class="chip is-accent">ראשי</span></li>
-      </ul>
-    </section>
-  </section>
-
-  <section id="profile-dana-2" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#directory">אנשי קשר</a></p>
-        <h1>דנה לוי</h1>
-        <p class="hint">עוד איש קשר באותו שם: <a href="#profile">דנה לוי</a></p>
-      </div>
-    </header>
-    <section class="glass sheet">
-      <dl class="facts">
-        <div><dt>שם פרטי</dt><dd>דנה</dd></div>
-        <div><dt>שם משפחה</dt><dd>לוי</dd></div>
-        <div><dt>שפה</dt><dd>עברית</dd></div>
-      </dl>
-      <p class="labels"><span class="chip is-neutral">בלי קשר</span></p>
-      <ul class="contact-list">
-        <li><bdi dir="ltr">054-200-2002</bdi> <span class="chip is-ok">פתוח</span> <span class="chip is-accent">ראשי</span></li>
-        <li><bdi dir="ltr">dana.other@example.com</bdi> <span class="chip is-ok">פתוח</span></li>
-      </ul>
-    </section>
-  </section>
-
-  <section id="profile-rina" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#directory">אנשי קשר</a></p>
-        <h1>רינה שמש</h1>
-        <p class="lede">נוצרה עכשיו.</p>
-      </div>
-    </header>
-    <section class="glass sheet">
-      <dl class="facts">
-        <div><dt>שם פרטי</dt><dd>רינה</dd></div>
-        <div><dt>שם משפחה</dt><dd>שמש</dd></div>
-        <div><dt>שפה</dt><dd>עברית</dd></div>
-      </dl>
-      <p class="labels"><span class="chip is-neutral">בלי קשר</span></p>
-      <ul class="contact-list">
-        <li><bdi dir="ltr">050-300-3003</bdi> <span class="chip is-ok">פתוח</span> <span class="chip is-accent">ראשי</span> <span>מהיום</span></li>
-      </ul>
-    </section>
-  </section>
-
-  <section id="profile-movers" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#directory">אנשי קשר</a></p>
-        <h1>הובלות הדגמה בע״מ</h1>
-        <p class="lede">נוצרה עכשיו.</p>
-      </div>
-    </header>
-    <input class="sr" type="radio" name="prov" id="prov-off" checked />
-    <input class="sr" type="radio" name="prov" id="prov-crew" />
-    <input class="sr" type="radio" name="prov" id="prov-contractor" />
-    <input class="sr" type="radio" name="prov" id="prov-warranty" />
-    <section class="glass sheet">
-      <dl class="facts">
-        <div><dt>שם משפטי</dt><dd>הובלות הדגמה בע״מ</dd></div>
-        <div><dt>סוג</dt><dd>חברה</dd></div>
-        <div><dt>שפה</dt><dd>עברית</dd></div>
-      </dl>
-      <p class="labels prov-off"><span class="chip is-neutral">בלי קשר</span></p>
-      <p class="labels prov-crew"><span class="chip is-accent">ספק שירות · צוות פנימי</span></p>
-      <p class="labels prov-contractor"><span class="chip is-accent">ספק שירות · קבלן</span></p>
-      <p class="labels prov-warranty"><span class="chip is-accent">ספק שירות · אחריות יזם</span></p>
-      <ul class="contact-list">
-        <li><bdi dir="ltr">office@example.com</bdi> <span class="chip is-ok">פתוח</span> <span class="chip is-accent">ראשי</span> <span>מהיום</span></li>
-      </ul>
-    </section>
-    <section class="glass sheet">
-      <h2>ספק שירות</h2>
-      <p class="prov-off hint">עדיין לא ספק שירות. בוחרים סוג.</p>
-      <p class="prov-crew hint">סומן כצוות פנימי.</p>
-      <p class="prov-contractor hint">סומן כקבלן.</p>
-      <p class="prov-warranty hint">סומן כאחריות יזם.</p>
-      <p class="row-actions">
-        <label class="btn btn-secondary" for="prov-crew">צוות פנימי</label>
-        <label class="btn btn-secondary" for="prov-contractor">קבלן</label>
-        <label class="btn btn-secondary" for="prov-warranty">אחריות יזם</label>
-      </p>
-    </section>
-  </section>
-
   <section id="edit" class="screen">
     <header class="page-head">
       <div>
-        <p class="lede"><a class="back" href="#profile">דנה לוי</a></p>
+        <p class="lede"><a class="back" href="/parties">דנה לוי</a></p>
         <h1>עריכת שם</h1>
       </div>
     </header>
@@ -764,7 +243,7 @@
         </div>
         <p class="operator-note">מפעיל מתקן שם ושפה. שדה המזהה לא מוצג לו.</p>
         <p class="row-actions">
-          <a class="btn btn-primary" href="#profile">שמירה</a>
+          <a class="btn btn-primary" href="/parties">שמירה</a>
         </p>
       </div>
     </div>
@@ -773,7 +252,7 @@
   <section id="edit-abu" class="screen">
     <header class="page-head">
       <div>
-        <p class="lede"><a class="back" href="#profile-abu">אבו חמד</a></p>
+        <p class="lede"><a class="back" href="/parties">אבו חמד</a></p>
         <h1>עריכת שם</h1>
       </div>
     </header>
@@ -795,7 +274,7 @@
             <option>רוסית</option>
           </select>
         </div>
-        <p class="row-actions"><a class="btn btn-primary" href="#profile-abu">שמירה</a></p>
+        <p class="row-actions"><a class="btn btn-primary" href="/parties">שמירה</a></p>
       </div>
     </div>
   </section>
@@ -803,7 +282,7 @@
   <section id="edit-company" class="screen">
     <header class="page-head">
       <div>
-        <p class="lede"><a class="back" href="#profile-company">מיזוג הדגמה בע״מ</a></p>
+        <p class="lede"><a class="back" href="/parties">מיזוג הדגמה בע״מ</a></p>
         <h1>עריכת שם</h1>
       </div>
     </header>
@@ -821,7 +300,7 @@
             <option>רוסית</option>
           </select>
         </div>
-        <p class="row-actions"><a class="btn btn-primary" href="#profile-company">שמירה</a></p>
+        <p class="row-actions"><a class="btn btn-primary" href="/parties">שמירה</a></p>
       </div>
     </div>
   </section>
@@ -829,12 +308,12 @@
   <section id="edit-clash" class="screen">
     <header class="page-head">
       <div>
-        <p class="lede"><a class="back" href="#profile-noa">נועה פרץ</a></p>
+        <p class="lede"><a class="back" href="/parties">נועה פרץ</a></p>
         <h1>עריכת שם</h1>
       </div>
     </header>
     <div class="glass sheet">
-      <p class="refusal">הת.ז. כבר רשומה על <a href="#profile">דנה לוי</a>.</p>
+      <p class="refusal">הת.ז. כבר רשומה על <a href="/parties">דנה לוי</a>.</p>
       <div class="stack">
         <div class="field">
           <label for="given-clash">שם פרטי</label>
@@ -856,7 +335,7 @@
   <section id="contact-add" class="screen">
     <header class="page-head">
       <div>
-        <p class="lede"><a class="back" href="#profile">דנה לוי</a></p>
+        <p class="lede"><a class="back" href="/parties">דנה לוי</a></p>
         <h1>הוספת קשר</h1>
       </div>
     </header>
@@ -880,7 +359,7 @@
           <input id="contact-from" type="date" value="2026-10-11" />
         </div>
         <p class="row-actions">
-          <a class="btn btn-primary" href="#profile">שמירה</a>
+          <a class="btn btn-primary" href="/parties">שמירה</a>
           <a class="btn btn-secondary" href="#contact-held">מספר שמישהו אחר מחזיק</a>
         </p>
       </div>
@@ -895,7 +374,7 @@
       </div>
     </header>
     <div class="glass sheet">
-      <p class="refusal">המספר פתוח אצל <a href="#profile-yosef">יוסף בן דוד</a>.</p>
+      <p class="refusal">המספר פתוח אצל <a href="/parties">יוסף בן דוד</a>.</p>
       <div class="stack">
         <div class="field">
           <label for="held-value">מספר</label>
@@ -913,7 +392,7 @@
   <section id="contact-primary" class="screen">
     <header class="page-head">
       <div>
-        <p class="lede"><a class="back" href="#profile">דנה לוי</a></p>
+        <p class="lede"><a class="back" href="/parties">דנה לוי</a></p>
         <h1>קשר ראשי</h1>
       </div>
     </header>
@@ -923,14 +402,14 @@
         <label><input type="radio" name="primary" checked /> <bdi dir="ltr">052-100-1001</bdi> · ראשי עכשיו</label>
         <label><input type="radio" name="primary" /> <bdi dir="ltr">dana.levi@example.com</bdi></label>
       </fieldset>
-      <p class="row-actions"><a class="btn btn-primary" href="#profile">שמירה</a></p>
+      <p class="row-actions"><a class="btn btn-primary" href="/parties">שמירה</a></p>
     </div>
   </section>
 
   <section id="contact-close" class="screen">
     <header class="page-head">
       <div>
-        <p class="lede"><a class="back" href="#profile">דנה לוי</a></p>
+        <p class="lede"><a class="back" href="/parties">דנה לוי</a></p>
         <h1>סגירת קשר</h1>
       </div>
     </header>
@@ -942,7 +421,7 @@
           <input id="close-on" type="date" value="2026-10-11" />
         </div>
         <p class="hint">המספר נשאר בפרופיל. מהתאריך הזה הוא לא מזהה את האדם בדלת, ואפשר לרשום אותו על מישהו אחר.</p>
-        <p class="row-actions"><a class="btn btn-primary" href="#profile">סגירה</a></p>
+        <p class="row-actions"><a class="btn btn-primary" href="/parties">סגירה</a></p>
       </div>
     </div>
   </section>
@@ -950,7 +429,7 @@
   <section id="create-person" class="screen">
     <header class="page-head">
       <div>
-        <p class="lede"><a class="back" href="#directory">אנשי קשר</a></p>
+        <p class="lede"><a class="back" href="/parties">אנשי קשר</a></p>
         <h1>אדם חדש</h1>
       </div>
     </header>
@@ -982,7 +461,7 @@
         </div>
         <p class="hint">חובה פרטי קשר אחד, או ת.ז.</p>
         <p class="row-actions">
-          <a class="btn btn-primary" href="#profile-rina">יצירה</a>
+          <a class="btn btn-primary" href="/parties">יצירה</a>
           <a class="btn btn-secondary" href="#create-person-refused">בלי קשר ובלי מזהה</a>
         </p>
       </div>
@@ -1023,7 +502,7 @@
   <section id="create-company" class="screen">
     <header class="page-head">
       <div>
-        <p class="lede"><a class="back" href="#directory">אנשי קשר</a></p>
+        <p class="lede"><a class="back" href="/parties">אנשי קשר</a></p>
         <h1>חברה חדשה</h1>
       </div>
     </header>
@@ -1051,7 +530,7 @@
         </div>
         <p class="hint">חובה פרטי קשר אחד, או ת.ז.</p>
         <p class="row-actions">
-          <a class="btn btn-primary" href="#profile-movers">יצירה</a>
+          <a class="btn btn-primary" href="/parties">יצירה</a>
           <a class="btn btn-secondary" href="#create-company-refused">בלי קשר ובלי מזהה</a>
         </p>
       </div>
@@ -1085,69 +564,4 @@
     </div>
   </section>
 
-  <section id="tenancy-12" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#profile">חזרה לפרופיל</a></p>
-        <h1>שכירות · דירה 12</h1>
-        <p class="lede">בניין הדוגמה, רחוב הדוגמה 4. מכאן החוזה, המסמכים והדיירים.</p>
-      </div>
-    </header>
-  </section>
-  <section id="tenancy-9" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#profile">חזרה לפרופיל</a></p>
-        <h1>שכירות · דירה 9</h1>
-        <p class="lede">בניין הדוגמה, רחוב הדוגמה 4. מכאן החוזה, המסמכים והדיירים.</p>
-      </div>
-    </header>
-  </section>
-  <section id="tenancy-4" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#profile-yosef">חזרה לפרופיל</a></p>
-        <h1>שכירות · דירה 4</h1>
-        <p class="lede">בניין הדוגמה, רחוב הדוגמה 4. מכאן החוזה, המסמכים והדיירים.</p>
-      </div>
-    </header>
-  </section>
-  <section id="tenancy-7" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#profile-abu">חזרה לפרופיל</a></p>
-        <h1>שכירות · דירה 7</h1>
-        <p class="lede">בניין הדוגמה, רחוב הדוגמה 4. מכאן החוזה, המסמכים והדיירים.</p>
-      </div>
-    </header>
-  </section>
-  <section id="tenancy-15" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#profile-noa">חזרה לפרופיל</a></p>
-        <h1>שכירות · דירה 15</h1>
-        <p class="lede">בניין הדוגמה, רחוב הדוגמה 4. מכאן החוזה, המסמכים והדיירים.</p>
-      </div>
-    </header>
-  </section>
-
-  <section id="call-leak" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#profile">דנה לוי</a></p>
-        <h1>נזילה במטבח</h1>
-        <p class="lede">טלפון · 2 באוק׳ 2026, 14:10 · פתוחה</p>
-      </div>
-    </header>
-  </section>
-
-  <section id="call-key" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="#profile">דנה לוי</a></p>
-        <h1>מפתח ללובי</h1>
-        <p class="lede">טלפון · 18 בספט׳ 2026, 09:02 · סגורה</p>
-      </div>
-    </header>
-  </section>
 </div>

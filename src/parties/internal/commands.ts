@@ -1,9 +1,9 @@
 // The parties module's write commands. Slice 2.4, and the caller 2.1 predicted: "2.3 and 2.4 are
 // this module's callers."
 //
-// Two upserts and nothing else. There is no read model here and no query on this module's contract,
-// deliberately — who is reachable on a number is `src/scope/`'s answer and never this module's,
-// which is foundation rule 1 expressed as a module boundary rather than as a comment.
+// The write commands. The directory and the profile are the read (#202, `directory.ts`). Who is
+// reachable on a number today is still `src/scope/`'s answer and never this module's, which is
+// foundation rule 1 expressed as a module boundary rather than as a comment.
 //
 // Both statements are `INSERT ... ON CONFLICT (<natural key>) DO UPDATE ... RETURNING`, which is
 // the estate importer's shape at 1.11 and for its reasons: the id is *proposed*, so on a second run

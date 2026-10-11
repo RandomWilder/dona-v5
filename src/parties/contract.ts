@@ -1,9 +1,10 @@
 // The parties module's public surface. Other modules, the composition root and the tests import
 // this file and never internal/ (AGENTS.md, and src/kernel/boundary.test.ts proves it from 2.4).
 //
-// Write commands, and from 6.5 one function that reads no table. Who is reachable on a number is
-// still `src/scope/`'s answer, and a second way to ask it would still be a second isolation join —
-// `countDistinctIdentifiers` asks what a value *would* key on, not who exists, and returns a count.
+// Write commands, the directory and the profile (#202), and from 6.5 one function that reads no
+// table. Who is reachable on a number today is still `src/scope/`'s answer. The directory names
+// who exists; it is not a second isolation join. `countDistinctIdentifiers` asks what a value
+// *would* key on, not who exists, and returns a count.
 
 export type {
   ContactChannel,
@@ -19,6 +20,13 @@ export {
   upsertParty,
   upsertPartyContact,
 } from './internal/commands.ts';
+export type {
+  DirectoryParty,
+  DirectoryQuery,
+  PartyProfile,
+  ProfileContact,
+} from './internal/directory.ts';
+export { readPartyProfile, searchParties } from './internal/directory.ts';
 export type { PartyName } from './internal/lookup.ts';
 export { findPartiesByName, listPartyNames } from './internal/lookup.ts';
 export type { Queryable } from './internal/types.ts';

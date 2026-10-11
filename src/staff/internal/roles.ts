@@ -22,6 +22,11 @@ export const PERMISSIONS = [
   'documents.read',
   'documents.write',
   'tenancy.write',
+  // #202. The אנשי קשר tab. ADMIN and OPERATOR. A viewer holds neither, so the tab is
+  // absent and the routes refuse. `party.write` has no route yet: the corrections arrive
+  // later and reuse this word rather than inventing a second one.
+  'party.read',
+  'party.write',
   'settings.write',
   'staff.invite',
   // Unused at 5.1, and here on purpose. SPEC.md's security default says `national_id` is
@@ -42,6 +47,8 @@ const MATRIX: Readonly<Record<Role, readonly Permission[]>> = Object.freeze({
     'documents.read',
     'documents.write',
     'tenancy.write',
+    'party.read',
+    'party.write',
     'settings.write',
     'staff.invite',
     'party.national_id.read',
@@ -51,6 +58,8 @@ const MATRIX: Readonly<Record<Role, readonly Permission[]>> = Object.freeze({
     'documents.read',
     'documents.write',
     'tenancy.write',
+    'party.read',
+    'party.write',
   ] as const),
   VIEWER: Object.freeze(['estate.read', 'documents.read'] as const),
 });

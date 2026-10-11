@@ -34,7 +34,7 @@ import {
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const AT = new Date('2026-09-08T12:00:00.000Z');
-const NAV = signedInChrome('x'.repeat(64), 'documents', true);
+const NAV = signedInChrome('x'.repeat(64), 'documents', true, true);
 const BUCKET = 'dona-v5-test-amendment';
 const LEASE_MARKERS = 'חוזה שכירות המושכר תקופת השכירות השוכר';
 // **Widened at 7.1, with the declaration it is a fixture for.** The נספח declaration was

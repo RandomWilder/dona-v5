@@ -84,6 +84,7 @@ import { registerUiAssets } from './kernel/ui/assets.ts';
 import { registerFormBodies } from './kernel/ui/forms.ts';
 import type { WorkRunner } from './kernel/work.ts';
 import { listPartyNames } from './parties/contract.ts';
+import { registerPartyDirectoryRoutes } from './party-directory.ts';
 import {
   parseCategoryForm,
   parseDocumentTypeForm,
@@ -416,6 +417,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     return renderIndexPage({
       csrf: csrfFrom(request),
       mayFile: can(request.staff?.role ?? null, 'documents.write'),
+      mayReadParties: can(request.staff?.role ?? null, 'party.read'),
       openCalls: request.openCalls,
     });
   });
@@ -446,6 +448,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       csrf: csrfFrom(request),
       mayWrite: can(role, 'settings.write'),
       mayFile: can(role, 'documents.write'),
+      mayReadParties: can(role, 'party.read'),
       openCalls: request.openCalls,
       state: 'wired',
       obligations: await listObligationTypes(deps.pool),
@@ -684,6 +687,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   // Slice 5.1, and from 5.2 no longer the only routes behind a session: every route this
   // application registers declares a stance above, and the hook calls `requireStaff` once.
   registerStaffRoutes(app, staffDeps);
+  registerPartyDirectoryRoutes(app, { pool: deps.pool });
   registerCallsRoutes(app, {
     pool: deps.pool,
     clock,

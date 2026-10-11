@@ -73,6 +73,7 @@ export interface StaffDeps {
     csrf: string,
     dest: ChromeDest,
     mayFile: boolean,
+    mayReadParties: boolean,
     openCalls?: number,
   ) => Html;
 }
@@ -325,6 +326,7 @@ export function registerStaffRoutes(
           csrf,
           'staff',
           can(request.staff?.role ?? null, 'documents.write'),
+          can(request.staff?.role ?? null, 'party.read'),
           request.openCalls,
         ),
         csrf,
@@ -362,6 +364,7 @@ export function registerStaffRoutes(
           csrf,
           'staff',
           can(request.staff?.role ?? null, 'documents.write'),
+          can(request.staff?.role ?? null, 'party.read'),
           request.openCalls,
         ),
         csrf,

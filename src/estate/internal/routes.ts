@@ -125,6 +125,7 @@ export interface EstateDeps {
     csrf: string,
     dest: ChromeDest,
     mayFile: boolean,
+    mayReadParties: boolean,
     openCalls?: number,
   ) => Html;
   /**
@@ -365,6 +366,10 @@ function carryQuery(carry: IntakeCarry): string {
  */
 function mayFile(request: FastifyRequest): boolean {
   return can(request.staff?.role ?? null, 'documents.write');
+}
+
+function mayReadParties(request: FastifyRequest): boolean {
+  return can(request.staff?.role ?? null, 'party.read');
 }
 
 function requireStaffAccountId(request: FastifyRequest): string {
@@ -898,6 +903,7 @@ export function registerEstateRoutes(
       csrfFrom(request),
       'estate',
       mayFile(request),
+      mayReadParties(request),
       request.openCalls,
     );
     return renderBuildingsPage(
@@ -940,6 +946,7 @@ export function registerEstateRoutes(
         csrfFrom(request),
         'inventory',
         mayFile(request),
+        mayReadParties(request),
         request.openCalls,
       ),
       mayWrite: can(request.staff?.role ?? null, 'estate.write'),
@@ -952,7 +959,13 @@ export function registerEstateRoutes(
     const csrf = csrfFrom(request);
     html(reply);
     return renderNewInventoryPage({
-      nav: deps.chrome(csrf, 'inventory', mayFile(request), request.openCalls),
+      nav: deps.chrome(
+        csrf,
+        'inventory',
+        mayFile(request),
+        mayReadParties(request),
+        request.openCalls,
+      ),
       csrf,
       projects,
     });
@@ -1071,6 +1084,7 @@ export function registerEstateRoutes(
           csrf,
           'inventory',
           mayFile(request),
+          mayReadParties(request),
           request.openCalls,
         ),
         mayFile: mayFile(request),
@@ -1228,6 +1242,7 @@ export function registerEstateRoutes(
         csrfFrom(request),
         'search',
         mayFile(request),
+        mayReadParties(request),
         request.openCalls,
       ),
     );
@@ -1243,6 +1258,7 @@ export function registerEstateRoutes(
         csrfFrom(request),
         'expiring',
         mayFile(request),
+        mayReadParties(request),
         request.openCalls,
       ),
     );
@@ -1257,7 +1273,13 @@ export function registerEstateRoutes(
       rows,
       queue,
       csrf,
-      deps.chrome(csrf, 'incomplete', mayFile(request), request.openCalls),
+      deps.chrome(
+        csrf,
+        'incomplete',
+        mayFile(request),
+        mayReadParties(request),
+        request.openCalls,
+      ),
     );
   });
 
@@ -1294,7 +1316,13 @@ export function registerEstateRoutes(
       optionalText(blankToNull(query.city), 'city', 120) ?? undefined;
     html(reply);
     return renderNewBuildingPage({
-      nav: deps.chrome(csrf, 'inventory', mayFile(request), request.openCalls),
+      nav: deps.chrome(
+        csrf,
+        'inventory',
+        mayFile(request),
+        mayReadParties(request),
+        request.openCalls,
+      ),
       csrf,
       projects,
       // **Slice 6.9.** The name defaults to the street, because A12 read a street and never a
@@ -1357,6 +1385,7 @@ export function registerEstateRoutes(
           csrf,
           'inventory',
           mayFile(request),
+          mayReadParties(request),
           request.openCalls,
         ),
         csrf,
@@ -1483,7 +1512,13 @@ export function registerEstateRoutes(
     return renderBuildingPage(
       detail,
       occupancy,
-      deps.chrome(csrf, 'estate', mayFile(request), request.openCalls),
+      deps.chrome(
+        csrf,
+        'estate',
+        mayFile(request),
+        mayReadParties(request),
+        request.openCalls,
+      ),
       documents,
       // Slice 6.2: the door to A13's screen, rendered for a viewer who may walk through it and for
       // nobody else — the buildings list's rule, one level down. Issue 140 hangs the remove
@@ -1543,7 +1578,13 @@ export function registerEstateRoutes(
       unit,
       states.get(unit.unit_id)?.word ?? UNIT_WORDS.vacant,
       documents,
-      deps.chrome(csrf, 'inventory', mayFile(request), request.openCalls),
+      deps.chrome(
+        csrf,
+        'inventory',
+        mayFile(request),
+        mayReadParties(request),
+        request.openCalls,
+      ),
       promoted,
       events,
       await officeRetrieval(
@@ -1687,6 +1728,7 @@ export function registerEstateRoutes(
         csrfFrom(request),
         'tenancies',
         mayFile(request),
+        mayReadParties(request),
         request.openCalls,
       ),
     );
@@ -1796,7 +1838,13 @@ export function registerEstateRoutes(
       activatableOn: gate.activatableOn,
       flags: gate.flags,
       csrf,
-      nav: deps.chrome(csrf, 'tenancies', mayFile(request), request.openCalls),
+      nav: deps.chrome(
+        csrf,
+        'tenancies',
+        mayFile(request),
+        mayReadParties(request),
+        request.openCalls,
+      ),
     });
   });
 

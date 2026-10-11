@@ -172,6 +172,8 @@ Three roles, and the permission names are the vocabulary the rest of the console
 | `documents.read` | ✓ | ✓ | ✓ |
 | `documents.write` | ✓ | ✓ | |
 | `tenancy.write` | ✓ | ✓ | |
+| `party.read` | ✓ | ✓ | |
+| `party.write` | ✓ | ✓ | |
 | `settings.write` | ✓ | | |
 | `staff.invite` | ✓ | | |
 | `party.national_id.read` | ✓ | | |
@@ -194,6 +196,8 @@ it too, and not `estate.read`** — a form an operator may render and may not po
 answers `not_allowed` after they have typed an address into it, and the refusal this system makes
 says nothing more, so they would learn nothing from it. The buildings list links to the screen only
 for a role that holds the permission.
+
+`party.read` is the אנשי קשר tab (`GET /parties` and `GET /parties/:partyId`, #202). A viewer holds neither it nor `party.write`, so the tab is absent from the rail and both routes refuse. `party.write` is granted to the same two roles and has no route yet: correcting a name, a contact or a new party arrives on later tickets, and the permission is named once so those routes do not invent a second word.
 
 `party.national_id.read` is here and unused, and that is on purpose: `SPEC.md`'s security default
 says `national_id` is **admin-only, unreachable by any agent tool, and access-logged**, and the

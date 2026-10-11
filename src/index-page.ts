@@ -33,6 +33,8 @@ export interface IndexScreen {
    * default type-checks everywhere and is only ever found by clicking.
    */
   mayFile: boolean;
+  /** Whether this role may open אנשי קשר — `party.read`. Required, for `mayFile`'s reason. */
+  mayReadParties: boolean;
   /** Open ServiceCalls, for the rail count. Absent when the page is rendered outside a request. */
   openCalls?: number;
 }
@@ -134,7 +136,13 @@ export function renderIndexPage(screen: IndexScreen): string {
   return renderPage({
     title: 'דונה דום — ניהול נכסים',
     styles,
-    nav: signedInChrome(screen.csrf, 'index', screen.mayFile, screen.openCalls),
+    nav: signedInChrome(
+      screen.csrf,
+      'index',
+      screen.mayFile,
+      screen.mayReadParties,
+      screen.openCalls,
+    ),
     body,
   });
 }

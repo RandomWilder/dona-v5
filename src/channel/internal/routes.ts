@@ -29,6 +29,7 @@ export interface ChannelDeps {
     csrf: string,
     dest: ChromeDest,
     mayFile: boolean,
+    mayReadParties: boolean,
     openCalls?: number,
   ) => Html;
   devIntake: boolean;
@@ -111,6 +112,7 @@ async function formPage(
       csrf,
       'calls',
       can(role, 'documents.write'),
+      can(role, 'party.read'),
       request.openCalls,
     ),
     csrf,

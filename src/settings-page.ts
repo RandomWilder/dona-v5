@@ -38,6 +38,8 @@ export interface SettingsScreen {
   mayWrite: boolean;
   /** Whether this role may file a document — the rail's one gated destination (slice 6.9). */
   mayFile: boolean;
+  /** Whether this role may open אנשי קשר — `party.read`. Required, for `mayFile`'s reason. */
+  mayReadParties: boolean;
   /** Open ServiceCalls, for the rail count. Absent when the page is rendered outside a request. */
   openCalls?: number;
   state: 'wired' | 'painted';
@@ -292,6 +294,7 @@ export function renderSettingsPage(screen: SettingsScreen): string {
       screen.csrf,
       'settings',
       screen.mayFile,
+      screen.mayReadParties,
       screen.openCalls,
     ),
     body,
