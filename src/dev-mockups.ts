@@ -55,8 +55,8 @@ export function renderMockup(flow: string, csrf: string): string {
     title: `${flow} — הדמיה — דונה דום`,
     // The rail a paint is reviewed in shows every destination, this slice's included: a mockup is
     // read by the director, who is an ADMIN, and a paint that hid a tab would be a paint of a
-    // screen nobody has.
-    nav: signedInChrome(csrf, 'index', true),
+    // screen nobody has. `parties` is the painted אנשי קשר tab (#201); it is current only here.
+    nav: signedInChrome(csrf, 'parties', true),
     body: new Html(painted),
   });
 }

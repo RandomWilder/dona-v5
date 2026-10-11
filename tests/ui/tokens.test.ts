@@ -2544,6 +2544,22 @@ describe('shared UI tokens', () => {
     }
   });
 
+  // #201. The אנשי קשר tab is painted, not wired: it sits in the rail only while the
+  // mockup is the current destination, and a real screen does not grow a link to it.
+  it('shows the painted אנשי קשר tab only while that paint is current', () => {
+    const painted = String(signedInChrome(CSRF, 'parties', true));
+    assert.match(painted, />אנשי קשר</);
+    assert.match(painted, /href="\/dev\/mockups\/party-directory"/);
+    assert.match(painted, /data-dest="parties" aria-current="page"/);
+    const search = painted.indexOf('data-dest="search"');
+    const parties = painted.indexOf('data-dest="parties"');
+    const staff = painted.indexOf('data-dest="staff"');
+    assert.ok(search !== -1 && search < parties && parties < staff);
+    const inventory = String(signedInChrome(CSRF, 'inventory', true));
+    assert.doesNotMatch(inventory, /אנשי קשר/);
+    assert.doesNotMatch(inventory, /party-directory/);
+  });
+
   /**
    * **Slice 6.9. Four causes, four sentences, and never the wrong one.**
    *
