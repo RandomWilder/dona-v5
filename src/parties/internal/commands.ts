@@ -120,7 +120,8 @@ function storedName(spec: {
  * A person named on a lease, with no identifier. Always an insert: there is no natural key to
  * conflict on. Slice 5.5 measured the portfolio and kept that: 0 parties with no identifier, 0
  * nameless same-name groups. Matching a name across tenancies stays forbidden (SPEC-flows.md A2
- * step 5). Slice 4.6, flow A2.
+ * step 5). Slice 4.6, flow A2. A party made by hand is `createPartyByHand` (#207). This command
+ * stays the lease path: a name alone is enough, because the lease is the evidence.
  */
 export async function createParty(
   db: Queryable,
@@ -147,6 +148,129 @@ export async function createParty(
     throw new KernelError('conflict', 'party insert returned no row');
   }
   return { id: row.party_id, inserted: row.inserted };
+}
+
+export interface HandPartySpec {
+  kind: PartyKind;
+  /** -- pii. Null is someone known by one name. */
+  givenName?: string | null;
+  /** -- pii. Required for a person. */
+  familyName?: string | null;
+  /** -- pii. Required for a company. */
+  legalName?: string | null;
+  preferredLanguage: string;
+  /**
+   * -- pii. Null when the party is reached by a contact and holds no identifier.
+   * Stored as given. The generated key is what refuses a second holder.
+   */
+  nationalId: string | null;
+  /**
+   * One open contact, already normalised, or null when the party is identified
+   * by a ת.ז. and holds no contact yet. The value is stored as given.
+   */
+  contact: {
+    channel: string;
+    value: string;
+    validFrom: string;
+  } | null;
+}
+
+/**
+ * A party an operator records from the directory. A name alone is not enough:
+ * without a contact or a ת.ז. the row can never be identified or reached, so
+ * the command refuses it and writes nothing. A contact another party holds, or
+ * a ת.ז. another party holds, refuses the whole create. No half-written party
+ * remains. The lease path stays `createParty`.
+ */
+export async function createPartyByHand(
+  db: Queryable,
+  spec: HandPartySpec,
+): Promise<{
+  partyId: string;
+  contact: { contactId: string; channel: ContactChannel } | null;
+}> {
+  const name = storedName(spec);
+  const language = preferredLanguage(spec.preferredLanguage);
+  const nationalId =
+    spec.nationalId === null || spec.nationalId.trim() === ''
+      ? null
+      : requireText(spec.nationalId, 'national_id', 64);
+  const contact = spec.contact;
+  if (nationalId === null && contact === null) {
+    throw new KernelError(
+      'invalid',
+      'a party needs a contact or an identifier',
+    );
+  }
+  if (contact !== null) {
+    contactChannel(contact.channel);
+    requireText(contact.value, 'value', 320);
+    calendarDay(contact.validFrom);
+  }
+  const partyId = newId();
+  return inTransaction(db, async (tx) => {
+    await tx.query('SAVEPOINT create_party_by_hand');
+    try {
+      await tx.query(
+        `INSERT INTO party (
+           party_id, party_kind, given_name, family_name, legal_name,
+           national_id, preferred_language
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          partyId,
+          spec.kind,
+          name.givenName,
+          name.familyName,
+          name.legalName,
+          nationalId,
+          language,
+        ],
+      );
+      const added =
+        contact === null
+          ? null
+          : await addPartyContact(tx, {
+              partyId,
+              channel: contact.channel,
+              value: contact.value,
+              label: null,
+              validFrom: contact.validFrom,
+            });
+      if (added !== null) {
+        await setPrimaryPartyContact(tx, {
+          partyId,
+          contactId: added.contactId,
+        });
+      }
+      await tx.query('RELEASE SAVEPOINT create_party_by_hand');
+      return { partyId, contact: added };
+    } catch (error) {
+      await tx.query('ROLLBACK TO SAVEPOINT create_party_by_hand');
+      if (error instanceof KernelError) throw error;
+      if (pgCode(error) === UNIQUE_VIOLATION && nationalId !== null) {
+        const holder = await tx.query<{
+          party_id: string;
+          full_name: string;
+        }>(
+          `SELECT party_id, full_name
+             FROM party
+            WHERE national_id_key = party_national_id_key($1, $2)`,
+          [spec.kind, nationalId],
+        );
+        const other = holder.rows[0];
+        throw new KernelError('conflict', 'that identifier is already held', {
+          ...(other
+            ? { partyId: other.party_id, fullName: other.full_name }
+            : {}),
+        });
+      }
+      if (pgCode(error) === CHECK_VIOLATION) {
+        throw new KernelError('invalid', 'the name does not match the kind');
+      }
+      throw error;
+    }
+  });
 }
 
 /** One person or company, identified by its normalised ת.ז. / ח.פ. */

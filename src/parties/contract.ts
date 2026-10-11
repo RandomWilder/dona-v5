@@ -9,6 +9,7 @@
 export type {
   ContactChannel,
   CreatePartySpec,
+  HandPartySpec,
   PartyContactSpec,
   PartyKind,
   PartySpec,
@@ -19,6 +20,7 @@ export {
   closePartyContact,
   countDistinctIdentifiers,
   createParty,
+  createPartyByHand,
   setPartyNationalId,
   setPrimaryPartyContact,
   updatePartyIdentity,

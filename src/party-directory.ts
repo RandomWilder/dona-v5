@@ -1,4 +1,5 @@
 // The אנשי קשר tab. #202. Labels are composed here. #203. Contacts are edited here. #206.
+// A party is created by hand here. #207.
 //
 // It lives beside `src/index-page.ts` and `src/settings-page.ts` because the profile is assembled
 // here, at the composition root. Later tickets add a tenancy section, an estate section and a
@@ -32,6 +33,7 @@ import type {
 import {
   addPartyContact,
   closePartyContact,
+  createPartyByHand,
   readPartyNationalId,
   readPartyProfile,
   searchParties,
@@ -67,7 +69,9 @@ const styles = h`<style>
   .party-search select,
   .party-id input,
   .party-contact-add input,
-  .party-contacts input {
+  .party-contacts input,
+  .party-create input,
+  .party-create select {
     min-height: var(--size-control);
     padding-inline: var(--space-3);
     border: var(--size-hairline) solid var(--color-divider);
@@ -83,8 +87,12 @@ const styles = h`<style>
   .party-contacts { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
   .party-contacts li { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
   .party-contact-add { display: grid; gap: var(--space-3); max-inline-size: var(--size-form-max); }
+  .party-create { display: grid; gap: var(--space-3); max-inline-size: var(--size-form-max); }
   .party-contact-add label,
-  .party-contacts label { display: grid; gap: var(--space-1); }
+  .party-contacts label,
+  .party-create label { display: grid; gap: var(--space-1); }
+  .party-create .btn { justify-self: start; }
+  .party-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0 0; }
   .party-choice { display: flex; flex-wrap: wrap; gap: var(--space-4); border: 0; margin: 0; padding: 0; }
   .party-choice label { display: inline-flex; gap: var(--space-2); align-items: center; }
 </style>`;
@@ -111,6 +119,7 @@ export interface DirectoryScreen {
   mayFile: boolean;
   mayReadParties: boolean;
   mayReadNationalId?: boolean;
+  mayWriteParty?: boolean;
   openCalls?: number;
   query: string;
   /** An administrator searched by ת.ז. The typed value is not on the page. */
@@ -156,6 +165,16 @@ interface ProfileHistory {
   who: string;
   when: string;
   what: readonly string[];
+}
+
+interface CreateDraft {
+  kind: 'PERSON' | 'COMPANY';
+  givenName: string;
+  familyName: string;
+  legalName: string;
+  language: PartyProfile['language'];
+  contact: string;
+  identifier: string;
 }
 
 const LABEL_FILTERS: readonly LabelFilter[] = [
@@ -427,10 +446,18 @@ export function renderPartyDirectory(screen: DirectoryScreen): string {
   const searchedById = screen.nationalIdSearch
     ? h`<p class="lede">חיפוש לפי ת.ז.</p>`
     : h``;
+  const create =
+    screen.mayWriteParty === true
+      ? h`<p class="party-actions">
+          <a class="btn btn-primary" href="/parties/new?kind=person">אדם חדש</a>
+          <a class="btn btn-secondary" href="/parties/new?kind=company">חברה חדשה</a>
+        </p>`
+      : h``;
   const body = h`<div class="glass-stage party-directory">
     <header class="page-head">
       <h1>אנשי קשר</h1>
       <p class="lede">כל מי שהמערכת מכירה.</p>
+      ${create}
     </header>
     <form class="glass party-search" method="get" action="/parties">
       <label>חיפוש
@@ -618,6 +645,13 @@ function historyWhat(
   action: string,
   inputs: Record<string, unknown>,
 ): string[] {
+  if (action === 'parties.create') {
+    const channel =
+      typeof inputs.channel === 'string'
+        ? CHANNEL_HE[inputs.channel]
+        : undefined;
+    return channel === undefined ? ['יצירה'] : ['יצירה', channel];
+  }
   const contact = CONTACT_ACTION_HE[action];
   if (contact !== undefined) {
     const channel =
@@ -750,6 +784,161 @@ export function renderPartyProfile(screen: ProfileScreen): string {
   </div>`;
   return renderPage({
     title: `${profile.fullName} — אנשי קשר — דונה דום`,
+    styles,
+    nav: navOf(screen, 'parties'),
+    body,
+  });
+}
+
+function emptyDraft(kind: CreateDraft['kind']): CreateDraft {
+  return {
+    kind,
+    givenName: '',
+    familyName: '',
+    legalName: '',
+    language: 'he',
+    contact: '',
+    identifier: '',
+  };
+}
+
+function createDraft(body: unknown): CreateDraft {
+  const language = formField(body, 'language');
+  const known = (Object.keys(LANGUAGE_HE) as PartyProfile['language'][]).find(
+    (code) => code === language,
+  );
+  return {
+    kind: formField(body, 'kind') === 'COMPANY' ? 'COMPANY' : 'PERSON',
+    givenName: formField(body, 'given_name'),
+    familyName: formField(body, 'family_name'),
+    legalName: formField(body, 'legal_name'),
+    language: known ?? 'he',
+    contact: formField(body, 'contact'),
+    identifier: formField(body, 'identifier'),
+  };
+}
+
+function foldedContact(
+  raw: string,
+): { channel: 'PHONE' | 'EMAIL'; value: string } | null {
+  const typed = raw.trim();
+  if (typed === '') return null;
+  try {
+    return { channel: 'PHONE', value: normalisePhone(typed) };
+  } catch (error) {
+    if (!(error instanceof KernelError)) throw error;
+  }
+  try {
+    return { channel: 'EMAIL', value: normaliseEmail(typed) };
+  } catch (error) {
+    if (!(error instanceof KernelError)) throw error;
+  }
+  throw new KernelError(
+    'invalid',
+    typed.includes('@')
+      ? 'email is not an address'
+      : 'phone is not a valid E.164 number',
+  );
+}
+
+function createRefusal(error: KernelError): string {
+  if (error.message === 'a party needs a contact or an identifier') {
+    return 'אי אפשר ליצור איש קשר בלי פרטי קשר ובלי ת.ז.';
+  }
+  if (error.message.startsWith('family_name ')) return 'חסר שם משפחה.';
+  if (error.message.startsWith('legal_name ')) return 'חסר שם משפטי.';
+  if (error.message === 'a person has no legal name') {
+    return 'לאדם אין שם משפטי.';
+  }
+  if (error.message === 'a company has a legal name and no person name') {
+    return 'לחברה אין שם פרטי.';
+  }
+  if (error.message === 'preferred_language is not a known language') {
+    return 'השפה אינה תקינה.';
+  }
+  if (error.message === 'kind is not a party kind') return 'הסוג אינו תקין.';
+  return contactRefusal(error);
+}
+
+export function renderPartyCreate(screen: {
+  csrf: string;
+  mayFile: boolean;
+  mayReadParties: boolean;
+  mayReadNationalId?: boolean;
+  openCalls?: number;
+  draft: CreateDraft;
+  refusal?: string | null;
+  contactHeld?: { partyId: string; fullName: string; open?: boolean } | null;
+  nationalIdConflict?: NationalIdConflict | null;
+}): string {
+  const { draft } = screen;
+  const person = draft.kind === 'PERSON';
+  const title = person ? 'אדם חדש' : 'חברה חדשה';
+  const names = person
+    ? h`<label>שם פרטי
+        <input name="given_name" value="${draft.givenName}" autocomplete="off" maxlength="200" />
+      </label>
+      <label>שם משפחה
+        <input name="family_name" value="${draft.familyName}" autocomplete="off" maxlength="200" required />
+      </label>`
+    : h`<label>שם משפטי
+        <input name="legal_name" value="${draft.legalName}" autocomplete="off" maxlength="200" required />
+      </label>`;
+  const identifier =
+    screen.mayReadNationalId === true
+      ? h`<label>ת.ז.
+          <input name="identifier" inputmode="numeric" autocomplete="off" maxlength="64" />
+        </label>`
+      : h``;
+  const hint =
+    screen.mayReadNationalId === true
+      ? 'חובה פרטי קשר אחד, או ת.ז.'
+      : 'חובה פרטי קשר אחד.';
+  const refusal =
+    screen.refusal === undefined ||
+    screen.refusal === null ||
+    screen.refusal === ''
+      ? h``
+      : h`<p class="party-refusal">${screen.refusal}</p>`;
+  const held = screen.contactHeld;
+  const heldNote =
+    held === undefined || held === null
+      ? h``
+      : held.partyId === ''
+        ? h`<p class="party-refusal">המספר כבר רשום כאן.</p>`
+        : h`<p class="party-refusal">${held.open === false ? 'המספר רשום על' : 'המספר פתוח אצל'} <a href="/parties/${held.partyId}">${held.fullName}</a>.</p>`;
+  const clash = screen.nationalIdConflict;
+  const clashNote =
+    clash === undefined || clash === null
+      ? h``
+      : clash.partyId === ''
+        ? h`<p class="party-refusal">הת.ז. כבר רשומה על איש קשר אחר.</p>`
+        : h`<p class="party-refusal">הת.ז. כבר רשומה על <a href="/parties/${clash.partyId}">${clash.fullName}</a>.</p>`;
+  const body = h`<div class="glass-stage party-directory">
+    <header class="page-head">
+      <p class="lede"><a class="back" href="/parties">אנשי קשר</a></p>
+      <h1>${title}</h1>
+    </header>
+    <form class="glass party-create" method="post" action="/parties">
+      ${csrfInput(screen.csrf)}
+      <input type="hidden" name="kind" value="${draft.kind}" />
+      ${refusal}
+      ${heldNote}
+      ${clashNote}
+      ${names}
+      <label>שפה
+        <select name="language">${languageOptions(draft.language)}</select>
+      </label>
+      <label>טלפון או דוא״ל
+        <input name="contact" value="${draft.contact}" autocomplete="off" maxlength="320" />
+      </label>
+      ${identifier}
+      <p class="lede">${hint}</p>
+      <button class="btn" type="submit">יצירה</button>
+    </form>
+  </div>`;
+  return renderPage({
+    title: `${title} — אנשי קשר — דונה דום`,
     styles,
     nav: navOf(screen, 'parties'),
     body,
@@ -939,6 +1128,92 @@ export function registerPartyDirectoryRoutes(
       label,
       rows,
     });
+  });
+
+  app.get('/parties/new', WRITE, async (request, reply) => {
+    html(reply);
+    const raw =
+      request.query !== null && typeof request.query === 'object'
+        ? (request.query as Record<string, unknown>).kind
+        : '';
+    const kind =
+      raw === 'person' ? 'PERSON' : raw === 'company' ? 'COMPANY' : null;
+    if (kind === null) throw new KernelError('not_found', 'route not found');
+    return renderPartyCreate({
+      ...screenOf(request),
+      draft: emptyDraft(kind),
+    });
+  });
+
+  app.post('/parties', WRITE, async (request, reply) => {
+    const draft = createDraft(request.body);
+    const identifier = draft.identifier.trim();
+    if (
+      identifier !== '' &&
+      !can(request.staff?.role ?? null, 'party.national_id.read')
+    ) {
+      throw new KernelError('not_allowed', 'not_allowed');
+    }
+    try {
+      const rawKind = formField(request.body, 'kind');
+      if (rawKind !== 'PERSON' && rawKind !== 'COMPANY') {
+        throw new KernelError('invalid', 'kind is not a party kind');
+      }
+      const contact = foldedContact(draft.contact);
+      const partyId = await inTransaction(deps.pool, async (db) => {
+        const created = await createPartyByHand(db, {
+          kind: rawKind,
+          givenName: draft.givenName,
+          familyName: draft.familyName,
+          legalName: draft.legalName,
+          preferredLanguage: formField(request.body, 'language'),
+          nationalId: identifier === '' ? null : identifier,
+          contact:
+            contact === null
+              ? null
+              : {
+                  channel: contact.channel,
+                  value: contact.value,
+                  validFrom: today(deps.clock),
+                },
+        });
+        await createAuditLog(db, deps.clock).write(
+          {
+            actorKind: 'staff',
+            actorId: request.staff?.staffAccountId,
+            actorRole: request.staff?.role ?? undefined,
+            action: 'parties.create',
+            subjectId: created.partyId,
+            inputs: {
+              partyId: created.partyId,
+              ...(created.contact === null
+                ? {}
+                : { channel: created.contact.channel }),
+            },
+          },
+          { outcome: 'ok' },
+        );
+        return created.partyId;
+      });
+      return reply.code(303).header('location', `/parties/${partyId}`).send();
+    } catch (error) {
+      if (!(error instanceof KernelError)) throw error;
+      if (error.code !== 'invalid' && error.code !== 'conflict') throw error;
+      html(reply);
+      reply.code(error.code === 'conflict' ? 409 : 400);
+      const other = conflictOf(error) ?? { partyId: '', fullName: '' };
+      return renderPartyCreate({
+        ...screenOf(request),
+        draft,
+        refusal: error.code === 'invalid' ? createRefusal(error) : null,
+        contactHeld:
+          error.message === 'that number is already held'
+            ? { ...other, open: error.details?.open === true }
+            : null,
+        nationalIdConflict:
+          error.message === 'that identifier is already held' ? other : null,
+      });
+    }
   });
 
   app.get<{ Params: { partyId: string } }>(

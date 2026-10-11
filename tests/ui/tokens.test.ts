@@ -67,6 +67,7 @@ import { renderIndexPage } from '../../src/index-page.ts';
 import { hasIdentifierRun } from '../../src/kernel/identifier.ts';
 import { CSRF_FIELD } from '../../src/kernel/ui/page.ts';
 import {
+  renderPartyCreate,
   renderPartyDirectory,
   renderPartyProfile,
 } from '../../src/party-directory.ts';
@@ -2326,6 +2327,7 @@ const SCREENS: Array<[string, () => string]> = [
         csrf: CSRF,
         mayFile: true,
         mayReadParties: true,
+        mayWriteParty: true,
         query: '',
         label: null,
         rows: [
@@ -2386,6 +2388,61 @@ const SCREENS: Array<[string, () => string]> = [
               tenancyId: '44444444-4444-4444-8444-444444444444',
             },
           ],
+        },
+      }),
+  ],
+  [
+    'parties · new person',
+    () =>
+      renderPartyCreate({
+        csrf: CSRF,
+        mayFile: true,
+        mayReadParties: true,
+        draft: {
+          kind: 'PERSON',
+          givenName: '',
+          familyName: '',
+          legalName: '',
+          language: 'he',
+          contact: '',
+          identifier: '',
+        },
+      }),
+  ],
+  [
+    'parties · new company',
+    () =>
+      renderPartyCreate({
+        csrf: CSRF,
+        mayFile: true,
+        mayReadParties: true,
+        draft: {
+          kind: 'COMPANY',
+          givenName: '',
+          familyName: '',
+          legalName: '',
+          language: 'he',
+          contact: '',
+          identifier: '',
+        },
+      }),
+  ],
+  [
+    'parties · new person, administrator',
+    () =>
+      renderPartyCreate({
+        csrf: CSRF,
+        mayFile: true,
+        mayReadParties: true,
+        mayReadNationalId: true,
+        draft: {
+          kind: 'PERSON',
+          givenName: '',
+          familyName: '',
+          legalName: '',
+          language: 'he',
+          contact: '',
+          identifier: '',
         },
       }),
   ],

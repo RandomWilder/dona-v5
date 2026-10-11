@@ -197,7 +197,7 @@ answers `not_allowed` after they have typed an address into it, and the refusal 
 says nothing more, so they would learn nothing from it. The buildings list links to the screen only
 for a role that holds the permission.
 
-`party.read` is the אנשי קשר tab (`GET /parties` and `GET /parties/:partyId`, #202). A viewer holds neither it nor `party.write`, so the tab is absent from the rail and both routes refuse. `party.write` guards correcting a party's name and language (`POST /parties/:partyId`, #205). A contact or a party created by hand arrives later and reuses the same word.
+`party.read` is the אנשי קשר tab (`GET /parties` and `GET /parties/:partyId`, #202). A viewer holds neither it nor `party.write`, so the tab is absent from the rail and both routes refuse. `party.write` guards correcting a party's name and language (`POST /parties/:partyId`, #205), the three contact posts (#206), and creating a party by hand (`GET /parties/new` and `POST /parties`, #207). An operator who posts a ת.ז. on that create is refused. Writing one stays `party.national_id.read`.
 
 `party.national_id.read` is ADMIN only. It was named before it had a reader, because `SPEC.md`'s
 security default says `national_id` is **admin-only, unreachable by any agent tool, and
