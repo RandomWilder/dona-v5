@@ -200,6 +200,47 @@ export async function listTenancyParties(
   return result.rows;
 }
 
+/** One role on one letting. Facts for a label, not the label. No name, no day. #203. */
+export interface PartyTenancyRole {
+  party_id: string;
+  role: string;
+  tenancy_id: string;
+  status: string;
+  start_date: string;
+  end_date: string;
+  unit_number: string;
+}
+
+/**
+ * The roles these parties hold, with each letting's status, dates and unit.
+ *
+ * No day predicate. Whether a letting counts today is decided by the caller
+ * from these dates and the clock — the same reading the isolation join uses —
+ * and stating it here would be a second copy.
+ */
+export async function listRolesForParties(
+  db: Queryable,
+  partyIds: readonly string[],
+): Promise<PartyTenancyRole[]> {
+  if (partyIds.length === 0) return [];
+  const result = await db.query<PartyTenancyRole>(
+    `SELECT tp.party_id,
+            tp.role,
+            t.tenancy_id,
+            t.status,
+            t.start_date::text AS start_date,
+            t.end_date::text AS end_date,
+            u.unit_number
+       FROM tenancy_party tp
+       JOIN tenancy t ON t.tenancy_id = tp.tenancy_id
+       JOIN unit u ON u.unit_id = t.unit_id
+      WHERE tp.party_id = ANY($1::uuid[])
+      ORDER BY t.start_date, t.tenancy_id, tp.role`,
+    [[...partyIds]],
+  );
+  return result.rows;
+}
+
 /** One Unit let today in a Building. Names, not identifiers. #122. */
 export interface ActiveLettingInBuilding {
   unit_name: string;

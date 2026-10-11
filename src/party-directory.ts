@@ -1,4 +1,4 @@
-// The אנשי קשר tab. #202.
+// The אנשי קשר tab. #202. Labels are composed here. #203.
 //
 // It lives beside `src/index-page.ts` and `src/settings-page.ts` because the profile is assembled
 // here, at the composition root. Later tickets add a tenancy section, an estate section and a
@@ -7,10 +7,16 @@
 //
 // The phone and the email are folded here, with the same normalisers the door uses, before the
 // parties contract is asked. A second copy of either fold inside parties is the one that drifts.
+//
+// A label is the same kind of composition. Tenancy returns each role with the letting's status,
+// dates and unit, and this file decides what that is today. "Current" is the isolation join's
+// reading: the letting is ACTIVE and the clock's day falls inside the term, both ends inclusive.
+// The query that fetched the roles does not state that, and neither does a column.
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { signedInChrome } from './chrome.ts';
+import { type Clock, today } from './kernel/clock.ts';
 import { KernelError } from './kernel/errors.ts';
 import { type Html, h } from './kernel/ui/html.ts';
 import { renderPage } from './kernel/ui/page.ts';
@@ -24,6 +30,8 @@ import type {
 import { readPartyProfile, searchParties } from './parties/contract.ts';
 import { normaliseEmail, normalisePhone } from './scope/contract.ts';
 import { can, csrfFrom } from './staff/contract.ts';
+import type { PartyTenancyRole } from './tenancy/contract.ts';
+import { listRolesForParties } from './tenancy/contract.ts';
 
 const QUERY_MAX = 200;
 
@@ -44,7 +52,8 @@ const styles = h`<style>
     gap: var(--space-3);
   }
   .party-search label { display: grid; gap: var(--space-1); flex: 1 1 16rem; }
-  .party-search input {
+  .party-search input,
+  .party-search select {
     min-height: var(--size-control);
     padding-inline: var(--space-3);
     border: var(--size-hairline) solid var(--color-divider);
@@ -52,9 +61,28 @@ const styles = h`<style>
     background: var(--color-surface-card);
     font: inherit;
   }
+  .party-labels { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  a.chip { text-decoration: none; }
   .party-contacts { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
   .party-contacts li { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
 </style>`;
+
+type TermState = 'current' | 'past' | 'draft';
+type LabelFilter = TermState | 'guarantor' | 'none';
+
+interface ShownLabel {
+  kind: TermState | 'guarantor';
+  text: string;
+  tenancyId: string;
+}
+
+interface PartyLabels {
+  labels: ShownLabel[];
+  /** The party holds a role. One that has not started is not a label and not אין קשר. */
+  holdsRole: boolean;
+}
+
+const NO_LABELS: PartyLabels = { labels: [], holdsRole: false };
 
 export interface DirectoryScreen {
   csrf: string;
@@ -62,7 +90,8 @@ export interface DirectoryScreen {
   mayReadParties: boolean;
   openCalls?: number;
   query: string;
-  rows: readonly DirectoryParty[];
+  label: LabelFilter | null;
+  rows: readonly (DirectoryParty & PartyLabels)[];
 }
 
 export interface ProfileScreen {
@@ -71,12 +100,147 @@ export interface ProfileScreen {
   mayReadParties: boolean;
   openCalls?: number;
   profile: PartyProfile;
+  labels: PartyLabels;
 }
+
+const LABEL_FILTERS: readonly LabelFilter[] = [
+  'current',
+  'past',
+  'draft',
+  'guarantor',
+  'none',
+];
+
+const FILTER_HE: Record<LabelFilter, string> = {
+  current: 'שוכר נוכחי',
+  past: 'שוכר לשעבר',
+  draft: 'טיוטת חוזה',
+  guarantor: 'ערב',
+  none: 'אין קשר',
+};
+
+const ROLE_HE: Record<string, string> = {
+  PRIMARY_TENANT: 'שוכר ראשי',
+  CO_TENANT: 'שוכר נוסף',
+  OCCUPANT: 'דייר',
+};
 
 function asked(query: unknown): string {
   if (query === null || typeof query !== 'object') return '';
   const value = (query as { q?: unknown }).q;
   return typeof value === 'string' ? value : '';
+}
+
+function askedLabel(query: unknown): LabelFilter | null {
+  if (query === null || typeof query !== 'object') return null;
+  const value = (query as { label?: unknown }).label;
+  if (typeof value !== 'string') return null;
+  for (const known of LABEL_FILTERS) {
+    if (value === known) return known;
+  }
+  return null;
+}
+
+/**
+ * Whether this letting counts today.
+ *
+ * The isolation join's reading, applied to facts tenancy already returned:
+ * ACTIVE, and the day falls inside the term, both ends inclusive. Not stated
+ * as a query. A letting that is ACTIVE and has not started does not count.
+ */
+function countsToday(
+  status: string,
+  startDate: string,
+  endDate: string,
+  day: string,
+): boolean {
+  return status === 'ACTIVE' && startDate <= day && endDate >= day;
+}
+
+function termState(
+  status: string,
+  startDate: string,
+  endDate: string,
+  day: string,
+): TermState | null {
+  if (status === 'DRAFT') return 'draft';
+  if (status === 'ENDED' || status === 'TERMINATED_EARLY') return 'past';
+  if (countsToday(status, startDate, endDate, day)) return 'current';
+  if (status === 'ACTIVE' && endDate < day) return 'past';
+  return null;
+}
+
+function place(unitNumber: string): string {
+  return `דירה ${unitNumber}`;
+}
+
+function guarantorText(state: TermState | null, unitNumber: string): string {
+  const where = place(unitNumber);
+  if (state === 'current') return `ערב · פעיל · ${where}`;
+  if (state === 'draft') return `ערב · טיוטה · ${where}`;
+  if (state === 'past') return `ערב · עבר · ${where}`;
+  return `ערב · ${where}`;
+}
+
+function tenantText(
+  state: TermState,
+  role: string,
+  unitNumber: string,
+): string {
+  const kind = FILTER_HE[state];
+  const who = ROLE_HE[role] ?? role;
+  return `${kind} · ${who} · ${place(unitNumber)}`;
+}
+
+function labelsFor(
+  roles: readonly PartyTenancyRole[],
+  day: string,
+): PartyLabels {
+  const labels: ShownLabel[] = [];
+  for (const role of roles) {
+    const state = termState(role.status, role.start_date, role.end_date, day);
+    if (role.role === 'GUARANTOR') {
+      labels.push({
+        kind: 'guarantor',
+        text: guarantorText(state, role.unit_number),
+        tenancyId: role.tenancy_id,
+      });
+      continue;
+    }
+    if (state === null || ROLE_HE[role.role] === undefined) continue;
+    labels.push({
+      kind: state,
+      text: tenantText(state, role.role, role.unit_number),
+      tenancyId: role.tenancy_id,
+    });
+  }
+  return { labels, holdsRole: roles.length > 0 };
+}
+
+function carries(filter: LabelFilter | null, labelled: PartyLabels): boolean {
+  if (filter === null) return true;
+  if (filter === 'none') return !labelled.holdsRole;
+  return labelled.labels.some((label) => label.kind === filter);
+}
+
+async function labelsByParty(
+  pool: Pool,
+  clock: Clock,
+  partyIds: readonly string[],
+): Promise<Map<string, PartyLabels>> {
+  const day = today(clock);
+  const roles = await listRolesForParties(pool, partyIds);
+  const rolesOf = new Map<string, PartyTenancyRole[]>();
+  for (const role of roles) {
+    const list = rolesOf.get(role.party_id);
+    if (list) list.push(role);
+    else rolesOf.set(role.party_id, [role]);
+  }
+  const byParty = new Map<string, PartyLabels>();
+  for (const partyId of partyIds) {
+    byParty.set(partyId, labelsFor(rolesOf.get(partyId) ?? [], day));
+  }
+  return byParty;
 }
 
 /** What the box asked, turned into the one read the contract accepts. */
@@ -126,19 +290,55 @@ function navOf(
   );
 }
 
+function labelMarks(labelled: PartyLabels, linked: boolean): Html {
+  if (!labelled.holdsRole) return h`<span>${FILTER_HE.none}</span>`;
+  if (labelled.labels.length === 0) return h`—`;
+  return h`<ul class="party-labels">
+    ${labelled.labels.map((label) =>
+      linked
+        ? h`<li><a class="chip" href="/estate/tenancies/${label.tenancyId}">${label.text}</a></li>`
+        : h`<li><span class="chip">${label.text}</span></li>`,
+    )}
+  </ul>`;
+}
+
+function labelSelect(current: LabelFilter | null): Html {
+  const options: { value: string; name: string }[] = [
+    { value: '', name: 'הכל' },
+    ...LABEL_FILTERS.map((filter) => ({
+      value: filter,
+      name: FILTER_HE[filter],
+    })),
+  ];
+  return h`<label>תווית
+    <select id="party-label" name="label">
+      ${options.map((option) => {
+        const selected =
+          (option.value === '' && current === null) || option.value === current;
+        return h`<option value="${option.value}"${selected ? h` selected` : h``}>${option.name}</option>`;
+      })}
+    </select>
+  </label>`;
+}
+
 export function renderPartyDirectory(screen: DirectoryScreen): string {
+  const quiet =
+    screen.query === '' && screen.label === null
+      ? 'אין אנשי קשר.'
+      : 'אין התאמה.';
   const rows =
     screen.rows.length === 0
-      ? h`<p class="lede">${screen.query === '' ? 'אין אנשי קשר.' : 'אין התאמה.'}</p>`
+      ? h`<p class="lede">${quiet}</p>`
       : h`<div class="table-wrap">
           <table class="grid-table">
             <thead>
-              <tr><th>שם</th><th>טלפון</th><th>דוא״ל</th><th>שפה</th></tr>
+              <tr><th>שם</th><th>תווית</th><th>טלפון</th><th>דוא״ל</th><th>שפה</th></tr>
             </thead>
             <tbody>
               ${screen.rows.map(
                 (row) => h`<tr>
                   <td><a href="/parties/${row.partyId}">${row.fullName}</a></td>
+                  <td>${labelMarks(row, false)}</td>
                   <td>${blank(row.primaryPhone)}</td>
                   <td>${blank(row.primaryEmail)}</td>
                   <td>${LANGUAGE_HE[row.language]}</td>
@@ -156,6 +356,7 @@ export function renderPartyDirectory(screen: DirectoryScreen): string {
       <label>חיפוש
         <input id="party-q" type="search" name="q" value="${screen.query}" placeholder="שם, טלפון או דוא״ל" autocomplete="off" maxlength="${QUERY_MAX}" />
       </label>
+      ${labelSelect(screen.label)}
       <button class="btn" type="submit">חיפוש</button>
     </form>
     <div class="glass">${rows}</div>
@@ -211,6 +412,10 @@ export function renderPartyProfile(screen: ProfileScreen): string {
       ${identity(profile)}
     </section>
     <section class="glass">
+      <h2>תוויות</h2>
+      ${labelMarks(screen.labels, true)}
+    </section>
+    <section class="glass">
       <h2>פרטי קשר</h2>
       ${contacts(profile.contacts)}
     </section>
@@ -246,17 +451,29 @@ function screenOf(request: FastifyRequest): {
 
 export function registerPartyDirectoryRoutes(
   app: FastifyInstance,
-  deps: { pool: Pool },
+  deps: { pool: Pool; clock: Clock },
 ): void {
   const READ = { config: { staff: 'party.read' } } as const;
 
   app.get('/parties', READ, async (request, reply) => {
     html(reply);
     const raw = asked(request.query);
-    const rows = await searchParties(deps.pool, directoryQuery(raw));
+    const label = askedLabel(request.query);
+    const found = await searchParties(deps.pool, directoryQuery(raw));
+    const byParty = await labelsByParty(
+      deps.pool,
+      deps.clock,
+      found.map((row) => row.partyId),
+    );
+    const rows = found.flatMap((row) => {
+      const labels = byParty.get(row.partyId) ?? NO_LABELS;
+      if (!carries(label, labels)) return [];
+      return [{ ...row, ...labels }];
+    });
     return renderPartyDirectory({
       ...screenOf(request),
       query: raw.trim().slice(0, QUERY_MAX),
+      label,
       rows,
     });
   });
@@ -271,7 +488,11 @@ export function registerPartyDirectoryRoutes(
         validId(request.params.partyId, 'party'),
       );
       if (!profile) throw new KernelError('not_found', 'route not found');
-      return renderPartyProfile({ ...screenOf(request), profile });
+      const byParty = await labelsByParty(deps.pool, deps.clock, [
+        profile.partyId,
+      ]);
+      const labels = byParty.get(profile.partyId) ?? NO_LABELS;
+      return renderPartyProfile({ ...screenOf(request), profile, labels });
     },
   );
 }

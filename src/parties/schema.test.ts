@@ -500,16 +500,32 @@ describe('parties · the rest of the schema', () => {
       // Foundation rule 1, asserted at the table that would be most tempting to put it on: the
       // scope is a view, and `party` carries no pointer to a unit or a tenancy.
       await t.test(
-        'no column here names a unit, a tenancy or a tenant',
+        'no column, view or table stores a label or a tenancy state on the party',
         async () => {
           await inRolledBackTransaction(pool, async (db) => {
             const leaked = await db.query(
               `SELECT table_name, column_name FROM information_schema.columns
              WHERE table_schema = 'public'
-               AND table_name IN ('party', 'party_contact')
-               AND column_name IN ('unit_id', 'tenancy_id', 'current_tenant')`,
+               AND (
+                 (
+                   table_name IN ('party', 'party_contact')
+                   AND column_name IN ('unit_id', 'tenancy_id', 'current_tenant')
+                 )
+                 OR (
+                   table_name = 'party'
+                   AND column_name IN ('label', 'party_label', 'tenancy_status')
+                 )
+               )`,
             );
             assert.deepEqual(leaked.rows, []);
+            const stored = await db.query(
+              `SELECT relname FROM pg_class c
+                 JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public'
+                  AND c.relkind IN ('r', 'v', 'm')
+                  AND relname IN ('party_label', 'party_status')`,
+            );
+            assert.deepEqual(stored.rows, []);
           });
         },
       );

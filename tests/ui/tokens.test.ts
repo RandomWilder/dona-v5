@@ -2327,6 +2327,7 @@ const SCREENS: Array<[string, () => string]> = [
         mayFile: true,
         mayReadParties: true,
         query: '',
+        label: null,
         rows: [
           {
             partyId: '33333333-3333-4333-8333-333333333333',
@@ -2334,6 +2335,14 @@ const SCREENS: Array<[string, () => string]> = [
             primaryPhone: '+972521111111',
             primaryEmail: 'dana@example.test',
             language: 'he',
+            holdsRole: true,
+            labels: [
+              {
+                kind: 'current',
+                text: 'שוכר נוכחי · שוכר ראשי · דירה 4',
+                tenancyId: '44444444-4444-4444-8444-444444444444',
+              },
+            ],
           },
         ],
       }),
@@ -2360,6 +2369,16 @@ const SCREENS: Array<[string, () => string]> = [
               isPrimary: true,
               validFrom: '2024-03-01',
               validTo: null,
+            },
+          ],
+        },
+        labels: {
+          holdsRole: true,
+          labels: [
+            {
+              kind: 'current',
+              text: 'שוכר נוכחי · שוכר ראשי · דירה 4',
+              tenancyId: '44444444-4444-4444-8444-444444444444',
             },
           ],
         },

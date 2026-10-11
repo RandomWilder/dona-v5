@@ -687,7 +687,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   // Slice 5.1, and from 5.2 no longer the only routes behind a session: every route this
   // application registers declares a stance above, and the hook calls `requireStaff` once.
   registerStaffRoutes(app, staffDeps);
-  registerPartyDirectoryRoutes(app, { pool: deps.pool });
+  registerPartyDirectoryRoutes(app, { pool: deps.pool, clock });
   registerCallsRoutes(app, {
     pool: deps.pool,
     clock,

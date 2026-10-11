@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 import { asOperator, signIn, signOutAll } from '../tests/support/session.ts';
 import { buildApp } from './app.ts';
 import { fixedClock } from './kernel/clock.ts';
+import { newId } from './kernel/ids.ts';
 import { migratedPoolOrNull, skipReason } from './kernel/pg-support.ts';
 import {
   createParty,
@@ -13,6 +14,11 @@ import {
   upsertPartyContact,
 } from './parties/contract.ts';
 import { normalisePhone } from './scope/contract.ts';
+import {
+  upsertTenancy,
+  upsertTenancyParty,
+  upsertTermsProfile,
+} from './tenancy/contract.ts';
 
 const AT = new Date('2026-10-11T09:00:00.000Z');
 const DOMAIN = 'party-directory.test';
@@ -432,4 +438,411 @@ describe('parties · the אנשי קשר tab', { concurrency: false }, () => {
       await pool.end();
     }
   });
+
+  it('labels each party from its tenancies, and filters by that label', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    // Late on the office day, so the next morning is inside the session's idle
+    // window. The term still includes this day and excludes the next.
+    const clock = fixedClock(new Date('2026-10-11T20:30:00.000Z'));
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    await cleanupLabels(pool);
+    const operator = await signIn(pool, clock, {
+      email: `ops@${LABEL_DOMAIN}`,
+      role: 'OPERATOR',
+    });
+    const terms = await upsertTermsProfile(pool, LABEL_TERMS);
+    const primary = await labelledParty(pool, 'ראשי203');
+    const coTenant = await labelledParty(pool, 'שותף203');
+    const occupant = await labelledParty(pool, 'דייר203');
+    const ended = await labelledParty(pool, 'עבר203');
+    const early = await labelledParty(pool, 'מוקדם203');
+    const draft = await labelledParty(pool, 'טיוטה203');
+    const guarantor = await labelledParty(pool, 'ערב203');
+    const both = await labelledParty(pool, 'כפול203');
+    const changing = await labelledParty(pool, 'מחליף203');
+    const unrelated = await labelledParty(pool, 'בודד203');
+    const notStarted = await labelledParty(pool, 'עתיד203');
+    const primaryLetting = await placeLetting(pool, terms.id, '2031', {
+      status: 'ACTIVE',
+      startDate: '2024-01-01',
+      endDate: '2027-01-01',
+      partyId: primary,
+      role: 'PRIMARY_TENANT',
+    });
+    await placeLetting(pool, terms.id, '2032', {
+      status: 'ACTIVE',
+      startDate: '2024-02-01',
+      endDate: '2027-01-01',
+      partyId: coTenant,
+      role: 'CO_TENANT',
+    });
+    await placeLetting(pool, terms.id, '2033', {
+      status: 'ACTIVE',
+      startDate: '2024-03-01',
+      endDate: '2027-01-01',
+      partyId: occupant,
+      role: 'OCCUPANT',
+    });
+    await placeLetting(pool, terms.id, '2034', {
+      status: 'ENDED',
+      startDate: '2020-01-01',
+      endDate: '2024-01-01',
+      partyId: ended,
+      role: 'PRIMARY_TENANT',
+    });
+    await placeLetting(pool, terms.id, '2035', {
+      status: 'TERMINATED_EARLY',
+      startDate: '2024-01-01',
+      endDate: '2027-06-01',
+      actualMoveOut: '2026-06-01',
+      partyId: early,
+      role: 'PRIMARY_TENANT',
+    });
+    await placeLetting(pool, terms.id, '2036', {
+      status: 'DRAFT',
+      startDate: '2024-01-01',
+      endDate: '2027-01-01',
+      partyId: draft,
+      role: 'PRIMARY_TENANT',
+    });
+    await placeLetting(pool, terms.id, '2037', {
+      status: 'ACTIVE',
+      startDate: '2024-04-01',
+      endDate: '2027-01-01',
+      partyId: guarantor,
+      role: 'GUARANTOR',
+    });
+    await placeLetting(pool, terms.id, '2038', {
+      status: 'DRAFT',
+      startDate: '2025-01-01',
+      endDate: '2027-01-01',
+      partyId: guarantor,
+      role: 'GUARANTOR',
+    });
+    await placeLetting(pool, terms.id, '2039', {
+      status: 'TERMINATED_EARLY',
+      startDate: '2023-01-01',
+      endDate: '2027-06-01',
+      actualMoveOut: '2026-03-01',
+      partyId: guarantor,
+      role: 'GUARANTOR',
+    });
+    const bothLetting = await placeLetting(pool, terms.id, '2040', {
+      status: 'ACTIVE',
+      startDate: '2024-05-01',
+      endDate: '2027-01-01',
+      partyId: both,
+      role: 'PRIMARY_TENANT',
+    });
+    const bothGuarantee = await placeLetting(pool, terms.id, '2041', {
+      status: 'ACTIVE',
+      startDate: '2024-06-01',
+      endDate: '2027-01-01',
+      partyId: both,
+      role: 'GUARANTOR',
+    });
+    await placeLetting(pool, terms.id, '2042', {
+      status: 'ACTIVE',
+      startDate: '2024-01-01',
+      endDate: '2026-10-11',
+      partyId: changing,
+      role: 'PRIMARY_TENANT',
+    });
+    await placeLetting(pool, terms.id, '2043', {
+      status: 'ACTIVE',
+      startDate: '2026-11-01',
+      endDate: '2027-11-01',
+      partyId: notStarted,
+      role: 'PRIMARY_TENANT',
+    });
+    const client = asOperator(app, operator);
+    const partyBefore = await partyRow(pool, changing);
+    try {
+      const list = await client.inject({ method: 'GET', url: '/parties' });
+      assert.equal(list.statusCode, 200);
+      const currentRow = rowOf(list.body, 'ראשי203 תווית203');
+      assert.match(currentRow, /שוכר נוכחי/);
+      assert.match(currentRow, /שוכר ראשי/);
+      assert.match(currentRow, /דירה 2031/);
+      assert.doesNotMatch(currentRow, /שוכר לשעבר/);
+      const coRow = rowOf(list.body, 'שותף203 תווית203');
+      assert.match(coRow, /שוכר נוכחי/);
+      assert.match(coRow, /שוכר נוסף/);
+      assert.doesNotMatch(coRow, /שוכר ראשי/);
+      const occupantRow = rowOf(list.body, 'דייר203 תווית203');
+      assert.match(occupantRow, /שוכר נוכחי/);
+      assert.match(occupantRow, /דייר/);
+      assert.doesNotMatch(occupantRow, /שוכר ראשי/);
+      assert.doesNotMatch(occupantRow, /שוכר נוסף/);
+      assert.match(rowOf(list.body, 'עבר203 תווית203'), /שוכר לשעבר/);
+      assert.match(rowOf(list.body, 'מוקדם203 תווית203'), /שוכר לשעבר/);
+      assert.doesNotMatch(rowOf(list.body, 'מוקדם203 תווית203'), /שוכר נוכחי/);
+      assert.match(rowOf(list.body, 'טיוטה203 תווית203'), /טיוטת חוזה/);
+      const guarantorRow = rowOf(list.body, 'ערב203 תווית203');
+      assert.match(guarantorRow, /ערב · פעיל · דירה 2037/);
+      assert.match(guarantorRow, /ערב · טיוטה · דירה 2038/);
+      assert.match(guarantorRow, /ערב · עבר · דירה 2039/);
+      assert.doesNotMatch(guarantorRow, /שוכר/);
+      const bothRow = rowOf(list.body, 'כפול203 תווית203');
+      assert.match(bothRow, /שוכר נוכחי · שוכר ראשי · דירה 2040/);
+      assert.match(bothRow, /ערב · פעיל · דירה 2041/);
+      assert.match(rowOf(list.body, 'מחליף203 תווית203'), /שוכר נוכחי/);
+      assert.match(rowOf(list.body, 'בודד203 תווית203'), /אין קשר/);
+      const waitingRow = rowOf(list.body, 'עתיד203 תווית203');
+      assert.doesNotMatch(waitingRow, /שוכר/);
+      assert.doesNotMatch(waitingRow, /אין קשר/);
+      assert.doesNotMatch(waitingRow, /ערב/);
+
+      const currentOnly = await client.inject({
+        method: 'GET',
+        url: `/parties?q=${encodeURIComponent(LABEL_FAMILY)}&label=current`,
+      });
+      assert.equal(currentOnly.statusCode, 200);
+      assert.deepEqual(namesIn(currentOnly.body).sort(), [
+        'דייר203 תווית203',
+        'כפול203 תווית203',
+        'מחליף203 תווית203',
+        'ראשי203 תווית203',
+        'שותף203 תווית203',
+      ]);
+      const pastOnly = await client.inject({
+        method: 'GET',
+        url: `/parties?q=${encodeURIComponent(LABEL_FAMILY)}&label=past`,
+      });
+      assert.deepEqual(namesIn(pastOnly.body).sort(), [
+        'מוקדם203 תווית203',
+        'עבר203 תווית203',
+      ]);
+      const draftOnly = await client.inject({
+        method: 'GET',
+        url: `/parties?q=${encodeURIComponent(LABEL_FAMILY)}&label=draft`,
+      });
+      assert.deepEqual(namesIn(draftOnly.body), ['טיוטה203 תווית203']);
+      const guarantors = await client.inject({
+        method: 'GET',
+        url: `/parties?q=${encodeURIComponent(LABEL_FAMILY)}&label=guarantor`,
+      });
+      assert.deepEqual(namesIn(guarantors.body).sort(), [
+        'כפול203 תווית203',
+        'ערב203 תווית203',
+      ]);
+      const noRelationship = await client.inject({
+        method: 'GET',
+        url: `/parties?q=${encodeURIComponent(LABEL_FAMILY)}&label=none`,
+      });
+      assert.deepEqual(namesIn(noRelationship.body), ['בודד203 תווית203']);
+      const searched = await client.inject({
+        method: 'GET',
+        url: `/parties?q=${encodeURIComponent('ראשי203')}&label=current`,
+      });
+      assert.deepEqual(namesIn(searched.body), ['ראשי203 תווית203']);
+      const missed = await client.inject({
+        method: 'GET',
+        url: `/parties?q=${encodeURIComponent('ראשי203')}&label=past`,
+      });
+      assert.deepEqual(namesIn(missed.body), []);
+      assert.match(missed.body, /אין התאמה/);
+
+      const profile = await client.inject({
+        method: 'GET',
+        url: `/parties/${primary}`,
+      });
+      assert.equal(profile.statusCode, 200);
+      assert.match(
+        profile.body,
+        new RegExp(
+          `href="/estate/tenancies/${primaryLetting}"[^>]*>שוכר נוכחי · שוכר ראשי · דירה 2031`,
+        ),
+      );
+      const bothProfile = await client.inject({
+        method: 'GET',
+        url: `/parties/${both}`,
+      });
+      assert.match(
+        bothProfile.body,
+        new RegExp(`href="/estate/tenancies/${bothLetting}"`),
+      );
+      assert.match(
+        bothProfile.body,
+        new RegExp(`href="/estate/tenancies/${bothGuarantee}"`),
+      );
+      const guarantorProfile = await client.inject({
+        method: 'GET',
+        url: `/parties/${guarantor}`,
+      });
+      assert.match(guarantorProfile.body, /ערב · פעיל · דירה 2037/);
+      assert.doesNotMatch(guarantorProfile.body, /שוכר/);
+      const alone = await client.inject({
+        method: 'GET',
+        url: `/parties/${unrelated}`,
+      });
+      assert.match(alone.body, /אין קשר/);
+      assert.doesNotMatch(alone.body, /\/estate\/tenancies\//);
+
+      clock.advance(40 * 60 * 1000);
+      const later = await client.inject({
+        method: 'GET',
+        url: `/parties?q=${encodeURIComponent('מחליף203')}`,
+      });
+      const laterRow = rowOf(later.body, 'מחליף203 תווית203');
+      assert.match(laterRow, /שוכר לשעבר/);
+      assert.doesNotMatch(laterRow, /שוכר נוכחי/);
+      assert.deepEqual(await partyRow(pool, changing), partyBefore);
+      const stillActive = await pool.query<{ status: string }>(
+        `SELECT status FROM tenancy t
+           JOIN tenancy_party tp ON tp.tenancy_id = t.tenancy_id
+          WHERE tp.party_id = $1`,
+        [changing],
+      );
+      assert.equal(stillActive.rows[0]?.status, 'ACTIVE');
+    } finally {
+      await cleanupLabels(pool);
+      await pool.end();
+    }
+  });
 });
+
+const LABEL_DOMAIN = 'party-labels.test';
+const LABEL_FAMILY = 'תווית203';
+const LABEL_TERMS = 'label-203-terms';
+
+function namesIn(html: string): string[] {
+  const start = html.indexOf('<tbody>');
+  if (start < 0) return [];
+  const body = html.slice(start, html.indexOf('</tbody>'));
+  const names: string[] = [];
+  const pattern = />([^<]*תווית203)<\/a>/g;
+  for (const match of body.matchAll(pattern)) {
+    const name = match[1];
+    if (name) names.push(name);
+  }
+  return names;
+}
+
+async function partyRow(
+  pool: import('pg').Pool,
+  partyId: string,
+): Promise<unknown[]> {
+  const result = await pool.query(
+    `SELECT party_kind, given_name, family_name, legal_name, full_name,
+            national_id, preferred_language
+       FROM party
+      WHERE party_id = $1`,
+    [partyId],
+  );
+  return result.rows;
+}
+
+async function labelledParty(
+  pool: import('pg').Pool,
+  givenName: string,
+): Promise<string> {
+  const made = await createParty(pool, {
+    kind: 'PERSON',
+    givenName,
+    familyName: LABEL_FAMILY,
+    preferredLanguage: 'he',
+  });
+  return made.id;
+}
+
+async function placeLetting(
+  pool: import('pg').Pool,
+  termsProfileId: string,
+  unitNumber: string,
+  spec: {
+    status: 'DRAFT' | 'ACTIVE' | 'ENDED' | 'TERMINATED_EARLY';
+    startDate: string;
+    endDate: string;
+    actualMoveOut?: string;
+    partyId: string;
+    role: 'PRIMARY_TENANT' | 'CO_TENANT' | 'OCCUPANT' | 'GUARANTOR';
+  },
+): Promise<string> {
+  const buildingId = newId();
+  const unitId = newId();
+  await pool.query(
+    `INSERT INTO building (building_id, name, address_line, city, handover_date,
+                           warranty_end_date, status)
+     VALUES ($1, $2, $3, 'שוהם', '2020-01-01', '2022-01-01', 'ACTIVE')`,
+    [buildingId, `label-203-${buildingId}`, `רחוב תווית ${buildingId}`],
+  );
+  await pool.query(
+    `INSERT INTO space (space_id, building_id, space_kind, name)
+     VALUES ($1, $2, 'UNIT', $3)`,
+    [unitId, buildingId, `דירה ${unitNumber}`],
+  );
+  await pool.query(
+    `INSERT INTO unit (unit_id, unit_number, rooms, has_mamad, condition_status)
+     VALUES ($1, $2, 3.5, false, 'READY')`,
+    [unitId, unitNumber],
+  );
+  const tenancy = await upsertTenancy(pool, {
+    unitId,
+    startDate: spec.startDate,
+    endDate: spec.endDate,
+    status: spec.status,
+    termsProfileId,
+    noticeDate: null,
+    actualMoveOut: spec.actualMoveOut ?? null,
+  });
+  await upsertTenancyParty(pool, {
+    tenancyId: tenancy.id,
+    partyId: spec.partyId,
+    role: spec.role,
+    isServiceContact: spec.role !== 'GUARANTOR',
+  });
+  return tenancy.id;
+}
+
+async function cleanupLabels(pool: import('pg').Pool): Promise<void> {
+  await pool.query(
+    `DELETE FROM tenancy_party
+      WHERE party_id IN (SELECT party_id FROM party WHERE family_name = $1)`,
+    [LABEL_FAMILY],
+  );
+  await pool.query(
+    `DELETE FROM tenancy_event
+      WHERE tenancy_id IN (
+        SELECT tenancy_id FROM tenancy
+         WHERE unit_id IN (
+           SELECT space_id FROM space
+            WHERE building_id IN (
+              SELECT building_id FROM building WHERE name LIKE 'label-203-%'
+            )
+         )
+      )`,
+  );
+  await pool.query(
+    `DELETE FROM tenancy
+      WHERE unit_id IN (
+        SELECT space_id FROM space
+         WHERE building_id IN (
+           SELECT building_id FROM building WHERE name LIKE 'label-203-%'
+         )
+      )`,
+  );
+  await pool.query(
+    `DELETE FROM unit
+      WHERE unit_id IN (
+        SELECT space_id FROM space
+         WHERE building_id IN (
+           SELECT building_id FROM building WHERE name LIKE 'label-203-%'
+         )
+      )`,
+  );
+  await pool.query(
+    `DELETE FROM space
+      WHERE building_id IN (
+        SELECT building_id FROM building WHERE name LIKE 'label-203-%'
+      )`,
+  );
+  await pool.query(`DELETE FROM building WHERE name LIKE 'label-203-%'`);
+  await pool.query(`DELETE FROM terms_profile WHERE name = $1`, [LABEL_TERMS]);
+  await pool.query(`DELETE FROM party WHERE family_name = $1`, [LABEL_FAMILY]);
+  await signOutAll(pool, LABEL_DOMAIN);
+}

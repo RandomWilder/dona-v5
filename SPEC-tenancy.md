@@ -345,7 +345,10 @@ prints the rows as one list and shows the name only on the letting that counts t
   reads are what it is allowed to ask. `getTenancy` takes a `tenancy_id` and returns dates, status
   and `unit_id` — no party and no name. `listTenancyParties` returns `party_id`, `role` and
   `is_service_contact` for that letting, still no name. The composition root asks parties for the
-  names the title needs. Neither query carries a temporal predicate. An `ENDED` letting is not reopened
+  names the title needs. Neither query carries a temporal predicate. **#203 adds
+  `listRolesForParties`.** Party ids in; each role out with that tenancy's status, start, end and
+  unit number. No name, no phone, and no day predicate. The אנשי קשר page is the caller, and it
+  decides which of those lettings count today. This query does not. An `ENDED` letting is not reopened
   by the clock or by `activateTenancy`; the register may still write historical `tenancy_party`
   rows onto an `ENDED` row because that is how a past household is loaded. A required document
   whose `valid_to` is strictly before today, on an `ACTIVE` letting, is a flag on the gate and
