@@ -222,7 +222,7 @@ function optionalLabel(value: string | null): string | null {
   if (value === null) return null;
   const trimmed = value.trim();
   if (trimmed.length === 0) return null;
-  return requireText(trimmed, 'label', 80);
+  return trimmed;
 }
 
 const LANGUAGES = ['he', 'ar', 'ru', 'fr', 'en'] as const;

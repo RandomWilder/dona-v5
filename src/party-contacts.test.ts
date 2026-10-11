@@ -152,7 +152,35 @@ describe('parties · contacts on the profile', { concurrency: false }, () => {
       assert.ok(page.body.includes('יוסי – סדרן'));
       assert.ok(page.body.includes('yosef206@example.test'));
 
-      const before = rows.length;
+      const longLabel = 'א'.repeat(81);
+      const long = await client.inject({
+        method: 'POST',
+        url: `/parties/${person.id}/contacts`,
+        ...POST,
+        payload: `channel=PHONE&value=052-206-1081&label=${encodeURIComponent(longLabel)}&valid_from=2026-10-11`,
+      });
+      assert.equal(long.statusCode, 303);
+      const labelled = (await stored(pool, person.id)).find(
+        (row) => row.value === '+972522061081',
+      );
+      assert.equal(labelled?.label, longLabel);
+
+      const forged = await client.inject({
+        method: 'POST',
+        url: `/parties/${person.id}/contacts`,
+        ...POST,
+        payload: 'channel=FAX&value=052-206-1099&valid_from=2026-10-11',
+      });
+      assert.equal(forged.statusCode, 400);
+      assert.match(forged.body, /הערוץ אינו תקין/);
+      assert.equal(
+        (await stored(pool, person.id)).some(
+          (row) => row.value === '+972522061099',
+        ),
+        false,
+      );
+
+      const before = (await stored(pool, person.id)).length;
       const bad = await client.inject({
         method: 'POST',
         url: `/parties/${person.id}/contacts`,
@@ -168,7 +196,7 @@ describe('parties · contacts on the profile', { concurrency: false }, () => {
         'parties.contact.add',
         operator.staffAccountId,
       );
-      assert.equal(written.length, 4);
+      assert.equal(written.length, 5);
       for (const row of written) {
         assert.equal(row.actor_role, 'OPERATOR');
         assert.equal(row.subject_id, person.id);
@@ -445,7 +473,12 @@ describe('parties · contacts on the profile', { concurrency: false }, () => {
       });
       assert.equal(former.statusCode, 200);
       assert.match(former.body, /עמיתא206/);
-      assert.match(former.body, /מספר לשעבר/);
+      assert.match(former.body, /\+972522064001/);
+      assert.match(former.body, /החיפוש הוא מספר לשעבר/);
+      assert.equal(
+        former.body.includes('+972522064001</bdi> <span>מספר לשעבר'),
+        false,
+      );
       const current = await client.inject({
         method: 'GET',
         url: `/parties?q=${encodeURIComponent('052-206-4001')}`,

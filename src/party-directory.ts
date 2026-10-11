@@ -18,7 +18,7 @@ import type { Pool } from 'pg';
 import { signedInChrome } from './chrome.ts';
 import { auditsForSubject, createAuditLog } from './kernel/audit.ts';
 import { type Clock, dayIn, today } from './kernel/clock.ts';
-import { inTransaction } from './kernel/db.ts';
+import { inTransaction, type Queryable } from './kernel/db.ts';
 import { KernelError } from './kernel/errors.ts';
 import { type Html, h } from './kernel/ui/html.ts';
 import { csrfInput, renderPage } from './kernel/ui/page.ts';
@@ -333,6 +333,16 @@ function blank(value: string | null): Html {
   return h`<bdi dir="ltr">${value}</bdi>`;
 }
 
+function phoneCell(row: DirectoryParty): Html {
+  const phone = blank(row.primaryPhone);
+  if (!row.formerNumber) return phone;
+  const mark =
+    row.primaryPhone === null || row.primaryPhone === ''
+      ? 'מספר לשעבר'
+      : 'החיפוש הוא מספר לשעבר';
+  return h`${phone} <span>${mark}</span>`;
+}
+
 function dates(contact: ProfileContact): string {
   if (contact.validTo === null) return contact.validFrom;
   return `${contact.validFrom} – ${contact.validTo}`;
@@ -403,7 +413,7 @@ export function renderPartyDirectory(screen: DirectoryScreen): string {
                 (row) => h`<tr>
                   <td><a href="/parties/${row.partyId}">${row.fullName}</a></td>
                   <td>${labelMarks(row, false)}</td>
-                  <td>${blank(row.primaryPhone)}${row.formerNumber ? h` <span>מספר לשעבר</span>` : h``}</td>
+                  <td>${phoneCell(row)}</td>
                   <td>${blank(row.primaryEmail)}</td>
                   <td>${LANGUAGE_HE[row.language]}</td>
                 </tr>`,
@@ -681,7 +691,7 @@ function addContact(screen: ProfileScreen): Html {
       <input name="value" value="${draft?.value ?? ''}" autocomplete="off" maxlength="320" required />
     </label>
     <label>תווית
-      <input name="label" value="${draft?.label ?? ''}" placeholder="למשל יוסי – סדרן" autocomplete="off" maxlength="80" />
+      <input name="label" value="${draft?.label ?? ''}" placeholder="למשל יוסי – סדרן" autocomplete="off" />
     </label>
     <label>בתוקף מ־
       <input name="valid_from" type="date" value="${draft?.validFrom || screen.day || ''}" />
@@ -789,7 +799,7 @@ interface ContactDraft {
 function contactDraft(body: unknown, day: string): ContactDraft {
   const from = formField(body, 'valid_from').trim();
   return {
-    channel: formField(body, 'channel') === 'EMAIL' ? 'EMAIL' : 'PHONE',
+    channel: formField(body, 'channel'),
     value: formField(body, 'value'),
     label: formField(body, 'label'),
     validFrom: from === '' ? day : from,
@@ -804,8 +814,10 @@ function contactRefusal(error: KernelError): string {
     return 'המספר אינו תקין.';
   }
   if (error.message === 'email is not an address') return 'הכתובת אינה תקינה.';
+  if (error.message === 'channel is not a contact channel') {
+    return 'הערוץ אינו תקין.';
+  }
   if (error.message === 'the date is not a day') return 'התאריך אינו יום.';
-  if (error.message.startsWith('label ')) return 'התווית ארוכה מדי.';
   if (error.message === 'that contact cannot be closed') {
     return 'אי אפשר לסגור את הקשר.';
   }
@@ -1055,13 +1067,13 @@ export function registerPartyDirectoryRoutes(
     const screen = await opened(request, partyId);
     if (error.code === 'conflict') {
       reply.code(409);
-      const partyId = error.details?.partyId;
+      const heldId = error.details?.partyId;
       const fullName = error.details?.fullName;
       return renderPartyProfile({
         ...screen,
         contactHeld:
-          typeof partyId === 'string' && typeof fullName === 'string'
-            ? { partyId, fullName, open: error.details?.open === true }
+          typeof heldId === 'string' && typeof fullName === 'string'
+            ? { partyId: heldId, fullName, open: error.details?.open === true }
             : { partyId: '', fullName: '' },
         contactDraft: draft,
       });
@@ -1074,6 +1086,30 @@ export function registerPartyDirectoryRoutes(
     });
   }
 
+  async function recordContact(
+    db: Queryable,
+    request: FastifyRequest,
+    action: string,
+    partyId: string,
+    contact: { contactId: string; channel: string },
+  ): Promise<void> {
+    await createAuditLog(db, deps.clock).write(
+      {
+        actorKind: 'staff',
+        actorId: request.staff?.staffAccountId,
+        actorRole: request.staff?.role ?? undefined,
+        action,
+        subjectId: partyId,
+        inputs: {
+          partyId,
+          contactId: contact.contactId,
+          channel: contact.channel,
+        },
+      },
+      { outcome: 'ok' },
+    );
+  }
+
   app.post<{ Params: { partyId: string } }>(
     '/parties/:partyId/contacts',
     WRITE,
@@ -1082,6 +1118,9 @@ export function registerPartyDirectoryRoutes(
       const day = today(deps.clock);
       const draft = contactDraft(request.body, day);
       try {
+        if (draft.channel !== 'PHONE' && draft.channel !== 'EMAIL') {
+          throw new KernelError('invalid', 'channel is not a contact channel');
+        }
         const value =
           draft.channel === 'EMAIL'
             ? normaliseEmail(draft.value)
@@ -1094,20 +1133,12 @@ export function registerPartyDirectoryRoutes(
             label: draft.label,
             validFrom: draft.validFrom,
           });
-          await createAuditLog(db, deps.clock).write(
-            {
-              actorKind: 'staff',
-              actorId: request.staff?.staffAccountId,
-              actorRole: request.staff?.role ?? undefined,
-              action: 'parties.contact.add',
-              subjectId: partyId,
-              inputs: {
-                partyId,
-                contactId: added.contactId,
-                channel: added.channel,
-              },
-            },
-            { outcome: 'ok' },
+          await recordContact(
+            db,
+            request,
+            'parties.contact.add',
+            partyId,
+            added,
           );
         });
       } catch (error) {
@@ -1129,20 +1160,12 @@ export function registerPartyDirectoryRoutes(
             partyId,
             contactId,
           });
-          await createAuditLog(db, deps.clock).write(
-            {
-              actorKind: 'staff',
-              actorId: request.staff?.staffAccountId,
-              actorRole: request.staff?.role ?? undefined,
-              action: 'parties.contact.primary',
-              subjectId: partyId,
-              inputs: {
-                partyId,
-                contactId: marked.contactId,
-                channel: marked.channel,
-              },
-            },
-            { outcome: 'ok' },
+          await recordContact(
+            db,
+            request,
+            'parties.contact.primary',
+            partyId,
+            marked,
           );
         });
       } catch (error) {
@@ -1167,20 +1190,12 @@ export function registerPartyDirectoryRoutes(
             contactId,
             validTo,
           });
-          await createAuditLog(db, deps.clock).write(
-            {
-              actorKind: 'staff',
-              actorId: request.staff?.staffAccountId,
-              actorRole: request.staff?.role ?? undefined,
-              action: 'parties.contact.close',
-              subjectId: partyId,
-              inputs: {
-                partyId,
-                contactId: closed.contactId,
-                channel: closed.channel,
-              },
-            },
-            { outcome: 'ok' },
+          await recordContact(
+            db,
+            request,
+            'parties.contact.close',
+            partyId,
+            closed,
           );
         });
       } catch (error) {
