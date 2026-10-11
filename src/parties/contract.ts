@@ -18,6 +18,7 @@ export {
   countDistinctIdentifiers,
   createParty,
   setPartyNationalId,
+  updatePartyIdentity,
   upsertParty,
   upsertPartyContact,
 } from './internal/commands.ts';
@@ -26,6 +27,7 @@ export type {
   DirectoryQuery,
   PartyProfile,
   ProfileContact,
+  SameNameParty,
 } from './internal/directory.ts';
 export {
   readPartyNationalId,

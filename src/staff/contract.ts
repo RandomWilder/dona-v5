@@ -39,6 +39,7 @@ export type { StaffAccount } from './internal/accounts.ts';
 export {
   accountByEmail,
   accountByLocalId,
+  accountsByIds,
   addOperator,
   assignRole,
   linkLocalId,

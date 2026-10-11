@@ -2363,6 +2363,7 @@ const SCREENS: Array<[string, () => string]> = [
           fullName: 'דנה לוי',
           language: 'he',
           nationalIdSuffix: null,
+          sameName: [],
           contacts: [
             {
               channel: 'PHONE',

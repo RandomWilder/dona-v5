@@ -15,6 +15,7 @@
 import type { Clock } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
+import { validId } from '../../kernel/validate.ts';
 import type { Role } from './roles.ts';
 import type { Queryable } from './types.ts';
 
@@ -87,6 +88,26 @@ export async function accountByLocalId(
     [idpLocalId],
   );
   return rows[0] ? toAccount(rows[0]) : null;
+}
+
+export async function accountsByIds(
+  db: Queryable,
+  staffAccountIds: readonly string[],
+): Promise<StaffAccount[]> {
+  const ids = staffAccountIds.filter((id) => {
+    try {
+      validId(id, 'staff');
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  if (ids.length === 0) return [];
+  const { rows } = await db.query<AccountRow>(
+    `${SELECT_ACCOUNT} WHERE staff_account_id = ANY($1::uuid[])`,
+    [ids],
+  );
+  return rows.map(toAccount);
 }
 
 export async function accountByEmail(

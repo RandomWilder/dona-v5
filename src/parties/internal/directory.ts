@@ -39,6 +39,11 @@ export interface ProfileContact {
   validTo: string | null;
 }
 
+export interface SameNameParty {
+  partyId: string;
+  fullName: string;
+}
+
 export interface PartyProfile {
   partyId: string;
   kind: PartyKind;
@@ -49,6 +54,8 @@ export interface PartyProfile {
   language: PreferredLanguage;
   /** Last four characters of the normalised identifier. Null when the party has none. */
   nationalIdSuffix: string | null;
+  /** Other parties with this display name. A count and a link, never a merge. */
+  sameName: SameNameParty[];
   contacts: ProfileContact[];
 }
 
@@ -199,6 +206,14 @@ export async function readPartyProfile(
   );
   const row = party.rows[0];
   if (!row) return null;
+  const sameName = await db.query<{ party_id: string; full_name: string }>(
+    `SELECT party_id, full_name
+       FROM party
+      WHERE full_name = $1
+        AND party_id <> $2
+      ORDER BY party_id`,
+    [row.full_name, row.party_id],
+  );
   const contacts = await db.query<ContactRow>(
     `SELECT channel, value, is_primary, valid_from::text AS valid_from,
             valid_to::text AS valid_to
@@ -216,6 +231,10 @@ export async function readPartyProfile(
     fullName: row.full_name,
     language: language(row.preferred_language),
     nationalIdSuffix: row.national_id_suffix,
+    sameName: sameName.rows.map((other) => ({
+      partyId: other.party_id,
+      fullName: other.full_name,
+    })),
     contacts: contacts.rows.map((contact) => ({
       channel: channel(contact.channel),
       value: contact.value,

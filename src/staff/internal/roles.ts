@@ -23,8 +23,8 @@ export const PERMISSIONS = [
   'documents.write',
   'tenancy.write',
   // #202. The אנשי קשר tab. ADMIN and OPERATOR. A viewer holds neither, so the tab is
-  // absent and the routes refuse. `party.write` has no route yet: the corrections arrive
-  // later and reuse this word rather than inventing a second one.
+  // absent and the routes refuse. `party.write` is the name and language correction
+  // (#205). A contact or a party created by hand reuses this word.
   'party.read',
   'party.write',
   'settings.write',

@@ -1,7 +1,7 @@
 // #202. The אנשי קשר tab, driven the way the office drives it: a signed-in role
 // opens the list, searches, and reads a profile. #204 adds the ת.ז.: masked,
-// revealed, searched and written. Nothing here calls the parties module except
-// to put a row in place first.
+// revealed, searched and written. #205 corrects a name and a language.
+// Nothing here calls the parties module except to put a row in place first.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { asOperator, signIn, signOutAll } from '../tests/support/session.ts';
@@ -400,7 +400,7 @@ describe('parties · the אנשי קשר tab', { concurrency: false }, () => {
     }
   });
 
-  it('opens a read-only profile with the split name and every contact, and never an identifier', async (t) => {
+  it('opens a profile with the split name and every contact, and never an identifier', async (t) => {
     const pool = await migratedPoolOrNull();
     if (!pool) {
       t.skip(skipReason);
@@ -481,7 +481,8 @@ describe('parties · the אנשי קשר tab', { concurrency: false }, () => {
       assert.match(profile.body, /2022-01-01/);
       assert.match(profile.body, /2025-03-01/);
       assert.match(profile.body, /href="\/parties"/);
-      assert.doesNotMatch(profile.body, /עריכ/);
+      assert.match(profile.body, /name="family_name"/);
+      assert.match(profile.body, /name="given_name"/);
       assert.doesNotMatch(profile.body, new RegExp(SECRET));
       assert.doesNotMatch(profile.body, /national_id/);
 
@@ -1226,3 +1227,448 @@ async function cleanupLabels(pool: import('pg').Pool): Promise<void> {
   await pool.query(`DELETE FROM party WHERE family_name = $1`, [LABEL_FAMILY]);
   await signOutAll(pool, LABEL_DOMAIN);
 }
+
+const EDIT_DOMAIN = 'party-edit.test';
+const EDIT_FAMILY = 'קשקוש205';
+const EDIT_LEGAL = 'מיזוג205 בע״מ';
+
+async function cleanupEdits(pool: import('pg').Pool): Promise<void> {
+  await pool.query(
+    `DELETE FROM audit_log
+      WHERE action LIKE 'parties.%'
+        AND actor_id IN (
+          SELECT staff_account_id::text FROM staff_account WHERE email LIKE $1
+        )`,
+    [`%@${EDIT_DOMAIN}`],
+  );
+  await pool.query(
+    `DELETE FROM party
+      WHERE family_name LIKE '%205%'
+         OR given_name LIKE '%205%'
+         OR legal_name LIKE '%205%'`,
+  );
+  await signOutAll(pool, EDIT_DOMAIN);
+}
+
+describe('parties · correcting a name', { concurrency: false }, () => {
+  it("an operator corrects a person's name and language, and the audit names the fields", async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    await cleanupEdits(pool);
+    const operator = await signIn(pool, clock, {
+      email: `ops@${EDIT_DOMAIN}`,
+      role: 'OPERATOR',
+    });
+    const person = await createParty(pool, {
+      kind: 'PERSON',
+      givenName: 'עמיתא205',
+      familyName: EDIT_FAMILY,
+      preferredLanguage: 'he',
+    });
+    const client = asOperator(app, operator);
+    try {
+      const saved = await client.inject({
+        method: 'POST',
+        url: `/parties/${person.id}`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `given_name=${encodeURIComponent('נועה205')}&family_name=${encodeURIComponent(EDIT_FAMILY)}&language=en`,
+      });
+      assert.equal(saved.statusCode, 303);
+      assert.equal(saved.headers.location, `/parties/${person.id}`);
+
+      const page = await client.inject({
+        method: 'GET',
+        url: `/parties/${person.id}`,
+      });
+      assert.equal(page.statusCode, 200);
+      assert.match(page.body, /נועה205 קשקוש205/);
+      assert.match(page.body, /אנגלית/);
+
+      const written = await audits(
+        pool,
+        'parties.identity.write',
+        operator.staffAccountId,
+      );
+      assert.equal(written.length, 1);
+      assert.equal(written[0]?.actor_role, 'OPERATOR');
+      assert.equal(written[0]?.subject_id, person.id);
+      const inputs = JSON.parse(written[0]?.inputs ?? '{}') as {
+        partyId?: string;
+        fields?: string[];
+      };
+      assert.equal(inputs.partyId, person.id);
+      assert.deepEqual([...(inputs.fields ?? [])].sort(), [
+        'given_name',
+        'preferred_language',
+      ]);
+      assert.equal(written[0]?.inputs.includes('נועה205'), false);
+    } finally {
+      await cleanupEdits(pool);
+      await pool.end();
+    }
+  });
+
+  it('accepts an empty given name and shows the family name alone', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    await cleanupEdits(pool);
+    const operator = await signIn(pool, clock, {
+      email: `ops@${EDIT_DOMAIN}`,
+      role: 'OPERATOR',
+    });
+    const person = await createParty(pool, {
+      kind: 'PERSON',
+      givenName: 'עמיתא205',
+      familyName: EDIT_FAMILY,
+      preferredLanguage: 'he',
+    });
+    const client = asOperator(app, operator);
+    try {
+      const saved = await client.inject({
+        method: 'POST',
+        url: `/parties/${person.id}`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `given_name=&family_name=${encodeURIComponent(EDIT_FAMILY)}&language=he`,
+      });
+      assert.equal(saved.statusCode, 303);
+      const page = await client.inject({
+        method: 'GET',
+        url: `/parties/${person.id}`,
+      });
+      assert.match(page.body, new RegExp(`<h1>${EDIT_FAMILY}</h1>`));
+      assert.doesNotMatch(page.body, /<h1>[^<]*עמיתא205/);
+    } finally {
+      await cleanupEdits(pool);
+      await pool.end();
+    }
+  });
+
+  it("an operator corrects a company's legal name and language", async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    await cleanupEdits(pool);
+    const operator = await signIn(pool, clock, {
+      email: `ops@${EDIT_DOMAIN}`,
+      role: 'OPERATOR',
+    });
+    const company = await createParty(pool, {
+      kind: 'COMPANY',
+      legalName: EDIT_LEGAL,
+      preferredLanguage: 'he',
+    });
+    const client = asOperator(app, operator);
+    try {
+      const saved = await client.inject({
+        method: 'POST',
+        url: `/parties/${company.id}`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `legal_name=${encodeURIComponent('קירור205 בע״מ')}&language=ru`,
+      });
+      assert.equal(saved.statusCode, 303);
+      const page = await client.inject({
+        method: 'GET',
+        url: `/parties/${company.id}`,
+      });
+      assert.match(page.body, /<h1>קירור205 בע״מ<\/h1>/);
+      assert.match(page.body, /רוסית/);
+      const written = await audits(
+        pool,
+        'parties.identity.write',
+        operator.staffAccountId,
+      );
+      assert.equal(written.length, 1);
+      const inputs = JSON.parse(written[0]?.inputs ?? '{}') as {
+        fields?: string[];
+      };
+      assert.deepEqual([...(inputs.fields ?? [])].sort(), [
+        'legal_name',
+        'preferred_language',
+      ]);
+      assert.equal(written[0]?.inputs.includes('קירור205'), false);
+    } finally {
+      await cleanupEdits(pool);
+      await pool.end();
+    }
+  });
+
+  it('refuses a name the kind cannot carry, and leaves the row unchanged', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    await cleanupEdits(pool);
+    const operator = await signIn(pool, clock, {
+      email: `ops@${EDIT_DOMAIN}`,
+      role: 'OPERATOR',
+    });
+    const person = await createParty(pool, {
+      kind: 'PERSON',
+      givenName: 'עמיתא205',
+      familyName: EDIT_FAMILY,
+      preferredLanguage: 'he',
+    });
+    const client = asOperator(app, operator);
+    try {
+      const refused = await client.inject({
+        method: 'POST',
+        url: `/parties/${person.id}`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `given_name=${encodeURIComponent('עמיתא205')}&family_name=${encodeURIComponent(EDIT_FAMILY)}&legal_name=${encodeURIComponent('קירור205 בע״מ')}&language=he`,
+      });
+      assert.equal(refused.statusCode, 400);
+      assert.match(refused.body, /a person has no legal name/);
+      assert.match(
+        refused.body,
+        new RegExp(`<h1>עמיתא205 ${EDIT_FAMILY}</h1>`),
+      );
+      assert.equal(
+        (await audits(pool, 'parties.identity.write', operator.staffAccountId))
+          .length,
+        0,
+      );
+
+      const blank = await client.inject({
+        method: 'POST',
+        url: `/parties/${person.id}`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: 'given_name=&family_name=&language=he',
+      });
+      assert.equal(blank.statusCode, 400);
+      assert.match(blank.body, /family_name must be 1 to 200 characters/);
+      const still = await client.inject({
+        method: 'GET',
+        url: `/parties/${person.id}`,
+      });
+      assert.match(still.body, new RegExp(`<h1>עמיתא205 ${EDIT_FAMILY}</h1>`));
+
+      const company = await createParty(pool, {
+        kind: 'COMPANY',
+        legalName: EDIT_LEGAL,
+        preferredLanguage: 'he',
+      });
+      const companyRefused = await client.inject({
+        method: 'POST',
+        url: `/parties/${company.id}`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `given_name=${encodeURIComponent('עמיתא205')}&family_name=${encodeURIComponent(EDIT_FAMILY)}&legal_name=${encodeURIComponent(EDIT_LEGAL)}&language=he`,
+      });
+      assert.equal(companyRefused.statusCode, 400);
+      assert.match(
+        companyRefused.body,
+        /a company has a legal name and no person name/,
+      );
+      assert.match(companyRefused.body, new RegExp(`<h1>${EDIT_LEGAL}</h1>`));
+    } finally {
+      await cleanupEdits(pool);
+      await pool.end();
+    }
+  });
+
+  it('lists the edit history newest first, and never a national id value', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    await cleanupEdits(pool);
+    const operator = await signIn(pool, clock, {
+      email: `ops@${EDIT_DOMAIN}`,
+      role: 'OPERATOR',
+    });
+    const admin = await signIn(pool, clock, {
+      email: `admin@${EDIT_DOMAIN}`,
+      role: 'ADMIN',
+    });
+    const person = await createParty(pool, {
+      kind: 'PERSON',
+      givenName: 'עמיתא205',
+      familyName: EDIT_FAMILY,
+      preferredLanguage: 'he',
+    });
+    const nationalId = await unusedIdentifier(pool);
+    const asOps = asOperator(app, operator);
+    const asAdmin = asOperator(app, admin);
+    const post = {
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    };
+    try {
+      const identified = await asAdmin.inject({
+        method: 'POST',
+        url: `/parties/${person.id}/national-id`,
+        ...post,
+        payload: `identifier=${encodeURIComponent(nationalId)}`,
+      });
+      assert.equal(identified.statusCode, 303);
+      clock.advance(60_000);
+      const renamed = await asOps.inject({
+        method: 'POST',
+        url: `/parties/${person.id}`,
+        ...post,
+        payload: `given_name=${encodeURIComponent('נועה205')}&family_name=${encodeURIComponent(EDIT_FAMILY)}&language=he`,
+      });
+      assert.equal(renamed.statusCode, 303);
+      clock.advance(60_000);
+      const relabelled = await asOps.inject({
+        method: 'POST',
+        url: `/parties/${person.id}`,
+        ...post,
+        payload: `given_name=${encodeURIComponent('נועה205')}&family_name=${encodeURIComponent(EDIT_FAMILY)}&language=en`,
+      });
+      assert.equal(relabelled.statusCode, 303);
+
+      const page = await asOps.inject({
+        method: 'GET',
+        url: `/parties/${person.id}`,
+      });
+      const history = page.body.slice(page.body.indexOf('id="party-history"'));
+      assert.ok(history.startsWith('id="party-history"'));
+      const languageAt = history.indexOf('שפה');
+      const givenAt = history.indexOf('שם פרטי');
+      const identifierAt = history.indexOf('>ת.ז.<');
+      assert.ok(languageAt >= 0 && languageAt < givenAt);
+      assert.ok(givenAt < identifierAt);
+      assert.ok(
+        history.indexOf('2026-10-11 12:02') <
+          history.indexOf('2026-10-11 12:01'),
+      );
+      assert.ok(
+        history.indexOf('2026-10-11 12:01') <
+          history.indexOf('2026-10-11 12:00'),
+      );
+      assert.match(history, new RegExp(operator.email));
+      assert.match(history, new RegExp(admin.email));
+      assert.equal(history.includes(nationalId), false);
+      assert.equal(history.includes('נועה205'), false);
+    } finally {
+      await cleanupEdits(pool);
+      await pool.end();
+    }
+  });
+
+  it('refuses a viewer the edit route', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    await cleanupEdits(pool);
+    const viewer = await signIn(pool, clock, {
+      email: `view@${EDIT_DOMAIN}`,
+      role: 'VIEWER',
+    });
+    const person = await createParty(pool, {
+      kind: 'PERSON',
+      givenName: 'עמיתא205',
+      familyName: EDIT_FAMILY,
+      preferredLanguage: 'he',
+    });
+    const client = asOperator(app, viewer);
+    try {
+      const refused = await client.inject({
+        method: 'POST',
+        url: `/parties/${person.id}`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `given_name=${encodeURIComponent('נועה205')}&family_name=${encodeURIComponent(EDIT_FAMILY)}&language=en`,
+      });
+      assert.equal(refused.statusCode, 403);
+      const still = await pool.query<{ full_name: string }>(
+        'SELECT full_name FROM party WHERE party_id = $1',
+        [person.id],
+      );
+      assert.equal(still.rows[0]?.full_name, `עמיתא205 ${EDIT_FAMILY}`);
+      assert.equal(
+        (await audits(pool, 'parties.identity.write', viewer.staffAccountId))
+          .length,
+        0,
+      );
+    } finally {
+      await cleanupEdits(pool);
+      await pool.end();
+    }
+  });
+
+  it('says how many other parties share the name, and links to them', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    await cleanupEdits(pool);
+    const operator = await signIn(pool, clock, {
+      email: `ops@${EDIT_DOMAIN}`,
+      role: 'OPERATOR',
+    });
+    const first = await createParty(pool, {
+      kind: 'PERSON',
+      givenName: 'עמיתא205',
+      familyName: EDIT_FAMILY,
+      preferredLanguage: 'he',
+    });
+    const second = await createParty(pool, {
+      kind: 'PERSON',
+      givenName: 'עמיתא205',
+      familyName: EDIT_FAMILY,
+      preferredLanguage: 'ar',
+    });
+    const only = await createParty(pool, {
+      kind: 'PERSON',
+      givenName: 'רות205',
+      familyName: EDIT_FAMILY,
+      preferredLanguage: 'he',
+    });
+    const client = asOperator(app, operator);
+    try {
+      const shared = await client.inject({
+        method: 'GET',
+        url: `/parties/${first.id}`,
+      });
+      const hintAt = shared.body.indexOf('class="party-same"');
+      const hint = shared.body.slice(
+        hintAt,
+        shared.body.indexOf('</p>', hintAt),
+      );
+      assert.match(hint, /עוד 1 בשם זה/);
+      assert.match(hint, new RegExp(`href="/parties/${second.id}"`));
+      assert.doesNotMatch(hint, new RegExp(`href="/parties/${first.id}"`));
+      assert.doesNotMatch(hint, /<form/);
+      assert.equal(
+        (await audits(pool, 'parties.identity.write', operator.staffAccountId))
+          .length,
+        0,
+      );
+
+      const alone = await client.inject({
+        method: 'GET',
+        url: `/parties/${only.id}`,
+      });
+      assert.equal(alone.body.includes('class="party-same"'), false);
+    } finally {
+      await cleanupEdits(pool);
+      await pool.end();
+    }
+  });
+});

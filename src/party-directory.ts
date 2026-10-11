@@ -16,8 +16,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { signedInChrome } from './chrome.ts';
-import { createAuditLog } from './kernel/audit.ts';
-import { type Clock, today } from './kernel/clock.ts';
+import { auditsForSubject, createAuditLog } from './kernel/audit.ts';
+import { type Clock, dayIn, today } from './kernel/clock.ts';
+import { inTransaction } from './kernel/db.ts';
 import { KernelError } from './kernel/errors.ts';
 import { type Html, h } from './kernel/ui/html.ts';
 import { csrfInput, renderPage } from './kernel/ui/page.ts';
@@ -33,9 +34,10 @@ import {
   readPartyProfile,
   searchParties,
   setPartyNationalId,
+  updatePartyIdentity,
 } from './parties/contract.ts';
 import { normaliseEmail, normalisePhone } from './scope/contract.ts';
-import { can, csrfFrom } from './staff/contract.ts';
+import { accountsByIds, can, csrfFrom } from './staff/contract.ts';
 import type { PartyTenancyRole } from './tenancy/contract.ts';
 import { listRolesForParties } from './tenancy/contract.ts';
 
@@ -117,12 +119,22 @@ export interface ProfileScreen {
   mayFile: boolean;
   mayReadParties: boolean;
   mayReadNationalId?: boolean;
+  mayWriteParty?: boolean;
   openCalls?: number;
   profile: PartyProfile;
   labels: PartyLabels;
   /** The stored value, this request only. Absent on the ordinary profile. */
   revealedNationalId?: string | null;
   nationalIdConflict?: NationalIdConflict | null;
+  /** Why the last correction was refused. The row was not changed. */
+  refusal?: string | null;
+  history?: readonly ProfileHistory[];
+}
+
+interface ProfileHistory {
+  who: string;
+  when: string;
+  what: readonly string[];
 }
 
 const LABEL_FILTERS: readonly LabelFilter[] = [
@@ -451,10 +463,50 @@ function nationalIdControls(screen: ProfileScreen): Html {
     </form>`;
 }
 
+function languageOptions(current: PartyProfile['language']): Html {
+  return h`${(Object.keys(LANGUAGE_HE) as PartyProfile['language'][]).map(
+    (code) =>
+      h`<option value="${code}"${code === current ? h` selected` : h``}>${LANGUAGE_HE[code]}</option>`,
+  )}`;
+}
+
+function identityForm(screen: ProfileScreen): Html {
+  if (screen.mayWriteParty !== true) return h``;
+  const profile = screen.profile;
+  const partyId = profile.partyId;
+  const refusal =
+    screen.refusal === undefined ||
+    screen.refusal === null ||
+    screen.refusal === ''
+      ? h``
+      : h`<p class="party-refusal">${screen.refusal}</p>`;
+  const names =
+    profile.kind === 'COMPANY'
+      ? h`<label>שם משפטי
+          <input name="legal_name" value="${profile.legalName ?? ''}" autocomplete="off" maxlength="200" required />
+        </label>`
+      : h`<label>שם פרטי
+          <input name="given_name" value="${profile.givenName ?? ''}" autocomplete="off" maxlength="200" placeholder="אפשר להשאיר ריק" />
+        </label>
+        <label>שם משפחה
+          <input name="family_name" value="${profile.familyName ?? ''}" autocomplete="off" maxlength="200" required />
+        </label>`;
+  return h`${refusal}
+    <form class="party-id" method="post" action="/parties/${partyId}">
+      ${csrfInput(screen.csrf)}
+      ${names}
+      <label>שפה
+        <select name="language">${languageOptions(profile.language)}</select>
+      </label>
+      <button class="btn" type="submit">שמירה</button>
+    </form>`;
+}
+
 function identity(screen: ProfileScreen): Html {
   const profile = screen.profile;
   const language = h`<div><dt>שפה</dt><dd>${LANGUAGE_HE[profile.language]}</dd></div>`;
   const identifier = h`<div><dt>ת.ז.</dt><dd>${nationalIdValue(screen)}</dd></div>`;
+  const form = identityForm(screen);
   if (profile.kind === 'COMPANY') {
     return h`<dl class="facts">
       <div><dt>שם משפטי</dt><dd>${profile.legalName ?? '—'}</dd></div>
@@ -462,6 +514,7 @@ function identity(screen: ProfileScreen): Html {
       ${language}
       ${identifier}
     </dl>
+    ${form}
     ${nationalIdControls(screen)}`;
   }
   return h`<dl class="facts">
@@ -471,7 +524,65 @@ function identity(screen: ProfileScreen): Html {
     ${language}
     ${identifier}
   </dl>
+  ${form}
   ${nationalIdControls(screen)}`;
+}
+
+const FIELD_HE: Record<string, string> = {
+  given_name: 'שם פרטי',
+  family_name: 'שם משפחה',
+  legal_name: 'שם משפטי',
+  preferred_language: 'שפה',
+  national_id: 'ת.ז.',
+};
+
+function namedFields(inputs: Record<string, unknown>): string[] {
+  const names: string[] = [];
+  const listed = inputs.fields;
+  if (Array.isArray(listed)) {
+    for (const field of listed) {
+      if (typeof field === 'string' && FIELD_HE[field] !== undefined) {
+        names.push(FIELD_HE[field]);
+      }
+    }
+  }
+  const one = inputs.field;
+  if (typeof one === 'string' && FIELD_HE[one] !== undefined) {
+    names.push(FIELD_HE[one]);
+  }
+  return names;
+}
+
+function shownWhen(at: Date, zone: string): string {
+  const time = new Intl.DateTimeFormat('en-GB', {
+    timeZone: zone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(at);
+  return `${dayIn(at, zone)} ${time}`;
+}
+
+function sameNameHint(profile: PartyProfile): Html {
+  if (profile.sameName.length === 0) return h``;
+  return h`<p class="party-same">עוד ${String(profile.sameName.length)} בשם זה
+    ${profile.sameName.map(
+      (other) => h`<a href="/parties/${other.partyId}">${other.fullName}</a>`,
+    )}
+  </p>`;
+}
+
+function historyList(rows: readonly ProfileHistory[]): Html {
+  if (rows.length === 0) return h`<p class="lede">אין שינויים.</p>`;
+  return h`<ul class="party-contacts">
+    ${rows.map(
+      (row) => h`<li>
+        <span>${row.who}</span>
+        <span dir="ltr">${row.when}</span>
+        ${row.what.map((field) => h`<span>${field}</span>`)}
+      </li>`,
+    )}
+  </ul>`;
 }
 
 function contacts(rows: readonly ProfileContact[]): Html {
@@ -494,6 +605,7 @@ export function renderPartyProfile(screen: ProfileScreen): string {
     <header class="page-head">
       <p class="lede"><a class="back" href="/parties">אנשי קשר</a></p>
       <h1>${profile.fullName}</h1>
+      ${sameNameHint(profile)}
     </header>
     <section class="glass">
       <h2>זהות</h2>
@@ -506,6 +618,10 @@ export function renderPartyProfile(screen: ProfileScreen): string {
     <section class="glass">
       <h2>פרטי קשר</h2>
       ${contacts(profile.contacts)}
+    </section>
+    <section class="glass" id="party-history">
+      <h2>היסטוריה</h2>
+      ${historyList(screen.history ?? [])}
     </section>
   </div>`;
   return renderPage({
@@ -527,6 +643,7 @@ function screenOf(request: FastifyRequest): {
   mayFile: boolean;
   mayReadParties: boolean;
   mayReadNationalId: boolean;
+  mayWriteParty: boolean;
   openCalls?: number;
 } {
   const role = request.staff?.role ?? null;
@@ -535,6 +652,7 @@ function screenOf(request: FastifyRequest): {
     mayFile: can(role, 'documents.write'),
     mayReadParties: can(role, 'party.read'),
     mayReadNationalId: can(role, 'party.national_id.read'),
+    mayWriteParty: can(role, 'party.write'),
     openCalls: request.openCalls,
   };
 }
@@ -579,6 +697,7 @@ export function registerPartyDirectoryRoutes(
   deps: { pool: Pool; clock: Clock },
 ): void {
   const READ = { config: { staff: 'party.read' } } as const;
+  const WRITE = { config: { staff: 'party.write' } } as const;
   const IDENTIFIER = { config: { staff: 'party.national_id.read' } } as const;
 
   async function opened(
@@ -590,10 +709,35 @@ export function registerPartyDirectoryRoutes(
     const byParty = await labelsByParty(deps.pool, deps.clock, [
       profile.partyId,
     ]);
+    const recorded = (
+      await auditsForSubject(deps.pool, profile.partyId)
+    ).filter((row) => row.action.startsWith('parties.'));
+    const actors = await accountsByIds(
+      deps.pool,
+      recorded.flatMap((row) => (row.actorId === null ? [] : [row.actorId])),
+    );
+    const whoOf = new Map(
+      actors.map((account) => [
+        account.staffAccountId,
+        account.displayName ?? account.email,
+      ]),
+    );
+    const history = recorded.map((row) => {
+      const what = namedFields(row.inputs);
+      return {
+        who:
+          (row.actorId !== null ? whoOf.get(row.actorId) : undefined) ??
+          row.actorRole ??
+          '—',
+        when: shownWhen(row.at, deps.clock.zone),
+        what,
+      };
+    });
     return {
       ...screenOf(request),
       profile,
       labels: byParty.get(profile.partyId) ?? NO_LABELS,
+      history,
     };
   }
 
@@ -642,6 +786,49 @@ export function registerPartyDirectoryRoutes(
       return renderPartyProfile(
         await opened(request, validId(request.params.partyId, 'party')),
       );
+    },
+  );
+
+  app.post<{ Params: { partyId: string } }>(
+    '/parties/:partyId',
+    WRITE,
+    async (request, reply) => {
+      const partyId = validId(request.params.partyId, 'party');
+      try {
+        await inTransaction(deps.pool, async (db) => {
+          const change = await updatePartyIdentity(db, {
+            partyId,
+            givenName: formField(request.body, 'given_name'),
+            familyName: formField(request.body, 'family_name'),
+            legalName: formField(request.body, 'legal_name'),
+            preferredLanguage: formField(request.body, 'language'),
+          });
+          if (change.fields.length > 0) {
+            await createAuditLog(db, deps.clock).write(
+              {
+                actorKind: 'staff',
+                actorId: request.staff?.staffAccountId,
+                actorRole: request.staff?.role ?? undefined,
+                action: 'parties.identity.write',
+                subjectId: partyId,
+                inputs: { partyId, fields: change.fields },
+              },
+              { outcome: 'ok' },
+            );
+          }
+        });
+      } catch (error) {
+        if (!(error instanceof KernelError) || error.code !== 'invalid') {
+          throw error;
+        }
+        html(reply);
+        reply.code(400);
+        return renderPartyProfile({
+          ...(await opened(request, partyId)),
+          refusal: error.message,
+        });
+      }
+      return reply.code(303).header('location', `/parties/${partyId}`).send();
     },
   );
 

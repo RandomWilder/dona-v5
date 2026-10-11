@@ -186,6 +186,92 @@ export async function upsertParty(
 }
 
 const UNIQUE_VIOLATION = '23505';
+const CHECK_VIOLATION = '23514';
+
+const LANGUAGES = ['he', 'ar', 'ru', 'fr', 'en'] as const;
+
+export type IdentityField =
+  | 'given_name'
+  | 'family_name'
+  | 'legal_name'
+  | 'preferred_language';
+
+function preferredLanguage(value: string): PreferredLanguage {
+  for (const known of LANGUAGES) {
+    if (value === known) return known;
+  }
+  throw new KernelError(
+    'invalid',
+    'preferred_language is not a known language',
+  );
+}
+
+/**
+ * Corrects the name and the language of one party. The kind stays. A blank given
+ * name is a person known by one name. The CHECK `party_name_matches_kind` still
+ * holds: a name the kind cannot carry is refused and the row is unchanged.
+ * The names returned are the fields that changed, never the values.
+ */
+export async function updatePartyIdentity(
+  db: Queryable,
+  spec: {
+    partyId: string;
+    givenName?: string | null;
+    familyName?: string | null;
+    legalName?: string | null;
+    preferredLanguage: string;
+  },
+): Promise<{ fields: IdentityField[] }> {
+  const partyId = validId(spec.partyId, 'party');
+  const current = await db.query<{
+    party_kind: string;
+    given_name: string | null;
+    family_name: string | null;
+    legal_name: string | null;
+    preferred_language: string;
+  }>(
+    `SELECT party_kind, given_name, family_name, legal_name, preferred_language
+       FROM party
+      WHERE party_id = $1`,
+    [partyId],
+  );
+  const row = current.rows[0];
+  if (!row) throw new KernelError('not_found', 'party not found');
+  const kind: PartyKind = row.party_kind === 'COMPANY' ? 'COMPANY' : 'PERSON';
+  const name = storedName({
+    kind,
+    givenName: spec.givenName,
+    familyName: spec.familyName,
+    legalName: spec.legalName,
+  });
+  const language = preferredLanguage(spec.preferredLanguage);
+  const fields: IdentityField[] = [];
+  if (name.givenName !== row.given_name) fields.push('given_name');
+  if (name.familyName !== row.family_name) fields.push('family_name');
+  if (name.legalName !== row.legal_name) fields.push('legal_name');
+  if (language !== row.preferred_language) fields.push('preferred_language');
+  if (fields.length === 0) return { fields };
+  try {
+    const updated = await db.query(
+      `UPDATE party
+          SET given_name = $2,
+              family_name = $3,
+              legal_name = $4,
+              preferred_language = $5
+        WHERE party_id = $1`,
+      [partyId, name.givenName, name.familyName, name.legalName, language],
+    );
+    if (updated.rowCount === 0) {
+      throw new KernelError('not_found', 'party not found');
+    }
+  } catch (error) {
+    if (!(error instanceof KernelError) && pgCode(error) === CHECK_VIOLATION) {
+      throw new KernelError('invalid', 'the name does not match the kind');
+    }
+    throw error;
+  }
+  return { fields };
+}
 
 function pgCode(error: unknown): string | undefined {
   if (error !== null && typeof error === 'object' && 'code' in error) {

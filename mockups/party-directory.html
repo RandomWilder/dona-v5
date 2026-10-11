@@ -1,13 +1,14 @@
 <!--
-  Painted flow: party-directory (#201). The directory and the profile are wired (#202);
-  what remains is the screens those later tickets still have to build.
+  Painted flow: party-directory (#201). The directory, the profile (#202) and the
+  identity edit (#205) are wired. What remains is the screens later tickets still
+  have to build.
   Served at /dev/mockups/party-directory. Later tickets delete their screen from this file;
   the last one deletes the file.
 -->
 <style>
   .party .screen { display: none; }
   .party .screen:target { display: grid; gap: var(--space-6); }
-  .party:not(:has(.screen:target)) #edit { display: grid; gap: var(--space-6); }
+  .party:not(:has(.screen:target)) #contact-add { display: grid; gap: var(--space-6); }
 
   .party .paint-bar {
     display: grid;
@@ -29,9 +30,7 @@
     text-decoration: none;
   }
   .party .paint-map a:hover { color: var(--color-text); }
-  .party:not(:has(.screen:target)) .paint-map a[href="#edit"],
-  .party:has(#edit:target) .paint-map a[href="#edit"],
-  .party:has(#edit-clash:target) .paint-map a[href="#edit-clash"],
+  .party:not(:has(.screen:target)) .paint-map a[href="#contact-add"],
   .party:has(#contact-add:target) .paint-map a[href="#contact-add"],
   .party:has(#contact-held:target) .paint-map a[href="#contact-held"],
   .party:has(#contact-primary:target) .paint-map a[href="#contact-primary"],
@@ -162,11 +161,9 @@
   .party .contact-list li,
   .party .plain-list li { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
   .party .hint { margin: 0; color: var(--color-text-muted); }
-  .party .operator-note { display: none; margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); }
   .party .id-open,
   .party .hide-until-open { display: none; }
   .party:has(#stance-operator:checked) .admin-only { display: none; }
-  .party:has(#stance-operator:checked) .operator-note { display: block; }
   .party:has(#stance-admin:checked):has(#id-open:checked) .id-masked { display: none; }
   .party:has(#stance-admin:checked):has(#id-open:checked) .id-open { display: inline; }
   .party:has(#stance-admin:checked):has(#id-open:checked) .hide-until-open { display: inline-flex; }
@@ -199,8 +196,6 @@
       <label for="stance-operator">תצוגת מפעיל</label>
     </div>
     <nav class="paint-map" aria-label="מסכי ההדמיה">
-      <a href="#edit">עריכה</a>
-      <a href="#edit-clash">מזהה תפוס</a>
       <a href="#contact-add">הוספת קשר</a>
       <a href="#contact-held">קשר תפוס</a>
       <a href="#contact-primary">קשר ראשי</a>
@@ -211,126 +206,6 @@
       <a href="#create-company-refused">סירוב חברה</a>
     </nav>
   </div>
-
-  <section id="edit" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="/parties">דנה לוי</a></p>
-        <h1>עריכת שם</h1>
-      </div>
-    </header>
-    <div class="glass sheet">
-      <div class="stack">
-        <div class="field">
-          <label for="given">שם פרטי</label>
-          <input id="given" type="text" value="דנה" autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="family">שם משפחה</label>
-          <input id="family" type="text" value="לוי" autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="lang">שפה</label>
-          <select id="lang">
-            <option selected>עברית</option>
-            <option>ערבית</option>
-            <option>רוסית</option>
-          </select>
-        </div>
-        <div class="field admin-only">
-          <label for="nid">ת.ז.</label>
-          <input id="nid" class="mono" type="text" value="" inputmode="numeric" autocomplete="off" placeholder="רק למנהל" />
-        </div>
-        <p class="operator-note">מפעיל מתקן שם ושפה. שדה המזהה לא מוצג לו.</p>
-        <p class="row-actions">
-          <a class="btn btn-primary" href="/parties">שמירה</a>
-        </p>
-      </div>
-    </div>
-  </section>
-
-  <section id="edit-abu" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="/parties">אבו חמד</a></p>
-        <h1>עריכת שם</h1>
-      </div>
-    </header>
-    <div class="glass sheet">
-      <div class="stack">
-        <div class="field">
-          <label for="given-abu">שם פרטי</label>
-          <input id="given-abu" type="text" value="" autocomplete="off" placeholder="אפשר להשאיר ריק" />
-        </div>
-        <div class="field">
-          <label for="family-abu">שם משפחה</label>
-          <input id="family-abu" type="text" value="אבו חמד" autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="lang-abu">שפה</label>
-          <select id="lang-abu">
-            <option>עברית</option>
-            <option selected>ערבית</option>
-            <option>רוסית</option>
-          </select>
-        </div>
-        <p class="row-actions"><a class="btn btn-primary" href="/parties">שמירה</a></p>
-      </div>
-    </div>
-  </section>
-
-  <section id="edit-company" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="/parties">מיזוג הדגמה בע״מ</a></p>
-        <h1>עריכת שם</h1>
-      </div>
-    </header>
-    <div class="glass sheet">
-      <div class="stack">
-        <div class="field">
-          <label for="legal">שם משפטי</label>
-          <input id="legal" type="text" value="מיזוג הדגמה בע״מ" autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="lang-co">שפה</label>
-          <select id="lang-co">
-            <option selected>עברית</option>
-            <option>ערבית</option>
-            <option>רוסית</option>
-          </select>
-        </div>
-        <p class="row-actions"><a class="btn btn-primary" href="/parties">שמירה</a></p>
-      </div>
-    </div>
-  </section>
-
-  <section id="edit-clash" class="screen">
-    <header class="page-head">
-      <div>
-        <p class="lede"><a class="back" href="/parties">נועה פרץ</a></p>
-        <h1>עריכת שם</h1>
-      </div>
-    </header>
-    <div class="glass sheet">
-      <p class="refusal">הת.ז. כבר רשומה על <a href="/parties">דנה לוי</a>.</p>
-      <div class="stack">
-        <div class="field">
-          <label for="given-clash">שם פרטי</label>
-          <input id="given-clash" type="text" value="נועה" autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="family-clash">שם משפחה</label>
-          <input id="family-clash" type="text" value="פרץ" autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="nid-clash">ת.ז.</label>
-          <input id="nid-clash" class="mono" type="text" value="000000018" inputmode="numeric" autocomplete="off" />
-        </div>
-        <p class="row-actions"><a class="btn btn-secondary" href="#edit">חזרה</a></p>
-      </div>
-    </div>
-  </section>
 
   <section id="contact-add" class="screen">
     <header class="page-head">
