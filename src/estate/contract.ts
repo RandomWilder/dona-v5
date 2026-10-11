@@ -45,6 +45,14 @@ export type {
 } from './internal/promote.ts';
 export { applyPromotedField } from './internal/promote.ts';
 export type {
+  LinkedProvider,
+  ProviderForParty,
+} from './internal/providers.ts';
+export {
+  linkProvider,
+  listProvidersForParties,
+} from './internal/providers.ts';
+export type {
   EstatePurgeApplySpec,
   EstatePurgeArgs,
   EstatePurgeKind,

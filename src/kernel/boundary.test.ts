@@ -142,6 +142,24 @@ describe('the module boundary', () => {
     }
     assert.deepEqual(violations, []);
   });
+
+  it('parties does not import estate', async () => {
+    const hits: string[] = [];
+    const root = path.join(srcRoot, 'parties');
+    let scanned = 0;
+    for await (const entry of glob('**/*.ts', { cwd: root })) {
+      scanned += 1;
+      const source = await readFile(path.join(root, entry), 'utf8');
+      for (const match of source.matchAll(importSpecifier)) {
+        const specifier = match[1] ?? match[2] ?? '';
+        if (specifier.includes('/estate/')) {
+          hits.push(`${entry} → ${specifier}`);
+        }
+      }
+    }
+    assert.ok(scanned >= 1, 'parties scanned no files');
+    assert.deepEqual(hits, []);
+  });
 });
 
 // ------------------------------------------------------------------------------------------------

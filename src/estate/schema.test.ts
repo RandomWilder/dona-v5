@@ -9,6 +9,7 @@
 // drifts from it turns this suite red, which is the point: the workbook is a specification, and a
 // specification nothing reads is a description.
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 import type { PoolClient } from 'pg';
 import { newId } from '../kernel/ids.ts';
@@ -658,31 +659,36 @@ describe('estate · Asset and the Provider stub', () => {
       return;
     }
     try {
-      await t.test('the fourteen columns, and the stub’s three', async () => {
-        await inRolledBackTransaction(pool, async (db) => {
-          assert.deepEqual(await columnsOf(db, 'provider'), [
-            'name',
-            'provider_id',
-            'provider_kind',
-          ]);
-          assert.deepEqual(await columnsOf(db, 'asset'), [
-            'asset_class',
-            'asset_id',
-            'asset_type',
-            'compliance_regime',
-            'installed_date',
-            'last_certificate_document_id',
-            'make_model',
-            'next_inspection_due',
-            'serial_no',
-            'source_document_id',
-            'space_id',
-            'status',
-            'warranty_end_date',
-            'warranty_provider_id',
-          ]);
-        });
-      });
+      await t.test(
+        'the fourteen columns, and the provider’s five',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            assert.deepEqual(await columnsOf(db, 'provider'), [
+              'name',
+              'party_id',
+              'party_kind',
+              'provider_id',
+              'provider_kind',
+            ]);
+            assert.deepEqual(await columnsOf(db, 'asset'), [
+              'asset_class',
+              'asset_id',
+              'asset_type',
+              'compliance_regime',
+              'installed_date',
+              'last_certificate_document_id',
+              'make_model',
+              'next_inspection_due',
+              'serial_no',
+              'source_document_id',
+              'space_id',
+              'status',
+              'warranty_end_date',
+              'warranty_provider_id',
+            ]);
+          });
+        },
+      );
 
       await t.test('R11 · a warranty provider must be a real one', async () => {
         await inRolledBackTransaction(pool, async (db) => {
@@ -697,10 +703,16 @@ describe('estate · Asset and the Provider stub', () => {
             ),
           );
           const providerId = newId();
+          const partyId = newId();
           await db.query(
-            `INSERT INTO provider (provider_id, name, provider_kind)
-             VALUES ($1, $2, 'DEVELOPER_WARRANTY')`,
-            [providerId, `provider-${providerId.slice(24)}`],
+            `INSERT INTO party (party_id, party_kind, legal_name)
+             VALUES ($1, 'COMPANY', $2)`,
+            [partyId, `provider-${providerId.slice(24)}`],
+          );
+          await db.query(
+            `INSERT INTO provider (provider_id, name, provider_kind, party_id)
+             VALUES ($1, $2, 'DEVELOPER_WARRANTY', $3)`,
+            [providerId, `provider-${providerId.slice(24)}`, partyId],
           );
           await db.query(
             `INSERT INTO asset (asset_id, space_id, asset_class, asset_type,
@@ -754,6 +766,115 @@ describe('estate · Asset and the Provider stub', () => {
             );
             assert.equal(row.rows[0]?.building, '2027-01-01');
             assert.equal(row.rows[0]?.unit, '2028-01-01');
+          });
+        },
+      );
+
+      await t.test(
+        'a provider cannot point at a person, and the party is required',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            const nullable = await db.query<{ is_nullable: string }>(
+              `SELECT is_nullable FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'provider'
+                  AND column_name = 'party_id'`,
+            );
+            assert.equal(nullable.rows[0]?.is_nullable, 'NO');
+
+            const personId = newId();
+            await db.query(
+              `INSERT INTO party (party_id, party_kind, family_name)
+               VALUES ($1, 'PERSON', 'אדם')`,
+              [personId],
+            );
+            await rejects(db, FOREIGN_KEY_VIOLATION, () =>
+              db.query(
+                `INSERT INTO provider (provider_id, name, provider_kind, party_id)
+                 VALUES ($1, $2, 'CONTRACTOR', $3)`,
+                [newId(), `crew-${personId.slice(24)}`, personId],
+              ),
+            );
+            await rejects(db, CHECK_VIOLATION, () =>
+              db.query(
+                `INSERT INTO provider
+                   (provider_id, name, provider_kind, party_id, party_kind)
+                 VALUES ($1, $2, 'CONTRACTOR', $3, 'PERSON')`,
+                [newId(), `person-${personId.slice(24)}`, personId],
+              ),
+            );
+            await rejects(db, NOT_NULL_VIOLATION, () =>
+              db.query(
+                `INSERT INTO provider (provider_id, name, provider_kind)
+                 VALUES ($1, $2, 'CONTRACTOR')`,
+                [newId(), `bare-${personId.slice(24)}`],
+              ),
+            );
+
+            const companyId = newId();
+            await db.query(
+              `INSERT INTO party (party_id, party_kind, legal_name)
+               VALUES ($1, 'COMPANY', $2)`,
+              [companyId, `חברה-${companyId.slice(24)}`],
+            );
+            const providerId = newId();
+            await db.query(
+              `INSERT INTO provider (provider_id, name, provider_kind, party_id)
+               VALUES ($1, $2, 'CONTRACTOR', $3)`,
+              [providerId, `חברה-${companyId.slice(24)}`, companyId],
+            );
+            await rejects(db, UNIQUE_VIOLATION, () =>
+              db.query(
+                `INSERT INTO provider (provider_id, name, provider_kind, party_id)
+                 VALUES ($1, $2, 'IN_HOUSE_CREW', $3)`,
+                [newId(), `שני-${companyId.slice(24)}`, companyId],
+              ),
+            );
+          });
+        },
+      );
+
+      await t.test(
+        'the backfill gives a provider with no party one company named after it',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            await db.query(
+              'ALTER TABLE provider ALTER COLUMN party_id DROP NOT NULL',
+            );
+            const providerId = newId();
+            const name = `מילוי-${providerId.slice(24)}`;
+            await db.query(
+              `INSERT INTO provider (provider_id, name, provider_kind)
+               VALUES ($1, $2, 'DEVELOPER_WARRANTY')`,
+              [providerId, name],
+            );
+            const sql = await readFile(
+              new URL(
+                '../kernel/migrations/0061_provider_party_backfill.sql',
+                import.meta.url,
+              ),
+              'utf8',
+            );
+            await db.query(sql);
+            const linked = await db.query<{
+              party_id: string;
+              party_kind: string;
+              legal_name: string;
+            }>(
+              `SELECT party.party_id, party.party_kind, party.legal_name
+                 FROM provider
+                 JOIN party ON party.party_id = provider.party_id
+                WHERE provider.provider_id = $1`,
+              [providerId],
+            );
+            assert.equal(linked.rows.length, 1);
+            assert.equal(linked.rows[0]?.party_kind, 'COMPANY');
+            assert.equal(linked.rows[0]?.legal_name, name);
+            const again = await db.query<{ n: string }>(
+              `SELECT count(*)::text AS n FROM party WHERE legal_name = $1`,
+              [name],
+            );
+            assert.equal(again.rows[0]?.n, '1');
           });
         },
       );

@@ -78,7 +78,7 @@ Follows the workbook's entities, not v3's ([docs/from-v3.md](docs/from-v3.md) Ti
 |---|---|---|
 | `kernel` | — | — |
 | `staff` | — | kernel |
-| `estate` | E1–E4, E11, E14 — Project · Building · Space · Unit · Asset · Provider (stub) | kernel |
+| `estate` | E1–E4, E11, E14 — Project · Building · Space · Unit · Asset · Provider | kernel, parties |
 | `parties` | E5, E6 — Party · PartyContact | kernel |
 | `tenancy` | E7–E10 — Tenancy · TenancyParty · Obligation · ObligationType | estate, parties |
 | `evidence` | E12, E13, E15, E16 — Document · DocumentLink · DocumentType · DocumentTypeField · ExtractedField · FieldPromotion | estate, parties, tenancy, staff |
@@ -86,7 +86,7 @@ Follows the workbook's entities, not v3's ([docs/from-v3.md](docs/from-v3.md) Ti
 | `register` | — the register file and nothing else | estate, parties, tenancy, scope |
 | `policy` | responsibility matrix · SLA · escalation | estate, tenancy |
 | `calls` | ServiceCall · Visit · Category · Filtered message · the state machine | scope, policy, parties |
-| `channel` | Conversation · Message · the intake door · the Outlook, Gmail and WhatsApp adapters | scope, calls, parties, evidence |
+| `channel` | Conversation · Message · the intake door · the Outlook, Gmail and WhatsApp adapters | scope, calls, evidence, estate |
 
 No cycles. `Project` sits above `Building` and is optional (`Building.project_id` nullable).
 

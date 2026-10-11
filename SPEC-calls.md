@@ -46,7 +46,9 @@ and appear on the call's timeline with the staff account that issued them.
 **The door identifies from the address.** When the isolation join returns exactly one party, the
 door moves that new call NEW → IDENTIFIED with no staff account. The timeline names the address
 match, not a person. No party, or more than one, leaves the call in NEW. One party who is on two
-units is one match: the requester is a party.
+units is one match: the requester is a party. A service provider's open contact identifies the
+call the same way (#208): the join returns no unit, and the party on no lease is still a requester
+this command already accepts.
 
 **Save this contact** is a command on a call a person identified, when the sender is an email
 address or a WhatsApp number. It adds that address to the requester as a PartyContact, through

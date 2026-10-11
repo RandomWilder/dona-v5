@@ -1,5 +1,5 @@
 // The אנשי קשר tab. #202. Labels are composed here. #203. Contacts are edited here. #206.
-// A party is created by hand here. #207.
+// A party is created by hand here. #207. A company is marked a service provider here. #208.
 //
 // It lives beside `src/index-page.ts` and `src/settings-page.ts` because the profile is assembled
 // here, at the composition root. Later tickets add a tenancy section, an estate section and a
@@ -17,6 +17,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { signedInChrome } from './chrome.ts';
+import type { ProviderKind } from './estate/contract.ts';
+import { linkProvider, listProvidersForParties } from './estate/contract.ts';
 import { auditsForSubject, createAuditLog } from './kernel/audit.ts';
 import { type Clock, dayIn, today } from './kernel/clock.ts';
 import { inTransaction, type Queryable } from './kernel/db.ts';
@@ -71,7 +73,8 @@ const styles = h`<style>
   .party-contact-add input,
   .party-contacts input,
   .party-create input,
-  .party-create select {
+  .party-create select,
+  .party-provider select {
     min-height: var(--size-control);
     padding-inline: var(--space-3);
     border: var(--size-hairline) solid var(--color-divider);
@@ -90,7 +93,9 @@ const styles = h`<style>
   .party-create { display: grid; gap: var(--space-3); max-inline-size: var(--size-form-max); }
   .party-contact-add label,
   .party-contacts label,
-  .party-create label { display: grid; gap: var(--space-1); }
+  .party-create label,
+  .party-provider label { display: grid; gap: var(--space-1); }
+  .party-provider { display: grid; gap: var(--space-3); max-inline-size: var(--size-form-max); }
   .party-create .btn { justify-self: start; }
   .party-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0 0; }
   .party-choice { display: flex; flex-wrap: wrap; gap: var(--space-4); border: 0; margin: 0; padding: 0; }
@@ -98,18 +103,20 @@ const styles = h`<style>
 </style>`;
 
 type TermState = 'current' | 'past' | 'draft';
-type LabelFilter = TermState | 'guarantor' | 'none';
+type LabelFilter = TermState | 'guarantor' | 'provider' | 'none';
 
 interface ShownLabel {
-  kind: TermState | 'guarantor';
+  kind: TermState | 'guarantor' | 'provider';
   text: string;
-  tenancyId: string;
+  tenancyId: string | null;
 }
 
 interface PartyLabels {
   labels: ShownLabel[];
-  /** The party holds a role. One that has not started is not a label and not אין קשר. */
+  /** A tenancy role, or a service provider. Either one is not אין קשר. A role that has not started is neither. */
   holdsRole: boolean;
+  /** Set when the party is a service provider. Absent on a screen that has none. */
+  providerKind?: ProviderKind | null;
 }
 
 const NO_LABELS: PartyLabels = { labels: [], holdsRole: false };
@@ -159,6 +166,8 @@ export interface ProfileScreen {
     label: string;
     validFrom: string;
   };
+  /** Why marking a service provider was refused. The provider row was not changed. */
+  providerRefusal?: string | null;
 }
 
 interface ProfileHistory {
@@ -182,6 +191,7 @@ const LABEL_FILTERS: readonly LabelFilter[] = [
   'past',
   'draft',
   'guarantor',
+  'provider',
   'none',
 ];
 
@@ -190,7 +200,14 @@ const FILTER_HE: Record<LabelFilter, string> = {
   past: 'שוכר לשעבר',
   draft: 'טיוטת חוזה',
   guarantor: 'ערב',
+  provider: 'ספק שירות',
   none: 'אין קשר',
+};
+
+const PROVIDER_KIND_HE: Record<ProviderKind, string> = {
+  IN_HOUSE_CREW: 'צוות פנימי',
+  CONTRACTOR: 'קבלן',
+  DEVELOPER_WARRANTY: 'אחריות יזם',
 };
 
 const ROLE_HE: Record<string, string> = {
@@ -269,6 +286,7 @@ function tenantText(
 function labelsFor(
   roles: readonly PartyTenancyRole[],
   day: string,
+  providerKind: ProviderKind | null,
 ): PartyLabels {
   const labels: ShownLabel[] = [];
   for (const role of roles) {
@@ -288,7 +306,18 @@ function labelsFor(
       tenancyId: role.tenancy_id,
     });
   }
-  return { labels, holdsRole: roles.length > 0 };
+  if (providerKind !== null) {
+    labels.push({
+      kind: 'provider',
+      text: `ספק שירות · ${PROVIDER_KIND_HE[providerKind]}`,
+      tenancyId: null,
+    });
+  }
+  return {
+    labels,
+    holdsRole: roles.length > 0 || providerKind !== null,
+    providerKind,
+  };
 }
 
 function carries(filter: LabelFilter | null, labelled: PartyLabels): boolean {
@@ -303,16 +332,23 @@ async function labelsByParty(
   partyIds: readonly string[],
 ): Promise<Map<string, PartyLabels>> {
   const day = today(clock);
-  const roles = await listRolesForParties(pool, partyIds);
+  const [roles, providers] = await Promise.all([
+    listRolesForParties(pool, partyIds),
+    listProvidersForParties(pool, partyIds),
+  ]);
   const rolesOf = new Map<string, PartyTenancyRole[]>();
   for (const role of roles) {
     const list = rolesOf.get(role.party_id);
     if (list) list.push(role);
     else rolesOf.set(role.party_id, [role]);
   }
+  const kindOf = new Map(providers.map((row) => [row.partyId, row.kind]));
   const byParty = new Map<string, PartyLabels>();
   for (const partyId of partyIds) {
-    byParty.set(partyId, labelsFor(rolesOf.get(partyId) ?? [], day));
+    byParty.set(
+      partyId,
+      labelsFor(rolesOf.get(partyId) ?? [], day, kindOf.get(partyId) ?? null),
+    );
   }
   return byParty;
 }
@@ -388,7 +424,7 @@ function labelMarks(labelled: PartyLabels, linked: boolean): Html {
   if (labelled.labels.length === 0) return h`—`;
   return h`<ul class="party-labels">
     ${labelled.labels.map((label) =>
-      linked
+      linked && label.tenancyId !== null
         ? h`<li><a class="chip" href="/estate/tenancies/${label.tenancyId}">${label.text}</a></li>`
         : h`<li><span class="chip">${label.text}</span></li>`,
     )}
@@ -652,6 +688,10 @@ function historyWhat(
         : undefined;
     return channel === undefined ? ['יצירה'] : ['יצירה', channel];
   }
+  if (action === 'estate.provider.link') {
+    const kind = providerKindText(inputs.kind);
+    return kind === undefined ? ['ספק שירות'] : ['ספק שירות', kind];
+  }
   const contact = CONTACT_ACTION_HE[action];
   if (contact !== undefined) {
     const channel =
@@ -734,6 +774,49 @@ function addContact(screen: ProfileScreen): Html {
   </form>`;
 }
 
+function providerKindText(value: unknown): string | undefined {
+  if (
+    value === 'IN_HOUSE_CREW' ||
+    value === 'CONTRACTOR' ||
+    value === 'DEVELOPER_WARRANTY'
+  ) {
+    return PROVIDER_KIND_HE[value];
+  }
+  return undefined;
+}
+
+function providerSection(screen: ProfileScreen): Html {
+  const refused =
+    screen.providerRefusal !== undefined &&
+    screen.providerRefusal !== null &&
+    screen.providerRefusal !== '';
+  const refusal = refused
+    ? h`<p class="party-refusal">${screen.providerRefusal}</p>`
+    : h``;
+  if (screen.profile.kind !== 'COMPANY' || screen.mayWriteParty !== true) {
+    if (!refused) return h``;
+    return h`<section class="glass" id="provider">${refusal}</section>`;
+  }
+  const chosen = screen.labels.providerKind ?? null;
+  const options = (Object.keys(PROVIDER_KIND_HE) as ProviderKind[]).map(
+    (kind) => {
+      const selected = kind === chosen;
+      return h`<option value="${kind}"${selected ? h` selected` : h``}>${PROVIDER_KIND_HE[kind]}</option>`;
+    },
+  );
+  return h`<section class="glass" id="provider">
+    <h2>ספק שירות</h2>
+    <form class="party-provider" method="post" action="/parties/${screen.profile.partyId}/provider">
+      ${csrfInput(screen.csrf)}
+      ${refusal}
+      <label>סוג
+        <select name="kind">${options}</select>
+      </label>
+      <button class="btn" type="submit">סימון</button>
+    </form>
+  </section>`;
+}
+
 function contacts(screen: ProfileScreen): Html {
   const rows = screen.profile.contacts;
   const writing = screen.mayWriteParty === true;
@@ -773,6 +856,7 @@ export function renderPartyProfile(screen: ProfileScreen): string {
       <h2>תוויות</h2>
       ${labelMarks(screen.labels, true)}
     </section>
+    ${providerSection(screen)}
     <section class="glass">
       <h2>פרטי קשר</h2>
       ${contacts(screen)}
@@ -1062,7 +1146,11 @@ export function registerPartyDirectoryRoutes(
     ]);
     const recorded = (
       await auditsForSubject(deps.pool, profile.partyId)
-    ).filter((row) => row.action.startsWith('parties.'));
+    ).filter(
+      (row) =>
+        row.action.startsWith('parties.') ||
+        row.action === 'estate.provider.link',
+    );
     const actors = await accountsByIds(
       deps.pool,
       recorded.flatMap((row) => (row.actorId === null ? [] : [row.actorId])),
@@ -1475,6 +1563,42 @@ export function registerPartyDirectoryRoutes(
         });
       } catch (error) {
         return contactFailed(error, request, reply, partyId);
+      }
+      return reply.code(303).header('location', `/parties/${partyId}`).send();
+    },
+  );
+
+  app.post<{ Params: { partyId: string } }>(
+    '/parties/:partyId/provider',
+    WRITE,
+    async (request, reply) => {
+      const partyId = validId(request.params.partyId, 'party');
+      const actorId = request.staff?.staffAccountId;
+      if (actorId === undefined) {
+        throw new KernelError('not_allowed', 'not_allowed');
+      }
+      try {
+        await linkProvider(deps.pool, deps.clock, {
+          partyId,
+          kind: formField(request.body, 'kind'),
+          actorId,
+          actorRole: request.staff?.role ?? undefined,
+        });
+      } catch (error) {
+        if (!(error instanceof KernelError)) throw error;
+        if (error.code !== 'invalid' && error.code !== 'conflict') throw error;
+        html(reply);
+        reply.code(error.code === 'conflict' ? 409 : 400);
+        const reason =
+          error.message === 'a person is not a service provider'
+            ? 'אדם אינו ספק שירות.'
+            : error.message === 'a provider already has that name'
+              ? 'כבר רשום ספק בשם זה.'
+              : 'הסוג אינו תקין.';
+        return renderPartyProfile({
+          ...(await opened(request, partyId)),
+          providerRefusal: reason,
+        });
       }
       return reply.code(303).header('location', `/parties/${partyId}`).send();
     },

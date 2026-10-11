@@ -33,7 +33,14 @@ echo of something the office sent. The door then runs in this order:
    raw address. A guarantor's contact is not a match. A message that attaches to an open call does
    not identify again. An address the join cannot read — a phone that is not a number, an email
    with no `@` — is no match, and the message is still kept. Identification follows the sort
-   because only a new call has a state to move.
+   because only a new call has a state to move. **A service provider is the one party the join
+   does not return who is still identified (#208).** When the join returns nobody, the door asks
+   scope who holds that open contact today — a party, and no unit — and estate whether that party
+   is a provider. Exactly
+   one provider moves the call to IDENTIFIED. The join still returns no unit. A guarantor stays
+   unmatched even when that party is also a provider: the call stays NEW and the message is kept.
+   A contact that is not a provider, and not a service contact on an active tenancy, leaves the
+   call in NEW.
 
 **A match is never filtered.** The emergency check has already run. When the text matches, a noise
 verdict or a sorter failure still opens a flagged ServiceCall, marked "to review" unless the

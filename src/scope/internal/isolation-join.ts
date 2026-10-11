@@ -347,3 +347,31 @@ export async function resolveOccupiedUnits(
     },
   );
 }
+
+/**
+ * The one party who holds this contact on this day. #208.
+ *
+ * The same contact-validity predicate as the join, asked of `party_contact`
+ * because the occupancy view only contains a contact that already reaches a
+ * unit. No unit comes back. More than one row is nobody. This is not a scoped
+ * read of a household, so it writes no access line of its own: the join
+ * already logged the miss.
+ *
+ * `$2` is the day, because that is what `CONTACT_VALID_TODAY` binds. The value
+ * is `$3` so the predicate stays the one string.
+ */
+export async function partyHoldingContact(
+  db: Queryable,
+  spec: { channel: 'PHONE' | 'EMAIL'; value: string; day: string },
+): Promise<string | null> {
+  const result = await db.query<{ party_id: string }>(
+    `SELECT party_id
+       FROM party_contact
+      WHERE channel = $1
+        AND value = $3
+        AND ${CONTACT_VALID_TODAY}`,
+    [spec.channel, spec.day, spec.value],
+  );
+  if (result.rows.length !== 1) return null;
+  return result.rows[0]?.party_id ?? null;
+}
