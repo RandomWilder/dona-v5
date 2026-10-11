@@ -80,7 +80,7 @@ async function addPerson(
 ): Promise<string> {
   const partyId = newId();
   await db.query(
-    `INSERT INTO party (party_id, party_kind, full_name, national_id, preferred_language)
+    `INSERT INTO party (party_id, party_kind, family_name, national_id, preferred_language)
      VALUES ($1, 'PERSON', $2, $3, 'he')`,
     [partyId, name, extras.nationalId ?? null],
   );

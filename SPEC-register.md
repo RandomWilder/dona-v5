@@ -46,7 +46,7 @@ names the physical line it came from.
 | `unit_number` · `rooms` · `area_sqm` · `has_mamad` | `area_sqm` is optional; `rooms` is numeric (3, 3.5, 4). |
 | `tenancy_start` · `tenancy_end` · `tenancy_status` | `DRAFT · ACTIVE · ENDED · TERMINATED_EARLY`. |
 | `terms_profile` | The profile's name. **Required** — see below. |
-| `party_kind` · `national_id` · `full_name` · `preferred_language` | `national_id` is **required** — see below. |
+| `party_kind` · `national_id` · `given_name` · `family_name` · `legal_name` · `preferred_language` | `national_id` is **required** — see below. A `PERSON` row carries `family_name` (and `given_name` when there is one) and a blank `legal_name`. A `COMPANY` row carries `legal_name` and blank person names. A row that supplies only a combined name — a blank `family_name` on a person, a blank `legal_name` on a company — is rejected with its line number. The file has no combined-name column. |
 | `role` · `is_service_contact` | `PRIMARY_TENANT · CO_TENANT · GUARANTOR · OCCUPANT`. |
 | `phone` · `contact_from` · `contact_to` | Normalised to E.164 before insert. `contact_to` blank = still current. |
 
@@ -180,7 +180,7 @@ fact about *this* import, which slice 1.11 shipped wrongly and CI caught within 
 
 Volume and realness are different facts, and an index decision needs only the first. The real
 register is step 4 of the method ([SPEC-flows.md](SPEC-flows.md)) and 2.5 imports it; 2.6 needed
-1,500 units in these same twenty-two columns, through this same importer, so that the path under
+1,500 units in these same columns, through this same importer, so that the path under
 measurement is the path that ships.
 
 `generateRegister({ units, today, seed, cities, block })` returns the file and a summary of what is

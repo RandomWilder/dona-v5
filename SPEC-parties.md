@@ -31,14 +31,24 @@ timestamp — `verified_at` — has no `DEFAULT now()`: it is written by the inj
 
 | Table | Columns |
 |---|---|
-| `party` | `party_id` PK · `party_kind` · `full_name` · `national_id?` · `preferred_language` |
+| `party` | `party_id` PK · `party_kind` · `given_name?` · `family_name?` · `legal_name?` · `full_name` · `national_id?` · `preferred_language` |
 | `party_contact` | `contact_id` PK · `party_id` FK → party · `channel` · `value` · `is_primary` · `valid_from` · `valid_to?` · `verified_at?` |
 
 Vocabularies: `party.party_kind` = `PERSON · COMPANY`; `party.preferred_language` = `he · ar · ru ·
 fr · en`; `party_contact.channel` = `PHONE · EMAIL`.
 
-`full_name`, `national_id` and `party_contact.value` are commented `-- pii`. The first two are seen
-by guard three by name; **the third is not, and the guard was taught to see it** — below.
+`given_name`, `family_name`, `legal_name`, `full_name`, `national_id` and `party_contact.value` are
+commented `-- pii`. Guard three sees the name columns and `national_id` by name; **`party_contact.value`
+is not among the bare names, and the guard was taught to see it** — below.
+
+**#200. A name is stored in parts, and `full_name` is computed.** A `PERSON` has a `family_name` and
+no `legal_name`; `given_name` is null when the person is known by one name. A `COMPANY` has a
+`legal_name` and neither person name. A `CHECK` (`party_name_matches_kind`) rejects every other
+combination. `full_name` is a stored generated column: `given_name` and `family_name` joined by one
+space, the family name alone when `given_name` is null, the legal name for a company. Nothing writes
+it. Rows that existed before the split keep their previous display string in `full_name_before_split`,
+and the generated column uses that string only while the split columns are still null. The migration
+does not parse those strings. `createParty` and `upsertParty` take the split fields.
 
 **`preferred_language` is `NOT NULL DEFAULT 'he'`** where the workbook marks the column optional. The
 sheet's own note is "Default he", and a null language is not a behaviour the agent can have: it opens

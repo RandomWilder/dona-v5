@@ -22,6 +22,7 @@ import {
   upsertTenancyParty,
 } from '../../tenancy/contract.ts';
 import { approveExtractedField } from './approve.ts';
+import { readConfirmedName } from './confirmed-name.ts';
 import { anchorOf, getFiledDocument, linkDocument } from './documents.ts';
 import { type ExtractedRow, listExtractedFields } from './extract.ts';
 import { promoteExtractedField } from './promote.ts';
@@ -131,6 +132,13 @@ export interface ConfirmLeaseSpec {
   termsProfileName?: string;
   confirmedBy: string;
   roles: Record<string, TenancyRole>;
+  /**
+   * Given and family name posted from the confirmation screen, keyed by extracted field.
+   * Absent when the split was already stored on the approved value.
+   */
+  names?: Readonly<
+    Record<string, { givenName: string | null; familyName: string }>
+  >;
 }
 
 export interface ConfirmLeaseResult {
@@ -538,6 +546,13 @@ async function writeParties(
     roles: Record<string, TenancyRole>;
     /** When set, an unstamped name writes no party. Lease create; an addendum still posts roles. */
     stamped?: ReadonlySet<string>;
+    /**
+     * The split the confirmation screen posted, keyed by extracted field. When absent, the
+     * stored confirmation (or the extraction, proposed as first word / remainder) is used.
+     */
+    names?: Readonly<
+      Record<string, { givenName: string | null; familyName: string }>
+    >;
   },
 ): Promise<number> {
   // **Checked before anything is written**, and folded by the database rather than compared as
@@ -562,16 +577,20 @@ async function writeParties(
     }
     const role = asRole(input.roles[person.extractedFieldId]);
     const identifier = input.household.identifiers[at] ?? null;
+    const posted = input.names?.[person.extractedFieldId];
+    const name = posted ?? readConfirmedName(person.value);
     const party =
       identifier === null
         ? await createParty(db, {
             kind: 'PERSON',
-            fullName: person.value,
+            givenName: name.givenName,
+            familyName: name.familyName,
             preferredLanguage: 'he',
           })
         : await upsertParty(db, {
             kind: 'PERSON',
-            fullName: person.value,
+            givenName: name.givenName,
+            familyName: name.familyName,
             nationalId: identifier,
             preferredLanguage: 'he',
           });
@@ -611,6 +630,7 @@ async function confirmAmendment(
     roles: Record<string, TenancyRole>;
     proposed: LeaseProposal;
     household: Household;
+    names?: ConfirmLeaseSpec['names'];
   },
 ): Promise<ConfirmLeaseResult> {
   const { documentId, confirmedBy, proposed } = spec;
@@ -653,6 +673,7 @@ async function confirmAmendment(
     documentId,
     household: spec.household,
     roles: spec.roles,
+    names: spec.names,
   });
 
   await deps.audit.write(
@@ -844,6 +865,7 @@ export async function confirmLeaseTenancy(
         roles: spec.roles,
         proposed,
         household,
+        names: spec.names,
       });
     }
     const existing = await tenancyLinkOf(db, documentId);
@@ -928,6 +950,7 @@ export async function confirmLeaseTenancy(
       household,
       roles,
       stamped,
+      names: spec.names,
     });
 
     await deps.audit.write(

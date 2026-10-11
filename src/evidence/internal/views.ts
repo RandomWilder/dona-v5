@@ -33,6 +33,12 @@ import {
   type DocumentTypeRow,
   FIELD_VALUE_TYPES,
 } from './catalogue.ts';
+import {
+  displayConfirmedName,
+  HOUSEHOLD_NAME_FIELDS,
+  proposeNameSplit,
+  readConfirmedName,
+} from './confirmed-name.ts';
 import { type ExtractedRow, isIdentifierField } from './extract.ts';
 import type { IntakeRefusal } from './intake.ts';
 import type { ProposedPerson, TenancyCandidate } from './lease.ts';
@@ -923,11 +929,23 @@ function filingApproveControl(
     <form method="post" action="/documents/filing/${screen.documentId}/approve">
       ${csrfInput(screen.csrf)}
       <input type="hidden" name="extracted_field_id" value="${row.extractedFieldId}" />
-      <input class="mini" name="approved_value" value="${row.value}" maxlength="2000"
-        aria-label="הערך המאושר ל${row.labelHe}" />
+      ${confirmValueInputs(row)}
       <button class="btn btn-primary mini" type="submit">אישור</button>
     </form>
   </td>`;
+}
+
+/** A household name is confirmed as a given name and a family name. Every other field stays one value. */
+function confirmValueInputs(row: ExtractedRow): Html {
+  if (!HOUSEHOLD_NAME_FIELDS.has(row.fieldKey)) {
+    return h`<input class="mini" name="approved_value" value="${row.value}" maxlength="2000"
+      aria-label="הערך המאושר ל${row.labelHe}" />`;
+  }
+  const proposed = proposeNameSplit(row.value);
+  return h`<input class="mini" name="given_name" value="${proposed.givenName}" maxlength="200"
+      aria-label="שם פרטי" placeholder="שם פרטי" />
+    <input class="mini" name="family_name" value="${proposed.familyName}" maxlength="200" required
+      aria-label="שם משפחה" placeholder="שם משפחה" />`;
 }
 
 function uncarriedNote(
@@ -1826,9 +1844,12 @@ export interface TenancyScreen {
 export function renderTenancyPage(screen: TenancyScreen): string {
   const back = `/estate/units/${screen.unit.unit_id}`;
   const isAmendment = screen.typeKey === 'lease_amendment';
-  const people = screen.people.map(
-    (person) => h`<div class="form-row">
-      <label>${person.value}
+  const people = screen.people.map((person) => {
+    const name = readConfirmedName(person.value);
+    return h`<div class="form-row">
+      <label>${displayConfirmedName(person.value)}
+        <input class="mini" name="given-${person.extractedFieldId}" value="${name.givenName ?? ''}" maxlength="200" aria-label="שם פרטי" placeholder="שם פרטי" />
+        <input class="mini" name="family-${person.extractedFieldId}" value="${name.familyName}" maxlength="200" required aria-label="שם משפחה" placeholder="שם משפחה" />
         <select name="role-${person.extractedFieldId}">
           ${Object.entries(ROLE_LABEL).map(
             ([value, label]) =>
@@ -1846,8 +1867,8 @@ export function renderTenancyPage(screen: TenancyScreen): string {
           ? h`<p class="hint">ת.ז. נקראה מהמסמך ותשויך לאדם הזה. הערך עצמו אינו מוצג כאן.</p>`
           : h`<p class="hint">לא שויכה ת.ז. לאדם הזה.</p>`
       }
-    </div>`,
-  );
+    </div>`;
+  });
   // **Slice 6.5 splits what used to be one condition.** Creating a letting needs dates, a tenant
   // and an annex; attaching to one that already exists needs none of the three, because it writes
   // none of them. A flat with no letting on it is the case this screen has always had, and it is
@@ -2431,8 +2452,7 @@ function approveControl(screen: FieldsScreen, row: ExtractedRow): Html {
     <form method="post" action="/documents/${screen.documentId}/fields/approve">
       ${csrfInput(screen.csrf)}
       <input type="hidden" name="extracted_field_id" value="${row.extractedFieldId}" />
-      <input class="mini" name="approved_value" value="${row.value}" maxlength="2000"
-             aria-label="הערך המאושר ל${row.labelHe}" />
+      ${confirmValueInputs(row)}
       <button class="btn btn-primary mini" type="submit">אישור</button>
     </form>
   </td>`;
@@ -2442,13 +2462,15 @@ function valueCell(screen: FieldsScreen, row: ExtractedRow): Html {
   if (!shows(screen, row)) {
     return h`<td class="key">${ltr(MASK)}</td>`;
   }
-  const read = row.value;
-  if (row.approvedValue === null || row.approvedValue === row.value) {
+  const read = displayConfirmedName(row.value);
+  const approved =
+    row.approvedValue === null ? null : displayConfirmedName(row.approvedValue);
+  if (approved === null || approved === read) {
     return h`<td>${read}</td>`;
   }
   // **The delta, on the screen it was created on.** Both values, because the point of the second
   // column is that somebody can see what the reader got wrong.
-  return h`<td><span class="value">${row.approvedValue}</span>
+  return h`<td><span class="value">${approved}</span>
     <span class="second">· נקרא: ${read}</span></td>`;
 }
 

@@ -19,12 +19,14 @@ describe('parties · createParty', () => {
       await inRolledBackTransaction(pool, async (db) => {
         const first = await createParty(db, {
           kind: 'PERSON',
-          fullName: 'יעל כהן',
+          givenName: 'יעל',
+          familyName: 'כהן',
           preferredLanguage: 'he',
         });
         const second = await createParty(db, {
           kind: 'PERSON',
-          fullName: 'יעל כהן',
+          givenName: 'יעל',
+          familyName: 'כהן',
           preferredLanguage: 'he',
         });
         assert.notEqual(first.id, second.id);

@@ -560,9 +560,9 @@ the flat.
 
 The ending date stays on the letting. Under the flat's word it shows the
 chip and the lease dates (start and end) of the letting that counts today, and of the next draft
-when there is one. Under the dates of the letting that counts today it shows that household's last
-name: the last word of the name שכירויות already uses (the primary tenant, otherwise the first
-person), and the whole name when it is one word. A draft's dates on the same tile carry no name. A
+when there is one. Under the dates of the letting that counts today it shows that household's
+family name: `party.family_name` of the person שכירויות already names (the primary tenant, otherwise
+the first person). #200. The last word of the display name is not taken. A draft's dates on the same tile carry no name. A
 vacant tile stays nameless, including when a draft is waiting. Co-tenants and the full name stay
 off the tile. The chip is the same label as on שכירויות: טיוטה, ממתינה, מוכנה, or פעיל. The
 letting that counts today is פעיל. A draft's chip is `draftLabel` on the activation gate, not a

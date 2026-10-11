@@ -141,7 +141,7 @@ async function seedTenancy(db: PoolClient, spec: TenancySpec): Promise<string> {
 async function insertParty(db: PoolClient, name: string): Promise<string> {
   const partyId = newId();
   await db.query(
-    `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', $2)`,
+    `INSERT INTO party (party_id, party_kind, family_name) VALUES ($1, 'PERSON', $2)`,
     [partyId, name],
   );
   return partyId;

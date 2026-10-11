@@ -53,7 +53,8 @@ describe('calls · close by an exit', () => {
         const closer = await staff(db, clock, 'close@calls-exit.test');
         const party = await createParty(db, {
           kind: 'PERSON',
-          fullName: 'יעל כהן',
+          givenName: 'יעל',
+          familyName: 'כהן',
           preferredLanguage: 'he',
         });
         const plumbing = (await listCategories(db)).find(
@@ -195,7 +196,8 @@ describe('calls · close by an exit', () => {
         const actor = await staff(db, clock, 'more@calls-exit.test');
         const party = await createParty(db, {
           kind: 'PERSON',
-          fullName: 'דנה לוי',
+          givenName: 'דנה',
+          familyName: 'לוי',
           preferredLanguage: 'he',
         });
         const plumbing = (await listCategories(db)).find(
@@ -386,7 +388,7 @@ describe('calls · close by an exit', () => {
         });
         const late = await createParty(db, {
           kind: 'PERSON',
-          fullName: 'מאוחר',
+          familyName: 'מאוחר',
           preferredLanguage: 'he',
         });
         const plumbing = (await listCategories(db)).find(

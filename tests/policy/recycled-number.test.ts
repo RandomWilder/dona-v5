@@ -54,7 +54,7 @@ describe('policy · a recycled number', () => {
           // The new holder of the same number. No tenancy anywhere: a member of the public who was
           // reassigned a number by their carrier and messaged the service line.
           await db.query(
-            `INSERT INTO party (party_id, party_kind, full_name)
+            `INSERT INTO party (party_id, party_kind, family_name)
              VALUES ($1, 'PERSON', 'New holder of a reassigned number')`,
             [newId()],
           );

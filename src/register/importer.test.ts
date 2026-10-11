@@ -273,7 +273,7 @@ describe('register · a broken file is reported, not refused', () => {
         assert.match(reasonOn(5), /tenancy_end .* is before tenancy_start/);
         assert.match(reasonOn(6), /role .* is not one of/);
         assert.match(reasonOn(7), /terms_profile is required/);
-        assert.match(reasonOn(8), /expected 22 columns, found 21/);
+        assert.match(reasonOn(8), /expected 24 columns, found 23/);
         assert.match(reasonOn(9), /guarantor_is_never_a_service_contact/);
         assert.match(reasonOn(10), /one_active_tenancy_per_unit/);
         assert.match(reasonOn(11), /contact_value_resolves_to_one_party/);
@@ -337,6 +337,37 @@ describe('register · a broken file is reported, not refused', () => {
             `a reject quoted ${secret.slice(0, 3)}…`,
           );
         }
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('rejects a person row that carries only a combined name, with its line number', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const lines = registerFixture().split('\n');
+        const header = lines[0] ?? '';
+        const fields = (lines[1] ?? '').split(',');
+        const nationalAt = header.split(',').indexOf('national_id');
+        fields[nationalAt + 1] = 'דנה כהן';
+        fields[nationalAt + 2] = '';
+        const report = await importRegister(
+          db,
+          `${header}\n${fields.join(',')}\n`,
+        );
+        assert.equal(report.accepted, 0);
+        assert.equal(report.rejects.length, 1);
+        assert.equal(report.rejects[0]?.line, 2);
+        assert.match(
+          report.rejects[0]?.reason ?? '',
+          /family_name is required/,
+        );
       });
     } finally {
       await pool.end();

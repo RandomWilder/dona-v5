@@ -85,7 +85,7 @@ async function seedPerson(
 ): Promise<string> {
   const partyId = newId();
   await db.query(
-    `INSERT INTO party (party_id, party_kind, full_name, national_id, preferred_language)
+    `INSERT INTO party (party_id, party_kind, family_name, national_id, preferred_language)
      VALUES ($1, 'PERSON', 'פלוני אלמוני', $2, 'he')`,
     [partyId, nationalId],
   );
@@ -161,7 +161,7 @@ describe('tenancy · countIdentifierOverlap', () => {
         const company = newId();
         const companyId = idNumber();
         await db.query(
-          `INSERT INTO party (party_id, party_kind, full_name, national_id, preferred_language)
+          `INSERT INTO party (party_id, party_kind, legal_name, national_id, preferred_language)
            VALUES ($1, 'COMPANY', 'חברה בע״מ', $2, 'he')`,
           [company, companyId],
         );
@@ -269,7 +269,7 @@ async function addNamedPerson(
 ): Promise<void> {
   const partyId = newId();
   await db.query(
-    `INSERT INTO party (party_id, party_kind, full_name, preferred_language)
+    `INSERT INTO party (party_id, party_kind, family_name, preferred_language)
      VALUES ($1, 'PERSON', $2, 'he')`,
     [partyId, name],
   );

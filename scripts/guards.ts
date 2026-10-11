@@ -206,7 +206,12 @@ const PII_COLUMNS = new Set([
   'email_address',
   'first_name',
   'last_name',
+  'given_name',
+  'family_name',
+  'legal_name',
   'full_name',
+  // #200. The display string a party had before its name was stored in parts.
+  'full_name_before_split',
   'contact_name',
   // Slice 5.1. `staff_account.display_name` is an operator's own name, typed by whoever invited
   // them. The list has learned four names now -- `party_contact.value` at 2.1, `national_id_key` at

@@ -287,7 +287,8 @@ describe('calls · the קריאות tab', () => {
     const client = asOperator(app, who);
     const party = await createParty(pool, {
       kind: 'PERSON',
-      fullName: 'יעל מזוהה',
+      givenName: 'יעל',
+      familyName: 'מזוהה',
       preferredLanguage: 'he',
     });
     try {

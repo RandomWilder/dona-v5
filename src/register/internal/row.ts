@@ -5,7 +5,8 @@
 // message about a uuid or a regular expression, which says nothing about the line that is wrong.
 //
 // **A reason never echoes a person.** SPEC.md's "PII never in logs" applies to an error message the
-// moment anything catches one, so `full_name`, `national_id` and `phone` are named as columns and
+// moment anything catches one, so `given_name`, `family_name`, `legal_name`, `national_id` and
+// `phone` are named as columns and
 // never quoted back. Every other column may echo its value, because a rejection reading
 // "tenancy_status 'LIVE' is not one of ..." is worth an order of magnitude more than one reading
 // "tenancy_status is invalid" and costs nothing — the value is a vocabulary word, a date or a
@@ -29,7 +30,9 @@ export const REGISTER_COLUMNS = [
   'terms_profile',
   'party_kind',
   'national_id',
-  'full_name',
+  'given_name',
+  'family_name',
+  'legal_name',
   'preferred_language',
   'role',
   'is_service_contact',
@@ -43,7 +46,9 @@ export type RegisterColumn = (typeof REGISTER_COLUMNS)[number];
 /** The three columns whose value never reaches a message. Everything else may be quoted back. */
 const NEVER_ECHOED: ReadonlySet<RegisterColumn> = new Set([
   'national_id',
-  'full_name',
+  'given_name',
+  'family_name',
+  'legal_name',
   'phone',
 ]);
 
@@ -84,7 +89,12 @@ export interface RegisterRow {
   termsProfile: string;
   partyKind: (typeof PARTY_KINDS)[number];
   nationalId: string;
-  fullName: string;
+  /** Null on a company, and on a person known by one name. */
+  givenName: string | null;
+  /** Null on a company. */
+  familyName: string | null;
+  /** Null on a person. */
+  legalName: string | null;
   preferredLanguage: (typeof LANGUAGES)[number];
   role: (typeof ROLES)[number];
   isServiceContact: boolean;
@@ -104,7 +114,7 @@ class Reader {
     );
   }
 
-  private fail(column: RegisterColumn, reason: string): void {
+  fail(column: RegisterColumn, reason: string): void {
     this.errors.push({ column, reason });
   }
 
@@ -229,6 +239,8 @@ export function readRow(
     };
   }
   const read = new Reader(fields);
+  const partyKind = read.oneOf('party_kind', PARTY_KINDS, 'PERSON');
+  const names = nameOf(read, partyKind);
   const row: RegisterRow = {
     projectCode: read.optional('project_code'),
     projectName: read.optional('project_name'),
@@ -246,12 +258,14 @@ export function readRow(
     // what the responsibility decision keys on, so a blank is a question for the client and not a
     // value this importer may invent (SPEC-tenancy.md, SPEC-register.md).
     termsProfile: read.required('terms_profile'),
-    partyKind: read.oneOf('party_kind', PARTY_KINDS, 'PERSON'),
+    partyKind,
     // Required by the file format where the column is nullable: `national_id_key` is party's
     // natural key, and a null identifier produces a null key, which a UNIQUE index ignores. No
     // identifier, no idempotence — so the row is refused rather than imported twice.
     nationalId: read.required('national_id'),
-    fullName: read.required('full_name'),
+    givenName: names.givenName,
+    familyName: names.familyName,
+    legalName: names.legalName,
     preferredLanguage: read.oneOf('preferred_language', LANGUAGES, 'he'),
     role: read.oneOf('role', ROLES, 'PRIMARY_TENANT'),
     isServiceContact: read.boolean('is_service_contact'),
@@ -279,6 +293,49 @@ export function readRow(
     });
   }
   return read.errors.length > 0 ? { errors: read.errors } : { row };
+}
+
+/**
+ * A person needs a family name and a company a legal name. A combined name is not a column:
+ * a blank family name on a person, or a blank legal name on a company, is the row that still
+ * has only one name, and it is rejected here with the other reasons rather than written.
+ */
+function nameOf(
+  read: Reader,
+  kind: (typeof PARTY_KINDS)[number],
+): {
+  givenName: string | null;
+  familyName: string | null;
+  legalName: string | null;
+} {
+  const given = read.optional('given_name');
+  const family = read.optional('family_name');
+  const legal = read.optional('legal_name');
+  if (kind === 'COMPANY') {
+    if (given !== null) {
+      read.fail('given_name', 'given_name is only for a person');
+    }
+    if (family !== null) {
+      read.fail('family_name', 'family_name is only for a person');
+    }
+    if (legal === null) {
+      read.fail(
+        'legal_name',
+        'legal_name is required and is blank; a combined name is not accepted',
+      );
+    }
+    return { givenName: null, familyName: null, legalName: legal };
+  }
+  if (legal !== null) {
+    read.fail('legal_name', 'legal_name is only for a company');
+  }
+  if (family === null) {
+    read.fail(
+      'family_name',
+      'family_name is required and is blank; a combined name is not accepted',
+    );
+  }
+  return { givenName: given, familyName: family, legalName: null };
 }
 
 /** The condition every register row implies. A register says nothing about renovation. */

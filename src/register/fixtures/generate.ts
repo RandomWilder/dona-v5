@@ -2,7 +2,7 @@
 //
 // **Volume and realness are different facts, and an index decision needs only the first.** The real
 // register belongs to step 4 of the method (SPEC-flows.md) and 2.5 imports it; what 2.6 needs is
-// 1,500 units in the same twenty-two columns, through the same importer, so the path under
+// 1,500 units in the same columns, through the same importer, so the path under
 // measurement is the path that ships. Deferring the two index questions to the pilot would have
 // pushed two real decisions into month two on no reasoning a measurement supports.
 //
@@ -177,7 +177,9 @@ interface Party {
   kind: 'PERSON' | 'COMPANY';
   /** As it is written in this file, which is not always as it is written in another row. */
   nationalId: string;
-  fullName: string;
+  givenName: string;
+  familyName: string;
+  legalName: string;
   language: string;
   phone: string;
   contactFrom: string;
@@ -204,7 +206,7 @@ interface Line {
 }
 
 /**
- * A register at whatever volume is asked for, in the twenty-two columns `REGISTER_COLUMNS` declares.
+ * A register at whatever volume is asked for, in the columns `REGISTER_COLUMNS` declares.
  *
  * The shape is the real one: **one row per party on a tenancy**, buildings and units repeating across
  * rows and converging through their natural keys, which is what the keys added at 1.11, 2.2 and 2.4
@@ -271,9 +273,11 @@ export function generateRegister(
       nationalId: asCompany
         ? `51${block}${pad(partySeq, 6)}`
         : `07${block}${pad(partySeq, 6)}`,
-      fullName: asCompany
+      givenName: asCompany ? '' : (pick(FIRST_NAMES) as string),
+      familyName: asCompany ? '' : (pick(LAST_NAMES) as string),
+      legalName: asCompany
         ? (COMPANY_NAMES[partySeq % COMPANY_NAMES.length] as string)
-        : `${pick(FIRST_NAMES)} ${pick(LAST_NAMES)}`,
+        : '',
       language: asCompany ? 'he' : pick(LANGUAGES),
       phone: inheritedPhone ?? phone,
       contactFrom: from,
@@ -518,7 +522,9 @@ export function generateRegister(
       line.profile,
       line.party.kind,
       line.party.nationalId,
-      line.party.fullName,
+      line.party.givenName,
+      line.party.familyName,
+      line.party.legalName,
       line.party.language,
       line.role,
       line.isServiceContact,

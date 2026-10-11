@@ -2,7 +2,7 @@
 // Slice 2.6.
 //
 // It writes a file rather than loading one, and that is the point of it: the artefact is the same
-// twenty-two columns an administrator is handed and the same file 2.5's real export will be, so what
+// columns an administrator is handed and the same file 2.5's real export will be, so what
 // gets timed at 1,500 units is the whole path -- read, parse, validate, write -- and not a shortcut
 // through it. `src/seed-register.ts` is the other door, for an environment that needs volume without
 // a file.

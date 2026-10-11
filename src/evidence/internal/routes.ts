@@ -92,6 +92,10 @@ import {
   listDocumentTypes,
   retireDocumentTypeField,
 } from './catalogue.ts';
+import {
+  approvedNameFromForm,
+  displayConfirmedName,
+} from './confirmed-name.ts';
 import { anchorOf, getFiledDocument } from './documents.ts';
 import {
   EXTRACT_WORK_KIND,
@@ -626,7 +630,8 @@ export function registerDocumentRoutes(
     return found.rows[0]?.tenancy_id ?? null;
   };
 
-  const printed = (row: ExtractedRow): string => row.approvedValue ?? row.value;
+  const printed = (row: ExtractedRow): string =>
+    displayConfirmedName(row.approvedValue ?? row.value);
 
   const filingOfDocument = async (
     request: FastifyRequest,
@@ -793,11 +798,10 @@ export function registerDocumentRoutes(
         audit: createAuditLog(deps.pool, deps.clock),
         clock: deps.clock,
       };
+      const approvedValue = approvedNameFromForm(fields);
       await approveExtractedField(approveDeps, {
         extractedFieldId,
-        ...(fields.approved_value === undefined
-          ? {}
-          : { approvedValue: fields.approved_value }),
+        ...(approvedValue === undefined ? {} : { approvedValue }),
         approvedBy,
         // Beat 3 prints identifiers. A stamp here is on a value the signer was shown.
         mayReadIdentifiers: true,
@@ -1786,14 +1790,13 @@ export function registerDocumentRoutes(
         });
         approved = result.approved;
       } else {
+        const approvedValue = approvedNameFromForm(fields);
         await approveExtractedField(approveDeps, {
           extractedFieldId: validId(
             fields.extracted_field_id ?? '',
             'extracted field',
           ),
-          ...(fields.approved_value === undefined
-            ? {}
-            : { approvedValue: fields.approved_value }),
+          ...(approvedValue === undefined ? {} : { approvedValue }),
           approvedBy,
           mayReadIdentifiers: mayReadIdentifiers(request),
         });
@@ -2017,9 +2020,21 @@ export function registerDocumentRoutes(
       }
       const fields = formBody(request);
       const roles: Record<string, TenancyRole> = {};
+      const names: Record<
+        string,
+        { givenName: string | null; familyName: string }
+      > = {};
       for (const [name, value] of Object.entries(fields)) {
         if (name.startsWith('role-')) {
           roles[name.slice(5)] = value as TenancyRole;
+        }
+        if (name.startsWith('family-')) {
+          const id = name.slice('family-'.length);
+          const given = (fields[`given-${id}`] ?? '').trim();
+          names[id] = {
+            givenName: given === '' ? null : given,
+            familyName: value.trim(),
+          };
         }
       }
       const confirmed = await confirmLeaseTenancy(leaseDeps(), {
@@ -2027,6 +2042,7 @@ export function registerDocumentRoutes(
         termsProfileName: fields.terms_profile ?? '',
         confirmedBy,
         roles,
+        names,
       });
       const proposed = await proposeLeaseTenancy(leaseDeps(), {
         documentId,

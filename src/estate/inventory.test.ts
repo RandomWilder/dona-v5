@@ -734,7 +734,7 @@ describe('estate · נכסים, tab create and mint', () => {
       const ended = newId();
       const partyId = newId();
       await pool.query(
-        `INSERT INTO party (party_id, party_kind, full_name)
+        `INSERT INTO party (party_id, party_kind, family_name)
          VALUES ($1, 'PERSON', $2)`,
         [partyId, partyName],
       );
@@ -929,9 +929,9 @@ describe('estate · נכסים, tab create and mint', () => {
       const profileId = profile.rows[0]?.terms_profile_id;
       const partyId = newId();
       await pool.query(
-        `INSERT INTO party (party_id, party_kind, full_name)
-         VALUES ($1, 'PERSON', $2)`,
-        [partyId, partyName],
+        `INSERT INTO party (party_id, party_kind, given_name, family_name)
+         VALUES ($1, 'PERSON', 'נכסים states', 'tenant')`,
+        [partyId],
       );
       const grant = async (
         name: string,
@@ -1337,7 +1337,7 @@ describe('estate · נכסים, tab create and mint', () => {
       );
       const partyId = newId();
       await pool.query(
-        `INSERT INTO party (party_id, party_kind, full_name)
+        `INSERT INTO party (party_id, party_kind, family_name)
          VALUES ($1, 'PERSON', $2)`,
         [partyId, partyName],
       );

@@ -362,7 +362,7 @@ async function seedActiveLetting(
     [tenancyId, unitId, profileId],
   );
   await db.query(
-    `INSERT INTO party (party_id, party_kind, full_name, preferred_language)
+    `INSERT INTO party (party_id, party_kind, family_name, preferred_language)
      VALUES ($1, 'PERSON', $2, 'he')`,
     [partyId, name],
   );

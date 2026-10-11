@@ -21,8 +21,14 @@ export type PreferredLanguage = 'he' | 'ar' | 'ru' | 'fr' | 'en';
 
 export interface PartySpec {
   kind: PartyKind;
-  /** -- pii. */
-  fullName: string;
+  /**
+   * -- pii. A person. Null is someone known by one name. Refused on a company.
+   */
+  givenName?: string | null;
+  /** -- pii. Required for a person. Refused on a company. */
+  familyName?: string | null;
+  /** -- pii. Required for a company. Refused on a person. */
+  legalName?: string | null;
   /**
    * -- pii. **Required by this command, where the column is nullable.**
    *
@@ -58,9 +64,55 @@ export interface PartyContactSpec {
 
 export interface CreatePartySpec {
   kind: PartyKind;
-  /** -- pii. */
-  fullName: string;
+  /** -- pii. Null is someone known by one name. */
+  givenName?: string | null;
+  /** -- pii. Required for a person. */
+  familyName?: string | null;
+  /** -- pii. Required for a company. */
+  legalName?: string | null;
   preferredLanguage: PreferredLanguage;
+}
+
+interface StoredName {
+  givenName: string | null;
+  familyName: string | null;
+  legalName: string | null;
+}
+
+/**
+ * The split the table will store. A blank given name is null, which is a mononym. The CHECK
+ * `party_name_matches_kind` is the rule; this is the message, and it names no value.
+ */
+function storedName(spec: {
+  kind: PartyKind;
+  givenName?: string | null;
+  familyName?: string | null;
+  legalName?: string | null;
+}): StoredName {
+  const given = spec.givenName?.trim() ?? '';
+  const family = spec.familyName?.trim() ?? '';
+  const legal = spec.legalName?.trim() ?? '';
+  if (spec.kind === 'COMPANY') {
+    if (given !== '' || family !== '') {
+      throw new KernelError(
+        'invalid',
+        'a company has a legal name and no person name',
+      );
+    }
+    return {
+      givenName: null,
+      familyName: null,
+      legalName: requireText(legal, 'legal_name', 200),
+    };
+  }
+  if (legal !== '') {
+    throw new KernelError('invalid', 'a person has no legal name');
+  }
+  return {
+    givenName: given === '' ? null : requireText(given, 'given_name', 200),
+    familyName: requireText(family, 'family_name', 200),
+    legalName: null,
+  };
 }
 
 /**
@@ -73,12 +125,21 @@ export async function createParty(
   db: Queryable,
   spec: CreatePartySpec,
 ): Promise<UpsertResult> {
-  const fullName = requireText(spec.fullName, 'full_name', 200);
+  const name = storedName(spec);
   const result = await db.query<{ party_id: string; inserted: boolean }>(
-    `INSERT INTO party (party_id, party_kind, full_name, national_id, preferred_language)
-     VALUES ($1, $2, $3, NULL, $4)
+    `INSERT INTO party (
+       party_id, party_kind, given_name, family_name, legal_name, national_id, preferred_language
+     )
+     VALUES ($1, $2, $3, $4, $5, NULL, $6)
      RETURNING party_id, ${INSERTED}`,
-    [newId(), spec.kind, fullName, spec.preferredLanguage],
+    [
+      newId(),
+      spec.kind,
+      name.givenName,
+      name.familyName,
+      name.legalName,
+      spec.preferredLanguage,
+    ],
   );
   const row = result.rows[0];
   if (!row) {
@@ -92,18 +153,25 @@ export async function upsertParty(
   db: Queryable,
   spec: PartySpec,
 ): Promise<UpsertResult> {
+  const name = storedName(spec);
   const result = await db.query<{ party_id: string; inserted: boolean }>(
-    `INSERT INTO party (party_id, party_kind, full_name, national_id, preferred_language)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO party (
+       party_id, party_kind, given_name, family_name, legal_name, national_id, preferred_language
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (national_id_key) DO UPDATE
-       SET full_name = EXCLUDED.full_name,
+       SET given_name = EXCLUDED.given_name,
+           family_name = EXCLUDED.family_name,
+           legal_name = EXCLUDED.legal_name,
            national_id = EXCLUDED.national_id,
            preferred_language = EXCLUDED.preferred_language
      RETURNING party_id, ${INSERTED}`,
     [
       newId(),
       spec.kind,
-      spec.fullName,
+      name.givenName,
+      name.familyName,
+      name.legalName,
       spec.nationalId,
       spec.preferredLanguage,
     ],

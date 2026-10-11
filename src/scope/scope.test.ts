@@ -106,7 +106,7 @@ async function seed(db: PoolClient, spec: SeedSpec): Promise<Seeded> {
   const tenancyId = newId();
   seeded += 1;
   await db.query(
-    `INSERT INTO party (party_id, party_kind, full_name, national_id) VALUES ($1, 'PERSON', $2, $3)`,
+    `INSERT INTO party (party_id, party_kind, family_name, national_id) VALUES ($1, 'PERSON', $2, $3)`,
     [partyId, spec.name, `04${String(seeded).padStart(7, '0')}`],
   );
   if (spec.phone !== null) {
@@ -206,7 +206,7 @@ describe('scope · Q1, who lives in unit 12 today', () => {
       // unreachable, where Q2 must not resolve them at all. Two questions, one view, opposite
       // readings of the same column.
       await db.query(
-        `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', 'Boaz Guarantor')`,
+        `INSERT INTO party (party_id, party_kind, family_name) VALUES ($1, 'PERSON', 'Boaz Guarantor')`,
         ['00000000-0000-4000-8000-00000000000b'],
       );
       await db.query(
@@ -309,7 +309,7 @@ describe('scope · which of these units are let today', () => {
       // still let.
       const tenant = await seed(db, { unitNumber: '22', name: 'Real Tenant' });
       await db.query(
-        `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', 'Guarantor')`,
+        `INSERT INTO party (party_id, party_kind, family_name) VALUES ($1, 'PERSON', 'Guarantor')`,
         ['00000000-0000-4000-8000-00000000002b'],
       );
       await db.query(

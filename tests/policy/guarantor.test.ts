@@ -64,7 +64,7 @@ describe('policy · a guarantor is never a service contact', () => {
           });
           const guarantorId = newId();
           await db.query(
-            `INSERT INTO party (party_id, party_kind, full_name)
+            `INSERT INTO party (party_id, party_kind, family_name)
              VALUES ($1, 'PERSON', 'ערב — the co-signing parent')`,
             [guarantorId],
           );
@@ -113,7 +113,7 @@ describe('policy · a guarantor is never a service contact', () => {
           });
           const guarantorId = newId();
           await db.query(
-            `INSERT INTO party (party_id, party_kind, full_name)
+            `INSERT INTO party (party_id, party_kind, family_name)
              VALUES ($1, 'PERSON', 'ערב — the co-signing parent')`,
             [guarantorId],
           );
@@ -176,7 +176,7 @@ describe('policy · a guarantor is never a service contact', () => {
           for (const role of ['CO_TENANT', 'OCCUPANT']) {
             const partyId = newId();
             await db.query(
-              `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', $2)`,
+              `INSERT INTO party (party_id, party_kind, family_name) VALUES ($1, 'PERSON', $2)`,
               [partyId, `${role} of 33`],
             );
             await db.query(
@@ -216,7 +216,7 @@ describe('policy · a guarantor is never a service contact', () => {
           });
           const guarantorId = newId();
           await db.query(
-            `INSERT INTO party (party_id, party_kind, full_name)
+            `INSERT INTO party (party_id, party_kind, family_name)
              VALUES ($1, 'PERSON', 'ערב — the co-signing parent')`,
             [guarantorId],
           );

@@ -46,7 +46,8 @@ describe('calls · identify the requester and set a category', () => {
         });
         const party = await createParty(db, {
           kind: 'PERSON',
-          fullName: 'יעל כהן',
+          givenName: 'יעל',
+          familyName: 'כהן',
           preferredLanguage: 'he',
         });
         const call = await openCall(db, clock, {
@@ -131,7 +132,8 @@ describe('calls · identify the requester and set a category', () => {
         });
         const guarantor = await createParty(db, {
           kind: 'PERSON',
-          fullName: 'ערב כהן',
+          givenName: 'ערב',
+          familyName: 'כהן',
           preferredLanguage: 'he',
         });
         await db.query(
@@ -187,7 +189,8 @@ describe('calls · identify the requester and set a category', () => {
         });
         const party = await createParty(db, {
           kind: 'PERSON',
-          fullName: 'דנה לוי',
+          givenName: 'דנה',
+          familyName: 'לוי',
           preferredLanguage: 'he',
         });
         const created = await upsertCategory(db, {
@@ -253,7 +256,7 @@ describe('calls · identify the requester and set a category', () => {
 
         const other = await createParty(db, {
           kind: 'PERSON',
-          fullName: 'עמית',
+          familyName: 'עמית',
           preferredLanguage: 'he',
         });
         const second = await openCall(db, clock, {
@@ -307,7 +310,7 @@ describe('calls · identify the requester and set a category', () => {
         });
         const party = await createParty(db, {
           kind: 'PERSON',
-          fullName: 'נועה',
+          familyName: 'נועה',
           preferredLanguage: 'he',
         });
         const plumbing = (await listCategories(db)).find(
