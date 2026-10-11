@@ -1,13 +1,13 @@
 ---
 number: 201
 title: Paint the אנשי קשר screens before wiring them
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent: 199
 created: 2026-10-11
-closed:
+closed: 2026-10-11
 ---
 
 ## Parent
@@ -40,11 +40,15 @@ one to finish deletes the file.
 - [x] Every screen and refusal listed above is present and clickable between screens.
 - [x] The tab is labelled אנשי קשר and sits with the existing tabs.
 - [x] No ת.ז. appears on the directory screens; on the profile it appears only masked until revealed.
-- [ ] The director has clicked it on `:3000` and their comments are folded into the mockup and, where they change behaviour, into #199 as a comment.
+- [x] The director has clicked it on `:3000` and their comments are folded into the mockup and, where they change behaviour, into #199 as a comment.
 
 ## Comment — 2026-10-11
 
 Paint is up at `http://127.0.0.1:3000/dev/mockups/party-directory` for the director to click. The אנשי קשר tab is in the rail only on that screen. Names and numbers are invented. Waiting on the director's comments before this closes.
+
+## Comment — 2026-10-11
+
+Director reviewed `http://127.0.0.1:3000/dev/mockups/party-directory` and approved the paint. No changes. Nothing folded into the mockup or into #199. The file stays until the last of #202–#209 is wired.
 
 ## Blocked by
 
