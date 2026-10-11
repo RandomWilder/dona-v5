@@ -115,7 +115,7 @@ const CHANNEL_HE: Record<SourceChannel, string> = {
   EMAIL: 'דוא״ל',
 };
 
-const STATE_HE: Record<CallState, string> = {
+export const CALL_STATE_HE: Record<CallState, string> = {
   NEW: 'חדשה',
   IDENTIFIED: 'זוהתה',
   TRIAGED: 'מוינה',
@@ -280,7 +280,7 @@ function callRow(call: ServiceCall, screen: CallsScreen): Html {
     <p class="call-main"><a href="/calls/${call.id}">${call.description}</a></p>
     <p class="call-meta">
       <span class="chip">${CHANNEL_HE[call.sourceChannel]}</span>
-      <span class="chip">${STATE_HE[call.state]}</span>
+      <span class="chip">${CALL_STATE_HE[call.state]}</span>
       ${category}
       ${proposal}
       ${emergency}
@@ -299,7 +299,7 @@ function filters(screen: CallsScreen): Html {
         <option value="" ${selected(screen.state === null)}>הכל</option>
         ${FILTER_STATES.map(
           (state) =>
-            h`<option value="${state}" ${selected(screen.state === state)}>${STATE_HE[state]}</option>`,
+            h`<option value="${state}" ${selected(screen.state === state)}>${CALL_STATE_HE[state]}</option>`,
         )}
         <option value="CLOSED" ${selected(screen.state === 'CLOSED')}>סגורות</option>
       </select>
@@ -789,7 +789,7 @@ export function renderCallPage(screen: CallScreen): string {
       <section class="glass sheet">
         <dl class="facts">
           <div><dt>ערוץ</dt><dd>${CHANNEL_HE[call.sourceChannel]}</dd></div>
-          <div><dt>מצב</dt><dd>${STATE_HE[call.state]}</dd></div>
+          <div><dt>מצב</dt><dd>${CALL_STATE_HE[call.state]}</dd></div>
           <div><dt>נרשם</dt><dd>${sender}</dd></div>
           <div><dt>פונה</dt><dd>${requester}</dd></div>
           <div><dt>קטגוריה</dt><dd>${category}</dd></div>

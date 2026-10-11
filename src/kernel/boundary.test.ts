@@ -143,7 +143,7 @@ describe('the module boundary', () => {
     assert.deepEqual(violations, []);
   });
 
-  it('parties does not import estate', async () => {
+  it('parties does not import estate or calls', async () => {
     const hits: string[] = [];
     const root = path.join(srcRoot, 'parties');
     let scanned = 0;
@@ -152,7 +152,7 @@ describe('the module boundary', () => {
       const source = await readFile(path.join(root, entry), 'utf8');
       for (const match of source.matchAll(importSpecifier)) {
         const specifier = match[1] ?? match[2] ?? '';
-        if (specifier.includes('/estate/')) {
+        if (specifier.includes('/estate/') || specifier.includes('/calls/')) {
           hits.push(`${entry} → ${specifier}`);
         }
       }

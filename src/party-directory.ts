@@ -1,10 +1,12 @@
 // The אנשי קשר tab. #202. Labels are composed here. #203. Contacts are edited here. #206.
 // A party is created by hand here. #207. A company is marked a service provider here. #208.
+// The calls this party opened are listed here. #209.
 //
 // It lives beside `src/index-page.ts` and `src/settings-page.ts` because the profile is assembled
-// here, at the composition root. Later tickets add a tenancy section, an estate section and a
-// calls section on this page. Those reads stay on their own contracts. The parties module does
-// not import them, and it does not learn that a page exists.
+// here, at the composition root. The calls this party opened are read from the calls contract
+// and painted here. A later ticket adds a tenancy section and an estate section the same way.
+// Those reads stay on their own contracts. The parties module does not import them, and it does
+// not learn that a page exists.
 //
 // The phone and the email are folded here, with the same normalisers the door uses, before the
 // parties contract is asked. A second copy of either fold inside parties is the one that drifts.
@@ -16,6 +18,7 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
+import { CALL_STATE_HE, listCallsByRequester } from './calls/contract.ts';
 import { signedInChrome } from './chrome.ts';
 import type { ProviderKind } from './estate/contract.ts';
 import { linkProvider, listProvidersForParties } from './estate/contract.ts';
@@ -87,8 +90,10 @@ const styles = h`<style>
   .party-refusal { margin: 0; color: var(--color-alert); }
   .party-labels { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
   a.chip { text-decoration: none; }
-  .party-contacts { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
-  .party-contacts li { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
+  .party-contacts,
+  .party-calls { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+  .party-contacts li,
+  .party-calls li { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
   .party-contact-add { display: grid; gap: var(--space-3); max-inline-size: var(--size-form-max); }
   .party-create { display: grid; gap: var(--space-3); max-inline-size: var(--size-form-max); }
   .party-contact-add label,
@@ -168,6 +173,17 @@ export interface ProfileScreen {
   };
   /** Why marking a service provider was refused. The provider row was not changed. */
   providerRefusal?: string | null;
+  /** The calls that name this party as requester, newest first. */
+  calls: readonly ProfileCall[];
+}
+
+interface ProfileCall {
+  id: string;
+  when: string;
+  description: string;
+  category: string;
+  state: string;
+  emergency: boolean;
 }
 
 interface ProfileHistory {
@@ -817,6 +833,22 @@ function providerSection(screen: ProfileScreen): Html {
   </section>`;
 }
 
+function partyCalls(screen: ProfileScreen): Html {
+  const rows = screen.calls;
+  if (rows.length === 0) return h`<p class="lede">אין קריאות.</p>`;
+  return h`<ul class="party-calls">
+    ${rows.map(
+      (call) => h`<li data-emergency="${call.emergency ? 'true' : 'false'}">
+        <a href="/calls/${call.id}">${call.description}</a>
+        <span>${call.when}</span>
+        <span>${call.category}</span>
+        <span class="chip">${call.state}</span>
+        ${call.emergency ? h`<span class="chip">חירום</span>` : h`<span>לא</span>`}
+      </li>`,
+    )}
+  </ul>`;
+}
+
 function contacts(screen: ProfileScreen): Html {
   const rows = screen.profile.contacts;
   const writing = screen.mayWriteParty === true;
@@ -860,6 +892,10 @@ export function renderPartyProfile(screen: ProfileScreen): string {
     <section class="glass">
       <h2>פרטי קשר</h2>
       ${contacts(screen)}
+    </section>
+    <section class="glass" id="party-calls">
+      <h2>קריאות</h2>
+      ${partyCalls(screen)}
     </section>
     <section class="glass" id="party-history">
       <h2>היסטוריה</h2>
@@ -1161,6 +1197,7 @@ export function registerPartyDirectoryRoutes(
         account.displayName ?? account.email,
       ]),
     );
+    const openedCalls = await listCallsByRequester(deps.pool, profile.partyId);
     const history = recorded.map((row) => {
       const what = historyWhat(row.action, row.inputs);
       return {
@@ -1176,6 +1213,14 @@ export function registerPartyDirectoryRoutes(
       ...screenOf(request),
       profile,
       labels: byParty.get(profile.partyId) ?? NO_LABELS,
+      calls: openedCalls.map((call) => ({
+        id: call.id,
+        when: dayIn(call.openedAt, deps.clock.zone),
+        description: call.description,
+        category: call.categoryLabel ?? 'טרם נבחרה',
+        state: CALL_STATE_HE[call.state],
+        emergency: call.emergency,
+      })),
       history,
       day: today(deps.clock),
     };

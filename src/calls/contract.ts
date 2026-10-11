@@ -28,6 +28,7 @@ export type {
   ManualChannel,
   OpenCallSpec,
   OpenIntakeCallSpec,
+  RequesterCall,
   ResponseBand,
   ResponseGoal,
   ReturnCallSpec,
@@ -53,6 +54,7 @@ export {
   getCall,
   identifyByAddress,
   identifyCall,
+  listCallsByRequester,
   listCategories,
   listOpenCalls,
   listReturnedCalls,
@@ -90,6 +92,7 @@ export type {
   TimelineMessage,
 } from './internal/views.ts';
 export {
+  CALL_STATE_HE,
   renderCallPage,
   renderCallsPage,
   renderFilteredPage,

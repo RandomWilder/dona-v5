@@ -135,6 +135,26 @@ filtered list. The rail shows the open-call count beside קריאות. A closed 
 count and the open list, and a closed filter shows it. The page is server-rendered with no
 client JavaScript and follows the approved stakeholder mockup.
 
+**A party's calls (#209).** The profile lists every call that names that party as requester, newest
+first, including a closed call and one returned to the filtered list. Each row shows the day the
+call opened, in the office's zone, the Category or that none is set yet, the state, and the
+emergency mark — חירום, or לא — and it links to the call by its description. A party who opened none is told so. A call
+that names another party, and a call that names nobody, are absent. The read is
+`listCallsByRequester` on this module's contract. Parties does not import this module. The
+composition root paints the section.
+
+The read is `WHERE requester_party_id = $1`, ordered newest first. The generated register writes no
+service calls, so the volume was measured as one call for each of the 2,908 parties that portfolio
+holds (the count recorded at 2.6), 2,911 rows once the three calls already in the database were
+counted, inside a transaction that was rolled back. Without an index the plan is a sequential scan
+of `service_call`, 2,910 rows removed by the filter, 48 buffers, 0.139–0.155 ms. A btree on
+`requester_party_id` is an index scan the planner chooses, cost 0.28..8.30 against the scan's
+84.39, 5 buffers, 0.024–0.046 ms. The same column restricted to a non-null requester is chosen at
+the same estimated cost, because every measured row had a requester. That partial index is the one
+added: a call still in NEW names nobody, this read never asks for that row, and only a call that
+names a party pays for the index on write. An index the planner will not choose is not added; this
+one it does.
+
 ## Not yet
 
 The states from RESPONSIBILITY SET on are the visit flow, and are not built by #181. **`WINDOWS
