@@ -1712,7 +1712,7 @@ export function renderNewUnitPage(screen: NewUnitScreen): string {
         </div>
         <div class="form-row">
           <label for="area_sqm">שטח במ״ר</label>
-          <input id="area_sqm" name="area_sqm" type="number" step="0.1" min="0" />
+          <input id="area_sqm" name="area_sqm" type="number" step="0.01" min="0" />
           <p class="hint">ריק — טרם נמדד.</p>
         </div>
       </div>
@@ -1989,7 +1989,7 @@ export function renderBuildingPage(
       <div class="chips">
         ${kinds.map(
           (kind) =>
-            h`<span class="chip">${label(SPACE_KIND, kind.space_kind)} · ${ltr(kind.n)}</span>`,
+            h`<span class="chip"><span>${label(SPACE_KIND, kind.space_kind)} · ${ltr(kind.n)}</span></span>`,
         )}
       </div>
     </section>
@@ -2154,7 +2154,7 @@ function editFlatForm(unit: UnitHit, csrf: string): Html {
     <div class="form-pair">
       <div class="form-row">
         <label for="area_sqm">שטח במ״ר</label>
-        <input id="area_sqm" name="area_sqm" type="number" step="0.1" min="0"
+        <input id="area_sqm" name="area_sqm" type="number" step="0.01" min="0"
           value="${unit.area_sqm ?? ''}" />
         <p class="hint">ריק — טרם נמדד.</p>
       </div>
@@ -2166,7 +2166,7 @@ function editFlatForm(unit: UnitHit, csrf: string): Html {
     </div>
     <div class="form-row">
       <label for="balcony_sqm">שטח מרפסת במ״ר</label>
-      <input id="balcony_sqm" name="balcony_sqm" type="number" step="0.1" min="0"
+      <input id="balcony_sqm" name="balcony_sqm" type="number" step="0.01" min="0"
         value="${unit.balcony_sqm ?? ''}" />
       <p class="hint">ריק — אין מרפסת, או ששטחה לא נמדד.</p>
     </div>
@@ -2207,9 +2207,9 @@ export function renderUnitPage(
         unit.rental_track
           ? h`<span class="chip">${TRACK_WORD[unit.rental_track] ?? unit.rental_track}</span>`
           : h``
-      }${unit.flat_type ? h`<span class="chip">טיפוס ${ltr(unit.flat_type)}</span>` : h``}${
+      }${unit.flat_type ? h`<span class="chip"><span>טיפוס ${ltr(unit.flat_type)}</span></span>` : h``}${
         unit.balcony_sqm
-          ? h`<span class="chip">מרפסת ${ltr(unit.balcony_sqm)} מ״ר</span>`
+          ? h`<span class="chip"><span>מרפסת ${ltr(unit.balcony_sqm)} מ״ר</span></span>`
           : h``
       }</div>
       <p class="unit-actions">

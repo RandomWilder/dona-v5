@@ -166,6 +166,16 @@ describe('estate · a seeded building on נכסים', () => {
       assert.match(unitPage.body, /<span class="chip">נמכרה<\/span>/);
       assert.match(unitPage.body, /<span class="chip">שוק חופשי<\/span>/);
       assert.match(unitPage.body, /מרפסת <span dir="ltr">14<\/span> מ״ר/);
+      // A chip is a flex box, so a word and a number in it are wrapped in one span; otherwise the
+      // space between them is dropped and the chip reads מרפסת14.
+      assert.match(unitPage.body, /<span class="chip"><span>מרפסת /);
+      // A developer sheet gives areas to the hundredth (128.05). A coarser step makes the browser
+      // refuse to save the flat's own seeded value.
+      assert.match(unitPage.body, /name="area_sqm" type="number" step="0\.01"/);
+      assert.match(
+        unitPage.body,
+        /name="balcony_sqm" type="number" step="0\.01"/,
+      );
       const regulatedFlat = await client.inject({
         method: 'GET',
         url: `/estate/units/${idOf('1')}`,
