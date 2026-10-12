@@ -2099,10 +2099,14 @@ describe('evidence · A12 offers to create, to an admin', () => {
     const hashes: string[] = [];
     let createdUnitId = '';
 
-    const documentCount = async (): Promise<string> =>
+    // A count of every document races the other suites, which commit their own
+    // rows into the same table. This walk only needs to know that its own file
+    // was not stored.
+    const documentsFor = async (bytes: Buffer): Promise<string> =>
       (
         await pool.query<{ n: string }>(
-          'SELECT count(*)::text AS n FROM document',
+          'SELECT count(*)::text AS n FROM document WHERE file_hash = $1',
+          [documentFileHash(bytes)],
         )
       ).rows[0]?.n ?? '0';
 
@@ -2175,7 +2179,6 @@ describe('evidence · A12 offers to create, to an admin', () => {
       await t.test(
         'an OPERATOR sees the search box and no create control',
         async () => {
-          const before = await documentCount();
           const putsBefore = puts;
           const response = await refuse(unheld, operator as SignedIn);
           assert.equal(response.statusCode, 422, response.body.slice(0, 400));
@@ -2183,7 +2186,10 @@ describe('evidence · A12 offers to create, to an admin', () => {
           assert.doesNotMatch(response.body, /\/estate\/buildings\/new\?/);
           assert.doesNotMatch(response.body, /יצירת הבניין והדירה/);
           // And it wrote nothing, which the create offer must not change either.
-          assert.equal(await documentCount(), before);
+          assert.equal(
+            await documentsFor(pdfBytes(`6.9 ${(operator as SignedIn).email}`)),
+            '0',
+          );
           assert.equal(puts, putsBefore, 'no object was written');
         },
       );
@@ -2191,14 +2197,16 @@ describe('evidence · A12 offers to create, to an admin', () => {
       await t.test(
         'an ADMIN is offered the building and the flat, prefilled',
         async () => {
-          const before = await documentCount();
           const putsBefore = puts;
           const response = await refuse(unheld, admin as SignedIn);
           assert.equal(response.statusCode, 422, response.body.slice(0, 400));
           assert.match(response.body, /יצירת הבניין והדירה/);
           assert.match(response.body, /\/estate\/buildings\/new\?/);
           assert.match(response.body, /next=intake/);
-          assert.equal(await documentCount(), before);
+          assert.equal(
+            await documentsFor(pdfBytes(`6.9 ${(admin as SignedIn).email}`)),
+            '0',
+          );
           assert.equal(puts, putsBefore, 'no object was written');
         },
       );

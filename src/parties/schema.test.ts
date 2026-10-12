@@ -461,7 +461,9 @@ describe('parties · the rest of the schema', () => {
         'a name that does not match the kind is rejected',
         async () => {
           await inRolledBackTransaction(pool, async (db) => {
-            await rejects(db, CHECK_VIOLATION, () =>
+            // No name parts means the generated display name is null, so the
+            // not-null on that column refuses the row before the kind check.
+            await rejects(db, NOT_NULL_VIOLATION, () =>
               db.query(
                 `INSERT INTO party (party_id, party_kind) VALUES ($1, 'PERSON')`,
                 [newId()],
@@ -474,7 +476,7 @@ describe('parties · the rest of the schema', () => {
                 [newId()],
               ),
             );
-            await rejects(db, CHECK_VIOLATION, () =>
+            await rejects(db, NOT_NULL_VIOLATION, () =>
               db.query(
                 `INSERT INTO party (party_id, party_kind) VALUES ($1, 'COMPANY')`,
                 [newId()],
