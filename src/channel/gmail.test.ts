@@ -226,6 +226,44 @@ describe('channel · gmail', () => {
     assert.deepEqual(gmail.attachments, outlook.attachments);
   });
 
+  it('keeps a photo pasted into the body, as Outlook does', () => {
+    const photo = Buffer.alloc(64 * 1024, 1);
+    const gmail = normaliseGmailMessage({
+      ...GMAIL_FILE,
+      payload: {
+        ...GMAIL_FILE.payload,
+        parts: [
+          GMAIL_FILE.payload.parts[0],
+          {
+            mimeType: 'image/png',
+            filename: 'image.png',
+            headers: [
+              {
+                name: 'Content-Disposition',
+                value: 'inline; filename="image.png"',
+              },
+            ],
+            body: { size: photo.length, data: photo.toString('base64url') },
+          },
+        ],
+      },
+    });
+    const outlook = normaliseOutlookMessage(OUTLOOK_FILE, [
+      {
+        ...OUTLOOK_ATTACHMENT,
+        name: 'image.png',
+        contentType: 'image/png',
+        isInline: true,
+        contentBytes: photo.toString('base64'),
+      },
+    ]);
+    assert.ok(gmail);
+    assert.ok(outlook);
+    assert.equal(gmail.attachments?.length, 1);
+    assert.equal(gmail.attachments?.[0]?.bytes?.equals(photo), true);
+    assert.deepEqual(gmail.attachments, outlook.attachments);
+  });
+
   it('keeps an email that is only an attachment', () => {
     const outlook = normaliseOutlookMessage(
       {

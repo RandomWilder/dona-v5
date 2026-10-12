@@ -26,6 +26,9 @@ import {
 } from './contract.ts';
 
 const HOUR = 60 * 60 * 1000;
+// Embedded files on the pilot mailbox: a logo at 51 KB, pasted images at 87 KB and
+// 2.5 MB. The line is 64 KB.
+const PASTED_PHOTO_BYTES = 64 * 1024;
 const MAILBOX_WARNING = 'תיבת הדואר לא נקראה כבר שעה.';
 const SECRET_RENEW = 'יש לבקש סוד חדש';
 const SECRET_UNKNOWN = 'תאריך התפוגה של הסוד לא הוגדר';
@@ -163,6 +166,102 @@ describe('channel · outlook', { concurrency: false }, () => {
     assert.equal(message.attachments?.[0]?.fileName, 'cheshbon.pdf');
     assert.equal(message.attachments?.[0]?.byteSize, pdf.length);
     assert.equal(message.attachments?.[0]?.bytes?.equals(pdf), true);
+  });
+
+  it('keeps a photo pasted into the body and skips a small embedded logo', () => {
+    const photo = Buffer.alloc(PASTED_PHOTO_BYTES, 1);
+    const logo = Buffer.alloc(51 * 1024, 2);
+    const message = normaliseOutlookMessage(
+      { ...REPLY, hasAttachments: false },
+      [
+        {
+          ...FILE,
+          id: 'att-photo',
+          name: 'image.png',
+          contentType: 'image/png',
+          isInline: true,
+          contentBytes: photo.toString('base64'),
+        },
+        {
+          ...FILE,
+          id: 'att-logo',
+          name: 'image001.jpg',
+          contentType: 'image/jpeg',
+          isInline: true,
+          contentBytes: logo.toString('base64'),
+        },
+      ],
+    );
+    assert.ok(message);
+    assert.equal(message.attachments?.length, 1);
+    assert.equal(message.attachments?.[0]?.fileName, 'image.png');
+    assert.equal(message.attachments?.[0]?.bytes?.equals(photo), true);
+  });
+
+  it('reads the files of a message Graph says has none, the way Graph accepts', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const photo = Buffer.alloc(PASTED_PHOTO_BYTES, 1);
+    const fetchImpl: GraphFetch = async (url) => {
+      if (url.startsWith('https://login.microsoftonline.com/')) {
+        return jsonResponse({ access_token: 'tok', expires_in: 3600 });
+      }
+      if (url.includes('$deltatoken=latest')) {
+        return jsonResponse({ value: [], '@odata.deltaLink': CURSOR });
+      }
+      if (url === CURSOR) {
+        return jsonResponse({
+          value: [{ ...REPLY, hasAttachments: false }],
+          '@odata.deltaLink': AFTER,
+        });
+      }
+      if (url.includes('/attachments')) {
+        // Graph types the collection as the base attachment, which has no
+        // contentBytes, and refuses a $select naming it (12 Oct 2026, staging).
+        if (/\$select=[^&]*contentBytes/.test(decodeURIComponent(url))) {
+          return {
+            ok: false,
+            status: 400,
+            async json() {
+              return {};
+            },
+          };
+        }
+        return jsonResponse({
+          value: [
+            {
+              ...FILE,
+              name: 'image.png',
+              contentType: 'image/png',
+              size: photo.length,
+              isInline: true,
+              contentBytes: photo.toString('base64'),
+            },
+          ],
+        });
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(new Date('2026-10-06T12:00:00.000Z'));
+        const reader = createGraphReader(graphConfig(), fetchImpl);
+        const handed: (string | undefined)[] = [];
+        const deliver = async (message: {
+          attachments?: readonly { fileName: string }[];
+        }) => {
+          handed.push(message.attachments?.[0]?.fileName);
+        };
+        await pollOutlook(db, clock, reader, deliver);
+        await pollOutlook(db, clock, reader, deliver);
+        assert.deepEqual(handed, ['image.png']);
+      });
+    } finally {
+      await pool.end();
+    }
   });
 
   it('keeps an email that is only an attachment', () => {
@@ -361,13 +460,7 @@ describe('channel · outlook', { concurrency: false }, () => {
           assert.doesNotMatch(call.url, /\/move/);
           assert.equal(call.url.includes('isRead'), false);
         }
-        assert.ok(
-          mail.some(
-            (call) =>
-              call.url.includes('/attachments') &&
-              call.url.includes('contentBytes'),
-          ),
-        );
+        assert.ok(mail.some((call) => call.url.includes('/attachments')));
         assert.equal(
           calls.some(
             (call) => call.method === 'PATCH' || call.method === 'DELETE',
@@ -410,6 +503,7 @@ describe('channel · outlook', { concurrency: false }, () => {
           '@odata.deltaLink': graphCursor,
         });
       }
+      if (url.includes('/attachments')) return jsonResponse({ value: [] });
       throw new Error(`unexpected ${url}`);
     };
     try {
@@ -461,6 +555,7 @@ describe('channel · outlook', { concurrency: false }, () => {
           '@odata.deltaLink': graphCursor,
         });
       }
+      if (url.includes('/attachments')) return jsonResponse({ value: [] });
       throw new Error(`unexpected ${url}`);
     };
     try {
@@ -587,6 +682,7 @@ describe('channel · outlook', { concurrency: false }, () => {
       if (url.includes('/messages/AAMkAG-thin')) {
         return jsonResponse({ id: 'AAMkAG-thin' });
       }
+      if (url.includes('/attachments')) return jsonResponse({ value: [] });
       throw new Error(`unexpected ${init?.method ?? 'GET'} ${url}`);
     };
     try {
