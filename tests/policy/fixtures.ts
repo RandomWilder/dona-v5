@@ -132,7 +132,7 @@ export async function seedOccupancy(
   const partyId = newId();
   const tenancyId = newId();
   await db.query(
-    `INSERT INTO party (party_id, party_kind, full_name, national_id)
+    `INSERT INTO party (party_id, party_kind, family_name, national_id)
      VALUES ($1, 'PERSON', $2, $3)`,
     [partyId, `Tenant of ${unitNumber}`, spec.nationalId ?? null],
   );

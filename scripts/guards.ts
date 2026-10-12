@@ -206,7 +206,12 @@ const PII_COLUMNS = new Set([
   'email_address',
   'first_name',
   'last_name',
+  'given_name',
+  'family_name',
+  'legal_name',
   'full_name',
+  // #200. The display string a party had before its name was stored in parts.
+  'full_name_before_split',
   'contact_name',
   // Slice 5.1. `staff_account.display_name` is an operator's own name, typed by whoever invited
   // them. The list has learned four names now -- `party_contact.value` at 2.1, `national_id_key` at
@@ -244,6 +249,9 @@ const PII_COLUMNS = new Set([
 // not say what it holds, and that is worth noticing rather than automating away.
 const PII_QUALIFIED_COLUMNS = new Set([
   'party_contact.value',
+  // #206. Who answers a company's number. `label` is a word other tables use for
+  // something that is not a person, so the bare name stays off the list.
+  'party_contact.label',
   'extracted_field.value',
   'document_passage.body',
   'tenancy_event.actor',

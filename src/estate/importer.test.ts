@@ -290,6 +290,46 @@ describe('estate · the import runs twice', () => {
           assert.deepEqual(second.asset, { created: 0, updated: 3 });
         });
       });
+
+      await t.test(
+        'a provider is one company party, and a re-run keeps that party',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            const plan = smallPlan();
+            plan.providers = [{ name: 'קבלן ייבוא208', kind: 'CONTRACTOR' }];
+            const first = await importEstate(db, plan);
+            assert.deepEqual(first.provider, { created: 1, updated: 0 });
+            const linked = await db.query<{
+              party_id: string;
+              party_kind: string;
+              legal_name: string;
+            }>(
+              `SELECT party.party_id, party.party_kind, party.legal_name
+                 FROM provider
+                 JOIN party ON party.party_id = provider.party_id
+                WHERE provider.name = $1`,
+              ['קבלן ייבוא208'],
+            );
+            assert.equal(linked.rows.length, 1);
+            assert.equal(linked.rows[0]?.party_kind, 'COMPANY');
+            assert.equal(linked.rows[0]?.legal_name, 'קבלן ייבוא208');
+            const partyId = linked.rows[0]?.party_id;
+
+            const second = await importEstate(db, plan);
+            assert.deepEqual(second.provider, { created: 0, updated: 1 });
+            const again = await db.query<{ party_id: string }>(
+              `SELECT party_id FROM provider WHERE name = $1`,
+              ['קבלן ייבוא208'],
+            );
+            assert.equal(again.rows[0]?.party_id, partyId);
+            const parties = await db.query<{ n: string }>(
+              `SELECT count(*)::text AS n FROM party WHERE legal_name = $1`,
+              ['קבלן ייבוא208'],
+            );
+            assert.equal(parties.rows[0]?.n, '1');
+          });
+        },
+      );
     } finally {
       await pool.end();
     }

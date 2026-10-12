@@ -10,6 +10,7 @@ import {
   openIntakeCall,
   saveSenderContact,
 } from '../calls/contract.ts';
+import { linkProvider } from '../estate/contract.ts';
 import { fixedClock } from '../kernel/clock.ts';
 import { newId } from '../kernel/ids.ts';
 import {
@@ -17,6 +18,7 @@ import {
   migratedPoolOrNull,
   skipReason,
 } from '../kernel/pg-support.ts';
+import { addPartyContact, createParty } from '../parties/contract.ts';
 import { addOperator } from '../staff/contract.ts';
 import {
   type IncomingMessage,
@@ -259,6 +261,152 @@ describe('channel · identify the sender', () => {
         const call = await getCall(db, outcome.callId);
         assert.equal(call?.state, 'IDENTIFIED');
         assert.equal(call?.requester?.id, tenant.partyId);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('identifies a service provider from its phone, and not a party on no lease', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const { account } = await addOperator(db, clock, {
+          email: 'ops@door-208.test',
+          role: 'OPERATOR',
+        });
+        const company = await createParty(db, {
+          kind: 'COMPANY',
+          legalName: 'קבלן דלת208',
+          preferredLanguage: 'he',
+        });
+        await linkProvider(db, clock, {
+          partyId: company.id,
+          kind: 'CONTRACTOR',
+          actorId: account.staffAccountId,
+          actorRole: 'OPERATOR',
+        });
+        await addPartyContact(db, {
+          partyId: company.id,
+          channel: 'PHONE',
+          value: '+972501890499',
+          label: null,
+          validFrom: '2026-01-01',
+        });
+        const neighbour = await createParty(db, {
+          kind: 'PERSON',
+          givenName: 'שכן',
+          familyName: 'דלת208',
+          preferredLanguage: 'he',
+        });
+        await addPartyContact(db, {
+          partyId: neighbour.id,
+          channel: 'PHONE',
+          value: '+972501890498',
+          label: null,
+          validFrom: '2026-01-01',
+        });
+
+        const providerCall = await receiveIncoming(
+          db,
+          clock,
+          { sorter: sorter(), matchesEmergency: async () => false },
+          incoming({
+            sourceChannel: 'WHATSAPP',
+            externalMessageId: 'msg-provider-208',
+            externalThreadId: 'thread-provider-208',
+            senderAddress: '050-189-0499',
+          }),
+        );
+        assert.equal(providerCall.kind, 'call');
+        if (providerCall.kind !== 'call') return;
+        const identified = await getCall(db, providerCall.callId);
+        assert.equal(identified?.state, 'IDENTIFIED');
+        assert.equal(identified?.requester?.id, company.id);
+
+        const neighbourCall = await receiveIncoming(
+          db,
+          clock,
+          { sorter: sorter(), matchesEmergency: async () => false },
+          incoming({
+            sourceChannel: 'WHATSAPP',
+            externalMessageId: 'msg-neighbour-208',
+            externalThreadId: 'thread-neighbour-208',
+            senderAddress: '050-189-0498',
+          }),
+        );
+        assert.equal(neighbourCall.kind, 'call');
+        if (neighbourCall.kind !== 'call') return;
+        const waiting = await getCall(db, neighbourCall.callId);
+        assert.equal(waiting?.state, 'NEW');
+        assert.equal(waiting?.requester, null);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('leaves a guarantor who is also a provider in NEW', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const { account } = await addOperator(db, clock, {
+          email: 'ops-g@door-208.test',
+          role: 'OPERATOR',
+        });
+        const company = await createParty(db, {
+          kind: 'COMPANY',
+          legalName: 'ערב דלת208',
+          preferredLanguage: 'he',
+        });
+        await linkProvider(db, clock, {
+          partyId: company.id,
+          kind: 'CONTRACTOR',
+          actorId: account.staffAccountId,
+          actorRole: 'OPERATOR',
+        });
+        await addPartyContact(db, {
+          partyId: company.id,
+          channel: 'PHONE',
+          value: '+972501890497',
+          label: null,
+          validFrom: '2026-01-01',
+        });
+        const tenancy = await seedOccupancy(db, '1893', {
+          phone: '+972501890496',
+          ...OCCUPANCY,
+        });
+        await db.query(
+          `INSERT INTO tenancy_party (tenancy_id, party_id, role, is_service_contact)
+           VALUES ($1, $2, 'GUARANTOR', false)`,
+          [tenancy.tenancyId, company.id],
+        );
+        const outcome = await receiveIncoming(
+          db,
+          clock,
+          { sorter: sorter(), matchesEmergency: async () => false },
+          incoming({
+            sourceChannel: 'WHATSAPP',
+            externalMessageId: 'msg-guarantor-provider-208',
+            externalThreadId: 'thread-guarantor-provider-208',
+            senderAddress: '050-189-0497',
+          }),
+        );
+        assert.equal(outcome.kind, 'call');
+        if (outcome.kind !== 'call') return;
+        const call = await getCall(db, outcome.callId);
+        assert.equal(call?.state, 'NEW');
+        assert.equal(call?.requester, null);
       });
     } finally {
       await pool.end();

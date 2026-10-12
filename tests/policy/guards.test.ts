@@ -258,6 +258,29 @@ describe('guard · a person-shaped column carries -- pii', () => {
     assert.match(result.violations[0]?.detail ?? '', /party_contact\.value/);
   });
 
+  it('trips on an unmarked party_contact.label', (t) => {
+    const root = fixture(migration('  label text'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const result = guardPiiComments(root);
+    assert.equal(result.violations.length, 1);
+    assert.match(result.violations[0]?.detail ?? '', /party_contact\.label/);
+  });
+
+  it('accepts party_contact.label when it is marked', (t) => {
+    const root = fixture(migration('  label text, -- pii'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    assert.deepEqual(guardPiiComments(root).violations, []);
+  });
+
+  it("leaves another table's label alone", (t) => {
+    const root = fixture({
+      [path.join(MIGRATIONS_DIR, '0099_other.sql')]:
+        'CREATE TABLE catalogue (\n  label text NOT NULL\n);\n',
+    });
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    assert.deepEqual(guardPiiComments(root).violations, []);
+  });
+
   it('accepts party_contact.value when it is marked', (t) => {
     const root = fixture(
       migration('  channel text NOT NULL,\n  value text NOT NULL, -- pii'),

@@ -66,6 +66,11 @@ import {
 import { renderIndexPage } from '../../src/index-page.ts';
 import { hasIdentifierRun } from '../../src/kernel/identifier.ts';
 import { CSRF_FIELD } from '../../src/kernel/ui/page.ts';
+import {
+  renderPartyCreate,
+  renderPartyDirectory,
+  renderPartyProfile,
+} from '../../src/party-directory.ts';
 import { renderSettingsPage } from '../../src/settings-page.ts';
 import {
   renderLoginPage,
@@ -289,16 +294,16 @@ const CSRF = 'a1b2c3d4'.repeat(8);
 // destination is the one gated item on it, so a nav built with `false` is a different screen and is
 // registered as one — `root · index, צופה` and `root · settings, viewer` below are where the
 // registry holds that variant.
-const NAV = signedInChrome(CSRF, 'estate', true);
-const NAV_INVENTORY = signedInChrome(CSRF, 'inventory', true);
-const NAV_SEARCH = signedInChrome(CSRF, 'search', true);
-const NAV_EXPIRING = signedInChrome(CSRF, 'expiring', true);
-const NAV_INCOMPLETE = signedInChrome(CSRF, 'incomplete', true);
-const NAV_TENANCIES = signedInChrome(CSRF, 'tenancies', true);
-const NAV_STAFF = signedInChrome(CSRF, 'staff', true);
-const NAV_DOCUMENTS = signedInChrome(CSRF, 'documents', true);
-const NAV_FILING = signedInChrome(CSRF, 'filing', true);
-const NAV_CALLS = signedInChrome(CSRF, 'calls', true, 1);
+const NAV = signedInChrome(CSRF, 'estate', true, true);
+const NAV_INVENTORY = signedInChrome(CSRF, 'inventory', true, true);
+const NAV_SEARCH = signedInChrome(CSRF, 'search', true, true);
+const NAV_EXPIRING = signedInChrome(CSRF, 'expiring', true, true);
+const NAV_INCOMPLETE = signedInChrome(CSRF, 'incomplete', true, true);
+const NAV_TENANCIES = signedInChrome(CSRF, 'tenancies', true, true);
+const NAV_STAFF = signedInChrome(CSRF, 'staff', true, true);
+const NAV_DOCUMENTS = signedInChrome(CSRF, 'documents', true, true);
+const NAV_FILING = signedInChrome(CSRF, 'filing', true, true);
+const NAV_CALLS = signedInChrome(CSRF, 'calls', true, true, 1);
 
 /**
  * **The read overlay at a stance. Slice 6.4.**
@@ -493,12 +498,16 @@ function fieldsLedger(options: {
 
 const SCREENS: Array<[string, () => string]> = [
   // A role that may not file: no card, and from 6.9 no rail destination either.
-  ['root · index, צופה', () => renderIndexPage({ csrf: CSRF, mayFile: false })],
+  [
+    'root · index, צופה',
+    () =>
+      renderIndexPage({ csrf: CSRF, mayFile: false, mayReadParties: false }),
+  ],
   [
     // Slice 6.3: the same index for a role that may file a document. The door is the only
     // difference, and the registry is where it is asserted rather than in a second guard.
     'root · index, may file',
-    () => renderIndexPage({ csrf: CSRF, mayFile: true }),
+    () => renderIndexPage({ csrf: CSRF, mayFile: true, mayReadParties: true }),
   ],
   [
     'estate · buildings',
@@ -2249,6 +2258,7 @@ const SCREENS: Array<[string, () => string]> = [
         csrf: CSRF,
         mayWrite: true,
         mayFile: true,
+        mayReadParties: true,
         state: 'wired',
         obligations: [
           {
@@ -2296,6 +2306,7 @@ const SCREENS: Array<[string, () => string]> = [
         csrf: CSRF,
         mayWrite: false,
         mayFile: false,
+        mayReadParties: false,
         state: 'wired',
         obligations: [],
         documents: [],
@@ -2307,6 +2318,133 @@ const SCREENS: Array<[string, () => string]> = [
           hours: 'טרם נקבעו',
         },
         goal: { amberMinutes: 240, redMinutes: 1440 },
+      }),
+  ],
+  [
+    'parties · directory',
+    () =>
+      renderPartyDirectory({
+        csrf: CSRF,
+        mayFile: true,
+        mayReadParties: true,
+        mayWriteParty: true,
+        query: '',
+        label: null,
+        rows: [
+          {
+            partyId: '33333333-3333-4333-8333-333333333333',
+            fullName: 'דנה לוי',
+            primaryPhone: '+972521111111',
+            primaryEmail: 'dana@example.test',
+            language: 'he',
+            formerNumber: false,
+            holdsRole: true,
+            labels: [
+              {
+                kind: 'current',
+                text: 'שוכר נוכחי · שוכר ראשי · דירה 4',
+                tenancyId: '44444444-4444-4444-8444-444444444444',
+              },
+            ],
+          },
+        ],
+      }),
+  ],
+  [
+    'parties · profile',
+    () =>
+      renderPartyProfile({
+        csrf: CSRF,
+        mayFile: true,
+        mayReadParties: true,
+        profile: {
+          partyId: '33333333-3333-4333-8333-333333333333',
+          kind: 'PERSON',
+          givenName: 'דנה',
+          familyName: 'לוי',
+          legalName: null,
+          fullName: 'דנה לוי',
+          language: 'he',
+          nationalIdSuffix: null,
+          sameName: [],
+          contacts: [
+            {
+              contactId: '55555555-5555-4555-8555-555555555555',
+              channel: 'PHONE',
+              value: '+972521111111',
+              label: null,
+              isPrimary: true,
+              validFrom: '2024-03-01',
+              validTo: null,
+            },
+          ],
+        },
+        labels: {
+          holdsRole: true,
+          labels: [
+            {
+              kind: 'current',
+              text: 'שוכר נוכחי · שוכר ראשי · דירה 4',
+              tenancyId: '44444444-4444-4444-8444-444444444444',
+            },
+          ],
+        },
+        calls: [],
+      }),
+  ],
+  [
+    'parties · new person',
+    () =>
+      renderPartyCreate({
+        csrf: CSRF,
+        mayFile: true,
+        mayReadParties: true,
+        draft: {
+          kind: 'PERSON',
+          givenName: '',
+          familyName: '',
+          legalName: '',
+          language: 'he',
+          contact: '',
+          identifier: '',
+        },
+      }),
+  ],
+  [
+    'parties · new company',
+    () =>
+      renderPartyCreate({
+        csrf: CSRF,
+        mayFile: true,
+        mayReadParties: true,
+        draft: {
+          kind: 'COMPANY',
+          givenName: '',
+          familyName: '',
+          legalName: '',
+          language: 'he',
+          contact: '',
+          identifier: '',
+        },
+      }),
+  ],
+  [
+    'parties · new person, administrator',
+    () =>
+      renderPartyCreate({
+        csrf: CSRF,
+        mayFile: true,
+        mayReadParties: true,
+        mayReadNationalId: true,
+        draft: {
+          kind: 'PERSON',
+          givenName: '',
+          familyName: '',
+          legalName: '',
+          language: 'he',
+          contact: '',
+          identifier: '',
+        },
       }),
   ],
 ];
@@ -2488,6 +2626,8 @@ describe('shared UI tokens', () => {
       if (VIEWER_RAIL.has(name)) {
         assert.doesNotMatch(html, /data-dest="documents"/, name);
         assert.doesNotMatch(html, /data-dest="filing"/, name);
+        assert.doesNotMatch(html, /אנשי קשר/, name);
+        assert.doesNotMatch(html, /href="\/parties"/, name);
       } else {
         assert.match(html, /data-dest="documents"/, name);
         // **Slice 7.1 repointed it.** The rail item was the filing form; it is the tab now, and
@@ -2498,6 +2638,8 @@ describe('shared UI tokens', () => {
         assert.match(html, /data-dest="filing"/, name);
         assert.match(html, /href="\/documents\/filing"/, name);
         assert.match(html, />תיוק חוזה</, name);
+        assert.match(html, /href="\/parties"/, name);
+        assert.match(html, />אנשי קשר</, name);
         const docs = html.indexOf('data-dest="documents"');
         const filing = html.indexOf('data-dest="filing"');
         assert.ok(docs < filing, name);
@@ -2532,16 +2674,33 @@ describe('shared UI tokens', () => {
       'staff',
       'calls',
       'settings',
+      'parties',
     ] as const) {
-      const rail = String(signedInChrome(CSRF, dest, true));
+      const rail = String(signedInChrome(CSRF, dest, true, true));
       assert.match(rail, new RegExp(`data-dest="${dest}" aria-current="page"`));
       assert.equal(rail.match(/aria-current="page"/g)?.length, 1, dest);
     }
     for (const dest of ['estate', 'index'] as const) {
-      const rail = String(signedInChrome(CSRF, dest, true));
+      const rail = String(signedInChrome(CSRF, dest, true, false));
       assert.equal(rail.match(/aria-current="page"/g)?.length ?? 0, 0, dest);
       assert.doesNotMatch(rail, /data-dest="estate"/);
     }
+  });
+
+  // #202. The tab is real, and it is `party.read`: a viewer does not see it.
+  it('shows אנשי קשר only to a role that may read parties', () => {
+    const shown = String(signedInChrome(CSRF, 'inventory', true, true));
+    assert.match(shown, />אנשי קשר</);
+    assert.match(shown, /href="\/parties"/);
+    const search = shown.indexOf('data-dest="search"');
+    const parties = shown.indexOf('data-dest="parties"');
+    const staff = shown.indexOf('data-dest="staff"');
+    assert.ok(search !== -1 && search < parties && parties < staff);
+    const current = String(signedInChrome(CSRF, 'parties', false, true));
+    assert.match(current, /data-dest="parties" aria-current="page"/);
+    const hidden = String(signedInChrome(CSRF, 'inventory', true, false));
+    assert.doesNotMatch(hidden, /אנשי קשר/);
+    assert.doesNotMatch(hidden, /href="\/parties"/);
   });
 
   /**
@@ -2752,8 +2911,19 @@ describe('shared UI tokens', () => {
     // document and a signed read of its bytes; it did not put a household on a chip (SPEC.md).
     //
     // The operator's own email is on the staff board and always was: this rule is about tenants.
+    // **#202.** אנשי קשר is the list that shows a party's phone. SPEC-parties.md. Every other
+    // screen stays nameless on this axis. The two exceptions have to actually carry a number,
+    // so an entry added here to hide a leak would fail instead of pass.
+    const MAY_SHOW_A_PHONE = new Set([
+      'parties · directory',
+      'parties · profile',
+    ]);
     for (const [name, render] of SCREENS) {
       const html = render();
+      if (MAY_SHOW_A_PHONE.has(name)) {
+        assert.match(html, /\+972/, name);
+        continue;
+      }
       assert.doesNotMatch(html, /05\d[- ]?\d/, name);
       assert.doesNotMatch(html, /\+972/, name);
     }

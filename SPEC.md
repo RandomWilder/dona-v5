@@ -78,7 +78,7 @@ Follows the workbook's entities, not v3's ([docs/from-v3.md](docs/from-v3.md) Ti
 |---|---|---|
 | `kernel` | — | — |
 | `staff` | — | kernel |
-| `estate` | E1–E4, E11, E14 — Project · Building · Space · Unit · Asset · Provider (stub) | kernel |
+| `estate` | E1–E4, E11, E14 — Project · Building · Space · Unit · Asset · Provider | kernel, parties |
 | `parties` | E5, E6 — Party · PartyContact | kernel |
 | `tenancy` | E7–E10 — Tenancy · TenancyParty · Obligation · ObligationType | estate, parties |
 | `evidence` | E12, E13, E15, E16 — Document · DocumentLink · DocumentType · DocumentTypeField · ExtractedField · FieldPromotion | estate, parties, tenancy, staff |
@@ -86,7 +86,7 @@ Follows the workbook's entities, not v3's ([docs/from-v3.md](docs/from-v3.md) Ti
 | `register` | — the register file and nothing else | estate, parties, tenancy, scope |
 | `policy` | responsibility matrix · SLA · escalation | estate, tenancy |
 | `calls` | ServiceCall · Visit · Category · Filtered message · the state machine | scope, policy, parties |
-| `channel` | Conversation · Message · the intake door · the Outlook, Gmail and WhatsApp adapters | scope, calls, parties, evidence |
+| `channel` | Conversation · Message · the intake door · the Outlook, Gmail and WhatsApp adapters | scope, calls, evidence, estate |
 
 No cycles. `Project` sits above `Building` and is optional (`Building.project_id` nullable).
 
@@ -123,11 +123,11 @@ here:
 - **UI is self-contained HTML plus `/ui/tokens.css`, and nothing else.** No bundler, no framework.
   Hebrew is RTL through logical properties (`margin-inline-start`, never `margin-left`), so one
   stylesheet serves both directions. **From slice 5.2c, every signed-in screen carries the same
-  ops sidebar** — נכסים, documents, lease filing, expiring, tenancies, incomplete, search, staff, calls, settings, and sign-out — built once at the
+  ops sidebar** — נכסים, documents, lease filing, expiring, tenancies, incomplete, search, אנשי קשר, staff, calls, settings, and sign-out — built once at the
   composition root and injected, because the kernel may not learn a route and a module may not own
   another module's. The current destination is marked on the rail. בניינים is not an item: a screen
   that still names that destination marks nothing. Documents and lease filing are on the rail only
-  for a role that may file. The login screen has none of
+  for a role that may file. אנשי קשר is on the rail only for a role that may read parties. The login screen has none of
   those links and no sidebar. **From 5.2d the shell is a phone first:** below 840px the rail is a
   drawer behind a menu control in that same shell, so a new screen inherits the drawer by calling
   `renderPage` with `nav` and never draws its own. Still no client JavaScript: the open state is a
@@ -228,6 +228,12 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
   exception. The pattern both read is `IDENTIFIER_RUN` in `src/kernel/identifier.ts`, one spelling,
   boundary-anchored so a UUID, a file hash, a base64 data URI and an ISO date cannot fire it —
   week 5 closed on the opposite mistake, a `/05\d/` that read a CSRF token's own hex.
+- **#204. The profile shows a masked suffix, and that is not a disclosure of the value.** Anyone
+  who can open a party's profile sees the last four characters of the normalised identifier, with
+  bullets before them. A party with none shows a dash. That suffix is not access-logged. The full
+  value stays behind `party.national_id.read`: revealing it, searching the directory by one, and
+  writing one are that permission, and each writes an audit line that does not carry the value.
+  The directory never shows the suffix. The policy case is `tests/policy/party-national-id.test.ts`.
 - **The staff credential is Google's; the session is ours** (slice 5.1, amended at 5.1b —
   `SPEC-staff.md`, ADR-0005). No password hash and no second-factor secret exist in this schema.
   **What this system asserts is an allowlist and not a factor**: only an email that already has a

@@ -690,15 +690,9 @@ const VACANT_TILE: UnitTileState = {
   lines: [],
 };
 
-function lastName(full: string | null): string | null {
-  const trimmed = full?.trim();
-  if (!trimmed) return null;
-  return trimmed.split(/\s+/).at(-1) ?? null;
-}
-
 function tileLetting(line: UnitTileState['lines'][number]): Html {
   if (line.chip === null) return h``;
-  const who = line.chip === 'active' ? lastName(line.household_name) : null;
+  const who = line.chip === 'active' ? line.family_name : null;
   return h`<span class="letting">${bookChip(line.chip)}${ltr(`${line.start} — ${line.end}`)}${
     who ? h`<span class="who">${who}</span>` : h``
   }</span>`;

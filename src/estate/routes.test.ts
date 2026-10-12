@@ -293,7 +293,7 @@ describe('estate · the routes', () => {
             [tenancyId, unitId, profile.rows[0]?.terms_profile_id],
           );
           await pool.query(
-            `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', $2)`,
+            `INSERT INTO party (party_id, party_kind, family_name) VALUES ($1, 'PERSON', $2)`,
             [partyId, 'Tenant of routes-48'],
           );
           await pool.query(
@@ -2610,7 +2610,7 @@ describe('estate · the tenancy page', () => {
         [tenancyId, unitId, profile.rows[0]?.terms_profile_id],
       );
       await pool.query(
-        `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', $2)`,
+        `INSERT INTO party (party_id, party_kind, family_name) VALUES ($1, 'PERSON', $2)`,
         [partyId, A5_TENANT],
       );
       await pool.query(
@@ -2797,7 +2797,7 @@ describe('estate · the tenancy page', () => {
         [tenancyId, unit.rows[0]?.unit_id, profile.rows[0]?.terms_profile_id],
       );
       await pool.query(
-        `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', $2)`,
+        `INSERT INTO party (party_id, party_kind, family_name) VALUES ($1, 'PERSON', $2)`,
         [partyId, A5_TENANT],
       );
       await pool.query(
@@ -2864,7 +2864,7 @@ describe('estate · the tenancy page', () => {
         [tenancyId, unit.rows[0]?.unit_id, profile.rows[0]?.terms_profile_id],
       );
       await pool.query(
-        `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', $2)`,
+        `INSERT INTO party (party_id, party_kind, family_name) VALUES ($1, 'PERSON', $2)`,
         [partyId, A5_TENANT],
       );
       await pool.query(
@@ -3034,11 +3034,11 @@ describe('estate · the tenancy page', () => {
         [tenancyId, unitId, profile.rows[0]?.terms_profile_id],
       );
       await pool.query(
-        `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', $2)`,
+        `INSERT INTO party (party_id, party_kind, family_name) VALUES ($1, 'PERSON', $2)`,
         [tenantId, A5_TENANT],
       );
       await pool.query(
-        `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', 'ערב ויתור')`,
+        `INSERT INTO party (party_id, party_kind, family_name) VALUES ($1, 'PERSON', 'ערב ויתור')`,
         [guarantorId],
       );
       await pool.query(
@@ -3278,7 +3278,7 @@ describe('estate · שכירויות', () => {
         ) => {
           const partyId = newId();
           await db.query(
-            `INSERT INTO party (party_id, party_kind, full_name)
+            `INSERT INTO party (party_id, party_kind, family_name)
              VALUES ($1, 'PERSON', $2)`,
             [partyId, fullName],
           );
@@ -3622,7 +3622,7 @@ describe('estate · the unit page lists its lettings', () => {
         ) => {
           const partyId = newId();
           await db.query(
-            `INSERT INTO party (party_id, party_kind, full_name)
+            `INSERT INTO party (party_id, party_kind, family_name)
              VALUES ($1, 'PERSON', $2)`,
             [partyId, fullName],
           );

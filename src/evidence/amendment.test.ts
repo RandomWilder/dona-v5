@@ -34,7 +34,7 @@ import {
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const AT = new Date('2026-09-08T12:00:00.000Z');
-const NAV = signedInChrome('x'.repeat(64), 'documents', true);
+const NAV = signedInChrome('x'.repeat(64), 'documents', true, true);
 const BUCKET = 'dona-v5-test-amendment';
 const LEASE_MARKERS = 'חוזה שכירות המושכר תקופת השכירות השוכר';
 // **Widened at 7.1, with the declaration it is a fixture for.** The נספח declaration was
@@ -466,5 +466,47 @@ describe('evidence · addendum confirm screen', () => {
     assert.match(html, /אישור נספח/);
     assert.match(html, /אישור וכתיבה/);
     assert.doesNotMatch(html, /<select name="terms_profile"/);
+  });
+
+  it('keeps a confirmed family name of more than one word', () => {
+    const fieldId = '44444444-4444-4444-8444-444444444444';
+    const html = renderTenancyPage({
+      nav: NAV,
+      csrf: '',
+      documentId: '33333333-3333-4333-8333-333333333333',
+      typeKey: 'lease_amendment',
+      unit,
+      crossCheck: {
+        addressRead: true,
+        apartmentRead: true,
+        addressFits: true,
+        apartmentFits: true,
+      },
+      startDate: null,
+      endDate: null,
+      apartmentNumber: null,
+      address: null,
+      people: [
+        {
+          extractedFieldId: fieldId,
+          fieldKey: 'guarantor_name',
+          value: 'דנה\u001fבן דוד',
+          proposedRole: 'GUARANTOR',
+          hasIdentifier: false,
+        },
+      ],
+      matchesUnit: true,
+      alreadyEstablished: false,
+      boundToTenancy: true,
+      termsProfileNames: [],
+      candidates: [],
+      proposedTenancyId: null,
+      identifiersRead: 0,
+      identifiersPaired: 0,
+    });
+    assert.match(html, /דנה בן דוד/);
+    assert.equal(html.includes('\u001f'), false);
+    assert.match(html, new RegExp(`name="given-${fieldId}" value="דנה"`));
+    assert.match(html, new RegExp(`name="family-${fieldId}" value="בן דוד"`));
   });
 });

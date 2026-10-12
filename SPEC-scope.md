@@ -66,6 +66,11 @@ each*. Two of them are this module's.
   appears rather than vanishing.
 - **Q2 — this phone number just messaged us, which unit, if any?** `resolveUnitsByPhone(db, phone,
   clock)`. The isolation join, and the answer is frequently *none*, which is the point.
+- **Who holds this open contact, with no unit?** `partyHoldingContact`. The same contact-validity
+  predicate, asked of `party_contact`, because the view only contains a contact that already
+  reaches a unit. The door uses it when Q2 returns nobody, then asks estate whether that one party
+  is a service provider (#208). More than one row is nobody. It writes no access line: the join
+  already logged the miss, and the answer carries no household.
 - **Q2 for an address — this email just arrived, which unit, if any?** `resolveUnitsByEmail(db,
   email, clock)`. The same join with `channel = 'EMAIL'`. The address is trimmed and lowercased
   here before it is compared, and a contact saved from a call is stored in that same form, so

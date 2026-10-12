@@ -71,12 +71,18 @@ async function insertParty(
   overrides: { kind?: string; language?: string; nationalId?: string } = {},
 ): Promise<string> {
   const partyId = newId();
+  const kind = overrides.kind ?? 'PERSON';
   await db.query(
-    `INSERT INTO party (party_id, party_kind, full_name, national_id, preferred_language)
-     VALUES ($1, $2, 'דנה כהן', $3, $4)`,
+    `INSERT INTO party (
+       party_id, party_kind, given_name, family_name, legal_name, national_id, preferred_language
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [
       partyId,
-      overrides.kind ?? 'PERSON',
+      kind,
+      null,
+      kind === 'COMPANY' ? null : 'דנה כהן',
+      kind === 'COMPANY' ? 'חברה לדוגמה' : null,
       overrides.nationalId ?? null,
       overrides.language ?? 'he',
     ],
@@ -361,7 +367,7 @@ describe('parties · the rest of the schema', () => {
           await inRolledBackTransaction(pool, async (db) => {
             const partyId = newId();
             await db.query(
-              `INSERT INTO party (party_id, party_kind, full_name)
+              `INSERT INTO party (party_id, party_kind, family_name)
              VALUES ($1, 'PERSON', 'דנה כהן')`,
               [partyId],
             );
@@ -379,7 +385,11 @@ describe('parties · the rest of the schema', () => {
       await t.test('the columns are the workbook’s E5 and E6', async () => {
         await inRolledBackTransaction(pool, async (db) => {
           assert.deepEqual(await columnsOf(db, 'party'), [
+            'family_name',
             'full_name',
+            'full_name_before_split',
+            'given_name',
+            'legal_name',
             'national_id',
             'national_id_key',
             'party_id',
@@ -390,6 +400,7 @@ describe('parties · the rest of the schema', () => {
             'channel',
             'contact_id',
             'is_primary',
+            'label',
             'party_id',
             'valid_from',
             'valid_to',
@@ -399,19 +410,172 @@ describe('parties · the rest of the schema', () => {
         });
       });
 
+      // #200. The name is stored in parts. full_name is computed and cannot be written.
+      await t.test(
+        'a person name is a family name, and the display is computed',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            const person = newId();
+            await db.query(
+              `INSERT INTO party (party_id, party_kind, given_name, family_name)
+             VALUES ($1, 'PERSON', 'דנה', 'בן דוד')`,
+              [person],
+            );
+            const mononym = newId();
+            await db.query(
+              `INSERT INTO party (party_id, party_kind, family_name)
+             VALUES ($1, 'PERSON', 'בן דוד')`,
+              [mononym],
+            );
+            const company = newId();
+            await db.query(
+              `INSERT INTO party (party_id, party_kind, legal_name)
+             VALUES ($1, 'COMPANY', 'אלפא שירותים')`,
+              [company],
+            );
+            const names = await db.query<{
+              party_id: string;
+              full_name: string;
+            }>(
+              `SELECT party_id, full_name FROM party WHERE party_id = ANY($1::uuid[])`,
+              [[person, mononym, company]],
+            );
+            const byId = new Map(
+              names.rows.map((row) => [row.party_id, row.full_name]),
+            );
+            assert.equal(byId.get(person), 'דנה בן דוד');
+            assert.equal(byId.get(mononym), 'בן דוד');
+            assert.equal(byId.get(company), 'אלפא שירותים');
+            await rejects(db, '428C9', () =>
+              db.query(
+                `INSERT INTO party (party_id, party_kind, family_name, full_name)
+               VALUES ($1, 'PERSON', 'כהן', 'דנה כהן')`,
+                [newId()],
+              ),
+            );
+          });
+        },
+      );
+
+      await t.test(
+        'a name that does not match the kind is rejected',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            // No name parts means the generated display name is null, so the
+            // not-null on that column refuses the row before the kind check.
+            await rejects(db, NOT_NULL_VIOLATION, () =>
+              db.query(
+                `INSERT INTO party (party_id, party_kind) VALUES ($1, 'PERSON')`,
+                [newId()],
+              ),
+            );
+            await rejects(db, CHECK_VIOLATION, () =>
+              db.query(
+                `INSERT INTO party (party_id, party_kind, family_name, legal_name)
+               VALUES ($1, 'PERSON', 'כהן', 'אלפא')`,
+                [newId()],
+              ),
+            );
+            await rejects(db, NOT_NULL_VIOLATION, () =>
+              db.query(
+                `INSERT INTO party (party_id, party_kind) VALUES ($1, 'COMPANY')`,
+                [newId()],
+              ),
+            );
+            await rejects(db, CHECK_VIOLATION, () =>
+              db.query(
+                `INSERT INTO party (party_id, party_kind, legal_name, given_name)
+               VALUES ($1, 'COMPANY', 'אלפא', 'דנה')`,
+                [newId()],
+              ),
+            );
+            await rejects(db, CHECK_VIOLATION, () =>
+              db.query(
+                `INSERT INTO party (party_id, party_kind, legal_name, family_name)
+               VALUES ($1, 'COMPANY', 'אלפא', 'כהן')`,
+                [newId()],
+              ),
+            );
+          });
+        },
+      );
+
+      // #206. A short name for who answers, optional, and not a second party.
+      await t.test(
+        'a contact can carry a label, and the column is optional',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            const partyId = newId();
+            await db.query(
+              `INSERT INTO party (party_id, party_kind, family_name)
+             VALUES ($1, 'PERSON', 'דנה כהן')`,
+              [partyId],
+            );
+            const labelled = newId();
+            await db.query(
+              `INSERT INTO party_contact (contact_id, party_id, channel, value, is_primary,
+                                        valid_from, label)
+             VALUES ($1, $2, 'PHONE', '+972522061111', true, '2026-01-01', 'יוסי – סדרן')`,
+              [labelled, partyId],
+            );
+            const plain = newId();
+            await db.query(
+              `INSERT INTO party_contact (contact_id, party_id, channel, value, is_primary,
+                                        valid_from)
+             VALUES ($1, $2, 'EMAIL', 'dana@example.test', false, '2026-01-01')`,
+              [plain, partyId],
+            );
+            const rows = await db.query<{
+              contact_id: string;
+              label: string | null;
+              is_nullable: string;
+            }>(
+              `SELECT c.contact_id, c.label, i.is_nullable
+               FROM party_contact c
+               JOIN information_schema.columns i
+                 ON i.table_schema = 'public'
+                AND i.table_name = 'party_contact'
+                AND i.column_name = 'label'
+              WHERE c.party_id = $1`,
+              [partyId],
+            );
+            const byId = new Map(rows.rows.map((row) => [row.contact_id, row]));
+            assert.equal(byId.get(labelled)?.label, 'יוסי – סדרן');
+            assert.equal(byId.get(plain)?.label, null);
+            assert.equal(byId.get(labelled)?.is_nullable, 'YES');
+          });
+        },
+      );
+
       // Foundation rule 1, asserted at the table that would be most tempting to put it on: the
       // scope is a view, and `party` carries no pointer to a unit or a tenancy.
       await t.test(
-        'no column here names a unit, a tenancy or a tenant',
+        'no column, view or table stores a label or a tenancy state on the party',
         async () => {
           await inRolledBackTransaction(pool, async (db) => {
             const leaked = await db.query(
               `SELECT table_name, column_name FROM information_schema.columns
              WHERE table_schema = 'public'
-               AND table_name IN ('party', 'party_contact')
-               AND column_name IN ('unit_id', 'tenancy_id', 'current_tenant')`,
+               AND (
+                 (
+                   table_name IN ('party', 'party_contact')
+                   AND column_name IN ('unit_id', 'tenancy_id', 'current_tenant')
+                 )
+                 OR (
+                   table_name = 'party'
+                   AND column_name IN ('label', 'party_label', 'tenancy_status')
+                 )
+               )`,
             );
             assert.deepEqual(leaked.rows, []);
+            const stored = await db.query(
+              `SELECT relname FROM pg_class c
+                 JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public'
+                  AND c.relkind IN ('r', 'v', 'm')
+                  AND relname IN ('party_label', 'party_status')`,
+            );
+            assert.deepEqual(stored.rows, []);
           });
         },
       );
@@ -514,7 +678,7 @@ describe('parties · a party is identified by its national_id, normalised', () =
         await inRolledBackTransaction(pool, async (db) => {
           await rejects(db, '428C9', () =>
             db.query(
-              `INSERT INTO party (party_id, party_kind, full_name, national_id, national_id_key)
+              `INSERT INTO party (party_id, party_kind, family_name, national_id, national_id_key)
                VALUES ($1, 'PERSON', 'דנה כהן', '042938271', 'whatever')`,
               [newId()],
             ),
@@ -568,9 +732,17 @@ describe('parties · the named fold and the generated column are one fold', () =
           ];
           for (const [kind, nationalId] of shapes) {
             await db.query(
-              `INSERT INTO party (party_id, party_kind, full_name, national_id, preferred_language)
-               VALUES ($1, $2, 'fold-case', $3, 'he')`,
-              [newId(), kind, nationalId],
+              `INSERT INTO party (
+                 party_id, party_kind, family_name, legal_name, national_id, preferred_language
+               )
+               VALUES ($1, $2, $3, $4, $5, 'he')`,
+              [
+                newId(),
+                kind,
+                kind === 'PERSON' ? 'fold-case' : null,
+                kind === 'COMPANY' ? 'fold-case' : null,
+                nationalId,
+              ],
             );
           }
           const counted = await db.query<{ rows: string; disagree: string }>(

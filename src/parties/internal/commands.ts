@@ -1,18 +1,19 @@
 // The parties module's write commands. Slice 2.4, and the caller 2.1 predicted: "2.3 and 2.4 are
 // this module's callers."
 //
-// Two upserts and nothing else. There is no read model here and no query on this module's contract,
-// deliberately — who is reachable on a number is `src/scope/`'s answer and never this module's,
-// which is foundation rule 1 expressed as a module boundary rather than as a comment.
+// The write commands. The directory and the profile are the read (#202, `directory.ts`). Who is
+// reachable on a number today is still `src/scope/`'s answer and never this module's, which is
+// foundation rule 1 expressed as a module boundary rather than as a comment.
 //
 // Both statements are `INSERT ... ON CONFLICT (<natural key>) DO UPDATE ... RETURNING`, which is
 // the estate importer's shape at 1.11 and for its reasons: the id is *proposed*, so on a second run
 // Postgres returns the id already there, and `DO UPDATE` rather than `DO NOTHING` because DO NOTHING
 // returns no row and an import correcting a typo in a name should correct it.
+import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
-import { requireText } from '../../kernel/validate.ts';
+import { requireText, validId } from '../../kernel/validate.ts';
 import type { Queryable } from './types.ts';
 
 export type PartyKind = 'PERSON' | 'COMPANY';
@@ -21,8 +22,14 @@ export type PreferredLanguage = 'he' | 'ar' | 'ru' | 'fr' | 'en';
 
 export interface PartySpec {
   kind: PartyKind;
-  /** -- pii. */
-  fullName: string;
+  /**
+   * -- pii. A person. Null is someone known by one name. Refused on a company.
+   */
+  givenName?: string | null;
+  /** -- pii. Required for a person. Refused on a company. */
+  familyName?: string | null;
+  /** -- pii. Required for a company. Refused on a person. */
+  legalName?: string | null;
   /**
    * -- pii. **Required by this command, where the column is nullable.**
    *
@@ -58,27 +65,83 @@ export interface PartyContactSpec {
 
 export interface CreatePartySpec {
   kind: PartyKind;
-  /** -- pii. */
-  fullName: string;
+  /** -- pii. Null is someone known by one name. */
+  givenName?: string | null;
+  /** -- pii. Required for a person. */
+  familyName?: string | null;
+  /** -- pii. Required for a company. */
+  legalName?: string | null;
   preferredLanguage: PreferredLanguage;
+}
+
+interface StoredName {
+  givenName: string | null;
+  familyName: string | null;
+  legalName: string | null;
+}
+
+/**
+ * The split the table will store. A blank given name is null, which is a mononym. The CHECK
+ * `party_name_matches_kind` is the rule; this is the message, and it names no value.
+ */
+function storedName(spec: {
+  kind: PartyKind;
+  givenName?: string | null;
+  familyName?: string | null;
+  legalName?: string | null;
+}): StoredName {
+  const given = spec.givenName?.trim() ?? '';
+  const family = spec.familyName?.trim() ?? '';
+  const legal = spec.legalName?.trim() ?? '';
+  if (spec.kind === 'COMPANY') {
+    if (given !== '' || family !== '') {
+      throw new KernelError(
+        'invalid',
+        'a company has a legal name and no person name',
+      );
+    }
+    return {
+      givenName: null,
+      familyName: null,
+      legalName: requireText(legal, 'legal_name', 200),
+    };
+  }
+  if (legal !== '') {
+    throw new KernelError('invalid', 'a person has no legal name');
+  }
+  return {
+    givenName: given === '' ? null : requireText(given, 'given_name', 200),
+    familyName: requireText(family, 'family_name', 200),
+    legalName: null,
+  };
 }
 
 /**
  * A person named on a lease, with no identifier. Always an insert: there is no natural key to
  * conflict on. Slice 5.5 measured the portfolio and kept that: 0 parties with no identifier, 0
  * nameless same-name groups. Matching a name across tenancies stays forbidden (SPEC-flows.md A2
- * step 5). Slice 4.6, flow A2.
+ * step 5). Slice 4.6, flow A2. A party made by hand is `createPartyByHand` (#207). This command
+ * stays the lease path: a name alone is enough, because the lease is the evidence.
  */
 export async function createParty(
   db: Queryable,
   spec: CreatePartySpec,
 ): Promise<UpsertResult> {
-  const fullName = requireText(spec.fullName, 'full_name', 200);
+  const name = storedName(spec);
   const result = await db.query<{ party_id: string; inserted: boolean }>(
-    `INSERT INTO party (party_id, party_kind, full_name, national_id, preferred_language)
-     VALUES ($1, $2, $3, NULL, $4)
+    `INSERT INTO party (
+       party_id, party_kind, given_name, family_name, legal_name, national_id, preferred_language
+     )
+     VALUES ($1, $2, $3, $4, $5, NULL, $6)
      RETURNING party_id, ${INSERTED}`,
-    [newId(), spec.kind, fullName, spec.preferredLanguage],
+    [
+      newId(),
+      spec.kind,
+      name.givenName,
+      name.familyName,
+      name.legalName,
+      spec.preferredLanguage,
+    ],
   );
   const row = result.rows[0];
   if (!row) {
@@ -87,23 +150,153 @@ export async function createParty(
   return { id: row.party_id, inserted: row.inserted };
 }
 
+export interface HandPartySpec {
+  kind: PartyKind;
+  /** -- pii. Null is someone known by one name. */
+  givenName?: string | null;
+  /** -- pii. Required for a person. */
+  familyName?: string | null;
+  /** -- pii. Required for a company. */
+  legalName?: string | null;
+  preferredLanguage: string;
+  /**
+   * -- pii. Null when the party is reached by a contact and holds no identifier.
+   * Stored as given. The generated key is what refuses a second holder.
+   */
+  nationalId: string | null;
+  /**
+   * One open contact, already normalised, or null when the party is identified
+   * by a ת.ז. and holds no contact yet. The value is stored as given.
+   */
+  contact: {
+    channel: string;
+    value: string;
+    validFrom: string;
+  } | null;
+}
+
+/**
+ * A party an operator records from the directory. A name alone is not enough:
+ * without a contact or a ת.ז. the row can never be identified or reached, so
+ * the command refuses it and writes nothing. A contact another party holds, or
+ * a ת.ז. another party holds, refuses the whole create. No half-written party
+ * remains. The lease path stays `createParty`.
+ */
+export async function createPartyByHand(
+  db: Queryable,
+  spec: HandPartySpec,
+): Promise<{
+  partyId: string;
+  contact: { contactId: string; channel: ContactChannel } | null;
+}> {
+  const name = storedName(spec);
+  const language = preferredLanguage(spec.preferredLanguage);
+  const nationalId =
+    spec.nationalId === null || spec.nationalId.trim() === ''
+      ? null
+      : requireText(spec.nationalId, 'national_id', 64);
+  const contact = spec.contact;
+  if (nationalId === null && contact === null) {
+    throw new KernelError(
+      'invalid',
+      'a party needs a contact or an identifier',
+    );
+  }
+  if (contact !== null) {
+    contactChannel(contact.channel);
+    requireText(contact.value, 'value', 320);
+    calendarDay(contact.validFrom);
+  }
+  const partyId = newId();
+  return inTransaction(db, async (tx) => {
+    await tx.query('SAVEPOINT create_party_by_hand');
+    try {
+      await tx.query(
+        `INSERT INTO party (
+           party_id, party_kind, given_name, family_name, legal_name,
+           national_id, preferred_language
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          partyId,
+          spec.kind,
+          name.givenName,
+          name.familyName,
+          name.legalName,
+          nationalId,
+          language,
+        ],
+      );
+      const added =
+        contact === null
+          ? null
+          : await addPartyContact(tx, {
+              partyId,
+              channel: contact.channel,
+              value: contact.value,
+              label: null,
+              validFrom: contact.validFrom,
+            });
+      if (added !== null) {
+        await setPrimaryPartyContact(tx, {
+          partyId,
+          contactId: added.contactId,
+        });
+      }
+      await tx.query('RELEASE SAVEPOINT create_party_by_hand');
+      return { partyId, contact: added };
+    } catch (error) {
+      await tx.query('ROLLBACK TO SAVEPOINT create_party_by_hand');
+      if (error instanceof KernelError) throw error;
+      if (pgCode(error) === UNIQUE_VIOLATION && nationalId !== null) {
+        const holder = await tx.query<{
+          party_id: string;
+          full_name: string;
+        }>(
+          `SELECT party_id, full_name
+             FROM party
+            WHERE national_id_key = party_national_id_key($1, $2)`,
+          [spec.kind, nationalId],
+        );
+        const other = holder.rows[0];
+        throw new KernelError('conflict', 'that identifier is already held', {
+          ...(other
+            ? { partyId: other.party_id, fullName: other.full_name }
+            : {}),
+        });
+      }
+      if (pgCode(error) === CHECK_VIOLATION) {
+        throw new KernelError('invalid', 'the name does not match the kind');
+      }
+      throw error;
+    }
+  });
+}
+
 /** One person or company, identified by its normalised ת.ז. / ח.פ. */
 export async function upsertParty(
   db: Queryable,
   spec: PartySpec,
 ): Promise<UpsertResult> {
+  const name = storedName(spec);
   const result = await db.query<{ party_id: string; inserted: boolean }>(
-    `INSERT INTO party (party_id, party_kind, full_name, national_id, preferred_language)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO party (
+       party_id, party_kind, given_name, family_name, legal_name, national_id, preferred_language
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (national_id_key) DO UPDATE
-       SET full_name = EXCLUDED.full_name,
+       SET given_name = EXCLUDED.given_name,
+           family_name = EXCLUDED.family_name,
+           legal_name = EXCLUDED.legal_name,
            national_id = EXCLUDED.national_id,
            preferred_language = EXCLUDED.preferred_language
      RETURNING party_id, ${INSERTED}`,
     [
       newId(),
       spec.kind,
-      spec.fullName,
+      name.givenName,
+      name.familyName,
+      name.legalName,
       spec.nationalId,
       spec.preferredLanguage,
     ],
@@ -115,6 +308,184 @@ export async function upsertParty(
     throw new KernelError('conflict', 'party upsert returned no row');
   }
   return { id: row.party_id, inserted: row.inserted };
+}
+
+const UNIQUE_VIOLATION = '23505';
+const CHECK_VIOLATION = '23514';
+const EXCLUSION_VIOLATION = '23P01';
+const FOREIGN_KEY_VIOLATION = '23503';
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A real calendar day. A shape that is not a day is refused here, not by a cast. */
+function calendarDay(value: string): string {
+  const day = value.trim();
+  if (!ISO_DATE.test(day)) {
+    throw new KernelError('invalid', 'the date is not a day');
+  }
+  const year = Number(day.slice(0, 4));
+  const month = Number(day.slice(5, 7));
+  const dayOfMonth = Number(day.slice(8, 10));
+  const utc = new Date(Date.UTC(year, month - 1, dayOfMonth));
+  if (
+    utc.getUTCFullYear() !== year ||
+    utc.getUTCMonth() !== month - 1 ||
+    utc.getUTCDate() !== dayOfMonth
+  ) {
+    throw new KernelError('invalid', 'the date is not a day');
+  }
+  return day;
+}
+
+function contactChannel(value: string): ContactChannel {
+  if (value === 'PHONE' || value === 'EMAIL') return value;
+  throw new KernelError('invalid', 'channel is not a contact channel');
+}
+
+function optionalLabel(value: string | null): string | null {
+  if (value === null) return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  return trimmed;
+}
+
+const LANGUAGES = ['he', 'ar', 'ru', 'fr', 'en'] as const;
+
+export type IdentityField =
+  | 'given_name'
+  | 'family_name'
+  | 'legal_name'
+  | 'preferred_language';
+
+function preferredLanguage(value: string): PreferredLanguage {
+  for (const known of LANGUAGES) {
+    if (value === known) return known;
+  }
+  throw new KernelError(
+    'invalid',
+    'preferred_language is not a known language',
+  );
+}
+
+/**
+ * Corrects the name and the language of one party. The kind stays. A blank given
+ * name is a person known by one name. The CHECK `party_name_matches_kind` still
+ * holds: a name the kind cannot carry is refused and the row is unchanged.
+ * The names returned are the fields that changed, never the values.
+ */
+export async function updatePartyIdentity(
+  db: Queryable,
+  spec: {
+    partyId: string;
+    givenName?: string | null;
+    familyName?: string | null;
+    legalName?: string | null;
+    preferredLanguage: string;
+  },
+): Promise<{ fields: IdentityField[] }> {
+  const partyId = validId(spec.partyId, 'party');
+  const current = await db.query<{
+    party_kind: string;
+    given_name: string | null;
+    family_name: string | null;
+    legal_name: string | null;
+    preferred_language: string;
+  }>(
+    `SELECT party_kind, given_name, family_name, legal_name, preferred_language
+       FROM party
+      WHERE party_id = $1`,
+    [partyId],
+  );
+  const row = current.rows[0];
+  if (!row) throw new KernelError('not_found', 'party not found');
+  const kind: PartyKind = row.party_kind === 'COMPANY' ? 'COMPANY' : 'PERSON';
+  const name = storedName({
+    kind,
+    givenName: spec.givenName,
+    familyName: spec.familyName,
+    legalName: spec.legalName,
+  });
+  const language = preferredLanguage(spec.preferredLanguage);
+  const fields: IdentityField[] = [];
+  if (name.givenName !== row.given_name) fields.push('given_name');
+  if (name.familyName !== row.family_name) fields.push('family_name');
+  if (name.legalName !== row.legal_name) fields.push('legal_name');
+  if (language !== row.preferred_language) fields.push('preferred_language');
+  if (fields.length === 0) return { fields };
+  try {
+    const updated = await db.query(
+      `UPDATE party
+          SET given_name = $2,
+              family_name = $3,
+              legal_name = $4,
+              preferred_language = $5
+        WHERE party_id = $1`,
+      [partyId, name.givenName, name.familyName, name.legalName, language],
+    );
+    if (updated.rowCount === 0) {
+      throw new KernelError('not_found', 'party not found');
+    }
+  } catch (error) {
+    if (!(error instanceof KernelError) && pgCode(error) === CHECK_VIOLATION) {
+      throw new KernelError('invalid', 'the name does not match the kind');
+    }
+    throw error;
+  }
+  return { fields };
+}
+
+function pgCode(error: unknown): string | undefined {
+  if (error !== null && typeof error === 'object' && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Sets one party's identifier. The generated key is the uniqueness: a value another party
+ * already holds is a conflict naming that party, and this row is left as it was. The message
+ * and the details carry no identifier.
+ */
+export async function setPartyNationalId(
+  db: Queryable,
+  partyId: string,
+  nationalId: string,
+): Promise<void> {
+  const id = validId(partyId, 'party');
+  const value = requireText(nationalId, 'national_id', 64);
+  const existing = await db.query<{ party_kind: string }>(
+    `SELECT party_kind FROM party WHERE party_id = $1`,
+    [id],
+  );
+  const kind = existing.rows[0]?.party_kind;
+  if (!kind) throw new KernelError('not_found', 'party not found');
+  try {
+    const updated = await db.query(
+      `UPDATE party SET national_id = $2 WHERE party_id = $1`,
+      [id, value],
+    );
+    if (updated.rowCount === 0) {
+      throw new KernelError('not_found', 'party not found');
+    }
+  } catch (error) {
+    if (!(error instanceof KernelError) && pgCode(error) === UNIQUE_VIOLATION) {
+      const holder = await db.query<{ party_id: string; full_name: string }>(
+        `SELECT party_id, full_name
+           FROM party
+          WHERE national_id_key = party_national_id_key($1, $2)
+            AND party_id <> $3`,
+        [kind, value, id],
+      );
+      const other = holder.rows[0];
+      throw new KernelError('conflict', 'that identifier is already held', {
+        ...(other
+          ? { partyId: other.party_id, fullName: other.full_name }
+          : {}),
+      });
+    }
+    throw error;
+  }
 }
 
 /**
@@ -160,6 +531,170 @@ export async function upsertPartyContact(
     throw new KernelError('conflict', 'party contact upsert returned no row');
   }
   return { id: row.contact_id, inserted: row.inserted };
+}
+
+/**
+ * The other party, if any, whose contact overlaps an open period starting on `validFrom`.
+ * The exclusion constraint is what refuses the row. This only names who already holds it.
+ */
+async function holderOf(
+  db: Queryable,
+  channel: ContactChannel,
+  value: string,
+  validFrom: string,
+  partyId: string,
+): Promise<{ partyId: string; fullName: string; open: boolean } | null> {
+  const found = await db.query<{
+    party_id: string;
+    full_name: string;
+    open: boolean;
+  }>(
+    `SELECT p.party_id, p.full_name, bool_or(c.valid_to IS NULL) AS open
+       FROM party_contact c
+       JOIN party p ON p.party_id = c.party_id
+      WHERE c.channel = $1
+        AND c.value = $2
+        AND c.party_id <> $4
+        AND daterange(c.valid_from, c.valid_to, '[]')
+            && daterange($3::date, NULL, '[]')
+      GROUP BY p.party_id, p.full_name
+      ORDER BY p.full_name
+      LIMIT 1`,
+    [channel, value, validFrom, partyId],
+  );
+  const other = found.rows[0];
+  if (!other) return null;
+  return {
+    partyId: other.party_id,
+    fullName: other.full_name,
+    open: other.open,
+  };
+}
+
+/**
+ * Adds one open contact. The value is stored as given: the caller has already folded a phone
+ * or an email. A value another party holds on any day of the new period is a conflict naming
+ * that party, and this insert is not kept.
+ */
+export async function addPartyContact(
+  db: Queryable,
+  spec: {
+    partyId: string;
+    channel: string;
+    value: string;
+    label: string | null;
+    validFrom: string;
+  },
+): Promise<{ contactId: string; channel: ContactChannel }> {
+  const partyId = validId(spec.partyId, 'party');
+  const channel = contactChannel(spec.channel);
+  const value = requireText(spec.value, 'value', 320);
+  const label = optionalLabel(spec.label);
+  const validFrom = calendarDay(spec.validFrom);
+  const contactId = newId();
+  return inTransaction(db, async (tx) => {
+    await tx.query('SAVEPOINT add_party_contact');
+    try {
+      await tx.query(
+        `INSERT INTO party_contact
+           (contact_id, party_id, channel, value, label, is_primary,
+            valid_from, valid_to, verified_at)
+         VALUES ($1, $2, $3, $4, $5, false, $6, NULL, NULL)`,
+        [contactId, partyId, channel, value, label, validFrom],
+      );
+      await tx.query('RELEASE SAVEPOINT add_party_contact');
+      return { contactId, channel };
+    } catch (error) {
+      await tx.query('ROLLBACK TO SAVEPOINT add_party_contact');
+      if (
+        pgCode(error) === EXCLUSION_VIOLATION ||
+        pgCode(error) === UNIQUE_VIOLATION
+      ) {
+        const holder = await holderOf(tx, channel, value, validFrom, partyId);
+        throw new KernelError(
+          'conflict',
+          'that number is already held',
+          holder ?? {},
+        );
+      }
+      if (pgCode(error) === FOREIGN_KEY_VIOLATION) {
+        throw new KernelError('not_found', 'party not found');
+      }
+      if (pgCode(error) === CHECK_VIOLATION) {
+        throw new KernelError('invalid', 'that contact cannot be stored');
+      }
+      throw error;
+    }
+  });
+}
+
+/**
+ * Marks one open contact as the primary of its channel. The other open primaries of that
+ * channel stop being primary, which is what lets the directory row show this one. A closed
+ * contact is not a primary the list can show.
+ */
+export async function setPrimaryPartyContact(
+  db: Queryable,
+  spec: { partyId: string; contactId: string },
+): Promise<{ contactId: string; channel: ContactChannel }> {
+  const partyId = validId(spec.partyId, 'party');
+  const contactId = validId(spec.contactId, 'contact');
+  const updated = await db.query<{ channel: string }>(
+    `WITH chosen AS (
+       SELECT contact_id, channel
+         FROM party_contact
+        WHERE contact_id = $1
+          AND party_id = $2
+          AND valid_to IS NULL
+     ),
+     cleared AS (
+       UPDATE party_contact
+          SET is_primary = false
+        WHERE party_id = $2
+          AND valid_to IS NULL
+          AND is_primary
+          AND channel = (SELECT channel FROM chosen)
+          AND contact_id <> $1
+     )
+     UPDATE party_contact
+        SET is_primary = true
+      WHERE contact_id = (SELECT contact_id FROM chosen)
+      RETURNING channel`,
+    [contactId, partyId],
+  );
+  const row = updated.rows[0];
+  if (!row) {
+    throw new KernelError('invalid', 'that contact cannot be primary');
+  }
+  return { contactId, channel: contactChannel(row.channel) };
+}
+
+/**
+ * Closes one open contact on a date. The row stays. The date is the last day the value
+ * identifies this party; the day after, it identifies nobody. There is no delete.
+ */
+export async function closePartyContact(
+  db: Queryable,
+  spec: { partyId: string; contactId: string; validTo: string },
+): Promise<{ contactId: string; channel: ContactChannel }> {
+  const partyId = validId(spec.partyId, 'party');
+  const contactId = validId(spec.contactId, 'contact');
+  const validTo = calendarDay(spec.validTo);
+  const updated = await db.query<{ channel: string }>(
+    `UPDATE party_contact
+        SET valid_to = $3::date
+      WHERE contact_id = $1
+        AND party_id = $2
+        AND valid_to IS NULL
+        AND valid_from <= $3::date
+      RETURNING channel`,
+    [contactId, partyId, validTo],
+  );
+  const row = updated.rows[0];
+  if (!row) {
+    throw new KernelError('invalid', 'that contact cannot be closed');
+  }
+  return { contactId, channel: contactChannel(row.channel) };
 }
 
 /**

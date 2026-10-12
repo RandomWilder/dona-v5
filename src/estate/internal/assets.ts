@@ -6,6 +6,7 @@
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { INSERTED } from '../../kernel/upsert.ts';
+import { createParty } from '../../parties/contract.ts';
 import type {
   AssetClass,
   AssetPlan,
@@ -32,13 +33,31 @@ export async function upsertProvider(
   db: Queryable,
   provider: ProviderPlan,
 ): Promise<{ providerId: string; inserted: boolean }> {
+  const existing = await db.query<{ provider_id: string }>(
+    `SELECT provider_id FROM provider WHERE name = $1`,
+    [provider.name],
+  );
+  const found = existing.rows[0];
+  if (found) {
+    await db.query(
+      `UPDATE provider SET provider_kind = $2 WHERE provider_id = $1`,
+      [found.provider_id, provider.kind],
+    );
+    return { providerId: found.provider_id, inserted: false };
+  }
+  const party = await createParty(db, {
+    kind: 'COMPANY',
+    legalName: provider.name,
+    preferredLanguage: 'he',
+  });
+  const providerId = newId();
   const result = await db.query<{ provider_id: string; inserted: boolean }>(
-    `INSERT INTO provider (provider_id, name, provider_kind)
-     VALUES ($1, $2, $3)
+    `INSERT INTO provider (provider_id, name, provider_kind, party_id, party_kind)
+     VALUES ($1, $2, $3, $4, 'COMPANY')
      ON CONFLICT (name) DO UPDATE
        SET provider_kind = EXCLUDED.provider_kind
      RETURNING provider_id, ${INSERTED}`,
-    [newId(), provider.name, provider.kind],
+    [providerId, provider.name, provider.kind, party.id],
   );
   const row = result.rows[0];
   if (!row) {

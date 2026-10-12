@@ -149,7 +149,7 @@ async function seedLetting(
     [tenancyId, unitIdValue, profileId],
   );
   await db.query(
-    `INSERT INTO party (party_id, party_kind, full_name) VALUES ($1, 'PERSON', $2)`,
+    `INSERT INTO party (party_id, party_kind, family_name) VALUES ($1, 'PERSON', $2)`,
     [partyId, fullName],
   );
   await db.query(

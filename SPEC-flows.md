@@ -216,6 +216,15 @@ unit — which is the sequence step 5 of that flow describes anyway.
    that command was added for (SPEC-parties.md). The 303 above is exactly why the two cases are
    separated rather than merged: a name is a guess and an identifier is a declaration.
 
+   **#200. The confirmation of a household name is a given name and a family name.** The extraction
+   stays one field. On the filing ledger, and on the fields ledger, each name row offers the two
+   fields, pre-filled by taking the first word of the extraction as the given name and the remainder
+   as the family name — a single word is a family name with an empty given name. That pre-fill is a
+   proposal. What is written to the party is what the human submits, including a cleared given name,
+   and it is not derived again by splitting the stored display string. A compound family name such as
+   "בן דוד" survives because the remainder, not the last word, is the proposal, and because a human
+   can replace either field before it is stored.
+
    **The pairing of a name to an identifier is ordinal, and it is all-or-nothing within a field
    family.** The *i*-th `tenant_name` pairs with the *i*-th `tenant_id_number` in the document order
    the proposal already sorts by, **only when those two counts are equal**; unequal counts pair

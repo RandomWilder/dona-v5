@@ -72,7 +72,7 @@ written by anything but the injected clock is a second source of truth no test c
 | `building` | `building_id` PK · `name` · `address_line` · `city` · `project_id?` FK → project · `handover_date` · `warranty_end_date` · `status` · `gush?` · `helka?` · `building_number?` · `address_key` generated, UNIQUE |
 | `space` | `space_id` PK · `building_id` FK → building · `space_kind` · `name` · `floor?` · `access_note?` |
 | `unit` | `unit_id` PK, FK → space · `unit_number` · `rooms` · `area_sqm?` · `has_mamad` · `parking_space_id?` · `storage_space_id?` · `warranty_end_date?` · `condition_status` |
-| `provider` | `provider_id` PK · `name` · `provider_kind` — E14, stub only. Present so R11 is resolvable. Everything else about providers waits. |
+| `provider` | `provider_id` PK · `name` · `provider_kind` · `party_id` FK → party, NOT NULL, UNIQUE · `party_kind` constant `COMPANY` — #208. A service provider is a company party. |
 | `asset` | `asset_id` PK · `space_id` FK → space, NOT NULL · `asset_class` · `asset_type` · `make_model?` · `serial_no?` · `installed_date?` · `warranty_end_date?` · `warranty_provider_id?` FK → provider · `compliance_regime` · `next_inspection_due?` · `last_certificate_document_id?` FK → document · `source_document_id?` FK → document · `status` |
 | `estate_event` | `estate_event_id` PK · `entity_type` · `building_id?` · `unit_id?` · `at` · `actor` · `kind` · `field` · `old_value?` · `new_value` · `source_document_id?` · `extracted_field_id?` — append-only log of a document-caused write onto an estate column (#141). |
 
@@ -172,9 +172,21 @@ and never `CURRENT_DATE`. There is no screen for them this week: the compliance 
 treatment is on the week's cut line, and the acceptance bar is the query. Both strings sit in
 `MEASURED_QUERIES` so `measure:scale` times what would run.
 
-**The E14 Provider stub** is three columns — `provider_id`, `name`, `provider_kind` — and a unique
-on `name` so a seed can be run twice. It lives in estate because R11 is an Asset fact and a second
-module for three columns would be a cycle looking for a home. Everything else about providers waits.
+**#208. A service provider is a company party.** `provider.party_id` is unique and not null, and
+`provider.party_kind` is the constant `COMPANY`. The foreign key is the pair, the same composite-key
+technique R2 uses, so a provider that points at a person is rejected. The column arrived nullable in
+`0060_provider_party.sql`. `0061_provider_party_backfill.sql` gives every provider the importer had
+already created one company party named after it, then sets the column not null. The unique on
+`name` stays, so a seed can still be run twice: the importer creates the party when it creates the
+provider, and a re-run keeps that party id and creates no second company. `linkProvider` is the
+profile's mark. Given a company and a kind — in-house crew, contractor, developer warranty — it
+creates the provider or updates the kind on the one this party already has, and writes
+`estate.provider.link` with the actor, the role, the party and the kind. The company's legal name
+is the provider's name when the row is created; a later rename of the company does not rewrite it.
+A person is refused and nothing is written. `listProvidersForParties` returns the kind for the
+parties it is asked about and nothing else. The parties module does not import estate. The
+composition root reads that list and paints the label. The provider still lives here because a
+warranty asset points at it.
 
 ## The natural keys — `src/kernel/migrations/0005_estate_natural_keys.sql`
 
@@ -560,9 +572,9 @@ the flat.
 
 The ending date stays on the letting. Under the flat's word it shows the
 chip and the lease dates (start and end) of the letting that counts today, and of the next draft
-when there is one. Under the dates of the letting that counts today it shows that household's last
-name: the last word of the name שכירויות already uses (the primary tenant, otherwise the first
-person), and the whole name when it is one word. A draft's dates on the same tile carry no name. A
+when there is one. Under the dates of the letting that counts today it shows that household's
+family name: `party.family_name` of the person שכירויות already names (the primary tenant, otherwise
+the first person). #200. The last word of the display name is not taken. A draft's dates on the same tile carry no name. A
 vacant tile stays nameless, including when a draft is waiting. Co-tenants and the full name stay
 off the tile. The chip is the same label as on שכירויות: טיוטה, ממתינה, מוכנה, or פעיל. The
 letting that counts today is פעיל. A draft's chip is `draftLabel` on the activation gate, not a

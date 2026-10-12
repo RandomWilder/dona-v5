@@ -80,6 +80,7 @@ export { listTenancyEvents } from './internal/events.ts';
 export type {
   ActiveLettingInBuilding,
   LettingOnUnit,
+  PartyTenancyRole,
   TenancyBook,
   TenancyBookRow,
   TenancyPartyRow,
@@ -91,6 +92,7 @@ export {
   getTenancy,
   listActiveLettingsInBuilding,
   listLettingsForUnits,
+  listRolesForParties,
   listTenancyBook,
   listTenancyParties,
   listUnitTenancies,

@@ -91,7 +91,7 @@ async function addGuarantor(
 ): Promise<void> {
   const guarantorId = newId();
   await db.query(
-    `INSERT INTO party (party_id, party_kind, full_name)
+    `INSERT INTO party (party_id, party_kind, family_name)
      VALUES ($1, 'PERSON', 'ערב')`,
     [guarantorId],
   );

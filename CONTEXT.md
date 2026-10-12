@@ -50,6 +50,10 @@ different; writing a lease's bay number onto the Unit is the same class of error
 | **Option** | A clause letting a Tenancy run past its initial term. **Exercising** it extends the same Tenancy — it never ends one and never starts another, because the household and the flat do not change. Distinct from a renewal that creates a new letting, and from `end_date`, which the exercise moves. |
 | **TenancyParty** | A Party's role in a Tenancy. |
 | **Guarantor** (**ערב**) | A role. Never receives service information — `is_service_contact` is forced false by a database constraint, not a form default. |
+| **Service provider** | A Party that a provider record points to — a crew, a contractor, a developer under warranty. A role the Party plays, like tenant, not a kind of Party and not a second phone book. |
+| **Lead** | A prospective tenant in the leasing funnel. **Not a Party** ([ADR-0014](docs/decisions/ADR-0014-a-lead-is-not-a-party.md)). It becomes one when a lease is drafted for it; until then it lives outside the directory and outside the isolation join. |
+| **Party directory** (**אנשי קשר**) | The administrator's list of every Party, searchable, each opening a **party profile**. Shows Parties only — never Leads. The Hebrew tab name says "contacts"; in English and in code "contact" still means only a PartyContact, a phone or an email. |
+| **Party label** | What a Party is to us today — current tenant, past tenant, draft tenancy, guarantor, service provider, no relationship. **Computed on every load, never stored**; one Party can carry several. Say "label", not "type" or "status". |
 
 ## Scope
 

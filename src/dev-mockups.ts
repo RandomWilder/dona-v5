@@ -53,10 +53,10 @@ export function renderMockup(flow: string, csrf: string): string {
   }
   return renderPage({
     title: `${flow} — הדמיה — דונה דום`,
-    // The rail a paint is reviewed in shows every destination, this slice's included: a mockup is
-    // read by the director, who is an ADMIN, and a paint that hid a tab would be a paint of a
-    // screen nobody has.
-    nav: signedInChrome(csrf, 'index', true),
+    // The rail a paint is reviewed in shows every destination the director can open. The אנשי קשר
+    // tab is real (#202); what remains in this file is the screens that are not wired yet, so the
+    // tab is shown and is not marked current — this page is not the directory.
+    nav: signedInChrome(csrf, 'index', true, true),
     body: new Html(painted),
   });
 }

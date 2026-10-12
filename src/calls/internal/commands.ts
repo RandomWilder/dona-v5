@@ -94,6 +94,17 @@ export type EmergencyMark =
       actorLabel: string;
     };
 
+/** One call on a party's profile. The calls that name that party as requester. #209. */
+export interface RequesterCall {
+  id: string;
+  openedAt: Date;
+  state: CallState;
+  description: string;
+  /** The Category's Hebrew label. Null when none is set. */
+  categoryLabel: string | null;
+  emergency: boolean;
+}
+
 export interface ServiceCall {
   id: string;
   sourceChannel: SourceChannel;
@@ -1002,6 +1013,48 @@ export async function listOpenCalls(
     [state, categoryId, emergency, toReview],
   );
   return rows.map(toCall);
+}
+
+/**
+ * The calls that name this party as requester, newest first. A call that names
+ * nobody, and a call that names someone else, are not in the list. #209.
+ */
+export async function listCallsByRequester(
+  db: Queryable,
+  partyId: string,
+): Promise<RequesterCall[]> {
+  const id = validId(partyId, 'party');
+  const { rows } = await db.query<{
+    service_call_id: string;
+    opened_at: Date;
+    state: string;
+    emergency: boolean;
+    description: string;
+    category_label_he: string | null;
+  }>(
+    `SELECT sc.service_call_id, sc.opened_at, sc.state, sc.emergency, sc.description,
+            category.label_he AS category_label_he
+       FROM service_call sc
+       LEFT JOIN call_category category ON category.category_id = sc.category_id
+      WHERE sc.requester_party_id = $1
+      ORDER BY sc.opened_at DESC, sc.service_call_id DESC`,
+    [id],
+  );
+  return rows.map((row) => {
+    if (!isState(row.state)) {
+      throw new KernelError('invalid', 'call state is not a state', {
+        field: 'state',
+      });
+    }
+    return {
+      id: row.service_call_id,
+      openedAt: row.opened_at,
+      state: row.state,
+      description: row.description,
+      categoryLabel: row.category_label_he,
+      emergency: row.emergency,
+    };
+  });
 }
 
 export async function getCall(

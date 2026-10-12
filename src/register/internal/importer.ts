@@ -181,7 +181,9 @@ async function writeRow(
 
   const party = await upsertParty(db, {
     kind: row.partyKind,
-    fullName: row.fullName,
+    givenName: row.givenName,
+    familyName: row.familyName,
+    legalName: row.legalName,
     nationalId: row.nationalId,
     preferredLanguage: row.preferredLanguage,
   });

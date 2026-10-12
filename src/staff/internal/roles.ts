@@ -22,12 +22,15 @@ export const PERMISSIONS = [
   'documents.read',
   'documents.write',
   'tenancy.write',
+  // #202. The אנשי קשר tab. ADMIN and OPERATOR. A viewer holds neither, so the tab is
+  // absent and the routes refuse. `party.write` is the name and language correction
+  // (#205). A contact or a party created by hand reuses this word.
+  'party.read',
+  'party.write',
   'settings.write',
   'staff.invite',
-  // Unused at 5.1, and here on purpose. SPEC.md's security default says `national_id` is
-  // **admin-only, unreachable by any agent tool, and access-logged**; the "admin-only" half needs a
-  // permission to name before week 9 can write the policy case that enforces the "unreachable"
-  // half. A permission with no reader is a smaller lie than a security default with no vocabulary.
+  // Named at 5.1 before it had a reader. The document reveal (7.3) and the profile's
+  // reveal, ת.ז. search and ת.ז. write (#204) are the readers. ADMIN only.
   'party.national_id.read',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
@@ -42,6 +45,8 @@ const MATRIX: Readonly<Record<Role, readonly Permission[]>> = Object.freeze({
     'documents.read',
     'documents.write',
     'tenancy.write',
+    'party.read',
+    'party.write',
     'settings.write',
     'staff.invite',
     'party.national_id.read',
@@ -51,6 +56,8 @@ const MATRIX: Readonly<Record<Role, readonly Permission[]>> = Object.freeze({
     'documents.read',
     'documents.write',
     'tenancy.write',
+    'party.read',
+    'party.write',
   ] as const),
   VIEWER: Object.freeze(['estate.read', 'documents.read'] as const),
 });

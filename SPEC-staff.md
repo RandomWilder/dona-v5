@@ -172,6 +172,8 @@ Three roles, and the permission names are the vocabulary the rest of the console
 | `documents.read` | ✓ | ✓ | ✓ |
 | `documents.write` | ✓ | ✓ | |
 | `tenancy.write` | ✓ | ✓ | |
+| `party.read` | ✓ | ✓ | |
+| `party.write` | ✓ | ✓ | |
 | `settings.write` | ✓ | | |
 | `staff.invite` | ✓ | | |
 | `party.national_id.read` | ✓ | | |
@@ -195,11 +197,14 @@ answers `not_allowed` after they have typed an address into it, and the refusal 
 says nothing more, so they would learn nothing from it. The buildings list links to the screen only
 for a role that holds the permission.
 
-`party.national_id.read` is here and unused, and that is on purpose: `SPEC.md`'s security default
-says `national_id` is **admin-only, unreachable by any agent tool, and access-logged**, and the
-"admin-only" half needs a permission to name before **5.3** can write the policy case that enforces
-the "unreachable" half. A permission with no reader is a smaller lie than a security default with no
-vocabulary.
+`party.read` is the אנשי קשר tab (`GET /parties` and `GET /parties/:partyId`, #202). A viewer holds neither it nor `party.write`, so the tab is absent from the rail and both routes refuse. `party.write` guards correcting a party's name and language (`POST /parties/:partyId`, #205), the three contact posts (#206), creating a party by hand (`GET /parties/new` and `POST /parties`, #207), and marking a company a service provider (`POST /parties/:partyId/provider`, #208). An operator who posts a ת.ז. on that create is refused. Writing one stays `party.national_id.read`.
+
+`party.national_id.read` is ADMIN only. It was named before it had a reader, because `SPEC.md`'s
+security default says `national_id` is **admin-only, unreachable by any agent tool, and
+access-logged**, and the "admin-only" half needs a permission to name. The document reveal reads it
+(slice 7.3). **#204** adds the profile: revealing a party's ת.ז., searching the directory by one, and
+writing one are all this permission, and an operator who posts any of the three is refused by the
+route. `party.write` does not cover them.
 
 ---
 

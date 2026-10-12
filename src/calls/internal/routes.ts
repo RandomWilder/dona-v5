@@ -60,6 +60,7 @@ export interface CallsDeps {
     csrf: string,
     dest: ChromeDest,
     mayFile: boolean,
+    mayReadParties: boolean,
     openCalls?: number,
   ) => Html;
   /** `-dev` only. The fabricated-message form. */
@@ -305,7 +306,13 @@ async function callsPage(
   const csrf = csrfFrom(request);
   const mayFile = can(role, 'documents.write');
   return renderCallsPage({
-    nav: deps.chrome(csrf, 'calls', mayFile, request.openCalls ?? calls.length),
+    nav: deps.chrome(
+      csrf,
+      'calls',
+      mayFile,
+      can(role, 'party.read'),
+      request.openCalls ?? calls.length,
+    ),
     csrf,
     calls,
     categories,
@@ -356,6 +363,7 @@ async function callPage(
       csrf,
       'calls',
       can(role, 'documents.write'),
+      can(role, 'party.read'),
       request.openCalls,
     ),
     csrf,
@@ -426,6 +434,7 @@ async function filteredPage(
       csrf,
       'calls',
       can(role, 'documents.write'),
+      can(role, 'party.read'),
       request.openCalls,
     ),
     csrf,

@@ -16,6 +16,7 @@ export {
   ISOLATION_JOIN_SQL,
   OCCUPANCY_VIEW,
   OCCUPANCY_VIEW_COLUMNS,
+  partyHoldingContact,
   resolveOccupiedUnits,
   resolvePartiesInUnit,
   resolveUnitsByEmail,

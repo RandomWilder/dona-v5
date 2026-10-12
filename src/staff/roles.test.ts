@@ -50,6 +50,10 @@ describe('the role matrix is code', () => {
     assert.equal(can('OPERATOR', 'estate.write'), false);
     assert.equal(can('VIEWER', 'estate.write'), false);
     assert.equal(can('OPERATOR', 'staff.invite'), false);
+    assert.equal(can('OPERATOR', 'party.read'), true);
+    assert.equal(can('OPERATOR', 'party.write'), true);
+    assert.equal(can('VIEWER', 'party.read'), false);
+    assert.equal(can('VIEWER', 'party.write'), false);
     assert.equal(can('OPERATOR', 'party.national_id.read'), false);
   });
 

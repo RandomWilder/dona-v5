@@ -6,7 +6,9 @@
 // open call stops there, and only then does a verdict become a call or a
 // filtered message. A later delivery of a held message finishes that one row.
 // One party from the isolation join moves a new call to IDENTIFIED. None, or
-// more than one, leaves it in NEW. An echo is the office's own message:
+// more than one, leaves it in NEW. A service provider's open contact is the
+// one party the join does not return who is still identified. An echo is the
+// office's own message:
 // stored, not sorted, and never a new call.
 
 import {
@@ -23,14 +25,18 @@ import {
   readEmergencySettings,
   type SorterLabel,
 } from '../../calls/contract.ts';
+import { listProvidersForParties } from '../../estate/contract.ts';
 import { createAuditLog } from '../../kernel/audit.ts';
-import type { Clock } from '../../kernel/clock.ts';
+import { type Clock, today } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
 import { optionalText, requireText, validId } from '../../kernel/validate.ts';
 import {
+  normaliseEmail,
+  normalisePhone,
+  partyHoldingContact,
   resolveUnitsByEmail,
   resolveUnitsByPhone,
 } from '../../scope/contract.ts';
@@ -1073,10 +1079,21 @@ async function settleVerdict(
       sorterPrompt: verdict?.promptVersion ?? null,
     });
     if (parties.length === 1 && parties[0] !== undefined) {
-      await identifyByAddress(tx, clock, {
-        callId: call.id,
-        partyId: parties[0],
-      });
+      try {
+        await identifyByAddress(tx, clock, {
+          callId: call.id,
+          partyId: parties[0],
+        });
+      } catch (error) {
+        // A guarantor is not a match, even when the party is also a provider.
+        // The calls constraint refuses the link; the call stays NEW and the
+        // message is kept.
+        const guarantor =
+          error instanceof KernelError &&
+          error.code === 'invalid' &&
+          error.details?.reason === 'guarantor';
+        if (!guarantor) throw error;
+      }
     }
     await tx.query(
       `UPDATE message
@@ -1121,7 +1138,19 @@ async function partiesFor(
     for (const row of rows) {
       if (!ids.includes(row.party_id)) ids.push(row.party_id);
     }
-    return ids;
+    if (ids.length > 0) return ids;
+    const email = message.sourceChannel === 'EMAIL';
+    const value = email
+      ? normaliseEmail(message.senderAddress)
+      : normalisePhone(message.senderAddress);
+    const holder = await partyHoldingContact(db, {
+      channel: email ? 'EMAIL' : 'PHONE',
+      value,
+      day: today(clock),
+    });
+    if (holder === null) return [];
+    const providers = await listProvidersForParties(db, [holder]);
+    return providers.length === 1 ? [holder] : [];
   } catch (error) {
     if (error instanceof KernelError && error.code === 'invalid') return [];
     throw error;

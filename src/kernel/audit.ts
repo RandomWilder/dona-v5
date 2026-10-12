@@ -59,6 +59,42 @@ export async function countActions(
   return Number(rows[0]?.n ?? 0);
 }
 
+export interface SubjectAudit {
+  at: Date;
+  actorId: string | null;
+  actorRole: string | null;
+  action: string;
+  inputs: Record<string, unknown>;
+}
+
+/** One subject's rows, newest first. The caller decides what of `inputs` may be shown. */
+export async function auditsForSubject(
+  db: AuditTarget,
+  subjectId: string,
+): Promise<SubjectAudit[]> {
+  const { rows } = await db.query<{
+    at: Date;
+    actor_id: string | null;
+    actor_role: string | null;
+    action: string;
+    inputs: Record<string, unknown>;
+  }>(
+    `SELECT at, actor_id, actor_role, action, inputs
+       FROM audit_log
+      WHERE subject_id = $1
+        AND outcome = 'ok'
+      ORDER BY at DESC, id DESC`,
+    [subjectId],
+  );
+  return rows.map((row) => ({
+    at: row.at,
+    actorId: row.actor_id,
+    actorRole: row.actor_role,
+    action: row.action,
+    inputs: row.inputs ?? {},
+  }));
+}
+
 export function createAuditLog(
   db: AuditTarget,
   clock: Clock = systemClock,

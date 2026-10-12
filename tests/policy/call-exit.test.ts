@@ -235,7 +235,7 @@ describe('policy · a call closes only by an exit that names its reason', () => 
 
           const partyId = newId();
           await db.query(
-            `INSERT INTO party (party_id, party_kind, full_name)
+            `INSERT INTO party (party_id, party_kind, family_name)
              VALUES ($1, 'PERSON', 'פונה לביקור')`,
             [partyId],
           );

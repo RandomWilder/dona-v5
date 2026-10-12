@@ -31,6 +31,8 @@ export interface LettingOnUnit extends UnitLetting {
   unit_id: string;
   /** Primary tenant, otherwise the first person. Null when the letting has no household. */
   household_name: string | null;
+  /** That person's family name. Null when the letting has no household. #200. */
+  family_name: string | null;
 }
 
 /** One letting, for the tenancy sheet. Dates, status, and the promoted copies. No party. #107, #134. */
@@ -66,13 +68,16 @@ export interface TenancyPartyRow {
  * Same question as `listUnitTenancies`, asked once for a page. Dates are cast to text so a
  * `date` does not shift when the server's timezone changes. No day predicate: a caller that
  * needs "still waiting" or "inside the expiring window" does that arithmetic on these dates
- * and the clock. `household_name` is the person the book already names, so the נכסים tile can
- * show the last word. `listUnitTenancies` still drops it.
+ * and the clock. `household_name` is the person the book already names. `family_name` is
+ * what the נכסים tile shows. `listUnitTenancies` still drops both.
  */
 /** The person שכירויות names. The alias is one of the two queries in this file. */
-function householdNameSql(tenancy: 'tenancy' | 't'): string {
+function householdColumnSql(
+  tenancy: 'tenancy' | 't',
+  column: 'full_name' | 'family_name',
+): string {
   return `(
-              SELECT p.full_name
+              SELECT p.${column}
                 FROM tenancy_party tp
                 JOIN party p ON p.party_id = tp.party_id
                WHERE tp.tenancy_id = ${tenancy}.tenancy_id
@@ -100,7 +105,8 @@ export async function listLettingsForUnits(
             end_date::text AS end_date,
             notice_date::text AS notice_date,
             status,
-            ${householdNameSql('tenancy')} AS household_name
+            ${householdColumnSql('tenancy', 'full_name')} AS household_name,
+            ${householdColumnSql('tenancy', 'family_name')} AS family_name
        FROM tenancy
       WHERE unit_id = ANY($1::uuid[])
       ORDER BY unit_id, start_date DESC`,
@@ -190,6 +196,47 @@ export async function listTenancyParties(
                END,
                party_id`,
     [tenancyId],
+  );
+  return result.rows;
+}
+
+/** One role on one letting. Facts for a label, not the label. No name, no day. #203. */
+export interface PartyTenancyRole {
+  party_id: string;
+  role: string;
+  tenancy_id: string;
+  status: string;
+  start_date: string;
+  end_date: string;
+  unit_number: string;
+}
+
+/**
+ * The roles these parties hold, with each letting's status, dates and unit.
+ *
+ * No day predicate. Whether a letting counts today is decided by the caller
+ * from these dates and the clock — the same reading the isolation join uses —
+ * and stating it here would be a second copy.
+ */
+export async function listRolesForParties(
+  db: Queryable,
+  partyIds: readonly string[],
+): Promise<PartyTenancyRole[]> {
+  if (partyIds.length === 0) return [];
+  const result = await db.query<PartyTenancyRole>(
+    `SELECT tp.party_id,
+            tp.role,
+            t.tenancy_id,
+            t.status,
+            t.start_date::text AS start_date,
+            t.end_date::text AS end_date,
+            u.unit_number
+       FROM tenancy_party tp
+       JOIN tenancy t ON t.tenancy_id = tp.tenancy_id
+       JOIN unit u ON u.unit_id = t.unit_id
+      WHERE tp.party_id = ANY($1::uuid[])
+      ORDER BY t.start_date, t.tenancy_id, tp.role`,
+    [[...partyIds]],
   );
   return result.rows;
 }
@@ -406,7 +453,7 @@ export async function listTenancyBook(
             b.address_line,
             b.city,
             b.building_number,
-            ${householdNameSql('t')} AS household_name
+            ${householdColumnSql('t', 'full_name')} AS household_name
        FROM tenancy t
        JOIN unit u ON u.unit_id = t.unit_id
        JOIN space s ON s.space_id = u.unit_id
