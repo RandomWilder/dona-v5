@@ -64,6 +64,8 @@ const SCHEMA_V6 = '2026-09-22';
 // Ticket #179. The second bay number, and the parking hint that names it as the first of two.
 // Ticket #180. The second storage number, on the same day, the same split.
 const SCHEMA_V7 = '2026-10-01';
+// #212. Who a regulated flat was let to. The track itself stays on the unit.
+const SCHEMA_V8 = '2026-10-12';
 // Inclusive windows: close the superseded declaration the day before the successor opens.
 const LAST_DAY_BEFORE_V5 = '2026-09-20';
 const LAST_DAY_BEFORE_V7 = '2026-09-30';
@@ -443,6 +445,17 @@ export const seedDocumentTypes: SeedDocumentType[] = [
         false,
         'המספר השני כשמודפסים שני מספרי חניה מופרדים בפלוס או בפסיק, בסדר המודפס. ספרות בלבד. אין ערך כשיש מספר אחד. לא מספר מחסן.',
         { from: SCHEMA_V7 },
+      ),
+      // **#212.** Who a regulated flat was let to. Optional: a free-market lease and a regulated
+      // lease that names no group both return nothing, and that is a correct reading. The value
+      // is the code, so promotion can store it. The Hebrew is what the page prints.
+      field(
+        'eligibility_group',
+        'זכאות',
+        'TEXT',
+        false,
+        'מי הדירה המפוקחת הושכרה לו. LOCAL_RESIDENT לבן מקום, ACTIVE_RESERVE למילואים פעיל. ריק כשהחוזה אינו אומר. לא מסלול השכירות ולא שוק חופשי.',
+        { from: SCHEMA_V8 },
       ),
     ],
   },

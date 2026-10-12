@@ -36,6 +36,7 @@ import {
 } from '../../tenancy/contract.ts';
 import { addCalendarYears, WARRANTY_YEARS } from './assets.ts';
 import { listEstateEvents } from './events.ts';
+import { changeUnitTenure, correctUnitFacts, type FlatFacts } from './facts.ts';
 import { importEstate, upsertUnitRow } from './importer.ts';
 import {
   inventoryAddFromForm,
@@ -54,6 +55,7 @@ import type {
   ProjectPlan,
   ProjectStatus,
   Queryable,
+  Tenure,
   UnitRowSpec,
 } from './plan.ts';
 import {
@@ -190,6 +192,7 @@ export interface EstateDeps {
     storage_name: string | null;
     second_storage_space_id: string | null;
     second_storage_name: string | null;
+    eligibility_group: string | null;
   }>;
   listTenancyParties: (
     db: Pool,
@@ -529,6 +532,38 @@ function officeAskNotice(request: FastifyRequest): string | undefined {
   return ask === 'unavailable' ? OFFICE_ASK_UNAVAILABLE : undefined;
 }
 
+/** #211. The page's own sentences for a tenure post that did not write. */
+const TENURE_NOTICE = {
+  confirm: 'נמכרה אינה ניתנת לביטול.',
+  sold: 'דירה שנמכרה נשארת נמכרה.',
+  let: 'לא ניתן למכור דירה עם שכירות פעילה.',
+} as const;
+
+const RENTAL_TRACKS = ['FREE_MARKET', 'REGULATED'] as const;
+
+function rentalTrackOf(query: unknown): (typeof RENTAL_TRACKS)[number] | null {
+  if (typeof query !== 'object' || query === null || !('track' in query)) {
+    return null;
+  }
+  const raw = (query as { track?: unknown }).track;
+  if (raw === undefined || raw === '') return null;
+  if (
+    typeof raw !== 'string' ||
+    !(RENTAL_TRACKS as readonly string[]).includes(raw)
+  ) {
+    throw new KernelError('invalid', 'track is not a rental track');
+  }
+  return raw as (typeof RENTAL_TRACKS)[number];
+}
+
+function tenureNoticeOf(request: FastifyRequest): string | undefined {
+  const raw = (request.query as { tenure?: string }).tenure;
+  if (raw === 'confirm' || raw === 'sold' || raw === 'let') {
+    return TENURE_NOTICE[raw];
+  }
+  return undefined;
+}
+
 /**
  * **Slice 6.1, flow A11.** ADMIN only ([SPEC-staff.md](SPEC-staff.md)): an operator files paper, an
  * admin shapes the estate.
@@ -775,6 +810,32 @@ function unitFromForm(body: unknown): {
     // where every input posts whether or not it was typed into. Floor is optional (a קרקע-less
     // building has none to say), so the empty string is normalised before it gets there.
     floor: optionalText(blankToNull(form.floor), 'floor', 32),
+  };
+}
+
+/**
+ * The five facts #210 lets an admin correct. Same edge as A13 for rooms, floor
+ * and area. Flat type is floor's optional text; balcony area is area's optional
+ * number. A blank optional field writes null.
+ */
+const TENURES: readonly Tenure[] = ['FOR_RENT', 'FOR_SALE', 'SOLD'];
+
+function postedTenure(value: unknown): Tenure {
+  const tenure = requireText(value, 'tenure', 16);
+  if (!(TENURES as readonly string[]).includes(tenure)) {
+    throw new KernelError('invalid', 'tenure is not a tenure');
+  }
+  return tenure as Tenure;
+}
+
+function flatFactsFromForm(body: unknown): FlatFacts {
+  const form = (body ?? {}) as Record<string, unknown>;
+  return {
+    rooms: requireNumber(form.rooms, 'rooms', 20),
+    floor: optionalText(blankToNull(form.floor), 'floor', 32),
+    areaSqm: optionalNumber(form.area_sqm, 'area_sqm', 10_000),
+    flatType: optionalText(blankToNull(form.flat_type), 'flat_type', 32),
+    balconySqm: optionalNumber(form.balcony_sqm, 'balcony_sqm', 10_000),
   };
 }
 
@@ -1063,6 +1124,7 @@ export function registerEstateRoutes(
       html(reply);
       const csrf = csrfFrom(request);
       return renderInventoryBuildingPage({
+        track: rentalTrackOf(request.query),
         building: detail.building,
         spaces,
         units: detail.units,
@@ -1602,8 +1664,75 @@ export function registerEstateRoutes(
         occupied.find((row) => row.unit_id === unit.unit_id)?.tenancy_id ??
           null,
       ),
+      can(request.staff?.role ?? null, 'estate.write')
+        ? { csrf, tenureNotice: tenureNoticeOf(request) }
+        : undefined,
     );
   });
+
+  // **#210.** Correct rooms, floor, area, flat type and balcony on a flat that
+  // already exists. `estate.write` on the post; the page itself stays
+  // `estate.read`. The five columns update in place. No `estate_event`.
+  app.post<{ Params: { unitId: string } }>(
+    '/estate/units/:unitId',
+    ESTATE_WRITE,
+    async (request, reply) => {
+      const unitId = validId(request.params.unitId, 'unitId');
+      const facts = flatFactsFromForm(request.body);
+      await getUnit(deps.pool, unitId);
+      await inTransaction(deps.pool, (db) =>
+        correctUnitFacts(db, unitId, facts),
+      );
+      return reply
+        .code(303)
+        .header('location', `/estate/units/${unitId}`)
+        .send();
+    },
+  );
+
+  // **#211.** Change tenure from the flat page. The facts post above does not
+  // touch this column. A same-value post writes nothing. The audit line is the
+  // record: who, when, old → new. `estate_event` stays a document's log.
+  app.post<{ Params: { unitId: string } }>(
+    '/estate/units/:unitId/tenure',
+    ESTATE_WRITE,
+    async (request, reply) => {
+      const unitId = validId(request.params.unitId, 'unitId');
+      const body = (request.body ?? {}) as {
+        tenure?: unknown;
+        confirm_sold?: unknown;
+      };
+      const tenure = postedTenure(body.tenure);
+      const change = await inTransaction(deps.pool, async (db) => {
+        const written = await changeUnitTenure(
+          db,
+          unitId,
+          tenure,
+          body.confirm_sold === 'yes',
+        );
+        if (written.outcome !== 'changed') return written;
+        await createAuditLog(db, deps.clock).write(
+          {
+            actorKind: 'staff',
+            actorId: request.staff?.staffAccountId,
+            actorRole: request.staff?.role ?? undefined,
+            action: 'estate.tenure',
+            subjectId: unitId,
+            inputs: { from: written.from, to: written.to },
+          },
+          { outcome: 'ok' },
+        );
+        return written;
+      });
+      const back =
+        change.outcome === 'confirm'
+          ? `/estate/units/${unitId}?tenure=confirm`
+          : change.outcome === 'refused'
+            ? `/estate/units/${unitId}?tenure=${change.reason}`
+            : `/estate/units/${unitId}`;
+      return reply.code(303).header('location', back).send();
+    },
+  );
 
   app.post<{ Params: { unitId: string } }>(
     '/estate/units/:unitId/office-turn',
@@ -1778,6 +1907,7 @@ export function registerEstateRoutes(
       rentAmount: letting.rent_amount,
       rentCurrency: letting.rent_currency,
       optionEndDate: letting.option_end_date,
+      eligibilityGroup: letting.eligibility_group,
       parkingSpaceId: letting.parking_space_id,
       parkingName: letting.parking_name,
       secondParkingName: letting.second_parking_name,
@@ -1807,6 +1937,7 @@ export function registerEstateRoutes(
       ],
       uncarriedRent: rentCites(pending),
       uncarriedOption: citesFor(pending, 'tenancy.option_end_date'),
+      uncarriedEligibility: citesFor(pending, 'tenancy.eligibility_group'),
       uncarriedBay: citesFor(pending, 'tenancy.parking_space_id'),
       uncarriedSecondBay: citesFor(pending, 'tenancy.second_parking_space_id'),
       uncarriedStorage: citesFor(pending, 'tenancy.storage_space_id'),

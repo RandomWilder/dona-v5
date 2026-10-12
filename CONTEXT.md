@@ -34,6 +34,8 @@ agent. **The office** — the humans who supervise exceptions.
 | **Built storage** | The `STORAGE` Space the plan attached to a Unit (הצמדה) — `Unit.storage_space_id`. It survives vacancy. |
 | **Assigned storage** | The `STORAGE` Space a household uses. It belongs to the **Tenancy**, same standing as the assigned bay. Never a property of the flat. |
 | **Tenure** | Whether Dona lets a Unit: **for rent**, **designated for sale** (still lettable, can be withdrawn) or **sold**. |
+| **Rental track** | Whether a tender lets a Unit at a **free-market** rent or a **regulated** one. Fixed per flat. Not who it was let to. |
+| **Eligibility group** | Who a regulated flat was let to: a **local resident** (בן מקום) or someone in **active reserve** (מילואים פעיל). A fact about the Tenancy. Empty when the letting names neither. |
 | **Sold flat** | A Unit that has left the rental stock. Still a Unit and still in its Building; never let again. Sold does not revert. |
 | **Disabled bay** | A `PARKING` Space reserved for a disabled-parking permit (חניית נכה). A fact about the bay, not about who parks in it. |
 | **Flat type** | The developer's layout code for a Unit (`A`, `BG`, `P1`). Each developer has their own. |

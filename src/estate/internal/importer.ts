@@ -274,8 +274,8 @@ async function upsertUnit(
   const result = await db.query<{ inserted: boolean }>(
     `INSERT INTO unit (unit_id, unit_number, rooms, area_sqm, has_mamad,
                        parking_space_id, storage_space_id, warranty_end_date, condition_status,
-                       tenure, flat_type, balcony_sqm)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                       tenure, flat_type, balcony_sqm, rental_track)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      ON CONFLICT (unit_id) DO UPDATE
        SET unit_number = EXCLUDED.unit_number,
            rooms = EXCLUDED.rooms,
@@ -285,9 +285,10 @@ async function upsertUnit(
            storage_space_id = EXCLUDED.storage_space_id,
            warranty_end_date = EXCLUDED.warranty_end_date,
            condition_status = EXCLUDED.condition_status,
-           tenure = CASE WHEN $13 THEN EXCLUDED.tenure ELSE unit.tenure END,
-           flat_type = CASE WHEN $14 THEN EXCLUDED.flat_type ELSE unit.flat_type END,
-           balcony_sqm = CASE WHEN $15 THEN EXCLUDED.balcony_sqm ELSE unit.balcony_sqm END
+           tenure = CASE WHEN $14 THEN EXCLUDED.tenure ELSE unit.tenure END,
+           flat_type = CASE WHEN $15 THEN EXCLUDED.flat_type ELSE unit.flat_type END,
+           balcony_sqm = CASE WHEN $16 THEN EXCLUDED.balcony_sqm ELSE unit.balcony_sqm END,
+           rental_track = CASE WHEN $17 THEN EXCLUDED.rental_track ELSE unit.rental_track END
      RETURNING ${INSERTED}`,
     [
       ids.unitId,
@@ -302,9 +303,11 @@ async function upsertUnit(
       unit.tenure ?? 'FOR_RENT',
       unit.flatType ?? null,
       unit.balconySqm ?? null,
+      unit.rentalTrack ?? 'FREE_MARKET',
       unit.tenure !== undefined,
       unit.flatType !== undefined,
       unit.balconySqm !== undefined,
+      unit.rentalTrack !== undefined,
     ],
   );
   const inserted = result.rows[0]?.inserted;

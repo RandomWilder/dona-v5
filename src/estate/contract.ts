@@ -32,6 +32,7 @@ export type {
   ProviderKind,
   ProviderPlan,
   Queryable,
+  RentalTrack,
   SpaceKind,
   SpacePlan,
   TableCount,

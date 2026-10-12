@@ -488,6 +488,7 @@ describe('tenancy · the rest of the schema', () => {
         await inRolledBackTransaction(pool, async (db) => {
           assert.deepEqual(await columnsOf(db, 'tenancy'), [
             'actual_move_out',
+            'eligibility_group',
             'end_date',
             'notice_date',
             'option_end_date',
@@ -519,6 +520,31 @@ describe('tenancy · the rest of the schema', () => {
           ]);
         });
       });
+
+      await t.test(
+        'an eligibility group is a local resident or active reserve, or none',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            const estate = await seedEstate(db);
+            const tenancyId = await seedTenancy(db, {
+              unitId: estate.unitId,
+              profileId: estate.profileId,
+              from: '2026-01-01',
+              to: '2027-01-01',
+            });
+            await db.query(
+              `UPDATE tenancy SET eligibility_group = 'LOCAL_RESIDENT' WHERE tenancy_id = $1`,
+              [tenancyId],
+            );
+            await rejects(db, CHECK_VIOLATION, () =>
+              db.query(
+                `UPDATE tenancy SET eligibility_group = 'STUDENT' WHERE tenancy_id = $1`,
+                [tenancyId],
+              ),
+            );
+          });
+        },
+      );
 
       // **There was a money case here, and it is deleted.** It asserted that no column on
       // `tenancy`, `tenancy_party` or `terms_profile` was named for an amount, under foundation

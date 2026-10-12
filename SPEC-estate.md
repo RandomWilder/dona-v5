@@ -43,6 +43,15 @@ workbook is right and this file is a bug.
   other and A11/A13. The flat page, A11, and A13 mark נכסים on the rail. A letting marks
   שכירויות. The old list and the old building page name the removed item and mark nothing.
   The נכסים building page is the one building page.
+  **#210.** An `estate.write` holder corrects a flat's rooms, floor, area, flat type and balcony
+  area from the flat's page. The write updates those columns in place and does not append
+  `estate_event`.
+  **#211.** The same holder changes that flat's tenure from the same page. `SOLD` asks for
+  confirmation and says it cannot be undone. The trigger's refusal is a sentence on the page.
+  A change writes `audit_log` (`estate.tenure`, old and new), not `estate_event`.
+  **#212.** A flat carries a rental track, free market or regulated, fixed by the tender. The
+  building page counts both and filters the flat tiles by them. Who a regulated flat was let to
+  is not this column.
 
 ## The shape, and why it is this one
 
@@ -59,7 +68,7 @@ avoids both.
 **Project sits above Building and is optional** (R15). `Building.project_id` is nullable and nothing
 downstream requires it; `project_code` lives on Project, so the tender code has one home.
 
-## Tables — `src/kernel/migrations/0004_estate.sql`, `0012_assets.sql` and `0064_unit_tenure.sql`
+## Tables — `src/kernel/migrations/0004_estate.sql`, `0012_assets.sql`, `0064_unit_tenure.sql` and `0065_rental_track.sql`
 
 The workbook's 28 columns, plus what enforcement needs — `address_key` on Building and the three
 constant discriminators on Unit, none of which carry a fact. Ids are `uuid`, enums are `text` with a
@@ -71,14 +80,14 @@ written by anything but the injected clock is a second source of truth no test c
 | `project` | `project_id` PK · `name` · `project_code` · `tender_ref?` · `status` |
 | `building` | `building_id` PK · `name` · `address_line` · `city` · `project_id?` FK → project · `handover_date` · `warranty_end_date` · `status` · `gush?` · `helka?` · `building_number?` · `address_key` generated, UNIQUE |
 | `space` | `space_id` PK · `building_id` FK → building · `space_kind` · `name` · `floor?` · `access_note?` · `disabled_bay` · `area_sqm?` |
-| `unit` | `unit_id` PK, FK → space · `unit_number` · `rooms` · `area_sqm?` · `has_mamad` · `parking_space_id?` · `storage_space_id?` · `warranty_end_date?` · `condition_status` · `tenure` · `flat_type?` · `balcony_sqm?` |
+| `unit` | `unit_id` PK, FK → space · `unit_number` · `rooms` · `area_sqm?` · `has_mamad` · `parking_space_id?` · `storage_space_id?` · `warranty_end_date?` · `condition_status` · `tenure` · `rental_track` · `flat_type?` · `balcony_sqm?` |
 | `provider` | `provider_id` PK · `name` · `provider_kind` · `party_id` FK → party, NOT NULL, UNIQUE · `party_kind` constant `COMPANY` — #208. A service provider is a company party. |
 | `asset` | `asset_id` PK · `space_id` FK → space, NOT NULL · `asset_class` · `asset_type` · `make_model?` · `serial_no?` · `installed_date?` · `warranty_end_date?` · `warranty_provider_id?` FK → provider · `compliance_regime` · `next_inspection_due?` · `last_certificate_document_id?` FK → document · `source_document_id?` FK → document · `status` |
 | `estate_event` | `estate_event_id` PK · `entity_type` · `building_id?` · `unit_id?` · `at` · `actor` · `kind` · `field` · `old_value?` · `new_value` · `source_document_id?` · `extracted_field_id?` — append-only log of a document-caused write onto an estate column (#141). |
 
 Vocabularies: `project.status` = `PLANNING · ACTIVE · EXITED`; `building.status` = `ACTIVE ·
 IN_CONSTRUCTION · EXITED`; `space.space_kind` = `UNIT · COMMON · TECHNICAL · EXTERIOR · PARKING ·
-STORAGE`; `unit.condition_status` = `READY · RENOVATION · WITHHELD`; `unit.tenure` = `FOR_RENT · FOR_SALE · SOLD`; `provider.provider_kind` =
+STORAGE`; `unit.condition_status` = `READY · RENOVATION · WITHHELD`; `unit.tenure` = `FOR_RENT · FOR_SALE · SOLD`; `unit.rental_track` = `FREE_MARKET · REGULATED`; `provider.provider_kind` =
 `IN_HOUSE_CREW · CONTRACTOR · DEVELOPER_WARRANTY`; `asset.asset_class` = `FIXTURE · SAFETY ·
 UTILITY`; `asset.compliance_regime` = `NONE · PERIODIC_INSPECTION`; `asset.status` = `IN_SERVICE ·
 FAULTY · REMOVED`. `asset_type` is the governed list on the FIELDS sheet, and a composite CHECK
@@ -121,8 +130,16 @@ ran before the sale can still be filed. Both halves are triggers in 0064, raisin
 
 The building page counts a `SOLD` flat as neither let nor vacant: **vacant flats** are the flats that
 are not `SOLD` and not let today. A flat tile carries למכירה or נמכרה under its measure line when
-its tenure is not `FOR_RENT`. Changing tenure is not on a screen yet: the seed file sets it, and
-`--update` changes it (below).
+its tenure is not `FOR_RENT`. The seed file sets tenure, and `--update` changes it (below). **#211**
+also changes it from the flat's page, `POST /estate/units/:unitId/tenure`, behind `estate.write`.
+`FOR_RENT` and `FOR_SALE` save at once. `SOLD` is written only when the post also carries a
+confirmation; without it the page is shown again and says נמכרה אינה ניתנת לביטול, and the column
+is unchanged. A flat already sold, and a flat with an active letting, come back to that page with
+a sentence — דירה שנמכרה נשארת נמכרה, and לא ניתן למכור דירה עם שכירות פעילה — rather than the
+error body. A post of the value the row already holds writes nothing. A change writes one
+`audit_log` line, action `estate.tenure`, subject the unit, inputs `from` and `to`. Who and when
+are that line's actor and `at`. It does not append `estate_event`. A value outside the three is
+`invalid` at the edge. The facts post (#210) still does not touch tenure.
 
 **Three facts a developer sheet carries.** `unit.flat_type` is the developer's layout code (`A`,
 `BG`, `P1`), free text because each developer has their own. `unit.balcony_sqm` is the balcony
@@ -133,6 +150,31 @@ All three are nullable, and a screen leaves an absent one out.
 **`space.disabled_bay`** marks a parking bay reserved for a disabled-parking permit (חניית נכה). Not
 null, false by default, and a CHECK refuses it on anything but a `PARKING` Space. The bay tile says
 נכה. Who may be assigned one is the letting's question, not this table's.
+
+## Rental track — `0065_rental_track.sql`
+
+**The track is whether the tender lets the flat at a free-market rent or a regulated one.**
+`FREE_MARKET` (שוק חופשי) is the default, and every flat that existed before 0065 is one: Ramle 103's
+sheet had no such column. `REGULATED` (מפוקח) is a flat the tender fixes at a regulated rent. The
+column is not null. Whether that rent is capped or checked against the tender is a later rule and
+not this column.
+
+The sheet mixes a second fact into the same cell. `מפוקח בן מקום` and `מפוקח מילואים פעיל` are still
+`REGULATED` here. בן מקום and מילואים פעיל say who the flat was let to, which is the letting's
+eligibility group (`tenancy.eligibility_group`, SPEC-tenancy.md), filled when a lease is read. The
+plan file does not carry it, because a plan has no letting.
+
+The seed file sets `rentalTrack`, and `--update` changes it. Omitted leaves the row; a new row
+defaults to `FREE_MARKET`. A value outside the two is `invalid` at the edge. The facts post and the
+tenure post do not touch it. There is no edit of it from the flat page: the tender fixed it, and a
+correction is another run of the file.
+
+The flat tile says מפוקח under its measure line when the track is regulated, the same way a flat
+for sale says למכירה. A free-market tile says nothing extra. The flat page names the track either
+way, as a chip. The building page (נכסים) counts both and filters the flat tiles:
+`GET /estate/inventory/:buildingId?track=FREE_MARKET` or `track=REGULATED`. Absent is every flat.
+Anything else is `invalid`. Parking and storage are not filtered. The list a seed prints counts
+regulated flats beside the tenure counts.
 
 ## EstateEvent — old → new on a place (#141)
 
@@ -151,6 +193,16 @@ and the register importer do not write here. The mint's batch line is kernel `au
 (`estate.inventory_mint`); each later add or remove is one `estate.inventory_add` or
 `estate.inventory_remove` line per Space. None of those are this table. The typed original is `old_value` on the first promotion row. The unit sheet lists these
 rows the same way it lists tenancy events, so an operator can ask what the room count used to be.
+
+**#210 leaves that rule standing.** A correction from the flat page updates `unit.rooms`,
+`unit.area_sqm`, `unit.flat_type`, `unit.balcony_sqm` and the unit space's `floor`, and appends
+nothing here. `kind` `amended` always names a source document, and a hand correction has none.
+The typed original on the first promotion row is still whatever the column held when the document
+was promoted, including a value an admin typed on this screen before that promotion.
+
+**#211 leaves it standing too.** A tenure change from the flat page is a hand change with no
+source document, so it writes kernel `audit_log` (`estate.tenure`), the same place a later
+inventory add writes, and appends nothing here.
 
 **`applyPromotedField` is the write.** It lives on this module's contract, beside `applyProtocolSeed`,
 so evidence never issues SQL against `unit`, `space`, or `building`. It parses `rooms` as a number
@@ -637,6 +689,25 @@ includes the building number when the building has one, in the same sentence the
 leaves that part out when it does not. The documents already on the page stay. The list is the
 book read for this unit, not a second classification.
 
+**#210. Correcting a seeded flat.** The page shows rooms, floor and area to every reader: a missing
+floor is left out, a missing area reads טרם נמדד. Flat type and balcony stay the chips already on
+the heading. An `estate.write` holder sees a form in place of that list, prefilled, posting
+`POST /estate/units/:unitId`. The edge is A13's: `rooms` required, a non-negative number at most
+20; `area_sqm` optional, a non-negative number at most 10,000, blank writes null; `floor` optional
+text at most 32 characters, blank writes null. Flat type is the same optional text. Balcony area
+is the same optional number as area. The post does not touch unit number, ממ״ד, condition,
+warranty, tenure, or the built bay and storage, and a letting on the flat does not refuse it. It
+replies `303` to this page. A viewer without `estate.write` sees the facts and no form; their post
+is `not_allowed`. No `estate_event` row.
+
+**#211. Tenure on the same page.** Beside the facts form, an `estate.write` holder sees a second
+form, prefilled with the row's tenure, posting `POST /estate/units/:unitId/tenure`. The options
+are להשכרה, למכירה and נמכרה. Selling asks for a confirmation whose words are נמכרה אינה ניתנת
+לביטול; a sale posted without it returns to this page with that sentence and changes nothing.
+The two trigger refusals return here the same way, with דירה שנמכרה נשארת נמכרה or לא ניתן
+למכור דירה עם שכירות פעילה. A viewer without `estate.write` sees no tenure form; their post is
+`not_allowed`. A value outside the three is `invalid`. The facts post still does not touch tenure.
+
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
 `GET`/`POST /documents/new`, reached from a unit row on the building page. It went behind the session
 at 5.2 with everything else, and its bounds are stated in full by
@@ -833,7 +904,7 @@ refuses a payload that would not fit in a job argument.
 
 `npm run estate:seed -- <file>` runs against the local database; `infra/estate-seed.sh staging
 <file> [--update]` runs against staging. Both list first and write nothing: the building, its flats
-by tenure, bays and storage per floor, how many disabled bays, the floor range. The staging wrapper
+by tenure and by rental track, bays and storage per floor, how many disabled bays, the floor range. The staging wrapper
 then asks y/n on the laptop and runs the apply job. Prod is refused, with `refuseUnlessStagingDatabase`
 (`src/staging-reset-plan.ts`), whatever the flags.
 

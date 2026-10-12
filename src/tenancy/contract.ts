@@ -44,6 +44,7 @@ export type {
 } from './internal/commands.ts';
 export {
   applyPromotedField,
+  eligibilityCode,
   endTenancyEarly,
   exerciseOption,
   expireDueTenancies,

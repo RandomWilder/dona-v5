@@ -1,13 +1,13 @@
 ---
 number: 210
 title: Edit a flat's facts after the building is seeded
-status: open
+status: closed
 labels: [needs-triage]
 assignee:
 blocked_by: []
 parent:
 created: 2026-10-12
-closed:
+closed: 2026-10-12
 ---
 
 ## Problem
@@ -30,3 +30,9 @@ flat's page. The same edge validation A13 applies. Whether a changed fact writes
 ## Not this ticket
 
 Tenure — #211. Bays and storage rooms on a flat — they arrive from leases.
+
+## Comment — 2026-10-12
+
+An admin corrects rooms, floor, area, flat type and balcony area from the flat's page. The same
+edge as A13. A letting does not block it. A hand correction does not append `estate_event`: that
+log is a document-caused change, and this screen has no document.

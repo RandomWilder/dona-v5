@@ -29,6 +29,7 @@ import { KernelError } from '../../kernel/errors.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
 import {
   applyPromotedField as applyTenancyPromotedField,
+  eligibilityCode,
   occupantOfAssignedBay,
   occupantOfAssignedStorage,
   occupantOfSecondAssignedBay,
@@ -63,6 +64,7 @@ const TENANCY_FIELD: Record<string, PromotedTenancyField> = {
   'tenancy.rent_amount': 'rent_amount',
   'tenancy.rent_currency': 'rent_currency',
   'tenancy.option_end_date': 'option_end_date',
+  'tenancy.eligibility_group': 'eligibility_group',
   'tenancy.parking_space_id': 'parking_space_id',
   'tenancy.second_parking_space_id': 'second_parking_space_id',
   'tenancy.storage_space_id': 'storage_space_id',
@@ -74,6 +76,17 @@ type AssignedTenancyField =
   | 'second_parking_space_id'
   | 'storage_space_id'
   | 'second_storage_space_id';
+
+function sameTenancyValue(
+  field: PromotedTenancyField,
+  held: string,
+  incoming: string,
+): boolean {
+  if (field !== 'eligibility_group') return held === incoming;
+  const left = eligibilityCode(held);
+  const right = eligibilityCode(incoming);
+  return left !== null && left === right;
+}
 
 function isAssignedTenancyField(
   field: PromotedTenancyField | undefined,
@@ -411,7 +424,7 @@ export async function promoteExtractedField(
         : (held?.value ?? null);
       if (
         occupyingValue !== null &&
-        occupyingValue !== copy.value &&
+        !sameTenancyValue(copy.field, occupyingValue, copy.value) &&
         !supersede
       ) {
         throw new KernelError(
@@ -428,7 +441,8 @@ export async function promoteExtractedField(
         );
       }
       const sameValueAlreadyHeld =
-        occupyingValue !== null && occupyingValue === copy.value;
+        occupyingValue !== null &&
+        sameTenancyValue(copy.field, occupyingValue, copy.value);
       if (!sameValueAlreadyHeld) {
         await applyTenancyPromotedField(db, {
           tenancyId,

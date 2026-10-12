@@ -46,6 +46,9 @@ any other column the system has no field for are dropped and not copied into the
      means `disabledBay: true`.
    - Status `מכירה` → `tenure: "FOR_SALE"`, `השכרה` → `"FOR_RENT"`. `SOLD` only when the sheet or
      the director says sold, never inferred.
+   - Rental track `שוק חופשי` → `rentalTrack: "FREE_MARKET"`. `מפוקח`, `מפוקח בן מקום` and
+     `מפוקח מילואים פעיל` → `"REGULATED"`. The words בן מקום and מילואים פעיל are not written on
+     the plan. They say who the flat was let to, and a lease that is read fills that on the letting.
    - Rooms 3, 3.5, 4 are numbers.
 
 4. **Check, and report — never fix silently.** List every anomaly with its sheet row and let the
@@ -97,6 +100,7 @@ any other column the system has no field for are dropped and not copied into the
 | `flatType` | flat | type / טיפוס (null if none) |
 | `balconySqm` | flat | balcony area (null if none) |
 | `tenure` | flat | status: `FOR_RENT`, `FOR_SALE`, `SOLD` |
+| `rentalTrack` | flat | `FREE_MARKET` or `REGULATED`. Omit only when the sheet has no such column; a new flat then defaults to free market |
 | `hasMamad` | flat | true unless the director or a spec sheet says otherwise; ask once per building |
 | `conditionStatus` | flat | `READY` unless the director says otherwise |
 | `parkingSpaceName`, `storageSpaceName`, `warrantyEndDate` | flat | always `null` |
@@ -135,7 +139,8 @@ director adds others. `accessNote` is always `null`. Every `UNIT` space has exac
         {
           "spaceName": "1", "unitNumber": "1", "rooms": 4, "areaSqm": 96, "hasMamad": true,
           "parkingSpaceName": null, "storageSpaceName": null, "warrantyEndDate": null,
-          "conditionStatus": "READY", "tenure": "FOR_SALE", "flatType": "C", "balconySqm": 11.5
+          "conditionStatus": "READY", "tenure": "FOR_SALE", "rentalTrack": "REGULATED",
+          "flatType": "C", "balconySqm": 11.5
         }
       ]
     }

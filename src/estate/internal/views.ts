@@ -25,7 +25,7 @@ import {
   type TenancyBookRow,
 } from '../../tenancy/contract.ts';
 import type { LaterAddPrefill } from './inventory.ts';
-import type { BuildingStatus, ConditionStatus } from './plan.ts';
+import type { BuildingStatus, ConditionStatus, Tenure } from './plan.ts';
 import type {
   BuildingDetail,
   BuildingSummary,
@@ -783,6 +783,22 @@ const TENURE_WORD: Record<string, string> = {
   SOLD: 'נמכרה',
 };
 
+const TRACK_WORD: Record<string, string> = {
+  FREE_MARKET: 'שוק חופשי',
+  REGULATED: 'מפוקח',
+};
+
+const ELIGIBILITY_WORD: Record<string, string> = {
+  LOCAL_RESIDENT: 'בן מקום',
+  ACTIVE_RESERVE: 'מילואים פעיל',
+};
+
+function regulatedMark(space: InventorySpaceRow): Html {
+  return space.rental_track === 'REGULATED'
+    ? h`<span class="sub">${TRACK_WORD.REGULATED}</span>`
+    : h``;
+}
+
 function groupSpaces(spaces: readonly InventorySpaceRow[]): {
   kind: string;
   rows: InventorySpaceRow[];
@@ -800,7 +816,7 @@ function spaceTile(
   sub: Html = h``,
 ): Html {
   if (space.space_kind === 'UNIT' && space.tenure === 'SOLD') {
-    return h`<a class="space-tile" href="/estate/units/${space.space_id}"><span class="no">${tileName(space.name)}</span><span class="state"><span class="dot is-hollow"></span>${TENURE_WORD.SOLD}</span>${sub}</a>`;
+    return h`<a class="space-tile" href="/estate/units/${space.space_id}"><span class="no">${tileName(space.name)}</span><span class="state"><span class="dot is-hollow"></span>${TENURE_WORD.SOLD}</span>${sub}${regulatedMark(space)}</a>`;
   }
   if (space.space_kind === 'UNIT') {
     const state = screen.states.get(space.space_id) ?? VACANT_TILE;
@@ -814,7 +830,7 @@ function spaceTile(
     const dot = state.vacant
       ? h`<span class="dot is-hollow"></span>`
       : h`<span class="dot"></span>`;
-    return h`<a class="${cls}" href="/estate/units/${space.space_id}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${state.word}</span>${sub}${forSale}${state.lines.map(tileLetting)}</a>`;
+    return h`<a class="${cls}" href="/estate/units/${space.space_id}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${state.word}</span>${sub}${forSale}${regulatedMark(space)}${state.lines.map(tileLetting)}</a>`;
   }
   const words = TILE_WORD[space.space_kind];
   if (words) {
@@ -1314,6 +1330,35 @@ function inventoryManage(
   </details>`;
 }
 
+function trackFilter(
+  buildingId: string,
+  units: readonly InventorySpaceRow[],
+  current: string | null,
+): Html {
+  const free = units.filter(
+    (unit) => (unit.rental_track ?? 'FREE_MARKET') === 'FREE_MARKET',
+  ).length;
+  const regulated = units.filter(
+    (unit) => unit.rental_track === 'REGULATED',
+  ).length;
+  const options: ReadonlyArray<readonly [string | null, string, number]> = [
+    [null, 'הכל', units.length],
+    ['FREE_MARKET', TRACK_WORD.FREE_MARKET, free],
+    ['REGULATED', TRACK_WORD.REGULATED, regulated],
+  ];
+  return h`<nav class="segmented glass is-raised" aria-label="סינון לפי מסלול">
+    ${options.map(([value, caption, n]) => {
+      const href =
+        value === null
+          ? `/estate/inventory/${buildingId}`
+          : `/estate/inventory/${buildingId}?track=${value}`;
+      return h`<a href="${href}" ${
+        value === current ? h`aria-current="true"` : h``
+      }>${caption} <span class="n">${ltr(n)}</span></a>`;
+    })}
+  </nav>`;
+}
+
 export function renderInventoryBuildingPage(screen: {
   building: BuildingSummary;
   spaces: readonly InventorySpaceRow[];
@@ -1329,8 +1374,18 @@ export function renderInventoryBuildingPage(screen: {
   write?: { csrf: string };
   add?: LaterAddPrefill;
   retrieval?: OfficeRetrievalView;
+  /** #212. Absent is every flat. */
+  track?: string | null;
 }): string {
-  const grouped = groupSpaces(screen.spaces);
+  const track = screen.track ?? null;
+  const visible = track
+    ? screen.spaces.filter(
+        (space) =>
+          space.space_kind !== 'UNIT' ||
+          (space.rental_track ?? 'FREE_MARKET') === track,
+      )
+    : screen.spaces;
+  const grouped = groupSpaces(visible);
   const byUnit = new Map(screen.units.map((unit) => [unit.unit_id, unit]));
   const unitRows = screen.spaces.filter((space) => space.space_kind === 'UNIT');
   const parkingRows = screen.spaces.filter(
@@ -1372,6 +1427,15 @@ export function renderInventoryBuildingPage(screen: {
         <div class="stat glass"><span class="stat-label">דירות פנויות</span><span class="stat-value">${ltr(vacantUnits)}</span></div>
         <div class="stat glass"><span class="stat-label">חניות פנויות</span><span class="stat-value">${ltr(vacantParking)}</span></div>
       </section>
+      ${trackFilter(screen.building.building_id, unitRows, track)}
+      ${
+        track &&
+        unitRows.filter(
+          (space) => (space.rental_track ?? 'FREE_MARKET') === track,
+        ).length === 0
+          ? h`<p class="empty-state">אין דירות במסלול זה.</p>`
+          : h``
+      }
       ${inventoryFacts(screen.building)}
       ${
         grouped.length === 0
@@ -1648,7 +1712,7 @@ export function renderNewUnitPage(screen: NewUnitScreen): string {
         </div>
         <div class="form-row">
           <label for="area_sqm">שטח במ״ר</label>
-          <input id="area_sqm" name="area_sqm" type="number" step="0.1" min="0" />
+          <input id="area_sqm" name="area_sqm" type="number" step="0.01" min="0" />
           <p class="hint">ריק — טרם נמדד.</p>
         </div>
       </div>
@@ -1925,7 +1989,7 @@ export function renderBuildingPage(
       <div class="chips">
         ${kinds.map(
           (kind) =>
-            h`<span class="chip">${label(SPACE_KIND, kind.space_kind)} · ${ltr(kind.n)}</span>`,
+            h`<span class="chip"><span>${label(SPACE_KIND, kind.space_kind)} · ${ltr(kind.n)}</span></span>`,
         )}
       </div>
     </section>
@@ -2018,6 +2082,100 @@ function unitLettingList(rows: readonly UnitLettingView[]): Html {
   </div></div>`;
 }
 
+/** #210. Present only for a viewer who holds `estate.write`. */
+export interface FlatEdit {
+  csrf: string;
+  /** #211. Set when a tenure post came back to this page with a sentence. */
+  tenureNotice?: string;
+}
+
+function unitFacts(unit: UnitHit): Html {
+  if (unit.rooms === undefined) return h``;
+  return h`<dl class="facts">
+    ${unit.floor ? h`<div><dt>קומה</dt><dd>${ltr(unit.floor)}</dd></div>` : h``}
+    <div><dt>חדרים</dt><dd>${ltr(unit.rooms)}</dd></div>
+    <div>
+      <dt>שטח</dt>
+      <dd>${unit.area_sqm ? h`${ltr(unit.area_sqm)} מ״ר` : h`טרם נמדד`}</dd>
+    </div>
+  </dl>`;
+}
+
+const TENURE_OPTION: readonly { value: Tenure; word: string }[] = [
+  { value: 'FOR_RENT', word: 'להשכרה' },
+  { value: 'FOR_SALE', word: 'למכירה' },
+  { value: 'SOLD', word: 'נמכרה' },
+];
+
+/** #211. Beside the facts form, and only for a viewer who holds `estate.write`. */
+function tenureForm(unit: UnitHit, edit: FlatEdit): Html {
+  const current = unit.tenure ?? 'FOR_RENT';
+  return h`<form class="form-grid" method="post" action="/estate/units/${unit.unit_id}/tenure">
+    ${csrfInput(edit.csrf)}
+    <h2>ייעוד הדירה</h2>
+    ${edit.tenureNotice ? h`<p class="form-note">${edit.tenureNotice}</p>` : h``}
+    <div class="form-row">
+      <label for="tenure">ייעוד</label>
+      <select id="tenure" name="tenure">
+        ${TENURE_OPTION.map(
+          (option) =>
+            h`<option value="${option.value}" ${
+              option.value === current ? h`selected` : h``
+            }>${option.word}</option>`,
+        )}
+      </select>
+    </div>
+    <label class="check" for="confirm_sold">
+      <input id="confirm_sold" name="confirm_sold" type="checkbox" value="yes" />
+      נמכרה אינה ניתנת לביטול
+    </label>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">שמירת ייעוד</button>
+    </div>
+  </form>`;
+}
+
+function editFlatForm(unit: UnitHit, csrf: string): Html {
+  return h`<form class="form-grid" method="post" action="/estate/units/${unit.unit_id}">
+    ${csrfInput(csrf)}
+    <h2>עריכת פרטי הדירה</h2>
+    <div class="form-pair">
+      <div class="form-row">
+        <label for="rooms">חדרים</label>
+        <input id="rooms" name="rooms" type="number" step="0.5" min="0" max="20" required
+          value="${unit.rooms ?? ''}" />
+      </div>
+      <div class="form-row">
+        <label for="floor">קומה</label>
+        <input id="floor" name="floor" type="text" maxlength="32" value="${unit.floor ?? ''}" />
+        <p class="hint">טקסט ולא מספר: קרקע, מרתף וגג אינם מספרים.</p>
+      </div>
+    </div>
+    <div class="form-pair">
+      <div class="form-row">
+        <label for="area_sqm">שטח במ״ר</label>
+        <input id="area_sqm" name="area_sqm" type="number" step="0.01" min="0"
+          value="${unit.area_sqm ?? ''}" />
+        <p class="hint">ריק — טרם נמדד.</p>
+      </div>
+      <div class="form-row">
+        <label for="flat_type">טיפוס</label>
+        <input id="flat_type" name="flat_type" type="text" maxlength="32"
+          value="${unit.flat_type ?? ''}" />
+      </div>
+    </div>
+    <div class="form-row">
+      <label for="balcony_sqm">שטח מרפסת במ״ר</label>
+      <input id="balcony_sqm" name="balcony_sqm" type="number" step="0.01" min="0"
+        value="${unit.balcony_sqm ?? ''}" />
+      <p class="hint">ריק — אין מרפסת, או ששטחה לא נמדד.</p>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">שמירה</button>
+    </div>
+  </form>`;
+}
+
 export function renderUnitPage(
   unit: UnitHit,
   word: UnitWord,
@@ -2027,6 +2185,7 @@ export function renderUnitPage(
   events: readonly TenancyEventView[] = [],
   retrieval?: OfficeRetrievalView,
   lettings: readonly UnitLettingView[] = [],
+  edit?: FlatEdit,
 ): string {
   const heading = lettingSentence({
     household_name: null,
@@ -2044,15 +2203,24 @@ export function renderUnitPage(
         unit.tenure === 'FOR_SALE'
           ? h`<span class="chip">${TENURE_WORD.FOR_SALE}</span>`
           : h``
-      }${unit.flat_type ? h`<span class="chip">טיפוס ${ltr(unit.flat_type)}</span>` : h``}${
+      }${
+        unit.rental_track
+          ? h`<span class="chip">${TRACK_WORD[unit.rental_track] ?? unit.rental_track}</span>`
+          : h``
+      }${unit.flat_type ? h`<span class="chip"><span>טיפוס ${ltr(unit.flat_type)}</span></span>` : h``}${
         unit.balcony_sqm
-          ? h`<span class="chip">מרפסת ${ltr(unit.balcony_sqm)} מ״ר</span>`
+          ? h`<span class="chip"><span>מרפסת ${ltr(unit.balcony_sqm)} מ״ר</span></span>`
           : h``
       }</div>
       <p class="unit-actions">
         <a href="/documents/new?unit=${unit.unit_id}">הוספת מסמך</a>
       </p>
     </div>
+    ${
+      edit
+        ? h`${editFlatForm(unit, edit.csrf)}${tenureForm(unit, edit)}`
+        : unitFacts(unit)
+    }
     ${unitLettingList(lettings)}
     ${promotedPanel(promoted)}
     ${changeLogPanel(events)}
@@ -2614,6 +2782,8 @@ export interface TenancySheet {
   rentAmount: string | null;
   rentCurrency: string | null;
   optionEndDate: string | null;
+  /** #212. Set when the letting names who a regulated flat was let to. */
+  eligibilityGroup?: string | null;
   parkingSpaceId: string | null;
   parkingName: string | null;
   /** Set only when the lease named a second bay. A one-bay letting omits the line. */
@@ -2631,6 +2801,7 @@ export interface TenancySheet {
   /** Approved rent that is not on the column. Empty when the column is the whole story. */
   uncarriedRent?: readonly UncarriedCite[];
   uncarriedOption?: readonly UncarriedCite[];
+  uncarriedEligibility?: readonly UncarriedCite[];
   uncarriedBay?: readonly UncarriedCite[];
   uncarriedSecondBay?: readonly UncarriedCite[];
   uncarriedStorage?: readonly UncarriedCite[];
@@ -2879,6 +3050,17 @@ function optionLine(optionEndDate: string | null): Html {
   return optionEndDate === null ? h`—` : ltr(optionEndDate);
 }
 
+function eligibilityRow(sheet: TenancySheet): Html {
+  const pending = sheet.uncarriedEligibility ?? [];
+  const group = sheet.eligibilityGroup ?? null;
+  if (group === null && pending.length === 0) return h``;
+  const word = group === null ? h`—` : h`${ELIGIBILITY_WORD[group] ?? group}`;
+  return h`<div>
+    <dt>זכאות</dt>
+    <dd>${carriedFact(word, pending, group === null, sheet.mayAddInventory)}</dd>
+  </div>`;
+}
+
 function lettingTitle(row: {
   household_name: string | null;
   address_line: string;
@@ -3094,6 +3276,7 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
             sheet.mayAddInventory,
           )}</dd>
         </div>
+        ${eligibilityRow(sheet)}
         <div>
           <dt>חניה משויכת</dt>
           <dd>${carriedFact(

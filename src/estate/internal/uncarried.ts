@@ -7,6 +7,7 @@
 // name the same fact.
 import { KernelError } from '../../kernel/errors.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
+import { eligibilityCode } from '../../tenancy/contract.ts';
 import { acceptedFirstNumber } from './inventory.ts';
 import type { Queryable } from './plan.ts';
 
@@ -40,6 +41,7 @@ const SHOWN = [
   'tenancy.second_parking_space_id',
   'tenancy.storage_space_id',
   'tenancy.second_storage_space_id',
+  'tenancy.eligibility_group',
   'unit.rooms',
   'space.floor',
 ] as const;
@@ -110,6 +112,7 @@ interface Place {
   rentAmount: string | null;
   rentCurrency: string | null;
   optionEndDate: string | null;
+  eligibilityGroup: string | null;
   parkingName: string | null;
   secondParkingName: string | null;
   storageName: string | null;
@@ -168,6 +171,7 @@ async function placeForTenancy(
     rentAmount: string | null;
     rentCurrency: string | null;
     optionEndDate: string | null;
+    eligibilityGroup: string | null;
     parkingName: string | null;
     secondParkingName: string | null;
     storageName: string | null;
@@ -180,6 +184,7 @@ async function placeForTenancy(
     `SELECT t.rent_amount::text AS "rentAmount",
             t.rent_currency AS "rentCurrency",
             t.option_end_date::text AS "optionEndDate",
+            t.eligibility_group AS "eligibilityGroup",
             park.name AS "parkingName",
             second_park.name AS "secondParkingName",
             store.name AS "storageName",
@@ -230,6 +235,7 @@ async function placeForUnit(
     rentAmount: null,
     rentCurrency: null,
     optionEndDate: null,
+    eligibilityGroup: null,
     parkingName: null,
     secondParkingName: null,
     storageName: null,
@@ -315,6 +321,7 @@ function heldValue(target: string, place: Place): string | null {
   if (target === 'tenancy.rent_amount') return place.rentAmount;
   if (target === 'tenancy.rent_currency') return place.rentCurrency;
   if (target === 'tenancy.option_end_date') return place.optionEndDate;
+  if (target === 'tenancy.eligibility_group') return place.eligibilityGroup;
   if (target === 'tenancy.parking_space_id') return place.parkingName;
   if (target === 'tenancy.second_parking_space_id')
     return place.secondParkingName;
@@ -328,6 +335,11 @@ function heldValue(target: string, place: Place): string | null {
 
 function sameValue(target: string, held: string, incoming: string): boolean {
   if (target === 'unit.rooms') return Number(held) === Number(incoming);
+  if (target === 'tenancy.eligibility_group') {
+    const left = eligibilityCode(held);
+    const right = eligibilityCode(incoming);
+    return left !== null && left === right;
+  }
   return held === incoming;
 }
 

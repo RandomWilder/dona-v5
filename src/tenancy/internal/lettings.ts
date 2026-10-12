@@ -45,6 +45,7 @@ export interface TenancyRow {
   rent_amount: string | null;
   rent_currency: string | null;
   option_end_date: string | null;
+  eligibility_group: string | null;
   parking_space_id: string | null;
   parking_name: string | null;
   second_parking_space_id: string | null;
@@ -152,6 +153,7 @@ export async function getTenancy(
             rent_amount::text AS rent_amount,
             rent_currency,
             option_end_date::text AS option_end_date,
+            eligibility_group,
             tenancy.parking_space_id,
             p.name AS parking_name,
             tenancy.second_parking_space_id,

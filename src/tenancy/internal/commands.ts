@@ -184,6 +184,7 @@ export type PromotedTenancyField =
   | 'rent_amount'
   | 'rent_currency'
   | 'option_end_date'
+  | 'eligibility_group'
   | 'parking_space_id'
   | 'second_parking_space_id'
   | 'storage_space_id'
@@ -231,6 +232,7 @@ const PROMOTED_COLUMN: Record<PromotedTenancyField, string> = {
   rent_amount: 'rent_amount',
   rent_currency: 'rent_currency',
   option_end_date: 'option_end_date',
+  eligibility_group: 'eligibility_group',
   parking_space_id: 'parking_space_id',
   second_parking_space_id: 'second_parking_space_id',
   storage_space_id: 'storage_space_id',
@@ -276,6 +278,26 @@ const DATE_FIELDS = new Set<PromotedTenancyField>([
 
 const AMOUNT = /^\d+(\.\d+)?$/;
 
+const ELIGIBILITY: Record<string, string> = {
+  LOCAL_RESIDENT: 'LOCAL_RESIDENT',
+  ACTIVE_RESERVE: 'ACTIVE_RESERVE',
+  'בן מקום': 'LOCAL_RESIDENT',
+  'מילואים פעיל': 'ACTIVE_RESERVE',
+};
+
+/** The stored code, whether the lease printed the code or the Hebrew. Null if neither. */
+export function eligibilityCode(value: string): string | null {
+  return ELIGIBILITY[value.trim()] ?? null;
+}
+
+function requireEligibility(value: string): string {
+  const code = eligibilityCode(value);
+  if (!code) {
+    throw new KernelError('invalid', 'that is not an eligibility group');
+  }
+  return code;
+}
+
 function requireAmount(value: string): string {
   if (!AMOUNT.test(value)) {
     throw new KernelError('invalid', 'that is not an amount');
@@ -289,6 +311,7 @@ function requirePromotedValue(
 ): string {
   if (DATE_FIELDS.has(field)) return requireDate(value);
   if (field === 'rent_amount') return requireAmount(value);
+  if (field === 'eligibility_group') return requireEligibility(value);
   if (value.trim() === '') {
     const assigned = ASSIGNED_SPACE[field as keyof typeof ASSIGNED_SPACE];
     throw new KernelError(
@@ -511,7 +534,7 @@ export async function applyPromotedField(
   const column = PROMOTED_COLUMN[spec.field];
   const current = await db.query<Record<string, string | null>>(
     `SELECT start_date::text, end_date::text, rent_amount::text, rent_currency,
-            option_end_date::text
+            option_end_date::text, eligibility_group
        FROM tenancy WHERE tenancy_id = $1`,
     [spec.tenancyId],
   );

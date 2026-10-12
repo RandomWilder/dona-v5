@@ -246,6 +246,7 @@ describe('estate · the import runs twice', () => {
             building.units[0] = {
               ...building.units[0],
               tenure: 'FOR_SALE',
+              rentalTrack: 'REGULATED',
               flatType: 'BG',
               balconySqm: 12.4,
             };
@@ -256,10 +257,11 @@ describe('estate · the import runs twice', () => {
             const units = await db.query<{
               unit_number: string;
               tenure: string;
+              rental_track: string;
               flat_type: string | null;
               balcony_sqm: string | null;
             }>(
-              `SELECT u.unit_number, u.tenure, u.flat_type, u.balcony_sqm FROM unit u
+              `SELECT u.unit_number, u.tenure, u.rental_track, u.flat_type, u.balcony_sqm FROM unit u
                JOIN space s ON s.space_id = u.unit_id
                JOIN building b ON b.building_id = s.building_id
                WHERE b.city = $1 ORDER BY u.unit_number`,
@@ -269,12 +271,13 @@ describe('estate · the import runs twice', () => {
               units.rows.map((r) => [
                 r.unit_number,
                 r.tenure,
+                r.rental_track,
                 r.flat_type,
                 r.balcony_sqm === null ? null : Number(r.balcony_sqm),
               ]),
               [
-                ['1', 'FOR_SALE', 'BG', 12.4],
-                ['2', 'SOLD', null, null],
+                ['1', 'FOR_SALE', 'REGULATED', 'BG', 12.4],
+                ['2', 'SOLD', 'FREE_MARKET', null, null],
               ],
             );
             const spaces = await db.query<{

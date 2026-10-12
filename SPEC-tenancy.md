@@ -30,7 +30,7 @@ on the party. Two spouses on one lease are two parties on one tenancy; one perso
 over five years is one party on three tenancies. Without the join table a second signatory has
 nowhere to go and gets typed into a notes field, where no rule can read them.
 
-## Tables — `src/kernel/migrations/0007_tenancy.sql`
+## Tables — `src/kernel/migrations/0007_tenancy.sql` and `0065_rental_track.sql`
 
 The workbook's E7 and E8 columns and no others, plus the one table a NOT NULL foreign key needs to
 exist. Ids are `uuid`, enums are `text` with a `CHECK`, and there is no `DEFAULT now()` anywhere: the
@@ -39,12 +39,22 @@ FIELDS sheet gives these entities no timestamp, and every date here is a fact so
 | Table | Columns |
 |---|---|
 | `terms_profile` | `terms_profile_id` PK · `name` |
-| `tenancy` | `tenancy_id` PK · `unit_id` FK → unit · `start_date` · `end_date` · `status` · `terms_profile_id` FK → terms_profile · `notice_date?` · `actual_move_out?` · `rent_amount?` · `rent_currency?` · `option_end_date?` · `parking_space_id?` · `storage_space_id?` |
+| `tenancy` | `tenancy_id` PK · `unit_id` FK → unit · `start_date` · `end_date` · `status` · `terms_profile_id` FK → terms_profile · `notice_date?` · `actual_move_out?` · `rent_amount?` · `rent_currency?` · `option_end_date?` · `parking_space_id?` · `storage_space_id?` · `eligibility_group?` |
 | `tenancy_party` | `tenancy_id` + `party_id` composite PK, both FK · `role` · `is_service_contact` |
 
 Vocabularies: `tenancy.status` = `DRAFT · ACTIVE · ENDED · TERMINATED_EARLY`; `tenancy_party.role` =
 `PRIMARY_TENANT · CO_TENANT · GUARANTOR · OCCUPANT`, where GUARANTOR is ערב — on the lease, but not a
-resident.
+resident. `tenancy.eligibility_group` = `LOCAL_RESIDENT · ACTIVE_RESERVE`, or null.
+
+**#212. Who a regulated flat was let to.** `eligibility_group` is nullable. `LOCAL_RESIDENT` is
+בן מקום and `ACTIVE_RESERVE` is מילואים פעיל. Null is a letting that names neither, which is every
+free-market letting and a regulated letting whose lease names no group. The column does not say
+the flat is regulated: that is `unit.rental_track` (SPEC-estate.md). A lease reading fills it.
+`eligibility_group` on the `lease` type promotes to this column. The approved value is one of the
+two codes, or the Hebrew the lease prints (`בן מקום`, `מילואים פעיל`), and the write stores the
+code. Anything else is `invalid` and the column is unchanged. The tenancy page shows the Hebrew
+when the column is set, and the uncarried mark when an approved reading has not landed. A letting
+with no group shows no line.
 
 **No amount column here, and no test asserts that any more.** Foundation rule 2 is retired
 ([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)) and the two
