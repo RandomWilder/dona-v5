@@ -73,8 +73,14 @@ echo "  live objects and every noncurrent version, in $PROJECT."
 echo "  The bucket's seven-day soft-delete window is NOT touched — what this removes"
 echo "  stays restorable by a human for seven days, which is the control working."
 echo
-printf 'Type the bucket name to confirm: '
-read -r ANSWER
+# CONFIRM_BUCKET is the typed answer given ahead of time, for infra/staging-reset.sh, whose own
+# prompt has already been answered. It still has to be this bucket's exact name.
+if [[ -n "${CONFIRM_BUCKET:-}" ]]; then
+  ANSWER="$CONFIRM_BUCKET"
+else
+  printf 'Type the bucket name to confirm: '
+  read -r ANSWER
+fi
 if [[ "$ANSWER" != "$BUCKET" ]]; then
   echo "✖ not confirmed — nothing was removed" >&2
   exit 1
@@ -118,6 +124,6 @@ echo "✔ $WHAT is cleared — no live object and no noncurrent version remains"
 if [[ -n "$SOFT" ]]; then
   # Said out loud rather than treated as a failure. This is the difference between this script and
   # corpus-delete.sh, and a reader who confuses the two would draw the wrong conclusion from silence.
-  echo "  Still restorable for seven days by a human, by design:"
-  echo "$SOFT" | sed 's/^/    /'
+  echo "  Still restorable for seven days by a human, by design: $(echo "$SOFT" | wc -l | tr -d ' ') objects, e.g."
+  echo "$SOFT" | head -5 | sed 's/^/    /'
 fi
