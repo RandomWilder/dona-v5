@@ -533,7 +533,7 @@ function officeAskNotice(request: FastifyRequest): string | undefined {
 
 /** #211. The page's own sentences for a tenure post that did not write. */
 const TENURE_NOTICE = {
-  confirm: 'נמכרה אינה ניתנת לביטול. סמנו אישור כדי למכור.',
+  confirm: 'נמכרה אינה ניתנת לביטול.',
   sold: 'דירה שנמכרה נשארת נמכרה.',
   let: 'לא ניתן למכור דירה עם שכירות פעילה.',
 } as const;

@@ -190,7 +190,10 @@ describe('estate · change a flat’s tenure from its page', () => {
       });
       assert.equal(page.statusCode, 200);
       assert.match(String(page.headers['content-type']), /text\/html/);
-      assert.match(page.body, /נמכרה אינה ניתנת לביטול\. סמנו אישור כדי למכור/);
+      assert.match(
+        page.body,
+        /<p class="form-note">נמכרה אינה ניתנת לביטול\.<\/p>/,
+      );
       const after = await pool.query<{ tenure: string }>(
         'SELECT tenure FROM unit WHERE unit_id = $1',
         [unitId],
