@@ -1,13 +1,13 @@
 ---
 number: 200
 title: "Names are split: given and family for a person, legal for a company"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent: 199
 created: 2026-10-11
-closed:
+closed: 2026-10-11
 ---
 
 ## Parent
@@ -46,6 +46,10 @@ picks a first and a last name. No existing name is split by guessing anywhere.
 The occupied tile on בניין מלאות, דירה 1, was opened on `:3000`. That letting is active and the party's family name is still empty, because no existing name was split by guessing. The tile shows the dates and the status, and not the last word of the display name.
 
 A filed lease's ledger opens and says the name approval will appear there. This database has no unapproved household-name reading, so the given-name and family-name fields were not on a live page. The addendum screen test covers a stored family name of more than one word.
+
+## Comment — 2026-10-11
+
+Closed. The split columns, the check, the generated display name, the register, the confirmation fields and the property tile are in. The live click of the given-name and family-name fields stays unchecked: this database has 3,488 leases and no extracted household-name reading, so the filing ledger says the approval will open there and the two fields are not on a page. That click does not hold the next ticket.
 
 ## Blocked by
 
