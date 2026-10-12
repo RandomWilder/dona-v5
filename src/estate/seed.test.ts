@@ -185,9 +185,27 @@ describe('estate · seeding a building from a plan file', () => {
     }
   });
 
+  it('reads a rental track and counts regulated flats', () => {
+    const json = planJson();
+    const building = (
+      json as { buildings: { units: Record<string, unknown>[] }[] }
+    ).buildings[0];
+    const unit = building?.units[0];
+    if (!unit) throw new Error('plan has no flat');
+    unit.rentalTrack = 'REGULATED';
+    const plan = readSeedPlan(json);
+    assert.equal(plan.buildings[0]?.units[0]?.rentalTrack, 'REGULATED');
+    assert.match(summariseSeedPlan(plan).join('\n'), /regulated 1/);
+    unit.rentalTrack = 'CAPPED';
+    assert.throws(() => readSeedPlan(json), /rentalTrack/);
+  });
+
   it('summarises what it would write', () => {
     const lines = summariseSeedPlan(readSeedPlan(planJson())).join('\n');
-    assert.match(lines, /flats\s+2 · FOR_RENT 1 · FOR_SALE 1 · SOLD 0/);
+    assert.match(
+      lines,
+      /flats\s+2 · FOR_RENT 1 · FOR_SALE 1 · SOLD 0 · regulated 0/,
+    );
     assert.match(lines, /floors קרקע–1/);
     assert.match(lines, /parking\s+2 · -1 1 · -2 1 · disabled 1/);
     assert.match(lines, /storage\s+1 · -1 1/);

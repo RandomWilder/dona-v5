@@ -24,6 +24,8 @@ export type BuildingStatus = 'ACTIVE' | 'IN_CONSTRUCTION' | 'EXITED';
 export type ConditionStatus = 'READY' | 'RENOVATION' | 'WITHHELD';
 /** Whether Dona lets the flat. `SOLD` is terminal (0064). */
 export type Tenure = 'FOR_RENT' | 'FOR_SALE' | 'SOLD';
+/** Whether the tender lets the flat at a free-market rent or a regulated one (#212). */
+export type RentalTrack = 'FREE_MARKET' | 'REGULATED';
 
 export interface ProjectPlan {
   name: string;
@@ -65,6 +67,11 @@ export interface UnitPlan {
   conditionStatus: ConditionStatus;
   /** 0064, from a developer sheet. Omitted leaves the row; a new row defaults to `FOR_RENT`. */
   tenure?: Tenure;
+  /**
+   * #212, from a developer sheet. Omitted leaves the row; a new row defaults to `FREE_MARKET`.
+   * The eligibility words in the same sheet cell are not this field.
+   */
+  rentalTrack?: RentalTrack;
   /** The developer's layout code (`A`, `BG`, `P1`). */
   flatType?: string | null;
   balconySqm?: number | null;

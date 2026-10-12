@@ -60,7 +60,11 @@ function plan(): EstatePlan {
           },
         ],
         units: [
-          flat('1', { tenure: 'FOR_RENT', flatType: 'BG' }),
+          flat('1', {
+            tenure: 'FOR_RENT',
+            flatType: 'BG',
+            rentalTrack: 'REGULATED',
+          }),
           flat('2', { tenure: 'FOR_SALE' }),
           flat('3', { tenure: 'SOLD', balconySqm: 14 }),
         ],
@@ -116,6 +120,38 @@ describe('estate · a seeded building on נכסים', () => {
       assert.match(html, /<span class="sub">נכה<\/span>/);
       assert.match(html, /<span dir="ltr">6\.2<\/span> מ״ר/);
       assert.match(html, /טיפוס <span dir="ltr">BG<\/span>/);
+      assert.match(html, /<span class="sub">מפוקח<\/span>/);
+      assert.match(html, /סינון לפי מסלול/);
+      assert.match(html, /שוק חופשי <span class="n"><span dir="ltr">2<\/span>/);
+      assert.match(html, /מפוקח <span class="n"><span dir="ltr">1<\/span>/);
+
+      const ids = await pool.query<{ unit_number: string; unit_id: string }>(
+        `SELECT u.unit_number, u.unit_id FROM unit u
+         JOIN space s ON s.space_id = u.unit_id
+         WHERE s.building_id = $1`,
+        [buildingId],
+      );
+      const idOf = (n: string) =>
+        ids.rows.find((row) => row.unit_number === n)?.unit_id ?? '';
+      const regulated = await client.inject({
+        method: 'GET',
+        url: `/estate/inventory/${buildingId}?track=REGULATED`,
+      });
+      assert.equal(regulated.statusCode, 200);
+      assert.match(regulated.body, new RegExp(`/estate/units/${idOf('1')}`));
+      assert.doesNotMatch(
+        regulated.body,
+        new RegExp(`/estate/units/${idOf('2')}`),
+      );
+      assert.doesNotMatch(
+        regulated.body,
+        new RegExp(`/estate/units/${idOf('3')}`),
+      );
+      const refused = await client.inject({
+        method: 'GET',
+        url: `/estate/inventory/${buildingId}?track=CAPPED`,
+      });
+      assert.equal(refused.statusCode, 400);
 
       const sold = await pool.query<{ unit_id: string }>(
         `SELECT u.unit_id FROM unit u JOIN space s ON s.space_id = u.unit_id
@@ -128,7 +164,14 @@ describe('estate · a seeded building on נכסים', () => {
       });
       assert.equal(unitPage.statusCode, 200);
       assert.match(unitPage.body, /<span class="chip">נמכרה<\/span>/);
+      assert.match(unitPage.body, /<span class="chip">שוק חופשי<\/span>/);
       assert.match(unitPage.body, /מרפסת <span dir="ltr">14<\/span> מ״ר/);
+      const regulatedFlat = await client.inject({
+        method: 'GET',
+        url: `/estate/units/${idOf('1')}`,
+      });
+      assert.equal(regulatedFlat.statusCode, 200);
+      assert.match(regulatedFlat.body, /<span class="chip">מפוקח<\/span>/);
     } finally {
       await cleanup(pool);
       await signOutAll(pool, DOMAIN);

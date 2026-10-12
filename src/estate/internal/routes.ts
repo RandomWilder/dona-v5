@@ -192,6 +192,7 @@ export interface EstateDeps {
     storage_name: string | null;
     second_storage_space_id: string | null;
     second_storage_name: string | null;
+    eligibility_group: string | null;
   }>;
   listTenancyParties: (
     db: Pool,
@@ -537,6 +538,23 @@ const TENURE_NOTICE = {
   sold: 'דירה שנמכרה נשארת נמכרה.',
   let: 'לא ניתן למכור דירה עם שכירות פעילה.',
 } as const;
+
+const RENTAL_TRACKS = ['FREE_MARKET', 'REGULATED'] as const;
+
+function rentalTrackOf(query: unknown): (typeof RENTAL_TRACKS)[number] | null {
+  if (typeof query !== 'object' || query === null || !('track' in query)) {
+    return null;
+  }
+  const raw = (query as { track?: unknown }).track;
+  if (raw === undefined || raw === '') return null;
+  if (
+    typeof raw !== 'string' ||
+    !(RENTAL_TRACKS as readonly string[]).includes(raw)
+  ) {
+    throw new KernelError('invalid', 'track is not a rental track');
+  }
+  return raw as (typeof RENTAL_TRACKS)[number];
+}
 
 function tenureNoticeOf(request: FastifyRequest): string | undefined {
   const raw = (request.query as { tenure?: string }).tenure;
@@ -1106,6 +1124,7 @@ export function registerEstateRoutes(
       html(reply);
       const csrf = csrfFrom(request);
       return renderInventoryBuildingPage({
+        track: rentalTrackOf(request.query),
         building: detail.building,
         spaces,
         units: detail.units,
@@ -1888,6 +1907,7 @@ export function registerEstateRoutes(
       rentAmount: letting.rent_amount,
       rentCurrency: letting.rent_currency,
       optionEndDate: letting.option_end_date,
+      eligibilityGroup: letting.eligibility_group,
       parkingSpaceId: letting.parking_space_id,
       parkingName: letting.parking_name,
       secondParkingName: letting.second_parking_name,
@@ -1917,6 +1937,7 @@ export function registerEstateRoutes(
       ],
       uncarriedRent: rentCites(pending),
       uncarriedOption: citesFor(pending, 'tenancy.option_end_date'),
+      uncarriedEligibility: citesFor(pending, 'tenancy.eligibility_group'),
       uncarriedBay: citesFor(pending, 'tenancy.parking_space_id'),
       uncarriedSecondBay: citesFor(pending, 'tenancy.second_parking_space_id'),
       uncarriedStorage: citesFor(pending, 'tenancy.storage_space_id'),

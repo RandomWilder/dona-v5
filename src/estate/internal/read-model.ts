@@ -131,6 +131,8 @@ export interface InventorySpaceRow {
   name: string;
   /** 0064. A UNIT row's tenure; null on every other kind. Optional for rows built by hand. */
   tenure?: string | null;
+  /** #212. A UNIT row's rental track; null on every other kind. */
+  rental_track?: string | null;
   /** 0064. Only ever true on PARKING. */
   disabled_bay?: boolean;
   /** 0064. A storage room's area; null elsewhere. */
@@ -162,6 +164,7 @@ export async function listInventorySpaces(
   const result = await db.query<InventorySpaceRow>(
     `SELECT space_id, space_kind, name,
             (SELECT u.tenure FROM unit u WHERE u.unit_id = space.space_id) AS tenure,
+            (SELECT u.rental_track FROM unit u WHERE u.unit_id = space.space_id) AS rental_track,
             disabled_bay, area_sqm::text AS area_sqm
        FROM space
       WHERE building_id = $1
@@ -178,6 +181,7 @@ export async function listPortfolioSpaces(
   const result = await db.query<PortfolioSpaceRow>(
     `SELECT building_id, space_id, space_kind, name,
             (SELECT u.tenure FROM unit u WHERE u.unit_id = space.space_id) AS tenure,
+            (SELECT u.rental_track FROM unit u WHERE u.unit_id = space.space_id) AS rental_track,
             disabled_bay, area_sqm::text AS area_sqm
        FROM space
       ORDER BY building_id, ${INVENTORY_SPACE_ORDER}`,
@@ -292,6 +296,8 @@ export interface UnitHit {
   building_number?: string | null;
   /** 0064. Read by `getUnit` for the unit page; search hits do not carry them. */
   tenure?: string;
+  /** #212. Read by `getUnit`. Search hits do not carry it. */
+  rental_track?: string;
   flat_type?: string | null;
   balcony_sqm?: string | null;
   /** #210. Read by `getUnit` for the flat page. Search hits do not carry them. */
@@ -318,6 +324,7 @@ export async function getUnit(db: Queryable, unitId: string): Promise<UnitHit> {
             b.city,
             b.building_number,
             u.tenure,
+            u.rental_track,
             u.flat_type,
             u.balcony_sqm::text AS balcony_sqm,
             u.rooms::text AS rooms,

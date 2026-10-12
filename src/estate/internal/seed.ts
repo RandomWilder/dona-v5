@@ -14,6 +14,7 @@ import type {
   ImportReport,
   ProjectPlan,
   Queryable,
+  RentalTrack,
   SpacePlan,
   Tenure,
   UnitPlan,
@@ -201,6 +202,7 @@ function readUnit(value: unknown, path: string): UnitPlan {
     'warrantyEndDate',
     'conditionStatus',
     'tenure',
+    'rentalTrack',
     'flatType',
     'balconySqm',
   ]);
@@ -231,6 +233,10 @@ function readUnit(value: unknown, path: string): UnitPlan {
     oneOf<Tenure>(o, 'tenure', path, ['FOR_RENT', 'FOR_SALE', 'SOLD']),
   );
   if (tenure !== undefined) unit.tenure = tenure;
+  const rentalTrack = optional(o, 'rentalTrack', () =>
+    oneOf<RentalTrack>(o, 'rentalTrack', path, ['FREE_MARKET', 'REGULATED']),
+  );
+  if (rentalTrack !== undefined) unit.rentalTrack = rentalTrack;
   const flatType = optional(o, 'flatType', () =>
     textOrNull(o, 'flatType', path),
   );
@@ -334,6 +340,9 @@ export function summariseSeedPlan(plan: EstatePlan): string[] {
   const of = (kind: string) => building.spaces.filter((s) => s.kind === kind);
   const tenure = (t: string) =>
     building.units.filter((u) => (u.tenure ?? 'FOR_RENT') === t).length;
+  const regulated = building.units.filter(
+    (u) => u.rentalTrack === 'REGULATED',
+  ).length;
   const floors = [...new Set(of('UNIT').map((s) => s.floor ?? '—'))].sort(
     floorOrder,
   );
@@ -349,7 +358,7 @@ export function summariseSeedPlan(plan: EstatePlan): string[] {
   return [
     `building  ${building.name} · ${building.addressLine}, ${building.city} · ${building.status}`,
     `          project ${project ? `${project.projectCode} (${project.name})` : (building.projectCode ?? '—')} · handover ${building.handoverDate} → warranty ${building.warrantyEndDate}`,
-    `flats     ${building.units.length} · FOR_RENT ${tenure('FOR_RENT')} · FOR_SALE ${tenure('FOR_SALE')} · SOLD ${tenure('SOLD')} · floors ${floors[0] ?? '—'}–${floors.at(-1) ?? '—'} · types ${types.size}`,
+    `flats     ${building.units.length} · FOR_RENT ${tenure('FOR_RENT')} · FOR_SALE ${tenure('FOR_SALE')} · SOLD ${tenure('SOLD')} · regulated ${regulated} · floors ${floors[0] ?? '—'}–${floors.at(-1) ?? '—'} · types ${types.size}`,
     `parking   ${parking.length}${parking.length ? ` · ${byFloor(parking)}` : ''} · disabled ${parking.filter((s) => s.disabledBay).length}`,
     `storage   ${storage.length}${storage.length ? ` · ${byFloor(storage)}` : ''}`,
     `other     ${other}`,

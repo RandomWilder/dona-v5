@@ -1,13 +1,13 @@
 ---
 number: 212
 title: A flat's rental track — free market or regulated, and who a regulated flat is let to
-status: open
-labels: [needs-triage]
+status: closed
+labels: []
 assignee:
 blocked_by: []
 parent:
 created: 2026-10-12
-closed:
+closed: 2026-10-12
 ---
 
 ## Problem
@@ -32,3 +32,10 @@ Tenancy. Then: a migration for the column(s), the
 building plan file and `building-sheet-to-plan` gain the field, the flat tile and page show it, and
 BSM-MSK is refilled with `infra/estate-seed.sh staging <file> --update`. Whether a regulated rent is
 capped or checked against the tender is a separate rule and not part of this ticket.
+
+## Comment — 2026-10-12
+
+Closed. The track is on the flat and the eligibility group is on the letting, filled when a lease is
+read. The building page counts both and filters the tiles. The three BSM plan files on this machine
+now carry the track. Staging was not updated: that command writes the live staging database and waits
+for a yes.

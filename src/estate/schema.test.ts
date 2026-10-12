@@ -397,6 +397,13 @@ describe('estate · the schema is the constraint', () => {
               [apartment],
             ),
           );
+          await insertUnit(db, apartment);
+          await rejects(db, CHECK_VIOLATION, () =>
+            db.query(
+              `UPDATE unit SET rental_track = 'SUBSIDISED' WHERE unit_id = $1`,
+              [apartment],
+            ),
+          );
         });
       });
     } finally {
@@ -459,6 +466,7 @@ describe('estate · the schema is the constraint', () => {
           'has_mamad',
           'parking_kind',
           'parking_space_id',
+          'rental_track',
           'rooms',
           'space_kind',
           'storage_kind',

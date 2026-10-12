@@ -40,6 +40,7 @@ const PROMOTION_TARGETS: Readonly<
     second_parking_space_number: 'tenancy.second_parking_space_id',
     storage_space_number: 'tenancy.storage_space_id',
     second_storage_space_number: 'tenancy.second_storage_space_id',
+    eligibility_group: 'tenancy.eligibility_group',
   },
   lease_amendment: {
     new_end_date: 'tenancy.end_date',

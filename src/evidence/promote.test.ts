@@ -147,8 +147,9 @@ describe('evidence · promote an extracted field', () => {
         // assigned storage, #179's second parking declaration, the parking hint
         // re-opened at SCHEMA_V7 (the closed SCHEMA_V6 row keeps its mapping),
         // #180's second storage declaration, and the storage hint re-opened the
-        // same day (the closed SCHEMA_V6 row keeps its mapping).
-        assert.equal(mappings.rows[0]?.n, '17');
+        // same day (the closed SCHEMA_V6 row keeps its mapping). #212 adds
+        // eligibility_group.
+        assert.equal(mappings.rows[0]?.n, '18');
         const extras = await db.query<{ n: string }>(
           `SELECT count(*)::text AS n FROM field_promotion p
              JOIN document_type_field f
@@ -1007,5 +1008,146 @@ describe('evidence · promote an extracted field', () => {
     assert.doesNotMatch(html, /field-box/);
     assert.doesNotMatch(html, /#f-/);
     assert.match(html, /91%/);
+  });
+
+  it('a read lease fills who a regulated flat was let to', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const unitId = await insertUnit(db);
+        const profile = await upsertTermsProfile(
+          db,
+          `promo-track-${unitId.slice(24)}`,
+        );
+        const tenancy = await upsertTenancy(db, {
+          unitId,
+          startDate: '2026-01-01',
+          endDate: '2027-12-31',
+          status: 'ACTIVE',
+          termsProfileId: profile.id,
+          noticeDate: null,
+          actualMoveOut: null,
+        });
+        const clock = fixedClock(new Date('2026-10-12T09:00:00.000Z'));
+        const filed = await fileDocument(
+          {
+            db,
+            objects: createMemoryStore(),
+            pdf: createFakePdfText([MARKERS]),
+            audit: createAuditLog(db, clock),
+            clock,
+            bucket: BUCKET,
+            extractor: createFakeExtractor(() => ({
+              findings: [
+                {
+                  field_key: 'eligibility_group',
+                  value: 'בן מקום',
+                  word_ids: [0],
+                },
+              ],
+            })),
+            extractModel: 'gpt-test',
+          } satisfies IntakeDeps,
+          {
+            bytes: pdfBytes('promote-eligibility'),
+            typeKey: 'lease',
+            place: { kind: 'UNIT', id: unitId },
+            tenancyId: tenancy.id,
+          },
+        );
+        assert.equal(filed.filed, true);
+        if (!filed.filed) return;
+        const rows = await listExtractedFields(db, filed.documentId);
+        const group = rows.find((row) => row.fieldKey === 'eligibility_group');
+        assert.equal(group?.promotionTarget, 'tenancy.eligibility_group');
+        assert.equal(group?.value, 'בן מקום');
+        await approveExtractedField(
+          {
+            db,
+            audit: createAuditLog(db, clock),
+            clock,
+          },
+          {
+            extractedFieldId: group?.extractedFieldId ?? '',
+            approvedBy: 'אסף',
+            mayReadIdentifiers: false,
+          },
+        );
+        await promoteExtractedField(
+          {
+            db,
+            audit: createAuditLog(db, clock),
+            clock,
+          },
+          {
+            extractedFieldId: group?.extractedFieldId ?? '',
+            promotedBy: 'אסף',
+          },
+        );
+        const letting = await db.query<{ eligibility_group: string | null }>(
+          'SELECT eligibility_group FROM tenancy WHERE tenancy_id = $1',
+          [tenancy.id],
+        );
+        assert.equal(letting.rows[0]?.eligibility_group, 'LOCAL_RESIDENT');
+        const again = await fileDocument(
+          {
+            db,
+            objects: createMemoryStore(),
+            pdf: createFakePdfText([MARKERS]),
+            audit: createAuditLog(db, clock),
+            clock,
+            bucket: BUCKET,
+            extractor: createFakeExtractor(() => ({
+              findings: [
+                {
+                  field_key: 'eligibility_group',
+                  value: 'LOCAL_RESIDENT',
+                  word_ids: [0],
+                },
+              ],
+            })),
+            extractModel: 'gpt-test',
+          } satisfies IntakeDeps,
+          {
+            bytes: pdfBytes('promote-eligibility-code'),
+            typeKey: 'lease',
+            place: { kind: 'UNIT', id: unitId },
+            tenancyId: tenancy.id,
+          },
+        );
+        assert.equal(again.filed, true);
+        if (!again.filed) return;
+        const second = (await listExtractedFields(db, again.documentId)).find(
+          (row) => row.fieldKey === 'eligibility_group',
+        );
+        await approveExtractedField(
+          { db, audit: createAuditLog(db, clock), clock },
+          {
+            extractedFieldId: second?.extractedFieldId ?? '',
+            approvedBy: 'אסף',
+            mayReadIdentifiers: false,
+          },
+        );
+        await promoteExtractedField(
+          { db, audit: createAuditLog(db, clock), clock },
+          {
+            extractedFieldId: second?.extractedFieldId ?? '',
+            promotedBy: 'אסף',
+          },
+        );
+        const after = await db.query<{ eligibility_group: string | null }>(
+          'SELECT eligibility_group FROM tenancy WHERE tenancy_id = $1',
+          [tenancy.id],
+        );
+        assert.equal(after.rows[0]?.eligibility_group, 'LOCAL_RESIDENT');
+      });
+    } finally {
+      await pool.end();
+    }
   });
 });

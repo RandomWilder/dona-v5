@@ -49,6 +49,9 @@ workbook is right and this file is a bug.
   **#211.** The same holder changes that flat's tenure from the same page. `SOLD` asks for
   confirmation and says it cannot be undone. The trigger's refusal is a sentence on the page.
   A change writes `audit_log` (`estate.tenure`, old and new), not `estate_event`.
+  **#212.** A flat carries a rental track, free market or regulated, fixed by the tender. The
+  building page counts both and filters the flat tiles by them. Who a regulated flat was let to
+  is not this column.
 
 ## The shape, and why it is this one
 
@@ -65,7 +68,7 @@ avoids both.
 **Project sits above Building and is optional** (R15). `Building.project_id` is nullable and nothing
 downstream requires it; `project_code` lives on Project, so the tender code has one home.
 
-## Tables — `src/kernel/migrations/0004_estate.sql`, `0012_assets.sql` and `0064_unit_tenure.sql`
+## Tables — `src/kernel/migrations/0004_estate.sql`, `0012_assets.sql`, `0064_unit_tenure.sql` and `0065_rental_track.sql`
 
 The workbook's 28 columns, plus what enforcement needs — `address_key` on Building and the three
 constant discriminators on Unit, none of which carry a fact. Ids are `uuid`, enums are `text` with a
@@ -77,14 +80,14 @@ written by anything but the injected clock is a second source of truth no test c
 | `project` | `project_id` PK · `name` · `project_code` · `tender_ref?` · `status` |
 | `building` | `building_id` PK · `name` · `address_line` · `city` · `project_id?` FK → project · `handover_date` · `warranty_end_date` · `status` · `gush?` · `helka?` · `building_number?` · `address_key` generated, UNIQUE |
 | `space` | `space_id` PK · `building_id` FK → building · `space_kind` · `name` · `floor?` · `access_note?` · `disabled_bay` · `area_sqm?` |
-| `unit` | `unit_id` PK, FK → space · `unit_number` · `rooms` · `area_sqm?` · `has_mamad` · `parking_space_id?` · `storage_space_id?` · `warranty_end_date?` · `condition_status` · `tenure` · `flat_type?` · `balcony_sqm?` |
+| `unit` | `unit_id` PK, FK → space · `unit_number` · `rooms` · `area_sqm?` · `has_mamad` · `parking_space_id?` · `storage_space_id?` · `warranty_end_date?` · `condition_status` · `tenure` · `rental_track` · `flat_type?` · `balcony_sqm?` |
 | `provider` | `provider_id` PK · `name` · `provider_kind` · `party_id` FK → party, NOT NULL, UNIQUE · `party_kind` constant `COMPANY` — #208. A service provider is a company party. |
 | `asset` | `asset_id` PK · `space_id` FK → space, NOT NULL · `asset_class` · `asset_type` · `make_model?` · `serial_no?` · `installed_date?` · `warranty_end_date?` · `warranty_provider_id?` FK → provider · `compliance_regime` · `next_inspection_due?` · `last_certificate_document_id?` FK → document · `source_document_id?` FK → document · `status` |
 | `estate_event` | `estate_event_id` PK · `entity_type` · `building_id?` · `unit_id?` · `at` · `actor` · `kind` · `field` · `old_value?` · `new_value` · `source_document_id?` · `extracted_field_id?` — append-only log of a document-caused write onto an estate column (#141). |
 
 Vocabularies: `project.status` = `PLANNING · ACTIVE · EXITED`; `building.status` = `ACTIVE ·
 IN_CONSTRUCTION · EXITED`; `space.space_kind` = `UNIT · COMMON · TECHNICAL · EXTERIOR · PARKING ·
-STORAGE`; `unit.condition_status` = `READY · RENOVATION · WITHHELD`; `unit.tenure` = `FOR_RENT · FOR_SALE · SOLD`; `provider.provider_kind` =
+STORAGE`; `unit.condition_status` = `READY · RENOVATION · WITHHELD`; `unit.tenure` = `FOR_RENT · FOR_SALE · SOLD`; `unit.rental_track` = `FREE_MARKET · REGULATED`; `provider.provider_kind` =
 `IN_HOUSE_CREW · CONTRACTOR · DEVELOPER_WARRANTY`; `asset.asset_class` = `FIXTURE · SAFETY ·
 UTILITY`; `asset.compliance_regime` = `NONE · PERIODIC_INSPECTION`; `asset.status` = `IN_SERVICE ·
 FAULTY · REMOVED`. `asset_type` is the governed list on the FIELDS sheet, and a composite CHECK
@@ -147,6 +150,31 @@ All three are nullable, and a screen leaves an absent one out.
 **`space.disabled_bay`** marks a parking bay reserved for a disabled-parking permit (חניית נכה). Not
 null, false by default, and a CHECK refuses it on anything but a `PARKING` Space. The bay tile says
 נכה. Who may be assigned one is the letting's question, not this table's.
+
+## Rental track — `0065_rental_track.sql`
+
+**The track is whether the tender lets the flat at a free-market rent or a regulated one.**
+`FREE_MARKET` (שוק חופשי) is the default, and every flat that existed before 0065 is one: Ramle 103's
+sheet had no such column. `REGULATED` (מפוקח) is a flat the tender fixes at a regulated rent. The
+column is not null. Whether that rent is capped or checked against the tender is a later rule and
+not this column.
+
+The sheet mixes a second fact into the same cell. `מפוקח בן מקום` and `מפוקח מילואים פעיל` are still
+`REGULATED` here. בן מקום and מילואים פעיל say who the flat was let to, which is the letting's
+eligibility group (`tenancy.eligibility_group`, SPEC-tenancy.md), filled when a lease is read. The
+plan file does not carry it, because a plan has no letting.
+
+The seed file sets `rentalTrack`, and `--update` changes it. Omitted leaves the row; a new row
+defaults to `FREE_MARKET`. A value outside the two is `invalid` at the edge. The facts post and the
+tenure post do not touch it. There is no edit of it from the flat page: the tender fixed it, and a
+correction is another run of the file.
+
+The flat tile says מפוקח under its measure line when the track is regulated, the same way a flat
+for sale says למכירה. A free-market tile says nothing extra. The flat page names the track either
+way, as a chip. The building page (נכסים) counts both and filters the flat tiles:
+`GET /estate/inventory/:buildingId?track=FREE_MARKET` or `track=REGULATED`. Absent is every flat.
+Anything else is `invalid`. Parking and storage are not filtered. The list a seed prints counts
+regulated flats beside the tenure counts.
 
 ## EstateEvent — old → new on a place (#141)
 
@@ -876,7 +904,7 @@ refuses a payload that would not fit in a job argument.
 
 `npm run estate:seed -- <file>` runs against the local database; `infra/estate-seed.sh staging
 <file> [--update]` runs against staging. Both list first and write nothing: the building, its flats
-by tenure, bays and storage per floor, how many disabled bays, the floor range. The staging wrapper
+by tenure and by rental track, bays and storage per floor, how many disabled bays, the floor range. The staging wrapper
 then asks y/n on the laptop and runs the apply job. Prod is refused, with `refuseUnlessStagingDatabase`
 (`src/staging-reset-plan.ts`), whatever the flags.
 
