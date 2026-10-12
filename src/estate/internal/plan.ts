@@ -22,6 +22,8 @@ export type SpaceKind =
 export type ProjectStatus = 'PLANNING' | 'ACTIVE' | 'EXITED';
 export type BuildingStatus = 'ACTIVE' | 'IN_CONSTRUCTION' | 'EXITED';
 export type ConditionStatus = 'READY' | 'RENOVATION' | 'WITHHELD';
+/** Whether Dona lets the flat. `SOLD` is terminal (0064). */
+export type Tenure = 'FOR_RENT' | 'FOR_SALE' | 'SOLD';
 
 export interface ProjectPlan {
   name: string;
@@ -38,6 +40,13 @@ export interface SpacePlan {
   floor: string | null;
   /** -- pii. Null in every fixture: how a technician gets into a home is not test data. */
   accessNote: string | null;
+  /**
+   * 0064, from a developer sheet. Optional, with #143's meaning: omitted leaves the row as it is,
+   * so A13, the mint and the register, which never name them, cannot wipe one a seed wrote.
+   * `disabledBay` only on PARKING, `areaSqm` only on STORAGE — the schema refuses the rest.
+   */
+  disabledBay?: boolean;
+  areaSqm?: number | null;
 }
 
 export interface UnitPlan {
@@ -54,6 +63,11 @@ export interface UnitPlan {
   /** Overrides the building's date when this unit was handed over separately (R14). */
   warrantyEndDate: string | null;
   conditionStatus: ConditionStatus;
+  /** 0064, from a developer sheet. Omitted leaves the row; a new row defaults to `FOR_RENT`. */
+  tenure?: Tenure;
+  /** The developer's layout code (`A`, `BG`, `P1`). */
+  flatType?: string | null;
+  balconySqm?: number | null;
 }
 
 export interface BuildingPlan {

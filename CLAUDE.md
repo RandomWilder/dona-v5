@@ -24,7 +24,9 @@ in every other repository. **Collision is the whole test, and a skill that dupli
 on.** `frontend-ui-engineering` has no counterpart in the flow and this repo has real screens, so it
 is on; document, artifact and harness skills (`docx`, `xlsx`, `pdf`, `pptx`, `artifact-*`, `dataviz`,
 `update-config`, `run`, `security-review`) are untouched too — and the four published documents need
-the artifact ones. The built-in `/code-review` and
+the artifact ones. One repo skill is an operator tool, not a workflow step:
+`building-sheet-to-plan` turns a developer's layout spreadsheet into the building plan file that
+`npm run estate:seed` reads. It duplicates nothing in the flow. The built-in `/code-review` and
 `/simplify` are `user-invocable-only`: type them and they run, but the model reaches for
 `mattpocock-skills:code-review` on its own. Adding a skill to this repo means adding it to the
 workflow, not alongside it.

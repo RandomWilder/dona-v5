@@ -33,6 +33,12 @@ agent. **The office** — the humans who supervise exceptions.
 | **Assigned bay** | The `PARKING` Space a household parks in. It belongs to the **Tenancy**, and the landlord may move it at will, with no amendment and no new document. Never a property of the flat. |
 | **Built storage** | The `STORAGE` Space the plan attached to a Unit (הצמדה) — `Unit.storage_space_id`. It survives vacancy. |
 | **Assigned storage** | The `STORAGE` Space a household uses. It belongs to the **Tenancy**, same standing as the assigned bay. Never a property of the flat. |
+| **Tenure** | Whether Dona lets a Unit: **for rent**, **designated for sale** (still lettable, can be withdrawn) or **sold**. |
+| **Sold flat** | A Unit that has left the rental stock. Still a Unit and still in its Building; never let again. Sold does not revert. |
+| **Disabled bay** | A `PARKING` Space reserved for a disabled-parking permit (חניית נכה). A fact about the bay, not about who parks in it. |
+| **Flat type** | The developer's layout code for a Unit (`A`, `BG`, `P1`). Each developer has their own. |
+| **Developer sheet** | The developer's spreadsheet of a Building's layout: flats, floors, rooms, bays, storage. Every developer's differs; the system reads none of them. |
+| **Building plan file** | The one format the system seeds a Building from. A developer sheet is converted into it outside the system. |
 
 **A bay is two facts, not one.** The built bay and the assigned bay are both true and are frequently
 different; writing a lease's bay number onto the Unit is the same class of error as `current_tenant`.

@@ -59,7 +59,7 @@ avoids both.
 **Project sits above Building and is optional** (R15). `Building.project_id` is nullable and nothing
 downstream requires it; `project_code` lives on Project, so the tender code has one home.
 
-## Tables — `src/kernel/migrations/0004_estate.sql` and `0012_assets.sql`
+## Tables — `src/kernel/migrations/0004_estate.sql`, `0012_assets.sql` and `0064_unit_tenure.sql`
 
 The workbook's 28 columns, plus what enforcement needs — `address_key` on Building and the three
 constant discriminators on Unit, none of which carry a fact. Ids are `uuid`, enums are `text` with a
@@ -70,15 +70,15 @@ written by anything but the injected clock is a second source of truth no test c
 |---|---|
 | `project` | `project_id` PK · `name` · `project_code` · `tender_ref?` · `status` |
 | `building` | `building_id` PK · `name` · `address_line` · `city` · `project_id?` FK → project · `handover_date` · `warranty_end_date` · `status` · `gush?` · `helka?` · `building_number?` · `address_key` generated, UNIQUE |
-| `space` | `space_id` PK · `building_id` FK → building · `space_kind` · `name` · `floor?` · `access_note?` |
-| `unit` | `unit_id` PK, FK → space · `unit_number` · `rooms` · `area_sqm?` · `has_mamad` · `parking_space_id?` · `storage_space_id?` · `warranty_end_date?` · `condition_status` |
+| `space` | `space_id` PK · `building_id` FK → building · `space_kind` · `name` · `floor?` · `access_note?` · `disabled_bay` · `area_sqm?` |
+| `unit` | `unit_id` PK, FK → space · `unit_number` · `rooms` · `area_sqm?` · `has_mamad` · `parking_space_id?` · `storage_space_id?` · `warranty_end_date?` · `condition_status` · `tenure` · `flat_type?` · `balcony_sqm?` |
 | `provider` | `provider_id` PK · `name` · `provider_kind` · `party_id` FK → party, NOT NULL, UNIQUE · `party_kind` constant `COMPANY` — #208. A service provider is a company party. |
 | `asset` | `asset_id` PK · `space_id` FK → space, NOT NULL · `asset_class` · `asset_type` · `make_model?` · `serial_no?` · `installed_date?` · `warranty_end_date?` · `warranty_provider_id?` FK → provider · `compliance_regime` · `next_inspection_due?` · `last_certificate_document_id?` FK → document · `source_document_id?` FK → document · `status` |
 | `estate_event` | `estate_event_id` PK · `entity_type` · `building_id?` · `unit_id?` · `at` · `actor` · `kind` · `field` · `old_value?` · `new_value` · `source_document_id?` · `extracted_field_id?` — append-only log of a document-caused write onto an estate column (#141). |
 
 Vocabularies: `project.status` = `PLANNING · ACTIVE · EXITED`; `building.status` = `ACTIVE ·
 IN_CONSTRUCTION · EXITED`; `space.space_kind` = `UNIT · COMMON · TECHNICAL · EXTERIOR · PARKING ·
-STORAGE`; `unit.condition_status` = `READY · RENOVATION · WITHHELD`; `provider.provider_kind` =
+STORAGE`; `unit.condition_status` = `READY · RENOVATION · WITHHELD`; `unit.tenure` = `FOR_RENT · FOR_SALE · SOLD`; `provider.provider_kind` =
 `IN_HOUSE_CREW · CONTRACTOR · DEVELOPER_WARRANTY`; `asset.asset_class` = `FIXTURE · SAFETY ·
 UTILITY`; `asset.compliance_regime` = `NONE · PERIODIC_INSPECTION`; `asset.status` = `IN_SERVICE ·
 FAULTY · REMOVED`. `asset_type` is the governed list on the FIELDS sheet, and a composite CHECK
@@ -100,6 +100,39 @@ building we own, and `building_number` (`206`) is meaningful inside one project 
 standalone building. Blank on A11 is null. The plan-shaped import and the register importer write
 null where the file has no value; A13 does not invent them. A later tabu type may promote onto the
 typed columns; until then they are the typed side of a cross-check, not a capture.
+
+## Tenure, and what a developer sheet adds to a flat — `0064_unit_tenure.sql`
+
+**Tenure is whether Dona lets the flat.** `FOR_RENT` is the default and every flat that existed before
+0064 is one. `FOR_SALE` is a flat the developer has designated for sale: it is still Dona's to let
+until it sells, so a letting on it is allowed and the designation can be withdrawn. `SOLD` is a flat
+that has left the rental stock, and it is **terminal**: once a row reads `SOLD` no update may move it
+anywhere else. A flat sold by mistake is corrected by a person with database access, deliberately,
+not by a re-run of a file. Real Ramle 103 (12 Oct 2026) is why: its developer sheet marks 13 of 105
+flats `מכירה`, and the director wanted them in the building, marked, not left out.
+
+A sold flat stays a Unit. It is still a door in the building, it still has a floor and rooms, and a
+building-wide defect still reaches it. What it loses is the letting: **no `DRAFT` or `ACTIVE`
+tenancy may sit on a `SOLD` flat, and a flat with an `ACTIVE` tenancy may not become `SOLD`.** An
+`ENDED` or `TERMINATED_EARLY` row is history and is untouched in both directions, so a lease that
+ran before the sale can still be filed. Both halves are triggers in 0064, raising
+`restrict_violation`, for the reason R1, R2 and R15 are in the schema: every writer of a tenancy row
+(A2, the register, a promotion) is refused without having to remember.
+
+The building page counts a `SOLD` flat as neither let nor vacant: **vacant flats** are the flats that
+are not `SOLD` and not let today. A flat tile carries למכירה or נמכרה under its measure line when
+its tenure is not `FOR_RENT`. Changing tenure is not on a screen yet: the seed file sets it, and
+`--update` changes it (below).
+
+**Three facts a developer sheet carries.** `unit.flat_type` is the developer's layout code (`A`,
+`BG`, `P1`), free text because each developer has their own. `unit.balcony_sqm` is the balcony
+area in square metres. `space.area_sqm` is a storage room's area, on the `STORAGE` Space because a
+storage room is its own Space and not a property of a flat (a CHECK refuses it on any other kind).
+All three are nullable, and a screen leaves an absent one out.
+
+**`space.disabled_bay`** marks a parking bay reserved for a disabled-parking permit (חניית נכה). Not
+null, false by default, and a CHECK refuses it on anything but a `PARKING` Space. The bay tile says
+נכה. Who may be assigned one is the letting's question, not this table's.
 
 ## EstateEvent — old → new on a place (#141)
 
@@ -782,6 +815,41 @@ only one Unit is applied.
 Rows first. The wrapper then prints object prefixes for `infra/docs-delete.sh`. If the bucket step
 fails, the hash is already free; leftover bytes are restorable for seven days.
 
+## Seeding a building from a developer sheet (operator, not a screen)
+
+A developer hands over the layout of a building as a spreadsheet: flats, floors, rooms, areas,
+types, bay and storage numbers. Every developer's sheet is laid out differently, and **the system
+does not read any of them.** It reads one file, the **building plan file**: JSON in the shape of
+`EstatePlan` (`src/estate/internal/plan.ts`), one project and one building. Turning a developer's
+sheet into that file is done by a person in Claude Code with the `building-sheet-to-plan` skill
+(`.claude/skills/`), which asks about every column it cannot place and reports every anomaly for the
+director to decide rather than correcting it. The admin's own path is unchanged: A11 and נכסים.
+
+**Neither the sheet nor the plan file is stored by the system.** They are the director's working
+files and live on the director's machine. The file reaches staging gzipped and base64-encoded as the
+argument of a one-off Cloud Run job (`infra/run-job.sh`, which deletes the job when it finishes),
+for the reason that file gives: the database credential does not leave the perimeter. The wrapper
+refuses a payload that would not fit in a job argument.
+
+`npm run estate:seed -- <file>` runs against the local database; `infra/estate-seed.sh staging
+<file> [--update]` runs against staging. Both list first and write nothing: the building, its flats
+by tenure, bays and storage per floor, how many disabled bays, the floor range. The staging wrapper
+then asks y/n on the laptop and runs the apply job. Prod is refused, with `refuseUnlessStagingDatabase`
+(`src/staging-reset-plan.ts`), whatever the flags.
+
+**The file is validated at the edge** — every field's type and vocabulary, with the path of the
+first bad one — and then by `validatePlan`. **A building that already exists at that address is
+refused**: a building is seeded once, and whatever an admin has typed on it since must not be
+overwritten by a second run of the same file. `--update` is the deliberate exception, for a mistake
+found on the first day. It runs the same `importEstate`, so ids are kept, facts in the file
+overwrite facts on the rows, and **nothing missing from the file is removed**. A removal is the
+per-space control on נכסים.
+
+The plan file attaches no bay or storage room to a flat. Its bays and storage rooms are Spaces of
+their own, and `unit.parking_space_id` and `storage_space_id` stay null. Who parks where comes from
+the leases (the assigned bay), and the developer sheet is kept by the director to check them
+against.
+
 ## What is deliberately not a column
 
 - **`Building.unit_count`** — counted, never stored. A stored count drifts the first time someone
@@ -809,3 +877,9 @@ variation that import will bring.
 **`Space.building_id` is mandatory**, so a garden genuinely shared between three cores has to hang
 off one of them. Making it optional would reintroduce the two-nullable-columns fork the Space idea
 exists to remove. Reopen if Shoham turns out to be multi-core — cheap, now that Project exists.
+
+**The developer sheet is the built-bay source, unwritten.** A sheet's `הצמדת חניות` and `הצמדת מחסן`
+columns are the developer's attachment of a bay and a storage room to a flat, which is what
+`unit.parking_space_id` means. The seed does not write them (12 Oct 2026, director's call: nothing
+reads a built bay before leases arrive). Ramle 103 has 42 flats with two attached bays, and the Unit
+has one built-bay column, so writing them needs a second one, the way #179 added it to the letting.

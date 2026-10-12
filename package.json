@@ -33,6 +33,7 @@
     "passages:sweep": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/passages-sweep.ts",
     "specimens:capture": "node --env-file-if-exists=.env.example --env-file-if-exists=.env scripts/capture-specimen.ts",
     "staging:reset": "./infra/staging-reset.sh",
+    "estate:seed": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/estate-seed.ts",
     "estate:purge": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/estate-purge.ts",
     "dev": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/serve.ts",
     "start": "node src/serve.ts"

@@ -213,12 +213,16 @@ async function upsertSpace(
   buildingId: string,
   space: SpacePlan,
 ): Promise<{ spaceId: string; inserted: boolean }> {
+  // 0064's two facts follow #143: omitted (`undefined`) leaves the row on conflict, named writes.
   const result = await db.query<{ space_id: string; inserted: boolean }>(
-    `INSERT INTO space (space_id, building_id, space_kind, name, floor, access_note)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO space (space_id, building_id, space_kind, name, floor, access_note,
+                        disabled_bay, area_sqm)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (building_id, space_kind, name) DO UPDATE
        SET floor = EXCLUDED.floor,
-           access_note = EXCLUDED.access_note
+           access_note = EXCLUDED.access_note,
+           disabled_bay = CASE WHEN $9 THEN EXCLUDED.disabled_bay ELSE space.disabled_bay END,
+           area_sqm = CASE WHEN $10 THEN EXCLUDED.area_sqm ELSE space.area_sqm END
      RETURNING space_id, ${INSERTED}`,
     [
       newId(),
@@ -227,6 +231,10 @@ async function upsertSpace(
       space.name,
       space.floor,
       space.accessNote,
+      space.disabledBay ?? false,
+      space.areaSqm ?? null,
+      space.disabledBay !== undefined,
+      space.areaSqm !== undefined,
     ],
   );
   const row = result.rows[0];
@@ -260,10 +268,14 @@ async function upsertUnit(
 ): Promise<boolean> {
   // The conflict target is the primary key, and it is the natural key: R2 makes a unit's identity
   // its space's, so there is no second key here to keep in step with the first.
+  //
+  // 0064's three facts follow #143: omitted leaves the row on conflict. A tenure the schema refuses
+  // (a sold flat named for rent, a let flat named sold) raises from the trigger, not from here.
   const result = await db.query<{ inserted: boolean }>(
     `INSERT INTO unit (unit_id, unit_number, rooms, area_sqm, has_mamad,
-                       parking_space_id, storage_space_id, warranty_end_date, condition_status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                       parking_space_id, storage_space_id, warranty_end_date, condition_status,
+                       tenure, flat_type, balcony_sqm)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      ON CONFLICT (unit_id) DO UPDATE
        SET unit_number = EXCLUDED.unit_number,
            rooms = EXCLUDED.rooms,
@@ -272,7 +284,10 @@ async function upsertUnit(
            parking_space_id = EXCLUDED.parking_space_id,
            storage_space_id = EXCLUDED.storage_space_id,
            warranty_end_date = EXCLUDED.warranty_end_date,
-           condition_status = EXCLUDED.condition_status
+           condition_status = EXCLUDED.condition_status,
+           tenure = CASE WHEN $13 THEN EXCLUDED.tenure ELSE unit.tenure END,
+           flat_type = CASE WHEN $14 THEN EXCLUDED.flat_type ELSE unit.flat_type END,
+           balcony_sqm = CASE WHEN $15 THEN EXCLUDED.balcony_sqm ELSE unit.balcony_sqm END
      RETURNING ${INSERTED}`,
     [
       ids.unitId,
@@ -284,6 +299,12 @@ async function upsertUnit(
       ids.storage,
       unit.warrantyEndDate,
       unit.conditionStatus,
+      unit.tenure ?? 'FOR_RENT',
+      unit.flatType ?? null,
+      unit.balconySqm ?? null,
+      unit.tenure !== undefined,
+      unit.flatType !== undefined,
+      unit.balconySqm !== undefined,
     ],
   );
   const inserted = result.rows[0]?.inserted;

@@ -35,6 +35,7 @@ export type {
   SpaceKind,
   SpacePlan,
   TableCount,
+  Tenure,
   UnitPlan,
   UnitRowResult,
   UnitRowSpec,
@@ -101,6 +102,15 @@ export {
 } from './internal/read-model.ts';
 export type { EstateDeps } from './internal/routes.ts';
 export { registerEstateRoutes } from './internal/routes.ts';
+export type { EstateSeedArgs, SeedResult } from './internal/seed.ts';
+export {
+  decodeSeedPayload,
+  findSeededBuilding,
+  parseEstateSeedArgs,
+  readSeedPlan,
+  seedBuilding,
+  summariseSeedPlan,
+} from './internal/seed.ts';
 export type { UncarriedField, UncarriedReason } from './internal/uncarried.ts';
 export {
   renderUncarriedReason,

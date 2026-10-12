@@ -66,6 +66,10 @@ export interface UnitRow {
   /** #140 — the card's remove control posts these, so the ids come back with the names. */
   parking_space_id: string | null;
   storage_space_id: string | null;
+  /** 0064. Optional for rows built by hand in tests. */
+  tenure?: string;
+  flat_type?: string | null;
+  balcony_sqm?: string | null;
 }
 
 /**
@@ -125,6 +129,12 @@ export interface InventorySpaceRow {
   space_id: string;
   space_kind: string;
   name: string;
+  /** 0064. A UNIT row's tenure; null on every other kind. Optional for rows built by hand. */
+  tenure?: string | null;
+  /** 0064. Only ever true on PARKING. */
+  disabled_bay?: boolean;
+  /** 0064. A storage room's area; null elsewhere. */
+  area_sqm?: string | null;
 }
 
 /** The same row, with the Building it belongs to, for the portfolio drill-down. */
@@ -150,7 +160,9 @@ export async function listInventorySpaces(
   buildingId: string,
 ): Promise<InventorySpaceRow[]> {
   const result = await db.query<InventorySpaceRow>(
-    `SELECT space_id, space_kind, name
+    `SELECT space_id, space_kind, name,
+            (SELECT u.tenure FROM unit u WHERE u.unit_id = space.space_id) AS tenure,
+            disabled_bay, area_sqm::text AS area_sqm
        FROM space
       WHERE building_id = $1
       ORDER BY ${INVENTORY_SPACE_ORDER}`,
@@ -164,7 +176,9 @@ export async function listPortfolioSpaces(
   db: Queryable,
 ): Promise<PortfolioSpaceRow[]> {
   const result = await db.query<PortfolioSpaceRow>(
-    `SELECT building_id, space_id, space_kind, name
+    `SELECT building_id, space_id, space_kind, name,
+            (SELECT u.tenure FROM unit u WHERE u.unit_id = space.space_id) AS tenure,
+            disabled_bay, area_sqm::text AS area_sqm
        FROM space
       ORDER BY building_id, ${INVENTORY_SPACE_ORDER}`,
   );
@@ -222,7 +236,10 @@ export async function getBuilding(
             pk.name AS parking_name,
             st.name AS storage_name,
             u.parking_space_id,
-            u.storage_space_id
+            u.storage_space_id,
+            u.tenure,
+            u.flat_type,
+            u.balcony_sqm::text AS balcony_sqm
      FROM unit u
      JOIN space s ON s.space_id = u.unit_id
      LEFT JOIN space pk ON pk.space_id = u.parking_space_id
@@ -273,6 +290,10 @@ export interface UnitHit {
    * Absent means the sentence leaves the building number out.
    */
   building_number?: string | null;
+  /** 0064. Read by `getUnit` for the unit page; search hits do not carry them. */
+  tenure?: string;
+  flat_type?: string | null;
+  balcony_sqm?: string | null;
 }
 
 /**
@@ -291,7 +312,10 @@ export async function getUnit(db: Queryable, unitId: string): Promise<UnitHit> {
             b.name AS building_name,
             b.address_line,
             b.city,
-            b.building_number
+            b.building_number,
+            u.tenure,
+            u.flat_type,
+            u.balcony_sqm::text AS balcony_sqm
      FROM unit u
      JOIN space s ON s.space_id = u.unit_id
      JOIN building b ON b.building_id = s.building_id
