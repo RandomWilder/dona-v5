@@ -36,7 +36,7 @@ import {
 } from '../../tenancy/contract.ts';
 import { addCalendarYears, WARRANTY_YEARS } from './assets.ts';
 import { listEstateEvents } from './events.ts';
-import { correctUnitFacts, type FlatFacts } from './facts.ts';
+import { changeUnitTenure, correctUnitFacts, type FlatFacts } from './facts.ts';
 import { importEstate, upsertUnitRow } from './importer.ts';
 import {
   inventoryAddFromForm,
@@ -55,6 +55,7 @@ import type {
   ProjectPlan,
   ProjectStatus,
   Queryable,
+  Tenure,
   UnitRowSpec,
 } from './plan.ts';
 import {
@@ -530,6 +531,21 @@ function officeAskNotice(request: FastifyRequest): string | undefined {
   return ask === 'unavailable' ? OFFICE_ASK_UNAVAILABLE : undefined;
 }
 
+/** #211. The page's own sentences for a tenure post that did not write. */
+const TENURE_NOTICE = {
+  confirm: 'נמכרה אינה ניתנת לביטול. סמנו אישור כדי למכור.',
+  sold: 'דירה שנמכרה נשארת נמכרה.',
+  let: 'לא ניתן למכור דירה עם שכירות פעילה.',
+} as const;
+
+function tenureNoticeOf(request: FastifyRequest): string | undefined {
+  const raw = (request.query as { tenure?: string }).tenure;
+  if (raw === 'confirm' || raw === 'sold' || raw === 'let') {
+    return TENURE_NOTICE[raw];
+  }
+  return undefined;
+}
+
 /**
  * **Slice 6.1, flow A11.** ADMIN only ([SPEC-staff.md](SPEC-staff.md)): an operator files paper, an
  * admin shapes the estate.
@@ -784,6 +800,16 @@ function unitFromForm(body: unknown): {
  * and area. Flat type is floor's optional text; balcony area is area's optional
  * number. A blank optional field writes null.
  */
+const TENURES: readonly Tenure[] = ['FOR_RENT', 'FOR_SALE', 'SOLD'];
+
+function postedTenure(value: unknown): Tenure {
+  const tenure = requireText(value, 'tenure', 16);
+  if (!(TENURES as readonly string[]).includes(tenure)) {
+    throw new KernelError('invalid', 'tenure is not a tenure');
+  }
+  return tenure as Tenure;
+}
+
 function flatFactsFromForm(body: unknown): FlatFacts {
   const form = (body ?? {}) as Record<string, unknown>;
   return {
@@ -1619,7 +1645,9 @@ export function registerEstateRoutes(
         occupied.find((row) => row.unit_id === unit.unit_id)?.tenancy_id ??
           null,
       ),
-      can(request.staff?.role ?? null, 'estate.write') ? { csrf } : undefined,
+      can(request.staff?.role ?? null, 'estate.write')
+        ? { csrf, tenureNotice: tenureNoticeOf(request) }
+        : undefined,
     );
   });
 
@@ -1640,6 +1668,50 @@ export function registerEstateRoutes(
         .code(303)
         .header('location', `/estate/units/${unitId}`)
         .send();
+    },
+  );
+
+  // **#211.** Change tenure from the flat page. The facts post above does not
+  // touch this column. A same-value post writes nothing. The audit line is the
+  // record: who, when, old → new. `estate_event` stays a document's log.
+  app.post<{ Params: { unitId: string } }>(
+    '/estate/units/:unitId/tenure',
+    ESTATE_WRITE,
+    async (request, reply) => {
+      const unitId = validId(request.params.unitId, 'unitId');
+      const body = (request.body ?? {}) as {
+        tenure?: unknown;
+        confirm_sold?: unknown;
+      };
+      const tenure = postedTenure(body.tenure);
+      const change = await inTransaction(deps.pool, async (db) => {
+        const written = await changeUnitTenure(
+          db,
+          unitId,
+          tenure,
+          body.confirm_sold === 'yes',
+        );
+        if (written.outcome !== 'changed') return written;
+        await createAuditLog(db, deps.clock).write(
+          {
+            actorKind: 'staff',
+            actorId: request.staff?.staffAccountId,
+            actorRole: request.staff?.role ?? undefined,
+            action: 'estate.tenure',
+            subjectId: unitId,
+            inputs: { from: written.from, to: written.to },
+          },
+          { outcome: 'ok' },
+        );
+        return written;
+      });
+      const back =
+        change.outcome === 'confirm'
+          ? `/estate/units/${unitId}?tenure=confirm`
+          : change.outcome === 'refused'
+            ? `/estate/units/${unitId}?tenure=${change.reason}`
+            : `/estate/units/${unitId}`;
+      return reply.code(303).header('location', back).send();
     },
   );
 

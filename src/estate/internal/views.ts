@@ -25,7 +25,7 @@ import {
   type TenancyBookRow,
 } from '../../tenancy/contract.ts';
 import type { LaterAddPrefill } from './inventory.ts';
-import type { BuildingStatus, ConditionStatus } from './plan.ts';
+import type { BuildingStatus, ConditionStatus, Tenure } from './plan.ts';
 import type {
   BuildingDetail,
   BuildingSummary,
@@ -2021,6 +2021,8 @@ function unitLettingList(rows: readonly UnitLettingView[]): Html {
 /** #210. Present only for a viewer who holds `estate.write`. */
 export interface FlatEdit {
   csrf: string;
+  /** #211. Set when a tenure post came back to this page with a sentence. */
+  tenureNotice?: string;
 }
 
 function unitFacts(unit: UnitHit): Html {
@@ -2033,6 +2035,40 @@ function unitFacts(unit: UnitHit): Html {
       <dd>${unit.area_sqm ? h`${ltr(unit.area_sqm)} מ״ר` : h`טרם נמדד`}</dd>
     </div>
   </dl>`;
+}
+
+const TENURE_OPTION: readonly { value: Tenure; word: string }[] = [
+  { value: 'FOR_RENT', word: 'להשכרה' },
+  { value: 'FOR_SALE', word: 'למכירה' },
+  { value: 'SOLD', word: 'נמכרה' },
+];
+
+/** #211. Beside the facts form, and only for a viewer who holds `estate.write`. */
+function tenureForm(unit: UnitHit, edit: FlatEdit): Html {
+  const current = unit.tenure ?? 'FOR_RENT';
+  return h`<form class="form-grid" method="post" action="/estate/units/${unit.unit_id}/tenure">
+    ${csrfInput(edit.csrf)}
+    <h2>ייעוד הדירה</h2>
+    ${edit.tenureNotice ? h`<p class="form-note">${edit.tenureNotice}</p>` : h``}
+    <div class="form-row">
+      <label for="tenure">ייעוד</label>
+      <select id="tenure" name="tenure">
+        ${TENURE_OPTION.map(
+          (option) =>
+            h`<option value="${option.value}" ${
+              option.value === current ? h`selected` : h``
+            }>${option.word}</option>`,
+        )}
+      </select>
+    </div>
+    <label class="check" for="confirm_sold">
+      <input id="confirm_sold" name="confirm_sold" type="checkbox" value="yes" />
+      נמכרה אינה ניתנת לביטול
+    </label>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">שמירת ייעוד</button>
+    </div>
+  </form>`;
 }
 
 function editFlatForm(unit: UnitHit, csrf: string): Html {
@@ -2112,7 +2148,11 @@ export function renderUnitPage(
         <a href="/documents/new?unit=${unit.unit_id}">הוספת מסמך</a>
       </p>
     </div>
-    ${edit ? editFlatForm(unit, edit.csrf) : unitFacts(unit)}
+    ${
+      edit
+        ? h`${editFlatForm(unit, edit.csrf)}${tenureForm(unit, edit)}`
+        : unitFacts(unit)
+    }
     ${unitLettingList(lettings)}
     ${promotedPanel(promoted)}
     ${changeLogPanel(events)}

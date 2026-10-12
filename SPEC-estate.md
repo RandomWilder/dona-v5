@@ -46,6 +46,9 @@ workbook is right and this file is a bug.
   **#210.** An `estate.write` holder corrects a flat's rooms, floor, area, flat type and balcony
   area from the flat's page. The write updates those columns in place and does not append
   `estate_event`.
+  **#211.** The same holder changes that flat's tenure from the same page. `SOLD` asks for
+  confirmation and says it cannot be undone. The trigger's refusal is a sentence on the page.
+  A change writes `audit_log` (`estate.tenure`, old and new), not `estate_event`.
 
 ## The shape, and why it is this one
 
@@ -124,8 +127,16 @@ ran before the sale can still be filed. Both halves are triggers in 0064, raisin
 
 The building page counts a `SOLD` flat as neither let nor vacant: **vacant flats** are the flats that
 are not `SOLD` and not let today. A flat tile carries למכירה or נמכרה under its measure line when
-its tenure is not `FOR_RENT`. Changing tenure is not on a screen yet: the seed file sets it, and
-`--update` changes it (below).
+its tenure is not `FOR_RENT`. The seed file sets tenure, and `--update` changes it (below). **#211**
+also changes it from the flat's page, `POST /estate/units/:unitId/tenure`, behind `estate.write`.
+`FOR_RENT` and `FOR_SALE` save at once. `SOLD` is written only when the post also carries a
+confirmation; without it the page is shown again and says נמכרה אינה ניתנת לביטול, and the column
+is unchanged. A flat already sold, and a flat with an active letting, come back to that page with
+a sentence — דירה שנמכרה נשארת נמכרה, and לא ניתן למכור דירה עם שכירות פעילה — rather than the
+error body. A post of the value the row already holds writes nothing. A change writes one
+`audit_log` line, action `estate.tenure`, subject the unit, inputs `from` and `to`. Who and when
+are that line's actor and `at`. It does not append `estate_event`. A value outside the three is
+`invalid` at the edge. The facts post (#210) still does not touch tenure.
 
 **Three facts a developer sheet carries.** `unit.flat_type` is the developer's layout code (`A`,
 `BG`, `P1`), free text because each developer has their own. `unit.balcony_sqm` is the balcony
@@ -160,6 +171,10 @@ rows the same way it lists tenancy events, so an operator can ask what the room 
 nothing here. `kind` `amended` always names a source document, and a hand correction has none.
 The typed original on the first promotion row is still whatever the column held when the document
 was promoted, including a value an admin typed on this screen before that promotion.
+
+**#211 leaves it standing too.** A tenure change from the flat page is a hand change with no
+source document, so it writes kernel `audit_log` (`estate.tenure`), the same place a later
+inventory add writes, and appends nothing here.
 
 **`applyPromotedField` is the write.** It lives on this module's contract, beside `applyProtocolSeed`,
 so evidence never issues SQL against `unit`, `space`, or `building`. It parses `rooms` as a number
@@ -656,6 +671,14 @@ is the same optional number as area. The post does not touch unit number, ממ״
 warranty, tenure, or the built bay and storage, and a letting on the flat does not refuse it. It
 replies `303` to this page. A viewer without `estate.write` sees the facts and no form; their post
 is `not_allowed`. No `estate_event` row.
+
+**#211. Tenure on the same page.** Beside the facts form, an `estate.write` holder sees a second
+form, prefilled with the row's tenure, posting `POST /estate/units/:unitId/tenure`. The options
+are להשכרה, למכירה and נמכרה. Selling asks for a confirmation whose words are נמכרה אינה ניתנת
+לביטול; a sale posted without it returns to this page with that sentence and changes nothing.
+The two trigger refusals return here the same way, with דירה שנמכרה נשארת נמכרה or לא ניתן
+למכור דירה עם שכירות פעילה. A viewer without `estate.write` sees no tenure form; their post is
+`not_allowed`. A value outside the three is `invalid`. The facts post still does not touch tenure.
 
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
 `GET`/`POST /documents/new`, reached from a unit row on the building page. It went behind the session
