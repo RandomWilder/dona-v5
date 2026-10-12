@@ -136,13 +136,17 @@ recorded payloads, and wired to no mailbox.
   placeholder until the director approves the wording.
 
 **Attachments** stay on their Message and show on the call. The bytes are kept with the message, so
-the call shows the file's name, type and size and the office can open it without the mailbox. A
-file the mailbox marks as embedded in the message is not an attachment. The office may file one as
-an Unassigned document through evidence's filing path, which is the only way an attachment becomes
-a Document. Filing declares the type and anchors the file to the unit the isolation join names,
-when that address is exactly one household, and leaves the document with no tenancy link. A
-guarantor's contact is not a match. Filing that same attachment again is that document, not a
-second one. A file this system does not store is refused.
+the call shows the file's name, type and size and the office can open it without the mailbox. A file
+the mailbox marks as embedded in the message is an attachment when it is 64 KB or larger, and is not
+one below that. A phone photo pasted into the body is the evidence a tenant sends, and mail programs
+embed it rather than attach it; signature logos and icons sit below the line (on the pilot mailbox a
+signature logo was 51 KB and pasted images 87 KB and 2.5 MB). The channel asks the mailbox for a
+message's files on every message, because a mailbox may report a message with only embedded files as
+having none. The office may file an attachment as an Unassigned document through evidence's filing
+path, which is the only way an attachment becomes a Document. Filing declares the type and anchors
+the file to the unit the isolation join names, when that address is exactly one household, and
+leaves the document with no tenancy link. A guarantor's contact is not a match. Filing that same
+attachment again is that document, not a second one. A file this system does not store is refused.
 
 ## Later
 

@@ -61,6 +61,12 @@ export interface IncomingAttachment {
   bytes?: Buffer;
 }
 
+/**
+ * An embedded file at least this large is a photo the sender pasted into the
+ * body, and is kept; below it is a logo or an icon. SPEC-channel, Attachments.
+ */
+export const EMBEDDED_FILE_MIN_BYTES = 64 * 1024;
+
 export interface IncomingMessage {
   sourceChannel: string;
   externalMessageId: string;

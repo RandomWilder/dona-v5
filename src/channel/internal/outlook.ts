@@ -9,7 +9,11 @@
 // restart resumes there.
 
 import { addDays, type Clock, today } from '../../kernel/clock.ts';
-import type { EmailDutyReply, IncomingMessage } from './door.ts';
+import {
+  EMBEDDED_FILE_MIN_BYTES,
+  type EmailDutyReply,
+  type IncomingMessage,
+} from './door.ts';
 import type { Queryable } from './types.ts';
 
 const CURSOR_ID = 'outlook';
@@ -164,8 +168,10 @@ export function createGraphReader(
           ? message
           : await readMessage(fetchImpl, mailbox, id, token);
         const fullRow = objectOf(full);
+        // Not gated on hasAttachments: Graph reports false for a message whose
+        // only file is a photo pasted into the body.
         const attachments =
-          fullRow.hasAttachments === true && stringOf(fullRow.id) !== ''
+          stringOf(fullRow.id) !== ''
             ? await listAttachments(
                 fetchImpl,
                 mailbox,
@@ -279,8 +285,9 @@ async function listAttachments(
   const files: unknown[] = [];
   let url: string | null =
     `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}` +
-    `/messages/${encodeURIComponent(messageId)}/attachments` +
-    '?$select=id,name,contentType,size,isInline,contentBytes';
+    // No $select: contentBytes is on fileAttachment, not on the attachment
+    // type the collection is declared as, and Graph refuses the whole request.
+    `/messages/${encodeURIComponent(messageId)}/attachments`;
   for (let page = 0; url !== null && page < 10; page += 1) {
     const body = objectOf(await graphGet(fetchImpl, url, token));
     if (Array.isArray(body.value)) files.push(...body.value);
@@ -414,12 +421,13 @@ function attachmentsOf(
   const files = [];
   for (const item of attachments) {
     const row = objectOf(item);
-    if (row.isInline === true) continue;
     const fileName = stringOf(row.name).trim();
     if (fileName === '') continue;
     const contentType = stringOf(row.contentType).trim();
     const bytes = bytesOf(row);
     const declared = typeof row.size === 'number' ? row.size : null;
+    const size = bytes?.length ?? declared ?? 0;
+    if (row.isInline === true && size < EMBEDDED_FILE_MIN_BYTES) continue;
     files.push({
       fileName,
       contentType: contentType === '' ? null : contentType,

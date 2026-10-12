@@ -2,7 +2,11 @@
 // incoming mail Outlook would hand the door. Nothing here is configured,
 // polled, or allowed to send.
 
-import type { IncomingAttachment, IncomingMessage } from './door.ts';
+import {
+  EMBEDDED_FILE_MIN_BYTES,
+  type IncomingAttachment,
+  type IncomingMessage,
+} from './door.ts';
 
 /** The only Gmail scope this standby may hold. Nothing here mints a token. */
 export const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
@@ -66,8 +70,12 @@ function walk(
   const disposition = header(part, 'content-disposition').trim().toLowerCase();
   const mime = stringOf(part.mimeType).toLowerCase();
   if (filename !== '') {
-    if (!disposition.startsWith('inline')) {
-      found.attachments.push(fileOf(part, filename, mime));
+    const file = fileOf(part, filename, mime);
+    if (
+      !disposition.startsWith('inline') ||
+      (file.byteSize ?? 0) >= EMBEDDED_FILE_MIN_BYTES
+    ) {
+      found.attachments.push(file);
     }
     return;
   }
