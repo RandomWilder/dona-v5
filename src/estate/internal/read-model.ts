@@ -294,6 +294,10 @@ export interface UnitHit {
   tenure?: string;
   flat_type?: string | null;
   balcony_sqm?: string | null;
+  /** #210. Read by `getUnit` for the flat page. Search hits do not carry them. */
+  rooms?: string;
+  floor?: string | null;
+  area_sqm?: string | null;
 }
 
 /**
@@ -315,7 +319,10 @@ export async function getUnit(db: Queryable, unitId: string): Promise<UnitHit> {
             b.building_number,
             u.tenure,
             u.flat_type,
-            u.balcony_sqm::text AS balcony_sqm
+            u.balcony_sqm::text AS balcony_sqm,
+            u.rooms::text AS rooms,
+            s.floor,
+            u.area_sqm::text AS area_sqm
      FROM unit u
      JOIN space s ON s.space_id = u.unit_id
      JOIN building b ON b.building_id = s.building_id

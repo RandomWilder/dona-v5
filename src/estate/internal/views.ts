@@ -2018,6 +2018,64 @@ function unitLettingList(rows: readonly UnitLettingView[]): Html {
   </div></div>`;
 }
 
+/** #210. Present only for a viewer who holds `estate.write`. */
+export interface FlatEdit {
+  csrf: string;
+}
+
+function unitFacts(unit: UnitHit): Html {
+  if (unit.rooms === undefined) return h``;
+  return h`<dl class="facts">
+    ${unit.floor ? h`<div><dt>קומה</dt><dd>${ltr(unit.floor)}</dd></div>` : h``}
+    <div><dt>חדרים</dt><dd>${ltr(unit.rooms)}</dd></div>
+    <div>
+      <dt>שטח</dt>
+      <dd>${unit.area_sqm ? h`${ltr(unit.area_sqm)} מ״ר` : h`טרם נמדד`}</dd>
+    </div>
+  </dl>`;
+}
+
+function editFlatForm(unit: UnitHit, csrf: string): Html {
+  return h`<form class="form-grid" method="post" action="/estate/units/${unit.unit_id}">
+    ${csrfInput(csrf)}
+    <h2>עריכת פרטי הדירה</h2>
+    <div class="form-pair">
+      <div class="form-row">
+        <label for="rooms">חדרים</label>
+        <input id="rooms" name="rooms" type="number" step="0.5" min="0" max="20" required
+          value="${unit.rooms ?? ''}" />
+      </div>
+      <div class="form-row">
+        <label for="floor">קומה</label>
+        <input id="floor" name="floor" type="text" maxlength="32" value="${unit.floor ?? ''}" />
+        <p class="hint">טקסט ולא מספר: קרקע, מרתף וגג אינם מספרים.</p>
+      </div>
+    </div>
+    <div class="form-pair">
+      <div class="form-row">
+        <label for="area_sqm">שטח במ״ר</label>
+        <input id="area_sqm" name="area_sqm" type="number" step="0.1" min="0"
+          value="${unit.area_sqm ?? ''}" />
+        <p class="hint">ריק — טרם נמדד.</p>
+      </div>
+      <div class="form-row">
+        <label for="flat_type">טיפוס</label>
+        <input id="flat_type" name="flat_type" type="text" maxlength="32"
+          value="${unit.flat_type ?? ''}" />
+      </div>
+    </div>
+    <div class="form-row">
+      <label for="balcony_sqm">שטח מרפסת במ״ר</label>
+      <input id="balcony_sqm" name="balcony_sqm" type="number" step="0.1" min="0"
+        value="${unit.balcony_sqm ?? ''}" />
+      <p class="hint">ריק — אין מרפסת, או ששטחה לא נמדד.</p>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">שמירה</button>
+    </div>
+  </form>`;
+}
+
 export function renderUnitPage(
   unit: UnitHit,
   word: UnitWord,
@@ -2027,6 +2085,7 @@ export function renderUnitPage(
   events: readonly TenancyEventView[] = [],
   retrieval?: OfficeRetrievalView,
   lettings: readonly UnitLettingView[] = [],
+  edit?: FlatEdit,
 ): string {
   const heading = lettingSentence({
     household_name: null,
@@ -2053,6 +2112,7 @@ export function renderUnitPage(
         <a href="/documents/new?unit=${unit.unit_id}">הוספת מסמך</a>
       </p>
     </div>
+    ${edit ? editFlatForm(unit, edit.csrf) : unitFacts(unit)}
     ${unitLettingList(lettings)}
     ${promotedPanel(promoted)}
     ${changeLogPanel(events)}

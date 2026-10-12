@@ -36,6 +36,7 @@ import {
 } from '../../tenancy/contract.ts';
 import { addCalendarYears, WARRANTY_YEARS } from './assets.ts';
 import { listEstateEvents } from './events.ts';
+import { correctUnitFacts, type FlatFacts } from './facts.ts';
 import { importEstate, upsertUnitRow } from './importer.ts';
 import {
   inventoryAddFromForm,
@@ -775,6 +776,22 @@ function unitFromForm(body: unknown): {
     // where every input posts whether or not it was typed into. Floor is optional (a קרקע-less
     // building has none to say), so the empty string is normalised before it gets there.
     floor: optionalText(blankToNull(form.floor), 'floor', 32),
+  };
+}
+
+/**
+ * The five facts #210 lets an admin correct. Same edge as A13 for rooms, floor
+ * and area. Flat type is floor's optional text; balcony area is area's optional
+ * number. A blank optional field writes null.
+ */
+function flatFactsFromForm(body: unknown): FlatFacts {
+  const form = (body ?? {}) as Record<string, unknown>;
+  return {
+    rooms: requireNumber(form.rooms, 'rooms', 20),
+    floor: optionalText(blankToNull(form.floor), 'floor', 32),
+    areaSqm: optionalNumber(form.area_sqm, 'area_sqm', 10_000),
+    flatType: optionalText(blankToNull(form.flat_type), 'flat_type', 32),
+    balconySqm: optionalNumber(form.balcony_sqm, 'balcony_sqm', 10_000),
   };
 }
 
@@ -1602,8 +1619,29 @@ export function registerEstateRoutes(
         occupied.find((row) => row.unit_id === unit.unit_id)?.tenancy_id ??
           null,
       ),
+      can(request.staff?.role ?? null, 'estate.write') ? { csrf } : undefined,
     );
   });
+
+  // **#210.** Correct rooms, floor, area, flat type and balcony on a flat that
+  // already exists. `estate.write` on the post; the page itself stays
+  // `estate.read`. The five columns update in place. No `estate_event`.
+  app.post<{ Params: { unitId: string } }>(
+    '/estate/units/:unitId',
+    ESTATE_WRITE,
+    async (request, reply) => {
+      const unitId = validId(request.params.unitId, 'unitId');
+      const facts = flatFactsFromForm(request.body);
+      await getUnit(deps.pool, unitId);
+      await inTransaction(deps.pool, (db) =>
+        correctUnitFacts(db, unitId, facts),
+      );
+      return reply
+        .code(303)
+        .header('location', `/estate/units/${unitId}`)
+        .send();
+    },
+  );
 
   app.post<{ Params: { unitId: string } }>(
     '/estate/units/:unitId/office-turn',

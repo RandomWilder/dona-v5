@@ -43,6 +43,9 @@ workbook is right and this file is a bug.
   other and A11/A13. The flat page, A11, and A13 mark נכסים on the rail. A letting marks
   שכירויות. The old list and the old building page name the removed item and mark nothing.
   The נכסים building page is the one building page.
+  **#210.** An `estate.write` holder corrects a flat's rooms, floor, area, flat type and balcony
+  area from the flat's page. The write updates those columns in place and does not append
+  `estate_event`.
 
 ## The shape, and why it is this one
 
@@ -151,6 +154,12 @@ and the register importer do not write here. The mint's batch line is kernel `au
 (`estate.inventory_mint`); each later add or remove is one `estate.inventory_add` or
 `estate.inventory_remove` line per Space. None of those are this table. The typed original is `old_value` on the first promotion row. The unit sheet lists these
 rows the same way it lists tenancy events, so an operator can ask what the room count used to be.
+
+**#210 leaves that rule standing.** A correction from the flat page updates `unit.rooms`,
+`unit.area_sqm`, `unit.flat_type`, `unit.balcony_sqm` and the unit space's `floor`, and appends
+nothing here. `kind` `amended` always names a source document, and a hand correction has none.
+The typed original on the first promotion row is still whatever the column held when the document
+was promoted, including a value an admin typed on this screen before that promotion.
 
 **`applyPromotedField` is the write.** It lives on this module's contract, beside `applyProtocolSeed`,
 so evidence never issues SQL against `unit`, `space`, or `building`. It parses `rooms` as a number
@@ -636,6 +645,17 @@ tenant name, even when a draft is waiting. Co-tenants stay on the tenancy page. 
 includes the building number when the building has one, in the same sentence the book uses, and
 leaves that part out when it does not. The documents already on the page stay. The list is the
 book read for this unit, not a second classification.
+
+**#210. Correcting a seeded flat.** The page shows rooms, floor and area to every reader: a missing
+floor is left out, a missing area reads טרם נמדד. Flat type and balcony stay the chips already on
+the heading. An `estate.write` holder sees a form in place of that list, prefilled, posting
+`POST /estate/units/:unitId`. The edge is A13's: `rooms` required, a non-negative number at most
+20; `area_sqm` optional, a non-negative number at most 10,000, blank writes null; `floor` optional
+text at most 32 characters, blank writes null. Flat type is the same optional text. Balcony area
+is the same optional number as area. The post does not touch unit number, ממ״ד, condition,
+warranty, tenure, or the built bay and storage, and a letting on the flat does not refuse it. It
+replies `303` to this page. A viewer without `estate.write` sees the facts and no form; their post
+is `not_allowed`. No `estate_event` row.
 
 **Slice 3.3 added the first write route in the system and it is `src/evidence/`'s, not estate's** —
 `GET`/`POST /documents/new`, reached from a unit row on the building page. It went behind the session

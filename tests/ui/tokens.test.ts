@@ -697,6 +697,28 @@ const SCREENS: Array<[string, () => string]> = [
   ],
   ['estate · one unit', () => renderUnitPage(hit, 'מושכרת', [filed], NAV)],
   [
+    'estate · one unit, admin corrects the flat',
+    () =>
+      renderUnitPage(
+        {
+          ...hit,
+          rooms: '3.5',
+          floor: '2',
+          area_sqm: '78.5',
+          flat_type: 'A',
+          balcony_sqm: '12',
+        },
+        'מושכרת',
+        [filed],
+        NAV,
+        [],
+        [],
+        undefined,
+        [],
+        { csrf: CSRF },
+      ),
+  ],
+  [
     'estate · one unit, retrieval panel',
     () =>
       renderUnitPage(hit, 'מושכרת', [filed], NAV, [], [], {
