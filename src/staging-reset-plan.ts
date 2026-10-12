@@ -40,25 +40,24 @@ export interface ResetPlan {
 }
 
 // Positive match, not a prod refusal: the reset runs only where the URL names the staging instance
-// or the laptop's own database. An unrecognised URL is refused, the same as prod.
+// or the laptop's own database. An unrecognised URL is refused, the same as prod. The building seed
+// (src/estate-seed.ts) holds itself to the same rule, and names itself in the refusal.
 export function refuseUnlessStagingDatabase(
   databaseUrl: string | undefined,
+  what = 'staging reset',
 ): void {
   if (databaseUrl === undefined) {
-    throw new KernelError(
-      'not_allowed',
-      'staging reset: DATABASE_URL is not set',
-    );
+    throw new KernelError('not_allowed', `${what}: DATABASE_URL is not set`);
   }
   if (/dona-prod\b/.test(databaseUrl)) {
-    throw new KernelError('not_allowed', 'staging reset refuses prod');
+    throw new KernelError('not_allowed', `${what} refuses prod`);
   }
   const staging = /dona-staging\b/.test(databaseUrl);
   const local = /@(127\.0\.0\.1|localhost)[:/]/.test(databaseUrl);
   if (!staging && !local) {
     throw new KernelError(
       'not_allowed',
-      'staging reset runs only against dona-staging or a local database',
+      `${what} runs only against dona-staging or a local database`,
     );
   }
 }

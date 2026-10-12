@@ -766,6 +766,23 @@ function spaceOccupied(
   return false;
 }
 
+/**
+ * Vacant is unoccupied and still in the rental stock: a sold flat is neither let nor vacant (0064).
+ * A flat designated for sale is still lettable, so it counts.
+ */
+function spaceVacant(
+  space: InventorySpaceRow,
+  screen: InventoryTiles,
+): boolean {
+  if (space.space_kind === 'UNIT' && space.tenure === 'SOLD') return false;
+  return !spaceOccupied(space, screen);
+}
+
+const TENURE_WORD: Record<string, string> = {
+  FOR_SALE: 'למכירה',
+  SOLD: 'נמכרה',
+};
+
 function groupSpaces(spaces: readonly InventorySpaceRow[]): {
   kind: string;
   rows: InventorySpaceRow[];
@@ -782,15 +799,22 @@ function spaceTile(
   screen: InventoryTiles,
   sub: Html = h``,
 ): Html {
+  if (space.space_kind === 'UNIT' && space.tenure === 'SOLD') {
+    return h`<a class="space-tile" href="/estate/units/${space.space_id}"><span class="no">${tileName(space.name)}</span><span class="state"><span class="dot is-hollow"></span>${TENURE_WORD.SOLD}</span>${sub}</a>`;
+  }
   if (space.space_kind === 'UNIT') {
     const state = screen.states.get(space.space_id) ?? VACANT_TILE;
+    const forSale =
+      space.tenure === 'FOR_SALE'
+        ? h`<span class="sub">${TENURE_WORD.FOR_SALE}</span>`
+        : h``;
     const cls = state.vacant
       ? 'space-tile is-vacant'
       : 'space-tile is-occupied';
     const dot = state.vacant
       ? h`<span class="dot is-hollow"></span>`
       : h`<span class="dot"></span>`;
-    return h`<a class="${cls}" href="/estate/units/${space.space_id}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${state.word}</span>${sub}${state.lines.map(tileLetting)}</a>`;
+    return h`<a class="${cls}" href="/estate/units/${space.space_id}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${state.word}</span>${sub}${forSale}${state.lines.map(tileLetting)}</a>`;
   }
   const words = TILE_WORD[space.space_kind];
   if (words) {
@@ -799,7 +823,13 @@ function spaceTile(
     const dot = on
       ? h`<span class="dot"></span>`
       : h`<span class="dot is-hollow"></span>`;
-    return h`<div class="${cls}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${words[on ? 'on' : 'off']}</span></div>`;
+    const fact =
+      space.space_kind === 'PARKING' && space.disabled_bay
+        ? h`<span class="sub">נכה</span>`
+        : space.space_kind === 'STORAGE' && space.area_sqm
+          ? h`<span class="sub">${ltr(space.area_sqm)} מ״ר</span>`
+          : h``;
+    return h`<div class="${cls}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${words[on ? 'on' : 'off']}</span>${fact}</div>`;
   }
   const named =
     space.space_kind === 'TECHNICAL'
@@ -825,6 +855,9 @@ function kindDrill(
   const occupied = group.rows.filter((space) =>
     spaceOccupied(space, screen),
   ).length;
+  const vacant = group.rows.filter((space) =>
+    spaceVacant(space, screen),
+  ).length;
   const vacantWord = VACANT_PLURAL[group.kind];
   const grid =
     group.kind === 'UNIT'
@@ -835,7 +868,7 @@ function kindDrill(
   return h`<details class="drill kind glass is-raised" ${open ? h`open` : h``}>
     <summary>${CHEV}<span class="kind-icon">${KIND_ICON[group.kind] ?? h``}</span><span class="kind-name">${label(SPACE_KIND, group.kind)}<span class="n">${ltr(group.rows.length)}</span></span><span class="kind-meta">${
       vacantWord
-        ? h`${meter(occupied, group.rows.length, `${occupied} מתוך ${group.rows.length}`)}<span>${ltr(group.rows.length - occupied)} ${vacantWord}</span>`
+        ? h`${meter(occupied, group.rows.length, `${occupied} מתוך ${group.rows.length}`)}<span>${ltr(vacant)} ${vacantWord}</span>`
         : h``
     }</span></summary>
     <div class="kind-body"><ul class="${grid}">${group.rows.map((space) => h`<li>${spaceTile(space, screen, subFor(space))}</li>`)}</ul></div>
@@ -848,6 +881,7 @@ function unitMeasure(unit: UnitRow | undefined): Html {
   if (unit.floor) bits.push(h`קומה ${ltr(unit.floor)}`);
   bits.push(h`${ltr(unit.rooms)} חד׳`);
   if (unit.area_sqm) bits.push(h`${ltr(unit.area_sqm)} מ״ר`);
+  if (unit.flat_type) bits.push(h`טיפוס ${ltr(unit.flat_type)}`);
   let line = bits[0] ?? h``;
   for (const bit of bits.slice(1)) line = h`${line} · ${bit}`;
   return h`<span class="sub">${line}</span>`;
@@ -895,7 +929,12 @@ export function renderInventoryPage(screen: {
         <div class="stat glass"><span class="stat-label">בניינים</span><span class="stat-value">${ltr(shown.length)}</span></div>
         <div class="stat glass"><span class="stat-label">יחידות דיור</span><span class="stat-value">${ltr(unitsOnScreen.length)}</span></div>
         <div class="stat glass"><span class="stat-label">מאוכלסות היום</span><span class="stat-value">${ltr(occupiedOnScreen)}</span>${meter(occupiedOnScreen, unitsOnScreen.length, `${occupiedOnScreen} מתוך ${unitsOnScreen.length}`)}</div>
-        <div class="stat glass"><span class="stat-label">פנויות</span><span class="stat-value">${ltr(unitsOnScreen.length - occupiedOnScreen)}</span></div>
+        <div class="stat glass"><span class="stat-label">פנויות</span><span class="stat-value">${ltr(
+          unitsOnScreen.filter(
+            (space) =>
+              space.tenure !== 'SOLD' && !screen.occupancy.has(space.space_id),
+          ).length,
+        )}</span></div>
       </section>
       <div class="toolbar">
         <nav class="segmented glass is-raised" aria-label="סינון לפי סטטוס">
@@ -1300,7 +1339,9 @@ export function renderInventoryBuildingPage(screen: {
   const letToday = unitRows.filter((space) =>
     screen.occupancy.has(space.space_id),
   ).length;
-  const vacantUnits = unitRows.length - letToday;
+  const vacantUnits = unitRows.filter(
+    (space) => space.tenure !== 'SOLD' && !screen.occupancy.has(space.space_id),
+  ).length;
   const vacantParking = parkingRows.filter(
     (space) => !screen.occupiedParking.has(space.space_id),
   ).length;
@@ -1999,7 +2040,15 @@ export function renderUnitPage(
       <a class="back" href="/estate/inventory/${unit.building_id}">← ${unit.building_name}</a>
       <h1>${heading}</h1>
       <p class="lede">${unit.building_name}</p>
-      <div class="chips"><span class="chip">${word}</span></div>
+      <div class="chips"><span class="chip">${unit.tenure === 'SOLD' ? TENURE_WORD.SOLD : word}</span>${
+        unit.tenure === 'FOR_SALE'
+          ? h`<span class="chip">${TENURE_WORD.FOR_SALE}</span>`
+          : h``
+      }${unit.flat_type ? h`<span class="chip">טיפוס ${ltr(unit.flat_type)}</span>` : h``}${
+        unit.balcony_sqm
+          ? h`<span class="chip">מרפסת ${ltr(unit.balcony_sqm)} מ״ר</span>`
+          : h``
+      }</div>
       <p class="unit-actions">
         <a href="/documents/new?unit=${unit.unit_id}">הוספת מסמך</a>
       </p>

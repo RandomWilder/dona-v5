@@ -236,6 +236,74 @@ describe('estate · the import runs twice', () => {
       );
 
       await t.test(
+        'writes what a developer sheet carries, and an omitted fact leaves the row',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            const plan = smallPlan();
+            const building = plan.buildings[0];
+            building.spaces[3] = { ...building.spaces[3], disabledBay: true };
+            building.spaces[4] = { ...building.spaces[4], areaSqm: 6.5 };
+            building.units[0] = {
+              ...building.units[0],
+              tenure: 'FOR_SALE',
+              flatType: 'BG',
+              balconySqm: 12.4,
+            };
+            building.units[1] = { ...building.units[1], tenure: 'SOLD' };
+            await importEstate(db, plan);
+            // smallPlan() again: none of the five is named, so none is written over.
+            await importEstate(db, smallPlan());
+            const units = await db.query<{
+              unit_number: string;
+              tenure: string;
+              flat_type: string | null;
+              balcony_sqm: string | null;
+            }>(
+              `SELECT u.unit_number, u.tenure, u.flat_type, u.balcony_sqm FROM unit u
+               JOIN space s ON s.space_id = u.unit_id
+               JOIN building b ON b.building_id = s.building_id
+               WHERE b.city = $1 ORDER BY u.unit_number`,
+              [CITY],
+            );
+            assert.deepEqual(
+              units.rows.map((r) => [
+                r.unit_number,
+                r.tenure,
+                r.flat_type,
+                r.balcony_sqm === null ? null : Number(r.balcony_sqm),
+              ]),
+              [
+                ['1', 'FOR_SALE', 'BG', 12.4],
+                ['2', 'SOLD', null, null],
+              ],
+            );
+            const spaces = await db.query<{
+              name: string;
+              disabled_bay: boolean;
+              area_sqm: string | null;
+            }>(
+              `SELECT s.name, s.disabled_bay, s.area_sqm FROM space s
+               JOIN building b ON b.building_id = s.building_id
+               WHERE b.city = $1 AND s.space_kind IN ('PARKING', 'STORAGE')
+               ORDER BY s.name`,
+              [CITY],
+            );
+            assert.deepEqual(
+              spaces.rows.map((r) => [
+                r.name,
+                r.disabled_bay,
+                r.area_sqm === null ? null : Number(r.area_sqm),
+              ]),
+              [
+                ['ח-1', true, null],
+                ['מ-1', false, 6.5],
+              ],
+            );
+          });
+        },
+      );
+
+      await t.test(
         'the Shoham plan is 1 building, 184 spaces and 72 units',
         async () => {
           await inRolledBackTransaction(pool, async (db) => {
