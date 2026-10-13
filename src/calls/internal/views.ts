@@ -475,6 +475,13 @@ function ltr(value: number): Html {
   return h`<span dir="ltr">${value}</span>`;
 }
 
+function emergencyChip(call: ServiceCall, ever: boolean): Html {
+  if (call.state === 'CLOSED') {
+    return ever ? h`<span class="chip">היה חירום</span>` : h``;
+  }
+  return call.emergency.flagged ? h`<span class="chip">חירום</span>` : h``;
+}
+
 function goalChip(call: ServiceCall, screen: CallsScreen): Html {
   if (call.state === 'CLOSED') return h``;
   const band = responseGoalBand(
@@ -561,9 +568,7 @@ function callMeta(call: ServiceCall, screen: CallsScreen): Html {
     call.category === null
       ? h``
       : h`<span class="chip">${call.category.labelHe}</span>`;
-  const emergency = call.emergency.flagged
-    ? h`<span class="chip">חירום</span>`
-    : h``;
+  const emergency = emergencyChip(call, call.wasEmergency);
   const review = call.toReview ? h`<span class="chip">לבדיקה</span>` : h``;
   const proposal =
     call.proposal === null || call.category !== null
@@ -924,7 +929,7 @@ function previewPane(screen: CallsScreen): Html {
     : h``;
   return h`<section class="preview glass" aria-label="תצוגה" data-preview="${call.id}">
     <h2>${call.description}</h2>
-    <p class="call-meta">${goalChip(call, screen)}</p>
+    <p class="call-meta">${emergencyChip(call, call.wasEmergency)}${goalChip(call, screen)}</p>
     <p>פונה <span data-requester>${name}</span></p>
     <p data-excerpt>${excerpt}</p>
     ${next}
@@ -1391,11 +1396,6 @@ function continuedBy(screen: CallScreen): Html {
   </section>`;
 }
 
-function everEmergency(call: ServiceCallDetail): boolean {
-  if (call.emergency.flagged) return true;
-  return call.timeline.some((event) => event.kind === 'FLAGGED');
-}
-
 function passedStates(call: ServiceCallDetail): CallState[] {
   const kinds = new Set(call.timeline.map((event) => event.kind));
   const passed: CallState[] = [];
@@ -1514,17 +1514,10 @@ export function renderCallPage(screen: CallScreen): string {
     call.predecessor === null
       ? h``
       : h`<div><dt>המשך של</dt><dd><a data-predecessor="${call.predecessor.id}" href="/calls/${call.predecessor.id}">${call.predecessor.description}</a></dd></div>`;
-  const emergency =
-    call.state === 'CLOSED'
-      ? everEmergency(call)
-        ? h`<span class="chip">היה חירום</span>`
-        : h``
-      : call.emergency.flagged
-        ? h`<span class="chip">חירום</span>`
-        : h``;
+  const emergency = emergencyChip(call, call.wasEmergency);
   const emergencyWords =
     call.state === 'CLOSED'
-      ? everEmergency(call)
+      ? call.wasEmergency
         ? 'היה חירום'
         : 'לא'
       : emergencyLabel(call);

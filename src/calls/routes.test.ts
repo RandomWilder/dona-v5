@@ -43,6 +43,15 @@ function dialogOf(html: string): string {
   return html.slice(start, end);
 }
 
+function splitCall(html: string, id: string): string {
+  const at = html.indexOf(`data-split-call="${id}"`);
+  assert.ok(at >= 0, id);
+  const start = html.lastIndexOf('<a', at);
+  const end = html.indexOf('</a>', at);
+  assert.ok(start >= 0 && end > start, id);
+  return html.slice(start, end);
+}
+
 function article(html: string, description: string): string {
   const at = html.indexOf(`>${description}</a>`);
   assert.ok(at >= 0, description);
@@ -58,6 +67,41 @@ function listedId(html: string, description: string): string {
   );
   assert.ok(found?.[1], description);
   return found[1];
+}
+
+/** List, split row, preview, and the call page all say היה חירום. The stored flag mark stays. */
+async function assertPastEmergency(
+  client: ReturnType<typeof asOperator>,
+  id: string,
+  description: string,
+  stored: 'true' | 'false',
+): Promise<void> {
+  const closedList = await client.inject({
+    method: 'GET',
+    url: '/calls?state=CLOSED&view=list',
+  });
+  const row = article(closedList.body, description);
+  assert.match(row, /<span class="chip">היה חירום<\/span>/);
+  assert.doesNotMatch(row, /<span class="chip">חירום<\/span>/);
+  assert.match(row, new RegExp(`data-emergency="${stored}"`));
+
+  const split = await client.inject({
+    method: 'GET',
+    url: `/calls?state=CLOSED&call=${id}`,
+  });
+  const listed = splitCall(split.body, id);
+  assert.match(listed, /<span class="chip">היה חירום<\/span>/);
+  assert.doesNotMatch(listed, /<span class="chip">חירום<\/span>/);
+  assert.match(listed, new RegExp(`data-emergency="${stored}"`));
+  const preview = region(split.body, `data-preview="${id}"`, '</section>');
+  assert.match(preview, /<span class="chip">היה חירום<\/span>/);
+  assert.doesNotMatch(preview, /<span class="chip">חירום<\/span>/);
+
+  const page = await client.inject({ method: 'GET', url: `/calls/${id}` });
+  const head = region(page.body, '<header class="page-head"', '</header>');
+  assert.match(head, /<span class="chip">היה חירום<\/span>/);
+  assert.doesNotMatch(head, /<span class="chip">חירום<\/span>/);
+  assert.match(page.body, new RegExp(`data-emergency="${stored}"`));
 }
 
 function layoutOf(html: string, name: 'split' | 'list'): string {
@@ -983,6 +1027,32 @@ describe('calls · the קריאות tab', () => {
       assert.match(article(list.body, pastOld), /מעבר ליעד/);
       assert.match(article(list.body, pastOld), /data-goal="red"/);
       assert.match(article(list.body, emergencyFresh), /חירום/);
+      assert.match(
+        article(list.body, emergencyFresh),
+        /<span class="chip">חירום<\/span>/,
+      );
+      assert.doesNotMatch(article(list.body, emergencyFresh), /היה חירום/);
+      assert.doesNotMatch(
+        article(list.body, fresh),
+        /<span class="chip">חירום<\/span>|היה חירום/,
+      );
+      const oldId = listedId(list.body, emergencyOld);
+      assert.match(
+        splitCall(list.body, oldId),
+        /<span class="chip">חירום<\/span>/,
+      );
+      assert.doesNotMatch(splitCall(list.body, oldId), /היה חירום/);
+      const focused = await client.inject({
+        method: 'GET',
+        url: `/calls?call=${oldId}`,
+      });
+      const openPreview = region(
+        focused.body,
+        `data-preview="${oldId}"`,
+        '</section>',
+      );
+      assert.match(openPreview, /<span class="chip">חירום<\/span>/);
+      assert.doesNotMatch(openPreview, /היה חירום/);
       assert.match(article(list.body, emergencyFresh), /בזמן/);
 
       const amber = await client.inject({
@@ -2522,6 +2592,13 @@ describe('calls · the קריאות tab', () => {
         });
         assert.match(was.body, /היה חירום/);
         assert.match(was.body, /data-emergency="false"/);
+        await assertPastEmergency(client, fireId, 'יש השריפה בדירה', 'true');
+        await assertPastEmergency(
+          client,
+          clearedId,
+          'סומנה ואז הוסרה',
+          'false',
+        );
 
         const stranger = `stranger@${domain}`;
         const arrived = await receiveIncoming(

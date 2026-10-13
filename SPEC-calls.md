@@ -246,7 +246,10 @@ shows בזמן, קרוב ליעד, or מעבר ליעד, a goal colour, or a goa
 is older than the red threshold.
 
 A call that was ever an emergency says היה חירום, including while the flag is still stored.
-Closing does not clear the flag. The mark the page already reports stays the stored flag.
+The list, the split row, and the split preview show that same chip. An open call that is
+flagged says חירום in those places, and an open call that is not flagged shows neither chip.
+Closing does not clear the flag. The mark the page already reports stays the stored flag,
+and the list and the split row report that same stored flag.
 The page offers no flag, clear, return, exit, identify, or category action. Return, exit,
 identify, and category stay refused. Filing still works for someone who may file. Saving the
 sender as a contact still works when that command would have been offered before the close:

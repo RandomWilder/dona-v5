@@ -115,6 +115,8 @@ export interface ServiceCall {
   requester: CallParty | null;
   category: CallCategory | null;
   emergency: EmergencyMark;
+  /** Flagged now, or a flag was recorded. A closed row says היה חירום from this. */
+  wasEmergency: boolean;
   /** A mark, not a state. Unsure, a sorter failure, or an emergency the sorter did not call a call. */
   toReview: boolean;
   summary: string | null;
@@ -406,6 +408,7 @@ interface CallRow {
   closed_by: string | null;
   closer_label: string | null;
   emergency: boolean;
+  was_emergency: boolean;
   emergency_by: string | null;
   emergency_actor: string | null;
   emergency_actor_label: string | null;
@@ -449,7 +452,13 @@ const CALL_SELECT = `SELECT sc.service_call_id, sc.source_channel, sc.state, sc.
             COALESCE(
               NULLIF(btrim(returner.display_name), ''),
               returner.email
-            ) AS returner_label
+            ) AS returner_label,
+            (sc.emergency OR EXISTS (
+              SELECT 1
+                FROM service_call_transition flagged
+               WHERE flagged.service_call_id = sc.service_call_id
+                 AND flagged.kind = 'FLAGGED'
+            )) AS was_emergency
        FROM service_call sc
        LEFT JOIN staff_account opener ON opener.staff_account_id = sc.opened_by
        LEFT JOIN party requester ON requester.party_id = sc.requester_party_id
@@ -497,6 +506,7 @@ function toCall(row: CallRow): ServiceCall {
       row.category_active,
     ),
     emergency: emergencyOf(row),
+    wasEmergency: row.was_emergency,
     toReview: row.to_review,
     summary: row.sorter_summary,
     proposal: categoryOf(
@@ -676,6 +686,7 @@ export async function openCall(
     requester: null,
     category: null,
     emergency: flagged ? { flagged: true, by: 'terms' } : { flagged: false },
+    wasEmergency: flagged,
     toReview: false,
     summary: null,
     proposal: null,
