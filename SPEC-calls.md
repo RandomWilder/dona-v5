@@ -149,8 +149,7 @@ past the goal, and calls marked for review are taken from that read and ignore t
 screen, so a short list can sit under a larger open total. The same numbers are on the segments,
 the summary, and the stat row. The red stat is titled מעבר ליעד המענה, with the near-goal count
 beside it. The closed segment is a second read, because a closed call is not in the open read, and
-that segment shows no count. The existing closed filter still lists closed calls. The thirty-day
-window is later.
+that segment shows no count.
 
 The segments are every open call, emergencies, לא בזמן, calls to review, and closed. The category
 menu and the state menu keep the other filters when one is chosen. An inactive category is marked
@@ -257,6 +256,47 @@ one button titled שמירת איש קשר, with no next-step label. The line א
 when that button is absent. The requester's name links to the profile under the same rule as
 an open call. Back goes to the closed list. The party profile still shows the stored flag as
 חירום or לא.
+
+**The closed list (#224)** is the closed segment, on the same split inbox and list view as the
+open list. It shows the calls closed in the last 30 days: a close later than 30 days before now,
+and not later than now. Newest close first. The rows are grouped by the day of the close in the
+office's zone: היום, אתמול, השבוע for the rest of the week back to the most recent Sunday, and
+קודם. An empty group is left out, so a Sunday or a Monday has no השבוע heading. A returned call
+is not a closed call and is not on this list.
+
+Older closes are the request `page=1`, then `page=2`, each a window of 30 days ending where the
+one after it began. The link 30 הימים הקודמים is drawn only when a closed call matching the
+category and the exit closed at or before the start of the window on screen. It leads to the
+window holding the newest of those closes, so it never leads to an empty window: a gap of more
+than 30 days with no close is skipped. A page that is not a whole number from 0 to 9999 is page 0.
+
+The closed list can be narrowed by exit, requested as `exit=ANSWERED` and the other three. The
+exit segments are הכל and the four exits, each with the number of calls of that exit in the window
+on screen under the category chosen, so the count on the chosen exit is the number of rows below
+it. An exit the page does not know is הכל. The category menu stays and keeps the exit and the page.
+The emergency, review, and goal filters do not apply to a closed call, and the closed list's links
+do not carry them. The open-call summary, the
+segment counts, and the stat row still count open calls only.
+
+A closed row shows the exit and the close time, and not the age, a goal word, or a goal mark. The
+split preview of a closed call shows the requester, היה חירום when the call ever was an emergency,
+and the outcome: the exit, who closed it, the close time, the reason, and the department of a
+forwarded call. It shows no next step, no state strip, and no message excerpt. An empty window says אין
+קריאות שנסגרו ב־30 הימים האלה. A window narrowed by category or exit that has no rows says אין
+קריאות תואמות. A closed call outside the window is still on its own page and on the requester's
+profile: the window is only the list.
+
+The window is `listClosedCalls`: closed, not returned, a close inside the window, ordered by close
+time newest first. The older link reads `newestCloseAtOrBefore` at the window's start. Both were
+measured inside a transaction that was rolled back, with closed calls spread evenly over the past:
+2,908 in one year, one for each party the portfolio holds, as the requester read was measured, and
+29,080 over ten years. The last 30 days were 239 rows either way. Without an index the window is a
+sequential scan and a sort: cost 179.90, 119 buffers, 0.296 ms at one year, and cost 1231.86, 713
+buffers, 1.871 ms at ten. The older read is a sequential scan of every closed call before the
+window: 0.367 ms and 3.040 ms. A btree on `closed_at`, restricted to a closed call, is a backward
+index scan the planner chooses for both reads at both volumes: the window at cost 32.69 and 28.63,
+9 and 11 buffers, under 0.1 ms; the older read at 3 buffers, 0.005 ms. That partial index is
+added, so an open call pays nothing for it on write.
 
 **A party's calls (#209).** The profile lists every call that names that party as requester, newest
 first, including a closed call and one returned to the filtered list. Each row shows the day the

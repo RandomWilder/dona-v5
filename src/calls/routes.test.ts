@@ -2771,6 +2771,318 @@ describe('calls · the קריאות tab', () => {
       await pool.end();
     }
   });
+
+  // #224. The clock is in 2020, so the closes every other file makes on this database, at their
+  // own clocks, are after this one's now and outside every window this test reads.
+  it('shows the closed calls of the last thirty days by day, by exit, and pages back', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const domain = 'closed-224.test';
+    const day = 24 * 60 * 60 * 1000;
+    // A Wednesday, 12:00 in the office's zone.
+    const now = new Date('2020-03-04T10:00:00.000Z');
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(now);
+        const app = buildApp({
+          pool: db as unknown as Pool,
+          version: '9.9.9-test',
+          clock,
+        });
+        const who = await signIn(db as unknown as Pool, clock, {
+          email: `ops@${domain}`,
+          role: 'OPERATOR',
+        });
+        const client = asOperator(app, who);
+        const party = await createParty(db, {
+          kind: 'PERSON',
+          givenName: 'רון',
+          familyName: 'ישן',
+          preferredLanguage: 'he',
+        });
+
+        const closeAt = async (
+          description: string,
+          exit: Record<string, string>,
+          closedAt: Date,
+        ): Promise<string> => {
+          const created = await client.inject({
+            method: 'POST',
+            url: '/calls',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            payload: form({ channel: 'PHONE', description, sender: 'unknown' }),
+          });
+          assert.equal(created.statusCode, 303);
+          const listed = await client.inject({
+            method: 'GET',
+            url: '/calls?view=list',
+          });
+          const id = callId(listed.body, description);
+          assert.ok(id, description);
+          const closed = await client.inject({
+            method: 'POST',
+            url: `/calls/${id}/exit`,
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            payload: form(exit),
+          });
+          assert.equal(closed.statusCode, 303);
+          await db.query(
+            `UPDATE service_call SET opened_at = $2, closed_at = $3
+              WHERE service_call_id = $1`,
+            [id, new Date(closedAt.getTime() - 60 * 60 * 1000), closedAt],
+          );
+          return id;
+        };
+        const answered = { exit: 'ANSWERED', note: 'נענתה בטלפון' };
+        const cancelled = { exit: 'CANCELLED', note: 'בוטלה' };
+
+        // 00:10 on Wednesday and 23:50 on Tuesday, in the office's zone.
+        const afterMidnight = await closeAt(
+          'נסגרה אחרי חצות',
+          answered,
+          new Date('2020-03-03T22:10:00.000Z'),
+        );
+        await closeAt(
+          'נסגרה לפני חצות',
+          { exit: 'FORWARDED', note: 'לכספים', department: 'כספים' },
+          new Date('2020-03-03T21:50:00.000Z'),
+        );
+        await closeAt(
+          'נסגרה ביום ראשון',
+          cancelled,
+          new Date('2020-03-01T08:00:00.000Z'),
+        );
+        await closeAt(
+          'נסגרה בשבת',
+          answered,
+          new Date('2020-02-29T08:00:00.000Z'),
+        );
+        await closeAt(
+          'נסגרה בדיוק לפני חודש',
+          answered,
+          new Date(now.getTime() - 30 * day),
+        );
+        await closeAt(
+          'נסגרה לפני חודש וחצי',
+          answered,
+          new Date(now.getTime() - 45 * day),
+        );
+        const oldest = await closeAt(
+          'נסגרה לפני חודשיים וחצי',
+          cancelled,
+          new Date(now.getTime() - 75 * day),
+        );
+        await db.query(
+          `UPDATE service_call SET requester_party_id = $2 WHERE service_call_id = $1`,
+          [oldest, party.id],
+        );
+
+        const listed = (html: string): string[] =>
+          [...html.matchAll(/href="\/calls\/[0-9a-f-]{36}">([^<]*)<\/a>/g)].map(
+            (match) => match[1] ?? '',
+          );
+        const headings = (html: string): string[] =>
+          [...html.matchAll(/<h2>([^<]*)<\/h2>/g)].map(
+            (match) => match[1] ?? '',
+          );
+
+        const recent = await client.inject({
+          method: 'GET',
+          url: '/calls?state=CLOSED&view=list',
+        });
+        const recentList = layoutOf(recent.body, 'list');
+        assert.deepEqual(listed(recentList), [
+          'נסגרה אחרי חצות',
+          'נסגרה לפני חצות',
+          'נסגרה ביום ראשון',
+          'נסגרה בשבת',
+        ]);
+        assert.deepEqual(headings(recentList), [
+          'היום',
+          'אתמול',
+          'השבוע',
+          'קודם',
+        ]);
+        const row = article(recentList, 'נסגרה אחרי חצות');
+        assert.match(row, /נענתה/);
+        assert.match(row, /00:10/);
+        assert.doesNotMatch(row, /שעות|בזמן|קרוב ליעד|מעבר ליעד|data-goal=/);
+        assert.match(
+          recentList,
+          /href="\/calls\?state=CLOSED&amp;view=list&amp;page=1"[^>]*>30 הימים הקודמים</,
+        );
+
+        const exits = (html: string): Record<string, number> => {
+          const nav = region(html, 'aria-label="סינון לפי יציאה"', '</nav>');
+          const counts: Record<string, number> = {};
+          for (const label of ['הכל', 'נענתה', 'הועברה', 'כפולה', 'בוטלה']) {
+            const found = nav.match(
+              new RegExp(`${label} <span class="n"><span dir="ltr">(\\d+)<`),
+            );
+            assert.ok(found, label);
+            counts[label] = Number(found[1]);
+          }
+          return counts;
+        };
+        assert.deepEqual(exits(recentList), {
+          הכל: 4,
+          נענתה: 2,
+          הועברה: 1,
+          כפולה: 0,
+          בוטלה: 1,
+        });
+        const onlyAnswered = await client.inject({
+          method: 'GET',
+          url: '/calls?state=CLOSED&view=list&exit=ANSWERED',
+        });
+        const answeredList = layoutOf(onlyAnswered.body, 'list');
+        assert.deepEqual(listed(answeredList), [
+          'נסגרה אחרי חצות',
+          'נסגרה בשבת',
+        ]);
+        assert.equal(exits(answeredList).נענתה, 2);
+        assert.match(answeredList, /exit=ANSWERED&amp;page=1"/);
+        const forwarded = await client.inject({
+          method: 'GET',
+          url: '/calls?state=CLOSED&view=list&exit=FORWARDED',
+        });
+        const forwardedList = layoutOf(forwarded.body, 'list');
+        assert.deepEqual(listed(forwardedList), ['נסגרה לפני חצות']);
+        assert.doesNotMatch(forwardedList, /30 הימים הקודמים/);
+        const duplicates = await client.inject({
+          method: 'GET',
+          url: '/calls?state=CLOSED&view=list&exit=DUPLICATE',
+        });
+        assert.match(layoutOf(duplicates.body, 'list'), /אין קריאות תואמות\./);
+        const category = await db.query<{ category_id: string }>(
+          `SELECT category_id FROM call_category WHERE code = 'PLUMBING'`,
+        );
+        const byCategory = await client.inject({
+          method: 'GET',
+          url: `/calls?state=CLOSED&view=list&category=${category.rows[0]?.category_id}`,
+        });
+        const categoryList = layoutOf(byCategory.body, 'list');
+        assert.match(categoryList, /אין קריאות תואמות\./);
+        assert.equal(exits(categoryList).הכל, 0);
+        assert.doesNotMatch(categoryList, /30 הימים הקודמים/);
+
+        const pages: string[][] = [];
+        let url: string | null = '/calls?state=CLOSED&view=list&page=1';
+        while (url !== null) {
+          const page = await client.inject({ method: 'GET', url });
+          const list = layoutOf(page.body, 'list');
+          pages.push(listed(list));
+          const older = list.match(
+            /href="([^"]*)"[^>]*>30 הימים הקודמים</,
+          )?.[1];
+          url = older === undefined ? null : older.replaceAll('&amp;', '&');
+          assert.ok(pages.length < 5, 'paging ends');
+        }
+        assert.deepEqual(pages, [
+          ['נסגרה בדיוק לפני חודש', 'נסגרה לפני חודש וחצי'],
+          ['נסגרה לפני חודשיים וחצי'],
+        ]);
+
+        const split = await client.inject({
+          method: 'GET',
+          url: `/calls?state=CLOSED&call=${afterMidnight}`,
+        });
+        const preview = region(
+          split.body,
+          `data-preview="${afterMidnight}"`,
+          '</section>',
+        );
+        assert.match(preview, /data-preview-outcome/);
+        assert.match(preview, /נענתה/);
+        assert.match(preview, /נענתה בטלפון/);
+        assert.match(preview, /ops@closed-224\.test/);
+        assert.doesNotMatch(
+          preview,
+          /data-excerpt|data-next-step|class="steps"/,
+        );
+        assert.deepEqual(
+          headings(
+            region(split.body, 'data-layout="split"', 'aria-label="תצוגה"'),
+          ),
+          ['היום', 'אתמול', 'השבוע', 'קודם'],
+        );
+
+        const own = await client.inject({
+          method: 'GET',
+          url: `/calls/${oldest}`,
+        });
+        assert.equal(own.statusCode, 200);
+        assert.match(own.body, /data-outcome=/);
+        const profile = await client.inject({
+          method: 'GET',
+          url: `/parties/${party.id}`,
+        });
+        assert.equal(profile.statusCode, 200);
+        assert.match(profile.body, new RegExp(`href="/calls/${oldest}"`));
+
+        // A Monday: yesterday is the Sunday, so there is no week heading.
+        const mondayClock = fixedClock(new Date('2020-03-02T10:00:00.000Z'));
+        const monday = buildApp({
+          pool: db as unknown as Pool,
+          version: '9.9.9-test',
+          clock: mondayClock,
+        });
+        const onMonday = await asOperator(monday, who).inject({
+          method: 'GET',
+          url: '/calls?state=CLOSED&view=list',
+        });
+        const mondayList = layoutOf(onMonday.body, 'list');
+        assert.deepEqual(listed(mondayList), [
+          'נסגרה ביום ראשון',
+          'נסגרה בשבת',
+          'נסגרה בדיוק לפני חודש',
+        ]);
+        assert.deepEqual(headings(mondayList), ['אתמול', 'קודם']);
+        await monday.close();
+
+        const laterClock = fixedClock(new Date(now.getTime() + 200 * day));
+        const later = buildApp({
+          pool: db as unknown as Pool,
+          version: '9.9.9-test',
+          clock: laterClock,
+        });
+        const laterWho = await signIn(db as unknown as Pool, laterClock, {
+          email: `later@${domain}`,
+          role: 'OPERATOR',
+        });
+        const quiet = await asOperator(later, laterWho).inject({
+          method: 'GET',
+          url: '/calls?state=CLOSED&view=list',
+        });
+        const quietList = layoutOf(quiet.body, 'list');
+        assert.deepEqual(listed(quietList), []);
+        assert.match(quietList, /אין קריאות שנסגרו ב־30 הימים האלה\./);
+        assert.doesNotMatch(quietList, /אין קריאות תואמות/);
+        // 200 days on, the newest close is 200.5 days back: page 6, past five empty windows.
+        assert.match(
+          quietList,
+          /href="\/calls\?state=CLOSED&amp;view=list&amp;page=6"/,
+        );
+        const skipped = await asOperator(later, laterWho).inject({
+          method: 'GET',
+          url: '/calls?state=CLOSED&view=list&page=6',
+        });
+        assert.deepEqual(listed(layoutOf(skipped.body, 'list')), [
+          'נסגרה אחרי חצות',
+          'נסגרה לפני חצות',
+          'נסגרה ביום ראשון',
+          'נסגרה בשבת',
+        ]);
+        await later.close();
+        await app.close();
+      });
+    } finally {
+      await pool.end();
+    }
+  });
 });
 
 function message(

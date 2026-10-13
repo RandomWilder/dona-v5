@@ -10,12 +10,14 @@ import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import {
   ageMinutes,
   CALL_STATES,
+  type CallExit,
   type CallState,
   type CallTransition,
   type CategoryRow,
   canExit,
   DEPARTMENT_MAX,
   DESCRIPTION_MAX,
+  EXIT_KINDS,
   type ExitKind,
   MANUAL_CHANNELS,
   NOTE_MAX,
@@ -117,6 +119,18 @@ export interface CallsScreen {
    * Omitted means the first row, with no inbound message loaded.
    */
   preview?: { id: string; excerpt: string } | null;
+  /** #224. The closed segment's thirty-day window. Null on the open list. */
+  closedList?: ClosedList | null;
+}
+
+export interface ClosedList {
+  exit: ExitKind | null;
+  /** 0 is the last thirty days, 1 the thirty before, and so on. */
+  page: number;
+  /** The window holding the newest matching close before this one. Null when there is none. */
+  olderPage: number | null;
+  /** Calls of each exit in this window under the category chosen. */
+  counts: Record<ExitKind | 'all', number>;
 }
 
 /** Mirrors channel's `SecretWarning`: channel imports calls, so calls cannot import it back. */
@@ -258,6 +272,7 @@ const styles = h`<style>
   .calls .call-list { display: grid; gap: var(--space-3); }
   .calls .group { display: grid; gap: var(--space-3); }
   .calls .group h2 { margin: 0; font-size: var(--text-lg); }
+  .calls .older { margin: var(--space-4) 0 0; }
   .calls .summary { margin: 0; }
   .calls .stat.is-alert {
     display: flex;
@@ -581,7 +596,12 @@ function callMeta(call: ServiceCall, screen: CallsScreen): Html {
     ${emergency}
     ${review}
     <span>${sender}</span>
-    <span>${ageLabel(call.openedAt, screen.now)}</span>
+    ${
+      call.exit === null
+        ? h`<span>${ageLabel(call.openedAt, screen.now)}</span>`
+        : h`<span class="chip" data-exit="${call.exit.kind}">${EXIT_HE[call.exit.kind]}</span>
+    <span>${whenLabel(call.exit.at)}</span>`
+    }
     ${goalChip(call, screen)}`;
 }
 
@@ -598,13 +618,19 @@ function filterParams(
   screen: CallsScreen,
   extra: Record<string, string | null> = {},
 ): Record<string, string | null> {
+  const closed = screen.closedList != null;
   return {
     state: screen.state,
     category: screen.categoryId,
-    emergency: screen.emergency ? '1' : null,
-    review: screen.toReview ? '1' : null,
-    goal: screen.band,
+    emergency: closed ? null : screen.emergency ? '1' : null,
+    review: closed ? null : screen.toReview ? '1' : null,
+    goal: closed ? null : screen.band,
     view: screen.layout === 'list' ? 'list' : null,
+    exit: screen.closedList?.exit ?? null,
+    page:
+      screen.closedList == null || screen.closedList.page === 0
+        ? null
+        : String(screen.closedList.page),
     ...extra,
   };
 }
@@ -654,7 +680,14 @@ function segments(screen: CallsScreen): Html {
   const openState =
     screen.state !== null && screen.state !== 'CLOSED' ? screen.state : null;
   const current = segmentNow(screen);
-  const cleared = { emergency: null, review: null, goal: null, call: null };
+  const cleared = {
+    emergency: null,
+    review: null,
+    goal: null,
+    call: null,
+    exit: null,
+    page: null,
+  };
   const items: {
     id: string;
     label: string;
@@ -736,6 +769,8 @@ function menus(screen: CallsScreen): Html {
       ${hidden('review', review)}
       ${hidden('goal', goal)}
       ${view}
+      ${hidden('exit', screen.closedList?.exit ?? null)}
+      ${hidden('page', screen.closedList?.page ? String(screen.closedList.page) : null)}
       <label>קטגוריה ${categories}</label>
       <button class="btn" type="submit">סינון</button>
     </form>
@@ -762,7 +797,46 @@ function listIsNarrowed(screen: CallsScreen): boolean {
 }
 
 function emptyCopy(screen: CallsScreen): string {
+  const closed = screen.closedList;
+  if (closed != null) {
+    return closed.exit !== null || screen.categoryId !== null
+      ? 'אין קריאות תואמות.'
+      : 'אין קריאות שנסגרו ב־30 הימים האלה.';
+  }
   return listIsNarrowed(screen) ? 'אין קריאות תואמות.' : 'אין קריאות פתוחות.';
+}
+
+function shiftDay(day: string, by: number): string {
+  const at = new Date(`${day}T00:00:00.000Z`);
+  at.setUTCDate(at.getUTCDate() + by);
+  return at.toISOString().slice(0, 10);
+}
+
+/** היום, אתמול, the rest of the week back to Sunday, then older: the day of the close in the office's zone. */
+function closeDayGroups(
+  calls: readonly ServiceCall[],
+  now: Date,
+): { heading: string; calls: ServiceCall[] }[] {
+  const today = dayIn(now, DEFAULT_ZONE);
+  const yesterday = shiftDay(today, -1);
+  const sunday = shiftDay(
+    today,
+    -new Date(`${today}T00:00:00.000Z`).getUTCDay(),
+  );
+  const groups = [
+    { heading: 'היום', calls: [] as ServiceCall[] },
+    { heading: 'אתמול', calls: [] as ServiceCall[] },
+    { heading: 'השבוע', calls: [] as ServiceCall[] },
+    { heading: 'קודם', calls: [] as ServiceCall[] },
+  ];
+  for (const call of calls) {
+    if (call.exit === null) continue;
+    const day = dayIn(call.exit.at, DEFAULT_ZONE);
+    const index =
+      day === today ? 0 : day === yesterday ? 1 : day >= sunday ? 2 : 3;
+    groups[index]?.calls.push(call);
+  }
+  return groups.filter((group) => group.calls.length > 0);
 }
 
 function groupedRows(
@@ -776,7 +850,12 @@ function groupedRows(
   const groups = arrange(screen);
   const rows = (calls: readonly ServiceCall[]) =>
     h`<div class="${rowClass}">${calls.map(row)}</div>`;
-  if (groups === null) return rows(screen.calls);
+  if (groups === null) {
+    return h`${closeDayGroups(screen.calls, screen.now).map(
+      (group) =>
+        h`<section class="group"><h2>${group.heading}</h2>${rows(group.calls)}</section>`,
+    )}`;
+  }
   const urgent =
     groups.urgent.length === 0
       ? h``
@@ -786,7 +865,32 @@ function groupedRows(
 }
 
 function callList(screen: CallsScreen): Html {
-  return groupedRows(screen, 'call-list', (call) => callRow(call, screen));
+  return h`${groupedRows(screen, 'call-list', (call) => callRow(call, screen))}${olderLink(screen)}`;
+}
+
+const EXIT_FILTERS: readonly (ExitKind | 'all')[] = ['all', ...EXIT_KINDS];
+
+function exitSegments(screen: CallsScreen): Html {
+  const closed = screen.closedList;
+  if (closed == null) return h``;
+  return h`<nav class="segmented glass is-raised" aria-label="סינון לפי יציאה">
+    ${EXIT_FILTERS.map((kind) => {
+      const exit = kind === 'all' ? null : kind;
+      const mark = exit === closed.exit ? h`aria-current="true"` : h``;
+      const label = exit === null ? 'הכל' : EXIT_HE[exit];
+      const href = callsHref(filterParams(screen, { exit, call: null }));
+      return h`<a href="${href}" ${mark}>${label} <span class="n">${ltr(closed.counts[kind])}</span></a>`;
+    })}
+  </nav>`;
+}
+
+function olderLink(screen: CallsScreen): Html {
+  const closed = screen.closedList;
+  if (closed == null || closed.olderPage === null) return h``;
+  const href = callsHref(
+    filterParams(screen, { page: String(closed.olderPage), call: null }),
+  );
+  return h`<p class="older"><a class="btn btn-glass" href="${href}">30 הימים הקודמים</a></p>`;
 }
 
 function logDialog(screen: CallsScreen, refusal: Html): Html {
@@ -924,6 +1028,14 @@ function previewPane(screen: CallsScreen): Html {
     return h`<section class="preview glass" aria-label="תצוגה"></section>`;
   const { call, excerpt } = preview;
   const name = call.requester?.name ?? 'טרם זוהה';
+  if (call.exit !== null) {
+    return h`<section class="preview glass" aria-label="תצוגה" data-preview="${call.id}">
+    <h2>${call.description}</h2>
+    <p class="call-meta">${emergencyChip(call, call.wasEmergency)}</p>
+    <p>פונה <span data-requester>${name}</span></p>
+    ${previewOutcome(call.exit)}
+  </section>`;
+  }
   const next = waitingOnCategory(call.state)
     ? h`<p data-next-step><a href="/calls/${call.id}">לעמוד הקריאה</a></p>`
     : h``;
@@ -936,11 +1048,32 @@ function previewPane(screen: CallsScreen): Html {
   </section>`;
 }
 
+/** The outcome of a closed call in the split preview: no next step, no steps, no message. */
+function previewOutcome(exit: CallExit): Html {
+  const reason =
+    exit.duplicateOf !== null
+      ? h`<div><dt>חוזרת על</dt><dd>${exit.duplicateOf.description}</dd></div>`
+      : exit.note === null
+        ? h``
+        : h`<div><dt>סיבה</dt><dd>${exit.note}</dd></div>`;
+  const department =
+    exit.department === null
+      ? h``
+      : h`<div><dt>מחלקה</dt><dd>${exit.department}</dd></div>`;
+  return h`<dl class="facts" data-preview-outcome="${exit.kind}">
+    <div><dt>יציאה</dt><dd>${EXIT_HE[exit.kind]}</dd></div>
+    <div><dt>סגר</dt><dd>${exit.actorLabel}</dd></div>
+    <div><dt>נסגרה</dt><dd>${whenLabel(exit.at)}</dd></div>
+    ${reason}
+    ${department}
+  </dl>`;
+}
+
 function listLayout(screen: CallsScreen): Html {
   return h`<div class="list-layout" data-layout="list">
     ${listHeader(screen)}
     ${statRow(screen)}
-    <div class="toolbar">${segments(screen)}${menus(screen)}</div>
+    <div class="toolbar">${segments(screen)}${exitSegments(screen)}${menus(screen)}</div>
     <section class="glass sheet">${callList(screen)}</section>
   </div>`;
 }
@@ -948,12 +1081,12 @@ function listLayout(screen: CallsScreen): Html {
 function splitLayout(screen: CallsScreen): Html {
   const preview = resolvedPreview(screen);
   const current = preview?.call.id ?? null;
-  const list = groupedRows(screen, 'split-rows', (call) =>
+  const list = h`${groupedRows(screen, 'split-rows', (call) =>
     splitRow(call, screen, current),
-  );
+  )}${olderLink(screen)}`;
   return h`<div class="split-layout" data-layout="split">
     ${splitHeader(screen)}
-    <div class="toolbar">${segments(screen)}${menus(screen)}</div>
+    <div class="toolbar">${segments(screen)}${exitSegments(screen)}${menus(screen)}</div>
     <div class="split-work">
       <div class="glass sheet">${list}</div>
       ${previewPane(screen)}

@@ -20,14 +20,18 @@ import {
   type CallState,
   canExit,
   clearEmergency,
+  EXIT_KINDS,
+  type ExitKind,
   exitCall,
   findCallsByDescription,
   flagEmergency,
   getCall,
   identifyCall,
   listCategories,
+  listClosedCalls,
   listOpenCalls,
   listReturnedCalls,
+  newestCloseAtOrBefore,
   type OpenCallSpec,
   openCall,
   type ResponseGoal,
@@ -134,6 +138,25 @@ function requestedCallId(query: unknown): string | null {
     if (error instanceof KernelError) return null;
     throw error;
   }
+}
+
+const CLOSED_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+function exitFilterOf(query: unknown): ExitKind | null {
+  const raw = textOf(formOf(query).exit);
+  return (EXIT_KINDS as readonly string[]).includes(raw)
+    ? (raw as ExitKind)
+    : null;
+}
+
+/** The window a close falls in: page k holds a close at least k×30 days old and younger than (k+1)×30. */
+function closedPageHolding(now: Date, closedAt: Date): number {
+  return Math.floor((now.getTime() - closedAt.getTime()) / CLOSED_WINDOW_MS);
+}
+
+function closedPageOf(query: unknown): number {
+  const raw = textOf(formOf(query).page);
+  return /^[0-9]{1,4}$/.test(raw) ? Number(raw) : 0;
 }
 
 function listFilter(query: unknown): CallListFilter {
@@ -348,9 +371,14 @@ async function callsPage(
   const filter = listFilter(request.query);
   const now = deps.clock.now();
   const closed = filter.state === 'CLOSED';
+  const exit = closed ? exitFilterOf(request.query) : null;
+  const page = closed ? closedPageOf(request.query) : 0;
+  const upTo = new Date(now.getTime() - page * CLOSED_WINDOW_MS);
+  const after = new Date(upTo.getTime() - CLOSED_WINDOW_MS);
   const [
     everyOpen,
     closedRows,
+    olderClose,
     categories,
     mailboxWarning,
     goal,
@@ -360,11 +388,16 @@ async function callsPage(
   ] = await Promise.all([
     listOpenCalls(deps.pool),
     closed
-      ? listOpenCalls(deps.pool, {
-          state: 'CLOSED',
+      ? listClosedCalls(deps.pool, {
+          after,
+          upTo,
           categoryId: filter.categoryId,
-          emergency: filter.emergency,
-          toReview: filter.toReview,
+        })
+      : Promise.resolve(null),
+    closed
+      ? newestCloseAtOrBefore(deps.pool, after, {
+          categoryId: filter.categoryId ?? null,
+          exit,
         })
       : Promise.resolve(null),
     listCategories(deps.pool),
@@ -374,13 +407,25 @@ async function callsPage(
     deps.listNoise ? deps.listNoise() : Promise.resolve([]),
     listReturnedCalls(deps.pool),
   ]);
-  const band = filter.band;
   const calls =
     closedRows === null
       ? everyOpen.filter((call) => shownCall(call, filter, now, goal))
-      : band === undefined
-        ? closedRows
-        : closedRows.filter((call) => matchesBand(call, band, now, goal));
+      : closedRows.filter((call) => exit === null || call.exit?.kind === exit);
+  const exitCounts: Record<ExitKind | 'all', number> | null =
+    closedRows === null
+      ? null
+      : {
+          all: closedRows.length,
+          ANSWERED: 0,
+          FORWARDED: 0,
+          DUPLICATE: 0,
+          CANCELLED: 0,
+        };
+  for (const call of closedRows ?? []) {
+    if (exitCounts !== null && call.exit !== null) {
+      exitCounts[call.exit.kind] += 1;
+    }
+  }
   let emergency = 0;
   let near = 0;
   let past = 0;
@@ -410,7 +455,9 @@ async function callsPage(
     chosen === null
       ? null
       : previewExcerpt(
-          deps.messagesOnCall ? await deps.messagesOnCall(chosen.id) : [],
+          deps.messagesOnCall && chosen.state !== 'CLOSED'
+            ? await deps.messagesOnCall(chosen.id)
+            : [],
           chosen,
         );
   return renderCallsPage({
@@ -448,6 +495,16 @@ async function callsPage(
     logging: textOf(formOf(request.query).log) === '1' || draft !== undefined,
     draft: draft ?? null,
     layout: listOnly ? 'list' : 'split',
+    closedList:
+      exitCounts === null
+        ? null
+        : {
+            exit,
+            page,
+            olderPage:
+              olderClose === null ? null : closedPageHolding(now, olderClose),
+            counts: exitCounts,
+          },
     preview:
       chosen === null || excerpt === null ? null : { id: chosen.id, excerpt },
   });

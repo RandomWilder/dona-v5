@@ -129,6 +129,8 @@ export interface ServiceCall {
   sorterPrompt: string | null;
   /** Returned to the filtered list. Not closed, and not in the open list. */
   returned: boolean;
+  /** How a closed call left. Null on an open call. */
+  exit: CallExit | null;
 }
 
 export type TransitionKind =
@@ -170,7 +172,6 @@ export interface CallTransition {
 
 export interface ServiceCallDetail extends ServiceCall {
   timeline: readonly CallTransition[];
-  exit: CallExit | null;
   /** Calls that named this one as the call they repeat. */
   repeatedBy: readonly CallLink[];
   /** Later calls that name this one as the call they continue. Newest first. */
@@ -519,6 +520,7 @@ function toCall(row: CallRow): ServiceCall {
     sorterModel: row.sorter_model,
     sorterPrompt: row.sorter_prompt,
     returned: row.returned_at !== null,
+    exit: exitOf(row),
   };
 }
 
@@ -694,6 +696,7 @@ export async function openCall(
     sorterModel: null,
     sorterPrompt: null,
     returned: false,
+    exit: null,
   };
 }
 
@@ -1033,6 +1036,58 @@ export async function listOpenCalls(
   return rows.map(toCall);
 }
 
+export interface ClosedWindow {
+  /** A close later than this. */
+  after: Date;
+  /** A close not later than this. */
+  upTo: Date;
+  categoryId?: string;
+}
+
+/** The calls closed inside one window, newest close first. A returned call is not closed. #224. */
+export async function listClosedCalls(
+  db: Queryable,
+  window: ClosedWindow,
+): Promise<ServiceCall[]> {
+  const categoryId =
+    window.categoryId === undefined
+      ? null
+      : validId(window.categoryId, 'category');
+  const { rows } = await db.query<CallRow>(
+    `${CALL_SELECT}
+      WHERE sc.state = 'CLOSED'
+        AND sc.returned_at IS NULL
+        AND sc.closed_at > $1
+        AND sc.closed_at <= $2
+        AND ($3::uuid IS NULL OR sc.category_id = $3)
+      ORDER BY sc.closed_at DESC, sc.service_call_id DESC`,
+    [window.after, window.upTo, categoryId],
+  );
+  return rows.map(toCall);
+}
+
+/** The newest close at or before this moment of a call matching the category and the exit. */
+export async function newestCloseAtOrBefore(
+  db: Queryable,
+  at: Date,
+  filter: { categoryId: string | null; exit: ExitKind | null },
+): Promise<Date | null> {
+  const categoryId =
+    filter.categoryId === null ? null : validId(filter.categoryId, 'category');
+  const { rows } = await db.query<{ closed_at: Date }>(
+    `SELECT closed_at FROM service_call
+      WHERE state = 'CLOSED'
+        AND returned_at IS NULL
+        AND closed_at <= $1
+        AND ($2::uuid IS NULL OR category_id = $2)
+        AND ($3::text IS NULL OR exit_kind = $3)
+      ORDER BY closed_at DESC
+      LIMIT 1`,
+    [at, categoryId, filter.exit],
+  );
+  return rows[0]?.closed_at ?? null;
+}
+
 /**
  * The calls that name this party as requester, newest first. A call that names
  * nobody, and a call that names someone else, are not in the list. #209.
@@ -1196,7 +1251,6 @@ export async function getCall(
   return {
     ...toCall(row),
     timeline,
-    exit: exitOf(row),
     repeatedBy: links.rows.map((link) => ({
       id: link.service_call_id,
       description: link.description,
