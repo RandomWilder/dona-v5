@@ -22,7 +22,11 @@ import { inTransaction } from '../kernel/db.ts';
 import { createFakeExtractor } from '../kernel/extraction.ts';
 import { createMemoryStore } from '../kernel/objects.ts';
 import { fakeItems } from '../kernel/pdf.ts';
-import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
+import {
+  migratedPoolOrNull,
+  skipReason,
+  withGuardsOff,
+} from '../kernel/pg-support.ts';
 import { upsertTermsProfile } from '../tenancy/contract.ts';
 import {
   applyDocumentTypeCatalogue,
@@ -187,22 +191,19 @@ describe('evidence · upload, read, approve', () => {
           [`gs://${BUCKET}/%`],
         );
       });
-      await pool.query(
-        'ALTER TABLE tenancy_event DISABLE TRIGGER tenancy_event_is_append_only',
-      );
-      try {
-        await pool.query(
-          `DELETE FROM tenancy_event WHERE extracted_field_id IN (
+      await withGuardsOff(
+        pool,
+        [['tenancy_event', 'tenancy_event_is_append_only']],
+        async (db) => {
+          await db.query(
+            `DELETE FROM tenancy_event WHERE extracted_field_id IN (
              SELECT extracted_field_id FROM extracted_field
               WHERE document_id IN (SELECT document_id FROM document
                                      WHERE storage_uri LIKE $1))`,
-          [`gs://${BUCKET}/%`],
-        );
-      } finally {
-        await pool.query(
-          'ALTER TABLE tenancy_event ENABLE TRIGGER tenancy_event_is_append_only',
-        );
-      }
+            [`gs://${BUCKET}/%`],
+          );
+        },
+      );
       await pool.query(
         `DELETE FROM extracted_field WHERE document_id IN
            (SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
@@ -223,59 +224,56 @@ describe('evidence · upload, read, approve', () => {
       ]);
     };
     const sweepPlace = async (): Promise<void> => {
-      await pool.query(
-        'ALTER TABLE tenancy_event DISABLE TRIGGER tenancy_event_is_append_only',
-      );
-      try {
-        await pool.query(
-          `DELETE FROM tenancy_event WHERE tenancy_id IN (
+      await withGuardsOff(
+        pool,
+        [['tenancy_event', 'tenancy_event_is_append_only']],
+        async (db) => {
+          await db.query(
+            `DELETE FROM tenancy_event WHERE tenancy_id IN (
            SELECT tenancy_id FROM tenancy WHERE unit_id IN (
              SELECT space_id FROM space WHERE building_id IN (
                SELECT building_id FROM building WHERE city = $1 AND address_line = $2)))`,
-          [CITY, ADDRESS],
-        );
-        await pool.query(
-          `DELETE FROM tenancy_party WHERE tenancy_id IN (
+            [CITY, ADDRESS],
+          );
+          await db.query(
+            `DELETE FROM tenancy_party WHERE tenancy_id IN (
            SELECT tenancy_id FROM tenancy WHERE unit_id IN (
              SELECT space_id FROM space WHERE building_id IN (
                SELECT building_id FROM building WHERE city = $1 AND address_line = $2)))`,
-          [CITY, ADDRESS],
-        );
-        await pool.query(
-          `DELETE FROM tenancy WHERE unit_id IN (
+            [CITY, ADDRESS],
+          );
+          await db.query(
+            `DELETE FROM tenancy WHERE unit_id IN (
            SELECT space_id FROM space WHERE building_id IN (
              SELECT building_id FROM building WHERE city = $1 AND address_line = $2))`,
-          [CITY, ADDRESS],
-        );
-        await pool.query(
-          `DELETE FROM unit WHERE unit_id IN (
+            [CITY, ADDRESS],
+          );
+          await db.query(
+            `DELETE FROM unit WHERE unit_id IN (
            SELECT space_id FROM space WHERE building_id IN (
              SELECT building_id FROM building WHERE city = $1 AND address_line = $2))`,
-          [CITY, ADDRESS],
-        );
-        await pool.query(
-          `DELETE FROM asset WHERE space_id IN (
+            [CITY, ADDRESS],
+          );
+          await db.query(
+            `DELETE FROM asset WHERE space_id IN (
            SELECT space_id FROM space WHERE building_id IN (
              SELECT building_id FROM building WHERE city = $1 AND address_line = $2))`,
-          [CITY, ADDRESS],
-        );
-        await pool.query(
-          `DELETE FROM space WHERE building_id IN (
+            [CITY, ADDRESS],
+          );
+          await db.query(
+            `DELETE FROM space WHERE building_id IN (
            SELECT building_id FROM building WHERE city = $1 AND address_line = $2)`,
-          [CITY, ADDRESS],
-        );
-        await pool.query(
-          'DELETE FROM building WHERE city = $1 AND address_line = $2',
-          [CITY, ADDRESS],
-        );
-        await pool.query('DELETE FROM project WHERE project_code = $1', [
-          PROJECT,
-        ]);
-      } finally {
-        await pool.query(
-          'ALTER TABLE tenancy_event ENABLE TRIGGER tenancy_event_is_append_only',
-        );
-      }
+            [CITY, ADDRESS],
+          );
+          await db.query(
+            'DELETE FROM building WHERE city = $1 AND address_line = $2',
+            [CITY, ADDRESS],
+          );
+          await db.query('DELETE FROM project WHERE project_code = $1', [
+            PROJECT,
+          ]);
+        },
+      );
     };
 
     try {

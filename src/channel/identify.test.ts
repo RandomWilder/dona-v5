@@ -150,15 +150,20 @@ describe('channel · identify the sender', () => {
           `ALTER TABLE party_contact
              DROP CONSTRAINT contact_value_resolves_to_one_party`,
         );
+        // A building of its own: this transaction holds party_contact's lock until it rolls back,
+        // and on the shared fixture building it would wait on another case that waits on it.
+        const own = { line: `Door 189 ${newId()}`, city: 'Shoham' };
         await seedOccupancy(db, '1895', {
           phone: '+972501890402',
           email: 'two@door-189.test',
           ...OCCUPANCY,
+          unitId: await seedUnit(db, '1895', own),
         });
         await seedOccupancy(db, '1896', {
           phone: '+972501890403',
           email: 'two@door-189.test',
           ...OCCUPANCY,
+          unitId: await seedUnit(db, '1896', own),
         });
         const outcome = await receiveIncoming(
           db,

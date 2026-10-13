@@ -139,8 +139,15 @@ describe('evidence · promote an extracted field', () => {
     try {
       await inRolledBackTransaction(pool, async (db) => {
         await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        // Counted on the catalogue's own types: other files write mappings for types of their
+        // own (card-lease-…) on this database while this case runs.
         const mappings = await db.query<{ n: string }>(
-          `SELECT count(*)::text AS n FROM field_promotion`,
+          `SELECT count(*)::text AS n FROM field_promotion p
+             JOIN document_type_field f
+               ON f.document_type_field_id = p.document_type_field_id
+             JOIN document_type t ON t.document_type_id = f.document_type_id
+            WHERE t.type_key = ANY($1::text[])`,
+          [seedDocumentTypes.map((seed) => seed.type.typeKey)],
         );
         // start_date, end_date, new_end_date — two effective_from rows each (R18) — plus the
         // three track B copies, #141's rooms and floor, #146's assigned bay, #148's

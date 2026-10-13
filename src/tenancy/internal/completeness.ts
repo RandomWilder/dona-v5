@@ -4,7 +4,7 @@ import { addDays, type Clock, dayIn, today } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import {
   type ActivationCheck,
-  activationGate,
+  gateOrGone,
   type TenancyDocumentsReader,
 } from './activation.ts';
 import type { Queryable } from './types.ts';
@@ -160,7 +160,8 @@ export async function listIncompleteTenancies(
     })),
   ];
   for (const place of places.rows) {
-    const gate = await activationGate(db, clock, place.tenancy_id, documents);
+    const gate = await gateOrGone(db, clock, place.tenancy_id, documents);
+    if (gate === null) continue;
     for (const check of gate.checks) {
       if (check.passed) continue;
       rows.push({
@@ -216,7 +217,8 @@ export async function listActivationQueue(
   const ready: ReadyToActivate[] = [];
   const soon: ArmingSoon[] = [];
   for (const place of places.rows) {
-    const gate = await activationGate(db, clock, place.tenancy_id, documents);
+    const gate = await gateOrGone(db, clock, place.tenancy_id, documents);
+    if (gate === null) continue;
     if (gate.canActivate) {
       ready.push({
         ...place,

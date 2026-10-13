@@ -13,7 +13,11 @@ import { buildApp } from '../app.ts';
 import { fixedClock } from '../kernel/clock.ts';
 import { embeddingColumnDimensions } from '../kernel/config.ts';
 import { newId } from '../kernel/ids.ts';
-import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
+import {
+  migratedPoolOrNull,
+  skipReason,
+  withGuardsOff,
+} from '../kernel/pg-support.ts';
 import type { EstatePlan } from './contract.ts';
 import { importEstate } from './contract.ts';
 
@@ -107,40 +111,37 @@ async function cleanup(pool: Pool): Promise<void> {
   const units = `(SELECT space_id FROM space s WHERE s.building_id IN ${buildings})`;
   const documents = `(SELECT document_id FROM document WHERE storage_uri LIKE 'gs://dona-hidden-172/%')`;
   const place = [CITY, ADDRESS];
-  await pool.query(
-    'ALTER TABLE tenancy_event DISABLE TRIGGER tenancy_event_is_append_only',
+  await withGuardsOff(
+    pool,
+    [['tenancy_event', 'tenancy_event_is_append_only']],
+    async (db) => {
+      for (const statement of [
+        `DELETE FROM document_passage WHERE document_id IN ${documents}`,
+        `DELETE FROM document_link WHERE document_id IN ${documents}`,
+        `DELETE FROM document WHERE document_id IN ${documents}`,
+      ]) {
+        await db.query(statement);
+      }
+      for (const statement of [
+        `DELETE FROM tenancy_event WHERE tenancy_id IN (
+         SELECT t.tenancy_id FROM tenancy t WHERE t.unit_id IN ${units})`,
+        `DELETE FROM tenancy_party WHERE tenancy_id IN (
+         SELECT t.tenancy_id FROM tenancy t WHERE t.unit_id IN ${units})`,
+        `DELETE FROM tenancy_completeness_exception WHERE tenancy_id IN (
+         SELECT t.tenancy_id FROM tenancy t WHERE t.unit_id IN ${units})`,
+        `DELETE FROM tenancy WHERE unit_id IN ${units}`,
+        `DELETE FROM unit WHERE unit_id IN ${units}`,
+        `DELETE FROM space WHERE building_id IN ${buildings}`,
+        `DELETE FROM building WHERE city = $1 AND address_line = $2`,
+      ]) {
+        await db.query(statement, place);
+      }
+      await db.query('DELETE FROM project WHERE project_code = $1', [PROJECT]);
+      await db.query('DELETE FROM terms_profile WHERE name = $1', [
+        `hidden-${PROJECT}`,
+      ]);
+    },
   );
-  try {
-    for (const statement of [
-      `DELETE FROM document_passage WHERE document_id IN ${documents}`,
-      `DELETE FROM document_link WHERE document_id IN ${documents}`,
-      `DELETE FROM document WHERE document_id IN ${documents}`,
-    ]) {
-      await pool.query(statement);
-    }
-    for (const statement of [
-      `DELETE FROM tenancy_event WHERE tenancy_id IN (
-         SELECT t.tenancy_id FROM tenancy t WHERE t.unit_id IN ${units})`,
-      `DELETE FROM tenancy_party WHERE tenancy_id IN (
-         SELECT t.tenancy_id FROM tenancy t WHERE t.unit_id IN ${units})`,
-      `DELETE FROM tenancy_completeness_exception WHERE tenancy_id IN (
-         SELECT t.tenancy_id FROM tenancy t WHERE t.unit_id IN ${units})`,
-      `DELETE FROM tenancy WHERE unit_id IN ${units}`,
-      `DELETE FROM unit WHERE unit_id IN ${units}`,
-      `DELETE FROM space WHERE building_id IN ${buildings}`,
-      `DELETE FROM building WHERE city = $1 AND address_line = $2`,
-    ]) {
-      await pool.query(statement, place);
-    }
-    await pool.query('DELETE FROM project WHERE project_code = $1', [PROJECT]);
-    await pool.query('DELETE FROM terms_profile WHERE name = $1', [
-      `hidden-${PROJECT}`,
-    ]);
-  } finally {
-    await pool.query(
-      'ALTER TABLE tenancy_event ENABLE TRIGGER tenancy_event_is_append_only',
-    );
-  }
 }
 
 describe('estate · the hidden buildings flow', () => {
@@ -176,6 +177,7 @@ describe('estate · the hidden buildings flow', () => {
       const unitId = found.rows[0]?.unit_id ?? '';
       assert.ok(buildingId && unitId);
 
+      const tenancyId = newId();
       const profile = await pool.query<{ terms_profile_id: string }>(
         `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)
          ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
@@ -186,7 +188,7 @@ describe('estate · the hidden buildings flow', () => {
         `INSERT INTO tenancy (
            tenancy_id, unit_id, start_date, end_date, status, terms_profile_id
          ) VALUES ($1, $2, '2026-01-01', '2026-10-20', 'ACTIVE', $3)`,
-        [newId(), unitId, profile.rows[0]?.terms_profile_id],
+        [tenancyId, unitId, profile.rows[0]?.terms_profile_id],
       );
 
       const type = await pool.query<{ document_type_id: string }>(
@@ -232,6 +234,11 @@ describe('estate · the hidden buildings flow', () => {
         );
       }
 
+      const ours = new Set(
+        [buildingId, unitId, tenancyId, ...filed.map((doc) => doc.id)].map(
+          (id) => id.toLowerCase(),
+        ),
+      );
       const search = `/estate/search?q=${encodeURIComponent(BUILDING_NAME)}`;
       const queue = ['/', search];
       const seen = new Set<string>();
@@ -246,23 +253,14 @@ describe('estate · the hidden buildings flow', () => {
         const response = await client.inject({ method: 'GET', url });
         const type = String(response.headers['content-type'] ?? '');
         if (response.statusCode !== 200 || !type.includes('text/html')) {
-          // The list screens are the whole portfolio. A document filed outside this
-          // fixture has no bytes in the test store, so its read page is not one of
-          // the screens this case opened. A unit, a building or a call this fixture
-          // did not create can disappear under another suite while the crawl is
-          // walking the same database.
-          const foreign = /^\/documents\/([0-9a-f-]{36})\//i.exec(bare(url));
-          const ours = filed.some((doc) => doc.id === foreign?.[1]);
-          const path = bare(url);
-          const foreignEstate =
-            (new RegExp(`^/estate/units/${UUID}/?$`, 'i').test(path) &&
-              path !== `/estate/units/${unitId}`) ||
-            (new RegExp(`^/estate/inventory/${UUID}/?$`, 'i').test(path) &&
-              path !== `/estate/inventory/${buildingId}`) ||
-            new RegExp(`^/calls/${UUID}/?$`, 'i').test(path);
-          if ((!foreign || ours) && !foreignEstate) {
-            broken.push(`${response.statusCode} ${url}`);
-          }
+          // The list screens are the whole portfolio, and other files create and delete rows in it
+          // while this crawl walks. A screen that names only rows this case did not create can be
+          // gone by the time it is opened, or be a document whose bytes are in no store here; that
+          // is not a broken link. A screen that names one of this fixture's rows, or none, must open.
+          const ids = url.match(new RegExp(UUID, 'gi')) ?? [];
+          const foreign =
+            ids.length > 0 && ids.every((id) => !ours.has(id.toLowerCase()));
+          if (!foreign) broken.push(`${response.statusCode} ${url}`);
           continue;
         }
         htmlOf.set(url, response.body);

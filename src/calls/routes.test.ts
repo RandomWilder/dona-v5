@@ -69,6 +69,27 @@ async function cleanup(pool: import('pg').Pool, domain: string): Promise<void> {
   await signOutAll(pool, domain);
 }
 
+// The badge and the list are two reads, and other files open and close calls on this database
+// while this one runs. A page read while the open count held still is one where the two must agree;
+// a page that straddled another file's write is read again.
+async function quietCallsPage(
+  pool: import('pg').Pool,
+  client: ReturnType<typeof asOperator>,
+): Promise<Awaited<ReturnType<ReturnType<typeof asOperator>['inject']>>> {
+  const openNow = async (): Promise<number> => {
+    const { rows } = await pool.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM service_call
+        WHERE state <> 'CLOSED' AND returned_at IS NULL`,
+    );
+    return rows[0]?.n ?? 0;
+  };
+  for (let attempt = 1; ; attempt += 1) {
+    const before = await openNow();
+    const page = await client.inject({ method: 'GET', url: '/calls' });
+    if ((await openNow()) === before || attempt === 20) return page;
+  }
+}
+
 describe('calls · the קריאות tab', () => {
   it('shows a phone call and a walk-in on the list, with the rail count', async (t) => {
     const pool = await migratedPoolOrNull();
@@ -113,7 +134,7 @@ describe('calls · the קריאות tab', () => {
       assert.equal(walkIn.statusCode, 303);
 
       clock.advance(HALF_HOUR);
-      const page = await client.inject({ method: 'GET', url: '/calls' });
+      const page = await quietCallsPage(pool, client);
       assert.equal(page.statusCode, 200);
       assert.doesNotMatch(page.body, /<script/);
       assert.match(page.body, /נזילה במטבח/);
@@ -447,7 +468,7 @@ describe('calls · the קריאות tab', () => {
       });
       assert.equal(closed.statusCode, 303);
 
-      const after = await client.inject({ method: 'GET', url: '/calls' });
+      const after = await quietCallsPage(pool, client);
       const afterBadge = Number(
         after.body.match(/data-open-calls="(\d+)"/)?.[1],
       );

@@ -17,6 +17,7 @@ import { newId } from '../../src/kernel/ids.ts';
 import {
   listActivationQueue,
   listIncompleteTenancies,
+  listTenancyBook,
   REQUIRED_FOR_ACTIVATION,
   recordCompletenessException,
 } from '../../src/tenancy/contract.ts';
@@ -392,6 +393,72 @@ describe('policy · gate misses join the incomplete-tenancy queue as named rules
         assert.deepEqual(
           mine.map((row) => row.missing),
           ['start_reached'],
+        );
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('leaves out a tenancy deleted between a list and its gate', async (t) => {
+    const pool = await policyPool();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const occupancy = await seedOccupancy(db, '1085', {
+          phone: '+972501110085',
+          contactFrom: '2026-01-01',
+          contactTo: null,
+          tenancyFrom: '2026-01-01',
+          tenancyTo: '2027-01-01',
+          status: 'DRAFT',
+        });
+        await linkApproved(db, occupancy.tenancyId, 'lease');
+        // The queue reads the list, then each tenancy's gate on its own. A purge committed in
+        // between is what a connection outside this transaction would see; here the gate's own
+        // read is made to find nothing, which is the same thing from where the queue stands.
+        const purgedBetween = new Proxy(db, {
+          get(target, key, receiver) {
+            if (key !== 'query') return Reflect.get(target, key, receiver);
+            return (text: unknown, values?: unknown[]) =>
+              typeof text === 'string' &&
+              /FROM tenancy WHERE tenancy_id = \$1/.test(text) &&
+              values?.[0] === occupancy.tenancyId
+                ? Promise.resolve({ rows: [], rowCount: 0 })
+                : target.query(text as string, values);
+          },
+        });
+        const queue = await queueOf(purgedBetween);
+        // The activation queue and the tenancy book read their lists the same way.
+        const waiting = await listActivationQueue(
+          purgedBetween,
+          CLOCK,
+          listTenancyDocumentFacts,
+        );
+        assert.ok(
+          [...waiting.ready, ...waiting.soon].every(
+            (row) => row.tenancy_id !== occupancy.tenancyId,
+          ),
+        );
+        const book = await listTenancyBook(
+          purgedBetween,
+          CLOCK,
+          listTenancyDocumentFacts,
+        );
+        assert.ok(
+          [...book.ready, ...book.draft, ...book.waiting].every(
+            (row) => row.tenancy_id !== occupancy.tenancyId,
+          ),
+        );
+        assert.ok(
+          queue.every(
+            (row) =>
+              row.tenancy_id !== occupancy.tenancyId ||
+              row.missing === 'guarantor',
+          ),
         );
       });
     } finally {
