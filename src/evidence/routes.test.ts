@@ -1404,17 +1404,12 @@ describe('evidence · A12 a document finds its own place', () => {
         'an address in no building writes no row and no object, and offers a search',
         async () => {
           const before = await documentsHere();
-          const documentsBefore = await pool.query<{ n: string }>(
-            'SELECT count(*)::text AS n FROM document',
-          );
+          const bytes = pdfBytes('a12 elsewhere');
           const putsBefore = puts;
           const response = await as(elsewhere).inject({
             method: 'POST',
             url: '/documents/intake',
-            ...upload(
-              { type: 'lease' },
-              { filename: 'unknown.pdf', bytes: pdfBytes('a12 elsewhere') },
-            ),
+            ...upload({ type: 'lease' }, { filename: 'unknown.pdf', bytes }),
           });
           assert.equal(response.statusCode, 422, response.body.slice(0, 400));
           // What was read, said back — so the refusal is one an operator can act on.
@@ -1424,10 +1419,14 @@ describe('evidence · A12 a document finds its own place', () => {
           assert.match(response.body, /type="file"/);
 
           assert.equal(await documentsHere(), before);
-          const documentsAfter = await pool.query<{ n: string }>(
-            'SELECT count(*)::text AS n FROM document',
+          // No row anywhere carries these bytes. Scoped by hash, not a count of the whole table: the
+          // suite runs files in parallel on one database, and another file filing a document at the
+          // same moment made the table count differ (CI on main, 13 Oct 2026).
+          const stored = await pool.query(
+            'SELECT 1 FROM document WHERE file_hash = $1',
+            [documentFileHash(bytes)],
           );
-          assert.equal(documentsAfter.rows[0]?.n, documentsBefore.rows[0]?.n);
+          assert.equal(stored.rowCount, 0);
           assert.equal(puts, putsBefore, 'no object was written');
 
           // The attempt is on the record, and counts against the day's cap.
