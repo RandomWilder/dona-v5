@@ -2155,6 +2155,7 @@ const SCREENS: Array<[string, () => string]> = [
           returned: false,
           exit: null,
           repeatedBy: [],
+          continuedBy: [],
           predecessor: null,
           returnedBy: null,
           timeline: [
@@ -2220,6 +2221,7 @@ const SCREENS: Array<[string, () => string]> = [
           returned: false,
           exit: null,
           repeatedBy: [],
+          continuedBy: [],
           predecessor: null,
           returnedBy: null,
           timeline: [

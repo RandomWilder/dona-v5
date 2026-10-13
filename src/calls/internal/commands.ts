@@ -171,6 +171,8 @@ export interface ServiceCallDetail extends ServiceCall {
   exit: CallExit | null;
   /** Calls that named this one as the call they repeat. */
   repeatedBy: readonly CallLink[];
+  /** Later calls that name this one as the call they continue. Newest first. */
+  continuedBy: readonly CallLink[];
   /** The closed call this one continues, when the thread's call was already closed. */
   predecessor: CallLink | null;
   /** Who returned it to the filtered list, when it was returned. */
@@ -1118,6 +1120,16 @@ export async function getCall(
       ORDER BY closed_at, service_call_id`,
     [id],
   );
+  const continued = await db.query<{
+    service_call_id: string;
+    description: string;
+  }>(
+    `SELECT service_call_id, description
+       FROM service_call
+      WHERE predecessor_id = $1
+      ORDER BY opened_at DESC, service_call_id DESC`,
+    [id],
+  );
   const opened: CallTransition = {
     kind: 'OPENED',
     at: row.opened_at,
@@ -1175,6 +1187,10 @@ export async function getCall(
     timeline,
     exit: exitOf(row),
     repeatedBy: links.rows.map((link) => ({
+      id: link.service_call_id,
+      description: link.description,
+    })),
+    continuedBy: continued.rows.map((link) => ({
       id: link.service_call_id,
       description: link.description,
     })),
@@ -1515,6 +1531,12 @@ async function recordEmergency(
   const actorId = idOf(spec.actorId, 'actor');
   await inTransaction(db, async (tx) => {
     const current = await lockCall(tx, callId);
+    if (current.state === 'CLOSED') {
+      throw new KernelError('invalid', 'a closed call cannot change', {
+        field: 'state',
+        reason: 'closed',
+      });
+    }
     const flagging = action === 'flag';
     if (current.emergency === flagging) return;
     const at = clock.now();

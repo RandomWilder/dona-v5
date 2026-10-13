@@ -151,6 +151,10 @@ export interface CallScreen {
   mayReadParties?: boolean;
   documentTypes?: readonly { typeKey: string; labelHe: string }[];
   refusal?: string;
+  /** Drawn only on the arrival after a close. */
+  receipt?: boolean;
+  /** The first open call. Read only while the receipt is drawn. */
+  nextOpen?: { id: string; description: string } | null;
   /** What was posted to an exit, kept when the exit is refused. */
   exitDraft?: ExitDraft;
 }
@@ -250,6 +254,7 @@ const styles = h`<style>
   .calls .filters label { display: inline-flex; gap: var(--space-2); align-items: center; }
   .calls .refusal,
   .calls .mailbox-warning { margin: 0; color: var(--color-alert); }
+  .calls .receipt { margin: 0; }
   .calls .call-list { display: grid; gap: var(--space-3); }
   .calls .group { display: grid; gap: var(--space-3); }
   .calls .group h2 { margin: 0; font-size: var(--text-lg); }
@@ -1146,13 +1151,15 @@ function canSaveContact(call: ServiceCallDetail): boolean {
 
 function saveContactForm(screen: CallScreen): Html {
   if (!canSaveContact(screen.call)) return h``;
+  const form = h`<form method="post" action="/calls/${screen.call.id}/contact">
+    ${csrfInput(screen.csrf)}
+    <button class="btn btn-primary" type="submit">שמירת איש קשר</button>
+  </form>`;
+  if (screen.call.state === 'CLOSED') return form;
   return h`<div class="aside-block">
     <h2>שמירת איש קשר</h2>
     <p class="lede">ההודעה הבאה מהכתובת הזו תזוהה. הזיהוי עצמו לא שומר.</p>
-    <form method="post" action="/calls/${screen.call.id}/contact">
-      ${csrfInput(screen.csrf)}
-      <button class="btn btn-primary" type="submit">שמירת איש קשר</button>
-    </form>
+    ${form}
   </div>`;
 }
 
@@ -1290,26 +1297,6 @@ function exitForm(screen: CallScreen): Html {
   </div>`;
 }
 
-function exitFacts(screen: CallScreen): Html {
-  const exit = screen.call.exit;
-  if (exit === null) return h``;
-  const note =
-    exit.note === null ? h`` : h`<div><dt>סיבה</dt><dd>${exit.note}</dd></div>`;
-  const department =
-    exit.department === null
-      ? h``
-      : h`<div><dt>מחלקה</dt><dd>${exit.department}</dd></div>`;
-  const other =
-    exit.duplicateOf === null
-      ? h``
-      : h`<div><dt>חוזרת על</dt><dd><a href="/calls/${exit.duplicateOf.id}">${exit.duplicateOf.description}</a></dd></div>`;
-  return h`
-    <div><dt>יציאה</dt><dd>${EXIT_HE[exit.kind]}</dd></div>
-    ${note}
-    ${department}
-    ${other}`;
-}
-
 function returnControl(screen: CallScreen): Html {
   const call = screen.call;
   if (call.state === 'CLOSED' || call.returned) return h``;
@@ -1353,8 +1340,12 @@ function closingOf(screen: CallScreen): Html {
 
 function callAside(screen: CallScreen): Html {
   const call = screen.call;
-  const rescue =
-    call.returned && call.state !== 'CLOSED' ? rescueForm(screen) : h``;
+  if (call.state === 'CLOSED') {
+    const save = saveContactForm(screen);
+    const body = save.value === '' ? h`<p class="lede">אין פעולות.</p>` : save;
+    return h`<aside class="call-aside glass" aria-label="פעולות">${body}</aside>`;
+  }
+  const rescue = call.returned ? rescueForm(screen) : h``;
   const parts = [
     rescue,
     nextStep(screen),
@@ -1385,6 +1376,84 @@ function repeatedBy(screen: CallScreen): Html {
       )}
     </ul>
   </section>`;
+}
+
+function continuedBy(screen: CallScreen): Html {
+  if (screen.call.continuedBy.length === 0) return h``;
+  return h`<section class="glass sheet" data-continuations>
+    <h2>המשכים</h2>
+    <ul class="timeline">
+      ${screen.call.continuedBy.map(
+        (call) =>
+          h`<li><a href="/calls/${call.id}">${call.description}</a></li>`,
+      )}
+    </ul>
+  </section>`;
+}
+
+function everEmergency(call: ServiceCallDetail): boolean {
+  if (call.emergency.flagged) return true;
+  return call.timeline.some((event) => event.kind === 'FLAGGED');
+}
+
+function passedStates(call: ServiceCallDetail): CallState[] {
+  const kinds = new Set(call.timeline.map((event) => event.kind));
+  const passed: CallState[] = [];
+  if (kinds.has('OPENED')) passed.push('NEW');
+  if (kinds.has('IDENTIFIED')) passed.push('IDENTIFIED');
+  if (kinds.has('TRIAGED')) passed.push('TRIAGED');
+  if (call.state === 'CLOSED') passed.push('CLOSED');
+  return passed;
+}
+
+function outcomeCard(screen: CallScreen): Html {
+  const call = screen.call;
+  const exit = call.exit;
+  if (call.state !== 'CLOSED' || exit === null) return h``;
+  const note =
+    exit.note === null ? h`` : h`<div><dt>סיבה</dt><dd>${exit.note}</dd></div>`;
+  const department =
+    exit.department === null
+      ? h``
+      : h`<div><dt>מחלקה</dt><dd>${exit.department}</dd></div>`;
+  const other =
+    exit.duplicateOf === null
+      ? h``
+      : h`<div><dt>חוזרת על</dt><dd><a href="/calls/${exit.duplicateOf.id}">${exit.duplicateOf.description}</a></dd></div>`;
+  return h`<section class="glass sheet" data-outcome="${exit.kind}">
+    <h2>תוצאה</h2>
+    <dl class="facts">
+      <div><dt>סגר</dt><dd>${exit.actorLabel}</dd></div>
+      <div><dt>פתוחה</dt><dd>${ageLabel(call.openedAt, exit.at)}</dd></div>
+      <div><dt>עברה</dt><dd><ol class="passed">${passedStates(call).map((state) => h`<li>${CALL_STATE_HE[state]}</li>`)}</ol></dd></div>
+      ${note}
+      ${department}
+      ${other}
+    </dl>
+  </section>`;
+}
+
+function receiptOf(screen: CallScreen): Html {
+  const exit = screen.call.exit;
+  if (
+    screen.receipt !== true ||
+    screen.call.state !== 'CLOSED' ||
+    exit === null
+  ) {
+    return h``;
+  }
+  const next =
+    screen.nextOpen == null
+      ? h``
+      : h` <a data-next-call href="/calls/${screen.nextOpen.id}">הקריאה הבאה</a>`;
+  return h`<p class="receipt" role="status" data-receipt="${exit.kind}">הקריאה נסגרה · ${EXIT_HE[exit.kind]}.${next}</p>`;
+}
+
+function closedWhen(screen: CallScreen): Html {
+  const exit = screen.call.exit;
+  if (exit === null) return h``;
+  return h`<div><dt>נסגרה</dt><dd>${whenLabel(exit.at)}</dd></div>
+    <div><dt>פתוחה</dt><dd>${ageLabel(screen.call.openedAt, exit.at)}</dd></div>`;
 }
 
 function stateSteps(state: CallState): Html {
@@ -1446,19 +1515,30 @@ export function renderCallPage(screen: CallScreen): string {
       ? h``
       : h`<div><dt>המשך של</dt><dd><a data-predecessor="${call.predecessor.id}" href="/calls/${call.predecessor.id}">${call.predecessor.description}</a></dd></div>`;
   const emergency =
-    call.state !== 'CLOSED' && call.emergency.flagged
-      ? h`<span class="chip">חירום</span>`
-      : h``;
+    call.state === 'CLOSED'
+      ? everEmergency(call)
+        ? h`<span class="chip">היה חירום</span>`
+        : h``
+      : call.emergency.flagged
+        ? h`<span class="chip">חירום</span>`
+        : h``;
+  const emergencyWords =
+    call.state === 'CLOSED'
+      ? everEmergency(call)
+        ? 'היה חירום'
+        : 'לא'
+      : emergencyLabel(call);
+  const back = call.state === 'CLOSED' ? '/calls?state=CLOSED' : '/calls';
   const body = h`
     <div class="calls glass-stage" data-call-state="${call.state}">
       <header class="page-head">
         <div>
-          <p class="back"><a href="/calls">קריאות</a></p>
+          <p class="back"><a href="${back}">קריאות</a></p>
           <h1>${call.description}</h1>
           <div class="head-meta">
             <dl class="facts">
               <div><dt>ערוץ</dt><dd>${CHANNEL_HE[call.sourceChannel]}</dd></div>
-              ${ageFact(screen)}
+              ${call.state === 'CLOSED' ? closedWhen(screen) : ageFact(screen)}
             </dl>
             ${emergency}
           </div>
@@ -1466,10 +1546,11 @@ export function renderCallPage(screen: CallScreen): string {
         ${headerActions(screen)}
       </header>
       ${refusal}
+      ${receiptOf(screen)}
       <div class="call-work">
         ${callAside(screen)}
         <div class="call-record">
-      ${stateSteps(call.state)}
+      ${call.state === 'CLOSED' ? outcomeCard(screen) : stateSteps(call.state)}
       <section class="glass sheet">
         <dl class="facts">
           <div><dt>מצב</dt><dd>${CALL_STATE_HE[call.state]}</dd></div>
@@ -1481,14 +1562,14 @@ export function renderCallPage(screen: CallScreen): string {
           ${sorted}
           ${review}
           ${earlier}
-          <div><dt>חירום</dt><dd data-emergency="${call.emergency.flagged ? 'true' : 'false'}">${emergencyLabel(call)}</dd></div>
-          ${exitFacts(screen)}
+          <div><dt>חירום</dt><dd data-emergency="${call.emergency.flagged ? 'true' : 'false'}">${emergencyWords}</dd></div>
         </dl>
       </section>
       <section class="glass sheet">
         <h2>מהלך</h2>
         <ol class="timeline">${timelineOf(screen)}</ol>
       </section>
+      ${continuedBy(screen)}
       ${repeatedBy(screen)}
         </div>
       </div>

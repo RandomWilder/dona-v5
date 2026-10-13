@@ -453,6 +453,21 @@ async function callsPage(
   });
 }
 
+async function firstOpenCall(
+  deps: CallsDeps,
+  goal: ResponseGoal,
+): Promise<{ id: string; description: string } | null> {
+  const open = await listOpenCalls(deps.pool);
+  const first = shownCalls({
+    calls: open,
+    state: null,
+    now: deps.clock.now(),
+    goal,
+  })[0];
+  if (!first) return null;
+  return { id: first.id, description: first.description };
+}
+
 async function heldDuplicate(
   deps: CallsDeps,
   found: readonly { id: string; description: string }[],
@@ -499,6 +514,9 @@ async function callPage(
       readResponseGoal(deps.pool),
     ]);
   const dupMatches = await heldDuplicate(deps, foundDup, exitDraft);
+  const receipt =
+    textOf(formOf(request.query).receipt) === '1' && call.state === 'CLOSED';
+  const nextOpen = receipt ? await firstOpenCall(deps, goal) : null;
   const role = request.staff?.role ?? null;
   const csrf = csrfFrom(request);
   return renderCallPage({
@@ -525,6 +543,8 @@ async function callPage(
     mayReadParties: can(role, 'party.read'),
     documentTypes,
     now: deps.clock.now(),
+    receipt,
+    nextOpen,
     exitDraft,
     refusal:
       refusal ??
@@ -832,12 +852,22 @@ export function registerCallsRoutes(
       return callPage(deps, request, callId, 'יש לבחור סימון חירום.');
     }
     const command = action === 'clear' ? clearEmergency : flagEmergency;
-    await command(deps.pool, deps.clock, {
-      callId,
-      actorId: staff.staffAccountId,
-      actorRole: staff.role,
-    });
-    return reply.code(303).header('location', `/calls/${callId}`).send();
+    try {
+      await command(deps.pool, deps.clock, {
+        callId,
+        actorId: staff.staffAccountId,
+        actorRole: staff.role,
+      });
+      return reply.code(303).header('location', `/calls/${callId}`).send();
+    } catch (error) {
+      if (!(error instanceof KernelError) || error.code === 'not_allowed') {
+        throw error;
+      }
+      if (error.code === 'not_found') throw error;
+      html(reply);
+      reply.code(400);
+      return callPage(deps, request, callId, refusalHe(error));
+    }
   });
 
   app.post('/calls/:id/return', STAFF, async (request, reply) => {
@@ -875,7 +905,10 @@ export function registerCallsRoutes(
         actorId: staff.staffAccountId,
         actorRole: staff.role,
       });
-      return reply.code(303).header('location', `/calls/${callId}`).send();
+      return reply
+        .code(303)
+        .header('location', `/calls/${callId}?receipt=1`)
+        .send();
     } catch (error) {
       if (!(error instanceof KernelError) || error.code === 'not_allowed') {
         throw error;

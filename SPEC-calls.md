@@ -207,7 +207,7 @@ opens. A person who may file can file it as a document. The size is shown in ord
 1024 bytes — B below 1024, then KB, then MB — and the byte count stays on the size mark. A filed
 attachment says תויק and opens the document; the document itself stays an Unassigned document.
 The sender and the requester are two facts, נרשם and פונה. Calls that repeat this one stay
-listed under it. Back returns to the open list.
+listed under it. Back from an open call returns to the open list.
 
 The aside is the only place an action on the call appears, and only where that command exists.
 A new call offers identification of the requester, for this call alone. A match is a name only.
@@ -222,9 +222,38 @@ for cancelled, a note and a department for forwarded, and the other call for a d
 close control names the exit and says that closing is final and a new message opens a new call.
 A refused exit keeps the exit and the values. Flagging and clearing an emergency, and sending
 the call back to the filtered list, are in the header. They are absent when they do not apply:
-a closed call has neither, and a call already returned is not sent back again. The requester's
+a closed call has neither, and a call already returned is not sent back again. A posted flag or
+clear on a closed call is refused by that same command, and the stored flag is unchanged. No new
+database constraint is added for the flag. The requester's
 name links to the party profile when this person holds `party.read`. The stacked cards those
 actions used to live in are gone.
+
+A call is closed only from its page. Success returns to that call with a receipt parameter.
+The receipt is drawn only when that parameter is present and the call is closed, and it names
+the exit. It links to the first call on the unfiltered open list, in that list's order, and the
+link is absent when nothing is open. The next call is read only for that receipt. A request
+without the parameter draws no receipt.
+
+The closed page draws an outcome card instead of the eight steps. The card names who closed
+the call, how long it was open, the states its transitions actually passed, and the reason for
+that exit: the note, the department, the other call, or the cancellation. The path is taken
+from the transitions already stored, in state order, and it is not a new field. A call closed
+while still new does not show the states it never reached. Later calls that continue this one
+are listed newest first, apart from the duplicates. The page shows the close time and the time
+open, counted in whole minutes from open to close in the same words as an open call's age:
+under an hour in minutes, one hour as שעה, under a day in hours, one day as יום. It never
+shows בזמן, קרוב ליעד, or מעבר ליעד, a goal colour, or a goal mark, including when the call
+is older than the red threshold.
+
+A call that was ever an emergency says היה חירום, including while the flag is still stored.
+Closing does not clear the flag. The mark the page already reports stays the stored flag.
+The page offers no flag, clear, return, exit, identify, or category action. Return, exit,
+identify, and category stay refused. Filing still works for someone who may file. Saving the
+sender as a contact still works when that command would have been offered before the close:
+one button titled שמירת איש קשר, with no next-step label. The line אין פעולות appears only
+when that button is absent. The requester's name links to the profile under the same rule as
+an open call. Back goes to the closed list. The party profile still shows the stored flag as
+חירום or לא.
 
 **A party's calls (#209).** The profile lists every call that names that party as requester, newest
 first, including a closed call and one returned to the filtered list. Each row shows the day the
