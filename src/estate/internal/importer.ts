@@ -213,16 +213,18 @@ async function upsertSpace(
   buildingId: string,
   space: SpacePlan,
 ): Promise<{ spaceId: string; inserted: boolean }> {
-  // 0064's two facts follow #143: omitted (`undefined`) leaves the row on conflict, named writes.
+  // 0064's two facts and 0066's one follow #143: omitted (`undefined`) leaves the row on conflict,
+  // named writes.
   const result = await db.query<{ space_id: string; inserted: boolean }>(
     `INSERT INTO space (space_id, building_id, space_kind, name, floor, access_note,
-                        disabled_bay, area_sqm)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                        disabled_bay, area_sqm, over_parking)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT (building_id, space_kind, name) DO UPDATE
        SET floor = EXCLUDED.floor,
            access_note = EXCLUDED.access_note,
-           disabled_bay = CASE WHEN $9 THEN EXCLUDED.disabled_bay ELSE space.disabled_bay END,
-           area_sqm = CASE WHEN $10 THEN EXCLUDED.area_sqm ELSE space.area_sqm END
+           disabled_bay = CASE WHEN $10 THEN EXCLUDED.disabled_bay ELSE space.disabled_bay END,
+           area_sqm = CASE WHEN $11 THEN EXCLUDED.area_sqm ELSE space.area_sqm END,
+           over_parking = CASE WHEN $12 THEN EXCLUDED.over_parking ELSE space.over_parking END
      RETURNING space_id, ${INSERTED}`,
     [
       newId(),
@@ -233,8 +235,10 @@ async function upsertSpace(
       space.accessNote,
       space.disabledBay ?? false,
       space.areaSqm ?? null,
+      space.overParking ?? false,
       space.disabledBay !== undefined,
       space.areaSqm !== undefined,
+      space.overParking !== undefined,
     ],
   );
   const row = result.rows[0];
@@ -269,13 +273,14 @@ async function upsertUnit(
   // The conflict target is the primary key, and it is the natural key: R2 makes a unit's identity
   // its space's, so there is no second key here to keep in step with the first.
   //
-  // 0064's three facts follow #143: omitted leaves the row on conflict. A tenure the schema refuses
+  // 0064's three facts and 0066's three follow #143: omitted leaves the row on conflict. A tenure the schema refuses
   // (a sold flat named for rent, a let flat named sold) raises from the trigger, not from here.
   const result = await db.query<{ inserted: boolean }>(
     `INSERT INTO unit (unit_id, unit_number, rooms, area_sqm, has_mamad,
                        parking_space_id, storage_space_id, warranty_end_date, condition_status,
-                       tenure, flat_type, balcony_sqm, rental_track)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                       tenure, flat_type, balcony_sqm, rental_track,
+                       garden_sqm, sukkah_balcony, attached_storage)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $18, $19, $20)
      ON CONFLICT (unit_id) DO UPDATE
        SET unit_number = EXCLUDED.unit_number,
            rooms = EXCLUDED.rooms,
@@ -288,7 +293,11 @@ async function upsertUnit(
            tenure = CASE WHEN $14 THEN EXCLUDED.tenure ELSE unit.tenure END,
            flat_type = CASE WHEN $15 THEN EXCLUDED.flat_type ELSE unit.flat_type END,
            balcony_sqm = CASE WHEN $16 THEN EXCLUDED.balcony_sqm ELSE unit.balcony_sqm END,
-           rental_track = CASE WHEN $17 THEN EXCLUDED.rental_track ELSE unit.rental_track END
+           rental_track = CASE WHEN $17 THEN EXCLUDED.rental_track ELSE unit.rental_track END,
+           garden_sqm = CASE WHEN $21 THEN EXCLUDED.garden_sqm ELSE unit.garden_sqm END,
+           sukkah_balcony = CASE WHEN $22 THEN EXCLUDED.sukkah_balcony ELSE unit.sukkah_balcony END,
+           attached_storage =
+             CASE WHEN $23 THEN EXCLUDED.attached_storage ELSE unit.attached_storage END
      RETURNING ${INSERTED}`,
     [
       ids.unitId,
@@ -308,6 +317,12 @@ async function upsertUnit(
       unit.flatType !== undefined,
       unit.balconySqm !== undefined,
       unit.rentalTrack !== undefined,
+      unit.gardenSqm ?? null,
+      unit.sukkahBalcony ?? false,
+      unit.attachedStorage ?? null,
+      unit.gardenSqm !== undefined,
+      unit.sukkahBalcony !== undefined,
+      unit.attachedStorage !== undefined,
     ],
   );
   const inserted = result.rows[0]?.inserted;

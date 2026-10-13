@@ -200,6 +200,42 @@ describe('estate · seeding a building from a plan file', () => {
     assert.throws(() => readSeedPlan(json), /rentalTrack/);
   });
 
+  it('reads the 0066 markings, refuses a bad one, and counts them', () => {
+    const json = planJson() as {
+      buildings: {
+        spaces: Record<string, unknown>[];
+        units: Record<string, unknown>[];
+      }[];
+    };
+    const building = json.buildings[0];
+    const [first, second] = building?.units ?? [];
+    const store = building?.spaces[4];
+    if (!first || !second || !store) throw new Error('plan is short');
+    first.gardenSqm = 211.7;
+    first.attachedStorage = 'GARDEN';
+    second.sukkahBalcony = true;
+    store.overParking = true;
+    const plan = readSeedPlan(json);
+    assert.equal(plan.buildings[0]?.units[0]?.gardenSqm, 211.7);
+    assert.equal(plan.buildings[0]?.units[0]?.attachedStorage, 'GARDEN');
+    assert.equal(plan.buildings[0]?.units[1]?.sukkahBalcony, true);
+    assert.equal(plan.buildings[0]?.spaces[4]?.overParking, true);
+    const lines = summariseSeedPlan(plan).join('\n');
+    assert.match(lines, /markings\s+garden 1 · sukkah 1 · attached storage 1/);
+    assert.match(lines, /storage\s+1 · -1 1 · over parking 1/);
+    first.attachedStorage = 'ROOF';
+    assert.throws(
+      () => readSeedPlan(json),
+      /units\[0\]\.attachedStorage: expected one of/,
+    );
+    first.attachedStorage = null;
+    second.sukkahBalcony = 'yes';
+    assert.throws(() => readSeedPlan(json), /units\[1\]\.sukkahBalcony/);
+    second.sukkahBalcony = false;
+    store.overParking = 1;
+    assert.throws(() => readSeedPlan(json), /spaces\[4\]\.overParking/);
+  });
+
   it('summarises what it would write', () => {
     const lines = summariseSeedPlan(readSeedPlan(planJson())).join('\n');
     assert.match(

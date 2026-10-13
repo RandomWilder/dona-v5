@@ -452,17 +452,20 @@ describe('estate · the schema is the constraint', () => {
           'disabled_bay',
           'floor',
           'name',
+          'over_parking',
           'space_id',
           'space_kind',
         ]);
-        // Unit's nine, three a developer sheet carries (0064), plus three constant discriminators that exist only so R2 and D3 can be
+        // Unit's nine, three a developer sheet carries (0064), three more (0066), plus three constant discriminators that exist only so R2 and D3 can be
         // composite foreign keys rather than triggers. They are enforcement and not facts: each is
         // pinned to one value by a CHECK, and nothing may write them.
         assert.deepEqual(await columnsOf(db, 'unit'), [
           'area_sqm',
+          'attached_storage',
           'balcony_sqm',
           'condition_status',
           'flat_type',
+          'garden_sqm',
           'has_mamad',
           'parking_kind',
           'parking_space_id',
@@ -471,6 +474,7 @@ describe('estate · the schema is the constraint', () => {
           'space_kind',
           'storage_kind',
           'storage_space_id',
+          'sukkah_balcony',
           'tenure',
           'unit_id',
           'unit_number',

@@ -49,7 +49,16 @@ any other column the system has no field for are dropped and not copied into the
    - Rental track `שוק חופשי` → `rentalTrack: "FREE_MARKET"`. `מפוקח`, `מפוקח בן מקום` and
      `מפוקח מילואים פעיל` → `"REGULATED"`. The words בן מקום and מילואים פעיל are not written on
      the plan. They say who the flat was let to, and a lease that is read fills that on the letting.
-   - Rooms 3, 3.5, 4 are numbers.
+   - Rooms 3, 3.5, 4 are numbers. A rooms cell with `גן` beside the number (`5 גן`) is a garden
+     flat: rooms is the number, and the garden's area goes in `gardenSqm`, not `balconySqm`, even
+     when the sheet puts it in the balcony column. `גן` is not a flat type.
+   - `סוכה` in any cell (`סוכה מחדר הורים`) → `sukkahBalcony: true`. Which room it opens from is not
+     written.
+   - A storage cell with no number, attached to the flat (`מחסן צמוד מהגינה ללא מספר`,
+     `…מהמרפסת…`) → `attachedStorage: "GARDEN"` or `"BALCONY"`. It is not a `STORAGE` space.
+   - A numbered storage room above the parking (`534 על החניה`) → a `STORAGE` space at the parking
+     level with `overParking: true`. Its number is its own: do not match it to a bay.
+   - `אין` in a storage cell writes nothing.
 
 4. **Check, and report — never fix silently.** List every anomaly with its sheet row and let the
    director decide each one:
@@ -101,12 +110,16 @@ any other column the system has no field for are dropped and not copied into the
 | `balconySqm` | flat | balcony area (null if none) |
 | `tenure` | flat | status: `FOR_RENT`, `FOR_SALE`, `SOLD` |
 | `rentalTrack` | flat | `FREE_MARKET` or `REGULATED`. Omit only when the sheet has no such column; a new flat then defaults to free market |
+| `gardenSqm` | flat | a garden flat's garden area (null or omitted otherwise) |
+| `sukkahBalcony` | flat | `true` for a sukkah balcony; omit otherwise |
+| `attachedStorage` | flat | `GARDEN` or `BALCONY` for an attached storage room with no number; omit otherwise |
 | `hasMamad` | flat | true unless the director or a spec sheet says otherwise; ask once per building |
 | `conditionStatus` | flat | `READY` unless the director says otherwise |
 | `parkingSpaceName`, `storageSpaceName`, `warrantyEndDate` | flat | always `null` |
 | `PARKING` space `name`, `floor` | `spaces[]` | every distinct bay number and its level |
 | `disabledBay` | `PARKING` space | `true` for a disabled bay; omit otherwise |
 | `STORAGE` space `name`, `floor`, `areaSqm` | `spaces[]` | every distinct storage number, level, area |
+| `overParking` | `STORAGE` space | `true` for a storage room above the parking; omit otherwise |
 
 **Bays and storage rooms are Spaces of their own, and no flat points at one.** The sheet's
 attachment of a bay to a flat (הצמדה) is not written. Leases assign bays, and the director keeps the

@@ -1,6 +1,6 @@
 // Hand corrections on a flat that already exists.
 //
-// #210 corrects the five facts. Not `upsertUnitRow`: that rewrite also sets the
+// #210 corrects the five facts, and 0066's three. Not `upsertUnitRow`: that rewrite also sets the
 // unit number, the ממ״ד, the condition, the warranty and the built bay. Not
 // `applyPromotedField`: that appends `estate_event`, and a hand correction has
 // no source document.
@@ -8,7 +8,7 @@
 // #211 changes tenure. The column's trigger is the refusal. This write does not
 // append `estate_event` either; the route records the change on `audit_log`.
 import { KernelError } from '../../kernel/errors.ts';
-import type { Queryable, Tenure } from './plan.ts';
+import type { AttachedStorage, Queryable, Tenure } from './plan.ts';
 
 export interface FlatFacts {
   rooms: number;
@@ -16,6 +16,9 @@ export interface FlatFacts {
   areaSqm: number | null;
   flatType: string | null;
   balconySqm: number | null;
+  gardenSqm: number | null;
+  sukkahBalcony: boolean;
+  attachedStorage: AttachedStorage | null;
 }
 
 export async function correctUnitFacts(
@@ -28,9 +31,21 @@ export async function correctUnitFacts(
         SET rooms = $2,
             area_sqm = $3,
             flat_type = $4,
-            balcony_sqm = $5
+            balcony_sqm = $5,
+            garden_sqm = $6,
+            sukkah_balcony = $7,
+            attached_storage = $8
       WHERE unit_id = $1`,
-    [unitId, facts.rooms, facts.areaSqm, facts.flatType, facts.balconySqm],
+    [
+      unitId,
+      facts.rooms,
+      facts.areaSqm,
+      facts.flatType,
+      facts.balconySqm,
+      facts.gardenSqm,
+      facts.sukkahBalcony,
+      facts.attachedStorage,
+    ],
   );
   if (updated.rowCount === 0) {
     throw new KernelError('not_found', 'unit not found');

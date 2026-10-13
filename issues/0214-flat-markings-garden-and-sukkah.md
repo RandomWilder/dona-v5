@@ -1,13 +1,13 @@
 ---
 number: 214
 title: Flat markings a developer sheet carries — garden flat, sukkah balcony
-status: open
-labels: [needs-triage]
+status: closed
+labels: []
 assignee:
 blocked_by: []
 parent:
 created: 2026-10-12
-closed:
+closed: 2026-10-13
 ---
 
 ## Problem
@@ -25,3 +25,11 @@ The spec decides whether these are named facts on the Unit (garden flat with its
 balcony) or a short controlled list of markings, and keeps `flat_type` for the developer's type code.
 The building plan file and `building-sheet-to-plan` take them, the flat tile and page show them, and
 BSM-MSK is refilled with `--update` — garden area moved off `balcony_sqm`.
+
+## Comment — 2026-10-13
+
+Closed by 0066. Two named facts on the Unit, not a list of markings, because they have different
+shapes: `unit.garden_sqm` (a garden flat and its garden area; null is not a garden flat) and
+`unit.sukkah_balcony` (yes or no). `flat_type` is the developer's layout code again: the BSM files no
+longer write `גן` there, and the garden area has moved off `balcony_sqm`. A garden flat's tile says
+גן; the flat page carries chips for the garden and the sukkah balcony, and the facts form corrects both.

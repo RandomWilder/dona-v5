@@ -68,7 +68,7 @@ avoids both.
 **Project sits above Building and is optional** (R15). `Building.project_id` is nullable and nothing
 downstream requires it; `project_code` lives on Project, so the tender code has one home.
 
-## Tables — `src/kernel/migrations/0004_estate.sql`, `0012_assets.sql`, `0064_unit_tenure.sql` and `0065_rental_track.sql`
+## Tables — `src/kernel/migrations/0004_estate.sql`, `0012_assets.sql`, `0064_unit_tenure.sql`, `0065_rental_track.sql` and `0066_flat_markings.sql`
 
 The workbook's 28 columns, plus what enforcement needs — `address_key` on Building and the three
 constant discriminators on Unit, none of which carry a fact. Ids are `uuid`, enums are `text` with a
@@ -79,15 +79,15 @@ written by anything but the injected clock is a second source of truth no test c
 |---|---|
 | `project` | `project_id` PK · `name` · `project_code` · `tender_ref?` · `status` |
 | `building` | `building_id` PK · `name` · `address_line` · `city` · `project_id?` FK → project · `handover_date` · `warranty_end_date` · `status` · `gush?` · `helka?` · `building_number?` · `address_key` generated, UNIQUE |
-| `space` | `space_id` PK · `building_id` FK → building · `space_kind` · `name` · `floor?` · `access_note?` · `disabled_bay` · `area_sqm?` |
-| `unit` | `unit_id` PK, FK → space · `unit_number` · `rooms` · `area_sqm?` · `has_mamad` · `parking_space_id?` · `storage_space_id?` · `warranty_end_date?` · `condition_status` · `tenure` · `rental_track` · `flat_type?` · `balcony_sqm?` |
+| `space` | `space_id` PK · `building_id` FK → building · `space_kind` · `name` · `floor?` · `access_note?` · `disabled_bay` · `area_sqm?` · `over_parking` |
+| `unit` | `unit_id` PK, FK → space · `unit_number` · `rooms` · `area_sqm?` · `has_mamad` · `parking_space_id?` · `storage_space_id?` · `warranty_end_date?` · `condition_status` · `tenure` · `rental_track` · `flat_type?` · `balcony_sqm?` · `garden_sqm?` · `sukkah_balcony` · `attached_storage?` |
 | `provider` | `provider_id` PK · `name` · `provider_kind` · `party_id` FK → party, NOT NULL, UNIQUE · `party_kind` constant `COMPANY` — #208. A service provider is a company party. |
 | `asset` | `asset_id` PK · `space_id` FK → space, NOT NULL · `asset_class` · `asset_type` · `make_model?` · `serial_no?` · `installed_date?` · `warranty_end_date?` · `warranty_provider_id?` FK → provider · `compliance_regime` · `next_inspection_due?` · `last_certificate_document_id?` FK → document · `source_document_id?` FK → document · `status` |
 | `estate_event` | `estate_event_id` PK · `entity_type` · `building_id?` · `unit_id?` · `at` · `actor` · `kind` · `field` · `old_value?` · `new_value` · `source_document_id?` · `extracted_field_id?` — append-only log of a document-caused write onto an estate column (#141). |
 
 Vocabularies: `project.status` = `PLANNING · ACTIVE · EXITED`; `building.status` = `ACTIVE ·
 IN_CONSTRUCTION · EXITED`; `space.space_kind` = `UNIT · COMMON · TECHNICAL · EXTERIOR · PARKING ·
-STORAGE`; `unit.condition_status` = `READY · RENOVATION · WITHHELD`; `unit.tenure` = `FOR_RENT · FOR_SALE · SOLD`; `unit.rental_track` = `FREE_MARKET · REGULATED`; `provider.provider_kind` =
+STORAGE`; `unit.condition_status` = `READY · RENOVATION · WITHHELD`; `unit.tenure` = `FOR_RENT · FOR_SALE · SOLD`; `unit.rental_track` = `FREE_MARKET · REGULATED`; `unit.attached_storage` = `GARDEN · BALCONY`; `provider.provider_kind` =
 `IN_HOUSE_CREW · CONTRACTOR · DEVELOPER_WARRANTY`; `asset.asset_class` = `FIXTURE · SAFETY ·
 UTILITY`; `asset.compliance_regime` = `NONE · PERIODIC_INSPECTION`; `asset.status` = `IN_SERVICE ·
 FAULTY · REMOVED`. `asset_type` is the governed list on the FIELDS sheet, and a composite CHECK
@@ -151,6 +151,38 @@ All three are nullable, and a screen leaves an absent one out.
 null, false by default, and a CHECK refuses it on anything but a `PARKING` Space. The bay tile says
 נכה. Who may be assigned one is the letting's question, not this table's.
 
+**Four more facts a developer sheet carries — `0066_flat_markings.sql`.** Beit Shemesh (BSM-MSK, 12
+Oct 2026) writes them as free text, and the 12 Oct seed could hold none of them: it put `גן` in
+`flat_type`, the garden's area in `balcony_sqm`, and dropped the rest.
+
+- **`unit.garden_sqm`** — a garden flat (`5 גן` in the sheet's rooms column) and its garden area. A
+  flat is a garden flat when the column is not null. The garden is not a balcony, and its area is
+  not `balcony_sqm`; `flat_type` stays the developer's layout code and nothing else. Nullable,
+  non-negative. The flat tile says גן under its measure line, the way a regulated flat says מפוקח,
+  and the flat page carries a chip גינה N מ״ר.
+- **`unit.sukkah_balcony`** — a balcony open to the sky that a sukkah may stand on (`סוכה מחדר
+  הורים`). Not null, false by default. Which room it opens from is layout, and is not kept. The flat
+  page carries a chip מרפסת סוכה; the tile says nothing.
+- **`unit.attached_storage`** — a storage room that belongs to the flat and has no number, reached
+  from its garden or its balcony (`מחסן צמוד מהגינה ללא מספר`). `GARDEN · BALCONY`, nullable. It is
+  a fact on the Unit and not a `STORAGE` Space, because it has no number and no door of its own and
+  can be neither assigned nor let apart from the flat. The flat page carries a chip מחסן צמוד מהגינה
+  or מחסן צמוד מהמרפסת.
+- **`space.over_parking`** — a numbered storage room built above the parking (`534 על החניה`). Not
+  null, false by default, and a CHECK refuses it on anything but a `STORAGE` Space. The number is the
+  storage room's own and names no bay: in BSM-MSK none of the eighteen matches a bay of its flat. Its
+  floor is the parking level. The storage tile says מעל החניה.
+
+A sheet's `אין` (no storage room) is not written. No flat is linked to its numbered storage room
+either (below, *Open*), so "none" and "not known" read the same until those links exist.
+
+The plan file carries `gardenSqm`, `sukkahBalcony` and `attachedStorage` on a flat and `overParking`
+on a storage room. Each is optional: omitted leaves the row, and a new row takes the default. The
+list a seed prints counts garden flats, sukkah balconies, attached storage rooms and storage rooms
+above the parking. The facts post (#210) corrects the three flat facts as it corrects the balcony:
+garden area blank writes null, the sukkah is a checkbox, attached storage is none, from the garden
+or from the balcony. `over_parking` changes only through the file; there is no storage-room form.
+
 ## Rental track — `0065_rental_track.sql`
 
 **The track is whether the tender lets the flat at a free-market rent or a regulated one.**
@@ -195,7 +227,8 @@ and the register importer do not write here. The mint's batch line is kernel `au
 rows the same way it lists tenancy events, so an operator can ask what the room count used to be.
 
 **#210 leaves that rule standing.** A correction from the flat page updates `unit.rooms`,
-`unit.area_sqm`, `unit.flat_type`, `unit.balcony_sqm` and the unit space's `floor`, and appends
+`unit.area_sqm`, `unit.flat_type`, `unit.balcony_sqm`, the three 0066 flat facts and the unit
+space's `floor`, and appends
 nothing here. `kind` `amended` always names a source document, and a hand correction has none.
 The typed original on the first promotion row is still whatever the column held when the document
 was promoted, including a value an admin typed on this screen before that promotion.
@@ -690,12 +723,14 @@ leaves that part out when it does not. The documents already on the page stay. T
 book read for this unit, not a second classification.
 
 **#210. Correcting a seeded flat.** The page shows rooms, floor and area to every reader: a missing
-floor is left out, a missing area reads טרם נמדד. Flat type and balcony stay the chips already on
-the heading. An `estate.write` holder sees a form in place of that list, prefilled, posting
+floor is left out, a missing area reads טרם נמדד. Flat type, balcony, garden, sukkah balcony and
+attached storage stay the chips already on the heading. An `estate.write` holder sees a form in place of that list, prefilled, posting
 `POST /estate/units/:unitId`. The edge is A13's: `rooms` required, a non-negative number at most
 20; `area_sqm` optional, a non-negative number at most 10,000, blank writes null; `floor` optional
 text at most 32 characters, blank writes null. Flat type is the same optional text. Balcony area
-is the same optional number as area. The post does not touch unit number, ממ״ד, condition,
+and garden area are the same optional number as area. `sukkah_balcony` is a checkbox, absent is
+false. `attached_storage` is blank (null), `GARDEN` or `BALCONY`, anything else `invalid` (0066,
+above). The post does not touch unit number, ממ״ד, condition,
 warranty, tenure, or the built bay and storage, and a letting on the flat does not refuse it. It
 replies `303` to this page. A viewer without `estate.write` sees the facts and no form; their post
 is `not_allowed`. No `estate_event` row.
