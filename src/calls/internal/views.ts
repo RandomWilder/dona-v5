@@ -65,6 +65,14 @@ export interface OpenListCounts {
   toReview: number;
 }
 
+/** What was typed into the log dialog, kept when the entry is refused. */
+export interface LogDraft {
+  channel: string;
+  description: string;
+  sender: string;
+  senderName: string;
+}
+
 export interface CallsScreen {
   nav: Html;
   csrf: string;
@@ -87,6 +95,9 @@ export interface CallsScreen {
   whatsappWarning?: boolean;
   /** #198. The mailbox's secret is near expiry, or its expiry is unknown. */
   secretWarning?: SecretNotice | null;
+  /** The log dialog is open on this list. A refusal opens it too. */
+  logging?: boolean;
+  draft?: LogDraft | null;
   refusal?: string;
 }
 
@@ -165,6 +176,24 @@ const styles = h`<style>
     display: grid;
     gap: var(--space-4);
     padding: var(--space-5);
+  }
+  .calls dialog.call-form {
+    position: fixed;
+    z-index: var(--z-dialog);
+    inset-block-start: var(--space-10);
+    inset-inline: 0;
+    inline-size: min(var(--size-form-max), calc(100% - var(--space-8)));
+    max-block-size: calc(100dvh - var(--space-10) - var(--space-4));
+    margin-block: 0;
+    margin-inline: auto;
+    overflow: auto;
+    border: 0;
+  }
+  .calls .call-form .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    align-items: center;
   }
   .calls .field {
     display: grid;
@@ -277,6 +306,10 @@ function selected(on: boolean): Html {
   return on ? h`selected` : h``;
 }
 
+function checked(on: boolean): Html {
+  return on ? h`checked` : h``;
+}
+
 function ltr(value: number): Html {
   return h`<span dir="ltr">${value}</span>`;
 }
@@ -361,6 +394,17 @@ function callRow(call: ServiceCall, screen: CallsScreen): Html {
       ${goal}
     </p>
   </article>`;
+}
+
+function listHref(screen: CallsScreen, log: boolean): string {
+  return callsHref({
+    state: screen.state,
+    category: screen.categoryId,
+    emergency: screen.emergency ? '1' : null,
+    review: screen.toReview ? '1' : null,
+    goal: screen.band,
+    log: log ? '1' : null,
+  });
 }
 
 function callsHref(params: Record<string, string | null>): string {
@@ -506,6 +550,43 @@ function callList(screen: CallsScreen): Html {
   return h`${urgent}${rest}`;
 }
 
+function logDialog(screen: CallsScreen, refusal: Html): Html {
+  const open = screen.logging === true || screen.refusal !== undefined;
+  if (!open) return h``;
+  const draft = screen.draft ?? null;
+  const description = draft?.description ?? '';
+  const senderName = draft?.senderName ?? '';
+  return h`<dialog class="glass call-form" open aria-labelledby="log-title" aria-modal="false">
+    <form method="post" action="${listHref(screen, true)}">
+      ${csrfInput(screen.csrf)}
+      <h2 id="log-title">רישום קריאה</h2>
+      ${refusal}
+      <fieldset class="choice">
+        <legend>ערוץ</legend>
+        ${MANUAL_CHANNELS.map(
+          (channel, index) =>
+            h`<label><input type="radio" name="channel" value="${channel}" ${checked(draft?.channel === channel)} ${index === 0 ? h`required` : h``} /> ${CHANNEL_HE[channel]}</label>`,
+        )}
+      </fieldset>
+      <div class="field">
+        <label for="call-description">תיאור</label>
+        <textarea id="call-description" name="description" rows="3" maxlength="${DESCRIPTION_MAX}" required>${description}</textarea>
+      </div>
+      <fieldset class="choice">
+        <legend>נרשם</legend>
+        <label><input type="radio" name="sender" value="named" ${checked(draft?.sender === 'named')} required /> שם ידוע</label>
+        <input name="sender_name" type="text" maxlength="${SENDER_MAX}" autocomplete="off" placeholder="שם" aria-label="שם" aria-describedby="log-sender-hint" value="${senderName}" />
+        <label><input type="radio" name="sender" value="unknown" ${checked(draft?.sender === 'unknown')} /> לא ידוע</label>
+        <p class="lede" id="log-sender-hint">את הפונה אפשר לזהות אחר כך מעמוד הקריאה.</p>
+      </fieldset>
+      <div class="actions">
+        <button class="btn btn-primary" type="submit">רישום</button>
+        <a class="btn btn-ghost" href="${listHref(screen, false)}">ביטול</a>
+      </div>
+    </form>
+  </dialog>`;
+}
+
 export function renderCallsPage(screen: CallsScreen): string {
   const refusal =
     screen.refusal === undefined
@@ -533,6 +614,7 @@ export function renderCallsPage(screen: CallsScreen): string {
           <p class="summary">פתוחות ${ltr(counts.open)} · חירום ${ltr(counts.emergency)} · לא בזמן ${ltr(counts.late)} · לבדיקה ${ltr(counts.toReview)}</p>
           <p class="lede">טלפון או הגעה. בלי מסווג. <a href="/calls/filtered">מסוננות <span class="n">${ltr(screen.filteredCount)}</span></a> ${devLink}</p>
         </div>
+        <a class="btn btn-primary" href="${listHref(screen, true)}">רישום קריאה</a>
       </header>
       ${mailbox}
       ${echoWarning}
@@ -550,29 +632,7 @@ export function renderCallsPage(screen: CallsScreen): string {
       <section class="glass sheet">
         ${callList(screen)}
       </section>
-      <form class="glass call-form" method="post" action="/calls">
-        ${csrfInput(screen.csrf)}
-        <h2>רישום קריאה</h2>
-        ${refusal}
-        <fieldset class="choice">
-          <legend>ערוץ</legend>
-          ${MANUAL_CHANNELS.map(
-            (channel, index) =>
-              h`<label><input type="radio" name="channel" value="${channel}" ${index === 0 ? h`required` : h``} /> ${CHANNEL_HE[channel]}</label>`,
-          )}
-        </fieldset>
-        <div class="field">
-          <label for="call-description">תיאור</label>
-          <textarea id="call-description" name="description" rows="3" maxlength="${DESCRIPTION_MAX}" required></textarea>
-        </div>
-        <fieldset class="choice">
-          <legend>פונה</legend>
-          <label><input type="radio" name="sender" value="named" required /> שם</label>
-          <input name="sender_name" type="text" maxlength="${SENDER_MAX}" autocomplete="off" aria-label="שם הפונה" />
-          <label><input type="radio" name="sender" value="unknown" /> לא ידוע</label>
-        </fieldset>
-        <button class="btn btn-primary" type="submit">רישום</button>
-      </form>
+      ${logDialog(screen, refusal)}
     </div>`;
   return renderPage({
     title: 'קריאות — דונה דום',

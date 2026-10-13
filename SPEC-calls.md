@@ -136,7 +136,14 @@ may perform every action on calls.
 
 The קריאות page lists open calls with their Source channel, state, Category, requester, age against
 the goal, emergency and "to review" marks. The open list is the hero, on the same glass language as
-the assets screens. Logging a call stays a form on this page until that form becomes a dialog. The
+the assets screens. Logging a call is a dialog on that list, and the list stays underneath. A link,
+רישום קריאה, opens it and keeps the filters already chosen. Cancelling, ביטול, returns to that same
+list and those same filters. The dialog offers only PHONE and WALK_IN, a description, and a sender.
+It does not offer email or WhatsApp. The sender is labeled נרשם, the choices are שם ידוע and לא
+ידוע, and the name field's placeholder is שם. A hint says the requester can be identified later
+from the call page: את הפונה אפשר לזהות אחר כך מעמוד הקריאה. A named sender with no name is
+refused; the dialog stays open and what was typed is kept. A successful log redirects to the open
+list, with the filters cleared. The dialog is not modal and does not trap the keyboard. The
 open rows are one read of every open call. The counts of open calls, emergencies, calls near or
 past the goal, and calls marked for review are taken from that read and ignore the filter on
 screen, so a short list can sit under a larger open total. The same numbers are on the segments,
@@ -154,8 +161,8 @@ due, expired, or undated are warnings above the list, each with a way to the set
 the filtered list shows how many rows are set aside: the length of the noise messages and the
 returned calls, the same two lists that page shows.
 
-The page has a manual-entry form for PHONE and WALK_IN with three required fields (channel,
-description, and a sender or "unknown") and no sorter, a call page with the full timeline of
+The dialog is the manual entry for PHONE and WALK_IN, three required fields (channel,
+description, and a sender or unknown) and no sorter, a call page with the full timeline of
 messages, attachments and transitions, and a filtered list. The rail shows the open-call count
 beside קריאות. A closed call leaves that count and the open list, and a closed filter shows it.
 The page is server-rendered with no client JavaScript and follows the approved stakeholder mockup.

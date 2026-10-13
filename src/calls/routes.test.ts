@@ -21,6 +21,13 @@ function callId(html: string, description: string): string | undefined {
   return links?.at(-1)?.match(/([0-9a-f-]{36})/)?.[1];
 }
 
+function dialogOf(html: string): string {
+  const start = html.indexOf('<dialog');
+  const end = html.indexOf('</dialog>');
+  assert.ok(start >= 0 && end > start, 'dialog');
+  return html.slice(start, end);
+}
+
 function article(html: string, description: string): string {
   const at = html.indexOf(`>${description}</a>`);
   assert.ok(at >= 0, description);
@@ -196,6 +203,97 @@ describe('calls · the קריאות tab', () => {
       );
       assert.equal(audit.length, 2);
       assert.equal(audit[0]?.actor_id, who.staffAccountId);
+    } finally {
+      await cleanup(pool, domain);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('opens a log dialog on the filtered list and keeps a refused name', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    const domain = 'calls-routes-dialog.test';
+    await cleanup(pool, domain);
+    const who = await signIn(pool, clock, { email: `ops@${domain}` });
+    const client = asOperator(app, who);
+    try {
+      const opened = await client.inject({
+        method: 'GET',
+        url: '/calls?emergency=1&goal=late&log=1',
+      });
+      assert.equal(opened.statusCode, 200);
+      assert.doesNotMatch(opened.body, /<script/);
+      assert.doesNotMatch(opened.body, /\binert\b/);
+      const box = dialogOf(opened.body);
+      assert.match(box, /<dialog\b[^>]*\bopen\b/);
+      assert.doesNotMatch(box, /aria-modal="true"/);
+      assert.match(box, /value="PHONE"/);
+      assert.match(box, /value="WALK_IN"/);
+      assert.doesNotMatch(box, /value="EMAIL"|value="WHATSAPP"/);
+      assert.match(box, /נרשם/);
+      assert.match(box, /שם ידוע/);
+      assert.match(box, /לא ידוע/);
+      assert.match(box, /placeholder="שם"/);
+      assert.match(box, /את הפונה אפשר לזהות אחר כך מעמוד הקריאה/);
+      assert.match(
+        box,
+        /<form method="post" action="\/calls\?emergency=1&amp;goal=late&amp;log=1">/,
+      );
+      const cancel = box.match(/<a\b[^>]*>ביטול<\/a>/);
+      assert.ok(cancel);
+      assert.match(cancel[0], /href="\/calls\?emergency=1&amp;goal=late"/);
+      assert.doesNotMatch(cancel[0], /log=1/);
+      const outside = opened.body.replace(box, '');
+      assert.match(outside, /<h1>קריאות<\/h1>/);
+      assert.match(outside, /אין קריאות תואמות|data-call=/);
+
+      const refused = await client.inject({
+        method: 'POST',
+        url: '/calls?emergency=1&goal=late&log=1',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({
+          channel: 'WALK_IN',
+          description: 'נזילה שנשמרה',
+          sender: 'named',
+          sender_name: '   ',
+        }),
+      });
+      assert.equal(refused.statusCode, 400);
+      const kept = dialogOf(refused.body);
+      assert.match(kept, /<dialog\b[^>]*\bopen\b/);
+      assert.match(kept, /יש לציין את הפונה, או לסמן שלא ידוע/);
+      assert.match(kept, /נזילה שנשמרה/);
+      assert.match(
+        kept,
+        /value="WALK_IN"[^>]*\bchecked\b|\bchecked\b[^>]*value="WALK_IN"/,
+      );
+      assert.match(
+        kept,
+        /value="named"[^>]*\bchecked\b|\bchecked\b[^>]*value="named"/,
+      );
+      assert.match(kept, /value=" {3}"/);
+      const refusedCancel = kept.match(/<a\b[^>]*>ביטול<\/a>/);
+      assert.ok(refusedCancel);
+      assert.match(
+        refusedCancel[0],
+        /href="\/calls\?emergency=1&amp;goal=late"/,
+      );
+      assert.doesNotMatch(refusedCancel[0], /log=1/);
+
+      const list = await client.inject({ method: 'GET', url: '/calls' });
+      assert.equal(list.statusCode, 200);
+      assert.doesNotMatch(list.body, /<dialog/);
+      assert.match(
+        list.body,
+        /<a\b[^>]*href="\/calls\?log=1"[^>]*>רישום קריאה<\/a>/,
+      );
+      assert.doesNotMatch(list.body, /נזילה שנשמרה/);
     } finally {
       await cleanup(pool, domain);
       await app.close();

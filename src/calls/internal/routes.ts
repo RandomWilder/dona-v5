@@ -40,6 +40,7 @@ import {
   setCallCategory,
 } from './commands.ts';
 import {
+  type LogDraft,
   renderCallPage,
   renderCallsPage,
   renderFilteredPage,
@@ -281,6 +282,16 @@ function textOf(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+function logDraft(body: unknown): LogDraft {
+  const form = formOf(body);
+  return {
+    channel: textOf(form.channel),
+    description: textOf(form.description),
+    sender: textOf(form.sender),
+    senderName: textOf(form.sender_name),
+  };
+}
+
 function parseManual(
   body: unknown,
   staff: { staffAccountId: string; role: Role | null },
@@ -306,6 +317,7 @@ async function callsPage(
   deps: CallsDeps,
   request: FastifyRequest,
   refusal?: string,
+  draft?: LogDraft,
 ): Promise<string> {
   const filter = listFilter(request.query);
   const now = deps.clock.now();
@@ -389,6 +401,8 @@ async function callsPage(
     whatsappWarning: echoWarning,
     secretWarning: deps.secretWarning ? deps.secretWarning() : null,
     refusal,
+    logging: textOf(formOf(request.query).log) === '1' || draft !== undefined,
+    draft: draft ?? null,
   });
 }
 
@@ -572,7 +586,7 @@ export function registerCallsRoutes(
       }
       html(reply);
       reply.code(400);
-      return callsPage(deps, request, refusalHe(error));
+      return callsPage(deps, request, refusalHe(error), logDraft(request.body));
     }
   });
 
