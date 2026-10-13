@@ -16,31 +16,43 @@ import { findPartiesByName } from '../../parties/contract.ts';
 import { can, csrfFrom, NOT_ALLOWED, type Role } from '../../staff/contract.ts';
 import {
   CALL_STATES,
+  type CallListFilter,
   type CallState,
   canExit,
   clearEmergency,
+  EXIT_KINDS,
+  type ExitKind,
   exitCall,
   findCallsByDescription,
   flagEmergency,
   getCall,
   identifyCall,
   listCategories,
+  listClosedCalls,
   listOpenCalls,
   listReturnedCalls,
+  newestCloseAtOrBefore,
   type OpenCallSpec,
   openCall,
+  type ResponseGoal,
   readResponseGoal,
   responseGoalBand,
   restoreReturnedCall,
   returnToFiltered,
+  type ServiceCall,
   saveSenderContact,
   setCallCategory,
 } from './commands.ts';
 import {
+  type ExitDraft,
+  type FilteredOrigin,
+  type LogDraft,
+  previewExcerpt,
   renderCallPage,
   renderCallsPage,
   renderFilteredPage,
   type SecretNotice,
+  shownCalls,
   type TimelineMessage,
 } from './views.ts';
 
@@ -50,6 +62,7 @@ export interface NoiseMessage {
   body: string;
   sender: string;
   at: Date;
+  channel: 'EMAIL' | 'WHATSAPP';
   bodyHe: string | null;
 }
 
@@ -116,24 +129,42 @@ function html(reply: FastifyReply): void {
   reply.header('x-content-type-options', 'nosniff');
 }
 
-function listFilter(query: unknown): {
-  state?: CallState;
-  categoryId?: string;
-  emergency?: boolean;
-  toReview?: boolean;
-  band?: 'amber' | 'red';
-} {
+function requestedCallId(query: unknown): string | null {
+  const raw = textOf(formOf(query).call).trim();
+  if (raw === '') return null;
+  try {
+    return validId(raw, 'call');
+  } catch (error) {
+    if (error instanceof KernelError) return null;
+    throw error;
+  }
+}
+
+const CLOSED_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+function exitFilterOf(query: unknown): ExitKind | null {
+  const raw = textOf(formOf(query).exit);
+  return (EXIT_KINDS as readonly string[]).includes(raw)
+    ? (raw as ExitKind)
+    : null;
+}
+
+/** The window a close falls in: page k holds a close at least k×30 days old and younger than (k+1)×30. */
+function closedPageHolding(now: Date, closedAt: Date): number {
+  return Math.floor((now.getTime() - closedAt.getTime()) / CLOSED_WINDOW_MS);
+}
+
+function closedPageOf(query: unknown): number {
+  const raw = textOf(formOf(query).page);
+  return /^[0-9]{1,4}$/.test(raw) ? Number(raw) : 0;
+}
+
+function listFilter(query: unknown): CallListFilter {
   const form = formOf(query);
   const state = textOf(form.state);
   const category = textOf(form.category);
   const band = textOf(form.goal);
-  const filter: {
-    state?: CallState;
-    categoryId?: string;
-    emergency?: boolean;
-    toReview?: boolean;
-    band?: 'amber' | 'red';
-  } = {};
+  const filter: CallListFilter = {};
   if ((CALL_STATES as readonly string[]).includes(state)) {
     filter.state = state as CallState;
   }
@@ -147,8 +178,40 @@ function listFilter(query: unknown): {
   }
   if (textOf(form.emergency) === '1') filter.emergency = true;
   if (textOf(form.review) === '1') filter.toReview = true;
-  if (band === 'amber' || band === 'red') filter.band = band;
+  if (band === 'amber' || band === 'red' || band === 'late') filter.band = band;
   return filter;
+}
+
+function matchesBand(
+  call: ServiceCall,
+  band: 'amber' | 'red' | 'late',
+  now: Date,
+  goal: ResponseGoal,
+): boolean {
+  const actual = responseGoalBand(call.state, call.openedAt, now, goal);
+  if (band === 'late') return actual === 'amber' || actual === 'red';
+  return actual === band;
+}
+
+function shownCall(
+  call: ServiceCall,
+  filter: CallListFilter,
+  now: Date,
+  goal: ResponseGoal,
+): boolean {
+  if (filter.state !== undefined && call.state !== filter.state) return false;
+  if (
+    filter.categoryId !== undefined &&
+    call.category?.id !== filter.categoryId
+  ) {
+    return false;
+  }
+  if (filter.emergency === true && !call.emergency.flagged) return false;
+  if (filter.toReview === true && !call.toReview) return false;
+  if (filter.band !== undefined && !matchesBand(call, filter.band, now, goal)) {
+    return false;
+  }
+  return true;
 }
 
 function refusalHe(error: KernelError): string {
@@ -258,6 +321,26 @@ function textOf(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+function logDraft(body: unknown): LogDraft {
+  const form = formOf(body);
+  return {
+    channel: textOf(form.channel),
+    description: textOf(form.description),
+    sender: textOf(form.sender),
+    senderName: textOf(form.sender_name),
+  };
+}
+
+function exitDraftOf(body: unknown): ExitDraft {
+  const form = formOf(body);
+  return {
+    kind: textOf(form.exit),
+    note: textOf(form.note),
+    department: textOf(form.department),
+    duplicateOf: textOf(form.duplicate_of),
+  };
+}
+
 function parseManual(
   body: unknown,
   staff: { staffAccountId: string; role: Role | null },
@@ -283,28 +366,100 @@ async function callsPage(
   deps: CallsDeps,
   request: FastifyRequest,
   refusal?: string,
+  draft?: LogDraft,
 ): Promise<string> {
   const filter = listFilter(request.query);
   const now = deps.clock.now();
-  const [listed, categories, mailboxWarning, goal, echoWarning] =
-    await Promise.all([
-      listOpenCalls(deps.pool, filter),
-      listCategories(deps.pool),
-      deps.mailboxWarning ? deps.mailboxWarning() : Promise.resolve(false),
-      readResponseGoal(deps.pool),
-      deps.whatsappWarning ? deps.whatsappWarning() : Promise.resolve(false),
-    ]);
+  const closed = filter.state === 'CLOSED';
+  const exit = closed ? exitFilterOf(request.query) : null;
+  const page = closed ? closedPageOf(request.query) : 0;
+  const upTo = new Date(now.getTime() - page * CLOSED_WINDOW_MS);
+  const after = new Date(upTo.getTime() - CLOSED_WINDOW_MS);
+  const [
+    everyOpen,
+    closedRows,
+    olderClose,
+    categories,
+    mailboxWarning,
+    goal,
+    echoWarning,
+    noise,
+    returned,
+  ] = await Promise.all([
+    listOpenCalls(deps.pool),
+    closed
+      ? listClosedCalls(deps.pool, {
+          after,
+          upTo,
+          categoryId: filter.categoryId,
+        })
+      : Promise.resolve(null),
+    closed
+      ? newestCloseAtOrBefore(deps.pool, after, {
+          categoryId: filter.categoryId ?? null,
+          exit,
+        })
+      : Promise.resolve(null),
+    listCategories(deps.pool),
+    deps.mailboxWarning ? deps.mailboxWarning() : Promise.resolve(false),
+    readResponseGoal(deps.pool),
+    deps.whatsappWarning ? deps.whatsappWarning() : Promise.resolve(false),
+    deps.listNoise ? deps.listNoise() : Promise.resolve([]),
+    listReturnedCalls(deps.pool),
+  ]);
   const calls =
-    filter.band === undefined
-      ? listed
-      : listed.filter(
-          (call) =>
-            responseGoalBand(call.state, call.openedAt, now, goal) ===
-            filter.band,
-        );
+    closedRows === null
+      ? everyOpen.filter((call) => shownCall(call, filter, now, goal))
+      : closedRows.filter((call) => exit === null || call.exit?.kind === exit);
+  const exitCounts: Record<ExitKind | 'all', number> | null =
+    closedRows === null
+      ? null
+      : {
+          all: closedRows.length,
+          ANSWERED: 0,
+          FORWARDED: 0,
+          DUPLICATE: 0,
+          CANCELLED: 0,
+        };
+  for (const call of closedRows ?? []) {
+    if (exitCounts !== null && call.exit !== null) {
+      exitCounts[call.exit.kind] += 1;
+    }
+  }
+  let emergency = 0;
+  let near = 0;
+  let past = 0;
+  let toReview = 0;
+  for (const call of everyOpen) {
+    if (call.emergency.flagged) emergency += 1;
+    if (call.toReview) toReview += 1;
+    const band = responseGoalBand(call.state, call.openedAt, now, goal);
+    if (band === 'amber') near += 1;
+    else if (band === 'red') past += 1;
+  }
   const role = request.staff?.role ?? null;
   const csrf = csrfFrom(request);
   const mayFile = can(role, 'documents.write');
+  const listOnly = textOf(formOf(request.query).view) === 'list';
+  const requested = requestedCallId(request.query);
+  const shown = shownCalls({
+    calls,
+    state: filter.state ?? null,
+    now,
+    goal,
+  });
+  const chosen = listOnly
+    ? null
+    : (shown.find((call) => call.id === requested) ?? shown[0] ?? null);
+  const excerpt =
+    chosen === null
+      ? null
+      : previewExcerpt(
+          deps.messagesOnCall && chosen.state !== 'CLOSED'
+            ? await deps.messagesOnCall(chosen.id)
+            : [],
+          chosen,
+        );
   return renderCallsPage({
     nav: deps.chrome(
       csrf,
@@ -322,13 +477,71 @@ async function callsPage(
     toReview: filter.toReview === true,
     band: filter.band ?? null,
     goal,
+    counts: {
+      open: everyOpen.length,
+      emergency,
+      near,
+      past,
+      late: near + past,
+      toReview,
+    },
+    filteredCount: noise.length + returned.length,
     devIntake: deps.devIntake === true,
     now,
     mailboxWarning,
     whatsappWarning: echoWarning,
     secretWarning: deps.secretWarning ? deps.secretWarning() : null,
     refusal,
+    logging: textOf(formOf(request.query).log) === '1' || draft !== undefined,
+    draft: draft ?? null,
+    layout: listOnly ? 'list' : 'split',
+    closedList:
+      exitCounts === null
+        ? null
+        : {
+            exit,
+            page,
+            olderPage:
+              olderClose === null ? null : closedPageHolding(now, olderClose),
+            counts: exitCounts,
+          },
+    preview:
+      chosen === null || excerpt === null ? null : { id: chosen.id, excerpt },
   });
+}
+
+async function firstOpenCall(
+  deps: CallsDeps,
+  goal: ResponseGoal,
+): Promise<{ id: string; description: string } | null> {
+  const open = await listOpenCalls(deps.pool);
+  const first = shownCalls({
+    calls: open,
+    state: null,
+    now: deps.clock.now(),
+    goal,
+  })[0];
+  if (!first) return null;
+  return { id: first.id, description: first.description };
+}
+
+async function heldDuplicate(
+  deps: CallsDeps,
+  found: readonly { id: string; description: string }[],
+  draft: ExitDraft | undefined,
+): Promise<{ id: string; description: string }[]> {
+  const held = draft?.kind === 'DUPLICATE' ? draft.duplicateOf.trim() : '';
+  if (held === '' || found.some((row) => row.id === held)) return [...found];
+  let otherId: string;
+  try {
+    otherId = validId(held, 'duplicate');
+  } catch (error) {
+    if (error instanceof KernelError) return [...found];
+    throw error;
+  }
+  const other = await getCall(deps.pool, otherId);
+  if (!other) return [...found];
+  return [{ id: other.id, description: other.description }, ...found];
 }
 
 async function callPage(
@@ -336,6 +549,7 @@ async function callPage(
   request: FastifyRequest,
   callId: string,
   refusal?: string,
+  exitDraft?: ExitDraft,
 ): Promise<string> {
   const call = await getCall(deps.pool, callId);
   if (!call) throw new KernelError('not_found', 'call not found');
@@ -345,7 +559,7 @@ async function callPage(
     call.state === 'NEW' && query.length > 0 && query.length <= 80;
   const dupSearching =
     canExit(call.state) && dup.length > 0 && dup.length <= 80;
-  const [categories, matches, dupMatches, messages, documentTypes, goal] =
+  const [categories, matches, foundDup, messages, documentTypes, goal] =
     await Promise.all([
       listCategories(deps.pool, { activeOnly: call.state !== 'NEW' }),
       searching ? findPartiesByName(deps.pool, query) : Promise.resolve([]),
@@ -356,6 +570,10 @@ async function callPage(
       deps.documentTypes ? deps.documentTypes() : Promise.resolve([]),
       readResponseGoal(deps.pool),
     ]);
+  const dupMatches = await heldDuplicate(deps, foundDup, exitDraft);
+  const receipt =
+    textOf(formOf(request.query).receipt) === '1' && call.state === 'CLOSED';
+  const nextOpen = receipt ? await firstOpenCall(deps, goal) : null;
   const role = request.staff?.role ?? null;
   const csrf = csrfFrom(request);
   return renderCallPage({
@@ -379,8 +597,12 @@ async function callPage(
     messages,
     goal,
     mayFile: can(role, 'documents.write'),
+    mayReadParties: can(role, 'party.read'),
     documentTypes,
     now: deps.clock.now(),
+    receipt,
+    nextOpen,
+    exitDraft,
     refusal:
       refusal ??
       (query.length > 80 || dup.length > 80 ? 'החיפוש ארוך מדי.' : undefined),
@@ -410,6 +632,8 @@ async function filteredPage(
         bodyHe: row.bodyHe,
         sender: row.sender,
         sorterLabel: 'noise' as const,
+        channel: row.channel,
+        at: row.at,
       },
     })),
     ...returned.map((row) => ({
@@ -422,11 +646,21 @@ async function filteredPage(
         bodyHe: null,
         sender: senderOf(row.senderLabel, row.senderUnknown),
         sorterLabel: row.sorterLabel,
+        channel: row.sourceChannel,
+        at: row.at,
       },
     })),
   ];
   ranked.sort((a, b) => b.at - a.at);
   const rows = ranked.map((item) => item.row);
+  const origin = filteredOrigin(request.query);
+  const shown = rows.filter((row) => shownFiltered(row.kind, origin));
+  let sorter = 0;
+  let office = 0;
+  for (const row of rows) {
+    if (row.kind === 'message') sorter += 1;
+    else office += 1;
+  }
   const role = request.staff?.role ?? null;
   const csrf = csrfFrom(request);
   return renderFilteredPage({
@@ -438,9 +672,26 @@ async function filteredPage(
       request.openCalls,
     ),
     csrf,
-    rows,
+    rows: shown,
+    origin,
+    counts: { all: rows.length, sorter, office },
     refusal,
   });
+}
+
+function filteredOrigin(query: unknown): FilteredOrigin {
+  const origin = textOf(formOf(query).origin);
+  if (origin === 'sorter' || origin === 'office') return origin;
+  return 'all';
+}
+
+function shownFiltered(
+  kind: 'message' | 'call',
+  origin: FilteredOrigin,
+): boolean {
+  if (origin === 'sorter') return kind === 'message';
+  if (origin === 'office') return kind === 'call';
+  return true;
 }
 
 export function registerCallsRoutes(
@@ -511,7 +762,7 @@ export function registerCallsRoutes(
       }
       html(reply);
       reply.code(400);
-      return callsPage(deps, request, refusalHe(error));
+      return callsPage(deps, request, refusalHe(error), logDraft(request.body));
     }
   });
 
@@ -658,12 +909,22 @@ export function registerCallsRoutes(
       return callPage(deps, request, callId, 'יש לבחור סימון חירום.');
     }
     const command = action === 'clear' ? clearEmergency : flagEmergency;
-    await command(deps.pool, deps.clock, {
-      callId,
-      actorId: staff.staffAccountId,
-      actorRole: staff.role,
-    });
-    return reply.code(303).header('location', `/calls/${callId}`).send();
+    try {
+      await command(deps.pool, deps.clock, {
+        callId,
+        actorId: staff.staffAccountId,
+        actorRole: staff.role,
+      });
+      return reply.code(303).header('location', `/calls/${callId}`).send();
+    } catch (error) {
+      if (!(error instanceof KernelError) || error.code === 'not_allowed') {
+        throw error;
+      }
+      if (error.code === 'not_found') throw error;
+      html(reply);
+      reply.code(400);
+      return callPage(deps, request, callId, refusalHe(error));
+    }
   });
 
   app.post('/calls/:id/return', STAFF, async (request, reply) => {
@@ -701,7 +962,10 @@ export function registerCallsRoutes(
         actorId: staff.staffAccountId,
         actorRole: staff.role,
       });
-      return reply.code(303).header('location', `/calls/${callId}`).send();
+      return reply
+        .code(303)
+        .header('location', `/calls/${callId}?receipt=1`)
+        .send();
     } catch (error) {
       if (!(error instanceof KernelError) || error.code === 'not_allowed') {
         throw error;
@@ -711,7 +975,13 @@ export function registerCallsRoutes(
       }
       html(reply);
       reply.code(error.code === 'not_found' ? 404 : 400);
-      return callPage(deps, request, callId, refusalHe(error));
+      return callPage(
+        deps,
+        request,
+        callId,
+        refusalHe(error),
+        exitDraftOf(request.body),
+      );
     }
   });
 }

@@ -132,8 +132,11 @@ describe('parties · create by hand', { concurrency: false }, () => {
       };
       assert.equal(inputs.partyId, partyId);
       assert.equal(inputs.channel, 'PHONE');
-      assert.equal(row.inputs.includes('+972'), false);
-      assert.equal(row.inputs.includes('052'), false);
+      // The party id is a random uuid, and one in a hundred or so contains "052" by chance.
+      const scrubbed = row.inputs.replaceAll(partyId, '');
+      assert.equal(scrubbed.includes('+972'), false);
+      assert.equal(scrubbed.includes('052'), false);
+      assert.equal(scrubbed.includes('2071001'), false);
       assert.equal(row.inputs.includes('national_id'), false);
       assert.equal(
         (await audits(pool, 'parties.contact.add', operator.staffAccountId))

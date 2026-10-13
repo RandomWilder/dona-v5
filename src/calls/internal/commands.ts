@@ -115,6 +115,8 @@ export interface ServiceCall {
   requester: CallParty | null;
   category: CallCategory | null;
   emergency: EmergencyMark;
+  /** Flagged now, or a flag was recorded. A closed row says היה חירום from this. */
+  wasEmergency: boolean;
   /** A mark, not a state. Unsure, a sorter failure, or an emergency the sorter did not call a call. */
   toReview: boolean;
   summary: string | null;
@@ -127,6 +129,8 @@ export interface ServiceCall {
   sorterPrompt: string | null;
   /** Returned to the filtered list. Not closed, and not in the open list. */
   returned: boolean;
+  /** How a closed call left. Null on an open call. */
+  exit: CallExit | null;
 }
 
 export type TransitionKind =
@@ -168,9 +172,10 @@ export interface CallTransition {
 
 export interface ServiceCallDetail extends ServiceCall {
   timeline: readonly CallTransition[];
-  exit: CallExit | null;
   /** Calls that named this one as the call they repeat. */
   repeatedBy: readonly CallLink[];
+  /** Later calls that name this one as the call they continue. Newest first. */
+  continuedBy: readonly CallLink[];
   /** The closed call this one continues, when the thread's call was already closed. */
   predecessor: CallLink | null;
   /** Who returned it to the filtered list, when it was returned. */
@@ -231,6 +236,8 @@ export interface CallListFilter {
   categoryId?: string;
   emergency?: boolean;
   toReview?: boolean;
+  /** Amber excludes past. Red is past only. Late is near or past, and has no band of its own. */
+  band?: ResponseBand | 'late';
 }
 
 export interface OpenIntakeCallSpec {
@@ -262,6 +269,7 @@ export interface ReturnedCall {
   senderLabel: string | null;
   senderUnknown: boolean;
   sorterLabel: SorterLabel | null;
+  sourceChannel: SourceChannel;
   at: Date;
 }
 
@@ -401,6 +409,7 @@ interface CallRow {
   closed_by: string | null;
   closer_label: string | null;
   emergency: boolean;
+  was_emergency: boolean;
   emergency_by: string | null;
   emergency_actor: string | null;
   emergency_actor_label: string | null;
@@ -444,7 +453,13 @@ const CALL_SELECT = `SELECT sc.service_call_id, sc.source_channel, sc.state, sc.
             COALESCE(
               NULLIF(btrim(returner.display_name), ''),
               returner.email
-            ) AS returner_label
+            ) AS returner_label,
+            (sc.emergency OR EXISTS (
+              SELECT 1
+                FROM service_call_transition flagged
+               WHERE flagged.service_call_id = sc.service_call_id
+                 AND flagged.kind = 'FLAGGED'
+            )) AS was_emergency
        FROM service_call sc
        LEFT JOIN staff_account opener ON opener.staff_account_id = sc.opened_by
        LEFT JOIN party requester ON requester.party_id = sc.requester_party_id
@@ -492,6 +507,7 @@ function toCall(row: CallRow): ServiceCall {
       row.category_active,
     ),
     emergency: emergencyOf(row),
+    wasEmergency: row.was_emergency,
     toReview: row.to_review,
     summary: row.sorter_summary,
     proposal: categoryOf(
@@ -504,6 +520,7 @@ function toCall(row: CallRow): ServiceCall {
     sorterModel: row.sorter_model,
     sorterPrompt: row.sorter_prompt,
     returned: row.returned_at !== null,
+    exit: exitOf(row),
   };
 }
 
@@ -671,6 +688,7 @@ export async function openCall(
     requester: null,
     category: null,
     emergency: flagged ? { flagged: true, by: 'terms' } : { flagged: false },
+    wasEmergency: flagged,
     toReview: false,
     summary: null,
     proposal: null,
@@ -678,6 +696,7 @@ export async function openCall(
     sorterModel: null,
     sorterPrompt: null,
     returned: false,
+    exit: null,
   };
 }
 
@@ -964,10 +983,11 @@ export async function listReturnedCalls(
     sender_label: string | null;
     sender_unknown: boolean;
     sorter_label: string | null;
+    source_channel: SourceChannel;
     returned_at: Date;
   }>(
     `SELECT service_call_id, description, sender_label, sender_unknown,
-            sorter_label, returned_at
+            sorter_label, source_channel, returned_at
        FROM service_call
       WHERE returned_at IS NOT NULL
       ORDER BY returned_at DESC, service_call_id DESC`,
@@ -978,6 +998,7 @@ export async function listReturnedCalls(
     senderLabel: row.sender_label,
     senderUnknown: row.sender_unknown,
     sorterLabel: sorterLabelOf(row.sorter_label),
+    sourceChannel: row.source_channel,
     at: row.returned_at,
   }));
 }
@@ -1013,6 +1034,58 @@ export async function listOpenCalls(
     [state, categoryId, emergency, toReview],
   );
   return rows.map(toCall);
+}
+
+export interface ClosedWindow {
+  /** A close later than this. */
+  after: Date;
+  /** A close not later than this. */
+  upTo: Date;
+  categoryId?: string;
+}
+
+/** The calls closed inside one window, newest close first. A returned call is not closed. #224. */
+export async function listClosedCalls(
+  db: Queryable,
+  window: ClosedWindow,
+): Promise<ServiceCall[]> {
+  const categoryId =
+    window.categoryId === undefined
+      ? null
+      : validId(window.categoryId, 'category');
+  const { rows } = await db.query<CallRow>(
+    `${CALL_SELECT}
+      WHERE sc.state = 'CLOSED'
+        AND sc.returned_at IS NULL
+        AND sc.closed_at > $1
+        AND sc.closed_at <= $2
+        AND ($3::uuid IS NULL OR sc.category_id = $3)
+      ORDER BY sc.closed_at DESC, sc.service_call_id DESC`,
+    [window.after, window.upTo, categoryId],
+  );
+  return rows.map(toCall);
+}
+
+/** The newest close at or before this moment of a call matching the category and the exit. */
+export async function newestCloseAtOrBefore(
+  db: Queryable,
+  at: Date,
+  filter: { categoryId: string | null; exit: ExitKind | null },
+): Promise<Date | null> {
+  const categoryId =
+    filter.categoryId === null ? null : validId(filter.categoryId, 'category');
+  const { rows } = await db.query<{ closed_at: Date }>(
+    `SELECT closed_at FROM service_call
+      WHERE state = 'CLOSED'
+        AND returned_at IS NULL
+        AND closed_at <= $1
+        AND ($2::uuid IS NULL OR category_id = $2)
+        AND ($3::text IS NULL OR exit_kind = $3)
+      ORDER BY closed_at DESC
+      LIMIT 1`,
+    [at, categoryId, filter.exit],
+  );
+  return rows[0]?.closed_at ?? null;
 }
 
 /**
@@ -1113,6 +1186,16 @@ export async function getCall(
       ORDER BY closed_at, service_call_id`,
     [id],
   );
+  const continued = await db.query<{
+    service_call_id: string;
+    description: string;
+  }>(
+    `SELECT service_call_id, description
+       FROM service_call
+      WHERE predecessor_id = $1
+      ORDER BY opened_at DESC, service_call_id DESC`,
+    [id],
+  );
   const opened: CallTransition = {
     kind: 'OPENED',
     at: row.opened_at,
@@ -1168,8 +1251,11 @@ export async function getCall(
   return {
     ...toCall(row),
     timeline,
-    exit: exitOf(row),
     repeatedBy: links.rows.map((link) => ({
+      id: link.service_call_id,
+      description: link.description,
+    })),
+    continuedBy: continued.rows.map((link) => ({
       id: link.service_call_id,
       description: link.description,
     })),
@@ -1510,6 +1596,12 @@ async function recordEmergency(
   const actorId = idOf(spec.actorId, 'actor');
   await inTransaction(db, async (tx) => {
     const current = await lockCall(tx, callId);
+    if (current.state === 'CLOSED') {
+      throw new KernelError('invalid', 'a closed call cannot change', {
+        field: 'state',
+        reason: 'closed',
+      });
+    }
     const flagging = action === 'flag';
     if (current.emergency === flagging) return;
     const at = clock.now();

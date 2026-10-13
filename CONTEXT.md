@@ -118,12 +118,16 @@ be met. Editable at `/settings` without a deploy.
 
 | Term | Means |
 |---|---|
-| **ServiceCall** (**קריאה**) | A request that reached the office through a **Source channel**. A question is a ServiceCall too, closed by an exit. The requester is identified, never presumed: an unknown sender's call waits in NEW for the office. Has a state machine, with no AI in it. Not "ticket", not "inquiry". |
+| **ServiceCall** (**קריאה**) | A request that reached the office through a **Source channel**. A question is a ServiceCall too, closed by an exit. Has a state machine, with no AI in it. Not "ticket", not "inquiry". |
+| **Sender** (**נרשם**) | The name, number, or address captured when a ServiceCall is opened, or unknown. Not the requester. |
+| **Requester** (**פונה**) | The party a ServiceCall is for. Identified, never presumed from the sender. |
 | **Source channel** | How a ServiceCall arrived: `WHATSAPP · EMAIL · PHONE · WALK_IN`. Set once, at intake. |
 | **Category** | The trade a ServiceCall needs — plumbing, electrical, A/C, locks, gates and the like, plus administrative. Dona Dom's list. Distinct from `asset_type`, which is what the call is filed against. |
-| **Emergency** | A ServiceCall flagged because its text contains an emergency term, or because a person flagged it. The flag records which. Pinned first in קריאות. Not a state, and no model sets it. |
+| **Emergency** | A ServiceCall flagged because its text contains an emergency term, or because a person flagged it. The flag records which. Pinned first in קריאות. Not a state, and no model sets it. Closing the call does not clear the flag. |
+| **Response goal** | How long an open ServiceCall has waited, in three bands: **בזמן** (inside the goal), **קרוב ליעד** (near), **מעבר ליעד** (past). The office's own measure. Not an SLA, and not the words כתום or אדום. |
 | **Duty contact** | The duty phone number and the duty hours. Editable at `/settings`. The fixed emergency reply is composed from these rows. |
 | **Exit** | A ServiceCall closed by a person, with a reason, before a Visit: **Answered** (a question, settled), **Forwarded** (a legitimate request another department owns — finance, legal — named on the call), **Duplicate** (linked to the call it repeats), **Cancelled** (the requester withdrew). Not "rejected", and a call with no exit reason is not closed. |
+| **Predecessor** (**המשך של**) | The earlier ServiceCall a later one continues. A call names at most one. Several later calls may name the same earlier one. Not a Duplicate. |
 | **Filtered message** | An incoming message the sorter judged not to be a ServiceCall. Kept for 6 months, then deleted unless the office has turned it into a call. Sent back to filtered, the six months start again from the return; the call record stays. |
 | **Visit** | A contractor or operator attending. |
 | **Responsibility** | **Ternary**: tenant / operator / **contractor**. Never binary. |

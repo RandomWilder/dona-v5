@@ -169,6 +169,7 @@ export interface NoiseMessage {
   bodyHe: string | null;
   sender: string;
   at: Date;
+  channel: 'EMAIL' | 'WHATSAPP';
   sorterModel: string | null;
   sorterPrompt: string | null;
 }
@@ -584,11 +585,12 @@ export async function listNoiseMessages(
     sender_address: string;
     received_at: Date;
     body_he: string | null;
+    source_channel: 'EMAIL' | 'WHATSAPP';
     sorter_model: string | null;
     sorter_prompt: string | null;
   }>(
     `SELECT message_id, subject, body_original, body_he, sender_address,
-            received_at, sorter_model, sorter_prompt
+            received_at, source_channel, sorter_model, sorter_prompt
        FROM message
       WHERE service_call_id IS NULL
         AND NOT is_echo
@@ -601,6 +603,7 @@ export async function listNoiseMessages(
     body: row.body_original,
     sender: row.sender_address,
     at: row.received_at,
+    channel: row.source_channel,
     bodyHe: row.body_he,
     sorterModel: row.sorter_model,
     sorterPrompt: row.sorter_prompt,

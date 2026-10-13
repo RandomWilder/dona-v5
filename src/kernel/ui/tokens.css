@@ -119,6 +119,8 @@
   --z-nav-scrim: 20;
   --z-nav-drawer: 30;
   --z-nav-bar: 40;
+  /* The log dialog floats over the list and must clear the nav bar. */
+  --z-dialog: 50;
 }
 
 *,
@@ -1129,6 +1131,11 @@ textarea {
 }
 
 @media (max-width: 839px) {
+  /* The phone gutter is --space-4 (page.ts); an ambient wider than it scrolls the page sideways. */
+  .glass-stage::before {
+    inset: calc(var(--space-4) * -1);
+  }
+
   .glass-stage .building > summary {
     grid-template-columns: auto minmax(0, 1fr);
     padding: var(--space-4);

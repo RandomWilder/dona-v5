@@ -79,8 +79,12 @@ call is never reopened.
 **Emergency.** A call is flagged an emergency by a deterministic match against the emergency terms,
 before any model reads the message (foundation rule 5), or by hand. A person can also clear a flag.
 The flag records who or what set it: the terms, or the staff account that flagged it. Clearing a
-flag records that staff account too. An emergency-flagged call is pinned first in the tab, marked
-red, and the list filters on the flag.
+flag records that staff account too. An emergency-flagged call leads the open list, including one
+still inside the response goal, and the list filters on the flag. Within that lead the emergencies
+are oldest first. A non-emergency call past the goal follows them, oldest first. A call near the
+goal stays with the other open calls, newest first. The lead is the heading דורש טיפול עכשיו, and
+the heading is left out when that group is empty. The flag is the word חירום as well as the red
+mark.
 
 The match is a substring, after case-folding and after niqqud and invisible marks are stripped.
 Any one term is enough. A Hebrew term inside a longer word matches, because a prefix is not a word
@@ -107,11 +111,14 @@ an SLA, and it is the director's decision when one is made.
 
 **The response goal** is two whole-minute thresholds, amber then red. Placeholders, until Dona Dom
 supplies theirs, are 240 and 1440. Age is whole minutes since the call opened. A call older than
-amber, and not older than red, shows amber. A call older than red shows red. A call exactly as old
-as a threshold has not passed it. A closed call shows neither, on the list and on its own page. The
-list filters on the band, and the amber filter does not include red. Red must be greater than
-amber. A threshold above a year of minutes is refused. A save is audited and is read on the next
-request, so it takes effect with no deploy.
+amber, and not older than red, is near the goal. A call older than red is past it. A call that has
+passed neither is inside the goal. A call exactly as old as a threshold has not passed it. On an
+open call those three are the words בזמן, קרוב ליעד, and מעבר ליעד. A closed call has no
+response-goal band: none of those words, no goal colour, and no goal mark, on the list and on its
+own page. The list filters on the band. The amber filter does not include red. Red means past the
+goal only. A late filter, labeled לא בזמן, means near or past. Amber and red remain valid and have
+no segment of their own. Red must be greater than amber. A threshold above a year of minutes is
+refused. A save is audited and is read on the next request, so it takes effect with no deploy.
 
 **Filtered messages** are kept for 6 months and then deleted by a scheduled sweep, unless rescued
 into a call. Six months is counted from when the message arrived. A message exactly that old is
@@ -128,12 +135,179 @@ may perform every action on calls.
 ## The tab
 
 The קריאות page lists open calls with their Source channel, state, Category, requester, age against
-the goal, emergency and "to review" marks. It filters on each of those. It has a manual-entry form
-for PHONE and WALK_IN with three required fields (channel, description, and a sender or "unknown")
-and no sorter, a call page with the full timeline of messages, attachments and transitions, and a
-filtered list. The rail shows the open-call count beside קריאות. A closed call leaves that
-count and the open list, and a closed filter shows it. The page is server-rendered with no
-client JavaScript and follows the approved stakeholder mockup.
+the goal, emergency and "to review" marks. The open list is the hero, on the same glass language as
+the assets screens. Logging a call is a dialog on that list, and the list stays underneath. A link,
+רישום קריאה, opens it and keeps the filters already chosen. Cancelling, ביטול, returns to that same
+list and those same filters. The dialog offers only PHONE and WALK_IN, a description, and a sender.
+It does not offer email or WhatsApp. The sender is labeled נרשם, the choices are שם ידוע and לא
+ידוע, and the name field's placeholder is שם. A hint says the requester can be identified later
+from the call page: את הפונה אפשר לזהות אחר כך מעמוד הקריאה. A named sender with no name is
+refused; the dialog stays open and what was typed is kept. A successful log redirects to the open
+list, with the filters cleared. The dialog is not modal and does not trap the keyboard. The
+open rows are one read of every open call. The counts of open calls, emergencies, calls near or
+past the goal, and calls marked for review are taken from that read and ignore the filter on
+screen, so a short list can sit under a larger open total. The same numbers are on the segments,
+the summary, and the stat row. The red stat is titled מעבר ליעד המענה, with the near-goal count
+beside it. The closed segment is a second read, because a closed call is not in the open read, and
+that segment shows no count.
+
+The segments are every open call, emergencies, לא בזמן, calls to review, and closed. The category
+menu and the state menu keep the other filters when one is chosen. An inactive category is marked
+לא פעיל. The state menu lists the open states. There is no search.
+
+The default response is a split inbox: that same list beside a preview of one call. The list view
+is the explicit request `view=list`, and that response is only the list. Below 64rem the default
+response shows only the list, because both layouts are in that response and the server does not
+read the viewport. The list rows keep the marks they already carry. A split row carries a different
+mark, so one call is not counted twice. Choosing a row previews that call and keeps the filter. A
+selection that is missing, closed, returned, or not in the current rows is skipped, and the first
+row of the current list is previewed. An empty list has an empty preview. The preview is read only
+for the split inbox. Its text is the first inbound message, cut after 240 characters, otherwise the
+summary, otherwise the description. The split header summarises open calls, emergencies, and calls
+past the goal, in place of the long lede and the stat row. The way into the filtered list stays on
+that header. The split list is that same list: the same order, the same urgent heading, and the
+same facts on each row. The warnings stay above both layouts.
+The requester's name in the preview is text, and it does not link to the profile. A new call, or a
+call still waiting on a category, offers a next step that links to the call page. From
+RESPONSIBILITY SET on, and on a closed call, there is no such strip.
+
+**A narrow screen (#225)** changes the layout and nothing else. Below 40rem the stat row is two
+columns, the segments wrap rather than scroll so the current one is always in view, the eight steps
+become one line of dots with only the current state named, the log dialog is a sheet on the bottom
+edge, and the filtered cards are one column. The call page's aside is first in the markup, so on a
+single column it sits above the record and the conversation. In the conversation the inbound message
+sits on the start side and the office echo on the end side. A file name is marked left to right, and so
+is a sender or an actor with no Hebrew in it, so an address is not reversed. A back link carries a
+chevron pointing right and a forward link one pointing left. Targets are the touch height; segments
+and small buttons keep the shorter control height the assets screens use. A list row is a target as
+a whole. Focus on a radio is drawn on its label. The page never scrolls sideways at 320px.
+
+A mailbox that has not been read, a WhatsApp echo that has gone quiet, and a mail secret that is
+due, expired, or undated are warnings above the list, each with a way to the settings. The way into
+the filtered list shows how many rows are set aside: the length of the noise messages and the
+returned calls, the same two lists that page shows.
+
+The filtered list is that one list. A row is a message the sorter set aside, or a ServiceCall the
+office sent back. A returned row is still that ServiceCall, and it links to the call. The views are
+הכל, המסווג, and המשרד. הכל shows both origins. המסווג shows only what the sorter set aside,
+requested as `origin=sorter`. המשרד shows only what the office returned, requested as
+`origin=office`. An origin the page does not know is הכל. Each view shows the three counts from
+that same read, so a short list can sit under a larger total. The sentence אין הודעות מסוננות means
+the book is empty. A view with none of its own rows does not use that sentence while another origin
+still has rows. Each row shows the sorter's verdict, the Source channel, and the time: when the
+message arrived, or when the office returned the call.
+The rows are cards on the same glass language as the open list. Rescue from either origin is the
+control הצלה — זו קריאה, the same words as on the returned call, and it puts the call back on the
+open list. The page stays server-rendered, and the marks the list already carries stay.
+
+The dialog is the manual entry for PHONE and WALK_IN, three required fields (channel,
+description, and a sender or unknown) and no sorter, a call page with the full timeline of
+messages, attachments and transitions, and a filtered list. The rail shows the open-call count
+beside קריאות. A closed call leaves that count and the open list, and a closed filter shows it.
+The page is server-rendered with no client JavaScript and follows the approved stakeholder mockup.
+
+An open call's page shows the description, the Source channel, and the age against the response
+goal, in the words בזמן, קרוב ליעד, or מעבר ליעד, and the word חירום when the call is flagged.
+The eight states are an indicator of where the call is: the current state is the current step,
+the states before it are behind it, and the states after it are ahead. The steps are not
+controls, and pressing one does nothing. A closed call does not draw the indicator. The
+conversation is the inbound message, the office echo, and the system events, in the order they
+already have. A translation is shown apart from the original. An attachment that can be opened
+opens. A person who may file can file it as a document. The size is shown in ordinary units of
+1024 bytes — B below 1024, then KB, then MB — and the byte count stays on the size mark. A filed
+attachment says תויק and opens the document; the document itself stays an Unassigned document.
+The sender and the requester are two facts, נרשם and פונה. Calls that repeat this one stay
+listed under it. Back from an open call returns to the open list.
+
+The aside is the only place an action on the call appears, and only where that command exists.
+A new call offers identification of the requester, for this call alone. A match is a name only.
+An identified or triaged call offers the category. Six or fewer active categories are a set of
+choices; more than six uses the select. Saving the sender as a contact uses the offer that
+already exists, and the control is absent when that command would not be offered. A returned
+call offers rescue back onto the list. The control says הצלה — זו קריאה. Rescue does not
+replace identification or the category while those commands still apply. The four exits stay off until the call is back on the open
+list. From RESPONSIBILITY SET on, there is no next step.
+Closing offers the four exits. Each one shows only the fields it needs: a note for answered and
+for cancelled, a note and a department for forwarded, and the other call for a duplicate. The
+close control names the exit and says that closing is final and a new message opens a new call.
+A refused exit keeps the exit and the values. Flagging and clearing an emergency, and sending
+the call back to the filtered list, are in the header. They are absent when they do not apply:
+a closed call has neither, and a call already returned is not sent back again. A posted flag or
+clear on a closed call is refused by that same command, and the stored flag is unchanged. No new
+database constraint is added for the flag. The requester's
+name links to the party profile when this person holds `party.read`. The stacked cards those
+actions used to live in are gone.
+
+A call is closed only from its page. Success returns to that call with a receipt parameter.
+The receipt is drawn only when that parameter is present and the call is closed, and it names
+the exit. It links to the first call on the unfiltered open list, in that list's order, and the
+link is absent when nothing is open. The next call is read only for that receipt. A request
+without the parameter draws no receipt.
+
+The closed page draws an outcome card instead of the eight steps. The card names who closed
+the call, how long it was open, the states its transitions actually passed, and the reason for
+that exit: the note, the department, the other call, or the cancellation. The path is taken
+from the transitions already stored, in state order, and it is not a new field. A call closed
+while still new does not show the states it never reached. Later calls that continue this one
+are listed newest first, apart from the duplicates. The page shows the close time and the time
+open, counted in whole minutes from open to close in the same words as an open call's age:
+under an hour in minutes, one hour as שעה, under a day in hours, one day as יום. It never
+shows בזמן, קרוב ליעד, or מעבר ליעד, a goal colour, or a goal mark, including when the call
+is older than the red threshold.
+
+A call that was ever an emergency says היה חירום, including while the flag is still stored.
+The list, the split row, and the split preview show that same chip. An open call that is
+flagged says חירום in those places, and an open call that is not flagged shows neither chip.
+Closing does not clear the flag. The mark the page already reports stays the stored flag,
+and the list and the split row report that same stored flag.
+The page offers no flag, clear, return, exit, identify, or category action. Return, exit,
+identify, and category stay refused. Filing still works for someone who may file. Saving the
+sender as a contact still works when that command would have been offered before the close:
+one button titled שמירת איש קשר, with no next-step label. The line אין פעולות appears only
+when that button is absent. The requester's name links to the profile under the same rule as
+an open call. Back goes to the closed list. The party profile still shows the stored flag as
+חירום or לא.
+
+**The closed list (#224)** is the closed segment, on the same split inbox and list view as the
+open list. It shows the calls closed in the last 30 days: a close later than 30 days before now,
+and not later than now. Newest close first. The rows are grouped by the day of the close in the
+office's zone: היום, אתמול, השבוע for the rest of the week back to the most recent Sunday, and
+קודם. An empty group is left out, so a Sunday or a Monday has no השבוע heading. A returned call
+is not a closed call and is not on this list.
+
+Older closes are the request `page=1`, then `page=2`, each a window of 30 days ending where the
+one after it began. The link 30 הימים הקודמים is drawn only when a closed call matching the
+category and the exit closed at or before the start of the window on screen. It leads to the
+window holding the newest of those closes, so it never leads to an empty window: a gap of more
+than 30 days with no close is skipped. A page that is not a whole number from 0 to 9999 is page 0.
+
+The closed list can be narrowed by exit, requested as `exit=ANSWERED` and the other three. The
+exit segments are הכל and the four exits, each with the number of calls of that exit in the window
+on screen under the category chosen, so the count on the chosen exit is the number of rows below
+it. An exit the page does not know is הכל. The category menu stays and keeps the exit and the page.
+The emergency, review, and goal filters do not apply to a closed call, and the closed list's links
+do not carry them. The open-call summary, the
+segment counts, and the stat row still count open calls only.
+
+A closed row shows the exit and the close time, and not the age, a goal word, or a goal mark. The
+split preview of a closed call shows the requester, היה חירום when the call ever was an emergency,
+and the outcome: the exit, who closed it, the close time, the reason, and the department of a
+forwarded call. It shows no next step, no state strip, and no message excerpt. An empty window says אין
+קריאות שנסגרו ב־30 הימים האלה. A window narrowed by category or exit that has no rows says אין
+קריאות תואמות. A closed call outside the window is still on its own page and on the requester's
+profile: the window is only the list.
+
+The window is `listClosedCalls`: closed, not returned, a close inside the window, ordered by close
+time newest first. The older link reads `newestCloseAtOrBefore` at the window's start. Both were
+measured inside a transaction that was rolled back, with closed calls spread evenly over the past:
+2,908 in one year, one for each party the portfolio holds, as the requester read was measured, and
+29,080 over ten years. The last 30 days were 239 rows either way. Without an index the window is a
+sequential scan and a sort: cost 179.90, 119 buffers, 0.296 ms at one year, and cost 1231.86, 713
+buffers, 1.871 ms at ten. The older read is a sequential scan of every closed call before the
+window: 0.367 ms and 3.040 ms. A btree on `closed_at`, restricted to a closed call, is a backward
+index scan the planner chooses for both reads at both volumes: the window at cost 32.69 and 28.63,
+9 and 11 buffers, under 0.1 ms; the older read at 3 buffers, 0.005 ms. That partial index is
+added, so an open call pays nothing for it on write.
 
 **A party's calls (#209).** The profile lists every call that names that party as requester, newest
 first, including a closed call and one returned to the filtered list. Each row shows the day the
