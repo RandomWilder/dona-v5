@@ -4,7 +4,7 @@
 //
 // Server-rendered, no client JavaScript. The rail count is the open-call count
 // for the whole office, passed in by the route, so a filter does not shrink it.
-import { DEFAULT_ZONE, dayIn } from '../../kernel/clock.ts';
+import { addDays, DEFAULT_ZONE, dayIn } from '../../kernel/clock.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import {
@@ -915,20 +915,14 @@ function emptyCopy(screen: CallsScreen): string {
   return listIsNarrowed(screen) ? 'אין קריאות תואמות.' : 'אין קריאות פתוחות.';
 }
 
-function shiftDay(day: string, by: number): string {
-  const at = new Date(`${day}T00:00:00.000Z`);
-  at.setUTCDate(at.getUTCDate() + by);
-  return at.toISOString().slice(0, 10);
-}
-
 /** היום, אתמול, the rest of the week back to Sunday, then older: the day of the close in the office's zone. */
 function closeDayGroups(
   calls: readonly ServiceCall[],
   now: Date,
 ): { heading: string; calls: ServiceCall[] }[] {
   const today = dayIn(now, DEFAULT_ZONE);
-  const yesterday = shiftDay(today, -1);
-  const sunday = shiftDay(
+  const yesterday = addDays(today, -1);
+  const sunday = addDays(
     today,
     -new Date(`${today}T00:00:00.000Z`).getUTCDay(),
   );
