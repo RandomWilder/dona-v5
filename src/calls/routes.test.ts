@@ -188,25 +188,43 @@ async function cleanup(pool: import('pg').Pool, domain: string): Promise<void> {
   await signOutAll(pool, domain);
 }
 
-// The badge and the list are two reads, and other files open and close calls on this database
-// while this one runs. A page read while the open count held still is one where the two must agree;
-// a page that straddled another file's write is read again.
+// The badge and the list are two reads, and other files open, flag and close calls on this database
+// while this one runs. Pages read while the open book held still are pages whose counts must agree;
+// a set that straddled another file's write is read again. The open book is every column of every
+// open call, not only how many there are: a flag set elsewhere moves the emergency count and leaves
+// the total where it was.
+type Page = Awaited<ReturnType<ReturnType<typeof asOperator>['inject']>>;
+
+async function quietPages(
+  pool: import('pg').Pool,
+  client: ReturnType<typeof asOperator>,
+  urls: readonly string[],
+): Promise<Page[]> {
+  const openBook = async (): Promise<string> => {
+    const { rows } = await pool.query<{ book: string | null }>(
+      `SELECT md5(string_agg(c::text, ',' ORDER BY c.service_call_id)) AS book
+         FROM service_call c
+        WHERE state <> 'CLOSED' AND returned_at IS NULL`,
+    );
+    return rows[0]?.book ?? '';
+  };
+  for (let attempt = 1; ; attempt += 1) {
+    const before = await openBook();
+    const pages: Page[] = [];
+    for (const url of urls) {
+      pages.push(await client.inject({ method: 'GET', url }));
+    }
+    if ((await openBook()) === before || attempt === 20) return pages;
+  }
+}
+
 async function quietCallsPage(
   pool: import('pg').Pool,
   client: ReturnType<typeof asOperator>,
-): Promise<Awaited<ReturnType<ReturnType<typeof asOperator>['inject']>>> {
-  const openNow = async (): Promise<number> => {
-    const { rows } = await pool.query<{ n: number }>(
-      `SELECT count(*)::int AS n FROM service_call
-        WHERE state <> 'CLOSED' AND returned_at IS NULL`,
-    );
-    return rows[0]?.n ?? 0;
-  };
-  for (let attempt = 1; ; attempt += 1) {
-    const before = await openNow();
-    const page = await client.inject({ method: 'GET', url: '/calls' });
-    if ((await openNow()) === before || attempt === 20) return page;
-  }
+): Promise<Page> {
+  const [page] = await quietPages(pool, client, ['/calls']);
+  assert.ok(page);
+  return page;
 }
 
 describe('calls · the קריאות tab', () => {
@@ -1087,17 +1105,18 @@ describe('calls · the קריאות tab', () => {
       assert.doesNotMatch(late.body, new RegExp(fresh));
       assert.doesNotMatch(list.body, /כתום|אדום/);
 
-      const emergencies = await client.inject({
-        method: 'GET',
-        url: '/calls?emergency=1',
-      });
+      const [book, emergencies] = await quietPages(pool, client, [
+        '/calls',
+        '/calls?emergency=1',
+      ]);
+      assert.ok(book && emergencies);
       const openTotal = railCount(emergencies.body);
       assert.equal(labeledCount(emergencies.body, 'פתוחות'), openTotal);
-      assert.equal(labeledCount(list.body, 'פתוחות'), railCount(list.body));
+      assert.equal(labeledCount(book.body, 'פתוחות'), railCount(book.body));
       for (const label of ['חירום', 'לא בזמן', 'לבדיקה'] as const) {
         assert.equal(
           labeledCount(emergencies.body, label),
-          labeledCount(list.body, label),
+          labeledCount(book.body, label),
         );
       }
       const shown = emergencies.body.match(/<article /g)?.length ?? 0;
@@ -1109,7 +1128,7 @@ describe('calls · the קריאות tab', () => {
       );
       assert.equal(
         labeledCount(emergencies.body, 'קרוב ליעד'),
-        labeledCount(list.body, 'קרוב ליעד'),
+        labeledCount(book.body, 'קרוב ליעד'),
       );
       assert.doesNotMatch(list.body, /סגורות <span/);
       assert.match(list.body, /href="\/calls\?state=CLOSED"/);
