@@ -171,6 +171,17 @@ The requester's name in the preview is text, and it does not link to the profile
 call still waiting on a category, offers a next step that links to the call page. From
 RESPONSIBILITY SET on, and on a closed call, there is no such strip.
 
+**A narrow screen (#225)** changes the layout and nothing else. Below 40rem the stat row is two
+columns, the segments wrap rather than scroll so the current one is always in view, the eight steps
+become one line of dots with only the current state named, the log dialog is a sheet on the bottom
+edge, and the filtered cards are one column. The call page's aside is first in the markup, so on a
+single column it sits above the record and the conversation. In the conversation the inbound message
+sits on the start side and the office echo on the end side. A file name is marked left to right, and so
+is a sender or an actor with no Hebrew in it, so an address is not reversed. A back link carries a
+chevron pointing right and a forward link one pointing left. Targets are the touch height; segments
+and small buttons keep the shorter control height the assets screens use. A list row is a target as
+a whole. Focus on a radio is drawn on its label. The page never scrolls sideways at 320px.
+
 A mailbox that has not been read, a WhatsApp echo that has gone quiet, and a mail secret that is
 due, expired, or undated are warnings above the list, each with a way to the settings. The way into
 the filtered list shows how many rows are set aside: the length of the noise messages and the

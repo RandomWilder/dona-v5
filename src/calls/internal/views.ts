@@ -439,6 +439,99 @@ const styles = h`<style>
     .calls .list-layout { display: grid; gap: var(--space-6); }
     .calls .split-layout { display: none; }
   }
+  .calls,
+  .calls .list-layout,
+  .calls .split-layout { grid-template-columns: minmax(0, 1fr); }
+  .calls h1 { overflow-wrap: anywhere; }
+  .calls .segmented { flex-wrap: wrap; max-inline-size: 100%; }
+  .calls .segmented a { white-space: nowrap; }
+  .calls .chev { inline-size: var(--space-4); block-size: var(--space-4); vertical-align: middle; }
+  .calls .chev.is-back { rotate: -90deg; }
+  :dir(ltr) .calls .chev.is-back { rotate: 90deg; }
+  .calls .back a,
+  .calls .receipt a,
+  .calls [data-next-step] a {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-height: var(--size-touch);
+  }
+  .calls .lede a,
+  .calls .file a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--size-touch);
+  }
+  .calls .choice label {
+    min-height: var(--size-touch);
+    padding-inline: var(--space-2);
+    border-radius: var(--radius-2);
+  }
+  .calls .choice label:has(input:focus-visible) {
+    outline: var(--size-focus) solid var(--color-accent-ink);
+    outline-offset: var(--size-focus);
+  }
+  .calls .choice input:focus-visible { outline: none; }
+  .calls .exit summary { padding-block: var(--space-3); }
+  .calls .exit:not([open]) { padding-block: 0; gap: 0; }
+  .calls article.call[data-call] { position: relative; }
+  .calls article.call[data-call] .call-main a::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+  }
+  .calls .timeline[data-conversation] {
+    list-style: none;
+    padding: 0;
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+  .calls .timeline[data-conversation] > li[data-kind="MESSAGE"] {
+    justify-self: start;
+    display: grid;
+    gap: var(--space-1);
+    max-inline-size: min(36rem, 88%);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-4);
+    border-end-start-radius: var(--radius-1);
+    background: var(--color-surface-card);
+    color: var(--color-text);
+    font-size: var(--text-body);
+  }
+  .calls .timeline[data-conversation] > li[data-echo="true"] {
+    justify-self: end;
+    border-end-start-radius: var(--radius-4);
+    border-end-end-radius: var(--radius-1);
+    background: var(--color-accent-tint);
+  }
+  .calls .timeline[data-conversation] .when { font-size: var(--text-xs); }
+  @media (max-width: 39.99rem) {
+    .calls .stat-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .calls .stat { padding: var(--space-3) var(--space-4); }
+    .calls .segmented { border-radius: var(--radius-4); }
+    .calls .steps { flex-wrap: nowrap; align-items: center; gap: var(--space-2); }
+    .calls .steps li:not([aria-current]) {
+      flex: none;
+      inline-size: var(--space-2);
+      block-size: var(--space-2);
+      overflow: hidden;
+      border-radius: var(--radius-pill);
+      background: var(--meter-track);
+      color: transparent;
+      font-size: 0;
+    }
+    .calls .steps li.is-done { background: var(--color-ok); }
+    .calls dialog.call-form {
+      inset-block-start: auto;
+      inset-block-end: 0;
+      inline-size: 100%;
+      max-block-size: calc(100dvh - var(--space-10));
+      border-end-start-radius: 0;
+      border-end-end-radius: 0;
+      padding-block-end: max(var(--space-5), env(safe-area-inset-bottom, 0px));
+    }
+    .calls .timeline[data-conversation] > li[data-kind="MESSAGE"] { max-inline-size: 100%; }
+  }
 </style>`;
 
 function ordinarySize(bytes: number): string {
@@ -489,6 +582,22 @@ function checked(on: boolean): Html {
 function ltr(value: number): Html {
   return h`<span dir="ltr">${value}</span>`;
 }
+
+const HEBREW = /[\u0590-\u05FF]/;
+
+/** An address, a number, or a Latin name reads left to right inside the Hebrew page. */
+function bidi(text: string): Html {
+  return HEBREW.test(text) ? h`${text}` : h`<span dir="ltr">${text}</span>`;
+}
+
+/** A forward chevron points the way the page reads, left in Hebrew; a back chevron points right. */
+function chevron(back: boolean): Html {
+  const kind = back ? 'chev is-back' : 'chev';
+  return h`<svg class="${kind}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
+}
+
+const FORWARD = chevron(false);
+const BACK = chevron(true);
 
 function emergencyChip(call: ServiceCall, ever: boolean): Html {
   if (call.state === 'CLOSED') {
@@ -595,7 +704,7 @@ function callMeta(call: ServiceCall, screen: CallsScreen): Html {
     ${proposal}
     ${emergency}
     ${review}
-    <span>${sender}</span>
+    <span>${bidi(sender)}</span>
     ${
       call.exit === null
         ? h`<span>${ageLabel(call.openedAt, screen.now)}</span>`
@@ -1037,7 +1146,7 @@ function previewPane(screen: CallsScreen): Html {
   </section>`;
   }
   const next = waitingOnCategory(call.state)
-    ? h`<p data-next-step><a href="/calls/${call.id}">לעמוד הקריאה</a></p>`
+    ? h`<p data-next-step><a href="/calls/${call.id}">לעמוד הקריאה${FORWARD}</a></p>`
     : h``;
   return h`<section class="preview glass" aria-label="תצוגה" data-preview="${call.id}">
     <h2>${call.description}</h2>
@@ -1062,7 +1171,7 @@ function previewOutcome(exit: CallExit): Html {
       : h`<div><dt>מחלקה</dt><dd>${exit.department}</dd></div>`;
   return h`<dl class="facts" data-preview-outcome="${exit.kind}">
     <div><dt>יציאה</dt><dd>${EXIT_HE[exit.kind]}</dd></div>
-    <div><dt>סגר</dt><dd>${exit.actorLabel}</dd></div>
+    <div><dt>סגר</dt><dd>${bidi(exit.actorLabel)}</dd></div>
     <div><dt>נסגרה</dt><dd>${whenLabel(exit.at)}</dd></div>
     ${reason}
     ${department}
@@ -1118,7 +1227,7 @@ export function renderCallsPage(screen: CallsScreen): string {
 
 function eventLine(event: CallTransition): Html {
   const when = whenLabel(event.at);
-  const who = `${event.actorLabel} · ${when}`;
+  const who = h`${bidi(event.actorLabel)} · ${when}`;
   if (event.kind === 'OPENED') {
     return h`<li data-kind="OPENED">נפתחה · ${who}</li>`;
   }
@@ -1129,7 +1238,8 @@ function eventLine(event: CallTransition): Html {
     return h`<li data-kind="TRIAGED">קטגוריה ${event.categoryLabel} · ${who}</li>`;
   }
   if (event.kind === 'FLAGGED') {
-    const setter = event.flagBy === 'terms' ? 'המונחים' : event.actorLabel;
+    const setter =
+      event.flagBy === 'terms' ? h`המונחים` : bidi(event.actorLabel);
     return h`<li data-kind="FLAGGED">סומנה חירום · ${setter} · ${when}</li>`;
   }
   if (event.kind === 'CLEARED') {
@@ -1189,7 +1299,7 @@ function fileBlock(
     file.documentId === null
       ? fileForm(screen, messageId, file)
       : h` <a href="/documents/${file.documentId}/read" data-document="${file.documentId}">תויק</a>`;
-  return h`<div class="file" data-file="${file.fileName}">קובץ: ${file.fileName}${type}${size}${open}${filed}</div>`;
+  return h`<div class="file" data-file="${file.fileName}">קובץ: <span dir="ltr">${file.fileName}</span>${type}${size}${open}${filed}</div>`;
 }
 
 function fileForm(
@@ -1228,10 +1338,10 @@ function timelineOf(screen: CallScreen): Html {
   return h`${items.map((item) => item.html)}`;
 }
 
-function emergencyLabel(call: ServiceCall): string {
-  if (!call.emergency.flagged) return 'לא';
-  if (call.emergency.by === 'terms') return 'המונחים';
-  return call.emergency.actorLabel;
+function emergencyLabel(call: ServiceCall): Html {
+  if (!call.emergency.flagged) return h`לא`;
+  if (call.emergency.by === 'terms') return h`המונחים`;
+  return bidi(call.emergency.actorLabel);
 }
 
 function emergencyControl(screen: CallScreen): Html {
@@ -1556,7 +1666,7 @@ function outcomeCard(screen: CallScreen): Html {
   return h`<section class="glass sheet" data-outcome="${exit.kind}">
     <h2>תוצאה</h2>
     <dl class="facts">
-      <div><dt>סגר</dt><dd>${exit.actorLabel}</dd></div>
+      <div><dt>סגר</dt><dd>${bidi(exit.actorLabel)}</dd></div>
       <div><dt>פתוחה</dt><dd>${ageLabel(call.openedAt, exit.at)}</dd></div>
       <div><dt>עברה</dt><dd><ol class="passed">${passedStates(call).map((state) => h`<li>${CALL_STATE_HE[state]}</li>`)}</ol></dd></div>
       ${note}
@@ -1578,7 +1688,7 @@ function receiptOf(screen: CallScreen): Html {
   const next =
     screen.nextOpen == null
       ? h``
-      : h` <a data-next-call href="/calls/${screen.nextOpen.id}">הקריאה הבאה</a>`;
+      : h` <a data-next-call href="/calls/${screen.nextOpen.id}">הקריאה הבאה${FORWARD}</a>`;
   return h`<p class="receipt" role="status" data-receipt="${exit.kind}">הקריאה נסגרה · ${EXIT_HE[exit.kind]}.${next}</p>`;
 }
 
@@ -1651,15 +1761,15 @@ export function renderCallPage(screen: CallScreen): string {
   const emergencyWords =
     call.state === 'CLOSED'
       ? call.wasEmergency
-        ? 'היה חירום'
-        : 'לא'
+        ? h`היה חירום`
+        : h`לא`
       : emergencyLabel(call);
   const back = call.state === 'CLOSED' ? '/calls?state=CLOSED' : '/calls';
   const body = h`
     <div class="calls glass-stage" data-call-state="${call.state}">
       <header class="page-head">
         <div>
-          <p class="back"><a href="${back}">קריאות</a></p>
+          <p class="back"><a href="${back}">${BACK}קריאות</a></p>
           <h1>${call.description}</h1>
           <div class="head-meta">
             <dl class="facts">
@@ -1680,7 +1790,7 @@ export function renderCallPage(screen: CallScreen): string {
       <section class="glass sheet">
         <dl class="facts">
           <div><dt>מצב</dt><dd>${CALL_STATE_HE[call.state]}</dd></div>
-          <div><dt>נרשם</dt><dd>${sender}</dd></div>
+          <div><dt>נרשם</dt><dd>${bidi(sender)}</dd></div>
           <div><dt>פונה</dt><dd>${requesterName(screen)}</dd></div>
           <div><dt>קטגוריה</dt><dd>${category}</dd></div>
           ${proposal}
@@ -1693,7 +1803,7 @@ export function renderCallPage(screen: CallScreen): string {
       </section>
       <section class="glass sheet">
         <h2>מהלך</h2>
-        <ol class="timeline">${timelineOf(screen)}</ol>
+        <ol class="timeline" data-conversation>${timelineOf(screen)}</ol>
       </section>
       ${continuedBy(screen)}
       ${repeatedBy(screen)}
@@ -1733,7 +1843,7 @@ function filteredRow(row: FilteredRow, csrf: string): Html {
       ${office}
       <span class="chip">${CHANNEL_HE[row.channel]}</span>
       <span>${whenLabel(row.at)}</span>
-      <span>${row.sender}</span>
+      <span>${bidi(row.sender)}</span>
     </p>
     <form method="post" action="/calls/filtered">
       ${csrfInput(csrf)}
@@ -1781,7 +1891,7 @@ export function renderFilteredPage(screen: FilteredScreen): string {
     <div class="calls glass-stage">
       <header class="page-head">
         <div>
-          <p class="back"><a href="/calls">קריאות</a></p>
+          <p class="back"><a href="/calls">${BACK}קריאות</a></p>
           <h1>מסוננות</h1>
           <p class="lede">מה שהמסווג הניח בצד, ומה שהמשרד החזיר.</p>
         </div>

@@ -1349,7 +1349,10 @@ describe('calls · the קריאות tab', () => {
         assert.doesNotMatch(inbound[1] ?? '', new RegExp(translation));
         assert.match(thread, new RegExp(echo));
 
-        assert.match(page.body, new RegExp(`<dt>נרשם</dt><dd>${sender}</dd>`));
+        assert.match(
+          page.body,
+          new RegExp(`<dt>נרשם</dt><dd><span dir="ltr">${sender}</span></dd>`),
+        );
         assert.match(
           page.body,
           /<dt>פונה<\/dt><dd><a href="\/parties\/[0-9a-f-]{36}">Tenant of 2191<\/a><\/dd>/,
