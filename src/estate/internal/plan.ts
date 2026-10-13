@@ -26,6 +26,8 @@ export type ConditionStatus = 'READY' | 'RENOVATION' | 'WITHHELD';
 export type Tenure = 'FOR_RENT' | 'FOR_SALE' | 'SOLD';
 /** Whether the tender lets the flat at a free-market rent or a regulated one (#212). */
 export type RentalTrack = 'FREE_MARKET' | 'REGULATED';
+/** Where a storage room attached to the flat with no number opens from (0066). */
+export type AttachedStorage = 'GARDEN' | 'BALCONY';
 
 export interface ProjectPlan {
   name: string;
@@ -49,6 +51,8 @@ export interface SpacePlan {
    */
   disabledBay?: boolean;
   areaSqm?: number | null;
+  /** 0066. A numbered storage room built above the parking. STORAGE only; names no bay. */
+  overParking?: boolean;
 }
 
 export interface UnitPlan {
@@ -75,6 +79,12 @@ export interface UnitPlan {
   /** The developer's layout code (`A`, `BG`, `P1`). */
   flatType?: string | null;
   balconySqm?: number | null;
+  /** 0066. A garden flat's garden area; null is not a garden flat. Not the balcony. */
+  gardenSqm?: number | null;
+  /** 0066. A balcony a sukkah may stand on. */
+  sukkahBalcony?: boolean;
+  /** 0066. A storage room attached to the flat with no number, by where it opens from. */
+  attachedStorage?: AttachedStorage | null;
 }
 
 export interface BuildingPlan {

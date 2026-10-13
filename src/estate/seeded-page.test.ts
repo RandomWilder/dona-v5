@@ -58,6 +58,13 @@ function plan(): EstatePlan {
             accessNote: null,
             areaSqm: 6.2,
           },
+          {
+            kind: 'STORAGE',
+            name: '534',
+            floor: '-1',
+            accessNote: null,
+            overParking: true,
+          },
         ],
         units: [
           flat('1', {
@@ -65,8 +72,12 @@ function plan(): EstatePlan {
             flatType: 'BG',
             rentalTrack: 'REGULATED',
           }),
-          flat('2', { tenure: 'FOR_SALE' }),
-          flat('3', { tenure: 'SOLD', balconySqm: 14 }),
+          flat('2', {
+            tenure: 'FOR_SALE',
+            gardenSqm: 211.7,
+            attachedStorage: 'GARDEN',
+          }),
+          flat('3', { tenure: 'SOLD', balconySqm: 14, sukkahBalcony: true }),
         ],
       },
     ],
@@ -124,6 +135,9 @@ describe('estate · a seeded building on נכסים', () => {
       assert.match(html, /סינון לפי מסלול/);
       assert.match(html, /שוק חופשי <span class="n"><span dir="ltr">2<\/span>/);
       assert.match(html, /מפוקח <span class="n"><span dir="ltr">1<\/span>/);
+      // 0066: a garden flat says so on its tile; a storage room above the parking says where it is.
+      assert.match(html, /<span class="sub">גן<\/span>/);
+      assert.match(html, /<span class="sub">מעל החניה<\/span>/);
 
       const ids = await pool.query<{ unit_number: string; unit_id: string }>(
         `SELECT u.unit_number, u.unit_id FROM unit u
@@ -166,6 +180,21 @@ describe('estate · a seeded building on נכסים', () => {
       assert.match(unitPage.body, /<span class="chip">נמכרה<\/span>/);
       assert.match(unitPage.body, /<span class="chip">שוק חופשי<\/span>/);
       assert.match(unitPage.body, /מרפסת <span dir="ltr">14<\/span> מ״ר/);
+      assert.match(unitPage.body, /<span class="chip">מרפסת סוכה<\/span>/);
+      const gardenFlat = await client.inject({
+        method: 'GET',
+        url: `/estate/units/${idOf('2')}`,
+      });
+      assert.equal(gardenFlat.statusCode, 200);
+      assert.match(
+        gardenFlat.body,
+        /<span class="chip"><span>גינה <span dir="ltr">211\.7<\/span> מ״ר<\/span><\/span>/,
+      );
+      assert.match(
+        gardenFlat.body,
+        /<span class="chip">מחסן צמוד מהגינה<\/span>/,
+      );
+      assert.doesNotMatch(gardenFlat.body, /<span class="chip">מרפסת סוכה/);
       // A chip is a flex box, so a word and a number in it are wrapped in one span; otherwise the
       // space between them is dropped and the chip reads מרפסת14.
       assert.match(unitPage.body, /<span class="chip"><span>מרפסת /);

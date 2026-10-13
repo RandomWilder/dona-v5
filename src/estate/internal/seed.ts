@@ -9,6 +9,7 @@ import { gunzipSync } from 'node:zlib';
 import { KernelError } from '../../kernel/errors.ts';
 import { importEstate } from './importer.ts';
 import type {
+  AttachedStorage,
   BuildingPlan,
   EstatePlan,
   ImportReport,
@@ -163,6 +164,7 @@ function readSpace(value: unknown, path: string): SpacePlan {
     'accessNote',
     'disabledBay',
     'areaSqm',
+    'overParking',
   ]);
   // -- pii. How a technician gets into a home does not travel in a layout file.
   if (o.accessNote !== null) bad(`${path}.accessNote`, 'must be null');
@@ -187,6 +189,10 @@ function readSpace(value: unknown, path: string): SpacePlan {
     numberOrNull(o, 'areaSqm', path),
   );
   if (areaSqm !== undefined) space.areaSqm = areaSqm;
+  const overParking = optional(o, 'overParking', () =>
+    boolean(o, 'overParking', path),
+  );
+  if (overParking !== undefined) space.overParking = overParking;
   return space;
 }
 
@@ -205,6 +211,9 @@ function readUnit(value: unknown, path: string): UnitPlan {
     'rentalTrack',
     'flatType',
     'balconySqm',
+    'gardenSqm',
+    'sukkahBalcony',
+    'attachedStorage',
   ]);
   for (const key of ['parkingSpaceName', 'storageSpaceName']) {
     if (o[key] !== null) {
@@ -245,6 +254,23 @@ function readUnit(value: unknown, path: string): UnitPlan {
     numberOrNull(o, 'balconySqm', path),
   );
   if (balconySqm !== undefined) unit.balconySqm = balconySqm;
+  const gardenSqm = optional(o, 'gardenSqm', () =>
+    numberOrNull(o, 'gardenSqm', path),
+  );
+  if (gardenSqm !== undefined) unit.gardenSqm = gardenSqm;
+  const sukkahBalcony = optional(o, 'sukkahBalcony', () =>
+    boolean(o, 'sukkahBalcony', path),
+  );
+  if (sukkahBalcony !== undefined) unit.sukkahBalcony = sukkahBalcony;
+  const attachedStorage = optional(o, 'attachedStorage', () =>
+    o.attachedStorage === null
+      ? null
+      : oneOf<AttachedStorage>(o, 'attachedStorage', path, [
+          'GARDEN',
+          'BALCONY',
+        ]),
+  );
+  if (attachedStorage !== undefined) unit.attachedStorage = attachedStorage;
   return unit;
 }
 
@@ -360,7 +386,8 @@ export function summariseSeedPlan(plan: EstatePlan): string[] {
     `          project ${project ? `${project.projectCode} (${project.name})` : (building.projectCode ?? '—')} · handover ${building.handoverDate} → warranty ${building.warrantyEndDate}`,
     `flats     ${building.units.length} · FOR_RENT ${tenure('FOR_RENT')} · FOR_SALE ${tenure('FOR_SALE')} · SOLD ${tenure('SOLD')} · regulated ${regulated} · floors ${floors[0] ?? '—'}–${floors.at(-1) ?? '—'} · types ${types.size}`,
     `parking   ${parking.length}${parking.length ? ` · ${byFloor(parking)}` : ''} · disabled ${parking.filter((s) => s.disabledBay).length}`,
-    `storage   ${storage.length}${storage.length ? ` · ${byFloor(storage)}` : ''}`,
+    `markings  garden ${building.units.filter((u) => u.gardenSqm != null).length} · sukkah ${building.units.filter((u) => u.sukkahBalcony).length} · attached storage ${building.units.filter((u) => u.attachedStorage != null).length}`,
+    `storage   ${storage.length}${storage.length ? ` · ${byFloor(storage)}` : ''} · over parking ${storage.filter((s) => s.overParking).length}`,
     `other     ${other}`,
   ];
 }

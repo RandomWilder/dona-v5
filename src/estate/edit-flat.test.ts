@@ -1,4 +1,4 @@
-// #210. An admin corrects a seeded flat from its page. The five facts update in place.
+// #210. An admin corrects a seeded flat from its page. The five facts, and 0066's three, update in place.
 // A letting does not block it, and nothing is appended to estate_event.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -71,15 +71,24 @@ async function cleanup(pool: {
     .catch(() => {});
 }
 
-function correction(overrides: Record<string, string> = {}): string {
-  return new URLSearchParams({
+/** The form as a browser posts it. A null override leaves the field out, as an unticked box is. */
+function correction(overrides: Record<string, string | null> = {}): string {
+  const fields: Record<string, string | null> = {
     rooms: '4.5',
     floor: 'קרקע',
     area_sqm: '88',
     flat_type: 'P1',
     balcony_sqm: '12.5',
+    garden_sqm: '96.89',
+    sukkah_balcony: 'on',
+    attached_storage: 'GARDEN',
     ...overrides,
-  }).toString();
+  };
+  const form = new URLSearchParams();
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== null) form.set(key, value);
+  }
+  return form.toString();
 }
 
 describe('estate · edit a flat after it is seeded', () => {
@@ -116,6 +125,12 @@ describe('estate · edit a flat after it is seeded', () => {
       assert.match(page.body, /name="area_sqm"[^>]*value="90"/);
       assert.match(page.body, /name="flat_type"[^>]*value="BG"/);
       assert.match(page.body, /name="balcony_sqm"[^>]*value=""/);
+      assert.match(page.body, /name="garden_sqm"[^>]*value=""/);
+      assert.match(page.body, /name="sukkah_balcony" type="checkbox"/);
+      assert.match(
+        page.body,
+        /<select id="attached_storage" name="attached_storage">/,
+      );
 
       const saved = await client.inject({
         method: 'POST',
@@ -132,6 +147,9 @@ describe('estate · edit a flat after it is seeded', () => {
         area_sqm: string;
         flat_type: string | null;
         balcony_sqm: string | null;
+        garden_sqm: string | null;
+        sukkah_balcony: boolean;
+        attached_storage: string | null;
         unit_number: string;
         has_mamad: boolean;
         tenure: string;
@@ -141,7 +159,8 @@ describe('estate · edit a flat after it is seeded', () => {
         storage_space_id: string | null;
       }>(
         `SELECT u.rooms::text, s.floor, u.area_sqm::text, u.flat_type,
-                u.balcony_sqm::text, u.unit_number, u.has_mamad, u.tenure,
+                u.balcony_sqm::text, u.garden_sqm::text, u.sukkah_balcony,
+                u.attached_storage, u.unit_number, u.has_mamad, u.tenure,
                 u.condition_status, u.warranty_end_date::text,
                 u.parking_space_id, u.storage_space_id
            FROM unit u JOIN space s ON s.space_id = u.unit_id
@@ -154,6 +173,9 @@ describe('estate · edit a flat after it is seeded', () => {
       assert.equal(row?.area_sqm, '88');
       assert.equal(row?.flat_type, 'P1');
       assert.equal(row?.balcony_sqm, '12.5');
+      assert.equal(row?.garden_sqm, '96.89');
+      assert.equal(row?.sukkah_balcony, true);
+      assert.equal(row?.attached_storage, 'GARDEN');
       assert.equal(row?.unit_number, '1');
       assert.equal(row?.has_mamad, true);
       assert.equal(row?.tenure, 'FOR_RENT');
@@ -201,6 +223,8 @@ describe('estate · edit a flat after it is seeded', () => {
         ['rooms, over', correction({ rooms: '21' })],
         ['area', correction({ area_sqm: '78,5' })],
         ['balcony', correction({ balcony_sqm: '-1' })],
+        ['garden', correction({ garden_sqm: '-1' })],
+        ['attached storage', correction({ attached_storage: 'ROOF' })],
         ['floor', correction({ floor: 'ק'.repeat(33) })],
         ['type', correction({ flat_type: 'A'.repeat(33) })],
       ] as Array<[string, string]>) {
@@ -265,6 +289,9 @@ describe('estate · edit a flat after it is seeded', () => {
           area_sqm: '',
           flat_type: '',
           balcony_sqm: '',
+          garden_sqm: '',
+          sukkah_balcony: null,
+          attached_storage: '',
         }),
       });
       assert.equal(cleared.statusCode, 303);
@@ -274,8 +301,12 @@ describe('estate · edit a flat after it is seeded', () => {
         area_sqm: string | null;
         flat_type: string | null;
         balcony_sqm: string | null;
+        garden_sqm: string | null;
+        sukkah_balcony: boolean;
+        attached_storage: string | null;
       }>(
-        `SELECT u.rooms::text, s.floor, u.area_sqm::text, u.flat_type, u.balcony_sqm::text
+        `SELECT u.rooms::text, s.floor, u.area_sqm::text, u.flat_type, u.balcony_sqm::text,
+                u.garden_sqm::text, u.sukkah_balcony, u.attached_storage
            FROM unit u JOIN space s ON s.space_id = u.unit_id
           WHERE u.unit_id = $1`,
         [unitId],
@@ -285,6 +316,9 @@ describe('estate · edit a flat after it is seeded', () => {
       assert.equal(after.rows[0]?.area_sqm, null);
       assert.equal(after.rows[0]?.flat_type, null);
       assert.equal(after.rows[0]?.balcony_sqm, null);
+      assert.equal(after.rows[0]?.garden_sqm, null);
+      assert.equal(after.rows[0]?.sukkah_balcony, false);
+      assert.equal(after.rows[0]?.attached_storage, null);
     } finally {
       await cleanup(pool);
       await signOutAll(pool, DOMAIN);

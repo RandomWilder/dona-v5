@@ -793,6 +793,18 @@ const ELIGIBILITY_WORD: Record<string, string> = {
   ACTIVE_RESERVE: 'מילואים פעיל',
 };
 
+/** 0066. A storage room attached to the flat with no number, by where it opens from. */
+const ATTACHED_STORAGE_WORD: Record<string, string> = {
+  GARDEN: 'מחסן צמוד מהגינה',
+  BALCONY: 'מחסן צמוד מהמרפסת',
+};
+
+const ATTACHED_STORAGE_CHOICES = [
+  { value: '', word: 'אין' },
+  { value: 'GARDEN', word: ATTACHED_STORAGE_WORD.GARDEN },
+  { value: 'BALCONY', word: ATTACHED_STORAGE_WORD.BALCONY },
+] as const;
+
 function regulatedMark(space: InventorySpaceRow): Html {
   return space.rental_track === 'REGULATED'
     ? h`<span class="sub">${TRACK_WORD.REGULATED}</span>`
@@ -830,7 +842,8 @@ function spaceTile(
     const dot = state.vacant
       ? h`<span class="dot is-hollow"></span>`
       : h`<span class="dot"></span>`;
-    return h`<a class="${cls}" href="/estate/units/${space.space_id}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${state.word}</span>${sub}${forSale}${regulatedMark(space)}${state.lines.map(tileLetting)}</a>`;
+    const garden = space.garden_sqm ? h`<span class="sub">גן</span>` : h``;
+    return h`<a class="${cls}" href="/estate/units/${space.space_id}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${state.word}</span>${sub}${forSale}${regulatedMark(space)}${garden}${state.lines.map(tileLetting)}</a>`;
   }
   const words = TILE_WORD[space.space_kind];
   if (words) {
@@ -845,7 +858,11 @@ function spaceTile(
         : space.space_kind === 'STORAGE' && space.area_sqm
           ? h`<span class="sub">${ltr(space.area_sqm)} מ״ר</span>`
           : h``;
-    return h`<div class="${cls}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${words[on ? 'on' : 'off']}</span>${fact}</div>`;
+    const above =
+      space.space_kind === 'STORAGE' && space.over_parking
+        ? h`<span class="sub">מעל החניה</span>`
+        : h``;
+    return h`<div class="${cls}"><span class="no">${tileName(space.name)}</span><span class="state">${dot}${words[on ? 'on' : 'off']}</span>${fact}${above}</div>`;
   }
   const named =
     space.space_kind === 'TECHNICAL'
@@ -2170,6 +2187,33 @@ function editFlatForm(unit: UnitHit, csrf: string): Html {
         value="${unit.balcony_sqm ?? ''}" />
       <p class="hint">ריק — אין מרפסת, או ששטחה לא נמדד.</p>
     </div>
+    <div class="form-pair">
+      <div class="form-row">
+        <label for="garden_sqm">שטח גינה במ״ר</label>
+        <input id="garden_sqm" name="garden_sqm" type="number" step="0.01" min="0"
+          value="${unit.garden_sqm ?? ''}" />
+        <p class="hint">ריק — אין גינה. גינה אינה מרפסת.</p>
+      </div>
+      <div class="form-row">
+        <label for="attached_storage">מחסן צמוד ללא מספר</label>
+        <select id="attached_storage" name="attached_storage">
+          ${ATTACHED_STORAGE_CHOICES.map(
+            (choice) =>
+              h`<option value="${choice.value}" ${
+                (unit.attached_storage ?? '') === choice.value
+                  ? h`selected`
+                  : h``
+              }>${choice.word}</option>`,
+          )}
+        </select>
+      </div>
+    </div>
+    <label class="check" for="sukkah_balcony">
+      <input id="sukkah_balcony" name="sukkah_balcony" type="checkbox" value="true" ${
+        unit.sukkah_balcony ? h`checked` : h``
+      } />
+      מרפסת סוכה
+    </label>
     <div class="form-actions">
       <button class="btn btn-primary" type="submit">שמירה</button>
     </div>
@@ -2210,6 +2254,14 @@ export function renderUnitPage(
       }${unit.flat_type ? h`<span class="chip"><span>טיפוס ${ltr(unit.flat_type)}</span></span>` : h``}${
         unit.balcony_sqm
           ? h`<span class="chip"><span>מרפסת ${ltr(unit.balcony_sqm)} מ״ר</span></span>`
+          : h``
+      }${
+        unit.garden_sqm
+          ? h`<span class="chip"><span>גינה ${ltr(unit.garden_sqm)} מ״ר</span></span>`
+          : h``
+      }${unit.sukkah_balcony ? h`<span class="chip">מרפסת סוכה</span>` : h``}${
+        unit.attached_storage
+          ? h`<span class="chip">${ATTACHED_STORAGE_WORD[unit.attached_storage] ?? unit.attached_storage}</span>`
           : h``
       }</div>
       <p class="unit-actions">

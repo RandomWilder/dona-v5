@@ -39,6 +39,10 @@ agent. **The office** — the humans who supervise exceptions.
 | **Sold flat** | A Unit that has left the rental stock. Still a Unit and still in its Building; never let again. Sold does not revert. |
 | **Disabled bay** | A `PARKING` Space reserved for a disabled-parking permit (חניית נכה). A fact about the bay, not about who parks in it. |
 | **Flat type** | The developer's layout code for a Unit (`A`, `BG`, `P1`). Each developer has their own. |
+| **Garden flat** | A Unit with a private garden (דירת גן), and the garden's area. A garden is not a balcony. |
+| **Sukkah balcony** | A balcony open to the sky that a sukkah may stand on (מרפסת סוכה). A fact about the Unit. |
+| **Attached storage room** | A storage room that belongs to a Unit and has no number, reached from its garden or balcony. Not a `STORAGE` Space: it cannot be assigned or let apart from the flat. |
+| **Storage above the parking** | A numbered `STORAGE` Space built over the parking level (מחסן על החניה). Its number is its own and names no bay. |
 | **Developer sheet** | The developer's spreadsheet of a Building's layout: flats, floors, rooms, bays, storage. Every developer's differs; the system reads none of them. |
 | **Building plan file** | The one format the system seeds a Building from. A developer sheet is converted into it outside the system. |
 

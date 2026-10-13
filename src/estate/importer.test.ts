@@ -307,6 +307,82 @@ describe('estate · the import runs twice', () => {
       );
 
       await t.test(
+        'writes the 0066 markings, leaves them when omitted, and clears them when named null',
+        async () => {
+          await inRolledBackTransaction(pool, async (db) => {
+            const marked = () => {
+              const plan = smallPlan();
+              const building = plan.buildings[0];
+              building.spaces[4] = { ...building.spaces[4], overParking: true };
+              building.units[0] = {
+                ...building.units[0],
+                gardenSqm: 211.7,
+                attachedStorage: 'GARDEN',
+              };
+              building.units[1] = { ...building.units[1], sukkahBalcony: true };
+              return plan;
+            };
+            const read = async () => {
+              const units = await db.query<{
+                unit_number: string;
+                garden_sqm: string | null;
+                sukkah_balcony: boolean;
+                attached_storage: string | null;
+              }>(
+                `SELECT u.unit_number, u.garden_sqm, u.sukkah_balcony, u.attached_storage
+                 FROM unit u JOIN space s ON s.space_id = u.unit_id
+                 JOIN building b ON b.building_id = s.building_id
+                 WHERE b.city = $1 ORDER BY u.unit_number`,
+                [CITY],
+              );
+              const store = await db.query<{ over_parking: boolean }>(
+                `SELECT s.over_parking FROM space s
+                 JOIN building b ON b.building_id = s.building_id
+                 WHERE b.city = $1 AND s.space_kind = 'STORAGE'`,
+                [CITY],
+              );
+              return {
+                units: units.rows.map((r) => [
+                  r.unit_number,
+                  r.garden_sqm === null ? null : Number(r.garden_sqm),
+                  r.sukkah_balcony,
+                  r.attached_storage,
+                ]),
+                overParking: store.rows.map((r) => r.over_parking),
+              };
+            };
+            await importEstate(db, marked());
+            await importEstate(db, smallPlan());
+            assert.deepEqual(await read(), {
+              units: [
+                ['1', 211.7, false, 'GARDEN'],
+                ['2', null, true, null],
+              ],
+              overParking: [true],
+            });
+            const cleared = marked();
+            const building = cleared.buildings[0];
+            building.spaces[4] = { ...building.spaces[4], overParking: false };
+            building.units[0] = {
+              ...building.units[0],
+              gardenSqm: null,
+              attachedStorage: null,
+            };
+            building.units[1] = { ...building.units[1], sukkahBalcony: false };
+            const report = await importEstate(db, cleared);
+            assert.equal(report.unit.created, 0);
+            assert.deepEqual(await read(), {
+              units: [
+                ['1', null, false, null],
+                ['2', null, false, null],
+              ],
+              overParking: [false],
+            });
+          });
+        },
+      );
+
+      await t.test(
         'the Shoham plan is 1 building, 184 spaces and 72 units',
         async () => {
           await inRolledBackTransaction(pool, async (db) => {

@@ -21,6 +21,7 @@ export type {
   AssetPlan,
   AssetStatus,
   AssetType,
+  AttachedStorage,
   BuildingPlan,
   BuildingStatus,
   ComplianceRegime,

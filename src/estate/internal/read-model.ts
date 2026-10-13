@@ -137,6 +137,10 @@ export interface InventorySpaceRow {
   disabled_bay?: boolean;
   /** 0064. A storage room's area; null elsewhere. */
   area_sqm?: string | null;
+  /** 0066. Only ever true on STORAGE. */
+  over_parking?: boolean;
+  /** 0066. A UNIT row's garden area; null on every other kind and on a flat with no garden. */
+  garden_sqm?: string | null;
 }
 
 /** The same row, with the Building it belongs to, for the portfolio drill-down. */
@@ -165,7 +169,8 @@ export async function listInventorySpaces(
     `SELECT space_id, space_kind, name,
             (SELECT u.tenure FROM unit u WHERE u.unit_id = space.space_id) AS tenure,
             (SELECT u.rental_track FROM unit u WHERE u.unit_id = space.space_id) AS rental_track,
-            disabled_bay, area_sqm::text AS area_sqm
+            (SELECT u.garden_sqm::text FROM unit u WHERE u.unit_id = space.space_id) AS garden_sqm,
+            disabled_bay, area_sqm::text AS area_sqm, over_parking
        FROM space
       WHERE building_id = $1
       ORDER BY ${INVENTORY_SPACE_ORDER}`,
@@ -182,7 +187,8 @@ export async function listPortfolioSpaces(
     `SELECT building_id, space_id, space_kind, name,
             (SELECT u.tenure FROM unit u WHERE u.unit_id = space.space_id) AS tenure,
             (SELECT u.rental_track FROM unit u WHERE u.unit_id = space.space_id) AS rental_track,
-            disabled_bay, area_sqm::text AS area_sqm
+            (SELECT u.garden_sqm::text FROM unit u WHERE u.unit_id = space.space_id) AS garden_sqm,
+            disabled_bay, area_sqm::text AS area_sqm, over_parking
        FROM space
       ORDER BY building_id, ${INVENTORY_SPACE_ORDER}`,
   );
@@ -300,6 +306,10 @@ export interface UnitHit {
   rental_track?: string;
   flat_type?: string | null;
   balcony_sqm?: string | null;
+  /** 0066. Read by `getUnit`. Search hits do not carry them. */
+  garden_sqm?: string | null;
+  sukkah_balcony?: boolean;
+  attached_storage?: string | null;
   /** #210. Read by `getUnit` for the flat page. Search hits do not carry them. */
   rooms?: string;
   floor?: string | null;
@@ -327,6 +337,9 @@ export async function getUnit(db: Queryable, unitId: string): Promise<UnitHit> {
             u.rental_track,
             u.flat_type,
             u.balcony_sqm::text AS balcony_sqm,
+            u.garden_sqm::text AS garden_sqm,
+            u.sukkah_balcony,
+            u.attached_storage,
             u.rooms::text AS rooms,
             s.floor,
             u.area_sqm::text AS area_sqm

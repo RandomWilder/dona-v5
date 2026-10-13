@@ -49,6 +49,7 @@ import {
   sharedSpaceFromForm,
 } from './inventory.ts';
 import type {
+  AttachedStorage,
   BuildingPlan,
   BuildingStatus,
   ConditionStatus,
@@ -836,7 +837,23 @@ function flatFactsFromForm(body: unknown): FlatFacts {
     areaSqm: optionalNumber(form.area_sqm, 'area_sqm', 10_000),
     flatType: optionalText(blankToNull(form.flat_type), 'flat_type', 32),
     balconySqm: optionalNumber(form.balcony_sqm, 'balcony_sqm', 10_000),
+    gardenSqm: optionalNumber(form.garden_sqm, 'garden_sqm', 10_000),
+    sukkahBalcony: checked(form.sukkah_balcony),
+    attachedStorage: postedAttachedStorage(form.attached_storage),
   };
+}
+
+/** 0066. Blank is none; otherwise where the room opens from. */
+function postedAttachedStorage(value: unknown): AttachedStorage | null {
+  const from = optionalText(blankToNull(value), 'attached_storage', 16);
+  if (from === null) return null;
+  if (from !== 'GARDEN' && from !== 'BALCONY') {
+    throw new KernelError(
+      'invalid',
+      'attached_storage is not garden or balcony',
+    );
+  }
+  return from;
 }
 
 async function recordInventoryAdds(
