@@ -263,12 +263,46 @@ const styles = h`<style>
   }
   .calls .timeline {
     display: grid;
-    gap: var(--space-2);
+    gap: var(--space-3);
     margin: 0;
     padding-inline-start: 1.25rem;
   }
+  .calls .steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-4);
+    margin: 0;
+    padding: 0 0 var(--space-3);
+    list-style: none;
+    border-block-end: var(--size-hairline) solid var(--color-divider-soft);
+  }
+  .calls .steps li {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+  .calls .steps li[aria-current="step"] {
+    color: var(--color-text);
+    font-weight: 600;
+  }
+  .calls .steps li.is-done { color: var(--color-ok); }
+  .calls .head-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    align-items: center;
+  }
+  .calls .head-meta .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
   .calls .back { margin: 0; }
-  .calls .message { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .calls .message { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .calls .timeline .when,
+  .calls .timeline [data-translation] {
+    margin: 0;
+    color: var(--color-text-muted);
+  }
   .calls .file {
     display: flex;
     flex-wrap: wrap;
@@ -276,6 +310,18 @@ const styles = h`<style>
     align-items: center;
   }
 </style>`;
+
+function ordinarySize(bytes: number): string {
+  const unit = 1024;
+  if (bytes < unit) return `${String(bytes)} B`;
+  if (bytes < unit * unit) return `${oneDecimal(bytes / unit)} KB`;
+  return `${oneDecimal(bytes / (unit * unit))} MB`;
+}
+
+function oneDecimal(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
 
 function ageLabel(openedAt: Date, now: Date): string {
   const minutes = ageMinutes(openedAt, now);
@@ -690,8 +736,8 @@ function messageLine(screen: CallScreen, message: TimelineMessage): Html {
   const translation =
     message.bodyHe === null
       ? h``
-      : h` <span data-translation="yes">תרגום: ${message.bodyHe}</span>`;
-  return h`<li data-kind="MESSAGE" data-echo="${echo}" data-message="${message.id}"><span class="message">${who} · ${subject}${message.body}${translation}</span>${files} · ${whenLabel(message.at)}</li>`;
+      : h`<p data-translation="yes">תרגום: ${message.bodyHe}</p>`;
+  return h`<li data-kind="MESSAGE" data-echo="${echo}" data-message="${message.id}"><p class="message">${who} · ${subject}${message.body}</p>${translation}${files}<p class="when">${whenLabel(message.at)}</p></li>`;
 }
 
 function fileBlock(
@@ -706,7 +752,7 @@ function fileBlock(
   const size =
     file.byteSize === null
       ? h``
-      : h` · <span data-size="${String(file.byteSize)}">${String(file.byteSize)}</span>`;
+      : h` · <span dir="ltr" data-size="${String(file.byteSize)}">${ordinarySize(file.byteSize)}</span>`;
   const callId = screen.call.id;
   const open = file.openable
     ? h` <a href="/calls/${callId}/messages/${messageId}/files/${String(file.index)}">פתיחה</a>`
@@ -714,7 +760,7 @@ function fileBlock(
   const filed =
     file.documentId === null
       ? fileForm(screen, messageId, file)
-      : h` <a href="/documents/${file.documentId}/read" data-document="${file.documentId}">לא מתוייק</a>`;
+      : h` <a href="/documents/${file.documentId}/read" data-document="${file.documentId}">תויק</a>`;
   return h`<div class="file" data-file="${file.fileName}">קובץ: ${file.fileName}${type}${size}${open}${filed}</div>`;
 }
 
@@ -958,6 +1004,22 @@ function repeatedBy(screen: CallScreen): Html {
   </section>`;
 }
 
+function stateSteps(state: CallState): Html {
+  if (state === 'CLOSED') return h``;
+  const current = CALL_STATES.indexOf(state);
+  return h`<ol class="steps" aria-label="מצב הקריאה">
+    ${CALL_STATES.map((step, index) => {
+      const mark =
+        index === current
+          ? h`aria-current="step"`
+          : index < current
+            ? h`class="is-done"`
+            : h``;
+      return h`<li ${mark}>${CALL_STATE_HE[step]}</li>`;
+    })}
+  </ol>`;
+}
+
 function ageFact(screen: CallScreen): Html {
   const age = ageLabel(screen.call.openedAt, screen.now);
   const band = responseGoalBand(
@@ -1010,18 +1072,29 @@ export function renderCallPage(screen: CallScreen): string {
   const saving = saveContactForm(screen);
   const closing =
     canExit(call.state) && !call.returned ? exitForm(screen) : h``;
+  const emergency =
+    call.state !== 'CLOSED' && call.emergency.flagged
+      ? h`<span class="chip">חירום</span>`
+      : h``;
   const body = h`
     <div class="calls glass-stage" data-call-state="${call.state}">
       <header class="page-head">
         <div>
           <p class="back"><a href="/calls">קריאות</a></p>
           <h1>${call.description}</h1>
+          <div class="head-meta">
+            <dl class="facts">
+              <div><dt>ערוץ</dt><dd>${CHANNEL_HE[call.sourceChannel]}</dd></div>
+              ${ageFact(screen)}
+            </dl>
+            ${emergency}
+          </div>
         </div>
       </header>
       ${refusal}
+      ${stateSteps(call.state)}
       <section class="glass sheet">
         <dl class="facts">
-          <div><dt>ערוץ</dt><dd>${CHANNEL_HE[call.sourceChannel]}</dd></div>
           <div><dt>מצב</dt><dd>${CALL_STATE_HE[call.state]}</dd></div>
           <div><dt>נרשם</dt><dd>${sender}</dd></div>
           <div><dt>פונה</dt><dd>${requester}</dd></div>
@@ -1031,7 +1104,6 @@ export function renderCallPage(screen: CallScreen): string {
           ${sorted}
           ${review}
           ${earlier}
-          ${ageFact(screen)}
           <div><dt>חירום</dt><dd data-emergency="${call.emergency.flagged ? 'true' : 'false'}">${emergencyLabel(call)}</dd></div>
           ${exitFacts(screen)}
         </dl>

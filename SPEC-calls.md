@@ -167,6 +167,20 @@ messages, attachments and transitions, and a filtered list. The rail shows the o
 beside קריאות. A closed call leaves that count and the open list, and a closed filter shows it.
 The page is server-rendered with no client JavaScript and follows the approved stakeholder mockup.
 
+An open call's page shows the description, the Source channel, and the age against the response
+goal, in the words בזמן, קרוב ליעד, or מעבר ליעד, and the word חירום when the call is flagged.
+The eight states are an indicator of where the call is: the current state is the current step,
+the states before it are behind it, and the states after it are ahead. The steps are not
+controls, and pressing one does nothing. A closed call does not draw the indicator. The
+conversation is the inbound message, the office echo, and the system events, in the order they
+already have. A translation is shown apart from the original. An attachment that can be opened
+opens. A person who may file can file it as a document. The size is shown in ordinary units of
+1024 bytes — B below 1024, then KB, then MB — and the byte count stays on the size mark. A filed
+attachment says תויק and opens the document; the document itself stays an Unassigned document.
+The sender and the requester are two facts, נרשם and פונה. Calls that repeat this one stay
+listed under it. Back returns to the open list. Identify, category, save-contact, emergency,
+return, and exit stay on this page.
+
 **A party's calls (#209).** The profile lists every call that names that party as requester, newest
 first, including a closed call and one returned to the filtered list. Each row shows the day the
 call opened, in the office's zone, the Category or that none is set yet, the state, and the

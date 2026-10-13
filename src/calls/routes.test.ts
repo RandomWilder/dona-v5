@@ -1,10 +1,24 @@
 // #182. The קריאות tab, driven the way the office drives it: a form post, then the list.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import type { Pool } from 'pg';
+import { seedOccupancy } from '../../tests/policy/fixtures.ts';
 import { asOperator, signIn, signOutAll } from '../../tests/support/session.ts';
 import { buildApp } from '../app.ts';
+import {
+  type IncomingMessage,
+  receiveIncoming,
+  type SortVerdict,
+} from '../channel/contract.ts';
+import { upsertDocumentType } from '../evidence/contract.ts';
 import { fixedClock } from '../kernel/clock.ts';
-import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
+import { createMemoryStore } from '../kernel/objects.ts';
+import { createFakePdfText } from '../kernel/pdf.ts';
+import {
+  inRolledBackTransaction,
+  migratedPoolOrNull,
+  skipReason,
+} from '../kernel/pg-support.ts';
 import { createParty } from '../parties/contract.ts';
 
 const AT = new Date('2026-10-06T12:00:00.000Z');
@@ -612,6 +626,7 @@ describe('calls · the קריאות tab', () => {
         url: `/calls/${questionId}`,
       });
       assert.match(closedPage.body, /data-call-state="CLOSED"/);
+      assert.doesNotMatch(closedPage.body, /class="steps"/);
       assert.match(closedPage.body, /נענתה/);
       assert.match(closedPage.body, /עניתי בטלפון/);
       assert.match(closedPage.body, /ops@calls-routes-exit\.test/);
@@ -1024,4 +1039,246 @@ describe('calls · the קריאות tab', () => {
       await pool.end();
     }
   });
+
+  it('shows where an open call is, and a filed attachment in ordinary units', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const domain = 'where-219.test';
+    const sender = `tenant@${domain}`;
+    const original = 'На кухне течёт кран';
+    const translation = 'הברז במטבח מטפטף';
+    const echo = 'חזרנו אליך';
+    const description = 'נזילה במטבח';
+    const bytes = Buffer.alloc(247808);
+    Buffer.from('%PDF-1.4\n').copy(bytes);
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const objects = createMemoryStore();
+        const app = buildApp({
+          pool: db as unknown as Pool,
+          version: '9.9.9-test',
+          clock,
+          objects,
+          bucket: 'dona-v5-test-where-219',
+          pdf: createFakePdfText([]),
+        });
+        await seedOccupancy(db, '2191', {
+          phone: '+972502191191',
+          email: sender,
+          contactFrom: '2026-01-01',
+          contactTo: null,
+          tenancyFrom: '2026-01-01',
+          tenancyTo: '2027-01-01',
+        });
+        await upsertDocumentType(db, {
+          typeKey: 'paper_219',
+          labelHe: 'מסמך מקריאה',
+          labelEn: null,
+          verificationTerms: null,
+          isActive: true,
+        });
+        const who = await signIn(db as unknown as Pool, clock, {
+          email: `ops@${domain}`,
+          role: 'OPERATOR',
+        });
+        const client = asOperator(app, who);
+        const verdict: SortVerdict = {
+          label: 'call',
+          categoryCode: null,
+          summary: description,
+        };
+        const door = (bodyHe: string | null) => ({
+          sorter: {
+            async sort() {
+              return verdict;
+            },
+            async translate() {
+              return { bodyHe };
+            },
+          },
+          matchesEmergency: async () => false,
+          objects,
+        });
+        const arrived = await receiveIncoming(
+          db,
+          clock,
+          door(translation),
+          message(domain, {
+            body: original,
+            attachments: [
+              {
+                fileName: 'lease.pdf',
+                contentType: 'application/pdf',
+                byteSize: bytes.length,
+                bytes,
+              },
+            ],
+          }),
+        );
+        assert.equal(arrived.kind, 'call');
+        if (arrived.kind !== 'call') return;
+        clock.advance(60_000);
+        const echoed = await receiveIncoming(
+          db,
+          clock,
+          door(null),
+          message(domain, {
+            externalMessageId: 'echo',
+            body: echo,
+            echo: true,
+            receivedAt: clock.now(),
+          }),
+        );
+        assert.equal(echoed.kind, 'echo');
+
+        const page = await client.inject({
+          method: 'GET',
+          url: `/calls/${arrived.callId}`,
+        });
+        assert.equal(page.statusCode, 200);
+        assert.doesNotMatch(page.body, /<script/);
+        assert.match(page.body, /data-call-state="IDENTIFIED"/);
+
+        const head = region(
+          page.body,
+          '<header class="page-head"',
+          '</header>',
+        );
+        assert.match(head, new RegExp(`<h1>${description}</h1>`));
+        assert.match(head, /דוא״ל/);
+        assert.match(head, /דקה · בזמן/);
+        assert.doesNotMatch(head, /חירום/);
+
+        const strip = region(page.body, '<ol class="steps"', '</ol>');
+        assert.match(strip, /aria-label="מצב הקריאה"/);
+        const labels = [...strip.matchAll(/<li([^>]*)>([^<]+)<\/li>/g)].map(
+          (match) => ({ attrs: match[1] ?? '', label: match[2] }),
+        );
+        assert.deepEqual(
+          labels.map((step) => step.label),
+          [
+            'חדשה',
+            'זוהתה',
+            'מוינה',
+            'אחריות נקבעה',
+            'חלונות נאספו',
+            'הוצעה',
+            'נקבעה',
+            'סגורה',
+          ],
+        );
+        assert.match(labels[0]?.attrs ?? '', /is-done/);
+        assert.match(labels[1]?.attrs ?? '', /aria-current="step"/);
+        assert.doesNotMatch(labels[2]?.attrs ?? '', /is-done|aria-current/);
+        assert.doesNotMatch(strip, /<a\b|<button\b/);
+
+        const thread = region(page.body, '<ol class="timeline"', '</ol>');
+        const kinds = [
+          ...thread.matchAll(
+            /data-kind="([A-Z]+)"(?: data-echo="(true|false)")?/g,
+          ),
+        ].map((match) =>
+          match[1] === 'MESSAGE' ? `MESSAGE:${match[2]}` : match[1],
+        );
+        assert.deepEqual(kinds, [
+          'MESSAGE:false',
+          'OPENED',
+          'IDENTIFIED',
+          'MESSAGE:true',
+        ]);
+        const translated = thread.match(/data-translation="yes"[^>]*>([^<]*)</);
+        assert.equal(translated?.[1], `תרגום: ${translation}`);
+        const inbound = [
+          ...thread.matchAll(/<p class="message">([\s\S]*?)<\/p>/g),
+        ].find((match) => match[1]?.includes(original));
+        assert.ok(inbound);
+        assert.doesNotMatch(inbound[1] ?? '', new RegExp(translation));
+        assert.match(thread, new RegExp(echo));
+
+        assert.match(page.body, new RegExp(`<dt>נרשם</dt><dd>${sender}</dd>`));
+        assert.match(page.body, /<dt>פונה<\/dt><dd>Tenant of 2191<\/dd>/);
+        assert.match(page.body, /<p class="back"><a href="\/calls">/);
+        assert.match(page.body, /name="category_id"/);
+
+        const file = region(page.body, '<div class="file"', '</div>');
+        assert.match(file, /data-size="247808"/);
+        assert.match(file, /242 KB/);
+        assert.match(file, /תייק כמסמך/);
+        const open = file.match(/href="(\/calls\/[^"]+\/files\/0)"/);
+        assert.ok(open?.[1]);
+        const opened = await client.inject({ method: 'GET', url: open[1] });
+        assert.equal(opened.statusCode, 200);
+        assert.equal(opened.headers['content-type'], 'application/pdf');
+
+        const filing = page.body.match(
+          /<form method="post" action="(\/calls\/[^"]+\/files\/0)">/,
+        );
+        assert.ok(filing?.[1]);
+        const posted = await client.inject({
+          method: 'POST',
+          url: filing[1],
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          payload: form({ type_key: 'paper_219' }),
+        });
+        assert.equal(posted.statusCode, 303);
+        const afterFile = await client.inject({
+          method: 'GET',
+          url: `/calls/${arrived.callId}`,
+        });
+        const filed = region(afterFile.body, '<div class="file"', '</div>');
+        assert.match(filed, /תויק/);
+        assert.match(filed, /data-document="[0-9a-f-]{36}"/);
+        assert.match(filed, /href="\/documents\/[0-9a-f-]{36}\/read"/);
+        assert.doesNotMatch(filed, /לא מתוייק/);
+        assert.match(filed, /242 KB/);
+
+        const flagged = await client.inject({
+          method: 'POST',
+          url: `/calls/${arrived.callId}/emergency`,
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          payload: form({ action: 'flag' }),
+        });
+        assert.equal(flagged.statusCode, 303);
+        const urgent = await client.inject({
+          method: 'GET',
+          url: `/calls/${arrived.callId}`,
+        });
+        assert.match(
+          region(urgent.body, '<header class="page-head"', '</header>'),
+          /חירום/,
+        );
+        assert.match(urgent.body, /data-emergency="true"/);
+        await app.close();
+      });
+    } finally {
+      await pool.end();
+    }
+  });
 });
+
+function message(
+  domain: string,
+  over: Partial<IncomingMessage> = {},
+): IncomingMessage {
+  return {
+    sourceChannel: 'EMAIL',
+    externalMessageId: `${domain}-${over.externalMessageId ?? '1'}`,
+    externalThreadId: `${domain}-thread`,
+    senderAddress: `tenant@${domain}`,
+    receivedAt: AT,
+    subject: null,
+    body: 'נזילה',
+    ...over,
+  };
+}
+
+function region(html: string, startMark: string, endMark: string): string {
+  const start = html.indexOf(startMark);
+  const end = html.indexOf(endMark, start);
+  assert.ok(start >= 0 && end > start, startMark);
+  return html.slice(start, end + endMark.length);
+}
