@@ -178,8 +178,24 @@ opens. A person who may file can file it as a document. The size is shown in ord
 1024 bytes — B below 1024, then KB, then MB — and the byte count stays on the size mark. A filed
 attachment says תויק and opens the document; the document itself stays an Unassigned document.
 The sender and the requester are two facts, נרשם and פונה. Calls that repeat this one stay
-listed under it. Back returns to the open list. Identify, category, save-contact, emergency,
-return, and exit stay on this page.
+listed under it. Back returns to the open list.
+
+The aside is the only place an action on the call appears, and only where that command exists.
+A new call offers identification of the requester, for this call alone. A match is a name only.
+An identified or triaged call offers the category. Six or fewer active categories are a set of
+choices; more than six uses the select. Saving the sender as a contact uses the offer that
+already exists, and the control is absent when that command would not be offered. A returned
+call offers rescue back onto the list. Rescue does not replace identification or the category
+while those commands still apply. The four exits stay off until the call is back on the open
+list. From RESPONSIBILITY SET on, there is no next step.
+Closing offers the four exits. Each one shows only the fields it needs: a note for answered and
+for cancelled, a note and a department for forwarded, and the other call for a duplicate. The
+close control names the exit and says that closing is final and a new message opens a new call.
+A refused exit keeps the exit and the values. Flagging and clearing an emergency, and sending
+the call back to the filtered list, are in the header. They are absent when they do not apply:
+a closed call has neither, and a call already returned is not sent back again. The requester's
+name links to the party profile when this person holds `party.read`. The stacked cards those
+actions used to live in are gone.
 
 **A party's calls (#209).** The profile lists every call that names that party as requester, newest
 first, including a closed call and one returned to the filtered list. Each row shows the day the

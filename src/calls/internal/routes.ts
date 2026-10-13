@@ -40,6 +40,7 @@ import {
   setCallCategory,
 } from './commands.ts';
 import {
+  type ExitDraft,
   type LogDraft,
   renderCallPage,
   renderCallsPage,
@@ -292,6 +293,16 @@ function logDraft(body: unknown): LogDraft {
   };
 }
 
+function exitDraftOf(body: unknown): ExitDraft {
+  const form = formOf(body);
+  return {
+    kind: textOf(form.exit),
+    note: textOf(form.note),
+    department: textOf(form.department),
+    duplicateOf: textOf(form.duplicate_of),
+  };
+}
+
 function parseManual(
   body: unknown,
   staff: { staffAccountId: string; role: Role | null },
@@ -406,11 +417,31 @@ async function callsPage(
   });
 }
 
+async function heldDuplicate(
+  deps: CallsDeps,
+  found: readonly { id: string; description: string }[],
+  draft: ExitDraft | undefined,
+): Promise<{ id: string; description: string }[]> {
+  const held = draft?.kind === 'DUPLICATE' ? draft.duplicateOf.trim() : '';
+  if (held === '' || found.some((row) => row.id === held)) return [...found];
+  let otherId: string;
+  try {
+    otherId = validId(held, 'duplicate');
+  } catch (error) {
+    if (error instanceof KernelError) return [...found];
+    throw error;
+  }
+  const other = await getCall(deps.pool, otherId);
+  if (!other) return [...found];
+  return [{ id: other.id, description: other.description }, ...found];
+}
+
 async function callPage(
   deps: CallsDeps,
   request: FastifyRequest,
   callId: string,
   refusal?: string,
+  exitDraft?: ExitDraft,
 ): Promise<string> {
   const call = await getCall(deps.pool, callId);
   if (!call) throw new KernelError('not_found', 'call not found');
@@ -420,7 +451,7 @@ async function callPage(
     call.state === 'NEW' && query.length > 0 && query.length <= 80;
   const dupSearching =
     canExit(call.state) && dup.length > 0 && dup.length <= 80;
-  const [categories, matches, dupMatches, messages, documentTypes, goal] =
+  const [categories, matches, foundDup, messages, documentTypes, goal] =
     await Promise.all([
       listCategories(deps.pool, { activeOnly: call.state !== 'NEW' }),
       searching ? findPartiesByName(deps.pool, query) : Promise.resolve([]),
@@ -431,6 +462,7 @@ async function callPage(
       deps.documentTypes ? deps.documentTypes() : Promise.resolve([]),
       readResponseGoal(deps.pool),
     ]);
+  const dupMatches = await heldDuplicate(deps, foundDup, exitDraft);
   const role = request.staff?.role ?? null;
   const csrf = csrfFrom(request);
   return renderCallPage({
@@ -454,8 +486,10 @@ async function callPage(
     messages,
     goal,
     mayFile: can(role, 'documents.write'),
+    mayReadParties: can(role, 'party.read'),
     documentTypes,
     now: deps.clock.now(),
+    exitDraft,
     refusal:
       refusal ??
       (query.length > 80 || dup.length > 80 ? 'החיפוש ארוך מדי.' : undefined),
@@ -786,7 +820,13 @@ export function registerCallsRoutes(
       }
       html(reply);
       reply.code(error.code === 'not_found' ? 404 : 400);
-      return callPage(deps, request, callId, refusalHe(error));
+      return callPage(
+        deps,
+        request,
+        callId,
+        refusalHe(error),
+        exitDraftOf(request.body),
+      );
     }
   });
 }

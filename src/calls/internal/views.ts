@@ -127,8 +127,20 @@ export interface CallScreen {
   now: Date;
   /** Staff who may file a document. The button is absent otherwise. */
   mayFile?: boolean;
+  /** `party.read`. The requester's name links to the profile only then. */
+  mayReadParties?: boolean;
   documentTypes?: readonly { typeKey: string; labelHe: string }[];
   refusal?: string;
+  /** What was posted to an exit, kept when the exit is refused. */
+  exitDraft?: ExitDraft;
+}
+
+/** The exit a refusal re-renders, with the values that were posted. */
+export interface ExitDraft {
+  kind: string;
+  note: string;
+  department: string;
+  duplicateOf: string;
 }
 
 const CHANNEL_HE: Record<SourceChannel, string> = {
@@ -308,6 +320,47 @@ const styles = h`<style>
     flex-wrap: wrap;
     gap: var(--space-2);
     align-items: center;
+  }
+  .calls .call-work {
+    display: grid;
+    gap: var(--space-6);
+    align-items: start;
+  }
+  .calls .call-record {
+    display: grid;
+    gap: var(--space-6);
+    min-width: 0;
+  }
+  .calls .call-aside {
+    display: grid;
+    gap: var(--space-5);
+    padding: var(--space-5);
+    min-width: 0;
+  }
+  .calls .aside-block { display: grid; gap: var(--space-3); }
+  .calls .call-aside h2 { margin: 0; font-size: var(--text-lg); }
+  .calls .head-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    align-items: center;
+  }
+  .calls .head-actions form { margin: 0; }
+  .calls .exit {
+    display: grid;
+    gap: var(--space-3);
+    padding-block: var(--space-2);
+  }
+  .calls .exit summary { cursor: pointer; }
+  .calls .exit .btn {
+    white-space: normal;
+    block-size: auto;
+    text-align: start;
+  }
+  @media (min-width: 64rem) {
+    .calls .call-work:has(.call-aside) {
+      grid-template-columns: var(--size-retrieval) minmax(0, 1fr);
+    }
   }
 </style>`;
 
@@ -806,18 +859,16 @@ function emergencyLabel(call: ServiceCall): string {
   return call.emergency.actorLabel;
 }
 
-function emergencyForm(screen: CallScreen): Html {
+function emergencyControl(screen: CallScreen): Html {
   const call = screen.call;
+  if (call.state === 'CLOSED') return h``;
   const action = call.emergency.flagged ? 'clear' : 'flag';
   const label = call.emergency.flagged ? 'הסרת סימון חירום' : 'סימון חירום';
-  return h`<section class="glass sheet">
-    <h2>חירום</h2>
-    <form method="post" action="/calls/${call.id}/emergency">
-      ${csrfInput(screen.csrf)}
-      <input type="hidden" name="action" value="${action}" />
-      <button class="btn btn-primary" type="submit">${label}</button>
-    </form>
-  </section>`;
+  return h`<form method="post" action="/calls/${call.id}/emergency">
+    ${csrfInput(screen.csrf)}
+    <input type="hidden" name="action" value="${action}" />
+    <button class="btn" type="submit">${label}</button>
+  </form>`;
 }
 
 function identifyForm(screen: CallScreen): Html {
@@ -837,7 +888,7 @@ function identifyForm(screen: CallScreen): Html {
             </fieldset>
             <button class="btn btn-primary" type="submit">זיהוי</button>
           </form>`;
-  return h`<section class="glass sheet">
+  return h`<div class="aside-block">
     <h2>זיהוי הפונה</h2>
     <p class="lede">מקשר את הקריאה הזו בלבד. לא שומר איש קשר.</p>
     <form class="filters" method="get" action="/calls/${screen.call.id}">
@@ -847,7 +898,7 @@ function identifyForm(screen: CallScreen): Html {
       <button class="btn" type="submit">חיפוש</button>
     </form>
     ${matches}
-  </section>`;
+  </div>`;
 }
 
 function canSaveContact(call: ServiceCallDetail): boolean {
@@ -863,31 +914,23 @@ function canSaveContact(call: ServiceCallDetail): boolean {
 
 function saveContactForm(screen: CallScreen): Html {
   if (!canSaveContact(screen.call)) return h``;
-  return h`<section class="glass sheet">
+  return h`<div class="aside-block">
     <h2>שמירת איש קשר</h2>
     <p class="lede">ההודעה הבאה מהכתובת הזו תזוהה. הזיהוי עצמו לא שומר.</p>
     <form method="post" action="/calls/${screen.call.id}/contact">
       ${csrfInput(screen.csrf)}
       <button class="btn btn-primary" type="submit">שמירת איש קשר</button>
     </form>
-  </section>`;
+  </div>`;
 }
 
-function categoryForm(screen: CallScreen): Html {
+/** The six seeded trades. A longer catalogue is the select. */
+const CATEGORY_CHOICE_LIMIT = 6;
+
+function categoryControl(screen: CallScreen): Html {
   const current = screen.call.category;
-  const held =
-    current === null
-      ? h``
-      : current.active
-        ? h`<p class="lede">הקטגוריה: ${current.labelHe}</p>`
-        : h`<p class="lede">הקטגוריה: ${current.labelHe} (לא פעיל)</p>`;
-  if (screen.categories.length === 0) {
-    return h`<section class="glass sheet"><h2>קטגוריה</h2>${held}<p class="lede">אין קטגוריה פעילה.</p></section>`;
-  }
-  return h`<section class="glass sheet">
-    <h2>קטגוריה</h2>
-    ${held}
-    <form method="post" action="/calls/${screen.call.id}/category">
+  if (screen.categories.length > CATEGORY_CHOICE_LIMIT) {
+    return h`<form method="post" action="/calls/${screen.call.id}/category">
       ${csrfInput(screen.csrf)}
       <label>מקצוע
         <select name="category_id" required>
@@ -899,52 +942,120 @@ function categoryForm(screen: CallScreen): Html {
         </select>
       </label>
       <button class="btn btn-primary" type="submit">שמירה</button>
+    </form>`;
+  }
+  return h`<form method="post" action="/calls/${screen.call.id}/category">
+    ${csrfInput(screen.csrf)}
+    <fieldset class="choice">
+      <legend>מקצוע</legend>
+      ${screen.categories.map(
+        (category, index) =>
+          h`<label><input type="radio" name="category_id" value="${category.id}"${index === 0 ? h` required` : h``}${current?.id === category.id ? h` checked` : h``} /> ${category.labelHe}</label>`,
+      )}
+    </fieldset>
+    <button class="btn btn-primary" type="submit">שמירה</button>
+  </form>`;
+}
+
+function categoryForm(screen: CallScreen): Html {
+  const current = screen.call.category;
+  const held =
+    current === null
+      ? h``
+      : current.active
+        ? h`<p class="lede">הקטגוריה: ${current.labelHe}</p>`
+        : h`<p class="lede">הקטגוריה: ${current.labelHe} (לא פעיל)</p>`;
+  if (screen.categories.length === 0) {
+    return h`<div class="aside-block"><h2>קטגוריה</h2>${held}<p class="lede">אין קטגוריה פעילה.</p></div>`;
+  }
+  return h`<div class="aside-block">
+    <h2>קטגוריה</h2>
+    ${held}
+    ${categoryControl(screen)}
+  </div>`;
+}
+
+function exitOpen(screen: CallScreen, kind: ExitKind): Html {
+  if (screen.exitDraft?.kind === kind) return h` open`;
+  if (kind === 'DUPLICATE' && screen.dupQuery !== '') return h` open`;
+  return h``;
+}
+
+function kept(
+  screen: CallScreen,
+  kind: ExitKind,
+  field: 'note' | 'department',
+): string {
+  if (screen.exitDraft?.kind !== kind) return '';
+  return screen.exitDraft[field];
+}
+
+function closeControl(kind: ExitKind): Html {
+  return h`<button class="btn btn-primary" type="submit">סגירה — ${EXIT_HE[kind]}. הסגירה סופית. הודעה חדשה פותחת קריאה חדשה.</button>`;
+}
+
+function noteField(screen: CallScreen, kind: ExitKind): Html {
+  return h`<div class="field">
+    <label for="exit-note-${kind}">סיבה</label>
+    <textarea id="exit-note-${kind}" name="note" rows="3" maxlength="${NOTE_MAX}">${kept(screen, kind, 'note')}</textarea>
+  </div>`;
+}
+
+function duplicateSearch(screen: CallScreen): Html {
+  return h`<form class="filters" method="get" action="/calls/${screen.call.id}">
+    <label>חיפוש קריאה
+      <input name="dup" type="text" value="${screen.dupQuery}" maxlength="80" autocomplete="off" />
+    </label>
+    <button class="btn" type="submit">חיפוש</button>
+  </form>`;
+}
+
+function duplicateMatches(screen: CallScreen): Html {
+  const chosen =
+    screen.exitDraft?.kind === 'DUPLICATE' ? screen.exitDraft.duplicateOf : '';
+  if (screen.dupQuery === '' && chosen === '') return h``;
+  if (screen.dupMatches.length === 0) return h`<p class="lede">אין התאמה.</p>`;
+  return h`<fieldset class="choice">
+    <legend>הקריאה שזו חוזרת עליה</legend>
+    ${screen.dupMatches.map(
+      (call) =>
+        h`<label><input type="radio" name="duplicate_of" value="${call.id}"${call.id === chosen ? h` checked` : h``} /> ${call.description}</label>`,
+    )}
+  </fieldset>`;
+}
+
+function exitFields(screen: CallScreen, kind: ExitKind): Html {
+  const department =
+    kind === 'FORWARDED'
+      ? h`<div class="field">
+          <label for="exit-department">מחלקה</label>
+          <input id="exit-department" name="department" type="text" value="${kept(screen, kind, 'department')}" maxlength="${DEPARTMENT_MAX}" autocomplete="off" />
+        </div>`
+      : h``;
+  return h`${noteField(screen, kind)}${department}`;
+}
+
+function exitChoice(screen: CallScreen, kind: ExitKind): Html {
+  const search = kind === 'DUPLICATE' ? duplicateSearch(screen) : h``;
+  const fields =
+    kind === 'DUPLICATE' ? duplicateMatches(screen) : exitFields(screen, kind);
+  return h`<details class="exit" data-exit="${kind}"${exitOpen(screen, kind)}>
+    <summary>${EXIT_HE[kind]}</summary>
+    ${search}
+    <form method="post" action="/calls/${screen.call.id}/exit">
+      ${csrfInput(screen.csrf)}
+      <input type="hidden" name="exit" value="${kind}" />
+      ${fields}
+      ${closeControl(kind)}
     </form>
-  </section>`;
+  </details>`;
 }
 
 function exitForm(screen: CallScreen): Html {
-  const matches =
-    screen.dupQuery === ''
-      ? h``
-      : screen.dupMatches.length === 0
-        ? h`<p class="lede">אין התאמה.</p>`
-        : h`<fieldset class="choice">
-            <legend>הקריאה שזו חוזרת עליה</legend>
-            ${screen.dupMatches.map(
-              (call) =>
-                h`<label><input type="radio" name="duplicate_of" value="${call.id}" /> ${call.description}</label>`,
-            )}
-          </fieldset>`;
-  return h`<section class="glass sheet">
+  return h`<div class="aside-block">
     <h2>סגירה</h2>
-    <form class="filters" method="get" action="/calls/${screen.call.id}">
-      <label>חיפוש קריאה
-        <input name="dup" type="text" value="${screen.dupQuery}" maxlength="80" autocomplete="off" />
-      </label>
-      <button class="btn" type="submit">חיפוש</button>
-    </form>
-    <form method="post" action="/calls/${screen.call.id}/exit">
-      ${csrfInput(screen.csrf)}
-      <fieldset class="choice">
-        <legend>יציאה</legend>
-        ${(Object.keys(EXIT_HE) as ExitKind[]).map(
-          (kind, index) =>
-            h`<label><input type="radio" name="exit" value="${kind}" ${index === 0 ? h`required` : h``} /> ${EXIT_HE[kind]}</label>`,
-        )}
-      </fieldset>
-      <div class="field">
-        <label for="exit-note">סיבה</label>
-        <textarea id="exit-note" name="note" rows="3" maxlength="${NOTE_MAX}"></textarea>
-      </div>
-      <div class="field">
-        <label for="exit-department">מחלקה</label>
-        <input id="exit-department" name="department" type="text" maxlength="${DEPARTMENT_MAX}" autocomplete="off" />
-      </div>
-      ${matches}
-      <button class="btn btn-primary" type="submit">סגירה</button>
-    </form>
-  </section>`;
+    ${(Object.keys(EXIT_HE) as ExitKind[]).map((kind) => exitChoice(screen, kind))}
+  </div>`;
 }
 
 function exitFacts(screen: CallScreen): Html {
@@ -967,28 +1078,68 @@ function exitFacts(screen: CallScreen): Html {
     ${other}`;
 }
 
-function returnForm(screen: CallScreen): Html {
+function returnControl(screen: CallScreen): Html {
   const call = screen.call;
-  if (call.state === 'CLOSED') return h``;
-  if (call.returned) {
-    return h`<section class="glass sheet">
-      <h2>מסוננות</h2>
-      <p class="lede">הוחזרה. ${sorterLabel(call.sorterLabel)} <span data-office="returned">משרד: הוחזר</span>${call.returnedBy === null ? h`` : h` · ${call.returnedBy}`}</p>
-      <form method="post" action="/calls/filtered">
-        ${csrfInput(screen.csrf)}
-        <input type="hidden" name="call_id" value="${call.id}" />
-        <button class="btn btn-primary" type="submit">הצלה</button>
-      </form>
-    </section>`;
-  }
-  return h`<section class="glass sheet">
-    <h2>לא קריאה</h2>
-    <p class="lede">יוצאת מהרשימה בלי להיסגר. הסימון של המסווג נשאר.</p>
-    <form method="post" action="/calls/${call.id}/return">
+  if (call.state === 'CLOSED' || call.returned) return h``;
+  return h`<form method="post" action="/calls/${call.id}/return">
+    ${csrfInput(screen.csrf)}
+    <button class="btn" type="submit">החזרה למסוננות</button>
+  </form>`;
+}
+
+function rescueForm(screen: CallScreen): Html {
+  const call = screen.call;
+  return h`<div class="aside-block">
+    <p class="lede">הוחזרה. ${sorterLabel(call.sorterLabel)} <span data-office="returned">משרד: הוחזר</span>${call.returnedBy === null ? h`` : h` · ${call.returnedBy}`}</p>
+    <form method="post" action="/calls/filtered">
       ${csrfInput(screen.csrf)}
-      <button class="btn" type="submit">החזרה למסוננות</button>
+      <input type="hidden" name="call_id" value="${call.id}" />
+      <button class="btn btn-primary" type="submit">הצלה</button>
     </form>
-  </section>`;
+  </div>`;
+}
+
+function headerActions(screen: CallScreen): Html {
+  if (screen.call.state === 'CLOSED') return h``;
+  return h`<div class="head-actions">${emergencyControl(screen)}${returnControl(screen)}</div>`;
+}
+
+function nextStep(screen: CallScreen): Html {
+  const call = screen.call;
+  if (call.state === 'NEW') return identifyForm(screen);
+  if (call.state === 'IDENTIFIED' || call.state === 'TRIAGED') {
+    return categoryForm(screen);
+  }
+  return h``;
+}
+
+function closingOf(screen: CallScreen): Html {
+  if (screen.call.returned) return h``;
+  if (!canExit(screen.call.state)) return h``;
+  return exitForm(screen);
+}
+
+function callAside(screen: CallScreen): Html {
+  const call = screen.call;
+  const rescue =
+    call.returned && call.state !== 'CLOSED' ? rescueForm(screen) : h``;
+  const parts = [
+    rescue,
+    nextStep(screen),
+    saveContactForm(screen),
+    closingOf(screen),
+  ];
+  if (parts.every((part) => part.value === '')) return h``;
+  return h`<aside class="call-aside glass" aria-label="פעולות">${parts}</aside>`;
+}
+
+function requesterName(screen: CallScreen): Html {
+  const requester = screen.call.requester;
+  const name = requester?.name ?? 'טרם זוהה';
+  if (requester !== null && screen.mayReadParties === true) {
+    return h`<a href="/parties/${requester.id}">${name}</a>`;
+  }
+  return h`${name}`;
 }
 
 function repeatedBy(screen: CallScreen): Html {
@@ -1041,7 +1192,6 @@ export function renderCallPage(screen: CallScreen): string {
     screen.refusal === undefined
       ? h``
       : h`<p class="refusal">${screen.refusal}</p>`;
-  const requester = call.requester?.name ?? 'טרם זוהה';
   const category = call.category?.labelHe ?? 'טרם נבחרה';
   const sender = call.sender.kind === 'unknown' ? 'לא ידוע' : call.sender.name;
   const proposal =
@@ -1063,15 +1213,6 @@ export function renderCallPage(screen: CallScreen): string {
     call.predecessor === null
       ? h``
       : h`<div><dt>המשך של</dt><dd><a data-predecessor="${call.predecessor.id}" href="/calls/${call.predecessor.id}">${call.predecessor.description}</a></dd></div>`;
-  const step =
-    call.state === 'NEW'
-      ? identifyForm(screen)
-      : call.state === 'IDENTIFIED' || call.state === 'TRIAGED'
-        ? categoryForm(screen)
-        : h``;
-  const saving = saveContactForm(screen);
-  const closing =
-    canExit(call.state) && !call.returned ? exitForm(screen) : h``;
   const emergency =
     call.state !== 'CLOSED' && call.emergency.flagged
       ? h`<span class="chip">חירום</span>`
@@ -1090,14 +1231,18 @@ export function renderCallPage(screen: CallScreen): string {
             ${emergency}
           </div>
         </div>
+        ${headerActions(screen)}
       </header>
       ${refusal}
+      <div class="call-work">
+        ${callAside(screen)}
+        <div class="call-record">
       ${stateSteps(call.state)}
       <section class="glass sheet">
         <dl class="facts">
           <div><dt>מצב</dt><dd>${CALL_STATE_HE[call.state]}</dd></div>
           <div><dt>נרשם</dt><dd>${sender}</dd></div>
-          <div><dt>פונה</dt><dd>${requester}</dd></div>
+          <div><dt>פונה</dt><dd>${requesterName(screen)}</dd></div>
           <div><dt>קטגוריה</dt><dd>${category}</dd></div>
           ${proposal}
           ${summary}
@@ -1113,11 +1258,8 @@ export function renderCallPage(screen: CallScreen): string {
         <ol class="timeline">${timelineOf(screen)}</ol>
       </section>
       ${repeatedBy(screen)}
-      ${emergencyForm(screen)}
-      ${step}
-      ${saving}
-      ${closing}
-      ${returnForm(screen)}
+        </div>
+      </div>
     </div>`;
   return renderPage({
     title: 'קריאה — דונה דום',

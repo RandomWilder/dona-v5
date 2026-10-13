@@ -19,7 +19,7 @@ import {
   migratedPoolOrNull,
   skipReason,
 } from '../kernel/pg-support.ts';
-import { createParty } from '../parties/contract.ts';
+import { createParty, upsertPartyContact } from '../parties/contract.ts';
 
 const AT = new Date('2026-10-06T12:00:00.000Z');
 const HALF_HOUR = 30 * 60 * 1000;
@@ -498,9 +498,13 @@ describe('calls · the קריאות tab', () => {
       assert.match(afterId.body, /data-call-state="IDENTIFIED"/);
       assert.match(afterId.body, /זוהתה/);
       assert.match(afterId.body, /יעל מזוהה/);
-      const plumbing = afterId.body.match(
-        /<option value="([0-9a-f-]{36})"[^>]*>אינסטלציה<\/option>/,
-      )?.[1];
+      const plumbing =
+        afterId.body.match(
+          /name="category_id" value="([0-9a-f-]{36})" \/> אינסטלציה/,
+        )?.[1] ??
+        afterId.body.match(
+          /<option value="([0-9a-f-]{36})"[^>]*>אינסטלציה<\/option>/,
+        )?.[1];
       assert.ok(plumbing);
 
       const triaged = await client.inject({
@@ -580,10 +584,38 @@ describe('calls · the קריאות tab', () => {
         url: `/calls/${questionId}`,
       });
       assert.match(page.body, /name="exit"/);
-      assert.match(page.body, /נענתה/);
-      assert.match(page.body, /הועברה/);
-      assert.match(page.body, /כפולה/);
-      assert.match(page.body, /בוטלה/);
+      const answered = region(page.body, 'data-exit="ANSWERED"', '</details>');
+      const forwarded = region(
+        page.body,
+        'data-exit="FORWARDED"',
+        '</details>',
+      );
+      const duplicate = region(
+        page.body,
+        'data-exit="DUPLICATE"',
+        '</details>',
+      );
+      const cancelled = region(
+        page.body,
+        'data-exit="CANCELLED"',
+        '</details>',
+      );
+      assert.match(answered, /סגירה — נענתה/);
+      assert.match(answered, /הסגירה סופית/);
+      assert.match(answered, /הודעה חדשה פותחת קריאה חדשה/);
+      assert.match(answered, /name="note"/);
+      assert.doesNotMatch(answered, /name="department"|name="dup"/);
+      assert.match(forwarded, /סגירה — הועברה/);
+      assert.match(forwarded, /name="note"/);
+      assert.match(forwarded, /name="department"/);
+      assert.doesNotMatch(forwarded, /name="dup"/);
+      assert.match(duplicate, /סגירה — כפולה/);
+      assert.match(duplicate, /name="dup"/);
+      assert.doesNotMatch(duplicate, /name="note"|name="department"/);
+      assert.match(cancelled, /סגירה — בוטלה/);
+      assert.match(cancelled, /name="note"/);
+      assert.doesNotMatch(cancelled, /name="department"|name="dup"/);
+      assert.doesNotMatch(page.body, /data-exit="[^"]*" open/);
 
       const refused = await client.inject({
         method: 'POST',
@@ -594,6 +626,13 @@ describe('calls · the קריאות tab', () => {
       assert.equal(refused.statusCode, 400);
       assert.match(refused.body, /יש לכתוב סיבה/);
       assert.match(refused.body, /data-call-state="NEW"/);
+      const kept = region(refused.body, 'data-exit="ANSWERED"', '</details>');
+      assert.match(kept, /data-exit="ANSWERED" open/);
+      assert.match(kept, /<textarea[^>]*name="note"[^>]*> {3}<\/textarea>/);
+      assert.doesNotMatch(
+        region(refused.body, 'data-exit="FORWARDED"', '</details>'),
+        / open/,
+      );
 
       const closed = await client.inject({
         method: 'POST',
@@ -632,6 +671,8 @@ describe('calls · the קריאות tab', () => {
       assert.match(closedPage.body, /ops@calls-routes-exit\.test/);
       assert.doesNotMatch(closedPage.body, /name="exit"/);
       assert.doesNotMatch(closedPage.body, /לא שומר איש קשר/);
+      assert.doesNotMatch(closedPage.body, /\/emergency|החזרה למסוננות/);
+      assert.doesNotMatch(closedPage.body, /<aside class="call-aside/);
 
       const again = await client.inject({
         method: 'POST',
@@ -746,6 +787,14 @@ describe('calls · the קריאות tab', () => {
         url: `/calls/${emergencyId}`,
       });
       assert.match(page.body, /המונחים/);
+      const flaggedHead = region(
+        page.body,
+        '<header class="page-head"',
+        '</header>',
+      );
+      assert.match(flaggedHead, /הסרת סימון חירום/);
+      assert.match(flaggedHead, /\/emergency/);
+      assert.doesNotMatch(page.body, /<h2>חירום<\/h2>/);
       const cleared = await client.inject({
         method: 'POST',
         url: `/calls/${emergencyId}/emergency`,
@@ -1151,7 +1200,7 @@ describe('calls · the קריאות tab', () => {
         assert.match(head, new RegExp(`<h1>${description}</h1>`));
         assert.match(head, /דוא״ל/);
         assert.match(head, /דקה · בזמן/);
-        assert.doesNotMatch(head, /חירום/);
+        assert.doesNotMatch(head, /<span class="chip">חירום<\/span>/);
 
         const strip = region(page.body, '<ol class="steps"', '</ol>');
         assert.match(strip, /aria-label="מצב הקריאה"/);
@@ -1200,7 +1249,10 @@ describe('calls · the קריאות tab', () => {
         assert.match(thread, new RegExp(echo));
 
         assert.match(page.body, new RegExp(`<dt>נרשם</dt><dd>${sender}</dd>`));
-        assert.match(page.body, /<dt>פונה<\/dt><dd>Tenant of 2191<\/dd>/);
+        assert.match(
+          page.body,
+          /<dt>פונה<\/dt><dd><a href="\/parties\/[0-9a-f-]{36}">Tenant of 2191<\/a><\/dd>/,
+        );
         assert.match(page.body, /<p class="back"><a href="\/calls">/);
         assert.match(page.body, /name="category_id"/);
 
@@ -1252,6 +1304,362 @@ describe('calls · the קריאות tab', () => {
           /חירום/,
         );
         assert.match(urgent.body, /data-emergency="true"/);
+        await app.close();
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('works an open call from the aside', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const domain = 'aside-220.test';
+    const held = `held@${domain}`;
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const clock = fixedClock(AT);
+        const app = buildApp({
+          pool: db as unknown as Pool,
+          version: '9.9.9-test',
+          clock,
+        });
+        const who = await signIn(db as unknown as Pool, clock, {
+          email: `ops@${domain}`,
+          role: 'OPERATOR',
+        });
+        const client = asOperator(app, who);
+        await db.query(
+          `UPDATE call_category
+              SET is_active = false
+            WHERE is_active
+              AND code NOT IN (
+                'PLUMBING', 'ELECTRICAL', 'AIR_CONDITIONING',
+                'LOCKS', 'GATES', 'ADMINISTRATIVE'
+              )`,
+        );
+        const party = await createParty(db, {
+          kind: 'PERSON',
+          givenName: 'יעל',
+          familyName: 'מזוהה',
+          preferredLanguage: 'he',
+        });
+        await upsertPartyContact(db, {
+          partyId: party.id,
+          channel: 'EMAIL',
+          value: held,
+          isPrimary: true,
+          validFrom: '2026-01-01',
+          validTo: null,
+          verifiedAt: null,
+        });
+        const phone = await client.inject({
+          method: 'POST',
+          url: '/calls',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          payload: form({
+            channel: 'PHONE',
+            description: 'טלפון מהדלפק',
+            sender: 'unknown',
+          }),
+        });
+        assert.equal(phone.statusCode, 303);
+        const listed = await client.inject({ method: 'GET', url: '/calls' });
+        const phoneId = callId(listed.body, 'טלפון מהדלפק');
+        assert.ok(phoneId);
+        const desk = await client.inject({
+          method: 'GET',
+          url: `/calls/${phoneId}`,
+        });
+        const head = region(
+          desk.body,
+          '<header class="page-head"',
+          '</header>',
+        );
+        assert.match(head, new RegExp(`/calls/${phoneId}/emergency`));
+        assert.match(head, /סימון חירום/);
+        assert.match(head, new RegExp(`/calls/${phoneId}/return`));
+        assert.match(head, /החזרה למסוננות/);
+        const aside = region(
+          desk.body,
+          '<aside class="call-aside ',
+          '</aside>',
+        );
+        assert.match(aside, /זיהוי הפונה/);
+        assert.match(aside, /מקשר את הקריאה הזו בלבד/);
+        assert.match(aside, /name="exit"/);
+        assert.doesNotMatch(aside, /\/emergency|\/return|שמירת איש קשר/);
+        assert.doesNotMatch(desk.body, /<h2>חירום<\/h2>|<h2>לא קריאה<\/h2>/);
+        assert.doesNotMatch(
+          desk.body,
+          /<section class="glass sheet">[\s\S]*זיהוי הפונה/,
+        );
+
+        const found = await client.inject({
+          method: 'GET',
+          url: `/calls/${phoneId}?q=${encodeURIComponent('יעל מזוהה')}`,
+        });
+        const choices = region(
+          found.body,
+          '<fieldset class="choice"',
+          '</fieldset>',
+        );
+        assert.match(choices, /יעל מזוהה/);
+        assert.doesNotMatch(choices, new RegExp(held));
+        assert.doesNotMatch(choices, /דייר|שוכר|ערב|@/);
+
+        const arrived = await receiveIncoming(
+          db,
+          clock,
+          {
+            sorter: {
+              async sort() {
+                return {
+                  label: 'call' as const,
+                  categoryCode: null,
+                  summary: 'הדלת חורקת',
+                };
+              },
+              async translate() {
+                return { bodyHe: null };
+              },
+            },
+            matchesEmergency: async () => false,
+          },
+          message(domain, {
+            senderAddress: `stranger@${domain}`,
+            body: 'הדלת חורקת',
+            externalMessageId: 'door',
+          }),
+        );
+        assert.equal(arrived.kind, 'call');
+        if (arrived.kind !== 'call') return;
+        const mail = await client.inject({
+          method: 'GET',
+          url: `/calls/${arrived.callId}`,
+        });
+        assert.match(mail.body, /data-call-state="NEW"/);
+        assert.doesNotMatch(mail.body, /שמירת איש קשר/);
+        const identified = await client.inject({
+          method: 'POST',
+          url: `/calls/${arrived.callId}/identify`,
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          payload: form({ party_id: party.id }),
+        });
+        assert.equal(identified.statusCode, 303);
+        const named = await client.inject({
+          method: 'GET',
+          url: `/calls/${arrived.callId}`,
+        });
+        const work = region(
+          named.body,
+          '<aside class="call-aside ',
+          '</aside>',
+        );
+        assert.match(work, /שמירת איש קשר/);
+        assert.match(work, /type="radio"[^>]*name="category_id"/);
+        assert.doesNotMatch(work, /<select name="category_id"/);
+        assert.match(
+          named.body,
+          new RegExp(
+            `<dt>פונה</dt><dd><a href="/parties/${party.id}">יעל מזוהה</a></dd>`,
+          ),
+        );
+        const viewer = asOperator(
+          app,
+          await signIn(db as unknown as Pool, clock, {
+            email: `view@${domain}`,
+            role: 'VIEWER',
+          }),
+        );
+        const withheld = await viewer.inject({
+          method: 'GET',
+          url: `/calls/${arrived.callId}`,
+        });
+        assert.match(withheld.body, /<dt>פונה<\/dt><dd>יעל מזוהה<\/dd>/);
+        assert.doesNotMatch(withheld.body, /href="\/parties\//);
+        const saved = await client.inject({
+          method: 'POST',
+          url: `/calls/${arrived.callId}/contact`,
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          payload: form({}),
+        });
+        assert.equal(saved.statusCode, 303);
+
+        await db.query(
+          `INSERT INTO call_category (category_id, code, label_he, label_en, is_active)
+           VALUES ('a2200007-0000-4000-8000-000000000007', 'PAINT', 'צבע', 'Paint', true)
+           ON CONFLICT (code) DO UPDATE
+             SET is_active = true, label_he = EXCLUDED.label_he`,
+        );
+        const long = await client.inject({
+          method: 'GET',
+          url: `/calls/${arrived.callId}`,
+        });
+        const longAside = region(
+          long.body,
+          '<aside class="call-aside ',
+          '</aside>',
+        );
+        assert.match(longAside, /<select name="category_id"/);
+        assert.match(
+          longAside,
+          /<option value="[0-9a-f-]{36}"[^>]*>צבע<\/option>/,
+        );
+        assert.doesNotMatch(longAside, /type="radio"[^>]*name="category_id"/);
+
+        const plumbing = named.body.match(
+          /name="category_id" value="([0-9a-f-]{36})" \/> אינסטלציה/,
+        )?.[1];
+        assert.ok(plumbing);
+        const triaged = await client.inject({
+          method: 'POST',
+          url: `/calls/${arrived.callId}/category`,
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          payload: form({ category_id: plumbing }),
+        });
+        assert.equal(triaged.statusCode, 303);
+        await db.query(
+          `UPDATE service_call SET state = 'RESPONSIBILITY_SET' WHERE service_call_id = $1`,
+          [arrived.callId],
+        );
+        const later = await client.inject({
+          method: 'GET',
+          url: `/calls/${arrived.callId}`,
+        });
+        assert.match(later.body, /data-call-state="RESPONSIBILITY_SET"/);
+        const laterAside = region(
+          later.body,
+          '<aside class="call-aside ',
+          '</aside>',
+        );
+        assert.doesNotMatch(
+          laterAside,
+          /name="category_id"|name="q"|זיהוי הפונה/,
+        );
+        assert.match(laterAside, /name="exit"/);
+        assert.match(laterAside, /שמירת איש קשר/);
+
+        const forwarded = await client.inject({
+          method: 'POST',
+          url: `/calls/${phoneId}/exit`,
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          payload: form({ exit: 'FORWARDED', department: 'כספים' }),
+        });
+        assert.equal(forwarded.statusCode, 400);
+        const keptForward = region(
+          forwarded.body,
+          'data-exit="FORWARDED"',
+          '</details>',
+        );
+        assert.match(keptForward, /data-exit="FORWARDED" open/);
+        assert.match(keptForward, /value="כספים"/);
+        const sent = await client.inject({
+          method: 'POST',
+          url: `/calls/${phoneId}/exit`,
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          payload: form({
+            exit: 'FORWARDED',
+            note: 'אין זה אצלנו',
+            department: 'כספים',
+          }),
+        });
+        assert.equal(sent.statusCode, 303);
+
+        const cancel = await client.inject({
+          method: 'POST',
+          url: '/calls',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          payload: form({
+            channel: 'WALK_IN',
+            description: 'ביטול מהדלפק',
+            sender: 'unknown',
+          }),
+        });
+        assert.equal(cancel.statusCode, 303);
+        const afterCancelLog = await client.inject({
+          method: 'GET',
+          url: '/calls',
+        });
+        const cancelId = callId(afterCancelLog.body, 'ביטול מהדלפק');
+        assert.ok(cancelId);
+        const sentBack = await client.inject({
+          method: 'POST',
+          url: `/calls/${cancelId}/return`,
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          payload: form({}),
+        });
+        assert.equal(sentBack.statusCode, 303);
+        const parked = await client.inject({
+          method: 'GET',
+          url: `/calls/${cancelId}`,
+        });
+        const parkedAside = region(
+          parked.body,
+          '<aside class="call-aside ',
+          '</aside>',
+        );
+        assert.match(parkedAside, /זיהוי הפונה/);
+        assert.match(parkedAside, /הצלה/);
+        assert.doesNotMatch(parkedAside, /name="exit"/);
+        const restored = await client.inject({
+          method: 'POST',
+          url: '/calls/filtered',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          payload: form({ call_id: cancelId }),
+        });
+        assert.equal(restored.statusCode, 303);
+        const cancelled = await client.inject({
+          method: 'POST',
+          url: `/calls/${cancelId}/exit`,
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          payload: form({ exit: 'CANCELLED', note: 'הפונה ביטל' }),
+        });
+        assert.equal(cancelled.statusCode, 303);
+        const closedCancel = await client.inject({
+          method: 'GET',
+          url: `/calls/${cancelId}`,
+        });
+        assert.match(closedCancel.body, /בוטלה/);
+        assert.match(closedCancel.body, /הפונה ביטל/);
+        assert.doesNotMatch(closedCancel.body, /\/emergency|החזרה למסוננות/);
+
+        const back = await client.inject({
+          method: 'POST',
+          url: `/calls/${arrived.callId}/return`,
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          payload: form({}),
+        });
+        assert.equal(back.statusCode, 303);
+        assert.equal(back.headers.location, '/calls/filtered');
+        const returned = await client.inject({
+          method: 'GET',
+          url: `/calls/${arrived.callId}`,
+        });
+        const returnedHead = region(
+          returned.body,
+          '<header class="page-head"',
+          '</header>',
+        );
+        assert.doesNotMatch(returnedHead, /החזרה למסוננות/);
+        assert.match(returnedHead, /\/emergency/);
+        const rescue = region(
+          returned.body,
+          '<aside class="call-aside ',
+          '</aside>',
+        );
+        assert.match(rescue, /הצלה/);
+        assert.match(
+          rescue,
+          new RegExp(`name="call_id" value="${arrived.callId}"`),
+        );
+        assert.doesNotMatch(
+          rescue,
+          /name="exit"|name="category_id"|זיהוי הפונה|שמירת איש קשר/,
+        );
         await app.close();
       });
     } finally {
