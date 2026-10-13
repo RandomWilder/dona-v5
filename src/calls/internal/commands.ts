@@ -264,6 +264,7 @@ export interface ReturnedCall {
   senderLabel: string | null;
   senderUnknown: boolean;
   sorterLabel: SorterLabel | null;
+  sourceChannel: SourceChannel;
   at: Date;
 }
 
@@ -966,10 +967,11 @@ export async function listReturnedCalls(
     sender_label: string | null;
     sender_unknown: boolean;
     sorter_label: string | null;
+    source_channel: SourceChannel;
     returned_at: Date;
   }>(
     `SELECT service_call_id, description, sender_label, sender_unknown,
-            sorter_label, returned_at
+            sorter_label, source_channel, returned_at
        FROM service_call
       WHERE returned_at IS NOT NULL
       ORDER BY returned_at DESC, service_call_id DESC`,
@@ -980,6 +982,7 @@ export async function listReturnedCalls(
     senderLabel: row.sender_label,
     senderUnknown: row.sender_unknown,
     sorterLabel: sorterLabelOf(row.sorter_label),
+    sourceChannel: row.source_channel,
     at: row.returned_at,
   }));
 }

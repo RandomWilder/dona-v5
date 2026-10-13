@@ -2260,8 +2260,12 @@ const SCREENS: Array<[string, () => string]> = [
             bodyHe: null,
             sender: 'shop@example.test',
             sorterLabel: 'noise',
+            channel: 'EMAIL',
+            at: new Date('2026-10-06T12:00:00.000Z'),
           },
         ],
+        origin: 'all',
+        counts: { all: 1, sorter: 1, office: 0 },
       }),
   ],
   [

@@ -54,7 +54,18 @@ export interface FilteredRow {
   bodyHe: string | null;
   sender: string;
   sorterLabel: SorterLabel | null;
+  channel: SourceChannel;
+  /** When the message arrived, or when the office returned the call. */
+  at: Date;
 }
+
+export interface FilteredCounts {
+  all: number;
+  sorter: number;
+  office: number;
+}
+
+export type FilteredOrigin = 'all' | 'sorter' | 'office';
 
 export interface OpenListCounts {
   open: number;
@@ -110,6 +121,8 @@ export interface FilteredScreen {
   nav: Html;
   csrf: string;
   rows: readonly FilteredRow[];
+  origin: FilteredOrigin;
+  counts: FilteredCounts;
   refusal?: string;
 }
 
@@ -263,6 +276,10 @@ const styles = h`<style>
   .calls .facts [data-goal="amber"] { color: var(--color-caution); }
   .calls .call-meta [data-goal="red"],
   .calls .facts [data-goal="red"] { color: var(--color-alert); }
+  .calls .call.glass {
+    padding: var(--space-4);
+    border-block-end-color: var(--glass-stroke);
+  }
   .calls .call-main { margin: 0; }
   .calls .call-meta {
     display: flex;
@@ -1094,7 +1111,7 @@ function rescueForm(screen: CallScreen): Html {
     <form method="post" action="/calls/filtered">
       ${csrfInput(screen.csrf)}
       <input type="hidden" name="call_id" value="${call.id}" />
-      <button class="btn btn-primary" type="submit">הצלה</button>
+      <button class="btn btn-primary" type="submit">הצלה — זו קריאה</button>
     </form>
   </div>`;
 }
@@ -1286,20 +1303,45 @@ function filteredRow(row: FilteredRow, csrf: string): Html {
     row.bodyHe === null
       ? h``
       : h` <span data-translation="yes">תרגום: ${row.bodyHe}</span>`;
-  return h`<article class="call" data-filtered="${row.kind}" data-filtered-id="${row.id}">
+  return h`<article class="call glass" data-filtered="${row.kind}" data-filtered-id="${row.id}">
     <p class="call-main">${title}</p>
     <p class="message">${row.body}${translation}</p>
     <p class="call-meta">
       ${sorterLabel(row.sorterLabel)}
       ${office}
+      <span class="chip">${CHANNEL_HE[row.channel]}</span>
+      <span>${whenLabel(row.at)}</span>
       <span>${row.sender}</span>
     </p>
     <form method="post" action="/calls/filtered">
       ${csrfInput(csrf)}
       ${hidden}
-      <button class="btn btn-primary" type="submit">הצלה</button>
+      <button class="btn btn-primary" type="submit">הצלה — זו קריאה</button>
     </form>
   </article>`;
+}
+
+function filteredHref(origin: FilteredOrigin): string {
+  if (origin === 'all') return '/calls/filtered';
+  return `/calls/filtered?origin=${origin}`;
+}
+
+function filteredSegments(screen: FilteredScreen): Html {
+  const items: {
+    id: keyof FilteredScreen['counts'];
+    label: string;
+    href: string;
+  }[] = [
+    { id: 'all', label: 'הכל', href: filteredHref('all') },
+    { id: 'sorter', label: 'המסווג', href: filteredHref('sorter') },
+    { id: 'office', label: 'המשרד', href: filteredHref('office') },
+  ];
+  return h`<nav class="segmented glass is-raised" aria-label="סינון מסוננות">
+    ${items.map((item) => {
+      const mark = item.id === screen.origin ? h`aria-current="true"` : h``;
+      return h`<a href="${item.href}" ${mark}>${item.label} <span class="n">${ltr(screen.counts[item.id])}</span></a>`;
+    })}
+  </nav>`;
 }
 
 export function renderFilteredPage(screen: FilteredScreen): string {
@@ -1309,7 +1351,9 @@ export function renderFilteredPage(screen: FilteredScreen): string {
       : h`<p class="refusal">${screen.refusal}</p>`;
   const list =
     screen.rows.length === 0
-      ? h`<p class="lede">אין הודעות מסוננות.</p>`
+      ? screen.counts.all === 0
+        ? h`<p class="lede">אין הודעות מסוננות.</p>`
+        : h``
       : h`<div class="call-list">${screen.rows.map((row) => filteredRow(row, screen.csrf))}</div>`;
   const body = h`
     <div class="calls glass-stage">
@@ -1321,9 +1365,8 @@ export function renderFilteredPage(screen: FilteredScreen): string {
         </div>
       </header>
       ${refusal}
-      <section class="glass sheet">
-        ${list}
-      </section>
+      ${filteredSegments(screen)}
+      ${list}
     </div>`;
   return renderPage({
     title: 'מסוננות — דונה דום',

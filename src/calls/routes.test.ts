@@ -1666,6 +1666,201 @@ describe('calls · the קריאות tab', () => {
       await pool.end();
     }
   });
+
+  it('narrows the filtered list by origin and rescues either one', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const domain = 'filtered-origin.test';
+    const clock = fixedClock(AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    await cleanupIntake(pool, domain);
+    const who = await signIn(pool, clock, {
+      email: `ops@${domain}`,
+      role: 'OPERATOR',
+    });
+    const client = asOperator(app, who);
+    const arrived = '6 באוק\u05F3, 15:00';
+    const returnedAt = '6 באוק\u05F3, 15:30';
+    const rescueWords = 'הצלה — זו קריאה';
+    try {
+      const noise = await receiveIncoming(
+        pool,
+        clock,
+        {
+          sorter: {
+            async sort() {
+              return { label: 'noise', categoryCode: null, summary: null };
+            },
+            async translate() {
+              return { bodyHe: null };
+            },
+          },
+          matchesEmergency: async () => false,
+        },
+        message(domain, {
+          externalMessageId: 'leaflet',
+          externalThreadId: 'leaflet',
+          subject: 'עלון החנות',
+          body: 'ניוזלטר',
+        }),
+      );
+      assert.equal(noise.kind, 'filtered');
+      const drip = await receiveIncoming(
+        pool,
+        clock,
+        {
+          sorter: {
+            async sort() {
+              return {
+                label: 'call',
+                categoryCode: 'PLUMBING',
+                summary: 'ברז מטפטף',
+              };
+            },
+            async translate() {
+              return { bodyHe: null };
+            },
+          },
+          matchesEmergency: async () => false,
+        },
+        message(domain, {
+          sourceChannel: 'WHATSAPP',
+          externalMessageId: 'drip',
+          externalThreadId: 'drip',
+          body: 'ברז מטפטף',
+        }),
+      );
+      assert.equal(drip.kind, 'call');
+      const open = await client.inject({ method: 'GET', url: '/calls' });
+      const dripId = callId(open.body, 'ברז מטפטף');
+      assert.ok(dripId);
+      clock.advance(HALF_HOUR);
+      const sentBack = await client.inject({
+        method: 'POST',
+        url: `/calls/${dripId}/return`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({}),
+      });
+      assert.equal(sentBack.statusCode, 303);
+
+      const all = await client.inject({
+        method: 'GET',
+        url: '/calls/filtered',
+      });
+      assert.equal(all.statusCode, 200);
+      assert.doesNotMatch(all.body, /<script/);
+      const noiseRow = filteredArticle(all.body, 'עלון החנות');
+      const officeRow = filteredArticle(all.body, 'ברז מטפטף');
+      assert.match(noiseRow, /data-filtered="message"/);
+      assert.match(noiseRow, /data-sorter="noise"/);
+      assert.match(noiseRow, /מסווג: רעש/);
+      assert.match(noiseRow, /דוא\u05F4ל/);
+      assert.match(noiseRow, new RegExp(arrived));
+      assert.match(noiseRow, new RegExp(rescueWords));
+      assert.match(officeRow, /data-filtered="call"/);
+      assert.match(officeRow, /data-sorter="call"/);
+      assert.match(officeRow, /מסווג: קריאה/);
+      assert.match(officeRow, /data-office="returned"/);
+      assert.match(officeRow, /משרד: הוחזר/);
+      assert.match(officeRow, /וואטסאפ/);
+      assert.match(officeRow, new RegExp(returnedAt));
+      assert.match(officeRow, new RegExp(`href="/calls/${dripId}"`));
+      assert.match(officeRow, new RegExp(rescueWords));
+      assertCountsMatchRows(all.body);
+      const sorterTotal = originCount(all.body, 'המסווג');
+      const officeTotal = originCount(all.body, 'המשרד');
+
+      const sorter = await client.inject({
+        method: 'GET',
+        url: '/calls/filtered?origin=sorter',
+      });
+      assert.match(sorter.body, /עלון החנות/);
+      assert.doesNotMatch(sorter.body, /ברז מטפטף/);
+      assert.doesNotMatch(sorter.body, /data-filtered="call"/);
+      assert.equal(originCount(sorter.body, 'המסווג'), sorterTotal);
+      assert.equal(originCount(sorter.body, 'המשרד'), officeTotal);
+      assert.ok(originCount(sorter.body, 'המשרד') >= 1);
+      assert.match(
+        sorter.body,
+        /href="\/calls\/filtered\?origin=sorter" aria-current="true"/,
+      );
+
+      const office = await client.inject({
+        method: 'GET',
+        url: '/calls/filtered?origin=office',
+      });
+      assert.match(office.body, /ברז מטפטף/);
+      assert.doesNotMatch(office.body, /עלון החנות/);
+      assert.doesNotMatch(office.body, /data-filtered="message"/);
+      assert.equal(originCount(office.body, 'המסווג'), sorterTotal);
+      assert.equal(originCount(office.body, 'המשרד'), officeTotal);
+      assert.match(
+        office.body,
+        /href="\/calls\/filtered\?origin=office" aria-current="true"/,
+      );
+
+      const unknown = await client.inject({
+        method: 'GET',
+        url: '/calls/filtered?origin=nope',
+      });
+      assert.match(unknown.body, /עלון החנות/);
+      assert.match(unknown.body, /ברז מטפטף/);
+
+      const parked = await client.inject({
+        method: 'GET',
+        url: `/calls/${dripId}`,
+      });
+      const parkedAside = region(
+        parked.body,
+        '<aside class="call-aside ',
+        '</aside>',
+      );
+      assert.match(parkedAside, new RegExp(rescueWords));
+
+      const restored = await client.inject({
+        method: 'POST',
+        url: '/calls/filtered',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({ call_id: dripId }),
+      });
+      assert.equal(restored.statusCode, 303);
+      assert.equal(restored.headers.location, `/calls/${dripId}`);
+      const back = await client.inject({ method: 'GET', url: '/calls' });
+      assert.match(back.body, /ברז מטפטף/);
+      const afterCall = await client.inject({
+        method: 'GET',
+        url: '/calls/filtered?origin=office',
+      });
+      assert.doesNotMatch(afterCall.body, /ברז מטפטף/);
+
+      const leafletId = noise.kind === 'filtered' ? noise.messageId : '';
+      const rescued = await client.inject({
+        method: 'POST',
+        url: '/calls/filtered',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({ message_id: leafletId }),
+      });
+      assert.equal(rescued.statusCode, 303);
+      assert.match(
+        String(rescued.headers.location),
+        /^\/calls\/[0-9a-f-]{36}$/,
+      );
+      const openAgain = await client.inject({ method: 'GET', url: '/calls' });
+      assert.match(openAgain.body, /עלון החנות/);
+      const afterNoise = await client.inject({
+        method: 'GET',
+        url: '/calls/filtered?origin=sorter',
+      });
+      assert.doesNotMatch(afterNoise.body, /עלון החנות/);
+    } finally {
+      await cleanupIntake(pool, domain);
+      await app.close();
+      await pool.end();
+    }
+  });
 });
 
 function message(
@@ -1689,4 +1884,63 @@ function region(html: string, startMark: string, endMark: string): string {
   const end = html.indexOf(endMark, start);
   assert.ok(start >= 0 && end > start, startMark);
   return html.slice(start, end + endMark.length);
+}
+
+function filteredArticle(html: string, title: string): string {
+  const at = html.indexOf(`>${title}<`);
+  assert.ok(at >= 0, title);
+  const start = html.lastIndexOf('<article', at);
+  const end = html.indexOf('</article>', at);
+  assert.ok(start >= 0 && end > start, title);
+  return html.slice(start, end);
+}
+
+function originCount(html: string, label: string): number {
+  const found = html.match(
+    new RegExp(`${label} <span class="n"><span dir="ltr">(\\d+)</span>`),
+  );
+  assert.ok(found, label);
+  return Number(found[1]);
+}
+
+function assertCountsMatchRows(html: string): void {
+  const sorter = html.match(/data-filtered="message"/g)?.length ?? 0;
+  const office = html.match(/data-filtered="call"/g)?.length ?? 0;
+  assert.equal(originCount(html, 'המסווג'), sorter);
+  assert.equal(originCount(html, 'המשרד'), office);
+  assert.equal(originCount(html, 'הכל'), sorter + office);
+}
+
+async function cleanupIntake(pool: Pool, domain: string): Promise<void> {
+  const like = `%@${domain}`;
+  await pool.query(
+    `DELETE FROM message
+      WHERE sender_address LIKE $1
+         OR service_call_id IN (
+           SELECT service_call_id FROM service_call WHERE sender_label LIKE $1
+         )`,
+    [like],
+  );
+  await pool.query(
+    `DELETE FROM service_call_transition
+      WHERE service_call_id IN (
+        SELECT service_call_id FROM service_call WHERE sender_label LIKE $1
+      )`,
+    [like],
+  );
+  await pool.query(
+    `DELETE FROM audit_log
+      WHERE subject_id IN (
+        SELECT service_call_id::text FROM service_call WHERE sender_label LIKE $1
+      )`,
+    [like],
+  );
+  await pool.query(`DELETE FROM service_call WHERE sender_label LIKE $1`, [
+    like,
+  ]);
+  await pool.query(
+    `DELETE FROM conversation WHERE external_thread_id LIKE $1`,
+    [`${domain}-%`],
+  );
+  await signOutAll(pool, domain);
 }

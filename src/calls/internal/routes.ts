@@ -41,6 +41,7 @@ import {
 } from './commands.ts';
 import {
   type ExitDraft,
+  type FilteredOrigin,
   type LogDraft,
   renderCallPage,
   renderCallsPage,
@@ -55,6 +56,7 @@ export interface NoiseMessage {
   body: string;
   sender: string;
   at: Date;
+  channel: 'EMAIL' | 'WHATSAPP';
   bodyHe: string | null;
 }
 
@@ -519,6 +521,8 @@ async function filteredPage(
         bodyHe: row.bodyHe,
         sender: row.sender,
         sorterLabel: 'noise' as const,
+        channel: row.channel,
+        at: row.at,
       },
     })),
     ...returned.map((row) => ({
@@ -531,11 +535,21 @@ async function filteredPage(
         bodyHe: null,
         sender: senderOf(row.senderLabel, row.senderUnknown),
         sorterLabel: row.sorterLabel,
+        channel: row.sourceChannel,
+        at: row.at,
       },
     })),
   ];
   ranked.sort((a, b) => b.at - a.at);
   const rows = ranked.map((item) => item.row);
+  const origin = filteredOrigin(request.query);
+  const shown = rows.filter((row) => shownFiltered(row.kind, origin));
+  let sorter = 0;
+  let office = 0;
+  for (const row of rows) {
+    if (row.kind === 'message') sorter += 1;
+    else office += 1;
+  }
   const role = request.staff?.role ?? null;
   const csrf = csrfFrom(request);
   return renderFilteredPage({
@@ -547,9 +561,26 @@ async function filteredPage(
       request.openCalls,
     ),
     csrf,
-    rows,
+    rows: shown,
+    origin,
+    counts: { all: rows.length, sorter, office },
     refusal,
   });
+}
+
+function filteredOrigin(query: unknown): FilteredOrigin {
+  const origin = textOf(formOf(query).origin);
+  if (origin === 'sorter' || origin === 'office') return origin;
+  return 'all';
+}
+
+function shownFiltered(
+  kind: 'message' | 'call',
+  origin: FilteredOrigin,
+): boolean {
+  if (origin === 'sorter') return kind === 'message';
+  if (origin === 'office') return kind === 'call';
+  return true;
 }
 
 export function registerCallsRoutes(

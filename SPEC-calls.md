@@ -161,6 +161,19 @@ due, expired, or undated are warnings above the list, each with a way to the set
 the filtered list shows how many rows are set aside: the length of the noise messages and the
 returned calls, the same two lists that page shows.
 
+The filtered list is that one list. A row is a message the sorter set aside, or a ServiceCall the
+office sent back. A returned row is still that ServiceCall, and it links to the call. The views are
+הכל, המסווג, and המשרד. הכל shows both origins. המסווג shows only what the sorter set aside,
+requested as `origin=sorter`. המשרד shows only what the office returned, requested as
+`origin=office`. An origin the page does not know is הכל. Each view shows the three counts from
+that same read, so a short list can sit under a larger total. The sentence אין הודעות מסוננות means
+the book is empty. A view with none of its own rows does not use that sentence while another origin
+still has rows. Each row shows the sorter's verdict, the Source channel, and the time: when the
+message arrived, or when the office returned the call.
+The rows are cards on the same glass language as the open list. Rescue from either origin is the
+control הצלה — זו קריאה, the same words as on the returned call, and it puts the call back on the
+open list. The page stays server-rendered, and the marks the list already carries stay.
+
 The dialog is the manual entry for PHONE and WALK_IN, three required fields (channel,
 description, and a sender or unknown) and no sorter, a call page with the full timeline of
 messages, attachments and transitions, and a filtered list. The rail shows the open-call count
@@ -185,8 +198,8 @@ A new call offers identification of the requester, for this call alone. A match 
 An identified or triaged call offers the category. Six or fewer active categories are a set of
 choices; more than six uses the select. Saving the sender as a contact uses the offer that
 already exists, and the control is absent when that command would not be offered. A returned
-call offers rescue back onto the list. Rescue does not replace identification or the category
-while those commands still apply. The four exits stay off until the call is back on the open
+call offers rescue back onto the list. The control says הצלה — זו קריאה. Rescue does not
+replace identification or the category while those commands still apply. The four exits stay off until the call is back on the open
 list. From RESPONSIBILITY SET on, there is no next step.
 Closing offers the four exits. Each one shows only the fields it needs: a note for answered and
 for cancelled, a note and a department for forwarded, and the other call for a duplicate. The
