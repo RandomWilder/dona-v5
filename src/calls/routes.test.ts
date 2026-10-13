@@ -51,6 +51,36 @@ function article(html: string, description: string): string {
   return html.slice(start, end);
 }
 
+function listedId(html: string, description: string): string {
+  const found = html.match(
+    new RegExp(`href="/calls/([0-9a-f-]{36})">${description}</a>`),
+  );
+  assert.ok(found?.[1], description);
+  return found[1];
+}
+
+function layoutOf(html: string, name: 'split' | 'list'): string {
+  const start = html.indexOf(`data-layout="${name}"`);
+  assert.ok(start >= 0, name);
+  const next =
+    name === 'list'
+      ? html.indexOf('data-layout="split"', start)
+      : html.indexOf('<dialog', start);
+  return html.slice(start, next > start ? next : html.length);
+}
+
+function previewId(html: string): string {
+  const found = html.match(/data-preview="([0-9a-f-]{36})"/);
+  assert.ok(found?.[1]);
+  return found[1];
+}
+
+function firstSplitId(html: string): string {
+  const found = html.match(/data-split-call="([0-9a-f-]{36})"/);
+  assert.ok(found?.[1]);
+  return found[1];
+}
+
 function labeledCount(html: string, label: string): number {
   const found = html.match(
     new RegExp(`${label} <span dir="ltr">(\\d+)</span>`),
@@ -1856,6 +1886,268 @@ describe('calls · the קריאות tab', () => {
       });
       assert.doesNotMatch(afterNoise.body, /עלון החנות/);
     } finally {
+      await cleanupIntake(pool, domain);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('opens the split inbox, and the list view only when asked', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    const domain = 'calls-routes-split.test';
+    await cleanup(pool, domain);
+    const who = await signIn(pool, clock, {
+      email: `ops@${domain}`,
+      role: 'OPERATOR',
+    });
+    const client = asOperator(app, who);
+    const party = await createParty(pool, {
+      kind: 'PERSON',
+      givenName: 'יעל',
+      familyName: 'בתצוגה',
+      preferredLanguage: 'he',
+    });
+    const desk = 'קריאה לדלפק';
+    const named = 'קריאה לפונה';
+    try {
+      for (const description of [desk, named]) {
+        const opened = await client.inject({
+          method: 'POST',
+          url: '/calls',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          payload: form({
+            channel: 'PHONE',
+            description,
+            sender: 'unknown',
+          }),
+        });
+        assert.equal(opened.statusCode, 303);
+      }
+      const first = await quietCallsPage(pool, client);
+      const deskId = listedId(first.body, desk);
+      const namedId = listedId(first.body, named);
+
+      const page = await client.inject({ method: 'GET', url: '/calls' });
+      assert.equal(page.statusCode, 200);
+      assert.doesNotMatch(
+        page.body,
+        /<script|type="search"|name="q"|name="search"/,
+      );
+      assert.match(page.body, /data-layout="list"/);
+      assert.match(page.body, /data-layout="split"/);
+      const listed = page.body.match(/data-call="/g)?.length ?? 0;
+      const splitRows = page.body.match(/data-split-call="/g)?.length ?? 0;
+      assert.ok(listed >= 2);
+      assert.equal(splitRows, listed);
+      const splitPane = layoutOf(page.body, 'split');
+      const splitSummary = splitPane.match(
+        /data-split-summary>([\s\S]*?)<\/p>/,
+      );
+      assert.ok(splitSummary?.[1]);
+      assert.match(splitSummary[1], /פתוחות/);
+      assert.match(splitSummary[1], /חירום/);
+      assert.match(splitSummary[1], /מעבר ליעד/);
+      assert.doesNotMatch(splitSummary[1], /לא בזמן|לבדיקה/);
+      assert.doesNotMatch(splitPane, /טלפון או הגעה|stat-row/);
+      assert.match(splitPane, /href="\/calls\?view=list"/);
+      const listPane = layoutOf(page.body, 'list');
+      assert.match(listPane, /טלפון או הגעה/);
+      assert.match(listPane, /stat-row/);
+      assert.match(listPane, /דורש טיפול עכשיו|data-call=/);
+
+      const list = await client.inject({
+        method: 'GET',
+        url: `/calls?view=list&call=${namedId}`,
+      });
+      assert.match(list.body, /data-layout="list"/);
+      assert.doesNotMatch(
+        list.body,
+        /data-layout="split"|data-split-call=|data-preview=/,
+      );
+      assert.match(list.body, /data-call="/);
+      assert.match(list.body, /טלפון או הגעה/);
+      assert.match(list.body, /href="\/calls"/);
+
+      const chosen = await client.inject({
+        method: 'GET',
+        url: `/calls?state=NEW&call=${namedId}`,
+      });
+      assert.match(chosen.body, new RegExp(`data-preview="${namedId}"`));
+      assert.match(chosen.body, /name="state" value="NEW"/);
+      assert.match(
+        chosen.body,
+        new RegExp(`href="/calls\\?state=NEW&amp;call=${namedId}"`),
+      );
+      const preview = region(
+        chosen.body,
+        `data-preview="${namedId}"`,
+        '</section>',
+      );
+      assert.match(preview, /data-requester>טרם זוהה</);
+      assert.match(preview, /data-next-step/);
+      assert.match(preview, new RegExp(`href="/calls/${namedId}"`));
+      assert.match(preview, new RegExp(`data-excerpt>${named}</`));
+
+      const identified = await client.inject({
+        method: 'POST',
+        url: `/calls/${namedId}/identify`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({ party_id: party.id }),
+      });
+      assert.equal(identified.statusCode, 303);
+      const withName = await client.inject({
+        method: 'GET',
+        url: `/calls?call=${namedId}`,
+      });
+      const namedPreview = region(
+        withName.body,
+        `data-preview="${namedId}"`,
+        '</section>',
+      );
+      assert.match(namedPreview, /data-requester>יעל בתצוגה</);
+      assert.doesNotMatch(namedPreview, /href="\/parties\//);
+      assert.match(namedPreview, /data-next-step/);
+
+      await pool.query(
+        `UPDATE service_call SET sorter_summary = 'סיכום הדלפק' WHERE service_call_id = $1`,
+        [deskId],
+      );
+      const summarised = await client.inject({
+        method: 'GET',
+        url: `/calls?call=${deskId}`,
+      });
+      const deskPreview = region(
+        summarised.body,
+        `data-preview="${deskId}"`,
+        '</section>',
+      );
+      assert.match(deskPreview, /data-excerpt>סיכום הדלפק</);
+      assert.match(deskPreview, /data-next-step/);
+
+      const inbound = `${'א'.repeat(240)}TAIL`;
+      const arrived = await receiveIncoming(
+        pool,
+        clock,
+        {
+          sorter: {
+            async sort() {
+              return {
+                label: 'call' as const,
+                categoryCode: null,
+                summary: 'כותרת קצרה',
+              };
+            },
+            async translate() {
+              return { bodyHe: null };
+            },
+          },
+          matchesEmergency: async () => false,
+        },
+        message(domain, {
+          senderAddress: `reader@${domain}`,
+          body: inbound,
+          externalMessageId: 'split-body',
+        }),
+      );
+      assert.equal(arrived.kind, 'call');
+      if (arrived.kind !== 'call') return;
+      const mailed = await client.inject({
+        method: 'GET',
+        url: `/calls?call=${arrived.callId}`,
+      });
+      const mailedPreview = region(
+        mailed.body,
+        `data-preview="${arrived.callId}"`,
+        '</section>',
+      );
+      assert.match(
+        mailedPreview,
+        new RegExp(`data-excerpt>${'א'.repeat(240)}…</`),
+      );
+      assert.doesNotMatch(mailedPreview, /data-excerpt>[^<]*TAIL/);
+      assert.doesNotMatch(mailedPreview, /data-excerpt>כותרת קצרה</);
+
+      const flagged = await client.inject({
+        method: 'POST',
+        url: `/calls/${namedId}/emergency`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({ action: 'flag' }),
+      });
+      assert.equal(flagged.statusCode, 303);
+      const outside = await client.inject({
+        method: 'GET',
+        url: `/calls?emergency=1&call=${deskId}`,
+      });
+      assert.doesNotMatch(
+        outside.body,
+        new RegExp(`data-split-call="${deskId}"`),
+      );
+      assert.match(outside.body, new RegExp(`data-split-call="${namedId}"`));
+      assert.equal(previewId(outside.body), firstSplitId(outside.body));
+      assert.notEqual(previewId(outside.body), deskId);
+      assert.match(outside.body, /name="emergency" value="1"/);
+
+      const missing = await client.inject({
+        method: 'GET',
+        url: '/calls?call=00000000-0000-4000-8000-000000000099',
+      });
+      assert.equal(previewId(missing.body), firstSplitId(missing.body));
+      assert.notEqual(
+        previewId(missing.body),
+        '00000000-0000-4000-8000-000000000099',
+      );
+
+      const closed = await client.inject({
+        method: 'POST',
+        url: `/calls/${deskId}/exit`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({ exit: 'ANSWERED', note: 'נסגרה מהתצוגה' }),
+      });
+      assert.equal(closed.statusCode, 303);
+      const skipped = await client.inject({
+        method: 'GET',
+        url: `/calls?call=${deskId}`,
+      });
+      assert.doesNotMatch(skipped.body, new RegExp(`data-preview="${deskId}"`));
+      assert.equal(previewId(skipped.body), firstSplitId(skipped.body));
+
+      const empty = await client.inject({
+        method: 'GET',
+        url: '/calls?category=00000000-0000-4000-8000-000000000099',
+      });
+      assert.match(empty.body, /אין קריאות תואמות/);
+      assert.doesNotMatch(empty.body, /data-split-call=/);
+      assert.doesNotMatch(empty.body, /data-preview="[0-9a-f]/);
+
+      await pool.query(
+        `UPDATE service_call
+            SET state = 'RESPONSIBILITY_SET',
+                category_id = (
+                  SELECT category_id FROM call_category
+                   WHERE is_active ORDER BY code LIMIT 1
+                )
+          WHERE service_call_id = $1`,
+        [namedId],
+      );
+      const later = await client.inject({
+        method: 'GET',
+        url: `/calls?call=${namedId}`,
+      });
+      const laterPreview = region(
+        later.body,
+        `data-preview="${namedId}"`,
+        '</section>',
+      );
+      assert.match(laterPreview, /data-requester>יעל בתצוגה</);
+      assert.doesNotMatch(laterPreview, /data-next-step|href="\/parties\//);
+    } finally {
+      await cleanup(pool, domain);
       await cleanupIntake(pool, domain);
       await app.close();
       await pool.end();

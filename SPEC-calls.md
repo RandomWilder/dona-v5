@@ -156,6 +156,22 @@ The segments are every open call, emergencies, לא בזמן, calls to review, a
 menu and the state menu keep the other filters when one is chosen. An inactive category is marked
 לא פעיל. The state menu lists the open states. There is no search.
 
+The default response is a split inbox: that same list beside a preview of one call. The list view
+is the explicit request `view=list`, and that response is only the list. Below 64rem the default
+response shows only the list, because both layouts are in that response and the server does not
+read the viewport. The list rows keep the marks they already carry. A split row carries a different
+mark, so one call is not counted twice. Choosing a row previews that call and keeps the filter. A
+selection that is missing, closed, returned, or not in the current rows is skipped, and the first
+row of the current list is previewed. An empty list has an empty preview. The preview is read only
+for the split inbox. Its text is the first inbound message, cut after 240 characters, otherwise the
+summary, otherwise the description. The split header summarises open calls, emergencies, and calls
+past the goal, in place of the long lede and the stat row. The way into the filtered list stays on
+that header. The split list is that same list: the same order, the same urgent heading, and the
+same facts on each row. The warnings stay above both layouts.
+The requester's name in the preview is text, and it does not link to the profile. A new call, or a
+call still waiting on a category, offers a next step that links to the call page. From
+RESPONSIBILITY SET on, and on a closed call, there is no such strip.
+
 A mailbox that has not been read, a WhatsApp echo that has gone quiet, and a mail secret that is
 due, expired, or undated are warnings above the list, each with a way to the settings. The way into
 the filtered list shows how many rows are set aside: the length of the noise messages and the

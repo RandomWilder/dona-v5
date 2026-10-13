@@ -110,6 +110,13 @@ export interface CallsScreen {
   logging?: boolean;
   draft?: LogDraft | null;
   refusal?: string;
+  /** `list` is the explicit list view. Anything else is the split inbox. */
+  layout?: 'split' | 'list';
+  /**
+   * The call the split inbox previews. Null when the list is empty.
+   * Omitted means the first row, with no inbound message loaded.
+   */
+  preview?: { id: string; excerpt: string } | null;
 }
 
 /** Mirrors channel's `SecretWarning`: channel imports calls, so calls cannot import it back. */
@@ -378,6 +385,39 @@ const styles = h`<style>
     .calls .call-work:has(.call-aside) {
       grid-template-columns: var(--size-retrieval) minmax(0, 1fr);
     }
+    .calls .split-work {
+      grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+    }
+  }
+  .calls .split-layout { display: grid; gap: var(--space-6); }
+  .calls .list-layout { display: none; }
+  .calls.is-list .list-layout { display: grid; gap: var(--space-6); }
+  .calls.is-list .split-layout { display: none; }
+  .calls .split-work {
+    display: grid;
+    gap: var(--space-4);
+    align-items: start;
+  }
+  .calls .split-rows { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+  .calls .split-row {
+    display: grid;
+    gap: var(--space-1);
+    padding: var(--space-3);
+    border-radius: var(--radius-3);
+    color: inherit;
+    text-decoration: none;
+  }
+  .calls .split-row[aria-current="true"] { background: var(--glass-fill-strong); }
+  .calls .split-row[data-emergency="true"] { color: var(--color-alert); }
+  .calls .preview {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-5);
+    align-content: start;
+  }
+  @media (max-width: 63.99rem) {
+    .calls .list-layout { display: grid; gap: var(--space-6); }
+    .calls .split-layout { display: none; }
   }
 </style>`;
 
@@ -454,7 +494,12 @@ function compareOpened(
   return newestFirst ? -byId : byId;
 }
 
-function arrange(screen: CallsScreen): {
+function arrange(screen: {
+  calls: readonly ServiceCall[];
+  state: CallState | null;
+  now: Date;
+  goal: ResponseGoal;
+}): {
   urgent: ServiceCall[];
   rest: ServiceCall[];
 } | null {
@@ -477,7 +522,33 @@ function arrange(screen: CallsScreen): {
   return { urgent: [...emergency, ...past], rest };
 }
 
-function callRow(call: ServiceCall, screen: CallsScreen): Html {
+/** The rows the office sees, in the order the list draws them. */
+export function shownCalls(screen: {
+  calls: readonly ServiceCall[];
+  state: CallState | null;
+  now: Date;
+  goal: ResponseGoal;
+}): ServiceCall[] {
+  const groups = arrange(screen);
+  if (groups === null) return [...screen.calls];
+  return [...groups.urgent, ...groups.rest];
+}
+
+const EXCERPT_AT = 240;
+
+/** First inbound message, then the summary, then the description. Cut after 240 characters. */
+export function previewExcerpt(
+  messages: readonly { echo: boolean; body: string }[],
+  call: { summary: string | null; description: string },
+): string {
+  const inbound = messages.find((message) => !message.echo);
+  const text = inbound?.body.trim() ?? '';
+  if (text.length > EXCERPT_AT) return `${text.slice(0, EXCERPT_AT)}…`;
+  if (text.length > 0) return text;
+  return call.summary?.trim() || call.description;
+}
+
+function callMeta(call: ServiceCall, screen: CallsScreen): Html {
   const sender =
     call.requester?.name ??
     (call.sender.kind === 'unknown' ? 'לא ידוע' : call.sender.name);
@@ -493,34 +564,57 @@ function callRow(call: ServiceCall, screen: CallsScreen): Html {
     call.proposal === null || call.category !== null
       ? h``
       : h`<span class="chip" data-proposal="${call.proposal.code}">הצעה: ${call.proposal.labelHe}</span>`;
+  return h`<span class="chip">${CHANNEL_HE[call.sourceChannel]}</span>
+    <span class="chip">${CALL_STATE_HE[call.state]}</span>
+    ${category}
+    ${proposal}
+    ${emergency}
+    ${review}
+    <span>${sender}</span>
+    <span>${ageLabel(call.openedAt, screen.now)}</span>
+    ${goalChip(call, screen)}`;
+}
+
+function callRow(call: ServiceCall, screen: CallsScreen): Html {
   const marked = call.emergency.flagged ? 'true' : 'false';
   const reviewing = call.toReview ? 'true' : 'false';
-  const goal = goalChip(call, screen);
   return h`<article class="call" data-call="${call.id}" data-channel="${call.sourceChannel}" data-call-state="${call.state}" data-emergency="${marked}" data-review="${reviewing}">
     <p class="call-main"><a href="/calls/${call.id}">${call.description}</a></p>
-    <p class="call-meta">
-      <span class="chip">${CHANNEL_HE[call.sourceChannel]}</span>
-      <span class="chip">${CALL_STATE_HE[call.state]}</span>
-      ${category}
-      ${proposal}
-      ${emergency}
-      ${review}
-      <span>${sender}</span>
-      <span>${ageLabel(call.openedAt, screen.now)}</span>
-      ${goal}
-    </p>
+    <p class="call-meta">${callMeta(call, screen)}</p>
   </article>`;
 }
 
-function listHref(screen: CallsScreen, log: boolean): string {
-  return callsHref({
+function filterParams(
+  screen: CallsScreen,
+  extra: Record<string, string | null> = {},
+): Record<string, string | null> {
+  return {
     state: screen.state,
     category: screen.categoryId,
     emergency: screen.emergency ? '1' : null,
     review: screen.toReview ? '1' : null,
     goal: screen.band,
-    log: log ? '1' : null,
-  });
+    view: screen.layout === 'list' ? 'list' : null,
+    ...extra,
+  };
+}
+
+function listHref(screen: CallsScreen, log: boolean): string {
+  return callsHref(filterParams(screen, { log: log ? '1' : null }));
+}
+
+function listViewHref(screen: CallsScreen): string {
+  return callsHref(
+    filterParams(screen, { view: 'list', call: null, log: null }),
+  );
+}
+
+function splitViewHref(screen: CallsScreen): string {
+  return callsHref(filterParams(screen, { view: null, call: null, log: null }));
+}
+
+function rowHref(screen: CallsScreen, callId: string): string {
+  return callsHref(filterParams(screen, { view: null, call: callId }));
 }
 
 function callsHref(params: Record<string, string | null>): string {
@@ -549,8 +643,8 @@ function segmentNow(screen: CallsScreen): string | null {
 function segments(screen: CallsScreen): Html {
   const openState =
     screen.state !== null && screen.state !== 'CLOSED' ? screen.state : null;
-  const kept = { category: screen.categoryId, state: openState };
   const current = segmentNow(screen);
+  const cleared = { emergency: null, review: null, goal: null, call: null };
   const items: {
     id: string;
     label: string;
@@ -561,31 +655,37 @@ function segments(screen: CallsScreen): Html {
       id: 'open',
       label: 'פתוחות',
       count: screen.counts.open,
-      href: callsHref(kept),
+      href: callsHref(filterParams(screen, { state: openState, ...cleared })),
     },
     {
       id: 'emergency',
       label: 'חירום',
       count: screen.counts.emergency,
-      href: callsHref({ ...kept, emergency: '1' }),
+      href: callsHref(
+        filterParams(screen, { state: openState, ...cleared, emergency: '1' }),
+      ),
     },
     {
       id: 'late',
       label: 'לא בזמן',
       count: screen.counts.late,
-      href: callsHref({ ...kept, goal: 'late' }),
+      href: callsHref(
+        filterParams(screen, { state: openState, ...cleared, goal: 'late' }),
+      ),
     },
     {
       id: 'review',
       label: 'לבדיקה',
       count: screen.counts.toReview,
-      href: callsHref({ ...kept, review: '1' }),
+      href: callsHref(
+        filterParams(screen, { state: openState, ...cleared, review: '1' }),
+      ),
     },
     {
       id: 'closed',
       label: 'סגורות',
       count: null,
-      href: callsHref({ category: screen.categoryId, state: 'CLOSED' }),
+      href: callsHref(filterParams(screen, { ...cleared, state: 'CLOSED' })),
     },
   ];
   return h`<nav class="segmented glass is-raised" aria-label="סינון קריאות">
@@ -618,12 +718,14 @@ function menus(screen: CallsScreen): Html {
         h`<option value="${state}" ${selected(screen.state === state)}>${CALL_STATE_HE[state]}</option>`,
     )}
   </select>`;
+  const view = hidden('view', screen.layout === 'list' ? 'list' : null);
   return h`<div class="filters">
     <form method="get" action="/calls">
       ${hidden('state', screen.state)}
       ${hidden('emergency', emergency)}
       ${hidden('review', review)}
       ${hidden('goal', goal)}
+      ${view}
       <label>קטגוריה ${categories}</label>
       <button class="btn" type="submit">סינון</button>
     </form>
@@ -632,38 +734,49 @@ function menus(screen: CallsScreen): Html {
       ${hidden('emergency', emergency)}
       ${hidden('review', review)}
       ${hidden('goal', goal)}
+      ${view}
       <label>מצב ${states}</label>
       <button class="btn" type="submit">סינון</button>
     </form>
   </div>`;
 }
 
-function callList(screen: CallsScreen): Html {
-  const narrowed =
+function listIsNarrowed(screen: CallsScreen): boolean {
+  return (
     screen.state !== null ||
     screen.categoryId !== null ||
     screen.emergency ||
     screen.toReview ||
-    screen.band !== null;
+    screen.band !== null
+  );
+}
+
+function emptyCopy(screen: CallsScreen): string {
+  return listIsNarrowed(screen) ? 'אין קריאות תואמות.' : 'אין קריאות פתוחות.';
+}
+
+function groupedRows(
+  screen: CallsScreen,
+  rowClass: string,
+  row: (call: ServiceCall) => Html,
+): Html {
   if (screen.calls.length === 0) {
-    return h`<p class="lede">${narrowed ? 'אין קריאות תואמות.' : 'אין קריאות פתוחות.'}</p>`;
+    return h`<p class="lede">${emptyCopy(screen)}</p>`;
   }
   const groups = arrange(screen);
-  if (groups === null) {
-    return h`<div class="call-list">${screen.calls.map((call) => callRow(call, screen))}</div>`;
-  }
+  const rows = (calls: readonly ServiceCall[]) =>
+    h`<div class="${rowClass}">${calls.map(row)}</div>`;
+  if (groups === null) return rows(screen.calls);
   const urgent =
     groups.urgent.length === 0
       ? h``
-      : h`<section class="group">
-          <h2>דורש טיפול עכשיו</h2>
-          <div class="call-list">${groups.urgent.map((call) => callRow(call, screen))}</div>
-        </section>`;
-  const rest =
-    groups.rest.length === 0
-      ? h``
-      : h`<div class="call-list">${groups.rest.map((call) => callRow(call, screen))}</div>`;
+      : h`<section class="group"><h2>דורש טיפול עכשיו</h2>${rows(groups.urgent)}</section>`;
+  const rest = groups.rest.length === 0 ? h`` : rows(groups.rest);
   return h`${urgent}${rest}`;
+}
+
+function callList(screen: CallsScreen): Html {
+  return groupedRows(screen, 'call-list', (call) => callRow(call, screen));
 }
 
 function logDialog(screen: CallsScreen, refusal: Html): Html {
@@ -703,15 +816,7 @@ function logDialog(screen: CallsScreen, refusal: Html): Html {
   </dialog>`;
 }
 
-export function renderCallsPage(screen: CallsScreen): string {
-  const refusal =
-    screen.refusal === undefined
-      ? h``
-      : h`<p class="refusal">${screen.refusal}</p>`;
-  const devLink = screen.devIntake
-    ? h`<a href="/dev/intake">הודעת בדיקה</a>`
-    : h``;
-  const counts = screen.counts;
+function channelWarnings(screen: CallsScreen): Html {
   const mailbox = screen.mailboxWarning
     ? channelWarning('תיבת הדואר לא נקראה כבר שעה.')
     : h``;
@@ -722,32 +827,142 @@ export function renderCallsPage(screen: CallsScreen): string {
     screen.secretWarning ?? null,
     dayIn(screen.now, DEFAULT_ZONE),
   );
+  return h`${mailbox}${echoWarning}${secret}`;
+}
+
+function statRow(screen: CallsScreen): Html {
+  const counts = screen.counts;
+  return h`<section class="stat-row" aria-label="סיכום">
+    <div class="stat glass"><span class="stat-label">פתוחות</span><span class="stat-value">${ltr(counts.open)}</span></div>
+    <div class="stat glass"><span class="stat-label">חירום</span><span class="stat-value">${ltr(counts.emergency)}</span></div>
+    <div class="stat glass is-alert"><span class="stat-label">מעבר ליעד המענה</span><span class="stat-value">${ltr(counts.past)}</span><span class="stat-note">קרוב ליעד ${ltr(counts.near)}</span></div>
+    <div class="stat glass"><span class="stat-label">לבדיקה</span><span class="stat-value">${ltr(counts.toReview)}</span></div>
+  </section>`;
+}
+
+function listHeader(screen: CallsScreen): Html {
+  const counts = screen.counts;
+  const devLink = screen.devIntake
+    ? h`<a href="/dev/intake">הודעת בדיקה</a>`
+    : h``;
+  const back =
+    screen.layout === 'list'
+      ? h`<a class="btn btn-glass" href="${splitViewHref(screen)}">מפוצל</a>`
+      : h``;
+  return h`<header class="page-head">
+    <div>
+      <h1>קריאות</h1>
+      <p class="summary">פתוחות ${ltr(counts.open)} · חירום ${ltr(counts.emergency)} · לא בזמן ${ltr(counts.late)} · לבדיקה ${ltr(counts.toReview)}</p>
+      <p class="lede">טלפון או הגעה. בלי מסווג. <a href="/calls/filtered">מסוננות <span class="n">${ltr(screen.filteredCount)}</span></a> ${devLink}</p>
+    </div>
+    <div class="head-actions">${back}<a class="btn btn-primary" href="${listHref(screen, true)}">רישום קריאה</a></div>
+  </header>`;
+}
+
+function splitHeader(screen: CallsScreen): Html {
+  const counts = screen.counts;
+  return h`<header class="page-head">
+    <div>
+      <h1>קריאות</h1>
+      <p class="summary" data-split-summary>פתוחות ${ltr(counts.open)} · חירום ${ltr(counts.emergency)} · מעבר ליעד ${ltr(counts.past)}</p>
+      <p class="lede"><a href="/calls/filtered">מסוננות <span class="n">${ltr(screen.filteredCount)}</span></a>${screen.devIntake ? h` <a href="/dev/intake">הודעת בדיקה</a>` : h``}</p>
+    </div>
+    <div class="head-actions">
+      <a class="btn btn-glass" href="${listViewHref(screen)}">רשימה</a>
+      <a class="btn btn-primary" href="${listHref(screen, true)}">רישום קריאה</a>
+    </div>
+  </header>`;
+}
+
+function waitingOnCategory(state: CallState): boolean {
+  return state === 'NEW' || state === 'IDENTIFIED' || state === 'TRIAGED';
+}
+
+function resolvedPreview(screen: CallsScreen): {
+  call: ServiceCall;
+  excerpt: string;
+} | null {
+  if (screen.layout === 'list' || screen.calls.length === 0) return null;
+  const rows = shownCalls(screen);
+  const asked = screen.preview;
+  const call =
+    (asked ? rows.find((row) => row.id === asked.id) : undefined) ?? rows[0];
+  if (!call) return null;
+  const excerpt =
+    asked && asked.id === call.id
+      ? asked.excerpt
+      : call.summary?.trim() || call.description;
+  return { call, excerpt };
+}
+
+function splitRow(
+  call: ServiceCall,
+  screen: CallsScreen,
+  current: string | null,
+): Html {
+  const marked = call.emergency.flagged ? 'true' : 'false';
+  const currentMark = call.id === current ? h`aria-current="true"` : h``;
+  return h`<a class="split-row" href="${rowHref(screen, call.id)}" data-split-call="${call.id}" data-emergency="${marked}" ${currentMark}>
+    <span class="call-main">${call.description}</span>
+    <span class="call-meta">${callMeta(call, screen)}</span>
+  </a>`;
+}
+
+function previewPane(screen: CallsScreen): Html {
+  const preview = resolvedPreview(screen);
+  if (!preview)
+    return h`<section class="preview glass" aria-label="תצוגה"></section>`;
+  const { call, excerpt } = preview;
+  const name = call.requester?.name ?? 'טרם זוהה';
+  const next = waitingOnCategory(call.state)
+    ? h`<p data-next-step><a href="/calls/${call.id}">לעמוד הקריאה</a></p>`
+    : h``;
+  return h`<section class="preview glass" aria-label="תצוגה" data-preview="${call.id}">
+    <h2>${call.description}</h2>
+    <p class="call-meta">${goalChip(call, screen)}</p>
+    <p>פונה <span data-requester>${name}</span></p>
+    <p data-excerpt>${excerpt}</p>
+    ${next}
+  </section>`;
+}
+
+function listLayout(screen: CallsScreen): Html {
+  return h`<div class="list-layout" data-layout="list">
+    ${listHeader(screen)}
+    ${statRow(screen)}
+    <div class="toolbar">${segments(screen)}${menus(screen)}</div>
+    <section class="glass sheet">${callList(screen)}</section>
+  </div>`;
+}
+
+function splitLayout(screen: CallsScreen): Html {
+  const preview = resolvedPreview(screen);
+  const current = preview?.call.id ?? null;
+  const list = groupedRows(screen, 'split-rows', (call) =>
+    splitRow(call, screen, current),
+  );
+  return h`<div class="split-layout" data-layout="split">
+    ${splitHeader(screen)}
+    <div class="toolbar">${segments(screen)}${menus(screen)}</div>
+    <div class="split-work">
+      <div class="glass sheet">${list}</div>
+      ${previewPane(screen)}
+    </div>
+  </div>`;
+}
+
+export function renderCallsPage(screen: CallsScreen): string {
+  const refusal =
+    screen.refusal === undefined
+      ? h``
+      : h`<p class="refusal">${screen.refusal}</p>`;
+  const explicit = screen.layout === 'list';
+  const stage = explicit ? 'calls glass-stage is-list' : 'calls glass-stage';
   const body = h`
-    <div class="calls glass-stage">
-      <header class="page-head">
-        <div>
-          <h1>קריאות</h1>
-          <p class="summary">פתוחות ${ltr(counts.open)} · חירום ${ltr(counts.emergency)} · לא בזמן ${ltr(counts.late)} · לבדיקה ${ltr(counts.toReview)}</p>
-          <p class="lede">טלפון או הגעה. בלי מסווג. <a href="/calls/filtered">מסוננות <span class="n">${ltr(screen.filteredCount)}</span></a> ${devLink}</p>
-        </div>
-        <a class="btn btn-primary" href="${listHref(screen, true)}">רישום קריאה</a>
-      </header>
-      ${mailbox}
-      ${echoWarning}
-      ${secret}
-      <section class="stat-row" aria-label="סיכום">
-        <div class="stat glass"><span class="stat-label">פתוחות</span><span class="stat-value">${ltr(counts.open)}</span></div>
-        <div class="stat glass"><span class="stat-label">חירום</span><span class="stat-value">${ltr(counts.emergency)}</span></div>
-        <div class="stat glass is-alert"><span class="stat-label">מעבר ליעד המענה</span><span class="stat-value">${ltr(counts.past)}</span><span class="stat-note">קרוב ליעד ${ltr(counts.near)}</span></div>
-        <div class="stat glass"><span class="stat-label">לבדיקה</span><span class="stat-value">${ltr(counts.toReview)}</span></div>
-      </section>
-      <div class="toolbar">
-        ${segments(screen)}
-        ${menus(screen)}
-      </div>
-      <section class="glass sheet">
-        ${callList(screen)}
-      </section>
+    <div class="${stage}">
+      ${channelWarnings(screen)}
+      ${listLayout(screen)}
+      ${explicit ? h`` : splitLayout(screen)}
       ${logDialog(screen, refusal)}
     </div>`;
   return renderPage({

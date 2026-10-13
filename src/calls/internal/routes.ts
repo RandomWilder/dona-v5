@@ -43,10 +43,12 @@ import {
   type ExitDraft,
   type FilteredOrigin,
   type LogDraft,
+  previewExcerpt,
   renderCallPage,
   renderCallsPage,
   renderFilteredPage,
   type SecretNotice,
+  shownCalls,
   type TimelineMessage,
 } from './views.ts';
 
@@ -121,6 +123,17 @@ function html(reply: FastifyReply): void {
   reply.header('content-type', 'text/html; charset=utf-8');
   reply.header('cache-control', 'no-store');
   reply.header('x-content-type-options', 'nosniff');
+}
+
+function requestedCallId(query: unknown): string | null {
+  const raw = textOf(formOf(query).call).trim();
+  if (raw === '') return null;
+  try {
+    return validId(raw, 'call');
+  } catch (error) {
+    if (error instanceof KernelError) return null;
+    throw error;
+  }
 }
 
 function listFilter(query: unknown): CallListFilter {
@@ -382,6 +395,24 @@ async function callsPage(
   const role = request.staff?.role ?? null;
   const csrf = csrfFrom(request);
   const mayFile = can(role, 'documents.write');
+  const listOnly = textOf(formOf(request.query).view) === 'list';
+  const requested = requestedCallId(request.query);
+  const shown = shownCalls({
+    calls,
+    state: filter.state ?? null,
+    now,
+    goal,
+  });
+  const chosen = listOnly
+    ? null
+    : (shown.find((call) => call.id === requested) ?? shown[0] ?? null);
+  const excerpt =
+    chosen === null
+      ? null
+      : previewExcerpt(
+          deps.messagesOnCall ? await deps.messagesOnCall(chosen.id) : [],
+          chosen,
+        );
   return renderCallsPage({
     nav: deps.chrome(
       csrf,
@@ -416,6 +447,9 @@ async function callsPage(
     refusal,
     logging: textOf(formOf(request.query).log) === '1' || draft !== undefined,
     draft: draft ?? null,
+    layout: listOnly ? 'list' : 'split',
+    preview:
+      chosen === null || excerpt === null ? null : { id: chosen.id, excerpt },
   });
 }
 
