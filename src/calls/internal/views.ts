@@ -56,6 +56,15 @@ export interface FilteredRow {
   sorterLabel: SorterLabel | null;
 }
 
+export interface OpenListCounts {
+  open: number;
+  emergency: number;
+  near: number;
+  past: number;
+  late: number;
+  toReview: number;
+}
+
 export interface CallsScreen {
   nav: Html;
   csrf: string;
@@ -65,7 +74,10 @@ export interface CallsScreen {
   categoryId: string | null;
   emergency: boolean;
   toReview: boolean;
-  band: ResponseBand | null;
+  band: ResponseBand | 'late' | null;
+  counts: OpenListCounts;
+  /** Noise messages plus returned calls, the rows the filtered list will show. */
+  filteredCount: number;
   goal: ResponseGoal;
   devIntake: boolean;
   now: Date;
@@ -140,8 +152,8 @@ const SORTER_HE: Record<SorterLabel, string> = {
 };
 
 const BAND_HE: Record<ResponseBand, string> = {
-  amber: 'כתום',
-  red: 'אדום',
+  amber: 'קרוב ליעד',
+  red: 'מעבר ליעד',
 };
 
 const FILTER_STATES = CALL_STATES.filter((state) => state !== 'CLOSED');
@@ -177,6 +189,24 @@ const styles = h`<style>
   .calls .filters label { display: inline-flex; gap: var(--space-2); align-items: center; }
   .calls .refusal,
   .calls .mailbox-warning { margin: 0; color: var(--color-alert); }
+  .calls .call-list { display: grid; gap: var(--space-3); }
+  .calls .group { display: grid; gap: var(--space-3); }
+  .calls .group h2 { margin: 0; font-size: var(--text-lg); }
+  .calls .summary { margin: 0; }
+  .calls .stat.is-alert {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: var(--space-3);
+    row-gap: var(--space-1);
+  }
+  .calls .stat.is-alert .stat-label { flex-basis: 100%; }
+  .calls .stat.is-alert .stat-value { color: var(--color-alert); }
+  .calls .stat-note {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
   .calls .call {
     display: grid;
     gap: var(--space-2);
@@ -247,8 +277,55 @@ function selected(on: boolean): Html {
   return on ? h`selected` : h``;
 }
 
-function goalChip(band: ResponseBand): Html {
+function ltr(value: number): Html {
+  return h`<span dir="ltr">${value}</span>`;
+}
+
+function goalChip(call: ServiceCall, screen: CallsScreen): Html {
+  if (call.state === 'CLOSED') return h``;
+  const band = responseGoalBand(
+    call.state,
+    call.openedAt,
+    screen.now,
+    screen.goal,
+  );
+  if (band === null) return h`<span class="chip">בזמן</span>`;
   return h`<span class="chip" data-goal="${band}">${BAND_HE[band]}</span>`;
+}
+
+function compareOpened(
+  a: ServiceCall,
+  b: ServiceCall,
+  newestFirst: boolean,
+): number {
+  const delta = a.openedAt.getTime() - b.openedAt.getTime();
+  const byTime = newestFirst ? -delta : delta;
+  if (byTime !== 0) return byTime;
+  const byId = a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  return newestFirst ? -byId : byId;
+}
+
+function arrange(screen: CallsScreen): {
+  urgent: ServiceCall[];
+  rest: ServiceCall[];
+} | null {
+  if (screen.state === 'CLOSED') return null;
+  const emergency: ServiceCall[] = [];
+  const past: ServiceCall[] = [];
+  const rest: ServiceCall[] = [];
+  for (const call of screen.calls) {
+    if (call.emergency.flagged) emergency.push(call);
+    else if (
+      responseGoalBand(call.state, call.openedAt, screen.now, screen.goal) ===
+      'red'
+    ) {
+      past.push(call);
+    } else rest.push(call);
+  }
+  emergency.sort((a, b) => compareOpened(a, b, false));
+  past.sort((a, b) => compareOpened(a, b, false));
+  rest.sort((a, b) => compareOpened(a, b, true));
+  return { urgent: [...emergency, ...past], rest };
 }
 
 function callRow(call: ServiceCall, screen: CallsScreen): Html {
@@ -269,13 +346,7 @@ function callRow(call: ServiceCall, screen: CallsScreen): Html {
       : h`<span class="chip" data-proposal="${call.proposal.code}">הצעה: ${call.proposal.labelHe}</span>`;
   const marked = call.emergency.flagged ? 'true' : 'false';
   const reviewing = call.toReview ? 'true' : 'false';
-  const band = responseGoalBand(
-    call.state,
-    call.openedAt,
-    screen.now,
-    screen.goal,
-  );
-  const goal = band === null ? h`` : goalChip(band);
+  const goal = goalChip(call, screen);
   return h`<article class="call" data-call="${call.id}" data-channel="${call.sourceChannel}" data-call-state="${call.state}" data-emergency="${marked}" data-review="${reviewing}">
     <p class="call-main"><a href="/calls/${call.id}">${call.description}</a></p>
     <p class="call-meta">
@@ -292,48 +363,147 @@ function callRow(call: ServiceCall, screen: CallsScreen): Html {
   </article>`;
 }
 
-function filters(screen: CallsScreen): Html {
-  return h`<form class="filters" method="get" action="/calls">
-    <label>מצב
-      <select name="state">
-        <option value="" ${selected(screen.state === null)}>הכל</option>
-        ${FILTER_STATES.map(
-          (state) =>
-            h`<option value="${state}" ${selected(screen.state === state)}>${CALL_STATE_HE[state]}</option>`,
-        )}
-        <option value="CLOSED" ${selected(screen.state === 'CLOSED')}>סגורות</option>
-      </select>
-    </label>
-    <label>קטגוריה
-      <select name="category">
-        <option value="" ${selected(screen.categoryId === null)}>הכל</option>
-        ${screen.categories.map(
-          (category) =>
-            h`<option value="${category.id}" ${selected(screen.categoryId === category.id)}>${category.labelHe}${category.isActive ? h`` : h` (לא פעיל)`}</option>`,
-        )}
-      </select>
-    </label>
-    <label>חירום
-      <select name="emergency">
-        <option value="" ${selected(!screen.emergency)}>הכל</option>
-        <option value="1" ${selected(screen.emergency)}>חירום</option>
-      </select>
-    </label>
-    <label>לבדיקה
-      <select name="review">
-        <option value="" ${selected(!screen.toReview)}>הכל</option>
-        <option value="1" ${selected(screen.toReview)}>לבדיקה</option>
-      </select>
-    </label>
-    <label>יעד
-      <select name="goal">
-        <option value="" ${selected(screen.band === null)}>הכל</option>
-        <option value="amber" ${selected(screen.band === 'amber')}>${BAND_HE.amber}</option>
-        <option value="red" ${selected(screen.band === 'red')}>${BAND_HE.red}</option>
-      </select>
-    </label>
-    <button class="btn" type="submit">סינון</button>
-  </form>`;
+function callsHref(params: Record<string, string | null>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== null && value !== '') search.set(key, value);
+  }
+  const query = search.toString();
+  return query === '' ? '/calls' : `/calls?${query}`;
+}
+
+function hidden(name: string, value: string | null): Html {
+  if (value === null || value === '') return h``;
+  return h`<input type="hidden" name="${name}" value="${value}" />`;
+}
+
+function segmentNow(screen: CallsScreen): string | null {
+  if (screen.state === 'CLOSED') return 'closed';
+  if (screen.emergency) return 'emergency';
+  if (screen.band === 'late') return 'late';
+  if (screen.toReview) return 'review';
+  if (screen.band === null) return 'open';
+  return null;
+}
+
+function segments(screen: CallsScreen): Html {
+  const openState =
+    screen.state !== null && screen.state !== 'CLOSED' ? screen.state : null;
+  const kept = { category: screen.categoryId, state: openState };
+  const current = segmentNow(screen);
+  const items: {
+    id: string;
+    label: string;
+    count: number | null;
+    href: string;
+  }[] = [
+    {
+      id: 'open',
+      label: 'פתוחות',
+      count: screen.counts.open,
+      href: callsHref(kept),
+    },
+    {
+      id: 'emergency',
+      label: 'חירום',
+      count: screen.counts.emergency,
+      href: callsHref({ ...kept, emergency: '1' }),
+    },
+    {
+      id: 'late',
+      label: 'לא בזמן',
+      count: screen.counts.late,
+      href: callsHref({ ...kept, goal: 'late' }),
+    },
+    {
+      id: 'review',
+      label: 'לבדיקה',
+      count: screen.counts.toReview,
+      href: callsHref({ ...kept, review: '1' }),
+    },
+    {
+      id: 'closed',
+      label: 'סגורות',
+      count: null,
+      href: callsHref({ category: screen.categoryId, state: 'CLOSED' }),
+    },
+  ];
+  return h`<nav class="segmented glass is-raised" aria-label="סינון קריאות">
+    ${items.map((item) => {
+      const mark = item.id === current ? h`aria-current="true"` : h``;
+      const count =
+        item.count === null
+          ? h``
+          : h` <span class="n">${ltr(item.count)}</span>`;
+      return h`<a href="${item.href}" ${mark}>${item.label}${count}</a>`;
+    })}
+  </nav>`;
+}
+
+function menus(screen: CallsScreen): Html {
+  const goal = screen.band;
+  const emergency = screen.emergency ? '1' : null;
+  const review = screen.toReview ? '1' : null;
+  const categories = h`<select name="category">
+    <option value="" ${selected(screen.categoryId === null)}>הכל</option>
+    ${screen.categories.map(
+      (category) =>
+        h`<option value="${category.id}" ${selected(screen.categoryId === category.id)}>${category.labelHe}${category.isActive ? h`` : h` (לא פעיל)`}</option>`,
+    )}
+  </select>`;
+  const states = h`<select name="state">
+    <option value="" ${selected(screen.state === null)}>הכל</option>
+    ${FILTER_STATES.map(
+      (state) =>
+        h`<option value="${state}" ${selected(screen.state === state)}>${CALL_STATE_HE[state]}</option>`,
+    )}
+  </select>`;
+  return h`<div class="filters">
+    <form method="get" action="/calls">
+      ${hidden('state', screen.state)}
+      ${hidden('emergency', emergency)}
+      ${hidden('review', review)}
+      ${hidden('goal', goal)}
+      <label>קטגוריה ${categories}</label>
+      <button class="btn" type="submit">סינון</button>
+    </form>
+    <form method="get" action="/calls">
+      ${hidden('category', screen.categoryId)}
+      ${hidden('emergency', emergency)}
+      ${hidden('review', review)}
+      ${hidden('goal', goal)}
+      <label>מצב ${states}</label>
+      <button class="btn" type="submit">סינון</button>
+    </form>
+  </div>`;
+}
+
+function callList(screen: CallsScreen): Html {
+  const narrowed =
+    screen.state !== null ||
+    screen.categoryId !== null ||
+    screen.emergency ||
+    screen.toReview ||
+    screen.band !== null;
+  if (screen.calls.length === 0) {
+    return h`<p class="lede">${narrowed ? 'אין קריאות תואמות.' : 'אין קריאות פתוחות.'}</p>`;
+  }
+  const groups = arrange(screen);
+  if (groups === null) {
+    return h`<div class="call-list">${screen.calls.map((call) => callRow(call, screen))}</div>`;
+  }
+  const urgent =
+    groups.urgent.length === 0
+      ? h``
+      : h`<section class="group">
+          <h2>דורש טיפול עכשיו</h2>
+          <div class="call-list">${groups.urgent.map((call) => callRow(call, screen))}</div>
+        </section>`;
+  const rest =
+    groups.rest.length === 0
+      ? h``
+      : h`<div class="call-list">${groups.rest.map((call) => callRow(call, screen))}</div>`;
+  return h`${urgent}${rest}`;
 }
 
 export function renderCallsPage(screen: CallsScreen): string {
@@ -341,40 +511,45 @@ export function renderCallsPage(screen: CallsScreen): string {
     screen.refusal === undefined
       ? h``
       : h`<p class="refusal">${screen.refusal}</p>`;
-  const filtered =
-    screen.state !== null ||
-    screen.categoryId !== null ||
-    screen.emergency ||
-    screen.toReview ||
-    screen.band !== null;
   const devLink = screen.devIntake
     ? h`<a href="/dev/intake">הודעת בדיקה</a>`
     : h``;
+  const counts = screen.counts;
   const mailbox = screen.mailboxWarning
-    ? h`<p class="mailbox-warning" role="status">תיבת הדואר לא נקראה כבר שעה.</p>`
+    ? channelWarning('תיבת הדואר לא נקראה כבר שעה.')
     : h``;
   const echoWarning = screen.whatsappWarning
-    ? h`<p class="mailbox-warning" role="status">אין הד מהטלפון כבר שבעה ימים. וואטסאפ עלול להתנתק.</p>`
+    ? channelWarning('אין הד מהטלפון כבר שבעה ימים. וואטסאפ עלול להתנתק.')
     : h``;
   const secret = secretNotice(
     screen.secretWarning ?? null,
     dayIn(screen.now, DEFAULT_ZONE),
   );
-  const list =
-    screen.calls.length === 0
-      ? h`<p class="lede">${filtered ? 'אין קריאות תואמות.' : 'אין קריאות פתוחות.'}</p>`
-      : h`<div class="call-list">${screen.calls.map((call) => callRow(call, screen))}</div>`;
   const body = h`
     <div class="calls glass-stage">
       <header class="page-head">
         <div>
           <h1>קריאות</h1>
-          <p class="lede">טלפון או הגעה. בלי מסווג. <a href="/calls/filtered">מסוננות</a> ${devLink}</p>
+          <p class="summary">פתוחות ${ltr(counts.open)} · חירום ${ltr(counts.emergency)} · לא בזמן ${ltr(counts.late)} · לבדיקה ${ltr(counts.toReview)}</p>
+          <p class="lede">טלפון או הגעה. בלי מסווג. <a href="/calls/filtered">מסוננות <span class="n">${ltr(screen.filteredCount)}</span></a> ${devLink}</p>
         </div>
       </header>
       ${mailbox}
       ${echoWarning}
       ${secret}
+      <section class="stat-row" aria-label="סיכום">
+        <div class="stat glass"><span class="stat-label">פתוחות</span><span class="stat-value">${ltr(counts.open)}</span></div>
+        <div class="stat glass"><span class="stat-label">חירום</span><span class="stat-value">${ltr(counts.emergency)}</span></div>
+        <div class="stat glass is-alert"><span class="stat-label">מעבר ליעד המענה</span><span class="stat-value">${ltr(counts.past)}</span><span class="stat-note">קרוב ליעד ${ltr(counts.near)}</span></div>
+        <div class="stat glass"><span class="stat-label">לבדיקה</span><span class="stat-value">${ltr(counts.toReview)}</span></div>
+      </section>
+      <div class="toolbar">
+        ${segments(screen)}
+        ${menus(screen)}
+      </div>
+      <section class="glass sheet">
+        ${callList(screen)}
+      </section>
       <form class="glass call-form" method="post" action="/calls">
         ${csrfInput(screen.csrf)}
         <h2>רישום קריאה</h2>
@@ -398,11 +573,6 @@ export function renderCallsPage(screen: CallsScreen): string {
         </fieldset>
         <button class="btn btn-primary" type="submit">רישום</button>
       </form>
-      <section class="glass sheet">
-        <h2>${screen.state === 'CLOSED' ? 'סגורות' : 'פתוחות'}</h2>
-        ${filters(screen)}
-        ${list}
-      </section>
     </div>`;
   return renderPage({
     title: 'קריאות — דונה דום',
@@ -736,7 +906,10 @@ function ageFact(screen: CallScreen): Html {
     screen.now,
     screen.goal,
   );
-  if (band === null) return h`<div><dt>גיל</dt><dd>${age}</dd></div>`;
+  if (band === null) {
+    const words = screen.call.state === 'CLOSED' ? age : h`${age} · בזמן`;
+    return h`<div><dt>גיל</dt><dd>${words}</dd></div>`;
+  }
   return h`<div><dt>גיל</dt><dd data-goal="${band}">${age} · ${BAND_HE[band]}</dd></div>`;
 }
 
@@ -886,10 +1059,14 @@ export function renderFilteredPage(screen: FilteredScreen): string {
   });
 }
 
+function channelWarning(text: string): Html {
+  return h`<p class="mailbox-warning" role="status">${text} <a href="/settings">הגדרות</a></p>`;
+}
+
 function secretNotice(notice: SecretNotice | null, today: string): Html {
   if (notice === null) return h``;
   if (notice.kind === 'unknown') {
-    return h`<p class="mailbox-warning" role="status">תיבת הדואר: תאריך התפוגה של הסוד לא הוגדר.</p>`;
+    return channelWarning('תיבת הדואר: תאריך התפוגה של הסוד לא הוגדר.');
   }
   const [year, month, day] = notice.expires.split('-');
   const date = `${day}.${month}.${year}`;
@@ -897,5 +1074,5 @@ function secretNotice(notice: SecretNotice | null, today: string): Html {
     notice.expires < today
       ? `תוקף הסוד של תיבת הדואר פג ב-${date}.`
       : `הסוד של תיבת הדואר בתוקף עד ${date}.`;
-  return h`<p class="mailbox-warning" role="status">${state} יש לבקש סוד חדש ממנהל Microsoft 365.</p>`;
+  return channelWarning(`${state} יש לבקש סוד חדש ממנהל Microsoft 365.`);
 }

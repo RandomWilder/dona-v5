@@ -154,7 +154,7 @@ describe('calls · the response goal', () => {
       clock.advance(MINUTE);
       const amberList = await asAdmin.inject({ method: 'GET', url: '/calls' });
       assert.equal(band(amberList.body, late), 'amber');
-      assert.match(article(amberList.body, late), /כתום/);
+      assert.match(article(amberList.body, late), /קרוב ליעד/);
       const lateId = amberList.body.match(
         new RegExp(`href="/calls/([0-9a-f-]{36})">${late}`),
       )?.[1];
@@ -168,7 +168,7 @@ describe('calls · the response goal', () => {
       clock.advance(10 * MINUTE);
       const redList = await asAdmin.inject({ method: 'GET', url: '/calls' });
       assert.equal(band(redList.body, late), 'red');
-      assert.match(article(redList.body, late), /אדום/);
+      assert.match(article(redList.body, late), /מעבר ליעד/);
 
       const second = await asAdmin.inject({
         method: 'POST',

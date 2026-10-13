@@ -16,6 +16,7 @@ import { findPartiesByName } from '../../parties/contract.ts';
 import { can, csrfFrom, NOT_ALLOWED, type Role } from '../../staff/contract.ts';
 import {
   CALL_STATES,
+  type CallListFilter,
   type CallState,
   canExit,
   clearEmergency,
@@ -29,10 +30,12 @@ import {
   listReturnedCalls,
   type OpenCallSpec,
   openCall,
+  type ResponseGoal,
   readResponseGoal,
   responseGoalBand,
   restoreReturnedCall,
   returnToFiltered,
+  type ServiceCall,
   saveSenderContact,
   setCallCategory,
 } from './commands.ts';
@@ -116,24 +119,12 @@ function html(reply: FastifyReply): void {
   reply.header('x-content-type-options', 'nosniff');
 }
 
-function listFilter(query: unknown): {
-  state?: CallState;
-  categoryId?: string;
-  emergency?: boolean;
-  toReview?: boolean;
-  band?: 'amber' | 'red';
-} {
+function listFilter(query: unknown): CallListFilter {
   const form = formOf(query);
   const state = textOf(form.state);
   const category = textOf(form.category);
   const band = textOf(form.goal);
-  const filter: {
-    state?: CallState;
-    categoryId?: string;
-    emergency?: boolean;
-    toReview?: boolean;
-    band?: 'amber' | 'red';
-  } = {};
+  const filter: CallListFilter = {};
   if ((CALL_STATES as readonly string[]).includes(state)) {
     filter.state = state as CallState;
   }
@@ -147,8 +138,40 @@ function listFilter(query: unknown): {
   }
   if (textOf(form.emergency) === '1') filter.emergency = true;
   if (textOf(form.review) === '1') filter.toReview = true;
-  if (band === 'amber' || band === 'red') filter.band = band;
+  if (band === 'amber' || band === 'red' || band === 'late') filter.band = band;
   return filter;
+}
+
+function matchesBand(
+  call: ServiceCall,
+  band: 'amber' | 'red' | 'late',
+  now: Date,
+  goal: ResponseGoal,
+): boolean {
+  const actual = responseGoalBand(call.state, call.openedAt, now, goal);
+  if (band === 'late') return actual === 'amber' || actual === 'red';
+  return actual === band;
+}
+
+function shownCall(
+  call: ServiceCall,
+  filter: CallListFilter,
+  now: Date,
+  goal: ResponseGoal,
+): boolean {
+  if (filter.state !== undefined && call.state !== filter.state) return false;
+  if (
+    filter.categoryId !== undefined &&
+    call.category?.id !== filter.categoryId
+  ) {
+    return false;
+  }
+  if (filter.emergency === true && !call.emergency.flagged) return false;
+  if (filter.toReview === true && !call.toReview) return false;
+  if (filter.band !== undefined && !matchesBand(call, filter.band, now, goal)) {
+    return false;
+  }
+  return true;
 }
 
 function refusalHe(error: KernelError): string {
@@ -286,22 +309,51 @@ async function callsPage(
 ): Promise<string> {
   const filter = listFilter(request.query);
   const now = deps.clock.now();
-  const [listed, categories, mailboxWarning, goal, echoWarning] =
-    await Promise.all([
-      listOpenCalls(deps.pool, filter),
-      listCategories(deps.pool),
-      deps.mailboxWarning ? deps.mailboxWarning() : Promise.resolve(false),
-      readResponseGoal(deps.pool),
-      deps.whatsappWarning ? deps.whatsappWarning() : Promise.resolve(false),
-    ]);
+  const closed = filter.state === 'CLOSED';
+  const [
+    everyOpen,
+    closedRows,
+    categories,
+    mailboxWarning,
+    goal,
+    echoWarning,
+    noise,
+    returned,
+  ] = await Promise.all([
+    listOpenCalls(deps.pool),
+    closed
+      ? listOpenCalls(deps.pool, {
+          state: 'CLOSED',
+          categoryId: filter.categoryId,
+          emergency: filter.emergency,
+          toReview: filter.toReview,
+        })
+      : Promise.resolve(null),
+    listCategories(deps.pool),
+    deps.mailboxWarning ? deps.mailboxWarning() : Promise.resolve(false),
+    readResponseGoal(deps.pool),
+    deps.whatsappWarning ? deps.whatsappWarning() : Promise.resolve(false),
+    deps.listNoise ? deps.listNoise() : Promise.resolve([]),
+    listReturnedCalls(deps.pool),
+  ]);
+  const band = filter.band;
   const calls =
-    filter.band === undefined
-      ? listed
-      : listed.filter(
-          (call) =>
-            responseGoalBand(call.state, call.openedAt, now, goal) ===
-            filter.band,
-        );
+    closedRows === null
+      ? everyOpen.filter((call) => shownCall(call, filter, now, goal))
+      : band === undefined
+        ? closedRows
+        : closedRows.filter((call) => matchesBand(call, band, now, goal));
+  let emergency = 0;
+  let near = 0;
+  let past = 0;
+  let toReview = 0;
+  for (const call of everyOpen) {
+    if (call.emergency.flagged) emergency += 1;
+    if (call.toReview) toReview += 1;
+    const band = responseGoalBand(call.state, call.openedAt, now, goal);
+    if (band === 'amber') near += 1;
+    else if (band === 'red') past += 1;
+  }
   const role = request.staff?.role ?? null;
   const csrf = csrfFrom(request);
   const mayFile = can(role, 'documents.write');
@@ -322,6 +374,15 @@ async function callsPage(
     toReview: filter.toReview === true,
     band: filter.band ?? null,
     goal,
+    counts: {
+      open: everyOpen.length,
+      emergency,
+      near,
+      past,
+      late: near + past,
+      toReview,
+    },
+    filteredCount: noise.length + returned.length,
     devIntake: deps.devIntake === true,
     now,
     mailboxWarning,

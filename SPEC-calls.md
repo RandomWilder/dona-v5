@@ -79,8 +79,12 @@ call is never reopened.
 **Emergency.** A call is flagged an emergency by a deterministic match against the emergency terms,
 before any model reads the message (foundation rule 5), or by hand. A person can also clear a flag.
 The flag records who or what set it: the terms, or the staff account that flagged it. Clearing a
-flag records that staff account too. An emergency-flagged call is pinned first in the tab, marked
-red, and the list filters on the flag.
+flag records that staff account too. An emergency-flagged call leads the open list, including one
+still inside the response goal, and the list filters on the flag. Within that lead the emergencies
+are oldest first. A non-emergency call past the goal follows them, oldest first. A call near the
+goal stays with the other open calls, newest first. The lead is the heading דורש טיפול עכשיו, and
+the heading is left out when that group is empty. The flag is the word חירום as well as the red
+mark.
 
 The match is a substring, after case-folding and after niqqud and invisible marks are stripped.
 Any one term is enough. A Hebrew term inside a longer word matches, because a prefix is not a word
@@ -107,11 +111,14 @@ an SLA, and it is the director's decision when one is made.
 
 **The response goal** is two whole-minute thresholds, amber then red. Placeholders, until Dona Dom
 supplies theirs, are 240 and 1440. Age is whole minutes since the call opened. A call older than
-amber, and not older than red, shows amber. A call older than red shows red. A call exactly as old
-as a threshold has not passed it. A closed call shows neither, on the list and on its own page. The
-list filters on the band, and the amber filter does not include red. Red must be greater than
-amber. A threshold above a year of minutes is refused. A save is audited and is read on the next
-request, so it takes effect with no deploy.
+amber, and not older than red, is near the goal. A call older than red is past it. A call that has
+passed neither is inside the goal. A call exactly as old as a threshold has not passed it. On an
+open call those three are the words בזמן, קרוב ליעד, and מעבר ליעד. A closed call has no
+response-goal band: none of those words, no goal colour, and no goal mark, on the list and on its
+own page. The list filters on the band. The amber filter does not include red. Red means past the
+goal only. A late filter, labeled לא בזמן, means near or past. Amber and red remain valid and have
+no segment of their own. Red must be greater than amber. A threshold above a year of minutes is
+refused. A save is audited and is read on the next request, so it takes effect with no deploy.
 
 **Filtered messages** are kept for 6 months and then deleted by a scheduled sweep, unless rescued
 into a call. Six months is counted from when the message arrived. A message exactly that old is
@@ -128,12 +135,30 @@ may perform every action on calls.
 ## The tab
 
 The קריאות page lists open calls with their Source channel, state, Category, requester, age against
-the goal, emergency and "to review" marks. It filters on each of those. It has a manual-entry form
-for PHONE and WALK_IN with three required fields (channel, description, and a sender or "unknown")
-and no sorter, a call page with the full timeline of messages, attachments and transitions, and a
-filtered list. The rail shows the open-call count beside קריאות. A closed call leaves that
-count and the open list, and a closed filter shows it. The page is server-rendered with no
-client JavaScript and follows the approved stakeholder mockup.
+the goal, emergency and "to review" marks. The open list is the hero, on the same glass language as
+the assets screens. Logging a call stays a form on this page until that form becomes a dialog. The
+open rows are one read of every open call. The counts of open calls, emergencies, calls near or
+past the goal, and calls marked for review are taken from that read and ignore the filter on
+screen, so a short list can sit under a larger open total. The same numbers are on the segments,
+the summary, and the stat row. The red stat is titled מעבר ליעד המענה, with the near-goal count
+beside it. The closed segment is a second read, because a closed call is not in the open read, and
+that segment shows no count. The existing closed filter still lists closed calls. The thirty-day
+window is later.
+
+The segments are every open call, emergencies, לא בזמן, calls to review, and closed. The category
+menu and the state menu keep the other filters when one is chosen. An inactive category is marked
+לא פעיל. The state menu lists the open states. There is no search.
+
+A mailbox that has not been read, a WhatsApp echo that has gone quiet, and a mail secret that is
+due, expired, or undated are warnings above the list, each with a way to the settings. The way into
+the filtered list shows how many rows are set aside: the length of the noise messages and the
+returned calls, the same two lists that page shows.
+
+The page has a manual-entry form for PHONE and WALK_IN with three required fields (channel,
+description, and a sender or "unknown") and no sorter, a call page with the full timeline of
+messages, attachments and transitions, and a filtered list. The rail shows the open-call count
+beside קריאות. A closed call leaves that count and the open list, and a closed filter shows it.
+The page is server-rendered with no client JavaScript and follows the approved stakeholder mockup.
 
 **A party's calls (#209).** The profile lists every call that names that party as requester, newest
 first, including a closed call and one returned to the filtered list. Each row shows the day the

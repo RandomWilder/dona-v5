@@ -21,6 +21,29 @@ function callId(html: string, description: string): string | undefined {
   return links?.at(-1)?.match(/([0-9a-f-]{36})/)?.[1];
 }
 
+function article(html: string, description: string): string {
+  const at = html.indexOf(`>${description}</a>`);
+  assert.ok(at >= 0, description);
+  const start = html.lastIndexOf('<article', at);
+  const end = html.indexOf('</article>', at);
+  assert.ok(start >= 0 && end > start);
+  return html.slice(start, end);
+}
+
+function labeledCount(html: string, label: string): number {
+  const found = html.match(
+    new RegExp(`${label} <span dir="ltr">(\\d+)</span>`),
+  );
+  assert.ok(found, label);
+  return Number(found[1]);
+}
+
+function railCount(html: string): number {
+  const found = html.match(/data-open-calls="(\d+)"/);
+  assert.ok(found);
+  return Number(found[1]);
+}
+
 function emergencyMark(html: string, description: string): string | undefined {
   const at = html.indexOf(`>${description}</a>`);
   if (at < 0) return undefined;
@@ -645,6 +668,259 @@ describe('calls · the קריאות tab', () => {
       assert.match(handed.body, /data-emergency="true"/);
       assert.match(handed.body, new RegExp(who.email));
     } finally {
+      await cleanup(pool, domain);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('leads with emergencies and past-goal calls, and counts the whole open book', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(AT);
+    const app = buildApp({ pool, version: '9.9.9-test', clock });
+    const domain = 'calls-routes-attention.test';
+    await cleanup(pool, domain);
+    let client = asOperator(
+      app,
+      await signIn(pool, clock, {
+        email: `ops@${domain}`,
+        role: 'OPERATOR',
+      }),
+    );
+    const refresh = async (): Promise<void> => {
+      client = asOperator(
+        app,
+        await signIn(pool, clock, {
+          email: `ops@${domain}`,
+          role: 'OPERATOR',
+        }),
+      );
+    };
+    const suffix = Date.now().toString(36);
+    const emergencyOld = `חירום ותיק ${suffix}`;
+    const emergencyFresh = `חירום טרי ${suffix}`;
+    const pastOld = `איחור ותיק ${suffix}`;
+    const pastNew = `איחור טרי ${suffix}`;
+    const near = `ליד היעד ${suffix}`;
+    const fresh = `זה עתה ${suffix}`;
+    const hour = 60 * 60 * 1000;
+    const minute = 60 * 1000;
+    let gatesOff = false;
+    const graphKeys = [
+      'GRAPH_TENANT_ID',
+      'GRAPH_CLIENT_ID',
+      'GRAPH_CLIENT_SECRET',
+      'GRAPH_MAILBOX',
+      'GRAPH_SECRET_EXPIRES',
+    ] as const;
+    const savedGraph = Object.fromEntries(
+      graphKeys.map((key) => [key, process.env[key]]),
+    );
+    const open = async (description: string): Promise<void> => {
+      await refresh();
+      const created = await client.inject({
+        method: 'POST',
+        url: '/calls',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({
+          channel: 'PHONE',
+          description,
+          sender: 'unknown',
+        }),
+      });
+      assert.equal(created.statusCode, 303);
+    };
+    const flag = async (description: string, html: string): Promise<void> => {
+      const id = callId(html, description);
+      assert.ok(id, description);
+      const flagged = await client.inject({
+        method: 'POST',
+        url: `/calls/${id}/emergency`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({ action: 'flag' }),
+      });
+      assert.equal(flagged.statusCode, 303);
+    };
+    try {
+      await open(emergencyOld);
+      clock.advance(4 * hour);
+      await open(pastOld);
+      clock.advance(hour);
+      await open(pastNew);
+      clock.advance(20 * hour);
+      await open(near);
+      clock.advance(4 * hour);
+      await open(emergencyFresh);
+      clock.advance(50 * minute);
+      await open(fresh);
+      clock.advance(10 * minute);
+
+      await refresh();
+      const created = await client.inject({ method: 'GET', url: '/calls' });
+      assert.equal(created.statusCode, 200);
+      await flag(emergencyOld, created.body);
+      await flag(emergencyFresh, created.body);
+
+      const list = await client.inject({ method: 'GET', url: '/calls' });
+      assert.equal(list.statusCode, 200);
+      assert.doesNotMatch(list.body, /type="search"|name="q"|name="search"/);
+      const order = [
+        emergencyOld,
+        emergencyFresh,
+        pastOld,
+        pastNew,
+        fresh,
+        near,
+      ].map((description) => list.body.indexOf(description));
+      assert.ok(
+        order.every(
+          (at, index) => at >= 0 && (index === 0 || at > order[index - 1]),
+        ),
+      );
+      const heading = list.body.indexOf('דורש טיפול עכשיו');
+      assert.ok(heading >= 0 && heading < order[0]);
+      assert.match(article(list.body, fresh), /בזמן/);
+      assert.doesNotMatch(article(list.body, fresh), /data-goal=/);
+      assert.match(article(list.body, near), /קרוב ליעד/);
+      assert.match(article(list.body, near), /data-goal="amber"/);
+      assert.match(article(list.body, pastOld), /מעבר ליעד/);
+      assert.match(article(list.body, pastOld), /data-goal="red"/);
+      assert.match(article(list.body, emergencyFresh), /חירום/);
+      assert.match(article(list.body, emergencyFresh), /בזמן/);
+
+      const amber = await client.inject({
+        method: 'GET',
+        url: '/calls?goal=amber',
+      });
+      assert.match(amber.body, new RegExp(near));
+      assert.doesNotMatch(amber.body, new RegExp(pastOld));
+      assert.doesNotMatch(amber.body, new RegExp(emergencyOld));
+      const empty = await client.inject({
+        method: 'GET',
+        url: '/calls?category=00000000-0000-4000-8000-000000000099',
+      });
+      assert.match(empty.body, /אין קריאות תואמות/);
+      assert.doesNotMatch(empty.body, /דורש טיפול עכשיו/);
+      const red = await client.inject({
+        method: 'GET',
+        url: '/calls?goal=red',
+      });
+      assert.match(red.body, new RegExp(pastOld));
+      assert.match(red.body, new RegExp(emergencyOld));
+      assert.doesNotMatch(red.body, new RegExp(near));
+      assert.doesNotMatch(red.body, new RegExp(fresh));
+      const late = await client.inject({
+        method: 'GET',
+        url: '/calls?goal=late',
+      });
+      assert.match(late.body, /לא בזמן/);
+      assert.match(late.body, new RegExp(near));
+      assert.match(late.body, new RegExp(pastOld));
+      assert.doesNotMatch(late.body, new RegExp(emergencyFresh));
+      assert.doesNotMatch(late.body, new RegExp(fresh));
+      assert.doesNotMatch(list.body, /כתום|אדום/);
+
+      const emergencies = await client.inject({
+        method: 'GET',
+        url: '/calls?emergency=1',
+      });
+      const openTotal = railCount(emergencies.body);
+      assert.equal(labeledCount(emergencies.body, 'פתוחות'), openTotal);
+      assert.equal(labeledCount(list.body, 'פתוחות'), railCount(list.body));
+      for (const label of ['חירום', 'לא בזמן', 'לבדיקה'] as const) {
+        assert.equal(
+          labeledCount(emergencies.body, label),
+          labeledCount(list.body, label),
+        );
+      }
+      const shown = emergencies.body.match(/<article /g)?.length ?? 0;
+      assert.ok(shown < openTotal);
+      assert.doesNotMatch(emergencies.body, new RegExp(fresh));
+      assert.match(
+        emergencies.body,
+        /מעבר ליעד המענה<\/span>\s*<span class="stat-value">\s*<span dir="ltr">\d+<\/span>\s*<\/span>\s*<span class="stat-note">\s*קרוב ליעד <span dir="ltr">\d+<\/span>/,
+      );
+      assert.equal(
+        labeledCount(emergencies.body, 'קרוב ליעד'),
+        labeledCount(list.body, 'קרוב ליעד'),
+      );
+      assert.doesNotMatch(list.body, /סגורות <span/);
+      assert.match(list.body, /href="\/calls\?state=CLOSED"/);
+      assert.match(list.body, /<option value="NEW"/);
+      assert.match(list.body, /<option value="SCHEDULED"/);
+      assert.doesNotMatch(list.body, /<option value="CLOSED"/);
+      assert.match(emergencies.body, /name="emergency" value="1"/);
+      assert.match(emergencies.body, /name="category"/);
+      assert.match(emergencies.body, /name="state"/);
+
+      await pool.query(
+        `UPDATE call_category SET is_active = false WHERE code = 'GATES'`,
+      );
+      gatesOff = true;
+      const inactive = await client.inject({ method: 'GET', url: '/calls' });
+      assert.match(inactive.body, /שערים \(לא פעיל\)/);
+      await pool.query(
+        `UPDATE call_category SET is_active = true WHERE code = 'GATES'`,
+      );
+      gatesOff = false;
+
+      const filtered = await client.inject({
+        method: 'GET',
+        url: '/calls/filtered',
+      });
+      const setAside = filtered.body.match(/data-filtered=/g)?.length ?? 0;
+      assert.match(
+        list.body,
+        new RegExp(
+          `מסוננות <span class="n"><span dir="ltr">${setAside}</span>`,
+        ),
+      );
+
+      for (const key of graphKeys) delete process.env[key];
+      process.env.GRAPH_TENANT_ID = 'tenant';
+      process.env.GRAPH_CLIENT_ID = 'client';
+      process.env.GRAPH_CLIENT_SECRET = 'secret';
+      process.env.GRAPH_MAILBOX = 'box@test';
+      const warned = await client.inject({ method: 'GET', url: '/calls' });
+      const warningAt = warned.body.indexOf('תאריך התפוגה של הסוד לא הוגדר');
+      const callAt = warned.body.indexOf(emergencyOld);
+      assert.ok(warningAt >= 0 && callAt > warningAt);
+      assert.match(
+        warned.body.slice(warningAt, warningAt + 280),
+        /href="\/settings"/,
+      );
+
+      const pastId = callId(list.body, pastOld);
+      assert.ok(pastId);
+      const closed = await client.inject({
+        method: 'POST',
+        url: `/calls/${pastId}/exit`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: form({ exit: 'ANSWERED', note: 'נסגרה אחרי היעד' }),
+      });
+      assert.equal(closed.statusCode, 303);
+      const closedList = await client.inject({
+        method: 'GET',
+        url: '/calls?state=CLOSED',
+      });
+      const closedRow = article(closedList.body, pastOld);
+      assert.doesNotMatch(closedRow, /בזמן|קרוב ליעד|מעבר ליעד/);
+      assert.doesNotMatch(closedRow, /data-goal=/);
+      assert.match(closedList.body, /מעבר ליעד המענה/);
+    } finally {
+      if (gatesOff) {
+        await pool.query(
+          `UPDATE call_category SET is_active = true WHERE code = 'GATES'`,
+        );
+      }
+      for (const [key, value] of Object.entries(savedGraph)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
       await cleanup(pool, domain);
       await app.close();
       await pool.end();

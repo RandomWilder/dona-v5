@@ -231,6 +231,8 @@ export interface CallListFilter {
   categoryId?: string;
   emergency?: boolean;
   toReview?: boolean;
+  /** Amber excludes past. Red is past only. Late is near or past, and has no band of its own. */
+  band?: ResponseBand | 'late';
 }
 
 export interface OpenIntakeCallSpec {
