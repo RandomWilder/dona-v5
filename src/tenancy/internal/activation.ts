@@ -299,3 +299,20 @@ export async function activateTenancy(
     [newId(), spec.tenancyId, clock.now(), actor],
   );
 }
+
+// The queues and the tenancy book read their list, then each tenancy's gate on its own. A tenancy
+// purged in between is not incomplete, not waiting and not a draft; it is gone, and the screen
+// leaves it out rather than failing whole.
+export async function gateOrGone(
+  db: Queryable,
+  clock: Clock,
+  tenancyId: string,
+  documents: TenancyDocumentsReader,
+): Promise<ActivationGate | null> {
+  try {
+    return await activationGate(db, clock, tenancyId, documents);
+  } catch (error) {
+    if (error instanceof KernelError && error.code === 'not_found') return null;
+    throw error;
+  }
+}

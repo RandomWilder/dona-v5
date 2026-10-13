@@ -12,8 +12,8 @@
 import { type Clock, today as dayOf } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import {
-  activationGate,
   draftLabel,
+  gateOrGone,
   type TenancyDocumentsReader,
 } from './activation.ts';
 import type { Queryable } from './types.ts';
@@ -473,7 +473,8 @@ export async function listTenancyBook(
   const past: { row: TenancyBookRow; left: string }[] = [];
   for (const place of places.rows) {
     if (place.status === 'DRAFT') {
-      const gate = await activationGate(db, clock, place.tenancy_id, documents);
+      const gate = await gateOrGone(db, clock, place.tenancy_id, documents);
+      if (gate === null) continue;
       const label = draftLabel(gate);
       book[label].push(toRow(place, label));
       continue;

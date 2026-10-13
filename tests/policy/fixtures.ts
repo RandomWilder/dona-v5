@@ -82,9 +82,12 @@ export interface SeededOccupancy {
 // at the same address.
 const ADDRESS = { line: 'Rakefet 12', city: 'Shoham' };
 
+// A case that holds a table lock for its whole transaction passes an address of its own: on the
+// shared one it would wait on another case's uncommitted building while that case waits on its lock.
 export async function seedUnit(
   db: Queryable,
   unitNumber: string,
+  address: { line: string; city: string } = ADDRESS,
 ): Promise<string> {
   const unitId = newId();
   await db.query(
@@ -94,9 +97,9 @@ export async function seedUnit(
      ON CONFLICT (address_key) DO NOTHING`,
     [
       newId(),
-      'Shoham — Rakefet 12',
-      ADDRESS.line,
-      ADDRESS.city,
+      `${address.city} — ${address.line}`,
+      address.line,
+      address.city,
       '2026-01-01',
       '2027-01-01',
       'ACTIVE',
@@ -106,7 +109,7 @@ export async function seedUnit(
   // two columns, and a second copy of that expression is a second thing to keep in step.
   const building = await db.query<{ building_id: string }>(
     'SELECT building_id FROM building WHERE city = $1 AND address_line = $2',
-    [ADDRESS.city, ADDRESS.line],
+    [address.city, address.line],
   );
   const buildingId = building.rows[0]?.building_id;
   await db.query(

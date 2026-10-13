@@ -553,7 +553,7 @@ describe('channel · the intake door', () => {
       await inRolledBackTransaction(pool, async (db) => {
         const clock = fixedClock(AT);
         const { account } = await addOperator(db, clock, {
-          email: 'ops@door-dup.test',
+          email: 'ops@door-dup-move.test',
           role: 'OPERATOR',
         });
         const deps = {

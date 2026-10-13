@@ -327,7 +327,10 @@ and `TERMINATED_EARLY` are עבר, sorted by the recorded move-out when the endi
 the contract end otherwise, most recent first. The household name is the primary tenant, otherwise
 the first person in `listTenancyParties`' order, otherwise none. No phone. **#165** passes one unit
 into that same read. The sections, the chips, the sort, and the name rule do not change. Estate
-prints the rows as one list and shows the name only on the letting that counts today. **#156** amends the rule that
+prints the rows as one list and shows the name only on the letting that counts today. All three
+reads take their list first and each draft's gate after it, one read per draft; a tenancy deleted
+between the two is left out, never a `not_found` for the whole screen (13 Oct 2026, found by the
+test suite's parallel files purging their own lettings). **#156** amends the rule that
   gate misses are not excepted: `handover_protocol` may be waived for one letting. A recorded
   waiver makes that check pass, and any row the letting still occupies on this queue carries who
   recorded it, the office day, and the reason. The query stops listing the protocol miss. `lease`,
