@@ -657,17 +657,23 @@ describe('channel · the intake door', () => {
     try {
       await inRolledBackTransaction(pool, async (db) => {
         const clock = fixedClock(AT);
-        const active = await listCategories(db, { activeOnly: true });
+        // Other files switch categories on and off, committed, while this runs, and the door
+        // swallows a throwing sorter as no verdict, so the stub only records what it was offered.
+        const activeCodes = async (): Promise<Set<string>> =>
+          new Set(
+            (await listCategories(db, { activeOnly: true })).map(
+              (row) => row.code,
+            ),
+          );
+        const before = await activeCodes();
+        let offered: string[] = [];
         const outcome = await receiveIncoming(
           db,
           clock,
           {
             sorter: {
               async sort(input) {
-                assert.deepEqual(
-                  input.categories.map((row) => row.code),
-                  active.map((row) => row.code),
-                );
+                offered = input.categories.map((row) => row.code);
                 return {
                   label: 'noise' as const,
                   categoryCode: null,
@@ -692,6 +698,13 @@ describe('channel · the intake door', () => {
             body: 'מבצע של החנות',
           }),
         );
+        const after = await activeCodes();
+        for (const code of before) {
+          if (after.has(code)) assert.ok(offered.includes(code), code);
+        }
+        for (const code of offered) {
+          assert.ok(before.has(code) || after.has(code), code);
+        }
         assert.equal(outcome.kind, 'filtered');
         if (outcome.kind !== 'filtered') return;
         const aside = await listNoiseMessages(db);

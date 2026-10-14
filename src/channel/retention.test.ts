@@ -147,7 +147,15 @@ describe('channel · filtered-message retention', () => {
 
         const second = await sweepFilteredMessages(db, clock);
         assert.equal(second.deleted, 0);
-        assert.equal((await listNoiseMessages(db)).length, left.length);
+        // Other files commit filtered messages of their own while this runs, so the list is
+        // compared on this case's rows, not on its length.
+        const ours = [old, edge, young].map((outcome) => outcome.messageId);
+        const mine = (rows: { id: string }[]) =>
+          rows
+            .map((row) => row.id)
+            .filter((id) => ours.includes(id))
+            .sort();
+        assert.deepEqual(mine(await listNoiseMessages(db)), mine(left));
       });
     } finally {
       await pool.end();
