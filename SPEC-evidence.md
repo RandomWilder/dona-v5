@@ -1316,7 +1316,17 @@ and built storage room by number, each labelled as built. Every field the accoun
 present and marked `לא רשום`, never omitted, and `לא רשום` is not a value: the model falls through to
 the paper or refuses. The record carries no phone and no ID number. It is a fact source this turn,
 as the hits and the list are; a record value in an earlier answer is not a fact unless this turn's
-record carries it. When the record and a hit disagree, the answer shows both and names the record's
+record carries it. **#228: the record's letting half.** Under the letting active today — read
+through scope's active-today rule (`resolveActiveTenancy`, then `resolvePartiesInUnit` for its
+parties), never re-derived — the record carries the
+start and end date, the option end, rent and rent currency, the bay and storage room the letting
+assigns, and each party's name and role — a guarantor marked as one, on the lease and not living there.
+An active letting with no party yet is still a letting, its parties `לא רשום`. No phone, no ID number. A letting field the account does
+not hold is `לא רשום`. With no letting active today — a vacant flat, or one whose only lettings are a
+draft, ended or future — the record says `אין השכרה פעילה` and carries no letting field, so "who
+lives here" on an empty flat is an answer, not a refusal. The assigned bay and storage are labelled
+as the letting's, beside the built ones, and are never merged with them: a parking question on a
+flat whose assigned bay differs from its built bay answers both. When the record and a hit disagree, the answer shows both and names the record's
 as the current value. The model cites the record with `cites_record`; the turn keeps that citation
 only when a record was loaded this turn, and persists it as `{ kind: 'record', record: 'unit', id }`.
 The answering model is always called on a Unit bound, hits or none. A Unit-bound refusal is the

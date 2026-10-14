@@ -29,6 +29,7 @@ const RECORD: UnitRecord = {
   tenure: 'FOR_RENT',
   builtParking: null,
   builtStorage: null,
+  letting: null,
 };
 
 const HIT = {

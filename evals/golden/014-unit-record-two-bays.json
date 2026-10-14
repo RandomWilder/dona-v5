@@ -1,0 +1,14 @@
+{
+  "id": "unit-record-two-bays",
+  "title": "A parking question on a Unit whose letting assigns a different bay from the built one answers both",
+  "input": {
+    "message": "איזו חניה יש לדירה?",
+    "bound": { "kind": "unit", "id": "record-unit" }
+  },
+  "expect": {
+    "refuses": false,
+    "citesClause": true,
+    "tool": "search",
+    "contains": ["14", "22"]
+  }
+}

@@ -45,6 +45,18 @@ const fixtureRecords: Record<string, UnitRecord> = {
     tenure: 'FOR_RENT',
     builtParking: '14',
     builtStorage: '7',
+    // #228: the letting assigns a different bay from the one the flat was built with.
+    letting: {
+      tenancyId: 'record-unit-letting',
+      startDate: '2026-01-01',
+      endDate: '2027-01-01',
+      optionEndDate: '2028-01-01',
+      rentAmount: '5400',
+      rentCurrency: 'ILS',
+      assignedParking: ['22'],
+      assignedStorage: ['7'],
+      parties: [{ fullName: 'יעל כהן', role: 'PRIMARY_TENANT' }],
+    },
   },
   [BARE_RECORD_UNIT]: {
     unitId: BARE_RECORD_UNIT,
@@ -59,6 +71,7 @@ const fixtureRecords: Record<string, UnitRecord> = {
     tenure: 'FOR_RENT',
     builtParking: null,
     builtStorage: null,
+    letting: null,
   },
 };
 
@@ -80,6 +93,18 @@ function placeholderRecordTurn(record: UnitRecord, message: string): AgentTurn {
   ) {
     return {
       text: `שטח הדירה ${record.areaSqm} מ״ר.`,
+      refused: false,
+      citations: [RECORD_CITATION],
+      toolCalls: ['search'],
+    };
+  }
+  // #228: built and assigned bay are two facts, and a parking question names both.
+  const assigned = record.letting?.assignedParking ?? [];
+  if (/חניה/.test(message) && record.builtParking !== null) {
+    const letting =
+      assigned.length === 0 ? '' : ` חניה מהשכירות: ${assigned.join(', ')}.`;
+    return {
+      text: `חניה מהבנייה: ${record.builtParking}.${letting}`,
       refused: false,
       citations: [RECORD_CITATION],
       toolCalls: ['search'],

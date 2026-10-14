@@ -31,6 +31,17 @@ export const OFFICE_TURN_RECORD_REFUSAL =
 /** A field the account does not hold. Present, never omitted, and never a value. */
 const NOT_RECORDED = 'לא רשום';
 
+/** #228: the record says so when no letting is active today. An answer, not a gap. */
+const NO_ACTIVE_LETTING = 'אין השכרה פעילה';
+const ACTIVE_LETTING = 'פעילה היום';
+
+const ROLE_WORD: Record<string, string> = {
+  PRIMARY_TENANT: 'שוכר ראשי',
+  CO_TENANT: 'שוכר נוסף',
+  OCCUPANT: 'דייר',
+  GUARANTOR: 'ערב',
+};
+
 const TENURE_WORD: Record<UnitRecord['tenure'], string> = {
   FOR_RENT: 'להשכרה',
   FOR_SALE: 'למכירה',
@@ -41,7 +52,7 @@ const TENURE_WORD: Record<UnitRecord['tenure'], string> = {
 export const OFFICE_TURN_EMPTY_ROLL = 'אין דירות מושכרות היום.';
 
 export const OFFICE_TURN_INSTRUCTIONS =
-  'Answer in Hebrew. Thread text may only clarify the question; it is not a source of facts. Facts are only this turn’s numbered passages, if present, this turn’s lettings list, if present, and this turn’s Unit record (כרטיס הדירה), if present. A record field marked לא רשום is not recorded: it is not a value, never infer it — answer it from the passages if they state it, otherwise do not answer. If you use a record value, set cites_record to true; otherwise false. When the record and a passage give different values for the same fact, give both, name the record’s as the current value, and cite both. A bay or storage room marked מהבנייה is the one the flat was built with. Copy names, addresses, amounts and identifiers exactly as printed. When a passage heading names a clause, use that heading. If you answer only from the lettings list, set hit_indexes to [] — a list cites no paper. If passages answer, cite them even when the list is also present. If the lettings list is present and empty, nobody is let today: that is an answer, not a documents refusal. If neither the record nor the passages answer, set answers to false. The record is this one Unit: a question about another flat is not answered from it. Do not mention another Unit. Do not suggest a Building or a wider bound.';
+  'Answer in Hebrew. Thread text may only clarify the question; it is not a source of facts. Facts are only this turn’s numbered passages, if present, this turn’s lettings list, if present, and this turn’s Unit record (כרטיס הדירה), if present. A record field marked לא רשום is not recorded: it is not a value, never infer it — answer it from the passages if they state it, otherwise do not answer. If you use a record value, set cites_record to true; otherwise false. When the record and a passage give different values for the same fact, give both, name the record’s as the current value, and cite both. A bay or storage room marked מהבנייה is the one the flat was built with; one marked מהשכירות is the one the current letting assigns. They are two facts: when a question asks about the flat’s bay or storage and the two differ, give both, each with its label. When the record says אין השכרה פעילה, no letting is active today: that is an answer to who lives there or who rents it, not a refusal. A party marked ערב is a guarantor: on the lease, not living in the flat. Copy names, addresses, amounts and identifiers exactly as printed. When a passage heading names a clause, use that heading. If you answer only from the lettings list, set hit_indexes to [] — a list cites no paper. If passages answer, cite them even when the list is also present. If the lettings list is present and empty, nobody is let today: that is an answer, not a documents refusal. If neither the record nor the passages answer, set answers to false. The record is this one Unit: a question about another flat is not answered from it. Do not mention another Unit. Do not suggest a Building or a wider bound.';
 
 export const OFFICE_TOOLS_INSTRUCTIONS =
   'Choose commands for this turn. search retrieves numbered passages (leases, protocols, other paper). list returns who is let in this Building today (unit names, party names, dates — not rent, not identifiers). A table of apartments let today and their tenants uses list and does not rebuild the roll from passages. A question about a document, clause, protocol or printed fact uses search. You may choose both. Facts will only be what the chosen commands return this turn.';
@@ -171,7 +182,10 @@ export async function runOfficeTurn(
   // #227: not a tool the chooser picks. A Unit bound always carries its record.
   const record =
     spec.bound.kind === 'unit'
-      ? await readUnitRecord(deps.db, spec.bound.id)
+      ? await readUnitRecord(deps.db, spec.bound.id, deps.clock, {
+          actorKind: 'staff',
+          actorId: spec.staffAccountId,
+        })
       : null;
   const hitIds = hits.map((hit) => hit.passageId);
   const decided = await answerOfficeHits(
@@ -324,9 +338,40 @@ function recordLines(record: UnitRecord): string {
     `סטטוס: ${TENURE_WORD[record.tenure]}`,
     `חניה (מהבנייה): ${held(record.builtParking)}`,
     `מחסן (מהבנייה): ${held(record.builtStorage)}`,
+    ...lettingLines(record.letting),
   ]
     .map((line) => `- ${line}`)
     .join('\n');
+}
+
+/** The letting active today, beside the built facts and never merged with them. */
+function lettingLines(letting: UnitRecord['letting']): string[] {
+  if (letting === null) return [`השכרה: ${NO_ACTIVE_LETTING}`];
+  const listed = (values: string[]): string =>
+    values.length === 0 ? NOT_RECORDED : values.join(', ');
+  const rent =
+    letting.rentAmount === null
+      ? NOT_RECORDED
+      : `${letting.rentAmount} ${letting.rentCurrency ?? ''}`.trim();
+  const parties =
+    letting.parties.length === 0
+      ? NOT_RECORDED
+      : letting.parties
+          .map(
+            (party) =>
+              `${party.fullName} — ${ROLE_WORD[party.role] ?? party.role}`,
+          )
+          .join('; ');
+  return [
+    `השכרה: ${ACTIVE_LETTING}`,
+    `תחילת השכירות: ${letting.startDate}`,
+    `סיום השכירות: ${letting.endDate}`,
+    `סיום האופציה: ${letting.optionEndDate ?? NOT_RECORDED}`,
+    `דמי שכירות: ${rent}`,
+    `חניה (מהשכירות): ${listed(letting.assignedParking)}`,
+    `מחסן (מהשכירות): ${listed(letting.assignedStorage)}`,
+    `צדדים: ${parties}`,
+  ];
 }
 
 function readReply(

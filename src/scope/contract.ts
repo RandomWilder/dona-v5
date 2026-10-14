@@ -17,6 +17,7 @@ export {
   OCCUPANCY_VIEW,
   OCCUPANCY_VIEW_COLUMNS,
   partyHoldingContact,
+  resolveActiveTenancy,
   resolveOccupiedUnits,
   resolvePartiesInUnit,
   resolveUnitsByEmail,

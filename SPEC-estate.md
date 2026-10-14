@@ -778,7 +778,9 @@ this Unit and redirects back to the same GET, which paints that account's thread
 Cited answers name the Document and the page, with a link through to the read overlay. **#227:** an
 answer drawn from the Unit record cites `כרטיס הדירה`, linking to `GET /estate/units/:unitId`; estate
 exposes `readUnitRecord` on its contract for the office turn to read the record without touching an
-estate table. A refusal
+estate table. **#228:** the record also carries the letting active today, found through scope's
+`resolveActiveTenancy` (parties through `resolvePartiesInUnit`) and read through tenancy's `getTenancy` — dates, option end, rent, assigned
+bay and storage, parties by name and role — or says there is none. A refusal
 is the frozen Hebrew sentence — on this panel `אין בכרטיס ובמסמכים תשובה לשאלה הזו.` — with no citations. If the office-turn command is `unavailable`,
 the post still 303s to that GET with `ask=unavailable`; the pane shows the frozen Hebrew
 *cannot answer now* sentence, the thread is unchanged, and the JSON error body does not replace

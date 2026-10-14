@@ -773,3 +773,228 @@ describe('evidence · office turn reads the Unit record', () => {
     assert.deepEqual(result.citations, []);
   });
 });
+
+// #228: the record's letting half. Today on the fixed clock is 2026-09-16.
+async function seedLetting(
+  db: PoolClient,
+  unitId: string,
+  letting: {
+    status: string;
+    start: string;
+    end: string;
+    rent?: { amount: string; currency: string; optionEnd: string };
+    parking?: string;
+    storage?: string;
+  },
+): Promise<void> {
+  const profileId = newId();
+  const tenancyId = newId();
+  const tenantId = newId();
+  const guarantorId = newId();
+  const building = await db.query<{ building_id: string }>(
+    `SELECT building_id FROM space WHERE space_id = $1`,
+    [unitId],
+  );
+  const buildingId = building.rows[0]?.building_id;
+  let parkingId: string | null = null;
+  let storageId: string | null = null;
+  if (letting.parking) {
+    parkingId = newId();
+    await db.query(
+      `INSERT INTO space (space_id, building_id, space_kind, name)
+       VALUES ($1, $2, 'PARKING', $3)`,
+      [parkingId, buildingId, letting.parking],
+    );
+  }
+  if (letting.storage) {
+    storageId = newId();
+    await db.query(
+      `INSERT INTO space (space_id, building_id, space_kind, name)
+       VALUES ($1, $2, 'STORAGE', $3)`,
+      [storageId, buildingId, letting.storage],
+    );
+  }
+  await db.query(
+    `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)`,
+    [profileId, `office-turn-${profileId}`],
+  );
+  await db.query(
+    `INSERT INTO tenancy (tenancy_id, unit_id, start_date, end_date, status, terms_profile_id,
+                          rent_amount, rent_currency, option_end_date,
+                          parking_space_id, storage_space_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+    [
+      tenancyId,
+      unitId,
+      letting.start,
+      letting.end,
+      letting.status,
+      profileId,
+      letting.rent?.amount ?? null,
+      letting.rent?.currency ?? null,
+      letting.rent?.optionEnd ?? null,
+      parkingId,
+      storageId,
+    ],
+  );
+  await db.query(
+    `INSERT INTO party (party_id, party_kind, family_name, preferred_language)
+     VALUES ($1, 'PERSON', $3, 'he'), ($2, 'PERSON', 'דוד לוי', 'he')`,
+    [tenantId, guarantorId, TENANT],
+  );
+  await db.query(
+    `INSERT INTO tenancy_party (tenancy_id, party_id, role, is_service_contact)
+     VALUES ($1, $2, 'PRIMARY_TENANT', true), ($1, $3, 'GUARANTOR', false)`,
+    [tenancyId, tenantId, guarantorId],
+  );
+}
+
+async function recordInputFor(db: PoolClient, unitId: string): Promise<string> {
+  const extractor = refusingExtractor();
+  await runOfficeTurn(turnDeps(db, extractor), {
+    staffAccountId: await operator(db),
+    bound: { kind: 'unit', id: unitId },
+    question: 'מי גר בדירה?',
+  });
+  return recordInput(extractor);
+}
+
+describe('evidence · the Unit record carries the letting active today', () => {
+  it('gives the model the active letting: dates, option end, rent, assigned bay and storage, parties by role', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const unitId = await seedRecordUnit(db);
+        await seedLetting(db, unitId, {
+          status: 'ACTIVE',
+          start: '2026-01-01',
+          end: '2027-01-01',
+          rent: { amount: '5400', currency: 'ILS', optionEnd: '2028-01-01' },
+          parking: 'P-22',
+          storage: 'M-9',
+        });
+        const input = await recordInputFor(db, unitId);
+        assert.match(input, /תחילת השכירות: 2026-01-01/);
+        assert.match(input, /סיום השכירות: 2027-01-01/);
+        assert.match(input, /סיום האופציה: 2028-01-01/);
+        assert.match(input, /דמי שכירות: 5400 ILS/);
+        assert.match(input, /חניה \(מהשכירות\): P-22/);
+        assert.match(input, /מחסן \(מהשכירות\): M-9/);
+        // Two labelled facts, never merged.
+        assert.match(input, /חניה \(מהבנייה\): P-14/);
+        assert.match(input, /מחסן \(מהבנייה\): M-7/);
+        assert.match(input, new RegExp(`${TENANT} — שוכר ראשי`));
+        assert.match(input, /דוד לוי — ערב/);
+        assert.equal(input.includes('אין השכרה פעילה'), false);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('marks a letting field the account does not hold as לא רשום', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const { unitId } = await seedBuilding(db);
+        await seedLetting(db, unitId, {
+          status: 'ACTIVE',
+          start: '2026-01-01',
+          end: '2027-01-01',
+        });
+        const input = await recordInputFor(db, unitId);
+        assert.match(input, /סיום האופציה: לא רשום/);
+        assert.match(input, /דמי שכירות: לא רשום/);
+        assert.match(input, /חניה \(מהשכירות\): לא רשום/);
+        assert.match(input, /מחסן \(מהשכירות\): לא רשום/);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('carries an active letting that has no party yet, with its parties as לא רשום', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const { unitId } = await seedBuilding(db);
+        const profileId = newId();
+        await db.query(
+          `INSERT INTO terms_profile (terms_profile_id, name) VALUES ($1, $2)`,
+          [profileId, `office-turn-${profileId}`],
+        );
+        await db.query(
+          `INSERT INTO tenancy (tenancy_id, unit_id, start_date, end_date, status, terms_profile_id)
+           VALUES ($1, $2, '2026-01-01', '2027-01-01', 'ACTIVE', $3)`,
+          [newId(), unitId, profileId],
+        );
+        const input = await recordInputFor(db, unitId);
+        assert.equal(input.includes('אין השכרה פעילה'), false);
+        assert.match(input, /סיום השכירות: 2027-01-01/);
+        assert.match(input, /צדדים: לא רשום/);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  for (const [label, letting] of [
+    ['a vacant flat', null],
+    [
+      'a draft only',
+      { status: 'DRAFT', start: '2026-01-01', end: '2027-01-01' },
+    ],
+    [
+      'an ended letting',
+      { status: 'ENDED', start: '2025-01-01', end: '2026-01-01' },
+    ],
+    [
+      'a future signed letting',
+      { status: 'ACTIVE', start: '2026-12-01', end: '2027-12-01' },
+    ],
+  ] as const) {
+    it(`says אין השכרה פעילה and carries no letting field for ${label}`, async (t) => {
+      const pool = await migratedPoolOrNull();
+      if (!pool) {
+        t.skip(skipReason);
+        return;
+      }
+      try {
+        await inRolledBackTransaction(pool, async (db) => {
+          const unitId = await seedRecordUnit(db);
+          if (letting) {
+            await seedLetting(db, unitId, {
+              ...letting,
+              rent: {
+                amount: '5400',
+                currency: 'ILS',
+                optionEnd: '2028-01-01',
+              },
+              parking: 'P-22',
+            });
+          }
+          const input = await recordInputFor(db, unitId);
+          assert.match(input, /השכרה: אין השכרה פעילה/);
+          assert.equal(input.includes('מהשכירות'), false);
+          assert.equal(input.includes('5400'), false);
+          assert.equal(input.includes(TENANT), false);
+          assert.match(input, /חניה \(מהבנייה\): P-14/);
+        });
+      } finally {
+        await pool.end();
+      }
+    });
+  }
+});
