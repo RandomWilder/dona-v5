@@ -1,13 +1,13 @@
 ---
 number: 226
 title: The office turn reads the Unit record and the Building record
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent:
 created: 2026-10-13
-closed:
+closed: 2026-10-14
 ---
 
 ## Problem Statement
@@ -168,3 +168,7 @@ The portfolio bound and the tenant-facing path are unchanged.
 - The record is small (a Unit record is a few hundred tokens; a Building record at Ramle's 40 units
   is about forty short lines), which is why it is loaded every turn rather than offered as a tool the
   chooser could fail to pick.
+
+## Comment — 2026-10-14
+
+All four slices are closed: #227 (the Unit record's physical half), #228 (the letting active today), #229 (a disagreement between record and paper shows both) and #230 (the Building record). The portfolio bound and the tenant path are unchanged.
