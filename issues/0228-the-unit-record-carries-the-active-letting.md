@@ -1,13 +1,13 @@
 ---
 number: 228
 title: The Unit record carries the letting active today
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: [227]
 parent: 226
 created: 2026-10-13
-closed:
+closed: 2026-10-14
 ---
 
 ## Parent
@@ -34,8 +34,8 @@ SPEC-evidence's office-turn paragraph is amended first.
 - [x] No phone and no ID number reaches the model.
 - [x] With no letting active today — including a flat with only a draft, an ended or a future letting — the record says `אין השכרה פעילה` and carries no letting fields.
 - [x] Built and assigned bay (and storage) arrive as two labelled facts.
-- [ ] Golden case, red first: a parking question on a Unit whose assigned bay differs from its built bay answers both. The full golden set passes.
-- [ ] Clicked on `:3000`: a let Unit answers its tenants and end date from the record, citing `כרטיס הדירה`.
+- [x] Golden case, red first: a parking question on a Unit whose assigned bay differs from its built bay answers both. The full golden set passes.
+- [x] Clicked on `:3000`: a let Unit answers its tenants and end date from the record, citing `כרטיס הדירה`.
 
 ## Comment — 2026-10-14
 
@@ -73,6 +73,24 @@ reached the panel on Unit 1 at בניין מלאות and ended in `ask=unavailab
 `readUnitRecord` against that Unit's local data returned the active letting, 2026-09-01 to
 2027-08-31, with party `משק בית נכנס` as primary tenant. It excluded the letting that ended early
 (2025-10-01 to 2026-12-31).
+
+## Comment — 2026-10-14, after the top-up
+
+Red first, keyed: case 014 ran against the final code with the #227 office turn put back. It went
+13/14, and 014 failed with `expected the answer to contain "22"`.
+
+Green, keyed, against the final prompt: golden 14/14, sorter 14/14, extraction required 14/14 and
+optional 42/46. Three runs before that were cut short by intermittent
+`429 credit_balance_exhausted` while the top-up settled. They had no grading failure, and every
+case that threw in one of them passed in another.
+
+Clicked on a fresh server after a restart. It ran on `:3001` because another session held `:3000`;
+same code and same database. The flat was Unit 1 at בניין מלאות. The question was
+`מי השוכרים בדירה ומתי מסתיימת השכירות?` and the answer named `משק בית נכנס — שוכר ראשי` and the end
+date `2027-08-31`. It cited `כרטיס הדירה`, which links to `/estate/units/<id>`. The letting that
+ended early was not mentioned. The model also said the tenants' names were not recorded, because
+that local party's name is a placeholder ("incoming household"). The click used a locally minted
+test-operator session, which was removed afterwards.
 
 ## Blocked by
 
