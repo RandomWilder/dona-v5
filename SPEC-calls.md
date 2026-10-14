@@ -167,6 +167,9 @@ summary, otherwise the description. The split header summarises open calls, emer
 past the goal, in place of the long lede and the stat row. The way into the filtered list stays on
 that header. The split list is that same list: the same order, the same urgent heading, and the
 same facts on each row. The warnings stay above both layouts.
+Every call row, split and list, opens with an icon tile for its Source channel (#241): mail for
+email, a phone, a speech bubble for WhatsApp, a door for a walk-in. The tile is decorative. The
+channel's text chip stays, and it is what a screen reader hears.
 The requester's name in the preview is text, and it does not link to the profile. A new call, or a
 call still waiting on a category, offers a next step that links to the call page. From
 RESPONSIBILITY SET on, and on a closed call, there is no such strip.

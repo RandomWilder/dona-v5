@@ -6,6 +6,7 @@
 // for the whole office, passed in by the route, so a filter does not shrink it.
 import { addDays, DEFAULT_ZONE, dayIn } from '../../kernel/clock.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
+import { type IconName, icon } from '../../kernel/ui/icons.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import {
   ageMinutes,
@@ -188,6 +189,17 @@ const CHANNEL_HE: Record<SourceChannel, string> = {
   EMAIL: 'דוא״ל',
 };
 
+const CHANNEL_ICON: Record<SourceChannel, IconName> = {
+  EMAIL: 'mail',
+  PHONE: 'phone',
+  WHATSAPP: 'message',
+  WALK_IN: 'door',
+};
+
+function channelTile(channel: SourceChannel): Html {
+  return h`<span class="channel-tile" aria-hidden="true">${icon(CHANNEL_ICON[channel])}</span>`;
+}
+
 export const CALL_STATE_HE: Record<CallState, string> = {
   NEW: 'חדשה',
   IDENTIFIED: 'זוהתה',
@@ -294,6 +306,25 @@ const styles = h`<style>
     padding-block: var(--space-3);
     border-block-end: var(--size-hairline) solid var(--color-divider-soft);
   }
+  .calls article.call:has(.channel-tile),
+  .calls .split-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .calls .channel-tile {
+    grid-row: 1 / span 2;
+    align-self: center;
+    inline-size: 32px;
+    block-size: 32px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-2);
+    background: var(--color-accent-tint);
+    color: var(--color-accent-ink);
+  }
+  .calls .channel-tile svg {
+    inline-size: 18px;
+    block-size: 18px;
+  }
   .calls .call[data-emergency="true"],
   .calls .call[data-emergency="true"] .call-main a,
   .calls .call[data-emergency="true"] .call-meta {
@@ -308,6 +339,10 @@ const styles = h`<style>
     border-block-end-color: var(--glass-stroke);
   }
   .calls .call-main { margin: 0; }
+  .calls article.call:has(.channel-tile) > .call-main,
+  .calls article.call:has(.channel-tile) > .call-meta,
+  .calls .split-row > .call-main,
+  .calls .split-row > .call-meta { grid-column: 2; }
   .calls .call-meta {
     display: flex;
     flex-wrap: wrap;
@@ -592,8 +627,7 @@ function bidi(text: string): Html {
 
 /** A forward chevron points the way the page reads, left in Hebrew; a back chevron points right. */
 function chevron(back: boolean): Html {
-  const kind = back ? 'chev is-back' : 'chev';
-  return h`<svg class="${kind}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
+  return icon('chevron', { class: back ? 'chev is-back' : 'chev' });
 }
 
 const FORWARD = chevron(false);
@@ -718,6 +752,7 @@ function callRow(call: ServiceCall, screen: CallsScreen): Html {
   const marked = call.emergency.flagged ? 'true' : 'false';
   const reviewing = call.toReview ? 'true' : 'false';
   return h`<article class="call" data-call="${call.id}" data-channel="${call.sourceChannel}" data-call-state="${call.state}" data-emergency="${marked}" data-review="${reviewing}">
+    ${channelTile(call.sourceChannel)}
     <p class="call-main"><a href="/calls/${call.id}">${call.description}</a></p>
     <p class="call-meta">${callMeta(call, screen)}</p>
   </article>`;
@@ -1120,6 +1155,7 @@ function splitRow(
   const marked = call.emergency.flagged ? 'true' : 'false';
   const currentMark = call.id === current ? h`aria-current="true"` : h``;
   return h`<a class="split-row" href="${rowHref(screen, call.id)}" data-split-call="${call.id}" data-emergency="${marked}" ${currentMark}>
+    ${channelTile(call.sourceChannel)}
     <span class="call-main">${call.description}</span>
     <span class="call-meta">${callMeta(call, screen)}</span>
   </a>`;
