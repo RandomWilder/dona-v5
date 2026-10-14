@@ -79,6 +79,12 @@ and the prompt version are stored on the verdict, on the call and on the message
 ServiceCall marked "to review", with no summary. Translate timing out leaves `body_he` empty and
 does not change that verdict.
 
+**A translation is checked against the letters, not taken on the model's word.** A reply that calls
+a message Hebrew when under half its letters are Hebrew, or hands back a translation under half
+Hebrew letters, is asked for once more; a second such reply counts as a failure, and `body_he`
+stays empty. The model judges which language a message is in; the code only refuses a judgement
+the text contradicts.
+
 **Any change to the sorter's prompt, model id or the Category list runs the full golden set.** The
 golden set's messages are fabricated, never a real tenant's.
 
