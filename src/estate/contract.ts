@@ -102,8 +102,13 @@ export {
   SEARCH_LIMIT,
   searchEstate,
 } from './internal/read-model.ts';
-export type { UnitRecord } from './internal/record.ts';
-export { readUnitRecord } from './internal/record.ts';
+export type {
+  BuildingRecord,
+  BuildingRecordCount,
+  BuildingRecordUnit,
+  UnitRecord,
+} from './internal/record.ts';
+export { readBuildingRecord, readUnitRecord } from './internal/record.ts';
 export type { EstateDeps } from './internal/routes.ts';
 export { registerEstateRoutes } from './internal/routes.ts';
 export type { EstateSeedArgs, SeedResult } from './internal/seed.ts';

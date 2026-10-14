@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   type AgentTurn,
+  BUILDING_RECORD_CITATION,
   type CitationKind,
   type GoldenCase,
   type GroundedAnswer,
@@ -97,9 +98,11 @@ export function gradeTurn(golden: GoldenCase, turn: AgentTurn): string[] {
   return failures;
 }
 
-/** A subject spells the Unit record's citation one way; every other citation is paper. */
+/** A subject spells each record's citation one way; every other citation is paper. */
 function citationKind(citation: string): CitationKind {
-  return citation === RECORD_CITATION ? 'record' : 'paper';
+  return citation === RECORD_CITATION || citation === BUILDING_RECORD_CITATION
+    ? 'record'
+    : 'paper';
 }
 
 /** Where the answering clause came back, or 0 when it did not come back. */

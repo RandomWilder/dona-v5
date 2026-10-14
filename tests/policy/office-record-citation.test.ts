@@ -7,9 +7,14 @@
 //
 // Written red first: with the `record !== null` guard removed from `readReply`, the portfolio case
 // kept a record citation and failed.
+//
+// #230. On a Building record the model names the Unit lines it drew on, by number. A number the
+// loaded record does not hold — another Building's flat, a flat that does not exist, or an id —
+// is dropped, and the citation falls back to the Building. Red first by mutation: with
+// `recordCitation` taking the model's string as the unitId, the invented-line case linked to it.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { UnitRecord } from '../../src/estate/contract.ts';
+import type { BuildingRecord, UnitRecord } from '../../src/estate/contract.ts';
 import {
   answerOfficeHits,
   OFFICE_TURN_REFUSAL,
@@ -80,5 +85,63 @@ describe('policy · a record citation is the record loaded this turn', () => {
     assert.equal(result.refused, true);
     assert.equal(result.text, OFFICE_TURN_REFUSAL);
     assert.deepEqual(result.citations, []);
+  });
+});
+
+const BUILDING: BuildingRecord = {
+  buildingId: 'building-loaded-this-turn',
+  name: 'בניין',
+  addressLine: 'רחוב 1',
+  city: 'עיר',
+  projectName: null,
+  handoverDate: '2025-01-01',
+  warrantyEndDate: '2026-01-01',
+  status: 'ACTIVE',
+  units: [
+    {
+      unitId: 'unit-12-in-this-building',
+      unitNumber: '12',
+      floor: '3',
+      rooms: '4',
+      areaSqm: '82',
+      tenure: 'FOR_RENT',
+      builtParking: null,
+      builtStorage: null,
+    },
+  ],
+  parking: { total: 0, assigned: 0 },
+  storage: { total: 0, assigned: 0 },
+};
+
+async function citeLines(lines: unknown) {
+  const result = await answerOfficeHits(
+    { extractor: citingRecord({ record_units: lines }), model: 'fake' },
+    'באיזו קומה הדירה?',
+    [],
+    [],
+    null,
+    BUILDING,
+  );
+  return result.citations;
+}
+
+describe('policy · a Unit-line citation is a line of the Building record loaded this turn', () => {
+  it('links to a Unit the record holds', async () => {
+    assert.deepEqual(await citeLines(['12']), [
+      {
+        kind: 'record',
+        record: 'building',
+        id: BUILDING.buildingId,
+        unitId: 'unit-12-in-this-building',
+      },
+    ]);
+  });
+
+  it('drops a line the record does not hold, and cites the Building', async () => {
+    for (const lines of [['99'], ['another-building-unit-id'], [12], 'x']) {
+      assert.deepEqual(await citeLines(lines), [
+        { kind: 'record', record: 'building', id: BUILDING.buildingId },
+      ]);
+    }
   });
 });

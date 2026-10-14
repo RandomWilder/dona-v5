@@ -38,7 +38,8 @@ export interface Expectation {
   contains: string[];
   /**
    * #229. Citation kinds the answer must carry, each at least once: `record` is the Unit record's
-   * `כרטיס הדירה`, `paper` is any other citation. Omitted means no kind is asserted.
+   * `כרטיס הדירה` or (#230) the Building
+   * record's `כרטיס הבניין`; `paper` is any other citation. Omitted means no kind is asserted.
    */
   citesKinds?: CitationKind[];
 }
@@ -47,6 +48,9 @@ export type CitationKind = 'record' | 'paper';
 
 /** How a subject spells a Unit-record citation, so the grader can tell it from paper. */
 export const RECORD_CITATION = 'כרטיס הדירה';
+
+/** #230. How a subject spells a Building-record citation. Also a `record` kind to the grader. */
+export const BUILDING_RECORD_CITATION = 'כרטיס הבניין';
 
 // A retrieval case asserts **where in the result set** the answering clause
 // came back, and nothing else.

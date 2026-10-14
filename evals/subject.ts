@@ -1,4 +1,8 @@
-import type { UnitRecord } from '../src/estate/contract.ts';
+import type {
+  BuildingRecord,
+  BuildingRecordUnit,
+  UnitRecord,
+} from '../src/estate/contract.ts';
 import type { PassageHit, RetrievalBound } from '../src/evidence/contract.ts';
 import {
   answerOfficeHits,
@@ -9,7 +13,12 @@ import { systemClock } from '../src/kernel/clock.ts';
 import type { Extractor } from '../src/kernel/extraction.ts';
 import { newId } from '../src/kernel/ids.ts';
 import type { ActiveLettingInBuilding } from '../src/tenancy/contract.ts';
-import { type AgentTurn, RECORD_CITATION, type Subject } from './case.ts';
+import {
+  type AgentTurn,
+  BUILDING_RECORD_CITATION,
+  RECORD_CITATION,
+  type Subject,
+} from './case.ts';
 import { type Corpus, HOME_UNIT, PORTFOLIO_BOUND } from './corpus.ts';
 
 // PLACEHOLDER. There is no WhatsApp agent yet. Behavioural cases that this
@@ -32,6 +41,9 @@ export const BARE_RECORD_UNIT = 'bare-record-unit';
 
 // #229. A flat whose record says 82 m² and whose lease prints 85 m².
 export const DISAGREE_UNIT = 'disagree-unit';
+
+// #230. A freshly seeded Building with no paper and no active letting: its record is all it has.
+export const RECORD_BUILDING = 'record-building';
 
 const fixtureRecords: Record<string, UnitRecord> = {
   [RECORD_UNIT]: {
@@ -116,12 +128,95 @@ function paperCitation(documentId: string, page: number): string {
   return `${documentId} עמ׳ ${page}`;
 }
 
-function fixtureRecord(bound: RetrievalBound): UnitRecord | null {
+function recordUnit(
+  unitNumber: string,
+  rooms: string,
+  floor: string | null,
+  areaSqm: string | null,
+): BuildingRecordUnit {
+  return {
+    unitId: `${RECORD_BUILDING}-${unitNumber}`,
+    unitNumber,
+    floor,
+    rooms,
+    areaSqm,
+    tenure: 'FOR_RENT',
+    builtParking: null,
+    builtStorage: null,
+  };
+}
+
+/** #230. Every Building bound carries a record; the two older Buildings carry the one flat they let. */
+function buildingRecord(
+  buildingId: string,
+  units: BuildingRecordUnit[],
+): BuildingRecord {
+  return {
+    buildingId,
+    name: 'בניין הזית',
+    addressLine: 'רחוב הזית 4',
+    city: 'רמלה',
+    projectName: null,
+    handoverDate: '2025-06-01',
+    warrantyEndDate: '2026-06-01',
+    status: 'ACTIVE',
+    units,
+    parking: { total: 4, assigned: 1 },
+    storage: { total: 2, assigned: 0 },
+  };
+}
+
+const fixtureBuildings: Record<string, BuildingRecord> = {
+  [ROLL_BUILDING]: buildingRecord(ROLL_BUILDING, [
+    recordUnit('12', '4', '3', '82'),
+  ]),
+  [EMPTY_BUILDING]: buildingRecord(EMPTY_BUILDING, [
+    recordUnit('12', '4', '3', '82'),
+  ]),
+  // Two four-room flats among four; the count is the case.
+  [RECORD_BUILDING]: buildingRecord(RECORD_BUILDING, [
+    recordUnit('1', '3', '0', '70'),
+    recordUnit('2', '4', '1', '92'),
+    recordUnit('3', '5', '1', '110'),
+    recordUnit('4', '4', '2', '92'),
+  ]),
+};
+
+function fixtureRecord(
+  bound: RetrievalBound,
+): UnitRecord | BuildingRecord | null {
+  if (bound.kind === 'building') {
+    const record = fixtureBuildings[bound.id];
+    if (!record) throw new Error(`no fixture Building record for ${bound.id}`);
+    return record;
+  }
   if (bound.kind !== 'unit') return null;
   const record = fixtureRecords[bound.id];
   // Production always loads a Unit bound's record; a case without one would grade the old turn.
   if (!record) throw new Error(`no fixture Unit record for ${bound.id}`);
   return record;
+}
+
+/** The placeholder's stand-in for counting flats by rooms from a Building record's Unit lines. */
+function placeholderBuildingRecordTurn(
+  record: BuildingRecord,
+  message: string,
+): AgentTurn | null {
+  const rooms = /(\d+|ארבעה|שלושה|חמישה)\s*חדרים/.exec(message)?.[1];
+  if (rooms === undefined || !/כמה/.test(message)) return null;
+  const asNumber: Record<string, string> = {
+    ארבעה: '4',
+    שלושה: '3',
+    חמישה: '5',
+  };
+  const wanted = asNumber[rooms] ?? rooms;
+  const count = record.units.filter((unit) => unit.rooms === wanted).length;
+  return {
+    text: `בבניין ${count} דירות בנות ${wanted} חדרים.`,
+    refused: false,
+    citations: [BUILDING_RECORD_CITATION],
+    toolCalls: ['search'],
+  };
 }
 
 /** The placeholder's stand-in for reading the record: a size question about this flat only. */
@@ -190,6 +285,14 @@ export const placeholderSubject: Subject = async ({
     return placeholderRecordTurn(fixtureRecord(bound) as UnitRecord, message);
   }
 
+  if (bound?.kind === 'building') {
+    const counted = placeholderBuildingRecordTurn(
+      fixtureRecord(bound) as BuildingRecord,
+      message,
+    );
+    if (counted) return counted;
+  }
+
   if (bound?.kind === 'building' && TABLE_ASK.test(message)) {
     if (bound.id === EMPTY_BUILDING) {
       return {
@@ -253,7 +356,9 @@ export function officeTurnSubject(options: {
     const bound = input.bound ?? PORTFOLIO_BOUND;
     const tools = await chooseOfficeTools(options, bound, input.message);
     let hits: PassageHit[] = [];
-    if (tools.includes('search')) {
+    // #230: the record Building has no paper, so its search returns nothing.
+    const paperless = bound.kind === 'building' && bound.id === RECORD_BUILDING;
+    if (tools.includes('search') && !paperless) {
       const searchBound: RetrievalBound =
         bound.kind === 'building' ? { kind: 'unit', id: HOME_UNIT } : bound;
       const found = await options.corpus.search(input.message, searchBound);
@@ -281,9 +386,11 @@ export function officeTurnSubject(options: {
       text: decided.text,
       refused: decided.refused,
       citations: decided.citations.map((citation) =>
-        citation.kind === 'record'
-          ? RECORD_CITATION
-          : paperCitation(citation.documentId, citation.page),
+        citation.kind !== 'record'
+          ? paperCitation(citation.documentId, citation.page)
+          : citation.record === 'unit'
+            ? RECORD_CITATION
+            : BUILDING_RECORD_CITATION,
       ),
       toolCalls: tools,
     };

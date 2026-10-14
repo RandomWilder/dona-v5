@@ -805,7 +805,14 @@ leave the thread unchanged, and do not dump `{ code, message }` on the POST URL.
 this account's thread for this Building and returns to the page that was posted. A Unit thread
 and a Building thread for the same staff account stay distinct. CSRF and a session on both posts;
 VIEWER may ask; no new permission. **#123:** a Building-bound turn may list who is let today as
-well as search Passages; the panel is unchanged. The buildings list, the נכסים list, the Unit
+well as search Passages; the panel is unchanged. **#230:** every Building-bound turn also reads the
+Building record through estate's `readBuildingRecord` on its contract — name, address, city,
+project, handover date, warranty end, status; one line per Unit (number, floor, rooms, area, tenure,
+built bay, built storage room); bay and storage-room counts with how many of each are assigned to a
+Unit or by a letting active today (scope's `resolveActiveTenancy`). No party and no rent. An answer
+drawn from it cites `כרטיס הבניין` on both Building pages, linking to
+`GET /estate/buildings/:buildingId`, or, when the answer is about one Unit line, to
+`GET /estate/units/:unitId`. A refusal on this panel is `אין בכרטיס ובמסמכים תשובה לשאלה הזו.`. The buildings list, the נכסים list, the Unit
 page (which keeps its own panel), letting sheet, documents, settings and queues do not render a
 Building panel and do not keep a leftover Building bound.
 

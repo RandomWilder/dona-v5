@@ -2367,10 +2367,14 @@ function citationList(
   return h`<ul class="unit-citations">
     ${citations.map((cite) => {
       if (cite.kind === 'record') {
-        // #227. The record cited is the page it links to.
-        return cite.record === 'unit'
-          ? h`<li><a href="/estate/units/${cite.id}">כרטיס הדירה</a></li>`
-          : h`<li><a href="/estate/buildings/${cite.id}">כרטיס הבניין</a></li>`;
+        // #227. The record cited is the page it links to. #230: a Building record cited for one
+        // Unit line links to that Unit, under the Building record's label.
+        if (cite.record === 'unit') {
+          return h`<li><a href="/estate/units/${cite.id}">כרטיס הדירה</a></li>`;
+        }
+        return cite.unitId === undefined
+          ? h`<li><a href="/estate/buildings/${cite.id}">כרטיס הבניין</a></li>`
+          : h`<li><a href="/estate/units/${cite.unitId}">כרטיס הבניין</a></li>`;
       }
       const labelHe = DOC_LABEL[cite.documentType] ?? cite.documentType;
       return h`<li>

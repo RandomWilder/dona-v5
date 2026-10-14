@@ -1,0 +1,15 @@
+{
+  "id": "building-record-counts-flats",
+  "title": "A Building with no paper counts its four-room flats from the Building record, citing it",
+  "input": {
+    "message": "כמה דירות של ארבעה חדרים יש בבניין?",
+    "bound": { "kind": "building", "id": "record-building" }
+  },
+  "expect": {
+    "refuses": false,
+    "citesClause": true,
+    "tool": "search",
+    "contains": ["2"],
+    "citesKinds": ["record"]
+  }
+}

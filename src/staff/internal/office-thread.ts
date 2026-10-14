@@ -21,6 +21,8 @@ export interface OfficeRecordCitation {
   kind: 'record';
   record: 'unit' | 'building';
   id: string;
+  /** #230. On a Building record cited for one Unit line: that Unit, and the page it links to. */
+  unitId?: string;
 }
 
 export type OfficeCitation = OfficeDocumentCitation | OfficeRecordCitation;

@@ -1,4 +1,10 @@
-import { readUnitRecord, type UnitRecord } from '../../estate/contract.ts';
+import {
+  type BuildingRecord,
+  type BuildingRecordUnit,
+  readBuildingRecord,
+  readUnitRecord,
+  type UnitRecord,
+} from '../../estate/contract.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import type { Embedder } from '../../kernel/embeddings.ts';
 import { KernelError } from '../../kernel/errors.ts';
@@ -48,14 +54,28 @@ const TENURE_WORD: Record<UnitRecord['tenure'], string> = {
   SOLD: 'נמכרה',
 };
 
+// The Building page's words for the same three values.
+const BUILDING_STATUS_WORD: Record<BuildingRecord['status'], string> = {
+  ACTIVE: 'פעיל',
+  IN_CONSTRUCTION: 'בבנייה',
+  EXITED: 'הסתיים',
+};
+
+/** #230. The record this turn loaded: a Unit bound's or a Building bound's, never both. */
+export type OfficeRecord = UnitRecord | BuildingRecord;
+
+function isBuildingRecord(record: OfficeRecord): record is BuildingRecord {
+  return 'units' in record;
+}
+
 /** Empty Building roll. An answer, not the documents-refusal sentence. */
 export const OFFICE_TURN_EMPTY_ROLL = 'אין דירות מושכרות היום.';
 
 export const OFFICE_TURN_INSTRUCTIONS =
-  'Answer in Hebrew. Thread text may only clarify the question; it is not a source of facts. Facts are only this turn’s numbered passages, if present, this turn’s lettings list, if present, and this turn’s Unit record (כרטיס הדירה), if present. A record field marked לא רשום is not recorded: it is not a value, never infer it — answer it from the passages if they state it, otherwise do not answer. If you use a record value, set cites_record to true; otherwise false. When the record and a passage give different values for the same fact, give both: the record’s first, written as הערך הנוכחי: followed by the value, then the passage’s as printed in that document. Never pick one silently and never give only one. Cite both: set cites_record to true and put that passage’s number in hit_indexes. A bay or storage room marked מהבנייה is the one the flat was built with; one marked מהשכירות is the one the current letting assigns. They are two facts: when a question asks about the flat’s bay or storage and the two differ, give both, each with its label. When the record says אין השכרה פעילה, no letting is active today: that is an answer to who lives there or who rents it, not a refusal. A party marked ערב is a guarantor: on the lease, not living in the flat. Copy names, addresses, amounts and identifiers exactly as printed. When a passage heading names a clause, use that heading. If you answer only from the lettings list, set hit_indexes to [] — a list cites no paper. If passages answer, cite them even when the list is also present. If the lettings list is present and empty, nobody is let today: that is an answer, not a documents refusal. If neither the record nor the passages answer, set answers to false. The record is this one Unit: a question about another flat is not answered from it. Do not mention another Unit. Do not suggest a Building or a wider bound.';
+  'Answer in Hebrew. Thread text may only clarify the question; it is not a source of facts. Facts are only this turn’s numbered passages, if present, this turn’s lettings list, if present, and this turn’s record — the Unit record (כרטיס הדירה) or the Building record (כרטיס הבניין) — if present. A record field marked לא רשום is not recorded: it is not a value, never infer it — answer it from the passages if they state it, otherwise do not answer. If you use a record value, set cites_record to true; otherwise false. When the record and a passage give different values for the same fact, give both: the record’s first, written as הערך הנוכחי: followed by the value, then the passage’s as printed in that document. Never pick one silently and never give only one. Cite both: set cites_record to true and put that passage’s number in hit_indexes. A bay or storage room marked מהבנייה is the one the flat was built with; one marked מהשכירות is the one the current letting assigns. They are two facts: when a question asks about the flat’s bay or storage and the two differ, give both, each with its label. When the record says אין השכרה פעילה, no letting is active today: that is an answer to who lives there or who rents it, not a refusal. A party marked ערב is a guarantor: on the lease, not living in the flat. Copy names, addresses, amounts and identifiers exactly as printed. When a passage heading names a clause, use that heading. If you answer only from the lettings list, set hit_indexes to [] — a list cites no paper. If passages answer, cite them even when the list is also present. If the lettings list is present and empty, nobody is let today: that is an answer, not a documents refusal. If neither the record nor the passages answer, set answers to false. A Unit record is this one Unit: a question about another flat is not answered from it. With a Unit record, do not mention another Unit, whatever the source. A Building record is this one Building: its own values, one line per Unit in it (number, floor, rooms, area, tenure, built bay and storage room), and how many bays and storage rooms it has and how many of each are assigned. Count and filter flats from its Unit lines. It names no tenant and no rent: who lives where is only the lettings list. In record_units list the unit numbers, as written in the record, of the Unit lines your answer drew on; otherwise []. Do not suggest a Building or a wider bound.';
 
 export const OFFICE_TOOLS_INSTRUCTIONS =
-  'Choose commands for this turn. search retrieves numbered passages (leases, protocols, other paper). list returns who is let in this Building today (unit names, party names, dates — not rent, not identifiers). A table of apartments let today and their tenants uses list and does not rebuild the roll from passages. A question about a document, clause, protocol or printed fact uses search. You may choose both. Facts will only be what the chosen commands return this turn.';
+  'Choose commands for this turn. This Building’s record — its own values, its flats by number, floor, rooms, area and tenure, and its bay and storage counts — is always given and needs no command. search retrieves numbered passages (leases, protocols, other paper). list returns who is let in this Building today (unit names, party names, dates — not rent, not identifiers). A table of apartments let today and their tenants uses list and does not rebuild the roll from passages. A question about a document, clause, protocol or printed fact uses search. You may choose both. Facts will only be what the chosen commands return this turn.';
 
 const OFFICE_TURN_SCHEMA: JsonSchema = {
   type: 'object',
@@ -65,8 +85,9 @@ const OFFICE_TURN_SCHEMA: JsonSchema = {
     text: { type: 'string' },
     hit_indexes: { type: 'array', items: { type: 'integer' } },
     cites_record: { type: 'boolean' },
+    record_units: { type: 'array', items: { type: 'string' } },
   },
-  required: ['answers', 'text', 'hit_indexes', 'cites_record'],
+  required: ['answers', 'text', 'hit_indexes', 'cites_record', 'record_units'],
 };
 
 const OFFICE_TOOLS_SCHEMA: JsonSchema = {
@@ -179,14 +200,16 @@ export async function runOfficeTurn(
   if (tools.includes('list')) {
     lettings = await listOfficeLettings(deps.db, deps.clock, spec.bound);
   }
-  // #227: not a tool the chooser picks. A Unit bound always carries its record.
-  const record =
-    spec.bound.kind === 'unit'
-      ? await readUnitRecord(deps.db, spec.bound.id, deps.clock, {
-          actorKind: 'staff',
-          actorId: spec.staffAccountId,
-        })
-      : null;
+  // #227, #230: not a tool the chooser picks. A Unit or Building bound always carries its record.
+  let record: OfficeRecord | null = null;
+  if (spec.bound.kind === 'unit') {
+    record = await readUnitRecord(deps.db, spec.bound.id, deps.clock, {
+      actorKind: 'staff',
+      actorId: spec.staffAccountId,
+    });
+  } else if (spec.bound.kind === 'building') {
+    record = await readBuildingRecord(deps.db, spec.bound.id, deps.clock);
+  }
   const hitIds = hits.map((hit) => hit.passageId);
   const decided = await answerOfficeHits(
     deps,
@@ -232,7 +255,7 @@ export async function answerOfficeHits(
   history: OfficeRetrievalTurn[],
   hits: PassageHit[],
   lettings: ActiveLettingInBuilding[] | null = null,
-  record: UnitRecord | null = null,
+  record: OfficeRecord | null = null,
 ): Promise<{
   refused: boolean;
   text: string;
@@ -242,7 +265,9 @@ export async function answerOfficeHits(
   if (hits.length === 0 && lettings === null && record === null) {
     return refuse(OFFICE_TURN_REFUSAL);
   }
-  if (lettings !== null && lettings.length === 0 && hits.length === 0) {
+  const emptyRoll =
+    lettings !== null && lettings.length === 0 && hits.length === 0;
+  if (emptyRoll && record === null) {
     return { refused: false, text: OFFICE_TURN_EMPTY_ROLL, citations: [] };
   }
   const reply = await deps.extractor.extract({
@@ -253,7 +278,12 @@ export async function answerOfficeHits(
     schema: OFFICE_TURN_SCHEMA,
     reasoningEffort: deps.reasoningEffort,
   });
-  return readReply(reply, hits, lettings !== null, record);
+  const decided = readReply(reply, hits, lettings !== null, record);
+  // #230: the empty roll answers only when the record did not.
+  if (emptyRoll && decided.citations.length === 0) {
+    return { refused: false, text: OFFICE_TURN_EMPTY_ROLL, citations: [] };
+  }
+  return decided;
 }
 
 function asOfficeBound(bound: RetrievalBound): OfficeRetrievalBound {
@@ -286,7 +316,7 @@ function modelInput(
   history: OfficeRetrievalTurn[],
   hits: PassageHit[],
   lettings: ActiveLettingInBuilding[] | null,
-  record: UnitRecord | null,
+  record: OfficeRecord | null,
 ): string {
   const thread =
     history.length === 0
@@ -298,7 +328,9 @@ function modelInput(
           )
           .join('\n');
   const parts = [`THREAD:\n${thread}`, `QUESTION:\n${question}`];
-  if (record !== null) {
+  if (record !== null && isBuildingRecord(record)) {
+    parts.push(`RECORD (כרטיס הבניין):\n${buildingRecordLines(record)}`);
+  } else if (record !== null) {
     parts.push(`RECORD (כרטיס הדירה):\n${recordLines(record)}`);
   }
   if (hits.length > 0) {
@@ -325,20 +357,56 @@ function modelInput(
   return parts.join('\n\n');
 }
 
+/** A value the account holds, or `לא רשום`. */
+function held(value: string | null): string {
+  return value ?? NOT_RECORDED;
+}
+
+function heldArea(areaSqm: string | null): string {
+  return areaSqm === null ? NOT_RECORDED : `${areaSqm} מ״ר`;
+}
+
 /** Every field, in a fixed order; what the account does not hold says so. */
 function recordLines(record: UnitRecord): string {
-  const held = (value: string | null): string => value ?? NOT_RECORDED;
   return [
     `דירה: ${record.unitNumber}`,
     `בניין: ${record.buildingName}, ${record.addressLine}, ${record.city}`,
     `קומה: ${held(record.floor)}`,
     `חדרים: ${record.rooms}`,
-    `שטח: ${record.areaSqm === null ? NOT_RECORDED : `${record.areaSqm} מ״ר`}`,
+    `שטח: ${heldArea(record.areaSqm)}`,
     `ממ״ד: ${record.hasMamad ? 'יש' : 'אין'}`,
     `סטטוס: ${TENURE_WORD[record.tenure]}`,
     `חניה (מהבנייה): ${held(record.builtParking)}`,
     `מחסן (מהבנייה): ${held(record.builtStorage)}`,
     ...lettingLines(record.letting),
+  ]
+    .map((line) => `- ${line}`)
+    .join('\n');
+}
+
+/** #230. The Building's values, its counts, then one line per Unit. No party, no rent. */
+function buildingRecordLines(record: BuildingRecord): string {
+  const unitLine = (unit: BuildingRecordUnit): string =>
+    [
+      `דירה ${unit.unitNumber}`,
+      `קומה: ${held(unit.floor)}`,
+      `חדרים: ${unit.rooms}`,
+      `שטח: ${heldArea(unit.areaSqm)}`,
+      TENURE_WORD[unit.tenure],
+      `חניה (מהבנייה): ${held(unit.builtParking)}`,
+      `מחסן (מהבנייה): ${held(unit.builtStorage)}`,
+    ].join(' · ');
+  return [
+    `בניין: ${record.name}`,
+    `כתובת: ${record.addressLine}, ${record.city}`,
+    `פרויקט: ${held(record.projectName)}`,
+    `מועד המסירה: ${record.handoverDate}`,
+    `סיום תקופת הבדק: ${record.warrantyEndDate}`,
+    `סטטוס: ${BUILDING_STATUS_WORD[record.status]}`,
+    `דירות: ${record.units.length}`,
+    `חניות: ${record.parking.total}, מתוכן משויכות: ${record.parking.assigned}`,
+    `מחסנים: ${record.storage.total}, מתוכם משויכים: ${record.storage.assigned}`,
+    ...record.units.map(unitLine),
   ]
     .map((line) => `- ${line}`)
     .join('\n');
@@ -378,7 +446,7 @@ function readReply(
   reply: unknown,
   hits: PassageHit[],
   listFacts: boolean,
-  record: UnitRecord | null,
+  record: OfficeRecord | null,
 ): { refused: boolean; text: string; citations: OfficeCitation[] } {
   // A turn that consulted a record says so in its refusal.
   const refusal =
@@ -391,6 +459,7 @@ function readReply(
     text?: unknown;
     hit_indexes?: unknown;
     cites_record?: unknown;
+    record_units?: unknown;
   };
   if (value.answers !== true) {
     return refuse(refusal);
@@ -403,7 +472,7 @@ function readReply(
   const citations: OfficeCitation[] = [];
   // The id is the record loaded this turn, never one the model names. No record, no citation.
   if (value.cites_record === true && record !== null) {
-    citations.push({ kind: 'record', record: 'unit', id: record.unitId });
+    citations.push(recordCitation(record, value.record_units));
   }
   const seen = new Set<string>();
   for (const raw of indexes) {
@@ -423,6 +492,32 @@ function readReply(
     return refuse(refusal);
   }
   return { refused: false, text, citations };
+}
+
+/**
+ * #230. A Building record cited for exactly one of its own Unit lines links to that Unit; any other
+ * record answer links to the Building. A unit number the record does not hold is dropped.
+ */
+function recordCitation(record: OfficeRecord, named: unknown): OfficeCitation {
+  if (!isBuildingRecord(record)) {
+    return { kind: 'record', record: 'unit', id: record.unitId };
+  }
+  const numbers = Array.isArray(named) ? named : [];
+  const lines = new Set<string>();
+  for (const number of numbers) {
+    if (typeof number !== 'string') continue;
+    const unit = record.units.find((line) => line.unitNumber === number.trim());
+    if (unit) lines.add(unit.unitId);
+  }
+  const cite: OfficeCitation = {
+    kind: 'record',
+    record: 'building',
+    id: record.buildingId,
+  };
+  const [only] = lines;
+  return lines.size === 1 && only !== undefined
+    ? { ...cite, unitId: only }
+    : cite;
 }
 
 function refuse(text: string): {
