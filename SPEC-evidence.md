@@ -1308,9 +1308,24 @@ An earlier table in the thread is not a fact unless the list is fetched again. T
 not offered on a Unit bound, a portfolio bound, or any tenant-facing path; offering it is a
 command error, fail closed. Evidence does not query tenancy tables; it calls the named command.
 
+**#227: on a Unit bound the turn also carries the Unit record.** Every Unit-bound turn calls
+estate's `readUnitRecord` for the bound Unit — not a tool the chooser picks, and evidence reads no
+estate table — and hands it to the answering model beside this turn's hits. The record's physical
+half: Unit number, Building name and address, floor, rooms, area, mamad, tenure, and the built bay
+and built storage room by number, each labelled as built. Every field the account does not hold is
+present and marked `לא רשום`, never omitted, and `לא רשום` is not a value: the model falls through to
+the paper or refuses. The record carries no phone and no ID number. It is a fact source this turn,
+as the hits and the list are; a record value in an earlier answer is not a fact unless this turn's
+record carries it. When the record and a hit disagree, the answer shows both and names the record's
+as the current value. The model cites the record with `cites_record`; the turn keeps that citation
+only when a record was loaded this turn, and persists it as `{ kind: 'record', record: 'unit', id }`.
+The answering model is always called on a Unit bound, hits or none. A Unit-bound refusal is the
+frozen `אין בכרטיס ובמסמכים תשובה לשאלה הזו.`; the portfolio bound keeps its sentence. The Building
+bound gains its record in #230 and is otherwise as below.
+
 The command loads that account's office retrieval thread for the bound (empty if none). Search,
-when chosen: embed and retrieve, eight nearest Passages. Zero search hits and no list this turn:
-refuse, persist, no citations, and the answering model is not called. Hits: the model may use
+when chosen: embed and retrieve, eight nearest Passages. Zero search hits, no list and no record
+this turn: refuse, persist, no citations, and the answering model is not called. Hits: the model may use
 thread text only to interpret this turn's question, and may use only this turn's hit texts as
 passage facts. A fact that is not a Passage hit this turn is not in a cite-from-paper answer. If
 none of the hits answer and the list was not fetched, refuse and persist, with no citations —
@@ -1325,7 +1340,8 @@ answer cites no paper; it is the letting. An empty active roll is an answer, not
 documents-refusal sentence, and it carries no Passage citations. Rent is not on the roll.
 
 Behavioural golden cases grade this turn as the evals subject (cite / refuse / tool = search, and
-on a Building bound list vs search vs empty roll). Grounding case `off-lease-refuses` still means
+on a Building bound list vs search vs empty roll, and on a Unit bound record answers: a Unit with no
+Documents answered from its record, a `לא רשום` field refused, another flat's question refused). Grounding case `off-lease-refuses` still means
 hits may exist and none answer.
 
 An extractor failure (`unavailable`) is not a turn: nothing is appended to the thread. Estate's

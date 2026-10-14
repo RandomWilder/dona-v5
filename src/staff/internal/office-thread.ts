@@ -8,11 +8,22 @@ export type OfficeRetrievalBound =
   | { kind: 'building'; id: string }
   | { kind: 'portfolio' };
 
-export interface OfficeCitation {
+/** A Document and page. Rows stored before #227 carry no `kind` and read as this. */
+export interface OfficeDocumentCitation {
+  kind?: 'document';
   documentId: string;
   page: number;
   documentType: string;
 }
+
+/** #227. The Unit or Building record the answer drew on; `id` is the page it links to. */
+export interface OfficeRecordCitation {
+  kind: 'record';
+  record: 'unit' | 'building';
+  id: string;
+}
+
+export type OfficeCitation = OfficeDocumentCitation | OfficeRecordCitation;
 
 export interface OfficeRetrievalTurn {
   question: string;

@@ -1,7 +1,9 @@
+import type { UnitRecord } from '../src/estate/contract.ts';
 import type { PassageHit, RetrievalBound } from '../src/evidence/contract.ts';
 import {
   answerOfficeHits,
   chooseOfficeTools,
+  OFFICE_TURN_RECORD_REFUSAL,
 } from '../src/evidence/contract.ts';
 import { systemClock } from '../src/kernel/clock.ts';
 import type { Extractor } from '../src/kernel/extraction.ts';
@@ -23,6 +25,74 @@ export const ROLL_BUILDING = 'roll-building';
 
 const TABLE_ASK = /מושכרות|הדיירים/;
 
+// #227. Two flats with no Documents, so the record is the only fact a Unit-bound turn has. The area
+// of the second is not held, which is the case a model must refuse rather than guess.
+export const RECORD_UNIT = 'record-unit';
+export const BARE_RECORD_UNIT = 'bare-record-unit';
+const RECORD_CITATION = 'כרטיס הדירה';
+
+const fixtureRecords: Record<string, UnitRecord> = {
+  [RECORD_UNIT]: {
+    unitId: RECORD_UNIT,
+    unitNumber: '12',
+    buildingName: 'בניין הזית',
+    addressLine: 'רחוב הזית 4',
+    city: 'רמלה',
+    floor: '3',
+    rooms: '4',
+    areaSqm: '82',
+    hasMamad: true,
+    tenure: 'FOR_RENT',
+    builtParking: '14',
+    builtStorage: '7',
+  },
+  [BARE_RECORD_UNIT]: {
+    unitId: BARE_RECORD_UNIT,
+    unitNumber: '5',
+    buildingName: 'בניין הזית',
+    addressLine: 'רחוב הזית 4',
+    city: 'רמלה',
+    floor: null,
+    rooms: '3',
+    areaSqm: null,
+    hasMamad: false,
+    tenure: 'FOR_RENT',
+    builtParking: null,
+    builtStorage: null,
+  },
+};
+
+function fixtureRecord(bound: RetrievalBound): UnitRecord | null {
+  if (bound.kind !== 'unit') return null;
+  const record = fixtureRecords[bound.id];
+  // Production always loads a Unit bound's record; a case without one would grade the old turn.
+  if (!record) throw new Error(`no fixture Unit record for ${bound.id}`);
+  return record;
+}
+
+/** The placeholder's stand-in for reading the record: a size question about this flat only. */
+function placeholderRecordTurn(record: UnitRecord, message: string): AgentTurn {
+  const otherFlat = /דירה\s*(\d+)/.exec(message)?.[1];
+  if (
+    /שטח|גודל/.test(message) &&
+    record.areaSqm !== null &&
+    (otherFlat === undefined || otherFlat === record.unitNumber)
+  ) {
+    return {
+      text: `שטח הדירה ${record.areaSqm} מ״ר.`,
+      refused: false,
+      citations: [RECORD_CITATION],
+      toolCalls: ['search'],
+    };
+  }
+  return {
+    text: OFFICE_TURN_RECORD_REFUSAL,
+    refused: true,
+    citations: [],
+    toolCalls: ['search'],
+  };
+}
+
 function fixtureLettings(bound: RetrievalBound): ActiveLettingInBuilding[] {
   if (bound.kind !== 'building') return [];
   if (bound.id === EMPTY_BUILDING) return [];
@@ -40,6 +110,10 @@ export const placeholderSubject: Subject = async ({
   message,
   bound,
 }): Promise<AgentTurn> => {
+  if (bound?.kind === 'unit') {
+    return placeholderRecordTurn(fixtureRecord(bound) as UnitRecord, message);
+  }
+
   if (bound?.kind === 'building' && TABLE_ASK.test(message)) {
     if (bound.id === EMPTY_BUILDING) {
       return {
@@ -124,12 +198,15 @@ export function officeTurnSubject(options: {
       [],
       hits,
       lettings,
+      fixtureRecord(bound),
     );
     return {
       text: decided.text,
       refused: decided.refused,
-      citations: decided.citations.map(
-        (citation) => `${citation.documentId} עמ׳ ${citation.page}`,
+      citations: decided.citations.map((citation) =>
+        citation.kind === 'record'
+          ? RECORD_CITATION
+          : `${citation.documentId} עמ׳ ${citation.page}`,
       ),
       toolCalls: tools,
     };

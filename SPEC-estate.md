@@ -775,8 +775,11 @@ bottom; a control collapses the pane to a rail and opens it again. Same checkbox
 pattern as the ops nav — no client script. On a narrow viewport the pane sits under the sheet
 and collapses to a bar. They ask in Hebrew; the post runs evidence's office-turn command bound to
 this Unit and redirects back to the same GET, which paints that account's thread oldest-first.
-Cited answers name the Document and the page, with a link through to the read overlay. A refusal
-is the frozen Hebrew sentence, with no citations. If the office-turn command is `unavailable`,
+Cited answers name the Document and the page, with a link through to the read overlay. **#227:** an
+answer drawn from the Unit record cites `כרטיס הדירה`, linking to `GET /estate/units/:unitId`; estate
+exposes `readUnitRecord` on its contract for the office turn to read the record without touching an
+estate table. A refusal
+is the frozen Hebrew sentence — on this panel `אין בכרטיס ובמסמכים תשובה לשאלה הזו.` — with no citations. If the office-turn command is `unavailable`,
 the post still 303s to that GET with `ask=unavailable`; the pane shows the frozen Hebrew
 *cannot answer now* sentence, the thread is unchanged, and the JSON error body does not replace
 the estate screen. Clear deletes only this account's thread for this Unit. CSRF and a session are required on both posts. The GET itself stays `estate.read`;

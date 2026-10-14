@@ -1,0 +1,14 @@
+{
+  "id": "unit-record-other-flat",
+  "title": "Another flat's question on this Unit's bound is refused, not answered from this record",
+  "input": {
+    "message": "מה השטח של דירה 7 בבניין?",
+    "bound": { "kind": "unit", "id": "record-unit" }
+  },
+  "expect": {
+    "refuses": true,
+    "citesClause": false,
+    "tool": "search",
+    "contains": []
+  }
+}

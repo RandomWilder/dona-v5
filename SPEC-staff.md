@@ -374,7 +374,7 @@ this module owns the store the turn writes to.
   same operator. A portfolio bound has no id; uniqueness treats that null as one key
   (`UNIQUE NULLS NOT DISTINCT`).
 - **Turns are oldest-first.** Each turn stores the question, the answer or refusal, whether it was
-  refused, the citations (document and page), and this turn's Passage hit ids. A refused turn is
+  refused, the citations (document and page, or — #227 — a record citation `{ kind: 'record', record, id }` naming the Unit or Building record it links to; a stored citation with no `kind` is a document citation, so older rows read unchanged), and this turn's Passage hit ids. A refused turn is
   stored: the office can see what was asked and that it was declined. Question and answer are
   `-- pii`.
 - **Clear deletes that thread** — the row and its turns — for that account and bound only. There is

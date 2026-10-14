@@ -24,6 +24,7 @@ import {
   withGuardsOff,
 } from '../kernel/pg-support.ts';
 import { h } from '../kernel/ui/html.ts';
+import { appendOfficeRetrievalTurn } from '../staff/contract.ts';
 import type { EstatePlan } from './contract.ts';
 import { importEstate, renderTenanciesPage } from './contract.ts';
 
@@ -608,10 +609,17 @@ describe('estate · unit retrieval panel', () => {
       t.skip(skipReason);
       return;
     }
+    // #227: a Unit bound always calls the answering model, hits or none.
     const app = buildApp({
       pool,
       version: '9.9.9-test',
       embedder: createFakeEmbedder(embeddingColumnDimensions),
+      extractor: createFakeExtractor(() => ({
+        answers: false,
+        text: '',
+        hit_indexes: [],
+        cites_record: false,
+      })),
     });
     await signOutAll(pool, ASK_DOMAIN);
     await askCleanup(pool);
@@ -691,7 +699,7 @@ describe('estate · unit retrieval panel', () => {
       const painted = await asViewer.inject({ method: 'GET', url: path });
       assert.equal(painted.statusCode, 200);
       assert.match(painted.body, /מה דמי השכירות\?/);
-      assert.match(painted.body, /אין במסמכים האלה תשובה לשאלה הזו/);
+      assert.match(painted.body, /אין בכרטיס ובמסמכים תשובה לשאלה הזו/);
 
       const neighbour = await asOther.inject({ method: 'GET', url: path });
       assert.equal(neighbour.statusCode, 200);
@@ -707,6 +715,83 @@ describe('estate · unit retrieval panel', () => {
       assert.equal(cleared.headers.location, path);
       const after = await asViewer.inject({ method: 'GET', url: path });
       assert.doesNotMatch(after.body, /מה דמי השכירות\?/);
+    } finally {
+      await askCleanup(pool);
+      await signOutAll(pool, ASK_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+});
+
+describe('estate · unit retrieval panel cites the record', () => {
+  it('paints a record citation as כרטיס הדירה linking to the Unit, beside an old Document citation', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      embedder: createFakeEmbedder(embeddingColumnDimensions),
+      extractor: createFakeExtractor(() => ({
+        answers: true,
+        text: 'שטח הדירה 70 מ״ר.',
+        hit_indexes: [],
+        cites_record: true,
+      })),
+    });
+    await signOutAll(pool, ASK_DOMAIN);
+    await askCleanup(pool);
+    const viewer = await signIn(pool, systemClock, {
+      email: `view@${ASK_DOMAIN}`,
+      role: 'VIEWER',
+    });
+    const asViewer = asOperator(app, viewer);
+    try {
+      await importEstate(pool, askPlan);
+      const unit = await pool.query<{ unit_id: string }>(
+        `SELECT u.unit_id FROM unit u
+         JOIN space s ON s.space_id = u.unit_id
+         JOIN building b ON b.building_id = s.building_id
+         WHERE b.city = $1 AND b.address_line = $2`,
+        [ASK_CITY, ASK_ADDRESS],
+      );
+      const unitId = unit.rows[0]?.unit_id ?? '';
+      const path = `/estate/units/${unitId}`;
+      const documentId = newId();
+      // A row stored before #227: a Document citation with no `kind`.
+      await appendOfficeRetrievalTurn(pool, systemClock, {
+        staffAccountId: viewer.staffAccountId,
+        bound: { kind: 'unit', id: unitId },
+        question: 'מה דמי השכירות?',
+        answer: 'לפי החוזה.',
+        refused: false,
+        citations: [{ documentId, page: 3, documentType: 'lease' }],
+        hitIds: [],
+      });
+
+      const asked = await asViewer.inject({
+        method: 'POST',
+        url: `${path}/office-turn`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent('מה גודל הדירה?')}`,
+      });
+      assert.equal(asked.statusCode, 303, asked.body.slice(0, 400));
+      assert.equal(asked.headers.location, path);
+
+      const painted = await asViewer.inject({ method: 'GET', url: path });
+      assert.equal(painted.statusCode, 200);
+      assert.match(painted.body, /שטח הדירה 70 מ״ר\./);
+      assert.match(
+        painted.body,
+        new RegExp(`<a href="${path}">כרטיס הדירה</a>`),
+      );
+      assert.match(
+        painted.body,
+        new RegExp(`href="/documents/${documentId}/read\\?page=3"`),
+      );
     } finally {
       await askCleanup(pool);
       await signOutAll(pool, ASK_DOMAIN);

@@ -21,9 +21,11 @@ import {
 import { addOperator } from '../staff/contract.ts';
 import type { IntakeDeps, RetrievalBound } from './contract.ts';
 import {
+  answerOfficeHits,
   applyDocumentTypeCatalogue,
   fileDocument,
   OFFICE_TURN_EMPTY_ROLL,
+  OFFICE_TURN_RECORD_REFUSAL,
   OFFICE_TURN_REFUSAL,
   runOfficeTurn,
 } from './contract.ts';
@@ -58,8 +60,10 @@ function deps(db: PoolClient, text: string[]): IntakeDeps {
 async function fileLease(
   db: PoolClient,
   extraPages: string[],
-  unitId = newId(),
+  unit?: string,
 ): Promise<{ documentId: string; unitId: string }> {
+  // #227: a Unit bound reads the Unit record, so the Unit has to exist.
+  const unitId = unit ?? (await seedBuilding(db)).unitId;
   await applyDocumentTypeCatalogue(db, seedDocumentTypes);
   const pages = [specimen('lease-standard.md'), ...extraPages];
   const result = await fileDocument(deps(db, pages), {
@@ -137,7 +141,7 @@ function turnDeps(
 }
 
 describe('evidence · office turn', () => {
-  it('refuses an empty bound without calling the answering model', async (t) => {
+  it('calls the answering model on a Unit bound with no Documents, and refuses with the record sentence', async (t) => {
     const pool = await migratedPoolOrNull();
     if (!pool) {
       t.skip(skipReason);
@@ -145,23 +149,36 @@ describe('evidence · office turn', () => {
     }
     try {
       await inRolledBackTransaction(pool, async (db) => {
+        const { unitId } = await seedBuilding(db);
         const extractor = refusingExtractor();
-        const bound: RetrievalBound = { kind: 'unit', id: newId() };
         const result = await runOfficeTurn(turnDeps(db, extractor), {
           staffAccountId: await operator(db),
-          bound,
+          bound: { kind: 'unit', id: unitId },
           question: 'מה דמי השכירות?',
         });
         assert.equal(result.refused, true);
-        assert.equal(result.text, OFFICE_TURN_REFUSAL);
+        assert.equal(result.text, OFFICE_TURN_RECORD_REFUSAL);
         assert.deepEqual(result.citations, []);
-        assert.equal(extractor.calls.length, 0);
+        assert.equal(extractor.calls.length, 1);
         assert.equal(result.thread.length, 1);
         assert.equal(result.thread[0]?.refused, true);
       });
     } finally {
       await pool.end();
     }
+  });
+
+  it('refuses the portfolio with no hits without calling the answering model', async () => {
+    const extractor = refusingExtractor();
+    const result = await answerOfficeHits(
+      { extractor, model: 'fake-office-turn' },
+      'מה דמי השכירות?',
+      [],
+      [],
+    );
+    assert.equal(result.refused, true);
+    assert.equal(result.text, OFFICE_TURN_REFUSAL);
+    assert.equal(extractor.calls.length, 0);
   });
 
   it('cites document and page, with amounts and identifiers as printed', async (t) => {
@@ -186,10 +203,9 @@ describe('evidence · office turn', () => {
         assert.equal(result.text.includes(RENT), true);
         assert.equal(result.text.includes(ID), true);
         assert.equal(result.text.includes('סעיף'), true);
-        assert.equal(result.citations.length, 1);
-        assert.equal(result.citations[0]?.documentId, documentId);
-        assert.equal(result.citations[0]?.page, 2);
-        assert.equal(result.citations[0]?.documentType, 'lease');
+        assert.deepEqual(result.citations, [
+          { documentId, page: 2, documentType: 'lease' },
+        ]);
       });
     } finally {
       await pool.end();
@@ -212,7 +228,7 @@ describe('evidence · office turn', () => {
           question: 'מי זכה בגביע המדינה בכדורגל?',
         });
         assert.equal(result.refused, true);
-        assert.equal(result.text, OFFICE_TURN_REFUSAL);
+        assert.equal(result.text, OFFICE_TURN_RECORD_REFUSAL);
         assert.deepEqual(result.citations, []);
         assert.equal(extractor.calls.length, 1);
       });
@@ -571,5 +587,189 @@ describe('evidence · office turn on a Building bound', () => {
     } finally {
       await pool.end();
     }
+  });
+});
+
+const PHONE = '+972521234567';
+
+async function seedRecordUnit(db: PoolClient): Promise<string> {
+  const { buildingId, unitId } = await seedBuilding(db);
+  const parkingId = newId();
+  const storageId = newId();
+  await db.query(
+    `INSERT INTO space (space_id, building_id, space_kind, name)
+     VALUES ($1, $3, 'PARKING', 'P-14'), ($2, $3, 'STORAGE', 'M-7')`,
+    [parkingId, storageId, buildingId],
+  );
+  await db.query(`UPDATE space SET floor = '3' WHERE space_id = $1`, [unitId]);
+  await db.query(
+    `UPDATE unit SET area_sqm = 82, parking_space_id = $2, storage_space_id = $3
+      WHERE unit_id = $1`,
+    [unitId, parkingId, storageId],
+  );
+  return unitId;
+}
+
+function recordInput(extractor: ReturnType<typeof createFakeExtractor>) {
+  const call = extractor.calls.find(
+    (request) => request.name === 'office_turn',
+  );
+  assert.ok(call, 'the answering model was called');
+  return call.input;
+}
+
+describe('evidence · office turn reads the Unit record', () => {
+  it('gives the model the record, with built bay and storage labelled as built', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const unitId = await seedRecordUnit(db);
+        const extractor = refusingExtractor();
+        await runOfficeTurn(turnDeps(db, extractor), {
+          staffAccountId: await operator(db),
+          bound: { kind: 'unit', id: unitId },
+          question: 'מה גודל הדירה?',
+        });
+        const input = recordInput(extractor);
+        assert.match(input, /כרטיס הדירה/);
+        assert.match(input, /שטח: 82/);
+        assert.match(input, /קומה: 3/);
+        assert.match(input, /חדרים: 3\.5/);
+        assert.match(input, /ממ״ד: יש/);
+        assert.match(input, /סטטוס: להשכרה/);
+        assert.match(input, /חניה \(מהבנייה\): P-14/);
+        assert.match(input, /מחסן \(מהבנייה\): M-7/);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('marks every field the account does not hold as לא רשום, never omitted', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const { unitId } = await seedBuilding(db);
+        const extractor = refusingExtractor();
+        await runOfficeTurn(turnDeps(db, extractor), {
+          staffAccountId: await operator(db),
+          bound: { kind: 'unit', id: unitId },
+          question: 'מה גודל הדירה?',
+        });
+        const input = recordInput(extractor);
+        assert.match(input, /שטח: לא רשום/);
+        assert.match(input, /קומה: לא רשום/);
+        assert.match(input, /חניה \(מהבנייה\): לא רשום/);
+        assert.match(input, /מחסן \(מהבנייה\): לא רשום/);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('carries no phone and no ID number to the model', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const unitId = await seedRecordUnit(db);
+        await seedActiveLetting(db, unitId, TENANT);
+        await db.query(
+          `INSERT INTO party_contact (contact_id, party_id, channel, value, is_primary, valid_from)
+           SELECT $1, tp.party_id, 'PHONE', $3, true, '2026-01-01'
+             FROM tenancy_party tp JOIN tenancy t ON t.tenancy_id = tp.tenancy_id
+            WHERE t.unit_id = $2`,
+          [newId(), unitId, PHONE],
+        );
+        await db.query(
+          `UPDATE party SET national_id = $2
+            WHERE party_id IN (SELECT tp.party_id FROM tenancy_party tp
+              JOIN tenancy t ON t.tenancy_id = tp.tenancy_id WHERE t.unit_id = $1)`,
+          [unitId, ID],
+        );
+        const extractor = refusingExtractor();
+        await runOfficeTurn(turnDeps(db, extractor), {
+          staffAccountId: await operator(db),
+          bound: { kind: 'unit', id: unitId },
+          question: 'מה הטלפון של הדייר?',
+        });
+        const input = recordInput(extractor);
+        assert.equal(input.includes(PHONE.slice(1)), false);
+        assert.equal(input.includes('0521234567'), false);
+        assert.equal(input.includes(ID), false);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('answers from the record alone and persists a record citation', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const unitId = await seedRecordUnit(db);
+        const extractor = createFakeExtractor(() => ({
+          answers: true,
+          text: 'שטח הדירה 82 מ״ר.',
+          hit_indexes: [],
+          cites_record: true,
+        }));
+        const result = await runOfficeTurn(turnDeps(db, extractor), {
+          staffAccountId: await operator(db),
+          bound: { kind: 'unit', id: unitId },
+          question: 'מה גודל הדירה?',
+        });
+        const cite = { kind: 'record', record: 'unit', id: unitId };
+        assert.equal(result.refused, false);
+        assert.equal(result.text, 'שטח הדירה 82 מ״ר.');
+        assert.deepEqual(result.citations, [cite]);
+        assert.deepEqual(result.thread[0]?.citations, [cite]);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('drops a record citation when no record was loaded this turn', async () => {
+    const extractor = createFakeExtractor(() => ({
+      answers: true,
+      text: 'שטח הדירה 82 מ״ר.',
+      hit_indexes: [],
+      cites_record: true,
+    }));
+    const result = await answerOfficeHits(
+      { extractor, model: 'fake-office-turn' },
+      'מה גודל הדירה?',
+      [],
+      [
+        {
+          passageId: newId(),
+          documentId: newId(),
+          page: 1,
+          text: 'דף שאינו עונה',
+          documentType: 'lease',
+          unitId: null,
+          distance: 0.5,
+        },
+      ],
+    );
+    assert.equal(result.refused, true);
+    assert.equal(result.text, OFFICE_TURN_REFUSAL);
+    assert.deepEqual(result.citations, []);
   });
 });
