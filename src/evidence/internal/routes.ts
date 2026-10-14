@@ -755,11 +755,22 @@ export function registerDocumentRoutes(
       const asked = (fields.terms_profile ?? '').trim();
       const termsProfile =
         asked === '' ? '' : requireText(asked, 'terms_profile', 200);
+      const attach = (fields.attach ?? '').trim();
+      const links: Record<string, string> = {};
+      for (const [name, value] of Object.entries(fields)) {
+        if (!name.startsWith('party-')) continue;
+        const partyId = value.trim();
+        if (partyId === '') continue;
+        links[validId(name.slice('party-'.length), 'extracted field')] =
+          validId(partyId, 'party');
+      }
       try {
         await openLeaseDraft(leaseDeps(), {
           documentId,
           termsProfileName: termsProfile,
           openedBy: requireOperatorEmail(request),
+          links,
+          ...(attach === '' ? {} : { attachTo: validId(attach, 'tenancy') }),
         });
       } catch (error) {
         if (

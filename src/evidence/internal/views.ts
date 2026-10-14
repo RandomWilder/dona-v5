@@ -1241,6 +1241,30 @@ function filingOpening(screen: LeaseFilingScreen): Html {
         }</dd>
       </div>
     </dl>
+    ${
+      opening.sameLease.length === 0
+        ? h``
+        : h`<h2 class="second-heading">חוזה קיים</h2>
+          <p class="lede">כבר יש שכירות לאדם עם אותה תעודת זהות באותו מועד תחילה. אפשר לצרף את החוזה אליה, או לפתוח טיוטה חדשה בכל זאת.</p>
+          ${opening.sameLease.map(
+            (
+              offer,
+            ) => h`<form method="post" action="/documents/filing/${screen.documentId}/open">
+              ${csrfInput(screen.csrf)}
+              <input type="hidden" name="attach" value="${offer.tenancyId}" />
+              <p>
+                <a href="/estate/tenancies/${offer.tenancyId}">פתיחת החוזה</a>
+                — ${offer.addressLine}, ${offer.city} · דירה ${ltr(offer.unitNumber)}
+              </p>
+              <div class="form-actions">
+                <button class="btn btn-secondary" type="submit">צירוף לחוזה זה</button>
+              </div>
+              <p class="hint">הצירוף כותב רק את הקישור למסמך. לא נכתבים אנשים ולא נפתחת טיוטה.</p>
+            </form>`,
+          )}`
+    }
+    <form class="form-grid" method="post" action="/documents/filing/${screen.documentId}/open">
+      ${csrfInput(screen.csrf)}
     <h2 class="second-heading">האנשים</h2>
     <ul class="missing">
       ${opening.people.map(
@@ -1252,9 +1276,23 @@ function filingOpening(screen: LeaseFilingScreen): Html {
               ? h``
               : person.matchedByContact
                 ? h`<span class="role">בלי ת.ז. — איש קשר קיים, לפי טלפון או דוא"ל</span>`
-                : h`<span class="role">בלי ת.ז. — איש קשר חדש</span>`
+                : person.nameCandidates.length > 0
+                  ? h``
+                  : h`<span class="role">בלי ת.ז. — איש קשר חדש</span>`
           }
           ${person.contacts > 0 ? h`<span class="role">${String(person.contacts)} פרטי קשר ייכתבו</span>` : h``}
+          ${
+            person.nameCandidates.length === 0
+              ? h``
+              : h`<fieldset>
+                  <legend>אותו אדם?</legend>
+                  <label><input type="radio" name="party-${person.extractedFieldId}" value="" ${person.chosenPartyId ? h`` : h`checked`} /> איש קשר חדש</label>
+                  ${person.nameCandidates.map(
+                    (candidate) =>
+                      h`<label><input type="radio" name="party-${person.extractedFieldId}" value="${candidate.partyId}" ${person.chosenPartyId === candidate.partyId ? h`checked` : h``} /> <a href="/parties/${candidate.partyId}">${candidate.fullName}</a></label>`,
+                  )}
+                </fieldset>`
+          }
         </li>`,
       )}
     </ul>
@@ -1263,8 +1301,6 @@ function filingOpening(screen: LeaseFilingScreen): Html {
         ? h`<p class="lede">${String(opening.unpairedContacts)} טלפונים או כתובות דוא"ל שאושרו לא שויכו לאף אדם — מספרם בחוזה שונה ממספר השמות — ולא ייכתבו.</p>`
         : h``
     }
-    <form class="form-grid" method="post" action="/documents/filing/${screen.documentId}/open">
-      ${csrfInput(screen.csrf)}
       <div class="form-row">
         <label for="terms_profile">נספח תנאים</label>
         <select id="terms_profile" name="terms_profile" required ${noProfile ? h`disabled` : h``}>

@@ -97,6 +97,7 @@ export {
   listTenancyBook,
   listTenancyParties,
   listUnitTenancies,
+  tenanciesHoldingIdentifierAtStart,
 } from './internal/lettings.ts';
 export type {
   ObligationRow,

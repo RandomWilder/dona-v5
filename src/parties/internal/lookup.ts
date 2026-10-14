@@ -48,6 +48,36 @@ export async function findPartiesByName(
 }
 
 /**
+ * **Parties whose given name and family name are these, exactly. #236.**
+ *
+ * פתיחת טיוטה lists them beside a person nobody matched by ת.ז., phone or email, and the operator
+ * decides. The system does not. A name search (`findPartiesByName`) is a fragment match for the
+ * directory; this one is equality, because a fragment of a name is how two people become one.
+ * Nothing but the id and the display name leaves.
+ */
+export async function partiesWithName(
+  db: Queryable,
+  spec: { givenName: string | null; familyName: string },
+): Promise<PartyName[]> {
+  const familyName = spec.familyName.trim();
+  if (familyName.length === 0) return [];
+  const givenName =
+    spec.givenName === null || spec.givenName.trim() === ''
+      ? null
+      : spec.givenName.trim();
+  const result = await db.query<PartyName>(
+    `SELECT party_id, full_name
+       FROM party
+      WHERE party_kind = 'PERSON'
+        AND family_name = $1
+        AND given_name IS NOT DISTINCT FROM $2
+      ORDER BY full_name, party_id`,
+    [familyName, givenName],
+  );
+  return result.rows;
+}
+
+/**
  * **The party a ת.ז. would key on, if it exists. #235.** פתיחת טיוטה shows before the press
  * whether a lease's approved phone already belongs to the person it is about to write, and for a
  * person printed with an identifier that person is this row. The identifier goes in and an id

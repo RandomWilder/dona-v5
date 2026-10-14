@@ -15,14 +15,17 @@ import {
   createParty,
   hasOpenPrimaryContact,
   listPartyNames,
+  partiesWithName,
   partyIdByNationalId,
   setPrimaryPartyContact,
   upsertParty,
 } from '../../parties/contract.ts';
 import {
   findTermsProfileByName,
+  getTenancy,
   listTermsProfiles,
   type TenancyRole,
+  tenanciesHoldingIdentifierAtStart,
   upsertTenancy,
   upsertTenancyParty,
 } from '../../tenancy/contract.ts';
@@ -587,6 +590,8 @@ interface ResolvedContact {
 interface ResolvedPerson {
   /** The existing party this person is, or null when the press creates one. */
   partyId: string | null;
+  /** #236. The operator chose this party from the same-name list. */
+  chosen: boolean;
   contacts: ResolvedContact[];
 }
 
@@ -637,7 +642,7 @@ async function resolvePeople(
         : holders.size === 1
           ? ([...holders][0] ?? null)
           : null;
-    resolved.push({ partyId, contacts });
+    resolved.push({ partyId, chosen: false, contacts });
   }
   return resolved;
 }
@@ -708,7 +713,15 @@ async function writeParties(
     const name = posted ?? readConfirmedName(person.value);
     const resolved = input.resolved?.people[at];
     const contactsFrom = input.resolved?.day;
-    const matched = identifier === null ? (resolved?.partyId ?? null) : null;
+    // A printed ת.ז. is always `upsertParty`, even when it matches nobody (#236, SPEC-parties).
+    // A same-name choice applies only when the lease printed none. A contact match is the same
+    // case (#235).
+    const matched =
+      identifier !== null
+        ? null
+        : resolved?.chosen
+          ? resolved.partyId
+          : (resolved?.partyId ?? null);
     const party =
       matched !== null
         ? { id: matched }
@@ -1031,6 +1044,13 @@ export interface OpeningPerson {
   matchedByContact: boolean;
   /** #235. How many approved phones and emails the press writes for this person. */
   contacts: number;
+  /**
+   * #236. Parties with this given and family name, when nothing else matched. Empty unless the
+   * operator is being asked. Never chosen for them.
+   */
+  nameCandidates: Array<{ partyId: string; fullName: string }>;
+  /** The candidate the failed press had chosen, so the screen shows it again. Null is a new party. */
+  chosenPartyId: string | null;
 }
 
 /** Every reason the press would be refused. The screen words each one; the command throws on it. */
@@ -1068,6 +1088,16 @@ export interface LeaseOpening {
   tenancyId: string | null;
   /** #235. Approved phones and emails that pair with no person, and so are not written. */
   unpairedContacts: number;
+  /**
+   * #236. A tenancy that already holds one of these people, by ת.ז., starting on this date.
+   * Offered, not a refusal: attach the document, or open a new draft anyway.
+   */
+  sameLease: Array<{
+    tenancyId: string;
+    addressLine: string;
+    city: string;
+    unitNumber: string;
+  }>;
 }
 
 function preselectedProfile(names: readonly string[]): string | null {
@@ -1136,6 +1166,83 @@ async function contactRefusals(
 }
 
 /**
+ * **Same-name candidates, for a person nothing else matched. #236.** Parallel to `people`. A party
+ * already chosen by ת.ז. or by a contact is not listed, and neither is a person whose approved
+ * phone or email already belongs to someone: that refusal stands, and a name is not a way past it.
+ */
+async function sameNameCandidates(
+  db: Queryable,
+  household: Household,
+  resolved: readonly ResolvedPerson[],
+  stamped: ReadonlySet<string>,
+): Promise<Array<Array<{ partyId: string; fullName: string }>>> {
+  const out: Array<Array<{ partyId: string; fullName: string }>> = [];
+  for (const [at, person] of household.people.entries()) {
+    const row = resolved[at];
+    const held = (row?.contacts ?? []).some(
+      (contact) => contact.holder !== null,
+    );
+    // A printed ת.ז. is not a name-only match, even when it identifies nobody. A held phone or
+    // email is not one either: that person is already matched, or the overlap refusal stands.
+    if (
+      !stamped.has(person.extractedFieldId) ||
+      household.identifiers[at] !== null ||
+      row?.partyId ||
+      held
+    ) {
+      out.push([]);
+      continue;
+    }
+    const name = readConfirmedName(person.value);
+    const found = await partiesWithName(db, {
+      givenName: name.givenName,
+      familyName: name.familyName,
+    });
+    out.push(
+      found.map((candidate) => ({
+        partyId: candidate.party_id,
+        fullName: candidate.full_name,
+      })),
+    );
+  }
+  return out;
+}
+
+/**
+ * **The operator's same-name choice, checked against the list just read. #236.** A posted id that
+ * is not one of that person's candidates is refused, and nothing is written. Empty is a new party,
+ * which is the default the screen already selected.
+ */
+function applyNameLinks(
+  household: Household,
+  resolved: ResolvedPerson[],
+  candidates: ReadonlyArray<ReadonlyArray<{ partyId: string }>>,
+  links: Readonly<Record<string, string>>,
+): void {
+  const seen = new Set<string>();
+  for (const [at, person] of household.people.entries()) {
+    const chosen = links[person.extractedFieldId];
+    if (!chosen) continue;
+    seen.add(person.extractedFieldId);
+    const allowed = new Set(
+      (candidates[at] ?? []).map((candidate) => candidate.partyId),
+    );
+    if (!allowed.has(chosen)) {
+      throw new KernelError('invalid', 'that party is not a candidate');
+    }
+    const row = resolved[at];
+    if (!row) continue;
+    row.partyId = chosen;
+    row.chosen = true;
+  }
+  for (const fieldId of Object.keys(links)) {
+    if (!seen.has(fieldId)) {
+      throw new KernelError('invalid', 'that party is not a candidate');
+    }
+  }
+}
+
+/**
  * **What פתיחת טיוטה shows before anything is written. #234.**
  *
  * The refusals are computed here and nowhere else, and `openLeaseDraft` reads them from this same
@@ -1153,6 +1260,7 @@ export async function proposeLeaseOpening(
 async function openingAndPeople(
   deps: OpeningDeps,
   documentIdRaw: string,
+  links?: Readonly<Record<string, string>>,
 ): Promise<{ opening: LeaseOpening; resolved: ResolvedPerson[]; day: string }> {
   const db = deps.db;
   const documentId = validId(documentIdRaw, 'document');
@@ -1202,6 +1310,8 @@ async function openingAndPeople(
   const day = today(deps.clock);
   const resolved = await resolvePeople(db, deps.contacts, household, day);
   const stamped = stampedNameIds(rows);
+  const candidates = await sameNameCandidates(db, household, resolved, stamped);
+  if (links) applyNameLinks(household, resolved, candidates, links);
   const matched = household.people.flatMap((person, at) => {
     const partyId = resolved[at]?.partyId;
     return stamped.has(person.extractedFieldId) && partyId ? [partyId] : [];
@@ -1213,6 +1323,28 @@ async function openingAndPeople(
     refusals.push({ kind: 'same_person' });
   }
   refusals.push(...(await contactRefusals(db, household, resolved, stamped)));
+
+  const startApproved =
+    startRow && startRow.approvedAt !== null
+      ? (startRow.approvedValue ?? startRow.value)
+      : null;
+  const sameLease: LeaseOpening['sameLease'] = [];
+  if (startApproved !== null && household.probes.length > 0) {
+    const held = await tenanciesHoldingIdentifierAtStart(db, {
+      startDate: startApproved,
+      identifiers: household.probes,
+    });
+    for (const tenancyId of held) {
+      const tenancy = await getTenancy(db, tenancyId);
+      const place = await getUnit(db, tenancy.unit_id);
+      sameLease.push({
+        tenancyId,
+        addressLine: place.address_line,
+        city: place.city,
+        unitNumber: place.unit_number,
+      });
+    }
+  }
 
   const opening: LeaseOpening = {
     documentId,
@@ -1233,14 +1365,21 @@ async function openingAndPeople(
       role: person.proposedRole,
       hasIdentifier: household.identifiers[at] !== null,
       matchedByContact:
-        household.identifiers[at] === null && Boolean(resolved[at]?.partyId),
+        household.identifiers[at] === null &&
+        Boolean(resolved[at]?.partyId) &&
+        resolved[at]?.chosen !== true,
       contacts: resolved[at]?.contacts.length ?? 0,
+      nameCandidates: candidates[at] ?? [],
+      chosenPartyId: resolved[at]?.chosen
+        ? (resolved[at]?.partyId ?? null)
+        : null,
     })),
     termsProfiles,
     termsProfile: preselectedProfile(termsProfiles),
     refusals,
     tenancyId: await tenancyLinkOf(db, documentId),
     unpairedContacts: household.unpairedContacts,
+    sameLease,
   };
   return { opening, resolved, day };
 }
@@ -1266,6 +1405,15 @@ export interface OpenLeaseDraftSpec {
   openedBy: string;
   /** A2's confirm screen may still post a split; הקריאה stores it on the approved value. */
   names?: ConfirmLeaseSpec['names'];
+  /**
+   * #236. A same-name choice, keyed by extracted field. Absent, or an empty value, is a new party.
+   */
+  links?: Readonly<Record<string, string>>;
+  /**
+   * #236. Attach this document to a tenancy the screen offered. Writes the link and no party.
+   * Absent opens a new draft.
+   */
+  attachTo?: string;
 }
 
 /**
@@ -1290,6 +1438,7 @@ export async function openLeaseDraft(
     const { opening, resolved, day } = await openingAndPeople(
       { db, clock: deps.clock, contacts: deps.contacts },
       documentId,
+      spec.links,
     );
     if (opening.tenancyId !== null) {
       return {
@@ -1297,6 +1446,37 @@ export async function openLeaseDraft(
         alreadyEstablished: true,
         partiesWritten: 0,
         attached: false,
+      };
+    }
+    if (spec.attachTo) {
+      if (!opening.sameLease.some((one) => one.tenancyId === spec.attachTo)) {
+        throw new KernelError('invalid', 'that tenancy is not the same lease');
+      }
+      await linkDocument(db, {
+        documentId,
+        entityType: 'TENANCY',
+        entityId: spec.attachTo,
+        linkRole: 'EVIDENCE',
+      });
+      await deps.audit.write(
+        {
+          actorKind: 'staff',
+          actorId: openedBy,
+          action: 'evidence.confirm_lease',
+          subjectId: documentId,
+          inputs: {
+            tenancyId: spec.attachTo,
+            partiesWritten: 0,
+            attached: true,
+          },
+        },
+        { outcome: 'ok' },
+      );
+      return {
+        tenancyId: spec.attachTo,
+        alreadyEstablished: false,
+        partiesWritten: 0,
+        attached: true,
       };
     }
     const refused = opening.refusals[0];

@@ -44,6 +44,7 @@ export {
   findPartiesByName,
   hasOpenPrimaryContact,
   listPartyNames,
+  partiesWithName,
   partyIdByNationalId,
 } from './internal/lookup.ts';
 export type { Queryable } from './internal/types.ts';

@@ -30,12 +30,16 @@ Spec: SPEC-flows A2 steps 5 and 6 as amended; SPEC-parties "Contacts from a leas
 
 ## Acceptance criteria
 
-- [ ] An existing party with the same given and family name and no other match is shown as a candidate. Pressing open without choosing creates a new party.
-- [ ] Choosing the candidate attaches the person to that party, and writes their approved contacts subject to the overlap refusal.
-- [ ] Two existing parties with the same name are both listed. Neither is chosen by default.
-- [ ] An existing tenancy with a party of the same ת.ז. and the same start date is offered. "Attach" writes only the document links to it; "new" proceeds as normal.
-- [ ] HTTP tests at the A16 seam for each case.
+- [x] An existing party with the same given and family name and no other match is shown as a candidate. Pressing open without choosing creates a new party.
+- [x] Choosing the candidate attaches the person to that party, and writes their approved contacts subject to the overlap refusal.
+- [x] Two existing parties with the same name are both listed. Neither is chosen by default.
+- [x] An existing tenancy with a party of the same ת.ז. and the same start date is offered. "Attach" writes only the document links to it; "new" proceeds as normal.
+- [x] HTTP tests at the A16 seam for each case.
 - [ ] Clicked on `:3000`.
+
+## Comment — 2026-10-14
+
+The checks are on פתיחת טיוטה. A person with no ת.ז. and no contact match is listed beside parties who share that given and family name; the new-party choice is already selected. A printed ת.ז. is not offered that list, even when it matches nobody. Attach writes the tenancy evidence link and no party. The same-flat, same-start refusal still blocks a new draft, and attach stays available beside it. Eight HTTP cases at the A16 seam. The dev server was restarted. The click is still open: the screen asks for a Google account.
 
 ## Blocked by
 
