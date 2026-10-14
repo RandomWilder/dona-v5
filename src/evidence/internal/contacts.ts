@@ -23,8 +23,42 @@ export const CONTACT_FIELDS: Readonly<
   guarantor_email: { channel: 'EMAIL', nameKey: 'guarantor_name' },
 };
 
-export function contactChannelOf(fieldKey: string): ContactChannel | null {
-  return CONTACT_FIELDS[fieldKey]?.channel ?? null;
+/**
+ * A phone or email approved under a declaration the #235 seed closed. The six keys above are not
+ * this: they have their own fields. A key or a Hebrew label that names a tenant or a guarantor and
+ * a phone or an email is. SPEC-parties "Contacts from a lease".
+ */
+export function legacyContactOf(
+  fieldKey: string,
+  labelHe: string,
+): { channel: ContactChannel; nameKey: string } | null {
+  if (fieldKey in CONTACT_FIELDS) return null;
+  const keyHit =
+    /tenant|guarantor/i.test(fieldKey) && /phone|mobile|email/i.test(fieldKey);
+  const labelHit =
+    /שוכר|ערב/.test(labelHe) && /טלפון|נייד|דוא"?ל|מייל/.test(labelHe);
+  if (!keyHit && !labelHit) return null;
+  const text = `${fieldKey} ${labelHe}`;
+  const nameKey = /guarantor|ערב/i.test(text)
+    ? 'guarantor_name'
+    : /second|נוסף/i.test(text)
+      ? 'second_tenant_name'
+      : 'main_tenant_name';
+  const phone = /phone|mobile|טלפון|נייד/i.test(text);
+  const email = /email|דוא"?ל|מייל/i.test(text);
+  const channel: ContactChannel = email && !phone ? 'EMAIL' : 'PHONE';
+  return { channel, nameKey };
+}
+
+export function contactChannelOf(
+  fieldKey: string,
+  labelHe = '',
+): ContactChannel | null {
+  return (
+    CONTACT_FIELDS[fieldKey]?.channel ??
+    legacyContactOf(fieldKey, labelHe)?.channel ??
+    null
+  );
 }
 
 /**

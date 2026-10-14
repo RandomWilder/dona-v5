@@ -188,7 +188,14 @@ is told so.
 The lease declares them per role: `main_tenant_phone`, `main_tenant_email`, `second_tenant_phone`,
 `second_tenant_email`, `guarantor_phone`, `guarantor_email`. A guarantor's contacts pair with
 `guarantor_name` by the same ordinal, all-or-nothing rule as identifiers. None of them has a
-`field_promotion` target. A phone is approvable only as a valid Israeli mobile number after
+`field_promotion` target. A value already approved under a declaration the seed closed — its key
+or its Hebrew label names a tenant's or a guarantor's phone or email, and the key is not one of
+those six — is written the same way. It belongs to the guarantor when the key or the label names a
+guarantor, to the second tenant when it names the additional tenant, and otherwise to the main
+tenant. It pairs only when that role has exactly one person and exactly one such approved value of
+that channel, and the six-key field for that channel did not already pair. A phone is offered the
+same leading 0 הקריאה offers, and it is written only when that is a valid Israeli mobile. Anything
+else is not written, and the draft still opens. A phone is approvable only as a valid Israeli mobile number after
 `normalisePhone`, and an email is folded by `normaliseEmail`, at the composition root, as #206
 already does.
 

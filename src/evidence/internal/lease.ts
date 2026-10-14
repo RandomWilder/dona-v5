@@ -36,6 +36,7 @@ import {
   CONTACT_FIELDS,
   type ContactChannel,
   type ContactRules,
+  legacyContactOf,
 } from './contacts.ts';
 import {
   anchorOf,
@@ -343,6 +344,28 @@ function householdOf(rows: readonly ExtractedRow[]): Household {
     const pairedContactFamilies = contactFamilies.filter(
       (family) => family.read.length === names.length,
     );
+    // A phone or email approved under a declaration the seed closed, before the six keys existed.
+    // The six-key field wins when it already paired. SPEC-parties "Contacts from a lease".
+    const legacyByChannel = new Map<ContactChannel, ExtractedRow[]>();
+    for (const row of rows) {
+      const hit = legacyContactOf(row.fieldKey, row.labelHe);
+      if (hit?.nameKey !== nameKey) continue;
+      const list = legacyByChannel.get(hit.channel) ?? [];
+      list.push(row);
+      legacyByChannel.set(hit.channel, list);
+    }
+    for (const [channel, read] of legacyByChannel) {
+      read.sort(inDocumentOrder);
+      const dedicated = pairedContactFamilies.some(
+        (family) => family.channel === channel,
+      );
+      const approved = read.filter((row) => row.approvedAt !== null);
+      if (dedicated || read.length !== names.length) {
+        unpairedContacts += approved.length;
+        continue;
+      }
+      pairedContactFamilies.push({ channel, read });
+    }
     for (const family of contactFamilies) {
       if (family.read.length !== names.length) {
         unpairedContacts += family.read.filter(
@@ -625,10 +648,21 @@ async function resolvePeople(
     }
     const contacts: ResolvedContact[] = [];
     for (const contact of approved) {
-      const value = (rules as ContactRules).normalise(
-        contact.channel,
-        contact.value,
-      );
+      // The leading 0 הקריאה offers, applied again here so a number approved before that offer
+      // existed (the 14 Oct read) still becomes a contact. A value that is not a mobile is left
+      // out; it does not refuse the draft.
+      let value: string;
+      try {
+        value = (rules as ContactRules).normalise(
+          contact.channel,
+          (rules as ContactRules).offer(contact.channel, contact.value),
+        );
+      } catch (error) {
+        if (error instanceof KernelError && error.code === 'invalid') {
+          continue;
+        }
+        throw error;
+      }
       contacts.push({
         channel: contact.channel,
         value,

@@ -20,6 +20,11 @@ import {
   createParty,
   setPrimaryPartyContact,
 } from '../parties/contract.ts';
+import {
+  applyDocumentTypeCatalogue,
+  declareDocumentTypeField,
+} from './contract.ts';
+import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const ON = new Date('2026-10-14T09:00:00.000Z');
 const TODAY = '2026-10-14';
@@ -392,6 +397,104 @@ describe('evidence · #235 contacts from the lease', () => {
         assert.deepEqual(await contactsByRole(o), []);
       },
     );
+    if (!ran) t.skip(skipReason);
+  });
+
+  /** A reading approved before the six keys existed: the row points at the closed declaration. */
+  async function stampClosedContact(
+    o: Opening,
+    tag: string,
+    spec: { fieldKey: string; labelHe: string; value: string },
+  ): Promise<void> {
+    await declareDocumentTypeField(o.db, {
+      typeKey: 'lease',
+      fieldKey: spec.fieldKey,
+      labelHe: spec.labelHe,
+      valueType: 'TEXT',
+      isRequired: false,
+      extractionHint: null,
+      on: '2026-10-02',
+    });
+    await applyDocumentTypeCatalogue(o.db, seedDocumentTypes);
+    const field = await o.db.query<{ id: string }>(
+      `SELECT f.document_type_field_id AS id
+         FROM document_type_field f
+         JOIN document_type t ON t.document_type_id = f.document_type_id
+        WHERE t.type_key = 'lease' AND f.field_key = $1
+        ORDER BY f.effective_from
+        LIMIT 1`,
+      [spec.fieldKey],
+    );
+    const fieldId = field.rows[0]?.id;
+    assert.ok(fieldId, 'the closed declaration is still there');
+    const inserted = await o.db.query<{ id: string }>(
+      `INSERT INTO extracted_field (
+         extracted_field_id, document_id, document_type_field_id, value,
+         page, bbox, confidence, model, extracted_at
+       ) VALUES (
+         gen_random_uuid(), $1, $2, $3,
+         1, '{"x":1,"y":2,"width":3,"height":4}'::jsonb, 0.99, 'fake', $4
+       )
+       RETURNING extracted_field_id AS id`,
+      [o.documentId, fieldId, spec.value, ON],
+    );
+    const id = inserted.rows[0]?.id;
+    assert.ok(id);
+    // The stamp the 14 Oct approval left, before a phone row could be refused. The trigger allows
+    // it only while approving, which is the same switch the approve command sets.
+    await o.db.query("SELECT set_config('dona.approving', 'on', true)");
+    await o.db.query(
+      `UPDATE extracted_field
+          SET approved_value = $2, approved_by = $3, approved_at = $4
+        WHERE extracted_field_id = $1`,
+      [id, spec.value, `admin@${tag}.test`, ON],
+    );
+  }
+
+  it('writes a phone approved under the old field name onto the main tenant', async (t) => {
+    const tag = 'contact-235-legacy';
+    const ran = await open(tag, [], async (o) => {
+      await stampClosedContact(o, tag, {
+        fieldKey: 'tenant_mobile',
+        labelHe: 'נייד השוכר',
+        value: '549797291',
+      });
+      for (const key of NAMES_AND_DATES) {
+        await o.approve(key);
+      }
+      const pressed = await o.post(`/documents/filing/${o.documentId}/open`, {
+        terms_profile: '',
+      });
+      assert.equal(pressed.statusCode, 302, pressed.body.slice(0, 400));
+      assert.deepEqual(await contactsByRole(o), [
+        {
+          role: 'PRIMARY_TENANT',
+          channel: 'PHONE',
+          value: '+972549797291',
+          primary: true,
+        },
+      ]);
+    });
+    if (!ran) t.skip(skipReason);
+  });
+
+  it('opens the draft when the old phone field is not a mobile number, and writes none', async (t) => {
+    const tag = 'contact-235-legacy-landline';
+    const ran = await open(tag, [], async (o) => {
+      await stampClosedContact(o, tag, {
+        fieldKey: 'tenant_mobile',
+        labelHe: 'נייד השוכר',
+        value: '03-5550191',
+      });
+      for (const key of NAMES_AND_DATES) {
+        await o.approve(key);
+      }
+      const pressed = await o.post(`/documents/filing/${o.documentId}/open`, {
+        terms_profile: '',
+      });
+      assert.equal(pressed.statusCode, 302, pressed.body.slice(0, 400));
+      assert.deepEqual(await contactsByRole(o), []);
+    });
     if (!ran) t.skip(skipReason);
   });
 });

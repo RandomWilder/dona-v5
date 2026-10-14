@@ -77,13 +77,13 @@ const LEASE_IDENTITY_AND_ACCESS: ReadonlySet<string> = new Set([
  * dates and the read address (#239).
  */
 export function pressedAlone(
-  row: { fieldKey: string; confidence: number | null },
+  row: { fieldKey: string; labelHe?: string; confidence: number | null },
   typeKey: string,
 ): boolean {
   return (
     isFlagged(row.confidence) ||
     isIdentifierField(row.fieldKey) ||
-    contactChannelOf(row.fieldKey) !== null ||
+    contactChannelOf(row.fieldKey, row.labelHe) !== null ||
     (typeKey === 'lease' && LEASE_IDENTITY_AND_ACCESS.has(row.fieldKey))
   );
 }

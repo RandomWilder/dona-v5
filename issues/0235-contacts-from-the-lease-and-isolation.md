@@ -57,3 +57,7 @@ Spec: SPEC-parties "Contacts from a lease"; SPEC-flows A2 step 5 as amended.
 - Beyond the ticket, the press also refuses one contact approved for two people on the same lease, and two people resolving to one existing party through a contact. Both are the overlap rule applied inside one document (SPEC-parties, amended).
 - An approved contact that the ordinal rule pairs with nobody is not written, and פתיחת טיוטה says how many there are.
 - The phone rule lives at the composition root (`src/contact-rules.ts`), because evidence may not import scope.
+
+## Comment — 2026-10-14
+
+The closing note above left a phone approved under an old field name off the person. That is no longer the case. פתיחת טיוטה writes it onto the person the old key or label names: the guarantor, the second tenant, or otherwise the main tenant. One person and one such approved value, and only when the new field for that channel did not already pair. A number read without its leading 0 is corrected the same way הקריאה corrects it. A value that is not a mobile number is not written, and the draft still opens. Re-reading `01a13956`, or typing the number on the person afterwards, is not required for that phone to arrive.
