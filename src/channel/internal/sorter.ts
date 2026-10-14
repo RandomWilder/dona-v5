@@ -112,13 +112,28 @@ function verdictOf(value: unknown, model: string): SortVerdict {
   };
 }
 
-function translationOf(value: unknown): Translation {
+/** At least half the letters are Hebrew. Digits, punctuation and spaces do not count. */
+function readsAsHebrew(text: string): boolean {
+  const letters = text.match(/\p{L}/gu) ?? [];
+  const hebrew = letters.filter((letter) => /\p{Script=Hebrew}/u.test(letter));
+  return letters.length > 0 && hebrew.length * 2 >= letters.length;
+}
+
+// A reply the letters contradict is a bad reply, the same as a malformed one:
+// the model once called an Arabic advertisement Hebrew (CI, 13 Oct 2026).
+function translationOf(value: unknown, input: TranslateInput): Translation {
   if (!isRecord(value) || typeof value.alreadyHebrew !== 'boolean') {
     throw new Error('translation was not a reply');
   }
-  if (value.alreadyHebrew) return { bodyHe: null };
+  if (value.alreadyHebrew) {
+    if (!readsAsHebrew(`${input.subject} ${input.body}`)) {
+      throw new Error('translation called a message Hebrew that is not Hebrew');
+    }
+    return { bodyHe: null };
+  }
   const bodyHe = textOf(value.bodyHe);
   if (bodyHe === null) throw new Error('translation was empty');
+  if (!readsAsHebrew(bodyHe)) throw new Error('translation was not Hebrew');
   return { bodyHe };
 }
 
@@ -138,15 +153,23 @@ export function createSorter(options: SorterOptions): Sorter {
     },
     async translate(input) {
       const model = await options.model();
-      const reply = await options.extractor.extract({
-        model,
-        name: 'sorter_translation',
-        instructions: TRANSLATE_INSTRUCTIONS,
-        input: translateMessage(input),
-        schema: translateSchema,
-        reasoningEffort: 'low',
-      });
-      return translationOf(reply);
+      const ask = () =>
+        options.extractor.extract({
+          model,
+          name: 'sorter_translation',
+          instructions: TRANSLATE_INSTRUCTIONS,
+          input: translateMessage(input),
+          schema: translateSchema,
+          reasoningEffort: 'low',
+        });
+      // One more try on a reply the letters contradict. A failed call is not
+      // retried: the door already leaves body_he empty for that.
+      const first = await ask();
+      try {
+        return translationOf(first, input);
+      } catch {
+        return translationOf(await ask(), input);
+      }
     },
   };
 }

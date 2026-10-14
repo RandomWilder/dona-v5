@@ -75,6 +75,42 @@ describe('channel · the sorter', () => {
     assert.equal(same.bodyHe, null);
   });
 
+  it('asks again when the reply contradicts the letters, and throws on a second', async () => {
+    const arabic = {
+      subject: '',
+      body: 'عرض خاص! خصم على البيتزا هذا الأسبوع فقط.',
+    };
+    const replies = (...rows: unknown[]) => {
+      let next = 0;
+      return sorterFor(() => rows[Math.min(next++, rows.length - 1)]);
+    };
+
+    const recovered = replies(
+      { alreadyHebrew: true, bodyHe: null },
+      { alreadyHebrew: false, bodyHe: 'מבצע מיוחד! הנחה על פיצה השבוע בלבד.' },
+    );
+    const second = await recovered.sorter.translate(arabic);
+    assert.equal(second.bodyHe, 'מבצע מיוחד! הנחה על פיצה השבוע בלבד.');
+    assert.equal(recovered.extractor.calls.length, 2);
+
+    const untranslated = replies({ alreadyHebrew: false, bodyHe: arabic.body });
+    await assert.rejects(
+      () => untranslated.sorter.translate(arabic),
+      /not Hebrew/,
+    );
+    assert.equal(untranslated.extractor.calls.length, 2);
+
+    const mixed = replies({ alreadyHebrew: true, bodyHe: null });
+    await assert.rejects(
+      () =>
+        mixed.sorter.translate({
+          subject: 'נזילה',
+          body: 'The tap is leaking in the kitchen since this morning.',
+        }),
+      /not Hebrew/,
+    );
+  });
+
   it('throws when the reply has no label, or the call fails', async () => {
     const broken = sorterFor(() => ({ label: 'maybe' }));
     await assert.rejects(() =>
