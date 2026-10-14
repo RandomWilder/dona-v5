@@ -181,6 +181,33 @@ learn a call, and it does not import calls. The composition root paints the sect
 call opened, the Category, the state, the emergency mark, and a link to the call. A party who opened none
 is told so.
 
+## Contacts from a lease (#232)
+
+**A phone or an email approved on a lease reaches `party_contact` only through A2's פתיחת טיוטה**
+([SPEC-flows.md](SPEC-flows.md), [ADR-0015](docs/decisions/ADR-0015-a-lease-is-unassigned-until-its-draft-opens.md)).
+The lease declares them per role: `main_tenant_phone`, `main_tenant_email`, `second_tenant_phone`,
+`second_tenant_email`, `guarantor_phone`, `guarantor_email`. A guarantor's contacts pair with
+`guarantor_name` by the same ordinal, all-or-nothing rule as identifiers. None of them has a
+`field_promotion` target. A phone is approvable only as a valid Israeli mobile number after
+`normalisePhone`, and an email is folded by `normaliseEmail`, at the composition root, as #206
+already does.
+
+**On the press, each approved value is written with `upsertPartyContact`** onto the party that row's
+person became, from today, with no label, primary when that party has no open primary on that
+channel. The overlap refusal of #206 applies unchanged. A value another party holds today refuses
+the whole draft and names that party, because a number shared by two people is exactly the case the
+isolation join cannot answer.
+
+**Matching an existing party, in order:**
+1. a printed ת.ז., through `upsertParty`;
+2. an approved phone or email that is an open contact of exactly one party;
+3. an explicit link the operator made on the screen from the same-name candidates.
+
+Otherwise `createParty`. A name alone never matches.
+**Access is not granted here.** A contact on a party whose only role is on a `DRAFT` tenancy
+resolves to no unit, and a `GUARANTOR` is never a service contact. The phone starts reaching a flat on
+the day an `ACTIVE` letting covers it, which is A5's gate, not this write.
+
 ## What is deliberately not here
 
 - **No uniqueness on `is_primary`, and 2.4 confirmed it rather than revisiting it.** "At most one

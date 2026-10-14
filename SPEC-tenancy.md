@@ -204,6 +204,23 @@ the reasoning that a previous household's paper must not be reachable from a cur
 renewal is not a previous household, and a schema that modelled it as one would hide this household's
 own first five years from it.
 
+## A draft opened from an unassigned lease (#232)
+
+**A draft is born on A2's פתיחת טיוטה** ([SPEC-flows.md](SPEC-flows.md),
+[ADR-0015](docs/decisions/ADR-0015-a-lease-is-unassigned-until-its-draft-opens.md)). No column
+changes:
+- `unit_id` and `terms_profile_id` stay `NOT NULL`, and the operator chooses both on that screen.
+- The terms profile is preselected by the existing rule: `נספח תחזוקה — תקן`, or the sole profile.
+- An empty register disables the press with a sentence rather than failing after it.
+- (unit, start date) stays the natural key and its refusal stands.
+
+**The title is computed, never stored.** It reads: `<given and family name of the primary tenant> · <street> <number>, <city> · דירה <unit number> · <start date>`. The primary tenant is the `PRIMARY_TENANT` party, or, when none exists, the first tenant by `tenancy_party` order. A pure function here takes the party name, the building address, the unit number and the start date. The composition root supplies the name and the address, as it already does for #107's title. **שכירויות**, the tenancy page, A16's הטיוטה beat and **ממתינים לפתיחה** call it.
+
+**The activation gate gains one flag, not one check.** When the tenancy's lease reading names an
+address and a unit number, and they do not fold to the unit's own, the gate reports it. The comparison
+uses the injected evidence reader and the cross-check's fold. It does not block: the operator
+already saw it on פתיחת טיוטה. It is computed on every read and stored nowhere.
+
 ## What is deliberately not here
 
 - **`terms_profile` has one column beyond its key, and that is not an oversight.** The workbook makes

@@ -218,6 +218,27 @@ address, no transliteration and no uploader-supplied filename anywhere in it.
   then names the bucket it means, and a row pointing at another environment's bucket is refused
   rather than followed.
 
+### An unassigned lease (#232)
+
+**Amended by [ADR-0015](docs/decisions/ADR-0015-a-lease-is-unassigned-until-its-draft-opens.md).
+A `lease` has no place at upload.** Its path is:
+
+```
+gs://<bucket>/unassigned/<type key>/<file hash>.<ext>
+```
+
+`unassigned` is a fixed vocabulary word in the place-kind position, not a fifth `PlaceKind`:
+`documentObjectPath` still refuses everything but the four places. A separate builder exists for the
+one type allowed to use it, and it refuses any type key other than `lease`. The leaf stays the file
+hash, for the idempotency reason above. Nothing names a person and nothing names a flat. No
+`document_link` is written at upload.
+
+**The anchor of an unassigned lease is its `UNIT` `SUBJECT` link**, written exactly once by A2's
+פתיחת טיוטה. `anchorOf` reads the path when the path names a place, and that link when it does not.
+A lease with neither is unopened: it has no anchor, appears on **ממתינים לפתיחה**, and is reached by
+no search, retrieval or office answer, because all three resolve through `document_link`. Documents
+filed under place paths before #232 keep those paths and that anchor; nothing is moved or copied.
+
 **The ingest order, which slice 3.3 must follow:** hash the bytes → look the hash up → `put` the
 object only when no document already holds it → `ingestDocument`. Hashing first is what makes the
 whole path computable before anything is written, and looking up before putting is what keeps the
