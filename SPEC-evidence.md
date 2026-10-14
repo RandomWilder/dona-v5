@@ -1326,8 +1326,14 @@ not hold is `לא רשום`. With no letting active today — a vacant flat, or 
 draft, ended or future — the record says `אין השכרה פעילה` and carries no letting field, so "who
 lives here" on an empty flat is an answer, not a refusal. The assigned bay and storage are labelled
 as the letting's, beside the built ones, and are never merged with them: a parking question on a
-flat whose assigned bay differs from its built bay answers both. When the record and a hit disagree, the answer shows both and names the record's
-as the current value. The model cites the record with `cites_record`; the turn keeps that citation
+flat whose assigned bay differs from its built bay answers both. **#229: a disagreement shows
+both.** When the record and a hit carry different values for the same fact — 82 m² recorded, 85 m²
+printed in the lease — the answer gives both values, writes the record's first as `הערך הנוכחי: <value>` — the current value — and
+carries both citations: the record's (`כרטיס הדירה`) and the hit's Document and page. The panel never
+chooses between them silently and never resolves them: a turn that finds a disagreement writes to
+no estate, tenancy or evidence table, only its turn on the office retrieval thread (and the access
+line scope writes for the parties it read). Correcting the record stays the governed paths it
+already has. The model cites the record with `cites_record`; the turn keeps that citation
 only when a record was loaded this turn, and persists it as `{ kind: 'record', record: 'unit', id }`.
 The answering model is always called on a Unit bound, hits or none. A Unit-bound refusal is the
 frozen `אין בכרטיס ובמסמכים תשובה לשאלה הזו.`; the portfolio bound keeps its sentence. The Building
@@ -1351,7 +1357,9 @@ documents-refusal sentence, and it carries no Passage citations. Rent is not on 
 
 Behavioural golden cases grade this turn as the evals subject (cite / refuse / tool = search, and
 on a Building bound list vs search vs empty roll, and on a Unit bound record answers: a Unit with no
-Documents answered from its record, a `לא רשום` field refused, another flat's question refused). Grounding case `off-lease-refuses` still means
+Documents answered from its record, a `לא רשום` field refused, another flat's question refused, a
+built and an assigned bay both answered, and a record area that disagrees with the lease's printed
+area answered with both values and both citation kinds). Grounding case `off-lease-refuses` still means
 hits may exist and none answer.
 
 An extractor failure (`unavailable`) is not a turn: nothing is appended to the thread. Estate's

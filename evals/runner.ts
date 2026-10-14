@@ -3,11 +3,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   type AgentTurn,
+  type CitationKind,
   type GoldenCase,
   type GroundedAnswer,
   type Grounder,
   parseCase,
   type RankedHit,
+  RECORD_CITATION,
   type Retriever,
   type Subject,
 } from './case.ts';
@@ -87,8 +89,17 @@ export function gradeTurn(golden: GoldenCase, turn: AgentTurn): string[] {
       failures.push(`expected the answer to contain "${needle}"`);
     }
   }
+  const carried = new Set(turn.citations.map(citationKind));
+  for (const kind of expect.citesKinds ?? []) {
+    if (!carried.has(kind)) failures.push(`expected a ${kind} citation`);
+  }
 
   return failures;
+}
+
+/** A subject spells the Unit record's citation one way; every other citation is paper. */
+function citationKind(citation: string): CitationKind {
+  return citation === RECORD_CITATION ? 'record' : 'paper';
 }
 
 /** Where the answering clause came back, or 0 when it did not come back. */

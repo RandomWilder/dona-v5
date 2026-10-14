@@ -7,6 +7,7 @@ import {
   type Grounder,
   parseCase,
   type RankedHit,
+  RECORD_CITATION,
   type Retriever,
   type Subject,
 } from './case.ts';
@@ -14,6 +15,7 @@ import {
   formatReport,
   gradeGrounding,
   gradeRetrieval,
+  gradeTurn,
   loadCases,
   rankOf,
   runCases,
@@ -91,6 +93,62 @@ describe('golden set', () => {
         .filter((result) => !result.skipped)
         .every((result) => result.failures.length > 0),
       'every failed case must say why',
+    );
+  });
+
+  it('fails a turn that cites the record but not the paper when the case names both kinds', () => {
+    const golden = parseCase(
+      {
+        id: 'both-kinds',
+        title: 'both kinds',
+        input: { message: 'מה שטח הדירה?' },
+        expect: {
+          refuses: false,
+          citesClause: true,
+          tool: null,
+          contains: [],
+          citesKinds: ['record', 'paper'],
+        },
+      },
+      'both-kinds.json',
+    );
+    const turn = (citations: string[]): AgentTurn => ({
+      text: '',
+      refused: false,
+      citations,
+      toolCalls: [],
+    });
+    assert.deepEqual(gradeTurn(golden, turn([RECORD_CITATION])), [
+      'expected a paper citation',
+    ]);
+    assert.deepEqual(gradeTurn(golden, turn(['lease עמ׳ 2'])), [
+      'expected a record citation',
+    ]);
+    assert.deepEqual(
+      gradeTurn(golden, turn([RECORD_CITATION, 'lease עמ׳ 2'])),
+      [],
+    );
+  });
+
+  it('rejects a citation kind that is not record or paper', () => {
+    assert.throws(
+      () =>
+        parseCase(
+          {
+            id: 'bad-kind',
+            title: 'bad kind',
+            input: { message: 'x' },
+            expect: {
+              refuses: false,
+              citesClause: true,
+              tool: null,
+              contains: [],
+              citesKinds: ['list'],
+            },
+          },
+          'bad-kind.json',
+        ),
+      /citesKinds/,
     );
   });
 

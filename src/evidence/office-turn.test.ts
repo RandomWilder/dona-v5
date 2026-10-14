@@ -745,6 +745,49 @@ describe('evidence · office turn reads the Unit record', () => {
     }
   });
 
+  it('keeps and persists both citations when the record and a page disagree', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const unitId = await seedRecordUnit(db);
+        const printed = 'שטח הדירה המושכרת 85 מ״ר.';
+        const { documentId } = await fileLease(db, [printed], unitId);
+        const staffAccountId = await operator(db);
+        const extractor = createFakeExtractor((request: ExtractionRequest) => {
+          const passages = request.input.split('PASSAGES:')[1] ?? '';
+          const at = passages
+            .split(/\n\n(?=\[\d+\])/)
+            .findIndex((one) => one.includes('85 מ״ר'));
+          return {
+            answers: true,
+            text: 'הערך הנוכחי: 82 מ״ר. בחוזה: 85 מ״ר.',
+            hit_indexes: [at + 1],
+            cites_record: true,
+          };
+        });
+        const result = await runOfficeTurn(turnDeps(db, extractor), {
+          staffAccountId,
+          bound: { kind: 'unit', id: unitId },
+          question: printed,
+        });
+        // #229. What the turn may write is the policy case office-disagreement-writes-nothing.
+        const both = [
+          { kind: 'record', record: 'unit', id: unitId },
+          { documentId, page: 2, documentType: 'lease' },
+        ];
+        assert.equal(result.refused, false);
+        assert.deepEqual(result.citations, both);
+        assert.deepEqual(result.thread[0]?.citations, both);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
   it('drops a record citation when no record was loaded this turn', async () => {
     const extractor = createFakeExtractor(() => ({
       answers: true,

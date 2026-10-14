@@ -9,7 +9,7 @@ import { systemClock } from '../src/kernel/clock.ts';
 import type { Extractor } from '../src/kernel/extraction.ts';
 import { newId } from '../src/kernel/ids.ts';
 import type { ActiveLettingInBuilding } from '../src/tenancy/contract.ts';
-import type { AgentTurn, Subject } from './case.ts';
+import { type AgentTurn, RECORD_CITATION, type Subject } from './case.ts';
 import { type Corpus, HOME_UNIT, PORTFOLIO_BOUND } from './corpus.ts';
 
 // PLACEHOLDER. There is no WhatsApp agent yet. Behavioural cases that this
@@ -29,7 +29,9 @@ const TABLE_ASK = /מושכרות|הדיירים/;
 // of the second is not held, which is the case a model must refuse rather than guess.
 export const RECORD_UNIT = 'record-unit';
 export const BARE_RECORD_UNIT = 'bare-record-unit';
-const RECORD_CITATION = 'כרטיס הדירה';
+
+// #229. A flat whose record says 82 m² and whose lease prints 85 m².
+export const DISAGREE_UNIT = 'disagree-unit';
 
 const fixtureRecords: Record<string, UnitRecord> = {
   [RECORD_UNIT]: {
@@ -73,7 +75,46 @@ const fixtureRecords: Record<string, UnitRecord> = {
     builtStorage: null,
     letting: null,
   },
+  [DISAGREE_UNIT]: {
+    unitId: DISAGREE_UNIT,
+    unitNumber: '9',
+    buildingName: 'בניין הזית',
+    addressLine: 'רחוב הזית 4',
+    city: 'רמלה',
+    floor: '2',
+    rooms: '4',
+    areaSqm: '82',
+    hasMamad: true,
+    tenure: 'FOR_RENT',
+    builtParking: null,
+    builtStorage: null,
+    letting: null,
+  },
 };
+
+// #229. Paper a fixture Unit holds, beside its record. A fixture of this subject rather than a corpus
+// row, so no portfolio-bound ranking or grounding case sees it.
+const fixturePages: Record<string, PassageHit> = {
+  [DISAGREE_UNIT]: {
+    passageId: `${DISAGREE_UNIT}-page`,
+    documentId: 'חוזה דירה 9',
+    page: 1,
+    text: 'שטח הדירה המושכרת הוא 85 מ״ר, כולל ממ״ד.',
+    documentType: 'lease',
+    unitId: DISAGREE_UNIT,
+    distance: 0.3,
+  },
+};
+
+function fixturePassages(bound: RetrievalBound): PassageHit[] {
+  const page = bound.kind === 'unit' ? fixturePages[bound.id] : undefined;
+  return page ? [page] : [];
+}
+
+/** How both subjects spell a Document-and-page citation. */
+function paperCitation(documentId: string, page: number): string {
+  return `${documentId} עמ׳ ${page}`;
+}
 
 function fixtureRecord(bound: RetrievalBound): UnitRecord | null {
   if (bound.kind !== 'unit') return null;
@@ -91,6 +132,16 @@ function placeholderRecordTurn(record: UnitRecord, message: string): AgentTurn {
     record.areaSqm !== null &&
     (otherFlat === undefined || otherFlat === record.unitNumber)
   ) {
+    // #229: when the flat's paper disagrees, both values, the record's first and named current.
+    const page = fixturePages[record.unitId];
+    if (page) {
+      return {
+        text: `הערך הנוכחי: ${record.areaSqm} מ״ר. בחוזה: ${page.text}`,
+        refused: false,
+        citations: [RECORD_CITATION, paperCitation(page.documentId, page.page)],
+        toolCalls: ['search'],
+      };
+    }
     return {
       text: `שטח הדירה ${record.areaSqm} מ״ר.`,
       refused: false,
@@ -215,6 +266,7 @@ export function officeTurnSubject(options: {
         unitId: null,
         distance: hit.distance,
       }));
+      hits = [...fixturePassages(bound), ...hits];
     }
     const lettings = tools.includes('list') ? fixtureLettings(bound) : null;
     const decided = await answerOfficeHits(
@@ -231,7 +283,7 @@ export function officeTurnSubject(options: {
       citations: decided.citations.map((citation) =>
         citation.kind === 'record'
           ? RECORD_CITATION
-          : `${citation.documentId} עמ׳ ${citation.page}`,
+          : paperCitation(citation.documentId, citation.page),
       ),
       toolCalls: tools,
     };
