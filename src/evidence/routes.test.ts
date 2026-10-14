@@ -359,16 +359,15 @@ describe('evidence · the upload route', () => {
             method: 'GET',
             url: `/documents/${blankId}/fields`,
           });
+          // #239: an unopened lease is approved on its filing workspace, not on the ledger.
           assert.equal(
             unitFields.statusCode,
-            200,
+            302,
             unitFields.body.slice(0, 400),
           );
-          // #237: a lease is stored unassigned, so until its draft opens it has no flat to go
-          // back to. Its way back is the filing workspace.
-          assert.match(
-            unitFields.body,
-            new RegExp(`class="back" href="/documents/filing/${blankId}"`),
+          assert.equal(
+            unitFields.headers.location,
+            `/documents/filing/${blankId}`,
           );
           assertNoOldBuilding(unitFields.body, unitFields.headers.location);
 
@@ -2847,17 +2846,18 @@ describe('evidence · the approval ledger, and who may sign what', () => {
       assert.ok(documentId, 'a lease goes to its filing workspace');
 
       await t.test(
-        'an OPERATOR reads the ledger and is told a count',
+        'an OPERATOR opening the ledger of an unopened lease lands on הקריאה (#239)',
         async () => {
           const response = await asOperator(app, operator as SignedIn).inject({
             method: 'GET',
             url: `/documents/${documentId}/fields`,
           });
-          assert.equal(response.statusCode, 200, response.body.slice(0, 400));
-          assert.match(response.body, /איכות הקריאה/);
-          assert.match(response.body, /מספר הדירה/);
+          assert.equal(response.statusCode, 302, response.body.slice(0, 400));
+          assert.equal(
+            response.headers.location,
+            `/documents/filing/${documentId}`,
+          );
           assert.doesNotMatch(response.body, new RegExp(ID_VALUE_AP));
-          assert.match(response.body, /נקרא שדה מזהה אחד ואינו מוצג/);
           // Opening a ledger is not a disclosure, so it writes no line — the same rule 6.4 wrote for
           // the overlay, kept at the finer grain 7.3 introduces.
           assert.equal(await reads(), 0);
@@ -2906,9 +2906,10 @@ describe('evidence · the approval ledger, and who may sign what', () => {
             { action: 'unflagged' },
           );
           assert.equal(response.statusCode, 302, response.body.slice(0, 200));
-          assert.match(
-            String(response.headers.location ?? ''),
-            /\/documents\/[0-9a-f-]{36}\/fields\?saved=\d+$/,
+          // #239: a lease lands back on its one approval screen.
+          assert.equal(
+            response.headers.location,
+            `/documents/filing/${documentId}`,
           );
           const identifier = await pool.query<{ approved_at: Date | null }>(
             `SELECT e.approved_at FROM extracted_field e
@@ -2925,9 +2926,9 @@ describe('evidence · the approval ledger, and who may sign what', () => {
         'a correction is written beside the reading, and signed once',
         async () => {
           const nameRow = await rowIdOf('tenant_name');
-          // The fake reader gives every word 0.9, so `tenant_name` was signed by the press above.
-          // Undo that one stamp to drive the single-row path — the trigger is what makes this a
-          // deliberate act rather than an UPDATE somebody could write by accident.
+          // On a lease a name is one press each (#239), so the press above left `tenant_name`.
+          // The unsign below is kept for the case it was: the trigger is what makes clearing a
+          // stamp a deliberate act rather than an UPDATE somebody could write by accident.
           await inTransaction(pool, async (db) => {
             await db.query("SELECT set_config('dona.approving', 'on', true)");
             await db.query(
@@ -2991,16 +2992,8 @@ describe('evidence · the approval ledger, and who may sign what', () => {
       );
 
       await t.test(
-        'the ledger links to the pixels, and the pixels no longer write',
+        'the pixels no longer write, and carry the door to the ledger',
         async () => {
-          const ledger = await asOperator(app, operator as SignedIn).inject({
-            method: 'GET',
-            url: `/documents/${documentId}/fields`,
-          });
-          assert.match(
-            ledger.body,
-            new RegExp(`/documents/${documentId}/read`),
-          );
           const pixels = await asOperator(app, operator as SignedIn).inject({
             method: 'GET',
             url: `/documents/${documentId}/read`,

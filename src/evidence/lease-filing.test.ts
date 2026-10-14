@@ -1228,11 +1228,9 @@ describe('evidence · A16 file a lease in one workspace', {
         method: 'GET',
         url: `/documents/${documentId}/fields`,
       });
-      assert.equal(ledger.statusCode, 200);
-      assert.match(ledger.body, /מה נקרא מן המסמך/);
-      assert.match(ledger.body, /איכות הקריאה/);
-      assert.match(ledger.body, /\/documents\/.*\/fields\/approve/);
-      noA16Paint(ledger.body);
+      // #239: an unopened lease has one approval screen, and it is this tab.
+      assert.equal(ledger.statusCode, 302);
+      assert.equal(ledger.headers.location, `/documents/filing/${documentId}`);
 
       const last = await stampOpening(documentId);
       assert.equal(last.statusCode, 302, last.body.slice(0, 400));

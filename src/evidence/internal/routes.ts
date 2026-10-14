@@ -118,7 +118,6 @@ import {
   runExtractWork,
 } from './intake.ts';
 import {
-  carryBoundLease,
   confirmLeaseTenancy,
   leaseReadingGaps,
   openLeaseDraft,
@@ -644,6 +643,19 @@ export function registerDocumentRoutes(
     return found.rows[0]?.entity_id ?? null;
   };
 
+  // #239. The tenancy a lease's opened draft is bound to: its reading is closed. Null for any other
+  // type, and for a lease whose draft has not opened.
+  const closedLeaseTenancy = async (
+    documentId: string,
+  ): Promise<string | null> =>
+    (await getFiledDocument(deps.pool, documentId)).typeKey === 'lease'
+      ? tenancyBoundTo(documentId)
+      : null;
+
+  const isOpenLease = async (documentId: string): Promise<boolean> =>
+    (await getFiledDocument(deps.pool, documentId)).typeKey === 'lease' &&
+    (await tenancyBoundTo(documentId)) === null;
+
   // #235. What each unapproved phone or email row offers for approval, and why it cannot be
   // approved as offered. A misread mobile number is offered back with its 0.
   const contactRowsOf = (
@@ -924,8 +936,26 @@ export function registerDocumentRoutes(
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
       const fields = formBody(request);
+      const approvedBy = requireOperatorEmail(request);
+      const approveDeps = {
+        db: deps.pool,
+        audit: createAuditLog(deps.pool, deps.clock),
+        clock: deps.clock,
+        contacts: deps.contacts,
+      };
+      // #239. Once the draft is open the reading is closed: a correction belongs on the tenancy.
+      const bound = await closedLeaseTenancy(documentId);
+      if (bound) {
+        html(reply);
+        reply.code(409);
+        return leaseFiling(request, {
+          ...(await filingOfDocument(request, documentId)),
+          stepRefusal: { kind: 'closed', tenancyId: bound },
+        });
+      }
       if (fields.action === 'unflagged') {
-        throw new KernelError('invalid', 'that control is not on this journey');
+        await approveUnflagged(approveDeps, { documentId, approvedBy });
+        return reply.redirect(`/documents/filing/${documentId}`);
       }
       const extractedFieldId = validId(
         fields.extracted_field_id ?? '',
@@ -938,13 +968,6 @@ export function registerDocumentRoutes(
       if (!row) {
         throw new KernelError('not_found', 'extracted field not found');
       }
-      const approvedBy = requireOperatorEmail(request);
-      const approveDeps = {
-        db: deps.pool,
-        audit: createAuditLog(deps.pool, deps.clock),
-        clock: deps.clock,
-        contacts: deps.contacts,
-      };
       const approvedValue = approvedNameFromForm(fields);
       try {
         await approveExtractedField(approveDeps, {
@@ -955,6 +978,15 @@ export function registerDocumentRoutes(
           mayReadIdentifiers: true,
         });
       } catch (error) {
+        // #239. A second press on a signed row is a sentence on this step, not an error page.
+        if (error instanceof KernelError && error.code === 'conflict') {
+          html(reply);
+          reply.code(409);
+          return leaseFiling(request, {
+            ...(await filingOfDocument(request, documentId)),
+            stepRefusal: { kind: 'already' },
+          });
+        }
         // #235. A phone that is not an Israeli mobile number, or an email that is not an address,
         // is refused on its own row: the screen comes back with the value as posted and why.
         const channel = contactChannelOf(row.fieldKey);
@@ -986,15 +1018,7 @@ export function registerDocumentRoutes(
           },
         });
       }
-      // Approving only stamps (#234). A lease with a draft still carries; nothing else follows.
-      await carryBoundLease(
-        {
-          db: deps.pool,
-          audit: createAuditLog(deps.pool, deps.clock),
-          clock: deps.clock,
-        },
-        { documentId, promotedBy: approvedBy },
-      );
+      // Approving only stamps (#234), and only before the draft opens (#239).
       return reply.redirect(`/documents/filing/${documentId}`);
     },
   );
@@ -1898,16 +1922,22 @@ export function registerDocumentRoutes(
           (row) => row.documentTypeFieldId === field.documentTypeFieldId,
         ),
     );
+    // #239. A lease's reading closes when its draft opens: shown, not signed, here.
+    const closedTo = await closedLeaseTenancy(documentId);
     const common = {
       nav: chromeOf(deps, request),
       csrf: csrfFrom(request),
       documentId,
       labelHe: filed.labelHe,
+      typeKey: filed.typeKey,
+      ...(closedTo ? { closedTo } : {}),
       on,
       rows,
       unread,
       mayReadIdentifiers: mayReadIdentifiers(request),
-      mayApprove: can(request.staff?.role ?? null, 'documents.write'),
+      mayApprove:
+        closedTo === null &&
+        can(request.staff?.role ?? null, 'documents.write'),
       mayAddInventory: can(request.staff?.role ?? null, 'estate.write'),
       uncarried: await uncarriedReasons(documentId),
       ...pageCoverage(filed),
@@ -1947,6 +1977,11 @@ export function registerDocumentRoutes(
     READ,
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
+      // #239. A lease is approved on A16's הקריאה, so one press means one thing. Once its draft
+      // opens the tab has moved on, and this ledger is where the closed reading is still read.
+      if (await isOpenLease(documentId)) {
+        return reply.redirect(`/documents/filing/${documentId}`);
+      }
       html(reply);
       return renderFieldsPage(
         await fieldsScreen(request, documentId, {
@@ -1977,6 +2012,12 @@ export function registerDocumentRoutes(
         clock: deps.clock,
         contacts: deps.contacts,
       };
+      const filed = await getFiledDocument(deps.pool, documentId);
+      if (await closedLeaseTenancy(documentId)) {
+        html(reply);
+        reply.code(409);
+        return renderFieldsPage(await fieldsScreen(request, documentId, {}));
+      }
       let approved = 1;
       if (fields.action === 'unflagged') {
         const result = await approveUnflagged(approveDeps, {
@@ -1986,22 +2027,38 @@ export function registerDocumentRoutes(
         approved = result.approved;
       } else {
         const approvedValue = approvedNameFromForm(fields);
-        await approveExtractedField(approveDeps, {
-          extractedFieldId: validId(
-            fields.extracted_field_id ?? '',
-            'extracted field',
-          ),
-          ...(approvedValue === undefined ? {} : { approvedValue }),
-          approvedBy,
-          mayReadIdentifiers: mayReadIdentifiers(request),
-        });
+        try {
+          await approveExtractedField(approveDeps, {
+            extractedFieldId: validId(
+              fields.extracted_field_id ?? '',
+              'extracted field',
+            ),
+            ...(approvedValue === undefined ? {} : { approvedValue }),
+            approvedBy,
+            mayReadIdentifiers: mayReadIdentifiers(request),
+          });
+        } catch (error) {
+          // #239. A stale ledger tab on a lease: the second press is the same sentence on הקריאה.
+          if (
+            filed.typeKey !== 'lease' ||
+            !(error instanceof KernelError) ||
+            error.code !== 'conflict'
+          ) {
+            throw error;
+          }
+          html(reply);
+          reply.code(409);
+          return leaseFiling(request, {
+            ...(await filingOfDocument(request, documentId)),
+            stepRefusal: { kind: 'already' },
+          });
+        }
       }
-      await carryBoundLease(leaseDeps(), {
-        documentId,
-        promotedBy: approvedBy,
-      });
+      // #239. Approving only stamps; a lease lands back on its one approval screen.
       return reply.redirect(
-        `/documents/${documentId}/fields?saved=${String(approved)}`,
+        filed.typeKey === 'lease'
+          ? `/documents/filing/${documentId}`
+          : `/documents/${documentId}/fields?saved=${String(approved)}`,
       );
     },
   );

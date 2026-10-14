@@ -833,6 +833,7 @@ That URL is this journey's, not `/documents/:id/fields` and not a Tenancy page. 
 `guarantor_name`, `start_date`, `end_date`. One row, one אישור, an optional correction in
 `approved_value`. A15's ledger stays at `GET /documents/:id/fields` for every other door — this
 journey does not load it. Reveal, promote, and `אישור כל מה שלא סומן` are not on this screen.
+(Superseded at #239: a lease is approved only here, and `אישור כל מה שלא סומן` is on this screen.)
 
 **Track B widens beat 3 from those four rows to the declared set**, and changes nothing else about
 it. It is still one row per value, one אישור, one optional correction; reveal, promote and bulk
@@ -1869,6 +1870,18 @@ the row why a value cannot be approved. The value signed is the one typed; the s
 normalised one, written by פתיחת טיוטה. **A run-time declaration the seed supersedes is closed by
 the seed:** an open `lease` declaration whose key or label names a phone or an email, other than the
 six above, is closed the day before they open, or on its own first day if it opened later.
+
+**On a lease the bulk set is narrower still (#239): the identity-and-access set stays out.** Every
+name, identifier, phone and email row; `start_date` and `end_date`; the read address
+(`address`, `apartment_number`, `building_number`); and every row the read-quality rule flags. Those
+decide who the letting is with, when, and where, so each is one press on הקריאה. The set is one
+predicate in `approve.ts`, read by `approveUnflagged` and by both screens, so the rows the screen
+sorts to the top are exactly the rows the press leaves. Other types keep the rule above.
+
+**A lease's reading closes when its draft opens.** Once the document has a `TENANCY` link, both
+approve routes refuse a press on its rows with a sentence and a link to the tenancy (SPEC-flows
+A15). The rule sits at the routes and not in `approveExtractedField`: A2's and A3's confirm screens
+still sign the dates they promote on a bound letting, and they are not a press on the reading.
 
 **The reveal is one row and one request.** `POST /documents/:id/fields/reveal`, gated on
 `party.national_id.read` — the first route in this system to declare that permission rather than

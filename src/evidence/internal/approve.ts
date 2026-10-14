@@ -53,6 +53,41 @@ export function isFlagged(confidence: number | null): boolean {
   return confidence === null || confidence < READ_QUALITY_THRESHOLD;
 }
 
+/**
+ * **#239. On a lease, the rows that say who the letting is with, when, and where.** Each is one
+ * press on הקריאה: a name, the two dates, the read address. Identifiers and contacts are in the set
+ * for every type already, below.
+ */
+const LEASE_IDENTITY_AND_ACCESS: ReadonlySet<string> = new Set([
+  'main_tenant_name',
+  'second_tenant_name',
+  'tenant_name',
+  'guarantor_name',
+  'start_date',
+  'end_date',
+  'address',
+  'apartment_number',
+  'building_number',
+]);
+
+/**
+ * **Whether this row is left for its own press by `אישור כל מה שלא סומן`.** One predicate, read by
+ * the command and by both screens, so the rows sorted to the top are exactly the rows the press
+ * leaves. Every type: read quality, an identifier, a phone or an email. A lease adds names, the two
+ * dates and the read address (#239).
+ */
+export function pressedAlone(
+  row: { fieldKey: string; confidence: number | null },
+  typeKey: string,
+): boolean {
+  return (
+    isFlagged(row.confidence) ||
+    isIdentifierField(row.fieldKey) ||
+    contactChannelOf(row.fieldKey) !== null ||
+    (typeKey === 'lease' && LEASE_IDENTITY_AND_ACCESS.has(row.fieldKey))
+  );
+}
+
 export interface ApproveDeps {
   db: Queryable;
   audit: AuditLog;
@@ -97,7 +132,7 @@ export interface ApproveUnflaggedSpec {
 
 export interface ApproveUnflaggedResult {
   approved: number;
-  /** Rows left for a person: low read quality, no read quality, or an identifier. */
+  /** Rows left for a person: every row `pressedAlone` names. */
   flagged: number;
 }
 
@@ -232,16 +267,21 @@ export async function approveUnflagged(
   const approvedBy = requireText(spec.approvedBy, 'approved_by', 200);
 
   return inTransaction(deps.db, async (db) => {
+    const typed = await db.query<{ type_key: string }>(
+      `SELECT dt.type_key FROM document d
+         JOIN document_type dt ON dt.document_type_id = d.document_type_id
+        WHERE d.document_id = $1`,
+      [documentId],
+    );
+    const typeKey = typed.rows[0]?.type_key;
+    if (typeKey === undefined) {
+      throw new KernelError('not_found', 'document not found');
+    }
     const rows = await listExtractedFields(db, documentId);
     const open = rows.filter((row) => row.approvedAt === null);
     // A phone or an email is never in the bulk set either (#235): who it reaches is decided by
     // the person who signs it, one row at a time, after the value is checked.
-    const unflagged = open.filter(
-      (row) =>
-        !isFlagged(row.confidence) &&
-        !isIdentifierField(row.fieldKey) &&
-        contactChannelOf(row.fieldKey) === null,
-    );
+    const unflagged = open.filter((row) => !pressedAlone(row, typeKey));
     for (const row of unflagged) {
       const captured = await capturedRow(db, row.extractedFieldId);
       if (captured.approved_at !== null) {

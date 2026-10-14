@@ -83,7 +83,8 @@ interface Carry {
   ) => Promise<{ statusCode: number; body: string }>;
   rowId: (documentId: string, fieldKey: string) => Promise<string>;
   tenancyId: () => Promise<string>;
-  fileBoundLease: (marker: string) => Promise<string>;
+  /** A second lease on the same letting. `stamped` are approved before it is bound (#239). */
+  fileBoundLease: (marker: string, ...stamped: string[]) => Promise<string>;
 }
 
 async function withCarry(
@@ -307,7 +308,7 @@ async function withCarry(
         );
         return letting.rows[0]?.tenancy_id ?? '';
       },
-      fileBoundLease: async (marker) => {
+      fileBoundLease: async (marker, ...stamped) => {
         const tenancyId = await pool.query<{ tenancy_id: string }>(
           'SELECT tenancy_id FROM tenancy WHERE unit_id = $1',
           [unitId],
@@ -328,6 +329,13 @@ async function withCarry(
             /\/documents\/filing\/([0-9a-f-]{36})$/,
           )?.[1] ?? '';
         assert.ok(id);
+        // A bound lease's reading is closed (#239): it is signed before the link, as attach does.
+        for (const key of stamped) {
+          const signed = await post(`/documents/filing/${id}/approve`, {
+            extracted_field_id: await rowId(id, key),
+          });
+          assert.equal(signed.statusCode, 302, signed.body.slice(0, 300));
+        }
         await linkDocument(pool, {
           documentId: id,
           entityType: 'UNIT',
@@ -451,8 +459,17 @@ async function stampOpening(carry: Carry): Promise<void> {
   }
 }
 
-/** Stamp the reading, then press פתיחת טיוטה (#234): approving alone writes no draft. */
-async function approveOpening(carry: Carry): Promise<void> {
+/**
+ * Stamp the reading, then press פתיחת טיוטה (#234): approving alone writes no draft. `mapped` are
+ * stamped first too — after the press the reading is closed (#239), and the press carries them.
+ */
+async function approveOpening(
+  carry: Carry,
+  ...mapped: string[]
+): Promise<void> {
+  for (const key of mapped) {
+    await approveMapped(carry, carry.documentId, key);
+  }
   await stampOpening(carry);
   await approveOpeningPress(carry);
 }
@@ -692,103 +709,9 @@ describe('evidence · approving a mapped lease field carries it', {
     if (!ran) t.skip(skipReason);
   });
 
-  it('carries each mapped field when the letting is already bound', async (t) => {
-    const address = 'נשיאה 175';
-    const ran = await withCarry(
-      {
-        tag: 'a174late',
-        city: 'עיר נשיאה ב',
-        address,
-        findings: [
-          ...opening(address),
-          { field_key: 'rent_amount', value: RENT, word_ids: [5] },
-          { field_key: 'rent_currency', value: CURRENCY, word_ids: [6] },
-          { field_key: 'option_end_date', value: OPTION, word_ids: [7] },
-          { field_key: 'parking_space_number', value: BAY, word_ids: [8] },
-          { field_key: 'storage_space_number', value: STORE, word_ids: [9] },
-        ],
-      },
-      async (carry) => {
-        await approveOpening(carry);
-        const bare = await column(carry);
-        assert.equal(bare.rent_amount, null);
-        assert.equal(bare.option_end_date, null);
-        assert.equal(bare.parking_name, null);
-        assert.equal(bare.storage_name, null);
-
-        const amount = await carry.post(
-          `/documents/${carry.documentId}/fields/approve`,
-          {
-            extracted_field_id: await carry.rowId(
-              carry.documentId,
-              'rent_amount',
-            ),
-          },
-        );
-        assert.equal(amount.statusCode, 302, amount.body.slice(0, 300));
-        assert.equal(
-          amount.headers.location,
-          `/documents/${carry.documentId}/fields?saved=1`,
-        );
-        assert.equal((await column(carry)).rent_amount, null);
-        const half = await carry.pool.query<{ promoted_to: string | null }>(
-          'SELECT promoted_to FROM extracted_field WHERE extracted_field_id = $1',
-          [await carry.rowId(carry.documentId, 'rent_amount')],
-        );
-        assert.equal(half.rows[0]?.promoted_to, null);
-
-        const currency = await carry.post(
-          `/documents/${carry.documentId}/fields/approve`,
-          {
-            extracted_field_id: await carry.rowId(
-              carry.documentId,
-              'rent_currency',
-            ),
-          },
-        );
-        assert.equal(currency.statusCode, 302, currency.body.slice(0, 300));
-        const priced = await column(carry);
-        assert.equal(priced.rent_amount, RENT);
-        assert.equal(priced.rent_currency, CURRENCY);
-        const pair = await carry.pool.query<{ n: string }>(
-          `SELECT count(*)::text AS n FROM audit_log
-            WHERE action = 'evidence.promote_field'
-              AND subject_id = ANY($1::text[])`,
-          [
-            [
-              await carry.rowId(carry.documentId, 'rent_amount'),
-              await carry.rowId(carry.documentId, 'rent_currency'),
-            ],
-          ],
-        );
-        assert.equal(pair.rows[0]?.n, '1');
-
-        for (const [key, read] of [
-          ['option_end_date', 'option_end_date'],
-          ['parking_space_number', 'parking_name'],
-          ['storage_space_number', 'storage_name'],
-        ] as const) {
-          const stamped = await carry.post(
-            `/documents/${carry.documentId}/fields/approve`,
-            { extracted_field_id: await carry.rowId(carry.documentId, key) },
-          );
-          assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
-          assert.equal(
-            stamped.headers.location,
-            `/documents/${carry.documentId}/fields?saved=1`,
-          );
-          const expected =
-            key === 'option_end_date'
-              ? OPTION
-              : key === 'parking_space_number'
-                ? BAY
-                : STORE;
-          assert.equal((await column(carry))[read], expected);
-        }
-      },
-    );
-    if (!ran) t.skip(skipReason);
-  });
+  // #239 retired "carries each mapped field when the letting is already bound": a bound lease's
+  // reading is closed, so nothing is approved after the press. lease-approval.test.ts proves the
+  // refusal; the press carrying what was approved before it is the case above.
 
   it('approves a bay and a store that are not in the building and carries nothing for them', async (t) => {
     const address = 'נשיאה 176';
@@ -862,14 +785,11 @@ describe('evidence · approving a mapped lease field carries it', {
         ],
       },
       async (carry) => {
-        await approveOpening(carry);
-        for (const key of ['parking_space_number', 'storage_space_number']) {
-          const stamped = await carry.post(
-            `/documents/${carry.documentId}/fields/approve`,
-            { extracted_field_id: await carry.rowId(carry.documentId, key) },
-          );
-          assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
-        }
+        await approveOpening(
+          carry,
+          'parking_space_number',
+          'storage_space_number',
+        );
         const place = await carry.pool.query<{ id: string }>(
           `SELECT building_id AS id FROM space WHERE space_id = $1`,
           [carry.unitId],
@@ -1034,14 +954,7 @@ describe('evidence · approving a mapped lease field carries it', {
         ],
       },
       async (carry) => {
-        await approveOpening(carry);
-        for (const key of ['rooms', 'floor']) {
-          const stamped = await carry.post(
-            `/documents/${carry.documentId}/fields/approve`,
-            { extracted_field_id: await carry.rowId(carry.documentId, key) },
-          );
-          assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
-        }
+        await approveOpening(carry, 'rooms', 'floor');
         const rooms = await carry.pool.query<{ rooms: string }>(
           'SELECT rooms::text AS rooms FROM unit WHERE unit_id = $1',
           [carry.unitId],
@@ -1094,18 +1007,11 @@ describe('evidence · approving a mapped lease field carries it', {
         await approveOpening(carry);
         assert.equal((await column(carry)).rent_amount, RENT);
 
-        const second = await carry.fileBoundLease('SECOND-LEASE');
-        for (const key of ['rent_amount', 'rent_currency']) {
-          const stamped = await carry.post(
-            `/documents/${second}/fields/approve`,
-            { extracted_field_id: await carry.rowId(second, key) },
-          );
-          assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
-          assert.equal(
-            stamped.headers.location,
-            `/documents/${second}/fields?saved=1`,
-          );
-        }
+        const second = await carry.fileBoundLease(
+          'SECOND-LEASE',
+          'rent_amount',
+          'rent_currency',
+        );
         assert.equal((await column(carry)).rent_amount, RENT);
         const held = await carry.pool.query<{ promoted_to: string | null }>(
           'SELECT promoted_to FROM extracted_field WHERE extracted_field_id = $1',
@@ -1146,7 +1052,7 @@ const HALF = 'החצי השני של דמי השכירות טרם אושר';
 describe('evidence · an approved value that is not on the letting says so', {
   concurrency: false,
 }, () => {
-  it('shows the approved rent and why the other half is missing, then drops the mark once both land', async (t) => {
+  it('shows the approved rent and why the other half is missing, and the closed reading takes no late half', async (t) => {
     const address = 'נשיאה 175א';
     const ran = await withCarry(
       {
@@ -1191,6 +1097,7 @@ describe('evidence · an approved value that is not on the letting says so', {
         assert.match(ledger.body, new RegExp(HALF));
         assert.match(ledger.body, />קדם/);
 
+        // #239. The other half comes too late: the reading closed when the draft opened.
         const currency = await carry.post(
           `/documents/${carry.documentId}/fields/approve`,
           {
@@ -1200,14 +1107,10 @@ describe('evidence · an approved value that is not on the letting says so', {
             ),
           },
         );
-        assert.equal(currency.statusCode, 302, currency.body.slice(0, 300));
-        const carried = await carry.get(`/estate/tenancies/${tenancyId}`);
-        assert.match(carried.body, new RegExp(RENT));
-        assert.match(carried.body, new RegExp(CURRENCY));
-        assert.doesNotMatch(carried.body, new RegExp(MARK));
-        assert.doesNotMatch(carried.body, new RegExp(HALF));
-        assert.equal((await column(carry)).rent_amount, RENT);
-        assert.equal((await column(carry)).rent_currency, CURRENCY);
+        assert.equal(currency.statusCode, 409, currency.body.slice(0, 300));
+        assert.match(currency.body, /הקריאה של החוזה הזה סגורה/);
+        assert.equal((await column(carry)).rent_amount, null);
+        assert.equal((await column(carry)).rent_currency, null);
       },
     );
     if (!ran) t.skip(skipReason);
@@ -1301,24 +1204,13 @@ describe('evidence · an approved value that is not on the letting says so', {
             extracted_field_id: await carry.rowId(carry.documentId, key),
           });
         }
-        await approveOpening(carry);
-        for (const key of ['rooms', 'floor']) {
-          const stamped = await carry.post(
-            `/documents/${carry.documentId}/fields/approve`,
-            { extracted_field_id: await carry.rowId(carry.documentId, key) },
-          );
-          assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
-        }
-        const second = await carry.fileBoundLease('SECOND-LEASE');
-        for (const key of ['rent_amount', 'rent_currency', 'option_end_date']) {
-          const stamped = await carry.post(
-            `/documents/${second}/fields/approve`,
-            {
-              extracted_field_id: await carry.rowId(second, key),
-            },
-          );
-          assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
-        }
+        await approveOpening(carry, 'rooms', 'floor');
+        const second = await carry.fileBoundLease(
+          'SECOND-LEASE',
+          'rent_amount',
+          'rent_currency',
+          'option_end_date',
+        );
 
         const page = await carry.get(
           `/estate/tenancies/${await carry.tenancyId()}`,
@@ -1438,7 +1330,7 @@ async function approveMapped(
   documentId: string,
   key: string,
 ): Promise<void> {
-  const stamped = await carry.post(`/documents/${documentId}/fields/approve`, {
+  const stamped = await carry.post(`/documents/filing/${documentId}/approve`, {
     extracted_field_id: await carry.rowId(documentId, key),
   });
   assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 400));
@@ -1497,8 +1389,7 @@ describe('evidence · a lease that names two bays assigns each', {
         assert.match(reading.body, /value="234"/);
         assert.doesNotMatch(reading.body, /237 \+ 234/);
 
-        await approveOpening(carry);
-        await approveMapped(carry, carry.documentId, 'parking_space_number');
+        await approveOpening(carry, 'parking_space_number');
         const lines = await bayLines(carry, carry.documentId);
         assert.deepEqual(
           lines.map((line) => line.value),
@@ -1548,14 +1439,9 @@ describe('evidence · a lease that names two bays assigns each', {
           lines.map((line) => `${line.key}=${line.value}`),
           ['parking_space_number=234', 'second_parking_space_number=237'],
         );
-        await approveOpening(carry);
-        await approveMapped(carry, carry.documentId, 'parking_space_number');
-        assert.equal((await column(carry)).parking_name, '234');
-        assert.equal((await column(carry)).second_parking_name, null);
-
-        await approveMapped(
+        await approveOpening(
           carry,
-          carry.documentId,
+          'parking_space_number',
           'second_parking_space_number',
         );
         const row = await column(carry);
@@ -1595,12 +1481,9 @@ describe('evidence · a lease that names two bays assigns each', {
         ],
       },
       async (carry) => {
-        await approveOpening(carry);
-        await approveMapped(carry, carry.documentId, 'parking_space_number');
-        assert.equal((await column(carry)).parking_name, null);
-        await approveMapped(
+        await approveOpening(
           carry,
-          carry.documentId,
+          'parking_space_number',
           'second_parking_space_number',
         );
         const row = await column(carry);
@@ -1637,11 +1520,9 @@ describe('evidence · a lease that names two bays assigns each', {
         ],
       },
       async (carry) => {
-        await approveOpening(carry);
-        await approveMapped(carry, carry.documentId, 'parking_space_number');
-        await approveMapped(
+        await approveOpening(
           carry,
-          carry.documentId,
+          'parking_space_number',
           'second_parking_space_number',
         );
         assert.equal((await column(carry)).parking_name, '234');
@@ -1744,20 +1625,18 @@ describe('evidence · a lease that names two bays assigns each', {
         ],
       },
       async (carry) => {
-        await approveOpening(carry);
-        await approveMapped(
+        await approveOpening(
           carry,
-          carry.documentId,
           'second_parking_space_number',
+          'parking_space_number',
         );
-        assert.equal((await column(carry)).parking_name, null);
-        assert.equal((await column(carry)).second_parking_name, '237');
-        await approveMapped(carry, carry.documentId, 'parking_space_number');
         assert.equal((await column(carry)).parking_name, '234');
         assert.equal((await column(carry)).second_parking_name, '237');
 
-        const second = await carry.fileBoundLease('SECOND-LEASE');
-        await approveMapped(carry, second, 'second_parking_space_number');
+        const second = await carry.fileBoundLease(
+          'SECOND-LEASE',
+          'second_parking_space_number',
+        );
         assert.equal((await column(carry)).parking_name, '234');
         assert.equal((await column(carry)).second_parking_name, '237');
         const refused = await carry.post(`/documents/${second}/promote`, {
@@ -1795,8 +1674,7 @@ describe('evidence · a lease that names two bays assigns each', {
           lines.map((line) => line.value),
           [BAY],
         );
-        await approveOpening(carry);
-        await approveMapped(carry, carry.documentId, 'parking_space_number');
+        await approveOpening(carry, 'parking_space_number');
         assert.equal((await column(carry)).parking_name, BAY);
         assert.equal((await column(carry)).second_parking_name, null);
         const page = await carry.get(
@@ -1840,11 +1718,9 @@ describe('evidence · a lease that names two bays assigns each', {
           [carry.documentId],
         );
         assert.equal(third.rows[0]?.n, '0');
-        await approveOpening(carry);
-        await approveMapped(carry, carry.documentId, 'parking_space_number');
-        await approveMapped(
+        await approveOpening(
           carry,
-          carry.documentId,
+          'parking_space_number',
           'second_parking_space_number',
         );
         const row = await column(carry);
@@ -2025,11 +1901,9 @@ describe('evidence · a lease that names two bays assigns each', {
           [carry.documentId],
         );
         assert.equal(third.rows[0]?.n, '0');
-        await approveOpening(carry);
-        await approveMapped(carry, carry.documentId, 'parking_space_number');
-        await approveMapped(
+        await approveOpening(
           carry,
-          carry.documentId,
+          'parking_space_number',
           'second_parking_space_number',
         );
         const row = await column(carry);
@@ -2099,8 +1973,7 @@ describe('evidence · a lease that names two storage rooms assigns each', {
         assert.match(reading.body, /value="50"/);
         assert.doesNotMatch(reading.body, /51 \+ 50/);
 
-        await approveOpening(carry);
-        await approveMapped(carry, carry.documentId, 'storage_space_number');
+        await approveOpening(carry, 'storage_space_number');
         const lines = await storageLines(carry, carry.documentId);
         assert.deepEqual(
           lines.map((line) => `${line.key}=${line.value}`),
@@ -2154,14 +2027,9 @@ describe('evidence · a lease that names two storage rooms assigns each', {
           lines.map((line) => `${line.key}=${line.value}`),
           ['second_storage_space_number=51', 'storage_space_number=50'],
         );
-        await approveOpening(carry);
-        await approveMapped(carry, carry.documentId, 'storage_space_number');
-        assert.equal((await column(carry)).storage_name, '50');
-        assert.equal((await column(carry)).second_storage_name, null);
-
-        await approveMapped(
+        await approveOpening(
           carry,
-          carry.documentId,
+          'storage_space_number',
           'second_storage_space_number',
         );
         const row = await column(carry);
@@ -2201,12 +2069,9 @@ describe('evidence · a lease that names two storage rooms assigns each', {
         ],
       },
       async (carry) => {
-        await approveOpening(carry);
-        await approveMapped(carry, carry.documentId, 'storage_space_number');
-        assert.equal((await column(carry)).storage_name, null);
-        await approveMapped(
+        await approveOpening(
           carry,
-          carry.documentId,
+          'storage_space_number',
           'second_storage_space_number',
         );
         const row = await column(carry);
@@ -2243,11 +2108,9 @@ describe('evidence · a lease that names two storage rooms assigns each', {
         ],
       },
       async (carry) => {
-        await approveOpening(carry);
-        await approveMapped(carry, carry.documentId, 'storage_space_number');
-        await approveMapped(
+        await approveOpening(
           carry,
-          carry.documentId,
+          'storage_space_number',
           'second_storage_space_number',
         );
         assert.equal((await column(carry)).storage_name, '50');
@@ -2350,20 +2213,18 @@ describe('evidence · a lease that names two storage rooms assigns each', {
         ],
       },
       async (carry) => {
-        await approveOpening(carry);
-        await approveMapped(
+        await approveOpening(
           carry,
-          carry.documentId,
           'second_storage_space_number',
+          'storage_space_number',
         );
-        assert.equal((await column(carry)).storage_name, null);
-        assert.equal((await column(carry)).second_storage_name, '51');
-        await approveMapped(carry, carry.documentId, 'storage_space_number');
         assert.equal((await column(carry)).storage_name, '50');
         assert.equal((await column(carry)).second_storage_name, '51');
 
-        const second = await carry.fileBoundLease('SECOND-LEASE');
-        await approveMapped(carry, second, 'second_storage_space_number');
+        const second = await carry.fileBoundLease(
+          'SECOND-LEASE',
+          'second_storage_space_number',
+        );
         assert.equal((await column(carry)).storage_name, '50');
         assert.equal((await column(carry)).second_storage_name, '51');
         const refused = await carry.post(`/documents/${second}/promote`, {
@@ -2401,8 +2262,7 @@ describe('evidence · a lease that names two storage rooms assigns each', {
           lines.map((line) => line.value),
           [STORE],
         );
-        await approveOpening(carry);
-        await approveMapped(carry, carry.documentId, 'storage_space_number');
+        await approveOpening(carry, 'storage_space_number');
         assert.equal((await column(carry)).storage_name, STORE);
         assert.equal((await column(carry)).second_storage_name, null);
         const page = await carry.get(
@@ -2451,11 +2311,9 @@ describe('evidence · a lease that names two storage rooms assigns each', {
           [carry.documentId],
         );
         assert.equal(third.rows[0]?.n, '0');
-        await approveOpening(carry);
-        await approveMapped(carry, carry.documentId, 'storage_space_number');
-        await approveMapped(
+        await approveOpening(
           carry,
-          carry.documentId,
+          'storage_space_number',
           'second_storage_space_number',
         );
         const row = await column(carry);

@@ -1085,28 +1085,6 @@ async function carryApprovedLease(
   });
 }
 
-/**
- * **An approval on a lease that already has a draft still carries. #234.**
- *
- * Approving only stamps (SPEC-flows A2 as amended at #232). The one consequence an approval keeps
- * is the carry onto a letting that already exists, which cannot refuse: every refusal is per row
- * and leaves the row uncarried. A lease with no draft carries nothing here; פתיחת טיוטה carries
- * every approved mapped row when it opens the draft. Anything that is not a lease is left alone.
- */
-export async function carryBoundLease(
-  deps: LeaseDeps,
-  spec: { documentId: string; promotedBy: string },
-): Promise<void> {
-  const documentId = validId(spec.documentId, 'document');
-  const filed = await getFiledDocument(deps.db, documentId);
-  if (filed.typeKey !== 'lease') return;
-  if ((await tenancyLinkOf(deps.db, documentId)) === null) return;
-  await carryApprovedLease(deps, {
-    documentId,
-    promotedBy: spec.promotedBy,
-  });
-}
-
 /** One person פתיחת טיוטה will write, and the role they will hold. A screen shape: no identifier. */
 export interface OpeningPerson {
   extractedFieldId: string;

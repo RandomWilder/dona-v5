@@ -27,7 +27,7 @@ import { onlineOcrByteLimit } from '../../kernel/ocr.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import type { UnitLetting } from '../../tenancy/contract.ts';
-import { isFlagged } from './approve.ts';
+import { isFlagged, pressedAlone } from './approve.ts';
 import {
   type DocumentTypeFieldRow,
   type DocumentTypeRow,
@@ -153,6 +153,12 @@ const styles = h`<style>
     font-size: var(--text-sm);
     font-weight: 500;
     background: var(--color-surface);
+  }
+  /* Issue 239. The part a row sits in — its own press, or the rest — above the groups inside it. */
+  .grid-table .part {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    padding-block-start: var(--space-4);
   }
   .ledger-head {
     display: flex;
@@ -969,6 +975,20 @@ export interface LeaseFilingScreen {
    * approved as offered, when it cannot. Keyed by extracted field.
    */
   contactRows?: Readonly<Record<string, ContactRow>>;
+  /**
+   * #239. A press refused with a sentence on this step: the row was already approved, or the draft
+   * has opened and the reading is closed.
+   */
+  stepRefusal?: { kind: 'already' } | { kind: 'closed'; tenancyId: string };
+}
+
+function stepRefusalNotice(screen: LeaseFilingScreen): Html {
+  const refusal = screen.stepRefusal;
+  if (!refusal) return h``;
+  if (refusal.kind === 'closed') return closedReadingNotice(refusal.tenancyId);
+  return h`<section class="notice">
+    <p class="lede">השורה הזו כבר אושרה. אישור הוא חתימה אחת, ואין צורך ללחוץ שוב.</p>
+  </section>`;
 }
 
 function filingApproveControl(
@@ -1103,13 +1123,45 @@ function filingReading(screen: LeaseFilingScreen): Html {
       }</p>
     </section>`;
   }
-  const grouped = READING_GROUPS.map((group, at) => ({
-    labelHe: group.labelHe,
-    rows: rows.filter((row) => readingGroupOf(row.fieldKey) === at),
-  })).filter((group) => group.rows.length > 0);
-  const leftover = rows.filter(
-    (row) => readingGroupOf(row.fieldKey) === READING_GROUPS.length,
+  // #239. The identity-and-access set, still open, above the groups: each is its own press, and
+  // they are exactly the rows `אישור כל מה שלא סומן` leaves.
+  const alone = rows.filter(
+    (row) => row.approvedAt === null && pressedAlone(row, 'lease'),
   );
+  const rest = rows.filter((row) => !alone.includes(row));
+  const bulk = rest.filter((row) => row.approvedAt === null).length;
+  // Grouped inside each part, so a native PDF — every row unmeasured, so every row its own press —
+  // still reads as dates, money, people, place.
+  const groups = (part: readonly ExtractedRow[]): Html[] => {
+    const grouped = READING_GROUPS.map((group, at) => ({
+      labelHe: group.labelHe,
+      rows: part.filter((row) => readingGroupOf(row.fieldKey) === at),
+    })).filter((group) => group.rows.length > 0);
+    const leftover = part.filter(
+      (row) => readingGroupOf(row.fieldKey) === READING_GROUPS.length,
+    );
+    return [
+      ...grouped.map(
+        (group) => h`<tbody>
+            <tr>
+              <th class="group" colspan="3">${group.labelHe}</th>
+            </tr>
+            ${group.rows.map((row) => filingReadingRow(screen, row, rows))}
+          </tbody>`,
+      ),
+      ...(leftover.length === 0
+        ? []
+        : [
+            h`<tbody>
+            ${leftover.map((row) => filingReadingRow(screen, row, rows))}
+          </tbody>`,
+          ]),
+    ];
+  };
+  const part = (caption: string): Html => h`<tbody>
+      <tr><th class="part" colspan="3">${caption}</th></tr>
+    </tbody>`;
+  const split = alone.length > 0 && rest.length > 0;
   return h`<section class="notice">
     <h2>הקריאה ${mark}</h2>
       <table class="grid-table">
@@ -1120,22 +1172,26 @@ function filingReading(screen: LeaseFilingScreen): Html {
             <th></th>
           </tr>
         </thead>
-        ${grouped.map(
-          (group) => h`<tbody>
-            <tr>
-              <th class="group" colspan="3">${group.labelHe}</th>
-            </tr>
-            ${group.rows.map((row) => filingReadingRow(screen, row, rows))}
-          </tbody>`,
-        )}
-        ${
-          leftover.length === 0
-            ? h``
-            : h`<tbody>
-            ${leftover.map((row) => filingReadingRow(screen, row, rows))}
-          </tbody>`
-        }
+        ${alone.length > 0 ? part('כל שורה באישור משלה') : h``}
+        ${groups(alone)}
+        ${split ? part('השאר') : h``}
+        ${groups(rest)}
       </table>
+      ${
+        screen.mayApprove && screen.documentId && bulk > 0
+          ? h`<form class="form-actions" method="post" action="/documents/filing/${screen.documentId}/approve">
+          ${csrfInput(screen.csrf)}
+          <input type="hidden" name="action" value="unflagged" />
+          <button class="btn btn-primary" type="submit">אישור כל מה שלא סומן</button>
+          <span class="chip verdict">${ltr(bulk)} שורות</span>
+          ${
+            alone.length > 0
+              ? h`<span class="hint">${ltr(alone.length)} השורות שלמעלה נשארות לאישור אחד אחד.</span>`
+              : h``
+          }
+        </form>`
+          : h``
+      }
   </section>
   ${filingNext(screen)}`;
 }
@@ -1717,6 +1773,7 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
       <p class="lede">${filingLede(screen)}</p>
     </div>
     ${filingBeats(screen.beat)}
+    ${stepRefusalNotice(screen)}
     ${tooLong}
     ${terms}
     ${already}
@@ -2719,6 +2776,27 @@ export interface FieldsScreen {
   uncarried?: Readonly<Record<string, UncarriedReason | null>>;
   /** `estate.write`. A missing bay is a link to later-add only for that reader. #176. */
   mayAddInventory: boolean;
+  /** The document type's key: a lease leaves more rows for their own press (#239). */
+  typeKey: string;
+  /**
+   * #239. The tenancy a lease opened, once it has. Its reading is closed: no approval here, and a
+   * sentence pointing to where a correction is made. `קדם` stays.
+   */
+  closedTo?: string;
+}
+
+/**
+ * **#239. A lease's reading is closed once its draft opens.** One sentence for both screens and both
+ * routes, pointing to the tenancy, where a correction sits beside what the paper said (#229).
+ */
+export function closedReadingNotice(tenancyId: string): Html {
+  return h`<section class="notice">
+    <h2>הקריאה סגורה</h2>
+    <p class="lede">
+      הטיוטה כבר נפתחה, והקריאה של החוזה הזה סגורה: אין בה עוד אישור או תיקון. תיקון נעשה
+      <a href="/estate/tenancies/${tenancyId}">בשכירות</a>, לצד מה שנקרא מהדף.
+    </p>
+  </section>`;
 }
 
 const MASK = IDENTIFIER_MASK;
@@ -2753,11 +2831,14 @@ function qualityCell(row: ExtractedRow): Html {
  * the top of the page, which is the other half of `אישור כל מה שלא סומן` being safe to press.
  * Signed rows fall to the bottom: they are the work already done.
  */
-function ledgerOrder(rows: readonly ExtractedRow[]): ExtractedRow[] {
+function ledgerOrder(
+  rows: readonly ExtractedRow[],
+  typeKey: string,
+): ExtractedRow[] {
   const rank = (row: ExtractedRow): number => {
     if (row.approvedAt !== null) return 3;
     if (row.confidence === null) return 0;
-    if (isFlagged(row.confidence) || isIdentifierField(row.fieldKey)) return 1;
+    if (pressedAlone(row, typeKey)) return 1;
     return 2;
   };
   return [...rows].sort(
@@ -2849,9 +2930,7 @@ export function renderFieldsPage(screen: FieldsScreen): string {
     ? 0
     : screen.rows.length - shown.length;
   const open = shown.filter((row) => row.approvedAt === null);
-  const unflagged = open.filter(
-    (row) => !isFlagged(row.confidence) && !isIdentifierField(row.fieldKey),
-  );
+  const unflagged = open.filter((row) => !pressedAlone(row, screen.typeKey));
   // **Slice 7.4: a mapped row that nobody signed has no `קדם` button.** A promotion now requires
   // the approval stamp (`promote.ts`, and the trigger in 0029), so a button that posted anyway
   // would be a control whose only outcome is a refusal. The note below says so, because a missing
@@ -2874,6 +2953,7 @@ export function renderFieldsPage(screen: FieldsScreen): string {
         }
       </div>
     </div>
+    ${screen.closedTo ? closedReadingNotice(screen.closedTo) : h``}
     ${
       screen.saved === undefined
         ? h``
@@ -2892,7 +2972,7 @@ export function renderFieldsPage(screen: FieldsScreen): string {
           <tr><th>שדה</th><th>ערך שנקרא</th><th>עמוד</th><th>איכות הקריאה</th><th>פעולה</th></tr>
         </thead>
         <tbody>
-          ${ledgerOrder(shown).map(
+          ${ledgerOrder(shown, screen.typeKey).map(
             (row) => h`<tr>
             <td class="value">${row.labelHe}${nameRole(row, screen.rows)}</td>
             ${valueCell(screen, row)}

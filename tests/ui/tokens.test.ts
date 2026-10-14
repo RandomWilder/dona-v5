@@ -424,6 +424,7 @@ function fieldsLedger(options: {
     buildingName: building.name,
     unitId: hit.unit_id,
     labelHe: 'חוזה שכירות',
+    typeKey: 'lease',
     on: '2026-09-14',
     rows: [
       reading(
@@ -3177,20 +3178,28 @@ describe('shared UI tokens', () => {
       ([name]) => name === 'documents · lease filing, thin reading',
     )?.[1]();
     assert.ok(html);
-    const heading = (label: string): number => {
-      const match = html.match(
-        new RegExp(`<th class="group"[^>]*>${label}</th>`),
-      );
-      return match ? html.indexOf(match[0]) : -1;
+    // #239. Two parts, each grouped: the rows pressed alone (dates, people, place here), then the
+    // rest (dates, money). Groups keep their order inside a part.
+    const heading = (label: string, from = 0): number => {
+      const match = html
+        .slice(from)
+        .match(new RegExp(`<th class="(?:group|part)"[^>]*>${label}</th>`));
+      return match?.index === undefined ? -1 : from + match.index;
     };
-    const dates = heading('תאריכים');
-    const money = heading('כסף');
-    const people = heading('אנשים');
-    const place = heading('מקום');
-    assert.ok(dates >= 0, 'dates group');
-    assert.ok(money > dates, 'money after dates');
-    assert.ok(people > money, 'people after money');
+    const alone = heading('כל שורה באישור משלה');
+    const dates = heading('תאריכים', alone);
+    const people = heading('אנשים', alone);
+    const place = heading('מקום', alone);
+    const rest = heading('השאר', alone);
+    const laterDates = heading('תאריכים', rest);
+    const money = heading('כסף', rest);
+    assert.ok(alone >= 0, 'the part pressed alone');
+    assert.ok(dates > alone, 'dates first');
+    assert.ok(people > dates, 'people after dates');
     assert.ok(place > people, 'place after people');
+    assert.ok(rest > place, 'the rest after the part pressed alone');
+    assert.ok(laterDates > rest, 'the rest is grouped too');
+    assert.ok(money > laterDates, 'money after dates');
     assert.match(html, /דמי שכירות חודשיים/);
     assert.match(html, /סיום תקופת האופציה/);
     assert.match(html, /מספר הדירה/);
@@ -3210,7 +3219,8 @@ describe('shared UI tokens', () => {
     );
     assert.match(html, new RegExp(READ_IDENTIFIER));
     assert.doesNotMatch(html, /גילוי/);
-    assert.doesNotMatch(html, /אישור כל מה שלא סומן/);
+    // #239. The bulk press lives here now, and it is the only approve-many control on a lease.
+    assert.match(html, /אישור כל מה שלא סומן/);
     assert.doesNotMatch(html, />קדם/);
     assert.doesNotMatch(html, /\/fields\/reveal/);
     assert.doesNotMatch(html, /\/fields\/promote/);

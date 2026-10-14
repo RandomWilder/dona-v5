@@ -890,6 +890,19 @@ other type. Both screens call one approval command, and **neither establishes a 
 effect of approving**. The clause above that has the approval which first establishes the draft
 carrying every mapped field now belongs to A2's פתיחת טיוטה.
 
+**Once a lease has a `TENANCY` link its reading is closed (#239).** Both approve routes refuse a
+press on its rows — one row, a correction, or the rest — with a sentence in the page and a link to
+the tenancy, where a correction is made with the reading shown beside the record. From then on
+`/documents/:id/fields` for that lease no longer redirects: A16's tab has moved on to הטיוטה, and
+the ledger is where the reading is still read. It is printed closed — the same sentence and link, no
+`אישור` and no `אישור כל מה שלא סומן` — and keeps `קדם` for an approved row the opening could not
+carry, because carrying is not approving and a bay added to the Building next month still has to
+land. The identity-and-access set and the second-press sentence are A16's and are stated there.
+This retires the first sentences of *What A15 does not do* above: a bound lease takes no approval,
+so no approval carries on one, and every mapped field reaches the letting at פתיחת טיוטה or by
+`קדם`. A second press on a lease row from a ledger tab opened before the redirect gets A16's
+sentence on הקריאה.
+
 **Module:** evidence owns the columns, the command, the routes and the screen. Staff owns the two
 permissions and decides nothing else.
 
@@ -946,8 +959,9 @@ stay on A1 / A12 / **מסמכים**.
    approved reading. This tab then shows beat 4. It does not teleport to the Tenancy page.
    **Track B widens this step to the whole declared set** and changes none of the sentence above
    except the promote clause: still one row per value, one אישור, one optional correction, and still
-   no reveal, no `קדם` button, and no bulk approval. **Approving a mapped field on a `lease` carries
-   it** when a letting is bound, and the approval that first establishes the draft carries every
+   no reveal, no `קדם` button, and no bulk approval (#239 adds the bulk approval; see below).
+   **Approving a mapped field on a `lease` carries it** when a letting is bound (retired at #239: a
+   bound lease takes no approval), and the approval that first establishes the draft carries every
    mapped field already approved — the same rule as A15. A carry that cannot land does not fail the
    approval, and the reading step shows the same mark the ledger shows beside `קדם`, and the same
    sentence when there is a reason to name. Still no button. The rows are **grouped in the view** — dates, money, people, place — which is a
@@ -982,10 +996,11 @@ moment the address is unique). It does not retitle A15.
 - **הקריאה gains one `אישור כל מה שלא סומן`.** It skips the identity-and-access set, which stays one press each:
   - every name, identifier, phone and email row;
   - start date and end date;
-  - the read address;
+  - the read address (`address`, `apartment_number`, `building_number`);
   - every row A15 would flag for read quality.
 
-  "No bulk approval" above is struck for this control only.
+  "No bulk approval" above is struck for this control only. The set is one predicate in evidence:
+  the command skips it, and the screen sorts it to the top of the table, above the groups.
 - **A phone row is approvable only as a valid Israeli mobile number.** A nine-digit number starting with 5 is offered back with its leading 0.
 - **A second approval of an approved row is a sentence on this step, not an error page.**
 - **When the reading is ready, the step shows פתיחת טיוטה.** That is A2's screen, inside this tab. When the reading is not ready, the step lists what is missing.
