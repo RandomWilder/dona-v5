@@ -63,6 +63,15 @@ describe('staging reset — what goes', () => {
     );
   });
 
+  // 14 Oct 2026: the reset of 12 Oct emptied `terms_profile`, and every lease draft after it failed
+  // on "that terms profile does not exist". A draft cannot be written without one.
+  it('keeps the terms profiles a draft cannot be written without', () => {
+    const all = KEEP_TABLES.map((table) => ({ table, rows: 1 }));
+    const plan = partitionTables([...all, { table: 'terms_profile', rows: 1 }]);
+    assert.ok(plan.keep.some((t) => t.table === 'terms_profile'));
+    assert.ok(!plan.wipe.some((t) => t.table === 'terms_profile'));
+  });
+
   it('refuses when a kept table has gone from the schema', () => {
     const all = KEEP_TABLES.filter((t) => t !== 'staff_account').map(
       (table) => ({ table, rows: 0 }),
