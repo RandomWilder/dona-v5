@@ -67,6 +67,8 @@ export {
 export type {
   AppendOfficeTurnSpec,
   OfficeCitation,
+  OfficeDocumentCitation,
+  OfficeRecordCitation,
   OfficeRetrievalBound,
   OfficeRetrievalTurn,
 } from './internal/office-thread.ts';

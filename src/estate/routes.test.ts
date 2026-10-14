@@ -24,6 +24,7 @@ import {
   withGuardsOff,
 } from '../kernel/pg-support.ts';
 import { h } from '../kernel/ui/html.ts';
+import { appendOfficeRetrievalTurn } from '../staff/contract.ts';
 import type { EstatePlan } from './contract.ts';
 import { importEstate, renderTenanciesPage } from './contract.ts';
 
@@ -608,10 +609,17 @@ describe('estate · unit retrieval panel', () => {
       t.skip(skipReason);
       return;
     }
+    // #227: a Unit bound always calls the answering model, hits or none.
     const app = buildApp({
       pool,
       version: '9.9.9-test',
       embedder: createFakeEmbedder(embeddingColumnDimensions),
+      extractor: createFakeExtractor(() => ({
+        answers: false,
+        text: '',
+        hit_indexes: [],
+        cites_record: false,
+      })),
     });
     await signOutAll(pool, ASK_DOMAIN);
     await askCleanup(pool);
@@ -691,7 +699,7 @@ describe('estate · unit retrieval panel', () => {
       const painted = await asViewer.inject({ method: 'GET', url: path });
       assert.equal(painted.statusCode, 200);
       assert.match(painted.body, /מה דמי השכירות\?/);
-      assert.match(painted.body, /אין במסמכים האלה תשובה לשאלה הזו/);
+      assert.match(painted.body, /אין בכרטיס ובמסמכים תשובה לשאלה הזו/);
 
       const neighbour = await asOther.inject({ method: 'GET', url: path });
       assert.equal(neighbour.statusCode, 200);
@@ -707,6 +715,167 @@ describe('estate · unit retrieval panel', () => {
       assert.equal(cleared.headers.location, path);
       const after = await asViewer.inject({ method: 'GET', url: path });
       assert.doesNotMatch(after.body, /מה דמי השכירות\?/);
+    } finally {
+      await askCleanup(pool);
+      await signOutAll(pool, ASK_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+});
+
+describe('estate · unit retrieval panel cites the record', () => {
+  it('paints a record citation as כרטיס הדירה linking to the Unit, beside an old Document citation', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      embedder: createFakeEmbedder(embeddingColumnDimensions),
+      extractor: createFakeExtractor(() => ({
+        answers: true,
+        text: 'שטח הדירה 70 מ״ר.',
+        hit_indexes: [],
+        cites_record: true,
+      })),
+    });
+    await signOutAll(pool, ASK_DOMAIN);
+    await askCleanup(pool);
+    const viewer = await signIn(pool, systemClock, {
+      email: `view@${ASK_DOMAIN}`,
+      role: 'VIEWER',
+    });
+    const asViewer = asOperator(app, viewer);
+    try {
+      await importEstate(pool, askPlan);
+      const unit = await pool.query<{ unit_id: string }>(
+        `SELECT u.unit_id FROM unit u
+         JOIN space s ON s.space_id = u.unit_id
+         JOIN building b ON b.building_id = s.building_id
+         WHERE b.city = $1 AND b.address_line = $2`,
+        [ASK_CITY, ASK_ADDRESS],
+      );
+      const unitId = unit.rows[0]?.unit_id ?? '';
+      const path = `/estate/units/${unitId}`;
+      const documentId = newId();
+      // A row stored before #227: a Document citation with no `kind`.
+      await appendOfficeRetrievalTurn(pool, systemClock, {
+        staffAccountId: viewer.staffAccountId,
+        bound: { kind: 'unit', id: unitId },
+        question: 'מה דמי השכירות?',
+        answer: 'לפי החוזה.',
+        refused: false,
+        citations: [{ documentId, page: 3, documentType: 'lease' }],
+        hitIds: [],
+      });
+
+      const asked = await asViewer.inject({
+        method: 'POST',
+        url: `${path}/office-turn`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent('מה גודל הדירה?')}`,
+      });
+      assert.equal(asked.statusCode, 303, asked.body.slice(0, 400));
+      assert.equal(asked.headers.location, path);
+
+      const painted = await asViewer.inject({ method: 'GET', url: path });
+      assert.equal(painted.statusCode, 200);
+      assert.match(painted.body, /שטח הדירה 70 מ״ר\./);
+      assert.match(
+        painted.body,
+        new RegExp(`<a href="${path}">כרטיס הדירה</a>`),
+      );
+      assert.match(
+        painted.body,
+        new RegExp(`href="/documents/${documentId}/read\\?page=3"`),
+      );
+    } finally {
+      await askCleanup(pool);
+      await signOutAll(pool, ASK_DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+});
+
+describe('estate · building retrieval panel cites the Building record', () => {
+  it('paints כרטיס הבניין on both Building pages, linking to the Building or to one Unit line', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    // #230. The model names Unit lines by number; the turn maps them to the record's Units.
+    let lines: string[] = [];
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      embedder: createFakeEmbedder(embeddingColumnDimensions),
+      extractor: createFakeExtractor(() => ({
+        answers: true,
+        text: lines.length === 0 ? 'בבניין דירה אחת.' : 'הדירה בקומה 1.',
+        hit_indexes: [],
+        cites_record: true,
+        record_units: lines,
+      })),
+    });
+    await signOutAll(pool, ASK_DOMAIN);
+    await askCleanup(pool);
+    const viewer = await signIn(pool, systemClock, {
+      email: `view@${ASK_DOMAIN}`,
+      role: 'VIEWER',
+    });
+    const asViewer = asOperator(app, viewer);
+    try {
+      await importEstate(pool, askPlan);
+      const found = await pool.query<{
+        building_id: string;
+        unit_id: string;
+        unit_number: string;
+      }>(
+        `SELECT b.building_id, u.unit_id, u.unit_number FROM unit u
+         JOIN space s ON s.space_id = u.unit_id
+         JOIN building b ON b.building_id = s.building_id
+         WHERE b.city = $1 AND b.address_line = $2`,
+        [ASK_CITY, ASK_ADDRESS],
+      );
+      const row = found.rows[0];
+      assert.ok(row);
+      const buildingPage = `/estate/buildings/${row.building_id}`;
+      const inventoryPage = `/estate/inventory/${row.building_id}`;
+
+      const counted = await asViewer.inject({
+        method: 'POST',
+        url: `${buildingPage}/office-turn`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent('כמה דירות יש בבניין?')}`,
+      });
+      assert.equal(counted.statusCode, 303, counted.body.slice(0, 400));
+
+      lines = [row.unit_number];
+      const one = await asViewer.inject({
+        method: 'POST',
+        url: `${inventoryPage}/office-turn`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `question=${encodeURIComponent(`באיזו קומה דירה ${row.unit_number}?`)}`,
+      });
+      assert.equal(one.statusCode, 303, one.body.slice(0, 400));
+
+      for (const page of [buildingPage, inventoryPage]) {
+        const painted = await asViewer.inject({ method: 'GET', url: page });
+        assert.equal(painted.statusCode, 200);
+        assert.match(
+          painted.body,
+          new RegExp(`<a href="${buildingPage}">כרטיס הבניין</a>`),
+        );
+        assert.match(
+          painted.body,
+          new RegExp(`<a href="/estate/units/${row.unit_id}">כרטיס הבניין</a>`),
+        );
+      }
     } finally {
       await askCleanup(pool);
       await signOutAll(pool, ASK_DOMAIN);
@@ -815,7 +984,7 @@ describe('estate · building retrieval panel', () => {
       });
       assert.equal(painted.statusCode, 200);
       assert.match(painted.body, /מה כתוב בפרוטוקול המסירה\?/);
-      assert.match(painted.body, /אין במסמכים האלה תשובה לשאלה הזו/);
+      assert.match(painted.body, /אין בכרטיס ובמסמכים תשובה לשאלה הזו/);
 
       const unitPage = await asViewer.inject({
         method: 'GET',
@@ -1075,7 +1244,7 @@ describe('estate · inventory building retrieval panel', () => {
       });
       assert.equal(painted.statusCode, 200);
       assert.match(painted.body, /מי המתגורר בבניין\?/);
-      assert.match(painted.body, /אין במסמכים האלה תשובה לשאלה הזו/);
+      assert.match(painted.body, /אין בכרטיס ובמסמכים תשובה לשאלה הזו/);
 
       const oldPage = await asViewer.inject({
         method: 'GET',

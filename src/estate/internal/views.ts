@@ -18,6 +18,7 @@
 // Phone numbers stay off.
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
+import type { OfficeCitation } from '../../staff/contract.ts';
 import {
   type ActivationFlag,
   EARLY_HANDOVER_DAYS,
@@ -2292,11 +2293,7 @@ export interface OfficeRetrievalView {
     question: string;
     answer: string;
     refused: boolean;
-    citations: readonly {
-      documentId: string;
-      page: number;
-      documentType: string;
-    }[];
+    citations: readonly OfficeCitation[];
   }[];
   notice?: string;
 }
@@ -2369,6 +2366,16 @@ function citationList(
   if (citations.length === 0) return h``;
   return h`<ul class="unit-citations">
     ${citations.map((cite) => {
+      if (cite.kind === 'record') {
+        // #227. The record cited is the page it links to. #230: a Building record cited for one
+        // Unit line links to that Unit, under the Building record's label.
+        if (cite.record === 'unit') {
+          return h`<li><a href="/estate/units/${cite.id}">כרטיס הדירה</a></li>`;
+        }
+        return cite.unitId === undefined
+          ? h`<li><a href="/estate/buildings/${cite.id}">כרטיס הבניין</a></li>`
+          : h`<li><a href="/estate/units/${cite.unitId}">כרטיס הבניין</a></li>`;
+      }
       const labelHe = DOC_LABEL[cite.documentType] ?? cite.documentType;
       return h`<li>
         <a href="/documents/${cite.documentId}/read?page=${cite.page}">${labelHe} · עמוד ${ltr(cite.page)}</a>

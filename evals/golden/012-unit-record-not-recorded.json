@@ -1,0 +1,14 @@
+{
+  "id": "unit-record-not-recorded",
+  "title": "A field the record marks לא רשום, with no paper, is refused rather than guessed",
+  "input": {
+    "message": "מה שטח הדירה?",
+    "bound": { "kind": "unit", "id": "bare-record-unit" }
+  },
+  "expect": {
+    "refuses": true,
+    "citesClause": false,
+    "tool": "search",
+    "contains": []
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "id": "unit-record-disagrees-with-lease",
+  "title": "A Unit whose record area differs from its lease's printed area answers both, citing the record and the page",
+  "input": {
+    "message": "מה שטח הדירה?",
+    "bound": { "kind": "unit", "id": "disagree-unit" }
+  },
+  "expect": {
+    "refuses": false,
+    "citesClause": true,
+    "tool": "search",
+    "contains": ["הערך הנוכחי: 82", "85"],
+    "citesKinds": ["record", "paper"]
+  }
+}

@@ -775,8 +775,13 @@ bottom; a control collapses the pane to a rail and opens it again. Same checkbox
 pattern as the ops nav — no client script. On a narrow viewport the pane sits under the sheet
 and collapses to a bar. They ask in Hebrew; the post runs evidence's office-turn command bound to
 this Unit and redirects back to the same GET, which paints that account's thread oldest-first.
-Cited answers name the Document and the page, with a link through to the read overlay. A refusal
-is the frozen Hebrew sentence, with no citations. If the office-turn command is `unavailable`,
+Cited answers name the Document and the page, with a link through to the read overlay. **#227:** an
+answer drawn from the Unit record cites `כרטיס הדירה`, linking to `GET /estate/units/:unitId`; estate
+exposes `readUnitRecord` on its contract for the office turn to read the record without touching an
+estate table. **#228:** the record also carries the letting active today, found through scope's
+`resolveActiveTenancy` (parties through `resolvePartiesInUnit`) and read through tenancy's `getTenancy` — dates, option end, rent, assigned
+bay and storage, parties by name and role — or says there is none. A refusal
+is the frozen Hebrew sentence — on this panel `אין בכרטיס ובמסמכים תשובה לשאלה הזו.` — with no citations. If the office-turn command is `unavailable`,
 the post still 303s to that GET with `ask=unavailable`; the pane shows the frozen Hebrew
 *cannot answer now* sentence, the thread is unchanged, and the JSON error body does not replace
 the estate screen. Clear deletes only this account's thread for this Unit. CSRF and a session are required on both posts. The GET itself stays `estate.read`;
@@ -800,7 +805,14 @@ leave the thread unchanged, and do not dump `{ code, message }` on the POST URL.
 this account's thread for this Building and returns to the page that was posted. A Unit thread
 and a Building thread for the same staff account stay distinct. CSRF and a session on both posts;
 VIEWER may ask; no new permission. **#123:** a Building-bound turn may list who is let today as
-well as search Passages; the panel is unchanged. The buildings list, the נכסים list, the Unit
+well as search Passages; the panel is unchanged. **#230:** every Building-bound turn also reads the
+Building record through estate's `readBuildingRecord` on its contract — name, address, city,
+project, handover date, warranty end, status; one line per Unit (number, floor, rooms, area, tenure,
+built bay, built storage room); bay and storage-room counts with how many of each are assigned to a
+Unit or by a letting active today (scope's `resolveActiveTenancy`). No party and no rent. An answer
+drawn from it cites `כרטיס הבניין` on both Building pages, linking to
+`GET /estate/buildings/:buildingId`, or, when the answer is about one Unit line, to
+`GET /estate/units/:unitId`. A refusal on this panel is `אין בכרטיס ובמסמכים תשובה לשאלה הזו.`. The buildings list, the נכסים list, the Unit
 page (which keeps its own panel), letting sheet, documents, settings and queues do not render a
 Building panel and do not keep a leftover Building bound.
 

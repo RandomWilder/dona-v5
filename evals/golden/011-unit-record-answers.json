@@ -1,0 +1,14 @@
+{
+  "id": "unit-record-answers",
+  "title": "A Unit with no Documents answers its area from the Unit record, citing it",
+  "input": {
+    "message": "מה שטח הדירה?",
+    "bound": { "kind": "unit", "id": "record-unit" }
+  },
+  "expect": {
+    "refuses": false,
+    "citesClause": true,
+    "tool": "search",
+    "contains": ["82"]
+  }
+}

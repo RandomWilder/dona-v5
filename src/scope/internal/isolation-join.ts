@@ -349,6 +349,30 @@ export async function resolveOccupiedUnits(
 }
 
 /**
+ * The letting on this Unit that counts today, read from `tenancy` and not from the view. #228.
+ *
+ * The view inner-joins `tenancy_party`, so an ACTIVE letting nobody has been put on yet is
+ * invisible to Q1 — right for "who lives here", wrong for "is this flat let". This asks the second
+ * question with the same `TENANCY_ACTIVE_TODAY` string, so the rule is still one string in one
+ * file. No party, no name: it writes no access line, and the party read that follows it does.
+ * `one_active_tenancy_per_unit` (0007) makes it one row at most.
+ */
+export async function resolveActiveTenancy(
+  db: Queryable,
+  unitId: string,
+  clock: Clock,
+): Promise<string | null> {
+  const result = await db.query<{ tenancy_id: string }>(
+    `SELECT tenancy_id
+       FROM tenancy
+      WHERE unit_id = $1
+        AND ${TENANCY_ACTIVE_TODAY}`,
+    [unitId, today(clock)],
+  );
+  return result.rows[0]?.tenancy_id ?? null;
+}
+
+/**
  * The one party who holds this contact on this day. #208.
  *
  * The same contact-validity predicate as the join, asked of `party_contact`

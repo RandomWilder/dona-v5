@@ -1308,9 +1308,58 @@ An earlier table in the thread is not a fact unless the list is fetched again. T
 not offered on a Unit bound, a portfolio bound, or any tenant-facing path; offering it is a
 command error, fail closed. Evidence does not query tenancy tables; it calls the named command.
 
+**#227: on a Unit bound the turn also carries the Unit record.** Every Unit-bound turn calls
+estate's `readUnitRecord` for the bound Unit — not a tool the chooser picks, and evidence reads no
+estate table — and hands it to the answering model beside this turn's hits. The record's physical
+half: Unit number, Building name and address, floor, rooms, area, mamad, tenure, and the built bay
+and built storage room by number, each labelled as built. Every field the account does not hold is
+present and marked `לא רשום`, never omitted, and `לא רשום` is not a value: the model falls through to
+the paper or refuses. The record carries no phone and no ID number. It is a fact source this turn,
+as the hits and the list are; a record value in an earlier answer is not a fact unless this turn's
+record carries it. **#228: the record's letting half.** Under the letting active today — read
+through scope's active-today rule (`resolveActiveTenancy`, then `resolvePartiesInUnit` for its
+parties), never re-derived — the record carries the
+start and end date, the option end, rent and rent currency, the bay and storage room the letting
+assigns, and each party's name and role — a guarantor marked as one, on the lease and not living there.
+An active letting with no party yet is still a letting, its parties `לא רשום`. No phone, no ID number. A letting field the account does
+not hold is `לא רשום`. With no letting active today — a vacant flat, or one whose only lettings are a
+draft, ended or future — the record says `אין השכרה פעילה` and carries no letting field, so "who
+lives here" on an empty flat is an answer, not a refusal. The assigned bay and storage are labelled
+as the letting's, beside the built ones, and are never merged with them: a parking question on a
+flat whose assigned bay differs from its built bay answers both. **#229: a disagreement shows
+both.** When the record and a hit carry different values for the same fact — 82 m² recorded, 85 m²
+printed in the lease — the answer gives both values, writes the record's first as `הערך הנוכחי: <value>` — the current value — and
+carries both citations: the record's (`כרטיס הדירה`) and the hit's Document and page. The panel never
+chooses between them silently and never resolves them: a turn that finds a disagreement writes to
+no estate, tenancy or evidence table, only its turn on the office retrieval thread (and the access
+line scope writes for the parties it read). Correcting the record stays the governed paths it
+already has. The model cites the record with `cites_record`; the turn keeps that citation
+only when a record was loaded this turn, and persists it as `{ kind: 'record', record: 'unit', id }`.
+The answering model is always called on a Unit bound, hits or none. A Unit-bound refusal is the
+frozen `אין בכרטיס ובמסמכים תשובה לשאלה הזו.`; the portfolio bound keeps its sentence.
+
+**#230: on a Building bound the turn also carries the Building record.** Every Building-bound turn
+calls estate's `readBuildingRecord` for the bound Building — again not a tool the chooser picks, and
+evidence reads no estate table — beside whatever search, list or both returned. The record carries
+the Building's name, address, city, project, handover date, warranty end and status; one line per
+Unit in it (number, floor, rooms, area, tenure, built bay, built storage room); and the count of
+bays and of storage rooms in the Building, each with how many are assigned — to a Unit as built, or
+by a letting active today (scope's `resolveActiveTenancy` per Unit, never re-derived). It carries
+no party and no rent: who is let today stays the lettings list. A field the account does not hold
+reads `לא רשום`. So a freshly seeded Building with no paper and no active letting still answers
+"how many four-room flats are there" from its Unit lines. The answering model is always called on a
+Building bound. The empty-roll sentence still applies only when the list was fetched, was empty,
+no hit was returned, and the answer does not cite the record — nothing else answers. A
+Building-bound refusal is `אין בכרטיס ובמסמכים תשובה לשאלה הזו.`. The model cites the record with
+`cites_record`, and names the Unit lines it drew on with `record_units`, by Unit number. The turn
+maps those numbers to the Units in the record it loaded and drops any it does not hold. An answer
+about exactly one Unit line cites that Unit — `{ kind: 'record', record: 'building', id: buildingId,
+unitId }` — and any other record answer cites the Building, `{ kind: 'record', record: 'building',
+id: buildingId }`. The portfolio bound loads no record.
+
 The command loads that account's office retrieval thread for the bound (empty if none). Search,
-when chosen: embed and retrieve, eight nearest Passages. Zero search hits and no list this turn:
-refuse, persist, no citations, and the answering model is not called. Hits: the model may use
+when chosen: embed and retrieve, eight nearest Passages. Zero search hits, no list and no record
+this turn: refuse, persist, no citations, and the answering model is not called. Hits: the model may use
 thread text only to interpret this turn's question, and may use only this turn's hit texts as
 passage facts. A fact that is not a Passage hit this turn is not in a cite-from-paper answer. If
 none of the hits answer and the list was not fetched, refuse and persist, with no citations —
@@ -1325,7 +1374,11 @@ answer cites no paper; it is the letting. An empty active roll is an answer, not
 documents-refusal sentence, and it carries no Passage citations. Rent is not on the roll.
 
 Behavioural golden cases grade this turn as the evals subject (cite / refuse / tool = search, and
-on a Building bound list vs search vs empty roll). Grounding case `off-lease-refuses` still means
+on a Building bound list vs search vs empty roll, and on a Unit bound record answers: a Unit with no
+Documents answered from its record, a `לא רשום` field refused, another flat's question refused, a
+built and an assigned bay both answered, and a record area that disagrees with the lease's printed
+area answered with both values and both citation kinds; and on a Building bound with no paper, a
+count of four-room flats answered from the Unit lines and citing `כרטיס הבניין`). Grounding case `off-lease-refuses` still means
 hits may exist and none answer.
 
 An extractor failure (`unavailable`) is not a turn: nothing is appended to the thread. Estate's

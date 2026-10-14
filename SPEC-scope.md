@@ -108,6 +108,16 @@ the same reading Q1 gives them from the other side, where they are shown and mar
 much of the estate is let today; the tenant-facing question is Q2, which takes a phone number and
 frequently answers with nothing.
 
+### Is this one flat let — `resolveActiveTenancy`, #228
+
+`resolveActiveTenancy(db, unitId, clock)` returns the id of the letting on one Unit that counts
+today, or null. It reads `tenancy`, not `occupancy`, because the view inner-joins `tenancy_party`
+and an ACTIVE letting nobody has been put on yet would read as vacant — right for "who lives here",
+wrong for "is this flat let". The predicate is the same `TENANCY_ACTIVE_TODAY` string, in this
+file. It returns no party and no name and writes no access line; the office turn's Unit record
+then asks `resolvePartiesInUnit` for the people, which does. `one_active_tenancy_per_unit` makes it
+one row at most.
+
 ## The audit line records what was reached, not what was asked
 
 SPEC.md's security defaults require **every scoped read of tenant data to be logged**, not only

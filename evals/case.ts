@@ -36,7 +36,21 @@ export interface Expectation {
   tool: string | null;
   /** Substrings the answer must contain. */
   contains: string[];
+  /**
+   * #229. Citation kinds the answer must carry, each at least once: `record` is the Unit record's
+   * `כרטיס הדירה` or (#230) the Building
+   * record's `כרטיס הבניין`; `paper` is any other citation. Omitted means no kind is asserted.
+   */
+  citesKinds?: CitationKind[];
 }
+
+export type CitationKind = 'record' | 'paper';
+
+/** How a subject spells a Unit-record citation, so the grader can tell it from paper. */
+export const RECORD_CITATION = 'כרטיס הדירה';
+
+/** #230. How a subject spells a Building-record citation. Also a `record` kind to the grader. */
+export const BUILDING_RECORD_CITATION = 'כרטיס הבניין';
 
 // A retrieval case asserts **where in the result set** the answering clause
 // came back, and nothing else.
@@ -196,6 +210,14 @@ export function parseCase(raw: unknown, source: string): GoldenCase {
   ) {
     fail('expect.contains must be an array of strings');
   }
+  const citesKinds: unknown = expect?.citesKinds;
+  if (
+    citesKinds !== undefined &&
+    (!Array.isArray(citesKinds) ||
+      citesKinds.some((kind) => kind !== 'record' && kind !== 'paper'))
+  ) {
+    fail('expect.citesKinds must be an array of record or paper');
+  }
 
   return {
     id,
@@ -206,6 +228,7 @@ export function parseCase(raw: unknown, source: string): GoldenCase {
       citesClause: flag('citesClause'),
       tool: (expect?.tool ?? null) as string | null,
       contains: expect?.contains as string[],
+      citesKinds: citesKinds as CitationKind[] | undefined,
     },
   };
 }
