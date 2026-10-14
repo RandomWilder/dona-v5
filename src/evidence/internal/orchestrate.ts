@@ -30,7 +30,7 @@ export function destinationAfterFiling(
     return `/documents/${step.documentId}/seed`;
   }
   if (step.typeKey === 'lease' && step.tenancyId === null) {
-    return `/documents/${step.documentId}/fields`;
+    return `/documents/filing/${step.documentId}`;
   }
   if (step.typeKey === 'lease_amendment' && step.tenancyId !== null) {
     return `/documents/${step.documentId}/tenancy`;

@@ -453,6 +453,17 @@ describe('evidence · #236 same-name candidates and the same lease', () => {
             entity_id: existing.id,
           },
         ]);
+        // #237. The lease is about the letting's flat, not the one the door preselected.
+        const subject = await o.db.query<{ entity_id: string }>(
+          `SELECT entity_id FROM document_link
+            WHERE document_id = $1 AND entity_type = 'UNIT' AND link_role = 'SUBJECT'`,
+          [o.documentId],
+        );
+        assert.deepEqual(
+          subject.rows.map((row) => row.entity_id),
+          [unitId],
+        );
+        assert.notEqual(unitId, o.unitId);
         const parties = await o.db.query<{ n: string }>(
           `SELECT count(*)::text AS n FROM party
             WHERE national_id_key = party_national_id_key('PERSON', $1)`,

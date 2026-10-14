@@ -308,20 +308,23 @@ describe('evidence · upload, read, approve', () => {
       assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
       documentId =
         String(filed.headers.location ?? '').match(
-          /\/documents\/([0-9a-f-]{36})\/fields$/,
+          /\/documents\/filing\/([0-9a-f-]{36})$/,
         )?.[1] ?? '';
       assert.ok(documentId);
-      assert.equal(
-        String(filed.headers.location),
-        unitDocumentAction('lease', documentId)?.href,
-      );
 
-      const anchored = await pool.query<{ n: string }>(
-        `SELECT count(*)::text AS n FROM document_link
-          WHERE document_id = $1 AND entity_type = 'UNIT' AND entity_id = $2`,
-        [documentId, unitId],
+      const anchored = await pool.query<{ n: string; storage_uri: string }>(
+        `SELECT
+           (SELECT count(*) FROM document_link
+             WHERE document_id = $1 AND entity_type = 'UNIT')::text AS n,
+           storage_uri
+         FROM document WHERE document_id = $1`,
+        [documentId],
       );
-      assert.equal(anchored.rows[0]?.n, '1');
+      assert.equal(anchored.rows[0]?.n, '0');
+      assert.match(
+        anchored.rows[0]?.storage_uri ?? '',
+        /\/unassigned\/lease\//,
+      );
 
       const read = await asOperator(app as never, who).inject({
         method: 'GET',

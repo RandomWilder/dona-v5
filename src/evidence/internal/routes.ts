@@ -102,7 +102,7 @@ import {
   contactChannelOf,
   contactRefusal,
 } from './contacts.ts';
-import { anchorOf, getFiledDocument } from './documents.ts';
+import { anchorOrNone, getFiledDocument } from './documents.ts';
 import {
   EXTRACT_WORK_KIND,
   type ExtractedRow,
@@ -110,12 +110,19 @@ import {
   isIdentifierField,
   listExtractedFields,
 } from './extract.ts';
-import { fileDocument, findDocumentByHash, runExtractWork } from './intake.ts';
+import {
+  fileDocument,
+  findDocumentByHash,
+  type IntakeResult,
+  rememberDoorUnit,
+  runExtractWork,
+} from './intake.ts';
 import {
   carryBoundLease,
   confirmLeaseTenancy,
   leaseReadingGaps,
   openLeaseDraft,
+  preselectedUnitId,
   proposeLeaseOpening,
   proposeLeaseTenancy,
 } from './lease.ts';
@@ -613,7 +620,14 @@ export function registerDocumentRoutes(
   const uncarriedReasons = async (
     documentId: string,
   ): Promise<Record<string, UncarriedReason | null>> => {
-    const rows = await uncarriedOnDocument(deps.pool, documentId);
+    // #237. An unopened lease is judged against the flat its opening would preselect.
+    const proposed = (await anchorOrNone(deps.pool, documentId))
+      ? null
+      : await preselectedUnitId(
+          { db: deps.pool, clock: deps.clock, objects: deps.objects },
+          documentId,
+        );
+    const rows = await uncarriedOnDocument(deps.pool, documentId, proposed);
     const out: Record<string, UncarriedReason | null> = {};
     for (const row of rows) {
       out[row.extractedFieldId] = row.reason;
@@ -658,14 +672,12 @@ export function registerDocumentRoutes(
     documentId: string,
   ): Promise<Omit<LeaseFilingScreen, 'nav' | 'csrf'>> => {
     const filed = await getFiledDocument(deps.pool, documentId);
-    const anchor = await anchorOf(deps.pool, documentId);
-    if (anchor.kind !== 'UNIT') {
-      throw new KernelError('not_found', 'document not found');
-    }
-    const unit = await getUnit(deps.pool, anchor.id);
+    const anchor = await anchorOrNone(deps.pool, documentId);
+    const unit =
+      anchor?.kind === 'UNIT' ? await getUnit(deps.pool, anchor.id) : undefined;
     const bound = await tenancyBoundTo(documentId);
     const rows = await listExtractedFields(deps.pool, documentId);
-    if (bound) {
+    if (bound && unit) {
       const tenancy = await getTenancy(deps.pool, bound);
       const facts = await listTenancyDocumentFacts(deps.pool, bound);
       return {
@@ -714,16 +726,37 @@ export function registerDocumentRoutes(
   // before anything is written. A refusal from the press re-renders this screen with its sentence.
   const openingOf = async (
     documentId: string,
-    extras: { failed?: boolean; termsProfile?: string } = {},
+    extras: {
+      failed?: boolean;
+      termsProfile?: string;
+      unitId?: string;
+      query?: string;
+      mayCreate?: boolean;
+    } = {},
   ): Promise<Omit<LeaseFilingScreen, 'nav' | 'csrf'>> => {
     const opening = await proposeLeaseOpening(
-      { db: deps.pool, clock: deps.clock, contacts: deps.contacts },
+      {
+        db: deps.pool,
+        clock: deps.clock,
+        contacts: deps.contacts,
+        objects: deps.objects,
+      },
       documentId,
+      {
+        ...(extras.unitId ? { unitId: extras.unitId } : {}),
+        ...(extras.query ? { query: extras.query } : {}),
+      },
     );
     return {
       beat: 'open',
       documentId,
-      unit: opening.unit,
+      ...(opening.unit ? { unit: opening.unit } : {}),
+      reading: opening.placeReading ?? undefined,
+      candidates: opening.candidates,
+      candidateTotal: opening.candidateTotal,
+      building: opening.placeBuilding,
+      mayCreate: extras.mayCreate === true,
+      ...(extras.query ? { query: extras.query } : {}),
       opening: {
         ...opening,
         ...(extras.termsProfile ? { termsProfile: extras.termsProfile } : {}),
@@ -737,7 +770,14 @@ export function registerDocumentRoutes(
     CONFIRM,
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
-      const screen = await openingOf(documentId);
+      const asked = String((request.query as { q?: string }).q ?? '').trim();
+      const query = asked === '' ? '' : requireText(asked, 'q', 200);
+      const unitId = String((request.query as { unit?: string }).unit ?? '');
+      const screen = await openingOf(documentId, {
+        mayCreate: mayShapeTheEstate(request),
+        ...(query === '' ? {} : { query }),
+        ...(unitId === '' ? {} : { unitId: validId(unitId, 'unit') }),
+      });
       if (screen.opening?.tenancyId) {
         return reply.redirect(`/documents/filing/${documentId}`);
       }
@@ -755,6 +795,7 @@ export function registerDocumentRoutes(
       const asked = (fields.terms_profile ?? '').trim();
       const termsProfile =
         asked === '' ? '' : requireText(asked, 'terms_profile', 200);
+      const postedUnit = (fields.unit ?? '').trim();
       const attach = (fields.attach ?? '').trim();
       const links: Record<string, string> = {};
       for (const [name, value] of Object.entries(fields)) {
@@ -770,6 +811,7 @@ export function registerDocumentRoutes(
           termsProfileName: termsProfile,
           openedBy: requireOperatorEmail(request),
           links,
+          ...(postedUnit === '' ? {} : { unitId: validId(postedUnit, 'unit') }),
           ...(attach === '' ? {} : { attachTo: validId(attach, 'tenancy') }),
         });
       } catch (error) {
@@ -783,7 +825,11 @@ export function registerDocumentRoutes(
             request,
             await openingOf(documentId, {
               failed: true,
+              mayCreate: mayShapeTheEstate(request),
               ...(termsProfile ? { termsProfile } : {}),
+              ...(postedUnit === ''
+                ? {}
+                : { unitId: validId(postedUnit, 'unit') }),
             }),
           );
         }
@@ -1005,6 +1051,16 @@ export function registerDocumentRoutes(
       }),
     );
     const unit = await getUnit(deps.pool, written.unitId);
+    const documentId = body.document
+      ? validId(String(body.document), 'document')
+      : '';
+    if (documentId !== '') {
+      const filed = await getFiledDocument(deps.pool, documentId);
+      await rememberDoorUnit(deps.objects, filed.fileHash, unit.unit_id);
+      return reply.redirect(
+        `/documents/filing/${documentId}/open?unit=${unit.unit_id}`,
+      );
+    }
     html(reply);
     return leaseFiling(request, {
       beat: 'place',
@@ -1098,9 +1154,7 @@ export function registerDocumentRoutes(
       );
     }
 
-    const chosen = fields.unit ? validId(fields.unit, 'unit') : null;
     const unread = read.ocrOutcome === 'too_large';
-    const reading = readPlace(read.text);
     const heldScreen = { held: fileHash, ...(unread ? { unread: true } : {}) };
 
     if (read.verification.verdict === 'refused' && !unread) {
@@ -1115,84 +1169,30 @@ export function registerDocumentRoutes(
       });
     }
 
-    if (chosen) {
-      const unit = await getUnit(deps.pool, chosen);
-      const result = await fileDocument(await filingDeps(deps), {
-        bytes,
-        typeKey: type.typeKey,
-        place: placeFor(type.typeKey, unit),
-        tenancyId: null,
-        filedBy: operator,
-        reading: read,
-        ...(unread ? { fileUnread: true } : {}),
-      });
-      html(reply);
-      if (!result.filed) {
-        reply.code(422);
-        return leaseFiling(request, {
-          beat: 'file',
-          ...heldScreen,
-          refused: {
-            type,
-            verification: result.verification,
-            reason: result.refusal,
-            ...(result.anchoredTo
-              ? {
-                  documentHref: `/documents/${(await findDocumentByHash(deps.pool, fileHash))?.documentId ?? ''}/read`,
-                }
-              : {}),
-          },
-        });
-      }
-      return reply.redirect(`/documents/filing/${result.documentId}`);
-    }
-
-    const resolved = await resolvePlace(deps.pool, reading);
-    if (!resolved.unit) {
-      await createAuditLog(deps.pool, deps.clock).write(
-        {
-          actorKind: 'staff',
-          actorId: operator,
-          actorRole: request.staff?.role ?? undefined,
-          action: 'evidence.intake_unresolved',
-          inputs: {
-            typeKey: type.typeKey,
-            extension,
-            bytes: bytes.length,
-            fileHash,
-            candidates: resolved.candidates.length,
-            ocr: read.ocrOutcome,
-            pages: read.native.length,
-            ...(read.pagesRead === undefined
-              ? {}
-              : { pagesRead: read.pagesRead }),
-          },
-        },
-        { outcome: 'ok' },
-      );
-      return paint(422, {
-        beat: 'place',
-        ...heldScreen,
-        reading,
-        candidates: resolved.candidates,
-        candidateTotal: resolved.total,
-        query: reading.addressLine ?? '',
-        mayCreate: mayShapeTheEstate(request),
-        building: resolved.building
-          ? {
-              building_id: resolved.building.building_id,
-              name: resolved.building.name,
-            }
-          : null,
-      });
-    }
-    html(reply);
-    return leaseFiling(request, {
-      beat: 'place',
-      ...heldScreen,
-      matched: resolved.unit,
-      reading,
+    const doorUnit = fields.unit ? validId(fields.unit, 'unit') : null;
+    const result = await fileDocument(await filingDeps(deps), {
+      bytes,
+      typeKey: type.typeKey,
+      place: null,
+      tenancyId: null,
+      filedBy: operator,
+      reading: read,
+      ...(doorUnit ? { preselectedUnitId: doorUnit } : {}),
+      ...(unread ? { fileUnread: true } : {}),
     });
+    html(reply);
+    if (!result.filed) {
+      reply.code(422);
+      const existingId =
+        result.existingDocumentId ??
+        (await findDocumentByHash(deps.pool, fileHash))?.documentId;
+      return leaseFiling(request, {
+        beat: 'file',
+        ...heldScreen,
+        refused: refusalOf(type, { ...result, existingDocumentId: existingId }),
+      });
+    }
+    return reply.redirect(`/documents/filing/${result.documentId}`);
   });
 
   // **The declaration an administrator writes. Slice 7.2, flow A14.**
@@ -1389,12 +1389,14 @@ export function registerDocumentRoutes(
     }
     const unit = await getUnit(deps.pool, unitId);
 
+    const lease = type.typeKey === 'lease';
     const result = await fileDocument(await filingDeps(deps), {
       bytes,
       typeKey: type.typeKey,
-      place: placeFor(type.typeKey, unit),
-      tenancyId,
+      place: lease ? null : placeFor(type.typeKey, unit),
+      tenancyId: lease ? null : tenancyId,
       filedBy: operator,
+      ...(lease ? { preselectedUnitId: unit.unit_id } : {}),
     });
 
     html(reply);
@@ -1413,9 +1415,7 @@ export function registerDocumentRoutes(
         declaredTypeKey: type.typeKey,
         declaredTenancyId: tenancyId ?? undefined,
         refused: {
-          type,
-          verification: result.verification,
-          reason: result.refusal,
+          ...refusalOf(type, result),
           // Slice 6.10. Present only on `anchored`, where naming the flat is the whole refusal.
           ...(result.anchoredTo
             ? { anchoredTo: await anchorScreen(deps, result.anchoredTo) }
@@ -1427,7 +1427,7 @@ export function registerDocumentRoutes(
       documentId: result.documentId,
       verdict: result.verification.verdict,
       typeKey: type.typeKey,
-      tenancyId,
+      tenancyId: lease ? null : tenancyId,
     });
     if (next) {
       return reply.redirect(next);
@@ -1521,6 +1521,56 @@ export function registerDocumentRoutes(
     }
     const extension = sniffExtension(bytes);
     const chosen = fields.unit ? validId(fields.unit, 'unit') : null;
+
+    if (type.typeKey === 'lease') {
+      let read: DocumentReading | undefined;
+      if (!chosen) {
+        read = await intakeReading(
+          deps,
+          bytes,
+          extension,
+          type.verificationTerms,
+        );
+        if (read.ocrOutcome === 'too_large') {
+          html(reply);
+          reply.code(422);
+          return renderIntakePage({
+            nav: chromeOf(deps, request),
+            csrf: csrfFrom(request),
+            types: await listDocumentTypes(deps.pool),
+            declaredTypeKey: type.typeKey,
+            tooLargeBytes: bytes.length,
+          });
+        }
+      }
+      const result = await fileDocument(await filingDeps(deps), {
+        bytes,
+        typeKey: type.typeKey,
+        place: null,
+        tenancyId: null,
+        filedBy: operator,
+        reading: read,
+        ...(chosen ? { preselectedUnitId: chosen } : {}),
+      });
+      html(reply);
+      if (!result.filed) {
+        reply.code(422);
+        return renderIntakePage({
+          nav: chromeOf(deps, request),
+          csrf: csrfFrom(request),
+          types: await listDocumentTypes(deps.pool),
+          declaredTypeKey: type.typeKey,
+          refused: refusalOf(type, result),
+        });
+      }
+      const next = destinationAfterFiling({
+        documentId: result.documentId,
+        verdict: result.verification.verdict,
+        typeKey: type.typeKey,
+        tenancyId: null,
+      });
+      return reply.redirect(next ?? `/documents/filing/${result.documentId}`);
+    }
 
     let unit: UnitHit;
     // What the reader read off these bytes, kept so `fileDocument` need not read them again (6.4,
@@ -1744,7 +1794,7 @@ export function registerDocumentRoutes(
       // rows, and on a document carrying two of them it drew the page's back link and its building
       // name off whichever came back. One read for both call sites now, and it is the place the
       // bytes are filed under.
-      const anchor = await anchorOf(deps.pool, documentId);
+      const anchor = await anchorOrNone(deps.pool, documentId);
       const extracted = await listExtractedFields(deps.pool, documentId);
       // The stance, once, before either branch renders — and the line written only when the viewer
       // holds the permission *and* the document actually carried an identifier.
@@ -1757,6 +1807,24 @@ export function registerDocumentRoutes(
         });
       }
       html(reply);
+      if (!anchor) {
+        return renderReadPage({
+          nav: chromeOf(deps, request),
+          csrf: csrfFrom(request),
+          documentId,
+          buildingId: '',
+          buildingName: 'תיוק חוזה',
+          unitId: null,
+          typeKey,
+          labelHe,
+          fileHash,
+          source,
+          pageText,
+          extracted,
+          mayReadIdentifiers: identifiers,
+          ...pageCoverage(await getFiledDocument(deps.pool, documentId)),
+        });
+      }
       if (anchor.kind === 'UNIT') {
         const unit = await getUnit(deps.pool, anchor.id);
         return renderReadPage({
@@ -1817,7 +1885,7 @@ export function registerDocumentRoutes(
     },
   ): Promise<FieldsScreen> => {
     const filed = await getFiledDocument(deps.pool, documentId);
-    const anchor = await anchorOf(deps.pool, documentId);
+    const anchor = await anchorOrNone(deps.pool, documentId);
     const rows = await listExtractedFields(deps.pool, documentId);
     const on = await declarationDay(deps, documentId, rows);
     const declared = await documentTypeFields(deps.pool, filed.typeKey, on);
@@ -1845,6 +1913,14 @@ export function registerDocumentRoutes(
       ...pageCoverage(filed),
       ...extra,
     };
+    if (!anchor) {
+      return {
+        ...common,
+        buildingId: '',
+        buildingName: 'תיוק חוזה',
+        unitId: null,
+      };
+    }
     if (anchor.kind === 'UNIT') {
       const unit = await getUnit(deps.pool, anchor.id);
       return {
@@ -2042,6 +2118,7 @@ export function registerDocumentRoutes(
     audit: createAuditLog(deps.pool, deps.clock),
     clock: deps.clock,
     contacts: deps.contacts,
+    objects: deps.objects,
   });
 
   app.get<{ Params: { documentId: string } }>(
@@ -2098,6 +2175,11 @@ export function registerDocumentRoutes(
     READ,
     async (request, reply) => {
       const documentId = validId(request.params.documentId, 'document');
+      // #237. An unopened lease has no flat, so there is no letting to confirm yet. Its door is the
+      // filing workspace, where פתיחת טיוטה chooses one.
+      if (!(await anchorOrNone(deps.pool, documentId))) {
+        return reply.redirect(`/documents/filing/${documentId}`);
+      }
       const proposed = await proposeLeaseTenancy(leaseDeps(), {
         documentId,
         readBy: requireOperatorEmail(request),
@@ -2359,6 +2441,29 @@ async function filingDeps(deps: DocumentDeps) {
     audit: createAuditLog(deps.pool, deps.clock),
     clock: deps.clock,
     bucket: deps.bucket,
+  };
+}
+
+/**
+ * A refused filing as every upload door shows it: the reason, and a link to the document these bytes
+ * already are. An unassigned lease has no flat to name, so the link is the whole answer (#237).
+ */
+function refusalOf<T>(
+  type: T,
+  result: Extract<IntakeResult, { filed: false }>,
+): {
+  type: T;
+  verification: typeof result.verification;
+  reason: typeof result.refusal;
+  documentHref?: string;
+} {
+  return {
+    type,
+    verification: result.verification,
+    reason: result.refusal,
+    ...(result.existingDocumentId
+      ? { documentHref: `/documents/filing/${result.existingDocumentId}` }
+      : {}),
   };
 }
 

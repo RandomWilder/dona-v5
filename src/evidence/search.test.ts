@@ -21,6 +21,7 @@ import type { IntakeDeps } from './contract.ts';
 import {
   applyDocumentTypeCatalogue,
   fileDocument,
+  linkDocument,
   listDocumentPassages,
   type RetrievalBound,
   searchPassages,
@@ -124,6 +125,56 @@ describe('evidence · search over passages', () => {
         assert.equal(hits[0]?.documentId, documentId);
         assert.equal(hits[0]?.page, 2);
         assert.match(hits[0]?.text ?? '', new RegExp(RENT));
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('does not return an unopened lease on the portfolio bound, and does once its flat is linked (#237)', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+        const page = `דמי השכירות ללא דירה ${RENT} ש״ח`;
+        const result = await fileDocument(
+          deps(db, [specimen('lease-standard.md'), page]),
+          {
+            bytes: pdfBytes(`search-unassigned-${newId()}`),
+            typeKey: 'lease',
+            place: null,
+            tenancyId: null,
+          },
+        );
+        if (!result.filed) throw new Error('expected a filed document');
+        const search = () =>
+          searchPassages(
+            db,
+            createFakeEmbedder(embeddingColumnDimensions),
+            page,
+            'administrator',
+            PORTFOLIO,
+          );
+        assert.ok(
+          !(await search()).some((hit) => hit.documentId === result.documentId),
+          'an unopened lease is about no flat, so no search reaches it',
+        );
+        const unitId = await seedListedUnit(db);
+        await linkDocument(db, {
+          documentId: result.documentId,
+          entityType: 'UNIT',
+          entityId: unitId,
+          linkRole: 'SUBJECT',
+        });
+        const hit = (await search()).find(
+          (row) => row.documentId === result.documentId,
+        );
+        assert.ok(hit, 'opened, it is a lease like any other');
+        assert.equal(hit.unitId, unitId);
       });
     } finally {
       await pool.end();

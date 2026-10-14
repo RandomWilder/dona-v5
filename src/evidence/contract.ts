@@ -214,9 +214,12 @@ export {
   documentFileHash,
   documentObjectPath,
   documentStorageUri,
+  isUnassignedStorageUri,
+  leaseProposalPath,
   parseObjectPath,
   parseStorageUri,
   sniffExtension,
+  unassignedDocumentPath,
 } from './internal/storage-path.ts';
 export type { Queryable } from './internal/types.ts';
 // The verification guard (slice 3.3). Exported because `tests/policy/document-verification.test.ts`

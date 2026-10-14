@@ -239,6 +239,17 @@ A lease with neither is unopened: it has no anchor, appears on **ממתינים 
 no search, retrieval or office answer, because all three resolve through `document_link`. Documents
 filed under place paths before #232 keep those paths and that anchor; nothing is moved or copied.
 
+**The opening proposal sits beside the lease, and it is not an anchor (#237).** Upload writes
+`unassigned/lease/<file hash>.proposal.json`: the deterministic place reader's output and, when the
+door carried one, the door's flat (A1's unit-first door, the flat page, a call's attachment, or a
+flat A16 created on the reading's behalf). "Nothing names a flat" is about the document's path and
+its links — what the system treats as *where the document is about*. The proposal is what פתיחת
+טיוטה would preselect, and nothing else reads it: `anchorOf`, search, retrieval and the office
+answer never open it, so a door's flat that turns out wrong costs one different choice at opening
+and binds nothing. The chosen flat beats the door's flat, which beats an exact address match.
+Once the `SUBJECT` link exists the proposal is ignored; it is not deleted, because it is cheap and
+it is the record of what the upload proposed.
+
 **The ingest order, which slice 3.3 must follow:** hash the bytes → look the hash up → `put` the
 object only when no document already holds it → `ingestDocument`. Hashing first is what makes the
 whole path computable before anything is written, and looking up before putting is what keeps the

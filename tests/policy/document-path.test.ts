@@ -21,6 +21,7 @@ import type { LinkEntityType } from '../../src/evidence/contract.ts';
 import {
   documentObjectPath,
   parseObjectPath,
+  unassignedDocumentPath,
 } from '../../src/evidence/contract.ts';
 import type { KernelError } from '../../src/kernel/errors.ts';
 
@@ -76,6 +77,29 @@ describe('policy · a document object path is rooted at a place, never at a pers
           parseObjectPath(`${kind.toLowerCase()}/${anId}/lease/${aDigest}.pdf`),
         (error: KernelError) => error.code === 'invalid',
         `${kind} must not parse as a path root`,
+      );
+    }
+  });
+
+  it('allows the unassigned root for a lease and refuses it for anything else', () => {
+    assert.equal(
+      unassignedDocumentPath({
+        typeKey: 'lease',
+        fileHash: aDigest,
+        extension: 'pdf',
+      }),
+      `unassigned/lease/${aDigest}.pdf`,
+    );
+    for (const typeKey of ['handover_protocol', 'arnona', 'lease_amendment']) {
+      assert.throws(
+        () =>
+          unassignedDocumentPath({
+            typeKey,
+            fileHash: aDigest,
+            extension: 'pdf',
+          }),
+        (error: KernelError) => error.code === 'invalid',
+        `${typeKey} must not use the unassigned root`,
       );
     }
   });

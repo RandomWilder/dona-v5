@@ -13,6 +13,7 @@ import {
   withOpening as fileLease,
   type Opening,
 } from '../../tests/support/lease-opening.ts';
+import { type EstatePlan, importEstate } from '../estate/contract.ts';
 import { skipReason } from '../kernel/pg-support.ts';
 import { findTermsProfileByName, upsertTenancy } from '../tenancy/contract.ts';
 import { DEFAULT_TERMS_PROFILE } from './contract.ts';
@@ -43,7 +44,11 @@ const household = (address: string): Finding[] => [
 
 /** The A16 path, filed with this suite's household unless a case reads something else. */
 const withOpening = (
-  spec: { tag: string; findings?: (address: string) => Finding[] },
+  spec: {
+    tag: string;
+    findings?: (address: string) => Finding[];
+    placed?: boolean;
+  },
   run: (opening: Opening) => Promise<void>,
 ): Promise<boolean> => fileLease({ on: ON, findings: household, ...spec }, run);
 
@@ -408,5 +413,183 @@ describe('evidence · #234 what הקריאה still needs', () => {
         ['end_date', null],
       ],
     );
+  });
+});
+
+// #237. A lease is stored unassigned; פתיחת טיוטה chooses its flat and writes the one link that
+// says so. The fixture files through A16 with the flat on the door, so that flat is preselected.
+describe('evidence · #237 the flat is chosen at פתיחת טיוטה', () => {
+  const unitSubjects = async (o: Opening): Promise<string[]> =>
+    (
+      await o.db.query<{ entity_id: string }>(
+        `SELECT entity_id FROM document_link
+          WHERE document_id = $1 AND entity_type = 'UNIT' AND link_role = 'SUBJECT'`,
+        [o.documentId],
+      )
+    ).rows.map((row) => row.entity_id);
+
+  /** A second flat, at an address the paper does not name. */
+  const anotherFlat = async (o: Opening): Promise<string> => {
+    await importEstate(o.db, {
+      projects: [
+        {
+          name: 'מכרז 237',
+          projectCode: 'TEST-OPEN-237',
+          tenderRef: null,
+          status: 'ACTIVE',
+        },
+      ],
+      buildings: [
+        {
+          name: 'בניין הברוש',
+          addressLine: 'הברוש 3',
+          city: 'עיר אחרת 237',
+          projectCode: 'TEST-OPEN-237',
+          handoverDate: '2025-03-01',
+          warrantyEndDate: '2027-03-01',
+          status: 'ACTIVE',
+          spaces: [
+            { kind: 'UNIT', name: 'דירה 9', floor: '1', accessNote: null },
+          ],
+          units: [
+            {
+              spaceName: 'דירה 9',
+              unitNumber: '9',
+              rooms: 3,
+              areaSqm: 70,
+              hasMamad: false,
+              parkingSpaceName: null,
+              storageSpaceName: null,
+              warrantyEndDate: null,
+              conditionStatus: 'READY',
+            },
+          ],
+        },
+      ],
+    } satisfies EstatePlan);
+    const other =
+      (
+        await o.db.query<{ unit_id: string }>(
+          `SELECT u.unit_id FROM unit u
+             JOIN space s ON s.space_id = u.unit_id
+             JOIN building b ON b.building_id = s.building_id
+            WHERE b.address_line = 'הברוש 3'`,
+        )
+      ).rows[0]?.unit_id ?? '';
+    assert.ok(other);
+    return other;
+  };
+
+  const lettingUnit = async (o: Opening): Promise<string | undefined> =>
+    (
+      await o.db.query<{ unit_id: string }>(
+        `SELECT t.unit_id FROM tenancy t
+           JOIN document_link l
+             ON l.entity_id = t.tenancy_id AND l.entity_type = 'TENANCY'
+          WHERE l.document_id = $1`,
+        [o.documentId],
+      )
+    ).rows[0]?.unit_id;
+
+  it('the press writes exactly one UNIT SUBJECT link, and the anchor is that flat from then on', async (t) => {
+    const ran = await withOpening({ tag: 'open-237-link' }, async (o) => {
+      for (const key of OPENING_KEYS) {
+        await o.approve(key);
+      }
+      const stored = await o.db.query<{ storage_uri: string }>(
+        'SELECT storage_uri FROM document WHERE document_id = $1',
+        [o.documentId],
+      );
+      assert.match(stored.rows[0]?.storage_uri ?? '', /\/unassigned\/lease\//);
+      assert.deepEqual(await unitSubjects(o), []);
+
+      const pressed = await o.post(`/documents/filing/${o.documentId}/open`, {
+        terms_profile: DEFAULT_TERMS_PROFILE,
+      });
+      assert.equal(pressed.statusCode, 302, pressed.body.slice(0, 300));
+      assert.deepEqual(await unitSubjects(o), [o.unitId]);
+
+      // A second press is the established draft, and writes no second link.
+      await o.post(`/documents/filing/${o.documentId}/open`, {
+        terms_profile: DEFAULT_TERMS_PROFILE,
+      });
+      assert.deepEqual(await unitSubjects(o), [o.unitId]);
+
+      // The path did not move; the anchor is the link now, and the ledger goes back to the flat.
+      const ledger = await o.get(`/documents/${o.documentId}/fields`);
+      assert.equal(ledger.statusCode, 200, ledger.body.slice(0, 300));
+      assert.match(
+        ledger.body,
+        new RegExp(`class="back" href="/estate/units/${o.unitId}"`),
+      );
+    });
+    if (!ran) t.skip(skipReason);
+  });
+
+  it('a chosen flat the paper disagrees with is shown beside the reading, and the press opens on it', async (t) => {
+    const ran = await withOpening({ tag: 'open-237-other' }, async (o) => {
+      for (const key of OPENING_KEYS) {
+        await o.approve(key);
+      }
+      const other = await anotherFlat(o);
+
+      const screen = await o.get(
+        `/documents/filing/${o.documentId}/open?unit=${other}`,
+      );
+      assert.equal(screen.statusCode, 200, screen.body.slice(0, 300));
+      assert.match(screen.body, /הברוש 3, עיר אחרת 237/);
+      assert.match(screen.body, /<dt>על הדף<\/dt>/);
+      assert.match(screen.body, /לא תואם את הדירה/);
+      assert.match(screen.body, new RegExp(`value="${other}"`));
+      assert.doesNotMatch(screen.body, /type="submit" disabled/);
+
+      const pressed = await o.post(`/documents/filing/${o.documentId}/open`, {
+        terms_profile: DEFAULT_TERMS_PROFILE,
+        unit: other,
+      });
+      assert.equal(pressed.statusCode, 302, pressed.body.slice(0, 300));
+      assert.deepEqual(await unitSubjects(o), [other]);
+      assert.equal(await lettingUnit(o), other);
+    });
+    if (!ran) t.skip(skipReason);
+  });
+
+  it('a lease filed under a place path before #237 keeps that flat, and the press writes no second link', async (t) => {
+    const ran = await withOpening(
+      { tag: 'open-237-placed', placed: true },
+      async (o) => {
+        for (const key of OPENING_KEYS) {
+          await o.approve(key);
+        }
+        // The row as #237 found it: the path names the flat, beside the link written at upload.
+        const stored = await o.db.query<{ storage_uri: string }>(
+          'SELECT storage_uri FROM document WHERE document_id = $1',
+          [o.documentId],
+        );
+        assert.match(
+          stored.rows[0]?.storage_uri ?? '',
+          new RegExp(`/unit/${o.unitId}/lease/`),
+        );
+        assert.deepEqual(await unitSubjects(o), [o.unitId]);
+
+        // Another flat asked for on the screen and posted with the press: the path still wins.
+        const other = await anotherFlat(o);
+        const screen = await o.get(
+          `/documents/filing/${o.documentId}/open?unit=${other}`,
+        );
+        assert.equal(screen.statusCode, 200, screen.body.slice(0, 300));
+        assert.match(screen.body, new RegExp(`value="${o.unitId}"`));
+        assert.doesNotMatch(screen.body, new RegExp(`value="${other}"`));
+
+        const pressed = await o.post(`/documents/filing/${o.documentId}/open`, {
+          terms_profile: DEFAULT_TERMS_PROFILE,
+          unit: other,
+        });
+        assert.equal(pressed.statusCode, 302, pressed.body.slice(0, 300));
+        assert.deepEqual(await unitSubjects(o), [o.unitId]);
+        assert.equal(await lettingUnit(o), o.unitId);
+      },
+    );
+    if (!ran) t.skip(skipReason);
   });
 });

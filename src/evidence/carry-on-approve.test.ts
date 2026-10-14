@@ -29,6 +29,7 @@ import { upsertTermsProfile } from '../tenancy/contract.ts';
 import {
   applyDocumentTypeCatalogue,
   DEFAULT_TERMS_PROFILE,
+  linkDocument,
 } from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
@@ -273,7 +274,7 @@ async function withCarry(
     const seen = await send('/documents/filing', {}, `${spec.tag}-seen`);
     assert.equal(
       seen.statusCode,
-      200,
+      302,
       `${String(seen.headers.location ?? '')} ${seen.body.slice(0, 180)}`,
     );
     const filed = await send(
@@ -318,16 +319,27 @@ async function withCarry(
           { unit: unitId, type: 'lease', tenancy: bound },
           marker,
         );
-        assert.equal(second.statusCode, 200, second.body.slice(0, 400));
-        const rows = await pool.query<{ id: string }>(
-          `SELECT d.document_id AS id FROM document d
-             JOIN document_link l ON l.document_id = d.document_id
-            WHERE l.entity_type = 'TENANCY' AND l.entity_id = $1
-              AND d.document_id <> $2`,
-          [bound, documentId],
-        );
-        const id = rows.rows[0]?.id ?? '';
+        // #237: through the flat page a lease is stored unassigned and lands on its workspace.
+        // What #236's attach leaves behind — the flat's `SUBJECT` link and the `TENANCY` link — is
+        // written here directly; attach itself is `lease-filing.test.ts`'s to prove.
+        assert.equal(second.statusCode, 302, second.body.slice(0, 400));
+        const id =
+          String(second.headers.location ?? '').match(
+            /\/documents\/filing\/([0-9a-f-]{36})$/,
+          )?.[1] ?? '';
         assert.ok(id);
+        await linkDocument(pool, {
+          documentId: id,
+          entityType: 'UNIT',
+          entityId: unitId,
+          linkRole: 'SUBJECT',
+        });
+        await linkDocument(pool, {
+          documentId: id,
+          entityType: 'TENANCY',
+          entityId: bound,
+          linkRole: 'EVIDENCE',
+        });
         return id;
       },
     });

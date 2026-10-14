@@ -257,6 +257,7 @@ function refusal(
   verification: Verification,
   reason: IntakeRefusal = 'terms',
   anchoredTo?: AnchoredPlace,
+  documentHref?: string,
 ): Html {
   if (reason === 'anchored') {
     // **Slice 6.10.** Which flat, by name and as a link. *This file is already on file* is a
@@ -265,14 +266,19 @@ function refusal(
     return h`<section class="notice">
       <h2>הקובץ הזה כבר מתויק</h2>
       <p class="lede">
-        אותם בתים בדיוק כבר שמורים במערכת, משויכים
         ${
-          anchoredTo
-            ? h`אל <a href="${anchoredTo.href}">${anchoredLine(anchoredTo)}</a>`
-            : h`אל דירה אחרת`
-        }.
-        מסמך משויך למקום אחד בלבד — זה שהקובץ שלו נשמר תחתיו — ולכן <strong>לא נשמר דבר</strong>:
-        לא קובץ, לא רישום ולא שיוך נוסף. אם זה המסמך הנכון, הוא כבר במערכת.
+          !anchoredTo && documentHref
+            ? h`אותם בתים בדיוק כבר שמורים במערכת — <a href="${documentHref}">המסמך הקיים</a>.
+              <strong>לא נשמר דבר</strong>: לא קובץ ולא רישום. אם זה המסמך הנכון, הוא כבר במערכת.`
+            : h`אותם בתים בדיוק כבר שמורים במערכת, משויכים
+              ${
+                anchoredTo
+                  ? h`אל <a href="${anchoredTo.href}">${anchoredLine(anchoredTo)}</a>`
+                  : h`אל דירה אחרת`
+              }.
+              מסמך משויך למקום אחד בלבד — זה שהקובץ שלו נשמר תחתיו — ולכן <strong>לא נשמר דבר</strong>:
+              לא קובץ, לא רישום ולא שיוך נוסף. אם זה המסמך הנכון, הוא כבר במערכת.`
+        }
       </p>
     </section>`;
   }
@@ -324,6 +330,8 @@ export interface UploadScreen {
     reason?: IntakeRefusal;
     /** Slice 6.10. Where these bytes already live, on the `anchored` refusal and nowhere else. */
     anchoredTo?: AnchoredPlace;
+    /** An unassigned lease already on file. The link is the document, not a flat. #237. */
+    documentHref?: string;
   };
 }
 
@@ -342,6 +350,7 @@ export function renderUploadPage(screen: UploadScreen): string {
             screen.refused.verification,
             screen.refused.reason,
             screen.refused.anchoredTo,
+            screen.refused.documentHref,
           )
         : h``
     }
@@ -471,6 +480,13 @@ export interface IntakeScreen {
    * candidate-chosen one A12 has had since 6.3.
    */
   chosenUnitId?: string;
+  /** A lease that was refused at the door: wrong type, or the same bytes again. #237. */
+  refused?: {
+    type: DocumentTypeRow;
+    verification: Verification;
+    reason?: IntakeRefusal;
+    documentHref?: string;
+  };
 }
 
 /**
@@ -623,6 +639,17 @@ export function renderIntakePage(screen: IntakeScreen): string {
     </div>
     ${tooLong}
     ${
+      screen.refused
+        ? refusal(
+            screen.refused.type,
+            screen.refused.verification,
+            screen.refused.reason,
+            undefined,
+            screen.refused.documentHref,
+          )
+        : h``
+    }
+    ${
       refused
         ? h`<section class="notice">
             <h2>${
@@ -741,14 +768,13 @@ export function renderIntakePage(screen: IntakeScreen): string {
 
 const FILING_BEATS = [
   { key: 'file', label: 'המסמך' },
-  { key: 'place', label: 'הדירה' },
   { key: 'read', label: 'הקריאה' },
   { key: 'open', label: 'פתיחת טיוטה' },
   { key: 'draft', label: 'הטיוטה' },
   { key: 'done', label: 'די היום' },
 ] as const;
 
-type FilingBeat = (typeof FILING_BEATS)[number]['key'];
+type FilingBeat = (typeof FILING_BEATS)[number]['key'] | 'place';
 
 function filingBeats(current: FilingBeat): Html {
   const at = FILING_BEATS.findIndex((beat) => beat.key === current);
@@ -780,6 +806,11 @@ function filingCreateOffer(
         : h``
     }
     ${
+      screen.documentId
+        ? h`<input type="hidden" name="document" value="${screen.documentId}" />`
+        : h``
+    }
+    ${
       screen.building
         ? h`<input type="hidden" name="building" value="${screen.building.building_id}" />`
         : h``
@@ -807,7 +838,9 @@ function filingCreateOffer(
       ${
         screen.held
           ? h`מה שנקרא מהמסמך הוא נקודת ההתחלה וניתן לתקן. הקובץ נשמר.`
-          : h`מה שנקרא מהמסמך הוא נקודת ההתחלה וניתן לתקן. אחרי היצירה יש לצרף את הקובץ שוב — שום דבר אינו נשמר בין הניסיונות.`
+          : screen.documentId
+            ? h`מה שנקרא מהמסמך הוא נקודת ההתחלה וניתן לתקן. החוזה כבר שמור; הדירה שתיווצר תסומן כאן.`
+            : h`מה שנקרא מהמסמך הוא נקודת ההתחלה וניתן לתקן. אחרי היצירה יש לצרף את הקובץ שוב — שום דבר אינו נשמר בין הניסיונות.`
       }
     </p>
   </form>`;
@@ -1178,12 +1211,37 @@ function openingRefusal(refusal: OpeningRefusal): Html {
   }
 }
 
+function openingCandidates(screen: LeaseFilingScreen): Html {
+  const opening = screen.opening;
+  if (!opening) return h``;
+  const listed =
+    opening.unit &&
+    !opening.candidates.some(
+      (candidate) => candidate.unit_id === opening.unit?.unit_id,
+    )
+      ? [opening.unit, ...opening.candidates]
+      : opening.candidates;
+  if (listed.length === 0) return h``;
+  return h`<ul class="candidates">
+    ${listed.map(
+      (unit) => h`<li class="candidate">
+        <input type="radio" id="u-${unit.unit_id}" name="unit" value="${unit.unit_id}" required ${
+          opening.unit?.unit_id === unit.unit_id ? h`checked` : h``
+        } />
+        <label for="u-${unit.unit_id}">דירה ${ltr(unit.unit_number)} · ${unit.building_name} · ${unit.address_line}, ${unit.city}</label>
+      </li>`,
+    )}
+  </ul>`;
+}
+
 function filingOpening(screen: LeaseFilingScreen): Html {
   const opening = screen.opening;
   if (screen.beat !== 'open' || !opening) {
     return h``;
   }
   const { unit } = opening;
+  const reading = opening.placeReading;
+  const choosing = unit === null || opening.candidates.length > 0;
   const refused = opening.refusals.length > 0;
   const unknownProfile =
     opening.termsProfile !== null &&
@@ -1222,10 +1280,33 @@ function filingOpening(screen: LeaseFilingScreen): Html {
           <ul class="missing">${opening.refusals.map(openingRefusal)}</ul>`
         : h``
     }
+    ${
+      reading && choosing
+        ? h`<h2 class="second-heading">${filingHeadline(reading, opening.candidateTotal)}</h2>
+          ${placeFacts(reading, opening.placeBuilding, excerpt)}`
+        : h``
+    }
+    ${
+      reading && choosing && screen.mayCreate
+        ? filingCreateOffer(
+            {
+              ...screen,
+              reading,
+              building: opening.placeBuilding,
+              mayCreate: true,
+            },
+            reading,
+          )
+        : h``
+    }
     <dl class="facts">
       <div>
         <dt>דירה</dt>
-        <dd>${unit.address_line}, ${unit.city} · דירה ${ltr(unit.unit_number)}</dd>
+        <dd>${
+          unit
+            ? h`${unit.address_line}, ${unit.city} · דירה ${ltr(unit.unit_number)}`
+            : h`טרם נבחרה`
+        }</dd>
       </div>
       ${readPlace}
       <div>
@@ -1263,8 +1344,22 @@ function filingOpening(screen: LeaseFilingScreen): Html {
             </form>`,
           )}`
     }
+    <form class="form-grid" method="get" action="/documents/filing/${screen.documentId}/open">
+      <div class="form-row">
+        <label for="q">חיפוש דירה</label>
+        <input class="field" id="q" name="q" type="search" value="${screen.query ?? ''}" />
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="submit">חיפוש</button>
+      </div>
+    </form>
     <form class="form-grid" method="post" action="/documents/filing/${screen.documentId}/open">
       ${csrfInput(screen.csrf)}
+      ${
+        unit && opening.candidates.length === 0
+          ? h`<input type="hidden" name="unit" value="${unit.unit_id}" />`
+          : openingCandidates(screen)
+      }
     <h2 class="second-heading">האנשים</h2>
     <ul class="missing">
       ${opening.people.map(
@@ -1401,14 +1496,14 @@ function filingLede(screen: LeaseFilingScreen): Html {
   if (screen.beat === 'read') {
     return screen.unit
       ? h`תויק לדירה ${excerpt(ltr(screen.unit.unit_number))}. חתמו על שמות ותאריכים, ואז פתיחת טיוטה.`
-      : h`החוזה בתיק. הקריאה בטאב הזה.`;
+      : h`החוזה נשמר בלי דירה. חתמו על שמות ותאריכים, ואז פתיחת טיוטה.`;
   }
   if (screen.matched) {
     return screen.held
       ? h`נקראה כתובת. הקובץ נשמר. הרישום אחרי המשך.`
       : h`נקראה כתובת. עדיין לא נשמר דבר.`;
   }
-  return h`חוזה אחד. הדירה מן הכתובת שעל הדף.`;
+  return h`חוזה אחד. הקובץ נשמר מיד, והדירה נבחרת בפתיחת טיוטה.`;
 }
 
 export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
@@ -1455,7 +1550,10 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
     : h``;
   const candidates = screen.candidates ?? [];
   const unresolved =
-    screen.reading !== undefined && !screen.matched && !screen.chosenUnitId
+    screen.reading !== undefined &&
+    screen.beat !== 'open' &&
+    !screen.matched &&
+    !screen.chosenUnitId
       ? h`<section class="notice">
           <h2>${filingHeadline(screen.reading, screen.candidateTotal ?? 0)}</h2>
           ${placeFacts(screen.reading, screen.building, excerpt)}
@@ -1576,7 +1674,7 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
                   ? h`נשאר על הצעד עד המשך. נשמר רק אחרי אישור הדירה.`
                   : candidates.length > 0
                     ? h`יש לצרף שוב. נשמר רק אחרי שהדירה אושרה.`
-                    : h`עד 100 מ״ב. הקובץ נשמר מיד, והרישום אחרי אישור הדירה.`
+                    : h`עד 100 מ״ב. הקובץ נשמר מיד, בלי דירה. הדירה נבחרת בפתיחת טיוטה.`
             }
           </p>
           <div class="form-actions">
@@ -1585,7 +1683,7 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
                 ? h`המשך ותיוק`
                 : candidates.length > 0
                   ? h`תיוק לדירה שנבחרה`
-                  : h`קריאת הכתובת`
+                  : h`שמירה וקריאה`
             }</button>
           </div>
         </form>`;
@@ -1996,7 +2094,9 @@ function extractedSection(screen: ReadScreen) {
 }
 
 export function renderReadPage(screen: ReadScreen): string {
-  const back = `/estate/inventory/${screen.buildingId}`;
+  const back = screen.buildingId
+    ? `/estate/inventory/${screen.buildingId}`
+    : `/documents/filing/${screen.documentId}`;
   // **The transcript is withheld below the permission. Slice 6.6, rewritten at #102.** 6.5 found an
   // operator reading a ת.ז. off a word-box `title`. There is no overlay now. The per-page text is
   // this system's transcription of the paper, so it is shown only when `mayReadIdentifiers` is true.
@@ -2739,7 +2839,9 @@ function valueCell(screen: FieldsScreen, row: ExtractedRow): Html {
 export function renderFieldsPage(screen: FieldsScreen): string {
   const back = screen.unitId
     ? `/estate/units/${screen.unitId}`
-    : `/estate/inventory/${screen.buildingId}`;
+    : screen.buildingId
+      ? `/estate/inventory/${screen.buildingId}`
+      : `/documents/filing/${screen.documentId}`;
   const shown = screen.mayReadIdentifiers
     ? screen.rows
     : screen.rows.filter((row) => !isIdentifierField(row.fieldKey));

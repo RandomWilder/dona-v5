@@ -13,8 +13,10 @@ import { importEstate } from '../../src/estate/contract.ts';
 import {
   applyDocumentTypeCatalogue,
   DEFAULT_TERMS_PROFILE,
+  fileDocument,
 } from '../../src/evidence/contract.ts';
 import { seedDocumentTypes } from '../../src/evidence/fixtures/document-types.ts';
+import { createAuditLog } from '../../src/kernel/audit.ts';
 import { type Clock, fixedClock } from '../../src/kernel/clock.ts';
 import { createFakeExtractor } from '../../src/kernel/extraction.ts';
 import { createMemoryStore } from '../../src/kernel/objects.ts';
@@ -66,7 +68,16 @@ export interface Opening {
 }
 
 export async function withOpening(
-  spec: { tag: string; on: Date; findings: (address: string) => Finding[] },
+  spec: {
+    tag: string;
+    on: Date;
+    findings: (address: string) => Finding[];
+    /**
+     * Files the lease the way every door did before #237: under the flat's place path, with its
+     * `UNIT` `SUBJECT` link written at upload. Through the contract, because no door does it now.
+     */
+    placed?: boolean;
+  },
   run: (opening: Opening) => Promise<void>,
 ): Promise<boolean> {
   const pool = await migratedPoolOrNull();
@@ -78,26 +89,30 @@ export async function withOpening(
   try {
     await inRolledBackTransaction(pool, async (db) => {
       const clock = fixedClock(spec.on);
+      const objects = createMemoryStore();
+      const pdf = {
+        async pages() {
+          return [
+            {
+              number: 1,
+              width: 595,
+              height: 842,
+              items: fakeItems(text, null),
+            },
+          ];
+        },
+        describe: () => 'fake',
+      };
+      const extractor = createFakeExtractor(() => ({ findings }));
+      const bucket = `dona-v5-test-${spec.tag}`;
       const app = buildApp({
         pool: db as unknown as Pool,
         version: '9.9.9-test',
         clock,
-        objects: createMemoryStore(),
-        pdf: {
-          async pages() {
-            return [
-              {
-                number: 1,
-                width: 595,
-                height: 842,
-                items: fakeItems(text, null),
-              },
-            ];
-          },
-          describe: () => 'fake',
-        },
-        extractor: createFakeExtractor(() => ({ findings })),
-        bucket: `dona-v5-test-${spec.tag}`,
+        objects,
+        pdf,
+        extractor,
+        bucket,
       });
       try {
         await applyDocumentTypeCatalogue(db, seedDocumentTypes);
@@ -208,13 +223,37 @@ export async function withOpening(
           }>;
         };
         const seen = await send({}, `${spec.tag}-seen`);
-        assert.equal(seen.statusCode, 200, seen.body.slice(0, 300));
-        const filed = await send({ unit: unitId }, `${spec.tag}-filed`);
-        assert.equal(filed.statusCode, 302, filed.body.slice(0, 300));
-        const documentId =
-          String(filed.headers.location ?? '').match(
-            /\/documents\/filing\/([0-9a-f-]{36})$/,
-          )?.[1] ?? '';
+        assert.equal(seen.statusCode, 302, seen.body.slice(0, 300));
+        let documentId: string;
+        if (spec.placed) {
+          const placed = await fileDocument(
+            {
+              db,
+              objects,
+              pdf,
+              extractor,
+              audit: createAuditLog(db, clock),
+              clock,
+              bucket,
+            },
+            {
+              bytes: Buffer.from(`%PDF-1.4\n% ${spec.tag}-filed\n`, 'latin1'),
+              typeKey: 'lease',
+              place: { kind: 'UNIT', id: unitId },
+              tenancyId: null,
+              filedBy: who.staffAccountId,
+            },
+          );
+          assert.ok(placed.filed);
+          documentId = placed.documentId;
+        } else {
+          const filed = await send({ unit: unitId }, `${spec.tag}-filed`);
+          assert.equal(filed.statusCode, 302, filed.body.slice(0, 300));
+          documentId =
+            String(filed.headers.location ?? '').match(
+              /\/documents\/filing\/([0-9a-f-]{36})$/,
+            )?.[1] ?? '';
+        }
         assert.ok(documentId);
 
         const approve = async (

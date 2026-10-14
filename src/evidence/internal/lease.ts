@@ -3,11 +3,12 @@
 //
 // The confirm page recomputes from extracted_field plus the unit — no staging table. Capture is
 // already immutable. Estate, parties and tenancy write through their contracts.
-import { getUnit, type UnitHit } from '../../estate/contract.ts';
+import { getUnit, searchEstate, type UnitHit } from '../../estate/contract.ts';
 import type { AuditLog } from '../../kernel/audit.ts';
 import { type Clock, today } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
+import type { ObjectStore } from '../../kernel/objects.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
 import {
   addPartyContact,
@@ -36,8 +37,15 @@ import {
   type ContactChannel,
   type ContactRules,
 } from './contacts.ts';
-import { anchorOf, getFiledDocument, linkDocument } from './documents.ts';
+import {
+  anchorOf,
+  anchorOrNone,
+  getFiledDocument,
+  linkDocument,
+} from './documents.ts';
 import { type ExtractedRow, listExtractedFields } from './extract.ts';
+import { readStoredLeasePlace } from './intake.ts';
+import { type PlaceReading, resolvePlace } from './place.ts';
 import { promoteExtractedField } from './promote.ts';
 import type { Queryable } from './types.ts';
 
@@ -54,6 +62,8 @@ export interface LeaseDeps {
   clock: Clock;
   /** #235. Absent, a lease with an approved phone or email cannot open. */
   contacts?: ContactRules;
+  /** #237. Reads the place proposal stored beside an unassigned lease. */
+  objects?: ObjectStore;
 }
 
 export interface ProposedPerson {
@@ -1072,7 +1082,13 @@ export type OpeningRefusal =
 
 export interface LeaseOpening {
   documentId: string;
-  unit: UnitHit;
+  /** Null until a flat is preselected or chosen. #237. */
+  unit: UnitHit | null;
+  /** The deterministic place reader, kept from upload. Null on a lease filed under a place path. */
+  placeReading: PlaceReading | null;
+  candidates: UnitHit[];
+  candidateTotal: number;
+  placeBuilding: { building_id: string; name: string } | null;
   startDate: string | null;
   endDate: string | null;
   /** The address and flat number as read, shown beside the unit's. Not a refusal (#232). */
@@ -1111,6 +1127,14 @@ export interface OpeningDeps {
   db: Queryable;
   clock: Clock;
   contacts?: ContactRules;
+  objects?: ObjectStore;
+}
+
+export interface OpeningOptions {
+  /** A flat posted or carried back from create. Wins over the stored preselection. */
+  unitId?: string | null;
+  /** Search on פתיחת טיוטה. Replaces the reader's candidate list. */
+  query?: string;
 }
 
 /**
@@ -1252,15 +1276,91 @@ function applyNameLinks(
 export async function proposeLeaseOpening(
   deps: OpeningDeps,
   documentIdRaw: string,
+  options: OpeningOptions = {},
 ): Promise<LeaseOpening> {
-  const opened = await openingAndPeople(deps, documentIdRaw);
+  const opened = await openingAndPeople(
+    deps,
+    documentIdRaw,
+    undefined,
+    options,
+  );
   return opened.opening;
+}
+
+/**
+ * The flat פתיחת טיוטה would open on, before anyone chooses: the anchor once there is one, else the
+ * door's flat, else the one flat the address resolves to. Null when it would ask. #237.
+ */
+export async function preselectedUnitId(
+  deps: OpeningDeps,
+  documentIdRaw: string,
+): Promise<string | null> {
+  const documentId = validId(documentIdRaw, 'document');
+  const filed = await getFiledDocument(deps.db, documentId);
+  if (filed.typeKey !== 'lease') return null;
+  const flat = await flatForOpening(deps, documentId, filed.fileHash, {});
+  return flat.unitId;
+}
+
+async function flatForOpening(
+  deps: OpeningDeps,
+  documentId: string,
+  fileHash: string,
+  options: OpeningOptions,
+): Promise<{
+  unitId: string | null;
+  placeReading: PlaceReading | null;
+  candidates: UnitHit[];
+  candidateTotal: number;
+  placeBuilding: { building_id: string; name: string } | null;
+}> {
+  const anchor = await anchorOrNone(deps.db, documentId);
+  if (anchor && anchor.kind !== 'UNIT') {
+    throw new KernelError('invalid', 'that document is not bound to a unit');
+  }
+  if (anchor?.kind === 'UNIT') {
+    return {
+      unitId: anchor.id,
+      placeReading: null,
+      candidates: [],
+      candidateTotal: 0,
+      placeBuilding: null,
+    };
+  }
+  const stored = deps.objects
+    ? await readStoredLeasePlace(deps.objects, fileHash)
+    : null;
+  const resolved = stored ? await resolvePlace(deps.db, stored.reading) : null;
+  const asked = options.query?.trim() ?? '';
+  const found = asked === '' ? null : await searchEstate(deps.db, asked);
+  const candidates = found ? found.units : (resolved?.candidates ?? []);
+  const door = stored?.doorUnitId ?? null;
+  const exact =
+    resolved && 'unit' in resolved && resolved.unit
+      ? resolved.unit.unit_id
+      : null;
+  const unitId = options.unitId || door || exact;
+  return {
+    unitId: unitId || null,
+    placeReading: stored?.reading ?? null,
+    candidates,
+    candidateTotal: found
+      ? found.units.length
+      : (resolved?.total ?? candidates.length),
+    placeBuilding: resolved?.building
+      ? {
+          building_id: resolved.building.building_id,
+          name: resolved.building.name,
+        }
+      : null,
+  };
 }
 
 async function openingAndPeople(
   deps: OpeningDeps,
   documentIdRaw: string,
   links?: Readonly<Record<string, string>>,
+  options: OpeningOptions = {},
 ): Promise<{ opening: LeaseOpening; resolved: ResolvedPerson[]; day: string }> {
   const db = deps.db;
   const documentId = validId(documentIdRaw, 'document');
@@ -1268,7 +1368,8 @@ async function openingAndPeople(
   if (filed.typeKey !== 'lease') {
     throw new KernelError('invalid', 'that document is not a lease');
   }
-  const unit = await getUnit(db, await unitIdOf(db, documentId));
+  const flat = await flatForOpening(deps, documentId, filed.fileHash, options);
+  const unit = flat.unitId ? await getUnit(db, flat.unitId) : null;
   const rows = await listExtractedFields(db, documentId);
   const household = householdOf(rows);
   const startRow = signedRow(rows, 'start_date');
@@ -1289,7 +1390,7 @@ async function openingAndPeople(
   if (termsProfiles.length === 0) {
     refusals.push({ kind: 'no_terms_profile' });
   }
-  if (startDate !== null) {
+  if (startDate !== null && unit) {
     const taken = await db.query<{ tenancy_id: string }>(
       `SELECT tenancy_id FROM tenancy WHERE unit_id = $1 AND start_date = $2`,
       [unit.unit_id, startDate],
@@ -1349,11 +1450,16 @@ async function openingAndPeople(
   const opening: LeaseOpening = {
     documentId,
     unit,
+    placeReading: flat.placeReading,
+    candidates: flat.candidates,
+    candidateTotal: flat.candidateTotal,
+    placeBuilding: flat.placeBuilding,
     startDate,
     endDate,
     address,
     apartmentNumber,
     matchesUnit:
+      unit !== null &&
       address !== null &&
       apartmentNumber !== null &&
       addressMatches(address, unit.address_line) &&
@@ -1410,6 +1516,10 @@ export interface OpenLeaseDraftSpec {
    */
   links?: Readonly<Record<string, string>>;
   /**
+   * #237. The flat chosen on פתיחת טיוטה. Ignored when the document already has an anchor.
+   */
+  unitId?: string;
+  /**
    * #236. Attach this document to a tenancy the screen offered. Writes the link and no party.
    * Absent opens a new draft.
    */
@@ -1435,10 +1545,21 @@ export async function openLeaseDraft(
   const openedBy = requireText(spec.openedBy, 'opened_by', 200);
 
   return inTransaction(deps.db, async (db) => {
+    // #237. Two presses at once would each see no anchor and each write a `UNIT` link. The row
+    // lock makes the second wait and then find the first one's link.
+    await db.query('SELECT 1 FROM document WHERE document_id = $1 FOR UPDATE', [
+      documentId,
+    ]);
     const { opening, resolved, day } = await openingAndPeople(
-      { db, clock: deps.clock, contacts: deps.contacts },
+      {
+        db,
+        clock: deps.clock,
+        contacts: deps.contacts,
+        objects: deps.objects,
+      },
       documentId,
       spec.links,
+      { unitId: spec.unitId },
     );
     if (opening.tenancyId !== null) {
       return {
@@ -1448,10 +1569,32 @@ export async function openLeaseDraft(
         attached: false,
       };
     }
+    // The one `UNIT` `SUBJECT` link an unassigned lease gets. #237.
+    const assignUnit = async (unitId: string) => {
+      const anchor = await anchorOrNone(db, documentId);
+      if (anchor) return;
+      await linkDocument(db, {
+        documentId,
+        entityType: 'UNIT',
+        entityId: unitId,
+        linkRole: 'SUBJECT',
+      });
+    };
     if (spec.attachTo) {
       if (!opening.sameLease.some((one) => one.tenancyId === spec.attachTo)) {
         throw new KernelError('invalid', 'that tenancy is not the same lease');
       }
+      // The letting already names its flat, and the lease is about that flat — not whichever one
+      // the screen had chosen. `sameLease` matches people and a start date, not a flat.
+      const letting = await db.query<{ unit_id: string }>(
+        'SELECT unit_id FROM tenancy WHERE tenancy_id = $1',
+        [spec.attachTo],
+      );
+      const lettingUnit = letting.rows[0]?.unit_id;
+      if (!lettingUnit) {
+        throw new KernelError('not_found', 'tenancy not found');
+      }
+      await assignUnit(lettingUnit);
       await linkDocument(db, {
         documentId,
         entityType: 'TENANCY',
@@ -1484,6 +1627,10 @@ export async function openLeaseDraft(
       const [code, message] = REFUSAL_ERRORS[refused.kind];
       throw new KernelError(code, message);
     }
+    if (!opening.unit) {
+      throw new KernelError('invalid', 'a flat is required');
+    }
+    const chosen = opening.unit;
     const asked = spec.termsProfileName?.trim() ?? '';
     const termsProfileName =
       asked === ''
@@ -1500,8 +1647,9 @@ export async function openLeaseDraft(
       throw new KernelError('invalid', 'the lease is missing dates');
     }
 
+    await assignUnit(chosen.unit_id);
     const tenancy = await upsertTenancy(db, {
-      unitId: opening.unit.unit_id,
+      unitId: chosen.unit_id,
       startDate: opening.startDate,
       endDate: opening.endDate,
       status: 'DRAFT',

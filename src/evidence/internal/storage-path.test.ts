@@ -8,6 +8,7 @@ import {
   parseObjectPath,
   parseStorageUri,
   sniffExtension,
+  unassignedDocumentPath,
 } from './storage-path.ts';
 
 // No database and no bucket: the convention is a pure function, and it is the one part of slice 3.2
@@ -250,5 +251,44 @@ describe('sniffing the kind of an uploaded file', () => {
       () => sniffExtension(Buffer.from([0x25, 0x50])),
       'is not one of the kinds',
     );
+  });
+});
+
+describe('unassigned lease path', () => {
+  it('is the unassigned root, the type and the digest, and names no flat', () => {
+    assert.equal(
+      unassignedDocumentPath({
+        typeKey: 'lease',
+        fileHash: hash,
+        extension: 'pdf',
+      }),
+      `unassigned/lease/${hash}.pdf`,
+    );
+  });
+
+  it('refuses every type but a lease', () => {
+    rejects(
+      () =>
+        unassignedDocumentPath({
+          typeKey: 'handover_protocol',
+          fileHash: hash,
+          extension: 'pdf',
+        }),
+      'only a lease is stored unassigned',
+    );
+  });
+
+  it('round-trips through a storage uri, and is not a place path', () => {
+    const path = unassignedDocumentPath({
+      typeKey: 'lease',
+      fileHash: hash,
+      extension: 'pdf',
+    });
+    const uri = documentStorageUri('dona-v5-staging-docs', path);
+    assert.deepEqual(parseStorageUri(uri, 'dona-v5-staging-docs'), {
+      bucket: 'dona-v5-staging-docs',
+      path,
+    });
+    rejects(() => parseObjectPath(path), 'not a document path');
   });
 });

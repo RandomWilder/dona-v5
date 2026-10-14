@@ -42,6 +42,7 @@ import {
   parseMeasuredWords,
 } from './extract.ts';
 import { embedderConfigured, writeDocumentPassages } from './passages.ts';
+import { readPlace } from './place.ts';
 import {
   type DocumentReading,
   ocrConfigured,
@@ -53,13 +54,17 @@ import {
   documentFileHash,
   documentObjectPath,
   documentStorageUri,
+  isUnassignedStorageUri,
+  leaseProposalPath,
   type Place,
   parseStorageUri,
   placeOfStorageUri,
   sniffExtension,
+  unassignedDocumentPath,
 } from './storage-path.ts';
 import type { Queryable } from './types.ts';
 import type { Verification } from './verify.ts';
+import { documentText } from './verify.ts';
 
 export interface IntakeDeps {
   db: Queryable;
@@ -88,8 +93,15 @@ export interface IntakeRequest {
   bytes: Buffer;
   /** Declared by the administrator, never detected (SPEC-flows.md invariant 6). */
   typeKey: string;
-  /** Where the document is filed: a place, and in this flow always the `UNIT`. */
-  place: Place;
+  /**
+   * Where the document is filed. Null is a lease stored unassigned (#237): no path place and
+   * no link. Every other type still requires a place.
+   */
+  place: Place | null;
+  /**
+   * A flat the upload door already stood on. Kept for פתיחת טיוטה, not written as a link.
+   */
+  preselectedUnitId?: string | null;
   /**
    * The letting this document belongs to, when the administrator named one.
    *
@@ -140,6 +152,11 @@ export interface IntakeRequest {
  */
 export type IntakeRefusal = 'terms' | 'too_large' | 'anchored';
 
+export interface StoredLeasePlace {
+  reading: ReturnType<typeof readPlace>;
+  doorUnitId: string | null;
+}
+
 export type IntakeResult =
   | {
       filed: true;
@@ -159,6 +176,8 @@ export type IntakeResult =
        * (SPEC-evidence.md, slice 6.10).
        */
       anchoredTo?: Place;
+      /** Set when these bytes are already a document. The screen links to it. */
+      existingDocumentId?: string;
     };
 
 /**
@@ -207,16 +226,21 @@ export async function fileDocument(
   const pagesRead =
     reading.pagesRead ?? (pageCount === 0 ? 0 : reading.pages.length);
 
+  const unassigned = request.place === null;
+  if (unassigned && type.typeKey !== 'lease') {
+    throw new KernelError('invalid', 'only a lease is stored unassigned');
+  }
+
   const line = {
     actorKind: 'staff' as const,
     // Named from slice 5.2. Before it there was no authenticated actor to name, and the per-caller
     // upload cap counts these rows by this column.
     actorId: request.filedBy,
     action: 'evidence.file_document',
-    subjectId: request.place.id,
+    subjectId: request.place?.id ?? request.preselectedUnitId ?? fileHash,
     inputs: {
       typeKey: type.typeKey,
-      placeKind: request.place.kind,
+      placeKind: request.place?.kind ?? 'unassigned',
       tenancyId: request.tenancyId,
       fileHash,
       extension,
@@ -279,8 +303,22 @@ export async function fileDocument(
   // other kind is untouched: R13 is about a lease being evidence of a letting and signed by two
   // parties, and none of those is a claim about which flat the paper is about.
   if (existing) {
+    if (unassigned || isUnassignedStorageUri(existing.storageUri)) {
+      await deps.audit.write(line, {
+        outcome: 'error',
+        code: 'conflict',
+        message: 'these bytes are already a document',
+      });
+      return {
+        filed: false,
+        verification,
+        refusal: 'anchored',
+        existingDocumentId: existing.documentId,
+      };
+    }
     const anchor = placeOfStorageUri(existing.storageUri);
-    if (anchor.kind !== request.place.kind || anchor.id !== request.place.id) {
+    const place = request.place;
+    if (!place || anchor.kind !== place.kind || anchor.id !== place.id) {
       await deps.audit.write(line, {
         outcome: 'error',
         code: 'conflict',
@@ -297,12 +335,18 @@ export async function fileDocument(
 
   let storageUri = existing?.storageUri ?? null;
   if (!storageUri) {
-    const path = documentObjectPath({
-      place: request.place,
-      typeKey: type.typeKey,
-      fileHash,
-      extension,
-    });
+    const path = request.place
+      ? documentObjectPath({
+          place: request.place,
+          typeKey: type.typeKey,
+          fileHash,
+          extension,
+        })
+      : unassignedDocumentPath({
+          typeKey: type.typeKey,
+          fileHash,
+          extension,
+        });
     storageUri = documentStorageUri(deps.bucket, path);
     // Before the rows and never after. An object with no row is invisible and costs storage; a row
     // pointing at an object that was never written is a document the system says it holds and does
@@ -335,13 +379,25 @@ export async function fileDocument(
       : {}),
   };
   const filed = await ingestDocument(deps.db, spec, deps.clock.now());
-  await linkDocument(deps.db, {
-    documentId: filed.id,
-    entityType: request.place.kind,
-    entityId: request.place.id,
-    linkRole: 'SUBJECT',
-  });
-  if (request.tenancyId) {
+  if (unassigned) {
+    const proposal: StoredLeasePlace = {
+      reading: readPlace(documentText(reading.pages)),
+      doorUnitId: request.preselectedUnitId ?? null,
+    };
+    await deps.objects.put(
+      leaseProposalPath(fileHash),
+      Buffer.from(JSON.stringify(proposal)),
+      'application/json',
+    );
+  } else if (request.place) {
+    await linkDocument(deps.db, {
+      documentId: filed.id,
+      entityType: request.place.kind,
+      entityId: request.place.id,
+      linkRole: 'SUBJECT',
+    });
+  }
+  if (request.tenancyId && !unassigned) {
     // SPEC-flows.md invariant 1: the tenancy is the binding the upload asks for. It is a link and
     // never the path root, because a tenancy is temporal and rooting the filing cabinet at one would
     // scatter a flat's papers across its lettings.
@@ -569,4 +625,50 @@ export async function findDocumentByHash(
   return row
     ? { documentId: row.document_id, storageUri: row.storage_uri }
     : null;
+}
+
+/** The place reader and the door's flat, written beside an unassigned lease. */
+export async function readStoredLeasePlace(
+  objects: ObjectStore,
+  fileHash: string,
+): Promise<StoredLeasePlace | null> {
+  try {
+    const object = await objects.read(leaseProposalPath(fileHash));
+    const parsed = JSON.parse(object.bytes.toString('utf8')) as {
+      reading?: StoredLeasePlace['reading'];
+      doorUnitId?: unknown;
+    };
+    const reading = parsed.reading;
+    if (!reading || typeof reading !== 'object') return null;
+    return {
+      reading: {
+        addressLine: reading.addressLine ?? null,
+        city: reading.city ?? null,
+        apartmentNumber: reading.apartmentNumber ?? null,
+        annexDeferral: reading.annexDeferral === true,
+      },
+      doorUnitId:
+        typeof parsed.doorUnitId === 'string' ? parsed.doorUnitId : null,
+    };
+  } catch (error) {
+    if (error instanceof KernelError && error.code === 'not_found') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function rememberDoorUnit(
+  objects: ObjectStore,
+  fileHash: string,
+  unitId: string,
+): Promise<void> {
+  const current = await readStoredLeasePlace(objects, fileHash);
+  if (!current) return;
+  const next: StoredLeasePlace = { ...current, doorUnitId: unitId };
+  await objects.put(
+    leaseProposalPath(fileHash),
+    Buffer.from(JSON.stringify(next)),
+    'application/json',
+  );
 }
