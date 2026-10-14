@@ -15,6 +15,7 @@ import type { Clock } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
+import { type ContactRules, contactChannelOf } from './contacts.ts';
 import { isIdentifierField, listExtractedFields } from './extract.ts';
 import type { Queryable } from './types.ts';
 
@@ -56,6 +57,12 @@ export interface ApproveDeps {
   db: Queryable;
   audit: AuditLog;
   clock: Clock;
+  /**
+   * **#235.** What makes a phone or an email approvable. Built at the composition root from
+   * `src/scope/`'s normalisers. Without it a contact row cannot be approved at all: a number
+   * nobody checked must not become somebody's contact.
+   */
+  contacts?: ContactRules;
 }
 
 export interface ApproveSpec {
@@ -191,7 +198,16 @@ export async function approveExtractedField(
         'a reading that is withheld from you cannot be approved by you',
       );
     }
-    return stamp(deps, db, row, corrected ?? row.value, approvedBy);
+    const approved = corrected ?? row.value;
+    const channel = contactChannelOf(row.field_key);
+    if (channel !== null) {
+      // The signed value stays as the person typed it; פתיחת טיוטה stores the normalised form.
+      if (!deps.contacts) {
+        throw new KernelError('invalid', 'a contact cannot be approved here');
+      }
+      deps.contacts.normalise(channel, approved);
+    }
+    return stamp(deps, db, row, approved, approvedBy);
   });
 }
 
@@ -218,8 +234,13 @@ export async function approveUnflagged(
   return inTransaction(deps.db, async (db) => {
     const rows = await listExtractedFields(db, documentId);
     const open = rows.filter((row) => row.approvedAt === null);
+    // A phone or an email is never in the bulk set either (#235): who it reaches is decided by
+    // the person who signs it, one row at a time, after the value is checked.
     const unflagged = open.filter(
-      (row) => !isFlagged(row.confidence) && !isIdentifierField(row.fieldKey),
+      (row) =>
+        !isFlagged(row.confidence) &&
+        !isIdentifierField(row.fieldKey) &&
+        contactChannelOf(row.fieldKey) === null,
     );
     for (const row of unflagged) {
       const captured = await capturedRow(db, row.extractedFieldId);

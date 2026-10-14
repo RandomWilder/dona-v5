@@ -39,6 +39,12 @@ import {
   proposeNameSplit,
   readConfirmedName,
 } from './confirmed-name.ts';
+import {
+  CONTACT_FIELDS,
+  type ContactChannel,
+  type ContactRefusal,
+  type ContactRow,
+} from './contacts.ts';
 import { type ExtractedRow, isIdentifierField } from './extract.ts';
 import type { IntakeRefusal } from './intake.ts';
 import type {
@@ -855,6 +861,7 @@ const READING_GROUPS: ReadonlyArray<{
       'second_tenant_id_number',
       'guarantor_name',
       'guarantor_id_number',
+      ...Object.keys(CONTACT_FIELDS),
     ]),
   },
   {
@@ -924,6 +931,11 @@ export interface LeaseFilingScreen {
   uncarried?: Readonly<Record<string, UncarriedReason | null>>;
   /** `estate.write`. A missing bay is a link to later-add only for that reader. #176. */
   mayAddInventory?: boolean;
+  /**
+   * #235. Each unapproved phone or email row: the value offered for approval, and why it cannot be
+   * approved as offered, when it cannot. Keyed by extracted field.
+   */
+  contactRows?: Readonly<Record<string, ContactRow>>;
 }
 
 function filingApproveControl(
@@ -943,16 +955,16 @@ function filingApproveControl(
     <form method="post" action="/documents/filing/${screen.documentId}/approve">
       ${csrfInput(screen.csrf)}
       <input type="hidden" name="extracted_field_id" value="${row.extractedFieldId}" />
-      ${confirmValueInputs(row)}
+      ${confirmValueInputs(row, screen.contactRows?.[row.extractedFieldId]?.offered)}
       <button class="btn btn-primary mini" type="submit">אישור</button>
     </form>
   </td>`;
 }
 
 /** A household name is confirmed as a given name and a family name. Every other field stays one value. */
-function confirmValueInputs(row: ExtractedRow): Html {
+function confirmValueInputs(row: ExtractedRow, offered?: string): Html {
   if (!HOUSEHOLD_NAME_FIELDS.has(row.fieldKey)) {
-    return h`<input class="mini" name="approved_value" value="${row.value}" maxlength="2000"
+    return h`<input class="mini" name="approved_value" value="${offered ?? row.value}" maxlength="2000"
       aria-label="הערך המאושר ל${row.labelHe}" />`;
   }
   const proposed = proposeNameSplit(row.value);
@@ -974,6 +986,19 @@ function uncarriedNote(
     : h``;
   return h`${UNCARRIED_MARK}${sentence}`;
 }
+
+/** A contact row's refusal, in the sentence the operator acts on. #235. */
+const CONTACT_REFUSAL: Readonly<Record<ContactRefusal, string>> = {
+  not_mobile: 'המספר אינו מספר נייד ישראלי. יש לתקן אותו לפני האישור.',
+  not_email: 'הכתובת אינה כתובת דוא"ל. יש לתקן אותה לפני האישור.',
+  unavailable: 'לא ניתן לאשר כאן טלפון או דוא"ל.',
+};
+
+/** What a contact channel is called in a sentence. #235. */
+const CHANNEL_NOUN: Readonly<Record<ContactChannel, string>> = {
+  PHONE: 'טלפון',
+  EMAIL: 'דוא"ל',
+};
 
 function readingGroupOf(fieldKey: string): number {
   const at = READING_GROUPS.findIndex((group) => group.keys.has(fieldKey));
@@ -1004,10 +1029,18 @@ function filingReadingRow(
     row.extractedFieldId,
     screen.mayAddInventory === true,
   );
+  const contact = screen.contactRows?.[row.extractedFieldId];
+  const refusal =
+    contact?.refusal === null || contact === undefined
+      ? h``
+      : h`<span class="role is-half">${CONTACT_REFUSAL[contact.refusal]}</span>`;
+  const offered = contact?.zeroAdded
+    ? h`<span class="role">הוצע עם 0 בהתחלה</span>`
+    : h``;
   return h`<tr>
     <td>${row.labelHe}${nameRole(row, rows)}${half}${
       note ? h`<span class="role">${note}</span>` : h``
-    }</td>
+    }${offered}${refusal}</td>
     <td>${
       row.fieldKey.endsWith('_date')
         ? excerpt(ltr(row.value))
@@ -1136,6 +1169,12 @@ function openingRefusal(refusal: OpeningRefusal): Html {
         <a href="/estate/tenancies/${refusal.tenancyId}">פתיחת החוזה</a>. לא נכתב דבר.</li>`;
     case 'same_person':
       return h`<li>שני אנשים בחוזה נושאים אותה תעודת זהות. יש לתקן את הקריאה לפני פתיחת הטיוטה.</li>`;
+    case 'contact_held':
+      return h`<li>ה${CHANNEL_NOUN[refusal.channel]} של ${refusal.person}
+        כבר שייך היום ל<a href="/parties/${refusal.partyId}">${refusal.holderName}</a>.
+        מספר אחד של שני אנשים הוא בדיוק מה שאי אפשר לשייך לדירה. יש לסגור אותו אצלו או לתקן את הקריאה. לא נכתב דבר.</li>`;
+    case 'contact_shared':
+      return h`<li>אותו ${CHANNEL_NOUN[refusal.channel]} נקרא לשני אנשים בחוזה. יש לתקן את הקריאה לפני פתיחת הטיוטה.</li>`;
   }
 }
 
@@ -1208,10 +1247,22 @@ function filingOpening(screen: LeaseFilingScreen): Html {
         (person) => h`<li>
           <span class="chip">${OPENING_ROLE[person.role] ?? person.role}</span>
           <span class="excerpt">${person.name}</span>
-          ${person.hasIdentifier ? h`` : h`<span class="role">בלי ת.ז. — איש קשר חדש</span>`}
+          ${
+            person.hasIdentifier
+              ? h``
+              : person.matchedByContact
+                ? h`<span class="role">בלי ת.ז. — איש קשר קיים, לפי טלפון או דוא"ל</span>`
+                : h`<span class="role">בלי ת.ז. — איש קשר חדש</span>`
+          }
+          ${person.contacts > 0 ? h`<span class="role">${String(person.contacts)} פרטי קשר ייכתבו</span>` : h``}
         </li>`,
       )}
     </ul>
+    ${
+      opening.unpairedContacts > 0
+        ? h`<p class="lede">${String(opening.unpairedContacts)} טלפונים או כתובות דוא"ל שאושרו לא שויכו לאף אדם — מספרם בחוזה שונה ממספר השמות — ולא ייכתבו.</p>`
+        : h``
+    }
     <form class="form-grid" method="post" action="/documents/filing/${screen.documentId}/open">
       ${csrfInput(screen.csrf)}
       <div class="form-row">
@@ -1232,7 +1283,7 @@ function filingOpening(screen: LeaseFilingScreen): Html {
         <button class="btn btn-primary" type="submit" ${refused ? h`disabled` : h``}>פתיחת טיוטה</button>
         <a class="btn btn-secondary" href="/documents/filing/${screen.documentId}">חזרה לקריאה</a>
       </div>
-      <p class="hint">הלחיצה כותבת את הטיוטה, האנשים ותפקידיהם והקישורים למסמך — הכול יחד, או כלום.</p>
+      <p class="hint">הלחיצה כותבת את הטיוטה, האנשים ותפקידיהם, הטלפונים והדוא"ל שאושרו והקישורים למסמך — הכול יחד, או כלום.</p>
     </form>
   </section>`;
 }

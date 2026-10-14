@@ -46,6 +46,8 @@ export {
   upsertDocumentType,
   upsertDocumentTypeField,
 } from './internal/catalogue.ts';
+export type { ContactChannel, ContactRules } from './internal/contacts.ts';
+export { NOT_A_MOBILE } from './internal/contacts.ts';
 export type {
   DocumentLinkSpec,
   DocumentSpec,

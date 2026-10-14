@@ -42,6 +42,7 @@ import {
   whatsappWarning,
 } from './channel/contract.ts';
 import { signedInChrome } from './chrome.ts';
+import { contactRules } from './contact-rules.ts';
 import { renderMockup } from './dev-mockups.ts';
 import { renderErrorPage, wantsHtml, wayBack } from './error-page.ts';
 import { registerEstateRoutes } from './estate/contract.ts';
@@ -757,6 +758,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     work: deps.work,
     bucket,
     chrome: signedInChrome,
+    contacts: contactRules,
   });
 
   return app;

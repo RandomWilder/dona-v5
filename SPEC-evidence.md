@@ -999,6 +999,9 @@ entirely correct doing it.
 | `second_tenant_id_number` | no | that party's `national_id` |
 | `guarantor_name` | no | `'GUARANTOR'` — unchanged, already declared |
 | `guarantor_id_number` | no | unchanged, already declared |
+| `main_tenant_phone`, `main_tenant_email` | no | an open `party_contact` on that party, at פתיחת טיוטה (#235) |
+| `second_tenant_phone`, `second_tenant_email` | no | the same, on the second tenant |
+| `guarantor_phone`, `guarantor_email` | no | the same, on the guarantor; paired with `guarantor_name` by the identifiers' ordinal, all-or-nothing rule |
 
 Pairing is solved by construction: `main_tenant_id_number` belongs to `main_tenant_name` because the
 declaration says so. There is no proximity heuristic and no screen that asks an operator to attach an
@@ -1839,6 +1842,16 @@ not been shown — the same objection as approving a withheld row, at scale and 
 noticing. It is flagged for everybody, and it is revealed and signed one at a time. **90% read
 quality is not an argument against this**: the number measures how legibly the characters were
 scanned, which is exactly the thing that says nothing about whether those digits are the tenant's.
+
+**A phone or an email is never in the bulk set either (#235).** It decides who reaches a flat once a
+letting is live, so it is signed one row at a time. `approveExtractedField` refuses a phone that is
+not an Israeli mobile number after `normalisePhone`, and an email `normaliseEmail` refuses, in the
+command, through `ContactRules` the composition root builds from `src/scope/` (evidence may not
+import scope). הקריאה offers a nine-digit read starting with 5 back with its leading 0, and says on
+the row why a value cannot be approved. The value signed is the one typed; the stored contact is the
+normalised one, written by פתיחת טיוטה. **A run-time declaration the seed supersedes is closed by
+the seed:** an open `lease` declaration whose key or label names a phone or an email, other than the
+six above, is closed the day before they open, or on its own first day if it opened later.
 
 **The reveal is one row and one request.** `POST /documents/:id/fields/reveal`, gated on
 `party.national_id.read` — the first route in this system to declare that permission rather than

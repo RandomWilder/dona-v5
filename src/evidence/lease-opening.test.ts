@@ -8,40 +8,18 @@
 // cleans up after a committed app.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { Pool, PoolClient } from 'pg';
-import { specimenDocuments } from '../../evals/fixtures/specimen-clauses.ts';
 import {
-  asOperator,
-  type SignedIn,
-  signIn,
-} from '../../tests/support/session.ts';
-import { buildApp } from '../app.ts';
-import type { EstatePlan } from '../estate/contract.ts';
-import { importEstate } from '../estate/contract.ts';
-import { fixedClock } from '../kernel/clock.ts';
-import { createFakeExtractor } from '../kernel/extraction.ts';
-import { createMemoryStore } from '../kernel/objects.ts';
-import { fakeItems } from '../kernel/pdf.ts';
-import {
-  inRolledBackTransaction,
-  migratedPoolOrNull,
-  skipReason,
-} from '../kernel/pg-support.ts';
-import {
-  findTermsProfileByName,
-  upsertTenancy,
-  upsertTermsProfile,
-} from '../tenancy/contract.ts';
-import {
-  applyDocumentTypeCatalogue,
-  DEFAULT_TERMS_PROFILE,
-} from './contract.ts';
-import { seedDocumentTypes } from './fixtures/document-types.ts';
+  type Finding,
+  withOpening as fileLease,
+  type Opening,
+} from '../../tests/support/lease-opening.ts';
+import { skipReason } from '../kernel/pg-support.ts';
+import { findTermsProfileByName, upsertTenancy } from '../tenancy/contract.ts';
+import { DEFAULT_TERMS_PROFILE } from './contract.ts';
 import type { ExtractedRow } from './internal/extract.ts';
 import { leaseReadingGaps } from './internal/lease.ts';
 
 const ON = new Date('2026-10-14T09:00:00.000Z');
-const BOUNDARY = '----dona234';
 const START = '2026-11-01';
 const END = '2027-10-31';
 const MAIN = 'יוסף כהן';
@@ -49,8 +27,6 @@ const SECOND = 'רחל כהן';
 const GUARANTOR = 'משה לוי';
 const MAIN_ID = '000000018';
 const RENT = '5300';
-
-type Finding = { field_key: string; value: string; word_ids: number[] };
 
 const household = (address: string): Finding[] => [
   { field_key: 'start_date', value: START, word_ids: [0] },
@@ -65,6 +41,12 @@ const household = (address: string): Finding[] => [
   { field_key: 'rent_currency', value: 'ILS', word_ids: [9] },
 ];
 
+/** The A16 path, filed with this suite's household unless a case reads something else. */
+const withOpening = (
+  spec: { tag: string; findings?: (address: string) => Finding[] },
+  run: (opening: Opening) => Promise<void>,
+): Promise<boolean> => fileLease({ on: ON, findings: household, ...spec }, run);
+
 const OPENING_KEYS = [
   'start_date',
   'end_date',
@@ -72,244 +54,6 @@ const OPENING_KEYS = [
   'second_tenant_name',
   'guarantor_name',
 ] as const;
-
-const lease = (): string => {
-  const found = specimenDocuments.find(
-    (document) => document.file === 'lease-standard.md',
-  );
-  if (!found) throw new Error('lease-standard.md is not in the corpus');
-  return found.text;
-};
-
-interface Opening {
-  db: PoolClient;
-  unitId: string;
-  documentId: string;
-  get: (url: string) => Promise<{
-    statusCode: number;
-    body: string;
-    headers: { location?: string };
-  }>;
-  post: (
-    url: string,
-    fields: Record<string, string>,
-  ) => Promise<{
-    statusCode: number;
-    body: string;
-    headers: { location?: string };
-  }>;
-  approve: (fieldKey: string) => Promise<void>;
-  counts: () => Promise<{
-    tenancies: number;
-    tenancyLinks: number;
-    signatories: number;
-  }>;
-}
-
-async function withOpening(
-  spec: { tag: string; findings?: (address: string) => Finding[] },
-  run: (opening: Opening) => Promise<void>,
-): Promise<boolean> {
-  const pool = await migratedPoolOrNull();
-  if (!pool) return false;
-  const city = `עיר פתיחה ${spec.tag}`;
-  const address = `הדקל ${spec.tag.length + 40}`;
-  const findings = (spec.findings ?? household)(address);
-  const text = `כתובת המושכר: ${address}, ${city}, דירה 7\n${lease()}`;
-  try {
-    await inRolledBackTransaction(pool, async (db) => {
-      const clock = fixedClock(ON);
-      const app = buildApp({
-        pool: db as unknown as Pool,
-        version: '9.9.9-test',
-        clock,
-        objects: createMemoryStore(),
-        pdf: {
-          async pages() {
-            return [
-              {
-                number: 1,
-                width: 595,
-                height: 842,
-                items: fakeItems(text, null),
-              },
-            ];
-          },
-          describe: () => 'fake',
-        },
-        extractor: createFakeExtractor(() => ({ findings })),
-        bucket: `dona-v5-test-${spec.tag}`,
-      });
-      try {
-        await applyDocumentTypeCatalogue(db, seedDocumentTypes);
-        const plan: EstatePlan = {
-          projects: [
-            {
-              name: `מכרז ${spec.tag}`,
-              projectCode: `TEST-${spec.tag}`,
-              tenderRef: null,
-              status: 'ACTIVE',
-            },
-          ],
-          buildings: [
-            {
-              name: `בניין ${spec.tag}`,
-              addressLine: address,
-              city,
-              projectCode: `TEST-${spec.tag}`,
-              handoverDate: '2025-03-01',
-              warrantyEndDate: '2027-03-01',
-              status: 'ACTIVE',
-              spaces: [
-                { kind: 'UNIT', name: 'דירה 7', floor: '1', accessNote: null },
-              ],
-              units: [
-                {
-                  spaceName: 'דירה 7',
-                  unitNumber: '7',
-                  rooms: 3,
-                  areaSqm: 70,
-                  hasMamad: false,
-                  parkingSpaceName: null,
-                  storageSpaceName: null,
-                  warrantyEndDate: null,
-                  conditionStatus: 'READY',
-                },
-              ],
-            },
-          ],
-        };
-        await importEstate(db, plan);
-        await upsertTermsProfile(db, DEFAULT_TERMS_PROFILE);
-        const found = await db.query<{ unit_id: string }>(
-          `SELECT u.unit_id FROM unit u
-             JOIN space s ON s.space_id = u.unit_id
-             JOIN building b ON b.building_id = s.building_id
-            WHERE b.city = $1 AND b.address_line = $2`,
-          [city, address],
-        );
-        const unitId = found.rows[0]?.unit_id ?? '';
-        assert.ok(unitId);
-        const who: SignedIn = await signIn(db as unknown as Pool, clock, {
-          email: `admin@${spec.tag}.test`,
-          role: 'ADMIN',
-        });
-        const client = asOperator(app as never, who);
-        const get = (url: string) =>
-          client.inject({ method: 'GET', url }) as Promise<{
-            statusCode: number;
-            body: string;
-            headers: { location?: string };
-          }>;
-        const post = (url: string, fields: Record<string, string>) =>
-          client.inject({
-            method: 'POST',
-            url,
-            headers: { 'content-type': 'application/x-www-form-urlencoded' },
-            payload: new URLSearchParams({
-              csrf: who.csrf,
-              ...fields,
-            }).toString(),
-          }) as Promise<{
-            statusCode: number;
-            body: string;
-            headers: { location?: string };
-          }>;
-        const send = (fields: Record<string, string>, marker: string) => {
-          const parts: Buffer[] = [];
-          for (const [name, value] of Object.entries({
-            csrf: who.csrf,
-            ...fields,
-          })) {
-            parts.push(
-              Buffer.from(
-                `--${BOUNDARY}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
-              ),
-            );
-          }
-          parts.push(
-            Buffer.from(
-              `--${BOUNDARY}\r\nContent-Disposition: form-data; name="file"; filename="שכירות.pdf"\r\n` +
-                'Content-Type: application/octet-stream\r\n\r\n',
-            ),
-            Buffer.from(`%PDF-1.4\n% ${marker}\n`, 'latin1'),
-            Buffer.from(`\r\n--${BOUNDARY}--\r\n`),
-          );
-          return client.inject({
-            method: 'POST',
-            url: '/documents/filing',
-            payload: Buffer.concat(parts),
-            headers: {
-              'content-type': `multipart/form-data; boundary=${BOUNDARY}`,
-            },
-          }) as Promise<{
-            statusCode: number;
-            body: string;
-            headers: { location?: string };
-          }>;
-        };
-        const seen = await send({}, `${spec.tag}-seen`);
-        assert.equal(seen.statusCode, 200, seen.body.slice(0, 300));
-        const filed = await send({ unit: unitId }, `${spec.tag}-filed`);
-        assert.equal(filed.statusCode, 302, filed.body.slice(0, 300));
-        const documentId =
-          String(filed.headers.location ?? '').match(
-            /\/documents\/filing\/([0-9a-f-]{36})$/,
-          )?.[1] ?? '';
-        assert.ok(documentId);
-
-        const approve = async (fieldKey: string) => {
-          const rows = await db.query<{ id: string }>(
-            `SELECT e.extracted_field_id AS id FROM extracted_field e
-               JOIN document_type_field f
-                 ON f.document_type_field_id = e.document_type_field_id
-              WHERE e.document_id = $1 AND f.field_key = $2
-                AND e.approved_at IS NULL`,
-            [documentId, fieldKey],
-          );
-          for (const row of rows.rows) {
-            const stamped = await post(
-              `/documents/filing/${documentId}/approve`,
-              { extracted_field_id: row.id },
-            );
-            assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
-            assert.equal(
-              stamped.headers.location,
-              `/documents/filing/${documentId}`,
-            );
-          }
-        };
-        const counts = async () => {
-          const result = await db.query<{
-            tenancies: string;
-            tenancy_links: string;
-            signatories: string;
-          }>(
-            `SELECT
-               (SELECT count(*) FROM tenancy WHERE unit_id = $1)::text AS tenancies,
-               (SELECT count(*) FROM document_link
-                 WHERE document_id = $2 AND entity_type = 'TENANCY')::text AS tenancy_links,
-               (SELECT count(*) FROM document_link
-                 WHERE document_id = $2 AND link_role = 'SIGNATORY')::text AS signatories`,
-            [unitId, documentId],
-          );
-          const row = result.rows[0];
-          return {
-            tenancies: Number(row?.tenancies),
-            tenancyLinks: Number(row?.tenancy_links),
-            signatories: Number(row?.signatories),
-          };
-        };
-        await run({ db, unitId, documentId, get, post, approve, counts });
-      } finally {
-        await app.close();
-      }
-    });
-  } finally {
-    await pool.end();
-  }
-  return true;
-}
 
 const nothingWritten = {
   tenancies: 0,

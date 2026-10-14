@@ -96,6 +96,12 @@ import {
   approvedNameFromForm,
   displayConfirmedName,
 } from './confirmed-name.ts';
+import {
+  type ContactRow,
+  type ContactRules,
+  contactChannelOf,
+  contactRefusal,
+} from './contacts.ts';
 import { anchorOf, getFiledDocument } from './documents.ts';
 import {
   EXTRACT_WORK_KIND,
@@ -169,6 +175,8 @@ export interface DocumentDeps {
   clock: Clock;
   /** The bucket `storage_uri` names. The memory store's stand-in locally (slice 3.2). */
   bucket: string;
+  /** #235. Built at the composition root from `src/scope/`'s normalisers. */
+  contacts?: ContactRules;
   /** Slice 5.2b. Built at the composition root. */
   /**
    * Slice 5.2b, and **`mayFile` from 6.9**: the rail's documents destination is gated on
@@ -622,6 +630,26 @@ export function registerDocumentRoutes(
     return found.rows[0]?.entity_id ?? null;
   };
 
+  // #235. What each unapproved phone or email row offers for approval, and why it cannot be
+  // approved as offered. A misread mobile number is offered back with its 0.
+  const contactRowsOf = (
+    rows: readonly ExtractedRow[],
+  ): Record<string, ContactRow> => {
+    const out: Record<string, ContactRow> = {};
+    for (const row of rows) {
+      const channel = contactChannelOf(row.fieldKey);
+      if (channel === null || row.approvedAt !== null) continue;
+      const offered = deps.contacts?.offer(channel, row.value) ?? row.value;
+      out[row.extractedFieldId] = {
+        channel,
+        offered,
+        refusal: contactRefusal(deps.contacts, channel, offered),
+        zeroAdded: offered !== row.value,
+      };
+    }
+    return out;
+  };
+
   const printed = (row: ExtractedRow): string =>
     displayConfirmedName(row.approvedValue ?? row.value);
 
@@ -678,6 +706,7 @@ export function registerDocumentRoutes(
       mayAddInventory: can(request.staff?.role ?? null, 'estate.write'),
       gaps: leaseReadingGaps(rows),
       mayOpen: can(request.staff?.role ?? null, 'tenancy.write'),
+      contactRows: contactRowsOf(rows),
     };
   };
 
@@ -687,7 +716,10 @@ export function registerDocumentRoutes(
     documentId: string,
     extras: { failed?: boolean; termsProfile?: string } = {},
   ): Promise<Omit<LeaseFilingScreen, 'nav' | 'csrf'>> => {
-    const opening = await proposeLeaseOpening(deps.pool, documentId);
+    const opening = await proposeLeaseOpening(
+      { db: deps.pool, clock: deps.clock, contacts: deps.contacts },
+      documentId,
+    );
     return {
       beat: 'open',
       documentId,
@@ -854,15 +886,49 @@ export function registerDocumentRoutes(
         db: deps.pool,
         audit: createAuditLog(deps.pool, deps.clock),
         clock: deps.clock,
+        contacts: deps.contacts,
       };
       const approvedValue = approvedNameFromForm(fields);
-      await approveExtractedField(approveDeps, {
-        extractedFieldId,
-        ...(approvedValue === undefined ? {} : { approvedValue }),
-        approvedBy,
-        // Beat 3 prints identifiers. A stamp here is on a value the signer was shown.
-        mayReadIdentifiers: true,
-      });
+      try {
+        await approveExtractedField(approveDeps, {
+          extractedFieldId,
+          ...(approvedValue === undefined ? {} : { approvedValue }),
+          approvedBy,
+          // Beat 3 prints identifiers. A stamp here is on a value the signer was shown.
+          mayReadIdentifiers: true,
+        });
+      } catch (error) {
+        // #235. A phone that is not an Israeli mobile number, or an email that is not an address,
+        // is refused on its own row: the screen comes back with the value as posted and why.
+        const channel = contactChannelOf(row.fieldKey);
+        if (
+          channel === null ||
+          !(error instanceof KernelError) ||
+          error.code !== 'invalid'
+        ) {
+          throw error;
+        }
+        const screen = await filingOfDocument(request, documentId);
+        html(reply);
+        reply.code(409);
+        return leaseFiling(request, {
+          ...screen,
+          contactRows: {
+            ...screen.contactRows,
+            [extractedFieldId]: {
+              channel,
+              offered: approvedValue ?? row.value,
+              refusal:
+                contactRefusal(
+                  deps.contacts,
+                  channel,
+                  approvedValue ?? row.value,
+                ) ?? 'unavailable',
+              zeroAdded: false,
+            },
+          },
+        });
+      }
       // Approving only stamps (#234). A lease with a draft still carries; nothing else follows.
       await carryBoundLease(
         {
@@ -1822,6 +1888,7 @@ export function registerDocumentRoutes(
         db: deps.pool,
         audit: createAuditLog(deps.pool, deps.clock),
         clock: deps.clock,
+        contacts: deps.contacts,
       };
       let approved = 1;
       if (fields.action === 'unflagged') {
@@ -1963,6 +2030,7 @@ export function registerDocumentRoutes(
     db: deps.pool,
     audit: createAuditLog(deps.pool, deps.clock),
     clock: deps.clock,
+    contacts: deps.contacts,
   });
 
   app.get<{ Params: { documentId: string } }>(

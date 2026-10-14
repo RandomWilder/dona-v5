@@ -192,11 +192,18 @@ The lease declares them per role: `main_tenant_phone`, `main_tenant_email`, `sec
 `normalisePhone`, and an email is folded by `normaliseEmail`, at the composition root, as #206
 already does.
 
-**On the press, each approved value is written with `upsertPartyContact`** onto the party that row's
+**On the press, each approved value is written with `addPartyContact`** onto the party that row's
 person became, from today, with no label, primary when that party has no open primary on that
-channel. The overlap refusal of #206 applies unchanged. A value another party holds today refuses
-the whole draft and names that party, because a number shared by two people is exactly the case the
-isolation join cannot answer.
+channel (`hasOpenPrimaryContact`). `addPartyContact` and not `upsertPartyContact`, because it is
+the command that carries #206's overlap refusal; the upsert would answer the exclusion constraint
+with a bare 23P01. A value another party holds today refuses the whole draft and names that party,
+because a number shared by two people is exactly the case the isolation join cannot answer. **#235
+adds two refusals of the same kind:** one value approved for two people of one lease, and two
+people of one lease resolving to one existing party through a contact. A value the person's own
+party already holds is not written twice. An approved contact the ordinal rule pairs with nobody
+is not written, and פתיחת טיוטה says how many there are. `partyIdByNationalId` is the read that
+tells the screen, before the press, which party a printed ת.ז. already is; it takes an identifier
+and returns an id, and nothing about the value leaves.
 
 **Matching an existing party, in order:**
 1. a printed ת.ז., through `upsertParty`;

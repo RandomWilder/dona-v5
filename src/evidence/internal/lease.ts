@@ -5,13 +5,18 @@
 // already immutable. Estate, parties and tenancy write through their contracts.
 import { getUnit, type UnitHit } from '../../estate/contract.ts';
 import type { AuditLog } from '../../kernel/audit.ts';
-import type { Clock } from '../../kernel/clock.ts';
+import { type Clock, today } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
 import {
+  addPartyContact,
   countDistinctIdentifiers,
   createParty,
+  hasOpenPrimaryContact,
+  listPartyNames,
+  partyIdByNationalId,
+  setPrimaryPartyContact,
   upsertParty,
 } from '../../parties/contract.ts';
 import {
@@ -23,6 +28,11 @@ import {
 } from '../../tenancy/contract.ts';
 import { approveExtractedField } from './approve.ts';
 import { displayConfirmedName, readConfirmedName } from './confirmed-name.ts';
+import {
+  CONTACT_FIELDS,
+  type ContactChannel,
+  type ContactRules,
+} from './contacts.ts';
 import { anchorOf, getFiledDocument, linkDocument } from './documents.ts';
 import { type ExtractedRow, listExtractedFields } from './extract.ts';
 import { promoteExtractedField } from './promote.ts';
@@ -39,6 +49,8 @@ export interface LeaseDeps {
   db: Queryable;
   audit: AuditLog;
   clock: Clock;
+  /** #235. Absent, a lease with an approved phone or email cannot open. */
+  contacts?: ContactRules;
 }
 
 export interface ProposedPerson {
@@ -278,6 +290,14 @@ interface Household {
   people: ProposedPerson[];
   /** Parallel to `people`. Never in a screen shape, never in a log, never in a response. */
   identifiers: Array<string | null>;
+  /**
+   * Parallel to `people`: each person's approved phones and emails, as signed. #235. Paired with
+   * the name by the identifiers' rule, per contact field: the *i*-th name takes the *i*-th value,
+   * and only when the counts are equal. A row nobody approved is paired and then left out.
+   */
+  contacts: Array<Array<{ channel: ContactChannel; value: string }>>;
+  /** Approved phones and emails the ordinal rule paired to nobody, and so will not be written. */
+  unpairedContacts: number;
   /** Distinct declared identifiers, for the overlap probe. */
   probes: string[];
   read: number;
@@ -287,6 +307,8 @@ interface Household {
 function householdOf(rows: readonly ExtractedRow[]): Household {
   const people: ProposedPerson[] = [];
   const identifiers: Array<string | null> = [];
+  const contacts: Household['contacts'] = [];
+  let unpairedContacts = 0;
   let read = 0;
   for (const [nameKey, idKey, firstRole, restRole] of FAMILIES) {
     const names = rows
@@ -297,7 +319,38 @@ function householdOf(rows: readonly ExtractedRow[]): Household {
       .sort(inDocumentOrder);
     read += ids.length;
     const pairs = ids.length > 0 && ids.length === names.length;
+    const contactFamilies = Object.entries(CONTACT_FIELDS)
+      .filter(([, field]) => field.nameKey === nameKey)
+      .map(([contactKey, field]) => ({
+        channel: field.channel,
+        read: rows
+          .filter((row) => row.fieldKey === contactKey)
+          .sort(inDocumentOrder),
+      }));
+    const pairedContactFamilies = contactFamilies.filter(
+      (family) => family.read.length === names.length,
+    );
+    for (const family of contactFamilies) {
+      if (family.read.length !== names.length) {
+        unpairedContacts += family.read.filter(
+          (row) => row.approvedAt !== null,
+        ).length;
+      }
+    }
     names.forEach((row, at) => {
+      contacts.push(
+        pairedContactFamilies.flatMap((family) => {
+          const paired = family.read[at];
+          return paired && paired.approvedAt !== null
+            ? [
+                {
+                  channel: family.channel,
+                  value: paired.approvedValue ?? paired.value,
+                },
+              ]
+            : [];
+        }),
+      );
       people.push({
         extractedFieldId: row.extractedFieldId,
         fieldKey: nameKey,
@@ -315,6 +368,8 @@ function householdOf(rows: readonly ExtractedRow[]): Household {
   return {
     people,
     identifiers,
+    contacts,
+    unpairedContacts,
     probes: [...new Set(declared)],
     read,
     paired: declared.length,
@@ -521,6 +576,72 @@ function asRole(value: string | undefined): TenancyRole {
   return value as TenancyRole;
 }
 
+/** One approved contact, stored form, and the party holding it as an open contact today. */
+interface ResolvedContact {
+  channel: ContactChannel;
+  value: string;
+  holder: string | null;
+}
+
+/** Who a person on the lease will be before anything is written. #235. */
+interface ResolvedPerson {
+  /** The existing party this person is, or null when the press creates one. */
+  partyId: string | null;
+  contacts: ResolvedContact[];
+}
+
+/**
+ * **Who each person becomes, read before anything is written. #235 (SPEC-parties "Contacts from a
+ * lease").** In order: a printed ת.ז. is the party it keys on; otherwise an approved phone or
+ * email held as an open contact by exactly one party is that party; otherwise a new party. A name
+ * never matches. Read once and used twice: the screen states the refusals from it, and the press
+ * writes from it, so the two cannot disagree about who a phone belongs to.
+ */
+async function resolvePeople(
+  db: Queryable,
+  rules: ContactRules | undefined,
+  household: Household,
+  day: string,
+): Promise<ResolvedPerson[]> {
+  const resolved: ResolvedPerson[] = [];
+  for (const [at, approved] of household.contacts.entries()) {
+    if (approved.length > 0 && !rules) {
+      throw new KernelError('invalid', 'a contact cannot be written here');
+    }
+    const contacts: ResolvedContact[] = [];
+    for (const contact of approved) {
+      const value = (rules as ContactRules).normalise(
+        contact.channel,
+        contact.value,
+      );
+      contacts.push({
+        channel: contact.channel,
+        value,
+        holder: await (rules as ContactRules).holder(db, {
+          channel: contact.channel,
+          value,
+          day,
+        }),
+      });
+    }
+    const identifier = household.identifiers[at] ?? null;
+    const holders = new Set(
+      contacts.flatMap((contact) => (contact.holder ? [contact.holder] : [])),
+    );
+    const partyId =
+      identifier !== null
+        ? await partyIdByNationalId(db, {
+            kind: 'PERSON',
+            nationalId: identifier,
+          })
+        : holders.size === 1
+          ? ([...holders][0] ?? null)
+          : null;
+    resolved.push({ partyId, contacts });
+  }
+  return resolved;
+}
+
 /**
  * **Every party this document writes, and the one place `upsertParty` and `createParty` are chosen
  * between. Slice 6.5.**
@@ -554,6 +675,11 @@ async function writeParties(
     names?: Readonly<
       Record<string, { givenName: string | null; familyName: string }>
     >;
+    /**
+     * #235. Who each person resolved to, parallel to `people`, and the day their contacts open.
+     * Absent on an addendum, which writes no contact.
+     */
+    resolved?: { people: readonly ResolvedPerson[]; day: string };
   },
 ): Promise<number> {
   // **Checked before anything is written**, and folded by the database rather than compared as
@@ -580,21 +706,26 @@ async function writeParties(
     const identifier = input.household.identifiers[at] ?? null;
     const posted = input.names?.[person.extractedFieldId];
     const name = posted ?? readConfirmedName(person.value);
+    const resolved = input.resolved?.people[at];
+    const contactsFrom = input.resolved?.day;
+    const matched = identifier === null ? (resolved?.partyId ?? null) : null;
     const party =
-      identifier === null
-        ? await createParty(db, {
-            kind: 'PERSON',
-            givenName: name.givenName,
-            familyName: name.familyName,
-            preferredLanguage: 'he',
-          })
-        : await upsertParty(db, {
-            kind: 'PERSON',
-            givenName: name.givenName,
-            familyName: name.familyName,
-            nationalId: identifier,
-            preferredLanguage: 'he',
-          });
+      matched !== null
+        ? { id: matched }
+        : identifier === null
+          ? await createParty(db, {
+              kind: 'PERSON',
+              givenName: name.givenName,
+              familyName: name.familyName,
+              preferredLanguage: 'he',
+            })
+          : await upsertParty(db, {
+              kind: 'PERSON',
+              givenName: name.givenName,
+              familyName: name.familyName,
+              nationalId: identifier,
+              preferredLanguage: 'he',
+            });
     if (seen.has(party.id)) {
       // Belt and braces, and cheap: the check above reads the identifiers this lease declared, and
       // this one reads the rows that actually came back. They can only disagree if the fold and the
@@ -617,6 +748,29 @@ async function writeParties(
       entityId: party.id,
       linkRole: 'SIGNATORY',
     });
+    for (const contact of contactsFrom ? (resolved?.contacts ?? []) : []) {
+      if (contact.holder === party.id) continue;
+      // The overlap refusal of #206: a value another party holds today raises `conflict` naming
+      // that party, and the transaction takes the whole draft with it.
+      const added = await addPartyContact(db, {
+        partyId: party.id,
+        channel: contact.channel,
+        value: contact.value,
+        label: null,
+        validFrom: contactsFrom as string,
+      });
+      if (
+        !(await hasOpenPrimaryContact(db, {
+          partyId: party.id,
+          channel: contact.channel,
+        }))
+      ) {
+        await setPrimaryPartyContact(db, {
+          partyId: party.id,
+          contactId: added.contactId,
+        });
+      }
+    }
     written += 1;
   }
   return written;
@@ -873,6 +1027,10 @@ export interface OpeningPerson {
   name: string;
   role: TenancyRole;
   hasIdentifier: boolean;
+  /** #235. No ת.ז., and an approved phone or email names the one existing party this person is. */
+  matchedByContact: boolean;
+  /** #235. How many approved phones and emails the press writes for this person. */
+  contacts: number;
 }
 
 /** Every reason the press would be refused. The screen words each one; the command throws on it. */
@@ -880,7 +1038,17 @@ export type OpeningRefusal =
   | { kind: 'not_ready'; gaps: ReadingGap[] }
   | { kind: 'no_terms_profile' }
   | { kind: 'unit_taken'; tenancyId: string }
-  | { kind: 'same_person' };
+  | { kind: 'same_person' }
+  /** #235. An approved phone or email another party holds today. Names that party, never the value. */
+  | {
+      kind: 'contact_held';
+      channel: ContactChannel;
+      person: string;
+      partyId: string;
+      holderName: string;
+    }
+  /** #235. One approved phone or email on two people of this lease. */
+  | { kind: 'contact_shared'; channel: ContactChannel };
 
 export interface LeaseOpening {
   documentId: string;
@@ -898,12 +1066,73 @@ export interface LeaseOpening {
   refusals: OpeningRefusal[];
   /** Set once the draft is open; the screen then has nothing to press. */
   tenancyId: string | null;
+  /** #235. Approved phones and emails that pair with no person, and so are not written. */
+  unpairedContacts: number;
 }
 
 function preselectedProfile(names: readonly string[]): string | null {
   if (names.includes(DEFAULT_TERMS_PROFILE)) return DEFAULT_TERMS_PROFILE;
   if (names.length === 1 && names[0]) return names[0];
   return null;
+}
+
+/** What פתיחת טיוטה reads: the connection, the day, and #235's contact rules. */
+export interface OpeningDeps {
+  db: Queryable;
+  clock: Clock;
+  contacts?: ContactRules;
+}
+
+/**
+ * **A phone or an email that would be written onto the wrong person. #235.** A value held today by
+ * a party other than the one this person becomes refuses the press, because a number shared by two
+ * people is exactly the case the isolation join cannot answer. One value on two people of the same
+ * lease is the same case, inside one document.
+ */
+async function contactRefusals(
+  db: Queryable,
+  household: Household,
+  resolved: readonly ResolvedPerson[],
+  stamped: ReadonlySet<string>,
+): Promise<OpeningRefusal[]> {
+  const refusals: OpeningRefusal[] = [];
+  const seen = new Map<string, number>();
+  const held: Array<{
+    channel: ContactChannel;
+    person: string;
+    partyId: string;
+  }> = [];
+  for (const [at, person] of household.people.entries()) {
+    if (!stamped.has(person.extractedFieldId)) continue;
+    for (const contact of resolved[at]?.contacts ?? []) {
+      const key = `${contact.channel}:${contact.value}`;
+      const first = seen.get(key);
+      if (first !== undefined && first !== at) {
+        refusals.push({ kind: 'contact_shared', channel: contact.channel });
+      }
+      seen.set(key, at);
+      if (contact.holder !== null && contact.holder !== resolved[at]?.partyId) {
+        held.push({
+          channel: contact.channel,
+          person: displayConfirmedName(person.value),
+          partyId: contact.holder,
+        });
+      }
+    }
+  }
+  const names = new Map(
+    (
+      await listPartyNames(db, [...new Set(held.map((one) => one.partyId))])
+    ).map((row) => [row.party_id, row.full_name]),
+  );
+  for (const one of held) {
+    refusals.push({
+      kind: 'contact_held',
+      ...one,
+      holderName: names.get(one.partyId) ?? '',
+    });
+  }
+  return refusals;
 }
 
 /**
@@ -914,9 +1143,18 @@ function preselectedProfile(names: readonly string[]): string | null {
  * whether the press would go through.
  */
 export async function proposeLeaseOpening(
-  db: Queryable,
+  deps: OpeningDeps,
   documentIdRaw: string,
 ): Promise<LeaseOpening> {
+  const opened = await openingAndPeople(deps, documentIdRaw);
+  return opened.opening;
+}
+
+async function openingAndPeople(
+  deps: OpeningDeps,
+  documentIdRaw: string,
+): Promise<{ opening: LeaseOpening; resolved: ResolvedPerson[]; day: string }> {
+  const db = deps.db;
   const documentId = validId(documentIdRaw, 'document');
   const filed = await getFiledDocument(db, documentId);
   if (filed.typeKey !== 'lease') {
@@ -961,8 +1199,22 @@ export async function proposeLeaseOpening(
   if ((await countDistinctIdentifiers(db, declared)) < declared.length) {
     refusals.push({ kind: 'same_person' });
   }
+  const day = today(deps.clock);
+  const resolved = await resolvePeople(db, deps.contacts, household, day);
+  const stamped = stampedNameIds(rows);
+  const matched = household.people.flatMap((person, at) => {
+    const partyId = resolved[at]?.partyId;
+    return stamped.has(person.extractedFieldId) && partyId ? [partyId] : [];
+  });
+  if (
+    new Set(matched).size < matched.length &&
+    !refusals.some((one) => one.kind === 'same_person')
+  ) {
+    refusals.push({ kind: 'same_person' });
+  }
+  refusals.push(...(await contactRefusals(db, household, resolved, stamped)));
 
-  return {
+  const opening: LeaseOpening = {
     documentId,
     unit,
     startDate,
@@ -980,12 +1232,17 @@ export async function proposeLeaseOpening(
       name: displayConfirmedName(person.value),
       role: person.proposedRole,
       hasIdentifier: household.identifiers[at] !== null,
+      matchedByContact:
+        household.identifiers[at] === null && Boolean(resolved[at]?.partyId),
+      contacts: resolved[at]?.contacts.length ?? 0,
     })),
     termsProfiles,
     termsProfile: preselectedProfile(termsProfiles),
     refusals,
     tenancyId: await tenancyLinkOf(db, documentId),
+    unpairedContacts: household.unpairedContacts,
   };
+  return { opening, resolved, day };
 }
 
 const REFUSAL_ERRORS: Readonly<
@@ -998,6 +1255,8 @@ const REFUSAL_ERRORS: Readonly<
     'that unit already has a lease starting on this date',
   ],
   same_person: ['invalid', 'two people on this lease resolve to one person'],
+  contact_held: ['conflict', 'that number is already held'],
+  contact_shared: ['invalid', 'two people on this lease share one contact'],
 };
 
 export interface OpenLeaseDraftSpec {
@@ -1028,7 +1287,10 @@ export async function openLeaseDraft(
   const openedBy = requireText(spec.openedBy, 'opened_by', 200);
 
   return inTransaction(deps.db, async (db) => {
-    const opening = await proposeLeaseOpening(db, documentId);
+    const { opening, resolved, day } = await openingAndPeople(
+      { db, clock: deps.clock, contacts: deps.contacts },
+      documentId,
+    );
     if (opening.tenancyId !== null) {
       return {
         tenancyId: opening.tenancyId,
@@ -1091,6 +1353,7 @@ export async function openLeaseDraft(
       roles: rolesFromFieldFamily(household.people),
       stamped: stampedNameIds(rows),
       names: spec.names,
+      resolved: { people: resolved, day },
     });
 
     await carryApprovedLease(
