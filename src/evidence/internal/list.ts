@@ -234,15 +234,18 @@ export interface LinkedDocumentRead extends LinkedDocument {
 }
 
 /**
- * Slice 5.4. The panel's signed reads, minted here so estate never parses a `gs://` uri.
+ * Slice 5.4. The panel's signed reads, and ממתינים לפתיחה's (#238), minted here so estate never
+ * parses a `gs://` uri.
  * A uri that names another bucket is skipped rather than taking the whole page down.
  */
-export async function signLinkedDocuments(
-  docs: readonly LinkedDocument[],
+export async function signLinkedDocuments<
+  T extends { storageUri: string } = LinkedDocument,
+>(
+  docs: readonly T[],
   store: ObjectStore,
   bucket: string,
   now: Date,
-): Promise<LinkedDocumentRead[]> {
+): Promise<(T & { readUrl: string })[]> {
   const expiresAt = new Date(now.getTime() + SIGN_READ_TTL_MS);
   return Promise.all(
     docs.map(async (doc) => {

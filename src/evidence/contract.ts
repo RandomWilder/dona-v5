@@ -108,6 +108,7 @@ export type {
   ProposedPerson,
   ProposeLeaseSpec,
   TenancyCandidate,
+  UnopenedLease,
 } from './internal/lease.ts';
 export {
   addressMatches,
@@ -115,6 +116,7 @@ export {
   confirmLeaseTenancy,
   DEFAULT_TERMS_PROFILE,
   dayOverlap,
+  listUnopenedLeases,
   openLeaseDraft,
   proposeLeaseOpening,
   proposeLeaseTenancy,

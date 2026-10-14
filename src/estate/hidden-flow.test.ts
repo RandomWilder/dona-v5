@@ -103,6 +103,11 @@ function enqueueable(href: string): string | null {
   // #202. The directory links every party. The list is opened and checked; walking each
   // profile is the whole register, and this crawl's cap is about the buildings graph.
   if (new RegExp(`^/parties/${UUID}/?$`, 'i').test(path)) return null;
+  // #238. ממתינים לפתיחה on שכירויות links every unopened lease in the database, and other files
+  // leave theirs behind. A filing workspace links no building page; walking each one is the cap.
+  if (new RegExp(`^/documents/filing/${UUID}(/open)?/?$`, 'i').test(path)) {
+    return null;
+  }
   return text;
 }
 

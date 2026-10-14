@@ -3182,9 +3182,56 @@ function bookChip(chip: TenancyBookRow['chip']): Html {
 }
 
 /**
- * #162. Every letting. Prints the book it is handed. Does not read the gate.
+ * One row of ממתינים לפתיחה, #238. Structural: evidence's read, signed at the composition root.
+ * `readUrl` is empty when the stored uri names another bucket; the row then prints no file link.
  */
-export function renderTenanciesPage(book: TenancyBook, nav: Html): string {
+export interface UnopenedLeaseView {
+  documentId: string;
+  ingestedAt: string;
+  storageUri: string;
+  readUrl: string;
+  tenantName: string | null;
+  ready: boolean;
+}
+
+/** #238. A lease one step short of a tenancy. Absent, heading and all, when nothing waits. */
+function waitingSection(leases: readonly UnopenedLeaseView[]): Html {
+  if (leases.length === 0) return h``;
+  return h`<section class="glass sheet">
+    <h2 class="block-title">ממתינים לפתיחה</h2>
+    <ul class="q-list">
+      ${leases.map(
+        (
+          lease,
+        ) => h`<li class="q-row glass is-raised" data-document="${lease.documentId}">
+          <div>
+            <span>${lease.tenantName ?? h`<span class="hint">לא נקרא שם</span>`}</span>
+            <p class="lede">הועלה ${ltr(lease.ingestedAt)}${
+              lease.readUrl
+                ? h` · <a href="${lease.readUrl}" rel="noreferrer">הקובץ</a>`
+                : h``
+            }</p>
+          </div>
+          ${
+            lease.ready
+              ? h`<a class="btn btn-primary btn-sm" href="/documents/filing/${lease.documentId}/open">פתח טיוטה</a>`
+              : h`<a class="btn btn-secondary btn-sm" href="/documents/filing/${lease.documentId}">המשך קריאה</a>`
+          }
+        </li>`,
+      )}
+    </ul>
+  </section>`;
+}
+
+/**
+ * #162. Every letting. Prints the book it is handed. Does not read the gate: the caller hands
+ * ממתינים לפתיחה only to a role holding `documents.write` (#238), and nothing otherwise.
+ */
+export function renderTenanciesPage(
+  book: TenancyBook,
+  nav: Html,
+  unopened: readonly UnopenedLeaseView[] = [],
+): string {
   const body = h`
     <div class="glass-stage">
     <header class="page-head">
@@ -3193,6 +3240,7 @@ export function renderTenanciesPage(book: TenancyBook, nav: Html): string {
         <p class="lede">כל ההשכרות בתיק.</p>
       </div>
     </header>
+    ${waitingSection(unopened)}
     ${BOOK_SECTIONS.map(([key, title]) => {
       const rows = book[key];
       return h`<section class="glass sheet">

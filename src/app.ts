@@ -52,6 +52,7 @@ import {
   listLinkedDocuments,
   listPromotedFieldsForUnit,
   listTenancyDocumentFacts,
+  listUnopenedLeases,
   registerDocumentRoutes,
   runOfficeTurn,
   searchDocuments,
@@ -602,6 +603,13 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       listActivationQueue(db, clock, listTenancyDocumentFacts),
     listTenancyBook: (db, unitId) =>
       listTenancyBook(db, clock, listTenancyDocumentFacts, unitId),
+    listUnopenedLeases: async (db) =>
+      signLinkedDocuments(
+        await listUnopenedLeases(db),
+        objects,
+        bucket,
+        clock.now(),
+      ),
     recordCompletenessException,
     getTenancy,
     listTenancyParties,

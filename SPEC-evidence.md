@@ -239,6 +239,12 @@ A lease with neither is unopened: it has no anchor, appears on **ממתינים 
 no search, retrieval or office answer, because all three resolve through `document_link`. Documents
 filed under place paths before #232 keep those paths and that anchor; nothing is moved or copied.
 
+**ממתינים לפתיחה is every lease with no `TENANCY` link (#238).** The test is the missing link, not
+the path, so a lease filed under a place path before #232 and never opened is listed the same way.
+Each row is the upload day, the main tenant as read (a signed correction when there is one), the
+file, and **פתח טיוטה** when הקריאה is ready or **המשך קריאה** when it is not. Evidence owns the
+read; שכירויות prints it for `documents.write` and shows nothing, heading included, when it is empty.
+
 **The opening proposal sits beside the lease, and it is not an anchor (#237).** Upload writes
 `unassigned/lease/<file hash>.proposal.json`: the deterministic place reader's output and, when the
 door carried one, the door's flat (A1's unit-first door, the flat page, a call's attachment, or a

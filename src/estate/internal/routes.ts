@@ -113,6 +113,7 @@ import {
   type TenancyPersonView,
   type UncarriedCite,
   type UnitLettingView,
+  type UnopenedLeaseView,
 } from './views.ts';
 
 export interface EstateDeps {
@@ -163,6 +164,8 @@ export interface EstateDeps {
   listActivationQueue: (db: Pool) => Promise<ActivationQueueView>;
   /** #162. Every letting, already sectioned. #165 passes one unit. Estate prints it. */
   listTenancyBook: (db: Pool, unitId?: string) => Promise<TenancyBook>;
+  /** #238. Evidence's ממתינים לפתיחה, signed. Injected for the reason `listLinkedDocuments` is. */
+  listUnopenedLeases: (db: Pool) => Promise<readonly UnopenedLeaseView[]>;
   recordCompletenessException: (
     db: Pool,
     spec: {
@@ -1867,6 +1870,9 @@ export function registerEstateRoutes(
 
   app.get('/estate/tenancies', READ, async (request, reply) => {
     const book = await deps.listTenancyBook(deps.pool);
+    const unopened = mayFile(request)
+      ? await deps.listUnopenedLeases(deps.pool)
+      : [];
     html(reply);
     return renderTenanciesPage(
       book,
@@ -1877,6 +1883,7 @@ export function registerEstateRoutes(
         mayReadParties(request),
         request.openCalls,
       ),
+      unopened,
     );
   });
 

@@ -910,6 +910,13 @@ const UNREAD_LABELS: Readonly<Record<string, string>> = {
   end_date: 'סיום תקופת השכירות',
 };
 
+/** The key the main tenant was read under: by role on live filings, `tenant_name` in September's. */
+function mainTenantKey(rows: readonly ExtractedRow[]): string {
+  return rows.some((row) => row.fieldKey === 'main_tenant_name')
+    ? 'main_tenant_name'
+    : 'tenant_name';
+}
+
 /**
  * **What is missing before the draft can open. #234 (SPEC-flows A16 as amended at #232).**
  *
@@ -939,9 +946,8 @@ export function leaseReadingGaps(rows: readonly ExtractedRow[]): ReadingGap[] {
       labelHe: row.labelHe,
       value: row.value,
     });
-  const tenants = rows.some((row) => row.fieldKey === 'main_tenant_name')
-    ? rows.filter((row) => row.fieldKey === 'main_tenant_name')
-    : rows.filter((row) => row.fieldKey === 'tenant_name');
+  const tenantKey = mainTenantKey(rows);
+  const tenants = rows.filter((row) => row.fieldKey === tenantKey);
   if (tenants.length === 0) {
     unread('main_tenant_name');
   }
@@ -974,6 +980,64 @@ function signedRow(
     .filter((row) => row.fieldKey === fieldKey)
     .sort(inDocumentOrder);
   return read.find((row) => row.approvedAt !== null) ?? read[0];
+}
+
+/** One row of ממתינים לפתיחה. */
+export interface UnopenedLease {
+  documentId: string;
+  /** The upload day, UTC, as the documents panel prints it. */
+  ingestedAt: string;
+  storageUri: string;
+  /** The main tenant as read, or as corrected when signed. Null when the reader named none. */
+  tenantName: string | null;
+  /** No gap left on הקריאה: the row offers פתח טיוטה, not המשך קריאה. */
+  ready: boolean;
+}
+
+const UNOPENED_LEASES_SQL = `
+  SELECT d.document_id,
+         (d.ingested_at AT TIME ZONE 'UTC')::date::text AS ingested_at,
+         d.storage_uri
+    FROM document d
+    JOIN document_type dt ON dt.document_type_id = d.document_type_id
+   WHERE dt.type_key = 'lease'
+     AND NOT EXISTS (
+       SELECT 1 FROM document_link l
+        WHERE l.document_id = d.document_id AND l.entity_type = 'TENANCY'
+     )
+   ORDER BY d.ingested_at DESC, d.document_id`;
+
+/**
+ * **ממתינים לפתיחה. #238 (SPEC-flows A16 as amended at #232).** Every lease with no `TENANCY`
+ * link, newest first, with the name read and whether הקריאה is ready.
+ *
+ * The test is the missing link and not the unassigned path, so a lease filed on a flat before #237
+ * and never opened is listed the same way. One reading per row: the list is a handful of leases one
+ * step short of a draft, not the archive, because opening a draft is what takes a row off it.
+ */
+export async function listUnopenedLeases(
+  db: Queryable,
+): Promise<UnopenedLease[]> {
+  const found = await db.query<{
+    document_id: string;
+    ingested_at: string;
+    storage_uri: string;
+  }>(UNOPENED_LEASES_SQL);
+  const leases: UnopenedLease[] = [];
+  for (const row of found.rows) {
+    const rows = await listExtractedFields(db, row.document_id);
+    const named = signedRow(rows, mainTenantKey(rows));
+    leases.push({
+      documentId: row.document_id,
+      ingestedAt: row.ingested_at,
+      storageUri: row.storage_uri,
+      tenantName: named
+        ? displayConfirmedName(named.approvedValue ?? named.value)
+        : null,
+      ready: leaseReadingGaps(rows).length === 0,
+    });
+  }
+  return leases;
 }
 
 /**

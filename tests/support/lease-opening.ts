@@ -25,6 +25,7 @@ import {
   inRolledBackTransaction,
   migratedPoolOrNull,
 } from '../../src/kernel/pg-support.ts';
+import type { Role } from '../../src/staff/contract.ts';
 import { upsertTermsProfile } from '../../src/tenancy/contract.ts';
 import { asOperator, type SignedIn, signIn } from './session.ts';
 
@@ -58,6 +59,11 @@ export interface Opening {
     body: string;
     headers: { location?: string };
   }>;
+  /** A GET by a second account of another role, signed in on the same app. #238. */
+  getAs: (
+    role: Role,
+    url: string,
+  ) => Promise<{ statusCode: number; body: string }>;
   /** Approves every unapproved row of a key. `fields` is posted with each, e.g. a corrected value. */
   approve: (fieldKey: string, fields?: Record<string, string>) => Promise<void>;
   counts: () => Promise<{
@@ -301,12 +307,23 @@ export async function withOpening(
             signatories: Number(row?.signatories),
           };
         };
+        const getAs = async (role: Role, url: string) => {
+          const other = await signIn(db as unknown as Pool, clock, {
+            email: `${role.toLowerCase()}-as@${spec.tag}.test`,
+            role,
+          });
+          return asOperator(app as never, other).inject({
+            method: 'GET',
+            url,
+          }) as Promise<{ statusCode: number; body: string }>;
+        };
         await run({
           clock,
           db,
           unitId,
           documentId,
           get,
+          getAs,
           post,
           approve,
           counts,
