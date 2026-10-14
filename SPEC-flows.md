@@ -989,6 +989,7 @@ moment the address is unique). It does not retitle A15.
 - **A phone row is approvable only as a valid Israeli mobile number.** A nine-digit number starting with 5 is offered back with its leading 0.
 - **A second approval of an approved row is a sentence on this step, not an error page.**
 - **When the reading is ready, the step shows פתיחת טיוטה.** That is A2's screen, inside this tab. When the reading is not ready, the step lists what is missing.
+- **Ready means** an approved main tenant name, an approved start date and end date, and every other name row of every role approved (#234). A date or a `main_tenant_name` read twice is one fact read twice: one approved capture is enough, and the unsigned twin writes nothing. Without that exception the only way past a duplicate read would be to sign it, writing two primary tenants for one person.
 - **"It does not list unfinished filings" is reversed.** Unassigned leases are listed under **ממתינים לפתיחה** at the top of **שכירויות**, each with **פתח טיוטה**, or a link back to הקריאה while it is not ready.
 - **A refusal anywhere on this tab is a Hebrew sentence in the page.**
 

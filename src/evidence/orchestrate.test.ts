@@ -434,12 +434,25 @@ describe('evidence · upload, read, approve', () => {
         csrf: who.csrf,
         extracted_field_id: name.rows[0]?.id ?? '',
       });
+      // #234: the approval that makes the reading ready only stamps. פתיחת טיוטה opens the draft.
       assert.equal(created.statusCode, 302);
-      const tenancyUrl = String(created.headers.location);
-      assert.match(tenancyUrl, /\/estate\/tenancies\/[0-9a-f-]{36}$/);
-      const tenancyId =
-        tenancyUrl.match(/\/estate\/tenancies\/([0-9a-f-]{36})$/)?.[1] ?? '';
+      assert.equal(
+        created.headers.location,
+        `/documents/${documentId}/fields?saved=1`,
+      );
+      const opened = await post(`/documents/filing/${documentId}/open`, {
+        csrf: who.csrf,
+        terms_profile: DEFAULT_TERMS_PROFILE,
+      });
+      assert.equal(opened.statusCode, 302, opened.body.slice(0, 300));
+      const bound = await pool.query<{ entity_id: string }>(
+        `SELECT entity_id FROM document_link
+          WHERE document_id = $1 AND entity_type = 'TENANCY'`,
+        [documentId],
+      );
+      const tenancyId = bound.rows[0]?.entity_id ?? '';
       assert.ok(tenancyId);
+      const tenancyUrl = `/estate/tenancies/${tenancyId}`;
 
       const sheet = await asOperator(app as never, who).inject({
         method: 'GET',

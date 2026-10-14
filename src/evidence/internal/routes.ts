@@ -106,9 +106,11 @@ import {
 } from './extract.ts';
 import { fileDocument, findDocumentByHash, runExtractWork } from './intake.ts';
 import {
+  carryBoundLease,
   confirmLeaseTenancy,
-  establishApprovedLease,
-  leaseReadingIsReady,
+  leaseReadingGaps,
+  openLeaseDraft,
+  proposeLeaseOpening,
   proposeLeaseTenancy,
 } from './lease.ts';
 import { listTenancyDocumentFacts } from './list.ts';
@@ -620,18 +622,6 @@ export function registerDocumentRoutes(
     return found.rows[0]?.entity_id ?? null;
   };
 
-  const collidingOn = async (
-    unitId: string,
-    startDate: string,
-  ): Promise<string | null> => {
-    const found = await deps.pool.query<{ tenancy_id: string }>(
-      `SELECT tenancy_id FROM tenancy
-        WHERE unit_id = $1 AND start_date = $2`,
-      [unitId, startDate],
-    );
-    return found.rows[0]?.tenancy_id ?? null;
-  };
-
   const printed = (row: ExtractedRow): string =>
     displayConfirmedName(row.approvedValue ?? row.value);
 
@@ -676,11 +666,6 @@ export function registerDocumentRoutes(
         },
       };
     }
-    const start = rows.find((row) => row.fieldKey === 'start_date');
-    const clash =
-      start && leaseReadingIsReady(rows)
-        ? await collidingOn(unit.unit_id, printed(start))
-        : null;
     return {
       beat: 'read',
       documentId,
@@ -691,9 +676,79 @@ export function registerDocumentRoutes(
       readingPending: await extractWorkIsOpen(deps.pool, documentId),
       uncarried: await uncarriedReasons(documentId),
       mayAddInventory: can(request.staff?.role ?? null, 'estate.write'),
-      ...(clash ? { conflictTenancyId: clash } : {}),
+      gaps: leaseReadingGaps(rows),
+      mayOpen: can(request.staff?.role ?? null, 'tenancy.write'),
     };
   };
+
+  // **פתיחת טיוטה. #234.** Everything the press would write, and every reason it would be refused,
+  // before anything is written. A refusal from the press re-renders this screen with its sentence.
+  const openingOf = async (
+    documentId: string,
+    extras: { failed?: boolean; termsProfile?: string } = {},
+  ): Promise<Omit<LeaseFilingScreen, 'nav' | 'csrf'>> => {
+    const opening = await proposeLeaseOpening(deps.pool, documentId);
+    return {
+      beat: 'open',
+      documentId,
+      unit: opening.unit,
+      opening: {
+        ...opening,
+        ...(extras.termsProfile ? { termsProfile: extras.termsProfile } : {}),
+      },
+      ...(extras.failed ? { openFailed: true } : {}),
+    };
+  };
+
+  app.get<{ Params: { documentId: string } }>(
+    '/documents/filing/:documentId/open',
+    CONFIRM,
+    async (request, reply) => {
+      const documentId = validId(request.params.documentId, 'document');
+      const screen = await openingOf(documentId);
+      if (screen.opening?.tenancyId) {
+        return reply.redirect(`/documents/filing/${documentId}`);
+      }
+      html(reply);
+      return leaseFiling(request, screen);
+    },
+  );
+
+  app.post<{ Params: { documentId: string } }>(
+    '/documents/filing/:documentId/open',
+    CONFIRM,
+    async (request, reply) => {
+      const documentId = validId(request.params.documentId, 'document');
+      const fields = formBody(request);
+      const asked = (fields.terms_profile ?? '').trim();
+      const termsProfile =
+        asked === '' ? '' : requireText(asked, 'terms_profile', 200);
+      try {
+        await openLeaseDraft(leaseDeps(), {
+          documentId,
+          termsProfileName: termsProfile,
+          openedBy: requireOperatorEmail(request),
+        });
+      } catch (error) {
+        if (
+          error instanceof KernelError &&
+          (error.code === 'invalid' || error.code === 'conflict')
+        ) {
+          html(reply);
+          reply.code(409);
+          return leaseFiling(
+            request,
+            await openingOf(documentId, {
+              failed: true,
+              ...(termsProfile ? { termsProfile } : {}),
+            }),
+          );
+        }
+        throw error;
+      }
+      return reply.redirect(`/documents/filing/${documentId}`);
+    },
+  );
 
   app.get('/documents/filing', NEW, async (request, reply) => {
     html(reply);
@@ -808,31 +863,15 @@ export function registerDocumentRoutes(
         // Beat 3 prints identifiers. A stamp here is on a value the signer was shown.
         mayReadIdentifiers: true,
       });
-      try {
-        await establishApprovedLease(
-          {
-            db: deps.pool,
-            audit: createAuditLog(deps.pool, deps.clock),
-            clock: deps.clock,
-          },
-          { documentId, confirmedBy: approvedBy },
-        );
-      } catch (error) {
-        if (
-          error instanceof KernelError &&
-          error.code === 'conflict' &&
-          error.message ===
-            'that unit already has a lease starting on this date'
-        ) {
-          html(reply);
-          reply.code(409);
-          return leaseFiling(
-            request,
-            await filingOfDocument(request, documentId),
-          );
-        }
-        throw error;
-      }
+      // Approving only stamps (#234). A lease with a draft still carries; nothing else follows.
+      await carryBoundLease(
+        {
+          db: deps.pool,
+          audit: createAuditLog(deps.pool, deps.clock),
+          clock: deps.clock,
+        },
+        { documentId, promotedBy: approvedBy },
+      );
       return reply.redirect(`/documents/filing/${documentId}`);
     },
   );
@@ -1803,13 +1842,10 @@ export function registerDocumentRoutes(
           mayReadIdentifiers: mayReadIdentifiers(request),
         });
       }
-      const tenancyId = await establishApprovedLease(leaseDeps(), {
+      await carryBoundLease(leaseDeps(), {
         documentId,
-        confirmedBy: approvedBy,
+        promotedBy: approvedBy,
       });
-      if (tenancyId) {
-        return reply.redirect(`/estate/tenancies/${tenancyId}`);
-      }
       return reply.redirect(
         `/documents/${documentId}/fields?saved=${String(approved)}`,
       );

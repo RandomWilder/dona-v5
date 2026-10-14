@@ -1,13 +1,13 @@
 ---
 number: 234
 title: "פתיחת טיוטה opens the draft from an approved reading"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent: 232
 created: 2026-10-14
-closed:
+closed: 2026-10-14
 ---
 
 ## Parent
@@ -42,16 +42,23 @@ Spec: SPEC-flows A2 and A16 as amended at #232; SPEC-tenancy "A draft opened fro
 
 ## Acceptance criteria
 
-- [ ] Approving any row on A16 or A15 writes only the stamp. No tenancy, party or link appears, even when the reading becomes ready.
-- [ ] הקריאה lists the missing rows while the reading is not ready, and shows **פתיחת טיוטה** once it is.
-- [ ] The opening screen shows the flat, the preselected terms profile, the people with their roles, and any refusal, before the press.
-- [ ] No terms profile in the register: the button is disabled and the screen says why. Nothing is posted.
-- [ ] The press writes the draft, the links, the dates and carried fields, the parties and their roles in one transaction. A forced failure part-way leaves no row behind.
-- [ ] (unit, start date) already taken: refused with the existing sentence and a link to that tenancy. Nothing is written.
-- [ ] Two people resolving to one ת.ז.: refused with a sentence. Nothing is written.
-- [ ] HTTP tests at the A16 seam cover ready, not ready, no profile, success, and both refusals. The existing A16 and lease suites are updated where they assumed approve-writes-draft.
+- [x] Approving any row on A16 or A15 writes only the stamp. No tenancy, party or link appears, even when the reading becomes ready.
+- [x] הקריאה lists the missing rows while the reading is not ready, and shows **פתיחת טיוטה** once it is.
+- [x] The opening screen shows the flat, the preselected terms profile, the people with their roles, and any refusal, before the press.
+- [x] No terms profile in the register: the button is disabled and the screen says why. Nothing is posted.
+- [x] The press writes the draft, the links, the dates and carried fields, the parties and their roles in one transaction. A forced failure part-way leaves no row behind.
+- [x] (unit, start date) already taken: refused with the existing sentence and a link to that tenancy. Nothing is written.
+- [x] Two people resolving to one ת.ז.: refused with a sentence. Nothing is written.
+- [x] HTTP tests at the A16 seam cover ready, not ready, no profile, success, and both refusals. The existing A16 and lease suites are updated where they assumed approve-writes-draft.
 - [ ] Clicked on `:3000` with a fixture lease. After deploy, the director opens `01a13956` on staging (after the PR RandomWilder/dona-v5#136 seed has run).
 
 ## Blocked by
 
 None (can start immediately).
+
+## Closing notes
+
+- The last criterion is half done: clicked locally on a fixture lease (on :3001, because :3000 was another session's server on pre-change code). Opening `01a13956` on staging is the director's, after deploy and the RandomWilder/dona-v5#136 seed.
+- The read address no longer refuses the press. SPEC-flows A2 as amended at #232 strikes that refusal, and `01a13956` had to open with this ticket alone. The disagreement is shown beside the flat on the screen; the activation-gate flag is #240.
+- Readiness keeps one exception the ticket's wording did not: a `main_tenant_name` read twice needs one signed capture, not both (now in SPEC-flows A16). Signing the twin would have written two primary tenants for one person, and nothing dismisses a row.
+- "The reading closes at opening" is #239's. An approval on a lease that already has a draft still carries its mapped field, as #232 says.

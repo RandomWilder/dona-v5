@@ -22,7 +22,7 @@ import {
   upsertTenancyParty,
 } from '../../tenancy/contract.ts';
 import { approveExtractedField } from './approve.ts';
-import { readConfirmedName } from './confirmed-name.ts';
+import { displayConfirmedName, readConfirmedName } from './confirmed-name.ts';
 import { anchorOf, getFiledDocument, linkDocument } from './documents.ts';
 import { type ExtractedRow, listExtractedFields } from './extract.ts';
 import { promoteExtractedField } from './promote.ts';
@@ -305,7 +305,8 @@ function householdOf(rows: readonly ExtractedRow[]): Household {
         proposedRole: at === 0 ? firstRole : restRole,
         hasIdentifier: pairs,
       });
-      identifiers.push(pairs ? (ids[at]?.value ?? null) : null);
+      const id = ids[at];
+      identifiers.push(pairs && id ? (id.approvedValue ?? id.value) : null);
     });
   }
   const declared = identifiers.filter(
@@ -718,55 +719,84 @@ function rolesFromFieldFamily(
   );
 }
 
-async function resolveTermsProfileName(
-  db: Queryable,
-  requested: string | undefined,
-): Promise<string> {
-  if (requested && requested.trim().length > 0) {
-    return requireText(requested, 'terms_profile', 200);
-  }
-  const names = await listTermsProfiles(db);
-  if (names.includes(DEFAULT_TERMS_PROFILE)) {
-    return DEFAULT_TERMS_PROFILE;
-  }
-  if (names.length === 1 && names[0]) {
-    return names[0];
-  }
-  throw new KernelError('invalid', 'that terms profile does not exist');
+/** A row הקריאה still needs before פתיחת טיוטה. `value` is null when the reader found none. #234. */
+export interface ReadingGap {
+  fieldKey: string;
+  labelHe: string;
+  value: string | null;
 }
 
+/** What a required field is called when the reader found no row to borrow a label from. */
+const UNREAD_LABELS: Readonly<Record<string, string>> = {
+  main_tenant_name: 'שם השוכר הראשי',
+  start_date: 'תחילת תקופת השכירות',
+  end_date: 'סיום תקופת השכירות',
+};
+
 /**
- * Whether the stamps that open a letting are on the reading. Live filings name the household by
- * role (`main_tenant_name`); a September reading still names `tenant_name`. Two captures of the
- * same role are a pick: one approved row is enough. Unapproved extras stay for the ledger.
+ * **What is missing before the draft can open. #234 (SPEC-flows A16 as amended at #232).**
+ *
+ * Ready means an approved main tenant name, an approved start date and end date, and every name
+ * row of every role approved. Live filings name the household by role (`main_tenant_name`); a
+ * September reading still names `tenant_name`, which stands in for the main tenant when no
+ * role-named row was read, and then every one of them is a tenant and a gap until signed.
+ *
+ * **Two exceptions, both captures of one fact read twice.** A date read twice is one date, and a
+ * `main_tenant_name` read twice is one main tenant: the reader capped that role at one person, so a
+ * second capture is the same name again and not a second household member. One approved capture
+ * is enough for either, and the unsigned twin stays on the ledger and writes no party. Without
+ * this, the only way to open the draft would be to sign the twin, which writes two primary
+ * tenants for one person, and there is no control that dismisses a row.
  */
-export function leaseReadingIsReady(rows: readonly ExtractedRow[]): boolean {
-  const byRole = rows.filter((row) => row.fieldKey === 'main_tenant_name');
-  const tenants =
-    byRole.length > 0
-      ? byRole
-      : rows.filter((row) => row.fieldKey === 'tenant_name');
-  if (!tenants.some((row) => row.approvedAt !== null)) {
-    return false;
-  }
-  if (byRole.length === 0 && tenants.some((row) => row.approvedAt === null)) {
-    return false;
-  }
-  if (
-    rows
-      .filter((row) => row.fieldKey === 'guarantor_name')
-      .some((row) => row.approvedAt === null)
-  ) {
-    return false;
+export function leaseReadingGaps(rows: readonly ExtractedRow[]): ReadingGap[] {
+  const gaps: ReadingGap[] = [];
+  const unread = (fieldKey: string) =>
+    gaps.push({
+      fieldKey,
+      labelHe: UNREAD_LABELS[fieldKey] ?? fieldKey,
+      value: null,
+    });
+  const unsigned = (row: ExtractedRow) =>
+    gaps.push({
+      fieldKey: row.fieldKey,
+      labelHe: row.labelHe,
+      value: row.value,
+    });
+  const tenants = rows.some((row) => row.fieldKey === 'main_tenant_name')
+    ? rows.filter((row) => row.fieldKey === 'main_tenant_name')
+    : rows.filter((row) => row.fieldKey === 'tenant_name');
+  if (tenants.length === 0) {
+    unread('main_tenant_name');
   }
   for (const key of ['start_date', 'end_date'] as const) {
-    if (
-      !rows.some((field) => field.fieldKey === key && field.approvedAt !== null)
-    ) {
-      return false;
+    const read = rows.filter((row) => row.fieldKey === key);
+    const first = read.sort(inDocumentOrder)[0];
+    if (!first) {
+      unread(key);
+    } else if (!read.some((row) => row.approvedAt !== null)) {
+      unsigned(first);
     }
   }
-  return true;
+  const mainSigned = rows.some(
+    (row) => row.fieldKey === 'main_tenant_name' && row.approvedAt !== null,
+  );
+  for (const row of [...rows].sort(inDocumentOrder)) {
+    if (!NAME_KEYS.has(row.fieldKey) || row.approvedAt !== null) continue;
+    if (row.fieldKey === 'main_tenant_name' && mainSigned) continue;
+    unsigned(row);
+  }
+  return gaps;
+}
+
+/** The signed capture of a date when there is one, so a second unapproved read never wins. */
+function signedRow(
+  rows: readonly ExtractedRow[],
+  fieldKey: string,
+): ExtractedRow | undefined {
+  const read = rows
+    .filter((row) => row.fieldKey === fieldKey)
+    .sort(inDocumentOrder);
+  return read.find((row) => row.approvedAt !== null) ?? read[0];
 }
 
 /**
@@ -774,74 +804,321 @@ export function leaseReadingIsReady(rows: readonly ExtractedRow[]): boolean {
  *
  * Each row is its own promotion. A `conflict` or `invalid` from one row — the
  * other rent half, a bay that is not a Space, a column that already holds
- * something else — leaves that row uncarried and does not fail the approval
- * that asked for the carry. `lease_amendment` never reaches here.
+ * something else — leaves that row uncarried and does not fail the press that
+ * asked for the carry. `lease_amendment` never reaches here.
+ *
+ * **Each row under its own savepoint. #234.** The carry now runs inside פתיחת טיוטה's
+ * transaction, and a promotion may refuse after one of its statements ran. Without the
+ * savepoint a refused row would abort the transaction and take the draft with it.
  */
 async function carryApprovedLease(
   deps: LeaseDeps,
   spec: { documentId: string; promotedBy: string },
 ): Promise<void> {
-  const rows = await listExtractedFields(deps.db, spec.documentId);
-  for (const row of rows) {
-    if (row.approvedAt === null || row.promotionTarget === null) continue;
-    if (row.promotedTo !== null) continue;
-    try {
-      await promoteExtractedField(
-        { db: deps.db, audit: deps.audit, clock: deps.clock },
-        {
-          extractedFieldId: row.extractedFieldId,
-          promotedBy: spec.promotedBy,
-        },
-      );
-    } catch (error) {
-      if (
-        error instanceof KernelError &&
-        (error.code === 'conflict' || error.code === 'invalid')
-      ) {
-        continue;
+  await inTransaction(deps.db, async (db) => {
+    const rows = await listExtractedFields(db, spec.documentId);
+    for (const row of rows) {
+      if (row.approvedAt === null || row.promotionTarget === null) continue;
+      if (row.promotedTo !== null) continue;
+      await db.query('SAVEPOINT carry_field');
+      try {
+        await promoteExtractedField(
+          { db, audit: deps.audit, clock: deps.clock },
+          {
+            extractedFieldId: row.extractedFieldId,
+            promotedBy: spec.promotedBy,
+          },
+        );
+        await db.query('RELEASE SAVEPOINT carry_field');
+      } catch (error) {
+        await db.query('ROLLBACK TO SAVEPOINT carry_field');
+        if (
+          error instanceof KernelError &&
+          (error.code === 'conflict' || error.code === 'invalid')
+        ) {
+          continue;
+        }
+        throw error;
       }
-      throw error;
     }
-  }
+  });
 }
 
 /**
- * After the ledger is stamped, write the draft when the reading is ready, then
- * carry every approved mapped field. A lease already bound to a letting carries
- * on this approval and returns null, so the approve route redirects as before.
- * Anything that is not a lease returns null and carries nothing.
+ * **An approval on a lease that already has a draft still carries. #234.**
+ *
+ * Approving only stamps (SPEC-flows A2 as amended at #232). The one consequence an approval keeps
+ * is the carry onto a letting that already exists, which cannot refuse: every refusal is per row
+ * and leaves the row uncarried. A lease with no draft carries nothing here; פתיחת טיוטה carries
+ * every approved mapped row when it opens the draft. Anything that is not a lease is left alone.
  */
-export async function establishApprovedLease(
+export async function carryBoundLease(
   deps: LeaseDeps,
-  spec: { documentId: string; confirmedBy: string },
-): Promise<string | null> {
+  spec: { documentId: string; promotedBy: string },
+): Promise<void> {
   const documentId = validId(spec.documentId, 'document');
   const filed = await getFiledDocument(deps.db, documentId);
-  if (filed.typeKey !== 'lease') {
-    return null;
-  }
-  const linked = await tenancyLinkOf(deps.db, documentId);
-  if (linked === null) {
-    const rows = await listExtractedFields(deps.db, documentId);
-    if (!leaseReadingIsReady(rows)) {
-      return null;
-    }
-    const confirmed = await confirmLeaseTenancy(deps, {
-      documentId,
-      confirmedBy: spec.confirmedBy,
-      roles: {},
-    });
-    await carryApprovedLease(deps, {
-      documentId,
-      promotedBy: spec.confirmedBy,
-    });
-    return confirmed.tenancyId;
-  }
+  if (filed.typeKey !== 'lease') return;
+  if ((await tenancyLinkOf(deps.db, documentId)) === null) return;
   await carryApprovedLease(deps, {
     documentId,
-    promotedBy: spec.confirmedBy,
+    promotedBy: spec.promotedBy,
   });
+}
+
+/** One person פתיחת טיוטה will write, and the role they will hold. A screen shape: no identifier. */
+export interface OpeningPerson {
+  extractedFieldId: string;
+  fieldKey: ProposedPerson['fieldKey'];
+  name: string;
+  role: TenancyRole;
+  hasIdentifier: boolean;
+}
+
+/** Every reason the press would be refused. The screen words each one; the command throws on it. */
+export type OpeningRefusal =
+  | { kind: 'not_ready'; gaps: ReadingGap[] }
+  | { kind: 'no_terms_profile' }
+  | { kind: 'unit_taken'; tenancyId: string }
+  | { kind: 'same_person' };
+
+export interface LeaseOpening {
+  documentId: string;
+  unit: UnitHit;
+  startDate: string | null;
+  endDate: string | null;
+  /** The address and flat number as read, shown beside the unit's. Not a refusal (#232). */
+  address: string | null;
+  apartmentNumber: string | null;
+  matchesUnit: boolean;
+  people: OpeningPerson[];
+  termsProfiles: string[];
+  /** The existing rule's choice: `DEFAULT_TERMS_PROFILE`, else the sole profile, else none. */
+  termsProfile: string | null;
+  refusals: OpeningRefusal[];
+  /** Set once the draft is open; the screen then has nothing to press. */
+  tenancyId: string | null;
+}
+
+function preselectedProfile(names: readonly string[]): string | null {
+  if (names.includes(DEFAULT_TERMS_PROFILE)) return DEFAULT_TERMS_PROFILE;
+  if (names.length === 1 && names[0]) return names[0];
   return null;
+}
+
+/**
+ * **What פתיחת טיוטה shows before anything is written. #234.**
+ *
+ * The refusals are computed here and nowhere else, and `openLeaseDraft` reads them from this same
+ * function inside its transaction: one rule, so the screen and the write cannot disagree about
+ * whether the press would go through.
+ */
+export async function proposeLeaseOpening(
+  db: Queryable,
+  documentIdRaw: string,
+): Promise<LeaseOpening> {
+  const documentId = validId(documentIdRaw, 'document');
+  const filed = await getFiledDocument(db, documentId);
+  if (filed.typeKey !== 'lease') {
+    throw new KernelError('invalid', 'that document is not a lease');
+  }
+  const unit = await getUnit(db, await unitIdOf(db, documentId));
+  const rows = await listExtractedFields(db, documentId);
+  const household = householdOf(rows);
+  const startRow = signedRow(rows, 'start_date');
+  const endRow = signedRow(rows, 'end_date');
+  const startDate = startRow
+    ? (startRow.approvedValue ?? startRow.value)
+    : null;
+  const endDate = endRow ? (endRow.approvedValue ?? endRow.value) : null;
+  const address = firstValue(rows, 'address');
+  const apartmentNumber = firstValue(rows, 'apartment_number');
+  const termsProfiles = await listTermsProfiles(db);
+
+  const refusals: OpeningRefusal[] = [];
+  const gaps = leaseReadingGaps(rows);
+  if (gaps.length > 0) {
+    refusals.push({ kind: 'not_ready', gaps });
+  }
+  if (termsProfiles.length === 0) {
+    refusals.push({ kind: 'no_terms_profile' });
+  }
+  if (startDate !== null) {
+    const taken = await db.query<{ tenancy_id: string }>(
+      `SELECT tenancy_id FROM tenancy WHERE unit_id = $1 AND start_date = $2`,
+      [unit.unit_id, startDate],
+    );
+    const tenancyId = taken.rows[0]?.tenancy_id;
+    if (tenancyId) {
+      refusals.push({ kind: 'unit_taken', tenancyId });
+    }
+  }
+  // Every paired identifier, not the distinct ones: two people printed with one ת.ז. is exactly
+  // the case a de-duplicated list would hide.
+  const declared = household.identifiers.filter(
+    (value): value is string => value !== null,
+  );
+  if ((await countDistinctIdentifiers(db, declared)) < declared.length) {
+    refusals.push({ kind: 'same_person' });
+  }
+
+  return {
+    documentId,
+    unit,
+    startDate,
+    endDate,
+    address,
+    apartmentNumber,
+    matchesUnit:
+      address !== null &&
+      apartmentNumber !== null &&
+      addressMatches(address, unit.address_line) &&
+      apartmentMatches(apartmentNumber, unit.unit_number),
+    people: household.people.map((person, at) => ({
+      extractedFieldId: person.extractedFieldId,
+      fieldKey: person.fieldKey,
+      name: displayConfirmedName(person.value),
+      role: person.proposedRole,
+      hasIdentifier: household.identifiers[at] !== null,
+    })),
+    termsProfiles,
+    termsProfile: preselectedProfile(termsProfiles),
+    refusals,
+    tenancyId: await tenancyLinkOf(db, documentId),
+  };
+}
+
+const REFUSAL_ERRORS: Readonly<
+  Record<OpeningRefusal['kind'], [KernelError['code'], string]>
+> = {
+  not_ready: ['invalid', 'the reading is not ready'],
+  no_terms_profile: ['invalid', 'no terms profile exists'],
+  unit_taken: [
+    'conflict',
+    'that unit already has a lease starting on this date',
+  ],
+  same_person: ['invalid', 'two people on this lease resolve to one person'],
+};
+
+export interface OpenLeaseDraftSpec {
+  documentId: string;
+  /** Empty or absent takes the preselected profile. */
+  termsProfileName?: string;
+  openedBy: string;
+  /** A2's confirm screen may still post a split; הקריאה stores it on the approved value. */
+  names?: ConfirmLeaseSpec['names'];
+}
+
+/**
+ * **פתיחת טיוטה: one post, one transaction. #234 (SPEC-flows A2 as amended at #232).**
+ *
+ * Writes the `DRAFT` tenancy, the document's `TENANCY` link, the signed dates, every approved
+ * mapped field, the parties, their `tenancy_party` rows and the `SIGNATORY` links, or none of them.
+ * The draft no longer follows a committed approval, which is what left the 14 Oct lease fully
+ * approved with no draft and nothing to press.
+ *
+ * The read address is not compared here. A flat that disagrees with the paper is shown on the
+ * screen and does not refuse (#232); the activation gate raises it again.
+ */
+export async function openLeaseDraft(
+  deps: LeaseDeps,
+  spec: OpenLeaseDraftSpec,
+): Promise<ConfirmLeaseResult> {
+  const documentId = validId(spec.documentId, 'document');
+  const openedBy = requireText(spec.openedBy, 'opened_by', 200);
+
+  return inTransaction(deps.db, async (db) => {
+    const opening = await proposeLeaseOpening(db, documentId);
+    if (opening.tenancyId !== null) {
+      return {
+        tenancyId: opening.tenancyId,
+        alreadyEstablished: true,
+        partiesWritten: 0,
+        attached: false,
+      };
+    }
+    const refused = opening.refusals[0];
+    if (refused) {
+      const [code, message] = REFUSAL_ERRORS[refused.kind];
+      throw new KernelError(code, message);
+    }
+    const asked = spec.termsProfileName?.trim() ?? '';
+    const termsProfileName =
+      asked === ''
+        ? opening.termsProfile
+        : requireText(asked, 'terms_profile', 200);
+    const profileId = termsProfileName
+      ? await findTermsProfileByName(db, termsProfileName)
+      : null;
+    if (!profileId) {
+      throw new KernelError('invalid', 'that terms profile does not exist');
+    }
+    if (!opening.startDate || !opening.endDate) {
+      // Unreachable once the reading is ready; kept so the types say what the write needs.
+      throw new KernelError('invalid', 'the lease is missing dates');
+    }
+
+    const tenancy = await upsertTenancy(db, {
+      unitId: opening.unit.unit_id,
+      startDate: opening.startDate,
+      endDate: opening.endDate,
+      status: 'DRAFT',
+      termsProfileId: profileId,
+      noticeDate: null,
+      actualMoveOut: null,
+    });
+    await linkDocument(db, {
+      documentId,
+      entityType: 'TENANCY',
+      entityId: tenancy.id,
+      linkRole: 'EVIDENCE',
+    });
+
+    const rows = await listExtractedFields(db, documentId);
+    const promote = { db, audit: deps.audit, clock: deps.clock };
+    for (const fieldKey of ['start_date', 'end_date'] as const) {
+      const row = signedRow(rows, fieldKey);
+      if (row) {
+        await signAndPromote(promote, row, openedBy);
+      }
+    }
+
+    const household = householdOf(rows);
+    const partiesWritten = await writeParties(db, {
+      tenancyId: tenancy.id,
+      documentId,
+      household,
+      roles: rolesFromFieldFamily(household.people),
+      stamped: stampedNameIds(rows),
+      names: spec.names,
+    });
+
+    await carryApprovedLease(
+      { db, audit: deps.audit, clock: deps.clock },
+      { documentId, promotedBy: openedBy },
+    );
+
+    await deps.audit.write(
+      {
+        actorKind: 'staff',
+        actorId: openedBy,
+        action: 'evidence.confirm_lease',
+        subjectId: documentId,
+        inputs: {
+          tenancyId: tenancy.id,
+          partiesWritten,
+        },
+      },
+      { outcome: 'ok' },
+    );
+
+    return {
+      tenancyId: tenancy.id,
+      alreadyEstablished: false,
+      partiesWritten,
+      attached: false,
+    };
+  });
 }
 
 export async function confirmLeaseTenancy(
@@ -868,110 +1145,15 @@ export async function confirmLeaseTenancy(
         names: spec.names,
       });
     }
-    const existing = await tenancyLinkOf(db, documentId);
-    if (existing) {
-      return {
-        tenancyId: existing,
-        alreadyEstablished: true,
-        partiesWritten: 0,
-        attached: false,
-      };
-    }
-    const termsProfileName = await resolveTermsProfileName(
-      db,
-      spec.termsProfileName,
-    );
-    if (!proposed.matchesUnit) {
-      throw new KernelError('invalid', 'the document does not match this unit');
-    }
-    if (!proposed.startDate || !proposed.endDate) {
-      throw new KernelError('invalid', 'the lease is missing dates');
-    }
-    const stamped = stampedNameIds(rows);
-    const tenants = household.people.filter(
-      (person) =>
-        (person.fieldKey === 'tenant_name' ||
-          person.fieldKey === 'main_tenant_name') &&
-        stamped.has(person.extractedFieldId),
-    );
-    if (tenants.length === 0) {
-      throw new KernelError('invalid', 'the lease names no tenant');
-    }
-    const roles = rolesFromFieldFamily(household.people);
-
-    const profileId = await findTermsProfileByName(db, termsProfileName);
-    if (!profileId) {
-      throw new KernelError('invalid', 'that terms profile does not exist');
-    }
-
-    const collision = await db.query<{ tenancy_id: string }>(
-      `SELECT tenancy_id FROM tenancy
-        WHERE unit_id = $1 AND start_date = $2`,
-      [proposed.unit.unit_id, proposed.startDate],
-    );
-    if (collision.rows[0]) {
-      throw new KernelError(
-        'conflict',
-        'that unit already has a lease starting on this date',
-      );
-    }
-
-    const tenancy = await upsertTenancy(db, {
-      unitId: proposed.unit.unit_id,
-      startDate: proposed.startDate,
-      endDate: proposed.endDate,
-      status: 'DRAFT',
-      termsProfileId: profileId,
-      noticeDate: null,
-      actualMoveOut: null,
-    });
-    await linkDocument(db, {
-      documentId,
-      entityType: 'TENANCY',
-      entityId: tenancy.id,
-      linkRole: 'EVIDENCE',
-    });
-
-    const promote = {
-      db,
-      audit: deps.audit,
-      clock: deps.clock,
-    };
-    for (const fieldKey of ['start_date', 'end_date'] as const) {
-      const row = rows.find((field) => field.fieldKey === fieldKey);
-      if (row) {
-        await signAndPromote(promote, row, confirmedBy);
-      }
-    }
-
-    const partiesWritten = await writeParties(db, {
-      tenancyId: tenancy.id,
-      documentId,
-      household,
-      roles,
-      stamped,
-      names: spec.names,
-    });
-
-    await deps.audit.write(
+    // A lease opens through פתיחת טיוטה's command, whichever screen posted it (#234).
+    return openLeaseDraft(
+      { ...deps, db },
       {
-        actorKind: 'staff',
-        actorId: confirmedBy,
-        action: 'evidence.confirm_lease',
-        subjectId: documentId,
-        inputs: {
-          tenancyId: tenancy.id,
-          partiesWritten,
-        },
+        documentId,
+        termsProfileName: spec.termsProfileName,
+        openedBy: confirmedBy,
+        names: spec.names,
       },
-      { outcome: 'ok' },
     );
-
-    return {
-      tenancyId: tenancy.id,
-      alreadyEstablished: false,
-      partiesWritten,
-      attached: false,
-    };
   });
 }

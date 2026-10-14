@@ -1274,6 +1274,20 @@ describe('evidence · A16 file a lease in one workspace', {
         String(last.headers.location),
         /\/estate\/tenancies\//,
       );
+      // #234: the stamps write no draft. הקריאה offers פתיחת טיוטה, and the press opens it.
+      const ready = await asRole(app, actor).inject({
+        method: 'GET',
+        url: `/documents/filing/${documentId}`,
+      });
+      assert.match(
+        ready.body,
+        new RegExp(`href="/documents/filing/${documentId}/open">פתיחת טיוטה`),
+      );
+      const opened = await post(`/documents/filing/${documentId}/open`, {
+        terms_profile: DEFAULT_TERMS_PROFILE,
+      });
+      assert.equal(opened.statusCode, 302, opened.body.slice(0, 400));
+      assert.equal(opened.headers.location, `/documents/filing/${documentId}`);
 
       const draft = await asRole(app, actor).inject({
         method: 'GET',
@@ -1336,9 +1350,13 @@ describe('evidence · A16 file a lease in one workspace', {
       assert.equal(kept.rows[0]?.n, '1');
 
       const secondId = await fileOnTab('a16-read-two');
-      const clash = await stampOpening(secondId);
+      const stamped = await stampOpening(secondId);
+      assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 400));
+      const clash = await post(`/documents/filing/${secondId}/open`, {
+        terms_profile: DEFAULT_TERMS_PROFILE,
+      });
       assert.equal(clash.statusCode, 409, clash.body.slice(0, 400));
-      assert.match(clash.body, /conflict/);
+      assert.match(clash.body, /כבר יש חוזה לדירה הזו באותו מועד תחילה/);
       assert.match(clash.body, new RegExp(`/estate/tenancies/${tenancyId}`));
     } finally {
       await inTransaction(pool, async (db) => {

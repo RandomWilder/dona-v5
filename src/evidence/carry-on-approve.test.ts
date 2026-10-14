@@ -425,7 +425,7 @@ async function withCarry(
   return true;
 }
 
-async function approveOpening(carry: Carry): Promise<void> {
+async function stampOpening(carry: Carry): Promise<void> {
   for (const key of ['start_date', 'end_date', 'main_tenant_name']) {
     const stamped = await carry.post(
       `/documents/filing/${carry.documentId}/approve`,
@@ -437,6 +437,24 @@ async function approveOpening(carry: Carry): Promise<void> {
       `/documents/filing/${carry.documentId}`,
     );
   }
+}
+
+/** Stamp the reading, then press פתיחת טיוטה (#234): approving alone writes no draft. */
+async function approveOpening(carry: Carry): Promise<void> {
+  await stampOpening(carry);
+  await approveOpeningPress(carry);
+}
+
+async function approveOpeningPress(carry: Carry): Promise<void> {
+  const opened = await carry.post(
+    `/documents/filing/${carry.documentId}/open`,
+    { terms_profile: DEFAULT_TERMS_PROFILE },
+  );
+  assert.equal(opened.statusCode, 302, opened.body.slice(0, 300));
+  assert.equal(
+    opened.headers.location,
+    `/documents/filing/${carry.documentId}`,
+  );
 }
 
 async function column(carry: Carry): Promise<{
@@ -568,6 +586,95 @@ describe('evidence · approving a mapped lease field carries it', {
         );
         assert.equal(audit.rows.length, 1);
         assert.equal(audit.rows[0]?.actor_id, carry.actor.email);
+      },
+    );
+    if (!ran) t.skip(skipReason);
+  });
+
+  it('a failure part-way through פתיחת טיוטה leaves no row behind (#234)', async (t) => {
+    // The one case here that needs a real transaction: the app runs on the pool, so the press
+    // owns its own BEGIN and ROLLBACK. The carry of the approved rent is the last write the press
+    // makes, after the draft, its links, the dates, the parties and their roles, so it is the one
+    // made to fail: everything before it must be gone.
+    const address = 'נשיאה 173';
+    const ran = await withCarry(
+      {
+        tag: 'a234fail',
+        city: 'עיר נשיאה כשל',
+        address,
+        findings: [
+          ...opening(address),
+          { field_key: 'rent_amount', value: RENT, word_ids: [5] },
+          { field_key: 'rent_currency', value: CURRENCY, word_ids: [6] },
+        ],
+      },
+      async (carry) => {
+        await stampOpening(carry);
+        for (const key of ['rent_amount', 'rent_currency']) {
+          const stamped = await carry.post(
+            `/documents/filing/${carry.documentId}/approve`,
+            { extracted_field_id: await carry.rowId(carry.documentId, key) },
+          );
+          assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
+        }
+        // A plpgsql body takes no parameters, so the id is spliced in: checked to be an id first.
+        assert.match(carry.unitId, /^[0-9a-f-]{36}$/);
+        const trigger = `fail_234_${carry.documentId.replaceAll('-', '').slice(-12)}`;
+        await carry.pool.query(
+          `CREATE FUNCTION ${trigger}() RETURNS trigger LANGUAGE plpgsql AS $$
+           BEGIN
+             IF NEW.unit_id = '${carry.unitId}' AND NEW.rent_amount IS NOT NULL THEN
+               RAISE EXCEPTION 'forced failure #234';
+             END IF;
+             RETURN NEW;
+           END $$`,
+        );
+        await carry.pool.query(
+          `CREATE TRIGGER ${trigger} BEFORE UPDATE ON tenancy
+             FOR EACH ROW EXECUTE FUNCTION ${trigger}()`,
+        );
+        try {
+          const pressed = await carry.post(
+            `/documents/filing/${carry.documentId}/open`,
+            { terms_profile: DEFAULT_TERMS_PROFILE },
+          );
+          // Not a refusal: the generic handler answers an unexpected error as unavailable.
+          assert.equal(pressed.statusCode, 503, pressed.body.slice(0, 300));
+        } finally {
+          await carry.pool.query(
+            `DROP TRIGGER ${trigger} ON tenancy; DROP FUNCTION ${trigger}()`,
+          );
+        }
+        const left = await carry.pool.query<{
+          tenancies: string;
+          links: string;
+          promoted: string;
+        }>(
+          `SELECT
+             (SELECT count(*) FROM tenancy WHERE unit_id = $1)::text AS tenancies,
+             (SELECT count(*) FROM document_link
+               WHERE document_id = $2
+                 AND (entity_type IN ('TENANCY', 'PARTY')))::text AS links,
+             (SELECT count(*) FROM extracted_field
+               WHERE document_id = $2 AND promoted_to IS NOT NULL)::text AS promoted`,
+          [carry.unitId, carry.documentId],
+        );
+        assert.deepEqual(left.rows[0], {
+          tenancies: '0',
+          links: '0',
+          promoted: '0',
+        });
+        const roles = await carry.pool.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM tenancy_party tp
+             JOIN tenancy t ON t.tenancy_id = tp.tenancy_id
+            WHERE t.unit_id = $1`,
+          [carry.unitId],
+        );
+        assert.equal(roles.rows[0]?.n, '0');
+
+        // And the same press, with nothing in the way, opens it.
+        await approveOpeningPress(carry);
+        assert.equal((await column(carry)).rent_amount, RENT);
       },
     );
     if (!ran) t.skip(skipReason);
