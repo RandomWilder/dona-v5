@@ -31,7 +31,9 @@ export const sorterCases: readonly SorterCase[] = [
     id: 'he-question',
     title: 'A Hebrew question is a call',
     subject: '',
-    body: 'מתי אפשר לשלוח מישהו לדירה?',
+    // The question names what it is for. Without "to fix the boiler" it also
+    // fits the prompt's unsure rule, and the model took that reading on CI.
+    body: 'מתי אפשר לשלוח מישהו לתקן את הדוד בדירה?',
     label: 'call',
     text: 'hebrew',
   },
