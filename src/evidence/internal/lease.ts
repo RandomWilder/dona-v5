@@ -990,6 +990,10 @@ export interface UnopenedLease {
   storageUri: string;
   /** The main tenant as read, or as corrected when signed. Null when the reader named none. */
   tenantName: string | null;
+  /** The address as read. Null when the reader named none. #240. */
+  address: string | null;
+  unitNumber: string | null;
+  startDate: string | null;
   /** No gap left on הקריאה: the row offers פתח טיוטה, not המשך קריאה. */
   ready: boolean;
 }
@@ -1027,6 +1031,14 @@ export async function listUnopenedLeases(
   for (const row of found.rows) {
     const rows = await listExtractedFields(db, row.document_id);
     const named = signedRow(rows, mainTenantKey(rows));
+    const address = signedRow(rows, 'address');
+    const apartment = signedRow(rows, 'apartment_number');
+    const start = signedRow(rows, 'start_date');
+    const read = (row: ExtractedRow | undefined): string | null => {
+      if (!row) return null;
+      const value = (row.approvedValue ?? row.value).trim();
+      return value === '' ? null : value;
+    };
     leases.push({
       documentId: row.document_id,
       ingestedAt: row.ingested_at,
@@ -1034,6 +1046,9 @@ export async function listUnopenedLeases(
       tenantName: named
         ? displayConfirmedName(named.approvedValue ?? named.value)
         : null,
+      address: read(address),
+      unitNumber: read(apartment),
+      startDate: read(start),
       ready: leaseReadingGaps(rows).length === 0,
     });
   }

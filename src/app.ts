@@ -47,6 +47,8 @@ import { renderMockup } from './dev-mockups.ts';
 import { renderErrorPage, wantsHtml, wayBack } from './error-page.ts';
 import { registerEstateRoutes } from './estate/contract.ts';
 import {
+  addressMatches,
+  apartmentMatches,
   fileDocument,
   listDocumentTypes,
   listLinkedDocuments,
@@ -615,7 +617,10 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     listTenancyParties,
     listPartyNames,
     activationGate: (db, tenancyId) =>
-      activationGate(db, clock, tenancyId, listTenancyDocumentFacts),
+      activationGate(db, clock, tenancyId, listTenancyDocumentFacts, {
+        addressMatches,
+        apartmentMatches,
+      }),
     activateTenancy: (db, spec) =>
       activateTenancy(db, clock, spec, listTenancyDocumentFacts),
     reassignParkingSpace: (db, spec) => reassignParkingSpace(db, clock, spec),

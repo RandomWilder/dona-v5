@@ -18,6 +18,7 @@ export type {
   ActivationFlag,
   ActivationGate,
   BlockingLetting,
+  PlaceFold,
   ProtocolWaiver,
   RequiredActivationDocument,
   TenancyDocumentFact,
@@ -120,4 +121,9 @@ export {
   OBLIGATION_EXPIRING_WINDOW_DAYS,
   obligationStatus,
 } from './internal/status.ts';
+export {
+  tenancyAddress,
+  tenancyTitle,
+  tenancyTitleName,
+} from './internal/title.ts';
 export type { Queryable } from './internal/types.ts';

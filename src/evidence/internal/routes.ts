@@ -76,10 +76,15 @@ function pageIndex(asked: unknown, pageCount: number): number {
 }
 
 import type { WorkRunner } from '../../kernel/work.ts';
+import { listPartyNames } from '../../parties/contract.ts';
 import {
   getTenancy,
+  listTenancyParties,
   listUnitTenancies,
   type TenancyRole,
+  tenancyAddress,
+  tenancyTitle,
+  tenancyTitleName,
 } from '../../tenancy/contract.ts';
 import { approveExtractedField, approveUnflagged } from './approve.ts';
 import {
@@ -679,6 +684,30 @@ export function registerDocumentRoutes(
   const printed = (row: ExtractedRow): string =>
     displayConfirmedName(row.approvedValue ?? row.value);
 
+  const draftTitle = async (
+    tenancyId: string,
+    unit: UnitHit,
+    startDate: string,
+  ): Promise<string> => {
+    const members = await listTenancyParties(deps.pool, tenancyId);
+    const names = await listPartyNames(
+      deps.pool,
+      members.map((member) => member.party_id),
+    );
+    const byId = new Map(names.map((row) => [row.party_id, row.full_name]));
+    return tenancyTitle({
+      name: tenancyTitleName(
+        members.map((member) => ({
+          role: member.role,
+          name: byId.get(member.party_id) ?? null,
+        })),
+      ),
+      address: tenancyAddress(unit.address_line, unit.city),
+      unitNumber: unit.unit_number,
+      startDate,
+    });
+  };
+
   const filingOfDocument = async (
     request: FastifyRequest,
     documentId: string,
@@ -698,6 +727,7 @@ export function registerDocumentRoutes(
         unit,
         draft: {
           tenancyId: bound,
+          title: await draftTitle(bound, unit, tenancy.start_date),
           tenants: rows
             .filter(
               (row) =>

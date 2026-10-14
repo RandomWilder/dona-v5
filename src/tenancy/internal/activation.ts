@@ -21,6 +21,10 @@ export interface TenancyDocumentFact {
   validTo: string | null;
   /** Set on an approved handover protocol, from A6's confirm. Absent otherwise. */
   handoverDate: string | null;
+  /** Lease reading of the street address. Null when this fact is not a lease, or none was read. */
+  addressRead?: string | null;
+  /** Lease reading of the flat number. Null when this fact is not a lease, or none was read. */
+  apartmentRead?: string | null;
 }
 
 export type TenancyDocumentsReader = (
@@ -71,7 +75,21 @@ export type ActivationFlag =
       handoverDate: string;
       /** `early` is before the start minus `EARLY_HANDOVER_DAYS`; `late` is after the end. */
       edge: 'early' | 'late';
+    }
+  | {
+      /** The lease reading's address and flat do not fold to the unit's own. Not a check. #240. */
+      rule: 'place_disagrees';
+      addressRead: string;
+      apartmentRead: string;
+      addressLine: string;
+      unitNumber: string;
     };
+
+/** The cross-check's fold, injected so this module does not import evidence. #240. */
+export interface PlaceFold {
+  addressMatches(extracted: string, addressLine: string): boolean;
+  apartmentMatches(extracted: string, unitNumber: string): boolean;
+}
 
 export interface ActivationGate {
   checks: ActivationCheck[];
@@ -112,6 +130,7 @@ export async function activationGate(
   clock: Clock,
   tenancyId: string,
   documents: TenancyDocumentsReader,
+  place?: PlaceFold,
 ): Promise<ActivationGate> {
   const current = await db.query<{
     status: string;
@@ -207,6 +226,21 @@ export async function activationGate(
       : [];
   const handoverDate = confirmedHandover(facts);
   const outside = handoverOutside(handoverDate, row.start_date, row.end_date);
+  const located = await db.query<{
+    unit_number: string;
+    address_line: string;
+  }>(
+    `SELECT u.unit_number, b.address_line
+       FROM unit u
+       JOIN space s ON s.space_id = u.unit_id
+       JOIN building b ON b.building_id = s.building_id
+      WHERE u.unit_id = $1`,
+    [row.unit_id],
+  );
+  const disagreed = placeDisagrees(facts, located.rows[0], place);
+  const flags = [...lapsed];
+  if (outside) flags.push(outside);
+  if (disagreed) flags.push(disagreed);
   return {
     checks,
     canActivate:
@@ -220,7 +254,29 @@ export async function activationGate(
         ? row.start_date
         : null,
     handoverDate,
-    flags: outside ? [...lapsed, outside] : lapsed,
+    flags,
+  };
+}
+
+function placeDisagrees(
+  facts: readonly TenancyDocumentFact[],
+  unit: { address_line: string; unit_number: string } | undefined,
+  place: PlaceFold | undefined,
+): ActivationFlag | null {
+  if (!place || !unit) return null;
+  const lease = facts.find((fact) => fact.typeKey === 'lease' && fact.approved);
+  const addressRead = lease?.addressRead?.trim() ?? '';
+  const apartmentRead = lease?.apartmentRead?.trim() ?? '';
+  if (addressRead === '' || apartmentRead === '') return null;
+  const addressFits = place.addressMatches(addressRead, unit.address_line);
+  const apartmentFits = place.apartmentMatches(apartmentRead, unit.unit_number);
+  if (addressFits && apartmentFits) return null;
+  return {
+    rule: 'place_disagrees',
+    addressRead,
+    apartmentRead,
+    addressLine: unit.address_line,
+    unitNumber: unit.unit_number,
   };
 }
 

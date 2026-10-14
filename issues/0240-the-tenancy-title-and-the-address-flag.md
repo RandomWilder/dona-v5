@@ -1,13 +1,13 @@
 ---
 number: 240
 title: "The tenancy title, and the address flag at activation"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: [237]
 parent: 232
 created: 2026-10-14
-closed:
+closed: 2026-10-14
 ---
 
 ## Parent
@@ -28,13 +28,23 @@ Spec: SPEC-tenancy "A draft opened from an unassigned lease".
 
 ## Acceptance criteria
 
-- [ ] The title renders in all four places in the stated format. Correcting a party's name changes the title everywhere with no other write.
-- [ ] With no `PRIMARY_TENANT`, the first tenant's name is used.
-- [ ] A tenancy opened on a flat that disagrees with the read address shows the flag on the activation gate. Activation is still possible when every check passes.
-- [ ] Matching addresses: no flag.
-- [ ] A unit test for the title function; HTTP tests for the flag on the tenancy page.
-- [ ] Clicked on `:3000`.
+- [x] The title renders in all four places in the stated format. Correcting a party's name changes the title everywhere with no other write.
+- [x] With no `PRIMARY_TENANT`, the first tenant's name is used.
+- [x] A tenancy opened on a flat that disagrees with the read address shows the flag on the activation gate. Activation is still possible when every check passes.
+- [x] Matching addresses: no flag.
+- [x] A unit test for the title function; HTTP tests for the flag on the tenancy page.
+- [x] Clicked on `:3000`.
 
 ## Blocked by
 
 - #237
+
+## Comment — 2026-10-14
+
+The title is computed wherever a letting is named: שכירויות, the tenancy page, A16's הטיוטה beat, and ממתינים לפתיחה. Before a tenancy exists the waiting row uses the name as read. Changing the party's given name changes those titles with no other write. With no primary tenant the first co-tenant is used.
+
+The activation gate reports a flag when the approved lease reading of the address and the flat number do not fold to the unit. It is not a check. A matching address shows nothing. Activation still goes through when every check passes.
+
+Clicked on `:3000` after restart, signed in. שכירויות showed `דנה חסום-107 · רחוב הקריאה 1, עיר קליק · דירה 1 · 2026-01-01`, and that letting's page used the same sentence. The activate button was live. That letting's address agreed with the unit, so no flag was on the page; the disagreeing case is the HTTP test.
+
+Full suite: 1210 passed, plus 41 hook tests. Lint clean.

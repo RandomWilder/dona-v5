@@ -919,6 +919,8 @@ const AMOUNT_CURRENCY: Readonly<Record<string, string>> = {
 
 export interface FilingDraftFacts {
   tenancyId: string;
+  /** The tenancy title. #240. */
+  title: string;
   tenants: readonly string[];
   guarantors: readonly string[];
   startDate: string;
@@ -1481,10 +1483,7 @@ function filingDraft(screen: LeaseFilingScreen): Html {
   if (screen.beat !== 'draft' || !draft || !unit) {
     return h``;
   }
-  const title = draft.tenants[0]
-    ? h`<span class="excerpt">${draft.tenants[0]}</span>
-        · ${unit.address_line}, ${unit.city} · דירה ${ltr(unit.unit_number)}`
-    : h`${unit.address_line}, ${unit.city} · דירה ${ltr(unit.unit_number)}`;
+  const title = draft.title;
   const tenants =
     draft.tenants.length === 0
       ? h`—`

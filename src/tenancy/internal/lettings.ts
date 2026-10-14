@@ -76,12 +76,17 @@ export interface TenancyPartyRow {
 function householdColumnSql(
   tenancy: 'tenancy' | 't',
   column: 'full_name' | 'family_name',
+  tenantsOnly = false,
 ): string {
+  const only = tenantsOnly
+    ? `AND tp.role IN ('PRIMARY_TENANT', 'CO_TENANT')`
+    : '';
   return `(
               SELECT p.${column}
                 FROM tenancy_party tp
                 JOIN party p ON p.party_id = tp.party_id
                WHERE tp.tenancy_id = ${tenancy}.tenancy_id
+                 ${only}
                ORDER BY CASE tp.role
                           WHEN 'PRIMARY_TENANT' THEN 0
                           WHEN 'CO_TENANT' THEN 1
@@ -484,7 +489,7 @@ export async function listTenancyBook(
             b.address_line,
             b.city,
             b.building_number,
-            ${householdColumnSql('t', 'full_name')} AS household_name
+            ${householdColumnSql('t', 'full_name', true)} AS household_name
        FROM tenancy t
        JOIN unit u ON u.unit_id = t.unit_id
        JOIN space s ON s.space_id = u.unit_id

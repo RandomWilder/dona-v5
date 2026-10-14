@@ -1387,6 +1387,7 @@ const SCREENS: Array<[string, () => string]> = [
           startDate: '2026-11-01',
           endDate: '2027-10-31',
           protocolPresent: false,
+          title: 'יעל כהן · רקפת 12, שוהם · דירה 7 · 2026-11-01',
         },
       }),
   ],

@@ -394,14 +394,17 @@ move `tenancy.status`. A waiver, or a confirm that recorded no date, raises noth
 the blocking letting by id and dates only — never a party.
 
 **Screen:** `GET /estate/tenancies/:tenancyId` — one letting, reached by its identifier. Title
-(the same sentence as שכירויות: tenant name, street, building number when the building has one,
-city, and apartment number), status, the lease's dates, the confirmed
+(the tenancy title: primary tenant, or the first co-tenant when there is no primary, then street
+and number, city, דירה and the unit number, then the start date — computed, never stored, #240),
+status, the lease's dates, the confirmed
 handover date beside them, the documents it holds,
 what is missing, every gate check with its outcome, and the activate button. The household name and
 the status chip share one line, the way a building title does on נכסים, and the lease dates sit
 under them. The confirmed handover date is printed on that same line. When the gate returns
 `handover_outside_term`, one alert-coloured line sits under those dates. It names the date and
-which edge it crossed, and it says the flag does not block. It is not a row in מה נבדק. The page prints the
+which edge it crossed, and it says the flag does not block. It is not a row in מה נבדק. When the
+lease reading names an address and a flat number that do not fold to the unit's own, the same
+kind of line names both (#240). It does not darken the button. The page prints the
 gate's returned facts and re-derives none of the rules. The button is dark until `canActivate`; a
 dark button names every requirement the gate checked. When the only miss is the start date, the
 page states `activatableOn` and says the letting stays a draft until that date. It does not say
@@ -969,7 +972,7 @@ stay on A1 / A12 / **מסמכים**.
    so an identifier arrives already attached to the name it belongs to and no step asks an operator
    to pair them. **A money pair missing its currency is marked here and approvable anyway**: this
    step attests what the page says, and the refusal belongs at promotion.
-4. **הטיוטה.** Named arrival in this tab: title, people, dates, and whether **פרוטוקול מסירה** is
+4. **הטיוטה.** Named arrival in this tab: the tenancy title (#240), people, dates, and whether **פרוטוקול מסירה** is
    missing or present. Present means the gate's approval — A6's confirm signed for that document —
    not a bare link. Facts only. No activate (A5 stays on the Tenancy screen). No protocol attach.
    When the protocol is missing, that line links to the tenancy page, which is where it is filed
@@ -1005,7 +1008,7 @@ moment the address is unique). It does not retitle A15.
 - **A second approval of an approved row is a sentence on this step, not an error page.**
 - **When the reading is ready, the step shows פתיחת טיוטה.** That is A2's screen, inside this tab. When the reading is not ready, the step lists what is missing.
 - **Ready means** an approved main tenant name, an approved start date and end date, and every other name row of every role approved (#234). A date or a `main_tenant_name` read twice is one fact read twice: one approved capture is enough, and the unsigned twin writes nothing. Without that exception the only way past a duplicate read would be to sign it, writing two primary tenants for one person.
-- **"It does not list unfinished filings" is reversed.** Every lease with no `TENANCY` link is listed under **ממתינים לפתיחה** at the top of **שכירויות** (#238), each with **פתח טיוטה**, or a link back to הקריאה while it is not ready. A lease filed on a flat before #237 and never opened is listed the same way.
+- **"It does not list unfinished filings" is reversed.** Every lease with no `TENANCY` link is listed under **ממתינים לפתיחה** at the top of **שכירויות** (#238), each with the tenancy title (#240) — the name as read, because no tenancy exists yet — and **פתח טיוטה**, or a link back to הקריאה while it is not ready. A lease filed on a flat before #237 and never opened is listed the same way. A reading that named no name still says לא נקרא שם.
 - **A refusal anywhere on this tab is a Hebrew sentence in the page.**
 
 **Module:** evidence owns the new screens and the posts that sequence existing commands. Estate owns

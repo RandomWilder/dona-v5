@@ -3622,7 +3622,7 @@ describe('estate · שכירויות', () => {
       assert.match(avi, new RegExp(`/estate/tenancies/${readyEarly}`));
       assert.match(
         avi,
-        /אבי מוכן · רחוב הספר 4, בניין <span dir="ltr">206<\/span>, עיר שכירויות · דירה <span dir="ltr">1<\/span>/,
+        /אבי מוכן · רחוב הספר 4, עיר שכירויות · דירה 1 · 2026-08-01/,
       );
       assert.match(avi, /2026-08-01 — 2027-07-31/);
       assert.match(avi, />מוכנה</);
@@ -3636,10 +3636,7 @@ describe('estate · שכירויות', () => {
       earlier('ראשון בלי ראשי', BOOK_BARE);
       const bare = row(BOOK_BARE);
       assert.match(bare, new RegExp(`/estate/tenancies/${nameless}`));
-      assert.match(
-        bare,
-        /רחוב בלי מספר 8, עיר שכירויות · דירה <span dir="ltr">ב<\/span>/,
-      );
+      assert.match(bare, /רחוב בלי מספר 8, עיר שכירויות · דירה ב · 2026-04-01/);
       assert.doesNotMatch(bare, /בניין/);
 
       const ram = row('רם ממתין');
@@ -3668,7 +3665,7 @@ describe('estate · שכירויות', () => {
       assert.equal(page.statusCode, 200);
       assert.match(
         page.body,
-        /אבי מוכן · רחוב הספר 4, בניין <span dir="ltr">206<\/span>, עיר שכירויות · דירה <span dir="ltr">1<\/span>/,
+        /אבי מוכן · רחוב הספר 4, עיר שכירויות · דירה 1 · 2026-08-01/,
       );
       assert.match(page.body, /מה נבדק/);
       assert.match(page.body, /הפעלת ההשכרה/);
@@ -3681,7 +3678,7 @@ describe('estate · שכירויות', () => {
       });
       assert.match(
         barePage.body,
-        /רחוב בלי מספר 8, עיר שכירויות · דירה <span dir="ltr">ב<\/span>/,
+        /רחוב בלי מספר 8, עיר שכירויות · דירה ב · 2026-04-01/,
       );
       assert.doesNotMatch(barePage.body, /בניין/);
 

@@ -24,6 +24,9 @@ import {
   EARLY_HANDOVER_DAYS,
   type TenancyBook,
   type TenancyBookRow,
+  tenancyAddress,
+  tenancyTitle,
+  tenancyTitleName,
 } from '../../tenancy/contract.ts';
 import type { LaterAddPrefill } from './inventory.ts';
 import type { BuildingStatus, ConditionStatus, Tenure } from './plan.ts';
@@ -3049,6 +3052,12 @@ function handoverFlag(sheet: TenancySheet): Html {
   return h`<p class="flag">דגל: תאריך המסירה בפרוטוקול (${ltr(flag.handoverDate)}) ${why}. אינו חוסם.</p>`;
 }
 
+function placeFlag(sheet: TenancySheet): Html {
+  const flag = sheet.flags.find((row) => row.rule === 'place_disagrees');
+  if (flag?.rule !== 'place_disagrees') return h``;
+  return h`<p class="flag">דגל: הכתובת בחוזה (${flag.addressRead}, דירה ${ltr(flag.apartmentRead)}) אינה כתובת הדירה (${flag.addressLine}, דירה ${ltr(flag.unitNumber)}). אינו חוסם.</p>`;
+}
+
 function tenantsLine(people: readonly TenancyPersonView[]): Html {
   const tenants = people.filter(
     (person) => person.role === 'PRIMARY_TENANT' || person.role === 'CO_TENANT',
@@ -3120,19 +3129,19 @@ function eligibilityRow(sheet: TenancySheet): Html {
   </div>`;
 }
 
-function lettingTitle(row: {
-  household_name: string | null;
+function titledLetting(row: {
+  name: string | null;
   address_line: string;
-  building_number?: string | null;
   city: string;
   unit_number: string;
+  start_date: string;
 }): string {
-  const number =
-    row.building_number != null && row.building_number !== ''
-      ? `, בניין ${row.building_number}`
-      : '';
-  const place = `${row.address_line}${number}, ${row.city} · דירה ${row.unit_number}`;
-  return row.household_name ? `${row.household_name} · ${place}` : place;
+  return tenancyTitle({
+    name: row.name,
+    address: tenancyAddress(row.address_line, row.city),
+    unitNumber: row.unit_number,
+    startDate: row.start_date,
+  });
 }
 
 function lettingSentence(row: {
@@ -3191,7 +3200,24 @@ export interface UnopenedLeaseView {
   storageUri: string;
   readUrl: string;
   tenantName: string | null;
+  /** The address as read. Null when the reading named none. #240. */
+  address?: string | null;
+  unitNumber?: string | null;
+  startDate?: string | null;
   ready: boolean;
+}
+
+function waitingTitle(lease: UnopenedLeaseView): Html {
+  const title = tenancyTitle({
+    name: lease.tenantName,
+    address: lease.address ?? null,
+    unitNumber: lease.unitNumber ?? null,
+    startDate: lease.startDate ?? null,
+  });
+  if (lease.tenantName != null) return h`${title}`;
+  return title === ''
+    ? h`<span class="hint">לא נקרא שם</span>`
+    : h`<span class="hint">לא נקרא שם</span> · ${title}`;
 }
 
 /** #238. A lease one step short of a tenancy. Absent, heading and all, when nothing waits. */
@@ -3205,7 +3231,7 @@ function waitingSection(leases: readonly UnopenedLeaseView[]): Html {
           lease,
         ) => h`<li class="q-row glass is-raised" data-document="${lease.documentId}">
           <div>
-            <span>${lease.tenantName ?? h`<span class="hint">לא נקרא שם</span>`}</span>
+            <span>${waitingTitle(lease)}</span>
             <p class="lede">הועלה ${ltr(lease.ingestedAt)}${
               lease.readUrl
                 ? h` · <a href="${lease.readUrl}" rel="noreferrer">הקובץ</a>`
@@ -3254,7 +3280,13 @@ export function renderTenanciesPage(
                     row,
                   ) => h`<a class="q-row glass is-raised" href="/estate/tenancies/${row.tenancy_id}">
                     <div>
-                      <span>${lettingSentence(row)}</span>
+                      <span>${titledLetting({
+                        name: row.household_name,
+                        address_line: row.address_line,
+                        city: row.city,
+                        unit_number: row.unit_number,
+                        start_date: row.start_date,
+                      })}</span>
                       <p class="lede">${ltr(`${row.start_date} — ${row.end_date}`)}</p>
                     </div>
                     ${bookChip(row.chip)}
@@ -3273,20 +3305,19 @@ export function renderTenanciesPage(
  * Prints the gate; does not re-run it. Prints every capture it is handed; does not inspect values.
  */
 export function renderTenancyDetailPage(sheet: TenancySheet): string {
-  const person =
-    sheet.people.find((row) => row.role === 'PRIMARY_TENANT') ??
-    sheet.people[0];
-  const place = {
-    household_name: person?.fullName ? person.fullName : null,
+  const person = tenancyTitleName(
+    sheet.people.map((row) => ({ role: row.role, name: row.fullName })),
+  );
+  const title = titledLetting({
+    name: person,
     address_line: sheet.unit.address_line,
-    building_number: sheet.unit.building_number,
     city: sheet.unit.city,
     unit_number: sheet.unit.unit_number,
-  };
-  const title = lettingTitle(place);
+    start_date: sheet.startDate,
+  });
   const lease = ofType(sheet.documents, 'lease');
   const active = sheet.status === 'ACTIVE';
-  const heading = lettingSentence(place);
+  const heading = title;
   const body = h`
     <div class="glass-stage">
     <div class="glass tenancy-sheet">
@@ -3295,6 +3326,7 @@ export function renderTenancyDetailPage(sheet: TenancySheet): string {
         <h1 class="b-title"><span>${heading}</span>${tenancyChip(sheet.status)}</h1>
         <p class="b-address"><span dir="ltr">${ltr(sheet.startDate)} — ${ltr(sheet.endDate)}</span>${handoverBeside(sheet)}</p>
         ${handoverFlag(sheet)}
+        ${placeFlag(sheet)}
       </div>
       ${
         active
