@@ -3,28 +3,50 @@
 //
 // The confirm page recomputes from extracted_field plus the unit — no staging table. Capture is
 // already immutable. Estate, parties and tenancy write through their contracts.
-import { getUnit, type UnitHit } from '../../estate/contract.ts';
+import { getUnit, searchEstate, type UnitHit } from '../../estate/contract.ts';
 import type { AuditLog } from '../../kernel/audit.ts';
-import type { Clock } from '../../kernel/clock.ts';
+import { type Clock, today } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
+import type { ObjectStore } from '../../kernel/objects.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
 import {
+  addPartyContact,
   countDistinctIdentifiers,
   createParty,
+  hasOpenPrimaryContact,
+  listPartyNames,
+  partiesWithName,
+  partyIdByNationalId,
+  setPrimaryPartyContact,
   upsertParty,
 } from '../../parties/contract.ts';
 import {
   findTermsProfileByName,
+  getTenancy,
   listTermsProfiles,
   type TenancyRole,
+  tenanciesHoldingIdentifierAtStart,
   upsertTenancy,
   upsertTenancyParty,
 } from '../../tenancy/contract.ts';
 import { approveExtractedField } from './approve.ts';
-import { readConfirmedName } from './confirmed-name.ts';
-import { anchorOf, getFiledDocument, linkDocument } from './documents.ts';
+import { displayConfirmedName, readConfirmedName } from './confirmed-name.ts';
+import {
+  CONTACT_FIELDS,
+  type ContactChannel,
+  type ContactRules,
+  legacyContactOf,
+} from './contacts.ts';
+import {
+  anchorOf,
+  anchorOrNone,
+  getFiledDocument,
+  linkDocument,
+} from './documents.ts';
 import { type ExtractedRow, listExtractedFields } from './extract.ts';
+import { readStoredLeasePlace } from './intake.ts';
+import { type PlaceReading, resolvePlace } from './place.ts';
 import { promoteExtractedField } from './promote.ts';
 import type { Queryable } from './types.ts';
 
@@ -39,6 +61,10 @@ export interface LeaseDeps {
   db: Queryable;
   audit: AuditLog;
   clock: Clock;
+  /** #235. Absent, a lease with an approved phone or email cannot open. */
+  contacts?: ContactRules;
+  /** #237. Reads the place proposal stored beside an unassigned lease. */
+  objects?: ObjectStore;
 }
 
 export interface ProposedPerson {
@@ -278,6 +304,14 @@ interface Household {
   people: ProposedPerson[];
   /** Parallel to `people`. Never in a screen shape, never in a log, never in a response. */
   identifiers: Array<string | null>;
+  /**
+   * Parallel to `people`: each person's approved phones and emails, as signed. #235. Paired with
+   * the name by the identifiers' rule, per contact field: the *i*-th name takes the *i*-th value,
+   * and only when the counts are equal. A row nobody approved is paired and then left out.
+   */
+  contacts: Array<Array<{ channel: ContactChannel; value: string }>>;
+  /** Approved phones and emails the ordinal rule paired to nobody, and so will not be written. */
+  unpairedContacts: number;
   /** Distinct declared identifiers, for the overlap probe. */
   probes: string[];
   read: number;
@@ -287,6 +321,8 @@ interface Household {
 function householdOf(rows: readonly ExtractedRow[]): Household {
   const people: ProposedPerson[] = [];
   const identifiers: Array<string | null> = [];
+  const contacts: Household['contacts'] = [];
+  let unpairedContacts = 0;
   let read = 0;
   for (const [nameKey, idKey, firstRole, restRole] of FAMILIES) {
     const names = rows
@@ -297,7 +333,60 @@ function householdOf(rows: readonly ExtractedRow[]): Household {
       .sort(inDocumentOrder);
     read += ids.length;
     const pairs = ids.length > 0 && ids.length === names.length;
+    const contactFamilies = Object.entries(CONTACT_FIELDS)
+      .filter(([, field]) => field.nameKey === nameKey)
+      .map(([contactKey, field]) => ({
+        channel: field.channel,
+        read: rows
+          .filter((row) => row.fieldKey === contactKey)
+          .sort(inDocumentOrder),
+      }));
+    const pairedContactFamilies = contactFamilies.filter(
+      (family) => family.read.length === names.length,
+    );
+    // A phone or email approved under a declaration the seed closed, before the six keys existed.
+    // The six-key field wins when it already paired. SPEC-parties "Contacts from a lease".
+    const legacyByChannel = new Map<ContactChannel, ExtractedRow[]>();
+    for (const row of rows) {
+      const hit = legacyContactOf(row.fieldKey, row.labelHe);
+      if (hit?.nameKey !== nameKey) continue;
+      const list = legacyByChannel.get(hit.channel) ?? [];
+      list.push(row);
+      legacyByChannel.set(hit.channel, list);
+    }
+    for (const [channel, read] of legacyByChannel) {
+      read.sort(inDocumentOrder);
+      const dedicated = pairedContactFamilies.some(
+        (family) => family.channel === channel,
+      );
+      const approved = read.filter((row) => row.approvedAt !== null);
+      if (dedicated || read.length !== names.length) {
+        unpairedContacts += approved.length;
+        continue;
+      }
+      pairedContactFamilies.push({ channel, read });
+    }
+    for (const family of contactFamilies) {
+      if (family.read.length !== names.length) {
+        unpairedContacts += family.read.filter(
+          (row) => row.approvedAt !== null,
+        ).length;
+      }
+    }
     names.forEach((row, at) => {
+      contacts.push(
+        pairedContactFamilies.flatMap((family) => {
+          const paired = family.read[at];
+          return paired && paired.approvedAt !== null
+            ? [
+                {
+                  channel: family.channel,
+                  value: paired.approvedValue ?? paired.value,
+                },
+              ]
+            : [];
+        }),
+      );
       people.push({
         extractedFieldId: row.extractedFieldId,
         fieldKey: nameKey,
@@ -305,7 +394,8 @@ function householdOf(rows: readonly ExtractedRow[]): Household {
         proposedRole: at === 0 ? firstRole : restRole,
         hasIdentifier: pairs,
       });
-      identifiers.push(pairs ? (ids[at]?.value ?? null) : null);
+      const id = ids[at];
+      identifiers.push(pairs && id ? (id.approvedValue ?? id.value) : null);
     });
   }
   const declared = identifiers.filter(
@@ -314,6 +404,8 @@ function householdOf(rows: readonly ExtractedRow[]): Household {
   return {
     people,
     identifiers,
+    contacts,
+    unpairedContacts,
     probes: [...new Set(declared)],
     read,
     paired: declared.length,
@@ -520,6 +612,85 @@ function asRole(value: string | undefined): TenancyRole {
   return value as TenancyRole;
 }
 
+/** One approved contact, stored form, and the party holding it as an open contact today. */
+interface ResolvedContact {
+  channel: ContactChannel;
+  value: string;
+  holder: string | null;
+}
+
+/** Who a person on the lease will be before anything is written. #235. */
+interface ResolvedPerson {
+  /** The existing party this person is, or null when the press creates one. */
+  partyId: string | null;
+  /** #236. The operator chose this party from the same-name list. */
+  chosen: boolean;
+  contacts: ResolvedContact[];
+}
+
+/**
+ * **Who each person becomes, read before anything is written. #235 (SPEC-parties "Contacts from a
+ * lease").** In order: a printed ת.ז. is the party it keys on; otherwise an approved phone or
+ * email held as an open contact by exactly one party is that party; otherwise a new party. A name
+ * never matches. Read once and used twice: the screen states the refusals from it, and the press
+ * writes from it, so the two cannot disagree about who a phone belongs to.
+ */
+async function resolvePeople(
+  db: Queryable,
+  rules: ContactRules | undefined,
+  household: Household,
+  day: string,
+): Promise<ResolvedPerson[]> {
+  const resolved: ResolvedPerson[] = [];
+  for (const [at, approved] of household.contacts.entries()) {
+    if (approved.length > 0 && !rules) {
+      throw new KernelError('invalid', 'a contact cannot be written here');
+    }
+    const contacts: ResolvedContact[] = [];
+    for (const contact of approved) {
+      // The leading 0 הקריאה offers, applied again here so a number approved before that offer
+      // existed (the 14 Oct read) still becomes a contact. A value that is not a mobile is left
+      // out; it does not refuse the draft.
+      let value: string;
+      try {
+        value = (rules as ContactRules).normalise(
+          contact.channel,
+          (rules as ContactRules).offer(contact.channel, contact.value),
+        );
+      } catch (error) {
+        if (error instanceof KernelError && error.code === 'invalid') {
+          continue;
+        }
+        throw error;
+      }
+      contacts.push({
+        channel: contact.channel,
+        value,
+        holder: await (rules as ContactRules).holder(db, {
+          channel: contact.channel,
+          value,
+          day,
+        }),
+      });
+    }
+    const identifier = household.identifiers[at] ?? null;
+    const holders = new Set(
+      contacts.flatMap((contact) => (contact.holder ? [contact.holder] : [])),
+    );
+    const partyId =
+      identifier !== null
+        ? await partyIdByNationalId(db, {
+            kind: 'PERSON',
+            nationalId: identifier,
+          })
+        : holders.size === 1
+          ? ([...holders][0] ?? null)
+          : null;
+    resolved.push({ partyId, chosen: false, contacts });
+  }
+  return resolved;
+}
+
 /**
  * **Every party this document writes, and the one place `upsertParty` and `createParty` are chosen
  * between. Slice 6.5.**
@@ -553,6 +724,11 @@ async function writeParties(
     names?: Readonly<
       Record<string, { givenName: string | null; familyName: string }>
     >;
+    /**
+     * #235. Who each person resolved to, parallel to `people`, and the day their contacts open.
+     * Absent on an addendum, which writes no contact.
+     */
+    resolved?: { people: readonly ResolvedPerson[]; day: string };
   },
 ): Promise<number> {
   // **Checked before anything is written**, and folded by the database rather than compared as
@@ -579,21 +755,34 @@ async function writeParties(
     const identifier = input.household.identifiers[at] ?? null;
     const posted = input.names?.[person.extractedFieldId];
     const name = posted ?? readConfirmedName(person.value);
+    const resolved = input.resolved?.people[at];
+    const contactsFrom = input.resolved?.day;
+    // A printed ת.ז. is always `upsertParty`, even when it matches nobody (#236, SPEC-parties).
+    // A same-name choice applies only when the lease printed none. A contact match is the same
+    // case (#235).
+    const matched =
+      identifier !== null
+        ? null
+        : resolved?.chosen
+          ? resolved.partyId
+          : (resolved?.partyId ?? null);
     const party =
-      identifier === null
-        ? await createParty(db, {
-            kind: 'PERSON',
-            givenName: name.givenName,
-            familyName: name.familyName,
-            preferredLanguage: 'he',
-          })
-        : await upsertParty(db, {
-            kind: 'PERSON',
-            givenName: name.givenName,
-            familyName: name.familyName,
-            nationalId: identifier,
-            preferredLanguage: 'he',
-          });
+      matched !== null
+        ? { id: matched }
+        : identifier === null
+          ? await createParty(db, {
+              kind: 'PERSON',
+              givenName: name.givenName,
+              familyName: name.familyName,
+              preferredLanguage: 'he',
+            })
+          : await upsertParty(db, {
+              kind: 'PERSON',
+              givenName: name.givenName,
+              familyName: name.familyName,
+              nationalId: identifier,
+              preferredLanguage: 'he',
+            });
     if (seen.has(party.id)) {
       // Belt and braces, and cheap: the check above reads the identifiers this lease declared, and
       // this one reads the rows that actually came back. They can only disagree if the fold and the
@@ -616,6 +805,29 @@ async function writeParties(
       entityId: party.id,
       linkRole: 'SIGNATORY',
     });
+    for (const contact of contactsFrom ? (resolved?.contacts ?? []) : []) {
+      if (contact.holder === party.id) continue;
+      // The overlap refusal of #206: a value another party holds today raises `conflict` naming
+      // that party, and the transaction takes the whole draft with it.
+      const added = await addPartyContact(db, {
+        partyId: party.id,
+        channel: contact.channel,
+        value: contact.value,
+        label: null,
+        validFrom: contactsFrom as string,
+      });
+      if (
+        !(await hasOpenPrimaryContact(db, {
+          partyId: party.id,
+          channel: contact.channel,
+        }))
+      ) {
+        await setPrimaryPartyContact(db, {
+          partyId: party.id,
+          contactId: added.contactId,
+        });
+      }
+    }
     written += 1;
   }
   return written;
@@ -718,55 +930,163 @@ function rolesFromFieldFamily(
   );
 }
 
-async function resolveTermsProfileName(
-  db: Queryable,
-  requested: string | undefined,
-): Promise<string> {
-  if (requested && requested.trim().length > 0) {
-    return requireText(requested, 'terms_profile', 200);
-  }
-  const names = await listTermsProfiles(db);
-  if (names.includes(DEFAULT_TERMS_PROFILE)) {
-    return DEFAULT_TERMS_PROFILE;
-  }
-  if (names.length === 1 && names[0]) {
-    return names[0];
-  }
-  throw new KernelError('invalid', 'that terms profile does not exist');
+/** A row הקריאה still needs before פתיחת טיוטה. `value` is null when the reader found none. #234. */
+export interface ReadingGap {
+  fieldKey: string;
+  labelHe: string;
+  value: string | null;
+}
+
+/** What a required field is called when the reader found no row to borrow a label from. */
+const UNREAD_LABELS: Readonly<Record<string, string>> = {
+  main_tenant_name: 'שם השוכר הראשי',
+  start_date: 'תחילת תקופת השכירות',
+  end_date: 'סיום תקופת השכירות',
+};
+
+/** The key the main tenant was read under: by role on live filings, `tenant_name` in September's. */
+function mainTenantKey(rows: readonly ExtractedRow[]): string {
+  return rows.some((row) => row.fieldKey === 'main_tenant_name')
+    ? 'main_tenant_name'
+    : 'tenant_name';
 }
 
 /**
- * Whether the stamps that open a letting are on the reading. Live filings name the household by
- * role (`main_tenant_name`); a September reading still names `tenant_name`. Two captures of the
- * same role are a pick: one approved row is enough. Unapproved extras stay for the ledger.
+ * **What is missing before the draft can open. #234 (SPEC-flows A16 as amended at #232).**
+ *
+ * Ready means an approved main tenant name, an approved start date and end date, and every name
+ * row of every role approved. Live filings name the household by role (`main_tenant_name`); a
+ * September reading still names `tenant_name`, which stands in for the main tenant when no
+ * role-named row was read, and then every one of them is a tenant and a gap until signed.
+ *
+ * **Two exceptions, both captures of one fact read twice.** A date read twice is one date, and a
+ * `main_tenant_name` read twice is one main tenant: the reader capped that role at one person, so a
+ * second capture is the same name again and not a second household member. One approved capture
+ * is enough for either, and the unsigned twin stays on the ledger and writes no party. Without
+ * this, the only way to open the draft would be to sign the twin, which writes two primary
+ * tenants for one person, and there is no control that dismisses a row.
  */
-export function leaseReadingIsReady(rows: readonly ExtractedRow[]): boolean {
-  const byRole = rows.filter((row) => row.fieldKey === 'main_tenant_name');
-  const tenants =
-    byRole.length > 0
-      ? byRole
-      : rows.filter((row) => row.fieldKey === 'tenant_name');
-  if (!tenants.some((row) => row.approvedAt !== null)) {
-    return false;
-  }
-  if (byRole.length === 0 && tenants.some((row) => row.approvedAt === null)) {
-    return false;
-  }
-  if (
-    rows
-      .filter((row) => row.fieldKey === 'guarantor_name')
-      .some((row) => row.approvedAt === null)
-  ) {
-    return false;
+export function leaseReadingGaps(rows: readonly ExtractedRow[]): ReadingGap[] {
+  const gaps: ReadingGap[] = [];
+  const unread = (fieldKey: string) =>
+    gaps.push({
+      fieldKey,
+      labelHe: UNREAD_LABELS[fieldKey] ?? fieldKey,
+      value: null,
+    });
+  const unsigned = (row: ExtractedRow) =>
+    gaps.push({
+      fieldKey: row.fieldKey,
+      labelHe: row.labelHe,
+      value: row.value,
+    });
+  const tenantKey = mainTenantKey(rows);
+  const tenants = rows.filter((row) => row.fieldKey === tenantKey);
+  if (tenants.length === 0) {
+    unread('main_tenant_name');
   }
   for (const key of ['start_date', 'end_date'] as const) {
-    if (
-      !rows.some((field) => field.fieldKey === key && field.approvedAt !== null)
-    ) {
-      return false;
+    const read = rows.filter((row) => row.fieldKey === key);
+    const first = read.sort(inDocumentOrder)[0];
+    if (!first) {
+      unread(key);
+    } else if (!read.some((row) => row.approvedAt !== null)) {
+      unsigned(first);
     }
   }
-  return true;
+  const mainSigned = rows.some(
+    (row) => row.fieldKey === 'main_tenant_name' && row.approvedAt !== null,
+  );
+  for (const row of [...rows].sort(inDocumentOrder)) {
+    if (!NAME_KEYS.has(row.fieldKey) || row.approvedAt !== null) continue;
+    if (row.fieldKey === 'main_tenant_name' && mainSigned) continue;
+    unsigned(row);
+  }
+  return gaps;
+}
+
+/** The signed capture of a date when there is one, so a second unapproved read never wins. */
+function signedRow(
+  rows: readonly ExtractedRow[],
+  fieldKey: string,
+): ExtractedRow | undefined {
+  const read = rows
+    .filter((row) => row.fieldKey === fieldKey)
+    .sort(inDocumentOrder);
+  return read.find((row) => row.approvedAt !== null) ?? read[0];
+}
+
+/** One row of ממתינים לפתיחה. */
+export interface UnopenedLease {
+  documentId: string;
+  /** The upload day, UTC, as the documents panel prints it. */
+  ingestedAt: string;
+  storageUri: string;
+  /** The main tenant as read, or as corrected when signed. Null when the reader named none. */
+  tenantName: string | null;
+  /** The address as read. Null when the reader named none. #240. */
+  address: string | null;
+  unitNumber: string | null;
+  startDate: string | null;
+  /** No gap left on הקריאה: the row offers פתח טיוטה, not המשך קריאה. */
+  ready: boolean;
+}
+
+const UNOPENED_LEASES_SQL = `
+  SELECT d.document_id,
+         (d.ingested_at AT TIME ZONE 'UTC')::date::text AS ingested_at,
+         d.storage_uri
+    FROM document d
+    JOIN document_type dt ON dt.document_type_id = d.document_type_id
+   WHERE dt.type_key = 'lease'
+     AND NOT EXISTS (
+       SELECT 1 FROM document_link l
+        WHERE l.document_id = d.document_id AND l.entity_type = 'TENANCY'
+     )
+   ORDER BY d.ingested_at DESC, d.document_id`;
+
+/**
+ * **ממתינים לפתיחה. #238 (SPEC-flows A16 as amended at #232).** Every lease with no `TENANCY`
+ * link, newest first, with the name read and whether הקריאה is ready.
+ *
+ * The test is the missing link and not the unassigned path, so a lease filed on a flat before #237
+ * and never opened is listed the same way. One reading per row: the list is a handful of leases one
+ * step short of a draft, not the archive, because opening a draft is what takes a row off it.
+ */
+export async function listUnopenedLeases(
+  db: Queryable,
+): Promise<UnopenedLease[]> {
+  const found = await db.query<{
+    document_id: string;
+    ingested_at: string;
+    storage_uri: string;
+  }>(UNOPENED_LEASES_SQL);
+  const leases: UnopenedLease[] = [];
+  for (const row of found.rows) {
+    const rows = await listExtractedFields(db, row.document_id);
+    const named = signedRow(rows, mainTenantKey(rows));
+    const address = signedRow(rows, 'address');
+    const apartment = signedRow(rows, 'apartment_number');
+    const start = signedRow(rows, 'start_date');
+    const read = (row: ExtractedRow | undefined): string | null => {
+      if (!row) return null;
+      const value = (row.approvedValue ?? row.value).trim();
+      return value === '' ? null : value;
+    };
+    leases.push({
+      documentId: row.document_id,
+      ingestedAt: row.ingested_at,
+      storageUri: row.storage_uri,
+      tenantName: named
+        ? displayConfirmedName(named.approvedValue ?? named.value)
+        : null,
+      address: read(address),
+      unitNumber: read(apartment),
+      startDate: read(start),
+      ready: leaseReadingGaps(rows).length === 0,
+    });
+  }
+  return leases;
 }
 
 /**
@@ -774,74 +1094,713 @@ export function leaseReadingIsReady(rows: readonly ExtractedRow[]): boolean {
  *
  * Each row is its own promotion. A `conflict` or `invalid` from one row — the
  * other rent half, a bay that is not a Space, a column that already holds
- * something else — leaves that row uncarried and does not fail the approval
- * that asked for the carry. `lease_amendment` never reaches here.
+ * something else — leaves that row uncarried and does not fail the press that
+ * asked for the carry. `lease_amendment` never reaches here.
+ *
+ * **Each row under its own savepoint. #234.** The carry now runs inside פתיחת טיוטה's
+ * transaction, and a promotion may refuse after one of its statements ran. Without the
+ * savepoint a refused row would abort the transaction and take the draft with it.
  */
 async function carryApprovedLease(
   deps: LeaseDeps,
   spec: { documentId: string; promotedBy: string },
 ): Promise<void> {
-  const rows = await listExtractedFields(deps.db, spec.documentId);
-  for (const row of rows) {
-    if (row.approvedAt === null || row.promotionTarget === null) continue;
-    if (row.promotedTo !== null) continue;
-    try {
-      await promoteExtractedField(
-        { db: deps.db, audit: deps.audit, clock: deps.clock },
-        {
-          extractedFieldId: row.extractedFieldId,
-          promotedBy: spec.promotedBy,
-        },
-      );
-    } catch (error) {
-      if (
-        error instanceof KernelError &&
-        (error.code === 'conflict' || error.code === 'invalid')
-      ) {
-        continue;
+  await inTransaction(deps.db, async (db) => {
+    const rows = await listExtractedFields(db, spec.documentId);
+    for (const row of rows) {
+      if (row.approvedAt === null || row.promotionTarget === null) continue;
+      if (row.promotedTo !== null) continue;
+      await db.query('SAVEPOINT carry_field');
+      try {
+        await promoteExtractedField(
+          { db, audit: deps.audit, clock: deps.clock },
+          {
+            extractedFieldId: row.extractedFieldId,
+            promotedBy: spec.promotedBy,
+          },
+        );
+        await db.query('RELEASE SAVEPOINT carry_field');
+      } catch (error) {
+        await db.query('ROLLBACK TO SAVEPOINT carry_field');
+        if (
+          error instanceof KernelError &&
+          (error.code === 'conflict' || error.code === 'invalid')
+        ) {
+          continue;
+        }
+        throw error;
       }
-      throw error;
+    }
+  });
+}
+
+/** One person פתיחת טיוטה will write, and the role they will hold. A screen shape: no identifier. */
+export interface OpeningPerson {
+  extractedFieldId: string;
+  fieldKey: ProposedPerson['fieldKey'];
+  name: string;
+  role: TenancyRole;
+  hasIdentifier: boolean;
+  /** #235. No ת.ז., and an approved phone or email names the one existing party this person is. */
+  matchedByContact: boolean;
+  /** #235. How many approved phones and emails the press writes for this person. */
+  contacts: number;
+  /**
+   * #236. Parties with this given and family name, when nothing else matched. Empty unless the
+   * operator is being asked. Never chosen for them.
+   */
+  nameCandidates: Array<{ partyId: string; fullName: string }>;
+  /** The candidate the failed press had chosen, so the screen shows it again. Null is a new party. */
+  chosenPartyId: string | null;
+}
+
+/** Every reason the press would be refused. The screen words each one; the command throws on it. */
+export type OpeningRefusal =
+  | { kind: 'not_ready'; gaps: ReadingGap[] }
+  | { kind: 'no_terms_profile' }
+  | { kind: 'unit_taken'; tenancyId: string }
+  | { kind: 'same_person' }
+  /** #235. An approved phone or email another party holds today. Names that party, never the value. */
+  | {
+      kind: 'contact_held';
+      channel: ContactChannel;
+      person: string;
+      partyId: string;
+      holderName: string;
+    }
+  /** #235. One approved phone or email on two people of this lease. */
+  | { kind: 'contact_shared'; channel: ContactChannel };
+
+export interface LeaseOpening {
+  documentId: string;
+  /** Null until a flat is preselected or chosen. #237. */
+  unit: UnitHit | null;
+  /** The deterministic place reader, kept from upload. Null on a lease filed under a place path. */
+  placeReading: PlaceReading | null;
+  candidates: UnitHit[];
+  candidateTotal: number;
+  placeBuilding: { building_id: string; name: string } | null;
+  startDate: string | null;
+  endDate: string | null;
+  /** The address and flat number as read, shown beside the unit's. Not a refusal (#232). */
+  address: string | null;
+  apartmentNumber: string | null;
+  matchesUnit: boolean;
+  people: OpeningPerson[];
+  termsProfiles: string[];
+  /** The existing rule's choice: `DEFAULT_TERMS_PROFILE`, else the sole profile, else none. */
+  termsProfile: string | null;
+  refusals: OpeningRefusal[];
+  /** Set once the draft is open; the screen then has nothing to press. */
+  tenancyId: string | null;
+  /** #235. Approved phones and emails that pair with no person, and so are not written. */
+  unpairedContacts: number;
+  /**
+   * #236. A tenancy that already holds one of these people, by ת.ז., starting on this date.
+   * Offered, not a refusal: attach the document, or open a new draft anyway.
+   */
+  sameLease: Array<{
+    tenancyId: string;
+    addressLine: string;
+    city: string;
+    unitNumber: string;
+  }>;
+}
+
+function preselectedProfile(names: readonly string[]): string | null {
+  if (names.includes(DEFAULT_TERMS_PROFILE)) return DEFAULT_TERMS_PROFILE;
+  if (names.length === 1 && names[0]) return names[0];
+  return null;
+}
+
+/** What פתיחת טיוטה reads: the connection, the day, and #235's contact rules. */
+export interface OpeningDeps {
+  db: Queryable;
+  clock: Clock;
+  contacts?: ContactRules;
+  objects?: ObjectStore;
+}
+
+export interface OpeningOptions {
+  /** A flat posted or carried back from create. Wins over the stored preselection. */
+  unitId?: string | null;
+  /** Search on פתיחת טיוטה. Replaces the reader's candidate list. */
+  query?: string;
+}
+
+/**
+ * **A phone or an email that would be written onto the wrong person. #235.** A value held today by
+ * a party other than the one this person becomes refuses the press, because a number shared by two
+ * people is exactly the case the isolation join cannot answer. One value on two people of the same
+ * lease is the same case, inside one document.
+ */
+async function contactRefusals(
+  db: Queryable,
+  household: Household,
+  resolved: readonly ResolvedPerson[],
+  stamped: ReadonlySet<string>,
+): Promise<OpeningRefusal[]> {
+  const refusals: OpeningRefusal[] = [];
+  const seen = new Map<string, number>();
+  const held: Array<{
+    channel: ContactChannel;
+    person: string;
+    partyId: string;
+  }> = [];
+  for (const [at, person] of household.people.entries()) {
+    if (!stamped.has(person.extractedFieldId)) continue;
+    for (const contact of resolved[at]?.contacts ?? []) {
+      const key = `${contact.channel}:${contact.value}`;
+      const first = seen.get(key);
+      if (first !== undefined && first !== at) {
+        refusals.push({ kind: 'contact_shared', channel: contact.channel });
+      }
+      seen.set(key, at);
+      if (contact.holder !== null && contact.holder !== resolved[at]?.partyId) {
+        held.push({
+          channel: contact.channel,
+          person: displayConfirmedName(person.value),
+          partyId: contact.holder,
+        });
+      }
+    }
+  }
+  const names = new Map(
+    (
+      await listPartyNames(db, [...new Set(held.map((one) => one.partyId))])
+    ).map((row) => [row.party_id, row.full_name]),
+  );
+  for (const one of held) {
+    refusals.push({
+      kind: 'contact_held',
+      ...one,
+      holderName: names.get(one.partyId) ?? '',
+    });
+  }
+  return refusals;
+}
+
+/**
+ * **Same-name candidates, for a person nothing else matched. #236.** Parallel to `people`. A party
+ * already chosen by ת.ז. or by a contact is not listed, and neither is a person whose approved
+ * phone or email already belongs to someone: that refusal stands, and a name is not a way past it.
+ */
+async function sameNameCandidates(
+  db: Queryable,
+  household: Household,
+  resolved: readonly ResolvedPerson[],
+  stamped: ReadonlySet<string>,
+): Promise<Array<Array<{ partyId: string; fullName: string }>>> {
+  const out: Array<Array<{ partyId: string; fullName: string }>> = [];
+  for (const [at, person] of household.people.entries()) {
+    const row = resolved[at];
+    const held = (row?.contacts ?? []).some(
+      (contact) => contact.holder !== null,
+    );
+    // A printed ת.ז. is not a name-only match, even when it identifies nobody. A held phone or
+    // email is not one either: that person is already matched, or the overlap refusal stands.
+    if (
+      !stamped.has(person.extractedFieldId) ||
+      household.identifiers[at] !== null ||
+      row?.partyId ||
+      held
+    ) {
+      out.push([]);
+      continue;
+    }
+    const name = readConfirmedName(person.value);
+    const found = await partiesWithName(db, {
+      givenName: name.givenName,
+      familyName: name.familyName,
+    });
+    out.push(
+      found.map((candidate) => ({
+        partyId: candidate.party_id,
+        fullName: candidate.full_name,
+      })),
+    );
+  }
+  return out;
+}
+
+/**
+ * **The operator's same-name choice, checked against the list just read. #236.** A posted id that
+ * is not one of that person's candidates is refused, and nothing is written. Empty is a new party,
+ * which is the default the screen already selected.
+ */
+function applyNameLinks(
+  household: Household,
+  resolved: ResolvedPerson[],
+  candidates: ReadonlyArray<ReadonlyArray<{ partyId: string }>>,
+  links: Readonly<Record<string, string>>,
+): void {
+  const seen = new Set<string>();
+  for (const [at, person] of household.people.entries()) {
+    const chosen = links[person.extractedFieldId];
+    if (!chosen) continue;
+    seen.add(person.extractedFieldId);
+    const allowed = new Set(
+      (candidates[at] ?? []).map((candidate) => candidate.partyId),
+    );
+    if (!allowed.has(chosen)) {
+      throw new KernelError('invalid', 'that party is not a candidate');
+    }
+    const row = resolved[at];
+    if (!row) continue;
+    row.partyId = chosen;
+    row.chosen = true;
+  }
+  for (const fieldId of Object.keys(links)) {
+    if (!seen.has(fieldId)) {
+      throw new KernelError('invalid', 'that party is not a candidate');
     }
   }
 }
 
 /**
- * After the ledger is stamped, write the draft when the reading is ready, then
- * carry every approved mapped field. A lease already bound to a letting carries
- * on this approval and returns null, so the approve route redirects as before.
- * Anything that is not a lease returns null and carries nothing.
+ * **What פתיחת טיוטה shows before anything is written. #234.**
+ *
+ * The refusals are computed here and nowhere else, and `openLeaseDraft` reads them from this same
+ * function inside its transaction: one rule, so the screen and the write cannot disagree about
+ * whether the press would go through.
  */
-export async function establishApprovedLease(
-  deps: LeaseDeps,
-  spec: { documentId: string; confirmedBy: string },
+export async function proposeLeaseOpening(
+  deps: OpeningDeps,
+  documentIdRaw: string,
+  options: OpeningOptions = {},
+): Promise<LeaseOpening> {
+  const opened = await openingAndPeople(
+    deps,
+    documentIdRaw,
+    undefined,
+    options,
+  );
+  return opened.opening;
+}
+
+/**
+ * The flat פתיחת טיוטה would open on, before anyone chooses: the anchor once there is one, else the
+ * door's flat, else the one flat the address resolves to. Null when it would ask. #237.
+ */
+export async function preselectedUnitId(
+  deps: OpeningDeps,
+  documentIdRaw: string,
 ): Promise<string | null> {
-  const documentId = validId(spec.documentId, 'document');
+  const documentId = validId(documentIdRaw, 'document');
   const filed = await getFiledDocument(deps.db, documentId);
+  if (filed.typeKey !== 'lease') return null;
+  const flat = await flatForOpening(deps, documentId, filed.fileHash, {});
+  return flat.unitId;
+}
+
+async function flatForOpening(
+  deps: OpeningDeps,
+  documentId: string,
+  fileHash: string,
+  options: OpeningOptions,
+): Promise<{
+  unitId: string | null;
+  placeReading: PlaceReading | null;
+  candidates: UnitHit[];
+  candidateTotal: number;
+  placeBuilding: { building_id: string; name: string } | null;
+}> {
+  const anchor = await anchorOrNone(deps.db, documentId);
+  if (anchor && anchor.kind !== 'UNIT') {
+    throw new KernelError('invalid', 'that document is not bound to a unit');
+  }
+  if (anchor?.kind === 'UNIT') {
+    return {
+      unitId: anchor.id,
+      placeReading: null,
+      candidates: [],
+      candidateTotal: 0,
+      placeBuilding: null,
+    };
+  }
+  const stored = deps.objects
+    ? await readStoredLeasePlace(deps.objects, fileHash)
+    : null;
+  const resolved = stored ? await resolvePlace(deps.db, stored.reading) : null;
+  const asked = options.query?.trim() ?? '';
+  const found = asked === '' ? null : await searchEstate(deps.db, asked);
+  const candidates = found ? found.units : (resolved?.candidates ?? []);
+  const door = stored?.doorUnitId ?? null;
+  const exact =
+    resolved && 'unit' in resolved && resolved.unit
+      ? resolved.unit.unit_id
+      : null;
+  const unitId = options.unitId || door || exact;
+  return {
+    unitId: unitId || null,
+    placeReading: stored?.reading ?? null,
+    candidates,
+    candidateTotal: found
+      ? found.units.length
+      : (resolved?.total ?? candidates.length),
+    placeBuilding: resolved?.building
+      ? {
+          building_id: resolved.building.building_id,
+          name: resolved.building.name,
+        }
+      : null,
+  };
+}
+
+async function openingAndPeople(
+  deps: OpeningDeps,
+  documentIdRaw: string,
+  links?: Readonly<Record<string, string>>,
+  options: OpeningOptions = {},
+): Promise<{ opening: LeaseOpening; resolved: ResolvedPerson[]; day: string }> {
+  const db = deps.db;
+  const documentId = validId(documentIdRaw, 'document');
+  const filed = await getFiledDocument(db, documentId);
   if (filed.typeKey !== 'lease') {
-    return null;
+    throw new KernelError('invalid', 'that document is not a lease');
   }
-  const linked = await tenancyLinkOf(deps.db, documentId);
-  if (linked === null) {
-    const rows = await listExtractedFields(deps.db, documentId);
-    if (!leaseReadingIsReady(rows)) {
-      return null;
+  const flat = await flatForOpening(deps, documentId, filed.fileHash, options);
+  const unit = flat.unitId ? await getUnit(db, flat.unitId) : null;
+  const rows = await listExtractedFields(db, documentId);
+  const household = householdOf(rows);
+  const startRow = signedRow(rows, 'start_date');
+  const endRow = signedRow(rows, 'end_date');
+  const startDate = startRow
+    ? (startRow.approvedValue ?? startRow.value)
+    : null;
+  const endDate = endRow ? (endRow.approvedValue ?? endRow.value) : null;
+  const address = firstValue(rows, 'address');
+  const apartmentNumber = firstValue(rows, 'apartment_number');
+  const termsProfiles = await listTermsProfiles(db);
+
+  const refusals: OpeningRefusal[] = [];
+  const gaps = leaseReadingGaps(rows);
+  if (gaps.length > 0) {
+    refusals.push({ kind: 'not_ready', gaps });
+  }
+  if (termsProfiles.length === 0) {
+    refusals.push({ kind: 'no_terms_profile' });
+  }
+  if (startDate !== null && unit) {
+    const taken = await db.query<{ tenancy_id: string }>(
+      `SELECT tenancy_id FROM tenancy WHERE unit_id = $1 AND start_date = $2`,
+      [unit.unit_id, startDate],
+    );
+    const tenancyId = taken.rows[0]?.tenancy_id;
+    if (tenancyId) {
+      refusals.push({ kind: 'unit_taken', tenancyId });
     }
-    const confirmed = await confirmLeaseTenancy(deps, {
-      documentId,
-      confirmedBy: spec.confirmedBy,
-      roles: {},
-    });
-    await carryApprovedLease(deps, {
-      documentId,
-      promotedBy: spec.confirmedBy,
-    });
-    return confirmed.tenancyId;
   }
-  await carryApprovedLease(deps, {
-    documentId,
-    promotedBy: spec.confirmedBy,
+  // Every paired identifier, not the distinct ones: two people printed with one ת.ז. is exactly
+  // the case a de-duplicated list would hide.
+  const declared = household.identifiers.filter(
+    (value): value is string => value !== null,
+  );
+  if ((await countDistinctIdentifiers(db, declared)) < declared.length) {
+    refusals.push({ kind: 'same_person' });
+  }
+  const day = today(deps.clock);
+  const resolved = await resolvePeople(db, deps.contacts, household, day);
+  const stamped = stampedNameIds(rows);
+  const candidates = await sameNameCandidates(db, household, resolved, stamped);
+  if (links) applyNameLinks(household, resolved, candidates, links);
+  const matched = household.people.flatMap((person, at) => {
+    const partyId = resolved[at]?.partyId;
+    return stamped.has(person.extractedFieldId) && partyId ? [partyId] : [];
   });
-  return null;
+  if (
+    new Set(matched).size < matched.length &&
+    !refusals.some((one) => one.kind === 'same_person')
+  ) {
+    refusals.push({ kind: 'same_person' });
+  }
+  refusals.push(...(await contactRefusals(db, household, resolved, stamped)));
+
+  const startApproved =
+    startRow && startRow.approvedAt !== null
+      ? (startRow.approvedValue ?? startRow.value)
+      : null;
+  const sameLease: LeaseOpening['sameLease'] = [];
+  if (startApproved !== null && household.probes.length > 0) {
+    const held = await tenanciesHoldingIdentifierAtStart(db, {
+      startDate: startApproved,
+      identifiers: household.probes,
+    });
+    for (const tenancyId of held) {
+      const tenancy = await getTenancy(db, tenancyId);
+      const place = await getUnit(db, tenancy.unit_id);
+      sameLease.push({
+        tenancyId,
+        addressLine: place.address_line,
+        city: place.city,
+        unitNumber: place.unit_number,
+      });
+    }
+  }
+
+  const opening: LeaseOpening = {
+    documentId,
+    unit,
+    placeReading: flat.placeReading,
+    candidates: flat.candidates,
+    candidateTotal: flat.candidateTotal,
+    placeBuilding: flat.placeBuilding,
+    startDate,
+    endDate,
+    address,
+    apartmentNumber,
+    matchesUnit:
+      unit !== null &&
+      address !== null &&
+      apartmentNumber !== null &&
+      addressMatches(address, unit.address_line) &&
+      apartmentMatches(apartmentNumber, unit.unit_number),
+    people: household.people.map((person, at) => ({
+      extractedFieldId: person.extractedFieldId,
+      fieldKey: person.fieldKey,
+      name: displayConfirmedName(person.value),
+      role: person.proposedRole,
+      hasIdentifier: household.identifiers[at] !== null,
+      matchedByContact:
+        household.identifiers[at] === null &&
+        Boolean(resolved[at]?.partyId) &&
+        resolved[at]?.chosen !== true,
+      contacts: resolved[at]?.contacts.length ?? 0,
+      nameCandidates: candidates[at] ?? [],
+      chosenPartyId: resolved[at]?.chosen
+        ? (resolved[at]?.partyId ?? null)
+        : null,
+    })),
+    termsProfiles,
+    termsProfile: preselectedProfile(termsProfiles),
+    refusals,
+    tenancyId: await tenancyLinkOf(db, documentId),
+    unpairedContacts: household.unpairedContacts,
+    sameLease,
+  };
+  return { opening, resolved, day };
+}
+
+const REFUSAL_ERRORS: Readonly<
+  Record<OpeningRefusal['kind'], [KernelError['code'], string]>
+> = {
+  not_ready: ['invalid', 'the reading is not ready'],
+  no_terms_profile: ['invalid', 'no terms profile exists'],
+  unit_taken: [
+    'conflict',
+    'that unit already has a lease starting on this date',
+  ],
+  same_person: ['invalid', 'two people on this lease resolve to one person'],
+  contact_held: ['conflict', 'that number is already held'],
+  contact_shared: ['invalid', 'two people on this lease share one contact'],
+};
+
+export interface OpenLeaseDraftSpec {
+  documentId: string;
+  /** Empty or absent takes the preselected profile. */
+  termsProfileName?: string;
+  openedBy: string;
+  /** A2's confirm screen may still post a split; הקריאה stores it on the approved value. */
+  names?: ConfirmLeaseSpec['names'];
+  /**
+   * #236. A same-name choice, keyed by extracted field. Absent, or an empty value, is a new party.
+   */
+  links?: Readonly<Record<string, string>>;
+  /**
+   * #237. The flat chosen on פתיחת טיוטה. Ignored when the document already has an anchor.
+   */
+  unitId?: string;
+  /**
+   * #236. Attach this document to a tenancy the screen offered. Writes the link and no party.
+   * Absent opens a new draft.
+   */
+  attachTo?: string;
+}
+
+/**
+ * **פתיחת טיוטה: one post, one transaction. #234 (SPEC-flows A2 as amended at #232).**
+ *
+ * Writes the `DRAFT` tenancy, the document's `TENANCY` link, the signed dates, every approved
+ * mapped field, the parties, their `tenancy_party` rows and the `SIGNATORY` links, or none of them.
+ * The draft no longer follows a committed approval, which is what left the 14 Oct lease fully
+ * approved with no draft and nothing to press.
+ *
+ * The read address is not compared here. A flat that disagrees with the paper is shown on the
+ * screen and does not refuse (#232); the activation gate raises it again.
+ */
+export async function openLeaseDraft(
+  deps: LeaseDeps,
+  spec: OpenLeaseDraftSpec,
+): Promise<ConfirmLeaseResult> {
+  const documentId = validId(spec.documentId, 'document');
+  const openedBy = requireText(spec.openedBy, 'opened_by', 200);
+
+  return inTransaction(deps.db, async (db) => {
+    // #237. Two presses at once would each see no anchor and each write a `UNIT` link. The row
+    // lock makes the second wait and then find the first one's link.
+    await db.query('SELECT 1 FROM document WHERE document_id = $1 FOR UPDATE', [
+      documentId,
+    ]);
+    const { opening, resolved, day } = await openingAndPeople(
+      {
+        db,
+        clock: deps.clock,
+        contacts: deps.contacts,
+        objects: deps.objects,
+      },
+      documentId,
+      spec.links,
+      { unitId: spec.unitId },
+    );
+    if (opening.tenancyId !== null) {
+      return {
+        tenancyId: opening.tenancyId,
+        alreadyEstablished: true,
+        partiesWritten: 0,
+        attached: false,
+      };
+    }
+    // The one `UNIT` `SUBJECT` link an unassigned lease gets. #237.
+    const assignUnit = async (unitId: string) => {
+      const anchor = await anchorOrNone(db, documentId);
+      if (anchor) return;
+      await linkDocument(db, {
+        documentId,
+        entityType: 'UNIT',
+        entityId: unitId,
+        linkRole: 'SUBJECT',
+      });
+    };
+    if (spec.attachTo) {
+      if (!opening.sameLease.some((one) => one.tenancyId === spec.attachTo)) {
+        throw new KernelError('invalid', 'that tenancy is not the same lease');
+      }
+      // The letting already names its flat, and the lease is about that flat — not whichever one
+      // the screen had chosen. `sameLease` matches people and a start date, not a flat.
+      const letting = await db.query<{ unit_id: string }>(
+        'SELECT unit_id FROM tenancy WHERE tenancy_id = $1',
+        [spec.attachTo],
+      );
+      const lettingUnit = letting.rows[0]?.unit_id;
+      if (!lettingUnit) {
+        throw new KernelError('not_found', 'tenancy not found');
+      }
+      await assignUnit(lettingUnit);
+      await linkDocument(db, {
+        documentId,
+        entityType: 'TENANCY',
+        entityId: spec.attachTo,
+        linkRole: 'EVIDENCE',
+      });
+      await deps.audit.write(
+        {
+          actorKind: 'staff',
+          actorId: openedBy,
+          action: 'evidence.confirm_lease',
+          subjectId: documentId,
+          inputs: {
+            tenancyId: spec.attachTo,
+            partiesWritten: 0,
+            attached: true,
+          },
+        },
+        { outcome: 'ok' },
+      );
+      return {
+        tenancyId: spec.attachTo,
+        alreadyEstablished: false,
+        partiesWritten: 0,
+        attached: true,
+      };
+    }
+    const refused = opening.refusals[0];
+    if (refused) {
+      const [code, message] = REFUSAL_ERRORS[refused.kind];
+      throw new KernelError(code, message);
+    }
+    if (!opening.unit) {
+      throw new KernelError('invalid', 'a flat is required');
+    }
+    const chosen = opening.unit;
+    const asked = spec.termsProfileName?.trim() ?? '';
+    const termsProfileName =
+      asked === ''
+        ? opening.termsProfile
+        : requireText(asked, 'terms_profile', 200);
+    const profileId = termsProfileName
+      ? await findTermsProfileByName(db, termsProfileName)
+      : null;
+    if (!profileId) {
+      throw new KernelError('invalid', 'that terms profile does not exist');
+    }
+    if (!opening.startDate || !opening.endDate) {
+      // Unreachable once the reading is ready; kept so the types say what the write needs.
+      throw new KernelError('invalid', 'the lease is missing dates');
+    }
+
+    await assignUnit(chosen.unit_id);
+    const tenancy = await upsertTenancy(db, {
+      unitId: chosen.unit_id,
+      startDate: opening.startDate,
+      endDate: opening.endDate,
+      status: 'DRAFT',
+      termsProfileId: profileId,
+      noticeDate: null,
+      actualMoveOut: null,
+    });
+    await linkDocument(db, {
+      documentId,
+      entityType: 'TENANCY',
+      entityId: tenancy.id,
+      linkRole: 'EVIDENCE',
+    });
+
+    const rows = await listExtractedFields(db, documentId);
+    const promote = { db, audit: deps.audit, clock: deps.clock };
+    for (const fieldKey of ['start_date', 'end_date'] as const) {
+      const row = signedRow(rows, fieldKey);
+      if (row) {
+        await signAndPromote(promote, row, openedBy);
+      }
+    }
+
+    const household = householdOf(rows);
+    const partiesWritten = await writeParties(db, {
+      tenancyId: tenancy.id,
+      documentId,
+      household,
+      roles: rolesFromFieldFamily(household.people),
+      stamped: stampedNameIds(rows),
+      names: spec.names,
+      resolved: { people: resolved, day },
+    });
+
+    await carryApprovedLease(
+      { db, audit: deps.audit, clock: deps.clock },
+      { documentId, promotedBy: openedBy },
+    );
+
+    await deps.audit.write(
+      {
+        actorKind: 'staff',
+        actorId: openedBy,
+        action: 'evidence.confirm_lease',
+        subjectId: documentId,
+        inputs: {
+          tenancyId: tenancy.id,
+          partiesWritten,
+        },
+      },
+      { outcome: 'ok' },
+    );
+
+    return {
+      tenancyId: tenancy.id,
+      alreadyEstablished: false,
+      partiesWritten,
+      attached: false,
+    };
+  });
 }
 
 export async function confirmLeaseTenancy(
@@ -868,110 +1827,15 @@ export async function confirmLeaseTenancy(
         names: spec.names,
       });
     }
-    const existing = await tenancyLinkOf(db, documentId);
-    if (existing) {
-      return {
-        tenancyId: existing,
-        alreadyEstablished: true,
-        partiesWritten: 0,
-        attached: false,
-      };
-    }
-    const termsProfileName = await resolveTermsProfileName(
-      db,
-      spec.termsProfileName,
-    );
-    if (!proposed.matchesUnit) {
-      throw new KernelError('invalid', 'the document does not match this unit');
-    }
-    if (!proposed.startDate || !proposed.endDate) {
-      throw new KernelError('invalid', 'the lease is missing dates');
-    }
-    const stamped = stampedNameIds(rows);
-    const tenants = household.people.filter(
-      (person) =>
-        (person.fieldKey === 'tenant_name' ||
-          person.fieldKey === 'main_tenant_name') &&
-        stamped.has(person.extractedFieldId),
-    );
-    if (tenants.length === 0) {
-      throw new KernelError('invalid', 'the lease names no tenant');
-    }
-    const roles = rolesFromFieldFamily(household.people);
-
-    const profileId = await findTermsProfileByName(db, termsProfileName);
-    if (!profileId) {
-      throw new KernelError('invalid', 'that terms profile does not exist');
-    }
-
-    const collision = await db.query<{ tenancy_id: string }>(
-      `SELECT tenancy_id FROM tenancy
-        WHERE unit_id = $1 AND start_date = $2`,
-      [proposed.unit.unit_id, proposed.startDate],
-    );
-    if (collision.rows[0]) {
-      throw new KernelError(
-        'conflict',
-        'that unit already has a lease starting on this date',
-      );
-    }
-
-    const tenancy = await upsertTenancy(db, {
-      unitId: proposed.unit.unit_id,
-      startDate: proposed.startDate,
-      endDate: proposed.endDate,
-      status: 'DRAFT',
-      termsProfileId: profileId,
-      noticeDate: null,
-      actualMoveOut: null,
-    });
-    await linkDocument(db, {
-      documentId,
-      entityType: 'TENANCY',
-      entityId: tenancy.id,
-      linkRole: 'EVIDENCE',
-    });
-
-    const promote = {
-      db,
-      audit: deps.audit,
-      clock: deps.clock,
-    };
-    for (const fieldKey of ['start_date', 'end_date'] as const) {
-      const row = rows.find((field) => field.fieldKey === fieldKey);
-      if (row) {
-        await signAndPromote(promote, row, confirmedBy);
-      }
-    }
-
-    const partiesWritten = await writeParties(db, {
-      tenancyId: tenancy.id,
-      documentId,
-      household,
-      roles,
-      stamped,
-      names: spec.names,
-    });
-
-    await deps.audit.write(
+    // A lease opens through פתיחת טיוטה's command, whichever screen posted it (#234).
+    return openLeaseDraft(
+      { ...deps, db },
       {
-        actorKind: 'staff',
-        actorId: confirmedBy,
-        action: 'evidence.confirm_lease',
-        subjectId: documentId,
-        inputs: {
-          tenancyId: tenancy.id,
-          partiesWritten,
-        },
+        documentId,
+        termsProfileName: spec.termsProfileName,
+        openedBy: confirmedBy,
+        names: spec.names,
       },
-      { outcome: 'ok' },
     );
-
-    return {
-      tenancyId: tenancy.id,
-      alreadyEstablished: false,
-      partiesWritten,
-      attached: false,
-    };
   });
 }

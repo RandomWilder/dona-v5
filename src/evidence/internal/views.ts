@@ -27,7 +27,7 @@ import { onlineOcrByteLimit } from '../../kernel/ocr.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import type { UnitLetting } from '../../tenancy/contract.ts';
-import { isFlagged } from './approve.ts';
+import { isFlagged, pressedAlone } from './approve.ts';
 import {
   type DocumentTypeFieldRow,
   type DocumentTypeRow,
@@ -39,9 +39,21 @@ import {
   proposeNameSplit,
   readConfirmedName,
 } from './confirmed-name.ts';
+import {
+  CONTACT_FIELDS,
+  type ContactChannel,
+  type ContactRefusal,
+  type ContactRow,
+} from './contacts.ts';
 import { type ExtractedRow, isIdentifierField } from './extract.ts';
 import type { IntakeRefusal } from './intake.ts';
-import type { ProposedPerson, TenancyCandidate } from './lease.ts';
+import type {
+  LeaseOpening,
+  OpeningRefusal,
+  ProposedPerson,
+  ReadingGap,
+  TenancyCandidate,
+} from './lease.ts';
 import { CANDIDATE_LIMIT, type PlaceReading } from './place.ts';
 import { documentExtensions } from './storage-path.ts';
 import type { Verification } from './verify.ts';
@@ -141,6 +153,12 @@ const styles = h`<style>
     font-size: var(--text-sm);
     font-weight: 500;
     background: var(--color-surface);
+  }
+  /* Issue 239. The part a row sits in — its own press, or the rest — above the groups inside it. */
+  .grid-table .part {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    padding-block-start: var(--space-4);
   }
   .ledger-head {
     display: flex;
@@ -245,6 +263,7 @@ function refusal(
   verification: Verification,
   reason: IntakeRefusal = 'terms',
   anchoredTo?: AnchoredPlace,
+  documentHref?: string,
 ): Html {
   if (reason === 'anchored') {
     // **Slice 6.10.** Which flat, by name and as a link. *This file is already on file* is a
@@ -253,14 +272,19 @@ function refusal(
     return h`<section class="notice">
       <h2>הקובץ הזה כבר מתויק</h2>
       <p class="lede">
-        אותם בתים בדיוק כבר שמורים במערכת, משויכים
         ${
-          anchoredTo
-            ? h`אל <a href="${anchoredTo.href}">${anchoredLine(anchoredTo)}</a>`
-            : h`אל דירה אחרת`
-        }.
-        מסמך משויך למקום אחד בלבד — זה שהקובץ שלו נשמר תחתיו — ולכן <strong>לא נשמר דבר</strong>:
-        לא קובץ, לא רישום ולא שיוך נוסף. אם זה המסמך הנכון, הוא כבר במערכת.
+          !anchoredTo && documentHref
+            ? h`אותם בתים בדיוק כבר שמורים במערכת — <a href="${documentHref}">המסמך הקיים</a>.
+              <strong>לא נשמר דבר</strong>: לא קובץ ולא רישום. אם זה המסמך הנכון, הוא כבר במערכת.`
+            : h`אותם בתים בדיוק כבר שמורים במערכת, משויכים
+              ${
+                anchoredTo
+                  ? h`אל <a href="${anchoredTo.href}">${anchoredLine(anchoredTo)}</a>`
+                  : h`אל דירה אחרת`
+              }.
+              מסמך משויך למקום אחד בלבד — זה שהקובץ שלו נשמר תחתיו — ולכן <strong>לא נשמר דבר</strong>:
+              לא קובץ, לא רישום ולא שיוך נוסף. אם זה המסמך הנכון, הוא כבר במערכת.`
+        }
       </p>
     </section>`;
   }
@@ -312,6 +336,8 @@ export interface UploadScreen {
     reason?: IntakeRefusal;
     /** Slice 6.10. Where these bytes already live, on the `anchored` refusal and nowhere else. */
     anchoredTo?: AnchoredPlace;
+    /** An unassigned lease already on file. The link is the document, not a flat. #237. */
+    documentHref?: string;
   };
 }
 
@@ -330,6 +356,7 @@ export function renderUploadPage(screen: UploadScreen): string {
             screen.refused.verification,
             screen.refused.reason,
             screen.refused.anchoredTo,
+            screen.refused.documentHref,
           )
         : h``
     }
@@ -459,6 +486,13 @@ export interface IntakeScreen {
    * candidate-chosen one A12 has had since 6.3.
    */
   chosenUnitId?: string;
+  /** A lease that was refused at the door: wrong type, or the same bytes again. #237. */
+  refused?: {
+    type: DocumentTypeRow;
+    verification: Verification;
+    reason?: IntakeRefusal;
+    documentHref?: string;
+  };
 }
 
 /**
@@ -611,6 +645,17 @@ export function renderIntakePage(screen: IntakeScreen): string {
     </div>
     ${tooLong}
     ${
+      screen.refused
+        ? refusal(
+            screen.refused.type,
+            screen.refused.verification,
+            screen.refused.reason,
+            undefined,
+            screen.refused.documentHref,
+          )
+        : h``
+    }
+    ${
       refused
         ? h`<section class="notice">
             <h2>${
@@ -729,13 +774,13 @@ export function renderIntakePage(screen: IntakeScreen): string {
 
 const FILING_BEATS = [
   { key: 'file', label: 'המסמך' },
-  { key: 'place', label: 'הדירה' },
   { key: 'read', label: 'הקריאה' },
+  { key: 'open', label: 'פתיחת טיוטה' },
   { key: 'draft', label: 'הטיוטה' },
   { key: 'done', label: 'די היום' },
 ] as const;
 
-type FilingBeat = (typeof FILING_BEATS)[number]['key'];
+type FilingBeat = (typeof FILING_BEATS)[number]['key'] | 'place';
 
 function filingBeats(current: FilingBeat): Html {
   const at = FILING_BEATS.findIndex((beat) => beat.key === current);
@@ -767,6 +812,11 @@ function filingCreateOffer(
         : h``
     }
     ${
+      screen.documentId
+        ? h`<input type="hidden" name="document" value="${screen.documentId}" />`
+        : h``
+    }
+    ${
       screen.building
         ? h`<input type="hidden" name="building" value="${screen.building.building_id}" />`
         : h``
@@ -794,7 +844,9 @@ function filingCreateOffer(
       ${
         screen.held
           ? h`מה שנקרא מהמסמך הוא נקודת ההתחלה וניתן לתקן. הקובץ נשמר.`
-          : h`מה שנקרא מהמסמך הוא נקודת ההתחלה וניתן לתקן. אחרי היצירה יש לצרף את הקובץ שוב — שום דבר אינו נשמר בין הניסיונות.`
+          : screen.documentId
+            ? h`מה שנקרא מהמסמך הוא נקודת ההתחלה וניתן לתקן. החוזה כבר שמור; הדירה שתיווצר תסומן כאן.`
+            : h`מה שנקרא מהמסמך הוא נקודת ההתחלה וניתן לתקן. אחרי היצירה יש לצרף את הקובץ שוב — שום דבר אינו נשמר בין הניסיונות.`
       }
     </p>
   </form>`;
@@ -848,6 +900,7 @@ const READING_GROUPS: ReadonlyArray<{
       'second_tenant_id_number',
       'guarantor_name',
       'guarantor_id_number',
+      ...Object.keys(CONTACT_FIELDS),
     ]),
   },
   {
@@ -866,6 +919,8 @@ const AMOUNT_CURRENCY: Readonly<Record<string, string>> = {
 
 export interface FilingDraftFacts {
   tenancyId: string;
+  /** The tenancy title. #240. */
+  title: string;
   tenants: readonly string[];
   guarantors: readonly string[];
   startDate: string;
@@ -901,7 +956,14 @@ export interface LeaseFilingScreen {
   unit?: UnitHit;
   rows?: readonly ExtractedRow[];
   mayApprove?: boolean;
-  conflictTenancyId?: string;
+  /** What הקריאה still needs before פתיחת טיוטה. Empty means ready. #234. */
+  gaps?: readonly ReadingGap[];
+  /** `tenancy.write`: the hand that may press פתיחת טיוטה. */
+  mayOpen?: boolean;
+  /** פתיחת טיוטה's screen. #234. */
+  opening?: LeaseOpening;
+  /** The press was refused; the refusals on `opening` say why. */
+  openFailed?: boolean;
   draft?: FilingDraftFacts;
   pageCount?: number;
   pagesRead?: number;
@@ -910,6 +972,25 @@ export interface LeaseFilingScreen {
   uncarried?: Readonly<Record<string, UncarriedReason | null>>;
   /** `estate.write`. A missing bay is a link to later-add only for that reader. #176. */
   mayAddInventory?: boolean;
+  /**
+   * #235. Each unapproved phone or email row: the value offered for approval, and why it cannot be
+   * approved as offered, when it cannot. Keyed by extracted field.
+   */
+  contactRows?: Readonly<Record<string, ContactRow>>;
+  /**
+   * #239. A press refused with a sentence on this step: the row was already approved, or the draft
+   * has opened and the reading is closed.
+   */
+  stepRefusal?: { kind: 'already' } | { kind: 'closed'; tenancyId: string };
+}
+
+function stepRefusalNotice(screen: LeaseFilingScreen): Html {
+  const refusal = screen.stepRefusal;
+  if (!refusal) return h``;
+  if (refusal.kind === 'closed') return closedReadingNotice(refusal.tenancyId);
+  return h`<section class="notice">
+    <p class="lede">השורה הזו כבר אושרה. אישור הוא חתימה אחת, ואין צורך ללחוץ שוב.</p>
+  </section>`;
 }
 
 function filingApproveControl(
@@ -929,16 +1010,16 @@ function filingApproveControl(
     <form method="post" action="/documents/filing/${screen.documentId}/approve">
       ${csrfInput(screen.csrf)}
       <input type="hidden" name="extracted_field_id" value="${row.extractedFieldId}" />
-      ${confirmValueInputs(row)}
+      ${confirmValueInputs(row, screen.contactRows?.[row.extractedFieldId]?.offered)}
       <button class="btn btn-primary mini" type="submit">אישור</button>
     </form>
   </td>`;
 }
 
 /** A household name is confirmed as a given name and a family name. Every other field stays one value. */
-function confirmValueInputs(row: ExtractedRow): Html {
+function confirmValueInputs(row: ExtractedRow, offered?: string): Html {
   if (!HOUSEHOLD_NAME_FIELDS.has(row.fieldKey)) {
-    return h`<input class="mini" name="approved_value" value="${row.value}" maxlength="2000"
+    return h`<input class="mini" name="approved_value" value="${offered ?? row.value}" maxlength="2000"
       aria-label="הערך המאושר ל${row.labelHe}" />`;
   }
   const proposed = proposeNameSplit(row.value);
@@ -960,6 +1041,19 @@ function uncarriedNote(
     : h``;
   return h`${UNCARRIED_MARK}${sentence}`;
 }
+
+/** A contact row's refusal, in the sentence the operator acts on. #235. */
+const CONTACT_REFUSAL: Readonly<Record<ContactRefusal, string>> = {
+  not_mobile: 'המספר אינו מספר נייד ישראלי. יש לתקן אותו לפני האישור.',
+  not_email: 'הכתובת אינה כתובת דוא"ל. יש לתקן אותה לפני האישור.',
+  unavailable: 'לא ניתן לאשר כאן טלפון או דוא"ל.',
+};
+
+/** What a contact channel is called in a sentence. #235. */
+const CHANNEL_NOUN: Readonly<Record<ContactChannel, string>> = {
+  PHONE: 'טלפון',
+  EMAIL: 'דוא"ל',
+};
 
 function readingGroupOf(fieldKey: string): number {
   const at = READING_GROUPS.findIndex((group) => group.keys.has(fieldKey));
@@ -990,10 +1084,18 @@ function filingReadingRow(
     row.extractedFieldId,
     screen.mayAddInventory === true,
   );
+  const contact = screen.contactRows?.[row.extractedFieldId];
+  const refusal =
+    contact?.refusal === null || contact === undefined
+      ? h``
+      : h`<span class="role is-half">${CONTACT_REFUSAL[contact.refusal]}</span>`;
+  const offered = contact?.zeroAdded
+    ? h`<span class="role">הוצע עם 0 בהתחלה</span>`
+    : h``;
   return h`<tr>
     <td>${row.labelHe}${nameRole(row, rows)}${half}${
       note ? h`<span class="role">${note}</span>` : h``
-    }</td>
+    }${offered}${refusal}</td>
     <td>${
       row.fieldKey.endsWith('_date')
         ? excerpt(ltr(row.value))
@@ -1013,17 +1115,8 @@ function filingReading(screen: LeaseFilingScreen): Html {
     screen.pagesRead,
     screen.readingPending,
   );
-  const conflict = screen.conflictTenancyId
-    ? h`<section class="notice">
-        <h2>conflict</h2>
-        <p class="lede">
-          כבר יש חוזה לדירה הזו באותו מועד תחילה —
-          <a href="/estate/tenancies/${screen.conflictTenancyId}">פתיחת החוזה</a>.
-        </p>
-      </section>`
-    : h``;
   if (rows.length === 0) {
-    return h`${conflict}<section class="notice">
+    return h`<section class="notice">
       <h2>הקריאה ${mark}</h2>
       <p class="lede">${
         screen.readingPending
@@ -1032,14 +1125,46 @@ function filingReading(screen: LeaseFilingScreen): Html {
       }</p>
     </section>`;
   }
-  const grouped = READING_GROUPS.map((group, at) => ({
-    labelHe: group.labelHe,
-    rows: rows.filter((row) => readingGroupOf(row.fieldKey) === at),
-  })).filter((group) => group.rows.length > 0);
-  const leftover = rows.filter(
-    (row) => readingGroupOf(row.fieldKey) === READING_GROUPS.length,
+  // #239. The identity-and-access set, still open, above the groups: each is its own press, and
+  // they are exactly the rows `אישור כל מה שלא סומן` leaves.
+  const alone = rows.filter(
+    (row) => row.approvedAt === null && pressedAlone(row, 'lease'),
   );
-  return h`${conflict}<section class="notice">
+  const rest = rows.filter((row) => !alone.includes(row));
+  const bulk = rest.filter((row) => row.approvedAt === null).length;
+  // Grouped inside each part, so a native PDF — every row unmeasured, so every row its own press —
+  // still reads as dates, money, people, place.
+  const groups = (part: readonly ExtractedRow[]): Html[] => {
+    const grouped = READING_GROUPS.map((group, at) => ({
+      labelHe: group.labelHe,
+      rows: part.filter((row) => readingGroupOf(row.fieldKey) === at),
+    })).filter((group) => group.rows.length > 0);
+    const leftover = part.filter(
+      (row) => readingGroupOf(row.fieldKey) === READING_GROUPS.length,
+    );
+    return [
+      ...grouped.map(
+        (group) => h`<tbody>
+            <tr>
+              <th class="group" colspan="3">${group.labelHe}</th>
+            </tr>
+            ${group.rows.map((row) => filingReadingRow(screen, row, rows))}
+          </tbody>`,
+      ),
+      ...(leftover.length === 0
+        ? []
+        : [
+            h`<tbody>
+            ${leftover.map((row) => filingReadingRow(screen, row, rows))}
+          </tbody>`,
+          ]),
+    ];
+  };
+  const part = (caption: string): Html => h`<tbody>
+      <tr><th class="part" colspan="3">${caption}</th></tr>
+    </tbody>`;
+  const split = alone.length > 0 && rest.length > 0;
+  return h`<section class="notice">
     <h2>הקריאה ${mark}</h2>
       <table class="grid-table">
         <thead>
@@ -1049,23 +1174,306 @@ function filingReading(screen: LeaseFilingScreen): Html {
             <th></th>
           </tr>
         </thead>
-        ${grouped.map(
-          (group) => h`<tbody>
-            <tr>
-              <th class="group" colspan="3">${group.labelHe}</th>
-            </tr>
-            ${group.rows.map((row) => filingReadingRow(screen, row, rows))}
-          </tbody>`,
-        )}
-        ${
-          leftover.length === 0
-            ? h``
-            : h`<tbody>
-            ${leftover.map((row) => filingReadingRow(screen, row, rows))}
-          </tbody>`
-        }
+        ${alone.length > 0 ? part('כל שורה באישור משלה') : h``}
+        ${groups(alone)}
+        ${split ? part('השאר') : h``}
+        ${groups(rest)}
       </table>
+      ${
+        screen.mayApprove && screen.documentId && bulk > 0
+          ? h`<form class="form-actions" method="post" action="/documents/filing/${screen.documentId}/approve">
+          ${csrfInput(screen.csrf)}
+          <input type="hidden" name="action" value="unflagged" />
+          <button class="btn btn-primary" type="submit">אישור כל מה שלא סומן</button>
+          <span class="chip verdict">${ltr(bulk)} שורות</span>
+          ${
+            alone.length > 0
+              ? h`<span class="hint">${ltr(alone.length)} השורות שלמעלה נשארות לאישור אחד אחד.</span>`
+              : h``
+          }
+        </form>`
+          : h``
+      }
+  </section>
+  ${filingNext(screen)}`;
+}
+
+/**
+ * **What הקריאה leads to. #234.** The tab never sits on a step with nothing to press: either the
+ * rows still missing, by name, or פתיחת טיוטה.
+ */
+function filingNext(screen: LeaseFilingScreen): Html {
+  const gaps = screen.gaps ?? [];
+  if (gaps.length > 0) {
+    return h`<section class="notice">
+      <h2>פתיחת טיוטה</h2>
+      <p class="lede">הטיוטה תיפתח כשכל אלה יאושרו:</p>
+      ${gapList(gaps)}
+    </section>`;
+  }
+  if (!screen.mayOpen || !screen.documentId) {
+    return h`<section class="notice">
+      <h2>פתיחת טיוטה</h2>
+      <p class="lede">הקריאה מוכנה. פתיחת הטיוטה בידי מי שמורשה לרשום שכירויות.</p>
+    </section>`;
+  }
+  return h`<section class="notice">
+    <h2>פתיחת טיוטה</h2>
+    <p class="lede">הקריאה מוכנה. במסך הבא — הדירה, הנספח והאנשים, לפני שנכתב דבר.</p>
+    <div class="form-actions">
+      <a class="btn btn-primary" href="/documents/filing/${screen.documentId}/open">פתיחת טיוטה</a>
     </div>
+  </section>`;
+}
+
+function gapList(gaps: readonly ReadingGap[]): Html {
+  return h`<ul class="missing">
+    ${gaps.map(
+      (gap) => h`<li>
+        <span class="chip">${gap.value === null ? h`לא נקרא` : h`לא אושר`}</span>
+        ${gap.labelHe}${
+          gap.value === null
+            ? h``
+            : h` · <span class="excerpt">${displayConfirmedName(gap.value)}</span>`
+        }
+      </li>`,
+    )}
+  </ul>`;
+}
+
+const OPENING_ROLE: Readonly<Record<string, string>> = {
+  PRIMARY_TENANT: 'שוכר ראשי',
+  CO_TENANT: 'שוכר נוסף',
+  GUARANTOR: 'ערב',
+  OCCUPANT: 'דייר',
+};
+
+/** Each refusal as the sentence an operator acts on. #234. */
+function openingRefusal(refusal: OpeningRefusal): Html {
+  switch (refusal.kind) {
+    case 'not_ready':
+      return h`<li>הקריאה עדיין לא מוכנה. חסרים:${gapList(refusal.gaps)}</li>`;
+    case 'no_terms_profile':
+      return h`<li>אין במערכת אף נספח תנאים, ולכל טיוטה נדרש אחד. יש להוסיף נספח לפני פתיחת הטיוטה.</li>`;
+    case 'unit_taken':
+      return h`<li>כבר יש חוזה לדירה הזו באותו מועד תחילה —
+        <a href="/estate/tenancies/${refusal.tenancyId}">פתיחת החוזה</a>. לא נכתב דבר.</li>`;
+    case 'same_person':
+      return h`<li>שני אנשים בחוזה נושאים אותה תעודת זהות. יש לתקן את הקריאה לפני פתיחת הטיוטה.</li>`;
+    case 'contact_held':
+      return h`<li>ה${CHANNEL_NOUN[refusal.channel]} של ${refusal.person}
+        כבר שייך היום ל<a href="/parties/${refusal.partyId}">${refusal.holderName}</a>.
+        מספר אחד של שני אנשים הוא בדיוק מה שאי אפשר לשייך לדירה. יש לסגור אותו אצלו או לתקן את הקריאה. לא נכתב דבר.</li>`;
+    case 'contact_shared':
+      return h`<li>אותו ${CHANNEL_NOUN[refusal.channel]} נקרא לשני אנשים בחוזה. יש לתקן את הקריאה לפני פתיחת הטיוטה.</li>`;
+  }
+}
+
+function openingCandidates(screen: LeaseFilingScreen): Html {
+  const opening = screen.opening;
+  if (!opening) return h``;
+  const listed =
+    opening.unit &&
+    !opening.candidates.some(
+      (candidate) => candidate.unit_id === opening.unit?.unit_id,
+    )
+      ? [opening.unit, ...opening.candidates]
+      : opening.candidates;
+  if (listed.length === 0) return h``;
+  return h`<ul class="candidates">
+    ${listed.map(
+      (unit) => h`<li class="candidate">
+        <input type="radio" id="u-${unit.unit_id}" name="unit" value="${unit.unit_id}" required ${
+          opening.unit?.unit_id === unit.unit_id ? h`checked` : h``
+        } />
+        <label for="u-${unit.unit_id}">דירה ${ltr(unit.unit_number)} · ${unit.building_name} · ${unit.address_line}, ${unit.city}</label>
+      </li>`,
+    )}
+  </ul>`;
+}
+
+function filingOpening(screen: LeaseFilingScreen): Html {
+  const opening = screen.opening;
+  if (screen.beat !== 'open' || !opening) {
+    return h``;
+  }
+  const { unit } = opening;
+  const reading = opening.placeReading;
+  const choosing = unit === null || opening.candidates.length > 0;
+  const refused = opening.refusals.length > 0;
+  const unknownProfile =
+    opening.termsProfile !== null &&
+    !opening.termsProfiles.includes(opening.termsProfile);
+  const failed = screen.openFailed
+    ? h`<p class="lede"><strong>הטיוטה לא נפתחה ולא נכתב דבר.</strong>${
+        unknownProfile
+          ? h` הנספח שנבחר אינו קיים במערכת. בחרו נספח מהרשימה.`
+          : refused
+            ? h``
+            : h` נסו שוב.`
+      }</p>`
+    : h``;
+  const readPlace =
+    opening.address !== null || opening.apartmentNumber !== null
+      ? h`<div>
+          <dt>על הדף</dt>
+          <dd>${
+            opening.address === null
+              ? h`—`
+              : h`<span class="excerpt">${opening.address}</span>`
+          }${
+            opening.apartmentNumber === null
+              ? h``
+              : h` · דירה <span class="excerpt">${opening.apartmentNumber}</span>`
+          }${opening.matchesUnit ? h`` : h` <span class="chip verdict is-low">לא תואם את הדירה</span>`}</dd>
+        </div>`
+      : h``;
+  const noProfile = opening.termsProfiles.length === 0;
+  return h`<section class="notice">
+    <h2>פתיחת טיוטה</h2>
+    ${failed}
+    ${
+      refused
+        ? h`<h2 class="second-heading">למה אי אפשר לפתוח</h2>
+          <ul class="missing">${opening.refusals.map(openingRefusal)}</ul>`
+        : h``
+    }
+    ${
+      reading && choosing
+        ? h`<h2 class="second-heading">${filingHeadline(reading, opening.candidateTotal)}</h2>
+          ${placeFacts(reading, opening.placeBuilding, excerpt)}`
+        : h``
+    }
+    ${
+      reading && choosing && screen.mayCreate
+        ? filingCreateOffer(
+            {
+              ...screen,
+              reading,
+              building: opening.placeBuilding,
+              mayCreate: true,
+            },
+            reading,
+          )
+        : h``
+    }
+    <dl class="facts">
+      <div>
+        <dt>דירה</dt>
+        <dd>${
+          unit
+            ? h`${unit.address_line}, ${unit.city} · דירה ${ltr(unit.unit_number)}`
+            : h`טרם נבחרה`
+        }</dd>
+      </div>
+      ${readPlace}
+      <div>
+        <dt>תקופה</dt>
+        <dd>${
+          opening.startDate === null
+            ? h`—`
+            : h`<span class="excerpt">${ltr(opening.startDate)}</span>`
+        } — ${
+          opening.endDate === null
+            ? h`—`
+            : h`<span class="excerpt">${ltr(opening.endDate)}</span>`
+        }</dd>
+      </div>
+    </dl>
+    ${
+      opening.sameLease.length === 0
+        ? h``
+        : h`<h2 class="second-heading">חוזה קיים</h2>
+          <p class="lede">כבר יש שכירות לאדם עם אותה תעודת זהות באותו מועד תחילה. אפשר לצרף את החוזה אליה, או לפתוח טיוטה חדשה בכל זאת.</p>
+          ${opening.sameLease.map(
+            (
+              offer,
+            ) => h`<form method="post" action="/documents/filing/${screen.documentId}/open">
+              ${csrfInput(screen.csrf)}
+              <input type="hidden" name="attach" value="${offer.tenancyId}" />
+              <p>
+                <a href="/estate/tenancies/${offer.tenancyId}">פתיחת החוזה</a>
+                — ${offer.addressLine}, ${offer.city} · דירה ${ltr(offer.unitNumber)}
+              </p>
+              <div class="form-actions">
+                <button class="btn btn-secondary" type="submit">צירוף לחוזה זה</button>
+              </div>
+              <p class="hint">הצירוף כותב רק את הקישור למסמך. לא נכתבים אנשים ולא נפתחת טיוטה.</p>
+            </form>`,
+          )}`
+    }
+    <form class="form-grid" method="get" action="/documents/filing/${screen.documentId}/open">
+      <div class="form-row">
+        <label for="q">חיפוש דירה</label>
+        <input class="field" id="q" name="q" type="search" value="${screen.query ?? ''}" />
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="submit">חיפוש</button>
+      </div>
+    </form>
+    <form class="form-grid" method="post" action="/documents/filing/${screen.documentId}/open">
+      ${csrfInput(screen.csrf)}
+      ${
+        unit && opening.candidates.length === 0
+          ? h`<input type="hidden" name="unit" value="${unit.unit_id}" />`
+          : openingCandidates(screen)
+      }
+    <h2 class="second-heading">האנשים</h2>
+    <ul class="missing">
+      ${opening.people.map(
+        (person) => h`<li>
+          <span class="chip">${OPENING_ROLE[person.role] ?? person.role}</span>
+          <span class="excerpt">${person.name}</span>
+          ${
+            person.hasIdentifier
+              ? h``
+              : person.matchedByContact
+                ? h`<span class="role">בלי ת.ז. — איש קשר קיים, לפי טלפון או דוא"ל</span>`
+                : person.nameCandidates.length > 0
+                  ? h``
+                  : h`<span class="role">בלי ת.ז. — איש קשר חדש</span>`
+          }
+          ${person.contacts > 0 ? h`<span class="role">${String(person.contacts)} פרטי קשר ייכתבו</span>` : h``}
+          ${
+            person.nameCandidates.length === 0
+              ? h``
+              : h`<fieldset>
+                  <legend>אותו אדם?</legend>
+                  <label><input type="radio" name="party-${person.extractedFieldId}" value="" ${person.chosenPartyId ? h`` : h`checked`} /> איש קשר חדש</label>
+                  ${person.nameCandidates.map(
+                    (candidate) =>
+                      h`<label><input type="radio" name="party-${person.extractedFieldId}" value="${candidate.partyId}" ${person.chosenPartyId === candidate.partyId ? h`checked` : h``} /> <a href="/parties/${candidate.partyId}">${candidate.fullName}</a></label>`,
+                  )}
+                </fieldset>`
+          }
+        </li>`,
+      )}
+    </ul>
+    ${
+      opening.unpairedContacts > 0
+        ? h`<p class="lede">${String(opening.unpairedContacts)} טלפונים או כתובות דוא"ל שאושרו לא שויכו לאף אדם — מספרם בחוזה שונה ממספר השמות — ולא ייכתבו.</p>`
+        : h``
+    }
+      <div class="form-row">
+        <label for="terms_profile">נספח תנאים</label>
+        <select id="terms_profile" name="terms_profile" required ${noProfile ? h`disabled` : h``}>
+          ${
+            opening.termsProfile === null
+              ? h`<option value="" selected>בחרו נספח</option>`
+              : h``
+          }
+          ${opening.termsProfiles.map(
+            (name) =>
+              h`<option value="${name}" ${name === opening.termsProfile ? h`selected` : h``}>${name}</option>`,
+          )}
+        </select>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit" ${refused ? h`disabled` : h``}>פתיחת טיוטה</button>
+        <a class="btn btn-secondary" href="/documents/filing/${screen.documentId}">חזרה לקריאה</a>
+      </div>
+      <p class="hint">הלחיצה כותבת את הטיוטה, האנשים ותפקידיהם, הטלפונים והדוא"ל שאושרו והקישורים למסמך — הכול יחד, או כלום.</p>
+    </form>
   </section>`;
 }
 
@@ -1075,10 +1483,7 @@ function filingDraft(screen: LeaseFilingScreen): Html {
   if (screen.beat !== 'draft' || !draft || !unit) {
     return h``;
   }
-  const title = draft.tenants[0]
-    ? h`<span class="excerpt">${draft.tenants[0]}</span>
-        · ${unit.address_line}, ${unit.city} · דירה ${ltr(unit.unit_number)}`
-    : h`${unit.address_line}, ${unit.city} · דירה ${ltr(unit.unit_number)}`;
+  const title = draft.title;
   const tenants =
     draft.tenants.length === 0
       ? h`—`
@@ -1140,17 +1545,20 @@ function filingLede(screen: LeaseFilingScreen): Html {
   if (screen.beat === 'draft') {
     return h`הטיוטה נרשמה. הגעה בשם — לא מסך חוזה אחר.`;
   }
+  if (screen.beat === 'open') {
+    return h`מה ייכתב, ומה יעצור — לפני שנכתב דבר.`;
+  }
   if (screen.beat === 'read') {
     return screen.unit
-      ? h`תויק לדירה ${excerpt(ltr(screen.unit.unit_number))}. חתמו על שמות ותאריכים — נפתחת טיוטה.`
-      : h`החוזה בתיק. הקריאה בטאב הזה.`;
+      ? h`תויק לדירה ${excerpt(ltr(screen.unit.unit_number))}. חתמו על שמות ותאריכים, ואז פתיחת טיוטה.`
+      : h`החוזה נשמר בלי דירה. חתמו על שמות ותאריכים, ואז פתיחת טיוטה.`;
   }
   if (screen.matched) {
     return screen.held
       ? h`נקראה כתובת. הקובץ נשמר. הרישום אחרי המשך.`
       : h`נקראה כתובת. עדיין לא נשמר דבר.`;
   }
-  return h`חוזה אחד. הדירה מן הכתובת שעל הדף.`;
+  return h`חוזה אחד. הקובץ נשמר מיד, והדירה נבחרת בפתיחת טיוטה.`;
 }
 
 export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
@@ -1197,7 +1605,10 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
     : h``;
   const candidates = screen.candidates ?? [];
   const unresolved =
-    screen.reading !== undefined && !screen.matched && !screen.chosenUnitId
+    screen.reading !== undefined &&
+    screen.beat !== 'open' &&
+    !screen.matched &&
+    !screen.chosenUnitId
       ? h`<section class="notice">
           <h2>${filingHeadline(screen.reading, screen.candidateTotal ?? 0)}</h2>
           ${placeFacts(screen.reading, screen.building, excerpt)}
@@ -1253,7 +1664,7 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
       </section>`
     : h``;
   const attach =
-    screen.beat === 'read' || screen.beat === 'draft'
+    screen.beat === 'read' || screen.beat === 'open' || screen.beat === 'draft'
       ? h``
       : screen.held && screen.refused?.reason === 'terms'
         ? h`<p class="form-note"><a href="/documents/filing">תיוק של קובץ אחר</a></p>`
@@ -1318,7 +1729,7 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
                   ? h`נשאר על הצעד עד המשך. נשמר רק אחרי אישור הדירה.`
                   : candidates.length > 0
                     ? h`יש לצרף שוב. נשמר רק אחרי שהדירה אושרה.`
-                    : h`עד 100 מ״ב. הקובץ נשמר מיד, והרישום אחרי אישור הדירה.`
+                    : h`עד 100 מ״ב. הקובץ נשמר מיד, בלי דירה. הדירה נבחרת בפתיחת טיוטה.`
             }
           </p>
           <div class="form-actions">
@@ -1327,12 +1738,15 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
                 ? h`המשך ותיוק`
                 : candidates.length > 0
                   ? h`תיוק לדירה שנבחרה`
-                  : h`קריאת הכתובת`
+                  : h`שמירה וקריאה`
             }</button>
           </div>
         </form>`;
   const search =
-    screen.beat === 'read' || screen.beat === 'draft' || screen.matched
+    screen.beat === 'read' ||
+    screen.beat === 'open' ||
+    screen.beat === 'draft' ||
+    screen.matched
       ? h``
       : screen.reading !== undefined || candidates.length > 0
         ? h`<form class="form-grid" method="get" action="/documents/filing">
@@ -1358,6 +1772,7 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
       <p class="lede">${filingLede(screen)}</p>
     </div>
     ${filingBeats(screen.beat)}
+    ${stepRefusalNotice(screen)}
     ${tooLong}
     ${terms}
     ${already}
@@ -1365,6 +1780,7 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
     ${created}
     ${match}
     ${filingReading(screen)}
+    ${filingOpening(screen)}
     ${filingDraft(screen)}
     ${attach}
     ${search}`;
@@ -1734,7 +2150,9 @@ function extractedSection(screen: ReadScreen) {
 }
 
 export function renderReadPage(screen: ReadScreen): string {
-  const back = `/estate/inventory/${screen.buildingId}`;
+  const back = screen.buildingId
+    ? `/estate/inventory/${screen.buildingId}`
+    : `/documents/filing/${screen.documentId}`;
   // **The transcript is withheld below the permission. Slice 6.6, rewritten at #102.** 6.5 found an
   // operator reading a ת.ז. off a word-box `title`. There is no overlay now. The per-page text is
   // this system's transcription of the paper, so it is shown only when `mayReadIdentifiers` is true.
@@ -2357,6 +2775,27 @@ export interface FieldsScreen {
   uncarried?: Readonly<Record<string, UncarriedReason | null>>;
   /** `estate.write`. A missing bay is a link to later-add only for that reader. #176. */
   mayAddInventory: boolean;
+  /** The document type's key: a lease leaves more rows for their own press (#239). */
+  typeKey: string;
+  /**
+   * #239. The tenancy a lease opened, once it has. Its reading is closed: no approval here, and a
+   * sentence pointing to where a correction is made. `קדם` stays.
+   */
+  closedTo?: string;
+}
+
+/**
+ * **#239. A lease's reading is closed once its draft opens.** One sentence for both screens and both
+ * routes, pointing to the tenancy, where a correction sits beside what the paper said (#229).
+ */
+export function closedReadingNotice(tenancyId: string): Html {
+  return h`<section class="notice">
+    <h2>הקריאה סגורה</h2>
+    <p class="lede">
+      הטיוטה כבר נפתחה, והקריאה של החוזה הזה סגורה: אין בה עוד אישור או תיקון. תיקון נעשה
+      <a href="/estate/tenancies/${tenancyId}">בשכירות</a>, לצד מה שנקרא מהדף.
+    </p>
+  </section>`;
 }
 
 const MASK = IDENTIFIER_MASK;
@@ -2391,11 +2830,14 @@ function qualityCell(row: ExtractedRow): Html {
  * the top of the page, which is the other half of `אישור כל מה שלא סומן` being safe to press.
  * Signed rows fall to the bottom: they are the work already done.
  */
-function ledgerOrder(rows: readonly ExtractedRow[]): ExtractedRow[] {
+function ledgerOrder(
+  rows: readonly ExtractedRow[],
+  typeKey: string,
+): ExtractedRow[] {
   const rank = (row: ExtractedRow): number => {
     if (row.approvedAt !== null) return 3;
     if (row.confidence === null) return 0;
-    if (isFlagged(row.confidence) || isIdentifierField(row.fieldKey)) return 1;
+    if (pressedAlone(row, typeKey)) return 1;
     return 2;
   };
   return [...rows].sort(
@@ -2477,7 +2919,9 @@ function valueCell(screen: FieldsScreen, row: ExtractedRow): Html {
 export function renderFieldsPage(screen: FieldsScreen): string {
   const back = screen.unitId
     ? `/estate/units/${screen.unitId}`
-    : `/estate/inventory/${screen.buildingId}`;
+    : screen.buildingId
+      ? `/estate/inventory/${screen.buildingId}`
+      : `/documents/filing/${screen.documentId}`;
   const shown = screen.mayReadIdentifiers
     ? screen.rows
     : screen.rows.filter((row) => !isIdentifierField(row.fieldKey));
@@ -2485,9 +2929,7 @@ export function renderFieldsPage(screen: FieldsScreen): string {
     ? 0
     : screen.rows.length - shown.length;
   const open = shown.filter((row) => row.approvedAt === null);
-  const unflagged = open.filter(
-    (row) => !isFlagged(row.confidence) && !isIdentifierField(row.fieldKey),
-  );
+  const unflagged = open.filter((row) => !pressedAlone(row, screen.typeKey));
   // **Slice 7.4: a mapped row that nobody signed has no `קדם` button.** A promotion now requires
   // the approval stamp (`promote.ts`, and the trigger in 0029), so a button that posted anyway
   // would be a control whose only outcome is a refusal. The note below says so, because a missing
@@ -2510,6 +2952,7 @@ export function renderFieldsPage(screen: FieldsScreen): string {
         }
       </div>
     </div>
+    ${screen.closedTo ? closedReadingNotice(screen.closedTo) : h``}
     ${
       screen.saved === undefined
         ? h``
@@ -2528,7 +2971,7 @@ export function renderFieldsPage(screen: FieldsScreen): string {
           <tr><th>שדה</th><th>ערך שנקרא</th><th>עמוד</th><th>איכות הקריאה</th><th>פעולה</th></tr>
         </thead>
         <tbody>
-          ${ledgerOrder(shown).map(
+          ${ledgerOrder(shown, screen.typeKey).map(
             (row) => h`<tr>
             <td class="value">${row.labelHe}${nameRole(row, screen.rows)}</td>
             ${valueCell(screen, row)}

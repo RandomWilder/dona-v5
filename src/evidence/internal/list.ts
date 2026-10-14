@@ -94,18 +94,74 @@ export async function listTenancyDocumentFacts(
       confirmed.set(row.subject_id, row.handover_date);
     }
   }
-  return linked.map((doc) => ({
-    typeKey: doc.typeKey,
-    approved:
-      doc.typeKey === 'handover_protocol'
-        ? confirmed.has(doc.documentId)
-        : true,
-    validTo: doc.validTo,
-    handoverDate:
-      doc.typeKey === 'handover_protocol'
-        ? (confirmed.get(doc.documentId) ?? null)
-        : null,
-  }));
+  const leases = linked
+    .filter((doc) => doc.typeKey === 'lease')
+    .map((doc) => doc.documentId);
+  const readings = await leasePlaceReadings(db, leases);
+  return linked.map((doc) => {
+    const read = readings.get(doc.documentId);
+    return {
+      typeKey: doc.typeKey,
+      approved:
+        doc.typeKey === 'handover_protocol'
+          ? confirmed.has(doc.documentId)
+          : true,
+      validTo: doc.validTo,
+      handoverDate:
+        doc.typeKey === 'handover_protocol'
+          ? (confirmed.get(doc.documentId) ?? null)
+          : null,
+      addressRead: read?.address ?? null,
+      apartmentRead: read?.apartment ?? null,
+    };
+  });
+}
+
+/** Approved lease reading of the address and the flat, else the raw read. #240. */
+async function leasePlaceReadings(
+  db: Queryable,
+  documentIds: readonly string[],
+): Promise<Map<string, { address: string | null; apartment: string | null }>> {
+  const out = new Map<
+    string,
+    { address: string | null; apartment: string | null }
+  >();
+  if (documentIds.length === 0) return out;
+  const rows = await db.query<{
+    document_id: string;
+    field_key: string;
+    value: string;
+  }>(
+    `SELECT DISTINCT ON (e.document_id, f.field_key)
+            e.document_id,
+            f.field_key,
+            e.approved_value AS value
+       FROM extracted_field e
+       JOIN document_type_field f
+         ON f.document_type_field_id = e.document_type_field_id
+      WHERE e.document_id = ANY($1::uuid[])
+        AND f.field_key IN ('address', 'apartment_number')
+        AND e.approved_at IS NOT NULL
+        AND e.approved_value IS NOT NULL
+        AND btrim(e.approved_value) <> ''
+      ORDER BY e.document_id, f.field_key, e.approved_at DESC, e.extracted_field_id`,
+    [documentIds],
+  );
+  for (const row of rows.rows) {
+    const current = out.get(row.document_id) ?? {
+      address: null,
+      apartment: null,
+    };
+    const value = row.value.trim();
+    if (value === '') {
+      out.set(row.document_id, current);
+      continue;
+    }
+    if (row.field_key === 'address') current.address = value;
+    if (row.field_key === 'apartment_number') current.apartment = value;
+    out.set(row.document_id, current);
+  }
+  return out;
 }
 
 export async function listLinkedDocuments(
@@ -234,15 +290,18 @@ export interface LinkedDocumentRead extends LinkedDocument {
 }
 
 /**
- * Slice 5.4. The panel's signed reads, minted here so estate never parses a `gs://` uri.
+ * Slice 5.4. The panel's signed reads, and ממתינים לפתיחה's (#238), minted here so estate never
+ * parses a `gs://` uri.
  * A uri that names another bucket is skipped rather than taking the whole page down.
  */
-export async function signLinkedDocuments(
-  docs: readonly LinkedDocument[],
+export async function signLinkedDocuments<
+  T extends { storageUri: string } = LinkedDocument,
+>(
+  docs: readonly T[],
   store: ObjectStore,
   bucket: string,
   now: Date,
-): Promise<LinkedDocumentRead[]> {
+): Promise<(T & { readUrl: string })[]> {
   const expiresAt = new Date(now.getTime() + SIGN_READ_TTL_MS);
   return Promise.all(
     docs.map(async (doc) => {

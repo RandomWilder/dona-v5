@@ -181,6 +181,47 @@ learn a call, and it does not import calls. The composition root paints the sect
 call opened, the Category, the state, the emergency mark, and a link to the call. A party who opened none
 is told so.
 
+## Contacts from a lease (#232)
+
+**A phone or an email approved on a lease reaches `party_contact` only through A2's פתיחת טיוטה**
+([SPEC-flows.md](SPEC-flows.md), [ADR-0015](docs/decisions/ADR-0015-a-lease-is-unassigned-until-its-draft-opens.md)).
+The lease declares them per role: `main_tenant_phone`, `main_tenant_email`, `second_tenant_phone`,
+`second_tenant_email`, `guarantor_phone`, `guarantor_email`. A guarantor's contacts pair with
+`guarantor_name` by the same ordinal, all-or-nothing rule as identifiers. None of them has a
+`field_promotion` target. A value already approved under a declaration the seed closed — its key
+or its Hebrew label names a tenant's or a guarantor's phone or email, and the key is not one of
+those six — is written the same way. It belongs to the guarantor when the key or the label names a
+guarantor, to the second tenant when it names the additional tenant, and otherwise to the main
+tenant. It pairs only when that role has exactly one person and exactly one such approved value of
+that channel, and the six-key field for that channel did not already pair. A phone is offered the
+same leading 0 הקריאה offers, and it is written only when that is a valid Israeli mobile. Anything
+else is not written, and the draft still opens. A phone is approvable only as a valid Israeli mobile number after
+`normalisePhone`, and an email is folded by `normaliseEmail`, at the composition root, as #206
+already does.
+
+**On the press, each approved value is written with `addPartyContact`** onto the party that row's
+person became, from today, with no label, primary when that party has no open primary on that
+channel (`hasOpenPrimaryContact`). `addPartyContact` and not `upsertPartyContact`, because it is
+the command that carries #206's overlap refusal; the upsert would answer the exclusion constraint
+with a bare 23P01. A value another party holds today refuses the whole draft and names that party,
+because a number shared by two people is exactly the case the isolation join cannot answer. **#235
+adds two refusals of the same kind:** one value approved for two people of one lease, and two
+people of one lease resolving to one existing party through a contact. A value the person's own
+party already holds is not written twice. An approved contact the ordinal rule pairs with nobody
+is not written, and פתיחת טיוטה says how many there are. `partyIdByNationalId` is the read that
+tells the screen, before the press, which party a printed ת.ז. already is; it takes an identifier
+and returns an id, and nothing about the value leaves.
+
+**Matching an existing party, in order:**
+1. a printed ת.ז., through `upsertParty`;
+2. an approved phone or email that is an open contact of exactly one party;
+3. an explicit link the operator made on the screen from the same-name candidates.
+
+Otherwise `createParty`. A name alone never matches.
+**Access is not granted here.** A contact on a party whose only role is on a `DRAFT` tenancy
+resolves to no unit, and a `GUARANTOR` is never a service contact. The phone starts reaching a flat on
+the day an `ACTIVE` letting covers it, which is A5's gate, not this write.
+
 ## What is deliberately not here
 
 - **No uniqueness on `is_primary`, and 2.4 confirmed it rather than revisiting it.** "At most one

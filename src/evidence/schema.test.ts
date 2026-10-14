@@ -1284,6 +1284,74 @@ describe('the acceptance bar — a new type costs no DDL', () => {
     assert.equal(live('index_publication_date'), undefined);
   });
 
+  it('declares a phone and an email per role, and closes what A14 declared for them (#235)', async (t) => {
+    if (!pool) return t.skip(skipReason);
+    await inRolledBackTransaction(pool, async (db) => {
+      await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+      const declare = (fieldKey: string, labelHe: string, on: string) =>
+        declareDocumentTypeField(db, {
+          typeKey: 'lease',
+          fieldKey,
+          labelHe,
+          valueType: 'TEXT',
+          isRequired: false,
+          extractionHint: null,
+          on,
+        });
+      // What an administrator might have declared on staging before the seed owned these keys.
+      await declare('tenant_mobile', 'נייד השוכר', '2026-10-02');
+      await declare('guarantor_phone', 'טלפון הערב', '2026-10-03');
+      await declare('contact', 'דוא"ל השוכר', '2026-10-20');
+      await declare('pets_allowed', 'בעלי חיים', '2026-10-02');
+      await declare('landlord_phone', 'טלפון המשכיר', '2026-10-02');
+      await applyDocumentTypeCatalogue(db, seedDocumentTypes);
+
+      const keysOn = async (day: string) =>
+        (await documentTypeFields(db, 'lease', day)).map(
+          (field) => field.fieldKey,
+        );
+      const before = await keysOn('2026-10-13');
+      assert.equal(before.includes('tenant_mobile'), true);
+      assert.equal(before.includes('guarantor_phone'), true);
+
+      const after = await keysOn('2026-10-21');
+      for (const key of [
+        'main_tenant_phone',
+        'main_tenant_email',
+        'second_tenant_phone',
+        'second_tenant_email',
+        'guarantor_phone',
+        'guarantor_email',
+      ]) {
+        assert.equal(
+          after.filter((one) => one === key).length,
+          1,
+          `${key} once`,
+        );
+      }
+      assert.equal(after.includes('tenant_mobile'), false);
+      assert.equal(after.includes('contact'), false, 'closed on its own day');
+      assert.equal(after.includes('pets_allowed'), true, 'not a contact');
+      assert.equal(
+        after.includes('landlord_phone'),
+        true,
+        'not a tenant or a guarantor',
+      );
+      const seeded = await db.query<{ from: string }>(
+        `SELECT to_char(f.effective_from, 'YYYY-MM-DD') AS from
+           FROM document_type_field f
+           JOIN document_type t ON t.document_type_id = f.document_type_id
+          WHERE t.type_key = 'lease' AND f.field_key = 'guarantor_phone'
+            AND f.effective_to IS NULL`,
+      );
+      assert.deepEqual(
+        seeded.rows.map((row) => row.from),
+        ['2026-10-14'],
+        'the seed row is the one left open',
+      );
+    });
+  });
+
   it('a September reading still resolves against the unpaired tenant_name', async (t) => {
     if (!pool) return t.skip(skipReason);
     await inRolledBackTransaction(pool, async (db) => {

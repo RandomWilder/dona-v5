@@ -153,8 +153,10 @@ async function confirmLease(
   await upsertTermsProfile(db, profile);
   const documentId = await fileLease(db, unitId);
   const rows = await listExtractedFields(db, documentId);
+  // #234: the draft opens from a ready reading — the name and both dates signed first.
+  const reading = new Set(['tenant_name', 'start_date', 'end_date']);
   for (const row of rows) {
-    if (row.fieldKey === 'tenant_name' && row.approvedAt === null) {
+    if (reading.has(row.fieldKey) && row.approvedAt === null) {
       await approveExtractedField(leaseDeps(db), {
         extractedFieldId: row.extractedFieldId,
         approvedBy: READ_BY,

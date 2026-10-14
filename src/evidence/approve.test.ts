@@ -68,7 +68,7 @@ async function insertUnit(db: PoolClient): Promise<string> {
   return unitId;
 }
 
-/** A filed lease with four readings on it, and a letting for the dates to be promoted onto. */
+/** A filed lease with five readings on it, and a letting for the dates to be promoted onto. */
 async function fileLease(
   db: PoolClient,
   marker: string,
@@ -99,6 +99,7 @@ async function fileLease(
           { field_key: 'tenant_name', value: 'אבי כהן', word_ids: [1] },
           { field_key: 'apartment_number', value: '24', word_ids: [2] },
           { field_key: 'tenant_id_number', value: '123456782', word_ids: [3] },
+          { field_key: 'rent_currency', value: 'ILS', word_ids: [4] },
         ],
       })),
       extractModel: 'gpt-test',
@@ -236,6 +237,7 @@ describe('evidence · approve a reading', () => {
       await inRolledBackTransaction(pool, async (db) => {
         const { documentId } = await fileLease(db, 'approve-bulk');
         await setQuality(db, documentId, {
+          rent_currency: 0.96,
           start_date: 0.96,
           tenant_name: 0.71,
           apartment_number: null,
@@ -247,10 +249,12 @@ describe('evidence · approve a reading', () => {
           approvedBy: SIGNER,
         });
         assert.equal(result.approved, 1);
-        assert.equal(result.flagged, 3);
+        assert.equal(result.flagged, 4);
 
         const rows = await listExtractedFields(db, documentId);
-        assert.notEqual(by(rows, 'start_date').approvedAt, null);
+        assert.notEqual(by(rows, 'rent_currency').approvedAt, null);
+        // 96%, and still one press: on a lease the start date is identity-and-access (#239).
+        assert.equal(by(rows, 'start_date').approvedAt, null);
         // 91% and never in the set: a ת.ז. does not reach a screen until somebody asks for it by
         // name, so bulk-approving one would sign a value the signer has not been shown.
         assert.equal(by(rows, 'tenant_id_number').approvedAt, null);
@@ -267,7 +271,7 @@ describe('evidence · approve a reading', () => {
           approvedBy: SIGNER,
         });
         assert.equal(again.approved, 0);
-        assert.equal(again.flagged, 3);
+        assert.equal(again.flagged, 4);
       });
     } finally {
       await pool.end();
@@ -281,6 +285,7 @@ describe('evidence · approve a reading', () => {
       await inRolledBackTransaction(pool, async (db) => {
         const { documentId } = await fileLease(db, 'approve-identifier');
         await setQuality(db, documentId, {
+          rent_currency: 0.96,
           start_date: 0.96,
           tenant_name: 0.96,
           apartment_number: 0.96,
@@ -304,11 +309,11 @@ describe('evidence · approve a reading', () => {
           documentId,
           approvedBy: SIGNER,
         });
-        assert.equal(bulk.approved, 3, 'the three ordinary rows');
+        assert.equal(bulk.approved, 1, 'the one ordinary row');
         assert.equal(
           bulk.flagged,
-          1,
-          'the identifier is left to be revealed and signed on its own',
+          4,
+          'the identifier, a name, a date and the flat are left for their own press',
         );
         const after = await listExtractedFields(db, documentId);
         assert.equal(by(after, 'tenant_id_number').approvedAt, null);

@@ -160,6 +160,55 @@ export function documentObjectPath(spec: ObjectPathSpec): string {
 }
 
 /**
+ * Where a lease waits until a flat is chosen. #237.
+ *
+ * Not a fifth `PlaceKind`: `documentObjectPath` still refuses everything but the four places.
+ * This builder is the one path allowed to use the `unassigned` root, and only for `lease`.
+ * The leaf stays the file hash, so the put stays idempotent. Nothing names a person or a flat.
+ */
+export function unassignedDocumentPath(spec: {
+  typeKey: string;
+  fileHash: string;
+  extension: DocumentExtension;
+}): string {
+  if (spec.typeKey !== 'lease') {
+    throw new KernelError('invalid', 'only a lease is stored unassigned', {
+      typeKey: spec.typeKey,
+    });
+  }
+  if (!fileHashPattern.test(spec.fileHash)) {
+    throw new KernelError('invalid', 'file hash is not a sha256 digest');
+  }
+  if (!(documentExtensions as readonly string[]).includes(spec.extension)) {
+    throw new KernelError('invalid', 'file extension is not one we store', {
+      accepted: documentExtensions.join(', '),
+    });
+  }
+  return `unassigned/lease/${spec.fileHash}.${spec.extension}`;
+}
+
+/** The place reader's result and the door's flat, kept until פתיחת טיוטה. */
+export function leaseProposalPath(fileHash: string): string {
+  if (!fileHashPattern.test(fileHash)) {
+    throw new KernelError('invalid', 'file hash is not a sha256 digest');
+  }
+  return `unassigned/lease/${fileHash}.proposal.json`;
+}
+
+const unassignedLeasePattern = new RegExp(
+  `^unassigned/lease/[0-9a-f]{64}\\.(${documentExtensions.join('|')})$`,
+);
+
+export function isUnassignedLeasePath(path: string): boolean {
+  return unassignedLeasePattern.test(path);
+}
+
+export function isUnassignedStorageUri(uri: string): boolean {
+  const match = /^gs:\/\/[^/]+\/(.+)$/.exec(uri);
+  return match?.[1] !== undefined && isUnassignedLeasePath(match[1]);
+}
+
+/**
  * Where a lease-filing upload waits until a flat is known.
  *
  * Not a place and not a document. The document path cannot be written yet, because it is the flat
@@ -225,7 +274,9 @@ export function parseStorageUri(
       found: bucket,
     });
   }
-  parseObjectPath(path);
+  if (!isUnassignedLeasePath(path)) {
+    parseObjectPath(path);
+  }
   return { bucket, path };
 }
 

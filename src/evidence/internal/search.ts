@@ -117,7 +117,8 @@ export async function searchPassages(
           WHERE l.document_id = p.document_id AND l.entity_type = 'TENANCY'
           LIMIT 1
        ) tenancy_unit ON true
-      WHERE $2::text = 'portfolio'
+      WHERE (
+            $2::text = 'portfolio'
          OR (
               -- The tenant's bag. One TENANCY link and nothing else: not the
               -- UNIT link the same lease also carries, and not a sibling
@@ -184,6 +185,16 @@ export async function searchPassages(
                 )
               )
             )
+        )
+        -- #237. An unopened lease is about no flat yet, so no bound reaches it. Outside the OR
+        -- above on purpose: inside it, it guarded only the last branch.
+        AND NOT (
+          d.storage_uri LIKE 'gs://%/unassigned/%'
+          AND NOT EXISTS (
+            SELECT 1 FROM document_link assigned
+             WHERE assigned.document_id = d.document_id
+          )
+        )
       ORDER BY p.embedding <=> $1::vector
       LIMIT ${SEARCH_PASSAGE_LIMIT}`,
     [vectorLiteral(vector), bound.kind, boundId],

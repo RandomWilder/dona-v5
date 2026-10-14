@@ -37,7 +37,6 @@ import {
   documentFileHash,
 } from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
-import { intakeObjectPath } from './internal/storage-path.ts';
 
 const CITY = 'עיר תיוק חוזה';
 const ADDRESS = 'הבילויים 10';
@@ -377,15 +376,16 @@ describe('evidence · A16 file a lease in one workspace', {
           assert.match(response.body, /הקובץ נשמר מיד/);
           assert.doesNotMatch(response.body, /נשמר רק אחרי שהדירה אושרה/);
           assert.deepEqual(paperMarks(response.body), []);
-          assert.match(response.body, /המסמך/);
-          assert.match(response.body, /הדירה/);
-          assert.match(response.body, /הקריאה/);
-          assert.match(response.body, /הטיוטה/);
-          assert.match(response.body, /די היום/);
           const beats = response.body.match(
             /<ol class="filing-beats"[^>]*>[\s\S]*?<\/ol>/,
           )?.[0];
           assert.ok(beats);
+          assert.match(beats, /המסמך/);
+          assert.match(beats, /הקריאה/);
+          assert.match(beats, /פתיחת טיוטה/);
+          assert.match(beats, /הטיוטה/);
+          assert.match(beats, /די היום/);
+          assert.doesNotMatch(beats, /הדירה/);
           assert.doesNotMatch(beats, /<a /);
           const docs = response.body.indexOf('data-dest="documents"');
           const filing = response.body.indexOf('data-dest="filing"');
@@ -419,64 +419,46 @@ describe('evidence · A16 file a lease in one workspace', {
       );
 
       await t.test(
-        'exact one Unit is shown, and Continue is what writes the row',
+        'a lease is stored unassigned, and exact one flat is preselected at opening',
         async () => {
           const before = await documentsHere();
-          const putsBefore = puts;
+          const bytes = pdfBytes('a16 one');
           const seen = await as(here).inject({
             method: 'POST',
             url: '/documents/filing',
-            ...upload(
-              { type: 'arnona' },
-              { filename: 'שכירות.pdf', bytes: pdfBytes('a16 one') },
-            ),
+            ...upload({ type: 'arnona' }, { filename: 'שכירות.pdf', bytes }),
           });
-          assert.equal(seen.statusCode, 200, seen.body.slice(0, 400));
-          assert.match(seen.body, /דירה אחת/);
-          assert.match(seen.body, /הקובץ נשמר/);
-          assert.doesNotMatch(seen.body, /עדיין לא נשמר דבר/);
-          const marks = paperMarks(seen.body);
-          assert.ok(marks.some((mark) => mark.includes(ADDRESS)));
-          assert.ok(marks.some((mark) => mark.includes(CITY)));
-          assert.ok(marks.some((mark) => mark === '9'));
-          assert.ok(marks.every((mark) => !/נקראה|בתיק|המשך/.test(mark)));
-          assert.match(seen.body, /class="file-well"/);
-          assert.match(seen.body, new RegExp(`value="${unitNine}"`));
-          assert.match(seen.body, /הקובץ נשמר/);
-          assert.doesNotMatch(seen.body, /type="file"/);
-          assert.doesNotMatch(seen.body, /type="radio"/);
-          assert.doesNotMatch(seen.body, /חיפוש דירה אחרת/);
-          assert.doesNotMatch(seen.body, /יצירת הבניין/);
-          assert.doesNotMatch(seen.body, /מה נקרא מן המסמך/);
-          assert.equal(await documentsHere(), before);
-          const held = documentFileHash(pdfBytes('a16 one'));
-          assert.match(seen.body, new RegExp(`name="held" value="${held}"`));
-          assert.equal(puts, putsBefore + 2);
-          const stored = await objects.read(intakeObjectPath(held, 'pdf'));
-          assert.equal(stored.bytes.length, pdfBytes('a16 one').length);
-
-          const filed = await as(here).inject({
-            method: 'POST',
-            url: '/documents/filing',
-            ...upload({ held, unit: unitNine }, null),
-          });
-          assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
-          assert.match(
-            filed.headers.location ?? '',
-            /\/documents\/filing\/[0-9a-f-]{36}$/,
+          assert.equal(seen.statusCode, 302, seen.body.slice(0, 400));
+          const documentId =
+            String(seen.headers.location ?? '').match(
+              /\/documents\/filing\/([0-9a-f-]{36})$/,
+            )?.[1] ?? '';
+          assert.ok(documentId);
+          const stored = await pool.query<{
+            storage_uri: string;
+            links: string;
+          }>(
+            `SELECT d.storage_uri,
+                    (SELECT count(*) FROM document_link l
+                      WHERE l.document_id = d.document_id)::text AS links
+               FROM document d WHERE d.document_id = $1`,
+            [documentId],
           );
-          assert.doesNotMatch(filed.headers.location ?? '', /\/fields$/);
-          assert.equal((await documentsHere()) - before, 1);
-
-          const next = await as(here).inject({
+          assert.match(
+            stored.rows[0]?.storage_uri ?? '',
+            /\/unassigned\/lease\//,
+          );
+          assert.equal(stored.rows[0]?.links, '0');
+          assert.equal(await documentsHere(), before);
+          const open = await as(here).inject({
             method: 'GET',
-            url: String(filed.headers.location),
+            url: `/documents/filing/${documentId}/open`,
           });
-          assert.equal(next.statusCode, 200);
-          assert.match(next.body, /תיוק חוזה/);
-          assert.match(next.body, /הקריאה/);
-          assert.doesNotMatch(next.body, /מה נקרא מן המסמך/);
-          hashes.push(documentFileHash(pdfBytes('a16 one')));
+          assert.equal(open.statusCode, 200);
+          assert.match(open.body, /פתיחת טיוטה/);
+          assert.match(open.body, new RegExp(`value="${unitNine}"`));
+          assert.doesNotMatch(open.body, /type="radio"/);
+          hashes.push(documentFileHash(bytes));
         },
       );
 
@@ -522,26 +504,9 @@ describe('evidence · A16 file a lease in one workspace', {
               },
             ),
           });
-          assert.equal(response.statusCode, 422);
-          assert.match(response.body, /גדול מכדי/);
-          assert.match(response.body, /הקובץ נשמר/);
-          assert.deepEqual(paperMarks(response.body), []);
-          assert.doesNotMatch(response.body, /type="file"/);
+          assert.equal(response.statusCode, 302, response.body.slice(0, 400));
           assert.equal(await documentsHere(), before);
-          assert.equal(puts, putsBefore + 2);
-          const held = documentFileHash(
-            Buffer.concat([
-              pdfBytes('a16 huge'),
-              Buffer.alloc(onlineOcrByteLimit, 0x20),
-            ]),
-          );
-          const filed = await as(huge).inject({
-            method: 'POST',
-            url: '/documents/filing',
-            ...upload({ held, unit: unitNine }, null),
-          });
-          assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
-          assert.equal((await documentsHere()) - before, 1);
+          assert.ok(puts > putsBefore);
         },
       );
 
@@ -577,22 +542,11 @@ describe('evidence · A16 file a lease in one workspace', {
             url: '/documents/filing',
             ...upload({}, { filename: 'fat.pdf', bytes: fat }),
           });
-          assert.equal(seen.statusCode, 200, seen.body.slice(0, 500));
-          assert.match(seen.body, /דירה אחת/);
-          assert.doesNotMatch(seen.body, /גדול מכדי/);
-          assert.doesNotMatch(seen.body, /type="file"/);
+          assert.equal(seen.statusCode, 302, seen.body.slice(0, 500));
           assert.ok(sent > 0);
           assert.ok(sent <= onlineOcrByteLimit);
           assert.ok(sent < fat.length);
           assert.equal(await documentsHere(), before);
-          const held = documentFileHash(fat);
-          const filed = await as(fatApp).inject({
-            method: 'POST',
-            url: '/documents/filing',
-            ...upload({ held, unit: unitNine }, null),
-          });
-          assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
-          assert.equal((await documentsHere()) - before, 1);
         },
       );
 
@@ -641,36 +595,27 @@ describe('evidence · A16 file a lease in one workspace', {
               { filename: 'several.pdf', bytes: pdfBytes('a16 several') },
             ),
           });
-          assert.equal(many.statusCode, 422);
-          assert.match(many.body, /נמצאה יותר מדירה אחת/);
-          const marks = paperMarks(many.body);
+          assert.equal(many.statusCode, 302, many.body.slice(0, 400));
+          const documentId =
+            String(many.headers.location ?? '').match(
+              /\/documents\/filing\/([0-9a-f-]{36})$/,
+            )?.[1] ?? '';
+          const open = await as(several).inject({
+            method: 'GET',
+            url: `/documents/filing/${documentId}/open`,
+          });
+          assert.equal(open.statusCode, 200);
+          assert.match(open.body, /נמצאה יותר מדירה אחת/);
+          const marks = paperMarks(open.body);
           assert.ok(marks.some((mark) => mark.includes(ADDRESS)));
           assert.ok(marks.some((mark) => mark.includes(CITY)));
-          assert.ok(marks.every((mark) => !/נקראה|יותר מדירה/.test(mark)));
-          assert.match(many.body, /class="file-well"/);
-          assert.match(many.body, /type="radio"/);
-          assert.match(many.body, new RegExp(`value="${unitNine}"`));
-          assert.match(many.body, new RegExp(`value="${unitTen}"`));
-          assert.match(many.body, /חיפוש דירה/);
-          assert.match(many.body, /הקובץ נשמר/);
-          assert.doesNotMatch(many.body, /type="file"/);
-          assert.doesNotMatch(many.body, /\/estate\/buildings\/new/);
+          assert.match(open.body, /type="radio"/);
+          assert.match(open.body, new RegExp(`value="${unitNine}"`));
+          assert.match(open.body, new RegExp(`value="${unitTen}"`));
+          assert.match(open.body, /חיפוש דירה/);
+          assert.doesNotMatch(open.body, /\/estate\/buildings\/new/);
           assert.equal(await documentsHere(), before);
-          const held = documentFileHash(pdfBytes('a16 several'));
-          assert.match(many.body, new RegExp(`name="held" value="${held}"`));
-          assert.equal(puts, putsBefore + 2);
-
-          const filed = await as(several).inject({
-            method: 'POST',
-            url: '/documents/filing',
-            ...upload({ held, unit: unitTen }, null),
-          });
-          assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
-          assert.match(
-            filed.headers.location ?? '',
-            /\/documents\/filing\/[0-9a-f-]{36}$/,
-          );
-          assert.equal((await documentsHere()) - before, 1);
+          assert.ok(puts > putsBefore);
           hashes.push(documentFileHash(pdfBytes('a16 several')));
         },
       );
@@ -688,16 +633,21 @@ describe('evidence · A16 file a lease in one workspace', {
               { filename: 'none.pdf', bytes: pdfBytes('a16 none') },
             ),
           });
-          assert.equal(none.statusCode, 422);
-          assert.match(none.body, /אינה בתיק/);
-          const marks = paperMarks(none.body);
+          assert.equal(none.statusCode, 302, none.body.slice(0, 400));
+          const noneId =
+            String(none.headers.location ?? '').match(
+              /\/documents\/filing\/([0-9a-f-]{36})$/,
+            )?.[1] ?? '';
+          const noneOpen = await as(elsewhere).inject({
+            method: 'GET',
+            url: `/documents/filing/${noneId}/open`,
+          });
+          assert.match(noneOpen.body, /אינה בתיק/);
+          const marks = paperMarks(noneOpen.body);
           assert.ok(marks.some((mark) => mark.includes(NONE_STREET)));
           assert.ok(marks.some((mark) => mark.includes(NONE_CITY)));
-          assert.ok(marks.every((mark) => !/אינה בתיק/.test(mark)));
-          assert.match(none.body, /חיפוש דירה/);
-          assert.match(none.body, /הקובץ נשמר/);
-          assert.doesNotMatch(none.body, /type="file"/);
-          assert.doesNotMatch(none.body, /\/estate\/buildings\/new/);
+          assert.match(noneOpen.body, /חיפוש דירה/);
+          assert.match(noneOpen.body, /יצירת הבניין/);
 
           const deferred = await as(annex).inject({
             method: 'POST',
@@ -707,11 +657,18 @@ describe('evidence · A16 file a lease in one workspace', {
               { filename: 'annex.pdf', bytes: pdfBytes('a16 annex') },
             ),
           });
-          assert.equal(deferred.statusCode, 422);
-          assert.match(deferred.body, /מפנה את פרטי הנכס לנספח/);
-          assert.match(deferred.body, /חיפוש דירה/);
-          assert.doesNotMatch(deferred.body, /יצירת הבניין/);
-          assert.doesNotMatch(deferred.body, /יצירת דירה/);
+          assert.equal(deferred.statusCode, 302, deferred.body.slice(0, 300));
+          const annexId =
+            String(deferred.headers.location ?? '').match(
+              /\/documents\/filing\/([0-9a-f-]{36})$/,
+            )?.[1] ?? '';
+          const annexOpen = await as(annex).inject({
+            method: 'GET',
+            url: `/documents/filing/${annexId}/open`,
+          });
+          assert.match(annexOpen.body, /מפנה את פרטי הנכס לנספח/);
+          assert.match(annexOpen.body, /חיפוש דירה/);
+          assert.doesNotMatch(annexOpen.body, /יצירת הבניין/);
 
           const blank = await as(unread).inject({
             method: 'POST',
@@ -721,13 +678,20 @@ describe('evidence · A16 file a lease in one workspace', {
               { filename: 'blank.pdf', bytes: pdfBytes('a16 unread') },
             ),
           });
-          assert.equal(blank.statusCode, 422);
-          assert.match(blank.body, /לא נקראה כתובת/);
-          assert.match(blank.body, /חיפוש דירה/);
-          assert.match(blank.body, /הקובץ נשמר/);
-          assert.doesNotMatch(blank.body, /יצירת הבניין/);
+          assert.equal(blank.statusCode, 302, blank.body.slice(0, 300));
+          const blankId =
+            String(blank.headers.location ?? '').match(
+              /\/documents\/filing\/([0-9a-f-]{36})$/,
+            )?.[1] ?? '';
+          const blankOpen = await as(unread).inject({
+            method: 'GET',
+            url: `/documents/filing/${blankId}/open`,
+          });
+          assert.match(blankOpen.body, /לא נקראה כתובת/);
+          assert.match(blankOpen.body, /חיפוש דירה/);
+          assert.doesNotMatch(blankOpen.body, /יצירת הבניין/);
           assert.equal(await documentsHere(), before);
-          assert.equal(puts, putsBefore + 6);
+          assert.ok(puts > putsBefore);
         },
       );
 
@@ -756,15 +720,21 @@ describe('evidence · A16 file a lease in one workspace', {
               { filename: 'ops.pdf', bytes: pdfBytes('a16 ops none') },
             ),
           });
-          assert.equal(response.statusCode, 422);
-          assert.match(response.body, /חיפוש דירה/);
-          assert.doesNotMatch(response.body, /יצירת הבניין/);
-          assert.doesNotMatch(response.body, /יצירת דירה/);
-          assert.doesNotMatch(response.body, /name="address_line"/);
-          assert.doesNotMatch(
-            response.body,
-            /action="\/documents\/filing\/place"/,
-          );
+          assert.equal(response.statusCode, 302, response.body.slice(0, 300));
+          const documentId =
+            String(response.headers.location ?? '').match(
+              /\/documents\/filing\/([0-9a-f-]{36})$/,
+            )?.[1] ?? '';
+          const open = await asRole(elsewhere, operator).inject({
+            method: 'GET',
+            url: `/documents/filing/${documentId}/open`,
+          });
+          assert.equal(open.statusCode, 200);
+          assert.match(open.body, /חיפוש דירה/);
+          assert.doesNotMatch(open.body, /יצירת הבניין/);
+          assert.doesNotMatch(open.body, /יצירת דירה/);
+          assert.doesNotMatch(open.body, /name="address_line"/);
+          assert.doesNotMatch(open.body, /action="\/documents\/filing\/place"/);
           const forbidden = await asRole(elsewhere, operator).inject({
             method: 'POST',
             url: '/documents/filing/place',
@@ -793,25 +763,32 @@ describe('evidence · A16 file a lease in one workspace', {
             url: '/documents/filing',
             ...upload({}, { filename: 'create.pdf', bytes: createBytes }),
           });
-          assert.equal(seen.statusCode, 422, seen.body.slice(0, 400));
-          assert.match(seen.body, /action="\/documents\/filing\/place"/);
-          assert.match(seen.body, /name="address_line"/);
-          assert.match(seen.body, new RegExp(`value="${NONE_STREET}"`));
-          assert.match(seen.body, new RegExp(`value="${NONE_CITY}"`));
-          assert.match(seen.body, /value="3"/);
-          assert.doesNotMatch(seen.body, /\/estate\/buildings\/new/);
-          assert.doesNotMatch(seen.body, /handover_date/);
+          assert.equal(seen.statusCode, 302, seen.body.slice(0, 400));
+          const documentId =
+            String(seen.headers.location ?? '').match(
+              /\/documents\/filing\/([0-9a-f-]{36})$/,
+            )?.[1] ?? '';
+          const open = await as(elsewhere).inject({
+            method: 'GET',
+            url: `/documents/filing/${documentId}/open`,
+          });
+          assert.match(open.body, /action="\/documents\/filing\/place"/);
+          assert.match(open.body, /name="address_line"/);
+          assert.match(open.body, new RegExp(`value="${NONE_STREET}"`));
+          assert.match(open.body, new RegExp(`value="${NONE_CITY}"`));
+          assert.match(open.body, /value="3"/);
+          assert.match(
+            open.body,
+            new RegExp(`name="document" value="${documentId}"`),
+          );
           assert.equal(await documentsHere(), before);
-          const held =
-            /name="held" value="([0-9a-f]{64})"/.exec(seen.body)?.[1] ?? '';
-          assert.equal(held, documentFileHash(createBytes));
-          assert.equal(puts, putsBefore + 2);
+          assert.ok(puts > putsBefore);
 
           const created = await as(elsewhere).inject({
             method: 'POST',
             url: '/documents/filing/place',
             payload: new URLSearchParams({
-              held,
+              document: documentId,
               address_line: NONE_STREET,
               city: NONE_CITY,
               unit_number: '3',
@@ -820,35 +797,21 @@ describe('evidence · A16 file a lease in one workspace', {
               'content-type': 'application/x-www-form-urlencoded',
             },
           });
-          assert.equal(created.statusCode, 200, created.body.slice(0, 400));
-          assert.match(created.body, /הדירה נוצרה/);
-          assert.match(created.body, /הקובץ נשמר/);
-          assert.doesNotMatch(created.body, /type="file"/);
-          assert.match(created.body, /type="radio"/);
-          assert.doesNotMatch(created.body, /\/estate\/buildings\//);
-          const createdUnit =
-            /name="unit"[^>]*value="([0-9a-f-]{36})"/.exec(created.body)?.[1] ??
-            /value="([0-9a-f-]{36})"[^>]*name="unit"/.exec(created.body)?.[1] ??
-            '';
-          assert.ok(createdUnit);
-          assert.equal(await documentsHere(), before);
-          assert.equal(puts, putsBefore + 2);
-
-          const filed = await as(elsewhere).inject({
-            method: 'POST',
-            url: '/documents/filing',
-            ...upload({ held, unit: createdUnit }, null),
-          });
-          assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
+          assert.equal(created.statusCode, 302, created.body.slice(0, 400));
           assert.match(
-            filed.headers.location ?? '',
-            /\/documents\/filing\/[0-9a-f-]{36}$/,
+            created.headers.location ?? '',
+            new RegExp(`/documents/filing/${documentId}/open\\?unit=`),
           );
+          const createdUnit =
+            /unit=([0-9a-f-]{36})/.exec(
+              String(created.headers.location),
+            )?.[1] ?? '';
+          assert.ok(createdUnit);
           const linked = await pool.query<{ n: string }>(
             'SELECT count(*)::text AS n FROM document_link WHERE entity_id = $1',
             [createdUnit],
           );
-          assert.equal(linked.rows[0]?.n, '1');
+          assert.equal(linked.rows[0]?.n, '0');
           hashes.push(documentFileHash(createBytes));
         },
       );
@@ -866,15 +829,23 @@ describe('evidence · A16 file a lease in one workspace', {
               { filename: 'flat.pdf', bytes: pdfBytes('a16 flat only') },
             ),
           });
-          assert.equal(seen.statusCode, 422);
-          assert.match(seen.body, /הבניין נמצא בתיק, והדירה לא/);
-          assert.match(seen.body, /name="building"/);
+          assert.equal(seen.statusCode, 302, seen.body.slice(0, 300));
+          const documentId =
+            String(seen.headers.location ?? '').match(
+              /\/documents\/filing\/([0-9a-f-]{36})$/,
+            )?.[1] ?? '';
+          const open = await as(missingFlat).inject({
+            method: 'GET',
+            url: `/documents/filing/${documentId}/open`,
+          });
+          assert.match(open.body, /הבניין נמצא בתיק, והדירה לא/);
+          assert.match(open.body, /name="building"/);
           const buildingId =
             /name="building"[^>]*value="([0-9a-f-]{36})"/.exec(
-              seen.body,
+              open.body,
             )?.[1] ??
             /value="([0-9a-f-]{36})"[^>]*name="building"/.exec(
-              seen.body,
+              open.body,
             )?.[1] ??
             '';
           assert.ok(buildingId);
@@ -882,6 +853,7 @@ describe('evidence · A16 file a lease in one workspace', {
             method: 'POST',
             url: '/documents/filing/place',
             payload: new URLSearchParams({
+              document: documentId,
               building: buildingId,
               address_line: ADDRESS,
               city: CITY,
@@ -891,11 +863,11 @@ describe('evidence · A16 file a lease in one workspace', {
               'content-type': 'application/x-www-form-urlencoded',
             },
           });
-          assert.equal(created.statusCode, 200, created.body.slice(0, 400));
+          assert.equal(created.statusCode, 302, created.body.slice(0, 400));
           const createdUnit =
-            /name="unit"[^>]*value="([0-9a-f-]{36})"/.exec(created.body)?.[1] ??
-            /value="([0-9a-f-]{36})"[^>]*name="unit"/.exec(created.body)?.[1] ??
-            '';
+            /unit=([0-9a-f-]{36})/.exec(
+              String(created.headers.location),
+            )?.[1] ?? '';
           assert.ok(createdUnit);
           const row = await pool.query<{ building_id: string }>(
             'SELECT building_id FROM space WHERE space_id = $1',
@@ -920,9 +892,9 @@ describe('evidence · A16 file a lease in one workspace', {
           assert.equal(response.statusCode, 302, response.body.slice(0, 400));
           assert.match(
             response.headers.location ?? '',
-            /\/documents\/[0-9a-f-]{36}\/fields$/,
+            /\/documents\/filing\/[0-9a-f-]{36}$/,
           );
-          assert.equal((await documentsHere()) - before, 1);
+          assert.equal((await documentsHere()) - before, 0);
           hashes.push(documentFileHash(pdfBytes('a16 a12 still')));
           const intake = await as(here).inject({
             method: 'GET',
@@ -936,13 +908,13 @@ describe('evidence · A16 file a lease in one workspace', {
           });
           assert.equal(catalogue.statusCode, 200);
           noA16Paint(catalogue.body);
-          const fields = await as(here).inject({
+          const filed = await as(here).inject({
             method: 'GET',
             url: String(response.headers.location),
           });
-          assert.equal(fields.statusCode, 200);
-          assert.match(fields.body, /מה נקרא מן המסמך/);
-          noA16Paint(fields.body);
+          assert.equal(filed.statusCode, 200);
+          assert.match(filed.body, /הקריאה/);
+          assert.match(filed.body, /class="filing-beats"/);
         },
       );
     } finally {
@@ -1131,13 +1103,8 @@ describe('evidence · A16 file a lease in one workspace', {
     };
 
     const fileOnTab = async (marker: string): Promise<string> => {
-      const seen = await send(
-        {},
-        { filename: 'שכירות.pdf', bytes: pdfBytes(marker) },
-      );
-      assert.equal(seen.statusCode, 200, seen.body.slice(0, 400));
       const filed = await send(
-        { unit: unitId },
+        {},
         { filename: 'שכירות.pdf', bytes: pdfBytes(marker) },
       );
       assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
@@ -1261,11 +1228,9 @@ describe('evidence · A16 file a lease in one workspace', {
         method: 'GET',
         url: `/documents/${documentId}/fields`,
       });
-      assert.equal(ledger.statusCode, 200);
-      assert.match(ledger.body, /מה נקרא מן המסמך/);
-      assert.match(ledger.body, /איכות הקריאה/);
-      assert.match(ledger.body, /\/documents\/.*\/fields\/approve/);
-      noA16Paint(ledger.body);
+      // #239: an unopened lease has one approval screen, and it is this tab.
+      assert.equal(ledger.statusCode, 302);
+      assert.equal(ledger.headers.location, `/documents/filing/${documentId}`);
 
       const last = await stampOpening(documentId);
       assert.equal(last.statusCode, 302, last.body.slice(0, 400));
@@ -1274,6 +1239,20 @@ describe('evidence · A16 file a lease in one workspace', {
         String(last.headers.location),
         /\/estate\/tenancies\//,
       );
+      // #234: the stamps write no draft. הקריאה offers פתיחת טיוטה, and the press opens it.
+      const ready = await asRole(app, actor).inject({
+        method: 'GET',
+        url: `/documents/filing/${documentId}`,
+      });
+      assert.match(
+        ready.body,
+        new RegExp(`href="/documents/filing/${documentId}/open">פתיחת טיוטה`),
+      );
+      const opened = await post(`/documents/filing/${documentId}/open`, {
+        terms_profile: DEFAULT_TERMS_PROFILE,
+      });
+      assert.equal(opened.statusCode, 302, opened.body.slice(0, 400));
+      assert.equal(opened.headers.location, `/documents/filing/${documentId}`);
 
       const draft = await asRole(app, actor).inject({
         method: 'GET',
@@ -1336,9 +1315,13 @@ describe('evidence · A16 file a lease in one workspace', {
       assert.equal(kept.rows[0]?.n, '1');
 
       const secondId = await fileOnTab('a16-read-two');
-      const clash = await stampOpening(secondId);
+      const stamped = await stampOpening(secondId);
+      assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 400));
+      const clash = await post(`/documents/filing/${secondId}/open`, {
+        terms_profile: DEFAULT_TERMS_PROFILE,
+      });
       assert.equal(clash.statusCode, 409, clash.body.slice(0, 400));
-      assert.match(clash.body, /conflict/);
+      assert.match(clash.body, /כבר יש חוזה לדירה הזו באותו מועד תחילה/);
       assert.match(clash.body, new RegExp(`/estate/tenancies/${tenancyId}`));
     } finally {
       await inTransaction(pool, async (db) => {
@@ -1590,13 +1573,8 @@ describe('evidence · A16 file a lease in one workspace', {
       unitId = found.rows[0]?.unit_id ?? '';
       assert.ok(unitId);
 
-      const seen = await send(
-        {},
-        { filename: 'שכירות.pdf', bytes: pdfBytes('a16-declared') },
-      );
-      assert.equal(seen.statusCode, 200, seen.body.slice(0, 400));
       const filed = await send(
-        { unit: unitId },
+        {},
         { filename: 'שכירות.pdf', bytes: pdfBytes('a16-declared') },
       );
       assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));

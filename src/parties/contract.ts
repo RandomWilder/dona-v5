@@ -40,5 +40,11 @@ export {
   searchParties,
 } from './internal/directory.ts';
 export type { PartyName } from './internal/lookup.ts';
-export { findPartiesByName, listPartyNames } from './internal/lookup.ts';
+export {
+  findPartiesByName,
+  hasOpenPrimaryContact,
+  listPartyNames,
+  partiesWithName,
+  partyIdByNationalId,
+} from './internal/lookup.ts';
 export type { Queryable } from './internal/types.ts';

@@ -308,20 +308,23 @@ describe('evidence · upload, read, approve', () => {
       assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
       documentId =
         String(filed.headers.location ?? '').match(
-          /\/documents\/([0-9a-f-]{36})\/fields$/,
+          /\/documents\/filing\/([0-9a-f-]{36})$/,
         )?.[1] ?? '';
       assert.ok(documentId);
-      assert.equal(
-        String(filed.headers.location),
-        unitDocumentAction('lease', documentId)?.href,
-      );
 
-      const anchored = await pool.query<{ n: string }>(
-        `SELECT count(*)::text AS n FROM document_link
-          WHERE document_id = $1 AND entity_type = 'UNIT' AND entity_id = $2`,
-        [documentId, unitId],
+      const anchored = await pool.query<{ n: string; storage_uri: string }>(
+        `SELECT
+           (SELECT count(*) FROM document_link
+             WHERE document_id = $1 AND entity_type = 'UNIT')::text AS n,
+           storage_uri
+         FROM document WHERE document_id = $1`,
+        [documentId],
       );
-      assert.equal(anchored.rows[0]?.n, '1');
+      assert.equal(anchored.rows[0]?.n, '0');
+      assert.match(
+        anchored.rows[0]?.storage_uri ?? '',
+        /\/unassigned\/lease\//,
+      );
 
       const read = await asOperator(app as never, who).inject({
         method: 'GET',
@@ -330,19 +333,23 @@ describe('evidence · upload, read, approve', () => {
       assert.equal(read.statusCode, 200);
       assert.match(read.body, /איכות הקריאה: לא נמדדה/);
 
+      // #239: a lease is approved on A16's הקריאה; the ledger sends it there.
       const ledger = await asOperator(app as never, who).inject({
         method: 'GET',
         url: `/documents/${documentId}/fields`,
       });
-      assert.equal(ledger.statusCode, 200);
-      assert.match(ledger.body, /מה נקרא מן המסמך/);
-      assert.match(ledger.body, /<th>עמוד<\/th>/);
-      assert.match(ledger.body, /דמי שכירות חודשיים/);
-      assert.match(ledger.body, /סכום הפיקדון/);
-      assert.match(ledger.body, /שוכר ראשי/);
-      assert.match(ledger.body, /איכות הקריאה: לא נמדדה/);
-      assert.doesNotMatch(ledger.body, /אישור כל מה שלא סומן/);
-      assert.match(ledger.body, /<details class="prose-fold"/);
+      assert.equal(ledger.statusCode, 302);
+      assert.equal(ledger.headers.location, `/documents/filing/${documentId}`);
+      const reading = await asOperator(app as never, who).inject({
+        method: 'GET',
+        url: `/documents/filing/${documentId}`,
+      });
+      assert.equal(reading.statusCode, 200);
+      assert.match(reading.body, /דמי שכירות חודשיים/);
+      assert.match(reading.body, /סכום הפיקדון/);
+      assert.match(reading.body, /שוכר ראשי/);
+      // Nothing was measured, so every row is its own press.
+      assert.doesNotMatch(reading.body, /אישור כל מה שלא סומן/);
 
       const start = await pool.query<{ id: string }>(
         `SELECT e.extracted_field_id AS id FROM extracted_field e
@@ -360,12 +367,10 @@ describe('evidence · upload, read, approve', () => {
         approved_value: '2026-01-01',
       });
       assert.equal(corrected.statusCode, 302);
-      const afterCorrect = await asOperator(app as never, who).inject({
-        method: 'GET',
-        url: String(corrected.headers.location),
-      });
-      assert.match(afterCorrect.body, /2026-01-01/);
-      assert.match(afterCorrect.body, /נקרא: 2026-01-07/);
+      assert.equal(
+        corrected.headers.location,
+        `/documents/filing/${documentId}`,
+      );
 
       const stamped = await pool.query<{ approved_value: string }>(
         'SELECT approved_value FROM extracted_field WHERE extracted_field_id = $1',
@@ -386,9 +391,8 @@ describe('evidence · upload, read, approve', () => {
 
       const measured = await asOperator(app as never, who).inject({
         method: 'GET',
-        url: `/documents/${documentId}/fields`,
+        url: `/documents/filing/${documentId}`,
       });
-      assert.match(measured.body, /איכות הקריאה: טובה/);
       assert.match(measured.body, /אישור כל מה שלא סומן/);
 
       const bulk = await post(`/documents/${documentId}/fields/approve`, {
@@ -434,12 +438,22 @@ describe('evidence · upload, read, approve', () => {
         csrf: who.csrf,
         extracted_field_id: name.rows[0]?.id ?? '',
       });
+      // #234: the approval that makes the reading ready only stamps. פתיחת טיוטה opens the draft.
       assert.equal(created.statusCode, 302);
-      const tenancyUrl = String(created.headers.location);
-      assert.match(tenancyUrl, /\/estate\/tenancies\/[0-9a-f-]{36}$/);
-      const tenancyId =
-        tenancyUrl.match(/\/estate\/tenancies\/([0-9a-f-]{36})$/)?.[1] ?? '';
+      assert.equal(created.headers.location, `/documents/filing/${documentId}`);
+      const opened = await post(`/documents/filing/${documentId}/open`, {
+        csrf: who.csrf,
+        terms_profile: DEFAULT_TERMS_PROFILE,
+      });
+      assert.equal(opened.statusCode, 302, opened.body.slice(0, 300));
+      const bound = await pool.query<{ entity_id: string }>(
+        `SELECT entity_id FROM document_link
+          WHERE document_id = $1 AND entity_type = 'TENANCY'`,
+        [documentId],
+      );
+      const tenancyId = bound.rows[0]?.entity_id ?? '';
       assert.ok(tenancyId);
+      const tenancyUrl = `/estate/tenancies/${tenancyId}`;
 
       const sheet = await asOperator(app as never, who).inject({
         method: 'GET',

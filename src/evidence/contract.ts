@@ -46,6 +46,8 @@ export {
   upsertDocumentType,
   upsertDocumentTypeField,
 } from './internal/catalogue.ts';
+export type { ContactChannel, ContactRules } from './internal/contacts.ts';
+export { NOT_A_MOBILE } from './internal/contacts.ts';
 export type {
   DocumentLinkSpec,
   DocumentSpec,
@@ -100,10 +102,13 @@ export type {
   ConfirmLeaseResult,
   ConfirmLeaseSpec,
   LeaseDeps,
+  LeaseOpening,
   LeaseProposal,
+  OpeningRefusal,
   ProposedPerson,
   ProposeLeaseSpec,
   TenancyCandidate,
+  UnopenedLease,
 } from './internal/lease.ts';
 export {
   addressMatches,
@@ -111,7 +116,9 @@ export {
   confirmLeaseTenancy,
   DEFAULT_TERMS_PROFILE,
   dayOverlap,
-  establishApprovedLease,
+  listUnopenedLeases,
+  openLeaseDraft,
+  proposeLeaseOpening,
   proposeLeaseTenancy,
   rankCandidates,
 } from './internal/lease.ts';
@@ -209,9 +216,12 @@ export {
   documentFileHash,
   documentObjectPath,
   documentStorageUri,
+  isUnassignedStorageUri,
+  leaseProposalPath,
   parseObjectPath,
   parseStorageUri,
   sniffExtension,
+  unassignedDocumentPath,
 } from './internal/storage-path.ts';
 export type { Queryable } from './internal/types.ts';
 // The verification guard (slice 3.3). Exported because `tests/policy/document-verification.test.ts`

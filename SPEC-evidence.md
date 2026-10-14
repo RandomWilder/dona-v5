@@ -218,6 +218,44 @@ address, no transliteration and no uploader-supplied filename anywhere in it.
   then names the bucket it means, and a row pointing at another environment's bucket is refused
   rather than followed.
 
+### An unassigned lease (#232)
+
+**Amended by [ADR-0015](docs/decisions/ADR-0015-a-lease-is-unassigned-until-its-draft-opens.md).
+A `lease` has no place at upload.** Its path is:
+
+```
+gs://<bucket>/unassigned/<type key>/<file hash>.<ext>
+```
+
+`unassigned` is a fixed vocabulary word in the place-kind position, not a fifth `PlaceKind`:
+`documentObjectPath` still refuses everything but the four places. A separate builder exists for the
+one type allowed to use it, and it refuses any type key other than `lease`. The leaf stays the file
+hash, for the idempotency reason above. Nothing names a person and nothing names a flat. No
+`document_link` is written at upload.
+
+**The anchor of an unassigned lease is its `UNIT` `SUBJECT` link**, written exactly once by A2's
+פתיחת טיוטה. `anchorOf` reads the path when the path names a place, and that link when it does not.
+A lease with neither is unopened: it has no anchor, appears on **ממתינים לפתיחה**, and is reached by
+no search, retrieval or office answer, because all three resolve through `document_link`. Documents
+filed under place paths before #232 keep those paths and that anchor; nothing is moved or copied.
+
+**ממתינים לפתיחה is every lease with no `TENANCY` link (#238).** The test is the missing link, not
+the path, so a lease filed under a place path before #232 and never opened is listed the same way.
+Each row is the upload day, the main tenant as read (a signed correction when there is one), the
+file, and **פתח טיוטה** when הקריאה is ready or **המשך קריאה** when it is not. Evidence owns the
+read; שכירויות prints it for `documents.write` and shows nothing, heading included, when it is empty.
+
+**The opening proposal sits beside the lease, and it is not an anchor (#237).** Upload writes
+`unassigned/lease/<file hash>.proposal.json`: the deterministic place reader's output and, when the
+door carried one, the door's flat (A1's unit-first door, the flat page, a call's attachment, or a
+flat A16 created on the reading's behalf). "Nothing names a flat" is about the document's path and
+its links — what the system treats as *where the document is about*. The proposal is what פתיחת
+טיוטה would preselect, and nothing else reads it: `anchorOf`, search, retrieval and the office
+answer never open it, so a door's flat that turns out wrong costs one different choice at opening
+and binds nothing. The chosen flat beats the door's flat, which beats an exact address match.
+Once the `SUBJECT` link exists the proposal is ignored; it is not deleted, because it is cheap and
+it is the record of what the upload proposed.
+
 **The ingest order, which slice 3.3 must follow:** hash the bytes → look the hash up → `put` the
 object only when no document already holds it → `ingestDocument`. Hashing first is what makes the
 whole path computable before anything is written, and looking up before putting is what keeps the
@@ -795,6 +833,7 @@ That URL is this journey's, not `/documents/:id/fields` and not a Tenancy page. 
 `guarantor_name`, `start_date`, `end_date`. One row, one אישור, an optional correction in
 `approved_value`. A15's ledger stays at `GET /documents/:id/fields` for every other door — this
 journey does not load it. Reveal, promote, and `אישור כל מה שלא סומן` are not on this screen.
+(Superseded at #239: a lease is approved only here, and `אישור כל מה שלא סומן` is on this screen.)
 
 **Track B widens beat 3 from those four rows to the declared set**, and changes nothing else about
 it. It is still one row per value, one אישור, one optional correction; reveal, promote and bulk
@@ -978,6 +1017,9 @@ entirely correct doing it.
 | `second_tenant_id_number` | no | that party's `national_id` |
 | `guarantor_name` | no | `'GUARANTOR'` — unchanged, already declared |
 | `guarantor_id_number` | no | unchanged, already declared |
+| `main_tenant_phone`, `main_tenant_email` | no | an open `party_contact` on that party, at פתיחת טיוטה (#235) |
+| `second_tenant_phone`, `second_tenant_email` | no | the same, on the second tenant |
+| `guarantor_phone`, `guarantor_email` | no | the same, on the guarantor; paired with `guarantor_name` by the identifiers' ordinal, all-or-nothing rule |
 
 Pairing is solved by construction: `main_tenant_id_number` belongs to `main_tenant_name` because the
 declaration says so. There is no proximity heuristic and no screen that asks an operator to attach an
@@ -1818,6 +1860,28 @@ not been shown — the same objection as approving a withheld row, at scale and 
 noticing. It is flagged for everybody, and it is revealed and signed one at a time. **90% read
 quality is not an argument against this**: the number measures how legibly the characters were
 scanned, which is exactly the thing that says nothing about whether those digits are the tenant's.
+
+**A phone or an email is never in the bulk set either (#235).** It decides who reaches a flat once a
+letting is live, so it is signed one row at a time. `approveExtractedField` refuses a phone that is
+not an Israeli mobile number after `normalisePhone`, and an email `normaliseEmail` refuses, in the
+command, through `ContactRules` the composition root builds from `src/scope/` (evidence may not
+import scope). הקריאה offers a nine-digit read starting with 5 back with its leading 0, and says on
+the row why a value cannot be approved. The value signed is the one typed; the stored contact is the
+normalised one, written by פתיחת טיוטה. **A run-time declaration the seed supersedes is closed by
+the seed:** an open `lease` declaration whose key or label names a phone or an email, other than the
+six above, is closed the day before they open, or on its own first day if it opened later.
+
+**On a lease the bulk set is narrower still (#239): the identity-and-access set stays out.** Every
+name, identifier, phone and email row; `start_date` and `end_date`; the read address
+(`address`, `apartment_number`, `building_number`); and every row the read-quality rule flags. Those
+decide who the letting is with, when, and where, so each is one press on הקריאה. The set is one
+predicate in `approve.ts`, read by `approveUnflagged` and by both screens, so the rows the screen
+sorts to the top are exactly the rows the press leaves. Other types keep the rule above.
+
+**A lease's reading closes when its draft opens.** Once the document has a `TENANCY` link, both
+approve routes refuse a press on its rows with a sentence and a link to the tenancy (SPEC-flows
+A15). The rule sits at the routes and not in `approveExtractedField`: A2's and A3's confirm screens
+still sign the dates they promote on a bound letting, and they are not a press on the reading.
 
 **The reveal is one row and one request.** `POST /documents/:id/fields/reveal`, gated on
 `party.national_id.read` — the first route in this system to declare that permission rather than

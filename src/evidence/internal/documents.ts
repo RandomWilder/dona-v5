@@ -6,7 +6,11 @@
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
-import { type Place, placeOfStorageUri } from './storage-path.ts';
+import {
+  isUnassignedStorageUri,
+  type Place,
+  placeOfStorageUri,
+} from './storage-path.ts';
 import type { Queryable } from './types.ts';
 import type { VerificationVerdict } from './verify.ts';
 
@@ -158,20 +162,55 @@ export async function linkDocument(
  * row to read and no order to choose (SPEC-evidence.md, *The same bytes are one document, and one
  * anchor*). `fileDocument` refuses a second place, so nothing new diverges; this is also what makes
  * the rows that already diverged resolve to the flat they are really about.
+ *
+ * **#237.** An unassigned lease's path names no place: its anchor is its `UNIT` `SUBJECT` link,
+ * written once when the draft opens. A lease with neither has no anchor yet, and this throws;
+ * `anchorOrNone` is the read that says so instead.
  */
 export async function anchorOf(
   db: Queryable,
   documentId: string,
 ): Promise<Place> {
+  const place = await anchorOrNone(db, documentId);
+  if (!place) {
+    const missing = await db.query(
+      'SELECT 1 FROM document WHERE document_id = $1',
+      [documentId],
+    );
+    throw new KernelError(
+      'not_found',
+      missing.rows.length === 0
+        ? 'document not found'
+        : 'document has no anchor',
+    );
+  }
+  return place;
+}
+
+export async function anchorOrNone(
+  db: Queryable,
+  documentId: string,
+): Promise<Place | null> {
   const result = await db.query<{ storage_uri: string }>(
     'SELECT storage_uri FROM document WHERE document_id = $1',
     [documentId],
   );
   const uri = result.rows[0]?.storage_uri;
   if (!uri) {
-    throw new KernelError('not_found', 'document not found');
+    return null;
   }
-  return placeOfStorageUri(uri);
+  if (!isUnassignedStorageUri(uri)) {
+    return placeOfStorageUri(uri);
+  }
+  const link = await db.query<{ entity_id: string }>(
+    `SELECT entity_id FROM document_link
+      WHERE document_id = $1 AND entity_type = 'UNIT' AND link_role = 'SUBJECT'
+      ORDER BY entity_id
+      LIMIT 1`,
+    [documentId],
+  );
+  const unitId = link.rows[0]?.entity_id;
+  return unitId ? { kind: 'UNIT', id: unitId } : null;
 }
 
 export interface FiledDocument {

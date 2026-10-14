@@ -798,6 +798,7 @@ describe('evidence · promote an extracted field', () => {
       buildingName: 'בניין',
       unitId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       labelHe: 'חוזה שכירות',
+      typeKey: 'lease',
       on: '2026-09-15',
       rows: READINGS,
       unread: [],
@@ -818,6 +819,7 @@ describe('evidence · promote an extracted field', () => {
       buildingName: 'בניין',
       unitId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       labelHe: 'חוזה שכירות',
+      typeKey: 'lease',
       on: '2026-09-15',
       rows: READINGS.map((row) =>
         row.fieldKey === 'start_date'
@@ -847,6 +849,7 @@ describe('evidence · promote an extracted field', () => {
       buildingName: 'בניין',
       unitId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       labelHe: 'חוזה שכירות',
+      typeKey: 'lease',
       on: '2026-09-22',
       rows: READINGS.map((row) =>
         row.fieldKey === 'start_date'
@@ -903,6 +906,7 @@ describe('evidence · promote an extracted field', () => {
       buildingName: 'בניין',
       unitId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       labelHe: 'חוזה שכירות',
+      typeKey: 'lease',
       on: '2026-09-15',
       rows: [],
       unread: [],

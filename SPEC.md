@@ -140,6 +140,14 @@ One shape everywhere: `{ code, message, details? }`. Codes: `not_found` · `not_
 · `invalid` · `unavailable`. Never return null for an error; never leak internals. The refusal says
 `not_allowed` and nothing more — an operator learns what they may do from the board, not by probing.
 
+**A browser gets a page, not the shape (#233).** When an error reaches the generic error handler
+and the request's `Accept` names `text/html`, the answer is a Hebrew page in the shell — with the
+rail when the guard resolved a staff session, the guest frame when it did not — under the same status
+code. Each code has one fixed Hebrew sentence; the page never carries the error's English message,
+its `details` or a stack. It links back to the referring page when the `Referer` is this host, and
+to `/` otherwise. Any other request — `application/json`, no `Accept` at all — gets the shape above,
+byte for byte. A screen that handles its own refusal still does; this is only the floor.
+
 ## Testing
 
 - **`tests/policy/` is the gate for everything no model may decide** — isolation, responsibility, the

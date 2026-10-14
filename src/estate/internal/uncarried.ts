@@ -263,7 +263,7 @@ async function spacesIn(
 
 async function placeFor(
   db: Queryable,
-  scope: { tenancyId: string } | { documentId: string },
+  scope: { tenancyId: string } | { documentId: string; unitId?: string | null },
 ): Promise<Place | null> {
   if ('tenancyId' in scope) return placeForTenancy(db, scope.tenancyId);
   const links = await db.query<{ entity_type: string; entity_id: string }>(
@@ -274,8 +274,8 @@ async function placeFor(
   const tenancy = links.rows.find((row) => row.entity_type === 'TENANCY');
   if (tenancy) return placeForTenancy(db, tenancy.entity_id);
   const unit = links.rows.find((row) => row.entity_type === 'UNIT');
-  if (!unit) return null;
-  return placeForUnit(db, unit.entity_id);
+  if (unit) return placeForUnit(db, unit.entity_id);
+  return scope.unitId ? placeForUnit(db, scope.unitId) : null;
 }
 
 async function siblings(
@@ -397,7 +397,7 @@ function decide(
 
 async function uncarried(
   db: Queryable,
-  scope: { tenancyId: string } | { documentId: string },
+  scope: { tenancyId: string } | { documentId: string; unitId?: string | null },
 ): Promise<UncarriedField[]> {
   const ids = await documentIds(db, scope);
   if (ids.length === 0) return [];
@@ -431,10 +431,16 @@ export function uncarriedOnTenancy(
   return uncarried(db, { tenancyId });
 }
 
-/** The same rows for one document, including before a letting exists. */
+/**
+ * The same rows for one document, including before a letting exists.
+ *
+ * `unitId` is the flat to judge against when the document has none yet: an unopened lease (#237)
+ * is read against the flat פתיחת טיוטה would preselect. A linked flat always wins over it.
+ */
 export function uncarriedOnDocument(
   db: Queryable,
   documentId: string,
+  unitId: string | null = null,
 ): Promise<UncarriedField[]> {
-  return uncarried(db, { documentId });
+  return uncarried(db, { documentId, unitId });
 }

@@ -351,11 +351,7 @@ describe('evidence · the upload route', () => {
           assert.equal(read.statusCode, 200, read.body.slice(0, 400));
           assert.match(
             read.body,
-            new RegExp(`class="back" href="${inventory}"`),
-          );
-          assert.match(
-            read.body,
-            new RegExp(`href="${inventory}">חזרה לבניין`),
+            new RegExp(`class="back" href="/documents/filing/${blankId}"`),
           );
           assertNoOldBuilding(read.body, read.headers.location);
 
@@ -363,14 +359,15 @@ describe('evidence · the upload route', () => {
             method: 'GET',
             url: `/documents/${blankId}/fields`,
           });
+          // #239: an unopened lease is approved on its filing workspace, not on the ledger.
           assert.equal(
             unitFields.statusCode,
-            200,
+            302,
             unitFields.body.slice(0, 400),
           );
-          assert.match(
-            unitFields.body,
-            new RegExp(`class="back" href="/estate/units/${unitId}"`),
+          assert.equal(
+            unitFields.headers.location,
+            `/documents/filing/${blankId}`,
           );
           assertNoOldBuilding(unitFields.body, unitFields.headers.location);
 
@@ -525,69 +522,80 @@ describe('evidence · the upload route', () => {
           url: '/documents',
           ...body,
         });
+        // #237: the flat page is one of the doors, and a lease through it is stored unassigned. The
+        // flat is a preselection for פתיחת טיוטה, not a link.
         assert.equal(response.statusCode, 302);
         assert.match(
           response.headers.location ?? '',
-          /\/documents\/[0-9a-f-]{36}\/fields$/,
+          /\/documents\/filing\/[0-9a-f-]{36}$/,
         );
-        const confirm = await as(lease).inject({
+        const workspace = await as(lease).inject({
           method: 'GET',
           url: String(response.headers.location),
         });
-        assert.equal(confirm.statusCode, 200);
-        assert.match(confirm.body, /מה נקרא מן המסמך/);
-        assert.doesNotMatch(confirm.body, /כהן/);
+        assert.equal(workspace.statusCode, 200);
+        assert.doesNotMatch(workspace.body, /כהן/);
 
         const rows = await pool.query<{
           file_hash: string;
           storage_uri: string;
           uploaded_by: string | null;
+          links: string;
         }>(
-          `SELECT d.file_hash, d.storage_uri, d.uploaded_by FROM document d
-             JOIN document_link l ON l.document_id = d.document_id
-            WHERE l.entity_id = $1 AND d.uploaded_by = $2
-            ORDER BY d.ingested_at DESC`,
-          [unitId, who.staffAccountId],
+          `SELECT d.file_hash, d.storage_uri, d.uploaded_by,
+                  (SELECT count(*) FROM document_link l
+                    WHERE l.document_id = d.document_id)::text AS links
+             FROM document d
+            WHERE d.file_hash = $1`,
+          [documentFileHash(pdfBytes('lease one'))],
         );
         assert.equal(rows.rows.length, 1);
         const filed = rows.rows[0];
         assert.ok(filed);
         hashes.push(filed.file_hash);
         assert.equal(filed.uploaded_by, who.staffAccountId);
+        assert.equal(filed.links, '0');
         assert.match(
           filed.storage_uri,
-          new RegExp(
-            `^gs://${BUCKET}/unit/${unitId}/lease/[0-9a-f]{64}\\.pdf$`,
-          ),
+          new RegExp(`^gs://${BUCKET}/unassigned/lease/[0-9a-f]{64}\\.pdf$`),
         );
         assert.doesNotMatch(filed.storage_uri, /כהן/);
+        assert.doesNotMatch(filed.storage_uri, new RegExp(unitId));
+
+        const opening = await as(lease).inject({
+          method: 'GET',
+          url: `${String(response.headers.location)}/open`,
+        });
+        assert.equal(opening.statusCode, 200, opening.body.slice(0, 400));
+        assert.match(
+          opening.body,
+          new RegExp(`name="unit" value="${unitId}"`),
+          'the flat the door stood on is preselected',
+        );
       });
 
       await t.test(
-        'the named lease is on the unit page and in search, as a door with a signed read',
+        'an unopened lease is on neither the unit page nor in search',
         async () => {
+          // #237: which flat a document is about is its path, or its `SUBJECT` link once the draft
+          // opens. An unopened lease has neither, so nothing that lists a flat's papers reaches it.
           const unitPage = await as(lease).inject({
             method: 'GET',
             url: `/estate/units/${unitId}`,
           });
           assert.equal(unitPage.statusCode, 200);
-          assert.match(unitPage.body, /חוזה שכירות/);
-          assert.match(unitPage.body, /storage\.googleapis\.com/);
-          assert.match(unitPage.body, /X-Goog-Expires=/);
-          assert.match(unitPage.body, /נמצאו כל הביטויים הקבועים של הטופס/);
-          assert.match(unitPage.body, /\/documents\/[0-9a-f-]{36}\/read/);
-          assert.match(unitPage.body, /\/documents\/[0-9a-f-]{36}\/fields/);
-          assert.doesNotMatch(unitPage.body, /href="gs:/);
-          assert.doesNotMatch(unitPage.body, /gs:\/\/dona-v5-test-docs\//);
+          assert.doesNotMatch(
+            unitPage.body,
+            /\/documents\/[0-9a-f-]{36}\/read/,
+          );
+          assert.doesNotMatch(unitPage.body, /X-Goog-Expires=/);
 
           const found = await as(lease).inject({
             method: 'GET',
             url: `/estate/search?q=${encodeURIComponent('בניין מסמכים')}`,
           });
           assert.equal(found.statusCode, 200);
-          assert.match(found.body, /מסמכים/);
-          assert.match(found.body, /חוזה שכירות/);
-          assert.match(found.body, /\/documents\/[0-9a-f-]{36}\/read/);
+          assert.doesNotMatch(found.body, /\/documents\/[0-9a-f-]{36}\/read/);
         },
       );
 
@@ -621,7 +629,7 @@ describe('evidence · the upload route', () => {
             `SELECT count(*)::text AS n FROM document_link WHERE entity_id = $1`,
             [unitId],
           );
-          assert.equal(count.rows[0]?.n, '1');
+          assert.equal(count.rows[0]?.n, '0');
         },
       );
 
@@ -642,7 +650,7 @@ describe('evidence · the upload route', () => {
             `SELECT count(*)::text AS n FROM document_link WHERE entity_id = $1`,
             [unitId],
           );
-          assert.equal(count.rows[0]?.n, '1');
+          assert.equal(count.rows[0]?.n, '0');
         },
       );
 
@@ -681,9 +689,8 @@ describe('evidence · the upload route', () => {
             document_id: string;
           }>(
             `SELECT d.file_hash, d.document_id FROM document d
-               JOIN document_link l ON l.document_id = d.document_id
-              WHERE l.entity_id = $1 AND d.verification_verdict = 'unverified'`,
-            [unitId],
+              WHERE d.file_hash = $1 AND d.verification_verdict = 'unverified'`,
+            [documentFileHash(pdfBytes('empty layer'))],
           );
           const filed = rows.rows[0];
           assert.ok(filed);
@@ -696,10 +703,8 @@ describe('evidence · the upload route', () => {
         async () => {
           const rows = await pool.query<{ document_id: string }>(
             `SELECT d.document_id FROM document d
-               JOIN document_link l ON l.document_id = d.document_id
-              WHERE l.entity_id = $1 AND d.verification_verdict = 'verified'
-              LIMIT 1`,
-            [unitId],
+              WHERE d.file_hash = $1 AND d.verification_verdict = 'verified'`,
+            [documentFileHash(pdfBytes('lease one'))],
           );
           const documentId = rows.rows[0]?.document_id ?? '';
           assert.ok(documentId);
@@ -850,10 +855,8 @@ describe('evidence · the upload route', () => {
           assert.equal(response.statusCode, 200);
           assert.match(response.body, /אינו נושא שכבת טקסט/);
           const rows = await pool.query<{ file_hash: string }>(
-            `SELECT d.file_hash FROM document d
-               JOIN document_link l ON l.document_id = d.document_id
-              WHERE l.entity_id = $1 AND d.storage_uri LIKE '%.png'`,
-            [unitId],
+            `SELECT d.file_hash FROM document d WHERE d.file_hash = $1`,
+            [documentFileHash(pngBytes('timeout'))],
           );
           const hash = rows.rows[0]?.file_hash;
           assert.ok(hash);
@@ -887,19 +890,15 @@ describe('evidence · the upload route', () => {
           });
           assert.equal(response.statusCode, 302);
           const posted = await pool.query<{ file_hash: string }>(
-            `SELECT d.file_hash FROM document d
-               JOIN document_link l ON l.document_id = d.document_id
-              WHERE l.entity_id = $1
-              ORDER BY d.ingested_at DESC
-              LIMIT 1`,
-            [unitId],
+            `SELECT d.file_hash FROM document d WHERE d.file_hash = $1`,
+            [documentFileHash(pngBytes(`ocr-overlay-${unitId}`))],
           );
           const postedHash = posted.rows[0]?.file_hash;
           assert.ok(postedHash);
           hashes.push(postedHash);
           const location = String(response.headers.location ?? '');
           const documentId =
-            location.match(/\/documents\/([0-9a-f-]{36})\/fields$/)?.[1] ?? '';
+            location.match(/\/documents\/filing\/([0-9a-f-]{36})$/)?.[1] ?? '';
           assert.ok(documentId);
           const overlay = await as(app).inject({
             method: 'GET',
@@ -1358,236 +1357,199 @@ describe('evidence · A12 a document finds its own place', () => {
         },
       );
 
+      // **#237.** A lease is stored unassigned at every door, and its flat is chosen on פתיחת טיוטה.
+      // What A12 used to decide at upload — one flat, none, several — is now what the opening
+      // proposes. `documentsHere` still counts this building's links, and it never moves: upload
+      // links nothing.
+      const stored = async (bytes: Buffer): Promise<string> => {
+        const rows = await pool.query<{
+          document_id: string;
+          storage_uri: string;
+          links: string;
+        }>(
+          `SELECT d.document_id, d.storage_uri,
+                  (SELECT count(*) FROM document_link l
+                    WHERE l.document_id = d.document_id)::text AS links
+             FROM document d WHERE d.file_hash = $1`,
+          [documentFileHash(bytes)],
+        );
+        const row = rows.rows[0];
+        assert.ok(row, 'the lease is stored');
+        hashes.push(documentFileHash(bytes));
+        assert.match(
+          row.storage_uri,
+          new RegExp(`^gs://${BUCKET}/unassigned/lease/[0-9a-f]{64}\\.pdf$`),
+        );
+        assert.equal(row.links, '0');
+        return row.document_id;
+      };
+      const opening = async (
+        app: (typeof apps)[number],
+        documentId: string,
+      ): Promise<string> => {
+        const response = await as(app).inject({
+          method: 'GET',
+          url: `/documents/filing/${documentId}/open`,
+        });
+        assert.equal(response.statusCode, 200, response.body.slice(0, 400));
+        return response.body;
+      };
+
       await t.test(
-        'a lease naming רקפת 12 דירה 12A files against 12A',
+        'a lease naming רקפת 12 דירה 12A is stored unassigned, and opens with 12A preselected',
         async () => {
           const before = await documentsHere();
+          const bytes = pdfBytes('a12 one');
           const response = await as(here).inject({
             method: 'POST',
             url: '/documents/intake',
-            ...upload(
-              { type: 'lease' },
-              { filename: 'שכירות לוי.pdf', bytes: pdfBytes('a12 one') },
-            ),
+            ...upload({ type: 'lease' }, { filename: 'שכירות לוי.pdf', bytes }),
           });
           assert.equal(response.statusCode, 302, response.body.slice(0, 400));
           assert.match(
             response.headers.location ?? '',
-            /\/documents\/[0-9a-f-]{36}\/fields$/,
+            /\/documents\/filing\/[0-9a-f-]{36}$/,
           );
-          assert.equal((await documentsHere()) - before, 1);
-          const rows = await pool.query<{
-            file_hash: string;
-            storage_uri: string;
-          }>(
-            `SELECT d.file_hash, d.storage_uri FROM document d
-             JOIN document_link l ON l.document_id = d.document_id
-            WHERE l.entity_id = $1
-            ORDER BY d.ingested_at DESC LIMIT 1`,
-            [unitA],
-          );
-          const filed = rows.rows[0];
-          assert.ok(filed, 'the lease filed against 12A and not against 12B');
-          hashes.push(filed.file_hash);
-          assert.match(
-            filed.storage_uri,
-            new RegExp(
-              `^gs://${BUCKET}/unit/${unitA}/lease/[0-9a-f]{64}\\.pdf$`,
-            ),
-          );
+          assert.equal(await documentsHere(), before);
+          const documentId = await stored(bytes);
+          const body = await opening(here, documentId);
+          assert.match(body, new RegExp(`name="unit" value="${unitA}"`));
+          assert.doesNotMatch(body, new RegExp(`value="${unitB}"`));
           // The filename carried a household name. It reached neither the path nor the screen.
-          assert.doesNotMatch(filed.storage_uri, /לוי/);
+          assert.doesNotMatch(body, /לוי/);
         },
       );
 
       await t.test(
-        'an address in no building writes no row and no object, and offers a search',
+        'an address in no building is stored, and opening says so and offers a search',
         async () => {
           const before = await documentsHere();
           const bytes = pdfBytes('a12 elsewhere');
-          const putsBefore = puts;
           const response = await as(elsewhere).inject({
             method: 'POST',
             url: '/documents/intake',
             ...upload({ type: 'lease' }, { filename: 'unknown.pdf', bytes }),
           });
-          assert.equal(response.statusCode, 422, response.body.slice(0, 400));
-          // What was read, said back — so the refusal is one an operator can act on.
-          assert.match(response.body, /אלמוג 5/);
-          assert.match(response.body, /לא נשמר דבר/);
-          assert.match(response.body, /חיפוש דירה אחרת/);
-          assert.match(response.body, /type="file"/);
-
+          assert.equal(response.statusCode, 302, response.body.slice(0, 400));
           assert.equal(await documentsHere(), before);
-          // No row anywhere carries these bytes. Scoped by hash, not a count of the whole table: the
-          // suite runs files in parallel on one database, and another file filing a document at the
-          // same moment made the table count differ (CI on main, 13 Oct 2026).
-          const stored = await pool.query(
-            'SELECT 1 FROM document WHERE file_hash = $1',
-            [documentFileHash(bytes)],
-          );
-          assert.equal(stored.rowCount, 0);
-          assert.equal(puts, putsBefore, 'no object was written');
-
-          // The attempt is on the record, and counts against the day's cap.
-          const audited = await pool.query<{
-            n: string;
-            inputs: Record<string, unknown>;
-          }>(
-            `SELECT count(*) OVER ()::text AS n, inputs FROM audit_log
-              WHERE action = 'evidence.intake_unresolved' AND actor_id = $1`,
-            [who.staffAccountId],
-          );
-          assert.equal(audited.rows[0]?.n, '1');
-          // **And what became of the reader is on it too. Slice 6.8, found by clicking.** 6.8 put
-          // the OCR outcome on `evidence.file_document` and not here, and this is the line A12
-          // writes when it cannot place a document — which is precisely the case where somebody
-          // asks afterwards whether the reader ran at all. Without it, an OCR that failed and an
-          // OCR that read a page naming an address nobody holds are the same row.
-          // `not_needed` here, and that is the assertion doing its job: this fixture's own text
-          // layer carries the lease's terms, so no call was owed. What the line could not say
-          // before is the difference between that and a reader that broke.
-          assert.equal(audited.rows[0]?.inputs.ocr, 'not_needed');
-          assert.equal(audited.rows[0]?.inputs.pages, 1);
+          const body = await opening(elsewhere, await stored(bytes));
+          // What was read, said back — so the choice is one an operator can act on.
+          assert.match(body, /אלמוג 5/);
+          assert.match(body, /אינה בתיק/);
+          assert.match(body, /חיפוש דירה/);
         },
       );
 
       await t.test(
-        'a landlord address is not the property, and files nothing against their flat',
+        'a landlord address is not the property, and opening preselects nothing',
         async () => {
           // **Slice 6.11, at the route and not only at the reader.** This paper carries no property
           // label at all: its only address is the party line a standard form prints above the
-          // property clause, and `רחוב` matched inside `מרחוב`. **The identical request filed
-          // against 12A before this slice** — a flat nobody chose, on a document nobody questioned,
-          // and the screen that would have said so does not exist. A null is a question; this was
-          // an answer.
+          // property clause, and `רחוב` matched inside `מרחוב`. Before 6.11 it filed against 12A;
+          // since #237 the danger is the same flat arriving preselected.
           const before = await documentsHere();
-          const putsBefore = puts;
+          const bytes = pdfBytes('a12 landlord');
           const response = await as(landlord).inject({
             method: 'POST',
             url: '/documents/intake',
-            ...upload(
-              { type: 'lease' },
-              { filename: 'landlord.pdf', bytes: pdfBytes('a12 landlord') },
-            ),
+            ...upload({ type: 'lease' }, { filename: 'landlord.pdf', bytes }),
           });
-          assert.equal(response.statusCode, 422, response.body.slice(0, 400));
-          // The landlord's street is not echoed back as the property's, because it was not read as
-          // one: the screen offers the search box instead.
-          assert.doesNotMatch(response.body, new RegExp(ADDRESS_A12));
-          assert.match(response.body, /חיפוש דירה אחרת/);
+          assert.equal(response.statusCode, 302, response.body.slice(0, 400));
           assert.equal(await documentsHere(), before);
-          assert.equal(puts, putsBefore, 'no object was written');
+          const body = await opening(landlord, await stored(bytes));
+          assert.doesNotMatch(body, new RegExp(`value="${unitA}"`));
+          assert.match(body, /לא נקראה כתובת/);
+          assert.match(body, /חיפוש דירה/);
         },
       );
 
       await t.test(
-        'two flats at the address and neither is the one named — both are offered, nothing is written',
+        'two flats at the address and neither is the one named — opening offers both',
         async () => {
           const before = await documentsHere();
-          const putsBefore = puts;
+          const bytes = pdfBytes('a12 ambiguous');
           const response = await as(ambiguous).inject({
             method: 'POST',
             url: '/documents/intake',
-            ...upload(
-              { type: 'lease' },
-              { filename: 'nine.pdf', bytes: pdfBytes('a12 ambiguous') },
-            ),
+            ...upload({ type: 'lease' }, { filename: 'nine.pdf', bytes }),
           });
-          assert.equal(response.statusCode, 422, response.body.slice(0, 400));
-          assert.match(response.body, new RegExp(`value="${unitA}"`));
-          assert.match(response.body, new RegExp(`value="${unitB}"`));
+          assert.equal(response.statusCode, 302, response.body.slice(0, 400));
           assert.equal(await documentsHere(), before);
-          assert.equal(puts, putsBefore);
+          const body = await opening(ambiguous, await stored(bytes));
+          assert.match(body, new RegExp(`value="${unitA}"`));
+          assert.match(body, new RegExp(`value="${unitB}"`));
+          assert.doesNotMatch(body, / required checked/);
         },
       );
 
       await t.test(
-        'a candidate posted back files against it, unread',
+        'a flat the door carried is a preselection, and nothing is linked',
         async () => {
           const before = await documentsHere();
+          const bytes = pdfBytes('a12 chosen');
           const response = await as(ambiguous).inject({
             method: 'POST',
             url: '/documents/intake',
             ...upload(
               { type: 'lease', unit: unitB },
-              { filename: 'nine.pdf', bytes: pdfBytes('a12 chosen') },
+              { filename: 'nine.pdf', bytes },
             ),
           });
           assert.equal(response.statusCode, 302, response.body.slice(0, 400));
-          assert.equal((await documentsHere()) - before, 1);
-          const rows = await pool.query<{ file_hash: string }>(
-            `SELECT d.file_hash FROM document d
-             JOIN document_link l ON l.document_id = d.document_id
-            WHERE l.entity_id = $1
-            ORDER BY d.ingested_at DESC LIMIT 1`,
-            [unitB],
-          );
-          const filed = rows.rows[0];
-          assert.ok(filed, 'the chosen flat is the one it filed against');
-          hashes.push(filed.file_hash);
+          assert.equal(await documentsHere(), before);
+          const body = await opening(ambiguous, await stored(bytes));
+          assert.match(body, new RegExp(`value="${unitB}" required checked`));
         },
       );
 
       await t.test(
-        'the same bytes against a second flat are refused, and the name the refusal gives is the first flat',
+        'the same bytes again are refused with a link to the document, and write nothing',
         async () => {
-          // **Slice 6.10 — the week-6 demo's fourth defect, replayed at the route.** The demo filed
-          // one file twice: `ON CONFLICT (file_hash)` returned the document filed a week earlier,
-          // the second `SUBJECT` link went in, and the confirm screen then spoke about whichever
-          // flat the unordered `LIMIT 1` handed back — *"the address does not match"*, about an
-          // apartment the director had never opened. The bytes below are the ones filed against 12B
-          // in the case above.
+          // **Slice 6.10, carried.** One file is one document. An unassigned lease has no flat to
+          // name, so the refusal names the document itself.
           const before = await documentsHere();
           const putsBefore = puts;
+          const bytes = pdfBytes('a12 chosen');
+          const found = await pool.query<{ document_id: string }>(
+            'SELECT document_id FROM document WHERE file_hash = $1',
+            [documentFileHash(bytes)],
+          );
+          const documentId = found.rows[0]?.document_id ?? '';
+          assert.ok(documentId);
           const response = await as(ambiguous).inject({
             method: 'POST',
             url: '/documents/intake',
             ...upload(
               { type: 'lease', unit: unitA },
-              { filename: 'nine.pdf', bytes: pdfBytes('a12 chosen') },
+              { filename: 'nine.pdf', bytes },
             ),
           });
           assert.equal(response.statusCode, 422, response.body.slice(0, 400));
-          // Which flat, by name. A refusal that only said *this is already on file* would send the
-          // operator looking for it (SPEC-evidence.md, 6.8's bar for a refusal).
-          assert.match(response.body, /<span dir="ltr">12B<\/span>/);
+          assert.match(
+            response.body,
+            new RegExp(`/documents/filing/${documentId}"`),
+          );
           assert.match(response.body, /לא נשמר דבר/);
-
-          // Nothing moved: no second link, no object, and the document still anchored where it was.
           assert.equal(await documentsHere(), before);
           assert.equal(puts, putsBefore, 'no object was written');
-          const anchored = await pool.query<{ n: string }>(
-            `SELECT count(*)::text AS n FROM document_link l
-               JOIN document d ON d.document_id = l.document_id
-              WHERE d.file_hash = $1 AND l.entity_type = 'UNIT'`,
-            [documentFileHash(pdfBytes('a12 chosen'))],
-          );
-          assert.equal(anchored.rows[0]?.n, '1');
-        },
-      );
 
-      await t.test(
-        'and the confirm screen for those bytes is still about the flat they were filed against',
-        async () => {
-          const found = await pool.query<{ document_id: string }>(
-            'SELECT document_id FROM document WHERE file_hash = $1',
-            [documentFileHash(pdfBytes('a12 chosen'))],
+          // And the second door did not move the first one's preselection.
+          const body = await opening(ambiguous, documentId);
+          assert.match(body, new RegExp(`value="${unitB}" required checked`));
+          assert.doesNotMatch(
+            body,
+            new RegExp(`value="${unitA}" required checked`),
           );
-          const documentId = found.rows[0]?.document_id ?? '';
-          assert.ok(documentId);
+          // The old confirm door sends an unopened lease to its workspace rather than a 404.
           const confirm = await as(ambiguous).inject({
             method: 'GET',
             url: `/documents/${documentId}/tenancy`,
           });
           assert.equal(confirm.statusCode, 302);
-          const ledger = await as(ambiguous).inject({
-            method: 'GET',
-            url: String(confirm.headers.location),
-          });
-          assert.equal(ledger.statusCode, 200, ledger.body.slice(0, 400));
-          assert.match(String(confirm.headers.location), /\/fields$/);
-          assert.match(ledger.body, /מה נקרא מן המסמך/);
+          assert.equal(
+            confirm.headers.location,
+            `/documents/filing/${documentId}`,
+          );
         },
       );
 
@@ -1849,9 +1811,9 @@ describe('evidence · a captured ת.ז., withheld unless the viewer may read it'
       assert.equal(response.statusCode, 302, response.body.slice(0, 400));
       const documentId =
         String(response.headers.location ?? '').match(
-          /\/documents\/([0-9a-f-]{36})\/fields$/,
+          /\/documents\/filing\/([0-9a-f-]{36})$/,
         )?.[1] ?? '';
-      assert.ok(documentId, 'a verified lease goes to its confirm screen');
+      assert.ok(documentId, 'a lease goes to its filing workspace');
       const row = await pool.query<{ file_hash: string }>(
         'SELECT file_hash FROM document WHERE document_id = $1',
         [documentId],
@@ -2070,20 +2032,12 @@ describe('evidence · A12 offers to create, to an admin', () => {
       `כתובת המושכר: ${address}\n${specimen('lease-standard.md')}`;
 
     const objects = createMemoryStore();
-    let puts = 0;
-    const counted = {
-      ...objects,
-      put: async (path: string, bytes: Buffer, contentType: string) => {
-        puts += 1;
-        return objects.put(path, bytes, contentType);
-      },
-    };
     const appFor = (text: string) =>
       buildApp({
         pool,
         version: '9.9.9-test',
         clock: fixedClock(AT),
-        objects: counted,
+        objects,
         pdf: createFakePdfText([text]),
         bucket: BUCKET,
       });
@@ -2096,7 +2050,6 @@ describe('evidence · A12 offers to create, to an admin', () => {
     let admin: SignedIn | null = null;
     let operator: SignedIn | null = null;
     const hashes: string[] = [];
-    let createdUnitId = '';
 
     // A count of every document races the other suites, which commit their own
     // rows into the same table. This walk only needs to know that its own file
@@ -2165,159 +2118,87 @@ describe('evidence · A12 offers to create, to an admin', () => {
         actor: SignedIn,
       ): T => asOperator(app as never, actor) as unknown as T;
 
-      const refuse = async (app: (typeof apps)[number], who: SignedIn) =>
-        asRole(app, who).inject({
+      // **#237.** A lease is stored first and its flat is chosen at פתיחת טיוטה, so the create offer
+      // moved from A12's refusal to the opening screen, under the same permission. The walk from
+      // there to a new flat is `lease-filing.test.ts`'s; this suite keeps the two stances.
+      const store = async (
+        app: (typeof apps)[number],
+        who: SignedIn,
+        marker: string,
+      ): Promise<string> => {
+        const bytes = pdfBytes(`6.9 ${marker}`);
+        const response = (await asRole(app, who).inject({
           method: 'POST',
           url: '/documents/intake',
           ...upload(
             { type: 'lease', csrf: who.csrf },
-            { filename: 'create.pdf', bytes: pdfBytes(`6.9 ${who.email}`) },
+            { filename: 'create.pdf', bytes },
           ),
-        } as never);
+        } as never)) as {
+          statusCode: number;
+          body: string;
+          headers: Record<string, string>;
+        };
+        assert.equal(response.statusCode, 302, response.body.slice(0, 400));
+        hashes.push(documentFileHash(bytes));
+        assert.equal(await documentsFor(bytes), '1');
+        return (
+          /\/documents\/filing\/([0-9a-f-]{36})$/.exec(
+            String(response.headers.location ?? ''),
+          )?.[1] ?? ''
+        );
+      };
+      const open = async (
+        app: (typeof apps)[number],
+        who: SignedIn,
+        documentId: string,
+      ): Promise<string> => {
+        const response = (await asRole(app, who).inject({
+          method: 'GET',
+          url: `/documents/filing/${documentId}/open`,
+        } as never)) as { statusCode: number; body: string };
+        assert.equal(response.statusCode, 200, response.body.slice(0, 400));
+        return response.body;
+      };
 
       await t.test(
         'an OPERATOR sees the search box and no create control',
         async () => {
-          const putsBefore = puts;
-          const response = await refuse(unheld, operator as SignedIn);
-          assert.equal(response.statusCode, 422, response.body.slice(0, 400));
-          assert.match(response.body, /חיפוש דירה אחרת/);
-          assert.doesNotMatch(response.body, /\/estate\/buildings\/new\?/);
-          assert.doesNotMatch(response.body, /יצירת הבניין והדירה/);
-          // And it wrote nothing, which the create offer must not change either.
-          assert.equal(
-            await documentsFor(pdfBytes(`6.9 ${(operator as SignedIn).email}`)),
-            '0',
-          );
-          assert.equal(puts, putsBefore, 'no object was written');
+          const who = operator as SignedIn;
+          const body = await open(unheld, who, await store(unheld, who, 'ops'));
+          assert.match(body, /חיפוש דירה/);
+          assert.doesNotMatch(body, /action="\/documents\/filing\/place"/);
+          assert.doesNotMatch(body, /יצירת הבניין/);
         },
       );
 
       await t.test(
         'an ADMIN is offered the building and the flat, prefilled',
         async () => {
-          const putsBefore = puts;
-          const response = await refuse(unheld, admin as SignedIn);
-          assert.equal(response.statusCode, 422, response.body.slice(0, 400));
-          assert.match(response.body, /יצירת הבניין והדירה/);
-          assert.match(response.body, /\/estate\/buildings\/new\?/);
-          assert.match(response.body, /next=intake/);
-          assert.equal(
-            await documentsFor(pdfBytes(`6.9 ${(admin as SignedIn).email}`)),
-            '0',
+          const who = admin as SignedIn;
+          const documentId = await store(unheld, who, 'admin');
+          const body = await open(unheld, who, documentId);
+          assert.match(body, /action="\/documents\/filing\/place"/);
+          assert.match(body, new RegExp(`value="${UNHELD}"`));
+          assert.match(body, new RegExp(`value="${CITY_69}"`));
+          assert.match(
+            body,
+            new RegExp(`name="document" value="${documentId}"`),
           );
-          assert.equal(puts, putsBefore, 'no object was written');
         },
       );
 
       await t.test(
         'the building is held and only the flat is offered',
         async () => {
-          const response = await refuse(flatOnly, admin as SignedIn);
-          assert.equal(response.statusCode, 422, response.body.slice(0, 400));
-          assert.match(response.body, /\/units\/new\?/);
-          assert.doesNotMatch(response.body, /\/estate\/buildings\/new\?/);
-        },
-      );
-
-      await t.test(
-        'and the walk ends with that lease filed against the new flat',
-        async () => {
           const who = admin as SignedIn;
-          const refusal = await refuse(unheld, who);
-          const href = /href="([^"]*\/estate\/buildings\/new\?[^"]*)"/.exec(
-            refusal.body,
-          )?.[1];
-          assert.ok(href, 'the refusal carried no building link');
-          const form = await asRole(unheld, who).inject({
-            method: 'GET',
-            url: href.replaceAll('&amp;', '&'),
-          });
-          assert.equal(form.statusCode, 200, form.body.slice(0, 400));
-          // The read address is already in the fields: this is the *no retyping* half of the bar.
-          assert.match(form.body, new RegExp(`value="${UNHELD}"`));
-          assert.match(form.body, new RegExp(`value="${CITY_69}"`));
-
-          const created = await asRole(unheld, who).inject({
-            method: 'POST',
-            url: '/estate/buildings',
-            payload: new URLSearchParams({
-              name: `בניין ${UNHELD}`,
-              address_line: UNHELD,
-              city: CITY_69,
-              project_code: '',
-              handover_date: '2025-05-01',
-              warranty_end_date: '',
-              status: 'ACTIVE',
-              unit_number: '4',
-              type: 'lease',
-              next: 'intake',
-            }).toString(),
-            headers: {
-              'content-type': 'application/x-www-form-urlencoded',
-            },
-          });
-          assert.equal(created.statusCode, 303, created.body.slice(0, 400));
-          const toUnit = created.headers.location ?? '';
-          assert.match(toUnit, /\/units\/new\?/);
-          assert.match(toUnit, /next=intake/);
-
-          const unitForm = await asRole(unheld, who).inject({
-            method: 'GET',
-            url: toUnit,
-          });
-          assert.equal(unitForm.statusCode, 200, unitForm.body.slice(0, 400));
-          assert.match(unitForm.body, /value="4"/);
-
-          const buildingId = /\/estate\/buildings\/([0-9a-f-]{36})\/units/.exec(
-            toUnit,
-          )?.[1];
-          assert.ok(buildingId);
-          const madeUnit = await asRole(unheld, who).inject({
-            method: 'POST',
-            url: `/estate/buildings/${buildingId}/units`,
-            payload: new URLSearchParams({
-              unit_number: '4',
-              floor: '1',
-              rooms: '3',
-              area_sqm: '',
-              condition_status: 'READY',
-              warranty_end_date: '',
-              type: 'lease',
-              next: 'intake',
-            }).toString(),
-            headers: {
-              'content-type': 'application/x-www-form-urlencoded',
-            },
-          });
-          assert.equal(madeUnit.statusCode, 303, madeUnit.body.slice(0, 400));
-          const back = madeUnit.headers.location ?? '';
-          assert.match(back, /^\/documents\/new\?anchor=[0-9a-f-]{36}/);
-          createdUnitId = /anchor=([0-9a-f-]{36})/.exec(back)?.[1] ?? '';
-          assert.ok(createdUnitId);
-
-          const anchored = await asRole(unheld, who).inject({
-            method: 'GET',
-            url: back,
-          });
-          assert.equal(anchored.statusCode, 200, anchored.body.slice(0, 400));
-          assert.match(anchored.body, new RegExp(`value="${createdUnitId}"`));
-          assert.match(anchored.body, /type="file"/);
-
-          const filed = await asRole(unheld, who).inject({
-            method: 'POST',
-            url: '/documents/intake',
-            ...upload(
-              { type: 'lease', unit: createdUnitId, csrf: who.csrf },
-              { filename: 'create.pdf', bytes: pdfBytes('6.9 filed') },
-            ),
-          });
-          assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
-          assert.match(
-            filed.headers.location ?? '',
-            /\/documents\/[0-9a-f-]{36}\/fields$/,
+          const body = await open(
+            flatOnly,
+            who,
+            await store(flatOnly, who, 'flat only'),
           );
-          hashes.push(documentFileHash(pdfBytes('6.9 filed')));
+          assert.match(body, /הבניין נמצא בתיק, והדירה לא/);
+          assert.match(body, /name="building"/);
         },
       );
     } finally {
@@ -2960,22 +2841,23 @@ describe('evidence · the approval ledger, and who may sign what', () => {
       assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
       documentId =
         String(filed.headers.location ?? '').match(
-          /\/documents\/([0-9a-f-]{36})\/fields$/,
+          /\/documents\/filing\/([0-9a-f-]{36})$/,
         )?.[1] ?? '';
-      assert.ok(documentId, 'a verified lease goes to its confirm screen');
+      assert.ok(documentId, 'a lease goes to its filing workspace');
 
       await t.test(
-        'an OPERATOR reads the ledger and is told a count',
+        'an OPERATOR opening the ledger of an unopened lease lands on הקריאה (#239)',
         async () => {
           const response = await asOperator(app, operator as SignedIn).inject({
             method: 'GET',
             url: `/documents/${documentId}/fields`,
           });
-          assert.equal(response.statusCode, 200, response.body.slice(0, 400));
-          assert.match(response.body, /איכות הקריאה/);
-          assert.match(response.body, /מספר הדירה/);
+          assert.equal(response.statusCode, 302, response.body.slice(0, 400));
+          assert.equal(
+            response.headers.location,
+            `/documents/filing/${documentId}`,
+          );
           assert.doesNotMatch(response.body, new RegExp(ID_VALUE_AP));
-          assert.match(response.body, /נקרא שדה מזהה אחד ואינו מוצג/);
           // Opening a ledger is not a disclosure, so it writes no line — the same rule 6.4 wrote for
           // the overlay, kept at the finer grain 7.3 introduces.
           assert.equal(await reads(), 0);
@@ -3024,9 +2906,10 @@ describe('evidence · the approval ledger, and who may sign what', () => {
             { action: 'unflagged' },
           );
           assert.equal(response.statusCode, 302, response.body.slice(0, 200));
-          assert.match(
-            String(response.headers.location ?? ''),
-            /\/documents\/[0-9a-f-]{36}\/fields\?saved=\d+$/,
+          // #239: a lease lands back on its one approval screen.
+          assert.equal(
+            response.headers.location,
+            `/documents/filing/${documentId}`,
           );
           const identifier = await pool.query<{ approved_at: Date | null }>(
             `SELECT e.approved_at FROM extracted_field e
@@ -3043,9 +2926,9 @@ describe('evidence · the approval ledger, and who may sign what', () => {
         'a correction is written beside the reading, and signed once',
         async () => {
           const nameRow = await rowIdOf('tenant_name');
-          // The fake reader gives every word 0.9, so `tenant_name` was signed by the press above.
-          // Undo that one stamp to drive the single-row path — the trigger is what makes this a
-          // deliberate act rather than an UPDATE somebody could write by accident.
+          // On a lease a name is one press each (#239), so the press above left `tenant_name`.
+          // The unsign below is kept for the case it was: the trigger is what makes clearing a
+          // stamp a deliberate act rather than an UPDATE somebody could write by accident.
           await inTransaction(pool, async (db) => {
             await db.query("SELECT set_config('dona.approving', 'on', true)");
             await db.query(
@@ -3109,16 +2992,8 @@ describe('evidence · the approval ledger, and who may sign what', () => {
       );
 
       await t.test(
-        'the ledger links to the pixels, and the pixels no longer write',
+        'the pixels no longer write, and carry the door to the ledger',
         async () => {
-          const ledger = await asOperator(app, operator as SignedIn).inject({
-            method: 'GET',
-            url: `/documents/${documentId}/fields`,
-          });
-          assert.match(
-            ledger.body,
-            new RegExp(`/documents/${documentId}/read`),
-          );
           const pixels = await asOperator(app, operator as SignedIn).inject({
             method: 'GET',
             url: `/documents/${documentId}/read`,

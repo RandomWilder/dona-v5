@@ -239,7 +239,11 @@ async function fileOne(
       {
         bytes: spec.bytes,
         typeKey: spec.typeKey,
-        place: { kind: 'UNIT', id: spec.unitId },
+        // #237. A lease is stored unassigned at every door; the call's flat is the preselection
+        // for פתיחת טיוטה, not a link.
+        ...(spec.typeKey === 'lease'
+          ? { place: null, preselectedUnitId: spec.unitId }
+          : { place: { kind: 'UNIT' as const, id: spec.unitId } }),
         tenancyId: null,
         filedBy: spec.actorId,
       },

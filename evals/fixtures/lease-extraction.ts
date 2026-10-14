@@ -374,6 +374,43 @@ const pinchot: GroundTruthDocument = {
       note: 'ת.ז. — a third identifier kind in a document whose tenants both hold passports.',
     },
 
+    // --- contacts, per role (#235). One phone and one email for the household, one pair for the guarantor. ---
+    {
+      fieldKey: 'main_tenant_phone',
+      value: '18472751193',
+      printed: '18472751193',
+      pdfPage: 1,
+      printedPage: 1,
+      declaration: 'declared',
+      note: 'One number printed after both tenants, before the email that is plainly Rami’s. A US number, so הקריאה refuses it as an Israeli mobile: read correctly, approved never.',
+    },
+    {
+      fieldKey: 'main_tenant_email',
+      value: 'rami.pinchot@gmail.com',
+      printed: 'rami.pinchot@gmail.com',
+      pdfPage: 1,
+      printedPage: 1,
+      declaration: 'declared',
+    },
+    {
+      fieldKey: 'guarantor_phone',
+      value: '054-2522434',
+      printed: '054-2522434',
+      pdfPage: 20,
+      printedPage: 20,
+      declaration: 'declared',
+      note: 'Beside his ת.ז. on the note, after המען. The only Israeli mobile on either specimen.',
+    },
+    {
+      fieldKey: 'guarantor_email',
+      value: 'yatkin0714@gmail.com',
+      printed: 'yatkin0714@gmail.co m',
+      pdfPage: 20,
+      printedPage: 20,
+      declaration: 'declared',
+      note: 'Broken across two words by the line end. The stored value is the address whole.',
+    },
+
     // --- provenance of the paper itself. ---
     {
       fieldKey: 'signed_date',
@@ -740,6 +777,34 @@ const bloch: GroundTruthDocument = {
       identifierKind: 'national_id',
       note: 'THE finding. A ת.ז. and a passport on one letting, one line apart. `identifierKind` is a property of the value and cannot be a property of the document or of the tenancy.',
     },
+
+    // --- contacts, per role (#235). One phone, printed with Devora, and an email each. ---
+    {
+      fieldKey: 'second_tenant_phone',
+      value: '+8477781544',
+      printed: '+8477781544',
+      pdfPage: 2,
+      printedPage: 1,
+      declaration: 'declared',
+      note: 'Printed straight after Devora’s ת.ז. and before her email, here and on PDF page 37 (נייד). The household prints one number and the page puts it with her.',
+    },
+    {
+      fieldKey: 'main_tenant_email',
+      value: 'yitzchokbloch@gmail.com',
+      printed: 'yitzchokbloch@gmail.com',
+      pdfPage: 2,
+      printedPage: 1,
+      declaration: 'declared',
+    },
+    {
+      fieldKey: 'second_tenant_email',
+      value: 'devorabloch@gmail.com',
+      printed: 'devorabloch@gmail.com',
+      pdfPage: 2,
+      printedPage: 1,
+      declaration: 'declared',
+      note: 'Printed before her husband’s. The name in the address says whose it is; the order does not.',
+    },
   ],
   absent: [
     {
@@ -750,6 +815,14 @@ const bloch: GroundTruthDocument = {
     {
       fieldKey: 'guarantor_id_number',
       reason: 'Same. No guarantor, so no identifier.',
+    },
+    {
+      fieldKey: 'guarantor_phone',
+      reason: 'Same. No guarantor, so no contact.',
+    },
+    {
+      fieldKey: 'guarantor_email',
+      reason: 'Same. No guarantor, so no contact.',
     },
   ],
   arithmetic: [

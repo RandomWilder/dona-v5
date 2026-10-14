@@ -202,10 +202,10 @@ describe('evidence · flow A2 confirms a lease into a draft tenancy', () => {
           'tenancy.start_date',
         );
 
-        // Dates are signed as they are promoted; names were signed on the ledger before the write.
+        // #234: the reading is signed before the draft opens, names and dates alike.
         for (const fieldKey of ['start_date', 'end_date'] as const) {
           const row = stamped.find((field) => field.fieldKey === fieldKey);
-          assert.equal(row?.approvedBy, 'אסף', `${fieldKey} was not signed`);
+          assert.equal(row?.approvedBy, READ_BY, `${fieldKey} was not signed`);
           assert.equal(row?.approvedValue, row?.value);
           assert.notEqual(row?.approvedAt, null);
         }
@@ -306,7 +306,10 @@ describe('evidence · flow A2 confirms a lease into a draft tenancy', () => {
     }
   });
 
-  it('refuses a wrong apartment and writes no party', async (t) => {
+  it('opens a draft on the filed flat even when the read flat disagrees (#232)', async (t) => {
+    // Until #234 a read flat number that did not fold to the filed flat refused the confirm. The
+    // amended A2 shows the disagreement on פתיחת טיוטה and does not refuse; the activation gate
+    // raises it again (#240).
     const pool = await migratedPoolOrNull();
     if (!pool) {
       t.skip(skipReason);
@@ -337,42 +340,19 @@ describe('evidence · flow A2 confirms a lease into a draft tenancy', () => {
           readBy: READ_BY,
         });
         assert.equal(proposed.matchesUnit, false);
-        const roles = Object.fromEntries(
-          proposed.people.map((person) => [
-            person.extractedFieldId,
-            person.proposedRole,
-          ]),
+        await stampNames(db, documentId);
+        const confirmed = await confirmLeaseTenancy(leaseDeps(db), {
+          documentId,
+          termsProfileName: `a2-miss-${unitId.slice(24)}`,
+          confirmedBy: 'אסף',
+          roles: {},
+        });
+        const tenancies = await db.query<{ unit_id: string }>(
+          'SELECT unit_id FROM tenancy WHERE tenancy_id = $1',
+          [confirmed.tenancyId],
         );
-        await assert.rejects(
-          () =>
-            confirmLeaseTenancy(
-              {
-                db,
-                audit: createAuditLog(db, fixedClock(AT)),
-                clock: fixedClock(AT),
-              },
-              {
-                documentId,
-                termsProfileName: `a2-miss-${unitId.slice(24)}`,
-                confirmedBy: 'אסף',
-                roles,
-              },
-            ),
-          (error: KernelError) =>
-            error.code === 'invalid' && error.message.includes('match'),
-        );
-        const parties = await db.query<{ n: string }>(
-          `SELECT count(*)::text AS n FROM tenancy_party tp
-             JOIN tenancy t ON t.tenancy_id = tp.tenancy_id
-            WHERE t.unit_id = $1`,
-          [unitId],
-        );
-        assert.equal(parties.rows[0]?.n, '0');
-        const tenancies = await db.query<{ n: string }>(
-          `SELECT count(*)::text AS n FROM tenancy WHERE unit_id = $1`,
-          [unitId],
-        );
-        assert.equal(tenancies.rows[0]?.n, '0');
+        assert.equal(tenancies.rows[0]?.unit_id, unitId);
+        assert.equal(confirmed.partiesWritten, 2);
       });
     } finally {
       await pool.end();
@@ -542,13 +522,20 @@ async function partiesHolding(
   return Number(rows.rows[0]?.n ?? '0');
 }
 
+/** #234: the draft opens from a ready reading — every name and both dates signed first. */
+const READING_KEYS = new Set([
+  'tenant_name',
+  'main_tenant_name',
+  'second_tenant_name',
+  'guarantor_name',
+  'start_date',
+  'end_date',
+]);
+
 async function stampNames(db: PoolClient, documentId: string): Promise<void> {
   const rows = await listExtractedFields(db, documentId);
   for (const row of rows) {
-    if (
-      (row.fieldKey === 'tenant_name' || row.fieldKey === 'guarantor_name') &&
-      row.approvedAt === null
-    ) {
+    if (READING_KEYS.has(row.fieldKey) && row.approvedAt === null) {
       await approveExtractedField(idDeps(db), {
         extractedFieldId: row.extractedFieldId,
         approvedBy: READ_BY,

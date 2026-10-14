@@ -103,6 +103,11 @@ function enqueueable(href: string): string | null {
   // #202. The directory links every party. The list is opened and checked; walking each
   // profile is the whole register, and this crawl's cap is about the buildings graph.
   if (new RegExp(`^/parties/${UUID}/?$`, 'i').test(path)) return null;
+  // #238. ממתינים לפתיחה on שכירויות links every unopened lease in the database, and other files
+  // leave theirs behind. A filing workspace links no building page; walking each one is the cap.
+  if (new RegExp(`^/documents/filing/${UUID}(/open)?/?$`, 'i').test(path)) {
+    return null;
+  }
   return text;
 }
 
@@ -252,6 +257,12 @@ describe('estate · the hidden buildings flow', () => {
         seen.add(url);
         const response = await client.inject({ method: 'GET', url });
         const type = String(response.headers['content-type'] ?? '');
+        // #239. A lease's ledger redirects to הקריאה; the crawl follows it like a browser would.
+        const location = String(response.headers.location ?? '');
+        if (response.statusCode === 302 && location.startsWith('/')) {
+          queue.push(location);
+          continue;
+        }
         if (response.statusCode !== 200 || !type.includes('text/html')) {
           // The list screens are the whole portfolio, and other files create and delete rows in it
           // while this crawl walks. A screen that names only rows this case did not create can be
@@ -306,7 +317,7 @@ describe('estate · the hidden buildings flow', () => {
         `/documents/new?unit=${unitId}`,
         ...filed.flatMap((doc) => [
           `/documents/${doc.id}/read`,
-          `/documents/${doc.id}/fields`,
+          `/documents/filing/${doc.id}`,
         ]),
       ];
       const missed = mustVisit.filter((url) => !htmlOf.has(url));

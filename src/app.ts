@@ -42,14 +42,19 @@ import {
   whatsappWarning,
 } from './channel/contract.ts';
 import { signedInChrome } from './chrome.ts';
+import { contactRules } from './contact-rules.ts';
 import { renderMockup } from './dev-mockups.ts';
+import { renderErrorPage, wantsHtml, wayBack } from './error-page.ts';
 import { registerEstateRoutes } from './estate/contract.ts';
 import {
+  addressMatches,
+  apartmentMatches,
   fileDocument,
   listDocumentTypes,
   listLinkedDocuments,
   listPromotedFieldsForUnit,
   listTenancyDocumentFacts,
+  listUnopenedLeases,
   registerDocumentRoutes,
   runOfficeTurn,
   searchDocuments,
@@ -382,10 +387,35 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     return toErrorBody(error);
   });
 
-  app.setErrorHandler(async (caught, _request, reply) => {
+  const stubHeaders = (reply: {
+    header: (name: string, value: string) => unknown;
+  }) => {
+    reply.header('content-type', 'text/html; charset=utf-8');
+    reply.header('cache-control', 'no-store');
+    reply.header('x-content-type-options', 'nosniff');
+  };
+
+  // **#233.** A browser gets the Hebrew page in the shell; everything else keeps the shape, byte for
+  // byte (SPEC.md §Error shape).
+  app.setErrorHandler(async (caught, request, reply) => {
     const body = toErrorBody(caught);
     reply.code(httpStatus(body.code));
-    return body;
+    if (!wantsHtml(request.headers.accept)) return body;
+    const staff = request.staff;
+    stubHeaders(reply);
+    return renderErrorPage({
+      code: body.code,
+      back: wayBack(request.headers.referer, request.headers.host),
+      signedIn:
+        staff == null
+          ? undefined
+          : {
+              csrf: csrfFrom(request),
+              mayFile: can(staff.role, 'documents.write'),
+              mayReadParties: can(staff.role, 'party.read'),
+              openCalls: request.openCalls,
+            },
+    });
   });
 
   app.get('/health', async (_request, reply) => {
@@ -421,14 +451,6 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       openCalls: request.openCalls,
     });
   });
-
-  const stubHeaders = (reply: {
-    header: (name: string, value: string) => unknown;
-  }) => {
-    reply.header('content-type', 'text/html; charset=utf-8');
-    reply.header('cache-control', 'no-store');
-    reply.header('x-content-type-options', 'nosniff');
-  };
 
   const SETTINGS_READ = { config: { staff: 'estate.read' } } as const;
   const SETTINGS_WRITE = { config: { staff: 'settings.write' } } as const;
@@ -583,12 +605,22 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       listActivationQueue(db, clock, listTenancyDocumentFacts),
     listTenancyBook: (db, unitId) =>
       listTenancyBook(db, clock, listTenancyDocumentFacts, unitId),
+    listUnopenedLeases: async (db) =>
+      signLinkedDocuments(
+        await listUnopenedLeases(db),
+        objects,
+        bucket,
+        clock.now(),
+      ),
     recordCompletenessException,
     getTenancy,
     listTenancyParties,
     listPartyNames,
     activationGate: (db, tenancyId) =>
-      activationGate(db, clock, tenancyId, listTenancyDocumentFacts),
+      activationGate(db, clock, tenancyId, listTenancyDocumentFacts, {
+        addressMatches,
+        apartmentMatches,
+      }),
     activateTenancy: (db, spec) =>
       activateTenancy(db, clock, spec, listTenancyDocumentFacts),
     reassignParkingSpace: (db, spec) => reassignParkingSpace(db, clock, spec),
@@ -739,6 +771,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     work: deps.work,
     bucket,
     chrome: signedInChrome,
+    contacts: contactRules,
   });
 
   return app;

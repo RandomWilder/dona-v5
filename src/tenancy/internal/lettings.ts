@@ -76,12 +76,17 @@ export interface TenancyPartyRow {
 function householdColumnSql(
   tenancy: 'tenancy' | 't',
   column: 'full_name' | 'family_name',
+  tenantsOnly = false,
 ): string {
+  const only = tenantsOnly
+    ? `AND tp.role IN ('PRIMARY_TENANT', 'CO_TENANT')`
+    : '';
   return `(
               SELECT p.${column}
                 FROM tenancy_party tp
                 JOIN party p ON p.party_id = tp.party_id
                WHERE tp.tenancy_id = ${tenancy}.tenancy_id
+                 ${only}
                ORDER BY CASE tp.role
                           WHEN 'PRIMARY_TENANT' THEN 0
                           WHEN 'CO_TENANT' THEN 1
@@ -362,6 +367,35 @@ export async function countIdentifierOverlap(
   );
 }
 
+/**
+ * **Tenancies that already hold one of these people on this start date. #236.**
+ *
+ * פתיחת טיוטה offers each one back before it writes: the same lease, scanned again, is a document
+ * to attach and not a second household. The probes are folded inside the statement, the same way
+ * `countIdentifierOverlap` folds them, and what leaves is a tenancy id. No name, no key, no value.
+ * Any tenancy, not one flat: the (unit, start date) refusal is a different check and stays one.
+ */
+export async function tenanciesHoldingIdentifierAtStart(
+  db: Queryable,
+  spec: { startDate: string; identifiers: readonly string[] },
+): Promise<string[]> {
+  if (spec.identifiers.length === 0) return [];
+  const result = await db.query<{ tenancy_id: string }>(
+    `SELECT DISTINCT t.tenancy_id
+       FROM tenancy t
+       JOIN tenancy_party tp ON tp.tenancy_id = t.tenancy_id
+       JOIN party p ON p.party_id = tp.party_id
+      WHERE t.start_date = $1::date
+        AND p.national_id_key = ANY (
+              SELECT party_national_id_key('PERSON', probe)
+                FROM unnest($2::text[]) AS probe
+            )
+      ORDER BY t.tenancy_id`,
+    [spec.startDate, [...spec.identifiers]],
+  );
+  return result.rows.map((row) => row.tenancy_id);
+}
+
 export type BookChip =
   | 'ready'
   | 'draft'
@@ -455,7 +489,7 @@ export async function listTenancyBook(
             b.address_line,
             b.city,
             b.building_number,
-            ${householdColumnSql('t', 'full_name')} AS household_name
+            ${householdColumnSql('t', 'full_name', true)} AS household_name
        FROM tenancy t
        JOIN unit u ON u.unit_id = t.unit_id
        JOIN space s ON s.space_id = u.unit_id

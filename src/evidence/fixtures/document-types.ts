@@ -43,6 +43,14 @@ import type {
 export interface SeedDocumentType {
   type: DocumentTypeSpec;
   fields: Omit<DocumentTypeFieldSpec, 'documentTypeId'>[];
+  /**
+   * **Run-time declarations the seed now owns. #235.** An open declaration of this type whose key
+   * or label matches, and which is not one of the seed's own rows, is closed on `on`, or on its own
+   * first day when it opened later. A14 lets an administrator declare a field the seed later
+   * declares under its own key; two keys reading one fact is two rows the operator must approve
+   * and only one that anything uses.
+   */
+  supersedes?: { key: RegExp; label: RegExp; on: string };
 }
 
 // The version every seeded declaration opens at. It is the date the catalogue was first seeded, and
@@ -66,6 +74,8 @@ const SCHEMA_V6 = '2026-09-22';
 const SCHEMA_V7 = '2026-10-01';
 // #212. Who a regulated flat was let to. The track itself stays on the unit.
 const SCHEMA_V8 = '2026-10-12';
+// #235. A phone and an email per role, read so פתיחת טיוטה can write them as contacts.
+const SCHEMA_V9 = '2026-10-14';
 // Inclusive windows: close the superseded declaration the day before the successor opens.
 const LAST_DAY_BEFORE_V5 = '2026-09-20';
 const LAST_DAY_BEFORE_V7 = '2026-09-30';
@@ -457,7 +467,68 @@ export const seedDocumentTypes: SeedDocumentType[] = [
         'מי הדירה המפוקחת הושכרה לו. LOCAL_RESIDENT לבן מקום, ACTIVE_RESERVE למילואים פעיל. ריק כשהחוזה אינו אומר. לא מסלול השכירות ולא שוק חופשי.',
         { from: SCHEMA_V8 },
       ),
+      // **#235. A phone and an email per role**, so a contact belongs to a person by construction
+      // and not by position. No promotion target: the value reaches `party_contact` only through
+      // פתיחת טיוטה, after a person approved it. A guarantor's pair with `guarantor_name` by the
+      // ordinal, all-or-nothing rule the identifiers use. Each hint names the digits it is not,
+      // for the identifier hints' reason: a ת.ז., a contract number and a phone sit side by side.
+      field(
+        'main_tenant_phone',
+        'טלפון השוכר הראשי',
+        'TEXT',
+        false,
+        'מספר הטלפון של השוכר הראשי, כפי שמודפס. לא ת.ז., לא מספר דרכון, לא מספר חוזה ולא מספר חשבון בנק. שייך לשם השוכר הראשי בלבד.',
+        { from: SCHEMA_V9 },
+      ),
+      field(
+        'main_tenant_email',
+        'דוא"ל השוכר הראשי',
+        'TEXT',
+        false,
+        'כתובת הדוא"ל של השוכר הראשי, כפי שמודפסת, גם כשהיא נשברת בין שורות. שייכת לשם השוכר הראשי בלבד.',
+        { from: SCHEMA_V9 },
+      ),
+      field(
+        'second_tenant_phone',
+        'טלפון השוכר הנוסף',
+        'TEXT',
+        false,
+        'מספר הטלפון של השוכר הנוסף, כפי שמודפס. לא ת.ז., לא מספר דרכון, לא מספר חוזה ולא מספר חשבון בנק. שייך לשם השוכר הנוסף בלבד.',
+        { from: SCHEMA_V9 },
+      ),
+      field(
+        'second_tenant_email',
+        'דוא"ל השוכר הנוסף',
+        'TEXT',
+        false,
+        'כתובת הדוא"ל של השוכר הנוסף, כפי שמודפסת, גם כשהיא נשברת בין שורות. שייכת לשם השוכר הנוסף בלבד.',
+        { from: SCHEMA_V9 },
+      ),
+      field(
+        'guarantor_phone',
+        'טלפון הערב',
+        'TEXT',
+        false,
+        'מספר הטלפון של הערב, כפי שמודפס. לא ת.ז. של הערב ולא טלפון של שוכר.',
+        { from: SCHEMA_V9 },
+      ),
+      field(
+        'guarantor_email',
+        'דוא"ל הערב',
+        'TEXT',
+        false,
+        'כתובת הדוא"ל של הערב, כפי שמודפסת, גם כשהיא נשברת בין שורות. לא דוא"ל של שוכר.',
+        { from: SCHEMA_V9 },
+      ),
     ],
+    // Whatever was declared through A14 to read a tenant's or a guarantor's phone or email off a
+    // lease before #235 gave each role its own pair. Both halves must match, so a landlord's phone
+    // or a mailing address keeps being read.
+    supersedes: {
+      key: /^(?=.*(tenant|guarantor))(?=.*(phone|mobile|email)).*$/i,
+      label: /^(?=.*(שוכר|ערב))(?=.*(טלפון|נייד|דוא"?ל|מייל)).*$/,
+      on: SCHEMA_V9,
+    },
   },
   {
     type: {

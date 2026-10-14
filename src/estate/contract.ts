@@ -144,6 +144,7 @@ export type {
   TenancyPersonView,
   TenancySheet,
   UnitRetrievalView,
+  UnopenedLeaseView,
 } from './internal/views.ts';
 export {
   renderBuildingPage,
