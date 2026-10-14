@@ -11,6 +11,10 @@
 // catalogues migrations and seed scripts own, and the staff accounts — without those nobody can sign
 // in to enter the first real building. Sessions and invites go with the data.
 //
+// **`terms_profile` is a catalogue too, and the 12 Oct reset is how that was learned.** Every lease
+// draft names one (`tenancy.terms_profile_id` is NOT NULL), so a reset that emptied it made every
+// draft on staging fail until someone re-seeded it (14 Oct 2026, #232).
+//
 // **TRUNCATE without CASCADE, on purpose.** All wiped tables go in one statement, so foreign keys
 // between them are fine. A kept table that references a wiped one makes Postgres refuse the whole
 // statement, where CASCADE would have emptied the kept table to satisfy it. Failing is the right
@@ -26,6 +30,7 @@ export const KEEP_TABLES: readonly string[] = [
   'document_type_field',
   'obligation_type',
   'call_category',
+  'terms_profile',
   'staff_account',
 ];
 
