@@ -22,6 +22,7 @@ import { renderIntakeForm } from '../../src/channel/contract.ts';
 // The root index is the composition root's screen from 5.2, not estate's. It is in this registry
 // under the same rule as every other screen: rendered here, asserted on the bytes.
 import { signedInChrome } from '../../src/chrome.ts';
+import { renderErrorPage } from '../../src/error-page.ts';
 import type {
   BuildingDetail,
   BuildingSummary,
@@ -508,6 +509,20 @@ const SCREENS: Array<[string, () => string]> = [
     // difference, and the registry is where it is asserted rather than in a second guard.
     'root · index, may file',
     () => renderIndexPage({ csrf: CSRF, mayFile: true, mayReadParties: true }),
+  ],
+  // #233: the floor under every screen's own refusal, in both frames.
+  [
+    'root · error page, guest',
+    () => renderErrorPage({ code: 'not_allowed', back: '/' }),
+  ],
+  [
+    'root · error page, signed in',
+    () =>
+      renderErrorPage({
+        code: 'invalid',
+        back: '/settings',
+        signedIn: { csrf: CSRF, mayFile: true, mayReadParties: true },
+      }),
   ],
   [
     'estate · buildings',
@@ -2715,6 +2730,8 @@ describe('shared UI tokens', () => {
     // page that could sign you out.
     for (const [name, render] of SCREENS) {
       if (name.startsWith('staff · login')) continue;
+      // #233: a refusal with no resolved session is drawn in login's guest frame, on purpose.
+      if (name === 'root · error page, guest') continue;
       const html = render();
       assert.match(html, /class="ops"/, name);
       assert.match(html, /<aside class="ops-nav"/, name);

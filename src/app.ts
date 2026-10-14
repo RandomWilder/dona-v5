@@ -43,6 +43,7 @@ import {
 } from './channel/contract.ts';
 import { signedInChrome } from './chrome.ts';
 import { renderMockup } from './dev-mockups.ts';
+import { renderErrorPage, wantsHtml, wayBack } from './error-page.ts';
 import { registerEstateRoutes } from './estate/contract.ts';
 import {
   fileDocument,
@@ -382,10 +383,35 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     return toErrorBody(error);
   });
 
-  app.setErrorHandler(async (caught, _request, reply) => {
+  const stubHeaders = (reply: {
+    header: (name: string, value: string) => unknown;
+  }) => {
+    reply.header('content-type', 'text/html; charset=utf-8');
+    reply.header('cache-control', 'no-store');
+    reply.header('x-content-type-options', 'nosniff');
+  };
+
+  // **#233.** A browser gets the Hebrew page in the shell; everything else keeps the shape, byte for
+  // byte (SPEC.md §Error shape).
+  app.setErrorHandler(async (caught, request, reply) => {
     const body = toErrorBody(caught);
     reply.code(httpStatus(body.code));
-    return body;
+    if (!wantsHtml(request.headers.accept)) return body;
+    const staff = request.staff;
+    stubHeaders(reply);
+    return renderErrorPage({
+      code: body.code,
+      back: wayBack(request.headers.referer, request.headers.host),
+      signedIn:
+        staff == null
+          ? undefined
+          : {
+              csrf: csrfFrom(request),
+              mayFile: can(staff.role, 'documents.write'),
+              mayReadParties: can(staff.role, 'party.read'),
+              openCalls: request.openCalls,
+            },
+    });
   });
 
   app.get('/health', async (_request, reply) => {
@@ -421,14 +447,6 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       openCalls: request.openCalls,
     });
   });
-
-  const stubHeaders = (reply: {
-    header: (name: string, value: string) => unknown;
-  }) => {
-    reply.header('content-type', 'text/html; charset=utf-8');
-    reply.header('cache-control', 'no-store');
-    reply.header('x-content-type-options', 'nosniff');
-  };
 
   const SETTINGS_READ = { config: { staff: 'estate.read' } } as const;
   const SETTINGS_WRITE = { config: { staff: 'settings.write' } } as const;

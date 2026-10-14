@@ -140,7 +140,11 @@ distinguished *no such account* from *account with no role* would be an account-
 sitting on the login screen of a system holding 1,500 households, and the distinction buys the
 honest user nothing they cannot get by asking a colleague. The body is a frozen constant, asserted
 in a test as identical across every case; `SPEC.md`'s error shape gives it `code: 'not_allowed'`,
-and it carries no `details`.
+and it carries no `details`. The sign-in callback renders its own refusal on the login screen. A
+session whose account lost its role is refused by the guard instead, through the generic error
+handler, and **from #233 a browser (`Accept: text/html`) gets the Hebrew error page there, just as
+frozen:** one fixed `not_allowed` sentence, the guest frame because no session resolved, and a way
+back that is the referring path or `/` — nothing in it varies with the cause.
 
 **The `sub` mismatch is the sharp one.** An email address can be deleted and re-created — inside a
 Workspace by an administrator, and by Google itself for some abandoned accounts. Silently rebinding
