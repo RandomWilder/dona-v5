@@ -17,6 +17,7 @@
 // The נכסים tile shows that household's last name under the live dates (ADR-0012).
 // Phone numbers stay off.
 import { type Html, h } from '../../kernel/ui/html.ts';
+import { icon } from '../../kernel/ui/icons.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
 import type { OfficeCitation } from '../../staff/contract.ts';
 import {
@@ -670,17 +671,17 @@ export function renderBuildingsPage(
   return page('דונה דום — בניינים', body, nav);
 }
 
-const CHEV = h`<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
-const PLUS = h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>`;
-const TO_BUILDING = h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="m11 18-6-6 6-6"/></svg>`;
+const CHEV = icon('chevron', { class: 'chev' });
+const PLUS = icon('plus');
+const TO_BUILDING = icon('arrow');
 
 const KIND_ICON: Record<string, Html> = {
-  UNIT: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg>`,
-  PARKING: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>`,
-  STORAGE: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5"/><path d="M12 13v8"/></svg>`,
-  TECHNICAL: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="m9 8 3-3 3 3"/><path d="m9 16 3 3 3-3"/></svg>`,
-  COMMON: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
-  EXTERIOR: h`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-7"/><path d="M7 15h10l-5-12z"/></svg>`,
+  UNIT: icon('house'),
+  PARKING: icon('parking'),
+  STORAGE: icon('box'),
+  TECHNICAL: icon('lift'),
+  COMMON: icon('users'),
+  EXTERIOR: icon('tree'),
 };
 
 const TILE_WORD: Record<string, { on: string; off: string }> = {

@@ -133,6 +133,9 @@ here:
   `renderPage` with `nav` and never draws its own. Still no client JavaScript: the open state is a
   checkbox the menu label and the scrim both drive. The viewport is `viewport-fit=cover`. Login
   stays a centred guest card.
+- **Icons are inline SVG drawn from one kernel table, `src/kernel/ui/icons.ts` (#241).** A screen
+  never writes its own `<svg>`; a guard test fails the build on one. Icon names are generic, and the
+  module that uses an icon owns the mapping from its own nouns to a name.
 
 ## Error shape
 

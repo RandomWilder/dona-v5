@@ -143,11 +143,8 @@ function railCount(html: string): number {
 function emergencyMark(html: string, description: string): string | undefined {
   const at = html.indexOf(`>${description}</a>`);
   if (at < 0) return undefined;
-  return html
-    .slice(Math.max(0, at - 400), at)
-    .match(/data-emergency="(true|false)"/g)
-    ?.at(-1)
-    ?.match(/true|false/)?.[0];
+  const start = html.lastIndexOf('<article', at);
+  return html.slice(start, at).match(/data-emergency="(true|false)"/)?.[1];
 }
 
 async function cleanup(pool: import('pg').Pool, domain: string): Promise<void> {
