@@ -737,6 +737,19 @@ narrows that building's units through `apartmentMatches`, which A2 already trust
   `searchEstate` over the street found, a search box for the operator's own term, and the file input
   re-armed. A candidate re-posted with the file is an ordinary filing against a unit a human chose.
 
+**The street search is narrowed by what the reader read, and still only asks. #242.** The city is
+whatever follows the comma, so a lease that continues its address clause with a phrase rather than
+a town (`רקפת 12, כמסומן בתשריט`) reads a city that matches no key. The street search then
+returns every flat in the right building, and the apartment number was read and thrown away. So
+when the exact key finds no unit, the search's units are narrowed in two steps. First, the same
+street and number as the reading: equality after a leading `רחוב` is dropped and whitespace is
+collapsed, never containment, because the search is a `LIKE` and `רקפת 12` finds `רקפת 120`.
+Second, within that, the units `apartmentMatches` accepts. The first of those sets that is not empty
+is offered, and otherwise everything the search found. **This branch never returns a unit, even
+when one candidate is left.** The city did not match, so nothing exact was found. The opening screen
+shows the one candidate unchecked, and a person ticks it. The reader's city rule is unchanged,
+because a list of phrases that are "not a city" is a reader that guesses.
+
 **The resolution says which building it matched, not only which units. Slice 6.9.** An address whose
 key matches a building holding no flats used to fall through to the street search, so the screen could
 not tell *the building is here and the flat is not* from *nothing here at all* — and those are the two
