@@ -49,9 +49,10 @@ around; the rest are what makes them enforceable.
    when `role = GUARANTOR` — a database constraint, not a form default. No toggle exists.
 8. **Capture is open; promotion is governed** ([archive/tasks-w1-7/plan.md](archive/tasks-w1-7/plan.md) A8). A document type is a row and a field is a
    row — new ones cost no migration and no deploy, and the value is citable the moment it is
-   extracted. An extracted value becoming a *typed column* costs a migration and a reviewed mapping,
+   extracted. An extracted value becoming a *typed column* costs a reviewed mapping, the column map in
+   evidence's code (plus a migration when the column itself is new), and a person's approval,
    because those columns are what the isolation join, the responsibility matrix and the state machine
-   read. Nothing deterministic reads an `ExtractedField` value directly; a contract test asserts it.
+   read ([ADR-0016](docs/decisions/ADR-0016-approval-is-the-only-act-the-press-writes-the-columns.md)). Nothing deterministic reads an `ExtractedField` value directly; a contract test asserts it.
    A view may display and cite an **approved** capture under the render-only rule in
    [CONTEXT.md](CONTEXT.md); it may not branch on one, compare one, or aggregate over one. Those
    reads live in the estate read model and the view, never in tenancy, evidence, policy, isolation
@@ -81,7 +82,7 @@ Follows the workbook's entities, not v3's ([docs/from-v3.md](docs/from-v3.md) Ti
 | `estate` | E1–E4, E11, E14 — Project · Building · Space · Unit · Asset · Provider | kernel, parties |
 | `parties` | E5, E6 — Party · PartyContact | kernel |
 | `tenancy` | E7–E10 — Tenancy · TenancyParty · Obligation · ObligationType | estate, parties |
-| `evidence` | E12, E13, E15, E16 — Document · DocumentLink · DocumentType · DocumentTypeField · ExtractedField · FieldPromotion | estate, parties, tenancy, staff |
+| `evidence` | E12, E13, E15, E16 — Document · DocumentLink · DocumentType · DocumentTypeField · ExtractedField (the column map is code, ADR-0016) | estate, parties, tenancy, staff |
 | `scope` | — the isolation join and nothing else | parties, tenancy, estate |
 | `register` | — the register file and nothing else | estate, parties, tenancy, scope |
 | `policy` | responsibility matrix · SLA · escalation | estate, tenancy |
@@ -199,7 +200,7 @@ byte for byte. A screen that handles its own refusal still does; this is only th
   which document — never the value, because PII never reaches a log. A declared field on a governed
   catalogue is the named exception to ADR-0004 decision 2's masking, argued in
   [ADR-0006](docs/decisions/ADR-0006-the-extractor-may-read-a-declared-identifier.md). **No
-  `field_promotion` target exists for either field**: the value becomes `party.national_id` through a
+  column-map target exists for either field**: the value becomes `party.national_id` through a
   human confirming a household, which is an act and not a promotion.
 - **From slice 6.5 a machine also compares the identifier, and that is a read too.** A2's resolution
   ranks a flat's lettings by how many people on each already carry an identifier the lease declares.

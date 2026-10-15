@@ -95,8 +95,8 @@ introducing one fails the build. Say "the scope", not "the tenant's permissions"
 | **Capture** | Getting a value into an `ExtractedField`. **Open** — cheap, ungoverned. |
 | **Credited absence** | A declared field that correctly returns nothing, because the document does not carry it. Scored as right, never as a miss — a scorer that penalises it tunes the reader toward inventing values. The measurable form of *a missing required field is a result, not an error*. |
 | **Approval** | A person signing a reading. A stamp on the `ExtractedField`. |
-| **Promotion** | Copying an approved value onto a **typed column**. **Governed** — costs a migration and a reviewed mapping, and only happens after approval. |
-| **FieldPromotion** | The record that a promotion happened. |
+| **Promotion** | Copying an approved value onto a **typed column**. **Governed**: only through the column map in evidence's code, only after approval, and only as part of the act the reading supports (פתיחת טיוטה for a lease, A3's confirm for an addendum). Never a separate button (ADR-0016). |
+| **Column map** | The reviewed constant naming which declared field lands on which typed column. Replaced the `field_promotion` table at #243. A promotion's record is the `promoted_to` stamp on the `ExtractedField`. |
 
 **Capture is open; promotion is governed.** Nothing deterministic ever reads an `ExtractedField`
 value directly — typed columns are what the isolation join, the responsibility matrix and the state

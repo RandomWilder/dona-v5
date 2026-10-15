@@ -38,6 +38,7 @@ for a week the register and the decision disagreed about whether three of four d
 | [0013](ADR-0013-whatsapp-arrives-by-coexistence.md) | WhatsApp arrives by coexistence, with Dona Dom as its own Tech Provider; no BSP, no unofficial client, no SMS provider | accepted |
 | [0014](ADR-0014-a-lead-is-not-a-party.md) | A Lead is not a Party; it stays outside the directory and the isolation join until a lease is drafted | accepted |
 | [0015](ADR-0015-a-lease-is-unassigned-until-its-draft-opens.md) | A lease is stored unassigned; the flat, terms and people are written together at **פתיחת טיוטה**; reverses A12's no-unfiled rule for leases | accepted |
+| [0016](ADR-0016-approval-is-the-only-act-the-press-writes-the-columns.md) | Approval is the only act; פתיחת טיוטה writes every approved mapped value through a map in code; `field_promotion`, `קדם` and the lease's regex place reading go | accepted |
 
 **A1–A10 in [archive/tasks-w1-7/plan.md](../../archive/tasks-w1-7/plan.md) are numbered as they will
 become ADRs.** They are decisions of record already; they become files here as the work that

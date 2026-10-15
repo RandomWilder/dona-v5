@@ -1339,6 +1339,11 @@ function filingOpening(screen: LeaseFilingScreen): Html {
         : h``
     }
     ${
+      reading === null && unit === null
+        ? h`<p>הכתובת טרם אושרה, ולכן הדירה לא נבחרה מראש.</p>`
+        : h``
+    }
+    ${
       reading && choosing
         ? h`<h2 class="second-heading">${filingHeadline(reading, opening.candidateTotal)}</h2>
           ${placeFacts(reading, opening.placeBuilding, excerpt)}`

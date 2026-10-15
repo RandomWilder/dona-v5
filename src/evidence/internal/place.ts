@@ -271,9 +271,36 @@ export async function resolvePlace(
   }
   if (reading.addressLine) {
     const found = await searchEstate(db, reading.addressLine);
-    return offer(found.units, building);
+    return offer(narrowSearch(reading, found.units), building);
   }
   return offer([], building);
+}
+
+/**
+ * **What the reader read, applied to a street search it could not key. #242.**
+ *
+ * The city is whatever follows the comma, and a lease whose clause runs on with a phrase reads the
+ * phrase as a town: the key misses and the search returns the whole building, with the flat the
+ * lease named somewhere past the twelfth radio button. So the search is narrowed to the same street
+ * — by equality, because the search is a LIKE and `רקפת 12` finds `רקפת 120` — and then to the
+ * apartment number. The first set that is not empty is offered. **Never a unit**: the city did not
+ * match, so this is a list a person ticks even when it is a list of one.
+ */
+function narrowSearch(reading: PlaceReading, units: UnitHit[]): UnitHit[] {
+  const street = sameStreet(reading.addressLine as string);
+  const onStreet = units.filter((unit) => street(unit.address_line));
+  const apartment = reading.apartmentNumber;
+  const named = apartment
+    ? onStreet.filter((unit) => apartmentMatches(apartment, unit.unit_number))
+    : [];
+  return [named, onStreet, units].find((set) => set.length > 0) ?? [];
+}
+
+function sameStreet(line: string): (other: string) => boolean {
+  const fold = (value: string) =>
+    value.replace(/\s+/g, ' ').trim().replace(LEADING_STREET, '');
+  const read = fold(line);
+  return (other) => fold(other) === read;
 }
 
 function offer(

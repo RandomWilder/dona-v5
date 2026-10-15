@@ -69,8 +69,8 @@ workbook a specification rather than a description.
 ## ExtractedField (slice 4.2, `src/kernel/migrations/0017_extracted_field.sql`)
 
 One row per value read off the paper. Slice 4.3 adds the promotion stamp (`promoted_to`,
-`promoted_by`, `promoted_at`) on this table; the mapping that *permits* a stamp is `field_promotion`,
-not these columns. The workbook FIELDS sheet does not yet list this table, so this section is the
+`promoted_by`, `promoted_at`) on this table; the mapping that *permits* a stamp is the column map in evidence's code
+([ADR-0016](docs/decisions/ADR-0016-approval-is-the-only-act-the-press-writes-the-columns.md)), not these columns. The workbook FIELDS sheet does not yet list this table, so this section is the
 specification the migration is measured against — the same standing 3.1 used for E12–E16 once the
 sheet existed.
 
@@ -172,7 +172,7 @@ sheet existed.
     What the permission governs is this system's own copy — the row, the transcript,
     `party.national_id` — and saying so plainly is worth more than a control that is believed and
     absent.
-  **No `field_promotion` target for either field**, deliberately: the identifier becomes
+  **Not in the column map, either field**, deliberately: the identifier becomes
   `party.national_id` when a human confirms a household (A2), which is an act and not a promotion.
   `listExtractedFields` keeps returning every row, because it is this module's internal truth — what
   is gated is the response shape, and that is where the gate is.
@@ -578,17 +578,10 @@ was measured, `לא נמדדה` when every field arrived with no score, which is
 the field carries (`tenant_name` is a tenant, `guarantor_name` is a guarantor who is never a service
 contact). Amounts are ordinary rows: after #101 they are.
 
-**#175.** An approved mapped row that has not been carried shows, beside its `קדם`, the mark
-*מאושר, לא הועבר להשכרה* and, when there is one, the same reason the letting page shows. The
-reason is read from current state — the other rent half, a bay or storage number that is not a
-Space in the Building, a different value already on the column or the Unit — and nothing is stored.
-When none of those is the case, the mark stands alone. A16's reading step shows that mark and that
-sentence, and no `קדם` button.
-
-**#176.** Pressing `קדם` while that bay or storage number is still not a Space in the Building
-re-renders this ledger with the sentence beside the row. The answer is the ledger, not a 400. The
-lease does not create the Space. Once an administrator has added it on the נכסים page, the same
-`קדם` carries the number onto the letting.
+**#175 and #176 are retired by ADR-0016.** The ledger has no `קדם` and no carry mark. Nothing is
+copied onto a column from this screen. A lease's values reach the letting at פתיחת טיוטה, where a
+value that will not land is named before the press, with the same reasons #175 computed (SPEC-flows
+A2). The tenancy card shows the paper's approved value beside a column that differs.
 
 ### The declaration becomes editable — `POST /documents/types/:typeKey/fields` (slice 7.2)
 
@@ -737,6 +730,26 @@ narrows that building's units through `apartmentMatches`, which A2 already trust
   `searchEstate` over the street found, a search box for the operator's own term, and the file input
   re-armed. A candidate re-posted with the file is an ordinary filing against a unit a human chose.
 
+**For a lease, the reading resolved is the approved one, not this reader's (ADR-0016, #243).**
+A lease is never filed by its place. On פתיחת טיוטה, `resolvePlace` is handed a reading built
+from the lease's approved `address` (street and number before its first comma, the town after it)
+and approved `apartment_number`. Everything below applies to that reading unchanged: exact key
+first, then the narrowed street search, never a unit on the fallback. An `address` nobody approved
+resolves nothing. The regex reader above runs for A12's other types only.
+
+**The street search is narrowed by what the reader read, and still only asks. #242.** The city is
+whatever follows the comma, so a lease that continues its address clause with a phrase rather than
+a town (`רקפת 12, כמסומן בתשריט`) reads a city that matches no key. The street search then
+returns every flat in the right building, and the apartment number was read and thrown away. So
+when the exact key finds no unit, the search's units are narrowed in two steps. First, the same
+street and number as the reading: equality after a leading `רחוב` is dropped and whitespace is
+collapsed, never containment, because the search is a `LIKE` and `רקפת 12` finds `רקפת 120`.
+Second, within that, the units `apartmentMatches` accepts. The first of those sets that is not empty
+is offered, and otherwise everything the search found. **This branch never returns a unit, even
+when one candidate is left.** The city did not match, so nothing exact was found. The opening screen
+shows the one candidate unchecked, and a person ticks it. The reader's city rule is unchanged,
+because a list of phrases that are "not a city" is a reader that guesses.
+
 **The resolution says which building it matched, not only which units. Slice 6.9.** An address whose
 key matches a building holding no flats used to fall through to the street search, so the screen could
 not tell *the building is here and the flat is not* from *nothing here at all* — and those are the two
@@ -838,9 +851,8 @@ journey does not load it. Reveal, promote, and `אישור כל מה שלא סו
 **Track B widens beat 3 from those four rows to the declared set**, and changes nothing else about
 it. It is still one row per value, one אישור, one optional correction; reveal, promote and bulk
 approval stay off this screen, because this journey ends in a draft letting and the ledger remains
-the door for everything else. An approved row that cannot be carried shows the same reason the
-ledger shows beside `קדם`, and still no button. The five beats are unchanged — המסמך · הדירה · הקריאה · הטיוטה · די
-היום — and everything here lands inside beats 3 and 4. The beats are named for what the operator is
+the door for everything else. (The beats and what the reading step carries are restated in SPEC-flows A16 as of #243. There is no
+carry from this step.) The beats are named for what the operator is
 doing, and reading a lease and signing the reading are one sitting; splitting them would turn the
 workspace the office asked for into two.
 
@@ -1145,10 +1157,11 @@ confirm page **recomputes from those rows plus `getUnit`**. There is no staging 
 confirms each proposed person's role and selects an existing `terms_profile` from the list tenancy
 already holds, evidence calls `createParty` or `upsertParty`, `upsertTenancy`, `upsertTenancyParty`
 and `promoteExtractedField`. The name is never typed and never invented: an empty list shows that fact
-and withholds the write. Establishing the draft carries every approved mapped field through
-FieldPromotion: the dates, rent as a pair, the option end, the assigned bay, the assigned storage,
-and rooms and floor on the Unit. A mapped field approved once the letting is bound is carried at
-that approval. A carry that cannot land leaves the row uncarried and does not undo the approval.
+and withholds the write. **From #243, פתיחת טיוטה writes every approved mapped field through the
+column map**: the dates, rent as a pair, the option end, the eligibility group, the assigned bays,
+the assigned storage, and rooms and floor on the Unit. A value that cannot land is named on the
+screen before the press and skipped as named. A bound lease takes no approval (#239), so nothing is
+carried after the press.
 Names do not get a promotion target: party provenance is a `PARTY` / `SIGNATORY` link and the
 `evidence.confirm_lease` audit line.
 
@@ -1596,42 +1609,48 @@ All four are nullable `ADD COLUMN`s when they come.
   first uploader (`COALESCE`). The `evidence.file_document` audit line still names the actor for the
   per-caller cap; the column is the fact other code may join on.
 
-## FieldPromotion (slice 4.3, `src/kernel/migrations/0018_field_promotion.sql`)
+## The column map (slice 4.3, restated at #243 by ADR-0016)
 
-The governed half of A8. Capture stays a row. Becoming a typed column costs a reviewed mapping, and
-the CHECK on `target` is that cost: a new business column the isolation join or the responsibility
-matrix could read cannot be added by seeding a catalogue field.
+The governed half of A8. Capture stays a row. Becoming a typed column costs a **reviewed mapping**.
+From #243 that mapping is **one constant in evidence's code**, not rows in a table.
 
-- **There is no `promotes_to` column anywhere in E15 or E16** (slice 3.0). A promotion target as a
-  catalogue row would make promotion a row, which is the half A8 governs.
-- **`field_promotion`** — one mapping per declaration. `document_type_field_id` is unique: a field
-  promotes to at most one column. `target` is a CHECK enum. Extending it is a migration. Mapping
-  *rows* are seed data, applied by the same function as the catalogue, because they point at ids that
-  only exist after `seed:doctypes`. After #212 the enum is `tenancy.start_date`, `tenancy.end_date`, `tenancy.rent_amount`, `tenancy.rent_currency`, `tenancy.option_end_date`, `tenancy.parking_space_id`, `tenancy.second_parking_space_id`, `tenancy.storage_space_id`, `tenancy.second_storage_space_id`, `tenancy.eligibility_group`, `unit.rooms` and `space.floor`. `gush`, `helka` and `building_number` stay
+- **The map** names, per document type, which declared field lands on which typed column:
+  - `lease`: `start_date`, `end_date`, `rent_amount`, `rent_currency`, `option_end_date`,
+    `eligibility_group`, `parking_space_number`, `second_parking_space_number`,
+    `storage_space_number` and `second_storage_space_number`, onto their `tenancy.*` columns; and
+    `rooms` and `floor`, onto `unit.rooms` and `space.floor`;
+  - `lease_amendment`: `new_end_date`, onto `tenancy.end_date`.
+
+  Changing it is a reviewed code change. A new target column also costs the migration that creates
+  the column. `gush`, `helka`, `building_number`, the address, the names and the identifiers stay
   off it.
-- **Stamp on `extracted_field`.** `promoted_to`, `promoted_by`, `promoted_at` — nullable until a
-  promotion succeeds. `promoted_by` is `-- pii`: it names the operator who signed the copy. It stays
-  a snapshot string, not a staff FK, because what it records is who signed the copy at that moment,
-  not a row that can later be disabled. From 5.4 the HTTP path fills it from the session's email;
-  there is no typed name field. Empty is `invalid`. Confirm (`confirmed_by`) is the same snapshot,
-  filled the same way.
+- **Why not rows.** Until #243 the mapping was the `field_promotion` table: seed rows behind a CHECK
+  enum, plus the same targets hard-coded in `promote.ts`. A row could name nothing the CHECK and the
+  code did not already allow, so it added no freedom. It did add a way to be missing: the 12 Oct
+  2026 staging reset emptied the table, and every draft after it failed. The table, its seed rows
+  and its CHECK are dropped by one migration.
+- **The stamp on `extracted_field`** is unchanged: `promoted_to`, `promoted_by`, `promoted_at`,
+  nullable until a copy succeeds.
+  - `promoted_by` is `-- pii`. It is a snapshot of the operator's email, never a staff FK, filled
+    from the session.
+  - The stamp is the provenance the event log cites: which reading set this column.
 - **The database is what refuses a stamp outside the command.** A trigger rejects UPDATE/INSERT of
-  the stamp columns unless `dona.promoting` is `on` for the transaction (`restrict_violation`, the
-  same class as `document_is_immutable`). A DELETE of a stamped row is the same rejection. Direct
-  writes to `tenancy.start_date` stay legal — the register importer writes those columns without a
-  document, and locking them would break week 2.
-- **`promoteExtractedField`** is the command. It requires a mapping row, a non-empty promoter, and
-  **from 7.4 an approval stamp on the row**. A `tenancy.*` target still requires a `TENANCY` link
-  and asks tenancy to apply the typed value. A `unit.*` or `space.floor` target requires a `UNIT`
-  link and asks estate's `applyPromotedField`; a `building.*` target would require a `BUILDING`
-  link. Evidence issues no estate SQL. An unmapped field (`apartment_number`, `address`,
-  `tenant_name`, `guarantor_name`, the parcel keys) is capturable, listed, searchable, and
-  **incapable** of becoming business truth: the command returns `invalid` and no typed row moves.
-  **From 7.3 those fields are attestable even though they are not promotable** — the approval stamp
-  is the verb that reaches them — and from 7.4 a promotion copies `approved_value`, which by then
-  is the only value a promotable row can have. Establishing a lease draft carries every approved
-  mapped field. Rooms and floor land when the Unit holds nothing different; a different value
-  already on the column is left uncarried, so the establishing step does not overwrite a flat's facts.
+  the stamp columns unless `dona.promoting` is `on` for the transaction (`restrict_violation`). A
+  DELETE of a stamped row is the same rejection. 0029 refuses a stamp on an unapproved row. Direct
+  writes to `tenancy.start_date` stay legal, because the register importer writes those columns
+  without a document.
+- **`promoteExtractedField` is the copy, and it has exactly two callers:** A2's פתיחת טיוטה and A3's
+  confirm. There is no route, no ledger button, and no later carry.
+  - It requires a target in the map, a non-empty promoter, and an approval stamp, and it copies
+    `approved_value`.
+  - A `tenancy.*` target requires a `TENANCY` link and asks tenancy to apply the value.
+  - A `unit.*` or `space.floor` target requires a `UNIT` link and asks estate's
+    `applyPromotedField`. Evidence issues no estate SQL.
+  - A field with no target is capturable, approvable, listed and searchable, and **incapable** of
+    becoming business truth: `invalid`, and no typed row moves.
+- **What will not land is computed before it is attempted.** The press and its screen share one
+  function that says, per approved mapped row, whether it lands and why not. The press attempts
+  only the rows that land, so nothing is caught and swallowed.
 - **R9.** Nothing in `src/policy/`, `src/scope/` or `src/calls/` may mention `extracted_field`.
   Isolation, responsibility and the state machine read typed columns. A contract test scans those
   trees.
@@ -1717,7 +1736,8 @@ on estate's contract (`occupantOfEstateColumn`) so the promotion family consumes
 re-deriving it, and so evidence issues no estate SQL. #141 widens `field_promotion.target` by
 `unit.rooms` and `space.floor` and writes through estate's `applyPromotedField`, which always
 appends `estate_event`. Identical values succeed without rewriting the column. The fields page's
-`קדם` is the first act; a differing occupied column is a second POST with `supersede`.
+From #243 the press never supersedes: a Unit that holds a different rooms or floor keeps it, and the
+opening screen names the difference before the press. A3's confirm is the one caller that supersedes.
 
 This is a policy case, red first, through `promoteExtractedField`.
 
@@ -1741,9 +1761,9 @@ display problem.
 its currency, the option end, the assigned bay, the second assigned bay, the assigned storage and the second assigned storage come from the letting's
 columns when those columns are set. The second assigned bay, and the second assigned storage, are each their own line, and the line is omitted when the lease named one of that kind. An approved value that has a promotion target and has not been
 carried is shown anyway: on the fixed row when the column is empty, and beside the column's value
-when that value differs, with the page it was read from and the mark *מאושר, לא הועבר להשכרה*. The
+when that value differs, with the page it was read from and the mark *על הדף* (#243; until then *מאושר, לא הועבר להשכרה*). The
 reason is computed on read — no column and no migration. Rooms and floor appear in the captures
-list with the same mark when uncarried. `—` means nothing was approved. Every other approved
+list with the same mark when the Unit holds something else. `—` means nothing was approved. Every other approved
 capture on paper bound to that letting is shown and cited (`/documents/:id/read?page=N`).
 Unapproved values do not appear. The view does not branch on a capture value. Nothing here lives
 in `src/tenancy/internal/` or `src/evidence/internal/`. R9 stays the scan it was.
@@ -1762,7 +1782,7 @@ SPEC.md says are never decided by a model.
 
 - **Three places say it, and that is deliberate.** The command refuses (`conflict`, *that reading has
   not been approved*); `extracted_field_promotion_needs_approval()` refuses the stamp in the database
-  even with the command bypassed; and the ledger draws no `קדם` button on an unsigned row. The
+  even with the command bypassed; and from #243 the copy has no button anywhere, only its two callers. The
   database is the one that makes it true for every caller this module ever grows — 0018's own
   argument, applied to the rule 0018 could not yet state.
 - **A third trigger, not a rewrite of the first two.** 0028 stated the reason when it added the

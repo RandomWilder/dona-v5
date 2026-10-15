@@ -188,7 +188,7 @@ is told so.
 The lease declares them per role: `main_tenant_phone`, `main_tenant_email`, `second_tenant_phone`,
 `second_tenant_email`, `guarantor_phone`, `guarantor_email`. A guarantor's contacts pair with
 `guarantor_name` by the same ordinal, all-or-nothing rule as identifiers. None of them has a
-`field_promotion` target. A value already approved under a declaration the seed closed — its key
+column-map target (ADR-0016). A value already approved under a declaration the seed closed — its key
 or its Hebrew label names a tenant's or a guarantor's phone or email, and the key is not one of
 those six — is written the same way. It belongs to the guarantor when the key or the label names a
 guarantor, to the second tenant when it names the additional tenant, and otherwise to the main

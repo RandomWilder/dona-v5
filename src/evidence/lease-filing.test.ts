@@ -322,11 +322,21 @@ describe('evidence · A16 file a lease in one workspace', {
       };
       await wipePlace(CITY, ADDRESS);
       await wipePlace(NONE_CITY, NONE_STREET);
-      await pool.query(
-        `DELETE FROM extracted_field WHERE document_id IN
-           (SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
-        [`gs://${BUCKET}/%`],
-      );
+      await inTransaction(pool, async (db) => {
+        await db.query("SELECT set_config('dona.approving', 'on', true)");
+        await db.query(
+          `UPDATE extracted_field
+              SET approved_value = NULL, approved_by = NULL, approved_at = NULL
+            WHERE document_id IN
+              (SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
+          [`gs://${BUCKET}/%`],
+        );
+        await db.query(
+          `DELETE FROM extracted_field WHERE document_id IN
+             (SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
+          [`gs://${BUCKET}/%`],
+        );
+      });
       await pool.query(
         `DELETE FROM document_passage WHERE document_id IN
            (SELECT document_id FROM document WHERE storage_uri LIKE $1)`,
@@ -356,6 +366,58 @@ describe('evidence · A16 file a lease in one workspace', {
         found.rows.find((row) => row.unit_number === '10')?.unit_id ?? '';
       assert.ok(unitNine);
       assert.ok(unitTen);
+
+      const approveCaptured = async (
+        app: {
+          inject: (
+            options: object,
+          ) => Promise<{ statusCode: number; body: string }>;
+        },
+        documentId: string,
+        captured: Record<string, string>,
+      ): Promise<void> => {
+        for (const [fieldKey, value] of Object.entries(captured)) {
+          const declared: { rows: Array<{ id: string }> } = await pool.query(
+            `SELECT f.document_type_field_id AS id
+               FROM document_type_field f
+               JOIN document_type t ON t.document_type_id = f.document_type_id
+              WHERE t.type_key = 'lease' AND f.field_key = $1
+              ORDER BY f.effective_from DESC
+              LIMIT 1`,
+            [fieldKey],
+          );
+          const fieldId: string = declared.rows[0]?.id ?? '';
+          assert.ok(fieldId, fieldKey);
+          const inserted = await pool.query<{ id: string }>(
+            `INSERT INTO extracted_field (
+               extracted_field_id, document_id, document_type_field_id, value,
+               page, bbox, confidence, model, extracted_at
+             ) VALUES (
+               gen_random_uuid(), $1, $2, $3,
+               1, '{"x":1,"y":2,"width":3,"height":4}'::jsonb, 0.99, 'fake', $4
+             )
+             RETURNING extracted_field_id AS id`,
+            [documentId, fieldId, value, AT],
+          );
+          const extractedFieldId = inserted.rows[0]?.id ?? '';
+          const stamped = await (
+            asOperator(app as never, who) as {
+              inject: (
+                options: object,
+              ) => Promise<{ statusCode: number; body: string }>;
+            }
+          ).inject({
+            method: 'POST',
+            url: `/documents/filing/${documentId}/approve`,
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            payload: new URLSearchParams({
+              csrf: who.csrf,
+              extracted_field_id: extractedFieldId,
+            }).toString(),
+          });
+          assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
+        }
+      };
 
       await t.test(
         'the rail item sits under מסמכים, and the empty tab is lease-only attach',
@@ -450,6 +512,10 @@ describe('evidence · A16 file a lease in one workspace', {
           );
           assert.equal(stored.rows[0]?.links, '0');
           assert.equal(await documentsHere(), before);
+          await approveCaptured(here, documentId, {
+            address: `${ADDRESS}, ${CITY}`,
+            apartment_number: '9',
+          });
           const open = await as(here).inject({
             method: 'GET',
             url: `/documents/filing/${documentId}/open`,
@@ -600,6 +666,9 @@ describe('evidence · A16 file a lease in one workspace', {
             String(many.headers.location ?? '').match(
               /\/documents\/filing\/([0-9a-f-]{36})$/,
             )?.[1] ?? '';
+          await approveCaptured(several, documentId, {
+            address: `${ADDRESS}, ${CITY}`,
+          });
           const open = await as(several).inject({
             method: 'GET',
             url: `/documents/filing/${documentId}/open`,
@@ -638,6 +707,10 @@ describe('evidence · A16 file a lease in one workspace', {
             String(none.headers.location ?? '').match(
               /\/documents\/filing\/([0-9a-f-]{36})$/,
             )?.[1] ?? '';
+          await approveCaptured(elsewhere, noneId, {
+            address: `${NONE_STREET}, ${NONE_CITY}`,
+            apartment_number: '3',
+          });
           const noneOpen = await as(elsewhere).inject({
             method: 'GET',
             url: `/documents/filing/${noneId}/open`,
@@ -666,7 +739,7 @@ describe('evidence · A16 file a lease in one workspace', {
             method: 'GET',
             url: `/documents/filing/${annexId}/open`,
           });
-          assert.match(annexOpen.body, /מפנה את פרטי הנכס לנספח/);
+          assert.match(annexOpen.body, /הכתובת טרם אושרה/);
           assert.match(annexOpen.body, /חיפוש דירה/);
           assert.doesNotMatch(annexOpen.body, /יצירת הבניין/);
 
@@ -687,7 +760,7 @@ describe('evidence · A16 file a lease in one workspace', {
             method: 'GET',
             url: `/documents/filing/${blankId}/open`,
           });
-          assert.match(blankOpen.body, /לא נקראה כתובת/);
+          assert.match(blankOpen.body, /הכתובת טרם אושרה/);
           assert.match(blankOpen.body, /חיפוש דירה/);
           assert.doesNotMatch(blankOpen.body, /יצירת הבניין/);
           assert.equal(await documentsHere(), before);
@@ -768,6 +841,10 @@ describe('evidence · A16 file a lease in one workspace', {
             String(seen.headers.location ?? '').match(
               /\/documents\/filing\/([0-9a-f-]{36})$/,
             )?.[1] ?? '';
+          await approveCaptured(elsewhere, documentId, {
+            address: `${NONE_STREET}, ${NONE_CITY}`,
+            apartment_number: '3',
+          });
           const open = await as(elsewhere).inject({
             method: 'GET',
             url: `/documents/filing/${documentId}/open`,
@@ -834,6 +911,10 @@ describe('evidence · A16 file a lease in one workspace', {
             String(seen.headers.location ?? '').match(
               /\/documents\/filing\/([0-9a-f-]{36})$/,
             )?.[1] ?? '';
+          await approveCaptured(missingFlat, documentId, {
+            address: `${ADDRESS}, ${CITY}`,
+            apartment_number: '12',
+          });
           const open = await as(missingFlat).inject({
             method: 'GET',
             url: `/documents/filing/${documentId}/open`,
@@ -927,11 +1008,21 @@ describe('evidence · A16 file a lease in one workspace', {
         .catch(() => {});
       await signOutAll(pool, STAFF_DOMAIN);
       for (const hash of hashes) {
-        await pool.query(
-          `DELETE FROM extracted_field WHERE document_id IN
-             (SELECT document_id FROM document WHERE file_hash = $1)`,
-          [hash],
-        );
+        await inTransaction(pool, async (db) => {
+          await db.query("SELECT set_config('dona.approving', 'on', true)");
+          await db.query(
+            `UPDATE extracted_field
+                SET approved_value = NULL, approved_by = NULL, approved_at = NULL
+              WHERE document_id IN
+                (SELECT document_id FROM document WHERE file_hash = $1)`,
+            [hash],
+          );
+          await db.query(
+            `DELETE FROM extracted_field WHERE document_id IN
+               (SELECT document_id FROM document WHERE file_hash = $1)`,
+            [hash],
+          );
+        });
         await pool.query(
           `DELETE FROM document_link WHERE document_id IN
              (SELECT document_id FROM document WHERE file_hash = $1)`,
@@ -1012,7 +1103,7 @@ describe('evidence · A16 file a lease in one workspace', {
       { field_key: 'start_date', value: START, word_ids: [0] },
       { field_key: 'end_date', value: END, word_ids: [1] },
       { field_key: 'apartment_number', value: '9', word_ids: [2] },
-      { field_key: 'address', value: ADDRESS_R, word_ids: [3] },
+      { field_key: 'address', value: `${ADDRESS_R}, ${CITY_R}`, word_ids: [3] },
       { field_key: 'tenant_name', value: TENANT, word_ids: [4] },
       { field_key: 'tenant_id_number', value: '123456789', word_ids: [5] },
     ];
@@ -1114,7 +1205,13 @@ describe('evidence · A16 file a lease in one workspace', {
     };
 
     const stampOpening = async (documentId: string) => {
-      for (const key of ['start_date', 'end_date', 'tenant_name'] as const) {
+      for (const key of [
+        'address',
+        'apartment_number',
+        'start_date',
+        'end_date',
+        'tenant_name',
+      ] as const) {
         const stamped = await post(`/documents/filing/${documentId}/approve`, {
           extracted_field_id: await rowIdOf(documentId, key),
         });
@@ -1707,6 +1804,324 @@ describe('evidence · A16 file a lease in one workspace', {
       await pool.query('DELETE FROM project WHERE project_code = $1', [
         PROJECT_D,
       ]);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('preselects the flat from the approved address, not the stored place reading', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+
+    const STREET = 'רקפת 12';
+    const TOWN = 'שוהם';
+    const WRONG_TOWN = 'כמסומן בתשריט';
+    const FLAT = '6';
+    const PROJECT_P = 'TEST-A16-244';
+    const BUCKET_P = 'dona-v5-test-a16-244';
+    const DOMAIN_P = 'a16-244.test';
+    const unitAt = (city: string) => ({
+      name: `בניין ${STREET} ${city}`,
+      addressLine: STREET,
+      city,
+      projectCode: PROJECT_P,
+      handoverDate: '2025-03-01',
+      warrantyEndDate: '2027-03-01',
+      status: 'ACTIVE' as const,
+      spaces: [
+        {
+          kind: 'UNIT' as const,
+          name: `דירה ${FLAT}`,
+          floor: '1',
+          accessNote: null,
+        },
+      ],
+      units: [
+        {
+          spaceName: `דירה ${FLAT}`,
+          unitNumber: FLAT,
+          rooms: 3,
+          areaSqm: 70,
+          hasMamad: false,
+          parkingSpaceName: null,
+          storageSpaceName: null,
+          warrantyEndDate: null,
+          conditionStatus: 'READY' as const,
+        },
+      ],
+    });
+    const planP: EstatePlan = {
+      projects: [
+        {
+          name: 'מכרז כתובת מאושרת',
+          projectCode: PROJECT_P,
+          tenderRef: null,
+          status: 'ACTIVE',
+        },
+      ],
+      buildings: [unitAt(TOWN), unitAt(WRONG_TOWN)],
+    };
+    const findings = [
+      { field_key: 'address', value: `${STREET}, ${TOWN}`, word_ids: [0] },
+      { field_key: 'apartment_number', value: FLAT, word_ids: [1] },
+    ];
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      clock: fixedClock(AT),
+      objects: createMemoryStore(),
+      pdf: createFakePdfText([
+        leasing(`${STREET}, ${WRONG_TOWN}. דירה ${FLAT}`),
+      ]),
+      extractor: createFakeExtractor(() => ({ findings })),
+      bucket: BUCKET_P,
+    });
+    let actor: SignedIn;
+    const approve = async (documentId: string, fieldKey: string) => {
+      const rows = await pool.query<{ id: string }>(
+        `SELECT e.extracted_field_id AS id
+           FROM extracted_field e
+           JOIN document_type_field f
+             ON f.document_type_field_id = e.document_type_field_id
+          WHERE e.document_id = $1 AND f.field_key = $2`,
+        [documentId, fieldKey],
+      );
+      const id = rows.rows[0]?.id ?? '';
+      assert.ok(id, fieldKey);
+      const stamped = await asRole(app, actor).inject({
+        method: 'POST',
+        url: `/documents/filing/${documentId}/approve`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: new URLSearchParams({
+          csrf: actor.csrf,
+          extracted_field_id: id,
+        }).toString(),
+      });
+      assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 400));
+    };
+    const fileLease = async (): Promise<string> => {
+      const filed = await asRole(app, actor).inject({
+        method: 'POST',
+        url: '/documents/filing',
+        ...upload(
+          { csrf: actor.csrf },
+          { filename: 'שכירות.pdf', bytes: pdfBytes(`a16-244-${Date.now()}`) },
+        ),
+      });
+      assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
+      return (
+        String(filed.headers.location ?? '').match(
+          /\/documents\/filing\/([0-9a-f-]{36})$/,
+        )?.[1] ?? ''
+      );
+    };
+
+    try {
+      await signOutAll(pool, DOMAIN_P);
+      actor = await signIn(pool, fixedClock(AT), {
+        email: `admin@${DOMAIN_P}`,
+        role: 'ADMIN',
+      });
+      await applyDocumentTypeCatalogue(pool, seedDocumentTypes);
+      for (const city of [TOWN, WRONG_TOWN]) {
+        await pool.query(
+          `DELETE FROM unit WHERE unit_id IN (
+             SELECT s.space_id FROM space s
+             JOIN building b ON b.building_id = s.building_id
+             WHERE b.city = $1 AND b.address_line = $2)`,
+          [city, STREET],
+        );
+        await pool.query(
+          `DELETE FROM space WHERE building_id IN (
+             SELECT building_id FROM building WHERE city = $1 AND address_line = $2)`,
+          [city, STREET],
+        );
+        await pool.query(
+          'DELETE FROM building WHERE city = $1 AND address_line = $2',
+          [city, STREET],
+        );
+      }
+      await pool.query('DELETE FROM project WHERE project_code = $1', [
+        PROJECT_P,
+      ]);
+      await importEstate(pool, planP);
+      const units = await pool.query<{
+        unit_id: string;
+        city: string;
+      }>(
+        `SELECT u.unit_id, b.city
+           FROM unit u
+           JOIN space s ON s.space_id = u.unit_id
+           JOIN building b ON b.building_id = s.building_id
+          WHERE b.address_line = $1 AND u.unit_number = $2`,
+        [STREET, FLAT],
+      );
+      const shoham = units.rows.find((row) => row.city === TOWN)?.unit_id ?? '';
+      const decoy =
+        units.rows.find((row) => row.city === WRONG_TOWN)?.unit_id ?? '';
+      assert.ok(shoham);
+      assert.ok(decoy);
+
+      await t.test(
+        'a wrong town in the stored reading still preselects flat 6 at the approved address',
+        async () => {
+          const documentId = await fileLease();
+          assert.ok(documentId);
+          await approve(documentId, 'address');
+          await approve(documentId, 'apartment_number');
+          const open = await asRole(app, actor).inject({
+            method: 'GET',
+            url: `/documents/filing/${documentId}/open`,
+          });
+          assert.equal(open.statusCode, 200);
+          assert.match(open.body, /רקפת 12, שוהם/);
+          assert.match(open.body, new RegExp(`value="${shoham}"`));
+          assert.doesNotMatch(open.body, new RegExp(decoy));
+          assert.doesNotMatch(open.body, /type="radio"/);
+        },
+      );
+
+      await t.test(
+        'an approved address with no town lists flat 6 unchecked',
+        async () => {
+          await pool.query(`DELETE FROM unit WHERE unit_id = $1`, [decoy]);
+          await pool.query(`DELETE FROM space WHERE space_id = $1`, [decoy]);
+          await pool.query(
+            'DELETE FROM building WHERE city = $1 AND address_line = $2',
+            [WRONG_TOWN, STREET],
+          );
+          const bare = buildApp({
+            pool,
+            version: '9.9.9-test',
+            clock: fixedClock(AT),
+            objects: createMemoryStore(),
+            pdf: createFakePdfText([leasing(`${STREET}. דירה ${FLAT}`)]),
+            extractor: createFakeExtractor(() => ({
+              findings: [
+                { field_key: 'address', value: STREET, word_ids: [0] },
+                { field_key: 'apartment_number', value: FLAT, word_ids: [1] },
+              ],
+            })),
+            bucket: BUCKET_P,
+          });
+          const documentId = await (async () => {
+            const filed = await asRole(bare, actor).inject({
+              method: 'POST',
+              url: '/documents/filing',
+              ...upload(
+                { csrf: actor.csrf },
+                {
+                  filename: 'שכירות.pdf',
+                  bytes: pdfBytes(`a16-244-bare-${Date.now()}`),
+                },
+              ),
+            });
+            assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
+            return (
+              String(filed.headers.location ?? '').match(
+                /\/documents\/filing\/([0-9a-f-]{36})$/,
+              )?.[1] ?? ''
+            );
+          })();
+          const stamp = async (fieldKey: string) => {
+            const rows = await pool.query<{ id: string }>(
+              `SELECT e.extracted_field_id AS id
+                 FROM extracted_field e
+                 JOIN document_type_field f
+                   ON f.document_type_field_id = e.document_type_field_id
+                WHERE e.document_id = $1 AND f.field_key = $2`,
+              [documentId, fieldKey],
+            );
+            const id = rows.rows[0]?.id ?? '';
+            assert.ok(id, fieldKey);
+            const stamped = await asRole(bare, actor).inject({
+              method: 'POST',
+              url: `/documents/filing/${documentId}/approve`,
+              headers: { 'content-type': 'application/x-www-form-urlencoded' },
+              payload: new URLSearchParams({
+                csrf: actor.csrf,
+                extracted_field_id: id,
+              }).toString(),
+            });
+            assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
+          };
+          await stamp('address');
+          await stamp('apartment_number');
+          const open = await asRole(bare, actor).inject({
+            method: 'GET',
+            url: `/documents/filing/${documentId}/open`,
+          });
+          assert.equal(open.statusCode, 200);
+          const radio = open.body.match(
+            new RegExp(`<input type="radio"[^>]*value="${shoham}"[^>]*>`),
+          );
+          assert.ok(radio);
+          assert.doesNotMatch(radio[0], /checked/);
+          assert.equal(open.body.match(/type="radio"/g)?.length, 1);
+          await bare.close();
+        },
+      );
+
+      await t.test(
+        'an unapproved address preselects nothing and says why',
+        async () => {
+          const held = buildApp({
+            pool,
+            version: '9.9.9-test',
+            clock: fixedClock(AT),
+            objects: createMemoryStore(),
+            pdf: createFakePdfText([
+              leasing(`${STREET}, ${TOWN}. דירה ${FLAT}`),
+            ]),
+            extractor: createFakeExtractor(() => ({
+              findings: [
+                {
+                  field_key: 'address',
+                  value: `${STREET}, ${TOWN}`,
+                  word_ids: [0],
+                },
+                {
+                  field_key: 'apartment_number',
+                  value: FLAT,
+                  word_ids: [1],
+                },
+              ],
+            })),
+            bucket: BUCKET_P,
+          });
+          const filed = await asRole(held, actor).inject({
+            method: 'POST',
+            url: '/documents/filing',
+            ...upload(
+              { csrf: actor.csrf },
+              {
+                filename: 'שכירות.pdf',
+                bytes: pdfBytes(`a16-244-held-${Date.now()}`),
+              },
+            ),
+          });
+          assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
+          const documentId =
+            String(filed.headers.location ?? '').match(
+              /\/documents\/filing\/([0-9a-f-]{36})$/,
+            )?.[1] ?? '';
+          const open = await asRole(held, actor).inject({
+            method: 'GET',
+            url: `/documents/filing/${documentId}/open`,
+          });
+          assert.equal(open.statusCode, 200);
+          assert.match(open.body, /הכתובת טרם אושרה/);
+          assert.match(open.body, /חיפוש דירה/);
+          assert.match(open.body, /טרם נבחרה/);
+          assert.doesNotMatch(open.body, new RegExp(shoham));
+          assert.doesNotMatch(open.body, /type="radio"/);
+          await held.close();
+        },
+      );
+    } finally {
       await app.close();
       await pool.end();
     }

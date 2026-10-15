@@ -266,6 +266,71 @@ describe('evidence · reading the place off a document', () => {
     });
   });
 
+  describe('a city misread off the clause after the comma (#242)', () => {
+    // The staging lease of 15 Oct, in invented values: the address clause runs on with a phrase,
+    // `CITY_AFTER` reads the phrase as the town, the exact key misses, and the street search returns
+    // the whole building — plus, because it is a LIKE, the `…120` next door with the same flat number.
+    const text = 'כתובת המושכר: רקפת 12, כמסומן בתשריט. דירה 6.';
+    const unit = (id: string, number: string, line: string): UnitHit => ({
+      unit_id: id,
+      unit_number: number,
+      building_id: `b-${line}`,
+      building_name: `בניין ${line}`,
+      address_line: line,
+      city: 'שוהם',
+    });
+    const searchAnswers = (units: UnitHit[]) => ({
+      query: async (sql: string) => ({
+        rows: /ILIKE/.test(sql) && /unit_number/.test(sql) ? units : [],
+      }),
+    });
+    const building = Array.from({ length: 26 }, (_, at) =>
+      unit(`u-${at + 1}`, String(at + 1), 'רקפת 12'),
+    );
+    const neighbour = unit('u-120-6', '6', 'רחוב רקפת 120');
+
+    it('reads the phrase as the city, which is why the key misses', () => {
+      assert.equal(readPlace(text).city, 'כמסומן בתשריט');
+    });
+
+    it('narrows the street search to the one flat the lease names, and still only asks', async () => {
+      const resolved = await resolvePlace(
+        searchAnswers([...building, neighbour]) as never,
+        readPlace(text),
+      );
+      assert.equal(resolved.unit, null);
+      assert.deepEqual(
+        resolved.candidates?.map((u) => u.unit_id),
+        ['u-6'],
+      );
+      assert.equal(resolved.total, 1);
+    });
+
+    it('offers the same street, not the neighbour, when no flat has that number', async () => {
+      const resolved = await resolvePlace(
+        searchAnswers([...building.slice(0, 5), neighbour]) as never,
+        readPlace(text),
+      );
+      assert.equal(resolved.unit, null);
+      assert.equal(resolved.total, 5);
+      assert.ok(
+        resolved.candidates?.every((u) => u.address_line === 'רקפת 12'),
+      );
+    });
+
+    it('offers everything the search found when nothing is on the same street', async () => {
+      const resolved = await resolvePlace(
+        searchAnswers([neighbour]) as never,
+        readPlace(text),
+      );
+      assert.deepEqual(
+        resolved.candidates?.map((u) => u.unit_id),
+        ['u-120-6'],
+      );
+      assert.equal(resolved.unit, null);
+    });
+  });
+
   it('does not call an ordinary lease a deferral, and never lets the marker place a flat', async () => {
     // The other direction, which is the one that matters: the marker is a **display fact**. A lease
     // that names its address does not carry it, and a body that does carry it resolves exactly as

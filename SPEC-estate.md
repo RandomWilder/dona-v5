@@ -831,10 +831,12 @@ buildings list and the incomplete queue still carry no name.
 
 **The card reads two kinds of fact (#134).** Rent, rent currency, the option end, the assigned bay
 and the assigned storage come off the letting's own columns via `getTenancy` when those columns are
-set. An approved row that has a promotion target and is not stamped `promoted_to` is not hidden
+set. An approved row that has a column-map target and is not stamped `promoted_to` is not hidden
 behind `—`. When the column is empty, the row shows the approved value, a link to the page it was
-read from, and the mark *מאושר, לא הועבר להשכרה*, with a reason computed on read from current
-state and stored nowhere: the other rent half is not approved; the named number is not a parking or
+read from, and the mark *על הדף* (until #243, *מאושר, לא הועבר להשכרה*). **It is a fact about the
+paper, not pending work: no button carries it later (ADR-0016).** A first bay or first storage
+room is set through this page's parking and storage commands. The reason is computed on read from
+current state and stored nowhere: the other rent half is not approved; the named number is not a parking or
 storage Space in this Building, and the sentence names the number and the Building; the column
 already holds a different value, and the sentence names it. When none of those is the case, the
 mark stands alone. **#176.** When the reader holds
