@@ -166,37 +166,81 @@ other type is unchanged and is still filed against the place this door names.
 
 ### A2 — A lease establishes a tenancy
 
-**Trigger:** A1 completes for a document of type lease.
-**Sequence:** extract → approve on the ledger → write a draft → the tenancy page.
+**Trigger:** a lease is filed (A16, or any upload door; every lease lands on A16's tab).
+**Sequence:** extract → a person approves the reading on A16's הקריאה → **פתיחת טיוטה** → the
+draft → A5 activates it. ([ADR-0015](docs/decisions/ADR-0015-a-lease-is-unassigned-until-its-draft-opens.md),
+[ADR-0016](docs/decisions/ADR-0016-approval-is-the-only-act-the-press-writes-the-columns.md).)
 
-**Amended at #232 ([ADR-0015](docs/decisions/ADR-0015-a-lease-is-unassigned-until-its-draft-opens.md)).
-The sequence is now extract → approve on A16's הקריאה → פתיחת טיוטה → the draft.** Approving only
-stamps. Nothing in this flow is written as a side effect of an approval, because on 14 Oct 2026 a
-draft write that followed a committed stamp failed (no terms profile), and left a reading that was
-fully approved, with no draft and nothing to press. **פתיחת טיוטה** is one screen and one post.
+**Approval is the only human act before the press, and it only stamps.** Nothing is written as a
+side effect of an approval: on 14 Oct 2026 a draft write that followed a committed stamp failed,
+and left a reading that was fully approved, with no draft and nothing to press. **There is no
+second act that copies a value afterwards.** The press writes everything the approved reading
+supports, and a value it cannot write is named on the screen before the press, not after it.
+
+**פתיחת טיוטה is one screen and one post.**
+
 - **Shown before the press:**
-  - the unit, preselected when the reading's address resolves to exactly one, otherwise a candidate list and search, with A12's four sentences and A12's create offer under `estate.write`;
-  - the terms profile, preselected by the rule in step 6;
-  - every person, with the party each will become;
-  - every reason the press would be refused.
+  - **the flat.** It is preselected when the *approved* `address` and `apartment_number` resolve to
+    exactly one Unit through `resolvePlace` (SPEC-evidence, *Resolution*). Otherwise the screen
+    offers candidates narrowed by street and apartment, a search box, A12's sentences, and A12's
+    create offer under `estate.write`. An `address` nobody has approved yet preselects nothing, and
+    the screen says so. A flat chosen at the unit-page upload door is preselected ahead of the
+    reading. The flat is never chosen without a human: a preselection is a checked radio the
+    operator can change, and the press is theirs.
+  - **the terms profile**, preselected by the rule in step 6. An empty register disables the button
+    with a sentence.
+  - **every person**, with the role their field gives them and the party each will become (step 5).
+  - **what the press will write onto the letting and the Unit.** Every approved value that has a
+    typed column (step 7), the column it lands on, and every one that will not land, with the
+    reason:
+    - the other rent half is not approved;
+    - the number is not a parking or storage Space in the Building, with the later-add link under
+      `estate.write`;
+    - the Unit already holds a different rooms or floor.
+
+    These do not refuse. They are what the operator fixes first, if they want the value on the
+    letting.
+  - **every reason the press would be refused.** The kinds are:
+    - the reading is not ready;
+    - no terms profile;
+    - the flat already has a lease on this start date;
+    - two people resolve to one;
+    - a contact is held by another party, or shared by two people on this lease.
 - **Written by the press, in one transaction:**
-  - the `DRAFT` tenancy;
+  - the `DRAFT` tenancy, with the approved dates;
   - the document's `TENANCY` link and its `UNIT` `SUBJECT` link;
-  - the signed dates and every approved mapped field (step 7);
+  - every approved mapped value that the screen said would land (step 7);
   - the parties (step 5);
-  - their `party_contact` rows from the approved per-role phone and email fields (SPEC-parties, "Contacts from a lease");
+  - their `party_contact` rows from the approved per-role phone and email fields (SPEC-parties,
+    "Contacts from a lease");
   - the `tenancy_party` rows;
   - the `SIGNATORY` links.
 
-  A refusal writes none of it.
+  A refusal writes none of it. **The screen and the press compute their answer with one function**,
+  so the press can refuse only for a reason the screen already showed. Anything else is a defect:
+  it is logged with its error code and message, and the page names it rather than saying try again.
+- **After the press** the tab arrives at הטיוטה (A16 beat 4), and the letting is activated on its
+  tenancy page (A5).
 
-The steps below stand, read in that light, with these changes:
-- **Step 5 gains two matches and one candidate list.** An existing party is reused when a ת.ז. (`upsertParty`), or an approved phone or email already held as an open contact, identifies it. A person who matches only by name is shown as a candidate and is created new unless the operator links them on this screen. A name is still never matched by the system.
-- **Step 6 gains a second key.** A tenancy holding a party with the same `national_id_key` and the same start date is offered back: attach this lease to it, or open a new draft anyway. The (unit, start date) refusal stands.
-- **The terms profile is a choice on the screen, not a refusal after it.** An empty register disables the button with a sentence.
-- **The cross-check below no longer refuses.** A read address that disagrees with the chosen unit is shown on the screen and does not refuse; A5's gate computes the same comparison again from the
-  approved reading and the unit, and shows it as a flag. Nothing is stored for it.
-- **Once the document has a `TENANCY` link, its reading is closed.** Corrections are made on the party or tenancy, with the paper's value shown beside the record (#229).
+Step 5's matching:
+- an existing party is reused when a ת.ז. (`upsertParty`), or an approved phone or email already
+  held as an open contact, identifies it;
+- a person who matches only by name is shown as a candidate, and is created new unless the operator
+  links them on this screen;
+- a name is still never matched by the system.
+
+Step 6's second key: a tenancy holding a party with the same `national_id_key` and the same start
+date is offered back, to attach this lease to it or to open a new draft anyway. The (unit, start
+date) refusal stands.
+
+A read address that disagrees with the chosen flat is shown on the screen and does not refuse. A5's
+gate computes the same comparison from the approved reading and the unit, and shows it as a flag.
+Nothing is stored for it.
+
+**Once the document has a `TENANCY` link, its reading is closed.** Corrections are made on the
+party or the tenancy, with the paper's value shown beside the record (#229).
+
+The steps below are the rules the press applies.
 
 1. Extraction reads the lease against `DocumentTypeField` for that type and returns what it found,
    including what it did not find.
@@ -214,7 +258,7 @@ The steps below stand, read in that light, with these changes:
    form and a badly scanned page all produce it, and none of them is an error or a retry. The value is
    **withheld from every read path by default** and shown only to a role holding
    `party.national_id.read`, with an `audit_log` line per disclosure; it is not on this flow's confirm
-   screen at all, and it has no `field_promotion` target, because it becomes `party.national_id` only
+   screen at all, and it is not in the column map, because it becomes `party.national_id` only
    when a human confirms a household. The exception this rests on is
    [ADR-0006](docs/decisions/ADR-0006-the-extractor-may-read-a-declared-identifier.md).
 4. **Role is confirmed by a human before any `tenancy_party` row is written.** This is invariant 5
@@ -288,14 +332,20 @@ The steps below stand, read in that light, with these changes:
    because the forms in hand do not print it.
 7. The written tenancy is `DRAFT` and carries per-field provenance back to the lease.
 
-   **Dates are promoted from the approved reading.** From 7.4 a promotion requires an approval stamp.
-   The ledger is where those dates are signed; the write copies the signed value. A row already
-   signed is left alone. Where a date was corrected on the ledger, that corrected value is what
-   `upsertTenancy` writes. The raw reading stays on the evidence row.
+   **Every approved value with a typed column is written by the press, from the value a person
+   signed.** Which field lands on which column is one map in evidence's code (SPEC-evidence,
+   *The column map*). For a lease it is:
+   - the dates and the rent pair;
+   - the option end and the eligibility group;
+   - the two assigned bays and the two assigned storage rooms;
+   - the Unit's rooms and floor.
 
-**Cross-check:** the address and apartment number extracted from the document are asserted against the
-unit the tenancy hangs on. This catches the error the type guard cannot — the right kind of document
-filed against the wrong apartment. A mismatch writes no tenancy and no party.
+   The dates are the tenancy's own `start_date` and `end_date` and are written at insert. Every
+   mapped row the press writes is stamped `promoted_to` on the evidence row, which is the
+   provenance the event log cites. A date corrected on הקריאה is the corrected value. The raw
+   reading stays on the evidence row. A value that cannot land, for the reasons the screen lists,
+   is skipped exactly as listed. A different rooms or floor already on the Unit stays, because a
+   Unit's facts are an ADMIN's (A11, A13).
 
 ### A3 — An addendum completes a tenancy
 
@@ -781,15 +831,14 @@ refilled and a staging store is what 3.2, A6 and the director's ruling of 14 Sep
 price is the one A12 has always charged — attach the file a second time — and it is the same price a
 candidate chosen off the list charges.
 
-**Amended at #232 for `lease` only ([ADR-0015](docs/decisions/ADR-0015-a-lease-is-unassigned-until-its-draft-opens.md)).
-A lease is not filed by its place.** The reader still runs at upload, and its result is kept as the
-reading's address proposal. Exactly one flat becomes the preselection on A2's **פתיחת טיוטה**.
-Zero, several, nothing read and annex become that screen's candidate list, search and create offer,
-under the same four sentences. The lease itself is stored unassigned, so the refusal that writes
-nothing, and the second attach, no longer apply to it. **"Nothing is held between the read and the
-file" is reversed for leases**: an unassigned lease is held, by design, until a human assigns it on
-פתיחת טיוטה. The permanence argument above is why: a path that names no place cannot name the wrong
-one. Every other type is unchanged.
+**A lease is not A12's to place** ([ADR-0015](docs/decisions/ADR-0015-a-lease-is-unassigned-until-its-draft-opens.md),
+[ADR-0016](docs/decisions/ADR-0016-approval-is-the-only-act-the-press-writes-the-columns.md)). A
+lease reaching this door is stored unassigned and lands on A16's tab. The regex reader does not run
+on it. Its flat is chosen on A2's **פתיחת טיוטה**, preselected from the address a person approved,
+through this section's `resolvePlace`. **"Nothing is held between the read and the file" is
+reversed for leases:** an unassigned lease is held, by design, until a human assigns it on
+פתיחת טיוטה. The permanence argument above is why: a path that names no place cannot name the
+wrong one. Every other type is unchanged.
 
 ### A14 — An administrator declares a field
 
@@ -872,39 +921,24 @@ verb. **Approving is a stamp on the evidence row; promoting is still the copy on
    dataset this flow exists to produce. A viewer who *may* read one still has to ask: the row is
    flagged for everybody, so a ת.ז. is revealed and signed on its own or not at all.
 
-**What A15 does not do.** It does not leave a mapped field on a `lease` approved and uncarried once
-a letting is bound. Approval of a mapped `lease` field carries it, by 4.3's promotion command, with
-the approver as the promoter. The approval that first establishes the draft carries every mapped
-field already approved, not only the two dates. A carry that cannot land — the other rent half still
-unapproved, a bay or storage number that is not a Space in the Building, a different value already on
-the column or the Unit — leaves that row uncarried and does not fail the approval: the approve route
-redirects as it does today. `lease_amendment` is untouched; A3's confirm still signs and carries
-`new_end_date`. **What 7.4 still holds is the direction of the dependency: a promotion requires the
-stamp this flow writes**, and copies `approved_value`. A2's and A3's confirm screens write that stamp
-themselves for the dates they promote, so the operator who never opens the ledger is still signing
-what the reader produced — on a screen that shows it. It does not create a row for a
-declaration the reader found nothing for: an `extracted_field` with no page and no bbox is refused by
-`0017`, and whether a hand-typed value is evidence at all is a ruling and not a button. It does not
-change what the reader looks for — that is A14, one screen earlier.
+**What A15 does not do.** It does not copy anything onto a typed column. Approving is a stamp and
+nothing else, on every type. The copy belongs to the act that a reading supports: A2's פתיחת טיוטה
+for a lease, and A3's confirm for an addendum ([ADR-0016](docs/decisions/ADR-0016-approval-is-the-only-act-the-press-writes-the-columns.md)).
+There is no `קדם` and no `/documents/:id/promote`. A15 does not create a row for a declaration the
+reader found nothing for: an `extracted_field` with no page and no bbox is refused by `0017`, and
+whether a hand-typed value is evidence at all is a ruling, not a button. It does not change what the
+reader looks for. That is A14, one screen earlier.
 
-**Amended at #232: a `lease` is not approved here.** `/documents/:id/fields` for a lease redirects
-to A16's הקריאה for that document, so one press means one thing. A15 remains the ledger for every
-other type. Both screens call one approval command, and **neither establishes a draft as a side
-effect of approving**. The clause above that has the approval which first establishes the draft
-carrying every mapped field now belongs to A2's פתיחת טיוטה.
+**A `lease` is not approved here.** `/documents/:id/fields` for an unopened lease redirects to A16's
+הקריאה for that document, so one press means one thing. A15 remains the ledger for every other type.
+Both screens call one approval command, and neither writes a draft.
 
-**Once a lease has a `TENANCY` link its reading is closed (#239).** Both approve routes refuse a
-press on its rows — one row, a correction, or the rest — with a sentence in the page and a link to
-the tenancy, where a correction is made with the reading shown beside the record. From then on
-`/documents/:id/fields` for that lease no longer redirects: A16's tab has moved on to הטיוטה, and
-the ledger is where the reading is still read. It is printed closed — the same sentence and link, no
-`אישור` and no `אישור כל מה שלא סומן` — and keeps `קדם` for an approved row the opening could not
-carry, because carrying is not approving and a bay added to the Building next month still has to
-land. The identity-and-access set and the second-press sentence are A16's and are stated there.
-This retires the first sentences of *What A15 does not do* above: a bound lease takes no approval,
-so no approval carries on one, and every mapped field reaches the letting at פתיחת טיוטה or by
-`קדם`. A second press on a lease row from a ledger tab opened before the redirect gets A16's
-sentence on הקריאה.
+**Once a lease has a `TENANCY` link, its reading is closed (#239).** Both approve routes refuse a
+press on its rows (one row, a correction, or the rest) with a sentence in the page and a link to the
+tenancy, where a correction is made with the reading shown beside the record. From then on
+`/documents/:id/fields` for that lease no longer redirects. It is where the closed reading is read,
+printed with the same sentence and link and with no buttons. A second press on a lease row, from a
+ledger tab opened before the redirect, gets A16's sentence on הקריאה.
 
 **Module:** evidence owns the columns, the command, the routes and the screen. Staff owns the two
 permissions and decides nothing else.
@@ -912,111 +946,114 @@ permissions and decides nothing else.
 ### A16 — File a lease in one workspace (תיוק חוזה)
 
 **Trigger:** an operator holds a signed lease, knows it is a lease, and does not want to hunt the
-Unit among 1,500 flats — and must not be sent into a different-looking app for the place, the
-reading, or the draft.
+Unit among 1,500 flats, or be sent into a different-looking app for the place, the reading, or the
+draft.
 
-**Why it is a flow at all, and why it does not replace A12.** A12, A15 and A2 already file a lease
-from paper, stamp a reading, and write a draft. Each is a correct act. Together they feel like five
-products: the rail says **מסמכים**, the place refusal is its own page, the reading is titled
-**מה נקרא מן המסמך**, the draft lands on the Tenancy screen. A16 is a **new lettered journey** with
-**new screens** and **one new rail door**. It calls the same commands. A1, A12, A15, A2, A3, A5, A6,
-A11, A13 and **מסמכים** stay. Their routes, copy, and behaviour are not amended by this flow.
+**This is the lease path.** Every door that takes a lease (A1's unit page, A12, מסמכים) lands it on
+this tab, and this section states the path as it is today. It replaced a stack of amendments with
+one current statement on 15 Oct 2026
+([ADR-0015](docs/decisions/ADR-0015-a-lease-is-unassigned-until-its-draft-opens.md),
+[ADR-0016](docs/decisions/ADR-0016-approval-is-the-only-act-the-press-writes-the-columns.md), #243).
+What the press writes is A2's. What happens after the draft is A5's.
 
 **What the paper said is marked.** A value the reader took off the page is an `excerpt` in our
-sentence — weight and tint, same face — so street, city, apartment, names and dates do not sit in
-the same voice as the operator's copy. The empty file step is a well, not a wall of hints. These
-marks live in the token sheet; this flow is the first to use them. Old screens are not restyled by
-A16.
+sentence, with weight and tint in the same face. So street, city, apartment, names and dates do not
+sit in the same voice as the operator's copy. These marks live in the token sheet.
 
 **Screen:** a rail item **תיוק חוזה**, directly under **מסמכים**, shown only when the role holds
-`documents.write`. The empty state of that tab **is** beat 1. The five beats are always visible as
+`documents.write`. The empty state of the tab is beat 1. The five beats are always visible as
 **status**, never as a skip control:
 
-**המסמך · הדירה · הקריאה · הטיוטה · די היום**
+**המסמך · הקריאה · פתיחת טיוטה · הטיוטה · די היום**
 
-Before the Document exists, the operator may change the file. After Continue files, beats 1–2 are
-done; the stepper does not unfile. Abandoned work is not listed here — **חוזים לא שלמים** and the
-Unit remain the other doors. Refresh keeps this tab's URL.
+Before the Document exists, the operator may change the file. Once it is filed, beat 1 is done and
+the stepper does not unfile. A refresh keeps the tab's URL. **The type is declared and locked:** beat
+1 shows **חוזה שכירות**, and there is no type menu.
 
-**Type is declared and locked.** Beat 1 shows **חוזה שכירות**. There is no type menu. Other types
-stay on A1 / A12 / **מסמכים**.
+1. **המסמך.**
+   - Attach one file: at most **100 MB**, one of the four sniffed kinds.
+   - OCR reads a fifteen-page slice, not the whole scan (#137). A first slice the online reader still
+     cannot carry is refused with a sentence, and nothing is written.
+   - A file the type guard refuses is not filed. The page says why, and the operator attaches again.
+   - Duplicate bytes are news on this tab, with a link to the existing Document. Nothing is merged
+     or written.
+   - A lease is stored **unassigned**: no place and no link, at an object path named by the
+     document (ADR-0015). Extraction runs on the upload. The rest of a long scan is read by the
+     work item.
+   - **No flat is read or chosen here.** A lease filed from a flat's own page carries that flat as a
+     preselection for beat 3, and writes no link.
+2. **הקריאה.** The whole declared set, one row per value, with one אישור and an optional
+   correction per row.
+   - **Layout:** the rows are grouped in the view (dates, money, people, place). That grouping is
+     the screen's, not the catalogue's.
+   - **People:** the household is read by role, so an identifier arrives attached to the name it
+     belongs to.
+   - **Money:** a pair missing its currency is marked here and is approvable anyway, because this
+     step attests what the page says.
+   - **Identity rows are pressed one at a time.** They are sorted to the top:
+     - every name, identifier, phone and email row;
+     - the start date and end date;
+     - the read address (`address`, `apartment_number`, `building_number`);
+     - every row A15 would flag for read quality.
 
-**Sequence.** Same laws as A12 and A15; different chrome.
+     One **אישור כל מה שלא סומן** approves the rest.
+   - **Phone:** a phone row is approvable only as a valid Israeli mobile number. A nine-digit
+     number starting with 5 is offered back with its leading 0.
+   - A second approval of an approved row is a sentence on this step, not an error page.
+   - **Approving only stamps.**
+   - **Ready means:**
+     - an approved main tenant name;
+     - an approved start date and end date;
+     - every other name row of every role approved (#234).
 
-1. **המסמך.** Attach one file. Bounds: one file, **100 MB**, four sniffed kinds. OCR is a
-   fifteen-page slice, not the whole scan (#137). A first slice the online reader still cannot
-   carry is refused with a sentence and writes nothing. Wrong file for a lease: same tab, attach
-   again.
-2. **הדירה — same step as the file.** Bytes are read in memory; nothing is held between read and
-   file. A deterministic place reader returns street, city, apartment. **Exact one Unit:** show it
-   (*we read … → this Unit*); Continue then files through `fileDocument`. **Zero, several, nothing
-   read, or annex:** same step, four sentences as A12. Candidates and search on this step. Picking a
-   candidate and attaching again is the second post. **Create** is offered only with `estate.write`:
-   building and/or Unit, **prefilled from the reading**, human may edit, then create via A11/A13
-   **commands** (not their screens). Then attach again. An operator sees pick/search only — no
-   disabled create door.
-3. **הקריאה.** New screens under this tab, not `/documents/:id/fields`. The stamps that **open** a
-   letting: names and dates (the required reading). Not a clone of A15's full ledger, bulk
-   approve-rest, a `קדם` button, or reveal. Those remain on A15. Approving those stamps
-   writes the draft **at the same moment as #110 / A2** — unit, dates, at least one tenant, from the
-   approved reading. This tab then shows beat 4. It does not teleport to the Tenancy page.
-   **Track B widens this step to the whole declared set** and changes none of the sentence above
-   except the promote clause: still one row per value, one אישור, one optional correction, and still
-   no reveal, no `קדם` button, and no bulk approval (#239 adds the bulk approval; see below).
-   **Approving a mapped field on a `lease` carries it** when a letting is bound (retired at #239: a
-   bound lease takes no approval), and the approval that first establishes the draft carries every
-   mapped field already approved — the same rule as A15. A carry that cannot land does not fail the
-   approval, and the reading step shows the same mark the ledger shows beside `קדם`, and the same
-   sentence when there is a reason to name. Still no button. The rows are **grouped in the view** — dates, money, people, place — which is a
-   thing the screen does and not a thing the catalogue declares. **The household is read by role**,
-   so an identifier arrives already attached to the name it belongs to and no step asks an operator
-   to pair them. **A money pair missing its currency is marked here and approvable anyway**: this
-   step attests what the page says, and the refusal belongs at promotion.
-4. **הטיוטה.** Named arrival in this tab: the tenancy title (#240), people, dates, and whether **פרוטוקול מסירה** is
-   missing or present. Present means the gate's approval — A6's confirm signed for that document —
-   not a bare link. Facts only. No activate (A5 stays on the Tenancy screen). No protocol attach.
-   When the protocol is missing, that line links to the tenancy page, which is where it is filed
-   (#157). Copy: going live is a later act on the Tenancy.
-5. **די היום.** File another (empty state of this tab) · open the Tenancy · open the Unit. Those
-   last two are **links out**, by choice.
+     A date or a `main_tenant_name` read twice is one fact read twice, so one approved capture is
+     enough and the unsigned twin writes nothing. Not ready, the step lists what is missing. Ready,
+     it shows פתיחת טיוטה.
+3. **פתיחת טיוטה.** A2's screen and A2's press, inside this tab:
+   - the flat, preselected from the approved address;
+   - the terms profile;
+   - the people;
+   - what will and will not land on the letting;
+   - the refusals.
+
+   One press writes the draft. A refusal is the same screen with its sentence.
+4. **הטיוטה.** The tab's named arrival:
+   - the tenancy title (#240), the people and the dates;
+   - whether **פרוטוקול מסירה** is missing or present. Present means the gate's approval, A6's
+     confirm signed for that document, not a bare link.
+
+   Facts only, with no activate and no protocol attach. When the protocol is missing, the line links
+   to the tenancy page, which is where it is filed (#157), waived (#156) and where the letting is
+   activated (A5). The copy says going live is a later act on the Tenancy.
+5. **די היום.** File another (the tab's empty state), open the Tenancy, or open the Unit. The last
+   two are links out, by choice.
 
 **A second lease on the same Unit and start date** is `conflict` with that reason, in this tab, with
-a link to the existing Tenancy. Duplicate bytes: news in this tab, link to the existing Document, not
-a silent merge. Overlapping `ACTIVE` + `DRAFT` on one Unit remains ordinary.
+a link to the existing Tenancy. An overlapping `ACTIVE` and `DRAFT` on one Unit remains ordinary.
 
-**What A16 does not do.** It does not classify. It does not hold bytes. It does not raise the file
-or OCR ceilings. It does not file a handover protocol or activate a Tenancy. Its הטיוטה beat
-links to the tenancy page's upload and does not become that upload. It does not list
-unfinished filings. It does not change A12's auto-file-on-exact-one (that door still files the
-moment the address is unique). It does not retitle A15.
+**Unopened leases are listed.** Every lease with no `TENANCY` link is listed under
+**ממתינים לפתיחה** at the top of **שכירויות** (#238). Each entry shows the tenancy title (#240),
+using the name as read because no tenancy exists yet. It offers **פתח טיוטה**, or a link back to
+הקריאה while the reading is not ready. A lease filed on a flat before #237 and never opened is listed
+the same way. A reading that named no name says לא נקרא שם.
 
-**Amended at #232 ([ADR-0015](docs/decisions/ADR-0015-a-lease-is-unassigned-until-its-draft-opens.md)).**
+**A refusal anywhere on this tab is a Hebrew sentence in the page.**
 
-- **The beats are המסמך · הקריאה · פתיחת טיוטה · הטיוטה · די היום.** הדירה is no longer a step of upload.
-- **המסמך stores the lease unassigned.** Duplicate bytes are still news, with a link.
-- **The place reader's result moves to פתיחת טיוטה**, together with its candidates, search and create offer.
-- **הקריאה only stamps.** The clause that approving writes the draft "at the same moment as #110 / A2" is struck.
-- **הקריאה gains one `אישור כל מה שלא סומן`.** It skips the identity-and-access set, which stays one press each:
-  - every name, identifier, phone and email row;
-  - start date and end date;
-  - the read address (`address`, `apartment_number`, `building_number`);
-  - every row A15 would flag for read quality.
+**What A16 does not do:**
+- It does not classify.
+- It does not raise the file or OCR ceilings.
+- It does not file a handover protocol or activate a Tenancy.
+- It does not copy a value onto a column outside the press: there is no `קדם` (ADR-0016).
+- It does not retitle A15.
+- A12's regex place reader and its file-on-exact-one stay A12's, for the types A12 files. A lease
+  is never placed by them.
 
-  "No bulk approval" above is struck for this control only. The set is one predicate in evidence:
-  the command skips it, and the screen sorts it to the top of the table, above the groups.
-- **A phone row is approvable only as a valid Israeli mobile number.** A nine-digit number starting with 5 is offered back with its leading 0.
-- **A second approval of an approved row is a sentence on this step, not an error page.**
-- **When the reading is ready, the step shows פתיחת טיוטה.** That is A2's screen, inside this tab. When the reading is not ready, the step lists what is missing.
-- **Ready means** an approved main tenant name, an approved start date and end date, and every other name row of every role approved (#234). A date or a `main_tenant_name` read twice is one fact read twice: one approved capture is enough, and the unsigned twin writes nothing. Without that exception the only way past a duplicate read would be to sign it, writing two primary tenants for one person.
-- **"It does not list unfinished filings" is reversed.** Every lease with no `TENANCY` link is listed under **ממתינים לפתיחה** at the top of **שכירויות** (#238), each with the tenancy title (#240) — the name as read, because no tenancy exists yet — and **פתח טיוטה**, or a link back to הקריאה while it is not ready. A lease filed on a flat before #237 and never opened is listed the same way. A reading that named no name still says לא נקרא שם.
-- **A refusal anywhere on this tab is a Hebrew sentence in the page.**
+**Module:** evidence owns the screens and the posts that sequence existing commands. Estate owns the
+create-building and create-Unit **commands** reused here. Tenancy owns the draft write it is asked
+for and the activation facts (read, not invoked). Staff owns `documents.write` and `estate.write`.
 
-**Module:** evidence owns the new screens and the posts that sequence existing commands. Estate owns
-create-building / create-Unit **commands** reused here. Tenancy owns draft-from-approved-reading and
-activation facts (read, not invoked). Staff owns `documents.write` and `estate.write`. The rail
-gains one destination; no other destination changes.
-
-**Work item:** #115. Paint deleted after wire (#119).
+**Work items:** #115 (the tab), #232–#240 (the opening), #243 (this statement and its three
+tickets).
 
 ### A17 — An administrator mints a building's inventory (נכסים)
 
