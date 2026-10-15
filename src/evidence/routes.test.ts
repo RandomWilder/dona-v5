@@ -11,6 +11,7 @@
 // the cleanup deletes exactly it.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import type { Pool } from 'pg';
 import { specimenDocuments } from '../../evals/fixtures/specimen-clauses.ts';
 import {
   asOperator,
@@ -50,6 +51,56 @@ const PROJECT_CODE = 'TEST-DOCS';
 // on that teardown already claimed the bucket was this suite's alone; now it is.
 const BUCKET = 'dona-v5-test-routes';
 const AT = new Date('2026-09-07T09:00:00.000Z');
+
+/** Stamp an address the opening screen can resolve. #244. */
+async function approveCaptured(
+  pool: Pool,
+  actor: SignedIn,
+  app: object,
+  documentId: string,
+  captured: Record<string, string>,
+): Promise<void> {
+  for (const [fieldKey, value] of Object.entries(captured)) {
+    const declared: { rows: Array<{ id: string }> } = await pool.query(
+      `SELECT f.document_type_field_id AS id
+         FROM document_type_field f
+         JOIN document_type t ON t.document_type_id = f.document_type_id
+        WHERE t.type_key = 'lease' AND f.field_key = $1
+        ORDER BY f.effective_from DESC
+        LIMIT 1`,
+      [fieldKey],
+    );
+    const fieldId: string = declared.rows[0]?.id ?? '';
+    assert.ok(fieldId, fieldKey);
+    const inserted: { rows: Array<{ id: string }> } = await pool.query(
+      `INSERT INTO extracted_field (
+         extracted_field_id, document_id, document_type_field_id, value,
+         page, bbox, confidence, model, extracted_at
+       ) VALUES (
+         gen_random_uuid(), $1, $2, $3,
+         1, '{"x":1,"y":2,"width":3,"height":4}'::jsonb, 0.99, 'fake', $4
+       )
+       RETURNING extracted_field_id AS id`,
+      [documentId, fieldId, value, AT],
+    );
+    const extractedFieldId: string = inserted.rows[0]?.id ?? '';
+    const client = asOperator(app as never, actor) as {
+      inject: (
+        options: object,
+      ) => Promise<{ statusCode: number; body: string }>;
+    };
+    const stamped = await client.inject({
+      method: 'POST',
+      url: `/documents/filing/${documentId}/approve`,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({
+        csrf: actor.csrf,
+        extracted_field_id: extractedFieldId,
+      }).toString(),
+    });
+    assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
+  }
+}
 
 const plan: EstatePlan = {
   projects: [
@@ -1138,11 +1189,21 @@ describe('evidence · A3 addendum upload redirects to confirm', () => {
     } finally {
       await signOutAll(pool, STAFF_DOMAIN);
       for (const hash of hashes) {
-        await pool.query(
-          `DELETE FROM extracted_field WHERE document_id IN
-             (SELECT document_id FROM document WHERE file_hash = $1)`,
-          [hash],
-        );
+        await inTransaction(pool, async (db) => {
+          await db.query("SELECT set_config('dona.approving', 'on', true)");
+          await db.query(
+            `UPDATE extracted_field
+                SET approved_value = NULL, approved_by = NULL, approved_at = NULL
+              WHERE document_id IN
+                (SELECT document_id FROM document WHERE file_hash = $1)`,
+            [hash],
+          );
+          await db.query(
+            `DELETE FROM extracted_field WHERE document_id IN
+               (SELECT document_id FROM document WHERE file_hash = $1)`,
+            [hash],
+          );
+        });
         await pool.query(
           `DELETE FROM document_link WHERE document_id IN
              (SELECT document_id FROM document WHERE file_hash = $1)`,
@@ -1412,6 +1473,10 @@ describe('evidence · A12 a document finds its own place', () => {
           );
           assert.equal(await documentsHere(), before);
           const documentId = await stored(bytes);
+          await approveCaptured(pool, who, here, documentId, {
+            address: `${ADDRESS_A12}, ${CITY_A12}`,
+            apartment_number: '12A',
+          });
           const body = await opening(here, documentId);
           assert.match(body, new RegExp(`name="unit" value="${unitA}"`));
           assert.doesNotMatch(body, new RegExp(`value="${unitB}"`));
@@ -1432,7 +1497,12 @@ describe('evidence · A12 a document finds its own place', () => {
           });
           assert.equal(response.statusCode, 302, response.body.slice(0, 400));
           assert.equal(await documentsHere(), before);
-          const body = await opening(elsewhere, await stored(bytes));
+          const documentId = await stored(bytes);
+          await approveCaptured(pool, who, elsewhere, documentId, {
+            address: 'אלמוג 5, עיר שאיננה',
+            apartment_number: '3',
+          });
+          const body = await opening(elsewhere, documentId);
           // What was read, said back — so the choice is one an operator can act on.
           assert.match(body, /אלמוג 5/);
           assert.match(body, /אינה בתיק/);
@@ -1458,7 +1528,7 @@ describe('evidence · A12 a document finds its own place', () => {
           assert.equal(await documentsHere(), before);
           const body = await opening(landlord, await stored(bytes));
           assert.doesNotMatch(body, new RegExp(`value="${unitA}"`));
-          assert.match(body, /לא נקראה כתובת/);
+          assert.match(body, /הכתובת טרם אושרה/);
           assert.match(body, /חיפוש דירה/);
         },
       );
@@ -1475,7 +1545,12 @@ describe('evidence · A12 a document finds its own place', () => {
           });
           assert.equal(response.statusCode, 302, response.body.slice(0, 400));
           assert.equal(await documentsHere(), before);
-          const body = await opening(ambiguous, await stored(bytes));
+          const documentId = await stored(bytes);
+          await approveCaptured(pool, who, ambiguous, documentId, {
+            address: `${ADDRESS_A12}, ${CITY_A12}`,
+            apartment_number: '9',
+          });
+          const body = await opening(ambiguous, documentId);
           assert.match(body, new RegExp(`value="${unitA}"`));
           assert.match(body, new RegExp(`value="${unitB}"`));
           assert.doesNotMatch(body, / required checked/);
@@ -1497,7 +1572,12 @@ describe('evidence · A12 a document finds its own place', () => {
           });
           assert.equal(response.statusCode, 302, response.body.slice(0, 400));
           assert.equal(await documentsHere(), before);
-          const body = await opening(ambiguous, await stored(bytes));
+          const documentId = await stored(bytes);
+          await approveCaptured(pool, who, ambiguous, documentId, {
+            address: `${ADDRESS_A12}, ${CITY_A12}`,
+            apartment_number: '9',
+          });
+          const body = await opening(ambiguous, documentId);
           assert.match(body, new RegExp(`value="${unitB}" required checked`));
         },
       );
@@ -1662,11 +1742,21 @@ describe('evidence · A12 a document finds its own place', () => {
         .catch(() => {});
       await signOutAll(pool, STAFF_DOMAIN);
       for (const hash of hashes) {
-        await pool.query(
-          `DELETE FROM extracted_field WHERE document_id IN
-             (SELECT document_id FROM document WHERE file_hash = $1)`,
-          [hash],
-        );
+        await inTransaction(pool, async (db) => {
+          await db.query("SELECT set_config('dona.approving', 'on', true)");
+          await db.query(
+            `UPDATE extracted_field
+                SET approved_value = NULL, approved_by = NULL, approved_at = NULL
+              WHERE document_id IN
+                (SELECT document_id FROM document WHERE file_hash = $1)`,
+            [hash],
+          );
+          await db.query(
+            `DELETE FROM extracted_field WHERE document_id IN
+               (SELECT document_id FROM document WHERE file_hash = $1)`,
+            [hash],
+          );
+        });
         await pool.query(
           `DELETE FROM document_link WHERE document_id IN
              (SELECT document_id FROM document WHERE file_hash = $1)`,
@@ -2177,6 +2267,10 @@ describe('evidence · A12 offers to create, to an admin', () => {
         async () => {
           const who = admin as SignedIn;
           const documentId = await store(unheld, who, 'admin');
+          await approveCaptured(pool, who, unheld, documentId, {
+            address: `${UNHELD}, ${CITY_69}`,
+            apartment_number: '4',
+          });
           const body = await open(unheld, who, documentId);
           assert.match(body, /action="\/documents\/filing\/place"/);
           assert.match(body, new RegExp(`value="${UNHELD}"`));
@@ -2192,11 +2286,12 @@ describe('evidence · A12 offers to create, to an admin', () => {
         'the building is held and only the flat is offered',
         async () => {
           const who = admin as SignedIn;
-          const body = await open(
-            flatOnly,
-            who,
-            await store(flatOnly, who, 'flat only'),
-          );
+          const documentId = await store(flatOnly, who, 'flat only');
+          await approveCaptured(pool, who, flatOnly, documentId, {
+            address: `${HELD}, ${CITY_69}`,
+            apartment_number: '12',
+          });
+          const body = await open(flatOnly, who, documentId);
           assert.match(body, /הבניין נמצא בתיק, והדירה לא/);
           assert.match(body, /name="building"/);
         },
@@ -2213,11 +2308,21 @@ describe('evidence · A12 offers to create, to an admin', () => {
       }
       await signOutAll(pool, DOMAIN_69);
       for (const hash of hashes) {
-        await pool.query(
-          `DELETE FROM extracted_field WHERE document_id IN
-             (SELECT document_id FROM document WHERE file_hash = $1)`,
-          [hash],
-        );
+        await inTransaction(pool, async (db) => {
+          await db.query("SELECT set_config('dona.approving', 'on', true)");
+          await db.query(
+            `UPDATE extracted_field
+                SET approved_value = NULL, approved_by = NULL, approved_at = NULL
+              WHERE document_id IN
+                (SELECT document_id FROM document WHERE file_hash = $1)`,
+            [hash],
+          );
+          await db.query(
+            `DELETE FROM extracted_field WHERE document_id IN
+               (SELECT document_id FROM document WHERE file_hash = $1)`,
+            [hash],
+          );
+        });
         await pool.query(
           `DELETE FROM document_link WHERE document_id IN
              (SELECT document_id FROM document WHERE file_hash = $1)`,

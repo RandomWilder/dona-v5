@@ -1175,7 +1175,10 @@ export interface LeaseOpening {
   documentId: string;
   /** Null until a flat is preselected or chosen. #237. */
   unit: UnitHit | null;
-  /** The deterministic place reader, kept from upload. Null on a lease filed under a place path. */
+  /**
+   * The reading built from the approved address. Null when that address is not approved.
+   * The stored place reading is not read (#244).
+   */
   placeReading: PlaceReading | null;
   candidates: UnitHit[];
   candidateTotal: number;
@@ -1380,7 +1383,7 @@ export async function proposeLeaseOpening(
 
 /**
  * The flat פתיחת טיוטה would open on, before anyone chooses: the anchor once there is one, else the
- * door's flat, else the one flat the address resolves to. Null when it would ask. #237.
+ * door's flat, else the one flat the approved address resolves to. Null when it would ask. #237, #244.
  */
 export async function preselectedUnitId(
   deps: OpeningDeps,
@@ -1421,11 +1424,12 @@ async function flatForOpening(
   const stored = deps.objects
     ? await readStoredLeasePlace(deps.objects, fileHash)
     : null;
-  const resolved = stored ? await resolvePlace(deps.db, stored.reading) : null;
+  const door = stored?.doorUnitId ?? null;
+  const approved = await approvedAddressReading(deps.db, documentId);
+  const resolved = approved ? await resolvePlace(deps.db, approved) : null;
   const asked = options.query?.trim() ?? '';
   const found = asked === '' ? null : await searchEstate(deps.db, asked);
   const candidates = found ? found.units : (resolved?.candidates ?? []);
-  const door = stored?.doorUnitId ?? null;
   const exact =
     resolved && 'unit' in resolved && resolved.unit
       ? resolved.unit.unit_id
@@ -1433,7 +1437,7 @@ async function flatForOpening(
   const unitId = options.unitId || door || exact;
   return {
     unitId: unitId || null,
-    placeReading: stored?.reading ?? null,
+    placeReading: approved,
     candidates,
     candidateTotal: found
       ? found.units.length
@@ -1445,6 +1449,43 @@ async function flatForOpening(
         }
       : null,
   };
+}
+
+/**
+ * The place פתיחת טיוטה resolves, from the approved address only (#244, ADR-0016).
+ *
+ * The street and number are what stands before the first comma, and the town is what stands after
+ * it. No comma means no town, which is a candidate list rather than a guess. An address nobody
+ * approved is no reading at all.
+ */
+async function approvedAddressReading(
+  db: Queryable,
+  documentId: string,
+): Promise<PlaceReading | null> {
+  const rows = await listExtractedFields(db, documentId);
+  const address = approvedCapture(rows, 'address');
+  if (address === null) return null;
+  const comma = address.indexOf(',');
+  const line = (comma === -1 ? address : address.slice(0, comma)).trim();
+  const town = comma === -1 ? '' : address.slice(comma + 1).trim();
+  return {
+    addressLine: line === '' ? null : line,
+    city: town === '' ? null : town,
+    apartmentNumber: approvedCapture(rows, 'apartment_number'),
+    annexDeferral: false,
+  };
+}
+
+function approvedCapture(
+  rows: readonly ExtractedRow[],
+  fieldKey: string,
+): string | null {
+  const signed = rows
+    .filter((row) => row.fieldKey === fieldKey && row.approvedAt !== null)
+    .sort(inDocumentOrder)[0];
+  if (!signed) return null;
+  const value = (signed.approvedValue ?? signed.value).trim();
+  return value === '' ? null : value;
 }
 
 async function openingAndPeople(

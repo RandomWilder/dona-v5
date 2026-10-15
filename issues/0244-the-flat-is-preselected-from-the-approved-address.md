@@ -34,11 +34,18 @@ A2).
 
 ## Acceptance
 
-- [ ] **Red first:** a regex reading with the wrong town and an approved `address` of
+- [x] **Red first:** a regex reading with the wrong town and an approved `address` of
       `רקפת 12, שוהם` with `apartment_number` `6` (invented values) preselect flat 6 at that address.
-- [ ] An approved address with no town lists the same-street flat 6 as the one candidate, unchecked.
-- [ ] An unapproved address preselects nothing, and the screen says why.
-- [ ] Existing A16 route tests stay green. The test "exact one flat is preselected at opening"
+- [x] An approved address with no town lists the same-street flat 6 as the one candidate, unchecked.
+- [x] An unapproved address preselects nothing, and the screen says why.
+- [x] Existing A16 route tests stay green. The test "exact one flat is preselected at opening"
       approves the address first.
 - [ ] A read-only check against staging: `01a13e3f` preselects flat 6 at building 205, and
       `01a13956` keeps flat 13.
+
+## Comment — 2026-10-15
+
+פתיחת טיוטה resolves the flat from the approved address. The stored place reading is not read.
+The three local cases are green, and the A16 opening tests approve the address first. The staging
+check is still open: the database is only reachable from the staging runtime, and this code is not
+deployed there yet.
