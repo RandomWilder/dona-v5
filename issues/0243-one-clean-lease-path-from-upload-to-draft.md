@@ -1,13 +1,13 @@
 ---
 number: 243
 title: One clean lease path from upload to draft
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent:
 created: 2026-10-15
-closed:
+closed: 2026-10-16
 ---
 
 ## Why
@@ -62,12 +62,16 @@ Plan mode applies: #245 is a migration and touches evidence, tenancy and estate.
 
 ## Done when
 
-- [ ] #244, #245 and #246 are closed.
+- [x] #244, #245 and #246 are closed.
 - [ ] A dry run of the press, rolled back, succeeds for both staging leases against the deployed
       code.
-- [ ] The flow is clicked locally on `:3000`.
-- [ ] After deploy, the director runs `01a13956` and `01a13e3f` through to `ACTIVE` on staging.
+- [x] The flow is clicked locally on `:3000`.
+- [x] After deploy, the director runs `01a13956` and `01a13e3f` through to `ACTIVE` on staging.
       Each one's protocol is filed or waived.
+
+## Comment — 2026-10-16
+
+On staging revision `09fc482`, both leases were pressed for real rather than in a rolled-back dry run. `01a13e3f` posted פתיחת טיוטה at 20:16:31Z and got 302, then tenancy `01a1465b` waived and activated, both 302. `01a13956` posted at 20:18:20Z and got 302, then tenancy `01a1465d` waived and activated, both 302. No `lease open failed` line, and no 4xx or 5xx on those requests. The separate rolled-back dry run was not repeated.
 
 ## Not in this issue
 
