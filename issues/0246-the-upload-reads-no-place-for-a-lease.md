@@ -1,13 +1,13 @@
 ---
 number: 246
 title: The upload reads no place for a lease, and the upload-time flat step goes
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: [244]
 parent: 243
 created: 2026-10-15
-closed:
+closed: 2026-10-16
 ---
 
 ## What
@@ -36,10 +36,14 @@ SPEC-flows A16 beat 1 and A12's lease paragraph, as rewritten at #243.
 
 ## Acceptance
 
-- [ ] **Red first:** uploading a lease does not call the place reader, and writes no reading into
+- [x] **Red first:** uploading a lease does not call the place reader, and writes no reading into
       the stored object.
-- [ ] The opening screen still preselects the unit-page door's flat.
-- [ ] A12 still files a non-lease document on an exact one, unchanged.
-- [ ] Every removed route answers 404. Nothing in `src/` links to it.
-- [ ] `npm test` is green.
-- [ ] The tab is clicked on `:3000`: upload, הקריאה, פתיחת טיוטה, הטיוטה.
+- [x] The opening screen still preselects the unit-page door's flat.
+- [x] A12 still files a non-lease document on an exact one, unchanged.
+- [x] Every removed route answers 404. Nothing in `src/` links to it.
+- [x] `npm test` is green.
+- [x] The tab is clicked on `:3000`: upload, הקריאה, פתיחת טיוטה, הטיוטה.
+
+## Comment — 2026-10-16
+
+Clicked on :3000 with a synthetic lease. The file was stored with no flat. The reading step approved the names and dates, the opening screen preselected the flat from the approved address, and the press wrote the draft.
