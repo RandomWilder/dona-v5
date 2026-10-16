@@ -16,12 +16,7 @@
 //
 // **No client JavaScript, here as everywhere.** The type list is a `<select>` the server filled from
 // the catalogue, the file input is a file input, and the page works with scripting switched off.
-import {
-  renderUncarriedReason,
-  UNCARRIED_MARK,
-  type UncarriedReason,
-  type UnitHit,
-} from '../../estate/contract.ts';
+import { renderUncarriedReason, type UnitHit } from '../../estate/contract.ts';
 import { IDENTIFIER_MASK } from '../../kernel/identifier.ts';
 import { onlineOcrByteLimit } from '../../kernel/ocr.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
@@ -964,14 +959,12 @@ export interface LeaseFilingScreen {
   opening?: LeaseOpening;
   /** The press was refused; the refusals on `opening` say why. */
   openFailed?: boolean;
+  /** A KernelError the opening screen did not already name. #245. */
+  openFailure?: { code: string; message: string };
   draft?: FilingDraftFacts;
   pageCount?: number;
   pagesRead?: number;
   readingPending?: boolean;
-  /** Approved mapped rows that are not on the column, keyed by extracted field. #175. A null reason is the mark alone. */
-  uncarried?: Readonly<Record<string, UncarriedReason | null>>;
-  /** `estate.write`. A missing bay is a link to later-add only for that reader. #176. */
-  mayAddInventory?: boolean;
   /**
    * #235. Each unapproved phone or email row: the value offered for approval, and why it cannot be
    * approved as offered, when it cannot. Keyed by extracted field.
@@ -1029,19 +1022,6 @@ function confirmValueInputs(row: ExtractedRow, offered?: string): Html {
       aria-label="שם משפחה" placeholder="שם משפחה" />`;
 }
 
-function uncarriedNote(
-  uncarried: Readonly<Record<string, UncarriedReason | null>> | undefined,
-  extractedFieldId: string,
-  mayAdd: boolean,
-): Html | null {
-  if (!uncarried || !Object.hasOwn(uncarried, extractedFieldId)) return null;
-  const reason = uncarried[extractedFieldId];
-  const sentence = reason
-    ? h` · ${renderUncarriedReason(reason, mayAdd)}`
-    : h``;
-  return h`${UNCARRIED_MARK}${sentence}`;
-}
-
 /** A contact row's refusal, in the sentence the operator acts on. #235. */
 const CONTACT_REFUSAL: Readonly<Record<ContactRefusal, string>> = {
   not_mobile: 'המספר אינו מספר נייד ישראלי. יש לתקן אותו לפני האישור.',
@@ -1079,11 +1059,6 @@ function filingReadingRow(
   const half = missingCurrency(row, rows)
     ? h`<span class="role is-half">חסר מטבע</span>`
     : h``;
-  const note = uncarriedNote(
-    screen.uncarried,
-    row.extractedFieldId,
-    screen.mayAddInventory === true,
-  );
   const contact = screen.contactRows?.[row.extractedFieldId];
   const refusal =
     contact?.refusal === null || contact === undefined
@@ -1093,9 +1068,7 @@ function filingReadingRow(
     ? h`<span class="role">הוצע עם 0 בהתחלה</span>`
     : h``;
   return h`<tr>
-    <td>${row.labelHe}${nameRole(row, rows)}${half}${
-      note ? h`<span class="role">${note}</span>` : h``
-    }${offered}${refusal}</td>
+    <td>${row.labelHe}${nameRole(row, rows)}${half}${offered}${refusal}</td>
     <td>${
       row.fieldKey.endsWith('_date')
         ? excerpt(ltr(row.value))
@@ -1292,6 +1265,32 @@ function openingCandidates(screen: LeaseFilingScreen): Html {
   </ul>`;
 }
 
+function landingLists(opening: LeaseOpening, mayAdd: boolean): Html {
+  if (opening.landing.length === 0) return h``;
+  const lands = opening.landing.filter((row) => row.reason === null);
+  const skips = opening.landing.filter((row) => row.reason !== null);
+  const line = (row: (typeof opening.landing)[number]): Html =>
+    h`<li>${row.labelHe} · ${ltr(row.value)} · ${ltr(row.target)}</li>`;
+  return h`${
+    lands.length === 0
+      ? h``
+      : h`<h2 class="second-heading">ייכתב</h2>
+        <ul class="missing">${lands.map(line)}</ul>`
+  }${
+    skips.length === 0
+      ? h``
+      : h`<h2 class="second-heading">לא ייכתב</h2>
+        <ul class="missing">${skips.map(
+          (row) =>
+            h`<li>${row.labelHe} · ${ltr(row.value)} · ${ltr(row.target)}${
+              row.reason
+                ? h` · ${renderUncarriedReason(row.reason, mayAdd)}`
+                : h``
+            }</li>`,
+        )}</ul>`
+  }`;
+}
+
 function filingOpening(screen: LeaseFilingScreen): Html {
   const opening = screen.opening;
   if (screen.beat !== 'open' || !opening) {
@@ -1308,9 +1307,11 @@ function filingOpening(screen: LeaseFilingScreen): Html {
     ? h`<p class="lede"><strong>הטיוטה לא נפתחה ולא נכתב דבר.</strong>${
         unknownProfile
           ? h` הנספח שנבחר אינו קיים במערכת. בחרו נספח מהרשימה.`
-          : refused
-            ? h``
-            : h` נסו שוב.`
+          : screen.openFailure
+            ? h` ${ltr(screen.openFailure.message)}`
+            : refused
+              ? h``
+              : h``
       }</p>`
     : h``;
   const readPlace =
@@ -1385,6 +1386,7 @@ function filingOpening(screen: LeaseFilingScreen): Html {
         }</dd>
       </div>
     </dl>
+    ${landingLists(opening, screen.mayCreate === true)}
     ${
       opening.sameLease.length === 0
         ? h``
@@ -2772,19 +2774,13 @@ export interface FieldsScreen {
   revealed?: string;
   /** How many rows the last press signed. */
   saved?: number;
-  /** Occupied estate column: the second act names the value already held. */
-  overwrite?: { extractedFieldId: string; existingValue: string };
   pageCount?: number;
   pagesRead?: number;
-  /** Approved mapped rows that are not on the column, keyed by extracted field. #175. A null reason is the mark alone. */
-  uncarried?: Readonly<Record<string, UncarriedReason | null>>;
-  /** `estate.write`. A missing bay is a link to later-add only for that reader. #176. */
-  mayAddInventory: boolean;
   /** The document type's key: a lease leaves more rows for their own press (#239). */
   typeKey: string;
   /**
    * #239. The tenancy a lease opened, once it has. Its reading is closed: no approval here, and a
-   * sentence pointing to where a correction is made. `קדם` stays.
+   * sentence pointing to where a correction is made.
    */
   closedTo?: string;
 }
@@ -2935,13 +2931,6 @@ export function renderFieldsPage(screen: FieldsScreen): string {
     : screen.rows.length - shown.length;
   const open = shown.filter((row) => row.approvedAt === null);
   const unflagged = open.filter((row) => !pressedAlone(row, screen.typeKey));
-  // **Slice 7.4: a mapped row that nobody signed has no `קדם` button.** A promotion now requires
-  // the approval stamp (`promote.ts`, and the trigger in 0029), so a button that posted anyway
-  // would be a control whose only outcome is a refusal. The note below says so, because a missing
-  // control that explains itself is a rule and a missing control that does not is a bug report.
-  const promotable = shown.filter(
-    (row) => row.promotionTarget && !row.promotedTo && row.approvedAt !== null,
-  );
   const body = h`
     <div>
       <a class="back" href="${back}">← ${screen.unitId ? h`הדירה` : screen.buildingName}</a>
@@ -3021,42 +3010,6 @@ export function renderFieldsPage(screen: FieldsScreen): string {
           ? h`<span class="chip">${ltr(open.length - unflagged.length)} שורות לבדיקה אישית</span>`
           : h``
       }
-    </div>
-    <details class="prose-fold">
-      <summary>מה בדיוק עושה «אישור», ומה ההבדל בינו לבין «קידום»</summary>
-      <p>
-      «אישור» של שדה ממופה בחוזה נושא אותו אל ההשכרה, ברגע שההשכרה קיימת. «קידום» נשאר
-      להחלפת ערך שכבר עומד על העמודה, ולערך שהאישור לא הצליח לשאת. ערך שנקרא לעולם אינו
-      נמחק — תיקון נכתב לצדו.
-      <strong>קידום מחייב אישור תחילה</strong>, והערך שמועתק הוא הערך שאושר: שורה שלא נחתמה אינה
-      מוצגת כאן לקידום.
-      </p>
-    </details>
-    ${
-      promotable.length > 0
-        ? promotable.map((row) => {
-            const overwrite =
-              screen.overwrite?.extractedFieldId === row.extractedFieldId
-                ? screen.overwrite
-                : undefined;
-            const note = uncarriedNote(
-              screen.uncarried,
-              row.extractedFieldId,
-              screen.mayAddInventory,
-            );
-            return h`<form class="form-actions" method="post" action="/documents/${screen.documentId}/promote">
-          ${csrfInput(screen.csrf)}
-          ${note ? h`<p class="lede">${note}</p>` : h``}
-          ${
-            overwrite
-              ? h`<p class="lede">העמודה כבר נושאת ${ltr(overwrite.existingValue)}. החלפה היא החלטה, לא ניסיון שני.</p>
-          <input type="hidden" name="supersede" value="1" />`
-              : h``
-          }
-          <button class="btn btn-secondary" name="extracted_field_id" value="${row.extractedFieldId}">${overwrite ? h`החלף` : h`קדם`} · ${row.labelHe}</button>
-        </form>`;
-          })
-        : h``
-    }`;
+    </div>`;
   return shell('דונה דום — אישור קריאה', body, screen.nav);
 }

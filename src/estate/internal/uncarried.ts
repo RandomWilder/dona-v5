@@ -58,8 +58,8 @@ const RENT_SIBLING: Record<string, { fieldKey: string; target: string }> = {
   },
 };
 
-/** The mark on an approved value that is not on the letting. The reason, when there is one, follows it. */
-export const UNCARRIED_MARK = 'מאושר, לא הועבר להשכרה';
+/** An approved paper value beside a column that differs. A fact, not pending work. #245. */
+export const UNCARRIED_MARK = 'על הדף';
 
 const ltr = (value: string): Html => h`<span dir="ltr">${value}</span>`;
 
@@ -98,6 +98,19 @@ export function renderUncarriedReason(
   return h`<a href="${missingSpaceHref(reason)}">${sentence}</a>`;
 }
 
+/** The column map, injected from evidence. Type key, then field key, then target. */
+export type ColumnTargets = Readonly<
+  Record<string, Readonly<Record<string, string>>>
+>;
+
+function targetFor(
+  map: ColumnTargets,
+  typeKey: string,
+  fieldKey: string,
+): string | null {
+  return map[typeKey]?.[fieldKey] ?? null;
+}
+
 interface RawRow {
   extractedFieldId: string;
   documentId: string;
@@ -133,20 +146,19 @@ interface Sibling {
 const ROWS_SQL = `
   SELECT e.extracted_field_id AS "extractedFieldId",
          e.document_id AS "documentId",
+         t.type_key AS "typeKey",
          f.field_key AS "fieldKey",
          f.label_he AS "labelHe",
          e.approved_value AS value,
-         e.page,
-         p.target
+         e.page
     FROM extracted_field e
+    JOIN document d ON d.document_id = e.document_id
+    JOIN document_type t ON t.document_type_id = d.document_type_id
     JOIN document_type_field f
       ON f.document_type_field_id = e.document_type_field_id
-    JOIN field_promotion p
-      ON p.document_type_field_id = e.document_type_field_id
    WHERE e.approved_at IS NOT NULL
      AND e.approved_value IS NOT NULL
      AND e.promoted_to IS NULL
-     AND p.target = ANY($2::text[])
      AND e.document_id = ANY($1::uuid[])
    ORDER BY f.field_key, e.extracted_field_id`;
 
@@ -281,24 +293,25 @@ async function placeFor(
 async function siblings(
   db: Queryable,
   documentIds: readonly string[],
+  map: ColumnTargets,
 ): Promise<Map<string, Sibling>> {
   const found = await db.query<{
     documentId: string;
+    typeKey: string;
     fieldKey: string;
     value: string | null;
     approvedAt: Date | null;
-    target: string | null;
   }>(
     `SELECT e.document_id AS "documentId",
+            t.type_key AS "typeKey",
             f.field_key AS "fieldKey",
             e.approved_value AS value,
-            e.approved_at AS "approvedAt",
-            p.target
+            e.approved_at AS "approvedAt"
        FROM extracted_field e
+       JOIN document d ON d.document_id = e.document_id
+       JOIN document_type t ON t.document_type_id = d.document_type_id
        JOIN document_type_field f
          ON f.document_type_field_id = e.document_type_field_id
-       LEFT JOIN field_promotion p
-         ON p.document_type_field_id = e.document_type_field_id
       WHERE e.document_id = ANY($1::uuid[])
         AND f.field_key IN ('rent_amount', 'rent_currency')
       ORDER BY e.extracted_at DESC, e.extracted_field_id`,
@@ -311,7 +324,7 @@ async function siblings(
     out.set(key, {
       value: row.value,
       approved: row.approvedAt !== null,
-      target: row.target,
+      target: targetFor(map, row.typeKey, row.fieldKey),
     });
   }
   return out;
@@ -397,6 +410,7 @@ function decide(
 
 async function uncarried(
   db: Queryable,
+  map: ColumnTargets,
   scope: { tenancyId: string } | { documentId: string; unitId?: string | null },
 ): Promise<UncarriedField[]> {
   const ids = await documentIds(db, scope);
@@ -408,10 +422,26 @@ async function uncarried(
     }
     return [];
   }
-  const listed = await db.query<RawRow>(ROWS_SQL, [ids, SHOWN]);
-  const other = await siblings(db, ids);
+  const fetched = await db.query<{
+    extractedFieldId: string;
+    documentId: string;
+    typeKey: string;
+    fieldKey: string;
+    labelHe: string;
+    value: string;
+    page: number;
+  }>(ROWS_SQL, [ids]);
+  const listed: RawRow[] = [];
+  for (const row of fetched.rows) {
+    const target = targetFor(map, row.typeKey, row.fieldKey);
+    if (target === null || !(SHOWN as readonly string[]).includes(target)) {
+      continue;
+    }
+    listed.push({ ...row, page: Number(row.page), target });
+  }
+  const other = await siblings(db, ids, map);
   const out: UncarriedField[] = [];
-  for (const row of listed.rows) {
+  for (const row of listed) {
     const pair = RENT_SIBLING[row.target];
     const sibling = pair
       ? other.get(`${row.documentId}:${pair.fieldKey}`)
@@ -427,8 +457,9 @@ async function uncarried(
 export function uncarriedOnTenancy(
   db: Queryable,
   tenancyId: string,
+  map: ColumnTargets,
 ): Promise<UncarriedField[]> {
-  return uncarried(db, { tenancyId });
+  return uncarried(db, map, { tenancyId });
 }
 
 /**
@@ -440,7 +471,8 @@ export function uncarriedOnTenancy(
 export function uncarriedOnDocument(
   db: Queryable,
   documentId: string,
+  map: ColumnTargets,
   unitId: string | null = null,
 ): Promise<UncarriedField[]> {
-  return uncarried(db, { documentId, unitId });
+  return uncarried(db, map, { documentId, unitId });
 }

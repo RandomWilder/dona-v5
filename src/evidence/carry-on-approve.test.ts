@@ -3,7 +3,7 @@
 // Seam: the two approval routes. Read back on the letting page and the typed
 // columns. The promotion command's own rules stay proved in the promotion suite.
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it, mock } from 'node:test';
 import type { Pool } from 'pg';
 import { specimenDocuments } from '../../evals/fixtures/specimen-clauses.ts';
 import {
@@ -810,8 +810,12 @@ describe('evidence · approving a mapped lease field carries it', {
         );
         const ledger = await carry.get(`/documents/${carry.documentId}/fields`);
         assert.equal(ledger.statusCode, 200);
-        assert.match(ledger.body, new RegExp(bayHref.replace(/[?]/g, '\\?')));
-        assert.match(ledger.body, new RegExp(storeHref.replace(/[?]/g, '\\?')));
+        assert.doesNotMatch(ledger.body, /קדם/);
+        assert.doesNotMatch(ledger.body, /החלף/);
+        assert.doesNotMatch(
+          ledger.body,
+          new RegExp(bayHref.replace(/[?]/g, '\\?')),
+        );
 
         const viewer = await signIn(carry.pool, fixedClock(ON), {
           email: 'viewer@a176miss.test',
@@ -826,9 +830,9 @@ describe('evidence · approving a mapped lease field carries it', {
           `/documents/${carry.documentId}/fields`,
         );
         assert.match(hiddenLetting.body, /אינה חניה ב/);
-        assert.match(hiddenLedger.body, /אינו מחסן ב/);
+        assert.doesNotMatch(hiddenLedger.body, /אינו מחסן ב/);
         assert.doesNotMatch(hiddenLetting.body, /parking_count=1/);
-        assert.doesNotMatch(hiddenLedger.body, /storage_count=1/);
+        assert.doesNotMatch(hiddenLedger.body, /קדם/);
 
         const named = async (kind: string, name: string) => {
           const rows = await carry.pool.query<{ n: string }>(
@@ -840,101 +844,8 @@ describe('evidence · approving a mapped lease field carries it', {
         };
         assert.equal(await named('PARKING', bay), '0');
         assert.equal(await named('STORAGE', store), '0');
-
-        const stuck = await carry.post(
-          `/documents/${carry.documentId}/promote`,
-          {
-            extracted_field_id: await carry.rowId(
-              carry.documentId,
-              'parking_space_number',
-            ),
-          },
-        );
-        assert.equal(stuck.statusCode, 200, stuck.body.slice(0, 300));
-        assert.match(stuck.body, /אינה חניה ב/);
-        assert.match(stuck.body, /קדם/);
-        assert.doesNotMatch(stuck.body, /"code"/);
         assert.equal((await column(carry)).parking_name, null);
-        assert.equal(await named('PARKING', bay), '0');
-        const refused = await carry.pool.query<{ n: string }>(
-          `SELECT count(*)::text AS n FROM audit_log
-            WHERE action = 'evidence.promote_field' AND subject_id = $1`,
-          [await carry.rowId(carry.documentId, 'parking_space_number')],
-        );
-        assert.equal(refused.rows[0]?.n, '0');
-
-        const form = await carry.get(
-          `/estate/inventory/${buildingId}?parking_count=1&parking_first=${bay}`,
-        );
-        assert.equal(form.statusCode, 200);
-        assert.match(form.body, /<details class="manage glass" open>/);
-        assert.match(form.body, /id="parking_count"[^>]*value="1"/);
-        assert.match(form.body, /id="parking_first"[^>]*value="999"/);
-        assert.match(form.body, /id="storage_count"[^>]*value="0"/);
-
-        const addedBay = await carry.post(
-          `/estate/inventory/${buildingId}/spaces`,
-          {
-            unit_count: '0',
-            parking_count: '1',
-            parking_first: bay,
-            storage_count: '0',
-            elevator_count: '0',
-          },
-        );
-        assert.equal(addedBay.statusCode, 303, addedBay.body.slice(0, 300));
-        assert.equal(await named('PARKING', bay), '1');
-
-        const carriedBay = await carry.post(
-          `/documents/${carry.documentId}/promote`,
-          {
-            extracted_field_id: await carry.rowId(
-              carry.documentId,
-              'parking_space_number',
-            ),
-          },
-        );
-        assert.equal(carriedBay.statusCode, 302, carriedBay.body.slice(0, 300));
-        assert.equal((await column(carry)).parking_name, bay);
-
-        const storeForm = await carry.get(
-          `/estate/inventory/${buildingId}?storage_count=1&storage_first=${store}`,
-        );
-        assert.match(storeForm.body, /id="storage_count"[^>]*value="1"/);
-        assert.match(storeForm.body, /id="storage_first"[^>]*value="707"/);
-        const addedStore = await carry.post(
-          `/estate/inventory/${buildingId}/spaces`,
-          {
-            unit_count: '0',
-            parking_count: '0',
-            storage_count: '1',
-            storage_first: store,
-            elevator_count: '0',
-          },
-        );
-        assert.equal(addedStore.statusCode, 303, addedStore.body.slice(0, 300));
-        const carriedStore = await carry.post(
-          `/documents/${carry.documentId}/promote`,
-          {
-            extracted_field_id: await carry.rowId(
-              carry.documentId,
-              'storage_space_number',
-            ),
-          },
-        );
-        assert.equal(
-          carriedStore.statusCode,
-          302,
-          carriedStore.body.slice(0, 300),
-        );
-        assert.equal((await column(carry)).storage_name, store);
-        assert.equal(await named('STORAGE', store), '1');
-
-        const landed = await carry.get(`/estate/tenancies/${tenancyId}`);
-        assert.match(landed.body, /חניה משויכת[\s\S]{0,200}999/);
-        assert.match(landed.body, /מחסן משויך[\s\S]{0,200}707/);
-        assert.doesNotMatch(landed.body, /parking_count=1/);
-        assert.doesNotMatch(landed.body, /מאושר, לא הועבר להשכרה/);
+        assert.match(letting.body, /על הדף/);
       },
     );
     if (!ran) t.skip(skipReason);
@@ -1025,28 +936,21 @@ describe('evidence · approving a mapped lease field carries it', {
         );
         assert.equal(refusedAudit.rows[0]?.n, '0');
 
-        const refused = await carry.post(`/documents/${second}/promote`, {
-          extracted_field_id: await carry.rowId(second, 'rent_amount'),
-        });
-        assert.equal(refused.statusCode, 409);
-        assert.match(refused.body, /העמודה כבר נושאת/);
-        assert.match(refused.body, /5200/);
-        assert.match(refused.body, /החלף/);
         assert.equal((await column(carry)).rent_amount, RENT);
-
-        const replaced = await carry.post(`/documents/${second}/promote`, {
-          extracted_field_id: await carry.rowId(second, 'rent_amount'),
-          supersede: '1',
-        });
-        assert.equal(replaced.statusCode, 302, replaced.body.slice(0, 300));
-        assert.equal((await column(carry)).rent_amount, '6000');
+        const page = await carry.get(
+          `/estate/tenancies/${await carry.tenancyId()}`,
+        );
+        assert.match(page.body, /על הדף/);
+        assert.match(page.body, /6000/);
+        const ledger = await carry.get(`/documents/${second}/fields`);
+        assert.doesNotMatch(ledger.body, /קדם/);
       },
     );
     if (!ran) t.skip(skipReason);
   });
 });
 
-const MARK = 'מאושר, לא הועבר להשכרה';
+const MARK = 'על הדף';
 const HALF = 'החצי השני של דמי השכירות טרם אושר';
 
 describe('evidence · an approved value that is not on the letting says so', {
@@ -1073,9 +977,10 @@ describe('evidence · an approved value that is not on the letting says so', {
         );
         assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
         const reading = await carry.get(
-          `/documents/filing/${carry.documentId}`,
+          `/documents/filing/${carry.documentId}/open`,
         );
         assert.equal(reading.statusCode, 200);
+        assert.match(reading.body, /לא ייכתב/);
         assert.match(reading.body, new RegExp(HALF));
         assert.match(reading.body, new RegExp(RENT));
         assert.doesNotMatch(reading.body, />קדם/);
@@ -1094,8 +999,8 @@ describe('evidence · an approved value that is not on the letting says so', {
         assert.equal((await column(carry)).rent_amount, null);
 
         const ledger = await carry.get(`/documents/${carry.documentId}/fields`);
-        assert.match(ledger.body, new RegExp(HALF));
-        assert.match(ledger.body, />קדם/);
+        assert.doesNotMatch(ledger.body, new RegExp(HALF));
+        assert.doesNotMatch(ledger.body, />קדם/);
 
         // #239. The other half comes too late: the reading closed when the draft opened.
         const currency = await carry.post(
@@ -1139,8 +1044,9 @@ describe('evidence · an approved value that is not on the letting says so', {
           assert.equal(stamped.statusCode, 302, stamped.body.slice(0, 300));
         }
         const reading = await carry.get(
-          `/documents/filing/${carry.documentId}`,
+          `/documents/filing/${carry.documentId}/open?unit=${carry.unitId}`,
         );
+        assert.match(reading.body, /לא ייכתב/);
         assert.match(reading.body, /999/);
         assert.match(reading.body, /אינה חניה ב/);
         assert.match(reading.body, new RegExp(`בניין ${tag}`));
@@ -1162,9 +1068,8 @@ describe('evidence · an approved value that is not on the letting says so', {
         assert.equal((await column(carry)).storage_name, null);
 
         const ledger = await carry.get(`/documents/${carry.documentId}/fields`);
-        assert.match(ledger.body, /אינה חניה ב/);
-        assert.match(ledger.body, /אינו מחסן ב/);
-        assert.match(ledger.body, />קדם/);
+        assert.doesNotMatch(ledger.body, /אינה חניה ב/);
+        assert.doesNotMatch(ledger.body, />קדם/);
       },
     );
     if (!ran) t.skip(skipReason);
@@ -1229,23 +1134,8 @@ describe('evidence · an approved value that is not on the letting says so', {
         assert.equal((await column(carry)).option_end_date, OPTION);
 
         const ledger = await carry.get(`/documents/${second}/fields`);
-        assert.match(ledger.body, /העמודה כבר נושאת/);
-        assert.match(ledger.body, />קדם/);
-
-        const replaced = await carry.post(`/documents/${second}/promote`, {
-          extracted_field_id: await carry.rowId(second, 'rent_amount'),
-          supersede: '1',
-        });
-        assert.equal(replaced.statusCode, 302, replaced.body.slice(0, 300));
-        const after = await carry.get(
-          `/estate/tenancies/${await carry.tenancyId()}`,
-        );
-        assert.equal((await column(carry)).rent_amount, '6000');
-        assert.match(after.body, /6000/);
-        assert.doesNotMatch(
-          after.body,
-          new RegExp(`העמודה כבר נושאת[\\s\\S]{0,80}${RENT}`),
-        );
+        assert.doesNotMatch(ledger.body, />קדם/);
+        assert.equal((await column(carry)).rent_amount, RENT);
       },
     );
     if (!ran) t.skip(skipReason);
@@ -1272,9 +1162,9 @@ describe('evidence · an approved value that is not on the letting says so', {
           });
         }
         const reading = await carry.get(
-          `/documents/filing/${carry.documentId}`,
+          `/documents/filing/${carry.documentId}/open`,
         );
-        assert.match(reading.body, new RegExp(MARK));
+        assert.match(reading.body, /ייכתב/);
         assert.match(reading.body, new RegExp(RENT));
         assert.match(reading.body, new RegExp(OPTION));
         assert.doesNotMatch(reading.body, />קדם/);
@@ -1313,10 +1203,8 @@ describe('evidence · an approved value that is not on the letting says so', {
         assert.doesNotMatch(page.body, /<dt>תום האופציה<\/dt>\s*<dd>—/);
 
         const ledger = await carry.get(`/documents/${carry.documentId}/fields`);
-        assert.match(ledger.body, new RegExp(MARK));
-        assert.match(ledger.body, new RegExp(RENT));
-        assert.match(ledger.body, new RegExp(OPTION));
-        assert.match(ledger.body, />קדם/);
+        assert.doesNotMatch(ledger.body, />קדם/);
+        assert.doesNotMatch(ledger.body, />על הדף</);
       },
     );
     if (!ran) t.skip(skipReason);
@@ -1541,7 +1429,11 @@ describe('evidence · a lease that names two bays assigns each', {
         assert.doesNotMatch(letting.body, /234, 999/);
         assert.match(letting.body, new RegExp(href.replace(/[?]/g, '\\?')));
         const ledger = await carry.get(`/documents/${carry.documentId}/fields`);
-        assert.match(ledger.body, new RegExp(href.replace(/[?]/g, '\\?')));
+        assert.doesNotMatch(
+          ledger.body,
+          new RegExp(href.replace(/[?]/g, '\\?')),
+        );
+        assert.doesNotMatch(ledger.body, /קדם/);
 
         const viewer = await signIn(carry.pool, fixedClock(ON_SECOND_BAY), {
           email: 'viewer@a179miss2.test',
@@ -1554,45 +1446,8 @@ describe('evidence · a lease that names two bays assigns each', {
         assert.match(hidden.body, /אינה חניה ב/);
         assert.doesNotMatch(hidden.body, /parking_count=1/);
 
-        const stuck = await carry.post(
-          `/documents/${carry.documentId}/promote`,
-          {
-            extracted_field_id: await carry.rowId(
-              carry.documentId,
-              'second_parking_space_number',
-            ),
-          },
-        );
-        assert.equal(stuck.statusCode, 200, stuck.body.slice(0, 300));
         assert.equal((await column(carry)).second_parking_name, null);
-
-        const added = await carry.post(
-          `/estate/inventory/${buildingId}/spaces`,
-          {
-            unit_count: '0',
-            parking_count: '1',
-            parking_first: '999',
-            storage_count: '0',
-            elevator_count: '0',
-          },
-        );
-        assert.equal(added.statusCode, 303, added.body.slice(0, 300));
-        const carried = await carry.post(
-          `/documents/${carry.documentId}/promote`,
-          {
-            extracted_field_id: await carry.rowId(
-              carry.documentId,
-              'second_parking_space_number',
-            ),
-          },
-        );
-        assert.equal(carried.statusCode, 302, carried.body.slice(0, 300));
-        const row = await column(carry);
-        assert.equal(row.parking_name, '234');
-        assert.equal(row.second_parking_name, '999');
-        const landed = await carry.get(`/estate/tenancies/${tenancyId}`);
-        assert.match(landed.body, /חניה שנייה[\s\S]{0,200}999/);
-        assert.doesNotMatch(landed.body, /מאושר, לא הועבר להשכרה/);
+        assert.match(letting.body, /על הדף/);
       },
     );
     if (!ran) t.skip(skipReason);
@@ -1633,21 +1488,17 @@ describe('evidence · a lease that names two bays assigns each', {
         assert.equal((await column(carry)).parking_name, '234');
         assert.equal((await column(carry)).second_parking_name, '237');
 
-        const second = await carry.fileBoundLease(
+        await carry.fileBoundLease(
           'SECOND-LEASE',
           'second_parking_space_number',
         );
         assert.equal((await column(carry)).parking_name, '234');
         assert.equal((await column(carry)).second_parking_name, '237');
-        const refused = await carry.post(`/documents/${second}/promote`, {
-          extracted_field_id: await carry.rowId(
-            second,
-            'second_parking_space_number',
-          ),
-        });
-        assert.equal(refused.statusCode, 409);
-        assert.match(refused.body, /העמודה כבר נושאת/);
-        assert.match(refused.body, /237/);
+        const page = await carry.get(
+          `/estate/tenancies/${await carry.tenancyId()}`,
+        );
+        assert.match(page.body, /על הדף/);
+        assert.match(page.body, /238/);
         assert.equal((await column(carry)).parking_name, '234');
         assert.equal((await column(carry)).second_parking_name, '237');
       },
@@ -2129,7 +1980,11 @@ describe('evidence · a lease that names two storage rooms assigns each', {
         assert.doesNotMatch(letting.body, /50, 999/);
         assert.match(letting.body, new RegExp(href.replace(/[?]/g, '\\?')));
         const ledger = await carry.get(`/documents/${carry.documentId}/fields`);
-        assert.match(ledger.body, new RegExp(href.replace(/[?]/g, '\\?')));
+        assert.doesNotMatch(
+          ledger.body,
+          new RegExp(href.replace(/[?]/g, '\\?')),
+        );
+        assert.doesNotMatch(ledger.body, /קדם/);
 
         const viewer = await signIn(carry.pool, fixedClock(ON_SECOND_BAY), {
           email: 'viewer@a180miss2.test',
@@ -2142,45 +1997,8 @@ describe('evidence · a lease that names two storage rooms assigns each', {
         assert.match(hidden.body, /אינו מחסן ב/);
         assert.doesNotMatch(hidden.body, /storage_count=1/);
 
-        const stuck = await carry.post(
-          `/documents/${carry.documentId}/promote`,
-          {
-            extracted_field_id: await carry.rowId(
-              carry.documentId,
-              'second_storage_space_number',
-            ),
-          },
-        );
-        assert.equal(stuck.statusCode, 200, stuck.body.slice(0, 300));
         assert.equal((await column(carry)).second_storage_name, null);
-
-        const added = await carry.post(
-          `/estate/inventory/${buildingId}/spaces`,
-          {
-            unit_count: '0',
-            parking_count: '0',
-            storage_count: '1',
-            storage_first: '999',
-            elevator_count: '0',
-          },
-        );
-        assert.equal(added.statusCode, 303, added.body.slice(0, 300));
-        const carried = await carry.post(
-          `/documents/${carry.documentId}/promote`,
-          {
-            extracted_field_id: await carry.rowId(
-              carry.documentId,
-              'second_storage_space_number',
-            ),
-          },
-        );
-        assert.equal(carried.statusCode, 302, carried.body.slice(0, 300));
-        const row = await column(carry);
-        assert.equal(row.storage_name, '50');
-        assert.equal(row.second_storage_name, '999');
-        const landed = await carry.get(`/estate/tenancies/${tenancyId}`);
-        assert.match(landed.body, /מחסן שני[\s\S]{0,200}999/);
-        assert.doesNotMatch(landed.body, /מאושר, לא הועבר להשכרה/);
+        assert.match(letting.body, /על הדף/);
       },
     );
     if (!ran) t.skip(skipReason);
@@ -2221,21 +2039,17 @@ describe('evidence · a lease that names two storage rooms assigns each', {
         assert.equal((await column(carry)).storage_name, '50');
         assert.equal((await column(carry)).second_storage_name, '51');
 
-        const second = await carry.fileBoundLease(
+        await carry.fileBoundLease(
           'SECOND-LEASE',
           'second_storage_space_number',
         );
         assert.equal((await column(carry)).storage_name, '50');
         assert.equal((await column(carry)).second_storage_name, '51');
-        const refused = await carry.post(`/documents/${second}/promote`, {
-          extracted_field_id: await carry.rowId(
-            second,
-            'second_storage_space_number',
-          ),
-        });
-        assert.equal(refused.statusCode, 409);
-        assert.match(refused.body, /העמודה כבר נושאת/);
-        assert.match(refused.body, /51/);
+        const page = await carry.get(
+          `/estate/tenancies/${await carry.tenancyId()}`,
+        );
+        assert.match(page.body, /על הדף/);
+        assert.match(page.body, /52/);
         assert.equal((await column(carry)).storage_name, '50');
         assert.equal((await column(carry)).second_storage_name, '51');
       },
@@ -2390,5 +2204,231 @@ describe('evidence · a lease that names two storage rooms assigns each', {
       },
     );
     if (!onlySecond) t.skip(skipReason);
+  });
+});
+
+describe('evidence · the press writes the columns through the map', {
+  concurrency: false,
+}, () => {
+  it('writes the mapped columns and stamps each row', async (t) => {
+    const address = 'מפה 245א';
+    const ran = await withCarry(
+      {
+        tag: 'a245write',
+        city: 'עיר מפה א',
+        address,
+        on: new Date('2026-10-12T09:00:00.000Z'),
+        parking: ['553'],
+        storage: ['506'],
+        findings: [
+          ...opening(address),
+          { field_key: 'rent_amount', value: RENT, word_ids: [5] },
+          { field_key: 'rent_currency', value: CURRENCY, word_ids: [6] },
+          { field_key: 'option_end_date', value: OPTION, word_ids: [7] },
+          {
+            field_key: 'eligibility_group',
+            value: 'LOCAL_RESIDENT',
+            word_ids: [8],
+          },
+          { field_key: 'parking_space_number', value: BAY, word_ids: [9] },
+          {
+            field_key: 'second_parking_space_number',
+            value: '553',
+            word_ids: [10],
+          },
+          { field_key: 'storage_space_number', value: STORE, word_ids: [11] },
+          {
+            field_key: 'second_storage_space_number',
+            value: '506',
+            word_ids: [12],
+          },
+          { field_key: 'rooms', value: ROOMS, word_ids: [13] },
+          { field_key: 'floor', value: FLOOR, word_ids: [14] },
+        ],
+      },
+      async (carry) => {
+        const keys = [
+          'rent_amount',
+          'rent_currency',
+          'option_end_date',
+          'eligibility_group',
+          'parking_space_number',
+          'second_parking_space_number',
+          'storage_space_number',
+          'second_storage_space_number',
+          'rooms',
+          'floor',
+        ];
+        for (const key of keys) {
+          await approveMapped(carry, carry.documentId, key);
+        }
+        const preview = await carry.get(
+          `/documents/filing/${carry.documentId}/open?unit=${carry.unitId}`,
+        );
+        assert.match(preview.body, /ייכתב/);
+        assert.doesNotMatch(preview.body, /לא ייכתב/);
+        await stampOpening(carry);
+        await approveOpeningPress(carry);
+
+        const written = await carry.pool.query<{
+          start_date: string;
+          end_date: string;
+          rent_amount: string | null;
+          rent_currency: string | null;
+          option_end_date: string | null;
+          eligibility_group: string | null;
+          parking_name: string | null;
+          second_parking_name: string | null;
+          storage_name: string | null;
+          second_storage_name: string | null;
+          rooms: string;
+          floor: string | null;
+        }>(
+          `SELECT t.start_date::text AS start_date,
+                  t.end_date::text AS end_date,
+                  t.rent_amount::text AS rent_amount,
+                  t.rent_currency,
+                  t.option_end_date::text AS option_end_date,
+                  t.eligibility_group,
+                  p.name AS parking_name,
+                  p2.name AS second_parking_name,
+                  st.name AS storage_name,
+                  st2.name AS second_storage_name,
+                  u.rooms::text AS rooms,
+                  s.floor
+             FROM tenancy t
+             JOIN unit u ON u.unit_id = t.unit_id
+             JOIN space s ON s.space_id = u.unit_id
+             LEFT JOIN space p ON p.space_id = t.parking_space_id
+             LEFT JOIN space p2 ON p2.space_id = t.second_parking_space_id
+             LEFT JOIN space st ON st.space_id = t.storage_space_id
+             LEFT JOIN space st2 ON st2.space_id = t.second_storage_space_id
+            WHERE t.unit_id = $1`,
+          [carry.unitId],
+        );
+        const row = written.rows[0];
+        assert.ok(row);
+        assert.equal(row.start_date, START);
+        assert.equal(row.end_date, END);
+        assert.equal(row.rent_amount, RENT);
+        assert.equal(row.rent_currency, CURRENCY);
+        assert.equal(row.option_end_date, OPTION);
+        assert.equal(row.eligibility_group, 'LOCAL_RESIDENT');
+        assert.equal(row.parking_name, BAY);
+        assert.equal(row.second_parking_name, '553');
+        assert.equal(row.storage_name, STORE);
+        assert.equal(row.second_storage_name, '506');
+        assert.equal(row.rooms, ROOMS);
+        assert.equal(row.floor, FLOOR);
+
+        const stamps = await carry.pool.query<{ key: string }>(
+          `SELECT f.field_key AS key
+             FROM extracted_field e
+             JOIN document_type_field f
+               ON f.document_type_field_id = e.document_type_field_id
+            WHERE e.document_id = $1
+              AND e.promoted_to IS NOT NULL
+              AND f.field_key = ANY($2::text[])`,
+          [carry.documentId, ['start_date', 'end_date', ...keys]],
+        );
+        assert.deepEqual(
+          stamps.rows.map((stamp) => stamp.key).sort(),
+          ['start_date', 'end_date', ...keys].sort(),
+        );
+        const table = await carry.pool.query<{ n: string }>(
+          `SELECT count(*)::text AS n
+             FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = 'field_promotion'`,
+        );
+        assert.equal(table.rows[0]?.n, '0');
+      },
+    );
+    if (!ran) t.skip(skipReason);
+  });
+
+  it('lists a half rent and a missing bay, and still opens the draft', async (t) => {
+    const address = 'מפה 245ב';
+    const ran = await withCarry(
+      {
+        tag: 'a245skip',
+        city: 'עיר מפה ב',
+        address,
+        findings: [
+          ...opening(address),
+          { field_key: 'rent_amount', value: RENT, word_ids: [5] },
+          { field_key: 'rent_currency', value: CURRENCY, word_ids: [6] },
+          { field_key: 'parking_space_number', value: '999', word_ids: [7] },
+        ],
+      },
+      async (carry) => {
+        await approveMapped(carry, carry.documentId, 'rent_amount');
+        await approveMapped(carry, carry.documentId, 'parking_space_number');
+        const preview = await carry.get(
+          `/documents/filing/${carry.documentId}/open?unit=${carry.unitId}`,
+        );
+        assert.match(preview.body, /לא ייכתב/);
+        assert.match(preview.body, new RegExp(HALF));
+        assert.match(preview.body, /999/);
+        assert.match(preview.body, /אינה חניה ב/);
+        await stampOpening(carry);
+        await approveOpeningPress(carry);
+        assert.notEqual(await carry.tenancyId(), '');
+        assert.equal((await column(carry)).rent_amount, null);
+        assert.equal((await column(carry)).parking_name, null);
+      },
+    );
+    if (!ran) t.skip(skipReason);
+  });
+
+  it('names a failure the opening did not predict', async (t) => {
+    const address = 'מפה 245ג';
+    const ran = await withCarry(
+      {
+        tag: 'a245fail',
+        city: 'עיר מפה ג',
+        address,
+        on: new Date('2026-10-12T09:00:00.000Z'),
+        findings: [
+          ...opening(address),
+          {
+            field_key: 'eligibility_group',
+            value: 'NOT-A-GROUP',
+            word_ids: [5],
+          },
+        ],
+      },
+      async (carry) => {
+        await approveMapped(carry, carry.documentId, 'eligibility_group');
+        await stampOpening(carry);
+        const errors: string[] = [];
+        const spy = mock.method(console, 'error', (...args: unknown[]) => {
+          errors.push(args.map(String).join(' '));
+        });
+        try {
+          const opened = await carry.post(
+            `/documents/filing/${carry.documentId}/open`,
+            {
+              terms_profile: DEFAULT_TERMS_PROFILE,
+              unit: carry.unitId,
+            },
+          );
+          assert.equal(opened.statusCode, 409, opened.body.slice(0, 400));
+          assert.match(opened.body, /that is not an eligibility group/);
+          assert.doesNotMatch(opened.body, /נסו שוב/);
+          assert.equal(await carry.tenancyId(), '');
+          const line = errors.find((entry) =>
+            entry.startsWith('lease open failed:'),
+          );
+          assert.equal(
+            line,
+            'lease open failed: invalid that is not an eligibility group',
+          );
+          assert.doesNotMatch(line ?? '', /@/);
+        } finally {
+          spy.mock.restore();
+        }
+      },
+    );
+    if (!ran) t.skip(skipReason);
   });
 });

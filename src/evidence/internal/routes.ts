@@ -19,9 +19,7 @@ import {
   getBuilding,
   getUnit,
   searchEstate,
-  type UncarriedReason,
   type UnitHit,
-  uncarriedOnDocument,
   upsertUnitRow,
   WARRANTY_YEARS,
 } from '../../estate/contract.ts';
@@ -126,7 +124,6 @@ import {
   confirmLeaseTenancy,
   leaseReadingGaps,
   openLeaseDraft,
-  preselectedUnitId,
   proposeLeaseOpening,
   proposeLeaseTenancy,
 } from './lease.ts';
@@ -134,7 +131,6 @@ import { listTenancyDocumentFacts } from './list.ts';
 import { destinationAfterFiling } from './orchestrate.ts';
 import { listDocumentPassages } from './passages.ts';
 import { readPlace, resolvePlace } from './place.ts';
-import { promoteExtractedField } from './promote.ts';
 import {
   type DocumentReading,
   ocrConfigured,
@@ -621,24 +617,6 @@ export function registerDocumentRoutes(
       ...extras,
     });
 
-  const uncarriedReasons = async (
-    documentId: string,
-  ): Promise<Record<string, UncarriedReason | null>> => {
-    // #237. An unopened lease is judged against the flat its opening would preselect.
-    const proposed = (await anchorOrNone(deps.pool, documentId))
-      ? null
-      : await preselectedUnitId(
-          { db: deps.pool, clock: deps.clock, objects: deps.objects },
-          documentId,
-        );
-    const rows = await uncarriedOnDocument(deps.pool, documentId, proposed);
-    const out: Record<string, UncarriedReason | null> = {};
-    for (const row of rows) {
-      out[row.extractedFieldId] = row.reason;
-    }
-    return out;
-  };
-
   const tenancyBoundTo = async (documentId: string): Promise<string | null> => {
     const found = await deps.pool.query<{ entity_id: string }>(
       `SELECT entity_id FROM document_link
@@ -756,8 +734,6 @@ export function registerDocumentRoutes(
       mayApprove: can(request.staff?.role ?? null, 'documents.write'),
       ...pageCoverage(filed),
       readingPending: await extractWorkIsOpen(deps.pool, documentId),
-      uncarried: await uncarriedReasons(documentId),
-      mayAddInventory: can(request.staff?.role ?? null, 'estate.write'),
       gaps: leaseReadingGaps(rows),
       mayOpen: can(request.staff?.role ?? null, 'tenancy.write'),
       contactRows: contactRowsOf(rows),
@@ -859,21 +835,38 @@ export function registerDocumentRoutes(
       } catch (error) {
         if (
           error instanceof KernelError &&
-          (error.code === 'invalid' || error.code === 'conflict')
+          (error.code === 'invalid' ||
+            error.code === 'conflict' ||
+            error.code === 'not_found')
         ) {
+          const screen = await openingOf(documentId, {
+            failed: true,
+            mayCreate: mayShapeTheEstate(request),
+            ...(termsProfile ? { termsProfile } : {}),
+            ...(postedUnit === ''
+              ? {}
+              : { unitId: validId(postedUnit, 'unit') }),
+          });
+          const predicted =
+            (screen.opening?.refusals.length ?? 0) > 0 ||
+            (termsProfile !== '' &&
+              screen.opening !== undefined &&
+              !screen.opening.termsProfiles.includes(termsProfile));
+          const openFailure = predicted
+            ? undefined
+            : { code: error.code, message: error.message };
+          if (openFailure) {
+            // Code and message only. The actor's email is personal and stays off the log.
+            console.error(
+              `lease open failed: ${openFailure.code} ${openFailure.message}`,
+            );
+          }
           html(reply);
           reply.code(409);
-          return leaseFiling(
-            request,
-            await openingOf(documentId, {
-              failed: true,
-              mayCreate: mayShapeTheEstate(request),
-              ...(termsProfile ? { termsProfile } : {}),
-              ...(postedUnit === ''
-                ? {}
-                : { unitId: validId(postedUnit, 'unit') }),
-            }),
-          );
+          return leaseFiling(request, {
+            ...screen,
+            ...(openFailure ? { openFailure } : {}),
+          });
         }
         throw error;
       }
@@ -1935,7 +1928,6 @@ export function registerDocumentRoutes(
     extra: {
       revealed?: string;
       saved?: number;
-      overwrite?: { extractedFieldId: string; existingValue: string };
     },
   ): Promise<FieldsScreen> => {
     const filed = await getFiledDocument(deps.pool, documentId);
@@ -1968,8 +1960,6 @@ export function registerDocumentRoutes(
       mayApprove:
         closedTo === null &&
         can(request.staff?.role ?? null, 'documents.write'),
-      mayAddInventory: can(request.staff?.role ?? null, 'estate.write'),
-      uncarried: await uncarriedReasons(documentId),
       ...pageCoverage(filed),
       ...extra,
     };
@@ -2132,61 +2122,6 @@ export function registerDocumentRoutes(
       return renderFieldsPage(
         await fieldsScreen(request, documentId, { revealed: extractedFieldId }),
       );
-    },
-  );
-
-  app.post<{ Params: { documentId: string } }>(
-    '/documents/:documentId/promote',
-    CONFIRM,
-    async (request, reply) => {
-      const documentId = validId(request.params.documentId, 'document');
-      const fields = formBody(request);
-      const extractedFieldId = validId(
-        fields.extracted_field_id ?? '',
-        'extracted field',
-      );
-      try {
-        await promoteExtractedField(
-          {
-            db: deps.pool,
-            audit: createAuditLog(deps.pool, deps.clock),
-            clock: deps.clock,
-          },
-          {
-            extractedFieldId,
-            promotedBy: requireOperatorEmail(request),
-            supersede: fields.supersede === '1',
-          },
-        );
-      } catch (error) {
-        if (
-          error instanceof KernelError &&
-          error.code === 'conflict' &&
-          typeof error.details?.existingValue === 'string'
-        ) {
-          html(reply);
-          reply.code(409);
-          return renderFieldsPage(
-            await fieldsScreen(request, documentId, {
-              overwrite: {
-                extractedFieldId,
-                existingValue: error.details.existingValue,
-              },
-            }),
-          );
-        }
-        if (
-          error instanceof KernelError &&
-          error.code === 'invalid' &&
-          (error.details?.absent === 'PARKING' ||
-            error.details?.absent === 'STORAGE')
-        ) {
-          html(reply);
-          return renderFieldsPage(await fieldsScreen(request, documentId, {}));
-        }
-        throw error;
-      }
-      return reply.redirect(`/documents/${documentId}/read`);
     },
   );
 

@@ -32,7 +32,6 @@ import { inRolledBackTransaction, policyPool, skipReason } from './support.ts';
 const AT = new Date('2026-09-22T09:00:00.000Z');
 const ON = '2026-09-22';
 const CLOCK = fixedClock(AT);
-const BLOCK = 't148';
 let sequence = 0;
 
 async function seedAssignedStorageReading(db: PoolClient): Promise<{
@@ -84,7 +83,7 @@ async function seedAssignedStorageReading(db: PoolClient): Promise<{
   );
 
   const type = await upsertDocumentType(db, {
-    typeKey: `${BLOCK}-lease-${sequence}`,
+    typeKey: 'lease',
     labelHe: 'חוזה שכירות',
     labelEn: 'Lease',
     verificationTerms: ['תקופת השכירות'],
@@ -100,11 +99,6 @@ async function seedAssignedStorageReading(db: PoolClient): Promise<{
     effectiveFrom: ON,
     effectiveTo: null,
   });
-  await db.query(
-    `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-     VALUES ($1, $2, 'tenancy.storage_space_id')`,
-    [newId(), field.id],
-  );
 
   const hash = newId().replace(/-/g, '');
   const document = await ingestDocument(

@@ -492,7 +492,6 @@ function fieldsLedger(options: {
     unread: [documentTypeFields[1] as DocumentTypeFieldRow],
     mayReadIdentifiers: options.mayReadIdentifiers,
     mayApprove: true,
-    mayAddInventory: false,
     ...(options.revealed === undefined ? {} : { revealed: identifier }),
     ...(options.saved === undefined ? {} : { saved: options.saved }),
   });
@@ -3291,7 +3290,7 @@ describe('shared UI tokens', () => {
     assert.match(ledger, /שוכר ראשי/);
     assert.match(ledger, /ערב · אינו איש קשר לשירות/);
     assert.match(ledger, /דמי השכירות/);
-    assert.match(ledger, /<details class="prose-fold"/);
+    assert.doesNotMatch(ledger, /<details class="prose-fold"/);
   });
 
   it('withholds the transcript of the paper, and names the page instead of drawing it', () => {

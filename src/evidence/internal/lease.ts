@@ -46,6 +46,7 @@ import {
 } from './documents.ts';
 import { type ExtractedRow, listExtractedFields } from './extract.ts';
 import { readStoredLeasePlace } from './intake.ts';
+import { type LandingRow, whatLands } from './landing.ts';
 import { type PlaceReading, resolvePlace } from './place.ts';
 import { promoteExtractedField } from './promote.ts';
 import type { Queryable } from './types.ts';
@@ -1090,46 +1091,32 @@ export async function listUnopenedLeases(
 }
 
 /**
- * Carry every approved, mapped, still-uncarried row on a lease.
+ * Copy the approved mapped rows `whatLands` says will land.
  *
- * Each row is its own promotion. A `conflict` or `invalid` from one row — the
- * other rent half, a bay that is not a Space, a column that already holds
- * something else — leaves that row uncarried and does not fail the press that
- * asked for the carry. `lease_amendment` never reaches here.
- *
- * **Each row under its own savepoint. #234.** The carry now runs inside פתיחת טיוטה's
- * transaction, and a promotion may refuse after one of its statements ran. Without the
- * savepoint a refused row would abort the transaction and take the draft with it.
+ * Rows it says will not are skipped, exactly as the opening screen listed them.
+ * Anything else throws and takes the draft with it: there is no savepoint.
  */
 async function carryApprovedLease(
   deps: LeaseDeps,
-  spec: { documentId: string; promotedBy: string },
+  spec: { documentId: string; unitId: string; promotedBy: string },
 ): Promise<void> {
   await inTransaction(deps.db, async (db) => {
+    const landing = await whatLands(db, spec.documentId, spec.unitId);
     const rows = await listExtractedFields(db, spec.documentId);
-    for (const row of rows) {
-      if (row.approvedAt === null || row.promotionTarget === null) continue;
-      if (row.promotedTo !== null) continue;
-      await db.query('SAVEPOINT carry_field');
-      try {
-        await promoteExtractedField(
-          { db, audit: deps.audit, clock: deps.clock },
-          {
-            extractedFieldId: row.extractedFieldId,
-            promotedBy: spec.promotedBy,
-          },
-        );
-        await db.query('RELEASE SAVEPOINT carry_field');
-      } catch (error) {
-        await db.query('ROLLBACK TO SAVEPOINT carry_field');
-        if (
-          error instanceof KernelError &&
-          (error.code === 'conflict' || error.code === 'invalid')
-        ) {
-          continue;
-        }
-        throw error;
-      }
+    const stamped = new Set(
+      rows
+        .filter((row) => row.promotedTo !== null)
+        .map((row) => row.extractedFieldId),
+    );
+    for (const row of landing) {
+      if (row.reason !== null || stamped.has(row.extractedFieldId)) continue;
+      await promoteExtractedField(
+        { db, audit: deps.audit, clock: deps.clock },
+        {
+          extractedFieldId: row.extractedFieldId,
+          promotedBy: spec.promotedBy,
+        },
+      );
     }
   });
 }
@@ -1198,6 +1185,8 @@ export interface LeaseOpening {
   tenancyId: string | null;
   /** #235. Approved phones and emails that pair with no person, and so are not written. */
   unpairedContacts: number;
+  /** Approved mapped rows, and why each one will not land. #245. */
+  landing: LandingRow[];
   /**
    * #236. A tenancy that already holds one of these people, by ת.ז., starting on this date.
    * Offered, not a refusal: attach the document, or open a new draft anyway.
@@ -1618,6 +1607,7 @@ async function openingAndPeople(
     tenancyId: await tenancyLinkOf(db, documentId),
     unpairedContacts: household.unpairedContacts,
     sameLease,
+    landing: await whatLands(db, documentId, unit?.unit_id ?? null),
   };
   return { opening, resolved, day };
 }
@@ -1818,7 +1808,7 @@ export async function openLeaseDraft(
 
     await carryApprovedLease(
       { db, audit: deps.audit, clock: deps.clock },
-      { documentId, promotedBy: openedBy },
+      { documentId, unitId: chosen.unit_id, promotedBy: openedBy },
     );
 
     await deps.audit.write(

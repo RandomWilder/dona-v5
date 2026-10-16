@@ -36,8 +36,6 @@ const ON = '2026-09-21';
 const CLOCK = fixedClock(AT);
 const FIRST = '2026-03-01';
 const SECOND = '2026-04-01';
-const BLOCK = 't130';
-let sequence = 0;
 
 interface Fixture {
   firstFieldId: string;
@@ -51,7 +49,6 @@ async function seedTwoReadings(
   db: PoolClient,
   secondValue: string,
 ): Promise<Fixture> {
-  sequence += 1;
   const buildingId = newId();
   const unitId = newId();
   await db.query(
@@ -85,7 +82,7 @@ async function seedTwoReadings(
   });
 
   const type = await upsertDocumentType(db, {
-    typeKey: `${BLOCK}-lease-${sequence}`,
+    typeKey: 'lease',
     labelHe: 'חוזה שכירות',
     labelEn: 'Lease',
     verificationTerms: ['תקופת השכירות'],
@@ -101,11 +98,6 @@ async function seedTwoReadings(
     effectiveFrom: ON,
     effectiveTo: null,
   });
-  await db.query(
-    `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-     VALUES ($1, $2, 'tenancy.start_date')`,
-    [newId(), field.id],
-  );
 
   async function fileReading(value: string): Promise<{
     documentId: string;

@@ -1,13 +1,13 @@
 ---
 number: 245
 title: The press writes the columns through a map in code, and shows what will not land
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent: 243
 created: 2026-10-15
-closed:
+closed: 2026-10-15
 ---
 
 ## What
@@ -49,7 +49,7 @@ ADR-0016, SPEC-evidence *The column map*, SPEC-flows A2 step 7.
 
 ## Acceptance
 
-- [ ] **Red first:** with `field_promotion` empty, the press succeeds and writes:
+- [x] **Red first:** with `field_promotion` empty, the press succeeds and writes:
       - the dates;
       - the rent pair and the option end;
       - the eligibility group;
@@ -57,14 +57,18 @@ ADR-0016, SPEC-evidence *The column map*, SPEC-flows A2 step 7.
       - rooms and floor on an empty Unit.
 
       Each written row is stamped.
-- [ ] **Red first:** a rent amount with its currency unapproved, and a bay number that is not a
+- [x] **Red first:** a rent amount with its currency unapproved, and a bay number that is not a
       Space, are listed on the opening screen as not landing. The press writes the draft without
       them and does not fail.
-- [ ] **Red first:** a failure inside the press that is not a refusal is logged with its code, and
+- [x] **Red first:** a failure inside the press that is not a refusal is logged with its code, and
       the page names it.
-- [ ] A3 confirms an addendum and writes `new_end_date` with the table gone.
-- [ ] There is no `/documents/:id/promote` route and no `קדם` in any view. The guard test that
+- [x] A3 confirms an addendum and writes `new_end_date` with the table gone.
+- [x] There is no `/documents/:id/promote` route and no `קדם` in any view. The guard test that
       lists routes is updated.
-- [ ] The full golden set is not required: no prompt, model, retrieval or tool definition changes.
-- [ ] `npm test` is green.
+- [x] The full golden set is not required: no prompt, model, retrieval or tool definition changes.
+- [x] `npm test` is green.
 - [ ] A rolled-back dry run of the press against staging succeeds for `01a13956`.
+
+## Comment — 2026-10-15
+
+The map is a constant. The press writes the rows that land and stamps them, and a half rent or a missing bay is listed and skipped. An eligibility value that is not a code is logged and named on the page, and the draft is not left behind. `field_promotion` is dropped. `קדם` is gone. The opening screen was not clicked on :3000. The staging dry run for `01a13956` was not run: it writes real staging data, and it was not asked for.

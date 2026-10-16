@@ -32,8 +32,6 @@ const ON = '2026-09-22';
 const CLOCK = fixedClock(AT);
 const TYPED = '3.5';
 const READING = '4';
-const BLOCK = 't141';
-let sequence = 0;
 
 async function seedRoomsReading(
   db: PoolClient,
@@ -43,7 +41,6 @@ async function seedRoomsReading(
   extractedFieldId: string;
   documentId: string;
 }> {
-  sequence += 1;
   const buildingId = newId();
   const unitId = newId();
   await db.query(
@@ -64,7 +61,7 @@ async function seedRoomsReading(
   );
 
   const type = await upsertDocumentType(db, {
-    typeKey: `${BLOCK}-lease-${sequence}`,
+    typeKey: 'lease',
     labelHe: 'חוזה שכירות',
     labelEn: 'Lease',
     verificationTerms: ['תקופת השכירות'],
@@ -80,11 +77,6 @@ async function seedRoomsReading(
     effectiveFrom: ON,
     effectiveTo: null,
   });
-  await db.query(
-    `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-     VALUES ($1, $2, 'unit.rooms')`,
-    [newId(), field.id],
-  );
 
   const hash = newId().replace(/-/g, '');
   const document = await ingestDocument(

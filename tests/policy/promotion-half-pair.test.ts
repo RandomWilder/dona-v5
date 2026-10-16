@@ -37,8 +37,6 @@ const AMOUNT = '12500';
 const CURRENCY = 'ILS';
 const OTHER_AMOUNT = '13000';
 const OPTION_END = '2030-01-17';
-const BLOCK = 't132';
-let sequence = 0;
 
 interface Fixture {
   amountFieldId: string;
@@ -79,7 +77,6 @@ async function seedLease(
   db: PoolClient,
   spec: { currencyValue: string | null },
 ): Promise<Fixture> {
-  sequence += 1;
   const buildingId = newId();
   const unitId = newId();
   await db.query(
@@ -113,7 +110,7 @@ async function seedLease(
   });
 
   const type = await upsertDocumentType(db, {
-    typeKey: `${BLOCK}-lease-${sequence}`,
+    typeKey: 'lease',
     labelHe: 'חוזה שכירות',
     labelEn: 'Lease',
     verificationTerms: ['תקופת השכירות'],
@@ -149,19 +146,6 @@ async function seedLease(
     effectiveFrom: ON,
     effectiveTo: null,
   });
-  await db.query(
-    `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-     VALUES ($1, $2, 'tenancy.rent_amount'), ($3, $4, 'tenancy.rent_currency'),
-            ($5, $6, 'tenancy.option_end_date')`,
-    [
-      newId(),
-      amountField.id,
-      newId(),
-      currencyField.id,
-      newId(),
-      optionField.id,
-    ],
-  );
 
   const hash = newId().replace(/-/g, '');
   const document = await ingestDocument(

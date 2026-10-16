@@ -11,6 +11,7 @@ import { newId } from '../../kernel/ids.ts';
 import type { PdfPage } from '../../kernel/pdf.ts';
 import type { DocumentTypeFieldRow, FieldValueType } from './catalogue.ts';
 import { documentTypeFields } from './catalogue.ts';
+import { columnTarget } from './column-map.ts';
 import { getFiledDocument } from './documents.ts';
 import type { Queryable } from './types.ts';
 
@@ -702,7 +703,7 @@ export async function listExtractedFields(
     bbox: BBox;
     confidence: number | null;
     model: string;
-    promotion_target: string | null;
+    type_key: string;
     promoted_to: string | null;
     promoted_by: string | null;
     promoted_at: Date | null;
@@ -712,13 +713,13 @@ export async function listExtractedFields(
   }>(
     `SELECT e.extracted_field_id, e.document_type_field_id, f.field_key, f.label_he,
             e.value, e.page, e.bbox, e.confidence, e.model,
-            p.target AS promotion_target, e.promoted_to, e.promoted_by, e.promoted_at,
+            t.type_key, e.promoted_to, e.promoted_by, e.promoted_at,
             e.approved_value, e.approved_by, e.approved_at
        FROM extracted_field e
+       JOIN document d ON d.document_id = e.document_id
+       JOIN document_type t ON t.document_type_id = d.document_type_id
        JOIN document_type_field f
          ON f.document_type_field_id = e.document_type_field_id
-       LEFT JOIN field_promotion p
-         ON p.document_type_field_id = e.document_type_field_id
       WHERE e.document_id = $1
       ORDER BY f.field_key, e.extracted_field_id`,
     [documentId],
@@ -733,7 +734,7 @@ export async function listExtractedFields(
     bbox: row.bbox,
     confidence: row.confidence,
     model: row.model,
-    promotionTarget: row.promotion_target,
+    promotionTarget: columnTarget(row.type_key, row.field_key),
     promotedTo: row.promoted_to,
     promotedBy: row.promoted_by,
     promotedAt: row.promoted_at,

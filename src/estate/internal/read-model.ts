@@ -738,19 +738,23 @@ export interface ApprovedCapture {
 export async function listApprovedCapturesForTenancy(
   db: Queryable,
   tenancyId: string,
+  map: Readonly<Record<string, Readonly<Record<string, string>>>>,
 ): Promise<ApprovedCapture[]> {
-  const result = await db.query<ApprovedCapture>(
+  const result = await db.query<
+    ApprovedCapture & { typeKey: string; fieldKey: string }
+  >(
     `SELECT e.document_id AS "documentId",
             f.label_he AS "labelHe",
             e.approved_value AS value,
-            e.page
+            e.page,
+            t.type_key AS "typeKey",
+            f.field_key AS "fieldKey"
        FROM extracted_field e
+       JOIN document d ON d.document_id = e.document_id
+       JOIN document_type t ON t.document_type_id = d.document_type_id
        JOIN document_type_field f
          ON f.document_type_field_id = e.document_type_field_id
-       LEFT JOIN field_promotion p
-         ON p.document_type_field_id = e.document_type_field_id
       WHERE e.approved_at IS NOT NULL
-        AND p.target IS NULL
         AND e.document_id IN (
           SELECT document_id FROM document_link
            WHERE entity_type = 'TENANCY' AND entity_id = $1
@@ -758,7 +762,14 @@ export async function listApprovedCapturesForTenancy(
       ORDER BY f.field_key, e.extracted_field_id`,
     [tenancyId],
   );
-  return result.rows;
+  return result.rows
+    .filter((row) => map[row.typeKey]?.[row.fieldKey] === undefined)
+    .map(({ documentId, labelHe, value, page }) => ({
+      documentId,
+      labelHe,
+      value,
+      page,
+    }));
 }
 
 /**

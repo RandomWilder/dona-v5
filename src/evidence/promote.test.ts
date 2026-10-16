@@ -24,6 +24,8 @@ import type { ExtractedRow, IntakeDeps } from './contract.ts';
 import {
   applyDocumentTypeCatalogue,
   approveExtractedField,
+  COLUMN_MAP,
+  columnTarget,
   extractFiledDocument,
   fileDocument,
   listExtractedFields,
@@ -139,47 +141,21 @@ describe('evidence · promote an extracted field', () => {
     try {
       await inRolledBackTransaction(pool, async (db) => {
         await applyDocumentTypeCatalogue(db, seedDocumentTypes);
-        // Counted on the catalogue's own types: other files write mappings for types of their
-        // own (card-lease-…) on this database while this case runs.
-        const mappings = await db.query<{ n: string }>(
-          `SELECT count(*)::text AS n FROM field_promotion p
-             JOIN document_type_field f
-               ON f.document_type_field_id = p.document_type_field_id
-             JOIN document_type t ON t.document_type_id = f.document_type_id
-            WHERE t.type_key = ANY($1::text[])`,
-          [seedDocumentTypes.map((seed) => seed.type.typeKey)],
-        );
-        // start_date, end_date, new_end_date — two effective_from rows each (R18) — plus the
-        // three track B copies, #141's rooms and floor, #146's assigned bay, #148's
-        // assigned storage, #179's second parking declaration, the parking hint
-        // re-opened at SCHEMA_V7 (the closed SCHEMA_V6 row keeps its mapping),
-        // #180's second storage declaration, and the storage hint re-opened the
-        // same day (the closed SCHEMA_V6 row keeps its mapping). #212 adds
-        // eligibility_group.
-        assert.equal(mappings.rows[0]?.n, '18');
-        const extras = await db.query<{ n: string }>(
-          `SELECT count(*)::text AS n FROM field_promotion p
-             JOIN document_type_field f
-               ON f.document_type_field_id = p.document_type_field_id
-            WHERE f.field_key LIKE ANY($1::text[])`,
-          [
-            [
-              'deposit%',
-              'maintenance%',
-              'promissory%',
-              'signed_date',
-              '%tenant_name',
-              '%id_number',
-              'gush',
-              'helka',
-              'building_number',
-              'apartment_type',
-              'has_storage',
-            ],
-          ],
-        );
-        assert.equal(extras.rows[0]?.n, '0');
-
+        assert.equal(Object.keys(COLUMN_MAP.lease ?? {}).length, 12);
+        assert.equal(Object.keys(COLUMN_MAP.lease_amendment ?? {}).length, 1);
+        for (const key of [
+          'deposit_amount',
+          'maintenance_amount',
+          'signed_date',
+          'tenant_name',
+          'tenant_id_number',
+          'gush',
+          'helka',
+          'building_number',
+          'apartment_number',
+        ]) {
+          assert.equal(columnTarget('lease', key), null, key);
+        }
         const unitId = await insertUnit(db);
         const profile = await upsertTermsProfile(
           db,
@@ -804,12 +780,11 @@ describe('evidence · promote an extracted field', () => {
       unread: [],
       mayReadIdentifiers: false,
       mayApprove: true,
-      mayAddInventory: false,
     });
     // **Slice 7.4: unsigned, so no button.** `READINGS` carries no approval stamp, and a promotion
     // now requires one — a `קדם` whose only outcome is a refusal is not a control.
-    assert.doesNotMatch(ledger, /קדם · תחילת תקופת השכירות/);
-    assert.match(ledger, /קידום מחייב אישור תחילה/);
+    assert.doesNotMatch(ledger, /קדם/);
+    assert.doesNotMatch(ledger, /קידום/);
 
     const signed = renderFieldsPage({
       nav: NAV,
@@ -834,11 +809,9 @@ describe('evidence · promote an extracted field', () => {
       unread: [],
       mayReadIdentifiers: false,
       mayApprove: true,
-      mayAddInventory: false,
     });
-    assert.match(signed, /קדם · תחילת תקופת השכירות/);
-    // An unmapped field is capturable, listed, signable — and still has nowhere to be promoted to.
-    assert.doesNotMatch(signed, /קדם · מספר הדירה/);
+    assert.doesNotMatch(signed, /קדם/);
+    assert.doesNotMatch(signed, /\/promote/);
     assert.doesNotMatch(signed, /name="promoted_by"/);
 
     const occupied = renderFieldsPage({
@@ -864,16 +837,10 @@ describe('evidence · promote an extracted field', () => {
       unread: [],
       mayReadIdentifiers: false,
       mayApprove: true,
-      mayAddInventory: false,
-      overwrite: {
-        extractedFieldId: READINGS[0]?.extractedFieldId ?? '',
-        existingValue: '3.5',
-      },
     });
-    assert.match(occupied, /העמודה כבר נושאת/);
-    assert.match(occupied, /3\.5/);
-    assert.match(occupied, /החלף · תחילת תקופת השכירות/);
-    assert.match(occupied, /name="supersede"/);
+    assert.doesNotMatch(occupied, /החלף/);
+    assert.doesNotMatch(occupied, /קדם/);
+    assert.doesNotMatch(occupied, /name="supersede"/);
   });
 
   it('says when the reading did not cover the whole file', () => {
@@ -912,7 +879,6 @@ describe('evidence · promote an extracted field', () => {
       unread: [],
       mayReadIdentifiers: false,
       mayApprove: false,
-      mayAddInventory: false,
       ...coverage,
     });
     assert.match(ledger, /15 מתוך 21/);

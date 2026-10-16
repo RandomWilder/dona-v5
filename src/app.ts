@@ -49,6 +49,7 @@ import { registerEstateRoutes } from './estate/contract.ts';
 import {
   addressMatches,
   apartmentMatches,
+  COLUMN_MAP,
   fileDocument,
   listDocumentTypes,
   listLinkedDocuments,
@@ -586,6 +587,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
 
   registerEstateRoutes(app, {
     pool: deps.pool,
+    columnMap: COLUMN_MAP,
     clock,
     chrome: signedInChrome,
     listLinkedDocuments: async (db, entityType, entityId) =>
