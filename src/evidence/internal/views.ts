@@ -775,7 +775,7 @@ const FILING_BEATS = [
   { key: 'done', label: 'די היום' },
 ] as const;
 
-type FilingBeat = (typeof FILING_BEATS)[number]['key'] | 'place';
+type FilingBeat = (typeof FILING_BEATS)[number]['key'];
 
 function filingBeats(current: FilingBeat): Html {
   const at = FILING_BEATS.findIndex((beat) => beat.key === current);
@@ -799,18 +799,10 @@ function filingCreateOffer(
   if (!screen.mayCreate || !reading.addressLine) {
     return h``;
   }
+  if (!screen.documentId) return h``;
   return h`<form class="form-grid" method="post" action="/documents/filing/place">
     ${csrfInput(screen.csrf)}
-    ${
-      screen.held
-        ? h`<input type="hidden" name="held" value="${screen.held}" />`
-        : h``
-    }
-    ${
-      screen.documentId
-        ? h`<input type="hidden" name="document" value="${screen.documentId}" />`
-        : h``
-    }
+    <input type="hidden" name="document" value="${screen.documentId}" />
     ${
       screen.building
         ? h`<input type="hidden" name="building" value="${screen.building.building_id}" />`
@@ -835,15 +827,7 @@ function filingCreateOffer(
           : h`יצירת הבניין והדירה`
       }</button>
     </div>
-    <p class="hint">
-      ${
-        screen.held
-          ? h`מה שנקרא מהמסמך הוא נקודת ההתחלה וניתן לתקן. הקובץ נשמר.`
-          : screen.documentId
-            ? h`מה שנקרא מהמסמך הוא נקודת ההתחלה וניתן לתקן. החוזה כבר שמור; הדירה שתיווצר תסומן כאן.`
-            : h`מה שנקרא מהמסמך הוא נקודת ההתחלה וניתן לתקן. אחרי היצירה יש לצרף את הקובץ שוב — שום דבר אינו נשמר בין הניסיונות.`
-      }
-    </p>
+    <p class="hint">מה שנקרא מהמסמך הוא נקודת ההתחלה וניתן לתקן. החוזה כבר שמור; הדירה שתיווצר תסומן כאן.</p>
   </form>`;
 }
 
@@ -927,19 +911,9 @@ export interface LeaseFilingScreen {
   nav: Html;
   csrf: string;
   beat: FilingBeat;
-  matched?: UnitHit;
-  reading?: PlaceReading;
   building?: { building_id: string; name: string } | null;
-  candidates?: UnitHit[];
-  /** How many Units answered. Used only for the A12 headline when nothing is exact. */
-  candidateTotal?: number;
   query?: string;
   mayCreate?: boolean;
-  chosenUnitId?: string;
-  /** The held upload's hash. Set once the file is kept. The file input does not come back. */
-  held?: string;
-  /** One page is over the reader's call. The file is kept and can be filed unread. */
-  unread?: boolean;
   tooLargeBytes?: number;
   refused?: {
     type: DocumentTypeRow;
@@ -1355,7 +1329,6 @@ function filingOpening(screen: LeaseFilingScreen): Html {
         ? filingCreateOffer(
             {
               ...screen,
-              reading,
               building: opening.placeBuilding,
               mayCreate: true,
             },
@@ -1560,24 +1533,12 @@ function filingLede(screen: LeaseFilingScreen): Html {
       ? h`תויק לדירה ${excerpt(ltr(screen.unit.unit_number))}. חתמו על שמות ותאריכים, ואז פתיחת טיוטה.`
       : h`החוזה נשמר בלי דירה. חתמו על שמות ותאריכים, ואז פתיחת טיוטה.`;
   }
-  if (screen.matched) {
-    return screen.held
-      ? h`נקראה כתובת. הקובץ נשמר. הרישום אחרי המשך.`
-      : h`נקראה כתובת. עדיין לא נשמר דבר.`;
-  }
   return h`חוזה אחד. הקובץ נשמר מיד, והדירה נבחרת בפתיחת טיוטה.`;
 }
 
 export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
-  const tooLong = screen.unread
-    ? h`<section class="notice">
-          <h2>הקובץ גדול מכדי שנקרא אותו</h2>
-          <p class="lede">
-            <strong>הקובץ נשמר.</strong> עמוד אחד גדול מכדי שהקורא יפתח אותו. בחרו דירה, והמסמך
-            יתויק בלי קריאה.
-          </p>
-        </section>`
-    : screen.tooLargeBytes === undefined
+  const tooLong =
+    screen.tooLargeBytes === undefined
       ? h``
       : h`<section class="notice">
           <h2>הקובץ גדול מכדי שנקרא אותו</h2>
@@ -1610,169 +1571,20 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
         </p>
       </section>`
     : h``;
-  const candidates = screen.candidates ?? [];
-  const unresolved =
-    screen.reading !== undefined &&
-    screen.beat !== 'open' &&
-    !screen.matched &&
-    !screen.chosenUnitId
-      ? h`<section class="notice">
-          <h2>${filingHeadline(screen.reading, screen.candidateTotal ?? 0)}</h2>
-          ${placeFacts(screen.reading, screen.building, excerpt)}
-          <p class="lede">
-            ${
-              screen.held
-                ? h`<strong>הקובץ נשמר.</strong> בחרו דירה, חפשו, או צרו אותה — אין צורך לצרף אותו שוב.`
-                : h`<strong>לא נשמר דבר</strong> — לא הקובץ ולא רישום. בחרו דירה, חפשו, או צרפו שוב.`
-            }
-          </p>
-          ${filingCreateOffer(screen, screen.reading)}
-        </section>`
-      : h``;
-  const created = screen.chosenUnitId
-    ? h`<section class="notice">
-        <h2>הדירה נוצרה</h2>
-        <p class="lede">
-          ${
-            screen.held
-              ? h`הדירה מסומנת למטה. <strong>הקובץ נשמר.</strong> תייקו.`
-              : h`הדירה מסומנת למטה. צרפו את הקובץ שוב — הוא לא נשמר בין הניסיונות — ותייקו.`
-          }
-        </p>
-      </section>`
-    : h``;
-  const match = screen.matched
-    ? h`<section class="notice">
-        <h2>דירה אחת</h2>
-        <p>
-          נקראה הכתובת
-          ${
-            screen.reading?.addressLine
-              ? h`<span class="excerpt">${screen.reading.addressLine}${
-                  screen.reading.city ? h`, ${screen.reading.city}` : h``
-                }</span>`
-              : h``
-          }
-          ${
-            screen.reading?.apartmentNumber
-              ? h` · דירה <span class="excerpt">${screen.reading.apartmentNumber}</span>`
-              : h``
-          }
-        </p>
-        <dl class="facts">
-          <div>
-            <dt>בתיק</dt>
-            <dd>
-              דירה ${ltr(screen.matched.unit_number)} · ${screen.matched.address_line} ·
-              ${screen.matched.city}
-            </dd>
-          </div>
-        </dl>
-      </section>`
-    : h``;
   const attach =
     screen.beat === 'read' || screen.beat === 'open' || screen.beat === 'draft'
       ? h``
-      : screen.held && screen.refused?.reason === 'terms'
-        ? h`<p class="form-note"><a href="/documents/filing">תיוק של קובץ אחר</a></p>`
-        : screen.held && !screen.matched && candidates.length === 0
-          ? h``
-          : h`<form class="file-well" method="post" action="/documents/filing" enctype="multipart/form-data">
+      : h`<form class="file-well" method="post" action="/documents/filing" enctype="multipart/form-data">
           ${csrfInput(screen.csrf)}
-          ${
-            screen.held
-              ? h`<input type="hidden" name="held" value="${screen.held}" />`
-              : h``
-          }
-          ${
-            screen.matched
-              ? h`<input type="hidden" name="unit" value="${screen.matched.unit_id}" />`
-              : h``
-          }
-          ${
-            !screen.matched && candidates.length > 0
-              ? h`<ul class="candidates">
-                  ${candidates.map(
-                    (unit) =>
-                      h`<li class="candidate">
-                        <input type="radio" id="u-${unit.unit_id}" name="unit" value="${unit.unit_id}" required ${
-                          screen.chosenUnitId === unit.unit_id
-                            ? h`checked`
-                            : h``
-                        } />
-                        <label for="u-${unit.unit_id}">דירה ${ltr(
-                          unit.unit_number,
-                        )} · ${unit.building_name} · ${unit.address_line}, ${
-                          unit.city
-                        }</label>
-                      </li>`,
-                  )}
-                </ul>
-                ${
-                  (screen.candidateTotal ?? candidates.length) >
-                  candidates.length
-                    ? h`<p class="hint">
-                        בכתובת הזו ${ltr(screen.candidateTotal ?? 0)} דירות. מוצגות ${ltr(
-                          CANDIDATE_LIMIT,
-                        )} הראשונות — אם הדירה אינה ביניהן, חפשו אותה למטה.
-                      </p>`
-                    : h``
-                }`
-              : h``
-          }
           <span class="chip">חוזה שכירות</span>
-          ${
-            screen.held
-              ? h``
-              : h`<label for="file">הקובץ</label>
+          <label for="file">הקובץ</label>
           <input id="file" name="file" type="file" required
-            accept="${documentExtensions.map((ext) => `.${ext}`).join(',')}" />`
-          }
-          <p class="hint">
-            ${
-              screen.held
-                ? h`הקובץ נשמר. נרשם אחרי אישור הדירה.`
-                : screen.matched
-                  ? h`נשאר על הצעד עד המשך. נשמר רק אחרי אישור הדירה.`
-                  : candidates.length > 0
-                    ? h`יש לצרף שוב. נשמר רק אחרי שהדירה אושרה.`
-                    : h`עד 100 מ״ב. הקובץ נשמר מיד, בלי דירה. הדירה נבחרת בפתיחת טיוטה.`
-            }
-          </p>
+            accept="${documentExtensions.map((ext) => `.${ext}`).join(',')}" />
+          <p class="hint">עד 100 מ״ב. הקובץ נשמר מיד, בלי דירה. הדירה נבחרת בפתיחת טיוטה.</p>
           <div class="form-actions">
-            <button class="btn btn-primary" type="submit">${
-              screen.matched
-                ? h`המשך ותיוק`
-                : candidates.length > 0
-                  ? h`תיוק לדירה שנבחרה`
-                  : h`שמירה וקריאה`
-            }</button>
+            <button class="btn btn-primary" type="submit">שמירה וקריאה</button>
           </div>
         </form>`;
-  const search =
-    screen.beat === 'read' ||
-    screen.beat === 'open' ||
-    screen.beat === 'draft' ||
-    screen.matched
-      ? h``
-      : screen.reading !== undefined || candidates.length > 0
-        ? h`<form class="form-grid" method="get" action="/documents/filing">
-            ${
-              screen.held
-                ? h`<input type="hidden" name="held" value="${screen.held}" />`
-                : h``
-            }
-            <div class="form-row">
-              <label for="q">חיפוש דירה</label>
-              <input class="field" id="q" name="q" type="search" value="${
-                screen.query ?? ''
-              }" />
-            </div>
-            <div class="form-actions">
-              <button class="btn btn-secondary" type="submit">חיפוש</button>
-            </div>
-          </form>`
-        : h``;
   const body = h`
     <div>
       <h1>תיוק חוזה</h1>
@@ -1783,14 +1595,10 @@ export function renderLeaseFilingPage(screen: LeaseFilingScreen): string {
     ${tooLong}
     ${terms}
     ${already}
-    ${unresolved}
-    ${created}
-    ${match}
     ${filingReading(screen)}
     ${filingOpening(screen)}
     ${filingDraft(screen)}
-    ${attach}
-    ${search}`;
+    ${attach}`;
   const refresh =
     screen.beat === 'read' &&
     screen.readingPending === true &&

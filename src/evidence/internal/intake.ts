@@ -42,7 +42,6 @@ import {
   parseMeasuredWords,
 } from './extract.ts';
 import { embedderConfigured, writeDocumentPassages } from './passages.ts';
-import { readPlace } from './place.ts';
 import {
   type DocumentReading,
   ocrConfigured,
@@ -64,7 +63,6 @@ import {
 } from './storage-path.ts';
 import type { Queryable } from './types.ts';
 import type { Verification } from './verify.ts';
-import { documentText } from './verify.ts';
 
 export interface IntakeDeps {
   db: Queryable;
@@ -136,13 +134,6 @@ export interface IntakeRequest {
    * seeding and importer paths that call this function have no session and never will.
    */
   filedBy?: string;
-  /**
-   * File a scan whose single page the reader cannot open, once a person has named the flat.
-   *
-   * תיוק חוזה only. Every other door leaves this unset, and a `too_large` reading still writes
-   * nothing. The row is `unverified`: nobody has seen the page, and a person anchored it anyway.
-   */
-  fileUnread?: boolean;
 }
 
 /**
@@ -152,8 +143,8 @@ export interface IntakeRequest {
  */
 export type IntakeRefusal = 'terms' | 'too_large' | 'anchored';
 
+/** The door's flat, kept until פתיחת טיוטה. A reading left by an older upload is ignored. */
 export interface StoredLeasePlace {
-  reading: ReturnType<typeof readPlace>;
   doorUnitId: string | null;
 }
 
@@ -259,10 +250,9 @@ export async function fileDocument(
     },
   };
 
-  if (reading.ocrOutcome === 'too_large' && request.fileUnread !== true) {
+  if (reading.ocrOutcome === 'too_large') {
     // Refused rather than filed. Nothing was read off this file and nothing could be, so a row
-    // would carry a verdict about a document nobody has seen a page of. תיוק חוזה is the
-    // exception, and only after a person has named the flat.
+    // would carry a verdict about a document nobody has seen a page of.
     await deps.audit.write(line, {
       outcome: 'error',
       code: 'invalid',
@@ -271,19 +261,7 @@ export async function fileDocument(
     return { filed: false, verification, refusal: 'too_large' };
   }
 
-  const filingVerification =
-    reading.ocrOutcome === 'too_large'
-      ? {
-          verdict: 'unverified' as const,
-          matchedTerms: [],
-          missingTerms: verification.missingTerms,
-        }
-      : verification;
-
-  if (
-    reading.ocrOutcome !== 'too_large' &&
-    filingVerification.verdict === 'refused'
-  ) {
+  if (verification.verdict === 'refused') {
     await deps.audit.write(line, {
       outcome: 'error',
       code: 'invalid',
@@ -366,22 +344,18 @@ export async function fileDocument(
     driveFileId: null,
     validFrom: request.validFrom ?? null,
     validTo: request.validTo ?? null,
-    verificationVerdict:
-      filingVerification.verdict === 'refused'
-        ? 'unverified'
-        : filingVerification.verdict,
+    verificationVerdict: verification.verdict,
     uploadedBy: request.filedBy ?? null,
     ...(pageCount > 0
       ? {
           pageCount,
-          pagesRead: reading.ocrOutcome === 'too_large' ? 0 : pagesRead,
+          pagesRead,
         }
       : {}),
   };
   const filed = await ingestDocument(deps.db, spec, deps.clock.now());
   if (unassigned) {
     const proposal: StoredLeasePlace = {
-      reading: readPlace(documentText(reading.pages)),
       doorUnitId: request.preselectedUnitId ?? null,
     };
     await deps.objects.put(
@@ -415,14 +389,14 @@ export async function fileDocument(
       inputs: {
         ...line.inputs,
         documentId: filed.id,
-        verdict: filingVerification.verdict,
+        verdict: verification.verdict,
       },
     },
     { outcome: 'ok' },
   );
 
-  const filedPagesRead = reading.ocrOutcome === 'too_large' ? 0 : pagesRead;
-  const filedPages = reading.ocrOutcome === 'too_large' ? [] : reading.pages;
+  const filedPagesRead = pagesRead;
+  const filedPages = reading.pages;
   const remainder = pageCount > filedPagesRead;
   if (remainder && deps.work && ocrConfigured(deps.ocr) && deps.ocrVersion) {
     bindExtractWork(deps);
@@ -459,7 +433,7 @@ export async function fileDocument(
     documentId: filed.id,
     inserted: filed.inserted,
     storageUri,
-    verification: filingVerification,
+    verification,
   };
 }
 
@@ -627,7 +601,7 @@ export async function findDocumentByHash(
     : null;
 }
 
-/** The place reader and the door's flat, written beside an unassigned lease. */
+/** The door's flat written beside an unassigned lease. A stored reading is not read. */
 export async function readStoredLeasePlace(
   objects: ObjectStore,
   fileHash: string,
@@ -635,18 +609,10 @@ export async function readStoredLeasePlace(
   try {
     const object = await objects.read(leaseProposalPath(fileHash));
     const parsed = JSON.parse(object.bytes.toString('utf8')) as {
-      reading?: StoredLeasePlace['reading'];
       doorUnitId?: unknown;
     };
-    const reading = parsed.reading;
-    if (!reading || typeof reading !== 'object') return null;
+    if (!parsed || typeof parsed !== 'object') return null;
     return {
-      reading: {
-        addressLine: reading.addressLine ?? null,
-        city: reading.city ?? null,
-        apartmentNumber: reading.apartmentNumber ?? null,
-        annexDeferral: reading.annexDeferral === true,
-      },
       doorUnitId:
         typeof parsed.doorUnitId === 'string' ? parsed.doorUnitId : null,
     };

@@ -245,16 +245,18 @@ Each row is the upload day, the main tenant as read (a signed correction when th
 file, and **פתח טיוטה** when הקריאה is ready or **המשך קריאה** when it is not. Evidence owns the
 read; שכירויות prints it for `documents.write` and shows nothing, heading included, when it is empty.
 
-**The opening proposal sits beside the lease, and it is not an anchor (#237).** Upload writes
-`unassigned/lease/<file hash>.proposal.json`: the deterministic place reader's output and, when the
-door carried one, the door's flat (A1's unit-first door, the flat page, a call's attachment, or a
-flat A16 created on the reading's behalf). "Nothing names a flat" is about the document's path and
-its links — what the system treats as *where the document is about*. The proposal is what פתיחת
-טיוטה would preselect, and nothing else reads it: `anchorOf`, search, retrieval and the office
-answer never open it, so a door's flat that turns out wrong costs one different choice at opening
-and binds nothing. The chosen flat beats the door's flat, which beats an exact address match.
-Once the `SUBJECT` link exists the proposal is ignored; it is not deleted, because it is cheap and
-it is the record of what the upload proposed.
+**The opening proposal sits beside the lease, and it is not an anchor (#237, #246).** Upload writes
+`unassigned/lease/<file hash>.proposal.json` with one field: the door's flat (`doorUnitId`), or null
+when the door carried none. A1's unit page, the flat page and a call's attachment are the doors
+that carry one. The regex place reader does not run on a lease, and its reading is not written.
+A lease filed before #246 may still carry a reading in that object; the reader ignores the field
+and the object is not rewritten. "Nothing names a flat" is about the document's path and its
+links — what the system treats as *where the document is about*. The proposal is the door's
+preselection for פתיחת טיוטה, and nothing else reads it: `anchorOf`, search, retrieval and the
+office answer never open it, so a door's flat that turns out wrong costs one different choice at
+opening and binds nothing. The chosen flat beats the door's flat, which beats an exact match of
+the address a person approved. Once the `SUBJECT` link exists the proposal is ignored; it is not
+deleted, because it is cheap and it is the record of what the door proposed.
 
 **The ingest order, which slice 3.3 must follow:** hash the bytes → look the hash up → `put` the
 object only when no document already holds it → `ingestDocument`. Hashing first is what makes the
@@ -809,35 +811,27 @@ moment the address is unique.
 no type menu, an attach well, and the five beats as status — not as links. A VIEWER never sees the
 item.
 
-**`POST /documents/filing`** keeps the file, then reads it. The door is unchanged and it runs first:
-over 100 MB, a kind this system does not store, and bytes already on file all refuse with nothing
-kept. A duplicate names the existing Document and links to it. Anything that passes is written once
-under `intake/<file hash>.<ext>` — not a place, not a document, and the same hash put twice is the
-same object. The reading taken off those bytes is kept beside them, so a later step on this tab
-does not attach the file again and does not read it again. Type is `lease` at the edge; a posted
-type is ignored.
+**`POST /documents/filing`** reads the bytes and files a lease unassigned. The door is unchanged
+and it runs first: over 100 MB, a kind this system does not store, and bytes already on file all
+refuse with nothing kept. A duplicate names the existing Document and links to it. A file the type
+guard refuses is not filed, and nothing is written; the page says why and the operator attaches
+again. Type is `lease` at the edge; a posted type is ignored. The regex place reader does not run.
+The only flat recorded at upload is a door's preselection, in the proposal object, and it writes
+no link.
 
-**Then the place is read** the way A12 does (`readForVerdict` → `readPlace` → `resolvePlace`).
-**Exact one Unit is shown, then Continue files** through `fileDocument`, posting the hold and the
-Unit, not the file. The document row is written then, under that flat, and not before. **Not
-exactly one Unit** stays here with A12's sentence for that cause, the candidate list, and estate
-search (`GET /documents/filing?q=&held=`). The file input does not come back. Picking a candidate
-files the hold. A file that fails the lease terms is kept and is not filed; the empty tab is how a
-different file is attached.
+**There is no upload-time place step (#246).** `GET /documents/filing` with `held` or `q` is not a
+screen, and neither is `POST /documents/filing/place` without a document: each answers 404. Nothing
+on this tab links to them. The create that remains is פתיחת טיוטה's. `POST /documents/filing/place`
+with the document is `estate.write` and calls `upsertUnitRow` — the same command A11/A13 use.
+Street, city and apartment are prefilled from the approved reading and editable. What the paper
+does not name (handover, rooms) is filled as today's date, two years of warranty, one room,
+`READY`. The new flat is marked on the proposal and the screen returns to פתיחת טיוטה; no link is
+written. An operator sees pick and search only — no disabled create control, and the create post
+refuses them. A11/A13 screens are untouched.
 
 **A slice the reader cannot carry is shortened by pages until it fits**, here and on the pages read
-after filing. One page that is itself over that bound is still kept. The screen says the reader
-could not open it, and once a person names the flat `fileDocument` files it unread. Other doors
-still refuse that case and write nothing.
-
-**Create is on this step**, not on A11 or A13's screens. `POST /documents/filing/place` is
-`estate.write` and calls `upsertUnitRow` — the same command A11/A13 use. Street, city and apartment
-are prefilled from the reading and editable, and the hold comes with them. What the paper does not
-name (handover, rooms) is filled as today's date, two years of warranty, one room, `READY`, so the
-tab stays the three fields the paint showed. The new flat comes back selected, and filing it posts
-the hold. An operator sees pick and search only — no disabled create control, and the create post
-refuses them. A11/A13 screens are untouched. The hold is not deleted: this bucket cannot delete,
-and the document's own copy lives under the flat.
+after filing. One page that is itself over that bound is refused with a sentence, and nothing is
+written. Other doors refuse that case the same way.
 
 **After a successful file** the operator is still on this tab: `GET /documents/filing/:documentId`.
 That URL is this journey's, not `/documents/:id/fields` and not a Tenancy page. Refresh keeps it.
