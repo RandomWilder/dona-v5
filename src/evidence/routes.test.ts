@@ -37,7 +37,11 @@ import {
 import { createFakePdfText } from '../kernel/pdf.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
 import { upsertTenancy, upsertTermsProfile } from '../tenancy/contract.ts';
-import { applyDocumentTypeCatalogue, documentFileHash } from './contract.ts';
+import {
+  applyDocumentTypeCatalogue,
+  columnTarget,
+  documentFileHash,
+} from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
 
 const CITY = 'עיר מסמכים';
@@ -2011,14 +2015,8 @@ describe('evidence · a captured ת.ז., withheld unless the viewer may read it'
         // SPEC-evidence.md: the value becomes `party.national_id` when a human confirms a
         // household (6.5), which is an act and not a promotion. A mapping row here would make it
         // one button.
-        const rows = await pool.query<{ n: string }>(
-          `SELECT count(*)::text AS n FROM field_promotion p
-             JOIN document_type_field f
-               ON f.document_type_field_id = p.document_type_field_id
-            WHERE f.field_key = ANY($1::text[])`,
-          [['tenant_id_number', 'guarantor_id_number']],
-        );
-        assert.equal(rows.rows[0]?.n, '0');
+        assert.equal(columnTarget('lease', 'tenant_id_number'), null);
+        assert.equal(columnTarget('lease', 'guarantor_id_number'), null);
       });
 
       await t.test(

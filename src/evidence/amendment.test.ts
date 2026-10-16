@@ -349,9 +349,10 @@ describe('evidence · flow A3 completes a tenancy from an addendum', () => {
             ORDER BY at, tenancy_event_id`,
           [tenancyId],
         );
-        assert.equal(events.rows.length, 2);
-        assert.equal(events.rows[1]?.old_value, '2027-02-28');
-        assert.equal(events.rows[1]?.new_value, '2028-02-28');
+        // The lease wrote its end date at insert and only stamped it. The addendum is the one move.
+        assert.equal(events.rows.length, 1);
+        assert.equal(events.rows[0]?.old_value, '2027-02-28');
+        assert.equal(events.rows[0]?.new_value, '2028-02-28');
 
         const onUnit = await listPromotedFieldsForUnit(db, unitId);
         const dates = onUnit.filter(

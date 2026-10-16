@@ -260,7 +260,7 @@ It is one token per session, not one per form. A per-form nonce would need somew
 the only somewhere available is the table this module is forbidden to put a token in.
 
 **The scope is every write route in the application**, not this module's alone: `POST /documents`,
-`POST /documents/:id/promote`, `POST /documents/:id/seed`, `POST /documents/:id/tenancy`,
+`POST /documents/:id/seed`, `POST /documents/:id/tenancy`,
 `POST /estate/incomplete/:tenancyId/exception`, `POST /estate/tenancies/:tenancyId/activate`,
 `POST /staff/operators`, `POST /staff/logout`,
 `POST /settings/obligation-types` and `POST /settings/document-types`.

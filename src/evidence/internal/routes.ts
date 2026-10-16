@@ -19,9 +19,7 @@ import {
   getBuilding,
   getUnit,
   searchEstate,
-  type UncarriedReason,
   type UnitHit,
-  uncarriedOnDocument,
   upsertUnitRow,
   WARRANTY_YEARS,
 } from '../../estate/contract.ts';
@@ -126,7 +124,6 @@ import {
   confirmLeaseTenancy,
   leaseReadingGaps,
   openLeaseDraft,
-  preselectedUnitId,
   proposeLeaseOpening,
   proposeLeaseTenancy,
 } from './lease.ts';
@@ -134,7 +131,6 @@ import { listTenancyDocumentFacts } from './list.ts';
 import { destinationAfterFiling } from './orchestrate.ts';
 import { listDocumentPassages } from './passages.ts';
 import { readPlace, resolvePlace } from './place.ts';
-import { promoteExtractedField } from './promote.ts';
 import {
   type DocumentReading,
   ocrConfigured,
@@ -147,11 +143,8 @@ import {
   proposeProtocol,
 } from './seed.ts';
 import {
-  type DocumentExtension,
-  documentContentTypes,
+  type documentContentTypes,
   documentFileHash,
-  intakeObjectPath,
-  intakeReadingPath,
   sniffExtension,
 } from './storage-path.ts';
 import { pageText as textOfPage } from './verify.ts';
@@ -621,24 +614,6 @@ export function registerDocumentRoutes(
       ...extras,
     });
 
-  const uncarriedReasons = async (
-    documentId: string,
-  ): Promise<Record<string, UncarriedReason | null>> => {
-    // #237. An unopened lease is judged against the flat its opening would preselect.
-    const proposed = (await anchorOrNone(deps.pool, documentId))
-      ? null
-      : await preselectedUnitId(
-          { db: deps.pool, clock: deps.clock, objects: deps.objects },
-          documentId,
-        );
-    const rows = await uncarriedOnDocument(deps.pool, documentId, proposed);
-    const out: Record<string, UncarriedReason | null> = {};
-    for (const row of rows) {
-      out[row.extractedFieldId] = row.reason;
-    }
-    return out;
-  };
-
   const tenancyBoundTo = async (documentId: string): Promise<string | null> => {
     const found = await deps.pool.query<{ entity_id: string }>(
       `SELECT entity_id FROM document_link
@@ -756,8 +731,6 @@ export function registerDocumentRoutes(
       mayApprove: can(request.staff?.role ?? null, 'documents.write'),
       ...pageCoverage(filed),
       readingPending: await extractWorkIsOpen(deps.pool, documentId),
-      uncarried: await uncarriedReasons(documentId),
-      mayAddInventory: can(request.staff?.role ?? null, 'estate.write'),
       gaps: leaseReadingGaps(rows),
       mayOpen: can(request.staff?.role ?? null, 'tenancy.write'),
       contactRows: contactRowsOf(rows),
@@ -793,9 +766,6 @@ export function registerDocumentRoutes(
       beat: 'open',
       documentId,
       ...(opening.unit ? { unit: opening.unit } : {}),
-      reading: opening.placeReading ?? undefined,
-      candidates: opening.candidates,
-      candidateTotal: opening.candidateTotal,
       building: opening.placeBuilding,
       mayCreate: extras.mayCreate === true,
       ...(extras.query ? { query: extras.query } : {}),
@@ -859,21 +829,38 @@ export function registerDocumentRoutes(
       } catch (error) {
         if (
           error instanceof KernelError &&
-          (error.code === 'invalid' || error.code === 'conflict')
+          (error.code === 'invalid' ||
+            error.code === 'conflict' ||
+            error.code === 'not_found')
         ) {
+          const screen = await openingOf(documentId, {
+            failed: true,
+            mayCreate: mayShapeTheEstate(request),
+            ...(termsProfile ? { termsProfile } : {}),
+            ...(postedUnit === ''
+              ? {}
+              : { unitId: validId(postedUnit, 'unit') }),
+          });
+          const predicted =
+            (screen.opening?.refusals.length ?? 0) > 0 ||
+            (termsProfile !== '' &&
+              screen.opening !== undefined &&
+              !screen.opening.termsProfiles.includes(termsProfile));
+          const openFailure = predicted
+            ? undefined
+            : { code: error.code, message: error.message };
+          if (openFailure) {
+            // Code and message only. The actor's email is personal and stays off the log.
+            console.error(
+              `lease open failed: ${openFailure.code} ${openFailure.message}`,
+            );
+          }
           html(reply);
           reply.code(409);
-          return leaseFiling(
-            request,
-            await openingOf(documentId, {
-              failed: true,
-              mayCreate: mayShapeTheEstate(request),
-              ...(termsProfile ? { termsProfile } : {}),
-              ...(postedUnit === ''
-                ? {}
-                : { unitId: validId(postedUnit, 'unit') }),
-            }),
-          );
+          return leaseFiling(request, {
+            ...screen,
+            ...(openFailure ? { openFailure } : {}),
+          });
         }
         throw error;
       }
@@ -882,72 +869,13 @@ export function registerDocumentRoutes(
   );
 
   app.get('/documents/filing', NEW, async (request, reply) => {
-    html(reply);
     const query = String((request.query as { q?: string }).q ?? '');
     const held = String((request.query as { held?: string }).held ?? '');
-    if (held === '') {
-      if (query === '') {
-        return leaseFiling(request, { beat: 'file' });
-      }
-      const found = await searchEstate(deps.pool, query);
-      return leaseFiling(request, {
-        beat: 'place',
-        reading: {
-          addressLine: null,
-          city: null,
-          apartmentNumber: null,
-          annexDeferral: false,
-        },
-        candidates: found.units,
-        candidateTotal: found.units.length,
-        query,
-        mayCreate: mayShapeTheEstate(request),
-        building: null,
-      });
+    if (query !== '' || held !== '') {
+      throw new KernelError('not_found', 'route not found');
     }
-    const hold = await loadHold(deps, held);
-    const reading = readPlace(hold.reading.text);
-    const unread = hold.reading.ocrOutcome === 'too_large';
-    if (query !== '') {
-      const found = await searchEstate(deps.pool, query);
-      return leaseFiling(request, {
-        beat: 'place',
-        held,
-        unread,
-        reading,
-        candidates: found.units,
-        candidateTotal: found.units.length,
-        query,
-        mayCreate: mayShapeTheEstate(request),
-        building: null,
-      });
-    }
-    const resolved = await resolvePlace(deps.pool, reading);
-    if (!resolved.unit) {
-      return leaseFiling(request, {
-        beat: 'place',
-        held,
-        unread,
-        reading,
-        candidates: resolved.candidates,
-        candidateTotal: resolved.total,
-        query: reading.addressLine ?? '',
-        mayCreate: mayShapeTheEstate(request),
-        building: resolved.building
-          ? {
-              building_id: resolved.building.building_id,
-              name: resolved.building.name,
-            }
-          : null,
-      });
-    }
-    return leaseFiling(request, {
-      beat: 'place',
-      held,
-      unread,
-      matched: resolved.unit,
-      reading,
-    });
+    html(reply);
+    return leaseFiling(request, { beat: 'file' });
   });
 
   app.get<{ Params: { documentId: string } }>(
@@ -1055,7 +983,12 @@ export function registerDocumentRoutes(
 
   app.post('/documents/filing/place', PLACE, async (request, reply) => {
     const body = (request.body as Form | undefined) ?? {};
-    const heldHash = body.held ? String(body.held) : undefined;
+    const documentId = body.document
+      ? validId(String(body.document), 'document')
+      : '';
+    if (documentId === '') {
+      throw new KernelError('not_found', 'route not found');
+    }
     const unitNumber = requireText(body.unit_number, 'unit_number', 32);
     const addressLine = requireText(body.address_line, 'address_line', 200);
     const city = requireText(body.city, 'city', 120);
@@ -1105,42 +1038,16 @@ export function registerDocumentRoutes(
       }),
     );
     const unit = await getUnit(deps.pool, written.unitId);
-    const documentId = body.document
-      ? validId(String(body.document), 'document')
-      : '';
-    if (documentId !== '') {
-      const filed = await getFiledDocument(deps.pool, documentId);
-      await rememberDoorUnit(deps.objects, filed.fileHash, unit.unit_id);
-      return reply.redirect(
-        `/documents/filing/${documentId}/open?unit=${unit.unit_id}`,
-      );
-    }
-    html(reply);
-    return leaseFiling(request, {
-      beat: 'place',
-      ...(heldHash ? { held: heldHash } : {}),
-      candidates: [unit],
-      candidateTotal: 1,
-      chosenUnitId: unit.unit_id,
-      mayCreate: true,
-      building: heldBuilding
-        ? {
-            building_id: heldBuilding.building_id,
-            name: heldBuilding.name,
-          }
-        : null,
-      reading: {
-        addressLine,
-        city,
-        apartmentNumber: unitNumber,
-        annexDeferral: false,
-      },
-    });
+    const filed = await getFiledDocument(deps.pool, documentId);
+    await rememberDoorUnit(deps.objects, filed.fileHash, unit.unit_id);
+    return reply.redirect(
+      `/documents/filing/${documentId}/open?unit=${unit.unit_id}`,
+    );
   });
 
   app.post('/documents/filing', FILING, async (request, reply) => {
-    const uploaded = await readUpload(request, true);
-    const { fields } = uploaded;
+    const uploaded = await readUpload(request);
+    const { fields, bytes } = uploaded;
     verifyCsrf(sessionTokenOf(request), fields[CSRF_FIELD]);
     const operator = requireOperator(request);
     await boundTheCaller(deps, operator);
@@ -1159,62 +1066,36 @@ export function registerDocumentRoutes(
       return leaseFiling(request, extras);
     };
 
-    let bytes: Buffer;
-    let extension: DocumentExtension;
-    let fileHash: string;
-    let read: DocumentReading;
-
-    if (uploaded.held) {
-      const hold = await loadHold(deps, fields.held ?? '');
-      bytes = hold.bytes;
-      extension = hold.extension;
-      fileHash = fields.held ?? '';
-      read = hold.reading;
-    } else {
-      bytes = uploaded.bytes;
-      extension = sniffExtension(bytes);
-      fileHash = documentFileHash(bytes);
-      const existing = await findDocumentByHash(deps.pool, fileHash);
-      if (existing) {
-        return paint(422, {
-          beat: 'file',
-          refused: {
-            type,
-            verification: {
-              verdict: 'unverified',
-              matchedTerms: [],
-              missingTerms: [],
-            },
-            reason: 'anchored',
-            documentHref: `/documents/${existing.documentId}/read`,
-          },
-        });
-      }
-      await deps.objects.put(
-        intakeObjectPath(fileHash, extension),
-        bytes,
-        documentContentTypes[extension],
-      );
-      read = await intakeReading(
-        deps,
-        bytes,
-        extension,
-        type.verificationTerms,
-      );
-      await deps.objects.put(
-        intakeReadingPath(fileHash),
-        Buffer.from(JSON.stringify({ extension, reading: read })),
-        'application/json',
-      );
-    }
-
-    const unread = read.ocrOutcome === 'too_large';
-    const heldScreen = { held: fileHash, ...(unread ? { unread: true } : {}) };
-
-    if (read.verification.verdict === 'refused' && !unread) {
+    const extension = sniffExtension(bytes);
+    const fileHash = documentFileHash(bytes);
+    const existing = await findDocumentByHash(deps.pool, fileHash);
+    if (existing) {
       return paint(422, {
         beat: 'file',
-        ...heldScreen,
+        refused: {
+          type,
+          verification: {
+            verdict: 'unverified',
+            matchedTerms: [],
+            missingTerms: [],
+          },
+          reason: 'anchored',
+          documentHref: `/documents/${existing.documentId}/read`,
+        },
+      });
+    }
+    const read = await intakeReading(
+      deps,
+      bytes,
+      extension,
+      type.verificationTerms,
+    );
+    if (read.ocrOutcome === 'too_large') {
+      return paint(422, { beat: 'file', tooLargeBytes: bytes.length });
+    }
+    if (read.verification.verdict === 'refused') {
+      return paint(422, {
+        beat: 'file',
         refused: {
           type,
           verification: read.verification,
@@ -1232,7 +1113,6 @@ export function registerDocumentRoutes(
       filedBy: operator,
       reading: read,
       ...(doorUnit ? { preselectedUnitId: doorUnit } : {}),
-      ...(unread ? { fileUnread: true } : {}),
     });
     html(reply);
     if (!result.filed) {
@@ -1242,7 +1122,6 @@ export function registerDocumentRoutes(
         (await findDocumentByHash(deps.pool, fileHash))?.documentId;
       return leaseFiling(request, {
         beat: 'file',
-        ...heldScreen,
         refused: refusalOf(type, { ...result, existingDocumentId: existingId }),
       });
     }
@@ -1935,7 +1814,6 @@ export function registerDocumentRoutes(
     extra: {
       revealed?: string;
       saved?: number;
-      overwrite?: { extractedFieldId: string; existingValue: string };
     },
   ): Promise<FieldsScreen> => {
     const filed = await getFiledDocument(deps.pool, documentId);
@@ -1968,8 +1846,6 @@ export function registerDocumentRoutes(
       mayApprove:
         closedTo === null &&
         can(request.staff?.role ?? null, 'documents.write'),
-      mayAddInventory: can(request.staff?.role ?? null, 'estate.write'),
-      uncarried: await uncarriedReasons(documentId),
       ...pageCoverage(filed),
       ...extra,
     };
@@ -2132,61 +2008,6 @@ export function registerDocumentRoutes(
       return renderFieldsPage(
         await fieldsScreen(request, documentId, { revealed: extractedFieldId }),
       );
-    },
-  );
-
-  app.post<{ Params: { documentId: string } }>(
-    '/documents/:documentId/promote',
-    CONFIRM,
-    async (request, reply) => {
-      const documentId = validId(request.params.documentId, 'document');
-      const fields = formBody(request);
-      const extractedFieldId = validId(
-        fields.extracted_field_id ?? '',
-        'extracted field',
-      );
-      try {
-        await promoteExtractedField(
-          {
-            db: deps.pool,
-            audit: createAuditLog(deps.pool, deps.clock),
-            clock: deps.clock,
-          },
-          {
-            extractedFieldId,
-            promotedBy: requireOperatorEmail(request),
-            supersede: fields.supersede === '1',
-          },
-        );
-      } catch (error) {
-        if (
-          error instanceof KernelError &&
-          error.code === 'conflict' &&
-          typeof error.details?.existingValue === 'string'
-        ) {
-          html(reply);
-          reply.code(409);
-          return renderFieldsPage(
-            await fieldsScreen(request, documentId, {
-              overwrite: {
-                extractedFieldId,
-                existingValue: error.details.existingValue,
-              },
-            }),
-          );
-        }
-        if (
-          error instanceof KernelError &&
-          error.code === 'invalid' &&
-          (error.details?.absent === 'PARKING' ||
-            error.details?.absent === 'STORAGE')
-        ) {
-          html(reply);
-          return renderFieldsPage(await fieldsScreen(request, documentId, {}));
-        }
-        throw error;
-      }
-      return reply.redirect(`/documents/${documentId}/read`);
     },
   );
 
@@ -2359,8 +2180,6 @@ export function registerDocumentRoutes(
 interface Upload {
   fields: Record<string, string>;
   bytes: Buffer;
-  /** The post names a held upload instead of attaching the file again. */
-  held: boolean;
 }
 
 /**
@@ -2406,20 +2225,17 @@ function formBody(request: FastifyRequest): Record<string, string> {
  * multipart. What is left is the two routes whose bodies really are streams, and they are exactly
  * the two the composition root exempts from the CSRF `preHandler`.
  */
-async function readUpload(
-  request: {
-    parts: () => AsyncIterableIterator<
-      | { type: 'field'; fieldname: string; value: unknown }
-      | {
-          type: 'file';
-          fieldname: string;
-          file: { truncated: boolean };
-          toBuffer: () => Promise<Buffer>;
-        }
-    >;
-  },
-  allowHold = false,
-): Promise<Upload> {
+async function readUpload(request: {
+  parts: () => AsyncIterableIterator<
+    | { type: 'field'; fieldname: string; value: unknown }
+    | {
+        type: 'file';
+        fieldname: string;
+        file: { truncated: boolean };
+        toBuffer: () => Promise<Buffer>;
+      }
+  >;
+}): Promise<Upload> {
   const fields: Record<string, string> = {};
   let bytes: Buffer | null = null;
   for await (const part of request.parts()) {
@@ -2437,70 +2253,10 @@ async function readUpload(
     }
     fields[part.fieldname] = String(part.value);
   }
-  const held =
-    allowHold &&
-    !bytes &&
-    typeof fields.held === 'string' &&
-    /^[0-9a-f]{64}$/.test(fields.held);
-  if (held) {
-    return { fields, bytes: Buffer.alloc(0), held: true };
-  }
   if (!bytes || bytes.length === 0) {
     throw new KernelError('invalid', 'no file was attached');
   }
-  return { fields, bytes, held: false };
-}
-
-const heldOutcomes = new Set([
-  'not_needed',
-  'ok',
-  'partial',
-  'unconfigured',
-  'failed',
-  'too_large',
-]);
-
-async function loadHold(
-  deps: DocumentDeps,
-  fileHash: string,
-): Promise<{
-  bytes: Buffer;
-  extension: DocumentExtension;
-  reading: DocumentReading;
-}> {
-  let parsed: unknown;
-  try {
-    const stored = await deps.objects.read(intakeReadingPath(fileHash));
-    parsed = JSON.parse(stored.bytes.toString('utf8'));
-  } catch {
-    throw new KernelError('invalid', 'that upload is not held');
-  }
-  if (!parsed || typeof parsed !== 'object') {
-    throw new KernelError('invalid', 'that upload is not held');
-  }
-  const row = parsed as { extension?: unknown; reading?: DocumentReading };
-  const extension = row.extension;
-  const reading = row.reading;
-  if (
-    typeof extension !== 'string' ||
-    !reading ||
-    typeof reading.text !== 'string' ||
-    typeof reading.ocrOutcome !== 'string' ||
-    !heldOutcomes.has(reading.ocrOutcome) ||
-    !Array.isArray(reading.native) ||
-    !Array.isArray(reading.pages) ||
-    !reading.verification
-  ) {
-    throw new KernelError('invalid', 'that upload is not held');
-  }
-  const file = await deps.objects.read(
-    intakeObjectPath(fileHash, extension as DocumentExtension),
-  );
-  return {
-    bytes: file.bytes,
-    extension: extension as DocumentExtension,
-    reading,
-  };
+  return { fields, bytes };
 }
 
 /**

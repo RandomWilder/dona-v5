@@ -21,6 +21,7 @@
 // `plan()` alone.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { COLUMN_MAP } from '../evidence/contract.ts';
 import { fixedClock } from '../kernel/clock.ts';
 import { newId } from '../kernel/ids.ts';
 import {
@@ -402,12 +403,15 @@ async function seedLettingPaper(
      VALUES ($1, $2, '2026-09-01', '2027-08-31', 'DRAFT', $3)`,
     [tenancyId, unitId, profileId],
   );
-  await db.query(
+  const type = await db.query<{ document_type_id: string }>(
     `INSERT INTO document_type (
        document_type_id, type_key, label_he, label_en, verification_terms, is_active
-     ) VALUES ($1, $2, 'חוזה', NULL, NULL, true)`,
-    [typeId, `card-lease-${typeId}`],
+     ) VALUES ($1, 'lease', 'חוזה', NULL, NULL, true)
+     ON CONFLICT (type_key) DO UPDATE SET is_active = document_type.is_active
+     RETURNING document_type_id`,
+    [typeId],
   );
+  const documentTypeId = type.rows[0]?.document_type_id ?? typeId;
   await db.query(
     `INSERT INTO document (
        document_id, document_type_id, storage_uri, file_hash,
@@ -415,7 +419,7 @@ async function seedLettingPaper(
      ) VALUES ($1, $2, $3, $4, $5, 'unguarded')`,
     [
       documentId,
-      typeId,
+      documentTypeId,
       `gs://x/${documentId}.pdf`,
       `hash-${documentId}`,
       CAPTURE_AT,
@@ -505,11 +509,6 @@ describe('estate · approved captures for one letting', () => {
           'rent_amount',
           'דמי שכירות',
         );
-        await db.query(
-          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-           VALUES ($1, $2, 'tenancy.rent_amount')`,
-          [newId(), rentId],
-        );
         const optionId = await declareField(
           db,
           documentId,
@@ -535,19 +534,6 @@ describe('estate · approved captures for one letting', () => {
           'מספר חדרים',
         );
         const floorId = await declareField(db, documentId, 'floor', 'קומה');
-        for (const [fieldId, target] of [
-          [optionId, 'tenancy.option_end_date'],
-          [bayId, 'tenancy.parking_space_id'],
-          [storeId, 'tenancy.storage_space_id'],
-          [roomsId, 'unit.rooms'],
-          [floorId, 'space.floor'],
-        ] as const) {
-          await db.query(
-            `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-             VALUES ($1, $2, $3)`,
-            [newId(), fieldId, target],
-          );
-        }
         const place = await db.query<{ building_id: string }>(
           `SELECT s.building_id
              FROM tenancy t
@@ -576,7 +562,11 @@ describe('estate · approved captures for one letting', () => {
         await capture(db, documentId, storeId, '505', 7, true);
         await capture(db, documentId, roomsId, '9', 7, true);
         await capture(db, documentId, floorId, '3', 7, true);
-        const rows = await listApprovedCapturesForTenancy(db, tenancyId);
+        const rows = await listApprovedCapturesForTenancy(
+          db,
+          tenancyId,
+          COLUMN_MAP,
+        );
         assert.deepEqual(
           rows.map((row) => ({
             labelHe: row.labelHe,
@@ -593,7 +583,7 @@ describe('estate · approved captures for one letting', () => {
             },
           ],
         );
-        const pending = await uncarriedOnTenancy(db, tenancyId);
+        const pending = await uncarriedOnTenancy(db, tenancyId, COLUMN_MAP);
         const byKey = new Map(pending.map((row) => [row.fieldKey, row]));
         assert.equal(byKey.get('unsigned_note'), undefined);
         assert.equal(byKey.get('deposit_amount'), undefined);

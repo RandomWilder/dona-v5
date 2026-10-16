@@ -492,9 +492,49 @@ function fieldsLedger(options: {
     unread: [documentTypeFields[1] as DocumentTypeFieldRow],
     mayReadIdentifiers: options.mayReadIdentifiers,
     mayApprove: true,
-    mayAddInventory: false,
     ...(options.revealed === undefined ? {} : { revealed: identifier }),
     ...(options.saved === undefined ? {} : { saved: options.saved }),
+  });
+}
+
+function leaseOpening(options: {
+  unit: UnitHit | null;
+  candidates: UnitHit[];
+  mayCreate: boolean;
+  placeBuilding: { building_id: string; name: string } | null;
+}): string {
+  return renderLeaseFilingPage({
+    nav: NAV_FILING,
+    csrf: CSRF,
+    beat: 'open',
+    documentId: FIELDS_DOCUMENT,
+    mayCreate: options.mayCreate,
+    opening: {
+      documentId: FIELDS_DOCUMENT,
+      unit: options.unit,
+      placeReading: {
+        addressLine: 'הבילויים 10',
+        city: 'ראשון לציון',
+        apartmentNumber: '9',
+        annexDeferral: false,
+      },
+      candidates: options.candidates,
+      candidateTotal: options.candidates.length,
+      placeBuilding: options.placeBuilding,
+      startDate: '2026-11-01',
+      endDate: '2027-10-31',
+      address: 'הבילויים 10, ראשון לציון',
+      apartmentNumber: '9',
+      matchesUnit: options.unit !== null,
+      people: [],
+      termsProfiles: ['נספח א'],
+      termsProfile: 'נספח א',
+      refusals: [],
+      tenancyId: null,
+      unpairedContacts: 0,
+      landing: [],
+      sameLease: [],
+    },
   });
 }
 
@@ -1269,36 +1309,33 @@ const SCREENS: Array<[string, () => string]> = [
     () => renderLeaseFilingPage({ nav: NAV_FILING, csrf: CSRF, beat: 'file' }),
   ],
   [
-    'documents · lease filing, exact one Unit',
+    'documents · lease filing, several flats',
     () =>
-      renderLeaseFilingPage({
-        nav: NAV_FILING,
-        csrf: CSRF,
-        beat: 'place',
-        matched: hit,
-        reading: {
-          addressLine: 'הבילויים 10',
-          city: 'ראשון לציון',
-          apartmentNumber: '9',
-          annexDeferral: false,
+      leaseOpening({
+        unit: null,
+        candidates: [
+          hit,
+          {
+            ...hit,
+            unit_id: '44444444-4444-4444-8444-444444444445',
+            unit_number: '8',
+          },
+        ],
+        mayCreate: false,
+        placeBuilding: {
+          building_id: building.building_id,
+          name: building.name,
         },
       }),
   ],
   [
-    'documents · lease filing, not ours',
+    'documents · lease filing, create the flat',
     () =>
-      renderLeaseFilingPage({
-        nav: NAV_FILING,
-        csrf: CSRF,
-        beat: 'place',
-        reading: {
-          addressLine: 'אלמוג 5',
-          city: 'עיר שאיננה',
-          apartmentNumber: '3',
-          annexDeferral: false,
-        },
-        building: null,
-        candidateTotal: 0,
+      leaseOpening({
+        unit: null,
+        candidates: [],
+        mayCreate: true,
+        placeBuilding: null,
       }),
   ],
   [
@@ -3291,7 +3328,7 @@ describe('shared UI tokens', () => {
     assert.match(ledger, /שוכר ראשי/);
     assert.match(ledger, /ערב · אינו איש קשר לשירות/);
     assert.match(ledger, /דמי השכירות/);
-    assert.match(ledger, /<details class="prose-fold"/);
+    assert.doesNotMatch(ledger, /<details class="prose-fold"/);
   });
 
   it('withholds the transcript of the paper, and names the page instead of drawing it', () => {

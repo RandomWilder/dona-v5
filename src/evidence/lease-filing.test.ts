@@ -1,11 +1,11 @@
 // A16 — the lease-filing tab. Issues #116, #117, #118 and #119.
 //
-// Highest seam is HTTP against the new tab. Command guts (place reader, fileDocument, type
-// guard, OCR ceiling, upsertUnitRow, draft from approved reading, same-Unit-and-start conflict)
-// stay proved where they already are. This suite proves the sequence: the file is kept, then
-// confirm-then-file without attaching it again, pick/search/create carry the hold, a fat scan
-// is read in a smaller piece, thin reading → טיוטה on this tab, paper marks, that A12 still
-// files on exact one, and that the paint is gone.
+// Highest seam is HTTP against the tab. Command guts (fileDocument, type guard, OCR ceiling,
+// upsertUnitRow, draft from approved reading, same-Unit-and-start conflict) stay proved where
+// they already are. This suite proves the sequence: a lease is filed unassigned with no place
+// reading, pick/search/create happen on פתיחת טיוטה, a fat scan is read in a smaller piece,
+// thin reading → טיוטה on this tab, paper marks, that A12 still files on exact one, and that
+// the upload-time place step is gone.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { PDFDocument, PDFName, PDFRawStream } from 'pdf-lib';
@@ -37,6 +37,7 @@ import {
   documentFileHash,
 } from './contract.ts';
 import { seedDocumentTypes } from './fixtures/document-types.ts';
+import { leaseProposalPath } from './internal/storage-path.ts';
 
 const CITY = 'עיר תיוק חוזה';
 const ADDRESS = 'הבילויים 10';
@@ -529,7 +530,100 @@ describe('evidence · A16 file a lease in one workspace', {
       );
 
       await t.test(
-        'a file that is not a lease is kept and is not filed',
+        'uploading a lease writes the door flat only, and a stored reading is ignored',
+        async () => {
+          const bytes = pdfBytes(`a16-246-noread-${Date.now()}`);
+          const seen = await as(here).inject({
+            method: 'POST',
+            url: '/documents/filing',
+            ...upload({}, { filename: 'noread.pdf', bytes }),
+          });
+          assert.equal(seen.statusCode, 302, seen.body.slice(0, 400));
+          const bare = await objects.read(
+            leaseProposalPath(documentFileHash(bytes)),
+          );
+          assert.deepEqual(JSON.parse(bare.bytes.toString('utf8')), {
+            doorUnitId: null,
+          });
+
+          const withDoor = pdfBytes(`a16-246-door-${Date.now()}`);
+          const filed = await as(here).inject({
+            method: 'POST',
+            url: '/documents/filing',
+            ...upload(
+              { unit: unitNine },
+              { filename: 'door.pdf', bytes: withDoor },
+            ),
+          });
+          assert.equal(filed.statusCode, 302, filed.body.slice(0, 400));
+          const documentId =
+            String(filed.headers.location ?? '').match(
+              /\/documents\/filing\/([0-9a-f-]{36})$/,
+            )?.[1] ?? '';
+          const proposalPath = leaseProposalPath(documentFileHash(withDoor));
+          const written = await objects.read(proposalPath);
+          assert.deepEqual(JSON.parse(written.bytes.toString('utf8')), {
+            doorUnitId: unitNine,
+          });
+          const open = await as(here).inject({
+            method: 'GET',
+            url: `/documents/filing/${documentId}/open`,
+          });
+          assert.match(open.body, new RegExp(`value="${unitNine}"`));
+
+          const bareId =
+            String(seen.headers.location ?? '').match(
+              /\/documents\/filing\/([0-9a-f-]{36})$/,
+            )?.[1] ?? '';
+          await objects.put(
+            leaseProposalPath(documentFileHash(bytes)),
+            Buffer.from(
+              JSON.stringify({
+                reading: {
+                  addressLine: ADDRESS,
+                  city: CITY,
+                  apartmentNumber: '9',
+                  annexDeferral: false,
+                },
+                doorUnitId: null,
+              }),
+            ),
+            'application/json',
+          );
+          const ignored = await as(here).inject({
+            method: 'GET',
+            url: `/documents/filing/${bareId}/open`,
+          });
+          assert.match(ignored.body, /הכתובת טרם אושרה/);
+          assert.doesNotMatch(ignored.body, new RegExp(`value="${unitNine}"`));
+
+          await objects.put(
+            proposalPath,
+            Buffer.from(
+              JSON.stringify({
+                reading: {
+                  addressLine: ADDRESS,
+                  city: CITY,
+                  apartmentNumber: '10',
+                  annexDeferral: false,
+                },
+                doorUnitId: unitNine,
+              }),
+            ),
+            'application/json',
+          );
+          const stillDoor = await as(here).inject({
+            method: 'GET',
+            url: `/documents/filing/${documentId}/open`,
+          });
+          assert.match(stillDoor.body, new RegExp(`value="${unitNine}"`));
+          assert.doesNotMatch(stillDoor.body, new RegExp(`value="${unitTen}"`));
+          hashes.push(documentFileHash(bytes), documentFileHash(withDoor));
+        },
+      );
+
+      await t.test(
+        'a file that is not a lease is not filed, and nothing is written',
         async () => {
           const before = await documentsHere();
           const putsBefore = puts;
@@ -544,15 +638,15 @@ describe('evidence · A16 file a lease in one workspace', {
           assert.equal(response.statusCode, 422);
           assert.match(response.body, /תיוק חוזה/);
           assert.match(response.body, /אינו נראה כמו/);
-          assert.match(response.body, /תיוק של קובץ אחר/);
-          assert.doesNotMatch(response.body, /type="file"/);
+          assert.match(response.body, /type="file"/);
+          assert.doesNotMatch(response.body, /name="held"/);
           assert.equal(await documentsHere(), before);
-          assert.equal(puts, putsBefore + 2);
+          assert.equal(puts, putsBefore);
         },
       );
 
       await t.test(
-        'a scan the reader cannot open is kept, and naming a flat files it unread',
+        'a scan the reader cannot open is refused, and nothing is written',
         async () => {
           const before = await documentsHere();
           const putsBefore = puts;
@@ -570,14 +664,17 @@ describe('evidence · A16 file a lease in one workspace', {
               },
             ),
           });
-          assert.equal(response.statusCode, 302, response.body.slice(0, 400));
+          assert.equal(response.statusCode, 422);
+          assert.match(response.body, /הקובץ גדול מכדי שנקרא אותו/);
+          assert.match(response.body, /לא נשמר/);
+          assert.match(response.body, /type="file"/);
           assert.equal(await documentsHere(), before);
-          assert.ok(puts > putsBefore);
+          assert.equal(puts, putsBefore);
         },
       );
 
       await t.test(
-        'a fat scan is read in a smaller piece and filed from the hold',
+        'a fat scan is read in a smaller piece and filed',
         async () => {
           const before = await documentsHere();
           const fat = await bulkyPdf(2, 8 * 1024 * 1024);
@@ -649,7 +746,7 @@ describe('evidence · A16 file a lease in one workspace', {
       );
 
       await t.test(
-        'several Units: the sentence, a list to pick, then the held file is filed',
+        'several Units: the sentence and a list to pick, on opening',
         async () => {
           const before = await documentsHere();
           const putsBefore = puts;
@@ -768,19 +865,56 @@ describe('evidence · A16 file a lease in one workspace', {
         },
       );
 
-      await t.test('search for a Unit works on this step', async () => {
-        const found = await as(here).inject({
-          method: 'GET',
-          url: `/documents/filing?q=${encodeURIComponent(ADDRESS)}`,
-        });
-        assert.equal(found.statusCode, 200);
-        assert.match(found.body, /תיוק חוזה/);
-        assert.match(found.body, /type="radio"/);
-        assert.match(found.body, new RegExp(`value="${unitNine}"`));
-        assert.match(found.body, /type="file"/);
-        assert.match(found.body, /action="\/documents\/filing"/);
-        assert.doesNotMatch(found.body, /\/estate\/buildings\/new/);
-      });
+      await t.test(
+        'search for a Unit works on opening, and the upload-time place step is gone',
+        async () => {
+          const bytes = pdfBytes(`a16-246-search-${Date.now()}`);
+          const seen = await as(here).inject({
+            method: 'POST',
+            url: '/documents/filing',
+            ...upload({}, { filename: 'search.pdf', bytes }),
+          });
+          assert.equal(seen.statusCode, 302, seen.body.slice(0, 400));
+          const documentId =
+            String(seen.headers.location ?? '').match(
+              /\/documents\/filing\/([0-9a-f-]{36})$/,
+            )?.[1] ?? '';
+          const found = await as(here).inject({
+            method: 'GET',
+            url: `/documents/filing/${documentId}/open?q=${encodeURIComponent(ADDRESS)}`,
+          });
+          assert.equal(found.statusCode, 200);
+          assert.match(found.body, /תיוק חוזה/);
+          assert.match(found.body, /type="radio"/);
+          assert.match(found.body, new RegExp(`value="${unitNine}"`));
+          assert.doesNotMatch(found.body, /type="file"/);
+          assert.doesNotMatch(found.body, /\/estate\/buildings\/new/);
+          const query = await as(here).inject({
+            method: 'GET',
+            url: `/documents/filing?q=${encodeURIComponent(ADDRESS)}`,
+          });
+          assert.equal(query.statusCode, 404);
+          const held = await as(here).inject({
+            method: 'GET',
+            url: `/documents/filing?held=${documentFileHash(bytes)}`,
+          });
+          assert.equal(held.statusCode, 404);
+          const place = await as(here).inject({
+            method: 'POST',
+            url: '/documents/filing/place',
+            payload: new URLSearchParams({
+              address_line: ADDRESS,
+              city: CITY,
+              unit_number: '9',
+            }).toString(),
+            headers: {
+              'content-type': 'application/x-www-form-urlencoded',
+            },
+          });
+          assert.equal(place.statusCode, 404);
+          hashes.push(documentFileHash(bytes));
+        },
+      );
 
       await t.test(
         'an OPERATOR sees pick and search and no create control',

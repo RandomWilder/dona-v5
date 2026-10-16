@@ -974,7 +974,8 @@ the stepper does not unfile. A refresh keeps the tab's URL. **The type is declar
    - Attach one file: at most **100 MB**, one of the four sniffed kinds.
    - OCR reads a fifteen-page slice, not the whole scan (#137). A first slice the online reader still
      cannot carry is refused with a sentence, and nothing is written.
-   - A file the type guard refuses is not filed. The page says why, and the operator attaches again.
+   - A file the type guard refuses is not filed, and nothing is written. The page says why, and the
+     operator attaches again.
    - Duplicate bytes are news on this tab, with a link to the existing Document. Nothing is merged
      or written.
    - A lease is stored **unassigned**: no place and no link, at an object path named by the

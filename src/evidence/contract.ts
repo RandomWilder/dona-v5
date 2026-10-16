@@ -46,6 +46,8 @@ export {
   upsertDocumentType,
   upsertDocumentTypeField,
 } from './internal/catalogue.ts';
+export type { ColumnMap } from './internal/column-map.ts';
+export { COLUMN_MAP, columnTarget } from './internal/column-map.ts';
 export type { ContactChannel, ContactRules } from './internal/contacts.ts';
 export { NOT_A_MOBILE } from './internal/contacts.ts';
 export type {
@@ -98,6 +100,8 @@ export type {
   IntakeResult,
 } from './internal/intake.ts';
 export { fileDocument, findDocumentByHash } from './internal/intake.ts';
+export type { LandingRow } from './internal/landing.ts';
+export { whatLands } from './internal/landing.ts';
 export type {
   ConfirmLeaseResult,
   ConfirmLeaseSpec,

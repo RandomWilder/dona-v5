@@ -30,12 +30,14 @@ import { requireText, validId } from '../../kernel/validate.ts';
 import {
   applyPromotedField as applyTenancyPromotedField,
   eligibilityCode,
+  getTenancy,
   occupantOfAssignedBay,
   occupantOfAssignedStorage,
   occupantOfSecondAssignedBay,
   occupantOfSecondAssignedStorage,
   type PromotedTenancyField,
 } from '../../tenancy/contract.ts';
+import { columnTarget } from './column-map.ts';
 import type { Queryable } from './types.ts';
 
 export interface PromoteDeps {
@@ -170,7 +172,8 @@ export async function promoteExtractedField(
       value: string | null;
       approved_at: Date | null;
       promoted_to: string | null;
-      target: string | null;
+      type_key: string;
+      field_key: string;
     }>(
       `SELECT e.extracted_field_id, e.document_id,
               -- **Slice 7.4.** The value a person signed, and nothing else. 7.3 wrote this as
@@ -178,17 +181,23 @@ export async function promoteExtractedField(
               -- approval required, a fallback that can no longer be taken is a claim about what
               -- this command can do that stopped being true.
               e.approved_value AS value,
-              e.approved_at, e.promoted_to, p.target
+              e.approved_at, e.promoted_to, t.type_key, f.field_key
          FROM extracted_field e
-         LEFT JOIN field_promotion p
-           ON p.document_type_field_id = e.document_type_field_id
+         JOIN document d ON d.document_id = e.document_id
+         JOIN document_type t ON t.document_type_id = d.document_type_id
+         JOIN document_type_field f
+           ON f.document_type_field_id = e.document_type_field_id
         WHERE e.extracted_field_id = $1`,
       [extractedFieldId],
     );
-    const row = captured.rows[0];
-    if (!row) {
+    const found = captured.rows[0];
+    if (!found) {
       throw new KernelError('not_found', 'extracted field not found');
     }
+    const row = {
+      ...found,
+      target: columnTarget(found.type_key, found.field_key),
+    };
     if (!row.target) {
       throw new KernelError(
         'invalid',
@@ -356,21 +365,28 @@ export async function promoteExtractedField(
         value: string | null;
         approved_at: Date | null;
         promoted_to: string | null;
-        target: string | null;
+        type_key: string;
+        field_key: string;
       }>(
         `SELECT e.extracted_field_id, e.approved_value AS value, e.approved_at,
-                e.promoted_to, p.target
+                e.promoted_to, t.type_key, f.field_key
            FROM extracted_field e
+           JOIN document d ON d.document_id = e.document_id
+           JOIN document_type t ON t.document_type_id = d.document_type_id
            JOIN document_type_field f
              ON f.document_type_field_id = e.document_type_field_id
-           LEFT JOIN field_promotion p
-             ON p.document_type_field_id = e.document_type_field_id
           WHERE e.document_id = $1 AND f.field_key = $2
           ORDER BY e.extracted_at DESC, e.extracted_field_id
           LIMIT 1`,
         [row.document_id, siblingSpec.fieldKey],
       );
-      const other = sibling.rows[0];
+      const otherRaw = sibling.rows[0];
+      const other = otherRaw
+        ? {
+            ...otherRaw,
+            target: columnTarget(otherRaw.type_key, otherRaw.field_key),
+          }
+        : undefined;
       const siblingField = TENANCY_FIELD[siblingSpec.target];
       if (
         !other ||
@@ -394,6 +410,20 @@ export async function promoteExtractedField(
     }
 
     const skipIds = copies.map((copy) => copy.extractedFieldId);
+    const letting = await getTenancy(db, tenancyId);
+    const columnHeld = (field: PromotedTenancyField): string | null => {
+      if (field === 'start_date') return letting.start_date;
+      if (field === 'end_date') return letting.end_date;
+      if (field === 'rent_amount') return letting.rent_amount;
+      if (field === 'rent_currency') return letting.rent_currency;
+      if (field === 'option_end_date') return letting.option_end_date;
+      if (field === 'eligibility_group') return letting.eligibility_group;
+      if (field === 'parking_space_id') return letting.parking_name;
+      if (field === 'second_parking_space_id')
+        return letting.second_parking_name;
+      if (field === 'storage_space_id') return letting.storage_name;
+      return letting.second_storage_name;
+    };
     let moved = false;
     await db.query("SELECT set_config('dona.promoting', 'on', true)");
     for (const copy of copies) {
@@ -440,9 +470,15 @@ export async function promoteExtractedField(
           },
         );
       }
+      const onColumn = columnHeld(copy.field);
+      const columnMatches =
+        onColumn !== null && sameTenancyValue(copy.field, onColumn, copy.value);
+      // A value the insert already wrote — the dates — only stamps. A different
+      // register date is not an occupant and still gets written.
       const sameValueAlreadyHeld =
-        occupyingValue !== null &&
-        sameTenancyValue(copy.field, occupyingValue, copy.value);
+        (occupyingValue !== null &&
+          sameTenancyValue(copy.field, occupyingValue, copy.value)) ||
+        (occupyingValue === null && columnMatches);
       if (!sameValueAlreadyHeld) {
         await applyTenancyPromotedField(db, {
           tenancyId,

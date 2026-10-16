@@ -42,12 +42,6 @@ const CLOCK = fixedClock(AT);
 const READ = '2026-03-01';
 const SIGNED = '2026-03-02';
 
-// This suite's own `type_key` block, for `read-quality.test.ts`'s reason: files run in parallel
-// against one database and `type_key` is UNIQUE, so two suites seeding one key wait on each other's
-// speculative insertion.
-const BLOCK = 't74';
-let sequence = 0;
-
 interface Fixture {
   documentId: string;
   extractedFieldId: string;
@@ -60,7 +54,6 @@ interface Fixture {
  * this case is about the value and not about the catalogue.
  */
 async function seedPromotableReading(db: PoolClient): Promise<Fixture> {
-  sequence += 1;
   const buildingId = newId();
   const unitId = newId();
   await db.query(
@@ -91,7 +84,7 @@ async function seedPromotableReading(db: PoolClient): Promise<Fixture> {
   });
 
   const type = await upsertDocumentType(db, {
-    typeKey: `${BLOCK}-lease-${sequence}`,
+    typeKey: 'lease',
     labelHe: 'חוזה שכירות',
     labelEn: 'Lease',
     verificationTerms: ['תקופת השכירות'],
@@ -107,11 +100,6 @@ async function seedPromotableReading(db: PoolClient): Promise<Fixture> {
     effectiveFrom: ON,
     effectiveTo: null,
   });
-  await db.query(
-    `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-     VALUES ($1, $2, 'tenancy.start_date')`,
-    [newId(), field.id],
-  );
 
   const hash = newId().replace(/-/g, '');
   const document = await ingestDocument(

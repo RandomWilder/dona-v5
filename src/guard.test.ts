@@ -189,6 +189,13 @@ describe('every route in the application', () => {
         `${url} declares ${stance}, which is not a permission`,
       );
     }
+    assert.equal(
+      declared.some(
+        ([route]) => route === 'POST /documents/:documentId/promote',
+      ),
+      false,
+      'promotion is not a route',
+    );
     await app.close();
     await pool.end();
   });

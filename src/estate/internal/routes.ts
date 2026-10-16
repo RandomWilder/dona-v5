@@ -80,7 +80,11 @@ import {
   searchEstate,
 } from './read-model.ts';
 import { removeInventorySpace, removeSpace } from './spaces.ts';
-import { type UncarriedField, uncarriedOnTenancy } from './uncarried.ts';
+import {
+  type ColumnTargets,
+  type UncarriedField,
+  uncarriedOnTenancy,
+} from './uncarried.ts';
 import {
   type TileLine,
   UNIT_WORDS,
@@ -132,6 +136,11 @@ export interface EstateDeps {
     mayReadParties: boolean,
     openCalls?: number,
   ) => Html;
+  /**
+   * The column map. Passed in from evidence: this module already sits under evidence in the
+   * module map, and importing the constant back would be a cycle.
+   */
+  columnMap: ColumnTargets;
   /**
    * Slice 3.6 / 4.4. Injected from evidence so this module never imports it — evidence already
    * imports estate, and the other direction would be a cycle. Structural: the composition root
@@ -1906,8 +1915,8 @@ export function registerEstateRoutes(
       deps.listTenancyParties(deps.pool, tenancyId),
       deps.listLinkedDocuments(deps.pool, 'TENANCY', tenancyId),
       deps.activationGate(deps.pool, tenancyId),
-      listApprovedCapturesForTenancy(deps.pool, tenancyId),
-      uncarriedOnTenancy(deps.pool, tenancyId),
+      listApprovedCapturesForTenancy(deps.pool, tenancyId, deps.columnMap),
+      uncarriedOnTenancy(deps.pool, tenancyId, deps.columnMap),
       listParkingSpacesInBuilding(deps.pool, unit.building_id),
       listStorageSpacesInBuilding(deps.pool, unit.building_id),
     ]);

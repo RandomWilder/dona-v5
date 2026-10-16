@@ -169,7 +169,7 @@ describe('estate · the tenancy card', () => {
       }),
     );
     assert.match(html, /5200/);
-    assert.match(html, /מאושר, לא הועבר להשכרה/);
+    assert.match(html, /על הדף/);
     assert.match(html, /החצי השני של דמי השכירות טרם אושר/);
     assert.match(
       html,

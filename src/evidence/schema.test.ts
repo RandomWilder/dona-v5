@@ -1079,7 +1079,6 @@ describe('the acceptance bar — a new type costs no DDL', () => {
     'document_type',
     'document_type_field',
     'extracted_field',
-    'field_promotion',
   ];
 
   async function schemaSnapshot(db: PoolClient): Promise<string> {
@@ -1508,13 +1507,7 @@ describe('the acceptance bar — a new type costs no DDL', () => {
   });
 });
 
-describe('field_promotion — A8 governed half', () => {
-  const PROMOTION_COLUMNS = [
-    'field_promotion_id',
-    'document_type_field_id',
-    'target',
-  ];
-
+describe('the promotion stamp — A8 governed half', () => {
   async function seedField(
     db: PoolClient,
     documentTypeId: string,
@@ -1550,124 +1543,13 @@ describe('field_promotion — A8 governed half', () => {
     return id;
   }
 
-  it('is a relation, with the mapping columns and no promotes_to on the catalogue', async (t) => {
+  it('is gone: the map is code', async (t) => {
     if (!pool) return t.skip(skipReason);
-    await inRolledBackTransaction(pool, async (db) => {
-      await db.query('SELECT 1 FROM field_promotion LIMIT 0');
-      const result = await db.query<{ column_name: string }>(
-        `SELECT column_name FROM information_schema.columns
-          WHERE table_schema = 'public' AND table_name = 'field_promotion'
-          ORDER BY ordinal_position`,
-      );
-      assert.deepEqual(
-        result.rows.map((row) => row.column_name),
-        PROMOTION_COLUMNS,
-      );
-      const catalogue = await db.query<{ column_name: string }>(
-        `SELECT column_name FROM information_schema.columns
-          WHERE table_schema = 'public'
-            AND table_name IN ('document_type', 'document_type_field')
-            AND column_name = 'promotes_to'`,
-      );
-      assert.deepEqual(catalogue.rows, []);
-    });
-  });
-
-  it('refuses a mapping whose declaration is missing, a second mapping, and an ungoverned target', async (t) => {
-    if (!pool) return t.skip(skipReason);
-    await inRolledBackTransaction(pool, async (db) => {
-      const documentTypeId = await seedType(db, { name: 'promo-fk' });
-      const fieldId = await seedField(db, documentTypeId);
-      await rejects(db, FOREIGN_KEY_VIOLATION, () =>
-        db.query(
-          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-           VALUES ($1, $2, 'tenancy.start_date')`,
-          [newId(), newId()],
-        ),
-      );
-      await db.query(
-        `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-         VALUES ($1, $2, 'tenancy.start_date')`,
-        [newId(), fieldId],
-      );
-      await rejects(db, UNIQUE_VIOLATION, () =>
-        db.query(
-          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-           VALUES ($1, $2, 'tenancy.end_date')`,
-          [newId(), fieldId],
-        ),
-      );
-      const other = await seedField(db, documentTypeId, 'end_date');
-      await rejects(db, CHECK_VIOLATION, () =>
-        db.query(
-          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-           VALUES ($1, $2, 'tenancy.notice_date')`,
-          [newId(), other],
-        ),
-      );
-      const rent = await seedField(db, documentTypeId, 'rent_amount');
-      await db.query(
-        `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-         VALUES ($1, $2, 'tenancy.rent_amount')`,
-        [newId(), rent],
-      );
-      const deposit = await seedField(db, documentTypeId, 'deposit_amount');
-      await rejects(db, CHECK_VIOLATION, () =>
-        db.query(
-          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-           VALUES ($1, $2, 'tenancy.deposit_amount')`,
-          [newId(), deposit],
-        ),
-      );
-      const rooms = await seedField(db, documentTypeId, 'rooms');
-      await db.query(
-        `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-         VALUES ($1, $2, 'unit.rooms')`,
-        [newId(), rooms],
-      );
-      const floor = await seedField(db, documentTypeId, 'floor');
-      await db.query(
-        `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-         VALUES ($1, $2, 'space.floor')`,
-        [newId(), floor],
-      );
-      const bay = await seedField(db, documentTypeId, 'parking_space_number');
-      await db.query(
-        `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-         VALUES ($1, $2, 'tenancy.parking_space_id')`,
-        [newId(), bay],
-      );
-      const store = await seedField(db, documentTypeId, 'storage_space_number');
-      await db.query(
-        `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-         VALUES ($1, $2, 'tenancy.storage_space_id')`,
-        [newId(), store],
-      );
-      const built = await seedField(db, documentTypeId, 'built_bay');
-      await rejects(db, CHECK_VIOLATION, () =>
-        db.query(
-          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-           VALUES ($1, $2, 'unit.parking_space_id')`,
-          [newId(), built],
-        ),
-      );
-      const builtStore = await seedField(db, documentTypeId, 'built_store');
-      await rejects(db, CHECK_VIOLATION, () =>
-        db.query(
-          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-           VALUES ($1, $2, 'unit.storage_space_id')`,
-          [newId(), builtStore],
-        ),
-      );
-      const gush = await seedField(db, documentTypeId, 'gush');
-      await rejects(db, CHECK_VIOLATION, () =>
-        db.query(
-          `INSERT INTO field_promotion (field_promotion_id, document_type_field_id, target)
-           VALUES ($1, $2, 'building.gush')`,
-          [newId(), gush],
-        ),
-      );
-    });
+    const found = await pool.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'field_promotion'`,
+    );
+    assert.equal(found.rows[0]?.n, '0');
   });
 
   it('refuses a stamp written outside the promotion path, and a delete of a stamped row', async (t) => {
