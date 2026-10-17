@@ -85,7 +85,7 @@ Follows the workbook's entities, not v3's ([docs/from-v3.md](docs/from-v3.md) Ti
 | `evidence` | E12, E13, E15, E16 — Document · DocumentLink · DocumentType · DocumentTypeField · ExtractedField (the column map is code, ADR-0016) | estate, parties, tenancy, staff |
 | `scope` | — the isolation join and nothing else | parties, tenancy, estate |
 | `register` | — the register file and nothing else | estate, parties, tenancy, scope |
-| `policy` | responsibility matrix · SLA · escalation | estate, tenancy |
+| `policy` | Policy library (sections, documents, passages) · responsibility matrix when built | evidence, staff |
 | `calls` | ServiceCall · Visit · Category · Filtered message · the state machine | scope, policy, parties |
 | `channel` | Conversation · Message · the intake door · the Outlook, Gmail and WhatsApp adapters | scope, calls, evidence, estate |
 

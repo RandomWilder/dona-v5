@@ -21,6 +21,7 @@
     "db:up": "docker compose up -d",
     "migrate": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/migrate.ts",
     "seed": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/seed.ts",
+    "seed:policy": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/seed-policy.ts",
     "import:register": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/import-register.ts",
     "register:generate": "node src/generate-register.ts",
     "seed:register": "node --env-file-if-exists=.env.example --env-file-if-exists=.env src/seed-register.ts",

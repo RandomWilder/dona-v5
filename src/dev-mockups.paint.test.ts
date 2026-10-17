@@ -1,6 +1,5 @@
-// The two paints for #248. They are files under `mockups/`, deleted when the flows are wired,
-// and this file goes with them: a test that still wanted them after that deletion would be red
-// at the moment the guard is right (see the note on `renderMockup` in `guard.test.ts`).
+// The call-copilot paint for #248. The Policy library paint was deleted when #250
+// wired the מדיניות tab. This file goes when the copilot is wired.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { renderMockup } from './dev-mockups.ts';
@@ -18,7 +17,6 @@ describe('call copilot paint', () => {
     const index = renderMockup('index', 'csrf');
     assert.match(index, /<html lang="he" dir="rtl">/);
     assert.match(index, /href="\/dev\/mockups\/call-copilot"/);
-    assert.match(index, /href="\/dev\/mockups\/policy-library"/);
 
     const page = renderMockup('call-copilot', 'csrf');
     assert.match(page, /class="ops"/);
@@ -96,37 +94,5 @@ describe('call copilot paint', () => {
     assert.match(sent, /כפי שנכתב/);
     assert.match(sent, /נערך/);
     assert.match(renderMockup('call-copilot', 'csrf'), /for="st-sent"/);
-  });
-});
-
-describe('policy library paint', () => {
-  it('renders in the live shell from the mockups index', () => {
-    const page = renderMockup('policy-library', 'csrf');
-    assert.match(page, /class="ops"/);
-    assert.match(page, /data-paint="policy-library"/);
-    assert.match(page, /מדיניות/);
-  });
-
-  it('shows both sections, a version history, and an admin upload', () => {
-    const admin = panel(renderMockup('policy-library', 'csrf'), 'admin');
-    assert.match(admin, /דין/);
-    assert.match(admin, /נוהל חברה/);
-    assert.match(admin, /data-effective-from="2020-01-01"/);
-    assert.match(admin, /data-effective-to="2023-12-31"/);
-    assert.match(admin, /data-effective-from="2024-01-01"/);
-    assert.match(admin, /type="file"/);
-    assert.match(admin, /העלאה/);
-    assert.match(renderMockup('policy-library', 'csrf'), /for="pol-admin"/);
-  });
-
-  it('shows the same library without upload to someone who is not an admin', () => {
-    const reader = panel(renderMockup('policy-library', 'csrf'), 'reader');
-    assert.match(reader, /דין/);
-    assert.match(reader, /נוהל חברה/);
-    assert.match(reader, /data-effective-from="2020-01-01"/);
-    assert.match(reader, /data-effective-to="2023-12-31"/);
-    assert.doesNotMatch(reader, /type="file"/);
-    assert.doesNotMatch(reader, /העלאה/);
-    assert.match(renderMockup('policy-library', 'csrf'), /for="pol-reader"/);
   });
 });

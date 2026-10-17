@@ -216,6 +216,7 @@ describe('every route in the application', () => {
       'POST /documents',
       'POST /documents/tenancies/:tenancyId/protocol',
       'POST /documents/intake',
+      'POST /policy',
       'POST /estate/tenancies/:tenancyId/end',
     ]);
     await app.close();

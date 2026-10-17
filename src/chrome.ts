@@ -28,6 +28,7 @@ export type ChromeDest =
   | 'search'
   | 'staff'
   | 'calls'
+  | 'policy'
   | 'settings'
   // **#202.** The אנשי קשר tab. Shown only when the role holds `party.read`.
   | 'parties';
@@ -104,6 +105,7 @@ export function signedInChrome(
     }
     ${item('staff', '/staff', 'צוות', dest, 'users')}
     ${item('calls', '/calls', 'קריאות', dest, 'phone', openCalls)}
+    ${item('policy', '/policy', 'מדיניות', dest, 'book')}
     ${item('settings', '/settings', 'הגדרות', dest, 'sun')}
   </nav>
   <div class="ops-footer">
