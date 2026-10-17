@@ -5,9 +5,11 @@ import type {
 } from '../src/estate/contract.ts';
 import type { PassageHit, RetrievalBound } from '../src/evidence/contract.ts';
 import {
+  answerCallBrief,
   answerOfficeHits,
   chooseOfficeTools,
   OFFICE_TURN_RECORD_REFUSAL,
+  OFFICE_TURN_REFUSAL,
 } from '../src/evidence/contract.ts';
 import { systemClock } from '../src/kernel/clock.ts';
 import type { Extractor } from '../src/kernel/extraction.ts';
@@ -280,7 +282,33 @@ function fixtureLettings(bound: RetrievalBound): ActiveLettingInBuilding[] {
 export const placeholderSubject: Subject = async ({
   message,
   bound,
+  brief,
 }): Promise<AgentTurn> => {
+  if (brief === 'lease') {
+    return {
+      text: 'לפי סעיף 7.2 בחוזה, תיקוני בלאי סביר הם באחריות בעל הדירה.',
+      refused: false,
+      citations: ['חוזה §7.2'],
+      toolCalls: ['search'],
+    };
+  }
+  if (brief === 'building') {
+    return {
+      text: 'מועד המסירה של הבניין נרשם בפרוטוקול.',
+      refused: false,
+      citations: ['בניין §0'],
+      toolCalls: ['search'],
+    };
+  }
+  if (brief === 'refuse') {
+    return {
+      text: OFFICE_TURN_REFUSAL,
+      refused: true,
+      citations: [],
+      toolCalls: ['search'],
+    };
+  }
+
   if (bound?.kind === 'unit') {
     return placeholderRecordTurn(fixtureRecord(bound) as UnitRecord, message);
   }
@@ -393,6 +421,59 @@ export function officeTurnSubject(options: {
             : BUILDING_RECORD_CITATION,
       ),
       toolCalls: tools,
+    };
+  };
+}
+
+/** #252. The call brief, graded on the same corpus. Lease and building paper are separate bags. */
+export function callBriefSubject(options: {
+  corpus: Corpus;
+  extractor: Extractor;
+  model: string;
+  reasoningEffort?: string;
+}): Subject {
+  const clock = systemClock;
+  return async (input): Promise<AgentTurn> => {
+    const found = await options.corpus.search(input.message, {
+      kind: 'unit',
+      id: HOME_UNIT,
+    });
+    const prefix =
+      input.brief === 'lease'
+        ? 'חוזה'
+        : input.brief === 'building'
+          ? 'בניין'
+          : null;
+    const kept =
+      prefix === null
+        ? found
+        : found.filter((hit) => (hit.clauseRef ?? '').startsWith(prefix));
+    const hits: PassageHit[] = kept.slice(0, 8).map((hit) => ({
+      passageId: newId(clock),
+      documentId: hit.clauseRef ?? hit.source,
+      page: 1,
+      text: hit.text,
+      documentType:
+        input.brief === 'building' ? 'building_handover_protocol' : 'lease',
+      unitId: null,
+      distance: hit.distance,
+    }));
+    const decided = await answerCallBrief(
+      options,
+      input.message,
+      hits,
+      'פונה: דייר לדוגמה',
+      false,
+    );
+    return {
+      text: decided.text,
+      refused: decided.refused,
+      citations: decided.citations.map((citation) =>
+        citation.kind === 'record'
+          ? RECORD_CITATION
+          : paperCitation(citation.documentId, citation.page),
+      ),
+      toolCalls: ['search'],
     };
   };
 }

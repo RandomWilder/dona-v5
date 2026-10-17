@@ -9,11 +9,19 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import type { ChromeDest } from '../../chrome.ts';
 import type { Clock } from '../../kernel/clock.ts';
+import type { Embedder } from '../../kernel/embeddings.ts';
 import { KernelError } from '../../kernel/errors.ts';
+import type { Extractor } from '../../kernel/extraction.ts';
 import type { Html } from '../../kernel/ui/html.ts';
 import { validId } from '../../kernel/validate.ts';
 import { findPartiesByName } from '../../parties/contract.ts';
 import { can, csrfFrom, NOT_ALLOWED, type Role } from '../../staff/contract.ts';
+import {
+  type CallBriefRunner,
+  loadCallBriefPanel,
+  refreshCallBrief,
+  startCallBrief,
+} from './brief.ts';
 import {
   CALL_STATES,
   type CallListFilter,
@@ -109,6 +117,12 @@ export interface CallsDeps {
   documentTypes?: () => Promise<
     readonly { typeKey: string; labelHe: string }[]
   >;
+  /** Present when a model and an embedder are configured. #252. */
+  brief?: {
+    extractor: Extractor;
+    embedder: Embedder;
+    schedule?: CallBriefRunner['schedule'];
+  };
 }
 
 const STAFF = { config: { staff: 'estate.read' } } as const;
@@ -122,6 +136,17 @@ const REFUSAL: Record<string, string> = {
   file: 'אין קובץ לתייק.',
   anchored: 'הקובץ כבר מתויק במקום אחר.',
 };
+
+function briefRunner(deps: CallsDeps): CallBriefRunner | null {
+  if (!deps.brief) return null;
+  return {
+    db: deps.pool,
+    clock: deps.clock,
+    extractor: deps.brief.extractor,
+    embedder: deps.brief.embedder,
+    schedule: deps.brief.schedule,
+  };
+}
 
 function html(reply: FastifyReply): void {
   reply.header('content-type', 'text/html; charset=utf-8');
@@ -550,6 +575,7 @@ async function callPage(
   callId: string,
   refusal?: string,
   exitDraft?: ExitDraft,
+  briefHold?: 'guarantor',
 ): Promise<string> {
   const call = await getCall(deps.pool, callId);
   if (!call) throw new KernelError('not_found', 'call not found');
@@ -576,6 +602,10 @@ async function callPage(
   const nextOpen = receipt ? await firstOpenCall(deps, goal) : null;
   const role = request.staff?.role ?? null;
   const csrf = csrfFrom(request);
+  const brief =
+    briefHold === 'guarantor'
+      ? { kind: 'guarantor' as const, facts: null, turns: [] }
+      : await loadCallBriefPanel(deps.pool, deps.clock, callId);
   return renderCallPage({
     nav: deps.chrome(
       csrf,
@@ -606,6 +636,7 @@ async function callPage(
     refusal:
       refusal ??
       (query.length > 80 || dup.length > 80 ? 'החיפוש ארוך מדי.' : undefined),
+    brief,
   });
 }
 
@@ -839,6 +870,8 @@ export function registerCallsRoutes(
         actorId: staff.staffAccountId,
         actorRole: staff.role,
       });
+      const runner = briefRunner(deps);
+      if (runner) await startCallBrief(runner, callId);
       return reply.code(303).header('location', `/calls/${callId}`).send();
     } catch (error) {
       if (!(error instanceof KernelError) || error.code === 'not_allowed') {
@@ -849,8 +882,17 @@ export function registerCallsRoutes(
       }
       html(reply);
       reply.code(error.code === 'not_found' ? 404 : 400);
-      return callPage(deps, request, callId, refusalHe(error));
+      const hold =
+        error.details?.reason === 'guarantor' ? 'guarantor' : undefined;
+      return callPage(deps, request, callId, refusalHe(error), undefined, hold);
     }
+  });
+
+  app.post('/calls/:id/brief', STAFF, async (request, reply) => {
+    const callId = callIdOf(request.params);
+    const runner = briefRunner(deps);
+    if (runner) await refreshCallBrief(runner, callId);
+    return reply.code(303).header('location', `/calls/${callId}`).send();
   });
 
   app.post('/calls/:id/contact', STAFF, async (request, reply) => {

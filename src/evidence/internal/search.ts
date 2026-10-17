@@ -20,6 +20,8 @@ export type RetrievalBound =
   | { kind: 'tenancy'; id: string }
   | { kind: 'unit'; id: string }
   | { kind: 'building'; id: string }
+  /** Documents linked to the Building itself. Not a neighbour's lease. #252. */
+  | { kind: 'building-paper'; id: string }
   | { kind: 'portfolio' };
 
 export const SEARCH_PASSAGE_LIMIT = 8;
@@ -64,6 +66,7 @@ export async function searchPassages(
     bound.kind !== 'tenancy' &&
     bound.kind !== 'unit' &&
     bound.kind !== 'building' &&
+    bound.kind !== 'building-paper' &&
     bound.kind !== 'portfolio'
   ) {
     throw new KernelError('invalid', 'a retrieval bound is required');
@@ -151,6 +154,18 @@ export async function searchPassages(
                      AND tenancy_bound.entity_type = 'TENANCY'
                      AND bound_tenancy.unit_id = $3::uuid
                 )
+              )
+            )
+         OR (
+              -- The Building's own paper. A BUILDING link and nothing wider:
+              -- not a Unit in the Building, and not a tenancy of one.
+              $2::text = 'building-paper'
+          AND EXISTS (
+                SELECT 1
+                  FROM document_link paper_link
+                 WHERE paper_link.document_id = p.document_id
+                   AND paper_link.entity_type = 'BUILDING'
+                   AND paper_link.entity_id = $3::uuid
               )
             )
          OR (

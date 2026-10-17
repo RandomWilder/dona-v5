@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { DEFAULT_ZONE } from './clock.ts';
 import { KernelError } from './errors.ts';
 import { defaultOcrProcessorVersion } from './ocr.ts';
@@ -16,7 +16,7 @@ export interface Settings {
   number(key: string, fallback: number): Promise<number>;
 }
 
-export function createSettings(pool: Pool): Settings {
+export function createSettings(pool: Pool | PoolClient): Settings {
   async function read(key: string): Promise<unknown> {
     const found = await pool.query<{ value: unknown }>(
       'SELECT value FROM config_settings WHERE key = $1',
@@ -207,6 +207,30 @@ export async function readSorterSettings(
 ): Promise<SorterSettings> {
   const model = await settings.text(sorterSettingKeys.model, 'gpt-5.6-luna');
   return { model };
+}
+
+export const briefSettingKeys = {
+  enabled: 'calls.brief',
+  model: 'calls.brief.model',
+} as const;
+
+export interface BriefSettings {
+  enabled: boolean;
+  model: string;
+}
+
+// Read per brief, like the sorter's model. Off writes nothing and calls no model.
+export async function readBriefSettings(
+  settings: Settings,
+): Promise<BriefSettings> {
+  const enabled = await settings.text(briefSettingKeys.enabled, 'on');
+  if (enabled !== 'on' && enabled !== 'off') {
+    throw new KernelError('invalid', 'calls.brief is not on or off', {
+      configured: enabled,
+    });
+  }
+  const model = await settings.text(briefSettingKeys.model, 'gpt-5.6-luna');
+  return { enabled: enabled === 'on', model };
 }
 
 export const ocrSettingKeys = {

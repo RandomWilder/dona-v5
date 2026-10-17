@@ -1,0 +1,14 @@
+{
+  "id": "call-brief-refuses",
+  "title": "A call brief is the frozen refusal when the paper does not answer",
+  "input": {
+    "message": "מי זכה בגביע המדינה בכדורגל?",
+    "brief": "refuse"
+  },
+  "expect": {
+    "refuses": true,
+    "citesClause": false,
+    "tool": "search",
+    "contains": ["אין במסמכים האלה תשובה לשאלה הזו."]
+  }
+}

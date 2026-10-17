@@ -83,6 +83,16 @@ declare module 'fastify' {
   }
 }
 
+export type {
+  CallBriefFacts,
+  CallBriefPanel,
+  CallBriefRunner,
+} from './internal/brief.ts';
+export {
+  loadCallBriefPanel,
+  refreshCallBrief,
+  startCallBrief,
+} from './internal/brief.ts';
 export type { CallsDeps } from './internal/routes.ts';
 export { registerCallsRoutes } from './internal/routes.ts';
 export type {

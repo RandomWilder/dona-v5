@@ -8,6 +8,8 @@ import { addDays, DEFAULT_ZONE, dayIn } from '../../kernel/clock.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { type IconName, icon } from '../../kernel/ui/icons.ts';
 import { csrfInput, renderPage } from '../../kernel/ui/page.ts';
+import type { OfficeCitation } from '../../staff/contract.ts';
+import type { CallBriefPanel } from './brief.ts';
 import {
   ageMinutes,
   CALL_STATES,
@@ -172,6 +174,8 @@ export interface CallScreen {
   nextOpen?: { id: string; description: string } | null;
   /** What was posted to an exit, kept when the exit is refused. */
   exitDraft?: ExitDraft;
+  /** The Call brief. Absent when this call has none. #252. */
+  brief?: CallBriefPanel | null;
 }
 
 /** The exit a refusal re-renders, with the values that were posted. */
@@ -325,6 +329,8 @@ const styles = h`<style>
     inline-size: 18px;
     block-size: 18px;
   }
+  .calls .brief { display: grid; gap: var(--space-3); }
+  .calls .brief .cites { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-2); }
   .calls .call[data-emergency="true"],
   .calls .call[data-emergency="true"] .call-main a,
   .calls .call[data-emergency="true"] .call-meta {
@@ -1760,6 +1766,73 @@ function ageFact(screen: CallScreen): Html {
   return h`<div><dt>גיל</dt><dd data-goal="${band}">${age} · ${BAND_HE[band]}</dd></div>`;
 }
 
+const BRIEF_DOC: Record<string, string> = {
+  lease: 'חוזה',
+  lease_amendment: 'חוזה',
+  building_handover_protocol: 'בניין',
+};
+
+function briefCite(cite: OfficeCitation): Html {
+  if (cite.kind === 'record') return h``;
+  const label = BRIEF_DOC[cite.documentType] ?? cite.documentType;
+  return h`<li><span class="chip">${label}</span> <a href="/documents/${cite.documentId}/read?page=${cite.page}">עמוד ${ltr(cite.page)}</a></li>`;
+}
+
+function briefFacts(facts: NonNullable<CallBriefPanel['facts']>): Html {
+  const place =
+    facts.place === null
+      ? h``
+      : h`<div><dt>מקום</dt><dd>${facts.place}</dd></div>`;
+  const letting =
+    facts.letting === null
+      ? h``
+      : h`<div><dt>שכירות</dt><dd>${facts.letting}</dd></div>`;
+  const related =
+    facts.related.length === 0
+      ? h``
+      : h`<div><dt>קריאות קשורות</dt><dd>${facts.related.join(' · ')}</dd></div>`;
+  return h`<dl class="facts">
+    <div><dt>פונה</dt><dd>${facts.requester}</dd></div>
+    ${place}
+    ${letting}
+    ${related}
+  </dl>`;
+}
+
+function briefOf(screen: CallScreen): Html {
+  const brief = screen.brief;
+  if (!brief) return h``;
+  if (brief.kind === 'guarantor') {
+    return h`<section class="glass sheet brief" data-brief="guarantor">
+      <h2>תקציר</h2>
+      <p>אין תקציר, אין שרשור ואין טיוטה. ערב אינו מקבל מידע על השירות.</p>
+    </section>`;
+  }
+  if (brief.kind === 'writing') {
+    return h`<section class="glass sheet brief" data-brief="writing">
+      <h2>תקציר</h2>
+      <p class="chip">התקציר נכתב</p>
+    </section>`;
+  }
+  const facts = brief.facts === null ? h`` : briefFacts(brief.facts);
+  const turns = brief.turns.map(
+    (turn) => h`<div data-brief-turn>
+      <p class="who">העוזר</p>
+      <p>${turn.answer}</p>
+      <ul class="cites">${turn.citations.map(briefCite)}</ul>
+    </div>`,
+  );
+  return h`<section class="glass sheet brief" data-brief="ready" data-brief-turns="${brief.turns.length}">
+    <h2>תקציר</h2>
+    ${facts}
+    ${turns}
+    <form method="post" action="/calls/${screen.call.id}/brief">
+      ${csrfInput(screen.csrf)}
+      <button class="btn btn-glass" type="submit">רענון</button>
+    </form>
+  </section>`;
+}
+
 export function renderCallPage(screen: CallScreen): string {
   const call = screen.call;
   const refusal =
@@ -1813,6 +1886,7 @@ export function renderCallPage(screen: CallScreen): string {
       </header>
       ${refusal}
       ${receiptOf(screen)}
+      ${briefOf(screen)}
       <div class="call-work">
         ${callAside(screen)}
         <div class="call-record">

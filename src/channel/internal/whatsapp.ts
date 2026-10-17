@@ -227,6 +227,7 @@ export function registerWhatsappWebhook(
     objects?: ObjectStore;
     sorter?: Sorter;
     fetch?: WhatsappFetch;
+    onCallIdentified?: (callId: string) => Promise<void>;
   },
 ): void {
   app.decorateRequest('whatsappRaw', null);
@@ -286,6 +287,7 @@ export function registerWhatsappWebhook(
           objects: deps.objects,
           replyOnWhatsapp: (reply) =>
             sendWhatsappReply(config, fetchImpl, reply),
+          onCallIdentified: deps.onCallIdentified,
         },
         message,
       );

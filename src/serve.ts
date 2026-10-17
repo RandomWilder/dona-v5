@@ -3,6 +3,7 @@
 // of it with --env-file-if-exists, neither of which overrides a variable already set in the shell —
 // which is why v3's hand-written .env loader (src/dev.ts) is not lifted.
 import { buildApp } from './app.ts';
+import { startCallBrief } from './calls/contract.ts';
 import {
   createGraphReader,
   createSorter,
@@ -104,6 +105,8 @@ if (outlook) {
           matchesEmergency: emergencyMatch(pool),
           objects,
           replyOnEmail: (reply) => sendOutlookReply(outlook, reply),
+          onCallIdentified: (callId) =>
+            startCallBrief({ db: pool, clock, extractor, embedder }, callId),
         },
         message,
       );

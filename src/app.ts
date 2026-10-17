@@ -24,6 +24,7 @@ import {
   registerCallsRoutes,
   saveEmergencySettings,
   saveResponseGoal,
+  startCallBrief,
   upsertCategory,
 } from './calls/contract.ts';
 import {
@@ -175,6 +176,11 @@ export interface AppDeps {
    * Present on staging and in production, where the dev form uses it too.
    */
   sorter?: Sorter;
+  /**
+   * When the call brief's model runs. Absent, it is deferred until after the
+   * response. Tests pass one they can hold.
+   */
+  briefSchedule?: (work: () => Promise<void>) => void;
   /**
    * Cleartext HTTP/2. **Set only by `serve.ts` when `K_SERVICE` is present.**
    *
@@ -723,9 +729,31 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   // application registers declares a stance above, and the hook calls `requireStaff` once.
   registerStaffRoutes(app, staffDeps);
   registerPartyDirectoryRoutes(app, { pool: deps.pool, clock });
+  const brief =
+    deps.extractor && deps.embedder
+      ? {
+          extractor: deps.extractor,
+          embedder: deps.embedder,
+          schedule: deps.briefSchedule,
+        }
+      : undefined;
+  const onCallIdentified = brief
+    ? (callId: string) =>
+        startCallBrief(
+          {
+            db: deps.pool,
+            clock,
+            extractor: brief.extractor,
+            embedder: brief.embedder,
+            schedule: brief.schedule,
+          },
+          callId,
+        )
+    : undefined;
   registerCallsRoutes(app, {
     pool: deps.pool,
     clock,
+    brief,
     chrome: signedInChrome,
     devIntake: deps.devMockups === true,
     messagesOnCall: (callId) => listMessagesOnCall(deps.pool, callId),
@@ -762,6 +790,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     sorter: deps.sorter,
     objects,
     whatsappFetch: deps.whatsappFetch,
+    onCallIdentified,
   });
   registerDocumentRoutes(app, {
     pool: deps.pool,

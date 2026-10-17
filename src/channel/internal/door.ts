@@ -142,6 +142,11 @@ export interface IntakeDeps {
   replyOnEmail?: (
     reply: EmailDutyReply,
   ) => Promise<{ externalMessageId: string }>;
+  /**
+   * A new call was stored. The brief starts here, after the duty reply, and
+   * the callback returns before any model call. Absent in tests.
+   */
+  onCallIdentified?: (callId: string) => Promise<void>;
 }
 
 export type IntakeOutcome =
@@ -225,6 +230,9 @@ export async function receiveIncoming(
   const message = normalize(raw);
   const outcome = await intake(db, clock, deps, message);
   await recordDutyReply(db, clock, message, outcome);
+  if (outcome.kind === 'call') {
+    await deps.onCallIdentified?.(outcome.callId);
+  }
   return outcome;
 }
 
