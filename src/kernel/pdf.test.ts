@@ -27,6 +27,24 @@ function textAt(x: number, bottomUpY: number, text: string): SampleRun {
 // One item of a page that was never a PDF, for the line fold below. Positions are zero on purpose:
 // a line is decided by `endsLine` and by nothing else, and a fixture carrying plausible coordinates
 // would let a geometry-based fold pass this suite.
+function placed(
+  text: string,
+  x: number,
+  endsLine: boolean,
+  rightToLeft = true,
+): PdfTextItem {
+  return {
+    text,
+    x,
+    y: 0,
+    width: text.length,
+    height: 12,
+    rightToLeft,
+    endsLine,
+    confidence: null,
+  };
+}
+
 function item(text: string, endsLine: boolean): PdfTextItem {
   return {
     text,
@@ -125,6 +143,33 @@ describe('pdf text', () => {
         ['רקפת', '12,', 'שוהם'],
         ['דירה', '3'],
       ],
+    );
+  });
+
+  it('reads a Hebrew line from the right edge', () => {
+    // The rent law arrived with each word spelled correctly and the line painted from the left,
+    // so the stored text started at the end of the sentence. The right edge is where a Hebrew
+    // line starts. A line with no Hebrew keeps the order the reader returned.
+    const hebrew = [
+      placed('והשאילה', 100, false),
+      placed('השכירות', 180, false),
+      placed('חוק', 260, true),
+    ];
+    const latin = [
+      placed('Rent', 400, false, false),
+      placed('4200', 120, true, false),
+    ];
+    assert.deepEqual(
+      pageLines({ number: 1, width: 595, height: 842, items: hebrew }).map(
+        (line) => line.map((one) => one.text),
+      ),
+      [['חוק', 'השכירות', 'והשאילה']],
+    );
+    assert.deepEqual(
+      pageLines({ number: 1, width: 595, height: 842, items: latin }).map(
+        (line) => line.map((one) => one.text),
+      ),
+      [['Rent', '4200']],
     );
   });
 
