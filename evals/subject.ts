@@ -8,6 +8,7 @@ import {
   answerCallBrief,
   answerOfficeHits,
   chooseOfficeTools,
+  followUpNamesOtherUnit,
   OFFICE_TURN_RECORD_REFUSAL,
   OFFICE_TURN_REFUSAL,
 } from '../src/evidence/contract.ts';
@@ -308,6 +309,25 @@ export const placeholderSubject: Subject = async ({
       toolCalls: ['search'],
     };
   }
+  if (brief === 'follow-up') {
+    return {
+      text: 'הערבות הבנקאית היא 13,560 ש״ח.',
+      refused: false,
+      citations: ['חוזה §12.1'],
+      toolCalls: ['search'],
+    };
+  }
+  if (
+    brief === 'out-of-bound' &&
+    followUpNamesOtherUnit(message, '12', ['7'])
+  ) {
+    return {
+      text: OFFICE_TURN_RECORD_REFUSAL,
+      refused: true,
+      citations: [],
+      toolCalls: [],
+    };
+  }
 
   if (bound?.kind === 'unit') {
     return placeholderRecordTurn(fixtureRecord(bound) as UnitRecord, message);
@@ -438,8 +458,19 @@ export function callBriefSubject(options: {
       kind: 'unit',
       id: HOME_UNIT,
     });
+    if (
+      input.brief === 'out-of-bound' &&
+      followUpNamesOtherUnit(input.message, '12', ['7'])
+    ) {
+      return {
+        text: OFFICE_TURN_RECORD_REFUSAL,
+        refused: true,
+        citations: [],
+        toolCalls: [],
+      };
+    }
     const prefix =
-      input.brief === 'lease'
+      input.brief === 'lease' || input.brief === 'follow-up'
         ? 'חוזה'
         : input.brief === 'building'
           ? 'בניין'

@@ -1,0 +1,14 @@
+{
+  "id": "call-follow-up",
+  "title": "A follow-up on the call thread cites the lease clause that answers it",
+  "input": {
+    "message": "מה סכום הערבות הבנקאית?",
+    "brief": "follow-up"
+  },
+  "expect": {
+    "refuses": false,
+    "citesClause": true,
+    "tool": "search",
+    "contains": ["13,560"]
+  }
+}

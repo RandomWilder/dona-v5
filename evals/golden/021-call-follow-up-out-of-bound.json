@@ -1,0 +1,14 @@
+{
+  "id": "call-follow-up-out-of-bound",
+  "title": "A follow-up about another unit is the record refusal, with no citation",
+  "input": {
+    "message": "מה דמי השכירות של דירה 7?",
+    "brief": "out-of-bound"
+  },
+  "expect": {
+    "refuses": true,
+    "citesClause": false,
+    "tool": null,
+    "contains": ["אין בכרטיס ובמסמכים תשובה לשאלה הזו."]
+  }
+}

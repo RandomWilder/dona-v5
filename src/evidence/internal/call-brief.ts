@@ -50,14 +50,42 @@ export interface CallBriefSpec {
   providerOnly: boolean;
   /** A person asked again. The first brief does not append a second turn. */
   refresh: boolean;
+  /** A staff follow-up. The brief and a refresh leave this false. */
+  followUp?: boolean;
+  /** Who asked. The brief is the copilot. */
+  asker?: string;
+}
+
+function questionNamesUnit(question: string, unitNumber: string): boolean {
+  const escaped = unitNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`דירה\\s*${escaped}(?![\\p{L}\\p{N}])`, 'u').test(question);
+}
+
+/** A follow-up names a unit on file that is not the bound unit. */
+export function followUpNamesOtherUnit(
+  question: string,
+  ownUnit: string | null,
+  knownOthers: readonly string[],
+): boolean {
+  return knownOthers.some(
+    (unit) => unit !== ownUnit && questionNamesUnit(question, unit),
+  );
 }
 
 function modelInput(
   question: string,
   context: string,
   hits: PassageHit[],
+  history: readonly { question: string; answer: string }[],
 ): string {
-  const parts = [`CONTEXT:\n${context}`, `QUESTION:\n${question}`];
+  const parts = [`CONTEXT:\n${context}`];
+  if (history.length > 0) {
+    const lines = history
+      .map((turn, index) => `(${index + 1}) ${turn.question}\n${turn.answer}`)
+      .join('\n\n');
+    parts.push(`THREAD:\n${lines}`);
+  }
+  parts.push(`QUESTION:\n${question}`);
   if (hits.length > 0) {
     const passages = hits
       .map(
@@ -120,6 +148,7 @@ export async function answerCallBrief(
   hits: PassageHit[],
   context: string,
   providerOnly: boolean,
+  history: readonly { question: string; answer: string }[] = [],
 ): Promise<{ refused: boolean; text: string; citations: OfficeCitation[] }> {
   if (hits.length === 0 && !providerOnly) {
     return { refused: true, text: OFFICE_TURN_REFUSAL, citations: [] };
@@ -129,7 +158,7 @@ export async function answerCallBrief(
       model: deps.model,
       name: 'call_brief',
       instructions: CALL_BRIEF_INSTRUCTIONS,
-      input: modelInput(question, context, hits),
+      input: modelInput(question, context, hits, history),
       schema: CALL_BRIEF_SCHEMA,
       reasoningEffort: deps.reasoningEffort,
     }),
@@ -150,8 +179,12 @@ export async function runCallBrief(
   const thread = await loadCallThread(deps.db, spec.callId);
   if (!thread) return;
   if (thread.status === 'skipped') return;
-  if (!spec.refresh && thread.turns.length > 0) return;
-  if (spec.refresh && thread.status !== 'ready') return;
+  if (spec.followUp) {
+    if (thread.status !== 'ready') return;
+  } else {
+    if (!spec.refresh && thread.turns.length > 0) return;
+    if (spec.refresh && thread.status !== 'ready') return;
+  }
 
   const hits: PassageHit[] = [];
   if (!spec.providerOnly) {
@@ -178,11 +211,17 @@ export async function runCallBrief(
     hits,
     spec.context,
     spec.providerOnly,
+    spec.followUp
+      ? thread.turns.map((turn) => ({
+          question: turn.question,
+          answer: turn.answer,
+        }))
+      : [],
   );
 
   await appendCallTurn(deps.db, deps.clock, {
     callId: spec.callId,
-    asker: 'copilot',
+    asker: spec.asker ?? 'copilot',
     question: spec.question,
     answer: decided.text,
     refused: decided.refused,

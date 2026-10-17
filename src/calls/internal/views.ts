@@ -1815,13 +1815,19 @@ function briefOf(screen: CallScreen): Html {
     </section>`;
   }
   const facts = brief.facts === null ? h`` : briefFacts(brief.facts);
-  const turns = brief.turns.map(
-    (turn) => h`<div data-brief-turn>
-      <p class="who">העוזר</p>
+  const turns = brief.turns.map((turn) => {
+    const who = turn.asker === 'copilot' ? 'העוזר' : turn.asker;
+    const asked =
+      turn.asker === 'copilot'
+        ? h``
+        : h`<p>${turn.question}</p><p>${whenLabel(turn.askedAt)}</p>`;
+    return h`<div data-brief-turn data-brief-asker="${turn.asker}">
+      <p class="who">${who}</p>
+      ${asked}
       <p>${turn.answer}</p>
       <ul class="cites">${turn.citations.map(briefCite)}</ul>
-    </div>`,
-  );
+    </div>`;
+  });
   return h`<section class="glass sheet brief" data-brief="ready" data-brief-turns="${brief.turns.length}">
     <h2>תקציר</h2>
     ${facts}
@@ -1829,6 +1835,13 @@ function briefOf(screen: CallScreen): Html {
     <form method="post" action="/calls/${screen.call.id}/brief">
       ${csrfInput(screen.csrf)}
       <button class="btn btn-glass" type="submit">רענון</button>
+    </form>
+    <form method="post" action="/calls/${screen.call.id}/follow-up">
+      ${csrfInput(screen.csrf)}
+      <label class="form-row">שאלה
+        <textarea name="question" required maxlength="2000" rows="2"></textarea>
+      </label>
+      <button class="btn btn-primary" type="submit">שאלו</button>
     </form>
   </section>`;
 }

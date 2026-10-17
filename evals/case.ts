@@ -28,8 +28,10 @@ export interface CaseInput {
   /**
    * #252. A Call brief. `lease` and `building` are the two bags the brief
    * searches; `refuse` is a question neither answers.
+   * #253. `follow-up` is a later question on that thread. `out-of-bound` names
+   * another unit and is the record refusal.
    */
-  brief?: 'lease' | 'building' | 'refuse';
+  brief?: 'lease' | 'building' | 'refuse' | 'follow-up' | 'out-of-bound';
 }
 
 export interface Expectation {
@@ -180,13 +182,21 @@ export function parseCase(raw: unknown, source: string): GoldenCase {
   const message = asked.message as string;
   const bound =
     asked.bound === undefined ? undefined : parseBound(asked.bound, fail);
-  const briefValues = ['lease', 'building', 'refuse'] as const;
+  const briefValues = [
+    'lease',
+    'building',
+    'refuse',
+    'follow-up',
+    'out-of-bound',
+  ] as const;
   const brief =
     asked.brief === undefined
       ? undefined
       : briefValues.find((value) => value === asked.brief);
   if (asked.brief !== undefined && brief === undefined) {
-    fail('input.brief must be lease, building or refuse');
+    fail(
+      'input.brief must be lease, building, refuse, follow-up or out-of-bound',
+    );
   }
 
   if (kinds[0] === 'retrieval') {
