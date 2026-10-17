@@ -10,6 +10,10 @@
   slice 6.4 — **decision 2 only**. Masking binds the embedder and any model call whose output can reach
   a tenant; a field *declared* on the document-type catalogue is the named exception. Decisions 1, 3
   and 4 are untouched.
+- **Later reading, 2026-10-17:** [WhatsApp content and OpenAI](../research/whatsapp-openai-section-4-7.md).
+  Does not change decisions 1–4. It adds a limit they did not contain: on this account, Meta's WhatsApp
+  terms do not allow message content to be sent to OpenAI. Decision 4's table already names that send
+  for the sorter; the naming is not a finding that the terms allow it.
 
 ## The decision
 
@@ -115,3 +119,8 @@ being true.
   tenant. If the answer is "on first contact through the agent channel", week 9 builds a step for it.
 - Whether redaction is its own slice in month one or rides with slice 4.2's comprehension work. It must
   precede week 10 either way. **Decision 2 is accepted; only its scheduling is open.**
+- **WhatsApp message content and OpenAI.** Recorded 2026-10-17 in
+  [docs/research/whatsapp-openai-section-4-7.md](../research/whatsapp-openai-section-4-7.md): the answer
+  is no on the current account. The call copilot does not brief or draft a WhatsApp call (#257). The
+  sorter already sends that text (#181); the same reading covers it, and changing the sorter is the
+  director's, not a change to these four decisions.
