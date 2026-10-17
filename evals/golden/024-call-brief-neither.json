@@ -1,0 +1,14 @@
+{
+  "id": "call-brief-neither",
+  "title": "A question answered by neither the lease nor the library is the refusal",
+  "input": {
+    "message": "מה שער הדולר אתמול?",
+    "brief": "neither"
+  },
+  "expect": {
+    "refuses": true,
+    "citesClause": false,
+    "tool": "search",
+    "contains": ["אין במסמכים האלה תשובה לשאלה הזו."]
+  }
+}

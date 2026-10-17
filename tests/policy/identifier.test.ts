@@ -168,6 +168,8 @@ describe('policy · the copy sent to the embedder', () => {
       `evidence${path.sep}internal${path.sep}passages.ts`,
       `evidence${path.sep}internal${path.sep}search.ts`,
       `policy${path.sep}internal${path.sep}library.ts`,
+      // The question, the same way passage search does. Not the stored body.
+      `policy${path.sep}internal${path.sep}search.ts`,
     ];
     assert.deepEqual(
       callers.sort(),

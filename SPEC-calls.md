@@ -71,7 +71,10 @@ settings rows. When the switch is off, no turn is written and the model is not c
 question appends one turn on that call's Call thread. The turn records the staff account that
 asked — the display name, or the address when there is none — and the time, and the page shows
 the turns in that order, each with its asker. The follow-up uses the same bound and the same
-exclusions as the brief. It cites, or it is the frozen refusal. A question that names a unit
+exclusions as the brief. That bound includes the Policy library (SPEC-evidence).
+The brief searches it as of today. A follow-up that names a date, or asks what
+applied when the lease was signed, is searched as of that date, and the answer
+states the date. It cites, or it is the frozen refusal. A question that names a unit
 other than the bound unit, or a party who is not the requester and not on the bound tenancy, is
 the record refusal. That other record is not searched, and the model is not called. A blank
 question, or one longer than 2000 characters, is not a turn. Sending a reply is a different

@@ -30,8 +30,18 @@ export interface CaseInput {
    * searches; `refuse` is a question neither answers.
    * #253. `follow-up` is a later question on that thread. `out-of-bound` names
    * another unit and is the record refusal.
+   * #254. `law-and-lease` cites both. `as-of` cites the older version. `neither`
+   * is the refusal when the lease and the library are both present.
    */
-  brief?: 'lease' | 'building' | 'refuse' | 'follow-up' | 'out-of-bound';
+  brief?:
+    | 'lease'
+    | 'building'
+    | 'refuse'
+    | 'follow-up'
+    | 'out-of-bound'
+    | 'law-and-lease'
+    | 'as-of'
+    | 'neither';
 }
 
 export interface Expectation {
@@ -188,6 +198,9 @@ export function parseCase(raw: unknown, source: string): GoldenCase {
     'refuse',
     'follow-up',
     'out-of-bound',
+    'law-and-lease',
+    'as-of',
+    'neither',
   ] as const;
   const brief =
     asked.brief === undefined
@@ -195,7 +208,7 @@ export function parseCase(raw: unknown, source: string): GoldenCase {
       : briefValues.find((value) => value === asked.brief);
   if (asked.brief !== undefined && brief === undefined) {
     fail(
-      'input.brief must be lease, building, refuse, follow-up or out-of-bound',
+      'input.brief must be lease, building, refuse, follow-up, out-of-bound, law-and-lease, as-of or neither',
     );
   }
 

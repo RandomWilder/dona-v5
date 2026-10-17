@@ -1,0 +1,14 @@
+{
+  "id": "call-follow-up-as-of",
+  "title": "An as-of follow-up cites the older version and states the date",
+  "input": {
+    "message": "מה היה חלון התיקון נכון ל־2026-03-31?",
+    "brief": "as-of"
+  },
+  "expect": {
+    "refuses": false,
+    "citesClause": true,
+    "tool": "search",
+    "contains": ["ארבעה עשר", "31.03.2026"]
+  }
+}

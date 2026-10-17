@@ -155,7 +155,7 @@ export async function buildCorpus(
       [
         toVector(vector),
         bound.kind,
-        bound.kind === 'portfolio' ? null : bound.id,
+        bound.kind === 'portfolio' || bound.kind === 'policy' ? null : bound.id,
       ],
     );
     return found.rows.map((row) => ({

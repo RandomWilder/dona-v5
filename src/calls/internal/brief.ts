@@ -15,6 +15,7 @@ import { type Clock, today } from '../../kernel/clock.ts';
 import { createSettings, readBriefSettings } from '../../kernel/config.ts';
 import type { Embedder } from '../../kernel/embeddings.ts';
 import type { Extractor } from '../../kernel/extraction.ts';
+import { searchPolicyPassages } from '../../policy/contract.ts';
 import {
   accountsByIds,
   appendCallTurn,
@@ -107,6 +108,50 @@ interface ResolvedBrief {
   partyId: string;
   unitNumber: string | null;
   tenancyId: string | null;
+  /** The bound letting's start, when there is one. The signed-on follow-up. */
+  lettingStart: string | null;
+}
+
+const ISO_DATE = /(\d{4})-(\d{2})-(\d{2})/;
+const DOT_DATE = /(\d{2})\.(\d{2})\.(\d{4})/;
+const SIGNED = /נחתם|חתימת החוזה|בעת החתימה|יום החתימה/;
+
+function isDate(iso: string): boolean {
+  if (!/^(\d{4})-(\d{2})-(\d{2})$/.test(iso)) return false;
+  const year = Number(iso.slice(0, 4));
+  const month = Number(iso.slice(5, 7));
+  const day = Number(iso.slice(8, 10));
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return (
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day
+  );
+}
+
+/** The day a follow-up searches. A named date is stated; today is not. */
+export function followUpAsOf(
+  question: string,
+  todayIso: string,
+  lettingStart: string | null,
+): { date: string; named: boolean } {
+  const iso = ISO_DATE.exec(question);
+  if (iso?.[0] && isDate(iso[0])) return { date: iso[0], named: true };
+  const dotted = DOT_DATE.exec(question);
+  if (dotted?.[1] && dotted[2] && dotted[3]) {
+    const asIso = `${dotted[3]}-${dotted[2]}-${dotted[1]}`;
+    if (isDate(asIso)) return { date: asIso, named: true };
+  }
+  if (lettingStart && SIGNED.test(question)) {
+    return { date: lettingStart, named: true };
+  }
+  return { date: todayIso, named: false };
+}
+
+function officeDate(iso: string): string {
+  const [year, month, day] = iso.split('-');
+  if (!year || !month || !day) return iso;
+  return `${day}.${month}.${year}`;
 }
 
 const QUESTION_MAX = 2000;
@@ -130,11 +175,12 @@ async function resolveBrief(
       related,
     };
     return {
-      bounds: [],
+      bounds: [{ kind: 'policy' }],
       providerOnly: true,
       partyId,
       unitNumber: null,
       tenancyId: null,
+      lettingStart: null,
       facts,
       context: `ספק שירות: ${requester}\nסוג: ${kind}\nזו הרשומה של הספק ורק היא.`,
     };
@@ -161,11 +207,13 @@ async function resolveBrief(
       bounds: [
         { kind: 'tenancy', id: letting.tenancy_id },
         { kind: 'building-paper', id: letting.building_id },
+        { kind: 'policy' },
       ],
       providerOnly: false,
       partyId,
       unitNumber: letting.unit_number,
       tenancyId: letting.tenancy_id,
+      lettingStart: letting.start_date,
       facts,
       context: [
         `פונה: ${requester}`,
@@ -186,11 +234,14 @@ async function resolveBrief(
     related,
   };
   return {
-    bounds: unit ? [{ kind: 'unit', id: unit.unit_id }] : [],
+    bounds: unit
+      ? [{ kind: 'unit', id: unit.unit_id }, { kind: 'policy' }]
+      : [{ kind: 'policy' }],
     providerOnly: false,
     partyId,
     unitNumber: unit?.unit_number ?? null,
     tenancyId: null,
+    lettingStart: unit?.start_date ?? null,
     facts,
     context: unit
       ? `פונה: ${requester}\nדירה: ${unit.unit_number}\nאין השכרה פעילה`
@@ -323,23 +374,30 @@ export async function writeCallBrief(
   if (!settings.enabled) return;
   const resolved = await resolvedFor(runner.db, runner.clock, callId);
   if (!resolved) return;
-  await runCallBrief(
-    {
-      db: runner.db,
-      clock: runner.clock,
-      extractor: runner.extractor,
-      embedder: runner.embedder,
-      model: settings.model,
-    },
-    {
-      callId,
-      question: call.description,
-      bounds: resolved.bounds,
-      context: resolved.context,
-      providerOnly: resolved.providerOnly,
-      refresh: refresh && !first,
-    },
-  );
+  await runCallBrief(depsFor(runner, settings.model), {
+    callId,
+    question: call.description,
+    bounds: resolved.bounds,
+    context: resolved.context,
+    providerOnly: resolved.providerOnly,
+    refresh: refresh && !first,
+    asOf: today(runner.clock),
+  });
+}
+
+function depsFor(
+  runner: CallBriefRunner,
+  model: string,
+): Parameters<typeof runCallBrief>[0] {
+  return {
+    db: runner.db,
+    clock: runner.clock,
+    extractor: runner.extractor,
+    embedder: runner.embedder,
+    model,
+    searchPolicy: (question, asOf) =>
+      searchPolicyPassages(runner.db, runner.embedder, question, asOf),
+  };
 }
 
 export async function refreshCallBrief(
@@ -462,23 +520,21 @@ export async function askCallFollowUp(
     });
     return;
   }
-  await runCallBrief(
-    {
-      db: runner.db,
-      clock: runner.clock,
-      extractor: runner.extractor,
-      embedder: runner.embedder,
-      model: settings.model,
-    },
-    {
-      callId,
-      question,
-      bounds: resolved.bounds,
-      context: resolved.context,
-      providerOnly: resolved.providerOnly,
-      refresh: false,
-      followUp: true,
-      asker,
-    },
+  const asOf = followUpAsOf(
+    question,
+    today(runner.clock),
+    resolved.lettingStart,
   );
+  await runCallBrief(depsFor(runner, settings.model), {
+    callId,
+    question,
+    bounds: resolved.bounds,
+    context: resolved.context,
+    providerOnly: resolved.providerOnly,
+    refresh: false,
+    followUp: true,
+    asker,
+    asOf: asOf.date,
+    statedDate: asOf.named ? officeDate(asOf.date) : null,
+  });
 }

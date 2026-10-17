@@ -1455,6 +1455,26 @@ other than the bound unit, or a party who is not the requester and not on the bo
 the turn is the record refusal (`אין בכרטיס ובמסמכים תשובה לשאלה הזו.`) and carries no
 citation, and the model is not called. Otherwise the turn cites, or it is the frozen refusal.
 
+**#254. The Policy library is on every Call thread's bound.** Beside the paper
+bounds this mode already searches, the bound includes the Policy library. The
+library holds no tenant data, so that bound is the library itself. A provider
+brief still searches no lease; it does search the library, and the provider
+record stays a fact on its own. Search takes an as-of date and returns only
+versions in force on that date, by `policy_document_in_force` (SPEC-policy) —
+the brief does not restate the predicate. The brief's date is today. A
+follow-up may name another date, as a calendar date in the question or as the
+day the bound letting was signed, and that date is stated in the answer. The
+day a version's effective-to arrives, that version is already out and is not
+cited. Each section returns at most eight passages, the same cap a passage
+search uses, so neither state law nor company policy can fill the prompt at
+the other's expense or at the lease's. The sections are not ranked against
+each other: state law is read before company policy because that is the
+section order, and distance orders only inside a section. A citation of a
+Policy passage names the section and the version's dates, so the office sees
+whether it is state law or company policy and from when. The model quotes
+those passages. It does not decide responsibility, a threshold or an emergency
+from them (ADR-0017).
+
 **#105 backfills the archive.** Documents holding no passages — filed before #103, or filed with an
 unconfigured embedder — are walked by `sweepMissingPassages` the way `sweepUnverified` walks
 `unverified` rows: one at a time, optional id filter, a report of examined / written / unchanged /

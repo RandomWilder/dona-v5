@@ -304,6 +304,12 @@ function asOfficeBound(bound: RetrievalBound): OfficeRetrievalBound {
       'the office turn does not take Building paper',
     );
   }
+  if (bound.kind === 'policy') {
+    throw new KernelError(
+      'not_allowed',
+      'the office turn does not search the Policy library',
+    );
+  }
   return { kind: bound.kind, id: bound.id };
 }
 

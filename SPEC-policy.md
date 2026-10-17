@@ -54,7 +54,9 @@ effective-to is empty or the date is strictly before effective-to. The day a new
 the previous one is already over. A version with no effective-to stays in force from its
 effective-from onward. The predicate is the SQL function
 `policy_document_in_force(effective_from, effective_to, on_date)`. The מדיניות tab uses it to mark
-the version in force today. An as-of search (#254) uses the same function and does not restate it.
+the version in force today. An as-of search (#254) uses the same function and does not restate it. The
+call brief is that search: today for the brief, the named date for a follow-up,
+at most eight passages from each section.
 
 **What may be written after insert.** The text, the title, the file and the passages are never
 updated and never deleted. The one permitted update is setting effective-to, once, from empty to a
