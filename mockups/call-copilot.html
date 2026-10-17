@@ -1,0 +1,266 @@
+<style>
+  .paint-switch {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .paint-switch input {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .paint-switch label {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--size-touch);
+    padding-inline: var(--space-3);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-card);
+    border: var(--size-hairline) solid var(--color-divider);
+    cursor: pointer;
+  }
+  .paint:has(#st-ready:checked) label[for="st-ready"],
+  .paint:has(#st-writing:checked) label[for="st-writing"],
+  .paint:has(#st-refusal:checked) label[for="st-refusal"],
+  .paint:has(#st-guarantor:checked) label[for="st-guarantor"],
+  .paint:has(#st-whatsapp-closed:checked) label[for="st-whatsapp-closed"],
+  .paint:has(#st-no-reply:checked) label[for="st-no-reply"],
+  .paint:has(#st-sent:checked) label[for="st-sent"] {
+    background: var(--color-accent-ink);
+    color: var(--color-on-accent);
+    border-color: var(--color-accent-ink);
+  }
+  .paint [data-state] { display: none; }
+  .paint:has(#st-ready:checked) [data-state="ready"],
+  .paint:has(#st-writing:checked) [data-state="writing"],
+  .paint:has(#st-refusal:checked) [data-state="refusal"],
+  .paint:has(#st-guarantor:checked) [data-state="guarantor"],
+  .paint:has(#st-whatsapp-closed:checked) [data-state="whatsapp-closed"],
+  .paint:has(#st-no-reply:checked) [data-state="no-reply"],
+  .paint:has(#st-sent:checked) [data-state="sent"] {
+    display: grid;
+    gap: var(--space-4);
+  }
+  .paint .block {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-5);
+  }
+  .paint .block h2 { margin: 0; }
+  .paint .who { margin: 0; font-weight: 600; }
+  .paint .thread,
+  .paint .timeline {
+    display: grid;
+    gap: var(--space-3);
+    margin: 0;
+    padding-inline-start: 1.25rem;
+  }
+  .paint .cites {
+    display: grid;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .paint .cites li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: baseline;
+  }
+  .paint .draft-pair {
+    display: grid;
+    gap: var(--space-4);
+  }
+  .paint .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+  @media (min-width: 40rem) {
+    .paint .draft-pair { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+<div class="calls glass-stage paint" data-paint="call-copilot">
+  <header class="page-head">
+    <div>
+      <p class="back"><a href="/dev/mockups/index">הדמיות</a></p>
+      <h1>דוד המים לא מחמם</h1>
+      <p class="lede">הדמיה. כל מצב נפתח בלחיצה. טקסט דוגמה בלבד.</p>
+    </div>
+  </header>
+  <div class="paint-switch" role="radiogroup" aria-label="מצב להצגה">
+    <input type="radio" name="copilot-state" id="st-ready" checked />
+    <label for="st-ready">תקציר</label>
+    <input type="radio" name="copilot-state" id="st-writing" />
+    <label for="st-writing">נכתב</label>
+    <input type="radio" name="copilot-state" id="st-refusal" />
+    <label for="st-refusal">סירוב</label>
+    <input type="radio" name="copilot-state" id="st-guarantor" />
+    <label for="st-guarantor">ערב בלבד</label>
+    <input type="radio" name="copilot-state" id="st-whatsapp-closed" />
+    <label for="st-whatsapp-closed">וואטסאפ סגור</label>
+    <input type="radio" name="copilot-state" id="st-no-reply" />
+    <label for="st-no-reply">בלי מענה</label>
+    <input type="radio" name="copilot-state" id="st-sent" />
+    <label for="st-sent">אחרי שליחה</label>
+  </div>
+
+  <section data-state="ready">
+    <article class="glass block">
+      <h2>תקציר</h2>
+      <dl class="facts">
+        <div><dt>פונה</dt><dd>נועה לדוגמה</dd></div>
+        <div><dt>דירה</dt><dd>דירה 4 · בניין הדגמה</dd></div>
+        <div><dt>שכירות</dt><dd>01.03.2026–28.02.2027</dd></div>
+        <div><dt>קריאות קשורות</dt><dd>נזילה במטבח · נסגרה</dd></div>
+      </dl>
+      <p>דוד המים הפסיק לחמם. התיקון חל על בעל הדירה. נפתחת קריאת שירות ונקבע ביקור.</p>
+      <ul class="cites">
+        <li><span class="chip">חוזה</span><span>חוזה §7.2 — תיקון תקלות הנובעות מבלאי סביר במערכות הדירה, לרבות דוד המים, הוא באחריות בעל הדירה ועל חשבונו.</span></li>
+        <li><span class="chip">נוהל חברה</span><span>נוהל שירות §3 — דיווח על תקלה שאינה דחופה נמסר דרך הודעה לשירות הדיירים, ונפתחת בגינו קריאת שירות.</span></li>
+        <li><span class="chip">דין</span><span>דין לדוגמה §4 — תחזוקת מערכת שבלאי סביר גרם לה חלה על בעל הדירה. מסמך דוגמה, אינו דין.</span></li>
+      </ul>
+      <div class="actions">
+        <button class="btn btn-glass" type="button">רענון</button>
+      </div>
+    </article>
+    <article class="glass block">
+      <h2>שרשור</h2>
+      <ol class="thread">
+        <li>
+          <p class="who">העוזר</p>
+          <p>תקציר הקריאה, למעלה.</p>
+        </li>
+        <li>
+          <p class="who">מיה הדגמה</p>
+          <p>מה חלון הזמן לביקור?</p>
+        </li>
+        <li>
+          <p class="who">העוזר</p>
+          <p>נוהל שירות §5 — לאחר פתיחת קריאת שירות נקבע לה סיווג, ומן הסיווג נגזר חלון הזמן שבו ייקבע הביקור. הדייר מקבל הודעה על מועד הביקור לפני קיומו.</p>
+        </li>
+      </ol>
+    </article>
+    <article class="glass block">
+      <h2>טיוטה</h2>
+      <p class="lede">שפת ההודעה האחרונה: אנגלית. העברית לצפייה בלבד.</p>
+      <div class="draft-pair">
+        <div>
+          <h3>לדייר</h3>
+          <p lang="en" dir="ltr">The water heater is the owner's responsibility. We have opened a service call and will set a visit time.</p>
+        </div>
+        <div>
+          <h3>עברית</h3>
+          <p>דוד המים באחריות בעל הדירה. נפתחה קריאת שירות ויקבע מועד ביקור.</p>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" type="button">שליחה</button>
+        <button class="btn btn-glass" type="button">העתקה</button>
+      </div>
+    </article>
+  </section>
+
+  <section data-state="writing">
+    <article class="glass block">
+      <h2>תקציר</h2>
+      <p class="chip is-busy"><span class="loader" aria-hidden="true"></span> התקציר נכתב</p>
+      <p class="lede">הקריאה זוהתה. התקציר עדיין נכתב. אין טיוטה ואין מענה עד שהוא מוכן.</p>
+    </article>
+  </section>
+
+  <section data-state="refusal">
+    <article class="glass block">
+      <h2>תקציר</h2>
+      <p>אין במסמכים האלה תשובה לשאלה הזו.</p>
+    </article>
+    <article class="glass block">
+      <h2>שרשור</h2>
+      <ol class="thread">
+        <li>
+          <p class="who">מיה הדגמה</p>
+          <p>באיזה צבע נצבע חדר השינה במסירה?</p>
+        </li>
+        <li>
+          <p class="who">העוזר</p>
+          <p>אין במסמכים האלה תשובה לשאלה הזו.</p>
+        </li>
+      </ol>
+    </article>
+  </section>
+
+  <section data-state="guarantor">
+    <article class="glass block">
+      <h2>פונה</h2>
+      <p>יוסי ערב-דוגמה · ערב בלבד</p>
+      <p>אין תקציר, אין שרשור ואין טיוטה.</p>
+    </article>
+  </section>
+
+  <section data-state="whatsapp-closed">
+    <article class="glass block">
+      <h2>וואטסאפ</h2>
+      <p>ההודעה האחרונה מהפונה נשלחה אתמול. חלון 24 השעות נסגר.</p>
+      <div class="draft-pair">
+        <div>
+          <h3>לדייר</h3>
+          <p lang="en" dir="ltr">The water heater is the owner's responsibility. We have opened a service call and will set a visit time.</p>
+        </div>
+        <div>
+          <h3>עברית</h3>
+          <p>דוד המים באחריות בעל הדירה. נפתחה קריאת שירות ויקבע מועד ביקור.</p>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-glass" type="button">העתקה</button>
+      </div>
+    </article>
+  </section>
+
+  <section data-state="no-reply">
+    <article class="glass block">
+      <h2>תקציר</h2>
+      <p>צופה. אפשר לקרוא את התקציר ואת השרשור. העתקה בלבד.</p>
+      <p>דוד המים הפסיק לחמם. התיקון חל על בעל הדירה.</p>
+      <p><span class="chip">חוזה</span> חוזה §7.2</p>
+    </article>
+    <article class="glass block">
+      <h2>טיוטה</h2>
+      <div class="draft-pair">
+        <div>
+          <h3>לדייר</h3>
+          <p lang="en" dir="ltr">The water heater is the owner's responsibility. We have opened a service call and will set a visit time.</p>
+        </div>
+        <div>
+          <h3>עברית</h3>
+          <p>דוד המים באחריות בעל הדירה. נפתחה קריאת שירות ויקבע מועד ביקור.</p>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-glass" type="button">העתקה</button>
+      </div>
+    </article>
+  </section>
+
+  <section data-state="sent">
+    <article class="glass block">
+      <h2>מהלך</h2>
+      <p class="lede">שתי שורות, כדי לראות את שני הסימונים.</p>
+      <ol class="timeline">
+        <li>נפתחה · מיה הדגמה</li>
+        <li>זוהתה · נועה לדוגמה</li>
+        <li data-mark="as-written">
+          <p>נשלח · מיה הדגמה · כפי שנכתב</p>
+          <p lang="en" dir="ltr">The water heater is the owner's responsibility. We have opened a service call and will set a visit time.</p>
+        </li>
+        <li data-mark="edited">
+          <p>נשלח · מיה הדגמה · נערך</p>
+          <p lang="en" dir="ltr">The water heater is the owner's responsibility. A technician will come tomorrow between 10:00 and 12:00.</p>
+        </li>
+      </ol>
+    </article>
+  </section>
+</div>
