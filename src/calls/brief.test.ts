@@ -2,7 +2,7 @@
 // emergency is already on the page, and a refresh appends.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { seedOccupancy } from '../../tests/policy/fixtures.ts';
+import { seedOccupancy, seedUnit } from '../../tests/policy/fixtures.ts';
 import { asOperator, signIn, signOutAll } from '../../tests/support/session.ts';
 import { buildApp } from '../app.ts';
 import { fixedClock } from '../kernel/clock.ts';
@@ -161,7 +161,9 @@ describe('calls · the call brief', () => {
       role: 'OPERATOR',
     });
     const client = asOperator(app, who);
-    const tenancy = await seedOccupancy(pool, `252-${newId().slice(0, 4)}`, {
+    const address = { line: `Brief ${newId().slice(0, 8)}`, city: 'Brief' };
+    const unitId = await seedUnit(pool, `252-${newId().slice(0, 4)}`, address);
+    const tenancy = await seedOccupancy(pool, '252-g', {
       phone: `+972501${newId()
         .replace(/[^0-9]/g, '')
         .padEnd(7, '1')
@@ -170,6 +172,7 @@ describe('calls · the call brief', () => {
       contactTo: null,
       tenancyFrom: '2026-01-01',
       tenancyTo: '2027-01-01',
+      unitId,
     });
     const guarantorId = newId();
     try {
@@ -236,6 +239,10 @@ describe('calls · the call brief', () => {
       await pool.query(`DELETE FROM space WHERE space_id = $1`, [
         tenancy.unitId,
       ]);
+      await pool.query(
+        `DELETE FROM building WHERE city = $1 AND address_line = $2`,
+        [address.city, address.line],
+      );
       await signOutAll(pool, domain);
       await app.close();
       await pool.end();
