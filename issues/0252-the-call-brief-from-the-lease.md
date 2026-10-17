@@ -1,13 +1,13 @@
 ---
 number: 252
 title: The Call brief, from the lease and the building's paper
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: [248]
 parent: 247
 created: 2026-10-16
-closed:
+closed: 2026-10-17
 ---
 
 ## Parent
@@ -58,8 +58,12 @@ say about this request?" with cited passages.
   - [x] a brief that cites lease clauses;
   - [x] a brief that cites the building's paper;
   - [x] a refusal.
-- [ ] Clicked on `:3000` with a specimen call. The restarted server stops at Google sign-in.
+- [x] Clicked on `:3000` with a specimen call.
 
 ## Blocked by
 
 - #248
+
+## Comment — 2026-10-17
+
+A new phone call, identified as דנה כהן, showed the brief once the turn landed. She has no lease on file, so the turn is the frozen refusal, and the related calls sit beside it. Refresh appended a second turn and left the first. A call identified before this server start has no brief: nothing is written for a call that was already identified.
