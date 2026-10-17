@@ -152,20 +152,115 @@ describe('policy library', () => {
       assert.match(after.body, /data-effective-from="2026-03-15"/);
       assert.match(after.body, new RegExp(SPECIMEN));
 
-      const library = await listPolicyLibrary(pool);
+      const library = await listPolicyLibrary(pool, '2026-10-17');
       const section = library.find(
         (item) => item.sectionKey === 'company_policy',
       );
       const document = section?.documents.find((item) => item.title === title);
       assert.ok(document);
-      assert.ok(document.passages.length > 0);
+      const version = document.versions[0];
+      assert.ok(version);
+      assert.equal(version.effectiveFrom, '2026-03-15');
+      assert.equal(version.effectiveTo, null);
+      assert.equal(version.inForce, true);
+      assert.ok(version.passages.length > 0);
       assert.equal(
-        document.passages.every(
+        version.passages.every(
           (passage) => passage.sectionKey === 'company_policy',
         ),
         true,
       );
-      assert.match(document.passages[0]?.body ?? '', /נוהל דוגמה/);
+      assert.match(version.passages[0]?.body ?? '', /נוהל דוגמה/);
+    } finally {
+      await signOutAll(pool, DOMAIN);
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('a later version ends the earlier one, and the tab shows both', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) {
+      t.skip(skipReason);
+      return;
+    }
+    const clock = fixedClock(AT);
+    const marker = `versions-${Date.now()}`;
+    const title = `נוהל גרסאות ${marker}`;
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      clock,
+      objects: createMemoryStore(),
+      pdf: createFakePdfText([SPECIMEN]),
+      embedder: createFakeEmbedder(embeddingColumnDimensions),
+      bucket: 'dona-v5-test-docs',
+    });
+    await signOutAll(pool, DOMAIN);
+    try {
+      await applyPolicySections(pool, policySections);
+      const admin = await signIn(pool, clock, {
+        email: `versions@${DOMAIN}`,
+        role: 'ADMIN',
+      });
+      for (const effectiveFrom of ['2026-03-15', '2026-06-01']) {
+        const body = uploadBody(
+          {
+            csrf: admin.csrf,
+            section_key: 'company_policy',
+            title,
+            effective_from: effectiveFrom,
+          },
+          pdfBytes(`${marker}-${effectiveFrom}`),
+        );
+        const posted = await app.inject({
+          method: 'POST',
+          url: '/policy',
+          headers: { cookie: admin.cookie, ...body.headers },
+          payload: body.payload,
+        });
+        assert.equal(posted.statusCode, 303);
+      }
+      const page = await asOperator(app, admin).inject({
+        method: 'GET',
+        url: '/policy',
+      });
+      assert.equal(page.statusCode, 200);
+      assert.match(page.body, /data-effective-from="2026-03-15"/);
+      assert.match(page.body, /data-effective-to="2026-06-01"/);
+      assert.match(page.body, /data-effective-from="2026-06-01"/);
+      assert.match(page.body, /data-in-force="false"/);
+      assert.match(page.body, /data-in-force="true"/);
+      assert.match(page.body, /בתוקף היום/);
+      assert.match(page.body, /גרסה חדשה/);
+
+      const library = await listPolicyLibrary(pool, '2026-10-17');
+      const section = library.find(
+        (item) => item.sectionKey === 'company_policy',
+      );
+      const document = section?.documents.find((item) => item.title === title);
+      assert.ok(document);
+      assert.equal(document.versions.length, 2);
+      const earlier = document.versions.find(
+        (version) => version.effectiveFrom === '2026-03-15',
+      );
+      const later = document.versions.find(
+        (version) => version.effectiveFrom === '2026-06-01',
+      );
+      assert.equal(earlier?.effectiveTo, '2026-06-01');
+      assert.equal(earlier?.inForce, false);
+      assert.equal(later?.effectiveTo, null);
+      assert.equal(later?.inForce, true);
+      assert.ok((earlier?.passages.length ?? 0) > 0);
+      assert.ok((later?.passages.length ?? 0) > 0);
+
+      const audit = await pool.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM audit_log
+          WHERE action = 'policy.supersede'
+            AND inputs->>'successorId' = $1`,
+        [later?.policyDocumentId],
+      );
+      assert.equal(audit.rows[0]?.n, '1');
     } finally {
       await signOutAll(pool, DOMAIN);
       await app.close();

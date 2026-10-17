@@ -10,6 +10,7 @@ export type {
   PolicyDocumentView,
   PolicyPassageView,
   PolicySectionView,
+  PolicyVersionView,
   UploadPolicyDocumentSpec,
 } from './internal/library.ts';
 export {

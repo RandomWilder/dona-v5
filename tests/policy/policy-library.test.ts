@@ -189,6 +189,16 @@ describe('policy · only an admin uploads, and a document is never rewritten', (
             [documentId],
           ),
         );
+        await db.query(
+          `UPDATE policy_document SET effective_to = '2025-01-01' WHERE policy_document_id = $1`,
+          [documentId],
+        );
+        await rejects(db, () =>
+          db.query(
+            `UPDATE policy_document SET effective_to = '2025-06-01' WHERE policy_document_id = $1`,
+            [documentId],
+          ),
+        );
         await rejects(db, () =>
           db.query(
             `DELETE FROM policy_document WHERE policy_document_id = $1`,

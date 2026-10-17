@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import type { ChromeDest, signedInChrome } from '../../chrome.ts';
 import { createAuditLog } from '../../kernel/audit.ts';
-import type { Clock } from '../../kernel/clock.ts';
+import { type Clock, today } from '../../kernel/clock.ts';
 import { createSettings, readOcrSettings } from '../../kernel/config.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import type { Embedder } from '../../kernel/embeddings.ts';
@@ -42,7 +42,7 @@ export function registerPolicyRoutes(
   deps: PolicyDeps,
 ): void {
   app.get('/policy', READ, async (request, reply) => {
-    const library = await listPolicyLibrary(deps.pool);
+    const library = await listPolicyLibrary(deps.pool, today(deps.clock));
     const role = request.staff?.role ?? null;
     const page = renderPolicyPage(library, {
       csrf: csrfFrom(request),
