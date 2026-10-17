@@ -139,7 +139,8 @@ export function stampOriginalPages(
  * **The line comes from the reader and is never inferred from the boxes.** pdfjs knows it (`hasEOL`)
  * and Document AI knows it (`lines` beside `tokens`), so a y-clustering fold here would be a third
  * opinion that drifts away from both. A page whose reader marked no line at all is one line, which
- * is exactly the string the pre-6.8 join produced.
+ * is exactly the string the pre-6.8 join produced. Within a Hebrew line, `readingOrder` then
+ * starts at the right edge. That is not a new line break: it is the order the words are stored in.
  */
 export function pageLines(page: PdfPage): PdfTextItem[][] {
   const lines: PdfTextItem[][] = [];
@@ -147,14 +148,37 @@ export function pageLines(page: PdfPage): PdfTextItem[][] {
   for (const item of page.items) {
     current.push(item);
     if (item.endsLine) {
-      lines.push(current);
+      lines.push(readingOrder(current));
       current = [];
     }
   }
   if (current.length > 0) {
-    lines.push(current);
+    lines.push(readingOrder(current));
   }
   return lines;
+}
+
+const HEBREW = /[\u0590-\u05FF]/;
+
+/**
+ * A Hebrew line is stored in reading order. The reader often returns the paint
+ * order, left to right, with each word already spelled correctly, and joining
+ * that order stores the sentence backwards. The right edge is where the line
+ * starts. A line with no Hebrew stays as the reader returned it: a label and
+ * its value are not a column to be sorted. Items that share one x — every
+ * fixture that never had coordinates — stay in arrival order too.
+ */
+function readingOrder(line: PdfTextItem[]): PdfTextItem[] {
+  if (!line.some((item) => HEBREW.test(item.text))) return line;
+  const origin = line[0]?.x;
+  if (line.every((item) => item.x === origin)) return line;
+  return line
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const byEdge = b.item.x + b.item.width - (a.item.x + a.item.width);
+      return byEdge === 0 ? a.index - b.index : byEdge;
+    })
+    .map(({ item }) => item);
 }
 
 /**

@@ -235,7 +235,12 @@ whole page with spaces. On a form a line break is where a field ends, and A12's 
 specified against structure that never arrived (SPEC-evidence.md, and the week-6 demo is where it
 showed). `pageLines(page)` folds a page's items into lines on that flag. **The line comes from the
 reader and is never inferred from geometry** — both readers know it, and a y-clustering detector
-standing beside two real ones is the thing that drifts out of step with them.
+standing beside two real ones is the thing that drifts out of step with them. Within a line that
+contains Hebrew, the items are then ordered from the right edge, so the stored text is reading
+order. A Hebrew PDF often paints the line from the left, and joining that paint order stores the
+words backwards. A line with no Hebrew stays in the order the reader returned, which is what keeps
+a label and its value together. Items that share one x, including every fixture that never had
+coordinates, stay in the order they arrived.
 
 `createPdfjsText()` wraps `pdfjs-dist`, imported lazily so a process that never reads a PDF never
 pays for it. The input is a third-party PDF and a PDF is a program, so nothing here renders:
