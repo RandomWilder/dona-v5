@@ -1448,6 +1448,13 @@ paper; only this mode searches them. When nothing in the bound answers, the turn
 refusal and carries no citation. A provider brief is answered from the provider record alone.
 The model is the `calls.brief.model` row. An extractor failure appends nothing.
 
+**#253. A follow-up is another turn of this mode.** The question is the one the staff member
+typed, and earlier turns may clarify it; they are not a source of facts. The asker is that
+staff account. The bound and the exclusions are the brief's. When the question names a unit
+other than the bound unit, or a party who is not the requester and not on the bound tenancy,
+the turn is the record refusal (`אין בכרטיס ובמסמכים תשובה לשאלה הזו.`) and carries no
+citation, and the model is not called. Otherwise the turn cites, or it is the frozen refusal.
+
 **#105 backfills the archive.** Documents holding no passages — filed before #103, or filed with an
 unconfigured embedder — are walked by `sweepMissingPassages` the way `sweepUnverified` walks
 `unverified` rows: one at a time, optional id filter, a report of examined / written / unchanged /

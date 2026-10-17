@@ -30,6 +30,7 @@ export type { CallBriefDeps, CallBriefSpec } from './internal/call-brief.ts';
 export {
   answerCallBrief,
   CALL_BRIEF_INSTRUCTIONS,
+  followUpNamesOtherUnit,
   runCallBrief,
 } from './internal/call-brief.ts';
 export type {

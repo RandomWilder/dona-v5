@@ -67,6 +67,16 @@ lease. A requester who is only a guarantor gets no brief; the page says so. A WH
 gets no brief. The on/off switch (`calls.brief`) and the model id (`calls.brief.model`) are
 settings rows. When the switch is off, no turn is written and the model is not called.
 
+**#253. A follow-up.** Under the brief, anyone who can read the call can ask a question. The
+question appends one turn on that call's Call thread. The turn records the staff account that
+asked — the display name, or the address when there is none — and the time, and the page shows
+the turns in that order, each with its asker. The follow-up uses the same bound and the same
+exclusions as the brief. It cites, or it is the frozen refusal. A question that names a unit
+other than the bound unit, or a party who is not the requester and not on the bound tenancy, is
+the record refusal. That other record is not searched, and the model is not called. A blank
+question, or one longer than 2000 characters, is not a turn. Sending a reply is a different
+command.
+
 **Save this contact** is a command on a call a person identified, when the sender is an email
 address or a WhatsApp number. It adds that address to the requester as a PartyContact, through
 parties' contract, valid from today, and it is audited. The next message from that address is

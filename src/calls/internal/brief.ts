@@ -6,12 +6,18 @@
 
 import { listProvidersForParties } from '../../estate/contract.ts';
 import type { RetrievalBound } from '../../evidence/contract.ts';
-import { runCallBrief } from '../../evidence/contract.ts';
+import {
+  followUpNamesOtherUnit,
+  OFFICE_TURN_RECORD_REFUSAL,
+  runCallBrief,
+} from '../../evidence/contract.ts';
 import { type Clock, today } from '../../kernel/clock.ts';
 import { createSettings, readBriefSettings } from '../../kernel/config.ts';
 import type { Embedder } from '../../kernel/embeddings.ts';
 import type { Extractor } from '../../kernel/extraction.ts';
 import {
+  accountsByIds,
+  appendCallTurn,
   beginCallThread,
   type CallThread,
   loadCallThread,
@@ -45,6 +51,9 @@ export interface CallBriefPanel {
   kind: 'writing' | 'ready' | 'guarantor';
   facts: CallBriefFacts | null;
   turns: {
+    asker: string;
+    question: string;
+    askedAt: Date;
     answer: string;
     refused: boolean;
     citations: OfficeCitation[];
@@ -95,7 +104,12 @@ interface ResolvedBrief {
   context: string;
   providerOnly: boolean;
   facts: CallBriefFacts;
+  partyId: string;
+  unitNumber: string | null;
+  tenancyId: string | null;
 }
+
+const QUESTION_MAX = 2000;
 
 async function resolveBrief(
   db: Queryable,
@@ -118,6 +132,9 @@ async function resolveBrief(
     return {
       bounds: [],
       providerOnly: true,
+      partyId,
+      unitNumber: null,
+      tenancyId: null,
       facts,
       context: `ספק שירות: ${requester}\nסוג: ${kind}\nזו הרשומה של הספק ורק היא.`,
     };
@@ -146,6 +163,9 @@ async function resolveBrief(
         { kind: 'building-paper', id: letting.building_id },
       ],
       providerOnly: false,
+      partyId,
+      unitNumber: letting.unit_number,
+      tenancyId: letting.tenancy_id,
       facts,
       context: [
         `פונה: ${requester}`,
@@ -168,6 +188,9 @@ async function resolveBrief(
   return {
     bounds: unit ? [{ kind: 'unit', id: unit.unit_id }] : [],
     providerOnly: false,
+    partyId,
+    unitNumber: unit?.unit_number ?? null,
+    tenancyId: null,
     facts,
     context: unit
       ? `פונה: ${requester}\nדירה: ${unit.unit_number}\nאין השכרה פעילה`
@@ -202,6 +225,9 @@ export async function loadCallBriefPanel(
     kind: 'ready',
     facts,
     turns: thread.turns.map((turn) => ({
+      asker: turn.asker,
+      question: turn.question,
+      askedAt: turn.askedAt,
       answer: turn.answer,
       refused: turn.refused,
       citations: turn.citations,
@@ -321,4 +347,138 @@ export async function refreshCallBrief(
   callId: string,
 ): Promise<void> {
   await writeCallBrief(runner, callId, true);
+}
+
+function nameStandsIn(question: string, name: string): boolean {
+  const trimmed = name.trim();
+  if (trimmed.length < 2) return false;
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(
+    `(?:^|[^\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`,
+    'u',
+  ).test(question);
+}
+
+async function askerLabel(
+  db: Queryable,
+  staffAccountId: string,
+): Promise<string> {
+  const [account] = await accountsByIds(db, [staffAccountId]);
+  const name = account?.displayName?.trim() ?? '';
+  if (name.length > 0) return name;
+  if (account?.email) return account.email;
+  return staffAccountId;
+}
+
+async function otherUnitNumbers(
+  db: Queryable,
+  own: string | null,
+): Promise<string[]> {
+  const { rows } = await db.query<{ unit_number: string }>(
+    `SELECT unit_number FROM unit
+      WHERE $1::text IS NULL OR unit_number <> $1`,
+    [own],
+  );
+  return rows.map((row) => row.unit_number);
+}
+
+/** A party who is not the requester and not on the bound tenancy, named in the question. */
+async function namesAnotherParty(
+  db: Queryable,
+  question: string,
+  partyId: string,
+  ownName: string,
+  tenancyId: string | null,
+): Promise<boolean> {
+  const own = ownName.trim();
+  const remainder = own.length >= 2 ? question.split(own).join(' ') : question;
+  const { rows } = await db.query<{ full_name: string }>(
+    `SELECT full_name
+       FROM party
+      WHERE party_id <> $1
+        AND length(btrim(full_name)) >= 2
+        AND strpos($2, full_name) > 0
+        AND (
+          $3::uuid IS NULL
+          OR NOT EXISTS (
+            SELECT 1 FROM tenancy_party tp
+             WHERE tp.party_id = party.party_id
+               AND tp.tenancy_id = $3
+          )
+        )
+      LIMIT 20`,
+    [partyId, remainder, tenancyId],
+  );
+  const ownTokens = new Set(
+    own.split(/\s+/).filter((token) => token.length >= 2),
+  );
+  return rows.some((row) => {
+    const name = row.full_name.trim();
+    if (ownTokens.has(name)) return false;
+    return nameStandsIn(remainder, name);
+  });
+}
+
+/**
+ * One follow-up on the call's thread. Same bound and exclusions as the brief.
+ * A question outside that bound is the record refusal, and the model is not called.
+ */
+export async function askCallFollowUp(
+  runner: CallBriefRunner,
+  callId: string,
+  spec: { staffAccountId: string; question: string },
+): Promise<void> {
+  const question = spec.question.trim();
+  if (question.length === 0 || question.length > QUESTION_MAX) return;
+  const thread = await loadCallThread(runner.db, callId);
+  if (thread?.status !== 'ready') return;
+  const settings = await readBriefSettings(createSettings(runner.db));
+  if (!settings.enabled) return;
+  const resolved = await resolvedFor(runner.db, runner.clock, callId);
+  if (!resolved) return;
+  const asker = await askerLabel(runner.db, spec.staffAccountId);
+  const outside =
+    followUpNamesOtherUnit(
+      question,
+      resolved.unitNumber,
+      await otherUnitNumbers(runner.db, resolved.unitNumber),
+    ) ||
+    (await namesAnotherParty(
+      runner.db,
+      question,
+      resolved.partyId,
+      resolved.facts.requester,
+      resolved.tenancyId,
+    ));
+  if (outside) {
+    await appendCallTurn(runner.db, runner.clock, {
+      callId,
+      asker,
+      question,
+      answer: OFFICE_TURN_RECORD_REFUSAL,
+      refused: true,
+      citations: [],
+      hitIds: [],
+    });
+    return;
+  }
+  await runCallBrief(
+    {
+      db: runner.db,
+      clock: runner.clock,
+      extractor: runner.extractor,
+      embedder: runner.embedder,
+      model: settings.model,
+    },
+    {
+      callId,
+      question,
+      bounds: resolved.bounds,
+      context: resolved.context,
+      providerOnly: resolved.providerOnly,
+      refresh: false,
+      followUp: true,
+      asker,
+    },
+  );
 }

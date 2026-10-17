@@ -89,6 +89,7 @@ export type {
   CallBriefRunner,
 } from './internal/brief.ts';
 export {
+  askCallFollowUp,
   loadCallBriefPanel,
   refreshCallBrief,
   startCallBrief,

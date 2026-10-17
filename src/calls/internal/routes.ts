@@ -17,6 +17,7 @@ import { validId } from '../../kernel/validate.ts';
 import { findPartiesByName } from '../../parties/contract.ts';
 import { can, csrfFrom, NOT_ALLOWED, type Role } from '../../staff/contract.ts';
 import {
+  askCallFollowUp,
   type CallBriefRunner,
   loadCallBriefPanel,
   refreshCallBrief,
@@ -892,6 +893,19 @@ export function registerCallsRoutes(
     const callId = callIdOf(request.params);
     const runner = briefRunner(deps);
     if (runner) await refreshCallBrief(runner, callId);
+    return reply.code(303).header('location', `/calls/${callId}`).send();
+  });
+
+  app.post('/calls/:id/follow-up', STAFF, async (request, reply) => {
+    const staff = staffOf(request);
+    const callId = callIdOf(request.params);
+    const runner = briefRunner(deps);
+    if (runner) {
+      await askCallFollowUp(runner, callId, {
+        staffAccountId: staff.staffAccountId,
+        question: textOf(formOf(request.body).question),
+      });
+    }
     return reply.code(303).header('location', `/calls/${callId}`).send();
   });
 

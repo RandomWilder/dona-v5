@@ -13,6 +13,7 @@ export interface CallTurn {
   refused: boolean;
   citations: OfficeCitation[];
   hitIds: string[];
+  askedAt: Date;
 }
 
 export interface CallThread {
@@ -73,6 +74,7 @@ interface TurnRow {
   refused: boolean;
   citations: OfficeCitation[] | string;
   hit_ids: string[];
+  asked_at: Date;
 }
 
 function toTurn(row: TurnRow): CallTurn {
@@ -87,6 +89,7 @@ function toTurn(row: TurnRow): CallTurn {
     refused: row.refused,
     citations,
     hitIds: row.hit_ids,
+    askedAt: row.asked_at,
   };
 }
 
@@ -111,7 +114,8 @@ export async function loadCallThread(
     );
   }
   const turns = await db.query<TurnRow>(
-    `SELECT t.asker, t.question, t.answer, t.refused, t.citations, t.hit_ids
+    `SELECT t.asker, t.question, t.answer, t.refused, t.citations, t.hit_ids,
+            t.asked_at
        FROM call_turn t
        JOIN call_thread h ON h.call_thread_id = t.call_thread_id
       WHERE h.service_call_id = $1
@@ -129,7 +133,7 @@ export async function loadCallThread(
 export async function appendCallTurn(
   db: Queryable,
   clock: Clock,
-  spec: CallTurn & { callId: string },
+  spec: Omit<CallTurn, 'askedAt'> & { callId: string },
 ): Promise<void> {
   const thread = await db.query<{ call_thread_id: string }>(
     `SELECT call_thread_id FROM call_thread WHERE service_call_id = $1`,
