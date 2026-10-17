@@ -22,8 +22,11 @@ This module owns both, and they are not the same thing.
 
 ## The Policy library
 
-The library holds no tenant's data. A name, a phone number, a national id or an address does not
-belong in a file uploaded here.
+The library is not tenant paper. A document here is not filed under a person, a flat or a
+letting, and it is not searched as one. The upload does not scan the file for a name, a phone
+number, a national id or an address. A statute or a company policy may mention any of those and
+still be a general rule. What keeps a tenant's own file out of this library is what an admin
+chooses to upload.
 
 **Sections** are rows. The seed is State law (`state_law`, דין המדינה) and Company policy
 (`company_policy`, נוהל חברה). A further section is another row in that seed, not a migration and

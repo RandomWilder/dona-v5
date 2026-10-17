@@ -50,3 +50,7 @@ staff member can open the מדיניות tab and read what is there.
 ## Comment — 2026-10-17
 
 The מדיניות tab is wired. Sections are seeded rows (State law, Company policy) via `npm run seed` and `npm run seed:policy`. An ADMIN uploads; an OPERATOR or VIEWER can read and is refused on upload. A document and its passages cannot be updated or deleted. The library paint is gone. Versions and call search stay on #251 and #254.
+
+## Comment — 2026-10-17
+
+The library is not scanned for a tenant's name, phone, national id or address. Those words can appear in a general law or a company policy. Keeping a tenant's own file out of the library is what an admin chooses to upload, not a check on the upload.
