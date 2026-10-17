@@ -1,0 +1,14 @@
+{
+  "id": "call-brief-lease",
+  "title": "A call brief cites the lease clause that answers the request",
+  "input": {
+    "message": "מי אחראי על תיקון הדוד בדירה?",
+    "brief": "lease"
+  },
+  "expect": {
+    "refuses": false,
+    "citesClause": true,
+    "tool": "search",
+    "contains": ["בעל הדירה"]
+  }
+}

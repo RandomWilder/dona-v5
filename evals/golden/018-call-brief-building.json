@@ -1,0 +1,14 @@
+{
+  "id": "call-brief-building",
+  "title": "A call brief cites the building's own paper",
+  "input": {
+    "message": "מתי נמסר הבניין?",
+    "brief": "building"
+  },
+  "expect": {
+    "refuses": false,
+    "citesClause": true,
+    "tool": "search",
+    "contains": ["2024-03-01"]
+  }
+}

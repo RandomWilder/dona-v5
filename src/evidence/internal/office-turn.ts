@@ -298,6 +298,12 @@ function asOfficeBound(bound: RetrievalBound): OfficeRetrievalBound {
       'the office turn does not take a Tenancy bound',
     );
   }
+  if (bound.kind === 'building-paper') {
+    throw new KernelError(
+      'not_allowed',
+      'the office turn does not take Building paper',
+    );
+  }
   return { kind: bound.kind, id: bound.id };
 }
 

@@ -25,6 +25,11 @@ export interface CaseInput {
   message: string;
   /** Required on retrieval cases. Grounding and behavioural cases omit it. */
   bound?: RetrievalBound;
+  /**
+   * #252. A Call brief. `lease` and `building` are the two bags the brief
+   * searches; `refuse` is a question neither answers.
+   */
+  brief?: 'lease' | 'building' | 'refuse';
 }
 
 export interface Expectation {
@@ -175,6 +180,14 @@ export function parseCase(raw: unknown, source: string): GoldenCase {
   const message = asked.message as string;
   const bound =
     asked.bound === undefined ? undefined : parseBound(asked.bound, fail);
+  const briefValues = ['lease', 'building', 'refuse'] as const;
+  const brief =
+    asked.brief === undefined
+      ? undefined
+      : briefValues.find((value) => value === asked.brief);
+  if (asked.brief !== undefined && brief === undefined) {
+    fail('input.brief must be lease, building or refuse');
+  }
 
   if (kinds[0] === 'retrieval') {
     const retrieval = parseRetrieval(value.retrieval, fail);
@@ -222,7 +235,7 @@ export function parseCase(raw: unknown, source: string): GoldenCase {
   return {
     id,
     title,
-    input: { message, bound },
+    input: { message, bound, brief },
     expect: {
       refuses: flag('refuses'),
       citesClause: flag('citesClause'),

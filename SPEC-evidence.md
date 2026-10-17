@@ -1321,7 +1321,10 @@ flat the document is anchored to (the `UNIT` link, or the tenancy's unit when th
 place-binding), and a distance. Distance orders the results and is never asserted on. A Unit bound
 returns only Passages of Documents linked to that Unit (a `UNIT` link, or a `TENANCY` link whose
 tenancy's unit is that Unit). A Building bound is the same command with a wider filter: Documents
-linked to that Building, or to a Unit in it, or to a tenancy of a Unit in it. A portfolio bound is
+linked to that Building, or to a Unit in it, or to a tenancy of a Unit in it. **#252. Building
+paper** is a different bound (`building-paper`): Documents linked to that Building and nothing
+else — not a Unit in it and not a neighbour's lease (ADR-0010). The office turn does not take
+it. A portfolio bound is
 the whole store, named. The administrator stance returns identifiers as printed. The tenant stance
 masks identifier-shaped runs in the returned text and does not rewrite the stored passage.
 
@@ -1433,6 +1436,17 @@ hits may exist and none answer.
 An extractor failure (`unavailable`) is not a turn: nothing is appended to the thread. Estate's
 POST 303s back to the bound page. The kernel records the provider `error.code` and
 `error.message` on that failure (SPEC-kernel.md); the office turn does not.
+
+**#252. The Call thread is a mode of this turn, not a third model.** One thread per ServiceCall,
+shared by every staff account that works the call, stored in the same shape as an office
+retrieval turn and keyed by the call. Staff owns the rows. Evidence runs the turn. The first
+turn is the Call brief (SPEC-calls): Hebrew, administrator stance, citations that name the
+Document and page. The question is the call's description. Passages come from the bound calls
+resolves — a Tenancy and that Building's paper, or a Unit bound — with the same cap per search
+this command already uses. The office turn still refuses a Tenancy bound and refuses Building
+paper; only this mode searches them. When nothing in the bound answers, the turn is the frozen
+refusal and carries no citation. A provider brief is answered from the provider record alone.
+The model is the `calls.brief.model` row. An extractor failure appends nothing.
 
 **#105 backfills the archive.** Documents holding no passages — filed before #103, or filed with an
 unconfigured embedder — are walked by `sweepMissingPassages` the way `sweepUnverified` walks

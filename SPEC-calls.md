@@ -50,6 +50,23 @@ units is one match: the requester is a party. A service provider's open contact 
 call the same way (#208): the join returns no unit, and the party on no lease is still a requester
 this command already accepts.
 
+**#252. The Call brief.** When a call reaches IDENTIFIED, by this command or by the door, the
+office retrieval model writes one Call brief: what the paper says about the request. It is the
+first turn of that call's Call thread (SPEC-evidence). It runs after the emergency path has
+finished, and it does not delay it — the page already shows an emergency as escalating before
+the model is called. The page shows the brief as being written until the turn lands. A refresh
+while that first turn has not landed writes it. A refresh after it has landed appends another
+turn and leaves the earlier ones. The brief proposes no command and moves no
+state.
+
+The bound is the requester's, and the stance is administrator. A live Tenancy is searched
+together with that Building's own paper (documents linked to the Building, not a neighbour's
+lease). With no live Tenancy, the bound is the Unit of the requester's latest letting — the
+office Unit bound. A service provider is answered from their own provider record and from no
+lease. A requester who is only a guarantor gets no brief; the page says so. A WHATSAPP call
+gets no brief. The on/off switch (`calls.brief`) and the model id (`calls.brief.model`) are
+settings rows. When the switch is off, no turn is written and the model is not called.
+
 **Save this contact** is a command on a call a person identified, when the sender is an email
 address or a WhatsApp number. It adds that address to the requester as a PartyContact, through
 parties' contract, valid from today, and it is audited. The next message from that address is

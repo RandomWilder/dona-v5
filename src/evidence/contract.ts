@@ -26,6 +26,12 @@ export {
   isFlagged,
   READ_QUALITY_THRESHOLD,
 } from './internal/approve.ts';
+export type { CallBriefDeps, CallBriefSpec } from './internal/call-brief.ts';
+export {
+  answerCallBrief,
+  CALL_BRIEF_INSTRUCTIONS,
+  runCallBrief,
+} from './internal/call-brief.ts';
 export type {
   DeclarationResult,
   DocumentTypeFieldRow,

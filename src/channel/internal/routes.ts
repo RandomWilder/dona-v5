@@ -38,6 +38,8 @@ export interface ChannelDeps {
   objects?: ObjectStore;
   /** Media download. Absent, the webhook calls Meta. */
   whatsappFetch?: WhatsappFetch;
+  /** After a new call is stored. The call brief. #252. */
+  onCallIdentified?: (callId: string) => Promise<void>;
 }
 
 const STAFF = { config: { staff: 'estate.read' } } as const;
@@ -133,6 +135,7 @@ export function registerChannelRoutes(
     objects: deps.objects,
     sorter: deps.sorter,
     fetch: deps.whatsappFetch,
+    onCallIdentified: deps.onCallIdentified,
   });
   if (!deps.devIntake) return;
 
@@ -163,6 +166,7 @@ export function registerChannelRoutes(
         {
           sorter: deps.sorter ?? sorterFor(form),
           matchesEmergency: emergencyMatch(deps.pool),
+          onCallIdentified: deps.onCallIdentified,
         },
         message,
       );

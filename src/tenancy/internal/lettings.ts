@@ -215,7 +215,9 @@ export interface PartyTenancyRole {
   status: string;
   start_date: string;
   end_date: string;
+  unit_id: string;
   unit_number: string;
+  building_id: string;
 }
 
 /**
@@ -237,10 +239,13 @@ export async function listRolesForParties(
             t.status,
             t.start_date::text AS start_date,
             t.end_date::text AS end_date,
-            u.unit_number
+            u.unit_id,
+            u.unit_number,
+            s.building_id
        FROM tenancy_party tp
        JOIN tenancy t ON t.tenancy_id = tp.tenancy_id
        JOIN unit u ON u.unit_id = t.unit_id
+       JOIN space s ON s.space_id = u.unit_id
       WHERE tp.party_id = ANY($1::uuid[])
       ORDER BY t.start_date, t.tenancy_id, tp.role`,
     [[...partyIds]],

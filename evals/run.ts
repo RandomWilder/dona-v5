@@ -18,7 +18,11 @@ import {
 } from './extraction.ts';
 import { formatReport, loadCases, runCases } from './runner.ts';
 import { runSorterGoldenSet } from './sorter.ts';
-import { officeTurnSubject, placeholderSubject } from './subject.ts';
+import {
+  callBriefSubject,
+  officeTurnSubject,
+  placeholderSubject,
+} from './subject.ts';
 
 // CI entry point (`npm run evals`). Non-zero exit blocks the merge, exactly
 // like a failing test -- docs/pipeline.md §5.
@@ -152,16 +156,21 @@ if (pool) {
   );
 }
 
+const answering =
+  corpus && extraction
+    ? {
+        corpus,
+        extractor: createConfiguredExtractor(),
+        model: extraction.model,
+        reasoningEffort: extraction.reasoningEffort,
+      }
+    : null;
 const report = await runCases(cases, {
-  answer:
-    corpus && extraction
-      ? officeTurnSubject({
-          corpus,
-          extractor: createConfiguredExtractor(),
-          model: extraction.model,
-          reasoningEffort: extraction.reasoningEffort,
-        })
-      : placeholderSubject,
+  answer: async (input) => {
+    if (!answering) return placeholderSubject(input);
+    if (input.brief) return callBriefSubject(answering)(input);
+    return officeTurnSubject(answering)(input);
+  },
   retrieve: corpus?.retrieve,
   ground: corpus?.ground,
 });
