@@ -30,7 +30,8 @@ belong in a file uploaded here.
 not a code path. `npm run seed` and `npm run seed:policy` both apply it, and a second run creates
 nothing.
 
-**A Policy document** has a section, a title and an effective-from date. Its bytes are stored in
+**A Policy document** has a section, a title and an effective-from date. The title is at most 80
+characters, which is what one field of the shared upload parser can carry. Its bytes are stored in
 the object store. Its text is read and chunked by evidence's reader (`readForVerdict`) and
 evidence's page chunker (`pageText`), then embedded, so the file becomes searchable passages.
 Passages are rows of this module, not rows of `document_passage`: that table is tenant paper, and

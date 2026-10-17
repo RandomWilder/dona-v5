@@ -4,6 +4,7 @@ import type { ChromeDest, signedInChrome } from '../../chrome.ts';
 import { createAuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import { createSettings, readOcrSettings } from '../../kernel/config.ts';
+import { inTransaction } from '../../kernel/db.ts';
 import type { Embedder } from '../../kernel/embeddings.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
@@ -76,16 +77,14 @@ export function registerPolicyRoutes(
     }
     const settings = createSettings(deps.pool);
     const ocr = await readOcrSettings(settings);
-    const client = await deps.pool.connect();
-    try {
-      await client.query('BEGIN');
+    await inTransaction(deps.pool, async (db) => {
       await uploadPolicyDocument(
         {
-          db: client,
+          db,
           objects: deps.objects,
           pdf: deps.pdf,
           embedder: deps.embedder,
-          audit: createAuditLog(client, deps.clock),
+          audit: createAuditLog(db, deps.clock),
           clock: deps.clock,
           bucket: deps.bucket,
           ocr: deps.ocr,
@@ -99,13 +98,7 @@ export function registerPolicyRoutes(
           uploadedBy: staff.staffAccountId,
         },
       );
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK').catch(() => {});
-      throw error;
-    } finally {
-      client.release();
-    }
+    });
     return reply.code(303).header('location', '/policy').send();
   });
 }

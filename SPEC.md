@@ -124,7 +124,7 @@ here:
 - **UI is self-contained HTML plus `/ui/tokens.css`, and nothing else.** No bundler, no framework.
   Hebrew is RTL through logical properties (`margin-inline-start`, never `margin-left`), so one
   stylesheet serves both directions. **From slice 5.2c, every signed-in screen carries the same
-  ops sidebar** — נכסים, documents, lease filing, expiring, tenancies, incomplete, search, אנשי קשר, staff, calls, settings, and sign-out — built once at the
+  ops sidebar** — נכסים, documents, lease filing, expiring, tenancies, incomplete, search, אנשי קשר, staff, calls, מדיניות, settings, and sign-out — built once at the
   composition root and injected, because the kernel may not learn a route and a module may not own
   another module's. The current destination is marked on the rail. בניינים is not an item: a screen
   that still names that destination marks nothing. Documents and lease filing are on the rail only
