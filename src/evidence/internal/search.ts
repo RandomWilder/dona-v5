@@ -22,7 +22,12 @@ export type RetrievalBound =
   | { kind: 'building'; id: string }
   /** Documents linked to the Building itself. Not a neighbour's lease. #252. */
   | { kind: 'building-paper'; id: string }
-  | { kind: 'portfolio' };
+  | { kind: 'portfolio' }
+  /**
+   * The Policy library. No tenant. Searched as of a date, not by this command.
+   * #254.
+   */
+  | { kind: 'policy' };
 
 export const SEARCH_PASSAGE_LIMIT = 8;
 
@@ -61,6 +66,12 @@ export async function searchPassages(
 ): Promise<PassageHit[]> {
   if (bound == null || typeof bound !== 'object' || !('kind' in bound)) {
     throw new KernelError('invalid', 'a retrieval bound is required');
+  }
+  if (bound.kind === 'policy') {
+    throw new KernelError(
+      'not_allowed',
+      'the Policy library is searched as of a date',
+    );
   }
   if (
     bound.kind !== 'tenancy' &&

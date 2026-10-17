@@ -1,0 +1,14 @@
+{
+  "id": "call-brief-law-and-lease",
+  "title": "A call brief cites a law and a lease clause together",
+  "input": {
+    "message": "לפי החוזה מי אחראי על תיקון הדוד, ולפי הדין בתוך כמה ימים?",
+    "brief": "law-and-lease"
+  },
+  "expect": {
+    "refuses": false,
+    "citesClause": true,
+    "tool": "search",
+    "contains": ["בעל הדירה", "שבעה ימים"]
+  }
+}

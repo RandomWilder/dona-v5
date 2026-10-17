@@ -1772,8 +1772,20 @@ const BRIEF_DOC: Record<string, string> = {
   building_handover_protocol: 'בניין',
 };
 
+function shownDate(iso: string): string {
+  const [year, month, day] = iso.split('-');
+  if (!year || !month || !day) return iso;
+  return `${day}.${month}.${year}`;
+}
+
 function briefCite(cite: OfficeCitation): Html {
   if (cite.kind === 'record') return h``;
+  if (cite.kind === 'policy') {
+    const until = cite.effectiveTo
+      ? h` · הוחלף ב־${shownDate(cite.effectiveTo)}`
+      : h``;
+    return h`<li data-policy-section="${cite.sectionKey}" data-policy-from="${cite.effectiveFrom}" data-policy-to="${cite.effectiveTo ?? ''}"><span class="chip">${cite.sectionLabel}</span> ${cite.title} · בתוקף מ־${shownDate(cite.effectiveFrom)}${until} · עמוד ${ltr(cite.page)}</li>`;
+  }
   const label = BRIEF_DOC[cite.documentType] ?? cite.documentType;
   return h`<li><span class="chip">${label}</span> <a href="/documents/${cite.documentId}/read?page=${cite.page}">עמוד ${ltr(cite.page)}</a></li>`;
 }

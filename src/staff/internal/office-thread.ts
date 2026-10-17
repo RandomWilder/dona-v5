@@ -25,7 +25,22 @@ export interface OfficeRecordCitation {
   unitId?: string;
 }
 
-export type OfficeCitation = OfficeDocumentCitation | OfficeRecordCitation;
+/** #254. A Policy passage. The section and the version's dates, not a lease page. */
+export interface OfficePolicyCitation {
+  kind: 'policy';
+  policyDocumentId: string;
+  page: number;
+  sectionKey: string;
+  sectionLabel: string;
+  title: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+}
+
+export type OfficeCitation =
+  | OfficeDocumentCitation
+  | OfficeRecordCitation
+  | OfficePolicyCitation;
 
 export interface OfficeRetrievalTurn {
   question: string;

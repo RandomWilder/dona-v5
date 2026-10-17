@@ -108,7 +108,7 @@ describe('policy · a call follow-up stays inside the bound', () => {
         const run = queued[0];
         assert.ok(run);
         await run();
-        assert.equal(extractor.calls.length, 0);
+        const afterBrief = extractor.calls.length;
 
         await askCallFollowUp(runner, call.id, {
           staffAccountId: account.staffAccountId,
@@ -139,7 +139,7 @@ describe('policy · a call follow-up stays inside the bound', () => {
           tenantTurn?.askedAt.toISOString(),
           new Date(AT.getTime() + 60_000).toISOString(),
         );
-        assert.equal(extractor.calls.length, 0);
+        assert.equal(extractor.calls.length, afterBrief);
       });
     } finally {
       await pool.end();

@@ -2370,6 +2370,16 @@ function citationList(
   if (citations.length === 0) return h``;
   return h`<ul class="unit-citations">
     ${citations.map((cite) => {
+      if (cite.kind === 'policy') {
+        const shown = (iso: string): string => {
+          const [year, month, day] = iso.split('-');
+          return year && month && day ? `${day}.${month}.${year}` : iso;
+        };
+        const until = cite.effectiveTo
+          ? h` · הוחלף ב־${shown(cite.effectiveTo)}`
+          : h``;
+        return h`<li>${cite.sectionLabel} · בתוקף מ־${shown(cite.effectiveFrom)}${until}</li>`;
+      }
       if (cite.kind === 'record') {
         // #227. The record cited is the page it links to. #230: a Building record cited for one
         // Unit line links to that Unit, under the Building record's label.

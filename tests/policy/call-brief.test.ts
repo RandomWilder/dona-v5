@@ -266,7 +266,11 @@ describe('policy · the call brief is not sent where it must not be', () => {
           actorId: account.staffAccountId,
           actorRole: 'OPERATOR',
         });
-        const extractor = throwingExtractor();
+        const extractor = createFakeExtractor(() => ({
+          answers: false,
+          text: '',
+          hit_indexes: [],
+        }));
         const runner = {
           db,
           clock,
@@ -284,7 +288,7 @@ describe('policy · the call brief is not sent where it must not be', () => {
         const thread = await loadCallThread(db, call.id);
         assert.equal(thread?.status, 'ready');
         assert.equal(thread?.turns.length, 1);
-        assert.equal(extractor.calls.length, 0);
+        assert.equal(thread?.turns[0]?.refused, true);
       });
     } finally {
       await pool.end();

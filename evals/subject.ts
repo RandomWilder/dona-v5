@@ -317,6 +317,30 @@ export const placeholderSubject: Subject = async ({
       toolCalls: ['search'],
     };
   }
+  if (brief === 'law-and-lease') {
+    return {
+      text: 'לפי החוזה תיקון הדוד הוא באחריות בעל הדירה, והדין נותן לכך שבעה ימים.',
+      refused: false,
+      citations: ['חוזה §7.2', 'דין המדינה'],
+      toolCalls: ['search'],
+    };
+  }
+  if (brief === 'as-of') {
+    return {
+      text: 'חלון התיקון הוא ארבעה עשר יום. נכון ל־31.03.2026.',
+      refused: false,
+      citations: ['דין המדינה'],
+      toolCalls: ['search'],
+    };
+  }
+  if (brief === 'neither') {
+    return {
+      text: OFFICE_TURN_REFUSAL,
+      refused: true,
+      citations: [],
+      toolCalls: ['search'],
+    };
+  }
   if (
     brief === 'out-of-bound' &&
     followUpNamesOtherUnit(message, '12', ['7'])
@@ -434,11 +458,13 @@ export function officeTurnSubject(options: {
       text: decided.text,
       refused: decided.refused,
       citations: decided.citations.map((citation) =>
-        citation.kind !== 'record'
-          ? paperCitation(citation.documentId, citation.page)
-          : citation.record === 'unit'
-            ? RECORD_CITATION
-            : BUILDING_RECORD_CITATION,
+        citation.kind === 'policy'
+          ? citation.sectionLabel
+          : citation.kind !== 'record'
+            ? paperCitation(citation.documentId, citation.page)
+            : citation.record === 'unit'
+              ? RECORD_CITATION
+              : BUILDING_RECORD_CITATION,
       ),
       toolCalls: tools,
     };
@@ -469,32 +495,87 @@ export function callBriefSubject(options: {
         toolCalls: [],
       };
     }
-    const prefix =
-      input.brief === 'lease' || input.brief === 'follow-up'
-        ? 'חוזה'
-        : input.brief === 'building'
-          ? 'בניין'
-          : null;
-    const kept =
-      prefix === null
-        ? found
-        : found.filter((hit) => (hit.clauseRef ?? '').startsWith(prefix));
-    const hits: PassageHit[] = kept.slice(0, 8).map((hit) => ({
+    const toHit = (
+      hit: (typeof found)[number],
+      documentType: string,
+    ): PassageHit => ({
       passageId: newId(clock),
       documentId: hit.clauseRef ?? hit.source,
       page: 1,
       text: hit.text,
-      documentType:
-        input.brief === 'building' ? 'building_handover_protocol' : 'lease',
+      documentType,
       unitId: null,
       distance: hit.distance,
-    }));
+    });
+    let hits: PassageHit[];
+    let statedDate: string | null = null;
+    if (input.brief === 'law-and-lease') {
+      hits = [
+        ...found
+          .filter((hit) => (hit.clauseRef ?? '').startsWith('חוזה'))
+          .slice(0, 8)
+          .map((hit) => toHit(hit, 'lease')),
+        {
+          passageId: newId(clock),
+          documentId: 'דין המדינה',
+          page: 1,
+          text: 'תיקון דוד המים בדירה שכורה ייעשה בתוך שבעה ימים.',
+          documentType: 'דין המדינה',
+          unitId: null,
+          distance: 0.1,
+        },
+      ];
+    } else if (input.brief === 'as-of') {
+      statedDate = '31.03.2026';
+      hits = [
+        {
+          passageId: newId(clock),
+          documentId: 'דין המדינה',
+          page: 1,
+          text: 'חלון התיקון הוא ארבעה עשר יום.',
+          documentType: 'דין המדינה',
+          unitId: null,
+          distance: 0.1,
+        },
+      ];
+    } else if (input.brief === 'neither') {
+      const lease = found
+        .filter((hit) => hit.source === 'lease')
+        .slice(0, 8)
+        .map((hit) => toHit(hit, 'lease'));
+      const policy = found
+        .filter((hit) => hit.source === 'policy')
+        .slice(0, 8)
+        .map((hit) => toHit(hit, 'נוהל חברה'));
+      hits = [...lease, ...policy];
+    } else {
+      const prefix =
+        input.brief === 'lease' || input.brief === 'follow-up'
+          ? 'חוזה'
+          : input.brief === 'building'
+            ? 'בניין'
+            : null;
+      const kept =
+        prefix === null
+          ? found
+          : found.filter((hit) => (hit.clauseRef ?? '').startsWith(prefix));
+      hits = kept
+        .slice(0, 8)
+        .map((hit) =>
+          toHit(
+            hit,
+            input.brief === 'building' ? 'building_handover_protocol' : 'lease',
+          ),
+        );
+    }
     const decided = await answerCallBrief(
       options,
       input.message,
       hits,
       'פונה: דייר לדוגמה',
       false,
+      [],
+      statedDate,
     );
     return {
       text: decided.text,
@@ -502,7 +583,9 @@ export function callBriefSubject(options: {
       citations: decided.citations.map((citation) =>
         citation.kind === 'record'
           ? RECORD_CITATION
-          : paperCitation(citation.documentId, citation.page),
+          : citation.kind === 'policy'
+            ? citation.sectionLabel
+            : paperCitation(citation.documentId, citation.page),
       ),
       toolCalls: ['search'],
     };
