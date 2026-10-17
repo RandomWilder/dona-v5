@@ -9,6 +9,6 @@
     "refuses": false,
     "citesClause": true,
     "tool": "search",
-    "contains": ["מועד המסירה"]
+    "contains": ["2024-03-01"]
   }
 }

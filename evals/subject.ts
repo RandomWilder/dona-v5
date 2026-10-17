@@ -294,7 +294,7 @@ export const placeholderSubject: Subject = async ({
   }
   if (brief === 'building') {
     return {
-      text: 'מועד המסירה של הבניין נרשם בפרוטוקול.',
+      text: 'הבניין נמסר ב-2024-03-01.',
       refused: false,
       citations: ['בניין §0'],
       toolCalls: ['search'],
