@@ -167,6 +167,7 @@ describe('policy · the copy sent to the embedder', () => {
     const expected = [
       `evidence${path.sep}internal${path.sep}passages.ts`,
       `evidence${path.sep}internal${path.sep}search.ts`,
+      `policy${path.sep}internal${path.sep}library.ts`,
     ];
     assert.deepEqual(
       callers.sort(),
@@ -191,5 +192,12 @@ describe('policy · the copy sent to the embedder', () => {
     assert.doesNotMatch(reader, /stance\s*=\s*['"]/);
     assert.match(reader, /bound: RetrievalBound/);
     assert.doesNotMatch(reader, /bound\?:/);
+    const policy = await readFile(
+      path.join(srcRoot, expected[2] ?? ''),
+      'utf8',
+    );
+    assert.equal(policy.includes('identifier.ts'), false);
+    assert.match(policy, /pageText\(page\)/);
+    assert.match(policy, /embedder\.embed\(bodies\)/);
   });
 });

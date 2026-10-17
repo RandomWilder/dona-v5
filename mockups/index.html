@@ -1,0 +1,33 @@
+<style>
+  .mock-index { display: grid; gap: var(--space-4); }
+  .mock-index .card-title {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    margin: 0 0 var(--space-2);
+    font-size: var(--text-lg);
+    font-weight: 500;
+  }
+  .mock-index a.card-link {
+    color: inherit;
+    text-decoration: none;
+    display: block;
+  }
+  .mock-index a.card-link:hover .card-title { text-decoration: underline; }
+</style>
+<div class="mock-index glass-stage" data-paint="index">
+  <header class="page-head">
+    <div>
+      <h1>הדמיות</h1>
+      <p class="lede">מסכים שעוד לא חוברו. טקסט דוגמה בלבד, בלי דייר אמיתי.</p>
+    </div>
+  </header>
+  <div class="index-list">
+    <article class="row-card">
+      <a class="card-link" href="/dev/mockups/call-copilot">
+        <p class="card-title">עוזר הקריאה</p>
+        <p class="lede">תקציר, שרשור, טיוטה, שליחה והעתקה. כל מצב בלחיצה.</p>
+      </a>
+    </article>
+  </div>
+</div>

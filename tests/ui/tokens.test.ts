@@ -2842,6 +2842,7 @@ describe('shared UI tokens', () => {
       'search',
       'staff',
       'calls',
+      'policy',
       'settings',
       'parties',
     ] as const) {

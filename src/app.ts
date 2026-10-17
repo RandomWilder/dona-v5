@@ -91,6 +91,7 @@ import { registerFormBodies } from './kernel/ui/forms.ts';
 import type { WorkRunner } from './kernel/work.ts';
 import { listPartyNames } from './parties/contract.ts';
 import { registerPartyDirectoryRoutes } from './party-directory.ts';
+import { registerPolicyRoutes } from './policy/contract.ts';
 import {
   parseCategoryForm,
   parseDocumentTypeForm,
@@ -774,6 +775,16 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     bucket,
     chrome: signedInChrome,
     contacts: contactRules,
+  });
+  registerPolicyRoutes(app, {
+    pool: deps.pool,
+    clock,
+    objects,
+    pdf,
+    embedder: deps.embedder ?? createUnconfiguredEmbedder(),
+    ocr: deps.ocr,
+    bucket,
+    chrome: signedInChrome,
   });
 
   return app;

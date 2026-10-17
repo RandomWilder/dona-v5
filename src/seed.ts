@@ -11,6 +11,7 @@
 import { importEstate } from './estate/contract.ts';
 import { shohamPlan } from './estate/fixtures/shoham.ts';
 import { createPool } from './kernel/db.ts';
+import { applyPolicySections, policySections } from './policy/contract.ts';
 
 const pool = createPool();
 
@@ -21,6 +22,7 @@ try {
     // about, and the plan is one screen's worth of rows.
     await client.query('BEGIN');
     const report = await importEstate(client, shohamPlan());
+    const sections = await applyPolicySections(client, policySections);
     await client.query('COMMIT');
     // created + updated, counted from the upserts themselves rather than from the tables: on a
     // second run every line reads `created 0`, which is the whole claim this file makes.
@@ -29,6 +31,9 @@ try {
         `seed: ${table} — created ${count.created}, updated ${count.updated}`,
       );
     }
+    console.log(
+      `seed: policy_section — created ${sections.created}, updated ${sections.updated}`,
+    );
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     throw error;

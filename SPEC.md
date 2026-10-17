@@ -85,7 +85,7 @@ Follows the workbook's entities, not v3's ([docs/from-v3.md](docs/from-v3.md) Ti
 | `evidence` | E12, E13, E15, E16 — Document · DocumentLink · DocumentType · DocumentTypeField · ExtractedField (the column map is code, ADR-0016) | estate, parties, tenancy, staff |
 | `scope` | — the isolation join and nothing else | parties, tenancy, estate |
 | `register` | — the register file and nothing else | estate, parties, tenancy, scope |
-| `policy` | responsibility matrix · SLA · escalation | estate, tenancy |
+| `policy` | Policy library (sections, documents, passages) · responsibility matrix when built | evidence, staff |
 | `calls` | ServiceCall · Visit · Category · Filtered message · the state machine | scope, policy, parties |
 | `channel` | Conversation · Message · the intake door · the Outlook, Gmail and WhatsApp adapters | scope, calls, evidence, estate |
 
@@ -124,7 +124,7 @@ here:
 - **UI is self-contained HTML plus `/ui/tokens.css`, and nothing else.** No bundler, no framework.
   Hebrew is RTL through logical properties (`margin-inline-start`, never `margin-left`), so one
   stylesheet serves both directions. **From slice 5.2c, every signed-in screen carries the same
-  ops sidebar** — נכסים, documents, lease filing, expiring, tenancies, incomplete, search, אנשי קשר, staff, calls, settings, and sign-out — built once at the
+  ops sidebar** — נכסים, documents, lease filing, expiring, tenancies, incomplete, search, אנשי קשר, staff, calls, מדיניות, settings, and sign-out — built once at the
   composition root and injected, because the kernel may not learn a route and a module may not own
   another module's. The current destination is marked on the rail. בניינים is not an item: a screen
   that still names that destination marks nothing. Documents and lease filing are on the rail only

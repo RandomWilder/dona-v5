@@ -233,6 +233,7 @@ export type { Queryable } from './internal/types.ts';
 export type { Verification, VerificationVerdict } from './internal/verify.ts';
 export {
   documentText,
+  pageText,
   verifyDeclaredType,
 } from './internal/verify.ts';
 export type {
