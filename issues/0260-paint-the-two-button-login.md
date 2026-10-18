@@ -1,13 +1,13 @@
 ---
 number: 260
 title: Paint the two-button login
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
 parent: 258
 created: 2026-10-18
-closed:
+closed: 2026-10-18
 ---
 
 ## Parent
@@ -27,11 +27,15 @@ paint.
 - [x] Both buttons are visually equal; neither reads as the default or the fallback.
 - [x] The note replaces the current Google-only line and names both providers.
 - [x] The paint shows the state with Microsoft unconfigured (Google only) as well.
-- [ ] The director has clicked it and their comments are recorded on this issue.
+- [x] The director has clicked it and their comments are recorded on this issue.
 
 ## Comment — 2026-10-18
 
 Paint is up at `http://127.0.0.1:3000/dev/mockups/login`, listed from the mockups index. Two states, switched by click: both providers, and Google alone when Microsoft is unconfigured. Both buttons are the same filled control, full width, Google above Microsoft. The both-providers note is "הכניסה היא דרך חשבון Google או חשבון Microsoft. אין כאן סיסמה ואין קוד." The Google-only state keeps today's line and one Google button. The buttons do not start a sign-in. Waiting on the director's comments before this closes.
+
+## Comment — 2026-10-18
+
+Director reviewed `http://127.0.0.1:3000/dev/mockups/login` on the signed-in dev host and approved the paint. No changes. The file stays until #263 wires the screen and deletes it.
 
 ## Blocked by
 
