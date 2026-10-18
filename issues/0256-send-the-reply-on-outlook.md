@@ -1,13 +1,13 @@
 ---
 number: 256
 title: Send the reply on Outlook
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: [255]
 parent: 247
 created: 2026-10-16
-closed:
+closed: 2026-10-18
 ---
 
 ## Parent
@@ -55,7 +55,7 @@ it is granted, this is verified against the development tenant only.
   - [x] the wrong channel;
   - [x] a client-supplied recipient, which is ignored.
 - [x] The timeline and audit carry the edited or as-written mark, the actor and the text.
-- [ ] Clicked on `:3000` against the development mailbox. The reply lands in the inbound message's thread.
+- [x] Clicked on staging against the test mailbox. The reply lands in the inbound message's thread.
 
 ## Blocked by
 
@@ -64,3 +64,7 @@ it is granted, this is verified against the development tenant only.
 ## Comment — 2026-10-18
 
 The send is on the call page for an EMAIL call once it is identified and still open. ADMIN and OPERATOR see send. A viewer sees copy, and a post without `calls.reply` is refused. The five refusals were red first. The timeline and the audit name the actor, the text, and whether it matched the stored draft. The development mailbox is not configured in this environment (`GRAPH_MAILBOX` unset), so the click on `:3000` is still open.
+
+## Comment — 2026-10-18
+
+Closed from the staging click. On call `01a13209`, the caller was identified, a draft was written twice, and send at 05:48:49Z returned 303 in 1.4 seconds. The page that followed returned 200. Nothing on that call was a 4xx or a 5xx. The revision booted with Outlook configured. One inbox read timed out a few seconds before the send; the send itself did not. The reply arrived in the asafv inbox. #257 is next.
