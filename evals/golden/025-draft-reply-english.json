@@ -1,0 +1,14 @@
+{
+  "id": "draft-reply-english",
+  "title": "A draft to a tenant who wrote in English is in English, with a Hebrew rendering",
+  "input": {
+    "message": "The water heater is not heating. Who fixes it?",
+    "brief": "draft-english"
+  },
+  "expect": {
+    "refuses": false,
+    "citesClause": true,
+    "tool": "search",
+    "contains": ["owner", "בעל הדירה"]
+  }
+}

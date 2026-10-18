@@ -32,6 +32,8 @@ export interface CaseInput {
    * another unit and is the record refusal.
    * #254. `law-and-lease` cites both. `as-of` cites the older version. `neither`
    * is the refusal when the lease and the library are both present.
+   * #255. `draft-english` is a reply in English with a Hebrew rendering.
+   * `draft-responsibility` quotes the paper and does not promise a visit.
    */
   brief?:
     | 'lease'
@@ -41,7 +43,9 @@ export interface CaseInput {
     | 'out-of-bound'
     | 'law-and-lease'
     | 'as-of'
-    | 'neither';
+    | 'neither'
+    | 'draft-english'
+    | 'draft-responsibility';
 }
 
 export interface Expectation {
@@ -53,6 +57,8 @@ export interface Expectation {
   tool: string | null;
   /** Substrings the answer must contain. */
   contains: string[];
+  /** Substrings the answer must not contain. A promise the draft must not make. */
+  absent?: string[];
   /**
    * #229. Citation kinds the answer must carry, each at least once: `record` is the Unit record's
    * `כרטיס הדירה` or (#230) the Building
@@ -201,6 +207,8 @@ export function parseCase(raw: unknown, source: string): GoldenCase {
     'law-and-lease',
     'as-of',
     'neither',
+    'draft-english',
+    'draft-responsibility',
   ] as const;
   const brief =
     asked.brief === undefined
@@ -208,7 +216,7 @@ export function parseCase(raw: unknown, source: string): GoldenCase {
       : briefValues.find((value) => value === asked.brief);
   if (asked.brief !== undefined && brief === undefined) {
     fail(
-      'input.brief must be lease, building, refuse, follow-up, out-of-bound, law-and-lease, as-of or neither',
+      'input.brief must be lease, building, refuse, follow-up, out-of-bound, law-and-lease, as-of, neither, draft-english or draft-responsibility',
     );
   }
 
@@ -246,6 +254,14 @@ export function parseCase(raw: unknown, source: string): GoldenCase {
   ) {
     fail('expect.contains must be an array of strings');
   }
+  const absent = expect?.absent;
+  if (
+    absent !== undefined &&
+    (!Array.isArray(absent) ||
+      absent.some((item) => typeof item !== 'string' || item.length === 0))
+  ) {
+    fail('expect.absent must be an array of non-empty strings when present');
+  }
   const citesKinds: unknown = expect?.citesKinds;
   if (
     citesKinds !== undefined &&
@@ -264,6 +280,7 @@ export function parseCase(raw: unknown, source: string): GoldenCase {
       citesClause: flag('citesClause'),
       tool: (expect?.tool ?? null) as string | null,
       contains: expect?.contains as string[],
+      absent: absent as string[] | undefined,
       citesKinds: citesKinds as CitationKind[] | undefined,
     },
   };

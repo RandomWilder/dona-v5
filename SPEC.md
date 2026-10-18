@@ -131,7 +131,8 @@ here:
   for a role that may file. אנשי קשר is on the rail only for a role that may read parties. The login screen has none of
   those links and no sidebar. **From 5.2d the shell is a phone first:** below 840px the rail is a
   drawer behind a menu control in that same shell, so a new screen inherits the drawer by calling
-  `renderPage` with `nav` and never draws its own. Still no client JavaScript: the open state is a
+  `renderPage` with `nav` and never draws its own. Still no client JavaScript, except the call
+  page's copy control, and only when that call has a draft (SPEC-calls). The drawer's open state is a
   checkbox the menu label and the scrim both drive. The viewport is `viewport-fit=cover`. Login
   stays a centred guest card.
 - **Icons are inline SVG drawn from one kernel table, `src/kernel/ui/icons.ts` (#241).** A screen
@@ -426,8 +427,9 @@ composition root in the same slice, because an index of screens stopped being on
 week a second module had one. **Slice 5.8 put the settings screen beside that index**, because the
 two catalogues it edits belong to two modules and a third module may not own either. **Slice 5.2b put one chrome on every signed-in screen**, and **5.2c
 gave that chrome v3's ops sidebar** rather than a top bar. **5.2d put that rail behind a menu control below 840px**, in the kernel
-shell so every later screen inherits it, still with no `<script>`. **Slice 5.3 added the remaining destinations** — קריאות and הגדרות — as stubs that name the week and slice that own them. The login screen stays without that rail. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
-physical side or a `<script>`, and from 2.6 also on a phone number or an E.164 prefix: what a screen
+shell so every later screen inherits it, still with no `<script>` except the call page's copy
+control, and only on a call that has a draft (SPEC-calls). **Slice 5.3 added the remaining destinations** — קריאות and הגדרות — as stubs that name the week and slice that own them. The login screen stays without that rail. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
+physical side or a `<script>` other than that copy control, and from 2.6 also on a phone number or an E.164 prefix: what a screen
 may say about a household is **a state and a count, never a tenant's name**, so the
 occupancy chip is derived on every load and search never reaches `party`.
 

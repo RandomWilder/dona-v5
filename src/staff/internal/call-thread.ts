@@ -14,6 +14,10 @@ export interface CallTurn {
   citations: OfficeCitation[];
   hitIds: string[];
   askedAt: Date;
+  /** A draft reply. Every other turn is the brief or a follow-up. */
+  kind: 'turn' | 'draft';
+  /** Hebrew beside a draft that is not already in Hebrew. */
+  rendering: string | null;
 }
 
 export interface CallThread {
@@ -75,6 +79,8 @@ interface TurnRow {
   citations: OfficeCitation[] | string;
   hit_ids: string[];
   asked_at: Date;
+  kind: string | null;
+  rendering: string | null;
 }
 
 function toTurn(row: TurnRow): CallTurn {
@@ -90,6 +96,8 @@ function toTurn(row: TurnRow): CallTurn {
     citations,
     hitIds: row.hit_ids,
     askedAt: row.asked_at,
+    kind: row.kind === 'draft' ? 'draft' : 'turn',
+    rendering: row.rendering,
   };
 }
 
@@ -115,7 +123,7 @@ export async function loadCallThread(
   }
   const turns = await db.query<TurnRow>(
     `SELECT t.asker, t.question, t.answer, t.refused, t.citations, t.hit_ids,
-            t.asked_at
+            t.asked_at, t.kind, t.rendering
        FROM call_turn t
        JOIN call_thread h ON h.call_thread_id = t.call_thread_id
       WHERE h.service_call_id = $1
@@ -133,7 +141,27 @@ export async function loadCallThread(
 export async function appendCallTurn(
   db: Queryable,
   clock: Clock,
-  spec: Omit<CallTurn, 'askedAt'> & { callId: string },
+  spec: Omit<CallTurn, 'askedAt' | 'kind' | 'rendering'> & { callId: string },
+): Promise<void> {
+  await insertTurn(db, clock, { ...spec, kind: null, rendering: null });
+}
+
+/** A draft reply on the same thread. The Hebrew rendering is null when the draft is Hebrew. */
+export async function appendCallDraft(
+  db: Queryable,
+  clock: Clock,
+  spec: Omit<CallTurn, 'askedAt' | 'kind'> & { callId: string },
+): Promise<void> {
+  await insertTurn(db, clock, { ...spec, kind: 'draft' });
+}
+
+async function insertTurn(
+  db: Queryable,
+  clock: Clock,
+  spec: Omit<CallTurn, 'askedAt' | 'kind'> & {
+    callId: string;
+    kind: 'draft' | null;
+  },
 ): Promise<void> {
   const thread = await db.query<{ call_thread_id: string }>(
     `SELECT call_thread_id FROM call_thread WHERE service_call_id = $1`,
@@ -151,8 +179,8 @@ export async function appendCallTurn(
   await db.query(
     `INSERT INTO call_turn (
        call_turn_id, call_thread_id, asked_at, ordinal, asker,
-       question, answer, refused, citations, hit_ids
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::uuid[])`,
+       question, answer, refused, citations, hit_ids, kind, rendering
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::uuid[], $11, $12)`,
     [
       newId(clock),
       threadId,
@@ -164,6 +192,8 @@ export async function appendCallTurn(
       spec.refused,
       JSON.stringify(spec.citations),
       spec.hitIds,
+      spec.kind,
+      spec.rendering,
     ],
   );
   await db.query(

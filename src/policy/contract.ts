@@ -22,6 +22,7 @@ export { registerPolicyRoutes } from './internal/routes.ts';
 export type { PolicyPassageHit } from './internal/search.ts';
 export {
   POLICY_SECTION_CAP,
+  policyPassagesByIds,
   searchPolicyPassages,
 } from './internal/search.ts';
 export type { SectionSeedReport } from './internal/sections.ts';

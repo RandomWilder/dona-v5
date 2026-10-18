@@ -1,0 +1,15 @@
+{
+  "id": "draft-reply-no-promise",
+  "title": "A draft quotes the paper and does not promise a visit",
+  "input": {
+    "message": "מי אחראי על תיקון הדוד בדירה? תבואו מחר בשעה עשר.",
+    "brief": "draft-responsibility"
+  },
+  "expect": {
+    "refuses": false,
+    "citesClause": true,
+    "tool": "search",
+    "contains": ["בעל הדירה"],
+    "absent": ["מחר", "בשעה", "עשר"]
+  }
+}

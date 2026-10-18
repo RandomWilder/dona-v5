@@ -63,6 +63,11 @@ export interface OccupancySpec {
    * database that held none. The identifier case seeds one.
    */
   nationalId?: string;
+  /**
+   * A building of this test's own. The default address is shared, and a test
+   * that commits it leaves the address the schema cases insert for themselves.
+   */
+  address?: { line: string; city: string };
 }
 
 export interface SeededOccupancy {
@@ -131,7 +136,11 @@ export async function seedOccupancy(
   unitNumber: string,
   spec: OccupancySpec,
 ): Promise<SeededOccupancy> {
-  const unitId = spec.unitId ?? (await seedUnit(db, unitNumber));
+  const unitId =
+    spec.unitId ??
+    (spec.address === undefined
+      ? await seedUnit(db, unitNumber)
+      : await seedUnit(db, unitNumber, spec.address));
   const partyId = newId();
   const tenancyId = newId();
   await db.query(

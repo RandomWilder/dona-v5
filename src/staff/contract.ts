@@ -52,6 +52,7 @@ export type {
   CallTurn,
 } from './internal/call-thread.ts';
 export {
+  appendCallDraft,
   appendCallTurn,
   beginCallThread,
   loadCallThread,

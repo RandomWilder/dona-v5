@@ -52,6 +52,7 @@ import {
   saveSenderContact,
   setCallCategory,
 } from './commands.ts';
+import { writeCallDraft } from './draft.ts';
 import {
   type ExitDraft,
   type FilteredOrigin,
@@ -605,7 +606,7 @@ async function callPage(
   const csrf = csrfFrom(request);
   const brief =
     briefHold === 'guarantor'
-      ? { kind: 'guarantor' as const, facts: null, turns: [] }
+      ? { kind: 'guarantor' as const, facts: null, turns: [], draft: null }
       : await loadCallBriefPanel(deps.pool, deps.clock, callId);
   return renderCallPage({
     nav: deps.chrome(
@@ -893,6 +894,19 @@ export function registerCallsRoutes(
     const callId = callIdOf(request.params);
     const runner = briefRunner(deps);
     if (runner) await refreshCallBrief(runner, callId);
+    return reply.code(303).header('location', `/calls/${callId}`).send();
+  });
+
+  app.post('/calls/:id/draft', STAFF, async (request, reply) => {
+    const callId = callIdOf(request.params);
+    const runner = briefRunner(deps);
+    if (runner) {
+      const messages = deps.messagesOnCall
+        ? await deps.messagesOnCall(callId)
+        : [];
+      const inbound = [...messages].reverse().find((message) => !message.echo);
+      await writeCallDraft(runner, callId, inbound?.body);
+    }
     return reply.code(303).header('location', `/calls/${callId}`).send();
   });
 

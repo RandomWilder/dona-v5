@@ -94,6 +94,7 @@ export {
   refreshCallBrief,
   startCallBrief,
 } from './internal/brief.ts';
+export { replyLanguage, writeCallDraft } from './internal/draft.ts';
 export type { CallsDeps } from './internal/routes.ts';
 export { registerCallsRoutes } from './internal/routes.ts';
 export type {

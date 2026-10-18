@@ -235,3 +235,34 @@ export async function searchPassages(
     distance: Number(row.distance),
   }));
 }
+
+/** The passages a draft is grounded in. No search: the brief already cited them. */
+export async function passagesByIds(
+  db: Queryable,
+  ids: readonly string[],
+): Promise<PassageHit[]> {
+  if (ids.length === 0) return [];
+  const found = await db.query<{
+    document_passage_id: string;
+    document_id: string;
+    page: number;
+    body: string;
+    type_key: string;
+  }>(
+    `SELECT p.document_passage_id, p.document_id, p.page, p.body, dt.type_key
+       FROM document_passage p
+       JOIN document d ON d.document_id = p.document_id
+       JOIN document_type dt ON dt.document_type_id = d.document_type_id
+      WHERE p.document_passage_id = ANY($1::uuid[])`,
+    [ids],
+  );
+  return found.rows.map((row) => ({
+    passageId: row.document_passage_id,
+    documentId: row.document_id,
+    page: row.page,
+    text: row.body,
+    documentType: row.type_key,
+    unitId: null,
+    distance: 0,
+  }));
+}

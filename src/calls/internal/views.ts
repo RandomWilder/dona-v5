@@ -331,6 +331,12 @@ const styles = h`<style>
   }
   .calls .brief { display: grid; gap: var(--space-3); }
   .calls .brief .cites { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-2); }
+  .calls .draft { display: grid; gap: var(--space-3); }
+  .calls .draft-pair { display: grid; gap: var(--space-3); }
+  .calls .draft textarea { inline-size: 100%; min-block-size: 8rem; }
+  @media (min-width: 40rem) {
+    .calls .draft-pair { grid-template-columns: 1fr 1fr; }
+  }
   .calls .call[data-emergency="true"],
   .calls .call[data-emergency="true"] .call-main a,
   .calls .call[data-emergency="true"] .call-meta {
@@ -1858,6 +1864,47 @@ function briefOf(screen: CallScreen): Html {
   </section>`;
 }
 
+function draftOf(screen: CallScreen): Html {
+  const brief = screen.brief;
+  if (brief?.kind !== 'ready') return h``;
+  const draft = brief.draft;
+  const field = draft
+    ? h`<label>לדייר
+        <textarea data-draft ${draft.rendering === null ? h`` : h`lang="en" dir="ltr"`}>${draft.text}</textarea>
+      </label>`
+    : h``;
+  const rendering =
+    draft?.rendering == null
+      ? h``
+      : h`<div><h3>עברית</h3><p data-rendering>${draft.rendering}</p></div>`;
+  const pair =
+    draft === null
+      ? h``
+      : draft.rendering === null
+        ? field
+        : h`<div class="draft-pair">${field}${rendering}</div>`;
+  const copy =
+    draft === null
+      ? h``
+      : h`<button class="btn btn-glass" type="button" data-copy>העתקה</button>
+        <script>
+          document.querySelector('[data-copy]').addEventListener('click', function () {
+            var box = document.querySelector('[data-draft]');
+            if (!box) return;
+            navigator.clipboard.writeText(box.value);
+          });
+        </script>`;
+  return h`<section class="glass sheet draft" data-draft-lang="${draft === null ? 'none' : draft.rendering === null ? 'he' : 'other'}">
+    <h2>טיוטה</h2>
+    ${pair}
+    ${copy}
+    <form method="post" action="/calls/${screen.call.id}/draft">
+      ${csrfInput(screen.csrf)}
+      <button class="btn btn-primary" type="submit">כתבו טיוטה</button>
+    </form>
+  </section>`;
+}
+
 export function renderCallPage(screen: CallScreen): string {
   const call = screen.call;
   const refusal =
@@ -1912,6 +1959,7 @@ export function renderCallPage(screen: CallScreen): string {
       ${refusal}
       ${receiptOf(screen)}
       ${briefOf(screen)}
+      ${draftOf(screen)}
       <div class="call-work">
         ${callAside(screen)}
         <div class="call-record">
