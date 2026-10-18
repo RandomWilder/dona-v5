@@ -243,12 +243,14 @@ describe('calls · the draft reply', () => {
         .replace(/[^a-z]/g, '')
         .slice(0, 6) || 'draft'
     }`;
+    const address = { line: `Draft ${unitNumber}`, city: 'Draftville' };
     const home = await seedOccupancy(pool, unitNumber, {
       phone: `+97250${newId().replace(/\D/g, '').padEnd(7, '2').slice(0, 7)}`,
       contactFrom: '2026-01-01',
       contactTo: null,
       tenancyFrom: '2026-01-01',
       tenancyTo: '2027-01-01',
+      address,
     });
     await applyDocumentTypeCatalogue(pool, seedDocumentTypes);
     const intake: IntakeDeps = {
@@ -355,6 +357,10 @@ describe('calls · the draft reply', () => {
       await pool.query(`DELETE FROM party WHERE party_id = $1`, [home.partyId]);
       await pool.query(`DELETE FROM unit WHERE unit_id = $1`, [home.unitId]);
       await pool.query(`DELETE FROM space WHERE space_id = $1`, [home.unitId]);
+      await pool.query(
+        `DELETE FROM building WHERE city = $1 AND address_line = $2`,
+        [address.city, address.line],
+      );
       await signOutAll(pool, domain);
       await app.close();
       await pool.end();
