@@ -27,7 +27,7 @@ for a week the register and the decision disagreed about whether three of four d
 | [0002](ADR-0002-ocr-is-required.md) | Scanned documents are read by OCR; manual entry is not a fallback | accepted |
 | [0003](ADR-0003-api-keys-stay-in-secret-manager.md) | API keys stay in Secret Manager; the admin controls the reference, never the value | accepted |
 | [0004](ADR-0004-personal-data-reaches-the-model-provider.md) | Personal data reaches the model provider, and that is a decision rather than an accident | accepted — decision 3's deliverable is fuse **F6** |
-| [0005](ADR-0005-the-credential-is-google-s.md) | The staff credential is Google's; the allowlist replaces the assertable second factor | accepted |
+| [0005](ADR-0005-the-credential-is-google-s.md) | The staff credential is Google's; the allowlist replaces the assertable second factor | accepted — amended by 0018 |
 | [0006](ADR-0006-the-extractor-may-read-a-declared-identifier.md) | The extractor may read a **declared** identifier; masking binds the embedder and any tenant-facing model call | accepted |
 | [0007](ADR-0007-work-is-tracked-as-blocking-edges-not-a-calendar.md) | Work is tracked as blocking edges between tickets, not a calendar of slices and weeks | accepted |
 | [0008](ADR-0008-money-is-ordinary-data.md) | Money is ordinary data; **foundation rule 2 is retired in full** and its three enforcements are deleted | accepted — the four published documents still promise the retired rule |
@@ -39,6 +39,7 @@ for a week the register and the decision disagreed about whether three of four d
 | [0014](ADR-0014-a-lead-is-not-a-party.md) | A Lead is not a Party; it stays outside the directory and the isolation join until a lease is drafted | accepted |
 | [0015](ADR-0015-a-lease-is-unassigned-until-its-draft-opens.md) | A lease is stored unassigned; the flat, terms and people are written together at **פתיחת טיוטה**; reverses A12's no-unfiled rule for leases | accepted |
 | [0016](ADR-0016-approval-is-the-only-act-the-press-writes-the-columns.md) | Approval is the only act; פתיחת טיוטה writes every approved mapped value through a map in code; `field_promotion`, `קדם` and the lease's regex place reading go | accepted |
+| [0018](ADR-0018-the-staff-credential-is-google-s-or-microsoft-s.md) | The staff credential is Google's or Microsoft's; the allowlist and the first-identity binding apply to both; Microsoft is Dona Dom's tenant and `@dona.co.il` only, one provider per account, and a sign-in app separate from the mailbox app | accepted |
 
 **A1–A10 in [archive/tasks-w1-7/plan.md](../../archive/tasks-w1-7/plan.md) are numbered as they will
 become ADRs.** They are decisions of record already; they become files here as the work that

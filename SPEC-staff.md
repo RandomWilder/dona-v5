@@ -12,7 +12,8 @@ piece of paper. Shared conventions live in [SPEC.md](SPEC.md) and are not repeat
   put every route in the application behind `requireStaff` and every write route behind a CSRF
   token derived from the session.
 - **Built:** slice 5.1 on Identity Platform, with a password form, a TOTP form and an invite flow.
-  **Amended at slice 5.1b**, which deleted all three and made the credential Google's. The
+  **Amended at slice 5.1b**, which deleted all three and made the credential Google's.
+  **Amended by [ADR-0018](docs/decisions/ADR-0018-the-staff-credential-is-google-s-or-microsoft-s.md)** (#259), which adds Microsoft beside Google. The
   `national_id` field guard is **5.3**. The signed-in chrome (slices **5.2b**, **5.2c** and **5.2d**)
   is the composition root's, not this module's: the staff home uses the ops rail (a drawer below
   840px); the login screen does not.
@@ -41,7 +42,7 @@ This module answers exactly three questions and refuses to answer a fourth:
 
 1. Who is making this request? (a session, or nobody)
 2. What is that person allowed to do? (a role, resolved against a matrix in code)
-3. How does a new operator come to exist? (an admin adds a row; the person signs in with Google)
+3. How does a new operator come to exist? (an admin adds a row; the person signs in with Google or Microsoft)
 
 The fourth — *what may this person see about a particular tenant* — is **`src/scope/`'s and nobody
 else's** (foundation rule 1). A staff role never widens or narrows the isolation join. The two
@@ -51,9 +52,9 @@ on the path that decides tenant isolation, and that path has exactly one file.
 
 ---
 
-## Google holds the credential; the session is ours
+## Google's path; the session is ours
 
-**The credential is Google's, entirely.** This system has no password hash, no TOTP secret, no
+**On this path the credential is Google's, entirely.** This system has no password hash, no TOTP secret, no
 password form and no second-factor form. Sign-in is the standard OIDC authorization-code flow: a
 link to `accounts.google.com`, a redirect back with a code, one server-side exchange, one verified
 ID token — and from that point the browser carries nothing but this system's own session cookie.
@@ -150,7 +151,101 @@ back that is the referring path or `/` — nothing in it varies with the cause.
 Workspace by an administrator, and by Google itself for some abandoned accounts. Silently rebinding
 the row to the new `sub` would hand a stranger an existing operator's role. So the row is bound to
 the first `sub` that ever signs in against it, and re-binding is a deliberate act by an admin, not a
-side effect of a login.
+side effect of a login. The same rule binds a Microsoft identity, below.
+
+---
+
+## Microsoft, beside Google
+
+**The credential is Google's or Microsoft's** ([ADR-0018](docs/decisions/ADR-0018-the-staff-credential-is-google-s-or-microsoft-s.md),
+amending ADR-0005). The Google path above is unchanged in every respect: its routes, its cookie, its
+claims and its refusals. Microsoft is a second way in, of the same shape — an authorization-code
+flow, server-side, no client JavaScript — and it is Dona Dom's own directory only.
+
+The Microsoft start route is `GET /staff/auth/microsoft/start` and the callback is
+`GET /staff/auth/microsoft/callback`. They are distinct from Google's so each provider has its own
+redirect URI. They sit outside the CSRF token for the same reason Google's do: they change no row
+of ours, and `state` is the anti-forgery value the flow carries. `state` and `nonce` ride the same
+short-lived `dona_oauth` cookie. The start redirects to Dona Dom's tenant-specific authority, forces
+the account chooser, and asks only for `openid` and `email`.
+
+### The tenant, the domain, and why the address is trusted
+
+Two gates, both required:
+
+- **Tenant.** `tid` equals the configured tenant, and the issuer equals that tenant's v2 issuer
+  (`https://login.microsoftonline.com/<tenant id>/v2.0`). The authority is Dona Dom's Entra tenant.
+  A token from any other tenant is refused, including one whose email claim is a staff account's
+  address.
+- **Domain.** The email claim is present and its domain equals the configured domain exactly
+  (`dona.co.il`). A look-alike (`evil-dona.co.il`, `dona.co.il.evil`) fails this gate.
+
+The address is trusted only after both gates. The email string alone is not evidence: the directory
+that issued the token can set it to any address, including one a staff account already uses.
+Matching the tenant ties the address to Dona Dom; matching the domain still refuses a look-alike
+inside that tenant. Personal Microsoft accounts (outlook.com, hotmail, live)
+are a different tenant and a different issuer, and they fail the same gates.
+
+The sign-in app is a separate registration from the mailbox app, in that same tenant, one per
+environment. It holds `openid` and `email` and no mail permission. The mailbox registration is not
+widened to sign staff in: a change to sign-in must not stop inbound mail, and the sign-in secret
+must not be able to read a mailbox.
+
+### What the Microsoft path refuses
+
+Each of these is the same frozen `not_allowed` body as the Google list above, byte for byte, with
+no `details` and nothing in the body that varies with the cause:
+
+- `state` is missing or does not match; the `nonce` does not match the one this browser started with;
+- `tid` is not the configured tenant, or the issuer is not that tenant's v2 issuer;
+- the email claim is absent, or its domain is not exactly the configured domain;
+- the account is a personal Microsoft account;
+- no `staff_account` row names the email;
+- the row exists and its `role` is null;
+- the row exists, has a role, and is disabled;
+- the row's `idp_local_id` is set and is not this Microsoft identity — including a row already bound
+  to a Google subject.
+
+A Microsoft-bound account that later signs in with Google is the Google list's `idp_local_id`
+mismatch, the same body again. Unconfigured Microsoft is not one of these refusals: the button is
+absent and both routes answer unavailable.
+
+### The binding, and how an admin switches a person's provider
+
+`staff_account.idp_local_id` holds one identity.
+
+- **Google** — the bare subject, as it does today.
+- **Microsoft** — `ms:<tenant id>:<object id>`.
+
+The first sign-in against an unbound row writes it. A second provider on a bound row is a refusal,
+never a second binding and never a silent rebind. There is no screen for switching. An admin who
+can reach the database clears the binding with one statement, and the person's next sign-in — with
+whichever provider — binds the row again:
+
+```sql
+UPDATE staff_account SET idp_local_id = NULL WHERE email = '<address>';
+```
+
+The address is the one stored, already lower case. A login never runs this statement.
+
+### Configuration
+
+Five environment values. The client id and the client secret are secrets, `<env>-microsoft-oauth-client-id`
+and `<env>-microsoft-oauth-client-secret`, bound and injected the way Google's two secrets are
+(ADR-0003, `infra/set-secret.sh`). They reach the process as `MICROSOFT_OAUTH_CLIENT_ID` and
+`MICROSOFT_OAUTH_CLIENT_SECRET`. The other three are ordinary configuration:
+`MICROSOFT_OAUTH_TENANT_ID`, `MICROSOFT_OAUTH_DOMAIN` (`dona.co.il`), and
+`MICROSOFT_OAUTH_SECRET_EXPIRES` (the client secret's expiry date, optional).
+
+Missing any of the first four leaves Microsoft **unconfigured**: the button is hidden, both routes
+answer unavailable, and the boot line says `microsoft:unconfigured`. The application still starts,
+and Google is unaffected. The boot line never prints the client secret. No expiry date means no
+expiry warning and no error.
+
+### The login screen
+
+Two equal buttons, Google then Microsoft, and one note naming both ways in. Neither button reads as
+the default. When Microsoft is unconfigured the screen is Google's alone, as today.
 
 ---
 
@@ -270,9 +365,9 @@ the only somewhere available is the table this module is forbidden to put a toke
 Enforcement is one `preHandler` hook in the composition root, which is why the list above is a
 consequence of the method rather than a list anybody maintains.
 
-**The two `GET /staff/auth/*` routes are deliberately outside it.** They change no row of ours, and
-`state` — minted into a one-shot `HttpOnly` cookie and compared in constant time — is the
-anti-forgery value that flow carries by construction. A CSRF token on them would be a second
+**The Google and Microsoft `GET /staff/auth/*` routes are deliberately outside it.** They change no
+row of ours, and `state` — minted into a one-shot `HttpOnly` cookie and compared in constant time —
+is the anti-forgery value that flow carries by construction. A CSRF token on them would be a second
 mechanism doing the first one's job.
 
 **`POST /documents` is the one route that checks the token inside its handler.** Its body is a
@@ -295,14 +390,14 @@ module's page CSS.
 ## The operator row, and the first operator
 
 **An operator is a row an admin wrote.** `POST /staff/operators` takes an email and a role and
-writes `staff_account` with `idp_local_id` null; the first Google sign-in against that address fills
-it in. That row *is* the authorisation — there is no token, no expiry, no acceptance URL, no
-enrolment screen and no message to deliver.
+writes `staff_account` with `idp_local_id` null; the first sign-in against that address, with
+Google or Microsoft, fills it in. That row *is* the authorisation — there is no token, no expiry,
+no acceptance URL, no enrolment screen and no message to deliver.
 
 This is what deleted 5.1's honest-but-awkward sentence about invites being printed URLs because the
 system has no mail transport. **It still has none, and now needs none**: nothing has to reach a new
 operator except the fact, told to them however their colleagues already talk, that they may now sign
-in with their Google account.
+in with their Google or Microsoft account.
 
 Adding an address that already has a row is not an error and not a second row: the role is updated,
 which is how a promotion, a demotion and a re-grant are all spelled. Withdrawing access is
