@@ -35,6 +35,7 @@ import {
   mailboxWarning,
   readAttachment,
   registerChannelRoutes,
+  replyOnInboundEmail,
   rescueNoise,
   type Sorter,
   secretWarning,
@@ -171,6 +172,14 @@ export interface AppDeps {
    * revision must not serve a second product beside the live screens.
    */
   devMockups?: boolean;
+  /**
+   * The one Outlook reply. Wired only when the mailbox is configured.
+   * The duty reply and the office reply both call it. #256.
+   */
+  graphReply?: (reply: {
+    messageId: string;
+    body: string;
+  }) => Promise<{ externalMessageId: string }>;
   /**
    * The real sorter. Absent in tests, which inject a fake at the door.
    * Present on staging and in production, where the dev form uses it too.
@@ -750,6 +759,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
           callId,
         )
     : undefined;
+  const graphReply = deps.graphReply;
   registerCallsRoutes(app, {
     pool: deps.pool,
     clock,
@@ -757,6 +767,11 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     chrome: signedInChrome,
     devIntake: deps.devMockups === true,
     messagesOnCall: (callId) => listMessagesOnCall(deps.pool, callId),
+    sendEmailReply:
+      graphReply === undefined
+        ? undefined
+        : (callId, body) =>
+            replyOnInboundEmail(deps.pool, callId, body, graphReply),
     listNoise: () => listNoiseMessages(deps.pool),
     rescueNoise: (spec) => rescueNoise(deps.pool, clock, spec),
     mailboxWarning: () =>

@@ -164,6 +164,8 @@ export interface CallScreen {
   now: Date;
   /** Staff who may file a document. The button is absent otherwise. */
   mayFile?: boolean;
+  /** `calls.reply`. The send control is absent otherwise. #256. */
+  mayReply?: boolean;
   /** `party.read`. The requester's name links to the profile only then. */
   mayReadParties?: boolean;
   documentTypes?: readonly { typeKey: string; labelHe: string }[];
@@ -1287,6 +1289,10 @@ function eventLine(event: CallTransition): Html {
   if (event.kind === 'CLEARED') {
     return h`<li data-kind="CLEARED">הוסר סימון חירום · ${who}</li>`;
   }
+  if (event.kind === 'REPLIED') {
+    const mark = event.replyMark === 'as_written' ? 'כפי שנכתבה' : 'אחרי עריכה';
+    return h`<li data-kind="REPLIED" data-reply="${event.replyMark}">נשלחה תשובה · ${mark} · ${who}<p>${event.note}</p></li>`;
+  }
   if (event.kind === 'ANSWERED') {
     return h`<li data-kind="ANSWERED">נענתה · ${event.note} · ${who}</li>`;
   }
@@ -1883,10 +1889,13 @@ function draftOf(screen: CallScreen): Html {
       : draft.rendering === null
         ? field
         : h`<div class="draft-pair">${field}${rendering}</div>`;
-  const copy =
-    draft === null
-      ? h``
-      : h`<button class="btn btn-glass" type="button" data-copy>העתקה</button>
+  const maySend =
+    draft !== null &&
+    screen.mayReply === true &&
+    screen.call.sourceChannel === 'EMAIL' &&
+    screen.call.state !== 'NEW' &&
+    screen.call.state !== 'CLOSED';
+  const copyButton = h`<button class="btn btn-glass" type="button" data-copy>העתקה</button>
         <script>
           document.querySelector('[data-copy]').addEventListener('click', function () {
             var box = document.querySelector('[data-draft]');
@@ -1894,10 +1903,31 @@ function draftOf(screen: CallScreen): Html {
             navigator.clipboard.writeText(box.value);
           });
         </script>`;
+  const sendField = maySend
+    ? h`<label>לדייר
+        <textarea name="body" data-draft ${draft.rendering === null ? h`` : h`lang="en" dir="ltr"`}>${draft.text}</textarea>
+      </label>`
+    : field;
+  const sendPair =
+    draft === null
+      ? h``
+      : !maySend
+        ? pair
+        : draft.rendering === null
+          ? sendField
+          : h`<div class="draft-pair">${sendField}${rendering}</div>`;
+  const copy = draft === null ? h`` : copyButton;
+  const send = maySend
+    ? h`<form method="post" action="/calls/${screen.call.id}/send">
+        ${csrfInput(screen.csrf)}
+        ${sendPair}
+        ${copy}
+        <button class="btn btn-primary" type="submit" data-send>שליחה</button>
+      </form>`
+    : h`${pair}${copy}`;
   return h`<section class="glass sheet draft" data-draft-lang="${draft === null ? 'none' : draft.rendering === null ? 'he' : 'other'}">
     <h2>טיוטה</h2>
-    ${pair}
-    ${copy}
+    ${send}
     <form method="post" action="/calls/${screen.call.id}/draft">
       ${csrfInput(screen.csrf)}
       <button class="btn btn-primary" type="submit">כתבו טיוטה</button>

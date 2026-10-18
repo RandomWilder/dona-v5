@@ -93,10 +93,10 @@ golden set's messages are fabricated, never a real tenant's.
 **Outlook is the client's inbox and is built first**, through Microsoft Graph:
 - An app registration in Dona Dom's Microsoft 365 tenant, holding the application permissions
   `Mail.Read` and `Mail.Send`, both limited to the one shared mailbox by Exchange Online's RBAC for
-  Applications. **Nothing here can delete, move or mark mail as read.** `Mail.Send` exists for one
-  message only: the fixed emergency reply, which lands in that mailbox's Sent Items like any reply
-  the office sends (decided 6 Oct 2026). The pilot grants `Mail.Read` only; `Mail.Send` is a second
-  request to Dona Dom's administrator, made with the emergency reply. No mail permission is granted
+  Applications. **Nothing here can delete, move or mark mail as read.** `Mail.Send` is one Graph
+  reply on an inbound message. It lands in that mailbox's Sent Items. Its callers are the fixed
+  duty reply and the office's reply on an EMAIL call (#256). The test mailbox holds `Mail.Send`.
+  Production `Mail.Send` is still for Dona Dom's administrator to grant. No mail permission is granted
   in Entra: access is the Exchange role assignment alone, which reaches the mailbox's folders but not
   the directory, so the adapter never looks up a user.
 - Polled with a delta query every one to two minutes, with the cursor stored. The first read

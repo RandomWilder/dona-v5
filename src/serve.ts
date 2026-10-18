@@ -143,6 +143,7 @@ const app = buildApp({
   devMockups: (process.env.VERSION ?? '0.0.0-dev').endsWith('-dev'),
   http2,
   sorter,
+  graphReply: outlook ? (reply) => sendOutlookReply(outlook, reply) : undefined,
 });
 
 await app.listen({ host, port });

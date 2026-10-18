@@ -32,6 +32,8 @@ export const PERMISSIONS = [
   // Named at 5.1 before it had a reader. The document reveal (7.3) and the profile's
   // reveal, ת.ז. search and ת.ז. write (#204) are the readers. ADMIN only.
   'party.national_id.read',
+  // #256. Sending the draft on an EMAIL call. ADMIN and OPERATOR. A viewer copies.
+  'calls.reply',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -50,6 +52,7 @@ const MATRIX: Readonly<Record<Role, readonly Permission[]>> = Object.freeze({
     'settings.write',
     'staff.invite',
     'party.national_id.read',
+    'calls.reply',
   ] as const),
   OPERATOR: Object.freeze([
     'estate.read',
@@ -58,6 +61,7 @@ const MATRIX: Readonly<Record<Role, readonly Permission[]>> = Object.freeze({
     'tenancy.write',
     'party.read',
     'party.write',
+    'calls.reply',
   ] as const),
   VIEWER: Object.freeze(['estate.read', 'documents.read'] as const),
 });

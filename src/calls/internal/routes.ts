@@ -1,10 +1,8 @@
 // The קריאות routes. #182 is the list and the manual entry. #183 is one call.
 // #184 closes it.
 //
-// All of them are `estate.read`, which every signed-in role holds. V1 has no
-// calls permission of its own: every staff member may log a call, identify the
-// requester and set the trade. The category catalogue is edited at /settings,
-// under settings.write.
+// The page is `estate.read`, which every signed-in role holds. Sending the
+// draft is `calls.reply` (#256): ADMIN and OPERATOR. A viewer copies.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import type { ChromeDest } from '../../chrome.ts';
@@ -53,6 +51,7 @@ import {
   setCallCategory,
 } from './commands.ts';
 import { writeCallDraft } from './draft.ts';
+import { sendCallReply } from './send.ts';
 import {
   type ExitDraft,
   type FilteredOrigin,
@@ -119,6 +118,14 @@ export interface CallsDeps {
   documentTypes?: () => Promise<
     readonly { typeKey: string; labelHe: string }[]
   >;
+  /**
+   * Sends on the call's inbound email. Absent when the mailbox is not
+   * configured: the page can still copy. #256.
+   */
+  sendEmailReply?: (
+    callId: string,
+    body: string,
+  ) => Promise<{ externalMessageId: string }>;
   /** Present when a model and an embedder are configured. #252. */
   brief?: {
     extractor: Extractor;
@@ -273,6 +280,17 @@ function refusalHe(error: KernelError): string {
   if (field === 'state' && reason === 'closed') {
     return 'קריאה סגורה אינה משתנה.';
   }
+  if (field === 'state' && reason === 'new') {
+    return 'יש לזהות את הפונה לפני השליחה.';
+  }
+  if (field === 'reply' && reason === 'channel') {
+    return 'אפשר לשלוח רק על דוא״ל.';
+  }
+  if (field === 'reply' && reason === 'message') {
+    return 'אין הודעה נכנסת לשלוח אליה.';
+  }
+  if (field === 'reply' && reason === 'send') return 'השליחה לא יצאה.';
+  if (field === 'body') return 'יש לכתוב את התשובה.';
   if (field === 'state' && reason === 'exit') {
     return 'לא ניתן לסגור קריאה שנקבעה.';
   }
@@ -629,6 +647,7 @@ async function callPage(
     messages,
     goal,
     mayFile: can(role, 'documents.write'),
+    mayReply: can(role, 'calls.reply'),
     mayReadParties: can(role, 'party.read'),
     documentTypes,
     now: deps.clock.now(),
@@ -896,6 +915,43 @@ export function registerCallsRoutes(
     if (runner) await refreshCallBrief(runner, callId);
     return reply.code(303).header('location', `/calls/${callId}`).send();
   });
+
+  app.post(
+    '/calls/:id/send',
+    { config: { staff: 'calls.reply' } },
+    async (request, reply) => {
+      const staff = staffOf(request);
+      const callId = callIdOf(request.params);
+      const body = textOf(formOf(request.body).body);
+      if (!deps.sendEmailReply) {
+        html(reply);
+        reply.code(400);
+        return callPage(deps, request, callId, 'הדואר אינו מוגדר.');
+      }
+      try {
+        await sendCallReply(
+          deps.pool,
+          deps.clock,
+          {
+            callId,
+            body,
+            actorId: staff.staffAccountId,
+            actorRole: staff.role,
+          },
+          deps.sendEmailReply,
+        );
+        return reply.code(303).header('location', `/calls/${callId}`).send();
+      } catch (error) {
+        if (!(error instanceof KernelError) || error.code === 'not_allowed') {
+          throw error;
+        }
+        if (error.code === 'not_found') throw error;
+        html(reply);
+        reply.code(error.code === 'unavailable' ? 503 : 400);
+        return callPage(deps, request, callId, refusalHe(error));
+      }
+    },
+  );
 
   app.post('/calls/:id/draft', STAFF, async (request, reply) => {
     const callId = callIdOf(request.params);

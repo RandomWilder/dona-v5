@@ -96,6 +96,17 @@ no draft. A WHATSAPP call gets no draft. When the brief's switch is off, no draf
 and the model is not called. The copy control is the one inline script on a call that has a
 draft, because the clipboard is not a form; a call with no draft has no script.
 
+**#256. Send the reply.** On an EMAIL call, a person who holds `calls.reply` can send the draft,
+edited or as written, as a reply to the inbound message the call was opened from. The server
+refuses unless the actor holds `calls.reply`, the call is IDENTIFIED or later and not closed, and
+the channel is EMAIL. Only one recipient is possible. The server resolves it, and the thread, from
+that inbound message. The page never supplies an address, and a recipient a client posts is
+ignored. The send is one Graph reply through the same Outlook send the duty reply uses. It is a
+timeline row and an audit row. Each row names the actor, the text sent, and whether that text was
+the stored draft or an edit of it. A viewer sees the copy control and not send. PHONE, WALK_IN and
+WHATSAPP are not this command. Production `Mail.Send` is the director's to request; until it is
+granted, the send is verified on the development mailbox only.
+
 **Save this contact** is a command on a call a person identified, when the sender is an email
 address or a WhatsApp number. It adds that address to the requester as a PartyContact, through
 parties' contract, valid from today, and it is audited. The next message from that address is

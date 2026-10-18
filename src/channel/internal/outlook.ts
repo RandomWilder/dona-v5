@@ -1,7 +1,7 @@
 // #188. Outlook, through Microsoft Graph. Reading never deletes, moves, or
-// marks mail as read. #195. Mail.Send is one function, used for the fixed
-// emergency reply and nothing else. The reply is posted on that message, so
-// it stays on the thread and lands in the mailbox's Sent Items.
+// marks mail as read. #195 and #256. Mail.Send is one function: a Graph reply
+// on the inbound message. The duty reply and the office reply are its callers.
+// The reply stays on that thread and lands in the mailbox's Sent Items.
 //
 // A mailbox is read from the cursor it starts at. The first read asks Graph
 // for a delta link as of now and imports nothing that arrived earlier. The
