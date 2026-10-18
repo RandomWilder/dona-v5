@@ -1,0 +1,580 @@
+<title>חיבור תיבת הדואר לדונה</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@500;600;700&family=Assistant:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Layout: one reading column; each stage is a numbered block with a short intro, then ordered steps; commands sit LTR in their own panels. */
+  :root {
+    direction: rtl;
+    --paper:      #F1F2EF;
+    --surface:    #FBFCF9;
+    --surface-2:  #E7EAE4;
+    --ink:        #17222E;
+    --ink-2:      #4C5964;
+    --ink-3:      #7B858D;
+    --rule:       #C8CFC7;
+    --structure:  #2F5D7C;
+    --signal:     #BF4A22;
+    --good:       #40704F;
+    --tint-structure: rgba(47,93,124,.10);
+    --tint-signal:    rgba(191,74,34,.10);
+    --tint-good:      rgba(64,112,79,.10);
+    --code-bg:    #1D2733;
+    --code-ink:   #E4E9EC;
+    --code-ph:    #F2B28F;
+
+    --font-display: "Heebo", "Helvetica Neue", Arial, sans-serif;
+    --font-body: "Assistant", "Heebo", system-ui, -apple-system, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --measure: 70ch;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:     #121821;
+      --surface:   #19212C;
+      --surface-2: #222C38;
+      --ink:       #E2E7E3;
+      --ink-2:     #A5B0B8;
+      --ink-3:     #79858E;
+      --rule:      #2F3B47;
+      --structure: #7BADD0;
+      --signal:    #EA7F52;
+      --good:      #79B78C;
+      --tint-structure: rgba(123,173,208,.14);
+      --tint-signal:    rgba(234,127,82,.14);
+      --tint-good:      rgba(121,183,140,.13);
+      --code-bg:   #0C1117;
+      --code-ink:  #DCE3E7;
+      --code-ph:   #F0A47E;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:     #121821;
+    --surface:   #19212C;
+    --surface-2: #222C38;
+    --ink:       #E2E7E3;
+    --ink-2:     #A5B0B8;
+    --ink-3:     #79858E;
+    --rule:      #2F3B47;
+    --structure: #7BADD0;
+    --signal:    #EA7F52;
+    --good:      #79B78C;
+    --tint-structure: rgba(123,173,208,.14);
+    --tint-signal:    rgba(234,127,82,.14);
+    --tint-good:      rgba(121,183,140,.13);
+    --code-bg:   #0C1117;
+    --code-ink:  #DCE3E7;
+    --code-ph:   #F0A47E;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 17px;
+    line-height: 1.65;
+  }
+  .page {
+    max-width: 820px;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 48px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 44px;
+  }
+  h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.25; }
+  h1 { font-size: 2.1rem; font-weight: 700; }
+  h2 { font-size: 1.4rem; font-weight: 700; }
+  h3 { font-size: 1.05rem; font-weight: 600; }
+  p { margin: 0; max-width: var(--measure); }
+  ul, ol { margin: 0; padding-inline-start: 1.3em; max-width: var(--measure); }
+  li + li { margin-top: 6px; }
+  code, .mono { font-family: var(--font-mono); font-size: .86em; direction: ltr; unicode-bidi: isolate; }
+  :not(pre) > code { background: var(--surface-2); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+  a { color: var(--structure); }
+  .eyebrow {
+    font-family: var(--font-display);
+    font-size: .78rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+    color: var(--ink-3);
+  }
+
+  header { display: flex; flex-direction: column; gap: 14px; border-bottom: 1px solid var(--rule); padding-bottom: 28px; }
+  .lede { font-size: 1.12rem; color: var(--ink-2); }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 24px; margin-top: 6px; }
+  .facts div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .facts dt { font-size: .8rem; color: var(--ink-3); font-weight: 600; }
+  .facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+
+  .why { display: flex; flex-direction: column; gap: 14px; }
+  .why ul { display: flex; flex-direction: column; gap: 4px; }
+  .why li + li { margin-top: 0; }
+
+  .callout {
+    padding: 14px 18px;
+    border-radius: 8px;
+    border-inline-start: 4px solid var(--signal);
+    background: var(--tint-signal);
+    max-width: var(--measure);
+  }
+  .callout.ok { border-color: var(--good); background: var(--tint-good); }
+  .callout.info { border-color: var(--structure); background: var(--tint-structure); }
+  .callout strong { font-family: var(--font-display); }
+
+  .ids {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .ids p { color: var(--ink-2); font-size: .95rem; }
+  .ids .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .ids label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; font-weight: 600; color: var(--ink-2); }
+  .ids input {
+    font-family: var(--font-mono);
+    font-size: .9rem;
+    direction: ltr;
+    text-align: left;
+    padding: 8px 10px;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--paper);
+    color: var(--ink);
+    width: 100%;
+  }
+  .ids input:focus-visible, button:focus-visible { outline: 2px solid var(--structure); outline-offset: 2px; }
+
+  .stages { display: flex; flex-direction: column; gap: 40px; counter-reset: stage; }
+  .stage { display: grid; grid-template-columns: 44px 1fr; gap: 0 16px; }
+  .stage > .num {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.05rem;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--structure);
+    color: var(--surface);
+    font-variant-numeric: tabular-nums;
+  }
+  .stage.optional > .num { background: var(--surface-2); color: var(--ink); border: 1px solid var(--rule); }
+  .stage > .body { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .stage .intro { color: var(--ink-2); }
+  .stage .where { font-size: .9rem; color: var(--ink-3); }
+  .stage ol > li::marker { font-family: var(--font-display); font-weight: 600; color: var(--structure); }
+
+  .code {
+    position: relative;
+    background: var(--code-bg);
+    border-radius: 8px;
+    direction: ltr;
+    text-align: left;
+  }
+  .code pre {
+    margin: 0;
+    padding: 14px 16px;
+    padding-right: 76px;
+    overflow-x: auto;
+    color: var(--code-ink);
+    font-family: var(--font-mono);
+    font-size: .84rem;
+    line-height: 1.6;
+  }
+  .code .ph { color: var(--code-ph); }
+  .code .cm { color: #8C9AA6; }
+  .copy {
+    position: absolute;
+    top: 8px; right: 8px;
+    font-family: var(--font-body);
+    font-size: .8rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,.25);
+    background: transparent;
+    color: var(--code-ink);
+    cursor: pointer;
+  }
+  .copy:hover { background: rgba(255,255,255,.08); }
+
+  table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+  th, td { text-align: start; padding: 10px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { font-family: var(--font-display); font-weight: 600; font-size: .85rem; color: var(--ink-2); background: var(--surface-2); }
+  td.k { white-space: nowrap; font-weight: 600; }
+
+  .later { display: flex; flex-direction: column; gap: 14px; border-top: 1px solid var(--rule); padding-top: 32px; }
+  footer { color: var(--ink-3); font-size: .85rem; }
+
+  @media (max-width: 520px) {
+    body { font-size: 16px; }
+    h1 { font-size: 1.7rem; }
+    .stage { grid-template-columns: 1fr; gap: 10px; }
+  }
+</style>
+
+<main class="page">
+
+  <header>
+    <span class="eyebrow">מדריך למנהל/ת Microsoft 365 · דונה דום</span>
+    <h1>חיבור תיבת הדואר למערכת דונה</h1>
+    <p class="lede">מה צריך להגדיר ב-Entra וב-Exchange Online כדי שהמערכת תקרא את המיילים הנכנסים לתיבה אחת, ורק לתיבה הזו. כ-30 דקות עבודה.</p>
+    <dl class="facts">
+      <div><dt>תיבה בשלב הזה</dt><dd class="mono">asafv@dona.co.il</dd></div>
+      <div><dt>סביבה</dt><dd>בדיקות (Staging)</dd></div>
+      <div><dt>הרשאות נדרשות</dt><dd>קריאה, ושליחת תשובה אחת</dd></div>
+    </dl>
+  </header>
+
+  <section class="why">
+    <h2>למה ומה</h2>
+    <p>מערכת דונה פותחת קריאת שירות מכל מייל של דייר. כדי לעשות את זה היא צריכה לקרוא את התיבה שאליה הדיירים כותבים. מתחילים בתיבת פיילוט, ועוברים לתיבה האמיתית רק אחרי שהכל עובד.</p>
+    <ul>
+      <li><strong>קוראת:</strong> מיילים חדשים בתיבה הנכנסת (Inbox), כל כ-90 שניות, מיום החיבור והלאה. שום דבר ישן לא נמשך.</li>
+      <li><strong>שולחת דבר אחד בלבד:</strong> תשובה קבועה עם מספר התורן, כשמייל מסומן כחירום. התשובה יוצאת מהתיבה עצמה ונשמרת ב-Sent Items כמו כל תשובה של המשרד.</li>
+      <li><strong>לא נוגעת:</strong> לא מוחקת, לא מעבירה, לא מסמנת כנקרא. התיבה נשארת בדיוק כפי שהיא.</li>
+      <li><strong>תיבה אחת בלבד:</strong> ההרשאה ניתנת ב-Exchange ומוגבלת לתיבה הזו. אין למערכת גישה לתיבות אחרות או לרשימת המשתמשים.</li>
+    </ul>
+    <div class="callout">
+      <strong>הדבר החשוב ביותר:</strong> לא להוסיף הרשאות דואר (Mail.Read / Mail.Send) במסך API permissions של Entra. הרשאה שם חלה על כל התיבות בארגון. ההרשאה ניתנת רק דרך Exchange, בשלבים 4–6.
+    </div>
+  </section>
+
+  <section class="ids" aria-labelledby="ids-h">
+    <h3 id="ids-h">מילוי אוטומטי של הפקודות</h3>
+    <p>אחרי שלב 1 יהיו בידיך שני מזהים. אפשר להדביק אותם כאן, והם ייכנסו לכל הפקודות בהמשך. שום דבר לא נשמר ולא נשלח.</p>
+    <div class="row">
+      <label for="appId">Application (client) ID
+        <input id="appId" type="text" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off" spellcheck="false">
+      </label>
+      <label for="spId">Object ID של ה-Enterprise application
+        <input id="spId" type="text" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off" spellcheck="false">
+      </label>
+    </div>
+  </section>
+
+  <section class="stages" aria-label="שלבי ההגדרה">
+
+    <article class="stage">
+      <span class="num">0</span>
+      <div class="body">
+        <h2>מה צריך לפני שמתחילים</h2>
+        <p class="intro">הרשאות מנהל בשני מקומות, ומודול PowerShell אחד.</p>
+        <ul>
+          <li>תפקיד <strong>Application Administrator</strong> (או Global Administrator) ב-Entra.</li>
+          <li>תפקיד <strong>Exchange Administrator</strong> (או Organization Management) ב-Exchange Online.</li>
+          <li>מודול ExchangeOnlineManagement מותקן:</li>
+        </ul>
+        <div class="code"><pre>Install-Module ExchangeOnlineManagement -Scope CurrentUser</pre></div>
+        <ul>
+          <li>התיבה <code>asafv@dona.co.il</code> קיימת ופעילה.</li>
+        </ul>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">1</span>
+      <div class="body">
+        <h2>רישום אפליקציה ב-Entra</h2>
+        <p class="intro">יוצרים זהות למערכת דונה, כדי שתוכל להתחבר בלי משתמש ובלי סיסמה של אדם.</p>
+        <p class="where">entra.microsoft.com ← Applications ← App registrations ← New registration</p>
+        <ol>
+          <li>Name: <code>Dona Platform - Staging</code></li>
+          <li>Supported account types: <strong>Accounts in this organizational directory only (Single tenant)</strong></li>
+          <li>Redirect URI: להשאיר ריק.</li>
+          <li>Register.</li>
+          <li>בדף Overview להעתיק שני ערכים: <strong>Application (client) ID</strong> ו-<strong>Directory (tenant) ID</strong>.</li>
+          <li>Enterprise applications ← לחפש <code>Dona Platform - Staging</code> ← להעתיק את ה-<strong>Object ID</strong> משם.</li>
+        </ol>
+        <div class="callout info">
+          ה-Object ID בשלב 4 הוא של ה-<strong>Enterprise application</strong>, לא של ה-App registration. אלה שני מספרים שונים, וזו הטעות הנפוצה ביותר בהגדרה הזו.
+        </div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">2</span>
+      <div class="body">
+        <h2>יצירת סוד (Client secret)</h2>
+        <p class="intro">זו הסיסמה של האפליקציה. המערכת מתריעה 30 יום לפני שהיא פגה, ולכן צריך גם את תאריך התפוגה.</p>
+        <p class="where">App registrations ← Dona Platform - Staging ← Certificates &amp; secrets ← New client secret</p>
+        <ol>
+          <li>Description: <code>dona-staging</code></li>
+          <li>Expires: <strong>Custom</strong>, ל-24 חודשים (המקסימום).</li>
+          <li>Add.</li>
+          <li>להעתיק מיד את עמודת <strong>Value</strong> (לא את Secret ID). הערך מוצג פעם אחת בלבד.</li>
+          <li>לרשום את תאריך התפוגה שמופיע בעמודת Expires.</li>
+        </ol>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">3</span>
+      <div class="body">
+        <h2>לוודא שאין הרשאות ב-Entra</h2>
+        <p class="intro">כל הרשאת דואר ב-Entra חלה על כל הארגון ועוקפת את ההגבלה לתיבה אחת. לכן המסך הזה צריך להישאר ריק.</p>
+        <p class="where">App registrations ← Dona Platform - Staging ← API permissions</p>
+        <ol>
+          <li>להסיר את <code>User.Read</code> שנוסף כברירת מחדל. המערכת לא משתמשת בו.</li>
+          <li>לא להוסיף שום הרשאה, ולא ללחוץ Grant admin consent.</li>
+          <li>התוצאה: הרשימה ריקה.</li>
+        </ol>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">4</span>
+      <div class="body">
+        <h2>רישום האפליקציה ב-Exchange</h2>
+        <p class="intro">Exchange צריך להכיר את האפליקציה לפני שאפשר לתת לה הרשאה. מכאן והלאה הכל ב-PowerShell.</p>
+        <ol>
+          <li>התחברות:</li>
+        </ol>
+        <div class="code"><pre>Connect-ExchangeOnline</pre></div>
+        <ol start="2">
+          <li>רישום האפליקציה (המזהים משלב 1):</li>
+        </ol>
+        <div class="code"><pre>New-ServicePrincipal -AppId <span class="ph" data-ph="appId">&lt;APP_ID&gt;</span> -ObjectId <span class="ph" data-ph="spId">&lt;ENTERPRISE_APP_OBJECT_ID&gt;</span> -DisplayName "Dona Platform - Staging"</pre></div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">5</span>
+      <div class="body">
+        <h2>הגדרת התחום: תיבה אחת</h2>
+        <p class="intro">מגדירים ל-Exchange "תחום" שכולל רק את תיבת הפיילוט. ההרשאות בשלב הבא יחולו רק עליו.</p>
+        <ol>
+          <li>יצירת התחום:</li>
+        </ol>
+        <div class="code"><pre>New-ManagementScope -Name "Dona-Staging-Mailbox" -RecipientRestrictionFilter "PrimarySmtpAddress -eq 'asafv@dona.co.il'"</pre></div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">6</span>
+      <div class="body">
+        <h2>מתן ההרשאות על התחום</h2>
+        <p class="intro">שתי הרשאות, שתיהן על התחום משלב 5 בלבד. קריאה לקליטת המיילים, ושליחה לתשובת החירום הקבועה.</p>
+        <ol>
+          <li>קריאה:</li>
+        </ol>
+        <div class="code"><pre>New-ManagementRoleAssignment -App <span class="ph" data-ph="appId">&lt;APP_ID&gt;</span> -Role "Application Mail.Read" -CustomResourceScope "Dona-Staging-Mailbox"</pre></div>
+        <ol start="2">
+          <li>שליחה (לתשובת החירום בלבד):</li>
+        </ol>
+        <div class="code"><pre>New-ManagementRoleAssignment -App <span class="ph" data-ph="appId">&lt;APP_ID&gt;</span> -Role "Application Mail.Send" -CustomResourceScope "Dona-Staging-Mailbox"</pre></div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">7</span>
+      <div class="body">
+        <h2>בדיקה</h2>
+        <p class="intro">Exchange יודע לענות אם לאפליקציה יש גישה לתיבה מסוימת. בודקים שהתשובה "כן" לתיבת הפיילוט ו"לא" לכל תיבה אחרת.</p>
+        <ol>
+          <li>תיבת הפיילוט. בעמודת InScope צריך להופיע <strong>True</strong> בשתי השורות (Mail.Read, Mail.Send):</li>
+        </ol>
+        <div class="code"><pre>Test-ServicePrincipalAuthorization -Identity <span class="ph" data-ph="appId">&lt;APP_ID&gt;</span> -Resource asafv@dona.co.il</pre></div>
+        <ol start="2">
+          <li>תיבה אחרת כלשהי בארגון. כאן InScope צריך להיות <strong>False</strong>:</li>
+        </ol>
+        <div class="code"><pre>Test-ServicePrincipalAuthorization -Identity <span class="ph" data-ph="appId">&lt;APP_ID&gt;</span> -Resource <span class="ph">&lt;OTHER_MAILBOX&gt;</span></pre></div>
+        <ol start="3">
+          <li>צילום מסך של שתי התוצאות, לצרף למסירה בשלב 8.</li>
+        </ol>
+        <div class="callout info">
+          ההרשאות נכנסות לתוקף אחרי 30 דקות עד שעתיים. בדיקה מוקדמת יכולה להראות False גם כשהכל תקין.
+        </div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">8</span>
+      <div class="body">
+        <h2>מסירת הפרטים</h2>
+        <p class="intro">אלה חמשת הערכים שהמערכת צריכה. ארבעה מהם אינם סודיים. הסוד עובר בנפרד.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ערך</th><th>מאיפה</th><th>סודי?</th></tr></thead>
+            <tbody>
+              <tr><td class="k">Directory (tenant) ID</td><td>שלב 1, Overview</td><td>לא</td></tr>
+              <tr><td class="k">Application (client) ID</td><td>שלב 1, Overview</td><td>לא</td></tr>
+              <tr><td class="k">Client secret (Value)</td><td>שלב 2</td><td><strong>כן</strong></td></tr>
+              <tr><td class="k">תאריך תפוגת הסוד</td><td>שלב 2</td><td>לא</td></tr>
+              <tr><td class="k">כתובת התיבה</td><td><span class="mono">asafv@dona.co.il</span></td><td>לא</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ul>
+          <li>את ארבעת הערכים הלא-סודיים ואת צילומי המסך משלב 7 אפשר לשלוח במייל.</li>
+          <li>את הסוד: לא במייל ולא בוואטסאפ. בטלפון, או בקישור חד-פעמי (למשל מנהל סיסמאות או OneTimeSecret).</li>
+        </ul>
+        <div class="callout ok">
+          זהו. אנחנו מכניסים את הערכים למערכת בסביבת הבדיקות, שולחים מייל ניסיון לתיבה, ומעדכנים כשהוא מופיע במערכת.
+        </div>
+      </div>
+    </article>
+
+  </section>
+
+  <section class="why" aria-labelledby="signin-h">
+    <h2 id="signin-h">כניסה של הצוות עם חשבון Microsoft</h2>
+    <p>עבודה נפרדת מחיבור התיבה, באותו דייר. יוצרים רישום אפליקציה חדש, כדי שעובדי דונה דום ייכנסו למערכת עם חשבון ה-Microsoft שלהם. אין כאן דואר ואין כאן יומן. כ-10 דקות.</p>
+    <div class="callout">
+      <strong>לא לגעת באפליקציית התיבה.</strong> <code>Dona Platform - Staging</code> נשארת כפי שהיא. לא מוסיפים לה כתובת הפניה, לא מוסיפים לה <code>openid</code>, ולא מוסיפים הרשאת דואר או יומן לרישום החדש.
+    </div>
+  </section>
+
+  <section class="stages" aria-label="רישום כניסה עם Microsoft">
+
+    <article class="stage">
+      <span class="num">1</span>
+      <div class="body">
+        <h2>רישום אפליקציה חדשה</h2>
+        <p class="intro">זהות נפרדת, לדייר הזה בלבד. סוג הפלטפורמה הוא Web, כי לאפליקציה יש סוד.</p>
+        <p class="where">entra.microsoft.com ← Applications ← App registrations ← New registration</p>
+        <ol>
+          <li>Name: <code>Dona Sign-in - Staging</code></li>
+          <li>Supported account types: <strong>Accounts in this organizational directory only (Single tenant)</strong>. לא לסמן חשבונות Microsoft אישיים.</li>
+          <li>Redirect URI: לבחור <strong>Web</strong>, ולהדביק את הכתובת הראשונה:</li>
+        </ol>
+        <div class="code"><pre>https://dona-staging-r44j24yuaa-zf.a.run.app/staff/auth/microsoft/callback</pre></div>
+        <ol start="4">
+          <li>Register.</li>
+          <li>Authentication ← Add URI, וגם היא <strong>Web</strong>. להדביק את הכתובת השנייה:</li>
+        </ol>
+        <div class="code"><pre>http://127.0.0.1:3000/staff/auth/microsoft/callback</pre></div>
+        <ol start="6">
+          <li>לא לסמן Access tokens ולא ID tokens תחת Implicit grant and hybrid flows.</li>
+          <li>בדף Overview להעתיק שני ערכים: <strong>Application (client) ID</strong> ו-<strong>Directory (tenant) ID</strong>.</li>
+        </ol>
+        <div class="callout info">
+          שתי הכתובות חייבות להיות זהות תו-בתו, כולל <code>https</code> מול <code>http</code>. כתובת אחת חסרה והכניסה נכשלת.
+        </div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">2</span>
+      <div class="body">
+        <h2>יצירת סוד (Client secret)</h2>
+        <p class="intro">סיסמה נפרדת משל אפליקציית התיבה. המערכת מתריעה 30 יום לפני שהיא פגה, ולכן צריך גם את תאריך התפוגה.</p>
+        <p class="where">App registrations ← Dona Sign-in - Staging ← Certificates &amp; secrets ← New client secret</p>
+        <ol>
+          <li>Description: <code>dona-signin-staging</code></li>
+          <li>Expires: <strong>Custom</strong>, ל-24 חודשים (המקסימום).</li>
+          <li>Add.</li>
+          <li>להעתיק מיד את עמודת <strong>Value</strong> (לא את Secret ID). הערך מוצג פעם אחת בלבד.</li>
+          <li>לרשום את תאריך התפוגה שמופיע בעמודת Expires, בצורת <code>YYYY-MM-DD</code>.</li>
+        </ol>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">3</span>
+      <div class="body">
+        <h2>הרשאות: openid ו-email בלבד</h2>
+        <p class="intro">הרשאה מואצלת (Delegated) בלבד, שתי אלה, ושום דבר אחר. לא דואר, לא יומן, ולא הרשאת Application.</p>
+        <p class="where">App registrations ← Dona Sign-in - Staging ← API permissions</p>
+        <ol>
+          <li>להסיר את <code>User.Read</code> שנוסף כברירת מחדל.</li>
+          <li>Add a permission ← Microsoft Graph ← <strong>Delegated permissions</strong> ← לסמן רק <code>openid</code> ו-<code>email</code>.</li>
+          <li>לא להוסיף <code>Mail.Read</code>, <code>Mail.Send</code>, <code>Calendars.Read</code>, או כל הרשאה אחרת.</li>
+          <li>לא לעבור ללשונית Application permissions.</li>
+          <li>אם מופיע Grant admin consent עבור שתי אלה בלבד — לאשר. לא להוסיף הרשאה כדי שהכפתור יופיע.</li>
+        </ol>
+        <div class="callout">
+          <strong>התוצאה ברשימה:</strong> <code>openid</code> ו-<code>email</code>, מסוג Delegated, וזהו. הרשאת דואר או יומן כאן אסורה. הדואר נשאר באפליקציה השנייה, ושם רק דרך Exchange.
+        </div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">4</span>
+      <div class="body">
+        <h2>מסירת הפרטים</h2>
+        <p class="intro">הפריסה מצפה לחמישה ערכים. את הדומיין כבר קבענו. את ארבעת האחרים מוסרים מכאן.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ערך</th><th>מאיפה</th><th>סודי?</th></tr></thead>
+            <tbody>
+              <tr><td class="k">Application (client) ID</td><td>שלב 1, Overview</td><td>לא</td></tr>
+              <tr><td class="k">Directory (tenant) ID</td><td>שלב 1, Overview</td><td>לא</td></tr>
+              <tr><td class="k">Client secret (Value)</td><td>שלב 2</td><td><strong>כן</strong></td></tr>
+              <tr><td class="k">תאריך תפוגת הסוד</td><td>שלב 2, צורה <span class="mono">YYYY-MM-DD</span></td><td>לא</td></tr>
+              <tr><td class="k">דומיין</td><td>כבר מוגדר: <span class="mono">dona.co.il</span>. לא שולחים.</td><td>לא</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ul>
+          <li>את מזהה האפליקציה, מזהה הדייר ותאריך התפוגה: במייל. לא בצ'אט — לא בוואטסאפ ולא ב-Teams.</li>
+          <li>את הסוד: לא במייל ולא בצ'אט. בטלפון, או בקישור חד-פעמי (מנהל סיסמאות או OneTimeSecret).</li>
+        </ul>
+        <div class="callout ok">
+          זהו. אנחנו מכניסים את הערכים לסביבת הבדיקות. עד אז כפתור Microsoft לא מופיע במסך הכניסה.
+        </div>
+      </div>
+    </article>
+
+  </section>
+
+  <section class="later">
+    <h2>להמשך</h2>
+    <ul>
+      <li><strong>התיבה האמיתית:</strong> אחרי שהבדיקות עוברות, חוזרים על שלבים 1–8 עבור התיבה שהדיירים מכירים, עם אפליקציה נפרדת (<code>Dona Platform - Production</code>) ותחום נפרד. כך פרטי סביבת הבדיקות לעולם לא יגיעו לתיבה האמיתית.</li>
+      <li><strong>חידוש הסוד של תיבת הדואר:</strong> המערכת תתריע 30 יום לפני התפוגה. החידוש הוא סוד חדש ותאריך חדש לאפליקציה <code>Dona Platform - Staging</code> (שלבים 2 ו-8). שום דבר אחר לא משתנה.</li>
+      <li><strong>חידוש סוד הכניסה:</strong> אותו דבר לאפליקציה <code>Dona Sign-in - Staging</code> (שלבים 2 ו-4 בחלק הכניסה).</li>
+      <li><strong>ביטול הגישה בכל רגע:</strong> מחיקת ה-Client secret ב-Entra עוצרת הכל מיד. להסרה מלאה:</li>
+    </ul>
+    <div class="code"><pre>Get-ManagementRoleAssignment -RoleAssignee <span class="ph" data-ph="appId">&lt;APP_ID&gt;</span> | Remove-ManagementRoleAssignment
+Remove-ServicePrincipal -Identity <span class="ph" data-ph="appId">&lt;APP_ID&gt;</span></pre></div>
+    <ul>
+      <li><strong>גישה מותנית (Conditional Access):</strong> אם יש מדיניות שמגבילה אפליקציות לפי כתובת IP, לעדכן אותנו. המערכת רצה ב-Google Cloud בלי כתובת IP קבועה.</li>
+    </ul>
+  </section>
+
+  <footer>שאלות: אסף וילדר · Exchange Online RBAC for Applications, Microsoft Graph</footer>
+</main>
+
+<script>
+  (function () {
+    var ids = ['appId', 'spId'];
+    function fill() {
+      ids.forEach(function (id) {
+        var v = document.getElementById(id).value.trim();
+        document.querySelectorAll('[data-ph="' + id + '"]').forEach(function (el) {
+          if (!el.dataset.orig) el.dataset.orig = el.textContent;
+          el.textContent = v || el.dataset.orig;
+        });
+      });
+    }
+    ids.forEach(function (id) { document.getElementById(id).addEventListener('input', fill); });
+
+    document.querySelectorAll('.code').forEach(function (box) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'copy';
+      btn.textContent = 'העתקה';
+      btn.addEventListener('click', function () {
+        var text = box.querySelector('pre').innerText;
+        var done = function () { btn.textContent = 'הועתק'; setTimeout(function () { btn.textContent = 'העתקה'; }, 1500); };
+        var fallback = function () {
+          var r = document.createRange(); r.selectNodeContents(box.querySelector('pre'));
+          var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        };
+        try { navigator.clipboard.writeText(text).then(done, fallback); } catch (e) { fallback(); }
+      });
+      box.appendChild(btn);
+    });
+  })();
+</script>

@@ -30,6 +30,13 @@ than creating a new one).
 These four URLs are new as of 3 Sep 2026. The **pre-cleanup originals were not modified** and are
 still live at their own URLs — see [../archive/2026-09-03-pre-cleanup/README.md](../archive/2026-09-03-pre-cleanup/README.md).
 
+Also published, from [outlook-admin-guide-HE.html](outlook-admin-guide-HE.html): **Outlook admin guide**
+(Hebrew, for Dona Dom's Microsoft 365 administrator: the mailbox app, #188/#195, and the separate
+staging sign-in app, #265) —
+https://claude.ai/artifact/2ar18NzYT3wmWXom1LC824 — and its short version,
+[outlook-admin-guide-lite-HE.html](outlook-admin-guide-lite-HE.html) —
+https://claude.ai/artifact/Rt8nzQyuq2XNY9u124kNYJ
+
 Also published, not stored locally: **Handoff (HTML)** —
 https://claude.ai/code/artifact/328f8a74-b426-4a0e-bb74-2831e098f144 — now behind
 [../HANDOFF.md](../HANDOFF.md); republish it before showing it to anyone.

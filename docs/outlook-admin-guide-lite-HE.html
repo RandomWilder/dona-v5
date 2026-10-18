@@ -1,0 +1,492 @@
+<title>חיבור מהיר לתיבת הדואר</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@500;600;700&family=Assistant:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Layout: one reading column; each stage is a numbered block with a short intro, then ordered steps; commands sit LTR in their own panels. */
+  :root {
+    direction: rtl;
+    --paper:      #F1F2EF;
+    --surface:    #FBFCF9;
+    --surface-2:  #E7EAE4;
+    --ink:        #17222E;
+    --ink-2:      #4C5964;
+    --ink-3:      #7B858D;
+    --rule:       #C8CFC7;
+    --structure:  #2F5D7C;
+    --signal:     #BF4A22;
+    --good:       #40704F;
+    --tint-structure: rgba(47,93,124,.10);
+    --tint-signal:    rgba(191,74,34,.10);
+    --tint-good:      rgba(64,112,79,.10);
+    --code-bg:    #1D2733;
+    --code-ink:   #E4E9EC;
+    --code-ph:    #F2B28F;
+
+    --font-display: "Heebo", "Helvetica Neue", Arial, sans-serif;
+    --font-body: "Assistant", "Heebo", system-ui, -apple-system, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --measure: 70ch;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:     #121821;
+      --surface:   #19212C;
+      --surface-2: #222C38;
+      --ink:       #E2E7E3;
+      --ink-2:     #A5B0B8;
+      --ink-3:     #79858E;
+      --rule:      #2F3B47;
+      --structure: #7BADD0;
+      --signal:    #EA7F52;
+      --good:      #79B78C;
+      --tint-structure: rgba(123,173,208,.14);
+      --tint-signal:    rgba(234,127,82,.14);
+      --tint-good:      rgba(121,183,140,.13);
+      --code-bg:   #0C1117;
+      --code-ink:  #DCE3E7;
+      --code-ph:   #F0A47E;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:     #121821;
+    --surface:   #19212C;
+    --surface-2: #222C38;
+    --ink:       #E2E7E3;
+    --ink-2:     #A5B0B8;
+    --ink-3:     #79858E;
+    --rule:      #2F3B47;
+    --structure: #7BADD0;
+    --signal:    #EA7F52;
+    --good:      #79B78C;
+    --tint-structure: rgba(123,173,208,.14);
+    --tint-signal:    rgba(234,127,82,.14);
+    --tint-good:      rgba(121,183,140,.13);
+    --code-bg:   #0C1117;
+    --code-ink:  #DCE3E7;
+    --code-ph:   #F0A47E;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 17px;
+    line-height: 1.65;
+  }
+  .page {
+    max-width: 820px;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 48px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 44px;
+  }
+  h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.25; }
+  h1 { font-size: 2.1rem; font-weight: 700; }
+  h2 { font-size: 1.4rem; font-weight: 700; }
+  h3 { font-size: 1.05rem; font-weight: 600; }
+  p { margin: 0; max-width: var(--measure); }
+  ul, ol { margin: 0; padding-inline-start: 1.3em; max-width: var(--measure); }
+  li + li { margin-top: 6px; }
+  code, .mono { font-family: var(--font-mono); font-size: .86em; direction: ltr; unicode-bidi: isolate; }
+  :not(pre) > code { background: var(--surface-2); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+  a { color: var(--structure); }
+  .eyebrow {
+    font-family: var(--font-display);
+    font-size: .78rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+    color: var(--ink-3);
+  }
+
+  header { display: flex; flex-direction: column; gap: 14px; border-bottom: 1px solid var(--rule); padding-bottom: 28px; }
+  .lede { font-size: 1.12rem; color: var(--ink-2); }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 24px; margin-top: 6px; }
+  .facts div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .facts dt { font-size: .8rem; color: var(--ink-3); font-weight: 600; }
+  .facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+
+  .why { display: flex; flex-direction: column; gap: 14px; }
+  .why ul { display: flex; flex-direction: column; gap: 4px; }
+  .why li + li { margin-top: 0; }
+
+  .callout {
+    padding: 14px 18px;
+    border-radius: 8px;
+    border-inline-start: 4px solid var(--signal);
+    background: var(--tint-signal);
+    max-width: var(--measure);
+  }
+  .callout.ok { border-color: var(--good); background: var(--tint-good); }
+  .callout.info { border-color: var(--structure); background: var(--tint-structure); }
+  .callout strong { font-family: var(--font-display); }
+
+  .ids {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .ids p { color: var(--ink-2); font-size: .95rem; }
+  .ids .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .ids label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; font-weight: 600; color: var(--ink-2); }
+  .ids input {
+    font-family: var(--font-mono);
+    font-size: .9rem;
+    direction: ltr;
+    text-align: left;
+    padding: 8px 10px;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--paper);
+    color: var(--ink);
+    width: 100%;
+  }
+  .ids input:focus-visible, button:focus-visible { outline: 2px solid var(--structure); outline-offset: 2px; }
+
+  .stages { display: flex; flex-direction: column; gap: 40px; counter-reset: stage; }
+  .stage { display: grid; grid-template-columns: 44px 1fr; gap: 0 16px; }
+  .stage > .num {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.05rem;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--structure);
+    color: var(--surface);
+    font-variant-numeric: tabular-nums;
+  }
+  .stage.optional > .num { background: var(--surface-2); color: var(--ink); border: 1px solid var(--rule); }
+  .stage > .body { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .stage .intro { color: var(--ink-2); }
+  .stage .where { font-size: .9rem; color: var(--ink-3); }
+  .stage ol > li::marker { font-family: var(--font-display); font-weight: 600; color: var(--structure); }
+
+  .code {
+    position: relative;
+    background: var(--code-bg);
+    border-radius: 8px;
+    direction: ltr;
+    text-align: left;
+  }
+  .code pre {
+    margin: 0;
+    padding: 14px 16px;
+    padding-right: 76px;
+    overflow-x: auto;
+    color: var(--code-ink);
+    font-family: var(--font-mono);
+    font-size: .84rem;
+    line-height: 1.6;
+  }
+  .code .ph { color: var(--code-ph); }
+  .code .cm { color: #8C9AA6; }
+  .copy {
+    position: absolute;
+    top: 8px; right: 8px;
+    font-family: var(--font-body);
+    font-size: .8rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,.25);
+    background: transparent;
+    color: var(--code-ink);
+    cursor: pointer;
+  }
+  .copy:hover { background: rgba(255,255,255,.08); }
+
+  table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+  th, td { text-align: start; padding: 10px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { font-family: var(--font-display); font-weight: 600; font-size: .85rem; color: var(--ink-2); background: var(--surface-2); }
+  td.k { white-space: nowrap; font-weight: 600; }
+
+  .later { display: flex; flex-direction: column; gap: 14px; border-top: 1px solid var(--rule); padding-top: 32px; }
+  footer { color: var(--ink-3); font-size: .85rem; }
+
+  @media (max-width: 520px) {
+    body { font-size: 16px; }
+    h1 { font-size: 1.7rem; }
+    .stage { grid-template-columns: 1fr; gap: 10px; }
+  }
+</style>
+
+<style>
+  .assure {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .assure h2 { font-size: 1.2rem; }
+  .entra-why { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 8px; background: var(--tint-structure); }
+  .entra-why h3 { color: var(--structure); }
+  .entra-why ul { display: flex; flex-direction: column; gap: 4px; }
+  .entra-why li + li { margin-top: 0; }
+  .checklist { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .checklist li { margin: 0; display: flex; gap: 10px; align-items: baseline; }
+  .checklist li::before { content: "☐"; color: var(--structure); font-size: 1.05em; flex: none; }
+</style>
+
+<main class="page">
+
+  <header>
+    <span class="eyebrow">מדריך מקוצר למנהל/ת Microsoft 365 · דונה דום</span>
+    <h1>חיבור תיבת הדואר למערכת דונה</h1>
+    <p class="lede">שני מסכים ב-Entra, מסך אחד ב-Exchange admin center וחמש פקודות PowerShell, ושתי פקודות בדיקה. כ-20 דקות עבודה, ועוד עד שעתיים המתנה עד שההרשאות נכנסות לתוקף.</p>
+    <dl class="facts">
+      <div><dt>תיבה בשלב הזה</dt><dd class="mono">asafv@dona.co.il</dd></div>
+      <div><dt>סביבה</dt><dd>בדיקות (Staging)</dd></div>
+      <div><dt>הרשאות</dt><dd>קריאה, ושליחת תשובת חירום אחת</dd></div>
+    </dl>
+  </header>
+
+  <section class="assure">
+    <h2>למה חשוב לעשות את זה נכון</h2>
+    <p>דונה דום בונה פלטפורמה חדשה לניהול הנכסים. המייל הוא הערוץ הראשון שבו דיירים פונים, ולכן החיבור הזה הוא הבסיס של כל המערכת: ממנו נפתחות קריאות שירות, ועליו יישענו בהמשך גם סוכני ה-AI שיטפלו בפניות.</p>
+    <p>ההגדרה נעשית פעם אחת. כשהיא נכונה, הגישה מוגבלת לתיבה אחת, מתועדת, ואפשר לבטל אותה בכל רגע. כשהיא שגויה, האפליקציה מקבלת גישה רחבה מדי או לא עובדת בכלל. לכן כל שלב כאן מפורט, ויש בדיקה בסוף שמוכיחה את התוצאה.</p>
+    <p>כל הרחבה עתידית, כמו תיבה נוספת או הרשאה נוספת, תהיה בקשה נפרדת ומפורשת. שום דבר לא מתרחב מעצמו.</p>
+  </section>
+
+  <section class="why">
+    <h2>מה המערכת עושה עם הגישה</h2>
+    <ul>
+      <li><strong>קוראת</strong> מיילים חדשים בתיבה הנכנסת, כל כ-90 שניות, מיום החיבור והלאה.</li>
+      <li><strong>שולחת דבר אחד:</strong> תשובה קבועה עם מספר התורן כשמייל מסומן כחירום. היא נשמרת ב-Sent Items.</li>
+      <li><strong>לא</strong> מוחקת, לא מעבירה ולא מסמנת כנקרא.</li>
+      <li><strong>תיבה אחת בלבד.</strong> אין גישה לתיבות אחרות או לרשימת המשתמשים.</li>
+    </ul>
+  </section>
+
+  <section class="stages" aria-label="שלבי ההגדרה">
+
+    <article class="stage">
+      <span class="num">1</span>
+      <div class="body">
+        <h2>Entra: זהות למערכת</h2>
+
+        <div class="entra-why">
+          <h3>מה זה Entra, ולמה אי אפשר לדלג</h3>
+          <ul>
+            <li>Entra (לשעבר Azure AD) הוא המקום שבו Microsoft 365 מחזיק את כל הזהויות בארגון: משתמשים, וגם אפליקציות.</li>
+            <li>המערכת ניגשת לתיבה בלי שאדם מחובר. Microsoft מאפשרת גישה כזו רק לאפליקציה שיש לה זהות וסיסמה ב-Entra.</li>
+            <li>Exchange לא יכול ליצור זהות כזו. הוא רק מחליט לאיזו תיבה זהות קיימת רשאית לגשת (שלב 2).</li>
+            <li>בקיצור: Entra קובע מי האפליקציה, Exchange קובע לאן היא נכנסת. בלי Entra אין למי לתת את ההרשאה.</li>
+          </ul>
+        </div>
+
+        <div class="callout">
+          <strong>אל תוסיפו שום הרשאה במסך API permissions, ואל תלחצו Grant admin consent.</strong> הרשאת דואר שם חלה על כל התיבות בארגון. ההרשאה ניתנת רק ב-Exchange, בשלב 2. (‏User.Read שמופיע שם כברירת מחדל לא מזיק ואפשר להשאיר אותו.)
+        </div>
+
+        <p class="where">entra.microsoft.com ← Applications ← App registrations ← New registration</p>
+        <ol>
+          <li>Name: <code>Dona Platform - Staging</code></li>
+          <li>Supported account types: <strong>Single tenant</strong> (ברירת המחדל).</li>
+          <li>Redirect URI: ריק. ← <strong>Register</strong>.</li>
+          <li>במסך Overview להעתיק: <strong>Application (client) ID</strong> ו-<strong>Directory (tenant) ID</strong>.</li>
+          <li>באותו מסך, ללחוץ על הקישור <strong>Managed application in local directory</strong> ← להעתיק את ה-<strong>Object ID</strong> שמופיע שם.</li>
+          <li>חזרה לאפליקציה ← <strong>Certificates &amp; secrets</strong> ← <strong>New client secret</strong> ← Expires: <strong>Custom, 24 חודשים</strong> ← Add.</li>
+          <li>להעתיק מיד את עמודת <strong>Value</strong> (לא Secret ID), ולרשום את תאריך התפוגה. הערך מוצג פעם אחת בלבד.</li>
+        </ol>
+        <div class="callout info">
+          ה-Object ID שצריך הוא זה שבסעיף 5 (של ה-Enterprise application), לא זה שמופיע ב-Overview של ה-App registration. הם שונים, וזו הטעות הנפוצה ביותר.
+        </div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">2</span>
+      <div class="body">
+        <h2>Exchange: הרשאה לתיבה אחת</h2>
+        <p class="intro">מציגים את האפליקציה ל-Exchange, מגדירים תחום שכולל רק את תיבת הפיילוט, ונותנים הרשאת קריאה ושליחה על התחום הזה בלבד. נדרש תפקיד Exchange Administrator.</p>
+
+        <div class="entra-why">
+          <h3>למה כאן אין מסכים בממשק הניהול</h3>
+          <ul>
+            <li>ההגבלה של אפליקציה לתיבה אחת (RBAC for Applications) קיימת ב-Exchange רק כפקודות PowerShell. ב-Exchange admin center אין לה מסך.</li>
+            <li>המסכים שכן קיימים (API permissions ב-Entra) נותנים גישה לכל התיבות בארגון. בדיוק מה שלא רוצים.</li>
+            <li>זה נעשה פעם אחת: חלון אחד, חמש פקודות להדבקה. אחרי כל פקודה כתוב מה אמור להופיע.</li>
+          </ul>
+        </div>
+
+        <h3>2א. בדיקת התיבה בממשק הניהול</h3>
+        <p class="where">admin.exchange.microsoft.com ← Recipients ← Mailboxes</p>
+        <ol>
+          <li>לחפש <code>asafv</code> ולפתוח את התיבה.</li>
+          <li>לוודא ש-<strong>Primary email address</strong> הוא בדיוק <code>asafv@dona.co.il</code>. אם מופיעה כתובת אחרת, להשתמש בה במקום בכל הפקודות.</li>
+        </ol>
+
+        <h3>2ב. פתיחת PowerShell</h3>
+        <ol>
+          <li>במחשב Windows: תפריט התחל ← לחפש <strong>PowerShell</strong> ← לפתוח.</li>
+          <li>אם זו הפעם הראשונה, להתקין את מודול Exchange. אם מופיעה שאלה, לענות <strong>Y</strong> או <strong>A</strong>:</li>
+        </ol>
+        <div class="code"><pre>Install-Module ExchangeOnlineManagement -Scope CurrentUser</pre></div>
+
+        <h3>2ג. חמש פקודות, אחת-אחת</h3>
+        <p>להדביק כל פקודה, ללחוץ Enter, ולוודא את התוצאה לפני שממשיכים. טקסט אדום = שגיאה, ראו טבלה בסוף.</p>
+        <ol>
+          <li><strong>התחברות.</strong> נפתח חלון התחברות רגיל של Microsoft. להתחבר עם חשבון המנהל.</li>
+        </ol>
+        <div class="code"><pre>Connect-ExchangeOnline</pre></div>
+        <ol start="2">
+          <li><strong>הצגת האפליקציה ל-Exchange.</strong> מופיעה שורה עם <code>Dona Platform - Staging</code>.</li>
+        </ol>
+        <div class="code"><pre>New-ServicePrincipal -AppId <span class="ph" data-ph="appId">&lt;APP_ID&gt;</span> -ObjectId <span class="ph" data-ph="spId">&lt;ENTERPRISE_APP_OBJECT_ID&gt;</span> -DisplayName "Dona Platform - Staging"</pre></div>
+        <ol start="3">
+          <li><strong>תחום של תיבה אחת.</strong> מופיעה שורה עם <code>Dona-Staging-Mailbox</code> והכתובת.</li>
+        </ol>
+        <div class="code"><pre>New-ManagementScope -Name "Dona-Staging-Mailbox" -RecipientRestrictionFilter "PrimarySmtpAddress -eq 'asafv@dona.co.il'"</pre></div>
+        <ol start="4">
+          <li><strong>הרשאת קריאה על התחום.</strong> מופיעה שורה עם <code>Application Mail.Read</code>.</li>
+        </ol>
+        <div class="code"><pre>New-ManagementRoleAssignment -App <span class="ph" data-ph="appId">&lt;APP_ID&gt;</span> -Role "Application Mail.Read" -CustomResourceScope "Dona-Staging-Mailbox"</pre></div>
+        <ol start="5">
+          <li><strong>הרשאת שליחה על התחום</strong> (לתשובת החירום בלבד). מופיעה שורה עם <code>Application Mail.Send</code>.</li>
+        </ol>
+        <div class="code"><pre>New-ManagementRoleAssignment -App <span class="ph" data-ph="appId">&lt;APP_ID&gt;</span> -Role "Application Mail.Send" -CustomResourceScope "Dona-Staging-Mailbox"</pre></div>
+        <p>להשאיר את החלון פתוח: שלב 3 רץ באותו חלון.</p>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">3</span>
+      <div class="body">
+        <h2>בדיקה</h2>
+        <p class="intro">מוכיחים שהגישה היא לתיבת הפיילוט ורק לה. להריץ אחרי 30 דקות עד שעתיים: לפני כן התשובה יכולה להיות False גם כשהכל תקין.</p>
+        <ol>
+          <li>תיבת הפיילוט. InScope צריך להיות <strong>True</strong> בשתי השורות:</li>
+        </ol>
+        <div class="code"><pre>Test-ServicePrincipalAuthorization -Identity <span class="ph" data-ph="appId">&lt;APP_ID&gt;</span> -Resource asafv@dona.co.il</pre></div>
+        <ol start="2">
+          <li>תיבה אחרת כלשהי. InScope צריך להיות <strong>False</strong>:</li>
+        </ol>
+        <div class="code"><pre>Test-ServicePrincipalAuthorization -Identity <span class="ph" data-ph="appId">&lt;APP_ID&gt;</span> -Resource <span class="ph">&lt;OTHER_MAILBOX&gt;</span></pre></div>
+        <ol start="3">
+          <li>צילום מסך של שתי התוצאות.</li>
+        </ol>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">4</span>
+      <div class="body">
+        <h2>מסירה</h2>
+        <p class="intro">חמישה ערכים וצילום מסך. רק הסוד רגיש, והוא עובר בנפרד.</p>
+        <ul class="checklist">
+          <li>Directory (tenant) ID</li>
+          <li>Application (client) ID</li>
+          <li>תאריך תפוגת הסוד</li>
+          <li>כתובת התיבה: <span class="mono">asafv@dona.co.il</span></li>
+          <li>צילומי המסך משלב 3</li>
+        </ul>
+        <p>את כל אלה אפשר לשלוח במייל.</p>
+        <div class="callout">
+          <strong>Client secret (Value):</strong> לא במייל ולא בוואטסאפ. בטלפון, או בקישור חד-פעמי (מנהל סיסמאות או OneTimeSecret).
+        </div>
+      </div>
+    </article>
+
+  </section>
+
+  <section class="later">
+    <h2>אחרי המסירה: מהתיבה לטאב קריאות</h2>
+    <p>כך מייל של דייר הופך לקריאת שירות במערכת. אותו מסלול בדיוק בבדיקות ובייצור, רק התיבה משתנה.</p>
+
+    <h3>המסלול של כל מייל</h3>
+    <ol>
+      <li><strong>קריאה.</strong> כל כ-90 שניות המערכת שואלת את Microsoft מה חדש בתיבה הנכנסת מאז הפעם הקודמת. נקודת הקריאה נשמרת, כך שגם אחרי הפעלה מחדש שום מייל לא נקרא פעמיים ולא מדולג.</li>
+      <li><strong>שמירה.</strong> המייל נשמר במערכת כפי שהוא, עם הקבצים המצורפים. בתיבה עצמה לא משתנה דבר.</li>
+      <li><strong>בדיקת חירום.</strong> לפי רשימת ביטויים קבועה, בלי AI. מייל חירום מסומן ומוצמד לראש הרשימה, ויוצאת ממנו תשובה קבועה אחת עם מספר התורן, על אותו שרשור.</li>
+      <li><strong>שרשור.</strong> תשובה על מייל קיים מצטרפת לקריאה הפתוחה שלו, ולא פותחת קריאה חדשה.</li>
+      <li><strong>מיון.</strong> מודל AI (OpenAI) מציע אם זו קריאת שירות, קטגוריה וסיכום בעברית, ומתרגם מייל שלא נכתב בעברית. הוא רק מציע; הצוות מחליט. מייל שאינו פנייה (פרסומת, התראה) עובר ל"מסוננות" ונמחק אחרי 6 חודשים.</li>
+      <li><strong>זיהוי.</strong> כתובת השולח מושווית לאנשי הקשר של הדיירים. התאמה אחת מסמנת את הקריאה כ"זוהתה".</li>
+      <li><strong>בטאב.</strong> הקריאה מופיעה בטאב קריאות, עם המייל, הקבצים והסיכום.</li>
+    </ol>
+
+    <h3>שמירה על החיבור</h3>
+    <ul>
+      <li>שעה בלי קריאה מוצלחת מהתיבה: הטאב מציג אזהרה. קריאה מוצלחת מנקה אותה.</li>
+      <li>30 יום לפני שהסוד פג: הטאב מציג אזהרה לחדש אותו.</li>
+    </ul>
+
+    <h3>בדיקות (Staging) עכשיו, ייצור (Production) אחר כך</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>בדיקות (עכשיו)</th><th>ייצור (בהמשך)</th></tr></thead>
+        <tbody>
+          <tr><td class="k">תיבה</td><td><span class="mono">asafv@dona.co.il</span></td><td>התיבה שהדיירים מכירים</td></tr>
+          <tr><td class="k">אפליקציה ב-Entra</td><td><code>Dona Platform - Staging</code></td><td><code>Dona Platform - Production</code>, נפרדת</td></tr>
+          <tr><td class="k">סביבת המערכת</td><td>סביבת בדיקות</td><td>סביבת הייצור</td></tr>
+          <tr><td class="k">ממתי נקרא</td><td>מיום החיבור</td><td>מיום החיבור. שום מייל ישן לא נמשך</td></tr>
+          <tr><td class="k">מתי</td><td>מיד אחרי המסירה</td><td>אחרי שכל בדיקות הפיילוט עוברות, ובאישור דונה דום</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>מה נבדוק בפיילוט</h3>
+    <ol>
+      <li>מייל ניסיון לתיבה מופיע בטאב קריאות תוך כ-2 דקות.</li>
+      <li>תשובה על אותו מייל מצטרפת לאותה קריאה.</li>
+      <li>מייל עם קובץ מצורף: הקובץ מופיע בקריאה.</li>
+      <li>מייל חירום: יוצאת תשובה אחת בלבד, והיא מופיעה ב-Sent Items של התיבה.</li>
+      <li>בתיבה עצמה שום מייל לא נמחק, לא הועבר ולא סומן כנקרא.</li>
+    </ol>
+    <p>כשהכל עובר, חוזרים על ארבעת השלבים של המדריך עבור התיבה האמיתית.</p>
+  </section>
+
+  <section class="later">
+    <h2>אם משהו לא עובד</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>מה רואים</th><th>מה לעשות</th></tr></thead>
+        <tbody>
+          <tr><td><code>New-ServicePrincipal</code> נכשל על ObjectId</td><td>הועתק ה-Object ID של ה-App registration. לקחת את זה מ-Managed application in local directory (שלב 1, סעיף 5).</td></tr>
+          <tr><td>בדיקה מחזירה False לתיבת הפיילוט</td><td>לחכות עד שעתיים ולהריץ שוב. אם עדיין False: לוודא שזו הכתובת הראשית של התיבה, עם <code>Get-Mailbox asafv@dona.co.il | fl PrimarySmtpAddress</code>.</td></tr>
+          <tr><td>בדיקה מחזירה True גם לתיבה אחרת</td><td>נוספה הרשאת דואר ב-API permissions של Entra. להסיר אותה ולבטל את ה-admin consent.</td></tr>
+          <tr><td>"already exists" באחת הפקודות</td><td>השלב כבר בוצע. להמשיך לשורה הבאה.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li><strong>ביטול גישה:</strong> מחיקת ה-Client secret ב-Entra עוצרת הכל מיד.</li>
+      <li><strong>התיבה האמיתית, בהמשך:</strong> אותם ארבעה שלבים, עם אפליקציה נפרדת (<code>Dona Platform - Production</code>) ותחום נפרד.</li>    </ul>
+  </section>
+</main>
+
+<script>
+  (function () {
+    document.querySelectorAll('.code').forEach(function (box) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'copy';
+      btn.textContent = 'העתקה';
+      btn.addEventListener('click', function () {
+        var text = box.querySelector('pre').innerText;
+        var done = function () { btn.textContent = 'הועתק'; setTimeout(function () { btn.textContent = 'העתקה'; }, 1500); };
+        var fallback = function () {
+          var r = document.createRange(); r.selectNodeContents(box.querySelector('pre'));
+          var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        };
+        try { navigator.clipboard.writeText(text).then(done, fallback); } catch (e) { fallback(); }
+      });
+      box.appendChild(btn);
+    });
+  })();
+</script>
