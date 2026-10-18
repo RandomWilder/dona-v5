@@ -90,6 +90,11 @@ export function gradeTurn(golden: GoldenCase, turn: AgentTurn): string[] {
       failures.push(`expected the answer to contain "${needle}"`);
     }
   }
+  for (const needle of expect.absent ?? []) {
+    if (turn.text.includes(needle)) {
+      failures.push(`expected the answer not to contain "${needle}"`);
+    }
+  }
   const carried = new Set(turn.citations.map(citationKind));
   for (const kind of expect.citesKinds ?? []) {
     if (!carried.has(kind)) failures.push(`expected a ${kind} citation`);

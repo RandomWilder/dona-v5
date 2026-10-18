@@ -33,6 +33,11 @@ export {
   followUpNamesOtherUnit,
   runCallBrief,
 } from './internal/call-brief.ts';
+export type { CallDraftAnswer, DraftPassage } from './internal/call-draft.ts';
+export {
+  answerCallDraft,
+  CALL_DRAFT_INSTRUCTIONS,
+} from './internal/call-draft.ts';
 export type {
   DeclarationResult,
   DocumentTypeFieldRow,
@@ -202,7 +207,11 @@ export type {
   RetrievalBound,
   RetrievalStance,
 } from './internal/search.ts';
-export { SEARCH_PASSAGE_LIMIT, searchPassages } from './internal/search.ts';
+export {
+  passagesByIds,
+  SEARCH_PASSAGE_LIMIT,
+  searchPassages,
+} from './internal/search.ts';
 export type { ProtocolProposal, SeedDeps } from './internal/seed.ts';
 export {
   confirmProtocol,

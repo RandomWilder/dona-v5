@@ -2680,9 +2680,15 @@ describe('shared UI tokens', () => {
       assert.match(html, /href="\/ui\/tokens\.css"/, name);
       assert.match(html, /<meta name="robots" content="noindex" \/>/, name);
       // v3 forbade `<script src=`. These pages are rendered on the server and need no script at
-      // all, so the stronger assertion is free — and an inline script is exactly how the next
-      // screen would acquire a dependency nothing gates.
-      assert.doesNotMatch(html, /<script/, name);
+      // all, except the call page's copy control once a draft exists (SPEC-calls): the clipboard
+      // is not a form. Any other script, or a script on a page with no draft, still fails.
+      const scripts = html.match(/<script\b[^>]*>[\s\S]*?<\/script>/g) ?? [];
+      if (scripts.length === 0) continue;
+      assert.match(html, /data-draft=/, name);
+      assert.equal(scripts.length, 1, name);
+      assert.match(scripts[0] ?? '', /data-draft/, name);
+      assert.match(scripts[0] ?? '', /clipboard/, name);
+      assert.doesNotMatch(scripts[0] ?? '', /\ssrc=/, name);
     }
   });
 

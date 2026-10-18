@@ -6,6 +6,7 @@ import type {
 import type { PassageHit, RetrievalBound } from '../src/evidence/contract.ts';
 import {
   answerCallBrief,
+  answerCallDraft,
   answerOfficeHits,
   chooseOfficeTools,
   followUpNamesOtherUnit,
@@ -341,6 +342,22 @@ export const placeholderSubject: Subject = async ({
       toolCalls: ['search'],
     };
   }
+  if (brief === 'draft-english') {
+    return {
+      text: 'The owner is responsible for fair wear.\nבעל הדירה',
+      refused: false,
+      citations: ['חוזה §7.2'],
+      toolCalls: ['search'],
+    };
+  }
+  if (brief === 'draft-responsibility') {
+    return {
+      text: 'לפי סעיף 7.2 בחוזה, תיקוני בלאי סביר הם באחריות בעל הדירה.',
+      refused: false,
+      citations: ['חוזה §7.2'],
+      toolCalls: ['search'],
+    };
+  }
   if (
     brief === 'out-of-bound' &&
     followUpNamesOtherUnit(message, '12', ['7'])
@@ -480,6 +497,51 @@ export function callBriefSubject(options: {
 }): Subject {
   const clock = systemClock;
   return async (input): Promise<AgentTurn> => {
+    if (
+      input.brief === 'draft-english' ||
+      input.brief === 'draft-responsibility'
+    ) {
+      const sought =
+        input.brief === 'draft-english'
+          ? 'מי אחראי על תיקון הדוד בדירה?'
+          : input.message;
+      const found = await options.corpus.search(sought, {
+        kind: 'unit',
+        id: HOME_UNIT,
+      });
+      const passages = found
+        .filter((hit) => (hit.clauseRef ?? '').startsWith('חוזה'))
+        .slice(0, 8)
+        .map((hit) => ({
+          passageId: newId(clock),
+          heading: 'lease עמוד 1',
+          text: hit.text,
+          citation: {
+            documentId: hit.clauseRef ?? hit.source,
+            page: 1,
+            documentType: 'lease',
+          },
+        }));
+      const decided = await answerCallDraft(options, {
+        question: input.message,
+        language: input.brief === 'draft-english' ? 'other' : 'he',
+        passages,
+      });
+      return {
+        text: decided.rendering
+          ? `${decided.text}\n${decided.rendering}`
+          : decided.text,
+        refused: decided.refused,
+        citations: decided.citations.map((citation) =>
+          citation.kind === 'policy'
+            ? citation.sectionLabel
+            : citation.kind === 'record'
+              ? RECORD_CITATION
+              : paperCitation(citation.documentId, citation.page),
+        ),
+        toolCalls: ['search'],
+      };
+    }
     const found = await options.corpus.search(input.message, {
       kind: 'unit',
       id: HOME_UNIT,

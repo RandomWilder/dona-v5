@@ -59,6 +59,8 @@ export interface CallBriefPanel {
     refused: boolean;
     citations: OfficeCitation[];
   }[];
+  /** The latest draft reply. Absent until someone asks for one. #255. */
+  draft: { text: string; rendering: string | null } | null;
 }
 
 export interface CallBriefRunner {
@@ -257,11 +259,11 @@ export async function loadCallBriefPanel(
   const thread = await loadCallThread(db, callId);
   if (!thread) return null;
   if (thread.status === 'skipped' && thread.skipReason === 'guarantor') {
-    return { kind: 'guarantor', facts: null, turns: [] };
+    return { kind: 'guarantor', facts: null, turns: [], draft: null };
   }
   if (thread.status === 'skipped') return null;
   if (thread.status === 'writing' && thread.turns.length === 0) {
-    return { kind: 'writing', facts: null, turns: [] };
+    return { kind: 'writing', facts: null, turns: [], draft: null };
   }
   const call = await getCall(db, callId);
   const partyId = call?.requester?.id ?? null;
@@ -272,17 +274,22 @@ export async function loadCallBriefPanel(
       : await resolveBrief(db, clock, callId, partyId, name);
   const facts =
     resolved === null || resolved === 'guarantor' ? null : resolved.facts;
+  const drafts = thread.turns.filter((turn) => turn.kind === 'draft');
+  const latest = drafts[drafts.length - 1];
   return {
     kind: 'ready',
     facts,
-    turns: thread.turns.map((turn) => ({
-      asker: turn.asker,
-      question: turn.question,
-      askedAt: turn.askedAt,
-      answer: turn.answer,
-      refused: turn.refused,
-      citations: turn.citations,
-    })),
+    turns: thread.turns
+      .filter((turn) => turn.kind !== 'draft')
+      .map((turn) => ({
+        asker: turn.asker,
+        question: turn.question,
+        askedAt: turn.askedAt,
+        answer: turn.answer,
+        refused: turn.refused,
+        citations: turn.citations,
+      })),
+    draft: latest ? { text: latest.answer, rendering: latest.rendering } : null,
   };
 }
 

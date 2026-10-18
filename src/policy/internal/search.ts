@@ -115,3 +115,44 @@ export async function searchPolicyPassages(
     distance: row.distance,
   }));
 }
+
+/** Passages a draft repeats from the brief. The version is the one that was cited. */
+export async function policyPassagesByIds(
+  db: Queryable,
+  ids: readonly string[],
+): Promise<PolicyPassageHit[]> {
+  if (ids.length === 0) return [];
+  const found = await db.query<{
+    policy_passage_id: string;
+    policy_document_id: string;
+    page: number;
+    body: string;
+    section_key: string;
+    label_he: string;
+    title: string;
+    effective_from: string;
+    effective_to: string | null;
+  }>(
+    `SELECT p.policy_passage_id, p.policy_document_id, p.page, p.body,
+            s.section_key, s.label_he, d.title,
+            to_char(d.effective_from, 'YYYY-MM-DD') AS effective_from,
+            to_char(d.effective_to, 'YYYY-MM-DD') AS effective_to
+       FROM policy_passage p
+       JOIN policy_document d ON d.policy_document_id = p.policy_document_id
+       JOIN policy_section s ON s.policy_section_id = d.policy_section_id
+      WHERE p.policy_passage_id = ANY($1::uuid[])`,
+    [ids],
+  );
+  return found.rows.map((row) => ({
+    passageId: row.policy_passage_id,
+    policyDocumentId: row.policy_document_id,
+    page: row.page,
+    text: row.body,
+    sectionKey: row.section_key,
+    sectionLabel: row.label_he,
+    title: row.title,
+    effectiveFrom: row.effective_from,
+    effectiveTo: row.effective_to,
+    distance: 0,
+  }));
+}

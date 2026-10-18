@@ -80,6 +80,22 @@ the record refusal. That other record is not searched, and the model is not call
 question, or one longer than 2000 characters, is not a turn. Sending a reply is a different
 command.
 
+**#255. The Draft reply.** A person asks for it from the call page, once the brief's thread is
+ready. It is one more turn on that thread, grounded in the passages the latest brief turn cited
+and in no others. It is written in the language of the requester's last inbound message, or of
+the description when the call has none: Hebrew when that text is Hebrew, and otherwise that
+other language with a Hebrew rendering stored beside it so the office can read what it would
+send. A Hebrew draft is one text. The page shows the draft in a field a staff member can edit.
+A copy control copies that field, edits included, on every channel that has a draft. PHONE and
+WALK_IN have nothing to send, and this command does not send on any channel. The draft never
+promises an outcome the code has not decided — responsibility, a visit time, or money — and it
+never states a fact the cited passages do not contain. When the brief cited nothing, the draft is
+the frozen refusal and the model is not called: one Hebrew sentence, or, in another language,
+“The papers on file do not answer this.” with that Hebrew sentence beside it. A requester who is only a guarantor gets
+no draft. A WHATSAPP call gets no draft. When the brief's switch is off, no draft is written
+and the model is not called. The copy control is the one inline script on a call that has a
+draft, because the clipboard is not a form; a call with no draft has no script.
+
 **Save this contact** is a command on a call a person identified, when the sender is an email
 address or a WhatsApp number. It adds that address to the requester as a PartyContact, through
 parties' contract, valid from today, and it is audited. The next message from that address is
