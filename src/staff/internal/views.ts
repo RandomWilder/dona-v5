@@ -53,6 +53,8 @@ const styles = h`<style>
     font-size: var(--text-sm);
   }
   .note { color: var(--color-text-muted); font-size: var(--text-sm); margin: 0; }
+  .auth-actions { display: grid; gap: var(--space-3); }
+  .auth-actions .btn { inline-size: 100%; }
   .secret {
     background: var(--color-surface-card);
     border: 1px solid var(--color-divider);
@@ -96,23 +98,42 @@ export interface LoginScreen {
   refused?: string;
   /** No OAuth client in this environment. Said out loud rather than answered as a failed sign-in. */
   unconfigured?: boolean;
+  /** Microsoft is configured, so the screen offers it beside Google. Absent leaves Google alone. */
+  microsoft?: boolean;
 }
 
 export function renderLoginPage(screen: LoginScreen = {}): string {
+  const google = h`<a class="btn btn-primary" href="/staff/auth/start">המשך עם Google</a>`;
+  const microsoft = h`<a class="btn btn-primary" href="/staff/auth/microsoft/start">המשך עם Microsoft</a>`;
+  const googleReady = screen.unconfigured !== true;
+  const microsoftReady = screen.microsoft === true;
   const start =
-    screen.unconfigured === true
-      ? h``
-      : h`<div class="auth-card">
-            <p class="note">הכניסה היא דרך חשבון Google. אין כאן סיסמה ואין קוד.</p>
-            <p><a class="btn btn-primary" href="/staff/auth/start">המשך עם Google</a></p>
-          </div>`;
+    googleReady && microsoftReady
+      ? h`<div class="auth-card">
+            <p class="note">הכניסה היא דרך חשבון Google או חשבון Microsoft. אין כאן סיסמה ואין קוד.</p>
+            <div class="auth-actions">
+              ${google}
+              ${microsoft}
+            </div>
+          </div>`
+      : googleReady
+        ? h`<div class="auth-card">
+              <p class="note">הכניסה היא דרך חשבון Google. אין כאן סיסמה ואין קוד.</p>
+              <p>${google}</p>
+            </div>`
+        : microsoftReady
+          ? h`<div class="auth-card">
+                <p class="note">הכניסה היא דרך חשבון Microsoft. אין כאן סיסמה ואין קוד.</p>
+                <p>${microsoft}</p>
+              </div>`
+          : h``;
   const body = h`
     <div class="auth">
       <div>
         <h1>כניסת צוות</h1>
         <p class="lede">מערכת דונה דום · ניהול נכסים</p>
       </div>
-      ${screen.unconfigured === true ? h`<p class="refusal">שירות הזהויות אינו מוגדר בסביבה הזו.</p>` : refusal(screen.refused)}
+      ${!googleReady && !microsoftReady ? h`<p class="refusal">שירות הזהויות אינו מוגדר בסביבה הזו.</p>` : refusal(screen.refused)}
       ${start}
       <p class="note">רק כתובת שכבר נמצאת ברשימת המשתמשים יכולה להיכנס.</p>
     </div>`;

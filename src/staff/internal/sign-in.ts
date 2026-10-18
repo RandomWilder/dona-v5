@@ -25,7 +25,7 @@ export interface VerifiedIdentity {
 
 /** The one refusal, before or after the identity is accepted. Names the account only when there is one. */
 export async function refuseSignIn(
-  deps: { pool: Pool; clock: Clock },
+  deps: { pool: Pool; clock: Clock; offerMicrosoft?: boolean },
   audit: AuditLog,
   reply: FastifyReply,
   cookies: string[],
@@ -49,7 +49,10 @@ export async function refuseSignIn(
   );
   reply.header('set-cookie', cookies);
   reply.code(403);
-  return renderLoginPage({ refused: REFUSED_HE });
+  return renderLoginPage({
+    refused: REFUSED_HE,
+    microsoft: deps.offerMicrosoft === true,
+  });
 }
 
 /**
@@ -62,7 +65,7 @@ export async function refuseSignIn(
  * step appends the session cookie on success and sets the header either way.
  */
 export async function completeSignIn(
-  deps: { pool: Pool; clock: Clock },
+  deps: { pool: Pool; clock: Clock; offerMicrosoft?: boolean },
   audit: AuditLog,
   reply: FastifyReply,
   secure: boolean,

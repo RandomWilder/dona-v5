@@ -528,3 +528,111 @@ describe('staff · signing in with Microsoft', () => {
     assert.equal(back.headers.location, '/staff');
   });
 });
+
+function loginButtons(
+  html: string,
+): { className: string; href: string; label: string }[] {
+  return [
+    ...html.matchAll(/<a class="([^"]+)" href="([^"]+)">([^<]+)<\/a>/g),
+  ].map((match) => ({
+    className: match[1] ?? '',
+    href: match[2] ?? '',
+    label: match[3] ?? '',
+  }));
+}
+
+describe('staff · the login screen offers Microsoft beside Google', () => {
+  it('shows two equal buttons, Google then Microsoft, when Microsoft is configured', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (pool === null) return t.skip(skipReason);
+    t.after(() => pool.end());
+
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      clock: fixedClock(AT),
+      identity: fakeGoogle(),
+      microsoft: fakeMicrosoft(),
+    });
+    const login = await app.inject({ method: 'GET', url: '/staff/login' });
+    assert.equal(login.statusCode, 200);
+    const offered = loginButtons(login.body);
+    assert.deepEqual(
+      offered.map((button) => button.label),
+      ['המשך עם Google', 'המשך עם Microsoft'],
+    );
+    assert.deepEqual(
+      offered.map((button) => button.href),
+      ['/staff/auth/start', '/staff/auth/microsoft/start'],
+    );
+    assert.equal(offered[0]?.className, offered[1]?.className);
+    assert.match(offered[0]?.className ?? '', /btn-primary/);
+    assert.match(
+      login.body,
+      /הכניסה היא דרך חשבון Google או חשבון Microsoft\. אין כאן סיסמה ואין קוד\./,
+    );
+    assert.doesNotMatch(
+      login.body,
+      /הכניסה היא דרך חשבון Google\. אין כאן סיסמה ואין קוד\./,
+    );
+    assert.doesNotMatch(login.body, /<script/);
+    assert.doesNotMatch(login.body, /<input/);
+  });
+
+  it('shows Google alone when Microsoft is not configured', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (pool === null) return t.skip(skipReason);
+    t.after(() => pool.end());
+
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      clock: fixedClock(AT),
+      identity: fakeGoogle(),
+    });
+    const login = await app.inject({ method: 'GET', url: '/staff/login' });
+    assert.equal(login.statusCode, 200);
+    assert.deepEqual(
+      loginButtons(login.body).map((button) => button.label),
+      ['המשך עם Google'],
+    );
+    assert.match(
+      login.body,
+      /הכניסה היא דרך חשבון Google\. אין כאן סיסמה ואין קוד\./,
+    );
+    assert.doesNotMatch(login.body, /Microsoft/);
+  });
+
+  it('still offers Microsoft when Google is not configured', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (pool === null) return t.skip(skipReason);
+    t.after(() => pool.end());
+
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      clock: fixedClock(AT),
+      microsoft: fakeMicrosoft(),
+    });
+    const login = await app.inject({ method: 'GET', url: '/staff/login' });
+    assert.equal(login.statusCode, 200);
+    assert.deepEqual(
+      loginButtons(login.body).map((button) => ({
+        href: button.href,
+        label: button.label,
+      })),
+      [
+        {
+          href: '/staff/auth/microsoft/start',
+          label: 'המשך עם Microsoft',
+        },
+      ],
+    );
+    assert.match(
+      login.body,
+      /הכניסה היא דרך חשבון Microsoft\. אין כאן סיסמה ואין קוד\./,
+    );
+    assert.doesNotMatch(login.body, /שירות הזהויות אינו מוגדר/);
+    assert.doesNotMatch(login.body, /href="\/staff\/auth\/start"/);
+  });
+});

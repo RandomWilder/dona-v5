@@ -176,6 +176,11 @@ export function registerStaffRoutes(
 ): void {
   const audit = createAuditLog(deps.pool, deps.clock);
   const unconfigured = () => deps.identity.describe() === 'unconfigured';
+  const signing = {
+    pool: deps.pool,
+    clock: deps.clock,
+    offerMicrosoft: deps.microsoft.expected() !== null,
+  };
 
   // The urlencoded body these forms post is parsed by `src/kernel/ui/forms.ts`, registered once by
   // the composition root — estate has posted a form since 2.6 and staff is the second module to,
@@ -184,7 +189,10 @@ export function registerStaffRoutes(
   app.register(async (scope) => {
     scope.get('/staff/login', PUBLIC, async (_request, reply) => {
       html(reply);
-      return renderLoginPage({ unconfigured: unconfigured() });
+      return renderLoginPage({
+        unconfigured: unconfigured(),
+        microsoft: signing.offerMicrosoft,
+      });
     });
 
     // **The redirect begins here so that the one-shot cookie is set by this system**, on this
@@ -221,7 +229,7 @@ export function registerStaffRoutes(
       const cookies = [clearedOauthCookie(isSecure(request))];
       html(reply);
 
-      const refuse = () => refuseSignIn(deps, audit, reply, cookies);
+      const refuse = () => refuseSignIn(signing, audit, reply, cookies);
 
       // Google declined, or the callback arrived without the redirect that should have started it.
       if (
@@ -253,7 +261,7 @@ export function registerStaffRoutes(
       });
       if (accepted === null) return refuse();
 
-      return completeSignIn(deps, audit, reply, isSecure(request), cookies, {
+      return completeSignIn(signing, audit, reply, isSecure(request), cookies, {
         bindingId: accepted.subject,
         address: accepted.email,
       });
@@ -306,7 +314,7 @@ export function registerStaffRoutes(
         const carried = readOauthCookie(request.headers.cookie);
         const cookies = [clearedOauthCookie(isSecure(request))];
         html(reply);
-        const refuse = () => refuseSignIn(deps, audit, reply, cookies);
+        const refuse = () => refuseSignIn(signing, audit, reply, cookies);
 
         if (
           query.error !== undefined ||
@@ -342,10 +350,17 @@ export function registerStaffRoutes(
         });
         if (accepted === null) return refuse();
 
-        return completeSignIn(deps, audit, reply, isSecure(request), cookies, {
-          bindingId: accepted.bindingId,
-          address: accepted.email,
-        });
+        return completeSignIn(
+          signing,
+          audit,
+          reply,
+          isSecure(request),
+          cookies,
+          {
+            bindingId: accepted.bindingId,
+            address: accepted.email,
+          },
+        );
       },
     );
 
