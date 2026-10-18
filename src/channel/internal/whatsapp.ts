@@ -18,6 +18,7 @@ import {
   type Sorter,
 } from './door.ts';
 import type { Queryable } from './types.ts';
+import type { WhatsappSessionReply } from './whatsapp-reply.ts';
 
 /** Seven days, the warning ahead of Meta's roughly fourteen-day disconnect. */
 const ECHO_QUIET_MS = 7 * 24 * 60 * 60 * 1000;
@@ -340,6 +341,14 @@ export async function sendWhatsappReply(
     throw new KernelError('unavailable', 'whatsapp reply was not sent');
   }
   return { externalMessageId: id };
+}
+
+/** The office reply. The same post the duty reply uses, with the default fetch. */
+export function sendWhatsappSession(
+  config: WhatsappConfig,
+  reply: WhatsappSessionReply,
+): Promise<{ externalMessageId: string }> {
+  return sendWhatsappReply(config, defaultFetch, reply);
 }
 
 function unconfiguredSorter(): Sorter {

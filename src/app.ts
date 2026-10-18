@@ -18,6 +18,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import {
   countOpenCalls,
+  getCall,
   listCategories,
   readEmergencySettings,
   readResponseGoal,
@@ -36,10 +37,12 @@ import {
   readAttachment,
   registerChannelRoutes,
   replyOnInboundEmail,
+  replyOnInboundWhatsapp,
   rescueNoise,
   type Sorter,
   secretWarning,
   type WhatsappFetch,
+  type WhatsappSessionReply,
   whatsappFrom,
   whatsappWarning,
 } from './channel/contract.ts';
@@ -186,6 +189,13 @@ export interface AppDeps {
     body: string;
   }) => Promise<{ externalMessageId: string }>;
   /**
+   * The one WhatsApp session send. Wired only when the number is configured.
+   * The duty reply and the office reply both call it. #257.
+   */
+  whatsappReply?: (
+    reply: WhatsappSessionReply,
+  ) => Promise<{ externalMessageId: string }>;
+  /**
    * The real sorter. Absent in tests, which inject a fake at the door.
    * Present on staging and in production, where the dev form uses it too.
    */
@@ -297,6 +307,37 @@ function unexpectedLine(caught: unknown, route: string | undefined): string {
     pgCode: text(foreign.code),
     constraint: text(foreign.constraint),
   });
+}
+
+function officeReply(
+  pool: Pool,
+  clock: Clock,
+  email: AppDeps['graphReply'],
+  whatsapp: AppDeps['whatsappReply'],
+):
+  | ((callId: string, body: string) => Promise<{ externalMessageId: string }>)
+  | undefined {
+  if (email === undefined && whatsapp === undefined) return undefined;
+  return async (callId, body) => {
+    const call = await getCall(pool, callId);
+    if (!call) throw new KernelError('not_found', 'call not found');
+    if (call.sourceChannel === 'WHATSAPP') {
+      if (!whatsapp) {
+        throw new KernelError('unavailable', 'whatsapp is not configured', {
+          field: 'reply',
+          reason: 'whatsapp',
+        });
+      }
+      return replyOnInboundWhatsapp(pool, clock, callId, body, whatsapp);
+    }
+    if (!email) {
+      throw new KernelError('unavailable', 'mailbox is not configured', {
+        field: 'reply',
+        reason: 'email',
+      });
+    }
+    return replyOnInboundEmail(pool, callId, body, email);
+  };
 }
 
 export function buildApp(deps: AppDeps): FastifyInstance {
@@ -809,11 +850,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     chrome: signedInChrome,
     devIntake: deps.devMockups === true,
     messagesOnCall: (callId) => listMessagesOnCall(deps.pool, callId),
-    sendEmailReply:
-      graphReply === undefined
-        ? undefined
-        : (callId, body) =>
-            replyOnInboundEmail(deps.pool, callId, body, graphReply),
+    sendReply: officeReply(deps.pool, clock, graphReply, deps.whatsappReply),
     listNoise: () => listNoiseMessages(deps.pool),
     rescueNoise: (spec) => rescueNoise(deps.pool, clock, spec),
     mailboxWarning: () =>

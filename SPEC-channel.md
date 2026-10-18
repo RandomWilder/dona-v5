@@ -139,7 +139,9 @@ recorded payloads, and wired to no mailbox.
   inbound message opened. It is not a template. No model writes it. It is stored on the call's
   timeline and audited. A second emergency message on the same open call does not send another. A
   call flagged by hand sends nothing. PHONE and WALK_IN send nothing. The sentence stays the
-  placeholder until the director approves the wording.
+  placeholder until the director approves the wording. The office reply on a WhatsApp call uses that
+  same session send. It goes to the number on the call's last inbound message, and only inside the
+  24-hour window that message opened (#257). An echo does not open the window.
 
 **Attachments** stay on their Message and show on the call. The bytes are kept with the message, so
 the call shows the file's name, type and size and the office can open it without the mailbox. A file

@@ -31,10 +31,10 @@ ticket sends WhatsApp content to the model.
 ## Acceptance criteria
 
 - [x] #249 is closed. Its outcome is the scope of this ticket: copy only, no brief, no draft.
-- [ ] A WHATSAPP call does not get a brief or a draft. The policy cases from #252 and #255 that
+- [x] A WHATSAPP call does not get a brief or a draft. The policy cases from #252 and #255 that
       excluded WhatsApp stay, and the reason recorded is #249.
-- [ ] The 24-hour refusal has a policy case that was red first, tested at the boundary minute.
-- [ ] The full golden set runs. The copilot does not send WhatsApp message text to the model.
+- [x] The 24-hour refusal has a policy case that was red first, tested at the boundary minute.
+- [x] The full golden set runs. The copilot does not send WhatsApp message text to the model.
       The sorter's existing send (#181) is outside this ticket.
 - [ ] Clicked on `:3000` with the development number:
   - [ ] a send of staff-written text inside the window;
@@ -50,3 +50,7 @@ ticket sends WhatsApp content to the model.
 #249 answered no. Scope of this ticket is copy only. A WhatsApp call gets no brief and no draft. The exclusion on the brief, follow-ups and draft stays. Nothing on this ticket sends WhatsApp content to the model.
 
 Sending inside the 24-hour window, and copy outside it, are unchanged, and still wait on #256. There is no model condition to copy in as an acceptance criterion.
+
+## Comment — 2026-10-18
+
+The page offers a box the person types or pastes into. On an identified WhatsApp call that is still open, send is there inside 24 hours of the last inbound message and copy only once that minute has passed. A viewer gets copy, and a post without `calls.reply` is refused. The server resolves the number from that inbound message. An echo does not keep the window open. The timeline and the audit name the actor and the text, marked as written, because there is no draft. The brief and the draft stay skipped, which is #249's no. The copilot golden set passed 26/26. The development number is not configured in this environment, so the click on `:3000` is still open.

@@ -1,6 +1,7 @@
-// #256. Send the draft, edited or as written, as a reply on the call's own
-// inbound email. The channel resolves the message. This command decides
-// whether the send is allowed, then records it.
+// #256 and #257. Send on the call's own channel. Email sends the draft,
+// edited or as written. WhatsApp sends the text the person typed, inside
+// the window the channel enforces. This command decides whether the send
+// is allowed, then records it.
 
 import { createAuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
@@ -59,11 +60,15 @@ export async function sendCallReply(
       reason: 'new',
     });
   }
-  if (call.sourceChannel !== 'EMAIL') {
-    throw new KernelError('invalid', 'only an email call can be replied to', {
-      field: 'reply',
-      reason: 'channel',
-    });
+  if (call.sourceChannel !== 'EMAIL' && call.sourceChannel !== 'WHATSAPP') {
+    throw new KernelError(
+      'invalid',
+      'only an email or WhatsApp call can be replied to',
+      {
+        field: 'reply',
+        reason: 'channel',
+      },
+    );
   }
 
   try {
@@ -78,7 +83,10 @@ export async function sendCallReply(
 
   const thread = await loadCallThread(db, callId);
   const draft = thread?.turns.filter((turn) => turn.kind === 'draft').at(-1);
-  const mark = draft?.answer.trim() === body ? 'as_written' : 'edited';
+  const mark =
+    call.sourceChannel === 'WHATSAPP' || draft?.answer.trim() === body
+      ? 'as_written'
+      : 'edited';
   const at = clock.now();
   await inTransaction(db, async (tx) => {
     await tx.query(

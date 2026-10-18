@@ -2,9 +2,11 @@
 // #184 closes it.
 //
 // The page is `estate.read`, which every signed-in role holds. Sending the
-// draft is `calls.reply` (#256): ADMIN and OPERATOR. A viewer copies.
+// draft is `calls.reply` (#256, #257): ADMIN and OPERATOR. A viewer copies.
+// WhatsApp sends only inside 24 hours of the last inbound message.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
+import { whatsappWindowOpen } from '../../channel/contract.ts';
 import type { ChromeDest } from '../../chrome.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import type { Embedder } from '../../kernel/embeddings.ts';
@@ -119,10 +121,10 @@ export interface CallsDeps {
     readonly { typeKey: string; labelHe: string }[]
   >;
   /**
-   * Sends on the call's inbound email. Absent when the mailbox is not
-   * configured: the page can still copy. #256.
+   * Sends on the call's own channel. Absent when neither mailbox nor
+   * WhatsApp is configured: the page can still copy. #256, #257.
    */
-  sendEmailReply?: (
+  sendReply?: (
     callId: string,
     body: string,
   ) => Promise<{ externalMessageId: string }>;
@@ -145,6 +147,23 @@ const REFUSAL: Record<string, string> = {
   file: 'אין קובץ לתייק.',
   anchored: 'הקובץ כבר מתויק במקום אחר.',
 };
+
+function whatsappWindowOf(
+  call: { sourceChannel: string; state: string },
+  messages: readonly { at: Date; echo: boolean }[],
+  now: Date,
+): 'open' | 'closed' | null {
+  if (call.sourceChannel !== 'WHATSAPP') return null;
+  if (call.state === 'NEW' || call.state === 'CLOSED') return null;
+  let last: Date | null = null;
+  for (const message of messages) {
+    if (message.echo) continue;
+    if (last === null || message.at.getTime() > last.getTime())
+      last = message.at;
+  }
+  if (last === null) return 'closed';
+  return whatsappWindowOpen(last, now) ? 'open' : 'closed';
+}
 
 function briefRunner(deps: CallsDeps): CallBriefRunner | null {
   if (!deps.brief) return null;
@@ -284,7 +303,16 @@ function refusalHe(error: KernelError): string {
     return 'יש לזהות את הפונה לפני השליחה.';
   }
   if (field === 'reply' && reason === 'channel') {
-    return 'אפשר לשלוח רק על דוא״ל.';
+    return 'אפשר לשלוח רק על דוא״ל או וואטסאפ.';
+  }
+  if (field === 'reply' && reason === 'window') {
+    return 'חלון 24 השעות נסגר.';
+  }
+  if (field === 'reply' && reason === 'whatsapp') {
+    return 'וואטסאפ אינו מוגדר.';
+  }
+  if (field === 'reply' && reason === 'email') {
+    return 'הדואר אינו מוגדר.';
   }
   if (field === 'reply' && reason === 'message') {
     return 'אין הודעה נכנסת לשלוח אליה.';
@@ -651,6 +679,7 @@ async function callPage(
     mayReadParties: can(role, 'party.read'),
     documentTypes,
     now: deps.clock.now(),
+    whatsappWindow: whatsappWindowOf(call, messages, deps.clock.now()),
     receipt,
     nextOpen,
     exitDraft,
@@ -923,10 +952,21 @@ export function registerCallsRoutes(
       const staff = staffOf(request);
       const callId = callIdOf(request.params);
       const body = textOf(formOf(request.body).body);
-      if (!deps.sendEmailReply) {
+      if (!deps.sendReply) {
+        const call = await getCall(deps.pool, callId);
         html(reply);
         reply.code(400);
-        return callPage(deps, request, callId, 'הדואר אינו מוגדר.');
+        return callPage(
+          deps,
+          request,
+          callId,
+          refusalHe(
+            new KernelError('unavailable', 'the reply is not configured', {
+              field: 'reply',
+              reason: call?.sourceChannel === 'WHATSAPP' ? 'whatsapp' : 'email',
+            }),
+          ),
+        );
       }
       try {
         await sendCallReply(
@@ -938,7 +978,7 @@ export function registerCallsRoutes(
             actorId: staff.staffAccountId,
             actorRole: staff.role,
           },
-          deps.sendEmailReply,
+          deps.sendReply,
         );
         return reply.code(303).header('location', `/calls/${callId}`).send();
       } catch (error) {

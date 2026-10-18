@@ -1,6 +1,7 @@
 // POLICY — the call brief's exclusions. #252.
 //
 // A guarantor, a WhatsApp call, and a switch that is off never reach the model.
+// The WhatsApp skip is #249's no.
 // A service provider is answered from their own record: a lease filed for
 // someone else is not a fact the brief is given.
 import assert from 'node:assert/strict';

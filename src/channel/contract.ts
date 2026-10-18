@@ -54,7 +54,13 @@ export type { WhatsappConfig, WhatsappFetch } from './internal/whatsapp.ts';
 export {
   noteWhatsappEcho,
   readWhatsappWebhook,
+  sendWhatsappSession,
   watchWhatsapp,
   whatsappFrom,
   whatsappWarning,
 } from './internal/whatsapp.ts';
+export {
+  replyOnInboundWhatsapp,
+  type WhatsappSessionReply,
+  whatsappWindowOpen,
+} from './internal/whatsapp-reply.ts';
