@@ -231,6 +231,13 @@ The requester's name in the preview is text, and it does not link to the profile
 call still waiting on a category, offers a next step that links to the call page. From
 RESPONSIBILITY SET on, and on a closed call, there is no such strip.
 
+On a wide screen the line between the inbox and the preview is a separator (#267). Resting the
+pointer on it shows a left-right resize cursor. Dragging it sets the inbox width, and the preview
+takes the width that remains. The inbox does not go below 16rem, and the preview does not go below
+20rem. That width is stored in the browser and restored the next time the split inbox is shown.
+The arrow keys move the same line, by 1rem, or by 4rem while Shift is held. The list view has no
+separator. Below 64rem the split inbox is not shown, so the separator is not used.
+
 **A narrow screen (#225)** changes the layout and nothing else. Below 40rem the stat row is two
 columns, the segments wrap rather than scroll so the current one is always in view, the eight steps
 become one line of dots with only the current state named, the log dialog is a sheet on the bottom

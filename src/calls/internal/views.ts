@@ -2,7 +2,8 @@
 // its timeline, identifying the requester, and setting the trade. #184 closes
 // it by an Exit. #186 adds the filtered list, the messages, and return.
 //
-// Server-rendered, no client JavaScript. The rail count is the open-call count
+// Server-rendered. The split inbox's resize handle is the one script on this
+// list (#267); the call page's copy control is the other. The rail count is the open-call count
 // for the whole office, passed in by the route, so a filter does not shrink it.
 import { addDays, DEFAULT_ZONE, dayIn } from '../../kernel/clock.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
@@ -33,6 +34,13 @@ import {
   type SorterLabel,
   type SourceChannel,
 } from './commands.ts';
+import {
+  SPLIT_INBOX_DEFAULT_REM,
+  SPLIT_INBOX_MIN_REM,
+  SPLIT_PREVIEW_MIN_REM,
+  splitResizeHandle,
+  splitResizeScript,
+} from './split-resize.ts';
 
 export interface TimelineMessage {
   id: string;
@@ -454,9 +462,6 @@ const styles = h`<style>
     .calls .call-work:has(.call-aside) {
       grid-template-columns: var(--size-retrieval) minmax(0, 1fr);
     }
-    .calls .split-work {
-      grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
-    }
   }
   .calls .split-layout { display: grid; gap: var(--space-6); }
   .calls .list-layout { display: none; }
@@ -466,6 +471,40 @@ const styles = h`<style>
     display: grid;
     gap: var(--space-4);
     align-items: start;
+  }
+  @media (min-width: 64rem) {
+    .calls .split-work {
+      column-gap: 0;
+      align-items: stretch;
+      grid-template-columns: auto var(--space-4) minmax(${SPLIT_PREVIEW_MIN_REM}rem, 1fr);
+    }
+    .calls .split-work > .sheet {
+      inline-size: var(--split-inbox, ${SPLIT_INBOX_DEFAULT_REM}rem);
+      min-inline-size: ${SPLIT_INBOX_MIN_REM}rem;
+      overflow: auto;
+    }
+    .calls .split-resize {
+      cursor: ew-resize;
+      touch-action: none;
+      user-select: none;
+      position: relative;
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+    .calls .split-resize::before {
+      content: "";
+      position: absolute;
+      inset-block: 0;
+      inset-inline-start: 50%;
+      inline-size: var(--size-hairline);
+      background: var(--color-divider-soft);
+      transform: translateX(-50%);
+    }
+    .calls .split-resize:focus-visible {
+      outline: var(--size-focus) solid var(--color-accent-ink);
+      outline-offset: var(--size-focus);
+    }
   }
   .calls .split-rows { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
   .calls .split-row {
@@ -1242,8 +1281,10 @@ function splitLayout(screen: CallsScreen): Html {
     <div class="toolbar">${segments(screen)}${exitSegments(screen)}${menus(screen)}</div>
     <div class="split-work">
       <div class="glass sheet">${list}</div>
+      ${splitResizeHandle()}
       ${previewPane(screen)}
     </div>
+    ${splitResizeScript()}
   </div>`;
 }
 
