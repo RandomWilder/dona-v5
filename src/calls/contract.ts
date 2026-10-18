@@ -97,6 +97,8 @@ export {
 export { replyLanguage, writeCallDraft } from './internal/draft.ts';
 export type { CallsDeps } from './internal/routes.ts';
 export { registerCallsRoutes } from './internal/routes.ts';
+export type { SendCallReplySpec } from './internal/send.ts';
+export { sendCallReply } from './internal/send.ts';
 export type {
   CallScreen,
   CallsScreen,

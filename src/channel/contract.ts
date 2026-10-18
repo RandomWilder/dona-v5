@@ -26,6 +26,7 @@ export {
   receiveIncoming,
   rescueNoise,
 } from './internal/door.ts';
+export { replyOnInboundEmail } from './internal/email-reply.ts';
 export { GMAIL_SCOPE, normaliseGmailMessage } from './internal/gmail.ts';
 export type {
   GraphFetch,

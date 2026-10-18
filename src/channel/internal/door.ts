@@ -136,8 +136,8 @@ export interface IntakeDeps {
     reply: DutyReply,
   ) => Promise<{ externalMessageId: string }>;
   /**
-   * Sends the fixed duty reply on the email's own thread. Absent, an
-   * emergency is still flagged and nothing is sent.
+   * The one Outlook reply, on this message. The duty reply is one caller.
+   * Absent, an emergency is still flagged and nothing is sent.
    */
   replyOnEmail?: (
     reply: EmailDutyReply,

@@ -139,6 +139,7 @@ export type TransitionKind =
   | 'TRIAGED'
   | 'FLAGGED'
   | 'CLEARED'
+  | 'REPLIED'
   | ExitKind;
 
 export interface CallLink {
@@ -168,6 +169,8 @@ export interface CallTransition {
   note?: string | null;
   department?: string | null;
   duplicateOf?: CallLink | null;
+  /** Set on a REPLIED event: the text matched the stored draft, or the person edited it. */
+  replyMark?: 'edited' | 'as_written' | null;
 }
 
 export interface ServiceCallDetail extends ServiceCall {
@@ -1153,12 +1156,13 @@ export async function getCall(
     department: string | null;
     duplicate_of: string | null;
     duplicate_description: string | null;
+    reply_mark: string | null;
   }>(
     `SELECT t.kind, t.at, t.actor_id, t.setter,
             COALESCE(NULLIF(btrim(actor.display_name), ''), actor.email) AS actor_label,
             party.full_name AS party_name,
             category.label_he AS category_label,
-            t.note, t.department, t.duplicate_of,
+            t.note, t.department, t.duplicate_of, t.reply_mark,
             dup.description AS duplicate_description
        FROM service_call_transition t
        LEFT JOIN staff_account actor ON actor.staff_account_id = t.actor_id
@@ -1211,15 +1215,20 @@ export async function getCall(
       event.kind === 'FLAGGED' &&
       (event.setter === 'TERMS' || event.setter === 'STAFF');
     const cleared = event.kind === 'CLEARED' && event.actor_id !== null;
+    const replied =
+      event.kind === 'REPLIED' &&
+      (event.reply_mark === 'edited' || event.reply_mark === 'as_written');
     const kind = flagged
       ? 'FLAGGED'
       : cleared
         ? 'CLEARED'
-        : event.kind === 'IDENTIFIED' || event.kind === 'TRIAGED'
-          ? event.kind
-          : isExitKind(event.kind)
+        : replied
+          ? 'REPLIED'
+          : event.kind === 'IDENTIFIED' || event.kind === 'TRIAGED'
             ? event.kind
-            : null;
+            : isExitKind(event.kind)
+              ? event.kind
+              : null;
     if (kind === null) continue;
     timeline.push({
       kind,
@@ -1238,6 +1247,12 @@ export async function getCall(
             : 'staff'
           : null,
       note: event.note,
+      replyMark:
+        kind === 'REPLIED'
+          ? event.reply_mark === 'as_written'
+            ? 'as_written'
+            : 'edited'
+          : null,
       department: event.department,
       duplicateOf:
         event.duplicate_of === null || event.duplicate_description === null
