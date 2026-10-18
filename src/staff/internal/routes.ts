@@ -29,6 +29,7 @@ import { requireText } from '../../kernel/validate.ts';
 import { addOperator, notAllowed } from './accounts.ts';
 import { csrfFrom } from './csrf.ts';
 import { acceptClaims, type IdentityProvider } from './identity.ts';
+import { acceptMicrosoftClaims, type MicrosoftProvider } from './microsoft.ts';
 import {
   can,
   isRole,
@@ -54,6 +55,8 @@ export interface StaffDeps {
   pool: Pool;
   clock: Clock;
   identity: IdentityProvider;
+  /** Microsoft, beside Google. Unconfigured unless the caller says otherwise, and Google is unaffected either way. */
+  microsoft: MicrosoftProvider;
   /** Where Google is told to send the operator back. The request's own origin when absent, which is what `npm run dev` wants. */
   baseUrl?: string;
   /** The Workspace domain to require, when Dona Dom's answer is known. Null means the allowlist is the only fence. */
@@ -106,11 +109,15 @@ function field(body: unknown, name: string, max: number): string {
 }
 
 /** Where Google sends the operator back, and the value Google matches character for character. */
-function callbackUrl(deps: StaffDeps, request: FastifyRequest): string {
+function callbackUrl(
+  deps: StaffDeps,
+  request: FastifyRequest,
+  path = '/staff/auth/callback',
+): string {
   const base =
     deps.baseUrl ??
     `${isSecure(request) ? 'https' : 'http'}://${request.headers.host ?? '127.0.0.1'}`;
-  return `${base.replace(/\/$/, '')}/staff/auth/callback`;
+  return `${base.replace(/\/$/, '')}${path}`;
 }
 
 /**
@@ -214,7 +221,7 @@ export function registerStaffRoutes(
       const cookies = [clearedOauthCookie(isSecure(request))];
       html(reply);
 
-      const refuse = () => refuseSignIn(audit, reply, cookies);
+      const refuse = () => refuseSignIn(deps, audit, reply, cookies);
 
       // Google declined, or the callback arrived without the redirect that should have started it.
       if (
@@ -251,6 +258,96 @@ export function registerStaffRoutes(
         address: accepted.email,
       });
     });
+
+    // Microsoft's own redirect URI, so a change to one provider's registration cannot move the
+    // other's. Unconfigured is not a refusal: both routes answer unavailable, and the login screen
+    // is what hides the button (SPEC-staff.md).
+    scope.get('/staff/auth/microsoft/start', PUBLIC, async (request, reply) => {
+      const expected = deps.microsoft.expected();
+      if (expected === null) {
+        throw new KernelError(
+          'unavailable',
+          'microsoft sign-in is not configured',
+        );
+      }
+      const state = newSessionToken();
+      const nonce = newSessionToken();
+      reply.header('set-cookie', oauthCookie(state, nonce, isSecure(request)));
+      return redirect(
+        reply,
+        deps.microsoft.authorizeUrl({
+          state,
+          nonce,
+          redirectUri: callbackUrl(
+            deps,
+            request,
+            '/staff/auth/microsoft/callback',
+          ),
+        }),
+      );
+    });
+
+    scope.get(
+      '/staff/auth/microsoft/callback',
+      PUBLIC,
+      async (request, reply) => {
+        const expected = deps.microsoft.expected();
+        if (expected === null) {
+          throw new KernelError(
+            'unavailable',
+            'microsoft sign-in is not configured',
+          );
+        }
+        const query = request.query as {
+          code?: string;
+          state?: string;
+          error?: string;
+        };
+        const carried = readOauthCookie(request.headers.cookie);
+        const cookies = [clearedOauthCookie(isSecure(request))];
+        html(reply);
+        const refuse = () => refuseSignIn(deps, audit, reply, cookies);
+
+        if (
+          query.error !== undefined ||
+          typeof query.code !== 'string' ||
+          typeof query.state !== 'string' ||
+          carried === null ||
+          !sameValue(carried.state, query.state)
+        ) {
+          return refuse();
+        }
+
+        let claims: Awaited<ReturnType<MicrosoftProvider['exchangeCode']>>;
+        try {
+          claims = await deps.microsoft.exchangeCode({
+            code: query.code,
+            redirectUri: callbackUrl(
+              deps,
+              request,
+              '/staff/auth/microsoft/callback',
+            ),
+          });
+        } catch (error) {
+          if (error instanceof KernelError && error.code === 'unavailable') {
+            throw error;
+          }
+          return refuse();
+        }
+
+        const accepted = acceptMicrosoftClaims(claims, {
+          nonce: carried.nonce,
+          tenantId: expected.tenantId,
+          domain: expected.domain,
+        });
+        if (accepted === null) return refuse();
+
+        return completeSignIn(deps, audit, reply, isSecure(request), cookies, {
+          bindingId: accepted.bindingId,
+          address: accepted.email,
+        });
+      },
+    );
 
     scope.post('/staff/logout', PUBLIC, async (request, reply) => {
       const token = readSessionCookie(request.headers.cookie);

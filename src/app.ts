@@ -106,9 +106,11 @@ import {
   CSRF_FIELD,
   can,
   createUnconfiguredIdentity,
+  createUnconfiguredMicrosoft,
   csrfFrom,
   csrfTokenFor,
   type IdentityProvider,
+  type MicrosoftProvider,
   PERMISSIONS,
   type Permission,
   type Role,
@@ -168,6 +170,11 @@ export interface AppDeps {
    * rather than starting a redirect to nowhere.
    */
   identity?: IdentityProvider;
+  /**
+   * Who signs in with Microsoft. **Unconfigured unless the caller says otherwise.** A clean clone
+   * starts, Google is unaffected, and the Microsoft routes answer unavailable.
+   */
+  microsoft?: MicrosoftProvider;
   /** Where Google is told to send an operator back. Absent, the request's own origin is used. */
   staffBaseUrl?: string;
   /** The Workspace domain to require, when Dona Dom's answer is known (slice 5.1b). */
@@ -320,6 +327,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     pool: deps.pool,
     clock: deps.clock ?? systemClock,
     identity: deps.identity ?? createUnconfiguredIdentity(),
+    microsoft: deps.microsoft ?? createUnconfiguredMicrosoft(),
     baseUrl: deps.staffBaseUrl,
     hostedDomain: deps.staffHostedDomain ?? null,
     chrome: signedInChrome,

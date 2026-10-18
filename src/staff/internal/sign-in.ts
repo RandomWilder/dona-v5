@@ -8,7 +8,9 @@ import type { Clock } from '../../kernel/clock.ts';
 import { sameValue } from '../../kernel/compare.ts';
 import {
   accountByEmail,
+  clearFailedAttempts,
   linkLocalId,
+  noteFailedAttempt,
   requireUsableAccount,
 } from './accounts.ts';
 import type { Role } from './roles.ts';
@@ -23,11 +25,19 @@ export interface VerifiedIdentity {
 
 /** The one refusal, before or after the identity is accepted. Names the account only when there is one. */
 export async function refuseSignIn(
+  deps: { pool: Pool; clock: Clock },
   audit: AuditLog,
   reply: FastifyReply,
   cookies: string[],
   accountId?: string,
 ): Promise<string> {
+  // Counted only once the address is one this system already holds. A token that has not been
+  // accepted does not name an account, and spending the lockout on an untrusted address would let
+  // a stranger lock a staff member out. Google and Microsoft share this counter: a second provider
+  // is not a second budget (ADR-0018).
+  if (accountId !== undefined) {
+    await noteFailedAttempt(deps.pool, deps.clock, accountId);
+  }
   await audit.write(
     {
       actorKind: 'staff',
@@ -60,7 +70,7 @@ export async function completeSignIn(
   identity: VerifiedIdentity,
 ): Promise<string | FastifyReply> {
   const refuse = (accountId?: string) =>
-    refuseSignIn(audit, reply, cookies, accountId);
+    refuseSignIn(deps, audit, reply, cookies, accountId);
 
   // **The allowlist.** An address with no row reaches exactly the same answer as an address the
   // provider never verified (ADR-0005, and the same fence for every later provider).
@@ -82,6 +92,7 @@ export async function completeSignIn(
     return refuse(usable.staffAccountId);
   }
 
+  await clearFailedAttempts(deps.pool, usable.staffAccountId);
   const { token, expiresAt } = await mintSession(
     deps.pool,
     deps.clock,

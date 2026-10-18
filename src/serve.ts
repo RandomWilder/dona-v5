@@ -33,6 +33,8 @@ import { createWorkRunner } from './kernel/work.ts';
 import {
   configuredHostedDomain,
   createConfiguredIdentity,
+  createConfiguredMicrosoft,
+  microsoftBootLine,
 } from './staff/contract.ts';
 
 const host = process.env.HOST ?? '0.0.0.0';
@@ -62,6 +64,9 @@ const extractor = createConfiguredExtractor();
 // one that does, and `identity: unconfigured` on staging is as wrong as a `-dev` version string —
 // readable on the boot line rather than discovered by an operator failing to log in.
 const identity = createConfiguredIdentity();
+// Microsoft beside Google (ADR-0018). Missing the client id, the secret, the tenant or the domain
+// leaves it unconfigured. The process still starts, and the boot line says so without the secret.
+const microsoft = createConfiguredMicrosoft();
 
 // **Which day the office is having (slice 7.2b).** A `config_settings` row, read here because this
 // is where the pool exists before the app does, and because a zone ICU does not know must fail the
@@ -136,6 +141,7 @@ const app = buildApp({
   work,
   bucket: configuredBucket(),
   identity,
+  microsoft,
   // Google matches the redirect URI character for character, so a deployment says its own origin
   // rather than letting a proxy header decide it.
   staffBaseUrl: process.env.STAFF_BASE_URL,
@@ -161,6 +167,7 @@ console.log(
 );
 console.log(`embed: ${embedder.describe()}`);
 console.log(`identity: ${identity.describe()}`);
+console.log(microsoftBootLine(microsoft));
 console.log(`clock: ${clock.zone}`);
 console.log(`outlook: ${outlook ? 'configured' : 'unconfigured'}`);
 console.log(`whatsapp: ${whatsapp ? 'configured' : 'unconfigured'}`);
