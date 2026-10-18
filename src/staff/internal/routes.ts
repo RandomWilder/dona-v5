@@ -26,13 +26,7 @@ import { sameValue } from '../../kernel/compare.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { Html } from '../../kernel/ui/html.ts';
 import { requireText } from '../../kernel/validate.ts';
-import {
-  accountByEmail,
-  addOperator,
-  linkLocalId,
-  notAllowed,
-  requireUsableAccount,
-} from './accounts.ts';
+import { addOperator, notAllowed } from './accounts.ts';
 import { csrfFrom } from './csrf.ts';
 import { acceptClaims, type IdentityProvider } from './identity.ts';
 import {
@@ -45,7 +39,6 @@ import {
 import {
   clearedOauthCookie,
   clearedSessionCookie,
-  mintSession,
   newSessionToken,
   oauthCookie,
   type ResolvedSession,
@@ -53,9 +46,9 @@ import {
   readSessionCookie,
   resolveSession,
   revokeSession,
-  sessionCookie,
 } from './sessions.ts';
-import { REFUSED_HE, renderLoginPage, renderStaffHomePage } from './views.ts';
+import { completeSignIn, refuseSignIn } from './sign-in.ts';
+import { renderLoginPage, renderStaffHomePage } from './views.ts';
 
 export interface StaffDeps {
   pool: Pool;
@@ -221,20 +214,7 @@ export function registerStaffRoutes(
       const cookies = [clearedOauthCookie(isSecure(request))];
       html(reply);
 
-      const refuse = async (accountId?: string): Promise<string> => {
-        await audit.write(
-          {
-            actorKind: 'staff',
-            actorId: accountId,
-            action: 'staff.login.refused',
-            inputs: {},
-          },
-          { outcome: 'error', code: 'not_allowed' },
-        );
-        reply.header('set-cookie', cookies);
-        reply.code(403);
-        return renderLoginPage({ refused: REFUSED_HE });
-      };
+      const refuse = () => refuseSignIn(audit, reply, cookies);
 
       // Google declined, or the callback arrived without the redirect that should have started it.
       if (
@@ -266,45 +246,10 @@ export function registerStaffRoutes(
       });
       if (accepted === null) return refuse();
 
-      // **The allowlist.** An address with no row reaches exactly the same answer as an address
-      // with no Google account behind it (ADR-0005).
-      const account = await accountByEmail(deps.pool, accepted.email);
-      let role: Role;
-      try {
-        role = requireUsableAccount(account, deps.clock);
-      } catch {
-        // No row, no role, disabled, locked — one answer, and the audit line names the account only
-        // when there is one to name. PII never in logs: no email here, ever (SPEC.md).
-        return refuse(account?.staffAccountId);
-      }
-      const usable = account as NonNullable<typeof account>;
-
-      // **The row is bound to the first Google account that ever uses it.** A re-created address is
-      // not the same operator, and rebinding silently is how a stranger inherits a role.
-      if (usable.idpLocalId === null) {
-        await linkLocalId(deps.pool, usable.staffAccountId, accepted.subject);
-      } else if (!sameValue(usable.idpLocalId, accepted.subject)) {
-        return refuse(usable.staffAccountId);
-      }
-
-      const { token, expiresAt } = await mintSession(
-        deps.pool,
-        deps.clock,
-        usable.staffAccountId,
-      );
-      await audit.write(
-        {
-          actorKind: 'staff',
-          actorId: usable.staffAccountId,
-          actorRole: role,
-          action: 'staff.login',
-          inputs: {},
-        },
-        { outcome: 'ok' },
-      );
-      cookies.push(sessionCookie(token, expiresAt, isSecure(request)));
-      reply.header('set-cookie', cookies);
-      return redirect(reply, '/staff');
+      return completeSignIn(deps, audit, reply, isSecure(request), cookies, {
+        bindingId: accepted.subject,
+        address: accepted.email,
+      });
     });
 
     scope.post('/staff/logout', PUBLIC, async (request, reply) => {
