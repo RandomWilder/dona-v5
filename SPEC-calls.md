@@ -85,7 +85,7 @@ ready. It is one more turn on that thread, grounded in the passages the latest b
 and in no others. It is written in the language of the requester's last inbound message, or of
 the description when the call has none: Hebrew when that text is Hebrew, and otherwise that
 other language with a Hebrew rendering stored beside it so the office can read what it would
-send. A Hebrew draft is one text. The page shows the draft in a field a staff member can edit.
+send. A Hebrew draft is one text. It opens with a greeting that uses the first word of the requester's name — שלום in Hebrew, Hello in the other language — which the code writes and the model does not. The model then writes one short sentence on what the requester asked about, naming the subject and not a day, a clock time, or a sum they asked for, and then the full answer from the cited passages. Passage numbers stay on the turn and are not written in the reply. When the draft is the frozen refusal, the greeting is followed by that sentence and there is no intro, because the model is not called. The page shows the draft in a field a staff member can edit.
 A copy control copies that field, edits included, on every channel that has a draft. PHONE and
 WALK_IN have nothing to send, and this command does not send on any channel. The draft never
 promises an outcome the code has not decided — responsibility, a visit time, or money — and it

@@ -57,3 +57,7 @@ Start here in a new session. #252 and #254 are closed. The staging walk-in that 
 ## Comment — 2026-10-18
 
 Closed. Draft is a turn on the call thread, written on request once the brief is ready, grounded in the passages that brief cited. Hebrew stays one text; more Latin than Hebrew gets the other language plus a Hebrew rendering. Guarantor-only, WhatsApp, and the brief switch off write nothing, and those three were red first. The two new golden cases passed (`draft-reply-english`, `draft-reply-no-promise`); the set was 25/26, and the miss was an extraction timeout on `building-lettings-list`, not the draft. On `:3000`, call `01a14a97` (Hebrew, phone), the draft field was edited and העתקה copied that edited text. Sending stays #256 and #257.
+
+## Comment — 2026-10-18
+
+The draft now opens as a reply. The code writes the greeting from the first word of the requester's name. The model writes one short sentence on the subject, then the full answer, and it does not write the greeting or passage numbers into the text. A refusal is the greeting and the frozen sentence only.

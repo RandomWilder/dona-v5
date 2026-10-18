@@ -23,6 +23,23 @@ import { DESCRIPTION_MAX, getCall } from './commands.ts';
 /** The frozen refusal, in English, beside the Hebrew sentence. */
 export const DRAFT_REFUSAL_EN = 'The papers on file do not answer this.';
 
+/** The first word of the name on file. That is the given name when the party has one. */
+function greetingName(name: string): string {
+  return name.trim().split(/\s+/)[0] ?? '';
+}
+
+/** The greeting the code writes. The model does not. */
+function withGreeting(
+  language: 'he' | 'other',
+  name: string,
+  body: string,
+): string {
+  const word = greetingName(name);
+  if (word.length === 0) return body;
+  const hello = language === 'he' ? `שלום ${word},` : `Hello ${word},`;
+  return `${hello}\n\n${body}`;
+}
+
 /** Hebrew when the text is Hebrew. Otherwise the language it was written in. */
 export function replyLanguage(text: string): 'he' | 'other' {
   const hebrew = text.match(/\p{Script=Hebrew}/gu)?.length ?? 0;
@@ -101,14 +118,19 @@ async function storeRefusal(
   callId: string,
   question: string,
   language: 'he' | 'other',
+  name: string,
 ): Promise<void> {
   const hebrew = language === 'he';
   await appendCallDraft(runner.db, runner.clock, {
     callId,
     asker: 'copilot',
     question,
-    answer: hebrew ? OFFICE_TURN_REFUSAL : DRAFT_REFUSAL_EN,
-    rendering: hebrew ? null : OFFICE_TURN_REFUSAL,
+    answer: withGreeting(
+      language,
+      name,
+      hebrew ? OFFICE_TURN_REFUSAL : DRAFT_REFUSAL_EN,
+    ),
+    rendering: hebrew ? null : withGreeting('he', name, OFFICE_TURN_REFUSAL),
     refused: true,
     citations: [],
     hitIds: [],
@@ -145,8 +167,9 @@ export async function writeCallDraft(
   const source = (spoken?.trim() || call.description).slice(0, DESCRIPTION_MAX);
   const language = replyLanguage(source);
   const passages = await citedPassages(runner.db, brief);
+  const name = call.requester.name;
   if (brief.refused || brief.citations.length === 0 || passages.length === 0) {
-    await storeRefusal(runner, callId, source, language);
+    await storeRefusal(runner, callId, source, language, name);
     return;
   }
   const decided = await answerCallDraft(
@@ -157,15 +180,18 @@ export async function writeCallDraft(
     { question: source, language, passages },
   );
   if (decided.refused) {
-    await storeRefusal(runner, callId, source, language);
+    await storeRefusal(runner, callId, source, language, name);
     return;
   }
   await appendCallDraft(runner.db, runner.clock, {
     callId,
     asker: 'copilot',
     question: source,
-    answer: decided.text,
-    rendering: language === 'he' ? null : decided.rendering,
+    answer: withGreeting(language, name, decided.text),
+    rendering:
+      language === 'he' || decided.rendering === null
+        ? null
+        : withGreeting('he', name, decided.rendering),
     refused: false,
     citations: decided.citations,
     hitIds: decided.hitIds,

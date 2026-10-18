@@ -122,11 +122,10 @@ describe('calls · the draft reply', () => {
       });
       const section = draftSection(page.body);
       assert.match(section, /data-draft-lang="other"/);
-      assert.match(
-        section,
-        /data-draft[^>]*>The papers on file do not answer this\./,
-      );
-      assert.match(section, /data-rendering>אין במסמכים האלה תשובה לשאלה הזו/);
+      assert.match(section, /data-draft[^>]*>Hello נועה,/);
+      assert.match(section, /The papers on file do not answer this\./);
+      assert.match(section, /data-rendering>שלום נועה,/);
+      assert.match(section, /אין במסמכים האלה תשובה לשאלה הזו/);
       assert.match(section, /data-copy>העתקה/);
       assert.match(section, /<script/);
       assert.match(section, /clipboard/);
@@ -175,7 +174,8 @@ describe('calls · the draft reply', () => {
       });
       const one = draftSection(hebrew.body);
       assert.match(one, /data-draft-lang="he"/);
-      assert.match(one, /data-draft[^>]*>אין במסמכים האלה תשובה לשאלה הזו/);
+      assert.match(one, /data-draft[^>]*>שלום נועה,/);
+      assert.match(one, /אין במסמכים האלה תשובה לשאלה הזו/);
       assert.doesNotMatch(one, /data-rendering/);
       assert.match(one, /data-copy>העתקה/);
       assert.doesNotMatch(one, /שליחה/);
@@ -309,8 +309,10 @@ describe('calls · the draft reply', () => {
       });
       const section = draftSection(page.body);
       assert.match(section, /data-draft-lang="other"/);
+      assert.match(section, /data-draft[^>]*>Hello Tenant,/);
       assert.match(section, /The owner repairs fair wear/);
-      assert.match(section, /data-rendering>בעל הדירה מתקן בלאי סביר/);
+      assert.match(section, /data-rendering>שלום Tenant,/);
+      assert.match(section, /בעל הדירה מתקן בלאי סביר/);
       const draftCall = extractor.calls.find(
         (call) => call.name === 'call_draft',
       );
