@@ -2680,15 +2680,21 @@ describe('shared UI tokens', () => {
       assert.match(html, /href="\/ui\/tokens\.css"/, name);
       assert.match(html, /<meta name="robots" content="noindex" \/>/, name);
       // v3 forbade `<script src=`. These pages are rendered on the server and need no script at
-      // all, except the call page's copy control once a draft exists (SPEC-calls): the clipboard
-      // is not a form. Any other script, or a script on a page with no draft, still fails.
+      // all, except two calls controls (SPEC-calls): the copy button once a draft exists, because
+      // the clipboard is not a form, and the split inbox separator, because a shared drag is not
+      // CSS. Any other script still fails.
       const scripts = html.match(/<script\b[^>]*>[\s\S]*?<\/script>/g) ?? [];
       if (scripts.length === 0) continue;
-      assert.match(html, /data-draft=/, name);
       assert.equal(scripts.length, 1, name);
-      assert.match(scripts[0] ?? '', /data-draft/, name);
-      assert.match(scripts[0] ?? '', /clipboard/, name);
       assert.doesNotMatch(scripts[0] ?? '', /\ssrc=/, name);
+      const copy =
+        /data-draft/.test(scripts[0] ?? '') &&
+        /clipboard/.test(scripts[0] ?? '');
+      const resize =
+        /data-split-resize/.test(html) &&
+        /dona\.calls\.split-inbox/.test(scripts[0] ?? '');
+      assert.ok(copy || resize, name);
+      if (copy) assert.match(html, /data-draft=/, name);
     }
   });
 

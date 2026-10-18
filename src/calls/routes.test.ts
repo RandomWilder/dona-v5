@@ -29,6 +29,15 @@ function form(fields: Record<string, string>): string {
   return new URLSearchParams(fields).toString();
 }
 
+/** The split inbox carries one resize script (#267). Nothing else on the list does. */
+function assertSplitResizeScript(html: string): void {
+  const scripts = html.match(/<script\b[^>]*>[\s\S]*?<\/script>/g) ?? [];
+  assert.equal(scripts.length, 1);
+  assert.match(scripts[0] ?? '', /dona\.calls\.split-inbox/);
+  assert.match(html, /data-split-resize/);
+  assert.doesNotMatch(scripts[0] ?? '', /\ssrc=/);
+}
+
 function callId(html: string, description: string): string | undefined {
   const at = html.indexOf(`>${description}</a>`);
   if (at < 0) return undefined;
@@ -270,7 +279,7 @@ describe('calls · the קריאות tab', () => {
       clock.advance(HALF_HOUR);
       const page = await quietCallsPage(pool, client);
       assert.equal(page.statusCode, 200);
-      assert.doesNotMatch(page.body, /<script/);
+      assertSplitResizeScript(page.body);
       assert.match(page.body, /נזילה במטבח/);
       assert.match(page.body, /יעל כהן/);
       assert.match(page.body, /טלפון/);
@@ -332,7 +341,7 @@ describe('calls · the קריאות tab', () => {
         url: '/calls?emergency=1&goal=late&log=1',
       });
       assert.equal(opened.statusCode, 200);
-      assert.doesNotMatch(opened.body, /<script/);
+      assertSplitResizeScript(opened.body);
       assert.doesNotMatch(opened.body, /\binert\b/);
       const box = dialogOf(opened.body);
       assert.match(box, /<dialog\b[^>]*\bopen\b/);
@@ -464,7 +473,7 @@ describe('calls · the קריאות tab', () => {
         assert.equal(refused.statusCode, 400);
         assert.ok(refused.body.includes(entry.sentence));
         assert.match(refused.body, /<form/);
-        assert.doesNotMatch(refused.body, /<script/);
+        assertSplitResizeScript(refused.body);
       }
       const page = await client.inject({ method: 'GET', url: '/calls' });
       assert.doesNotMatch(page.body, /חסר ערוץ|חסר פונה|שם ריק/);
@@ -2025,10 +2034,8 @@ describe('calls · the קריאות tab', () => {
 
       const page = await client.inject({ method: 'GET', url: '/calls' });
       assert.equal(page.statusCode, 200);
-      assert.doesNotMatch(
-        page.body,
-        /<script|type="search"|name="q"|name="search"/,
-      );
+      assertSplitResizeScript(page.body);
+      assert.doesNotMatch(page.body, /type="search"|name="q"|name="search"/);
       assert.match(page.body, /data-layout="list"/);
       assert.match(page.body, /data-layout="split"/);
       const listed = page.body.match(/data-call="/g)?.length ?? 0;
