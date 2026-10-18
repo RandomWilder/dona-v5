@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Pool } from 'pg';
+import { asOperator, signIn, signOutAll } from '../../tests/support/session.ts';
 import { buildApp } from '../app.ts';
 import { fixedClock } from '../kernel/clock.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
@@ -634,5 +635,95 @@ describe('staff · the login screen offers Microsoft beside Google', () => {
     );
     assert.doesNotMatch(login.body, /שירות הזהויות אינו מוגדר/);
     assert.doesNotMatch(login.body, /href="\/staff\/auth\/start"/);
+  });
+
+  it('warns an admin on the staff home inside the window, and nobody else', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (pool === null) return t.skip(skipReason);
+    const clock = fixedClock(new Date('2028-09-27T09:00:00.000Z'));
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      clock,
+      identity: fakeGoogle(),
+    });
+    const domain = 'ms264-expiry.test';
+    const saved = process.env.MICROSOFT_OAUTH_SECRET_EXPIRES;
+    const secret = process.env.MICROSOFT_OAUTH_CLIENT_SECRET;
+    await signOutAll(pool, domain);
+    t.after(async () => {
+      if (saved === undefined)
+        delete process.env.MICROSOFT_OAUTH_SECRET_EXPIRES;
+      else process.env.MICROSOFT_OAUTH_SECRET_EXPIRES = saved;
+      if (secret === undefined)
+        delete process.env.MICROSOFT_OAUTH_CLIENT_SECRET;
+      else process.env.MICROSOFT_OAUTH_CLIENT_SECRET = secret;
+      await signOutAll(pool, domain);
+      await pool.end();
+    });
+
+    process.env.MICROSOFT_OAUTH_CLIENT_SECRET = 'microsoft-client-secret-value';
+    process.env.MICROSOFT_OAUTH_SECRET_EXPIRES = '2028-10-07';
+    const admin = await signIn(pool, clock, {
+      email: `admin@${domain}`,
+      role: 'ADMIN',
+    });
+    const operator = await signIn(pool, clock, {
+      email: `operator@${domain}`,
+      role: 'OPERATOR',
+    });
+    const viewer = await signIn(pool, clock, {
+      email: `viewer@${domain}`,
+      role: 'VIEWER',
+    });
+
+    const home = await asOperator(app, admin).inject({
+      method: 'GET',
+      url: '/staff',
+    });
+    assert.equal(home.statusCode, 200);
+    assert.match(home.body, /הסוד של כניסת Microsoft בתוקף עד 07\.10\.2028/);
+    assert.match(home.body, /יש לבקש סוד חדש ממנהל Microsoft 365/);
+    assert.doesNotMatch(home.body, /microsoft-client-secret-value/);
+
+    const ops = await asOperator(app, operator).inject({
+      method: 'GET',
+      url: '/staff',
+    });
+    assert.equal(ops.statusCode, 200);
+    assert.doesNotMatch(ops.body, /כניסת Microsoft/);
+
+    const view = await asOperator(app, viewer).inject({
+      method: 'GET',
+      url: '/staff',
+    });
+    assert.equal(view.statusCode, 200);
+    assert.doesNotMatch(view.body, /כניסת Microsoft/);
+
+    process.env.MICROSOFT_OAUTH_SECRET_EXPIRES = '2028-09-01';
+    const expired = await asOperator(app, admin).inject({
+      method: 'GET',
+      url: '/staff',
+    });
+    assert.match(
+      expired.body,
+      /תוקף הסוד של כניסת Microsoft פג ב-01\.09\.2028/,
+    );
+
+    delete process.env.MICROSOFT_OAUTH_SECRET_EXPIRES;
+    const quiet = await asOperator(app, admin).inject({
+      method: 'GET',
+      url: '/staff',
+    });
+    assert.equal(quiet.statusCode, 200);
+    assert.doesNotMatch(quiet.body, /כניסת Microsoft/);
+
+    process.env.MICROSOFT_OAUTH_SECRET_EXPIRES = 'not-a-date';
+    const junk = await asOperator(app, admin).inject({
+      method: 'GET',
+      url: '/staff',
+    });
+    assert.equal(junk.statusCode, 200);
+    assert.doesNotMatch(junk.body, /כניסת Microsoft/);
   });
 });

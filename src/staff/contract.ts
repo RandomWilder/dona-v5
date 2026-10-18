@@ -85,6 +85,7 @@ export {
   createMicrosoftOidc,
   createUnconfiguredMicrosoft,
   microsoftBootLine,
+  microsoftSecretNotice,
 } from './internal/microsoft.ts';
 export type {
   AppendOfficeTurnSpec,

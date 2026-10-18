@@ -13,6 +13,7 @@
 //   https://learn.microsoft.com/en-us/entra/identity-platform/access-tokens
 import { createPublicKey } from 'node:crypto';
 import { OAuth2Client } from 'google-auth-library';
+import { addDays, type Clock, today } from '../../kernel/clock.ts';
 import { sameValue } from '../../kernel/compare.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { IdentityRefusal } from './identity.ts';
@@ -355,6 +356,31 @@ export function createUnconfiguredMicrosoft(): MicrosoftProvider {
  */
 export function microsoftBootLine(provider: MicrosoftProvider): string {
   return `microsoft:${provider.describe()}`;
+}
+
+/** From 30 days before the client secret expires. No date, or a value that is not a date, is silence. */
+const SECRET_WARN_DAYS = 30;
+
+export function microsoftSecretNotice(
+  env: Record<string, string | undefined>,
+  clock: Clock,
+): { expires: string; expired: boolean } | null {
+  const expires = calendarDate(
+    env.MICROSOFT_OAUTH_SECRET_EXPIRES?.trim() ?? '',
+  );
+  if (expires === null) return null;
+  const day = today(clock);
+  if (day < addDays(expires, -SECRET_WARN_DAYS)) return null;
+  return { expires, expired: expires < day };
+}
+
+function calendarDate(value: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+    ? value
+    : null;
 }
 
 /**

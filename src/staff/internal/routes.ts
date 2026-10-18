@@ -29,7 +29,11 @@ import { requireText } from '../../kernel/validate.ts';
 import { addOperator, notAllowed } from './accounts.ts';
 import { csrfFrom } from './csrf.ts';
 import { acceptClaims, type IdentityProvider } from './identity.ts';
-import { acceptMicrosoftClaims, type MicrosoftProvider } from './microsoft.ts';
+import {
+  acceptMicrosoftClaims,
+  type MicrosoftProvider,
+  microsoftSecretNotice,
+} from './microsoft.ts';
 import {
   can,
   isRole,
@@ -106,6 +110,15 @@ type Form = Record<string, string>;
 
 function field(body: unknown, name: string, max: number): string {
   return requireText((body as Form | undefined)?.[name], name, max);
+}
+
+/** Admins see the Microsoft client-secret warning. Operators and viewers do not. */
+function secretNoticeFor(
+  deps: StaffDeps,
+  role: Role,
+): { expires: string } | null {
+  if (role !== 'ADMIN') return null;
+  return microsoftSecretNotice(process.env, deps.clock);
 }
 
 /** Where Google sends the operator back, and the value Google matches character for character. */
@@ -391,6 +404,7 @@ export function registerStaffRoutes(
         role,
         permissions: permissionsOf(role),
         mayInvite: can(role, 'staff.invite'),
+        secretNotice: secretNoticeFor(deps, role),
       });
     });
 
@@ -429,6 +443,7 @@ export function registerStaffRoutes(
         role,
         permissions: permissionsOf(role),
         mayInvite: true,
+        secretNotice: secretNoticeFor(deps, role),
         addedOperator: {
           email: added.account.email,
           role: asked,

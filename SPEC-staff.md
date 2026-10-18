@@ -237,10 +237,21 @@ and `<env>-microsoft-oauth-client-secret`, bound and injected the way Google's t
 `MICROSOFT_OAUTH_TENANT_ID`, `MICROSOFT_OAUTH_DOMAIN` (`dona.co.il`), and
 `MICROSOFT_OAUTH_SECRET_EXPIRES` (the client secret's expiry date, optional).
 
+Staging carries all five, and a deploy before they exist still succeeds. The client id and the
+client secret mount only when those secrets exist. The domain is `dona.co.il`, set by the deploy.
+The tenant id and the expiry date are not known until the registration exists, so they mount when
+`<env>-microsoft-oauth-tenant-id` and `<env>-microsoft-oauth-secret-expires` exist and stay unset
+otherwise. `infra/bootstrap.sh` names the Entra registration (a separate single-tenant app,
+delegated `openid email` only, and the two redirect URIs) and these secrets. It does not create
+the app. Production is a later ticket and is not mounted.
+
 Missing any of the first four leaves Microsoft **unconfigured**: the button is hidden, both routes
 answer unavailable, and the boot line says `microsoft:unconfigured`. The application still starts,
-and Google is unaffected. The boot line never prints the client secret. No expiry date means no
-expiry warning and no error.
+and Google is unaffected. The boot line never prints the client secret.
+
+From 30 days before `MICROSOFT_OAUTH_SECRET_EXPIRES`, and after that date, an admin's staff home
+warns that the client secret needs renewing. An operator or a viewer does not see it. No date, or
+a value that is not a date, means no warning and no error.
 
 ### The login screen
 

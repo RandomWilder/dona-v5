@@ -79,6 +79,14 @@ const styles = h`<style>
     align-items: baseline;
     flex-wrap: wrap;
   }
+  .secret-warning {
+    border: 1px solid var(--color-alert);
+    border-radius: var(--radius-1);
+    padding: var(--space-3);
+    color: var(--color-alert);
+    font-size: var(--text-sm);
+    margin: 0;
+  }
 </style>`;
 
 function page(title: string, body: Html): string {
@@ -89,6 +97,18 @@ function page(title: string, body: Html): string {
 
 function refusal(message: string | undefined): Html {
   return message === undefined ? h`` : h`<p class="refusal">${message}</p>`;
+}
+
+function secretWarning(
+  notice: { expires: string; expired: boolean } | null,
+): Html {
+  if (notice === null) return h``;
+  const [year, month, day] = notice.expires.split('-');
+  const date = `${day}.${month}.${year}`;
+  const state = notice.expired
+    ? `תוקף הסוד של כניסת Microsoft פג ב-${date}.`
+    : `הסוד של כניסת Microsoft בתוקף עד ${date}.`;
+  return h`<p class="secret-warning" role="status">${state} יש לבקש סוד חדש ממנהל Microsoft 365.</p>`;
 }
 
 /** The one sentence, in Hebrew, for every cause. See the file header. */
@@ -151,6 +171,8 @@ export interface StaffHomeScreen {
   mayInvite: boolean;
   /** The operator just added. There is no URL to hand over, because there is nothing to deliver. */
   addedOperator?: { email: string; role: Role; created: boolean };
+  /** An admin, inside the Microsoft client-secret window. Absent for every other role. */
+  secretNotice?: { expires: string; expired: boolean } | null;
   refused?: string;
 }
 
@@ -193,6 +215,7 @@ export function renderStaffHomePage(screen: StaffHomeScreen): string {
         </p>
       </div>
       ${refusal(screen.refused)}
+      ${secretWarning(screen.secretNotice ?? null)}
       <div class="auth-card">
         <h2>מה מותר לכם</h2>
         <ul class="perm-list">

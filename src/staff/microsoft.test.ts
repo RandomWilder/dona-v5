@@ -6,7 +6,9 @@
 
 import assert from 'node:assert/strict';
 import { createSign, generateKeyPairSync, type KeyObject } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
+import { fixedClock } from '../kernel/clock.ts';
 import { KernelError } from '../kernel/errors.ts';
 import {
   acceptMicrosoftClaims,
@@ -15,6 +17,7 @@ import {
   IdentityRefusal,
   type MicrosoftClaims,
   microsoftBootLine,
+  microsoftSecretNotice,
 } from './contract.ts';
 
 const TENANT = '11111111-1111-1111-1111-111111111111';
@@ -392,6 +395,77 @@ describe('staff · Microsoft unconfigured', () => {
       microsoftBootLine(createConfiguredMicrosoft({})),
       'microsoft:unconfigured',
     );
+  });
+});
+
+describe('staff · Microsoft secret expiry', () => {
+  it('warns from 30 days before the date, and stays quiet when the date is missing', () => {
+    const env = { MICROSOFT_OAUTH_SECRET_EXPIRES: '2028-10-07' };
+    const at = (iso: string) => fixedClock(new Date(iso));
+    assert.equal(
+      microsoftSecretNotice(env, at('2028-09-06T20:59:59.000Z')),
+      null,
+    );
+    assert.deepEqual(
+      microsoftSecretNotice(env, at('2028-09-06T21:00:00.000Z')),
+      {
+        expires: '2028-10-07',
+        expired: false,
+      },
+    );
+    assert.deepEqual(
+      microsoftSecretNotice(env, at('2028-11-01T00:00:00.000Z')),
+      {
+        expires: '2028-10-07',
+        expired: true,
+      },
+    );
+    assert.equal(
+      microsoftSecretNotice({}, at('2026-10-07T00:00:00.000Z')),
+      null,
+    );
+    assert.equal(
+      microsoftSecretNotice(
+        { MICROSOFT_OAUTH_SECRET_EXPIRES: 'not-a-date' },
+        at('2026-10-07T00:00:00.000Z'),
+      ),
+      null,
+    );
+    assert.equal(
+      microsoftSecretNotice(
+        { MICROSOFT_OAUTH_SECRET_EXPIRES: '2028-02-31' },
+        at('2028-02-01T00:00:00.000Z'),
+      ),
+      null,
+    );
+  });
+
+  it('mounts the five values on staging only when they exist, and names the Entra step', () => {
+    const staging = readFileSync('.github/workflows/deploy.yml', 'utf8');
+    const prod = readFileSync('.github/workflows/release.yml', 'utf8');
+    const bootstrap = readFileSync('infra/bootstrap.sh', 'utf8');
+    const required = staging.slice(
+      staging.indexOf('SECRETS="DATABASE_URL'),
+      staging.indexOf('add_secret()'),
+    );
+    assert.doesNotMatch(required, /MICROSOFT_OAUTH/);
+    for (const line of [
+      'add_secret MICROSOFT_OAUTH_CLIENT_ID staging-microsoft-oauth-client-id',
+      'add_secret MICROSOFT_OAUTH_CLIENT_SECRET staging-microsoft-oauth-client-secret',
+      'add_secret MICROSOFT_OAUTH_TENANT_ID staging-microsoft-oauth-tenant-id',
+      'add_secret MICROSOFT_OAUTH_SECRET_EXPIRES staging-microsoft-oauth-secret-expires',
+    ]) {
+      assert.match(staging, new RegExp(line.replace(/[.*]/g, '\\$&')));
+    }
+    assert.match(staging, /MICROSOFT_OAUTH_DOMAIN=dona\.co\.il/);
+    assert.doesNotMatch(prod, /MICROSOFT_OAUTH/);
+    assert.match(bootstrap, /microsoft-oauth-client-id/);
+    assert.match(bootstrap, /microsoft-oauth-client-secret/);
+    assert.match(bootstrap, /microsoft-oauth-tenant-id/);
+    assert.match(bootstrap, /microsoft-oauth-secret-expires/);
+    assert.match(bootstrap, /openid email/);
+    assert.match(bootstrap, /\/staff\/auth\/microsoft\/callback/);
+    assert.match(bootstrap, /microsoft:unconfigured/);
   });
 });
 

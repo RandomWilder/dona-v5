@@ -107,6 +107,10 @@ jobs:
           if [[ -n "${{ steps.ocr.outputs.processor }}" ]]; then
             ENV_VARS="$ENV_VARS,DOCUMENT_AI_PROCESSOR=${{ steps.ocr.outputs.processor }}"
           fi
+          # Microsoft sign-in (#264). The domain is known. The other four mount
+          # only when the secrets exist, so a deploy before the Entra registration
+          # still rolls and the boot line says microsoft:unconfigured.
+          ENV_VARS="$ENV_VARS,MICROSOFT_OAUTH_DOMAIN=dona.co.il"
           # HTTP/1 stops a body at 32 MiB, under the 100 MB upload bound. HTTP/2 removes that
           # cap; 2Gi is room for one such scan while it is sliced. The process speaks h2c only
           # when K_SERVICE is set. Both flags have to stay, or the next revision is the English page.
@@ -133,6 +137,10 @@ jobs:
           add_secret WHATSAPP_VERIFY_TOKEN staging-whatsapp-verify-token
           add_secret WHATSAPP_ACCESS_TOKEN staging-whatsapp-access-token
           add_secret WHATSAPP_PHONE_NUMBER_ID staging-whatsapp-phone-number-id
+          add_secret MICROSOFT_OAUTH_CLIENT_ID staging-microsoft-oauth-client-id
+          add_secret MICROSOFT_OAUTH_CLIENT_SECRET staging-microsoft-oauth-client-secret
+          add_secret MICROSOFT_OAUTH_TENANT_ID staging-microsoft-oauth-tenant-id
+          add_secret MICROSOFT_OAUTH_SECRET_EXPIRES staging-microsoft-oauth-secret-expires
           gcloud run deploy "$SERVICE" \
             --image "$IMAGE:$SHA" \
             --region "$REGION" \
