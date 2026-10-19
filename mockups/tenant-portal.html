@@ -1,0 +1,677 @@
+<style>
+  .paint-switch {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: center;
+  }
+  .paint-switch input,
+  .portal-frame .chooser input,
+  .portal-frame .channel input {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .paint-switch label,
+  .langs label,
+  .chooser label,
+  .channel label,
+  .portal-nav label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--size-touch);
+    padding-inline: var(--space-3);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-card);
+    border: var(--size-hairline) solid var(--color-divider);
+    cursor: pointer;
+    text-align: center;
+  }
+  .paint-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: center;
+  }
+  .paint-group .group-name {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+  }
+  .paint:has(#st-phone:checked) .paint-switch label[for="st-phone"],
+  .paint:has(#st-code:checked) .paint-switch label[for="st-code"],
+  .paint:has(#st-passkey:checked) .paint-switch label[for="st-passkey"],
+  .paint:has(#st-notice:checked) .paint-switch label[for="st-notice"],
+  .paint:has(#st-home:checked) .paint-switch label[for="st-home"],
+  .paint:has(#st-flat:checked) .paint-switch label[for="st-flat"],
+  .paint:has(#st-papers:checked) .paint-switch label[for="st-papers"],
+  .paint:has(#st-calls:checked) .paint-switch label[for="st-calls"],
+  .paint:has(#st-thread:checked) .paint-switch label[for="st-thread"],
+  .paint:has(#st-report:checked) .paint-switch label[for="st-report"],
+  .paint:has(#st-ask:checked) .paint-switch label[for="st-ask"],
+  .paint:has(#st-not-yet:checked) .paint-switch label[for="st-not-yet"],
+  .paint:has(#st-english:checked) .paint-switch label[for="st-english"],
+  .paint:has(#st-russian:checked) .paint-switch label[for="st-russian"],
+  .paint:has(#st-switch:checked) .paint-switch label[for="st-switch"],
+  .paint:has(#st-refusal:checked) .paint-switch label[for="st-refusal"],
+  .paint:has(#st-settings:checked) .paint-switch label[for="st-settings"] {
+    background: var(--color-accent-ink);
+    color: var(--color-on-accent);
+    border-color: var(--color-accent-ink);
+  }
+  .paint [data-state] { display: none; }
+  .paint:has(#st-phone:checked) [data-state="phone"],
+  .paint:has(#st-code:checked) [data-state="code"],
+  .paint:has(#st-passkey:checked) [data-state="passkey"],
+  .paint:has(#st-notice:checked) [data-state="notice"],
+  .paint:has(#st-home:checked) [data-state="home"],
+  .paint:has(#st-flat:checked) [data-state="flat"],
+  .paint:has(#st-papers:checked) [data-state="papers"],
+  .paint:has(#st-calls:checked) [data-state="calls"],
+  .paint:has(#st-thread:checked) [data-state="thread"],
+  .paint:has(#st-report:checked) [data-state="report"],
+  .paint:has(#st-ask:checked) [data-state="ask"],
+  .paint:has(#st-not-yet:checked) [data-state="not-yet"],
+  .paint:has(#st-english:checked) [data-state="english"],
+  .paint:has(#st-russian:checked) [data-state="russian"],
+  .paint:has(#st-switch:checked) [data-state="switch"],
+  .paint:has(#st-refusal:checked) [data-state="refusal"],
+  .paint:has(#st-settings:checked) [data-state="settings"] {
+    display: grid;
+    gap: var(--space-4);
+  }
+  .portal-frame {
+    display: none;
+    max-inline-size: var(--size-form-max);
+    margin-inline: auto;
+    padding: var(--space-4);
+    border: var(--size-hairline) solid var(--color-divider);
+    border-radius: var(--radius-4);
+    background: var(--color-bg);
+    gap: var(--space-4);
+  }
+  .paint:has(#st-phone:checked) .portal-frame,
+  .paint:has(#st-code:checked) .portal-frame,
+  .paint:has(#st-passkey:checked) .portal-frame,
+  .paint:has(#st-notice:checked) .portal-frame,
+  .paint:has(#st-home:checked) .portal-frame,
+  .paint:has(#st-flat:checked) .portal-frame,
+  .paint:has(#st-papers:checked) .portal-frame,
+  .paint:has(#st-calls:checked) .portal-frame,
+  .paint:has(#st-thread:checked) .portal-frame,
+  .paint:has(#st-report:checked) .portal-frame,
+  .paint:has(#st-ask:checked) .portal-frame,
+  .paint:has(#st-not-yet:checked) .portal-frame,
+  .paint:has(#st-english:checked) .portal-frame,
+  .paint:has(#st-russian:checked) .portal-frame {
+    display: grid;
+    direction: ltr;
+  }
+  .portal-top, .langs, .chooser, .channel, .portal-nav, .call-list, .paper-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: center;
+  }
+  .portal-top { justify-content: space-between; }
+  .portal-brand { margin: 0; font-weight: 600; }
+  .portal-nav { display: none; }
+  .paint:has(#st-home:checked) .portal-nav,
+  .paint:has(#st-flat:checked) .portal-nav,
+  .paint:has(#st-papers:checked) .portal-nav,
+  .paint:has(#st-calls:checked) .portal-nav,
+  .paint:has(#st-thread:checked) .portal-nav,
+  .paint:has(#st-report:checked) .portal-nav,
+  .paint:has(#st-ask:checked) .portal-nav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .portal-nav label { inline-size: 100%; }
+  .paint fieldset {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-inline-size: 0;
+  }
+  .paint:has(#st-home:checked) .langs label[for="st-home"],
+  .paint:has(#st-english:checked) .langs label[for="st-english"],
+  .paint:has(#st-russian:checked) .langs label[for="st-russian"],
+  .paint:has(#tenancy-a:checked) .chooser label[for="tenancy-a"],
+  .paint:has(#tenancy-b:checked) .chooser label[for="tenancy-b"],
+  .paint:has(#code-wa:checked) .channel label[for="code-wa"],
+  .paint:has(#code-sms:checked) .channel label[for="code-sms"] {
+    background: var(--color-accent-ink);
+    color: var(--color-on-accent);
+    border-color: var(--color-accent-ink);
+  }
+  .paint [data-tenancy],
+  .paint [data-channel] { display: none; }
+  .paint:has(#tenancy-a:checked) [data-tenancy="a"],
+  .paint:has(#tenancy-b:checked) [data-tenancy="b"],
+  .paint:has(#code-wa:checked) [data-channel="wa"],
+  .paint:has(#code-sms:checked) [data-channel="sms"] {
+    display: grid;
+    gap: var(--space-3);
+  }
+  .paint .block {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    min-inline-size: 0;
+  }
+  .paint .block h2, .paint .block h3, .paint .block p { margin: 0; }
+  .paint .who { font-weight: 600; }
+  .paint .thread {
+    display: grid;
+    gap: var(--space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .otp {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: var(--space-2);
+  }
+  .otp input {
+    padding-inline: var(--space-1);
+    text-align: center;
+    min-inline-size: 0;
+  }
+  .call-list, .paper-list {
+    display: grid;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .call-list li, .paper-list li {
+    display: grid;
+    gap: var(--space-1);
+    padding: var(--space-3);
+    border-radius: var(--radius-3);
+    background: var(--color-surface-card);
+    border: var(--size-hairline) solid var(--color-divider-soft);
+    min-inline-size: 0;
+  }
+  .call-list label { justify-content: space-between; }
+  .duty { color: var(--color-alert); font-weight: 600; }
+  .reply-line {
+    margin: 0;
+    padding: var(--space-3);
+    border-radius: var(--radius-3);
+    background: var(--color-accent-tint);
+    color: var(--color-accent-deep);
+  }
+  .actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+  .actions .btn, .actions label.btn { min-height: var(--size-touch); }
+  label.btn { cursor: pointer; }
+</style>
+<div class="glass-stage paint" data-paint="tenant-portal">
+  <header class="page-head">
+    <div>
+      <p class="back"><a href="/dev/mockups/index">הדמיות</a></p>
+      <h1>פורטל הדיירים</h1>
+      <p class="lede">הדמיה. כל מסך בלחיצה. טקסט דוגמה בלבד, בלי דייר אמיתי. העמודה היא המסך בטלפון.</p>
+    </div>
+  </header>
+
+  <div class="paint-switch" role="radiogroup" aria-label="מסך להצגה">
+    <div class="paint-group">
+      <p class="group-name">דייר</p>
+      <input type="radio" name="portal-state" id="st-phone" checked />
+      <label for="st-phone">טלפון</label>
+      <input type="radio" name="portal-state" id="st-code" />
+      <label for="st-code">קוד</label>
+      <input type="radio" name="portal-state" id="st-passkey" />
+      <label for="st-passkey">מפתח</label>
+      <input type="radio" name="portal-state" id="st-notice" />
+      <label for="st-notice">הודעה ראשונה</label>
+      <input type="radio" name="portal-state" id="st-home" />
+      <label for="st-home">בית</label>
+      <input type="radio" name="portal-state" id="st-flat" />
+      <label for="st-flat">הדירה</label>
+      <input type="radio" name="portal-state" id="st-papers" />
+      <label for="st-papers">המסמכים</label>
+      <input type="radio" name="portal-state" id="st-calls" />
+      <label for="st-calls">הקריאות</label>
+      <input type="radio" name="portal-state" id="st-thread" />
+      <label for="st-thread">שרשור</label>
+      <input type="radio" name="portal-state" id="st-report" />
+      <label for="st-report">דיווח</label>
+      <input type="radio" name="portal-state" id="st-ask" />
+      <label for="st-ask">שאלה</label>
+      <input type="radio" name="portal-state" id="st-not-yet" />
+      <label for="st-not-yet">בניין לא בפורטל</label>
+      <input type="radio" name="portal-state" id="st-english" />
+      <label for="st-english">English</label>
+      <input type="radio" name="portal-state" id="st-russian" />
+      <label for="st-russian">Русский</label>
+    </div>
+    <div class="paint-group">
+      <p class="group-name">משרד</p>
+      <input type="radio" name="portal-state" id="st-switch" />
+      <label for="st-switch">מתג בניין</label>
+      <input type="radio" name="portal-state" id="st-refusal" />
+      <label for="st-refusal">סירוב</label>
+      <input type="radio" name="portal-state" id="st-settings" />
+      <label for="st-settings">הגדרות</label>
+    </div>
+  </div>
+
+  <div class="portal-frame">
+    <header class="portal-top">
+      <p class="portal-brand">דונה דום</p>
+      <div class="langs" role="group" aria-label="שפה">
+        <label for="st-home">עברית</label>
+        <label for="st-english">English</label>
+        <label for="st-russian">Русский</label>
+      </div>
+    </header>
+
+    <section data-state="phone">
+      <article class="glass block">
+        <h2>כניסה</h2>
+        <p class="lede">המספר שהמשרד כבר מכיר. מספר נייד ישראלי בלבד.</p>
+        <div class="field">
+          <label for="phone">מספר נייד</label>
+          <input id="phone" type="tel" inputmode="tel" dir="ltr" placeholder="050-000-0000" value="050-000-0000" />
+        </div>
+        <div class="actions">
+          <label class="btn btn-primary" for="st-code">המשך</label>
+        </div>
+      </article>
+    </section>
+
+    <section data-state="code">
+      <article class="glass block">
+        <h2>קוד כניסה</h2>
+        <div class="channel">
+          <input type="radio" name="code-channel" id="code-wa" checked />
+          <input type="radio" name="code-channel" id="code-sms" />
+          <label for="code-wa">וואטסאפ</label>
+          <label for="code-sms">מסרון</label>
+        </div>
+        <p data-channel="wa">הקוד נשלח לוואטסאפ של <span dir="ltr">050-000-0000</span>. זו ברירת המחדל.</p>
+        <p data-channel="sms">הקוד נשלח במסרון אל <span dir="ltr">050-000-0000</span>. מתאים גם לטלפון בלי אינטרנט.</p>
+        <div class="otp" dir="ltr">
+          <input type="text" inputmode="numeric" maxlength="1" aria-label="ספרה 1" value="4" />
+          <input type="text" inputmode="numeric" maxlength="1" aria-label="ספרה 2" value="1" />
+          <input type="text" inputmode="numeric" maxlength="1" aria-label="ספרה 3" value="8" />
+          <input type="text" inputmode="numeric" maxlength="1" aria-label="ספרה 4" />
+          <input type="text" inputmode="numeric" maxlength="1" aria-label="ספרה 5" />
+          <input type="text" inputmode="numeric" maxlength="1" aria-label="ספרה 6" />
+        </div>
+        <div class="actions">
+          <label class="btn btn-primary" for="st-passkey">כניסה</label>
+          <label class="btn btn-glass" for="st-code">קוד חדש</label>
+        </div>
+      </article>
+    </section>
+
+    <section data-state="passkey">
+      <article class="glass block">
+        <h2>מפתח כניסה</h2>
+        <p>אפשר להיכנס בפעם הבאה בטביעת אצבע, בזיהוי פנים או בקוד המכשיר. בלי קוד, ובלי עלות למשרד.</p>
+        <p class="lede">אפשר לדלג ולהוסיף אחר כך.</p>
+        <div class="actions">
+          <label class="btn btn-primary" for="st-notice">הוספת מפתח</label>
+          <label class="btn btn-glass" for="st-notice">דילוג</label>
+        </div>
+      </article>
+    </section>
+
+    <section data-state="notice">
+      <article class="glass block">
+        <h2>הודעה ראשונה</h2>
+        <h3>הודעת פרטיות</h3>
+        <p>טקסט דוגמה, מציין מקום. הפורטל שומר את המספר המאומת, את הקריאות ואת המסמכים של השכירות, כדי שתוכלו לראות אותם. השירות אינו מותנה באישור.</p>
+        <h3>תנאים</h3>
+        <p>טקסט דוגמה. השימוש הוא לצפייה בשכירות שלכם ולפתיחת קריאה למשרד.</p>
+        <label class="check">
+          <input type="checkbox" />
+          עדכונים על הבניין. כבוי עד שתסמנו.
+        </label>
+        <div class="actions">
+          <label class="btn btn-primary" for="st-home">קראתי</label>
+        </div>
+      </article>
+    </section>
+
+    <section data-state="home">
+      <article class="glass block">
+        <h2>שלום, נועה לדוגמה</h2>
+        <p>דירה 12 · רחוב הדגמה 8</p>
+        <p class="reply-line">אנחנו עונים בתוך 2 ימי עסקים</p>
+        <p class="lede">השורה מוצגת כי המשרד הדליק את ההצגה לדיירים.</p>
+        <div class="actions">
+          <label class="btn btn-primary" for="st-report">דיווח על תקלה</label>
+          <label class="btn btn-glass" for="st-ask">שאלה למשרד</label>
+        </div>
+      </article>
+    </section>
+
+    <section data-state="flat">
+      <article class="glass block">
+        <h2>הדירה שלי</h2>
+        <p class="lede">שתי שכירויות על המספר. בחרו אחת.</p>
+        <div class="chooser" role="radiogroup" aria-label="שכירות">
+          <input type="radio" name="tenancy" id="tenancy-a" checked />
+          <input type="radio" name="tenancy" id="tenancy-b" />
+          <label for="tenancy-a">דירה 12 · רחוב הדגמה 8</label>
+          <label for="tenancy-b">דירה 3 · רחוב אחר 2</label>
+        </div>
+        <div data-tenancy="a">
+          <dl class="facts">
+            <div><dt>כתובת</dt><dd>רחוב הדגמה 8, תל אביב</dd></div>
+            <div><dt>דירה</dt><dd>12</dd></div>
+            <div><dt>שכירות</dt><dd>01.03.2026–28.02.2027</dd></div>
+            <div><dt>חניה</dt><dd>12</dd></div>
+            <div><dt>מחסן</dt><dd>4</dd></div>
+          </dl>
+        </div>
+        <div data-tenancy="b">
+          <dl class="facts">
+            <div><dt>כתובת</dt><dd>רחוב אחר 2, חיפה</dd></div>
+            <div><dt>דירה</dt><dd>3</dd></div>
+            <div><dt>שכירות</dt><dd>01.09.2025–31.08.2026</dd></div>
+            <div><dt>חניה</dt><dd>3</dd></div>
+            <div><dt>מחסן</dt><dd>1</dd></div>
+          </dl>
+        </div>
+      </article>
+    </section>
+
+    <section data-state="papers">
+      <article class="glass block">
+        <h2>המסמכים שלי</h2>
+        <p class="lede">רק מה שתויק לשכירות שנבחרה במסך הדירה.</p>
+        <div data-tenancy="a">
+          <p>דירה 12 · רחוב הדגמה 8</p>
+          <ul class="paper-list">
+            <li>
+              <span>חוזה שכירות</span>
+              <button class="btn btn-glass" type="button">הורדה</button>
+            </li>
+            <li>
+              <span>נספח לחוזה</span>
+              <button class="btn btn-glass" type="button">הורדה</button>
+            </li>
+            <li>
+              <span>פרוטוקול מסירה</span>
+              <button class="btn btn-glass" type="button">הורדה</button>
+            </li>
+          </ul>
+        </div>
+        <div data-tenancy="b">
+          <p>דירה 3 · רחוב אחר 2</p>
+          <ul class="paper-list">
+            <li>
+              <span>חוזה שכירות</span>
+              <button class="btn btn-glass" type="button">הורדה</button>
+            </li>
+            <li>
+              <span>נספח חניה</span>
+              <button class="btn btn-glass" type="button">הורדה</button>
+            </li>
+          </ul>
+        </div>
+      </article>
+    </section>
+
+    <section data-state="calls">
+      <article class="glass block">
+        <h2>הקריאות שלי</h2>
+        <p class="lede">החדשות למעלה. גם קריאה שנפתחה בוואטסאפ או בטלפון. הרשימה היא של השכירות שנבחרה.</p>
+        <div data-tenancy="a">
+          <p>דירה 12 · רחוב הדגמה 8</p>
+          <ul class="call-list">
+            <li>
+              <span class="chip">התקבלה</span>
+              <span>19.10.2026 · אינסטלציה · נזילה מתחת לכיור</span>
+            </li>
+            <li>
+              <span class="chip">בטיפול</span>
+              <span>12.10.2026 · דלתות · דלת הכניסה חורקת</span>
+            </li>
+            <li>
+              <span class="chip">ממתין לתיאום</span>
+              <span>02.10.2026 · חניה · שאלה על חניון האורחים</span>
+            </li>
+            <li>
+              <label for="st-thread">
+                <span class="chip">נקבע ביקור</span>
+                <span>28.09.2026 · דוד · דוד המים לא מחמם</span>
+              </label>
+            </li>
+            <li>
+              <span class="chip">נענתה</span>
+              <span>15.09.2026 · מסמכים · העתק חוזה</span>
+            </li>
+            <li>
+              <span class="chip">הועברה</span>
+              <span>01.09.2026 · ארנונה · חשבון ארנונה</span>
+            </li>
+            <li>
+              <span class="chip">אוחדה</span>
+              <span>20.08.2026 · אינסטלציה · נזילה נוספת בכיור</span>
+            </li>
+            <li>
+              <span class="chip">בוטלה</span>
+              <span>01.08.2026 · דוד · ביקור שכבר לא נדרש. הערה: הדייר ביקש לבטל.</span>
+            </li>
+          </ul>
+        </div>
+        <div data-tenancy="b">
+          <p>דירה 3 · רחוב אחר 2</p>
+          <ul class="call-list">
+            <li>
+              <span class="chip">בטיפול</span>
+              <span>11.10.2026 · חשמל · מפסק במטבח</span>
+            </li>
+            <li>
+              <span class="chip">נענתה</span>
+              <span>03.09.2026 · מפתחות · מפתח למחסן</span>
+            </li>
+          </ul>
+        </div>
+      </article>
+    </section>
+
+    <section data-state="thread">
+      <article class="glass block">
+        <h2>דוד המים לא מחמם</h2>
+        <p><span class="chip">נקבע ביקור</span> 28.09.2026 · קריאה 1042</p>
+        <ol class="thread">
+          <li>
+            <p class="who">נועה לדוגמה</p>
+            <p>דוד המים הפסיק לחמם אתמול בערב.</p>
+          </li>
+          <li>
+            <p class="who">המשרד</p>
+            <p>קיבלנו. נקבע ביקור ביום ראשון בין 10:00 ל-12:00.</p>
+          </li>
+        </ol>
+        <div class="field">
+          <label for="follow-up">המשך</label>
+          <textarea id="follow-up" rows="3" placeholder="עוד פרט לקריאה הפתוחה"></textarea>
+        </div>
+        <p class="lede">קריאה סגורה לא ממשיכה כאן. הודעה עליה פותחת קריאה חדשה שמקושרת אליה.</p>
+        <div class="actions">
+          <button class="btn btn-primary" type="button">שליחה</button>
+          <label class="btn btn-glass" for="st-calls">חזרה לקריאות</label>
+        </div>
+      </article>
+    </section>
+
+    <section data-state="report">
+      <article class="glass block">
+        <h2>דיווח על תקלה</h2>
+        <p class="duty">חירום? התקשרו לכונן עכשיו, <span dir="ltr">050-000-0001</span>. אל תחכו לטופס.</p>
+        <div class="field">
+          <label for="category">קטגוריה</label>
+          <select id="category">
+            <option>אינסטלציה</option>
+            <option>חשמל</option>
+            <option>דוד</option>
+            <option>אחר</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="report-text">מה קרה</label>
+          <textarea id="report-text" rows="4">יש נזילה מתחת לכיור במטבח.</textarea>
+        </div>
+        <fieldset>
+          <legend>כניסה לדירה כשאינכם בבית</legend>
+          <label class="check"><input type="radio" name="entry" checked /> מותר להיכנס</label>
+          <label class="check"><input type="radio" name="entry" /> רק בתיאום</label>
+          <label class="check"><input type="radio" name="entry" /> אין כניסה בלעדי</label>
+        </fieldset>
+        <div class="field">
+          <label for="attachments">תמונות או סרטון קצר</label>
+          <input id="attachments" type="file" accept="image/*,video/*,.pdf" multiple />
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" type="button">שליחה</button>
+        </div>
+      </article>
+    </section>
+
+    <section data-state="ask">
+      <article class="glass block">
+        <h2>שאלה למשרד</h2>
+        <p class="lede">מגיעה לאדם, ונרשמת כמו כל קריאה. כל מספר מאומת יכול לשאול, גם בלי שכירות בפורטל.</p>
+        <div class="field">
+          <label for="question">שאלה</label>
+          <textarea id="question" rows="4">אפשר לקבל העתק של החוזה?</textarea>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" type="button">שליחה</button>
+        </div>
+      </article>
+    </section>
+
+    <section data-state="not-yet">
+      <article class="glass block">
+        <h2>הבניין עדיין לא בפורטל</h2>
+        <p>נכנסתם עם <span dir="ltr">050-000-0000</span>. הרישומות של הבניין עדיין לא בפורטל, ולכן אין כאן דירה, מסמכים או קריאות.</p>
+        <div class="actions">
+          <label class="btn btn-primary" for="st-ask">שאלה למשרד</label>
+        </div>
+      </article>
+    </section>
+
+    <section data-state="english" lang="en" dir="ltr">
+      <article class="glass block">
+        <h2>Hello, Noa Example</h2>
+        <p>Flat 12 · 8 Demo Street</p>
+        <p class="reply-line">We reply within 2 business days</p>
+        <p class="lede">This screen is English, left to right. The rest of the portal stays Hebrew, right to left.</p>
+        <div class="actions">
+          <label class="btn btn-primary" for="st-report">Report an issue</label>
+          <label class="btn btn-glass" for="st-ask">Ask the office</label>
+        </div>
+      </article>
+    </section>
+
+    <section data-state="russian" lang="ru" dir="ltr">
+      <article class="glass block">
+        <h2>Здравствуйте, Ноа</h2>
+        <p>Квартира 12 · улица Демо 8</p>
+        <p class="reply-line">Мы отвечаем в течение 2 рабочих дней</p>
+        <p class="lede">Экран на русском, слева направо. Текст пример.</p>
+      </article>
+    </section>
+
+    <nav class="portal-nav" aria-label="פורטל">
+      <label for="st-home">בית</label>
+      <label for="st-flat">הדירה</label>
+      <label for="st-papers">המסמכים</label>
+      <label for="st-calls">הקריאות</label>
+      <label for="st-report">דיווח</label>
+      <label for="st-ask">שאלה</label>
+    </nav>
+  </div>
+
+  <section data-state="switch">
+    <article class="glass block">
+      <p class="back"><a href="/dev/mockups/index">הדמיות</a> · מסך משרד, לא מסך דייר</p>
+      <h2>בניין הדגמה</h2>
+      <p class="lede">רחוב הדגמה 8, תל אביב. המתג דורש הרשאה משלו.</p>
+      <label class="check">
+        <input type="checkbox" checked />
+        הבניין בפורטל
+      </label>
+      <p>דייר פעיל רואה את הדירה, את המסמכים ואת הקריאות. כיבוי נכנס לתוקף בבקשה הבאה.</p>
+    </article>
+  </section>
+
+  <section data-state="refusal">
+    <article class="glass block">
+      <h2>בניין הדגמה</h2>
+      <label class="check">
+        <input type="checkbox" disabled />
+        הבניין בפורטל
+      </label>
+      <p class="duty">לא ניתן להדליק את הפורטל כל עוד נוסח משפטי הוא מציין מקום.</p>
+      <ul class="paper-list">
+        <li><span>הודעת פרטיות · עברית · מציין מקום</span></li>
+        <li><span>תנאים · אנגלית · מציין מקום</span></li>
+        <li><span>הודעת פרטיות · רוסית · אושר</span></li>
+      </ul>
+    </article>
+  </section>
+
+  <section data-state="settings">
+    <article class="glass block">
+      <h2>תאריכים לא עובדים</h2>
+      <p class="lede">יום עסקים הוא ראשון עד חמישי, פחות התאריכים האלה.</p>
+      <ul class="paper-list">
+        <li><span dir="ltr">14.04.2027</span><span>פסח · דוגמה</span></li>
+      </ul>
+      <div class="field">
+        <label for="holiday">תאריך להוספה</label>
+        <input id="holiday" type="text" dir="ltr" placeholder="01.01.2027" />
+      </div>
+      <button class="btn btn-primary" type="button">שמירה</button>
+    </article>
+    <article class="glass block">
+      <h2>יעד מענה פנימי</h2>
+      <p class="lede">השעון הקיים, בדקות, לקריאת חירום. אינו מוצג לדייר. נשאר כמו שהוא.</p>
+      <dl class="facts">
+        <div><dt>כתום</dt><dd dir="ltr">240 דקות</dd></div>
+        <div><dt>אדום</dt><dd dir="ltr">1440 דקות</dd></div>
+      </dl>
+    </article>
+    <article class="glass block">
+      <h2>ספי טיפול בימי עסקים</h2>
+      <p class="lede">השעון השני, ליד שעון הדקות. לכל קריאה שאינה חירום.</p>
+      <div class="field">
+        <label for="amber-days">כתום (ימי עסקים)</label>
+        <input id="amber-days" type="text" inputmode="numeric" dir="ltr" value="2" />
+      </div>
+      <div class="field">
+        <label for="red-days">אדום (ימי עסקים)</label>
+        <input id="red-days" type="text" inputmode="numeric" dir="ltr" value="5" />
+      </div>
+      <button class="btn btn-primary" type="button">שמירה</button>
+    </article>
+    <article class="glass block">
+      <h2>יעד מענה לדייר</h2>
+      <p class="lede">מענה של אדם, לא האישור האוטומטי. אינו מבטיח סגירה או ביקור.</p>
+      <div class="field">
+        <label for="reply-target">יעד מענה (ימי עסקים)</label>
+        <input id="reply-target" type="text" inputmode="numeric" dir="ltr" value="2" />
+      </div>
+      <label class="check">
+        <input type="checkbox" />
+        הצגה לדיירים
+      </label>
+      <p class="lede">כבוי כברירת מחדל. כשדולק, הדייר רואה: אנחנו עונים בתוך 2 ימי עסקים.</p>
+      <button class="btn btn-primary" type="button">שמירה</button>
+    </article>
+  </section>
+</div>
