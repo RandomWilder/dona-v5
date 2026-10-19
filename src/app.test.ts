@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import { signIn, signOutAll } from '../tests/support/session.ts';
 import { buildApp } from './app.ts';
 import { fixedClock } from './kernel/clock.ts';
+import { KernelError } from './kernel/errors.ts';
 import { migratedPoolOrNull, skipReason } from './kernel/pg-support.ts';
 
 // app.inject drives the route without binding a socket, so the suite never races a port.
@@ -50,6 +51,55 @@ describe('/health', () => {
       strictEqual(body.message, 'database unreachable');
       // The connection string is in the caught error. It must not be on the wire.
       strictEqual(/59999|postgres:\/\//.test(response.body), false);
+    } finally {
+      await app.close();
+      await deadPool.end();
+    }
+  });
+
+  // #269. A 503 on staging left no line in the application log, and the cause had to be read off the
+  // storage audit log. One line per unexpected outcome, and never what the error quotes of a row.
+  it('logs one line for an unexpected error, without the database detail text', async () => {
+    const deadPool = new Pool({
+      connectionString: 'postgres://dona:dona@127.0.0.1:59999/dona',
+      connectionTimeoutMillis: 500,
+      allowExitOnIdle: true,
+    });
+    const lines: string[] = [];
+    const app = buildApp({
+      pool: deadPool,
+      version: '9.9.9-test',
+      logError: (line) => lines.push(line),
+    });
+    app.get('/boom', { config: { staff: 'public' } }, async () => {
+      throw Object.assign(new Error('duplicate key value'), {
+        code: '23505',
+        constraint: 'building_address_unique',
+        detail: 'Key (address_key)=(בית שמש|הרב קוק 50) already exists.',
+      });
+    });
+    app.get('/stored', { config: { staff: 'public' } }, async () => {
+      throw new KernelError('unavailable', 'object could not be stored', {
+        status: 403,
+      });
+    });
+    app.get('/missing', { config: { staff: 'public' } }, async () => {
+      throw new KernelError('not_found', 'nothing here');
+    });
+    try {
+      strictEqual((await app.inject({ url: '/boom' })).statusCode, 503);
+      strictEqual((await app.inject({ url: '/stored' })).statusCode, 503);
+      strictEqual((await app.inject({ url: '/missing' })).statusCode, 404);
+      strictEqual(lines.length, 2);
+      const [foreign, kernel] = lines.map((line) => JSON.parse(line ?? ''));
+      strictEqual(foreign.severity, 'ERROR');
+      strictEqual(foreign.route, '/boom');
+      strictEqual(foreign.pgCode, '23505');
+      strictEqual(foreign.constraint, 'building_address_unique');
+      strictEqual(/הרב קוק|address_key\)=/.test(lines[0] ?? ''), false);
+      strictEqual(kernel.code, 'unavailable');
+      strictEqual(kernel.message, 'object could not be stored');
+      strictEqual(kernel.details.status, 403);
     } finally {
       await app.close();
       await deadPool.end();

@@ -139,6 +139,11 @@ import {
 export interface AppDeps {
   pool: Pool;
   version: string;
+  /**
+   * #269. Where the one line for an unexpected outcome goes. stderr by default, which Cloud Run
+   * reads as a structured entry; a test passes a collector.
+   */
+  logError?: (line: string) => void;
   /** Injected here and nowhere deeper. SPEC.md: the clock is a dependency, never a global read. */
   clock?: Clock;
   /**
@@ -259,6 +264,39 @@ function declaredStance(config: unknown): Stance | undefined {
     return asked as Permission;
   }
   return undefined;
+}
+
+/**
+ * **#269. One line for an `unavailable` outcome, so a 503 is explained by the application log.**
+ *
+ * A kernel error carries a message and details written to be safe on the wire, so they are safe
+ * here. Any other error is named by its class, its database code and its constraint, and never by
+ * its message or `detail`: a pg error's detail quotes the row (`Key (address_key)=(...)`), and a
+ * row is a tenant's data. The route is the pattern, never the URL, which can carry a search.
+ */
+function unexpectedLine(caught: unknown, route: string | undefined): string {
+  const where = { severity: 'ERROR', route: route ?? null };
+  if (caught instanceof KernelError) {
+    return JSON.stringify({
+      ...where,
+      code: caught.code,
+      message: caught.message,
+      ...(caught.details === undefined ? {} : { details: caught.details }),
+    });
+  }
+  const foreign = (caught ?? {}) as {
+    name?: unknown;
+    code?: unknown;
+    constraint?: unknown;
+  };
+  const text = (value: unknown) => (typeof value === 'string' ? value : null);
+  return JSON.stringify({
+    ...where,
+    code: 'unavailable',
+    error: text(foreign.name),
+    pgCode: text(foreign.code),
+    constraint: text(foreign.constraint),
+  });
 }
 
 export function buildApp(deps: AppDeps): FastifyInstance {
@@ -414,9 +452,13 @@ export function buildApp(deps: AppDeps): FastifyInstance {
 
   // **#233.** A browser gets the Hebrew page in the shell; everything else keeps the shape, byte for
   // byte (SPEC.md §Error shape).
+  const logError = deps.logError ?? ((line: string) => console.error(line));
   app.setErrorHandler(async (caught, request, reply) => {
     const body = toErrorBody(caught);
     reply.code(httpStatus(body.code));
+    if (body.code === 'unavailable') {
+      logError(unexpectedLine(caught, request.routeOptions?.url));
+    }
     if (!wantsHtml(request.headers.accept)) return body;
     const staff = request.staff;
     stubHeaders(reply);

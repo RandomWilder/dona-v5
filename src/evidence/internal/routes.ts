@@ -15,7 +15,10 @@ import type { Pool } from 'pg';
 import type { ChromeDest } from '../../chrome.ts';
 import {
   addCalendarYears,
+  addressKeyOf,
   type BuildingStatus,
+  findBuildingAtAddress,
+  findUnitsAtAddress,
   getBuilding,
   getUnit,
   searchEstate,
@@ -117,7 +120,6 @@ import {
   fileDocument,
   findDocumentByHash,
   type IntakeResult,
-  rememberDoorUnit,
   runExtractWork,
 } from './intake.ts';
 import {
@@ -989,6 +991,8 @@ export function registerDocumentRoutes(
     if (documentId === '') {
       throw new KernelError('not_found', 'route not found');
     }
+    // The document is held before anything is written for it.
+    await getFiledDocument(deps.pool, documentId);
     const unitNumber = requireText(body.unit_number, 'unit_number', 32);
     const addressLine = requireText(body.address_line, 'address_line', 200);
     const city = requireText(body.city, 'city', 120);
@@ -996,9 +1000,32 @@ export function registerDocumentRoutes(
       ? validId(body.building, 'building')
       : null;
     const handover = today(deps.clock);
+    // #269. The building already at the typed address is the one this flat joins, named on the form
+    // or not: an upsert of a new building's facts over it would reset its handover, warranty and
+    // project. The same key and the same `=` the unique index uses.
     const heldBuilding = askedBuilding
       ? (await getBuilding(deps.pool, askedBuilding)).building
-      : null;
+      : await findBuildingAtAddress(deps.pool, [
+          addressKeyOf(city, addressLine),
+        ]);
+    // A flat it already holds under that number is selected, never written: the upsert would reset
+    // its rooms, area and ממ"ד to what this form does not know.
+    const heldFlat = heldBuilding
+      ? (
+          await findUnitsAtAddress(deps.pool, [
+            addressKeyOf(heldBuilding.city, heldBuilding.address_line),
+          ])
+        ).find(
+          (hit) =>
+            hit.building_id === heldBuilding.building_id &&
+            hit.unit_number === unitNumber,
+        )
+      : undefined;
+    if (heldFlat) {
+      return reply.redirect(
+        `/documents/filing/${documentId}/open?unit=${heldFlat.unit_id}`,
+      );
+    }
     const written = await inTransaction(deps.pool, (db) =>
       upsertUnitRow(db, {
         project: null,
@@ -1038,8 +1065,8 @@ export function registerDocumentRoutes(
       }),
     );
     const unit = await getUnit(deps.pool, written.unitId);
-    const filed = await getFiledDocument(deps.pool, documentId);
-    await rememberDoorUnit(deps.objects, filed.fileHash, unit.unit_id);
+    // The redirect is the preselection. The proposal object is written once, at upload, and never
+    // rewritten (#269): document storage is create-only for the runtime account.
     return reply.redirect(
       `/documents/filing/${documentId}/open?unit=${unit.unit_id}`,
     );

@@ -45,6 +45,22 @@ describe('object store', () => {
     assert.equal((await store.read('p')).bytes.toString(), 'original');
   });
 
+  // #269. The runtime account may create objects and may not delete them, and replacing an object is
+  // a delete, so staging refuses a second write to a path. The memory store refuses it the same way,
+  // or a test passes on a write staging answers with 503.
+  it('refuses a second write to the same path, as the bucket does', async () => {
+    const store = createMemoryStore();
+    await store.put('p', Buffer.from('first'), 'application/json');
+    await assert.rejects(
+      store.put('p', Buffer.from('second'), 'application/json'),
+      (error: KernelError) => {
+        assert.equal(error.code, 'unavailable');
+        return true;
+      },
+    );
+    assert.equal((await store.read('p')).bytes.toString(), 'first');
+  });
+
   it('says not_found rather than returning an empty object', async () => {
     const store = createMemoryStore();
     await assert.rejects(store.read('missing'), (error: KernelError) => {
