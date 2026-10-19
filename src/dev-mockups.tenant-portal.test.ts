@@ -26,10 +26,13 @@ describe('tenant portal paint', () => {
     const page = renderMockup('tenant-portal', 'csrf');
     const phone = panel(page, 'phone');
     assert.match(phone, /מספר נייד/);
-    assert.match(phone, /050/);
+    assert.match(phone, /type="tel"/);
+    assert.match(phone, /\+972/);
     const code = panel(page, 'code');
     assert.match(code, /וואטסאפ/);
     assert.match(code, /מסרון/);
+    assert.match(code, /for="code-sms"/);
+    assert.doesNotMatch(code, />כניסה</);
     assert.match(page, /for="st-phone"/);
     assert.match(page, /for="st-code"/);
   });
@@ -47,6 +50,8 @@ describe('tenant portal paint', () => {
     const notice = panel(page, 'notice');
     assert.match(notice, /הודעת פרטיות/);
     assert.match(notice, /קראתי/);
+    assert.match(notice, /role="switch"/);
+    assert.doesNotMatch(notice, /role="switch"[^>]*checked/);
     assert.match(page, /for="st-notice"/);
   });
 
@@ -67,11 +72,25 @@ describe('tenant portal paint', () => {
     assert.match(page, /for="st-flat"/);
   });
 
-  it('lists the tenancy papers', () => {
+  it('lists the tenancy papers on the flat screen', () => {
     const page = renderMockup('tenant-portal', 'csrf');
-    const papers = panel(page, 'papers');
-    assert.match(papers, /חוזה/);
+    const flat = panel(page, 'flat');
+    assert.match(flat, /מסמכים/);
+    assert.match(flat, /חוזה/);
     assert.match(page, /for="st-papers"/);
+  });
+
+  it('switches tenancy and language in bottom sheets', () => {
+    const page = renderMockup('tenant-portal', 'csrf');
+    const tenancy = panel(page, 'tenancy');
+    assert.match(tenancy, /בחירת דירה/);
+    assert.match(tenancy, /for="tenancy-a"/);
+    assert.match(tenancy, /for="tenancy-b"/);
+    const lang = panel(page, 'lang');
+    assert.match(lang, /for="st-english"/);
+    assert.match(lang, /for="st-russian"/);
+    assert.match(page, /for="st-tenancy"/);
+    assert.match(page, /for="st-lang"/);
   });
 
   it('lists calls in the tenant status words', () => {
@@ -89,19 +108,35 @@ describe('tenant portal paint', () => {
     const page = renderMockup('tenant-portal', 'csrf');
     const thread = panel(page, 'thread');
     assert.match(thread, /דוד המים/);
-    assert.match(thread, /המשך/);
-    assert.match(thread, /<textarea/);
+    assert.match(thread, /עוד פרט לקריאה/);
     assert.match(page, /for="st-thread"/);
+    const closed = panel(page, 'thread-closed');
+    assert.match(closed, /פתיחת קריאה המשך/);
+    assert.doesNotMatch(closed, /עוד פרט לקריאה/);
+    assert.match(page, /for="st-thread-closed"/);
   });
 
-  it('paints report an issue with category, entry, emergency and attachments', () => {
+  it('paints report an issue in three steps: category, details, entry, then sent', () => {
     const page = renderMockup('tenant-portal', 'csrf');
     const report = panel(page, 'report');
-    assert.match(report, /קטגוריה/);
-    assert.match(report, /כניסה/);
     assert.match(report, /כונן/);
-    assert.match(report, /type="file"/);
-    assert.match(page, /for="st-report"/);
+    assert.match(report, /href="tel:/);
+    assert.ok(
+      report.indexOf('tel:') < report.indexOf('name="category"'),
+      'the emergency call comes before the form',
+    );
+    assert.match(report, /אינסטלציה/);
+    assert.match(panel(page, 'report-2'), /type="file"/);
+    assert.match(panel(page, 'report-3'), /להיכנס לדירה/);
+    assert.match(panel(page, 'report-sent'), /הדיווח התקבל/);
+    for (const id of [
+      'st-report',
+      'st-report-2',
+      'st-report-3',
+      'st-report-sent',
+    ]) {
+      assert.match(page, new RegExp(`for="${id}"`));
+    }
   });
 
   it('paints ask the office', () => {
@@ -115,7 +150,7 @@ describe('tenant portal paint', () => {
   it('tells a tenant their building is not in the portal yet, without the flat', () => {
     const page = renderMockup('tenant-portal', 'csrf');
     const locked = panel(page, 'not-yet');
-    assert.match(locked, /עדיין לא בפורטל/);
+    assert.match(locked, /עוד לא בפורטל/);
     assert.match(locked, /שאלה/);
     assert.doesNotMatch(locked, /חוזה/);
     assert.doesNotMatch(locked, /חניה/);

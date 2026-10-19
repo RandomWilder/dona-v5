@@ -1,24 +1,19 @@
 <style>
+  /* ---------- Paint chrome: the screen switcher and the office screens (admin style) ---------- */
   .paint-switch {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
     align-items: center;
   }
-  .paint-switch input,
-  .portal-frame .chooser input,
-  .portal-frame .channel input {
+  .paint-switch input {
     position: absolute;
     inline-size: 1px;
     block-size: 1px;
     overflow: hidden;
     clip: rect(0 0 0 0);
   }
-  .paint-switch label,
-  .langs label,
-  .chooser label,
-  .channel label,
-  .portal-nav label {
+  .paint-switch label {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -46,11 +41,17 @@
   .paint:has(#st-passkey:checked) .paint-switch label[for="st-passkey"],
   .paint:has(#st-notice:checked) .paint-switch label[for="st-notice"],
   .paint:has(#st-home:checked) .paint-switch label[for="st-home"],
+  .paint:has(#st-tenancy:checked) .paint-switch label[for="st-tenancy"],
+  .paint:has(#st-lang:checked) .paint-switch label[for="st-lang"],
   .paint:has(#st-flat:checked) .paint-switch label[for="st-flat"],
   .paint:has(#st-papers:checked) .paint-switch label[for="st-papers"],
   .paint:has(#st-calls:checked) .paint-switch label[for="st-calls"],
   .paint:has(#st-thread:checked) .paint-switch label[for="st-thread"],
+  .paint:has(#st-thread-closed:checked) .paint-switch label[for="st-thread-closed"],
   .paint:has(#st-report:checked) .paint-switch label[for="st-report"],
+  .paint:has(#st-report-2:checked) .paint-switch label[for="st-report-2"],
+  .paint:has(#st-report-3:checked) .paint-switch label[for="st-report-3"],
+  .paint:has(#st-report-sent:checked) .paint-switch label[for="st-report-sent"],
   .paint:has(#st-ask:checked) .paint-switch label[for="st-ask"],
   .paint:has(#st-not-yet:checked) .paint-switch label[for="st-not-yet"],
   .paint:has(#st-english:checked) .paint-switch label[for="st-english"],
@@ -63,159 +64,874 @@
     border-color: var(--color-accent-ink);
   }
   .paint [data-state] { display: none; }
-  .paint:has(#st-phone:checked) [data-state="phone"],
-  .paint:has(#st-code:checked) [data-state="code"],
-  .paint:has(#st-passkey:checked) [data-state="passkey"],
-  .paint:has(#st-notice:checked) [data-state="notice"],
-  .paint:has(#st-home:checked) [data-state="home"],
-  .paint:has(#st-flat:checked) [data-state="flat"],
-  .paint:has(#st-papers:checked) [data-state="papers"],
-  .paint:has(#st-calls:checked) [data-state="calls"],
-  .paint:has(#st-thread:checked) [data-state="thread"],
-  .paint:has(#st-report:checked) [data-state="report"],
-  .paint:has(#st-ask:checked) [data-state="ask"],
-  .paint:has(#st-not-yet:checked) [data-state="not-yet"],
-  .paint:has(#st-english:checked) [data-state="english"],
-  .paint:has(#st-russian:checked) [data-state="russian"],
-  .paint:has(#st-switch:checked) [data-state="switch"],
-  .paint:has(#st-refusal:checked) [data-state="refusal"],
-  .paint:has(#st-settings:checked) [data-state="settings"] {
+  .paint:has(#st-switch:checked) > [data-state="switch"],
+  .paint:has(#st-refusal:checked) > [data-state="refusal"],
+  .paint:has(#st-settings:checked) > [data-state="settings"] {
     display: grid;
     gap: var(--space-4);
   }
-  .portal-frame {
-    display: none;
-    max-inline-size: var(--size-form-max);
-    margin-inline: auto;
-    padding: var(--space-4);
-    border: var(--size-hairline) solid var(--color-divider);
-    border-radius: var(--radius-4);
-    background: var(--color-bg);
-    gap: var(--space-4);
-  }
-  .paint:has(#st-phone:checked) .portal-frame,
-  .paint:has(#st-code:checked) .portal-frame,
-  .paint:has(#st-passkey:checked) .portal-frame,
-  .paint:has(#st-notice:checked) .portal-frame,
-  .paint:has(#st-home:checked) .portal-frame,
-  .paint:has(#st-flat:checked) .portal-frame,
-  .paint:has(#st-papers:checked) .portal-frame,
-  .paint:has(#st-calls:checked) .portal-frame,
-  .paint:has(#st-thread:checked) .portal-frame,
-  .paint:has(#st-report:checked) .portal-frame,
-  .paint:has(#st-ask:checked) .portal-frame,
-  .paint:has(#st-not-yet:checked) .portal-frame,
-  .paint:has(#st-english:checked) .portal-frame,
-  .paint:has(#st-russian:checked) .portal-frame {
-    display: grid;
-    direction: ltr;
-  }
-  .portal-top, .langs, .chooser, .channel, .portal-nav, .call-list, .paper-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    align-items: center;
-  }
-  .portal-top { justify-content: space-between; }
-  .portal-brand { margin: 0; font-weight: 600; }
-  .portal-nav { display: none; }
-  .paint:has(#st-home:checked) .portal-nav,
-  .paint:has(#st-flat:checked) .portal-nav,
-  .paint:has(#st-papers:checked) .portal-nav,
-  .paint:has(#st-calls:checked) .portal-nav,
-  .paint:has(#st-thread:checked) .portal-nav,
-  .paint:has(#st-report:checked) .portal-nav,
-  .paint:has(#st-ask:checked) .portal-nav {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .portal-nav label { inline-size: 100%; }
-  .paint fieldset {
-    margin: 0;
-    padding: 0;
-    border: 0;
-    min-inline-size: 0;
-  }
-  .paint:has(#st-home:checked) .langs label[for="st-home"],
-  .paint:has(#st-english:checked) .langs label[for="st-english"],
-  .paint:has(#st-russian:checked) .langs label[for="st-russian"],
-  .paint:has(#tenancy-a:checked) .chooser label[for="tenancy-a"],
-  .paint:has(#tenancy-b:checked) .chooser label[for="tenancy-b"],
-  .paint:has(#code-wa:checked) .channel label[for="code-wa"],
-  .paint:has(#code-sms:checked) .channel label[for="code-sms"] {
-    background: var(--color-accent-ink);
-    color: var(--color-on-accent);
-    border-color: var(--color-accent-ink);
-  }
-  .paint [data-tenancy],
-  .paint [data-channel] { display: none; }
-  .paint:has(#tenancy-a:checked) [data-tenancy="a"],
-  .paint:has(#tenancy-b:checked) [data-tenancy="b"],
-  .paint:has(#code-wa:checked) [data-channel="wa"],
-  .paint:has(#code-sms:checked) [data-channel="sms"] {
-    display: grid;
-    gap: var(--space-3);
-  }
-  .paint .block {
+  .paint > [data-state] .block {
     display: grid;
     gap: var(--space-3);
     padding: var(--space-4);
     min-inline-size: 0;
   }
-  .paint .block h2, .paint .block h3, .paint .block p { margin: 0; }
-  .paint .who { font-weight: 600; }
-  .paint .thread {
-    display: grid;
-    gap: var(--space-3);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .otp {
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: var(--space-2);
-  }
-  .otp input {
-    padding-inline: var(--space-1);
-    text-align: center;
-    min-inline-size: 0;
-  }
-  .call-list, .paper-list {
+  .paint > [data-state] .block h2,
+  .paint > [data-state] .block h3,
+  .paint > [data-state] .block p { margin: 0; }
+  .paint > [data-state] .duty { color: var(--color-alert); font-weight: 600; }
+  .paint > [data-state] .paper-list {
     display: grid;
     gap: var(--space-2);
     margin: 0;
     padding: 0;
     list-style: none;
   }
-  .call-list li, .paper-list li {
+  .paint > [data-state] .paper-list li {
     display: grid;
     gap: var(--space-1);
     padding: var(--space-3);
     border-radius: var(--radius-3);
     background: var(--color-surface-card);
     border: var(--size-hairline) solid var(--color-divider-soft);
-    min-inline-size: 0;
   }
-  .call-list label { justify-content: space-between; }
-  .duty { color: var(--color-alert); font-weight: 600; }
-  .reply-line {
+
+  /* ---------- Tenant portal design system: tokens ---------- */
+  .portal-frame {
+    /* Ground & surfaces */
+    --tp-bg:            #f2f2f3;
+    --tp-surface:       #ffffff;
+    --tp-surface-muted: #e9eaec;
+    --tp-surface-sunk:  #e4e5e8;
+    --tp-scrim:         #7d838b;
+
+    /* Ink */
+    --tp-ink:           #1d1f20;
+    --tp-ink-2:         #3a3c40;
+    --tp-ink-muted:     #55585d;
+    --tp-ink-subtle:    #6b6e73;
+    --tp-ink-faint:     #8a8d92;
+
+    /* Lines */
+    --tp-line:          #e3e4e7;
+    --tp-line-soft:     #eeeff1;
+    --tp-line-strong:   #b6b9be;
+    --tp-frame:         #d3d5d9;
+
+    /* Steel accent ramp */
+    --tp-accent-100:    #eef6ff;
+    --tp-accent-200:    #d6ebff;
+    --tp-accent-300:    #b5d9fd;
+    --tp-accent-400:    #94bce3;
+    --tp-accent-600:    #597ea3;
+    --tp-accent-700:    #416180;
+    --tp-accent-800:    #2c455d;
+
+    /* Semantic, status only */
+    --tp-ok:            #4e7a63;  --tp-ok-tint:     #e3eee8;
+    --tp-warn-ink:      #7a5418;  --tp-warn-tint:   #f6ecd9;  --tp-warn-line: #e9d6b0;
+    --tp-danger:        #a85a4a;  --tp-danger-ink:  #7d3a2c;  --tp-danger-tint: #f7e9e5;
+
+    /* Radius */
+    --tp-r-xs: 9px;
+    --tp-r-sm: 12px;
+    --tp-r-md: 14px;
+    --tp-r-lg: 16px;
+    --tp-r-xl: 20px;
+    --tp-r-sheet: 28px;
+    --tp-r-pill: 999px;
+
+    /* Spacing (4-pt) */
+    --tp-1: 4px; --tp-2: 8px; --tp-3: 12px; --tp-4: 16px; --tp-5: 20px; --tp-6: 24px;
+
+    /* Elevation */
+    --tp-shadow-fab:   0 10px 18px -8px rgba(44,69,93,.7);
+    --tp-shadow-thumb: 0 1px 2px rgba(0,0,0,.08);
+
+    font-family: 'Heebo', system-ui, sans-serif;
+    color: var(--tp-ink);
+  }
+
+  /* ---------- Shell ---------- */
+  .portal-frame {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    inline-size: min(360px, 100%);
+    block-size: 740px;
+    margin-inline: auto;
+    border: 1px solid var(--tp-frame);
+    border-radius: 36px;
+    background: var(--tp-bg);
+    overflow: hidden;
+    box-shadow: 0 24px 48px -24px rgba(29,45,61,.4);
+    font-size: 15px;
+    line-height: 1.4;
+  }
+  .paint:has(#st-switch:checked, #st-refusal:checked, #st-settings:checked) .portal-frame { display: none; }
+  .portal-frame :where(h1, h2, h3, p, ul, ol, li, dl, dt, dd) { margin: 0; padding: 0; }
+  .portal-frame :where(ul, ol) { list-style: none; }
+  .portal-frame :where(p) { text-wrap: pretty; }
+  .portal-frame label { cursor: pointer; }
+  .portal-frame :where(button) {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+  }
+  .portal-frame :focus-visible { outline: 2px solid var(--tp-accent-600); outline-offset: 2px; }
+  .portal-frame :is(span, b)[dir="ltr"] { white-space: nowrap; }
+  .tp-sr {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
     margin: 0;
-    padding: var(--space-3);
-    border-radius: var(--radius-3);
-    background: var(--color-accent-tint);
-    color: var(--color-accent-deep);
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
-  .actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-  .actions .btn, .actions label.btn { min-height: var(--size-touch); }
-  label.btn { cursor: pointer; }
+
+  .tp-i {
+    inline-size: 20px;
+    block-size: 20px;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .tp-i.i14 { inline-size: 14px; block-size: 14px; }
+  .tp-i.i15 { inline-size: 15px; block-size: 15px; }
+  .tp-i.i16 { inline-size: 16px; block-size: 16px; }
+  .tp-i.i18 { inline-size: 18px; block-size: 18px; }
+  .tp-i.i22 { inline-size: 22px; block-size: 22px; }
+  .tp-i.i24 { inline-size: 24px; block-size: 24px; }
+  .tp-i.i26 { inline-size: 26px; block-size: 26px; }
+  .tp-i.i48 { inline-size: 48px; block-size: 48px; }
+  .tp-i.is-bold { stroke-width: 2; }
+
+  .tp-status {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    block-size: 44px;
+    padding-inline: 26px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .tp-batt {
+    inline-size: 22px;
+    block-size: 11px;
+    border: 1.5px solid var(--tp-ink);
+    border-radius: 3px;
+    padding: 1px;
+  }
+  .tp-batt::before { content: ""; display: block; block-size: 100%; inline-size: 70%; background: var(--tp-ink); border-radius: 1px; }
+
+  /* Screens */
+  .portal-frame > [data-state] { flex: 1; min-height: 0; flex-direction: column; }
+  .paint:has(#st-phone:checked) .portal-frame > [data-state="phone"],
+  .paint:has(#st-code:checked) .portal-frame > [data-state="code"],
+  .paint:has(#st-passkey:checked) .portal-frame > [data-state="passkey"],
+  .paint:has(#st-notice:checked) .portal-frame > [data-state="notice"],
+  .paint:has(#st-home:checked) .portal-frame > [data-state="home"],
+  .paint:has(#st-tenancy:checked) .portal-frame > [data-state="tenancy"],
+  .paint:has(#st-lang:checked) .portal-frame > [data-state="lang"],
+  .paint:has(#st-flat:checked) .portal-frame > [data-state="flat"],
+  .paint:has(#st-papers:checked) .portal-frame > [data-state="flat"],
+  .paint:has(#st-calls:checked) .portal-frame > [data-state="calls"],
+  .paint:has(#st-thread:checked) .portal-frame > [data-state="thread"],
+  .paint:has(#st-thread-closed:checked) .portal-frame > [data-state="thread-closed"],
+  .paint:has(#st-report:checked) .portal-frame > [data-state="report"],
+  .paint:has(#st-report-2:checked) .portal-frame > [data-state="report-2"],
+  .paint:has(#st-report-3:checked) .portal-frame > [data-state="report-3"],
+  .paint:has(#st-report-sent:checked) .portal-frame > [data-state="report-sent"],
+  .paint:has(#st-ask:checked) .portal-frame > [data-state="ask"],
+  .paint:has(#st-not-yet:checked) .portal-frame > [data-state="not-yet"],
+  .paint:has(#st-english:checked) .portal-frame > [data-state="english"],
+  .paint:has(#st-russian:checked) .portal-frame > [data-state="russian"] {
+    display: flex;
+  }
+
+  /* Sample-data switches: tenancy, code channel, open/closed calls */
+  .paint [data-tenancy],
+  .paint [data-channel],
+  .paint [data-calls] { display: none; }
+  .paint:has(#tenancy-a:checked) [data-tenancy="a"],
+  .paint:has(#tenancy-b:checked) [data-tenancy="b"],
+  .paint:has(#code-wa:checked) [data-channel="wa"],
+  .paint:has(#code-sms:checked) [data-channel="sms"],
+  .paint:has(#calls-open:checked) [data-calls="open"],
+  .paint:has(#calls-closed:checked) [data-calls="closed"] {
+    display: contents;
+  }
+
+  .tp-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 8px 20px 16px;
+  }
+  .tp-body.is-auth { padding: 12px 24px 28px; gap: 16px; }
+  .tp-body.is-center { text-align: center; }
+  .tp-spacer { flex: 1 0 0; }
+  .tp-stack { display: grid; gap: 8px; }
+  .tp-stack-10 { display: grid; gap: 10px; }
+
+  /* Headers */
+  .tp-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-block-size: 40px;
+  }
+  .tp-bar { flex: none; display: grid; gap: 10px; padding: 4px 20px 8px; }
+  .tp-bar-row { display: flex; align-items: center; gap: 10px; min-block-size: 36px; }
+  .tp-bar-title { flex: 1; min-width: 0; display: grid; gap: 1px; }
+  .tp-bar-title b { font-size: 16px; font-weight: 700; }
+  .tp-bar-title small { font-size: 12px; color: var(--tp-ink-subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tp-auth-top { display: flex; align-items: center; justify-content: space-between; }
+  .tp-auth-head { margin-block-start: 32px; }
+
+  /* Type */
+  .tp-display { font-size: 28px; line-height: 1.15; font-weight: 700; }
+  .tp-page-title { font-size: 26px; line-height: 1.15; font-weight: 700; }
+  .tp-q { font-size: 20px; line-height: 1.25; font-weight: 700; }
+  .tp-section { font-size: 15px; font-weight: 600; }
+  .tp-lede { font-size: 15px; line-height: 1.5; color: var(--tp-ink-muted); }
+  .tp-long { font-size: 14px; line-height: 1.6; color: var(--tp-ink-2); }
+  .tp-meta { font-size: 12px; color: var(--tp-ink-subtle); }
+  .tp-caption { font-size: 12px; color: var(--tp-ink-subtle); text-align: center; }
+  .tp-kicker { font-size: 11px; letter-spacing: .04em; font-weight: 600; color: var(--tp-ink-muted); }
+  .tp-ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tp-section-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+
+  .tp-link { color: var(--tp-accent-700); font-weight: 500; text-decoration: none; }
+  .tp-link:hover { color: var(--tp-accent-800); text-decoration: underline; }
+
+  /* Brand */
+  .tp-brand { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; }
+  .tp-brand-mark {
+    display: grid;
+    place-items: center;
+    inline-size: 28px;
+    block-size: 28px;
+    border-radius: 8px;
+    background: var(--tp-accent-600);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 800;
+  }
+
+  /* Hit area for controls drawn smaller than 44px */
+  .tp-hit { position: relative; }
+  .tp-hit::after { content: ""; position: absolute; inset: -4px; }
+
+  /* Pills and round buttons */
+  .tp-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    block-size: 36px;
+    padding-inline: 12px;
+    border-radius: var(--tp-r-pill);
+    background: var(--tp-surface);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .tp-pill.is-compact { block-size: 32px; font-size: 12px; }
+  .tp-pill .tp-i { color: var(--tp-accent-700); }
+  .tp-pill:hover { background: var(--tp-accent-100); }
+  .tp-icon-btn {
+    display: grid;
+    place-items: center;
+    flex: none;
+    inline-size: 36px;
+    block-size: 36px;
+    border-radius: var(--tp-r-pill);
+    background: var(--tp-surface);
+    color: var(--tp-ink);
+  }
+  .tp-icon-btn:hover { background: var(--tp-accent-100); }
+  .tp-icon-btn.is-globe { inline-size: 40px; block-size: 40px; color: var(--tp-accent-700); }
+  .tp-icon-btn.is-auth { border-radius: var(--tp-r-sm); }
+
+  /* Buttons */
+  .tp-primary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    inline-size: 100%;
+    block-size: 54px;
+    border-radius: var(--tp-r-md);
+    background: var(--tp-accent-600);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .portal-frame .tp-primary { background: var(--tp-accent-600); color: #fff; }
+  .portal-frame .tp-primary:hover { background: var(--tp-accent-700); }
+  .portal-frame .tp-primary:active { background: var(--tp-accent-800); }
+  .tp-primary:disabled { opacity: .45; }
+  .tp-text-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    inline-size: 100%;
+    block-size: 48px;
+    border-radius: var(--tp-r-md);
+    color: var(--tp-accent-700);
+    font-size: 15px;
+    font-weight: 500;
+  }
+  .tp-text-btn:hover { background: var(--tp-accent-100); }
+  .tp-danger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    block-size: 46px;
+    border-radius: var(--tp-r-sm);
+    background: var(--tp-danger);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .tp-danger:hover { background: var(--tp-danger-ink); }
+
+  /* Status chips */
+  .tp-chip {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    padding: 4px 9px;
+    border-radius: var(--tp-r-pill);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+  .tp-chip[data-status="received"]  { background: var(--tp-accent-100); color: var(--tp-accent-700); }
+  .tp-chip[data-status="handling"]  { background: var(--tp-accent-200); color: var(--tp-accent-800); }
+  .tp-chip[data-status="waiting"]   { background: var(--tp-warn-tint); color: var(--tp-warn-ink); }
+  .tp-chip[data-status="visit"]     { background: var(--tp-accent-600); color: #fff; }
+  .tp-chip[data-status="answered"]  { background: var(--tp-ok-tint); color: var(--tp-ok); }
+  .tp-chip[data-status="forwarded"],
+  .tp-chip[data-status="merged"],
+  .tp-chip[data-status="cancelled"] { background: var(--tp-surface-muted); color: var(--tp-ink-muted); }
+  .tp-hero .tp-chip { background: rgba(255,255,255,.14); color: #fff; font-weight: 500; }
+
+  /* Cards */
+  .tp-card { display: grid; gap: 10px; padding: 14px 16px; border-radius: var(--tp-r-lg); background: var(--tp-surface); }
+  .tp-card.is-row { display: flex; align-items: center; gap: 12px; }
+  .tp-card.is-xl { border-radius: var(--tp-r-xl); padding: 18px; gap: 14px; }
+  .tp-card.is-grow { flex: 1 1 auto; min-height: 0; overflow-y: auto; align-content: start; gap: 12px; }
+  .tp-list { display: grid; padding: 4px 14px; border-radius: var(--tp-r-lg); background: var(--tp-surface); }
+  .tp-list > * { padding-block: 12px; border-block-end: 1px solid var(--tp-line-soft); }
+  .tp-list > :last-child { border-block-end: 0; }
+  .tp-row { display: flex; align-items: center; gap: 12px; min-block-size: 44px; text-align: start; inline-size: 100%; }
+  .tp-row-text { display: grid; gap: 2px; min-width: 0; flex: 1; }
+  .tp-row-title { font-size: 14px; font-weight: 500; }
+  .tp-row-title.is-strong { font-size: 15px; font-weight: 600; }
+
+  .tp-hero {
+    display: grid;
+    gap: 12px;
+    padding: 18px;
+    border-radius: var(--tp-r-xl);
+    background: var(--tp-accent-800);
+    color: #fff;
+  }
+  .tp-hero-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 8px; }
+  .tp-hero .tp-kicker { color: var(--tp-accent-300); }
+  .tp-hero-title { font-size: 19px; line-height: 1.25; font-weight: 700; }
+  .tp-hero-when { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--tp-accent-200); }
+
+  .tp-strip {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: var(--tp-r-md);
+    background: var(--tp-accent-100);
+    color: var(--tp-accent-800);
+    font-size: 14px;
+  }
+  .tp-emergency {
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+    border-radius: var(--tp-r-lg);
+    background: var(--tp-danger-tint);
+    color: var(--tp-danger-ink);
+  }
+  .tp-emergency b { font-size: 15px; font-weight: 700; }
+  .tp-emergency p { font-size: 13px; }
+  .tp-summary { display: grid; gap: 8px; padding: 14px; border-radius: var(--tp-r-lg); background: var(--tp-surface-muted); }
+  .tp-summary dl { grid-template-columns: minmax(0, 1fr); }
+  .tp-summary div { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+  .tp-summary dt { color: var(--tp-ink-muted); flex: none; }
+  .tp-summary dd { font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .tp-shortcuts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tp-shortcut {
+    display: grid;
+    gap: 10px;
+    justify-items: start;
+    padding: 14px;
+    border-radius: var(--tp-r-lg);
+    background: var(--tp-surface);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .tp-shortcut:hover { background: var(--tp-accent-100); }
+
+  /* Icon wells */
+  .tp-well {
+    display: grid;
+    place-items: center;
+    flex: none;
+    inline-size: 36px;
+    block-size: 36px;
+    border-radius: 11px;
+    background: var(--tp-accent-100);
+    color: var(--tp-accent-700);
+  }
+  .tp-well.is-40 { inline-size: 40px; block-size: 40px; border-radius: var(--tp-r-sm); }
+  .tp-hero-well { display: grid; place-items: center; inline-size: 96px; block-size: 96px; margin-inline: auto; }
+  .tp-hero-well.is-passkey { border-radius: 30px; background: var(--tp-accent-200); color: var(--tp-accent-700); }
+  .tp-hero-well.is-sent { border-radius: var(--tp-r-pill); background: var(--tp-ok-tint); color: var(--tp-ok); }
+  .tp-hero-well.is-muted { border-radius: 30px; background: var(--tp-surface-muted); color: var(--tp-ink-muted); }
+
+  /* Call card */
+  .tp-calls { display: grid; gap: 10px; }
+  .tp-call { display: grid; gap: 10px; }
+  .tp-call:hover { box-shadow: inset 0 0 0 1.5px var(--tp-accent-200); }
+  .tp-call-head { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+  .tp-call-text { display: grid; gap: 2px; min-width: 0; flex: 1; }
+  .tp-call-title { font-size: 15px; font-weight: 600; }
+  .tp-call-note { font-size: 12px; color: var(--tp-ink-muted); }
+  .tp-progress { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .tp-progress i { block-size: 4px; border-radius: 2px; background: var(--tp-line); }
+  .tp-progress[data-step="1"] i:nth-child(-n+1),
+  .tp-progress[data-step="2"] i:nth-child(-n+2),
+  .tp-progress[data-step="3"] i:nth-child(-n+3),
+  .tp-progress[data-step="4"] i { background: var(--tp-accent-600); }
+  .tp-progress.is-closed i { background: var(--tp-ink-faint); }
+  .tp-call.is-waiting { box-shadow: inset 0 0 0 1.5px var(--tp-warn-line); }
+  .tp-wait-line { font-size: 12px; font-weight: 500; color: var(--tp-warn-ink); }
+
+  /* Segmented control */
+  .tp-seg {
+    flex: none;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 4px;
+    border-radius: var(--tp-r-sm);
+    background: var(--tp-surface-sunk);
+  }
+  .tp-seg label {
+    display: grid;
+    place-items: center;
+    block-size: 34px;
+    border-radius: var(--tp-r-xs);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--tp-ink-muted);
+  }
+  .paint:has(#calls-open:checked) .tp-seg label[for="calls-open"],
+  .paint:has(#calls-closed:checked) .tp-seg label[for="calls-closed"] {
+    background: var(--tp-surface);
+    color: var(--tp-ink);
+    font-weight: 600;
+    box-shadow: var(--tp-shadow-thumb);
+  }
+
+  /* Inputs */
+  .tp-label { display: block; margin-block-end: 8px; font-size: 13px; font-weight: 500; color: var(--tp-ink-muted); }
+  .tp-phone {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    block-size: 56px;
+    padding-inline: 16px;
+    border: 1.5px solid var(--tp-line);
+    border-radius: var(--tp-r-md);
+    background: var(--tp-surface);
+  }
+  .tp-phone:focus-within { border-color: var(--tp-accent-600); box-shadow: inset 0 0 0 .5px var(--tp-accent-600); }
+  .tp-prefix { flex: none; font-size: 16px; color: var(--tp-ink-faint); white-space: nowrap; }
+  .tp-divider { flex: none; inline-size: 1px; block-size: 24px; background: var(--tp-line); }
+  .portal-frame .tp-phone > input[type="tel"] {
+    flex: 1;
+    min-width: 0;
+    inline-size: auto;
+    min-height: 0;
+    block-size: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-family: inherit;
+    font-size: 19px;
+    font-weight: 500;
+    color: var(--tp-ink);
+    outline: none;
+  }
+  .portal-frame textarea.tp-textarea {
+    display: block;
+    inline-size: 100%;
+    min-height: 130px;
+    padding: 14px;
+    border: 1.5px solid var(--tp-line);
+    border-radius: var(--tp-r-md);
+    background: var(--tp-surface);
+    font-family: inherit;
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--tp-ink);
+    resize: none;
+  }
+  .portal-frame textarea.tp-textarea.is-tall { min-height: 180px; }
+  .portal-frame textarea.tp-textarea:focus { outline: none; border-color: var(--tp-accent-600); box-shadow: inset 0 0 0 .5px var(--tp-accent-600); }
+  .tp-help { margin-block-start: 8px; font-size: 12px; color: var(--tp-ink-subtle); }
+
+  .tp-otp { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .tp-otp span {
+    display: grid;
+    place-items: center;
+    min-width: 0;
+    block-size: 58px;
+    border: 1.5px solid var(--tp-line);
+    border-radius: var(--tp-r-sm);
+    background: #fff;
+    font-size: 24px;
+    font-weight: 600;
+  }
+  .tp-otp .is-filled { border-color: var(--tp-accent-200); }
+  .tp-otp .is-current { border: 2px solid var(--tp-accent-600); }
+  .tp-otp .is-current::after { content: ""; inline-size: 2px; block-size: 24px; background: var(--tp-accent-600); }
+  .tp-timer { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--tp-ink-subtle); }
+
+  .tp-composer {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px 26px;
+    background: #fff;
+    border-block-start: 1px solid #e6e7ea;
+  }
+  .tp-cam { display: grid; place-items: center; flex: none; inline-size: 40px; block-size: 40px; border-radius: var(--tp-r-pill); color: var(--tp-accent-700); }
+  .tp-cam:hover { background: var(--tp-accent-100); }
+  .portal-frame .tp-composer input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    inline-size: auto;
+    min-height: 0;
+    block-size: 42px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: var(--tp-r-pill);
+    background: var(--tp-bg);
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--tp-ink);
+  }
+  .portal-frame .tp-composer input[type="text"]::placeholder { color: var(--tp-ink-faint); }
+  .tp-send { display: grid; place-items: center; flex: none; inline-size: 42px; block-size: 42px; border-radius: var(--tp-r-pill); background: var(--tp-accent-600); color: #fff; }
+  .portal-frame .tp-send { background: var(--tp-accent-600); color: #fff; }
+  .portal-frame .tp-send:hover { background: var(--tp-accent-700); }
+  .tp-send .tp-i { transform: scaleX(-1); }
+  .tp-dock {
+    flex: none;
+    display: grid;
+    gap: 8px;
+    padding: 12px 20px 26px;
+    background: #fff;
+    border-block-start: 1px solid #e6e7ea;
+  }
+
+  /* Radio cards */
+  .tp-radio {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1.5px solid var(--tp-line);
+    border-radius: var(--tp-r-md);
+    background: #fff;
+  }
+  .tp-radio.is-sheet { border-radius: var(--tp-r-lg); }
+  .tp-ring { flex: none; box-sizing: border-box; inline-size: 22px; block-size: 22px; border: 1.5px solid var(--tp-line-strong); border-radius: 50%; }
+  .tp-radio:has(:checked),
+  .paint:has(#tenancy-a:checked) .tp-radio[for="tenancy-a"],
+  .paint:has(#tenancy-b:checked) .tp-radio[for="tenancy-b"] {
+    border: 2px solid var(--tp-accent-600);
+    padding: 13.5px 15.5px;
+  }
+  .tp-radio:has(:checked) .tp-ring,
+  .paint:has(#tenancy-a:checked) .tp-radio[for="tenancy-a"] .tp-ring,
+  .paint:has(#tenancy-b:checked) .tp-radio[for="tenancy-b"] .tp-ring { border: 6px solid var(--tp-accent-600); }
+  .tp-radio:has(:focus-visible) { outline: 2px solid var(--tp-accent-600); outline-offset: 2px; }
+  .tp-radio-text { display: grid; gap: 2px; min-width: 0; flex: 1; font-size: 15px; font-weight: 500; }
+
+  /* Category tiles */
+  .tp-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tp-tile {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    block-size: 104px;
+    padding: 14px;
+    border: 1.5px solid var(--tp-line);
+    border-radius: var(--tp-r-lg);
+    background: #fff;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .tp-tile .tp-i { color: var(--tp-accent-700); }
+  .tp-tile:has(:checked) { border: 2px solid var(--tp-accent-600); padding: 13.5px; color: var(--tp-accent-800); }
+  .tp-tile:has(:checked) .tp-i { color: var(--tp-accent-800); }
+  .tp-tile:has(:focus-visible) { outline: 2px solid var(--tp-accent-600); outline-offset: 2px; }
+
+  .tp-thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .tp-thumb { position: relative; aspect-ratio: 1; border-radius: var(--tp-r-md); }
+  .tp-thumb.is-a { background: linear-gradient(150deg, #c8d3dd, #8c9fb1 60%, #6f8193); }
+  .tp-thumb.is-b { background: linear-gradient(200deg, #d9d2c6, #a9a092 55%, #7f776b); }
+  .tp-thumb-x {
+    position: absolute;
+    inset-block-start: 6px;
+    inset-inline-end: 6px;
+    display: grid;
+    place-items: center;
+    inline-size: 22px;
+    block-size: 22px;
+    border-radius: var(--tp-r-pill);
+  }
+  .portal-frame .tp-thumb-x { background: rgba(29,31,32,.72); color: #fff; }
+  .tp-add {
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 4px;
+    aspect-ratio: 1;
+    border: 1.5px dashed var(--tp-accent-400);
+    border-radius: var(--tp-r-md);
+    color: var(--tp-accent-700);
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .tp-add:hover { background: var(--tp-accent-100); }
+  .tp-add:has(:focus-visible) { outline: 2px solid var(--tp-accent-600); outline-offset: 2px; }
+
+  /* Step bar (report) */
+  .tp-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .tp-steps i { block-size: 4px; border-radius: 2px; background: var(--tp-frame); }
+  .tp-steps[data-step="1"] i:nth-child(-n+1),
+  .tp-steps[data-step="2"] i:nth-child(-n+2),
+  .tp-steps[data-step="3"] i { background: var(--tp-accent-600); }
+
+  /* Bottom sheet */
+  .portal-frame > .tp-sheet-state { position: absolute; inset: 0; z-index: 2; background: var(--tp-scrim); }
+  .tp-scrim-close { flex: 1; }
+  .tp-sheet {
+    display: grid;
+    gap: 14px;
+    padding: 10px 20px 30px;
+    border-radius: var(--tp-r-sheet) var(--tp-r-sheet) 0 0;
+    background: var(--tp-bg);
+  }
+  .tp-grabber { justify-self: center; inline-size: 40px; block-size: 5px; border-radius: var(--tp-r-pill); background: #c9cbcf; }
+  .tp-sheet-title { font-size: 20px; font-weight: 700; }
+  .tp-sheet-help { font-size: 13px; color: var(--tp-ink-subtle); margin-block-start: -8px; }
+  .tp-lang-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 14px; }
+  .tp-lang-row b { font-weight: 600; }
+  .tp-lang-row small { font-size: 12px; color: var(--tp-ink-subtle); }
+  .tp-lang-row .tp-i { color: var(--tp-accent-700); }
+
+  /* Toggle switch */
+  .tp-switch { position: relative; flex: none; inline-size: 46px; block-size: 28px; border-radius: var(--tp-r-pill); background: #d3d5d9; transition: background .15s; }
+  .tp-switch input { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; margin: 0; opacity: 0; cursor: pointer; }
+  .tp-switch::after {
+    content: "";
+    position: absolute;
+    inset-block-start: 3px;
+    inset-inline-start: 3px;
+    inline-size: 22px;
+    block-size: 22px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,.2);
+    transition: inset-inline-start .15s;
+    pointer-events: none;
+  }
+  .tp-switch:has(input:checked) { background: var(--tp-accent-600); }
+  .tp-switch:has(input:checked)::after { inset-inline-start: 21px; }
+  .tp-switch:has(input:focus-visible) { outline: 2px solid var(--tp-accent-600); outline-offset: 2px; }
+
+  /* Thread */
+  .tp-stepper {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    padding: 14px 12px 12px;
+    border-radius: var(--tp-r-lg);
+    background: var(--tp-surface);
+    text-align: center;
+  }
+  .tp-stepper li { display: grid; justify-items: center; gap: 6px; font-size: 11px; color: var(--tp-ink-faint); }
+  .tp-dot { display: grid; place-items: center; box-sizing: border-box; inline-size: 24px; block-size: 24px; border: 1.5px solid #c9cbcf; border-radius: 50%; background: #fff; }
+  .tp-stepper .is-done { color: var(--tp-ink-muted); }
+  .tp-stepper .is-done .tp-dot { border: 0; background: var(--tp-accent-600); color: #fff; }
+  .tp-stepper .is-current { color: var(--tp-accent-800); font-weight: 700; }
+  .tp-stepper .is-current .tp-dot { border: 6px solid var(--tp-accent-600); }
+  .tp-datetile {
+    flex: none;
+    display: grid;
+    justify-items: center;
+    inline-size: 44px;
+    padding-block: 5px;
+    border-radius: 10px;
+    background: #fff;
+    color: var(--tp-accent-700);
+    line-height: 1.1;
+  }
+  .tp-datetile small { font-size: 10px; font-weight: 600; }
+  .tp-datetile b { font-size: 17px; font-weight: 700; }
+  .tp-visit-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+  .tp-visit-text b { font-size: 14px; font-weight: 600; }
+  .tp-visit-text span { font-size: 13px; }
+  .tp-day { text-align: center; font-size: 11px; font-weight: 500; color: var(--tp-ink-faint); }
+  .tp-thread { display: flex; flex-direction: column; gap: 10px; }
+  .tp-msg { display: grid; gap: 4px; max-width: 78%; }
+  .tp-msg.is-tenant { align-self: flex-start; }
+  .tp-msg.is-office { align-self: flex-end; }
+  .tp-who { font-size: 11px; font-weight: 600; color: var(--tp-ink-subtle); }
+  .tp-bubble { padding: 10px 14px; font-size: 14px; line-height: 1.45; }
+  .is-tenant .tp-bubble { background: var(--tp-accent-600); color: #fff; border-radius: 18px 18px 4px 18px; }
+  .is-office .tp-bubble { background: #fff; border-radius: 18px 18px 18px 4px; }
+  .tp-time { display: block; margin-block-start: 4px; font-size: 10px; text-align: end; color: var(--tp-ink-faint); }
+  .is-tenant .tp-time { color: var(--tp-accent-200); }
+
+  /* Flat */
+  .tp-flat-title { font-size: 20px; line-height: 1.25; font-weight: 700; }
+  .tp-lease { display: grid; gap: 8px; }
+  .tp-lease-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--tp-ink-subtle); }
+  .tp-lease-row b { font-weight: 600; color: var(--tp-accent-800); }
+  .tp-track { block-size: 6px; border-radius: var(--tp-r-pill); background: var(--tp-line); overflow: hidden; }
+  .tp-track i { display: block; block-size: 100%; border-radius: inherit; background: var(--tp-accent-600); }
+  .tp-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .tp-facts div { display: grid; gap: 2px; padding: 10px 12px; border-radius: var(--tp-r-sm); background: var(--tp-bg); }
+  .tp-facts dt { font-size: 12px; color: var(--tp-ink-subtle); }
+  .tp-facts dd { font-size: 18px; font-weight: 700; }
+  .tp-doc .tp-dl { color: var(--tp-accent-700); }
+
+  /* Reply-time line */
+  .tp-reply { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--tp-accent-700); }
+  .tp-reply-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    align-self: center;
+    padding: 8px 14px;
+    border-radius: var(--tp-r-pill);
+    background: var(--tp-accent-100);
+    color: var(--tp-accent-700);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  /* Ask topics */
+  .tp-topics { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tp-topic { padding: 8px 12px; border: 1px solid var(--tp-line); border-radius: var(--tp-r-pill); font-size: 13px; }
+  .portal-frame .tp-topic { background: #fff; border: 1px solid var(--tp-line); }
+  .portal-frame .tp-topic:hover { background: var(--tp-accent-100); }
+  .tp-topic.tp-hit::after { inset: -5px -2px; }
+
+  /* Bottom tab bar */
+  .tp-tabs {
+    flex: none;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    align-items: end;
+    padding: 8px 6px 22px;
+    background: var(--tp-surface);
+    border-block-start: 1px solid #e6e7ea;
+  }
+  .tp-tabs label {
+    display: grid;
+    justify-items: center;
+    align-content: end;
+    gap: 3px;
+    min-block-size: 44px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--tp-ink-subtle);
+  }
+  .tp-tabs label:hover { color: var(--tp-accent-700); }
+  .tp-tabs .is-active,
+  .tp-tabs .tp-fab { color: var(--tp-accent-700); font-weight: 600; }
+  .tp-fab-btn {
+    display: grid;
+    place-items: center;
+    inline-size: 50px;
+    block-size: 50px;
+    margin-block-start: -26px;
+    border-radius: 17px;
+    background: var(--tp-accent-600);
+    color: #fff;
+    box-shadow: var(--tp-shadow-fab);
+  }
+  .tp-fab:hover .tp-fab-btn { background: var(--tp-accent-700); }
+  .tp-fab-btn .tp-i { stroke-width: 1.8; }
 </style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="tpi-house" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="tpi-message-square" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="tpi-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="tpi-building" viewBox="0 0 24 24"><rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/></symbol>
+  <symbol id="tpi-ellipsis" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+  <symbol id="tpi-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+  <symbol id="tpi-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="tpi-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="tpi-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="tpi-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="tpi-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+  <symbol id="tpi-calendar" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></symbol>
+  <symbol id="tpi-scan-face" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></symbol>
+  <symbol id="tpi-shield-check" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="tpi-file-text" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="tpi-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
+  <symbol id="tpi-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+  <symbol id="tpi-camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></symbol>
+  <symbol id="tpi-send" viewBox="0 0 24 24"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></symbol>
+  <symbol id="tpi-phone" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></symbol>
+  <symbol id="tpi-message-circle" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+  <symbol id="tpi-droplet" viewBox="0 0 24 24"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></symbol>
+  <symbol id="tpi-zap" viewBox="0 0 24 24"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></symbol>
+  <symbol id="tpi-flame" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></symbol>
+  <symbol id="tpi-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+</svg>
+
 <div class="glass-stage paint" data-paint="tenant-portal">
   <header class="page-head">
     <div>
       <p class="back"><a href="/dev/mockups/index">הדמיות</a></p>
       <h1>פורטל הדיירים</h1>
-      <p class="lede">הדמיה. כל מסך בלחיצה. טקסט דוגמה בלבד, בלי דייר אמיתי. העמודה היא המסך בטלפון.</p>
+      <p class="lede">הדמיה. כל מסך בלחיצה, גם בתוך הטלפון. טקסט דוגמה בלבד, בלי דייר אמיתי. "המסמכים" מוביל למסך הדירה, שבו המסמכים יושבים עכשיו.</p>
     </div>
   </header>
 
@@ -232,6 +948,10 @@
       <label for="st-notice">הודעה ראשונה</label>
       <input type="radio" name="portal-state" id="st-home" />
       <label for="st-home">בית</label>
+      <input type="radio" name="portal-state" id="st-tenancy" />
+      <label for="st-tenancy">בחירת דירה</label>
+      <input type="radio" name="portal-state" id="st-lang" />
+      <label for="st-lang">שפה</label>
       <input type="radio" name="portal-state" id="st-flat" />
       <label for="st-flat">הדירה</label>
       <input type="radio" name="portal-state" id="st-papers" />
@@ -240,8 +960,16 @@
       <label for="st-calls">הקריאות</label>
       <input type="radio" name="portal-state" id="st-thread" />
       <label for="st-thread">שרשור</label>
+      <input type="radio" name="portal-state" id="st-thread-closed" />
+      <label for="st-thread-closed">שרשור סגור</label>
       <input type="radio" name="portal-state" id="st-report" />
       <label for="st-report">דיווח</label>
+      <input type="radio" name="portal-state" id="st-report-2" />
+      <label for="st-report-2">דיווח 2</label>
+      <input type="radio" name="portal-state" id="st-report-3" />
+      <label for="st-report-3">דיווח 3</label>
+      <input type="radio" name="portal-state" id="st-report-sent" />
+      <label for="st-report-sent">נשלח</label>
       <input type="radio" name="portal-state" id="st-ask" />
       <label for="st-ask">שאלה</label>
       <input type="radio" name="portal-state" id="st-not-yet" />
@@ -263,337 +991,695 @@
   </div>
 
   <div class="portal-frame">
-    <header class="portal-top">
-      <p class="portal-brand">דונה דום</p>
-      <div class="langs" role="group" aria-label="שפה">
-        <label for="st-home">עברית</label>
-        <label for="st-english">English</label>
-        <label for="st-russian">Русский</label>
-      </div>
-    </header>
+    <input class="tp-sr" type="radio" name="tenancy" id="tenancy-a" checked aria-label="דירה 12 · רחוב הדגמה 8" />
+    <input class="tp-sr" type="radio" name="tenancy" id="tenancy-b" aria-label="דירה 3 · רחוב אחר 2" />
+    <input class="tp-sr" type="radio" name="code-channel" id="code-wa" checked aria-label="קוד בוואטסאפ" />
+    <input class="tp-sr" type="radio" name="code-channel" id="code-sms" aria-label="קוד במסרון" />
+    <input class="tp-sr" type="radio" name="calls-tab" id="calls-open" checked aria-label="קריאות פתוחות" />
+    <input class="tp-sr" type="radio" name="calls-tab" id="calls-closed" aria-label="קריאות סגורות" />
 
+    <div class="tp-status" dir="ltr" aria-hidden="true"><span>9:41</span><span class="tp-batt"></span></div>
+
+    <!-- 1a · Phone -->
     <section data-state="phone">
-      <article class="glass block">
-        <h2>כניסה</h2>
-        <p class="lede">המספר שהמשרד כבר מכיר. מספר נייד ישראלי בלבד.</p>
-        <div class="field">
-          <label for="phone">מספר נייד</label>
-          <input id="phone" type="tel" inputmode="tel" dir="ltr" placeholder="050-000-0000" value="050-000-0000" />
+      <div class="tp-body is-auth">
+        <div class="tp-auth-top">
+          <span class="tp-brand"><span class="tp-brand-mark">ד</span>דונה דום</span>
+          <label class="tp-icon-btn is-globe is-auth" for="st-lang" aria-label="שפה · Language · Язык"><svg class="tp-i i22"><use href="#tpi-globe"/></svg></label>
         </div>
-        <div class="actions">
-          <label class="btn btn-primary" for="st-code">המשך</label>
+        <div class="tp-stack tp-auth-head">
+          <h1 class="tp-display">כניסה לפורטל הדיירים</h1>
+          <p class="tp-lede">הזינו את מספר הנייד שהמשרד מכיר. נשלח אליו קוד כניסה.</p>
         </div>
-      </article>
+        <div>
+          <label class="tp-label" for="phone">מספר נייד</label>
+          <div class="tp-phone" dir="ltr">
+            <span class="tp-prefix">🇮🇱 +972</span>
+            <span class="tp-divider"></span>
+            <input id="phone" type="tel" inputmode="tel" autocomplete="tel-national" placeholder="50-000-0000" value="50-000-0000" />
+          </div>
+        </div>
+        <div class="tp-spacer"></div>
+        <div class="tp-stack">
+          <label class="tp-primary" for="st-code">שליחת קוד</label>
+          <p class="tp-caption">הקוד יגיע בוואטסאפ. אין וואטסאפ? אפשר לבקש במסרון במסך הבא.</p>
+        </div>
+      </div>
     </section>
 
+    <!-- 1b · Code -->
     <section data-state="code">
-      <article class="glass block">
-        <h2>קוד כניסה</h2>
-        <div class="channel">
-          <input type="radio" name="code-channel" id="code-wa" checked />
-          <input type="radio" name="code-channel" id="code-sms" />
-          <label for="code-wa">וואטסאפ</label>
-          <label for="code-sms">מסרון</label>
+      <div class="tp-body is-auth">
+        <div class="tp-auth-top">
+          <label class="tp-icon-btn tp-hit" for="st-phone" aria-label="חזרה"><svg class="tp-i i18"><use href="#tpi-chevron-right"/></svg></label>
         </div>
-        <p data-channel="wa">הקוד נשלח לוואטסאפ של <span dir="ltr">050-000-0000</span>. זו ברירת המחדל.</p>
-        <p data-channel="sms">הקוד נשלח במסרון אל <span dir="ltr">050-000-0000</span>. מתאים גם לטלפון בלי אינטרנט.</p>
-        <div class="otp" dir="ltr">
-          <input type="text" inputmode="numeric" maxlength="1" aria-label="ספרה 1" value="4" />
-          <input type="text" inputmode="numeric" maxlength="1" aria-label="ספרה 2" value="1" />
-          <input type="text" inputmode="numeric" maxlength="1" aria-label="ספרה 3" value="8" />
-          <input type="text" inputmode="numeric" maxlength="1" aria-label="ספרה 4" />
-          <input type="text" inputmode="numeric" maxlength="1" aria-label="ספרה 5" />
-          <input type="text" inputmode="numeric" maxlength="1" aria-label="ספרה 6" />
+        <div class="tp-stack">
+          <h1 class="tp-display">הזינו את הקוד</h1>
+          <div data-channel="wa"><p class="tp-lede">שלחנו קוד בן 6 ספרות לוואטסאפ של <b dir="ltr">050-000-0000</b> · <label class="tp-link" for="st-phone">שינוי</label></p></div>
+          <div data-channel="sms"><p class="tp-lede">שלחנו קוד בן 6 ספרות במסרון אל <b dir="ltr">050-000-0000</b> · <label class="tp-link" for="st-phone">שינוי</label></p></div>
         </div>
-        <div class="actions">
-          <label class="btn btn-primary" for="st-passkey">כניסה</label>
-          <label class="btn btn-glass" for="st-code">קוד חדש</label>
-        </div>
-      </article>
-    </section>
-
-    <section data-state="passkey">
-      <article class="glass block">
-        <h2>מפתח כניסה</h2>
-        <p>אפשר להיכנס בפעם הבאה בטביעת אצבע, בזיהוי פנים או בקוד המכשיר. בלי קוד, ובלי עלות למשרד.</p>
-        <p class="lede">אפשר לדלג ולהוסיף אחר כך.</p>
-        <div class="actions">
-          <label class="btn btn-primary" for="st-notice">הוספת מפתח</label>
-          <label class="btn btn-glass" for="st-notice">דילוג</label>
-        </div>
-      </article>
-    </section>
-
-    <section data-state="notice">
-      <article class="glass block">
-        <h2>הודעה ראשונה</h2>
-        <h3>הודעת פרטיות</h3>
-        <p>טקסט דוגמה, מציין מקום. הפורטל שומר את המספר המאומת, את הקריאות ואת המסמכים של השכירות, כדי שתוכלו לראות אותם. השירות אינו מותנה באישור.</p>
-        <h3>תנאים</h3>
-        <p>טקסט דוגמה. השימוש הוא לצפייה בשכירות שלכם ולפתיחת קריאה למשרד.</p>
-        <label class="check">
-          <input type="checkbox" />
-          עדכונים על הבניין. כבוי עד שתסמנו.
+        <label class="tp-otp" for="st-passkey" dir="ltr" aria-label="קוד כניסה, 6 ספרות">
+          <span class="is-filled">4</span>
+          <span class="is-filled">1</span>
+          <span class="is-filled">8</span>
+          <span class="is-current"></span>
+          <span></span>
+          <span></span>
         </label>
-        <div class="actions">
-          <label class="btn btn-primary" for="st-home">קראתי</label>
+        <p class="tp-timer"><svg class="tp-i i16"><use href="#tpi-clock"/></svg>אפשר לבקש קוד חדש בעוד <span dir="ltr">0:42</span></p>
+        <div class="tp-spacer"></div>
+        <div data-channel="wa">
+          <div class="tp-card is-row">
+            <span class="tp-well is-40"><svg class="tp-i i18"><use href="#tpi-message-square"/></svg></span>
+            <span class="tp-row-text">
+              <b class="tp-row-title is-strong">לא הגיע בוואטסאפ?</b>
+              <span class="tp-meta">שלחו במסרון. עובד גם בלי אינטרנט.</span>
+            </span>
+            <label class="tp-link tp-hit" for="code-sms">מסרון</label>
+          </div>
         </div>
-      </article>
+        <div data-channel="sms">
+          <div class="tp-card is-row">
+            <span class="tp-well is-40"><svg class="tp-i i18"><use href="#tpi-message-circle"/></svg></span>
+            <span class="tp-row-text">
+              <b class="tp-row-title is-strong">לא הגיע במסרון?</b>
+              <span class="tp-meta">אפשר לחזור לקוד בוואטסאפ.</span>
+            </span>
+            <label class="tp-link tp-hit" for="code-wa">וואטסאפ</label>
+          </div>
+        </div>
+      </div>
     </section>
 
+    <!-- 1c · Passkey -->
+    <section data-state="passkey">
+      <div class="tp-body is-auth is-center">
+        <div class="tp-spacer"></div>
+        <span class="tp-hero-well is-passkey"><svg class="tp-i i48"><use href="#tpi-scan-face"/></svg></span>
+        <div class="tp-stack">
+          <h1 class="tp-display">כניסה מהירה בפעם הבאה</h1>
+          <p class="tp-lede">בפעם הבאה נכנסים בטביעת אצבע, בזיהוי פנים או בקוד המכשיר.</p>
+        </div>
+        <ul class="tp-list">
+          <li class="tp-row"><svg class="tp-i" style="color: var(--tp-ok)"><use href="#tpi-check"/></svg>בלי לחכות לקוד</li>
+          <li class="tp-row"><svg class="tp-i" style="color: var(--tp-ok)"><use href="#tpi-check"/></svg>המפתח נשאר רק בטלפון שלכם</li>
+          <li class="tp-row"><svg class="tp-i" style="color: var(--tp-ok)"><use href="#tpi-check"/></svg>אפשר להוסיף או להסיר מתי שתרצו</li>
+        </ul>
+        <div class="tp-spacer"></div>
+        <div class="tp-stack">
+          <label class="tp-primary" for="st-notice">הפעלת כניסה מהירה</label>
+          <label class="tp-text-btn" for="st-notice">לא עכשיו</label>
+        </div>
+      </div>
+    </section>
+
+    <!-- 1d · First-visit notice -->
+    <section data-state="notice">
+      <div class="tp-body is-auth">
+        <div class="tp-stack">
+          <h1 class="tp-display">לפני שמתחילים</h1>
+          <p class="tp-lede">שני דברים קצרים. השירות אינו מותנה באישור.</p>
+        </div>
+        <article class="tp-card is-grow">
+          <div class="tp-row">
+            <span class="tp-well"><svg class="tp-i i18"><use href="#tpi-shield-check"/></svg></span>
+            <h2 class="tp-section" style="font-weight: 700">הודעת פרטיות</h2>
+          </div>
+          <p class="tp-long">טקסט דוגמה, מציין מקום. הפורטל שומר את המספר המאומת, את הקריאות ואת המסמכים של השכירות, כדי שתוכלו לראות אותם.</p>
+          <div class="tp-row">
+            <span class="tp-well"><svg class="tp-i i18"><use href="#tpi-file-text"/></svg></span>
+            <h2 class="tp-section" style="font-weight: 700">תנאי שימוש</h2>
+          </div>
+          <p class="tp-long">טקסט דוגמה. השימוש הוא לצפייה בשכירות שלכם ולפתיחת קריאה למשרד.</p>
+          <a class="tp-link" href="#">קריאת הנוסח המלא</a>
+        </article>
+        <label class="tp-card is-row" for="opt-in">
+          <span class="tp-row-text">
+            <b class="tp-row-title is-strong">עדכונים על הבניין</b>
+            <span class="tp-meta">עבודות, הפסקות מים וכדומה. לא חובה.</span>
+          </span>
+          <span class="tp-switch"><input id="opt-in" type="checkbox" role="switch" /></span>
+        </label>
+        <label class="tp-primary" for="st-home">קראתי, המשך</label>
+      </div>
+    </section>
+
+    <!-- 1e · Home -->
     <section data-state="home">
-      <article class="glass block">
-        <h2>שלום, נועה לדוגמה</h2>
-        <p>דירה 12 · רחוב הדגמה 8</p>
-        <p class="reply-line">אנחנו עונים בתוך 2 ימי עסקים</p>
-        <p class="lede">השורה מוצגת כי המשרד הדליק את ההצגה לדיירים.</p>
-        <div class="actions">
-          <label class="btn btn-primary" for="st-report">דיווח על תקלה</label>
-          <label class="btn btn-glass" for="st-ask">שאלה למשרד</label>
+      <div class="tp-body">
+        <div class="tp-head">
+          <label class="tp-pill" for="st-tenancy">
+            <svg class="tp-i i16"><use href="#tpi-house"/></svg>
+            <span data-tenancy="a">דירה 12 · הדגמה 8</span><span data-tenancy="b">דירה 3 · אחר 2</span>
+            <svg class="tp-i i16"><use href="#tpi-chevron-down"/></svg>
+          </label>
+          <label class="tp-icon-btn is-globe" for="st-lang" aria-label="שפה · Language · Язык"><svg class="tp-i i22"><use href="#tpi-globe"/></svg></label>
         </div>
-      </article>
-    </section>
-
-    <section data-state="flat">
-      <article class="glass block">
-        <h2>הדירה שלי</h2>
-        <p class="lede">שתי שכירויות על המספר. בחרו אחת.</p>
-        <div class="chooser" role="radiogroup" aria-label="שכירות">
-          <input type="radio" name="tenancy" id="tenancy-a" checked />
-          <input type="radio" name="tenancy" id="tenancy-b" />
-          <label for="tenancy-a">דירה 12 · רחוב הדגמה 8</label>
-          <label for="tenancy-b">דירה 3 · רחוב אחר 2</label>
+        <div class="tp-stack">
+          <h1 class="tp-page-title">בוקר טוב, נועה</h1>
+          <p class="tp-reply"><svg class="tp-i i15"><use href="#tpi-clock"/></svg>אנחנו עונים בתוך 2 ימי עסקים</p>
         </div>
-        <div data-tenancy="a">
-          <dl class="facts">
-            <div><dt>כתובת</dt><dd>רחוב הדגמה 8, תל אביב</dd></div>
-            <div><dt>דירה</dt><dd>12</dd></div>
-            <div><dt>שכירות</dt><dd>01.03.2026–28.02.2027</dd></div>
-            <div><dt>חניה</dt><dd>12</dd></div>
-            <div><dt>מחסן</dt><dd>4</dd></div>
-          </dl>
-        </div>
-        <div data-tenancy="b">
-          <dl class="facts">
-            <div><dt>כתובת</dt><dd>רחוב אחר 2, חיפה</dd></div>
-            <div><dt>דירה</dt><dd>3</dd></div>
-            <div><dt>שכירות</dt><dd>01.09.2025–31.08.2026</dd></div>
-            <div><dt>חניה</dt><dd>3</dd></div>
-            <div><dt>מחסן</dt><dd>1</dd></div>
-          </dl>
-        </div>
-      </article>
-    </section>
-
-    <section data-state="papers">
-      <article class="glass block">
-        <h2>המסמכים שלי</h2>
-        <p class="lede">רק מה שתויק לשכירות שנבחרה במסך הדירה.</p>
-        <div data-tenancy="a">
-          <p>דירה 12 · רחוב הדגמה 8</p>
-          <ul class="paper-list">
-            <li>
-              <span>חוזה שכירות</span>
-              <button class="btn btn-glass" type="button">הורדה</button>
-            </li>
-            <li>
-              <span>נספח לחוזה</span>
-              <button class="btn btn-glass" type="button">הורדה</button>
-            </li>
-            <li>
-              <span>פרוטוקול מסירה</span>
-              <button class="btn btn-glass" type="button">הורדה</button>
-            </li>
-          </ul>
-        </div>
-        <div data-tenancy="b">
-          <p>דירה 3 · רחוב אחר 2</p>
-          <ul class="paper-list">
-            <li>
-              <span>חוזה שכירות</span>
-              <button class="btn btn-glass" type="button">הורדה</button>
-            </li>
-            <li>
-              <span>נספח חניה</span>
-              <button class="btn btn-glass" type="button">הורדה</button>
-            </li>
-          </ul>
-        </div>
-      </article>
-    </section>
-
-    <section data-state="calls">
-      <article class="glass block">
-        <h2>הקריאות שלי</h2>
-        <p class="lede">החדשות למעלה. גם קריאה שנפתחה בוואטסאפ או בטלפון. הרשימה היא של השכירות שנבחרה.</p>
-        <div data-tenancy="a">
-          <p>דירה 12 · רחוב הדגמה 8</p>
-          <ul class="call-list">
-            <li>
-              <span class="chip">התקבלה</span>
-              <span>19.10.2026 · אינסטלציה · נזילה מתחת לכיור</span>
-            </li>
-            <li>
-              <span class="chip">בטיפול</span>
-              <span>12.10.2026 · דלתות · דלת הכניסה חורקת</span>
-            </li>
-            <li>
-              <span class="chip">ממתין לתיאום</span>
-              <span>02.10.2026 · חניה · שאלה על חניון האורחים</span>
-            </li>
-            <li>
-              <label for="st-thread">
-                <span class="chip">נקבע ביקור</span>
-                <span>28.09.2026 · דוד · דוד המים לא מחמם</span>
+        <label class="tp-hero" for="st-thread">
+          <span class="tp-hero-top"><span class="tp-kicker">הביקור הבא</span><span class="tp-chip">נקבע ביקור</span></span>
+          <span class="tp-hero-title">דוד המים לא מחמם</span>
+          <span class="tp-hero-when"><svg class="tp-i i18"><use href="#tpi-calendar"/></svg>יום ראשון · <span dir="ltr">25.10</span> · <span dir="ltr">10:00–12:00</span></span>
+        </label>
+        <div class="tp-stack-10">
+          <div class="tp-section-row">
+            <h2 class="tp-section">קריאות פתוחות · <span data-tenancy="a">4</span><span data-tenancy="b">1</span></h2>
+            <label class="tp-link tp-hit" for="st-calls">הכול</label>
+          </div>
+          <ul class="tp-list">
+            <li data-tenancy="a">
+              <label class="tp-row" for="st-thread" style="padding-block: 12px; border-block-end: 1px solid var(--tp-line-soft)">
+                <span class="tp-row-text"><span class="tp-row-title is-strong">נזילה מתחת לכיור</span><span class="tp-meta tp-ellipsis">אינסטלציה · <span dir="ltr">19.10</span> · בפורטל</span></span>
+                <span class="tp-chip" data-status="received">התקבלה</span>
+              </label>
+              <label class="tp-row" for="st-thread" style="padding-block: 12px">
+                <span class="tp-row-text"><span class="tp-row-title is-strong">דלת הכניסה חורקת</span><span class="tp-meta tp-ellipsis">דלתות · <span dir="ltr">12.10</span> · בוואטסאפ</span></span>
+                <span class="tp-chip" data-status="handling">בטיפול</span>
               </label>
             </li>
-            <li>
-              <span class="chip">נענתה</span>
-              <span>15.09.2026 · מסמכים · העתק חוזה</span>
-            </li>
-            <li>
-              <span class="chip">הועברה</span>
-              <span>01.09.2026 · ארנונה · חשבון ארנונה</span>
-            </li>
-            <li>
-              <span class="chip">אוחדה</span>
-              <span>20.08.2026 · אינסטלציה · נזילה נוספת בכיור</span>
-            </li>
-            <li>
-              <span class="chip">בוטלה</span>
-              <span>01.08.2026 · דוד · ביקור שכבר לא נדרש. הערה: הדייר ביקש לבטל.</span>
+            <li data-tenancy="b">
+              <label class="tp-row" for="st-thread" style="padding-block: 12px">
+                <span class="tp-row-text"><span class="tp-row-title is-strong">מפסק במטבח קופץ</span><span class="tp-meta tp-ellipsis">חשמל · <span dir="ltr">11.10</span> · בטלפון</span></span>
+                <span class="tp-chip" data-status="handling">בטיפול</span>
+              </label>
             </li>
           </ul>
+        </div>
+        <div class="tp-shortcuts">
+          <label class="tp-shortcut" for="st-ask"><span class="tp-well"><svg class="tp-i i18"><use href="#tpi-message-circle"/></svg></span>שאלה למשרד</label>
+          <label class="tp-shortcut" for="st-papers"><span class="tp-well"><svg class="tp-i i18"><use href="#tpi-file-text"/></svg></span>המסמכים שלי</label>
+        </div>
+      </div>
+      <nav class="tp-tabs" aria-label="ניווט">
+        <label class="is-active" for="st-home" aria-current="page"><svg class="tp-i i22"><use href="#tpi-house"/></svg>בית</label>
+        <label for="st-calls"><svg class="tp-i i22"><use href="#tpi-message-square"/></svg>קריאות</label>
+        <label class="tp-fab" for="st-report"><span class="tp-fab-btn"><svg class="tp-i i24"><use href="#tpi-plus"/></svg></span>דיווח</label>
+        <label for="st-flat"><svg class="tp-i i22"><use href="#tpi-building"/></svg>הדירה</label>
+        <label for="st-ask"><svg class="tp-i i22"><use href="#tpi-ellipsis"/></svg>עוד</label>
+      </nav>
+    </section>
+
+    <!-- 1f · Tenancy sheet -->
+    <section data-state="tenancy" class="tp-sheet-state">
+      <label class="tp-scrim-close" for="st-home" aria-label="סגירה"></label>
+      <div class="tp-sheet" role="dialog" aria-label="בחירת דירה">
+        <span class="tp-grabber"></span>
+        <h2 class="tp-sheet-title">בחירת דירה</h2>
+        <p class="tp-sheet-help">שתי שכירויות רשומות על המספר שלכם. הקריאות והמסמכים יוצגו לפי הדירה שתבחרו.</p>
+        <label class="tp-radio is-sheet" for="tenancy-a">
+          <span class="tp-ring"></span>
+          <span class="tp-radio-text">דירה 12 · רחוב הדגמה 8<span class="tp-meta">תל אביב · 4 קריאות פתוחות</span></span>
+        </label>
+        <label class="tp-radio is-sheet" for="tenancy-b">
+          <span class="tp-ring"></span>
+          <span class="tp-radio-text">דירה 3 · רחוב אחר 2<span class="tp-meta">חיפה · קריאה פתוחה אחת</span></span>
+        </label>
+      </div>
+    </section>
+
+    <!-- 1g′ · Language sheet -->
+    <section data-state="lang" class="tp-sheet-state">
+      <label class="tp-scrim-close" for="st-home" aria-label="סגירה"></label>
+      <div class="tp-sheet" role="dialog" aria-label="שפה">
+        <span class="tp-grabber"></span>
+        <h2 class="tp-sheet-title"><bdi>שפה</bdi> · <bdi lang="en">Language</bdi> · <bdi lang="ru">Язык</bdi></h2>
+        <div class="tp-list">
+          <label class="tp-lang-row" for="st-home"><b>עברית</b><svg class="tp-i"><use href="#tpi-check"/></svg></label>
+          <label class="tp-lang-row" for="st-english" dir="ltr" lang="en"><span>English</span><small>left to right</small></label>
+          <label class="tp-lang-row" for="st-russian" dir="ltr" lang="ru"><span>Русский</span><small>слева направо</small></label>
+        </div>
+      </div>
+    </section>
+
+    <!-- 1m · Flat and documents (st-flat and st-papers) -->
+    <section data-state="flat">
+      <div class="tp-body">
+        <div class="tp-head">
+          <h1 class="tp-page-title">הדירה</h1>
+          <label class="tp-pill is-compact" for="st-tenancy">
+            <svg class="tp-i i16"><use href="#tpi-house"/></svg>החלפה<svg class="tp-i i16"><use href="#tpi-chevron-down"/></svg>
+          </label>
+        </div>
+        <div data-tenancy="a">
+          <article class="tp-card is-xl">
+            <div class="tp-stack" style="gap: 2px">
+              <h2 class="tp-flat-title">רחוב הדגמה 8, דירה 12</h2>
+              <p class="tp-meta" style="font-size: 13px">תל אביב</p>
+            </div>
+            <div class="tp-lease">
+              <div class="tp-lease-row"><span dir="ltr">01.03.2026</span><b>נותרו 4 חודשים</b><span dir="ltr">28.02.2027</span></div>
+              <div class="tp-track"><i style="inline-size: 63%"></i></div>
+            </div>
+            <dl class="tp-facts">
+              <div><dt>חניה</dt><dd>12</dd></div>
+              <div><dt>מחסן</dt><dd>4</dd></div>
+            </dl>
+          </article>
+          <h2 class="tp-section">מסמכים</h2>
+          <div class="tp-list">
+            <button class="tp-row tp-doc" type="button"><span class="tp-well"><svg class="tp-i i18"><use href="#tpi-file"/></svg></span><span class="tp-row-text"><span class="tp-row-title">חוזה שכירות</span><span class="tp-meta">PDF</span></span><svg class="tp-i tp-dl"><use href="#tpi-download"/></svg></button>
+            <button class="tp-row tp-doc" type="button"><span class="tp-well"><svg class="tp-i i18"><use href="#tpi-file"/></svg></span><span class="tp-row-text"><span class="tp-row-title">נספח לחוזה</span><span class="tp-meta">PDF</span></span><svg class="tp-i tp-dl"><use href="#tpi-download"/></svg></button>
+            <button class="tp-row tp-doc" type="button"><span class="tp-well"><svg class="tp-i i18"><use href="#tpi-file"/></svg></span><span class="tp-row-text"><span class="tp-row-title">פרוטוקול מסירה</span><span class="tp-meta">PDF</span></span><svg class="tp-i tp-dl"><use href="#tpi-download"/></svg></button>
+          </div>
         </div>
         <div data-tenancy="b">
-          <p>דירה 3 · רחוב אחר 2</p>
-          <ul class="call-list">
-            <li>
-              <span class="chip">בטיפול</span>
-              <span>11.10.2026 · חשמל · מפסק במטבח</span>
-            </li>
-            <li>
-              <span class="chip">נענתה</span>
-              <span>03.09.2026 · מפתחות · מפתח למחסן</span>
-            </li>
-          </ul>
+          <article class="tp-card is-xl">
+            <div class="tp-stack" style="gap: 2px">
+              <h2 class="tp-flat-title">רחוב אחר 2, דירה 3</h2>
+              <p class="tp-meta" style="font-size: 13px">חיפה</p>
+            </div>
+            <div class="tp-lease">
+              <div class="tp-lease-row"><span dir="ltr">01.09.2026</span><b>נותרו 10 חודשים</b><span dir="ltr">31.08.2027</span></div>
+              <div class="tp-track"><i style="inline-size: 13%"></i></div>
+            </div>
+            <dl class="tp-facts">
+              <div><dt>חניה</dt><dd>3</dd></div>
+              <div><dt>מחסן</dt><dd>1</dd></div>
+            </dl>
+          </article>
+          <h2 class="tp-section">מסמכים</h2>
+          <div class="tp-list">
+            <button class="tp-row tp-doc" type="button"><span class="tp-well"><svg class="tp-i i18"><use href="#tpi-file"/></svg></span><span class="tp-row-text"><span class="tp-row-title">חוזה שכירות</span><span class="tp-meta">PDF</span></span><svg class="tp-i tp-dl"><use href="#tpi-download"/></svg></button>
+            <button class="tp-row tp-doc" type="button"><span class="tp-well"><svg class="tp-i i18"><use href="#tpi-file"/></svg></span><span class="tp-row-text"><span class="tp-row-title">נספח חניה</span><span class="tp-meta">PDF</span></span><svg class="tp-i tp-dl"><use href="#tpi-download"/></svg></button>
+          </div>
         </div>
-      </article>
+      </div>
+      <nav class="tp-tabs" aria-label="ניווט">
+        <label for="st-home"><svg class="tp-i i22"><use href="#tpi-house"/></svg>בית</label>
+        <label for="st-calls"><svg class="tp-i i22"><use href="#tpi-message-square"/></svg>קריאות</label>
+        <label class="tp-fab" for="st-report"><span class="tp-fab-btn"><svg class="tp-i i24"><use href="#tpi-plus"/></svg></span>דיווח</label>
+        <label class="is-active" for="st-flat" aria-current="page"><svg class="tp-i i22"><use href="#tpi-building"/></svg>הדירה</label>
+        <label for="st-ask"><svg class="tp-i i22"><use href="#tpi-ellipsis"/></svg>עוד</label>
+      </nav>
     </section>
 
+    <!-- 1g · Calls -->
+    <section data-state="calls">
+      <div class="tp-body">
+        <div class="tp-head">
+          <h1 class="tp-page-title">הקריאות</h1>
+          <label class="tp-pill is-compact" for="st-tenancy">
+            <svg class="tp-i i16"><use href="#tpi-house"/></svg><span data-tenancy="a">דירה 12</span><span data-tenancy="b">דירה 3</span><svg class="tp-i i16"><use href="#tpi-chevron-down"/></svg>
+          </label>
+        </div>
+        <div class="tp-seg" role="tablist" aria-label="קריאות">
+          <label for="calls-open">פתוחות · <span data-tenancy="a">4</span><span data-tenancy="b">1</span></label>
+          <label for="calls-closed">סגורות · <span data-tenancy="a">4</span><span data-tenancy="b">1</span></label>
+        </div>
+        <div data-tenancy="a">
+          <div data-calls="open">
+            <div class="tp-calls">
+              <label class="tp-card tp-call" for="st-thread">
+                <span class="tp-call-head"><span class="tp-call-text"><span class="tp-call-title">נזילה מתחת לכיור</span><span class="tp-meta tp-ellipsis">אינסטלציה · <span dir="ltr">19.10</span> · בפורטל</span></span><span class="tp-chip" data-status="received">התקבלה</span></span>
+                <span class="tp-progress" data-step="1"><i></i><i></i><i></i><i></i></span>
+              </label>
+              <label class="tp-card tp-call" for="st-thread">
+                <span class="tp-call-head"><span class="tp-call-text"><span class="tp-call-title">דלת הכניסה חורקת</span><span class="tp-meta tp-ellipsis">דלתות · <span dir="ltr">12.10</span> · בוואטסאפ</span></span><span class="tp-chip" data-status="handling">בטיפול</span></span>
+                <span class="tp-progress" data-step="2"><i></i><i></i><i></i><i></i></span>
+              </label>
+              <label class="tp-card tp-call is-waiting" for="st-thread">
+                <span class="tp-call-head"><span class="tp-call-text"><span class="tp-call-title">תיאום ביקור חשמלאי</span><span class="tp-meta tp-ellipsis">חשמל · <span dir="ltr">02.10</span> · בטלפון</span></span><span class="tp-chip" data-status="waiting">ממתין לתיאום</span></span>
+                <span class="tp-wait-line">המשרד מחכה לתשובה מכם ←</span>
+              </label>
+              <label class="tp-card tp-call" for="st-thread">
+                <span class="tp-call-head"><span class="tp-call-text"><span class="tp-call-title">דוד המים לא מחמם</span><span class="tp-meta tp-ellipsis">דוד · <span dir="ltr">28.09</span> · ביקור ב-<span dir="ltr">25.10</span></span></span><span class="tp-chip" data-status="visit">נקבע ביקור</span></span>
+                <span class="tp-progress" data-step="3"><i></i><i></i><i></i><i></i></span>
+              </label>
+            </div>
+          </div>
+          <div data-calls="closed">
+            <div class="tp-calls">
+              <label class="tp-card tp-call" for="st-thread-closed">
+                <span class="tp-call-head"><span class="tp-call-text"><span class="tp-call-title">העתק חוזה</span><span class="tp-meta tp-ellipsis">מסמכים · <span dir="ltr">15.09</span> · בפורטל</span></span><span class="tp-chip" data-status="answered">נענתה</span></span>
+                <span class="tp-progress is-closed" data-step="4"><i></i><i></i><i></i><i></i></span>
+              </label>
+              <label class="tp-card tp-call" for="st-thread-closed">
+                <span class="tp-call-head"><span class="tp-call-text"><span class="tp-call-title">חשבון ארנונה</span><span class="tp-meta tp-ellipsis">ארנונה · <span dir="ltr">01.09</span> · בוואטסאפ</span></span><span class="tp-chip" data-status="forwarded">הועברה</span></span>
+                <span class="tp-progress is-closed" data-step="4"><i></i><i></i><i></i><i></i></span>
+              </label>
+              <label class="tp-card tp-call" for="st-thread-closed">
+                <span class="tp-call-head"><span class="tp-call-text"><span class="tp-call-title">נזילה נוספת בכיור</span><span class="tp-meta tp-ellipsis">אינסטלציה · <span dir="ltr">20.08</span> · בטלפון</span></span><span class="tp-chip" data-status="merged">אוחדה</span></span>
+                <span class="tp-progress is-closed" data-step="4"><i></i><i></i><i></i><i></i></span>
+              </label>
+              <label class="tp-card tp-call" for="st-thread-closed">
+                <span class="tp-call-head"><span class="tp-call-text"><span class="tp-call-title">ביקור שכבר לא נדרש</span><span class="tp-meta tp-ellipsis">דוד · <span dir="ltr">01.08</span> · בוואטסאפ</span><span class="tp-call-note">הערת המשרד: הדיירת ביקשה לבטל.</span></span><span class="tp-chip" data-status="cancelled">בוטלה</span></span>
+                <span class="tp-progress is-closed" data-step="4"><i></i><i></i><i></i><i></i></span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div data-tenancy="b">
+          <div data-calls="open">
+            <div class="tp-calls">
+              <label class="tp-card tp-call" for="st-thread">
+                <span class="tp-call-head"><span class="tp-call-text"><span class="tp-call-title">מפסק במטבח קופץ</span><span class="tp-meta tp-ellipsis">חשמל · <span dir="ltr">11.10</span> · בטלפון</span></span><span class="tp-chip" data-status="handling">בטיפול</span></span>
+                <span class="tp-progress" data-step="2"><i></i><i></i><i></i><i></i></span>
+              </label>
+            </div>
+          </div>
+          <div data-calls="closed">
+            <div class="tp-calls">
+              <label class="tp-card tp-call" for="st-thread-closed">
+                <span class="tp-call-head"><span class="tp-call-text"><span class="tp-call-title">מפתח למחסן</span><span class="tp-meta tp-ellipsis">מפתחות · <span dir="ltr">03.09</span> · בפורטל</span></span><span class="tp-chip" data-status="answered">נענתה</span></span>
+                <span class="tp-progress is-closed" data-step="4"><i></i><i></i><i></i><i></i></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <nav class="tp-tabs" aria-label="ניווט">
+        <label for="st-home"><svg class="tp-i i22"><use href="#tpi-house"/></svg>בית</label>
+        <label class="is-active" for="st-calls" aria-current="page"><svg class="tp-i i22"><use href="#tpi-message-square"/></svg>קריאות</label>
+        <label class="tp-fab" for="st-report"><span class="tp-fab-btn"><svg class="tp-i i24"><use href="#tpi-plus"/></svg></span>דיווח</label>
+        <label for="st-flat"><svg class="tp-i i22"><use href="#tpi-building"/></svg>הדירה</label>
+        <label for="st-ask"><svg class="tp-i i22"><use href="#tpi-ellipsis"/></svg>עוד</label>
+      </nav>
+    </section>
+
+    <!-- 1h · Thread (open) -->
     <section data-state="thread">
-      <article class="glass block">
-        <h2>דוד המים לא מחמם</h2>
-        <p><span class="chip">נקבע ביקור</span> 28.09.2026 · קריאה 1042</p>
-        <ol class="thread">
-          <li>
-            <p class="who">נועה לדוגמה</p>
-            <p>דוד המים הפסיק לחמם אתמול בערב.</p>
-          </li>
-          <li>
-            <p class="who">המשרד</p>
-            <p>קיבלנו. נקבע ביקור ביום ראשון בין 10:00 ל-12:00.</p>
-          </li>
+      <header class="tp-bar">
+        <div class="tp-bar-row">
+          <label class="tp-icon-btn tp-hit" for="st-calls" aria-label="חזרה לקריאות"><svg class="tp-i i18"><use href="#tpi-chevron-right"/></svg></label>
+          <span class="tp-bar-title"><b>דוד המים לא מחמם</b><small>קריאה 1042 · דוד · <span dir="ltr">28.09.2026</span></small></span>
+        </div>
+      </header>
+      <div class="tp-body">
+        <ol class="tp-stepper" aria-label="מצב הקריאה">
+          <li class="is-done"><span class="tp-dot"><svg class="tp-i i14 is-bold"><use href="#tpi-check"/></svg></span>התקבלה</li>
+          <li class="is-done"><span class="tp-dot"><svg class="tp-i i14 is-bold"><use href="#tpi-check"/></svg></span>בטיפול</li>
+          <li class="is-current" aria-current="step"><span class="tp-dot"></span>נקבע ביקור</li>
+          <li><span class="tp-dot"></span>טופלה</li>
         </ol>
-        <div class="field">
-          <label for="follow-up">המשך</label>
-          <textarea id="follow-up" rows="3" placeholder="עוד פרט לקריאה הפתוחה"></textarea>
+        <div class="tp-strip">
+          <span class="tp-datetile"><small>יום א׳</small><b dir="ltr">25.10</b></span>
+          <span class="tp-visit-text"><b>ביקור טכנאי</b><span>יום ראשון · <span dir="ltr">10:00–12:00</span></span></span>
+          <a class="tp-link tp-hit" href="#">ליומן</a>
         </div>
-        <p class="lede">קריאה סגורה לא ממשיכה כאן. הודעה עליה פותחת קריאה חדשה שמקושרת אליה.</p>
-        <div class="actions">
-          <button class="btn btn-primary" type="button">שליחה</button>
-          <label class="btn btn-glass" for="st-calls">חזרה לקריאות</label>
+        <p class="tp-day">יום שני · <span dir="ltr">28.09</span></p>
+        <div class="tp-thread">
+          <div class="tp-msg is-tenant">
+            <p class="tp-bubble">דוד המים הפסיק לחמם אתמול בערב. יש מים חמים רק כמה דקות.<span class="tp-time"><span dir="ltr">08:12</span></span></p>
+          </div>
+          <div class="tp-msg is-office">
+            <span class="tp-who">המשרד</span>
+            <p class="tp-bubble">קיבלנו, תודה. אנחנו בודקים מול הטכנאי ונעדכן כאן.<span class="tp-time"><span dir="ltr">09:30</span></span></p>
+          </div>
         </div>
-      </article>
+        <p class="tp-day">היום · <span dir="ltr">19.10</span></p>
+        <div class="tp-thread">
+          <div class="tp-msg is-office">
+            <span class="tp-who">המשרד</span>
+            <p class="tp-bubble">נקבע ביקור טכנאי ביום ראשון, <span dir="ltr">25.10</span>, בין <span dir="ltr">10:00</span> ל-<span dir="ltr">12:00</span>.<span class="tp-time"><span dir="ltr">11:05</span></span></p>
+          </div>
+          <div class="tp-msg is-tenant">
+            <p class="tp-bubble">מעולה, אהיה בבית.<span class="tp-time"><span dir="ltr">11:20</span></span></p>
+          </div>
+        </div>
+      </div>
+      <div class="tp-composer">
+        <button class="tp-cam" type="button" aria-label="צירוף תמונה"><svg class="tp-i"><use href="#tpi-camera"/></svg></button>
+        <input type="text" aria-label="עוד פרט לקריאה" placeholder="עוד פרט לקריאה…" />
+        <button class="tp-send" type="button" aria-label="שליחה"><svg class="tp-i i18"><use href="#tpi-send"/></svg></button>
+      </div>
     </section>
 
+    <!-- 1h · Thread (closed) -->
+    <section data-state="thread-closed">
+      <header class="tp-bar">
+        <div class="tp-bar-row">
+          <label class="tp-icon-btn tp-hit" for="st-calls" aria-label="חזרה לקריאות"><svg class="tp-i i18"><use href="#tpi-chevron-right"/></svg></label>
+          <span class="tp-bar-title"><b>העתק חוזה</b><small>קריאה 1031 · מסמכים · <span dir="ltr">15.09.2026</span></small></span>
+          <span class="tp-chip" data-status="answered">נענתה</span>
+        </div>
+      </header>
+      <div class="tp-body">
+        <ol class="tp-stepper" aria-label="מצב הקריאה">
+          <li class="is-done"><span class="tp-dot"><svg class="tp-i i14 is-bold"><use href="#tpi-check"/></svg></span>התקבלה</li>
+          <li class="is-done"><span class="tp-dot"><svg class="tp-i i14 is-bold"><use href="#tpi-check"/></svg></span>בטיפול</li>
+          <li class="is-done"><span class="tp-dot"><svg class="tp-i i14 is-bold"><use href="#tpi-check"/></svg></span>נקבע ביקור</li>
+          <li class="is-done"><span class="tp-dot"><svg class="tp-i i14 is-bold"><use href="#tpi-check"/></svg></span>טופלה</li>
+        </ol>
+        <p class="tp-day">יום שלישי · <span dir="ltr">15.09</span></p>
+        <div class="tp-thread">
+          <div class="tp-msg is-tenant">
+            <p class="tp-bubble">אפשר לקבל העתק של החוזה?<span class="tp-time"><span dir="ltr">17:40</span></span></p>
+          </div>
+          <div class="tp-msg is-office">
+            <span class="tp-who">המשרד</span>
+            <p class="tp-bubble">שלחנו. החוזה נמצא גם בלשונית הדירה, תחת מסמכים.<span class="tp-time"><span dir="ltr">10:02</span></span></p>
+          </div>
+        </div>
+      </div>
+      <div class="tp-dock">
+        <p class="tp-caption">הקריאה סגורה. קריאת המשך תקושר אליה.</p>
+        <label class="tp-primary" for="st-report">פתיחת קריאה המשך</label>
+      </div>
+    </section>
+
+    <!-- 1i · Report, step 1 -->
     <section data-state="report">
-      <article class="glass block">
-        <h2>דיווח על תקלה</h2>
-        <p class="duty">חירום? התקשרו לכונן עכשיו, <span dir="ltr">050-000-0001</span>. אל תחכו לטופס.</p>
-        <div class="field">
-          <label for="category">קטגוריה</label>
-          <select id="category">
-            <option>אינסטלציה</option>
-            <option>חשמל</option>
-            <option>דוד</option>
-            <option>אחר</option>
-          </select>
+      <header class="tp-bar">
+        <div class="tp-bar-row">
+          <span class="tp-bar-title"><b>דיווח על תקלה</b></span>
+          <label class="tp-icon-btn tp-hit" for="st-home" aria-label="סגירה"><svg class="tp-i i18"><use href="#tpi-x"/></svg></label>
         </div>
-        <div class="field">
-          <label for="report-text">מה קרה</label>
-          <textarea id="report-text" rows="4">יש נזילה מתחת לכיור במטבח.</textarea>
+        <div class="tp-steps" data-step="1" aria-label="שלב 1 מתוך 3"><i></i><i></i><i></i></div>
+      </header>
+      <div class="tp-body">
+        <div class="tp-emergency">
+          <b>חירום? אל תחכו לטופס</b>
+          <p>הצפה, ריח שרוף או הפסקת חשמל בכל הדירה: התקשרו לכונן עכשיו.</p>
+          <a class="tp-danger" href="tel:+972500000001"><svg class="tp-i i18"><use href="#tpi-phone"/></svg>התקשרו לכונן · <span dir="ltr">050-000-0001</span></a>
         </div>
-        <fieldset>
-          <legend>כניסה לדירה כשאינכם בבית</legend>
-          <label class="check"><input type="radio" name="entry" checked /> מותר להיכנס</label>
-          <label class="check"><input type="radio" name="entry" /> רק בתיאום</label>
-          <label class="check"><input type="radio" name="entry" /> אין כניסה בלעדי</label>
-        </fieldset>
-        <div class="field">
-          <label for="attachments">תמונות או סרטון קצר</label>
-          <input id="attachments" type="file" accept="image/*,video/*,.pdf" multiple />
+        <h2 class="tp-q">מה התקלה?</h2>
+        <div class="tp-tiles" role="radiogroup" aria-label="קטגוריה">
+          <label class="tp-tile"><input class="tp-sr" type="radio" name="category" checked /><svg class="tp-i i26"><use href="#tpi-droplet"/></svg>אינסטלציה</label>
+          <label class="tp-tile"><input class="tp-sr" type="radio" name="category" /><svg class="tp-i i26"><use href="#tpi-zap"/></svg>חשמל</label>
+          <label class="tp-tile"><input class="tp-sr" type="radio" name="category" /><svg class="tp-i i26"><use href="#tpi-flame"/></svg>דוד</label>
+          <label class="tp-tile"><input class="tp-sr" type="radio" name="category" /><svg class="tp-i i26"><use href="#tpi-ellipsis"/></svg>אחר</label>
         </div>
-        <div class="actions">
-          <button class="btn btn-primary" type="button">שליחה</button>
-        </div>
-      </article>
+        <div class="tp-spacer"></div>
+        <label class="tp-primary" for="st-report-2">המשך</label>
+      </div>
     </section>
 
+    <!-- 1j · Report, step 2 -->
+    <section data-state="report-2">
+      <header class="tp-bar">
+        <div class="tp-bar-row">
+          <label class="tp-icon-btn tp-hit" for="st-report" aria-label="חזרה"><svg class="tp-i i18"><use href="#tpi-chevron-right"/></svg></label>
+          <span class="tp-bar-title"><b>אינסטלציה</b></span>
+        </div>
+        <div class="tp-steps" data-step="2" aria-label="שלב 2 מתוך 3"><i></i><i></i><i></i></div>
+      </header>
+      <div class="tp-body">
+        <h2 class="tp-q"><label for="report-text">ספרו לנו מה קרה</label></h2>
+        <div>
+          <textarea class="tp-textarea" id="report-text" aria-describedby="report-help">יש נזילה מתחת לכיור במטבח. התחילה הבוקר, הארון רטוב.</textarea>
+          <p class="tp-help" id="report-help">איפה, ממתי, וכמה זה חמור.</p>
+        </div>
+        <h3 class="tp-section">תמונות או סרטון קצר</h3>
+        <div class="tp-thumbs">
+          <div class="tp-thumb is-a" role="img" aria-label="תמונה 1"><button class="tp-thumb-x" type="button" aria-label="הסרת תמונה 1"><svg class="tp-i i14 is-bold"><use href="#tpi-x"/></svg></button></div>
+          <div class="tp-thumb is-b" role="img" aria-label="תמונה 2"><button class="tp-thumb-x" type="button" aria-label="הסרת תמונה 2"><svg class="tp-i i14 is-bold"><use href="#tpi-x"/></svg></button></div>
+          <label class="tp-add"><input class="tp-sr" type="file" accept="image/*,video/*,.pdf" multiple /><svg class="tp-i i22"><use href="#tpi-camera"/></svg>הוספה</label>
+        </div>
+        <div class="tp-spacer"></div>
+        <label class="tp-primary" for="st-report-3">המשך</label>
+      </div>
+    </section>
+
+    <!-- 1k · Report, step 3 -->
+    <section data-state="report-3">
+      <header class="tp-bar">
+        <div class="tp-bar-row">
+          <label class="tp-icon-btn tp-hit" for="st-report-2" aria-label="חזרה"><svg class="tp-i i18"><use href="#tpi-chevron-right"/></svg></label>
+          <span class="tp-bar-title"><b>כמעט סיימנו</b></span>
+        </div>
+        <div class="tp-steps" data-step="3" aria-label="שלב 3 מתוך 3"><i></i><i></i><i></i></div>
+      </header>
+      <div class="tp-body">
+        <h2 class="tp-q" id="entry-q">אפשר להיכנס לדירה כשאתם לא בבית?</h2>
+        <div class="tp-stack" role="radiogroup" aria-labelledby="entry-q">
+          <label class="tp-radio"><input class="tp-sr" type="radio" name="entry" checked /><span class="tp-ring"></span><span class="tp-radio-text">כן, מותר להיכנס</span></label>
+          <label class="tp-radio"><input class="tp-sr" type="radio" name="entry" /><span class="tp-ring"></span><span class="tp-radio-text">רק בתיאום מראש</span></label>
+          <label class="tp-radio"><input class="tp-sr" type="radio" name="entry" /><span class="tp-ring"></span><span class="tp-radio-text">לא, רק כשאני בבית</span></label>
+        </div>
+        <div class="tp-summary">
+          <span class="tp-kicker">סיכום</span>
+          <dl class="tp-stack">
+            <div><dt>קטגוריה</dt><dd>אינסטלציה</dd></div>
+            <div><dt>תיאור</dt><dd>יש נזילה מתחת לכיור במטבח. התחילה הבוקר…</dd></div>
+            <div><dt>קבצים</dt><dd>2 תמונות</dd></div>
+            <div><dt>דירה</dt><dd><span data-tenancy="a">דירה 12 · הדגמה 8</span><span data-tenancy="b">דירה 3 · אחר 2</span></dd></div>
+          </dl>
+        </div>
+        <div class="tp-spacer"></div>
+        <label class="tp-primary" for="st-report-sent">שליחת הדיווח</label>
+      </div>
+    </section>
+
+    <!-- 1l · Report sent -->
+    <section data-state="report-sent">
+      <div class="tp-body is-auth is-center">
+        <div class="tp-spacer"></div>
+        <span class="tp-hero-well is-sent"><svg class="tp-i i48"><use href="#tpi-check"/></svg></span>
+        <div class="tp-stack">
+          <h1 class="tp-display">הדיווח התקבל</h1>
+          <p class="tp-lede">קריאה 1043 · אינסטלציה. נעדכן אתכם כאן בכל שינוי.</p>
+        </div>
+        <p class="tp-reply-pill"><svg class="tp-i i15"><use href="#tpi-clock"/></svg>אדם מהמשרד יענה בתוך 2 ימי עסקים</p>
+        <div class="tp-spacer"></div>
+        <div class="tp-stack">
+          <label class="tp-primary" for="st-thread">לצפייה בקריאה</label>
+          <label class="tp-text-btn" for="st-home">חזרה לבית</label>
+        </div>
+      </div>
+    </section>
+
+    <!-- 1n · Ask the office -->
     <section data-state="ask">
-      <article class="glass block">
-        <h2>שאלה למשרד</h2>
-        <p class="lede">מגיעה לאדם, ונרשמת כמו כל קריאה. כל מספר מאומת יכול לשאול, גם בלי שכירות בפורטל.</p>
-        <div class="field">
-          <label for="question">שאלה</label>
-          <textarea id="question" rows="4">אפשר לקבל העתק של החוזה?</textarea>
+      <header class="tp-bar">
+        <div class="tp-bar-row">
+          <span class="tp-bar-title"><b>שאלה למשרד</b></span>
+          <label class="tp-icon-btn tp-hit" for="st-home" aria-label="סגירה"><svg class="tp-i i18"><use href="#tpi-x"/></svg></label>
         </div>
-        <div class="actions">
-          <button class="btn btn-primary" type="button">שליחה</button>
+      </header>
+      <div class="tp-body">
+        <p class="tp-strip"><svg class="tp-i"><use href="#tpi-message-circle"/></svg>השאלה מגיעה לאדם במשרד, ונשמרת עם הקריאות שלכם.</p>
+        <textarea class="tp-textarea is-tall" id="question" aria-label="השאלה">אפשר לקבל העתק של החוזה?</textarea>
+        <div class="tp-stack">
+          <div class="tp-topics">
+            <button class="tp-topic tp-hit" type="button">העתק חוזה</button>
+            <button class="tp-topic tp-hit" type="button">חניה</button>
+            <button class="tp-topic tp-hit" type="button">ארנונה</button>
+            <button class="tp-topic tp-hit" type="button">תשלום שכירות</button>
+            <button class="tp-topic tp-hit" type="button">מפתחות</button>
+          </div>
+          <p class="tp-meta">נושאים נפוצים. מוגדרים במשרד.</p>
         </div>
-      </article>
+        <div class="tp-spacer"></div>
+        <label class="tp-primary" for="st-calls">שליחה</label>
+      </div>
     </section>
 
+    <!-- 1o · Building not in the portal -->
     <section data-state="not-yet">
-      <article class="glass block">
-        <h2>הבניין עדיין לא בפורטל</h2>
-        <p>נכנסתם עם <span dir="ltr">050-000-0000</span>. הרישומות של הבניין עדיין לא בפורטל, ולכן אין כאן דירה, מסמכים או קריאות.</p>
-        <div class="actions">
-          <label class="btn btn-primary" for="st-ask">שאלה למשרד</label>
+      <div class="tp-body is-auth is-center">
+        <div class="tp-spacer"></div>
+        <span class="tp-hero-well is-muted"><svg class="tp-i i48"><use href="#tpi-building"/></svg></span>
+        <div class="tp-stack">
+          <h1 class="tp-display">הבניין שלכם עוד לא בפורטל</h1>
+          <p class="tp-lede">נכנסתם עם <span dir="ltr">050-000-0000</span>. הבניין עוד לא עלה לפורטל, ולכן אין כאן עדיין דירה, מסמכים או קריאות.</p>
+          <p class="tp-meta" style="font-size: 13px">בינתיים אפשר לשאול את המשרד כל שאלה.</p>
         </div>
-      </article>
+        <div class="tp-spacer"></div>
+        <div class="tp-stack">
+          <label class="tp-primary" for="st-ask">שאלה למשרד</label>
+          <label class="tp-text-btn" for="st-phone">יציאה</label>
+        </div>
+      </div>
     </section>
 
+    <!-- 1e in English, left to right -->
     <section data-state="english" lang="en" dir="ltr">
-      <article class="glass block">
-        <h2>Hello, Noa Example</h2>
-        <p>Flat 12 · 8 Demo Street</p>
-        <p class="reply-line">We reply within 2 business days</p>
-        <p class="lede">This screen is English, left to right. The rest of the portal stays Hebrew, right to left.</p>
-        <div class="actions">
-          <label class="btn btn-primary" for="st-report">Report an issue</label>
-          <label class="btn btn-glass" for="st-ask">Ask the office</label>
+      <div class="tp-body">
+        <div class="tp-head">
+          <label class="tp-pill" for="st-tenancy">
+            <svg class="tp-i i16"><use href="#tpi-house"/></svg>Flat 12 · 8 Demo St<svg class="tp-i i16"><use href="#tpi-chevron-down"/></svg>
+          </label>
+          <label class="tp-icon-btn is-globe" for="st-lang" aria-label="Language"><svg class="tp-i i22"><use href="#tpi-globe"/></svg></label>
         </div>
-      </article>
+        <div class="tp-stack">
+          <h1 class="tp-page-title">Good morning, Noa</h1>
+          <p class="tp-reply"><svg class="tp-i i15"><use href="#tpi-clock"/></svg>We reply within 2 business days</p>
+        </div>
+        <label class="tp-hero" for="st-thread">
+          <span class="tp-hero-top"><span class="tp-kicker">NEXT VISIT</span><span class="tp-chip">Visit booked</span></span>
+          <span class="tp-hero-title">Water heater not heating</span>
+          <span class="tp-hero-when"><svg class="tp-i i18"><use href="#tpi-calendar"/></svg>Sunday · 25.10 · 10:00–12:00</span>
+        </label>
+        <div class="tp-stack-10">
+          <div class="tp-section-row">
+            <h2 class="tp-section">Open calls · 4</h2>
+            <label class="tp-link tp-hit" for="st-calls">See all</label>
+          </div>
+          <div class="tp-list">
+            <label class="tp-row" for="st-thread">
+              <span class="tp-row-text"><span class="tp-row-title is-strong">Leak under the sink</span><span class="tp-meta tp-ellipsis">Plumbing · 19.10 · in the portal</span></span>
+              <span class="tp-chip" data-status="received">Received</span>
+            </label>
+            <label class="tp-row" for="st-thread">
+              <span class="tp-row-text"><span class="tp-row-title is-strong">Front door creaks</span><span class="tp-meta tp-ellipsis">Doors · 12.10 · by WhatsApp</span></span>
+              <span class="tp-chip" data-status="handling">In progress</span>
+            </label>
+          </div>
+        </div>
+        <div class="tp-shortcuts">
+          <label class="tp-shortcut" for="st-ask"><span class="tp-well"><svg class="tp-i i18"><use href="#tpi-message-circle"/></svg></span>Ask the office</label>
+          <label class="tp-shortcut" for="st-papers"><span class="tp-well"><svg class="tp-i i18"><use href="#tpi-file-text"/></svg></span>My documents</label>
+        </div>
+      </div>
+      <nav class="tp-tabs" aria-label="Navigation">
+        <label class="is-active" for="st-english" aria-current="page"><svg class="tp-i i22"><use href="#tpi-house"/></svg>Home</label>
+        <label for="st-calls"><svg class="tp-i i22"><use href="#tpi-message-square"/></svg>Calls</label>
+        <label class="tp-fab" for="st-report"><span class="tp-fab-btn"><svg class="tp-i i24"><use href="#tpi-plus"/></svg></span>Report</label>
+        <label for="st-flat"><svg class="tp-i i22"><use href="#tpi-building"/></svg>My flat</label>
+        <label for="st-ask"><svg class="tp-i i22"><use href="#tpi-ellipsis"/></svg>More</label>
+      </nav>
     </section>
 
+    <!-- 1e in Russian, left to right -->
     <section data-state="russian" lang="ru" dir="ltr">
-      <article class="glass block">
-        <h2>Здравствуйте, Ноа</h2>
-        <p>Квартира 12 · улица Демо 8</p>
-        <p class="reply-line">Мы отвечаем в течение 2 рабочих дней</p>
-        <p class="lede">Экран на русском, слева направо. Текст пример.</p>
-      </article>
+      <div class="tp-body">
+        <div class="tp-head">
+          <label class="tp-pill" for="st-tenancy">
+            <svg class="tp-i i16"><use href="#tpi-house"/></svg>Кв. 12 · Демо 8<svg class="tp-i i16"><use href="#tpi-chevron-down"/></svg>
+          </label>
+          <label class="tp-icon-btn is-globe" for="st-lang" aria-label="Язык"><svg class="tp-i i22"><use href="#tpi-globe"/></svg></label>
+        </div>
+        <div class="tp-stack">
+          <h1 class="tp-page-title">Доброе утро, Ноа</h1>
+          <p class="tp-reply"><svg class="tp-i i15"><use href="#tpi-clock"/></svg>Мы отвечаем в течение 2 рабочих дней</p>
+        </div>
+        <label class="tp-hero" for="st-thread">
+          <span class="tp-hero-top"><span class="tp-kicker">СЛЕДУЮЩИЙ ВИЗИТ</span><span class="tp-chip">Визит назначен</span></span>
+          <span class="tp-hero-title">Не греет бойлер</span>
+          <span class="tp-hero-when"><svg class="tp-i i18"><use href="#tpi-calendar"/></svg>Воскресенье · 25.10 · 10:00–12:00</span>
+        </label>
+        <div class="tp-stack-10">
+          <div class="tp-section-row">
+            <h2 class="tp-section">Открытые заявки · 4</h2>
+            <label class="tp-link tp-hit" for="st-calls">Все</label>
+          </div>
+          <div class="tp-list">
+            <label class="tp-row" for="st-thread">
+              <span class="tp-row-text"><span class="tp-row-title is-strong">Течь под раковиной</span><span class="tp-meta tp-ellipsis">Сантехника · 19.10 · в портале</span></span>
+              <span class="tp-chip" data-status="received">Принята</span>
+            </label>
+            <label class="tp-row" for="st-thread">
+              <span class="tp-row-text"><span class="tp-row-title is-strong">Скрипит входная дверь</span><span class="tp-meta tp-ellipsis">Двери · 12.10 · в WhatsApp</span></span>
+              <span class="tp-chip" data-status="handling">В работе</span>
+            </label>
+          </div>
+        </div>
+        <div class="tp-shortcuts">
+          <label class="tp-shortcut" for="st-ask"><span class="tp-well"><svg class="tp-i i18"><use href="#tpi-message-circle"/></svg></span>Вопрос в офис</label>
+          <label class="tp-shortcut" for="st-papers"><span class="tp-well"><svg class="tp-i i18"><use href="#tpi-file-text"/></svg></span>Мои документы</label>
+        </div>
+      </div>
+      <nav class="tp-tabs" aria-label="Навигация">
+        <label class="is-active" for="st-russian" aria-current="page"><svg class="tp-i i22"><use href="#tpi-house"/></svg>Главная</label>
+        <label for="st-calls"><svg class="tp-i i22"><use href="#tpi-message-square"/></svg>Заявки</label>
+        <label class="tp-fab" for="st-report"><span class="tp-fab-btn"><svg class="tp-i i24"><use href="#tpi-plus"/></svg></span>Сообщить</label>
+        <label for="st-flat"><svg class="tp-i i22"><use href="#tpi-building"/></svg>Квартира</label>
+        <label for="st-ask"><svg class="tp-i i22"><use href="#tpi-ellipsis"/></svg>Ещё</label>
+      </nav>
     </section>
-
-    <nav class="portal-nav" aria-label="פורטל">
-      <label for="st-home">בית</label>
-      <label for="st-flat">הדירה</label>
-      <label for="st-papers">המסמכים</label>
-      <label for="st-calls">הקריאות</label>
-      <label for="st-report">דיווח</label>
-      <label for="st-ask">שאלה</label>
-    </nav>
   </div>
 
   <section data-state="switch">
