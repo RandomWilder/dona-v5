@@ -184,6 +184,144 @@ describe('evidence · approve a reading', () => {
     }
   });
 
+  // #268. A misread a person waved through is corrected by signing again, with a different value.
+  it('re-stamps an approved row with a different value, and keeps every stamp in the audit log', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) return t.skip(skipReason);
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const { documentId } = await fileLease(db, 'approve-restamp');
+        const flat = by(
+          await listExtractedFields(db, documentId),
+          'apartment_number',
+        );
+        await approveExtractedField(deps(db), {
+          extractedFieldId: flat.extractedFieldId,
+          approvedBy: SIGNER,
+          mayReadIdentifiers: false,
+        });
+        const again = await approveExtractedField(deps(db), {
+          extractedFieldId: flat.extractedFieldId,
+          approvedValue: '42',
+          approvedBy: 'second@dona.test',
+          mayReadIdentifiers: false,
+        });
+        assert.equal(again.edited, true);
+        const stamped = by(
+          await listExtractedFields(db, documentId),
+          'apartment_number',
+        );
+        assert.equal(stamped.value, '24');
+        assert.equal(stamped.approvedValue, '42');
+        assert.equal(stamped.approvedBy, 'second@dona.test');
+
+        // Back to what the reader said is a correction too: an empty input affirms the reading.
+        await approveExtractedField(deps(db), {
+          extractedFieldId: flat.extractedFieldId,
+          approvedValue: '',
+          approvedBy: SIGNER,
+          mayReadIdentifiers: false,
+        });
+        const lines = await db.query<{
+          inputs: { edited: boolean; restamped: boolean };
+        }>(
+          `SELECT inputs FROM audit_log
+            WHERE action = 'evidence.approve_field' AND subject_id = $1`,
+          [flat.extractedFieldId],
+        );
+        // One clock, so the three lines share a timestamp: compared as a set.
+        assert.deepEqual(
+          lines.rows
+            .map((row) => `${row.inputs.edited}/${row.inputs.restamped}`)
+            .sort(),
+          ['false/false', 'false/true', 'true/true'],
+        );
+        assert.equal(
+          by(await listExtractedFields(db, documentId), 'apartment_number')
+            .approvedValue,
+          '24',
+        );
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('refuses a correction of a withheld identifier before it compares anything', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) return t.skip(skipReason);
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const { documentId } = await fileLease(db, 'approve-restamp-id');
+        const id = by(
+          await listExtractedFields(db, documentId),
+          'tenant_id_number',
+        );
+        await approveExtractedField(deps(db), {
+          extractedFieldId: id.extractedFieldId,
+          approvedBy: SIGNER,
+          mayReadIdentifiers: true,
+        });
+        // Same value or another, the answer is the same: a viewer who was never shown the value
+        // learns nothing about it from which refusal comes back.
+        for (const approvedValue of ['123456782', '000000018']) {
+          await assert.rejects(
+            () =>
+              approveExtractedField(deps(db), {
+                extractedFieldId: id.extractedFieldId,
+                approvedValue,
+                approvedBy: SIGNER,
+                mayReadIdentifiers: false,
+              }),
+            (error: KernelError) => error.code === 'not_allowed',
+          );
+        }
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('does not re-stamp a promoted row, whose value is already business truth', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (!pool) return t.skip(skipReason);
+    try {
+      await inRolledBackTransaction(pool, async (db) => {
+        const { documentId } = await fileLease(db, 'approve-restamp-promoted');
+        const start = by(
+          await listExtractedFields(db, documentId),
+          'start_date',
+        );
+        await approveExtractedField(deps(db), {
+          extractedFieldId: start.extractedFieldId,
+          approvedBy: SIGNER,
+          mayReadIdentifiers: false,
+        });
+        await promoteExtractedField(deps(db), {
+          extractedFieldId: start.extractedFieldId,
+          promotedBy: SIGNER,
+        });
+        await assert.rejects(
+          () =>
+            approveExtractedField(deps(db), {
+              extractedFieldId: start.extractedFieldId,
+              approvedValue: '2026-04-01',
+              approvedBy: SIGNER,
+              mayReadIdentifiers: false,
+            }),
+          (error: KernelError) => error.code === 'conflict',
+        );
+        assert.equal(
+          by(await listExtractedFields(db, documentId), 'start_date')
+            .approvedValue,
+          '2026-03-01',
+        );
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
   it('writes a correction beside the reading and never over it', async (t) => {
     const pool = await migratedPoolOrNull();
     if (!pool) return t.skip(skipReason);

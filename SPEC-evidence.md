@@ -255,7 +255,8 @@ links — what the system treats as *where the document is about*. The proposal 
 preselection for פתיחת טיוטה, and nothing else reads it: `anchorOf`, search, retrieval and the
 office answer never open it, so a door's flat that turns out wrong costs one different choice at
 opening and binds nothing. The chosen flat beats the door's flat, which beats an exact match of
-the address a person approved. Once the `SUBJECT` link exists the proposal is ignored; it is not
+the address a person approved. The proposal is written once, at upload, and never rewritten (#269).
+Once the `SUBJECT` link exists the proposal is ignored; it is not
 deleted, because it is cheap and it is the record of what the door proposed.
 
 **The ingest order, which slice 3.3 must follow:** hash the bytes → look the hash up → `put` the
@@ -825,7 +826,11 @@ on this tab links to them. The create that remains is פתיחת טיוטה's. `
 with the document is `estate.write` and calls `upsertUnitRow` — the same command A11/A13 use.
 Street, city and apartment are prefilled from the approved reading and editable. What the paper
 does not name (handover, rooms) is filled as today's date, two years of warranty, one room,
-`READY`. The new flat is marked on the proposal and the screen returns to פתיחת טיוטה; no link is
+`READY`. **It never changes what the estate already holds (#269):** the typed address is looked up
+by `address_key` first, a building already there is used as it is, and a flat already carrying the
+typed number is selected and not written. The screen returns to פתיחת טיוטה with the flat in the
+redirect; that is the preselection, and the proposal object is not rewritten — document storage is
+create-only for the runtime account, and replacing an object is a delete. No link is
 written. An operator sees pick and search only — no disabled create control, and the create post
 refuses them. A11/A13 screens are untouched.
 
@@ -1863,6 +1868,12 @@ that will never have anywhere to be promoted to — `address`, `apartment_number
   is a second trigger beside 4.3's, not a rewrite of it: it rejects INSERT or UPDATE of the three
   columns unless `dona.approving` is `on` for the transaction, and rejects DELETE of an approved row
   — `restrict_violation`, the same class 0018 and `document_is_immutable` already use.
+- **A correction is a re-stamp (#268).** Until the reading closes — for a lease, the draft
+  tenancy; for any row, its promotion — an approved row may be approved again with a different
+  value. The three columns are written again and `value` is not touched, so the accuracy dataset
+  keeps the reader's output and the latest signature. The same value again is `conflict`. The audit
+  line carries `restamped: true` and still no value. No state is added and no migration: the guard
+  already admits the update under `dona.approving`.
 - **Re-extract spares an approved row.** 4.2's rule was *replace unstamped rows only* and the stamp
   it meant was the promotion. An approval is a person's attestation and deleting it would erase who
   said so; the DELETE is now `promoted_at IS NULL AND approved_at IS NULL` and the trigger enforces

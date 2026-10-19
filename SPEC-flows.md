@@ -183,7 +183,8 @@ supports, and a value it cannot write is named on the screen before the press, n
   - **the flat.** It is preselected when the *approved* `address` and `apartment_number` resolve to
     exactly one Unit through `resolvePlace` (SPEC-evidence, *Resolution*). Otherwise the screen
     offers candidates narrowed by street and apartment, a search box, A12's sentences, and A12's
-    create offer under `estate.write`. An `address` nobody has approved yet preselects nothing, and
+    create offer under `estate.write`, which never changes a building or flat already held at the
+    typed address (#269). An `address` nobody has approved yet preselects nothing, and
     the screen says so. A flat chosen at the unit-page upload door is preselected ahead of the
     reading. The flat is never chosen without a human: a preselection is a checked radio the
     operator can change, and the press is theirs.
@@ -906,8 +907,11 @@ verb. **Approving is a stamp on the evidence row; promoting is still the copy on
    under `documents.write`. `approved_value` is written either way — equal to `value` when the reader
    was right — and **`value` is never overwritten**. The difference between the two columns is the
    per-field accuracy dataset, and a single column would destroy it on the first correction.
-3. **A second approval of the same row is refused.** `conflict`. An approval is a person's signature
-   at a moment, not a field that can be edited; changing one is not in this flow and has no screen.
+3. **A second approval with the same value is refused; a different value re-stamps (#268).**
+   `conflict` for the same value, so a double press is harmless. A different value replaces the
+   stamp — the person, the time and the value — while `value` stays the reader's and every stamp
+   stays in the audit log with `restamped`. The identifier and contact rules run on every stamp. A
+   promoted row is not re-stamped: the promotion copied the value, and the two would disagree.
 4. **One control approves the rest — `אישור כל מה שלא סומן`, never approve-all.** Rows below the
    read-quality threshold, rows with no read quality at all, and **every identifier row at every
    stance** are flagged, sorted to the top, and must be touched individually. On a fourteen-page
@@ -1000,7 +1004,11 @@ the stepper does not unfile. A refresh keeps the tab's URL. **The type is declar
      One **אישור כל מה שלא סומן** approves the rest.
    - **Phone:** a phone row is approvable only as a valid Israeli mobile number. A nine-digit
      number starting with 5 is offered back with its leading 0.
-   - A second approval of an approved row is a sentence on this step, not an error page.
+   - **Any approved row can be corrected while the reading is open (#268).** The row shows the
+     approved value, and a closed `תיקון` holds the same input and אישור. A different value
+     re-stamps the row; the same value is a sentence on this step, not an error page. An
+     unrevealed identifier has no `תיקון`. Once the draft tenancy exists the reading is closed and
+     corrections are the tenancy page's.
    - **Approving only stamps.**
    - **Ready means:**
      - an approved main tenant name;
@@ -1017,7 +1025,9 @@ the stepper does not unfile. A refresh keeps the tab's URL. **The type is declar
    - what will and will not land on the letting;
    - the refusals.
 
-   One press writes the draft. A refusal is the same screen with its sentence.
+   One press writes the draft. A refusal is the same screen with its sentence. A **חזרה לקריאה**
+   link returns to הקריאה, so a wrong value seen here — the address that resolves to nothing, a
+   name, a date — is corrected at the reading rather than built around (#268).
 4. **הטיוטה.** The tab's named arrival:
    - the tenancy title (#240), the people and the dates;
    - whether **פרוטוקול מסירה** is missing or present. Present means the gate's approval, A6's

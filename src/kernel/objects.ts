@@ -25,8 +25,10 @@ export interface StoredObject {
 }
 
 export interface ObjectStore {
-  // The name is `put` rather than `upload`: writing the same path twice
-  // replaces, and the bucket's versioning is what keeps the previous bytes.
+  // Create-only (#269). The runtime account holds objectCreator and not
+  // objectAdmin, and replacing an object is a delete, so writing a path that
+  // already holds an object is refused as `unavailable` -- by the bucket on
+  // staging and by the memory store in tests. Every path is written once.
   put(path: string, bytes: Buffer, contentType: string): Promise<void>;
   read(path: string): Promise<StoredObject>;
   /**
@@ -177,6 +179,13 @@ export function createMemoryStore(): ObjectStore {
   const objects = new Map<string, StoredObject>();
   return {
     async put(path, bytes, contentType) {
+      // What the bucket answers the runtime account: an overwrite needs
+      // storage.objects.delete, which it does not hold.
+      if (objects.has(path)) {
+        throw new KernelError('unavailable', 'object could not be stored', {
+          status: 403,
+        });
+      }
       objects.set(path, { bytes: Buffer.from(bytes), contentType });
     },
     async read(path) {

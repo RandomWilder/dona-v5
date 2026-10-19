@@ -284,4 +284,127 @@ describe('evidence · #239 a lease is approved on הקריאה', () => {
     });
     if (!ran) t.skip(skipReason);
   });
+
+  // #268. Any approved row is corrected by approving it again, with a different value, until the
+  // draft opens. Proved on a money row, the read address and a phone: the control is the same one.
+  const stampOf = async (o: Opening, id: string) =>
+    (
+      await o.db.query<{ value: string; approved_value: string | null }>(
+        'SELECT value, approved_value FROM extracted_field WHERE extracted_field_id = $1',
+        [id],
+      )
+    ).rows[0];
+  const linesOf = async (o: Opening, id: string) =>
+    (
+      await o.db.query<{
+        inputs: { edited: boolean; restamped: boolean };
+      }>(
+        `SELECT inputs FROM audit_log
+          WHERE action = 'evidence.approve_field' AND subject_id = $1`,
+        [id],
+      )
+    ).rows.map((row) => row.inputs);
+
+  it("#268: an approved row is corrected on הקריאה, and the reader's value stays", async (t) => {
+    const ran = await withLease('appr-268-fix', async (o) => {
+      const approveUrl = `/documents/filing/${o.documentId}/approve`;
+      const deposit = await idOf(o, 'deposit_amount');
+      assert.equal(
+        (await o.post(approveUrl, { extracted_field_id: deposit })).statusCode,
+        302,
+      );
+
+      const screen = await o.get(`/documents/filing/${o.documentId}`);
+      assert.match(screen.body, /<summary[^>]*>תיקון<\/summary>/);
+
+      const fixed = await o.post(approveUrl, {
+        extracted_field_id: deposit,
+        approved_value: '10700',
+      });
+      assert.equal(fixed.statusCode, 302, fixed.body.slice(0, 300));
+      assert.deepEqual(await stampOf(o, deposit), {
+        value: '10600',
+        approved_value: '10700',
+      });
+      const lines = await linesOf(o, deposit);
+      assert.equal(lines.length, 2);
+      assert.ok(lines.some((line) => line.restamped && line.edited));
+      assert.equal(JSON.stringify(lines).includes('10700'), false);
+
+      // The row shows what was signed, beside what was read.
+      const after = await o.get(`/documents/filing/${o.documentId}`);
+      assert.match(after.body, /10700/);
+
+      // The same value again is today's sentence, and writes nothing.
+      const twice = await o.post(approveUrl, {
+        extracted_field_id: deposit,
+        approved_value: '10700',
+      });
+      assert.equal(twice.statusCode, 409);
+      assert.match(twice.body, /השורה הזו כבר אושרה/);
+      assert.equal((await linesOf(o, deposit)).length, 2);
+
+      // The bulk press stamps only what nobody signed, so the correction survives it.
+      await o.post(approveUrl, { action: 'unflagged' });
+      assert.equal((await stampOf(o, deposit))?.approved_value, '10700');
+
+      // A corrected phone is checked the way a first approval is.
+      const phone = await idOf(o, 'main_tenant_phone');
+      assert.equal(
+        (await o.post(approveUrl, { extracted_field_id: phone })).statusCode,
+        302,
+      );
+      const badPhone = await o.post(approveUrl, {
+        extracted_field_id: phone,
+        approved_value: '12345',
+      });
+      assert.equal(badPhone.statusCode, 409);
+      assert.equal((await stampOf(o, phone))?.approved_value, '0521234567');
+    });
+    if (!ran) t.skip(skipReason);
+  });
+
+  it('#268: a corrected address is what פתיחת טיוטה reads, and the step links back to הקריאה', async (t) => {
+    const ran = await withLease('appr-268-addr', async (o) => {
+      const approveUrl = `/documents/filing/${o.documentId}/approve`;
+      const address = await idOf(o, 'address');
+      await o.post(approveUrl, { extracted_field_id: address });
+      for (const key of OPENING_KEYS) {
+        await o.approve(key);
+      }
+      const fixed = await o.post(approveUrl, {
+        extracted_field_id: address,
+        approved_value: 'הרב קוק 50, בית שמש',
+      });
+      assert.equal(fixed.statusCode, 302, fixed.body.slice(0, 300));
+      const open = await o.get(`/documents/filing/${o.documentId}/open`);
+      assert.equal(open.statusCode, 200);
+      assert.match(open.body, /הרב קוק 50/);
+      assert.match(
+        open.body,
+        new RegExp(
+          `href="/documents/filing/${o.documentId}"[^>]*>חזרה לקריאה<`,
+        ),
+      );
+    });
+    if (!ran) t.skip(skipReason);
+  });
+
+  it('#268: once the draft is open, a signed row is not corrected here', async (t) => {
+    const ran = await withLease('appr-268-closed', async (o) => {
+      const start = await idOf(o, 'start_date');
+      await opened(o);
+      const refused = await o.post(
+        `/documents/filing/${o.documentId}/approve`,
+        {
+          extracted_field_id: start,
+          approved_value: '2026-12-01',
+        },
+      );
+      assert.equal(refused.statusCode, 409);
+      assert.match(refused.body, /הקריאה של החוזה הזה סגורה/);
+      assert.equal((await stampOf(o, start))?.approved_value, '2026-11-01');
+    });
+    if (!ran) t.skip(skipReason);
+  });
 });

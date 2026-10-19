@@ -224,11 +224,22 @@ describe('evidence · A16 file a lease in one workspace', {
 
     const objects = createMemoryStore();
     let puts = 0;
+    // What a bucket held before #246, planted over what upload wrote. The store is create-only
+    // (#269), so a fixture cannot rewrite an object; it shadows the read instead.
+    const planted = new Map<string, Buffer>();
+    const plant = (path: string, body: object) =>
+      planted.set(path, Buffer.from(JSON.stringify(body)));
     const counted = {
       ...objects,
       put: async (path: string, bytes: Buffer, contentType: string) => {
         puts += 1;
         return objects.put(path, bytes, contentType);
+      },
+      read: async (path: string) => {
+        const shadow = planted.get(path);
+        return shadow
+          ? { bytes: Buffer.from(shadow), contentType: 'application/json' }
+          : objects.read(path);
       },
     };
     const appFor = (text: string) =>
@@ -575,21 +586,15 @@ describe('evidence · A16 file a lease in one workspace', {
             String(seen.headers.location ?? '').match(
               /\/documents\/filing\/([0-9a-f-]{36})$/,
             )?.[1] ?? '';
-          await objects.put(
-            leaseProposalPath(documentFileHash(bytes)),
-            Buffer.from(
-              JSON.stringify({
-                reading: {
-                  addressLine: ADDRESS,
-                  city: CITY,
-                  apartmentNumber: '9',
-                  annexDeferral: false,
-                },
-                doorUnitId: null,
-              }),
-            ),
-            'application/json',
-          );
+          plant(leaseProposalPath(documentFileHash(bytes)), {
+            reading: {
+              addressLine: ADDRESS,
+              city: CITY,
+              apartmentNumber: '9',
+              annexDeferral: false,
+            },
+            doorUnitId: null,
+          });
           const ignored = await as(here).inject({
             method: 'GET',
             url: `/documents/filing/${bareId}/open`,
@@ -597,21 +602,15 @@ describe('evidence · A16 file a lease in one workspace', {
           assert.match(ignored.body, /הכתובת טרם אושרה/);
           assert.doesNotMatch(ignored.body, new RegExp(`value="${unitNine}"`));
 
-          await objects.put(
-            proposalPath,
-            Buffer.from(
-              JSON.stringify({
-                reading: {
-                  addressLine: ADDRESS,
-                  city: CITY,
-                  apartmentNumber: '10',
-                  annexDeferral: false,
-                },
-                doorUnitId: unitNine,
-              }),
-            ),
-            'application/json',
-          );
+          plant(proposalPath, {
+            reading: {
+              addressLine: ADDRESS,
+              city: CITY,
+              apartmentNumber: '10',
+              annexDeferral: false,
+            },
+            doorUnitId: unitNine,
+          });
           const stillDoor = await as(here).inject({
             method: 'GET',
             url: `/documents/filing/${documentId}/open`,
@@ -984,6 +983,13 @@ describe('evidence · A16 file a lease in one workspace', {
             url: `/documents/filing/${documentId}/open`,
           });
           assert.match(open.body, /action="\/documents\/filing\/place"/);
+          // #268. Beside the create offer, the way back to correct the reading instead.
+          assert.match(
+            open.body,
+            new RegExp(
+              `מתוקנים\\s*<a href="/documents/filing/${documentId}">בקריאה</a>`,
+            ),
+          );
           assert.match(open.body, /name="address_line"/);
           assert.match(open.body, new RegExp(`value="${NONE_STREET}"`));
           assert.match(open.body, new RegExp(`value="${NONE_CITY}"`));
@@ -1089,6 +1095,111 @@ describe('evidence · A16 file a lease in one workspace', {
             [createdUnit],
           );
           assert.equal(row.rows[0]?.building_id, buildingId);
+        },
+      );
+
+      await t.test(
+        '#269: a create at an address the estate holds leaves the building as it was',
+        async () => {
+          const wrongRead = appFor(leasing(`${ADDRESS}, ${CITY}, דירה 14`));
+          apps.push(wrongRead);
+          const bytes = pdfBytes(`a16-269-held-${Date.now()}`);
+          const seen = await as(wrongRead).inject({
+            method: 'POST',
+            url: '/documents/filing',
+            ...upload({}, { filename: 'held.pdf', bytes }),
+          });
+          assert.equal(seen.statusCode, 302, seen.body.slice(0, 300));
+          hashes.push(documentFileHash(bytes));
+          const documentId =
+            String(seen.headers.location ?? '').match(
+              /\/documents\/filing\/([0-9a-f-]{36})$/,
+            )?.[1] ?? '';
+          const proposal = leaseProposalPath(documentFileHash(bytes));
+          const proposed = (await objects.read(proposal)).bytes.toString();
+          const buildingOf = async () =>
+            (
+              await pool.query<{
+                building_id: string;
+                name: string;
+                handover_date: string;
+                warranty_end_date: string;
+                project_id: string | null;
+                status: string;
+              }>(
+                `SELECT building_id, name, handover_date::text, warranty_end_date::text,
+                        project_id::text, status
+                   FROM building WHERE city = $1 AND address_line = $2`,
+                [CITY, ADDRESS],
+              )
+            ).rows;
+          const before = await buildingOf();
+          assert.equal(before.length, 1);
+          assert.ok(before[0]?.project_id);
+
+          // What the 19 October press posted: the create form for a building the screen did not
+          // name, typed with an address the estate already holds.
+          const created = await as(wrongRead).inject({
+            method: 'POST',
+            url: '/documents/filing/place',
+            payload: new URLSearchParams({
+              document: documentId,
+              address_line: ADDRESS,
+              city: CITY,
+              unit_number: '14',
+            }).toString(),
+            headers: {
+              'content-type': 'application/x-www-form-urlencoded',
+            },
+          });
+          assert.equal(created.statusCode, 302, created.body.slice(0, 400));
+          const createdUnit =
+            /unit=([0-9a-f-]{36})/.exec(
+              String(created.headers.location),
+            )?.[1] ?? '';
+          assert.ok(createdUnit);
+          assert.deepEqual(await buildingOf(), before);
+          const placed = await pool.query<{ building_id: string }>(
+            'SELECT building_id FROM space WHERE space_id = $1',
+            [createdUnit],
+          );
+          assert.equal(placed.rows[0]?.building_id, before[0]?.building_id);
+          assert.equal(
+            (await objects.read(proposal)).bytes.toString(),
+            proposed,
+          );
+
+          // A flat number the building already has is selected, and nothing about it is written.
+          const flatOf = async () =>
+            (
+              await pool.query<{ rooms: string; area_sqm: string | null }>(
+                `SELECT u.rooms::text, s.area_sqm::text
+                   FROM unit u JOIN space s ON s.space_id = u.unit_id
+                  WHERE u.unit_id = $1`,
+                [unitNine],
+              )
+            ).rows[0];
+          const nineBefore = await flatOf();
+          const again = await as(wrongRead).inject({
+            method: 'POST',
+            url: '/documents/filing/place',
+            payload: new URLSearchParams({
+              document: documentId,
+              address_line: ADDRESS,
+              city: CITY,
+              unit_number: '9',
+            }).toString(),
+            headers: {
+              'content-type': 'application/x-www-form-urlencoded',
+            },
+          });
+          assert.equal(again.statusCode, 302, again.body.slice(0, 400));
+          assert.match(
+            String(again.headers.location),
+            new RegExp(`unit=${unitNine}`),
+          );
+          assert.deepEqual(await flatOf(), nineBefore);
+          assert.deepEqual(await buildingOf(), before);
         },
       );
 

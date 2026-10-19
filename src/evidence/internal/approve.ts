@@ -123,6 +123,8 @@ export interface ApproveResult {
   extractedFieldId: string;
   fieldKey: string;
   edited: boolean;
+  /** #268. The row was already approved, and this stamp replaced that one. */
+  restamped: boolean;
 }
 
 export interface ApproveUnflaggedSpec {
@@ -141,7 +143,9 @@ interface CapturedRow {
   document_id: string;
   field_key: string;
   value: string;
+  approved_value: string | null;
   approved_at: Date | null;
+  promoted_at: Date | null;
 }
 
 async function stamp(
@@ -159,6 +163,8 @@ async function stamp(
     [row.extracted_field_id, approvedValue, approvedBy, deps.clock.now()],
   );
   const edited = approvedValue !== row.value;
+  // #268. A stamp over a stamp: the earlier signature is replaced on the row and kept here.
+  const restamped = row.approved_at !== null;
   // **Never the value, and never either of them.** PII does not reach a log (SPEC.md), and a line
   // carrying the correction would defeat the thing it exists to record. `edited` is the fact worth
   // keeping: it is the per-field accuracy signal in its smallest honest form.
@@ -172,6 +178,7 @@ async function stamp(
         documentId: row.document_id,
         fieldKey: row.field_key,
         edited,
+        restamped,
       },
     },
     { outcome: 'ok' },
@@ -180,6 +187,7 @@ async function stamp(
     extractedFieldId: row.extracted_field_id,
     fieldKey: row.field_key,
     edited,
+    restamped,
   };
 }
 
@@ -188,7 +196,8 @@ async function capturedRow(
   extractedFieldId: string,
 ): Promise<CapturedRow> {
   const result = await db.query<CapturedRow>(
-    `SELECT e.extracted_field_id, e.document_id, f.field_key, e.value, e.approved_at
+    `SELECT e.extracted_field_id, e.document_id, f.field_key, e.value,
+            e.approved_value, e.approved_at, e.promoted_at
        FROM extracted_field e
        JOIN document_type_field f
          ON f.document_type_field_id = e.document_type_field_id
@@ -206,8 +215,15 @@ async function capturedRow(
 /**
  * One reading, approved as read or corrected first.
  *
- * **A second approval is refused.** An approval is a person's signature at a moment, not a field
- * that can be edited — changing one is not a flow this system has and it has no screen.
+ * **#268. An approved reading is corrected by approving it again, with a different value.** A misread
+ * a person waved through would otherwise follow the paper into the letting, or be built around. The
+ * stamp is written again — value, person, time — and `value` is still the reader's, so the accuracy
+ * dataset keeps both and the audit log keeps every signature. The same value again is `conflict`,
+ * which the screen says as a sentence. Every field takes the same path; none is special.
+ *
+ * **Where it stops.** A promoted row is refused: its value is already on a typed column, and a new
+ * stamp would disagree with it. A lease's reading closes when the draft opens, and that rule is the
+ * routes' (they know the tenancy link; this command does not).
  */
 export async function approveExtractedField(
   deps: ApproveDeps,
@@ -224,16 +240,22 @@ export async function approveExtractedField(
 
   return inTransaction(deps.db, async (db) => {
     const row = await capturedRow(db, extractedFieldId);
-    if (row.approved_at !== null) {
-      throw new KernelError('conflict', 'that reading is already approved');
-    }
+    // First, before anything is compared: "already approved" for an equal value would tell a
+    // viewer who was never shown an identifier what it says.
     if (isIdentifierField(row.field_key) && !spec.mayReadIdentifiers) {
       throw new KernelError(
         'not_allowed',
         'a reading that is withheld from you cannot be approved by you',
       );
     }
+    // A row 7.3 promoted before promotion needed a stamp can still be signed once.
+    if (row.approved_at !== null && row.promoted_at !== null) {
+      throw new KernelError('conflict', 'that reading is already promoted');
+    }
     const approved = corrected ?? row.value;
+    if (row.approved_at !== null && row.approved_value === approved) {
+      throw new KernelError('conflict', 'that reading is already approved');
+    }
     const channel = contactChannelOf(row.field_key);
     if (channel !== null) {
       // The signed value stays as the person typed it; פתיחת טיוטה stores the normalised form.

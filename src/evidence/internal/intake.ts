@@ -623,18 +623,3 @@ export async function readStoredLeasePlace(
     throw error;
   }
 }
-
-export async function rememberDoorUnit(
-  objects: ObjectStore,
-  fileHash: string,
-  unitId: string,
-): Promise<void> {
-  const current = await readStoredLeasePlace(objects, fileHash);
-  if (!current) return;
-  const next: StoredLeasePlace = { ...current, doorUnitId: unitId };
-  await objects.put(
-    leaseProposalPath(fileHash),
-    Buffer.from(JSON.stringify(next)),
-    'application/json',
-  );
-}

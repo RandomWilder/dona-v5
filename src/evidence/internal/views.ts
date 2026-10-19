@@ -111,6 +111,9 @@ const styles = h`<style>
   .row-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
   .row-actions form { display: contents; }
   .row-actions input { inline-size: auto; flex: 1 1 7rem; min-inline-size: 5rem; }
+  /* Issue 268. A signed row's correction: one word until it is opened, then the same input and press. */
+  .row-actions .restamp > summary { cursor: pointer; color: var(--color-accent-ink); font-size: var(--text-sm); }
+  .row-actions .restamp[open] { display: flex; flex: 1 1 100%; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
   .mini {
     min-height: var(--size-control-ops);
     padding-inline: var(--space-3);
@@ -967,29 +970,56 @@ function filingApproveControl(
   if (!screen.documentId) {
     return h``;
   }
+  const offered = screen.contactRows?.[row.extractedFieldId]?.offered;
+  const form = h`<form method="post" action="/documents/filing/${screen.documentId}/approve">
+      ${csrfInput(screen.csrf)}
+      <input type="hidden" name="extracted_field_id" value="${row.extractedFieldId}" />
+      ${confirmValueInputs(row, offered)}
+      <button class="btn btn-primary mini" type="submit">אישור</button>
+    </form>`;
   if (row.approvedAt !== null) {
-    return h`<td class="muted">אושר</td>`;
+    // #268. A signed row is corrected by signing it again, with the same input and the same press,
+    // while the reading is open. Closed by default, so the table scans as it did. Opened when the
+    // correction just came back refused, so the reason sits beside the value.
+    if (!screen.mayApprove) {
+      return h`<td class="muted">אושר</td>`;
+    }
+    return h`<td class="row-actions">
+      <span class="muted">אושר</span>
+      <details class="restamp" ${offered === undefined ? h`` : h`open`}>
+        <summary>תיקון</summary>
+        ${form}
+      </details>
+    </td>`;
   }
   if (!screen.mayApprove) {
     return h`<td class="muted">—</td>`;
   }
   return h`<td class="row-actions">
-    <form method="post" action="/documents/filing/${screen.documentId}/approve">
-      ${csrfInput(screen.csrf)}
-      <input type="hidden" name="extracted_field_id" value="${row.extractedFieldId}" />
-      ${confirmValueInputs(row, screen.contactRows?.[row.extractedFieldId]?.offered)}
-      <button class="btn btn-primary mini" type="submit">אישור</button>
-    </form>
+    ${form}
   </td>`;
 }
 
-/** A household name is confirmed as a given name and a family name. Every other field stays one value. */
+/**
+ * A household name is confirmed as a given name and a family name. Every other field stays one value.
+ * #268: a signed row offers what was signed, so a correction starts from it and not from the paper.
+ */
 function confirmValueInputs(row: ExtractedRow, offered?: string): Html {
+  const signed = row.approvedValue;
   if (!HOUSEHOLD_NAME_FIELDS.has(row.fieldKey)) {
-    return h`<input class="mini" name="approved_value" value="${offered ?? row.value}" maxlength="2000"
+    return h`<input class="mini" name="approved_value" value="${offered ?? signed ?? row.value}" maxlength="2000"
       aria-label="הערך המאושר ל${row.labelHe}" />`;
   }
-  const proposed = proposeNameSplit(row.value);
+  const proposed =
+    signed === null
+      ? proposeNameSplit(row.value)
+      : (() => {
+          const name = readConfirmedName(signed);
+          return {
+            givenName: name.givenName ?? '',
+            familyName: name.familyName,
+          };
+        })();
   return h`<input class="mini" name="given_name" value="${proposed.givenName}" maxlength="200"
       aria-label="שם פרטי" placeholder="שם פרטי" />
     <input class="mini" name="family_name" value="${proposed.familyName}" maxlength="200" required
@@ -1041,12 +1071,20 @@ function filingReadingRow(
   const offered = contact?.zeroAdded
     ? h`<span class="role">הוצע עם 0 בהתחלה</span>`
     : h``;
+  const read = row.fieldKey.endsWith('_date')
+    ? excerpt(ltr(row.value))
+    : excerpt(row.value);
+  // #268. A row signed with another value shows what was signed, and what the paper said beside it.
+  const shown =
+    row.approvedValue === null ? null : displayConfirmedName(row.approvedValue);
+  const signed = shown !== null && shown !== row.value ? shown : null;
   return h`<tr>
     <td>${row.labelHe}${nameRole(row, rows)}${half}${offered}${refusal}</td>
     <td>${
-      row.fieldKey.endsWith('_date')
-        ? excerpt(ltr(row.value))
-        : excerpt(row.value)
+      signed === null
+        ? read
+        : h`<strong>${row.fieldKey.endsWith('_date') ? ltr(signed) : signed}</strong>
+          <span class="muted">· נקרא ${read}</span>`
     }</td>
     ${filingApproveControl(screen, row)}
   </tr>`;
@@ -1321,7 +1359,9 @@ function filingOpening(screen: LeaseFilingScreen): Html {
     ${
       reading && choosing
         ? h`<h2 class="second-heading">${filingHeadline(reading, opening.candidateTotal)}</h2>
-          ${placeFacts(reading, opening.placeBuilding, excerpt)}`
+          ${placeFacts(reading, opening.placeBuilding, excerpt)}
+          <p class="form-note">כתובת או מספר דירה שאושרו בטעות מתוקנים
+            <a href="/documents/filing/${screen.documentId}">בקריאה</a>, ולא ביצירת בניין.</p>`
         : h``
     }
     ${
