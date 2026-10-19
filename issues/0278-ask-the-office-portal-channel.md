@@ -1,24 +1,24 @@
 ---
-number: 276
+number: 278
 title: "Ask the office, and the PORTAL Source channel"
 status: open
 labels: [ready-for-agent]
 assignee:
-blocked_by: [271]
-parent: 268
+blocked_by: [273]
+parent: 270
 created: 2026-10-19
 closed:
 ---
 
 ## Parent
 
-#268 — Tenant portal.
+#270 — Tenant portal.
 
 ## What to build
 
 Any signed-in tenant — any verified number — can ask the office a question from the portal. It becomes an ordinary ServiceCall with Source channel `PORTAL`, through the same intake door as WhatsApp and email: dedupe, store, emergency check, thread, sort, identify. The tenant sees "received" and the call number at once. A number that resolves to a Party is identified by number with no Tenancy attached; a number that resolves to nobody stays unidentified and is marked as from a verified number. The office sees it in the same calls list, marked `PORTAL`.
 
-**Paint screens 1n** (`mockups/tenant-portal.html`): a close button, the line "השאלה מגיעה לאדם במשרד, ונשמרת עם הקריאות שלכם.", one text area and **שליחה**. The verified non-tenant and the tenant of a building not in the portal reach it from screen 1o's primary button (#277). The paint's topic chips ("נושאים נפוצים. מוגדרים במשרד.") are a design proposal that needs an office-managed list; they are not in this ticket.
+**Paint screens 1n** (`mockups/tenant-portal.html`): a close button, the line "השאלה מגיעה לאדם במשרד, ונשמרת עם הקריאות שלכם.", one text area and **שליחה**. The verified non-tenant and the tenant of a building not in the portal reach it from screen 1o's primary button (#279). The paint's topic chips ("נושאים נפוצים. מוגדרים במשרד.") are a design proposal that needs an office-managed list; they are not in this ticket.
 
 ## Acceptance criteria
 
@@ -33,4 +33,4 @@ Any signed-in tenant — any verified number — can ask the office a question f
 
 ## Blocked by
 
-- #271
+- #273

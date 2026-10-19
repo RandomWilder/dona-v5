@@ -1,18 +1,18 @@
 ---
-number: 270
+number: 272
 title: "Prefactor: a tenant stance and the tenant host"
 status: open
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
-parent: 268
+parent: 270
 created: 2026-10-19
 closed:
 ---
 
 ## Parent
 
-#268 — Tenant portal.
+#270 — Tenant portal.
 
 ## What to build
 

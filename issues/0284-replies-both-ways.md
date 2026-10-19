@@ -1,24 +1,24 @@
 ---
-number: 282
+number: 284
 title: "Replies both ways"
 status: open
 labels: [ready-for-agent]
 assignee:
-blocked_by: [279]
-parent: 268
+blocked_by: [281]
+parent: 270
 created: 2026-10-19
 closed:
 ---
 
 ## Parent
 
-#268 — Tenant portal.
+#270 — Tenant portal.
 
 ## What to build
 
 The tenant writes a follow-up on an open call from its thread. On a closed call, **פתיחת קריאה המשך** opens a new call linked to it, as writing on a closed WhatsApp thread does. The office replies to a `PORTAL` call from the call page and the reply appears in the tenant's thread. A `PORTAL` call cannot be returned to the filtered list; the office cancels it with a note instead, and the tenant sees בוטלה with the note.
 
-**Paint screens 1h** (`mockups/tenant-portal.html`). On an open call, the message field is pinned to the bottom of the thread: a camera button, a round field ("עוד פרט לקריאה…") and a round send button. On a closed call, the field is replaced by one primary button, **פתיחת קריאה המשך**, which opens the report (#280) as a new call naming the closed one as Predecessor.
+**Paint screens 1h** (`mockups/tenant-portal.html`). On an open call, the message field is pinned to the bottom of the thread: a camera button, a round field ("עוד פרט לקריאה…") and a round send button. On a closed call, the field is replaced by one primary button, **פתיחת קריאה המשך**, which opens the report (#282) as a new call naming the closed one as Predecessor.
 
 ## Acceptance criteria
 
@@ -32,4 +32,4 @@ The tenant writes a follow-up on an open call from its thread. On a closed call,
 
 ## Blocked by
 
-- #279
+- #281

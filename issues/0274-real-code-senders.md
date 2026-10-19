@@ -1,18 +1,18 @@
 ---
-number: 272
+number: 274
 title: "Real code senders: WhatsApp template and SMS"
 status: open
 labels: [ready-for-agent]
 assignee:
-blocked_by: [271]
-parent: 268
+blocked_by: [273]
+parent: 270
 created: 2026-10-19
 closed:
 ---
 
 ## Parent
 
-#268 — Tenant portal.
+#270 — Tenant portal.
 
 ## What to build
 
@@ -27,7 +27,7 @@ Two real implementations of the code sender, each off until it is configured: a 
 - [ ] With no real sender configured, staging refuses to start the sign-in flow rather than silently falling back to the dev sender.
 - [ ] With one sender configured, no choice is shown; with both, WhatsApp is sent first and SMS is offered from the code screen's fallback card.
 - [ ] The SMS sender name is at most 11 Latin characters and is configuration.
-- [ ] SMS is sent only to Israeli mobile numbers; the send caps from #271 apply to both senders.
+- [ ] SMS is sent only to Israeli mobile numbers; the send caps from #273 apply to both senders.
 - [ ] A provider error shows the tenant a retry message and is an audit row; it never reveals the provider's response.
 - [ ] Turning either sender on in staging is the director's step (Meta template and payment method; gateway contract and processor annex), recorded as a comment here when done.
 - [ ] With both senders, the code screen offers SMS only as the bottom fallback card; choosing it sends a new code by SMS and the screen's line names SMS.
@@ -35,4 +35,4 @@ Two real implementations of the code sender, each off until it is configured: a 
 
 ## Blocked by
 
-- #271
+- #273

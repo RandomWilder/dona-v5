@@ -140,7 +140,7 @@ problem.
 - **No payments, invoices, or provider billing.** Lives in the ERP; we hold foreign keys only.
 - **No AI in the responsibility decision or the state machine.** Both must be inspectable, versioned,
   and defensible a year later in a dispute.
-- **No tenant app and no provider portal.** WhatsApp is the app. Every additional surface is an
+- **No tenant app and no provider portal.** _(Tenant half superseded by [ADR-0019](../decisions/ADR-0019-the-tenant-portal-is-a-source-channel.md): the Portal is the tenant's home and WhatsApp stays a door. No provider portal still stands.)_ WhatsApp is the app. Every additional surface is an
   adoption tax paid by the people least willing to pay it — and "providers change nothing" is
   precisely why the switchboard model works.
 - **No move-in / move-out workflow.** Genuinely valuable, genuinely separate. It's the second sale.

@@ -1,18 +1,18 @@
 ---
-number: 275
+number: 277
 title: "Building portal switch"
 status: open
 labels: [ready-for-agent]
 assignee:
-blocked_by: [274]
-parent: 268
+blocked_by: [276]
+parent: 270
 created: 2026-10-19
 closed:
 ---
 
 ## Parent
 
-#268 — Tenant portal.
+#270 — Tenant portal.
 
 ## What to build
 
@@ -29,4 +29,4 @@ An administrator switches a Building into the portal, or out of it, from the Bui
 
 ## Blocked by
 
-- #274
+- #276

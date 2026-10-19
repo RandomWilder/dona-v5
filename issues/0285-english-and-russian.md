@@ -1,18 +1,18 @@
 ---
-number: 283
+number: 285
 title: "English and Russian"
 status: open
 labels: [ready-for-agent]
 assignee:
-blocked_by: [274, 278, 282]
-parent: 268
+blocked_by: [276, 280, 284]
+parent: 270
 created: 2026-10-19
 closed:
 ---
 
 ## Parent
 
-#268 — Tenant portal.
+#270 — Tenant portal.
 
 ## What to build
 
@@ -31,6 +31,6 @@ Every portal string is translated into English and Russian by a person. Page dir
 
 ## Blocked by
 
-- #274
-- #278
-- #282
+- #276
+- #280
+- #284

@@ -1,24 +1,24 @@
 ---
-number: 273
+number: 275
 title: "Passkeys and the new-device notice"
 status: open
 labels: [ready-for-agent]
 assignee:
-blocked_by: [271]
-parent: 268
+blocked_by: [273]
+parent: 270
 created: 2026-10-19
 closed:
 ---
 
 ## Parent
 
-#268 — Tenant portal.
+#270 — Tenant portal.
 
 ## What to build
 
 After a code sign-in, the tenant is offered a passkey on that device (fingerprint, face or device PIN). Later sign-ins on that device use the passkey and skip the code. A sign-in on a device with no passkey is a new-device sign-in, and a short notice is sent to the number by the code sender. The tenant can see and remove their passkeys.
 
-**Paint screens 1c** (`mockups/tenant-portal.html`): a centred face-scan mark, "כניסה מהירה בפעם הבאה", three reasons (no waiting for a code, the key stays on this phone, it can be added or removed any time), the primary **הפעלת כניסה מהירה** and the text button **לא עכשיו**. The tenant's list of passkeys sits under the עוד tab (#277).
+**Paint screens 1c** (`mockups/tenant-portal.html`): a centred face-scan mark, "כניסה מהירה בפעם הבאה", three reasons (no waiting for a code, the key stays on this phone, it can be added or removed any time), the primary **הפעלת כניסה מהירה** and the text button **לא עכשיו**. The tenant's list of passkeys sits under the עוד tab (#279).
 
 ## Acceptance criteria
 
@@ -33,4 +33,4 @@ After a code sign-in, the tenant is offered a passkey on that device (fingerprin
 
 ## Blocked by
 
-- #271
+- #273

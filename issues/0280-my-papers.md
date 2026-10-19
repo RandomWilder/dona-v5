@@ -1,24 +1,24 @@
 ---
-number: 278
+number: 280
 title: "My papers"
 status: open
 labels: [ready-for-agent]
 assignee:
-blocked_by: [277]
-parent: 268
+blocked_by: [279]
+parent: 270
 created: 2026-10-19
 closed:
 ---
 
 ## Parent
 
-#268 — Tenant portal.
+#270 — Tenant portal.
 
 ## What to build
 
 The tenant sees the documents filed to their chosen tenancy on the flat page, opens them and downloads them. Only documents bound to the tenancy are shown; office-only records of the Unit or the Building never are.
 
-**Paint screens 1m** (`mockups/tenant-portal.html`). **There is no separate papers page.** The documents are the "מסמכים" section of the flat page from #277, one row each: a file mark, the document's name, its type, and a download mark, the whole row the tap target. The home tile המסמכים שלי opens the flat page at that section.
+**Paint screens 1m** (`mockups/tenant-portal.html`). **There is no separate papers page.** The documents are the "מסמכים" section of the flat page from #279, one row each: a file mark, the document's name, its type, and a download mark, the whole row the tap target. The home tile המסמכים שלי opens the flat page at that section.
 
 ## Acceptance criteria
 
@@ -30,4 +30,4 @@ The tenant sees the documents filed to their chosen tenancy on the flat page, op
 
 ## Blocked by
 
-- #277
+- #279

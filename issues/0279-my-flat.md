@@ -1,24 +1,24 @@
 ---
-number: 277
+number: 279
 title: "My flat"
 status: open
 labels: [ready-for-agent]
 assignee:
-blocked_by: [271, 275]
-parent: 268
+blocked_by: [273, 277]
+parent: 270
 created: 2026-10-19
 closed:
 ---
 
 ## Parent
 
-#268 — Tenant portal.
+#270 — Tenant portal.
 
 ## What to build
 
 A verified active tenant of a portal-enabled building sees their flat: address, unit, the tenancy's dates, the assigned bay and assigned storage. A tenant with more than one active tenancy chooses between them in a bottom sheet. Access is decided on every request: the number is resolved through the isolation join (a new read in the scope module, the only place the join is written) and the tenancy's Building must be portal-enabled. A tenant of a building not in the portal, a past tenant, a guarantor and a verified non-tenant get only "ask the office", with a plain explanation. Anything not theirs is "not found". Every tenant read of tenancy data is an audit row.
 
-**Paint screens 1e, 1f, 1m and 1o** (`mockups/tenant-portal.html`). **This ticket builds the tenant shell** every later tab screen sits in: the bottom tab bar (בית · קריאות · דיווח · הדירה · עוד, with דיווח as the raised button that later opens #280), the home page with the greeting and its two shortcut tiles (שאלה למשרד, המסמכים שלי), and the tenancy pill and sheet. The tenancy chosen in the sheet ("בחירת דירה") is the scope for the whole portal — home, the flat, the documents, the calls and a new report — not for this page only, and the pill shows its chevron and opens the sheet only with two or more active tenancies. The flat page ("הדירה") shows the address, the city, the tenancy's dates as a progress bar with the months left, and the bay and storage as two tiles; the documents of #278 sit under it on the same page. The עוד tab holds ask the office, the language, the passkeys and sign out. Screen 1o is the page a tenant without tenancy access sees: "הבניין שלכם עוד לא בפורטל", the number they signed in with, **שאלה למשרד** and **יציאה**, with no tab bar.
+**Paint screens 1e, 1f, 1m and 1o** (`mockups/tenant-portal.html`). **This ticket builds the tenant shell** every later tab screen sits in: the bottom tab bar (בית · קריאות · דיווח · הדירה · עוד, with דיווח as the raised button that later opens #282), the home page with the greeting and its two shortcut tiles (שאלה למשרד, המסמכים שלי), and the tenancy pill and sheet. The tenancy chosen in the sheet ("בחירת דירה") is the scope for the whole portal — home, the flat, the documents, the calls and a new report — not for this page only, and the pill shows its chevron and opens the sheet only with two or more active tenancies. The flat page ("הדירה") shows the address, the city, the tenancy's dates as a progress bar with the months left, and the bay and storage as two tiles; the documents of #280 sit under it on the same page. The עוד tab holds ask the office, the language, the passkeys and sign out. Screen 1o is the page a tenant without tenancy access sees: "הבניין שלכם עוד לא בפורטל", the number they signed in with, **שאלה למשרד** and **יציאה**, with no tab bar.
 
 ## Acceptance criteria
 
@@ -37,5 +37,5 @@ A verified active tenant of a portal-enabled building sees their flat: address, 
 
 ## Blocked by
 
-- #271
-- #275
+- #273
+- #277

@@ -1,18 +1,18 @@
 ---
-number: 274
+number: 276
 title: "Legal texts and the first-visit acknowledgement"
 status: open
 labels: [ready-for-agent]
 assignee:
-blocked_by: [271]
-parent: 268
+blocked_by: [273]
+parent: 270
 created: 2026-10-19
 closed:
 ---
 
 ## Parent
 
-#268 — Tenant portal.
+#270 — Tenant portal.
 
 ## What to build
 
@@ -33,4 +33,4 @@ The privacy notice, the terms, the entry-permission wording and the optional opt
 
 ## Blocked by
 
-- #271
+- #273

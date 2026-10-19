@@ -1,24 +1,24 @@
 ---
-number: 271
+number: 273
 title: "Sign in by code"
 status: open
 labels: [ready-for-agent]
 assignee:
-blocked_by: [269, 270]
-parent: 268
+blocked_by: [271, 272]
+parent: 270
 created: 2026-10-19
 closed:
 ---
 
 ## Parent
 
-#268 — Tenant portal.
+#270 — Tenant portal.
 
 ## What to build
 
 A tenant enters their phone number on the tenant host, receives a one-time code from a **code sender**, enters it, and is signed in: a **Portal identity** is created for the number on its first verification and a **Tenant session** starts. The code sender is an interface; this ticket ships a fake for tests and a dev-only sender that writes the code to the server log, so the flow can be clicked on `:3000` with no provider. Signed in, the tenant lands on an empty home page with sign out and "sign out of every device". Adds the `asTenant(phone)` test helper beside `asOperator`, which signs in through this real flow.
 
-**Paint screens 1a and 1b** (`mockups/tenant-portal.html`), in the tenant portal design system. This ticket lands that system for every later portal screen: the `--tp-*` tokens and the portal components (buttons, inputs, cards, chips, sheets, tab bar) move out of the paint into a stylesheet served on the tenant host, beside `/ui/tokens.css` and never mixed into the office shell, and the portal's icons are added to `kernel/ui/icons.ts`. The phone screen shows the brand mark and the language button, one phone field with a fixed `+972` prefix, and **שליחת קוד** with the caption that the code comes by WhatsApp. The code screen shows the number with a שינוי link back, six code cells drawn over one input, and the wait before a new code may be asked for. There is no כניסה button: the sixth digit submits. Signed in, the tenant lands on the empty home page; the tab bar arrives with #277.
+**Paint screens 1a and 1b** (`mockups/tenant-portal.html`), in the tenant portal design system. This ticket lands that system for every later portal screen: the `--tp-*` tokens and the portal components (buttons, inputs, cards, chips, sheets, tab bar) move out of the paint into a stylesheet served on the tenant host, beside `/ui/tokens.css` and never mixed into the office shell, and the portal's icons are added to `kernel/ui/icons.ts`. The phone screen shows the brand mark and the language button, one phone field with a fixed `+972` prefix, and **שליחת קוד** with the caption that the code comes by WhatsApp. The code screen shows the number with a שינוי link back, six code cells drawn over one input, and the wait before a new code may be asked for. There is no כניסה button: the sixth digit submits. Signed in, the tenant lands on the empty home page; the tab bar arrives with #279.
 
 ## Acceptance criteria
 
@@ -40,5 +40,5 @@ A tenant enters their phone number on the tenant host, receives a one-time code 
 
 ## Blocked by
 
-- #269
-- #270
+- #271
+- #272

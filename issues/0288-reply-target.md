@@ -1,18 +1,18 @@
 ---
-number: 286
+number: 288
 title: "Reply target"
 status: open
 labels: [ready-for-agent]
 assignee:
-blocked_by: [279, 285]
-parent: 268
+blocked_by: [281, 287]
+parent: 270
 created: 2026-10-19
 closed:
 ---
 
 ## Parent
 
-#268 — Tenant portal.
+#270 — Tenant portal.
 
 ## What to build
 
@@ -30,5 +30,5 @@ An administrator sets the **Reply target** X in business days. A call counts as 
 
 ## Blocked by
 
-- #279
-- #285
+- #281
+- #287

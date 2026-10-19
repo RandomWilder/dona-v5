@@ -1,18 +1,18 @@
 ---
-number: 269
+number: 271
 title: "Paint the tenant portal"
 status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: []
-parent: 268
+parent: 270
 created: 2026-10-19
 closed: 2026-10-19
 ---
 
 ## Parent
 
-#268 — Tenant portal.
+#270 — Tenant portal.
 
 ## What to build
 
@@ -54,14 +54,18 @@ The tenant side of the paint is restyled to the director's design brief (`Tenant
 
 **Verified.** Every one of the 23 states was rendered through `renderMockup` with the live shell's stylesheet and clicked, in Hebrew, English and Russian, at the desktop pane width and at 320px: no horizontal page scroll and nothing escaping the frame in any state. The report flow was driven by real clicks (FAB → category tile → המשך → step 2), and the switcher highlight follows clicks made inside the phone. `src/dev-mockups.tenant-portal.test.ts` is updated to the new structure (16 pass). The `:3000` click-through itself was not possible from the agent session, because staff sign-in is Google OAuth.
 
-**Once approved.** Issue #268's user stories still describe a separate papers screen and a single-page report form. Those edits wait for the director's yes on this design, and then the `--tp-*` tokens and components become the portal's design system in the app.
+**Once approved.** Issue #270's user stories still describe a separate papers screen and a single-page report form. Those edits wait for the director's yes on this design, and then the `--tp-*` tokens and components become the portal's design system in the app.
 
 ## Comment — 2026-10-19 (tickets follow the paint)
 
-The portal's tickets now name their screens in this paint. #268 records the design system, the tab bar, the papers-in-the-flat-page merge, the tenancy and language sheets and the three-step report, and lists the two brief proposals no ticket builds (ask topic chips, the "ליומן" link). #271 lands the `--tp-*` stylesheet and the portal icons; #277 builds the tenant shell (tab bar, home, tenancy sheet, the עוד tab); the screen tickets #272–#274, #276, #278–#283 and #286 each carry their screen's layout and copy. #275, #284 and #285 are unchanged: office-only or no screen.
+The portal's tickets now name their screens in this paint. #270 records the design system, the tab bar, the papers-in-the-flat-page merge, the tenancy and language sheets and the three-step report, and lists the two brief proposals no ticket builds (ask topic chips, the "ליומן" link). #273 lands the `--tp-*` stylesheet and the portal icons; #279 builds the tenant shell (tab bar, home, tenancy sheet, the עוד tab); the screen tickets #274–#276, #278, #280–#285 and #288 each carry their screen's layout and copy. #277, #286 and #287 are unchanged: office-only or no screen.
 
 ## Comment — 2026-10-19, approved
 
-The director approved the paint as it stands at 1793b64, both in function and in design, and the portal tickets now follow it (63ec7b1). The approval covers the deviations listed in the design-pass comment above, and the brief's colours stay as they are, including the four pairs that measure under 4.5:1. Revisiting those is a design decision for later, not a condition of closing. From here, the `--tp-*` tokens and components are the tenant portal's design system, and #271 lands them in the app.
+The director approved the paint as it stands at 1793b64, both in function and in design, and the portal tickets now follow it (63ec7b1). The approval covers the deviations listed in the design-pass comment above, and the brief's colours stay as they are, including the four pairs that measure under 4.5:1. Revisiting those is a design decision for later, not a condition of closing. From here, the `--tp-*` tokens and components are the tenant portal's design system, and #273 lands them in the app.
 
-The last criterion is not this ticket's to meet. The paint stays in `mockups/` as the reference that the screen tickets name, and #268's phase-0 rule still applies: the last ticket that wires a painted screen deletes the paint and its test, `src/dev-mockups.tenant-portal.test.ts`.
+The last criterion is not this ticket's to meet. The paint stays in `mockups/` as the reference that the screen tickets name, and #270's phase-0 rule still applies: the last ticket that wires a painted screen deletes the paint and its test, `src/dev-mockups.tenant-portal.test.ts`.
+
+## Comment — 2026-10-20
+
+Renumbered from #269 to #271. Main already had a #269. The approval is unchanged.

@@ -1,5 +1,5 @@
 ---
-number: 268
+number: 270
 title: "Tenant portal: sign in by phone, see my flat, my papers and my calls, report or ask"
 status: open
 labels: [ready-for-agent]
@@ -180,7 +180,7 @@ sign-in, the first-visit notice, my flat, my papers, my calls, a call thread, re
 office's building switch and reply-target settings. The director clicks it before any route is wired;
 it is deleted when the flow is wired. Its tenant screens follow the director's design brief of
 19 October 2026 (screens 1a–1o and 1g′): the paint is the reference each screen ticket names, and
-its `--tp-*` tokens and components become the portal's design system, landed by #271.
+its `--tp-*` tokens and components become the portal's design system, landed by #273.
 
 ### Modules
 
@@ -369,3 +369,7 @@ query's shape. Internal refactors must not break a test.
 **Where this was settled:** the grilling of 17–19 October 2026, recorded in ADR-0019 and the
 CONTEXT.md terms Portal, Portal-enabled building, Portal identity, Tenant session, Tenant status,
 Reply target and Business day.
+
+## Comment — 2026-10-20
+
+These tickets were written as #268–#286. Main had already used #268 and #269 for the lease reading, so the set moved up by two and is now #270–#288. The paint stays #271, closed. The next ticket to build is #272.
