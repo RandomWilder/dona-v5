@@ -94,6 +94,7 @@ import type { WorkRunner } from './kernel/work.ts';
 import { listPartyNames } from './parties/contract.ts';
 import { registerPartyDirectoryRoutes } from './party-directory.ts';
 import { registerPolicyRoutes } from './policy/contract.ts';
+import { renderPortalPlaceholder } from './portal-placeholder.ts';
 import {
   parseCategoryForm,
   parseDocumentTypeForm,
@@ -170,6 +171,11 @@ export interface AppDeps {
   identity?: IdentityProvider;
   /** Where Google is told to send an operator back. Absent, the request's own origin is used. */
   staffBaseUrl?: string;
+  /**
+   * The tenant host, hostname only. Absent, `tenant.localhost`, which resolves to this machine
+   * and is never the office. #272.
+   */
+  tenantHost?: string;
   /** The Workspace domain to require, when Dona Dom's answer is known (slice 5.1b). */
   staffHostedDomain?: string | null;
   /**
@@ -229,6 +235,11 @@ export function createH2cServer(
  * and `public` is a word written next to a route rather than the absence of one.
  */
 declare module 'fastify' {
+  interface FastifyContextConfig {
+    /** The tenant audience. #272. `public` is the only value until a tenant permission exists. */
+    tenant?: string;
+  }
+
   interface FastifyInstance {
     /** Every route this application registered and the stance it declared (slice 5.2). */
     stances: RouteStance[];
@@ -241,21 +252,83 @@ export type Stance = Permission | 'public';
 export interface RouteStance {
   method: string;
   url: string;
+  /** Staff stance. Absent on a tenant route. */
   stance: Stance | undefined;
+  /** Which host serves the route. Absent on the probe and the shared assets. */
+  audience?: 'office' | 'tenant';
   csrf?: 'in-body';
 }
 
+/** Hostname the tenant host answers on when nothing else is configured. #272. */
+export const DEFAULT_TENANT_HOST = 'tenant.localhost';
+
+/** The tenant session's cookie. Read on the tenant host only. There is no session behind it yet. */
+export const TENANT_SESSION_COOKIE = 'dona_portal';
+
+type Audience = 'office' | 'tenant';
+
+function hostnameOf(host: string | undefined): string {
+  if (host === undefined) return '';
+  const value = host.trim().toLowerCase();
+  if (value.startsWith('[')) {
+    const end = value.indexOf(']');
+    return end === -1 ? value : value.slice(1, end);
+  }
+  const colon = value.lastIndexOf(':');
+  if (colon > -1 && !value.slice(0, colon).includes(':')) {
+    return value.slice(0, colon);
+  }
+  return value;
+}
+
 /**
- * The two the root owns and serves itself: the liveness probe `infra/smoke.sh` asks, and the
+ * HTTP/1 sends `Host`. HTTP/2, which is what Cloud Run speaks, sends `:authority` and no `Host`.
+ * Either one is the host. A missing one is not the tenant host.
+ */
+export function hostOf(headers: {
+  host?: string | string[];
+  ':authority'?: string | string[];
+}): string {
+  const pick = (value: string | string[] | undefined) =>
+    Array.isArray(value) ? value[0] : value;
+  return hostnameOf(pick(headers.host) ?? pick(headers[':authority']));
+}
+
+function pathOf(url: string): string {
+  const query = url.indexOf('?');
+  return query === -1 ? url : url.slice(0, query);
+}
+
+/**
+ * A route pattern against a request path. One segment per `:name`. Enough for the paths this
+ * application registers; the router itself still does the serving.
+ */
+function patternMatches(pattern: string, path: string): boolean {
+  const left = pattern.split('/');
+  const right = path.split('/');
+  if (left.length !== right.length) return false;
+  for (let i = 0; i < left.length; i++) {
+    const part = left[i] ?? '';
+    if (part.startsWith(':')) continue;
+    if (part !== right[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * The routes the root owns and serves itself: the liveness probe `infra/smoke.sh` asks, and the
  * stylesheet and fonts every screen -- including the login screen, which is served to somebody with
  * no session by definition -- loads before anybody has signed in. They are listed here, in the
  * composition root, rather than declared in `src/kernel/`, because the stance vocabulary is this
- * application's and the kernel is not allowed to know it (SPEC.md rule 9).
+ * application's and the kernel is not allowed to know it (SPEC.md rule 9). They are not an
+ * audience: both hosts serve them. #272.
  */
 const ROOT_PUBLIC = ['/health', '/ui/tokens.css', '/ui/fonts/:file'];
 
-function declaredStance(config: unknown): Stance | undefined {
+/** Absent is not the same as a typo: a typo next to a tenant stance must not boot as tenant. */
+function declaredStance(config: unknown): Stance | 'absent' | 'invalid' {
   const asked = (config as { staff?: unknown } | undefined)?.staff;
+  if (asked === undefined) return 'absent';
   if (asked === 'public') return 'public';
   if (
     typeof asked === 'string' &&
@@ -263,8 +336,20 @@ function declaredStance(config: unknown): Stance | undefined {
   ) {
     return asked as Permission;
   }
-  return undefined;
+  return 'invalid';
 }
+
+/** `public` is the only tenant stance until a tenant permission exists. Anything else is a typo. */
+function declaredTenant(config: unknown): 'public' | 'absent' | 'invalid' {
+  const asked = (config as { tenant?: unknown } | undefined)?.tenant;
+  if (asked === undefined) return 'absent';
+  if (asked === 'public') return 'public';
+  return 'invalid';
+}
+
+const NO_STANCE =
+  'declares no staff stance: ' +
+  "add config: { staff: <permission> } or config: { staff: 'public' } or config: { tenant: 'public' }";
 
 /**
  * **#269. One line for an `unavailable` outcome, so a 503 is explained by the application log.**
@@ -300,10 +385,44 @@ function unexpectedLine(caught: unknown, route: string | undefined): string {
 }
 
 export function buildApp(deps: AppDeps): FastifyInstance {
+  const tenantHost = hostnameOf(deps.tenantHost ?? DEFAULT_TENANT_HOST);
+  const audienceOf = (headers: {
+    host?: string | string[];
+    ':authority'?: string | string[];
+  }): Audience => (hostOf(headers) === tenantHost ? 'tenant' : 'office');
+  // Unconstrained routes (the probe, the assets, Fastify's own 404) still match a request that
+  // carries an audience. A constrained route matches only its own host.
+  //
+  // The strategy is cast because find-my-way's type says the store holds a handler, and the
+  // library stores a bitmap. The cast is the type, not the behaviour.
+  const audienceConstraint = {
+    name: 'audience',
+    mustMatchWhenDerived: false,
+    storage() {
+      const values = new Map<string, unknown>();
+      return {
+        get: (value: string) => values.get(value) ?? null,
+        set: (value: string, stored: unknown) => {
+          values.set(value, stored);
+        },
+      };
+    },
+    deriveConstraint: (req: {
+      headers: { host?: string | string[]; ':authority'?: string | string[] };
+    }) => audienceOf(req.headers),
+    validate(value: unknown) {
+      if (value !== 'office' && value !== 'tenant') {
+        throw new Error('audience must be office or tenant');
+      }
+    },
+  };
   const app = (
     deps.http2
       ? Fastify({
           logger: false,
+          routerOptions: {
+            constraints: { audience: audienceConstraint as never },
+          },
           http2: true,
           serverFactory: (handler) =>
             createH2cServer(
@@ -313,7 +432,12 @@ export function buildApp(deps: AppDeps): FastifyInstance {
               ) => void,
             ),
         })
-      : Fastify({ logger: false })
+      : Fastify({
+          logger: false,
+          routerOptions: {
+            constraints: { audience: audienceConstraint as never },
+          },
+        })
   ) as FastifyInstance;
 
   const staffDeps: StaffDeps = {
@@ -327,9 +451,9 @@ export function buildApp(deps: AppDeps): FastifyInstance {
 
   // **The boot check. Slice 5.2, and it is the whole of the inversion.**
   //
-  // A route that declares neither a permission nor `public` does not serve unguarded -- it stops
-  // the process from starting, with the method and the path in the message. The failure mode this
-  // replaces is the one this system actually had: a route added in a hurry, guarded by nobody,
+  // A route that declares neither a staff stance nor a tenant stance does not serve unguarded -- it
+  // stops the process from starting, with the method and the path in the message. The failure mode
+  // this replaces is the one this system actually had: a route added in a hurry, guarded by nobody,
   // discovered by nobody, and shipped. A test asserting "every route is guarded" can only assert it
   // about the routes that exist the day it is written; this asserts it about the next one.
   //
@@ -339,27 +463,42 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   // without this a test asserting "the public surface is exactly these" would have to keep its own
   // copy of the list — which is the second copy this slice spent its whole design avoiding.
   const stances: RouteStance[] = [];
+  // Tenant paths, recorded here because Fastify's 404 wildcard is unconstrained and would also
+  // match a tenant-audience lookup. The office host uses this list to answer "not found" for a
+  // tenant route without sending a stranger to the staff login.
+  const tenantRoutes: { method: string; url: string }[] = [];
   app.addHook('onRoute', (route) => {
-    if (route.method !== 'HEAD') {
-      stances.push({
-        method: String(route.method),
-        url: route.url,
-        stance: ROOT_PUBLIC.includes(route.url)
-          ? 'public'
-          : declaredStance(route.config),
-        csrf: route.config?.csrf,
-      });
+    const shared = ROOT_PUBLIC.includes(route.url);
+    const tenant = shared ? 'absent' : declaredTenant(route.config);
+    const staff = shared ? 'public' : declaredStance(route.config);
+    const tenantOnly = tenant === 'public' && staff === 'absent';
+    const officeOnly =
+      tenant === 'absent' && staff !== 'absent' && staff !== 'invalid';
+    if (!shared) {
+      if (tenantOnly) {
+        route.constraints = { ...route.constraints, audience: 'tenant' };
+      } else if (officeOnly) {
+        route.constraints = { ...route.constraints, audience: 'office' };
+      } else if (route.method !== 'HEAD') {
+        throw new Error(
+          `route ${String(route.method)} ${route.url} ${NO_STANCE}`,
+        );
+      }
     }
-    if (ROOT_PUBLIC.includes(route.url)) return;
-    // Fastify registers a HEAD beside every GET; it carries the GET's config and needs no second
-    // declaration.
+    if (tenant === 'public') {
+      tenantRoutes.push({ method: String(route.method), url: route.url });
+    }
     if (route.method === 'HEAD') return;
-    if (declaredStance(route.config) === undefined) {
-      throw new Error(
-        `route ${String(route.method)} ${route.url} declares no staff stance: ` +
-          "add config: { staff: <permission> } or config: { staff: 'public' }",
-      );
-    }
+    stances.push({
+      method: String(route.method),
+      url: route.url,
+      stance:
+        tenant === 'public' || staff === 'absent' || staff === 'invalid'
+          ? undefined
+          : staff,
+      audience: shared ? undefined : tenant === 'public' ? 'tenant' : 'office',
+      csrf: route.config?.csrf,
+    });
   });
 
   // **The guard, and it is `requireStaff` -- one function, one call site.**
@@ -367,18 +506,47 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   // `onRequest` rather than `preHandler`, because this hook runs before the body is parsed: an
   // unauthenticated 100 MB upload is refused before a byte of it is read.
   //
-  // A request that matched no route reaches here with no config, and is treated as guarded rather
-  // than as public. That is deliberate: answering 404 to an anonymous caller and a redirect to a
-  // signed-out one would tell a stranger which paths exist.
+  // A request that matched no route reaches here with no config, and on the office host is treated
+  // as guarded rather than as public. That is deliberate: answering 404 to an anonymous caller and
+  // a redirect to a signed-out one would tell a stranger which paths exist. A tenant route on the
+  // office host, and anything on the tenant host that is not a tenant route, is not found — and
+  // the staff cookie is not read on the way there. #272.
   app.addHook('onRequest', async (request, reply) => {
+    const audience = audienceOf(request.headers);
+    if (audience === 'tenant') {
+      const url = request.routeOptions?.url ?? '';
+      const tenant = declaredTenant(request.routeOptions?.config);
+      if (
+        !request.is404 &&
+        (ROOT_PUBLIC.includes(url) || tenant === 'public')
+      ) {
+        return;
+      }
+      // Not a tenant route. Do not read `dona_session`: it is not a session on this host.
+      // Sent here rather than via callNotFound: this hook also runs inside the 404 route, and
+      // calling it again from there would re-enter the hook.
+      return reply.code(missingRoute.status).send(missingRoute.body);
+    }
+    if (request.is404) {
+      const path = pathOf(request.url);
+      const tenantRoute = tenantRoutes.some(
+        (route) =>
+          route.method === request.method && patternMatches(route.url, path),
+      );
+      if (tenantRoute) {
+        return reply.code(missingRoute.status).send(missingRoute.body);
+      }
+    }
+    const declared = declaredStance(request.routeOptions?.config);
     const stance =
-      declaredStance(request.routeOptions?.config) ??
-      (ROOT_PUBLIC.includes(request.routeOptions?.url ?? '')
-        ? 'public'
-        : undefined);
+      declared === 'absent' || declared === 'invalid'
+        ? ROOT_PUBLIC.includes(request.routeOptions?.url ?? '')
+          ? 'public'
+          : undefined
+        : declared;
     // Derived here and nowhere else, so no screen computes it and none of them can compute it
     // differently. A request with no session gets none, and a screen with no token renders no form
-    // that would need one.
+    // that would need one. The tenant cookie is not this cookie, and it is not read here.
     const token = readSessionCookie(request.headers.cookie);
     if (token !== null) request.csrf = csrfTokenFor(token);
     if (stance === 'public') return;
@@ -413,6 +581,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   // and calls the same `verifyCsrf`. The early-end route is one, because the notice letter
   // is a file.
   app.addHook('preHandler', async (request) => {
+    // A staff cookie on the tenant host is not a session, so it does not carry a token to check.
+    if (audienceOf(request.headers) === 'tenant') return;
     if (request.method === 'GET' || request.method === 'HEAD') return;
     const config = request.routeOptions?.config as
       | { csrf?: unknown }
@@ -436,10 +606,13 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   // carries the thrown message. Both render as SPEC.md's { code, message } instead. 1.3 wrote the
   // 503 body as a literal and deliberately left these two out, because writing the shape twice is
   // how two copies drift — kernel/errors.ts owns it from this slice, so they land now.
-  app.setNotFoundHandler(async (_request, reply) => {
+  const missingRoute = (() => {
     const error = new KernelError('not_found', 'route not found');
-    reply.code(httpStatus(error.code));
-    return toErrorBody(error);
+    return { status: httpStatus(error.code), body: toErrorBody(error) };
+  })();
+  app.setNotFoundHandler(async (_request, reply) => {
+    reply.code(missingRoute.status);
+    return missingRoute.body;
   });
 
   const stubHeaders = (reply: {
@@ -509,6 +682,13 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       mayReadParties: can(request.staff?.role ?? null, 'party.read'),
       openCalls: request.openCalls,
     });
+  });
+
+  // The tenant host's home. The office home is the route above; this one exists because the path
+  // is the same and the host is not. #272.
+  app.get('/', { config: { tenant: 'public' } }, async (_request, reply) => {
+    stubHeaders(reply);
+    return renderPortalPlaceholder();
   });
 
   const SETTINGS_READ = { config: { staff: 'estate.read' } } as const;

@@ -258,11 +258,20 @@ byte for byte. A screen that handles its own refusal still does; this is only th
   byte-identically for an unknown account, an account with no role and a disabled one, because the
   alternative is an account-enumeration oracle on the login screen. The role matrix is code and not
   a config row — a deliberate exception to rule 8, argued in `SPEC-staff.md`.
-- **Every route declares its stance, and the default is deny** (slice 5.2). A route carries
-  `config: { staff: <permission> }` or `config: { staff: 'public' }`; one `onRequest` hook in the
-  composition root calls `requireStaff`, and an `onRoute` hook **refuses to start the process** if a
-  route declares neither. Openness is a written word, never what happened when nobody said
-  otherwise.
+- **Every route declares its stance, and the default is deny** (slice 5.2, tenant audience #272).
+  A route carries `config: { staff: <permission> }` or `config: { staff: 'public' }`, or
+  `config: { tenant: 'public' }`. It declares one audience, never both. One `onRequest` hook in the
+  composition root calls `requireStaff` for a staff route, and an `onRoute` hook **refuses to start
+  the process** if a route declares neither a staff stance nor a tenant stance. Openness is a
+  written word, never what happened when nobody said otherwise. **Staff routes are served only on
+  the office host, and tenant routes only on the tenant host** (`TENANT_HOST`, default
+  `tenant.localhost`). A staff route requested on the tenant host is not found, and a tenant route
+  requested on the office host is not found. The liveness probe, the stylesheet and the fonts are
+  the process rather than an audience, and are served on both hosts. **A staff session is not a
+  session on the tenant host, and a tenant session is not a session on the office host.** The staff
+  cookie (`dona_session`) is read only on the office host. The tenant cookie is `dona_portal`. The
+  office host does not read it. There is no tenant session yet, so that cookie is not a session on
+  the tenant host either, and the tenant host serves one placeholder page.
 - **Every write route carries a CSRF token, and the token is derived rather than stored** (slice
   5.2): `sha256('csrf:' + <session token>)`, computed from the `HttpOnly` cookie the request already
   carries, held in no column and defended by the same policy case that forbids a stored token.
@@ -420,9 +429,12 @@ started.
 **The application serves screens from 1.11 and six estate routes from 3.6**: an index at `/`, the buildings
 list, one building, one unit, `/estate/search` and `/estate/expiring` — server-rendered Hebrew RTL off
 `/ui/tokens.css`, with no client JavaScript and, **from slice 5.2, behind the session 5.1 built**.
-Every route in this application declares its own stance — a permission, or the word `public` — and
-an `onRoute` hook refuses to start the process if one declares neither, so the default is deny and
-an open route is open because somebody wrote it down. The root index moved from `src/estate/` to the
+Every route in this application declares its own stance — a staff permission, the word `public`,
+or a tenant stance — and an `onRoute` hook refuses to start the process if one declares neither a
+staff stance nor a tenant stance, so the default is deny on both hosts and an open route is open
+because somebody wrote it down. Staff routes answer only on the office host and tenant routes only
+on the tenant host; the other host is told the route is not found. A staff session cookie is not a
+session on the tenant host, and a tenant session cookie is not a session on the office host. The root index moved from `src/estate/` to the
 composition root in the same slice, because an index of screens stopped being one module's fact the
 week a second module had one. **Slice 5.8 put the settings screen beside that index**, because the
 two catalogues it edits belong to two modules and a third module may not own either. **Slice 5.2b put one chrome on every signed-in screen**, and **5.2c

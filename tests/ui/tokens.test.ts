@@ -72,6 +72,7 @@ import {
   renderPartyDirectory,
   renderPartyProfile,
 } from '../../src/party-directory.ts';
+import { renderPortalPlaceholder } from '../../src/portal-placeholder.ts';
 import { renderSettingsPage } from '../../src/settings-page.ts';
 import {
   renderLoginPage,
@@ -551,6 +552,8 @@ const SCREENS: Array<[string, () => string]> = [
     'root · index, may file',
     () => renderIndexPage({ csrf: CSRF, mayFile: true, mayReadParties: true }),
   ],
+  // #272. The tenant host's one page. No session, no rail.
+  ['tenant · placeholder', () => renderPortalPlaceholder()],
   // #233: the floor under every screen's own refusal, in both frames.
   [
     'root · error page, guest',
@@ -2783,6 +2786,8 @@ describe('shared UI tokens', () => {
       if (name.startsWith('staff · login')) continue;
       // #233: a refusal with no resolved session is drawn in login's guest frame, on purpose.
       if (name === 'root · error page, guest') continue;
+      // #272: the tenant host's placeholder is a guest page. It has no office rail.
+      if (name === 'tenant · placeholder') continue;
       const html = render();
       assert.match(html, /class="ops"/, name);
       assert.match(html, /<aside class="ops-nav"/, name);
