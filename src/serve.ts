@@ -12,6 +12,7 @@ import {
   receiveIncoming,
   SORTER_PROMPT_VERSION,
   sendOutlookReply,
+  sendWhatsappSession,
   startOutlookPolling,
   watchWhatsapp,
   whatsappFrom,
@@ -144,6 +145,9 @@ const app = buildApp({
   http2,
   sorter,
   graphReply: outlook ? (reply) => sendOutlookReply(outlook, reply) : undefined,
+  whatsappReply: whatsapp
+    ? (reply) => sendWhatsappSession(whatsapp, reply)
+    : undefined,
 });
 
 await app.listen({ host, port });

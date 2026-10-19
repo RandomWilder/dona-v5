@@ -468,7 +468,7 @@ async function dutyReplyOwed(
   return true;
 }
 
-function whatsappTo(address: string): string | null {
+export function whatsappTo(address: string): string | null {
   const digits = address.replace(/\D/g, '');
   if (!/^\d{8,15}$/.test(digits)) return null;
   const compact = address.replace(/[\s\-().+]/g, '');

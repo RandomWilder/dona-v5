@@ -174,6 +174,8 @@ export interface CallScreen {
   mayFile?: boolean;
   /** `calls.reply`. The send control is absent otherwise. #256. */
   mayReply?: boolean;
+  /** WhatsApp compose. Null on every other channel. #257. */
+  whatsappWindow?: 'open' | 'closed' | null;
   /** `party.read`. The requester's name links to the profile only then. */
   mayReadParties?: boolean;
   documentTypes?: readonly { typeKey: string; labelHe: string }[];
@@ -341,9 +343,9 @@ const styles = h`<style>
   }
   .calls .brief { display: grid; gap: var(--space-3); }
   .calls .brief .cites { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-2); }
-  .calls .draft { display: grid; gap: var(--space-3); }
+  .calls .draft, .calls .whatsapp { display: grid; gap: var(--space-3); }
   .calls .draft-pair { display: grid; gap: var(--space-3); }
-  .calls .draft textarea { inline-size: 100%; min-block-size: 8rem; }
+  .calls .draft textarea, .calls .whatsapp textarea { inline-size: 100%; min-block-size: 8rem; }
   @media (min-width: 40rem) {
     .calls .draft-pair { grid-template-columns: 1fr 1fr; }
   }
@@ -1911,6 +1913,43 @@ function briefOf(screen: CallScreen): Html {
   </section>`;
 }
 
+function copyControl(): Html {
+  return h`<button class="btn btn-glass" type="button" data-copy>העתקה</button>
+        <script>
+          document.querySelector('[data-copy]').addEventListener('click', function () {
+            var box = document.querySelector('[data-draft]');
+            if (!box) return;
+            navigator.clipboard.writeText(box.value);
+          });
+        </script>`;
+}
+
+function whatsappOf(screen: CallScreen): Html {
+  const open = screen.whatsappWindow;
+  if (open !== 'open' && open !== 'closed') return h``;
+  const maySend = open === 'open' && screen.mayReply === true;
+  const field = h`<label>לדייר
+      <textarea name="body" data-draft rows="4"></textarea>
+    </label>`;
+  const note =
+    open === 'closed'
+      ? h`<p class="lede">חלון 24 השעות נסגר. אפשר להעתיק.</p>`
+      : h``;
+  const body = maySend
+    ? h`<form method="post" action="/calls/${screen.call.id}/send">
+        ${csrfInput(screen.csrf)}
+        ${note}
+        ${field}
+        ${copyControl()}
+        <button class="btn btn-primary" type="submit" data-send>שליחה</button>
+      </form>`
+    : h`${note}${field}${copyControl()}`;
+  return h`<section class="glass sheet whatsapp" data-whatsapp="${open}">
+    <h2>וואטסאפ</h2>
+    ${body}
+  </section>`;
+}
+
 function draftOf(screen: CallScreen): Html {
   const brief = screen.brief;
   if (brief?.kind !== 'ready') return h``;
@@ -1936,14 +1975,7 @@ function draftOf(screen: CallScreen): Html {
     screen.call.sourceChannel === 'EMAIL' &&
     screen.call.state !== 'NEW' &&
     screen.call.state !== 'CLOSED';
-  const copyButton = h`<button class="btn btn-glass" type="button" data-copy>העתקה</button>
-        <script>
-          document.querySelector('[data-copy]').addEventListener('click', function () {
-            var box = document.querySelector('[data-draft]');
-            if (!box) return;
-            navigator.clipboard.writeText(box.value);
-          });
-        </script>`;
+  const copyButton = copyControl();
   const sendField = maySend
     ? h`<label>לדייר
         <textarea name="body" data-draft ${draft.rendering === null ? h`` : h`lang="en" dir="ltr"`}>${draft.text}</textarea>
@@ -2031,6 +2063,7 @@ export function renderCallPage(screen: CallScreen): string {
       ${receiptOf(screen)}
       ${briefOf(screen)}
       ${draftOf(screen)}
+      ${whatsappOf(screen)}
       <div class="call-work">
         ${callAside(screen)}
         <div class="call-record">

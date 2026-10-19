@@ -1,6 +1,7 @@
 // POLICY — the draft reply's exclusions. #255.
 //
 // A guarantor, a WhatsApp call, and a switch that is off never reach the model.
+// The WhatsApp skip is #249's no.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {

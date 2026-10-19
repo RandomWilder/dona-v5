@@ -103,9 +103,22 @@ the channel is EMAIL. Only one recipient is possible. The server resolves it, an
 that inbound message. The page never supplies an address, and a recipient a client posts is
 ignored. The send is one Graph reply through the same Outlook send the duty reply uses. It is a
 timeline row and an audit row. Each row names the actor, the text sent, and whether that text was
-the stored draft or an edit of it. A viewer sees the copy control and not send. PHONE, WALK_IN and
-WHATSAPP are not this command. Production `Mail.Send` is the director's to request; until it is
-granted, the send is verified on the development mailbox only.
+the stored draft or an edit of it. A viewer sees the copy control and not send. PHONE and WALK_IN
+are not this command. A WHATSAPP call is #257. Production `Mail.Send` is the director's to request;
+until it is granted, the send is verified on the development mailbox only.
+
+**#257. WhatsApp, copy and send inside the window.** A WHATSAPP call gets no brief and no draft.
+That exclusion is #249's no, and nothing on this command sends the call's WhatsApp text to the
+model. A person who holds `calls.reply` can send text they typed or pasted, as one session message,
+inside 24 hours of the requester's last inbound message. An echo does not open the window. The
+window closes when those 24 hours have passed. The boundary the server tests is that minute: the
+same minute the next day is refused, and one minute earlier is still open. The box is on an
+identified call that is still open. The send uses the same WhatsApp session send the duty reply
+uses. The server resolves the recipient from that last inbound message. The page never supplies a
+number, and a recipient a client posts is ignored. Outside the window that page offers copy only,
+and the server refuses a send. The send is a timeline row and an audit row. Each names the actor and the text.
+There is no draft to compare, so the row is marked as written. A viewer sees copy and not send.
+Templates outside the window are out of scope (ADR-0017).
 
 **Save this contact** is a command on a call a person identified, when the sender is an email
 address or a WhatsApp number. It adds that address to the requester as a PartyContact, through
