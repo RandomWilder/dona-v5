@@ -35,7 +35,9 @@ Also published, from [outlook-admin-guide-HE.html](outlook-admin-guide-HE.html):
 staging sign-in app, #265) —
 https://claude.ai/artifact/2ar18NzYT3wmWXom1LC824 — and its short version,
 [outlook-admin-guide-lite-HE.html](outlook-admin-guide-lite-HE.html) —
-https://claude.ai/artifact/Rt8nzQyuq2XNY9u124kNYJ
+https://claude.ai/artifact/Rt8nzQyuq2XNY9u124kNYJ — and the sign-in part alone, for the admin who
+only registers the staff sign-in app (#266), [signin-admin-guide-HE.html](signin-admin-guide-HE.html) —
+https://claude.ai/artifact/WtsoRPjbmnrmZG7zL8YbQd
 
 Also published, not stored locally: **Handoff (HTML)** —
 https://claude.ai/code/artifact/328f8a74-b426-4a0e-bb74-2831e098f144 — now behind

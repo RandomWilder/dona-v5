@@ -276,8 +276,8 @@ if [ "$ENV" = staging ]; then
   # secrets when they exist.
   echo "  app:      separate single-tenant registration, delegated openid email only"
   echo "  redirect: ${SERVICE_URL:-<the dona-$ENV service URL, once it exists>}/staff/auth/microsoft/callback"
-  echo "  redirect: http://127.0.0.1:3000/staff/auth/microsoft/callback"
-  echo "  then:     ./infra/set-secret.sh $ENV microsoft-oauth-client-id"
+  echo "  redirect: http://127.0.0.1:3000/staff/auth/microsoft/callback  (Manifest, web.redirectUris: the portal box refuses http loopback)"
+  echo "  then:    ./infra/set-secret.sh $ENV microsoft-oauth-client-id"
   echo "            ./infra/set-secret.sh $ENV microsoft-oauth-client-secret"
   echo "            ./infra/set-secret.sh $ENV microsoft-oauth-tenant-id"
   echo "            ./infra/set-secret.sh $ENV microsoft-oauth-secret-expires   (YYYY-MM-DD)"

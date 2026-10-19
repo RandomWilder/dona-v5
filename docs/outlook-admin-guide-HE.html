@@ -228,7 +228,7 @@
   <header>
     <span class="eyebrow">מדריך למנהל/ת Microsoft 365 · דונה דום</span>
     <h1>חיבור תיבת הדואר למערכת דונה</h1>
-    <p class="lede">מה צריך להגדיר ב-Entra וב-Exchange Online כדי שהמערכת תקרא את המיילים הנכנסים לתיבה אחת, ורק לתיבה הזו. כ-30 דקות עבודה.</p>
+    <p class="lede">מה צריך להגדיר ב-Entra וב-Exchange Online כדי שהמערכת תקרא את המיילים הנכנסים לתיבה אחת, ורק לתיבה הזו. כ-30 דקות עבודה. בסוף המדריך, חלק נפרד וקצר: <a href="#signin-h">כניסה של הצוות עם חשבון Microsoft</a>.</p>
     <dl class="facts">
       <div><dt>תיבה בשלב הזה</dt><dd class="mono">asafv@dona.co.il</dd></div>
       <div><dt>סביבה</dt><dd>בדיקות (Staging)</dd></div>
@@ -446,20 +446,25 @@
         <ol>
           <li>Name: <code>Dona Sign-in - Staging</code></li>
           <li>Supported account types: <strong>Accounts in this organizational directory only (Single tenant)</strong>. לא לסמן חשבונות Microsoft אישיים.</li>
-          <li>Redirect URI: לבחור <strong>Web</strong>, ולהדביק את הכתובת הראשונה:</li>
+          <li>Redirect URI: לבחור <strong>Web</strong>, ולהדביק את הכתובת הראשונה (סביבת הבדיקות):</li>
         </ol>
         <div class="code"><pre>https://dona-staging-r44j24yuaa-zf.a.run.app/staff/auth/microsoft/callback</pre></div>
         <ol start="4">
           <li>Register.</li>
-          <li>Authentication ← Add URI, וגם היא <strong>Web</strong>. להדביק את הכתובת השנייה:</li>
+          <li>את הכתובת השנייה (פיתוח מקומי) מוסיפים דרך <strong>Manifest</strong>, לא דרך מסך Authentication: המסך הזה לא מקבל כתובת <code>http</code> עם <code>127.0.0.1</code>.<br>
+            App registrations ← Dona Sign-in - Staging ← Manifest ← בתוך <code>"web"</code>, ברשימה <code>"redirectUris"</code>, להוסיף את השורה השנייה. התוצאה:</li>
         </ol>
-        <div class="code"><pre>http://127.0.0.1:3000/staff/auth/microsoft/callback</pre></div>
+        <div class="code"><pre>"redirectUris": [
+  "https://dona-staging-r44j24yuaa-zf.a.run.app/staff/auth/microsoft/callback",
+  "http://127.0.0.1:3000/staff/auth/microsoft/callback"
+],</pre></div>
         <ol start="6">
+          <li>Save. במסך Authentication, תחת Web, מופיעות עכשיו שתי הכתובות.</li>
           <li>לא לסמן Access tokens ולא ID tokens תחת Implicit grant and hybrid flows.</li>
           <li>בדף Overview להעתיק שני ערכים: <strong>Application (client) ID</strong> ו-<strong>Directory (tenant) ID</strong>.</li>
         </ol>
         <div class="callout info">
-          שתי הכתובות חייבות להיות זהות תו-בתו, כולל <code>https</code> מול <code>http</code>. כתובת אחת חסרה והכניסה נכשלת.
+          שתי הכתובות חייבות להיות זהות תו-בתו, כולל <code>https</code> מול <code>http</code>, ו-<code>127.0.0.1</code> ולא <code>localhost</code>. כתובת אחת חסרה או שונה והכניסה נכשלת בשגיאה AADSTS50011.
         </div>
       </div>
     </article>
@@ -491,7 +496,7 @@
           <li>Add a permission ← Microsoft Graph ← <strong>Delegated permissions</strong> ← לסמן רק <code>openid</code> ו-<code>email</code>.</li>
           <li>לא להוסיף <code>Mail.Read</code>, <code>Mail.Send</code>, <code>Calendars.Read</code>, או כל הרשאה אחרת.</li>
           <li>לא לעבור ללשונית Application permissions.</li>
-          <li>אם מופיע Grant admin consent עבור שתי אלה בלבד — לאשר. לא להוסיף הרשאה כדי שהכפתור יופיע.</li>
+          <li>ללחוץ <strong>Grant admin consent</strong> ולאשר, כשברשימה רק שתי אלה. כך עובדי הצוות לא יתבקשו לאשר בעצמם, והכניסה עובדת גם אם הארגון חוסם אישור של משתמשים.</li>
         </ol>
         <div class="callout">
           <strong>התוצאה ברשימה:</strong> <code>openid</code> ו-<code>email</code>, מסוג Delegated, וזהו. הרשאת דואר או יומן כאן אסורה. הדואר נשאר באפליקציה השנייה, ושם רק דרך Exchange.

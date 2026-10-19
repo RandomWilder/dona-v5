@@ -1,0 +1,402 @@
+<title>כניסה עם Microsoft לדונה</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@500;600;700&family=Assistant:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Layout: one reading column; each stage is a numbered block with a short intro, then ordered steps; commands sit LTR in their own panels. */
+  :root {
+    direction: rtl;
+    --paper:      #F1F2EF;
+    --surface:    #FBFCF9;
+    --surface-2:  #E7EAE4;
+    --ink:        #17222E;
+    --ink-2:      #4C5964;
+    --ink-3:      #7B858D;
+    --rule:       #C8CFC7;
+    --structure:  #2F5D7C;
+    --signal:     #BF4A22;
+    --good:       #40704F;
+    --tint-structure: rgba(47,93,124,.10);
+    --tint-signal:    rgba(191,74,34,.10);
+    --tint-good:      rgba(64,112,79,.10);
+    --code-bg:    #1D2733;
+    --code-ink:   #E4E9EC;
+    --code-ph:    #F2B28F;
+
+    --font-display: "Heebo", "Helvetica Neue", Arial, sans-serif;
+    --font-body: "Assistant", "Heebo", system-ui, -apple-system, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --measure: 70ch;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:     #121821;
+      --surface:   #19212C;
+      --surface-2: #222C38;
+      --ink:       #E2E7E3;
+      --ink-2:     #A5B0B8;
+      --ink-3:     #79858E;
+      --rule:      #2F3B47;
+      --structure: #7BADD0;
+      --signal:    #EA7F52;
+      --good:      #79B78C;
+      --tint-structure: rgba(123,173,208,.14);
+      --tint-signal:    rgba(234,127,82,.14);
+      --tint-good:      rgba(121,183,140,.13);
+      --code-bg:   #0C1117;
+      --code-ink:  #DCE3E7;
+      --code-ph:   #F0A47E;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:     #121821;
+    --surface:   #19212C;
+    --surface-2: #222C38;
+    --ink:       #E2E7E3;
+    --ink-2:     #A5B0B8;
+    --ink-3:     #79858E;
+    --rule:      #2F3B47;
+    --structure: #7BADD0;
+    --signal:    #EA7F52;
+    --good:      #79B78C;
+    --tint-structure: rgba(123,173,208,.14);
+    --tint-signal:    rgba(234,127,82,.14);
+    --tint-good:      rgba(121,183,140,.13);
+    --code-bg:   #0C1117;
+    --code-ink:  #DCE3E7;
+    --code-ph:   #F0A47E;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 17px;
+    line-height: 1.65;
+  }
+  .page {
+    max-width: 820px;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 48px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 44px;
+  }
+  h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.25; }
+  h1 { font-size: 2.1rem; font-weight: 700; }
+  h2 { font-size: 1.4rem; font-weight: 700; }
+  h3 { font-size: 1.05rem; font-weight: 600; }
+  p { margin: 0; max-width: var(--measure); }
+  ul, ol { margin: 0; padding-inline-start: 1.3em; max-width: var(--measure); }
+  li + li { margin-top: 6px; }
+  code, .mono { font-family: var(--font-mono); font-size: .86em; direction: ltr; unicode-bidi: isolate; }
+  :not(pre) > code { background: var(--surface-2); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+  a { color: var(--structure); }
+  .eyebrow {
+    font-family: var(--font-display);
+    font-size: .78rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+    color: var(--ink-3);
+  }
+
+  header { display: flex; flex-direction: column; gap: 14px; border-bottom: 1px solid var(--rule); padding-bottom: 28px; }
+  .lede { font-size: 1.12rem; color: var(--ink-2); }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 24px; margin-top: 6px; }
+  .facts div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .facts dt { font-size: .8rem; color: var(--ink-3); font-weight: 600; }
+  .facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+
+  .why { display: flex; flex-direction: column; gap: 14px; }
+  .why ul { display: flex; flex-direction: column; gap: 4px; }
+  .why li + li { margin-top: 0; }
+
+  .callout {
+    padding: 14px 18px;
+    border-radius: 8px;
+    border-inline-start: 4px solid var(--signal);
+    background: var(--tint-signal);
+    max-width: var(--measure);
+  }
+  .callout.ok { border-color: var(--good); background: var(--tint-good); }
+  .callout.info { border-color: var(--structure); background: var(--tint-structure); }
+  .callout strong { font-family: var(--font-display); }
+
+  .ids {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .ids p { color: var(--ink-2); font-size: .95rem; }
+  .ids .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .ids label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; font-weight: 600; color: var(--ink-2); }
+  .ids input {
+    font-family: var(--font-mono);
+    font-size: .9rem;
+    direction: ltr;
+    text-align: left;
+    padding: 8px 10px;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--paper);
+    color: var(--ink);
+    width: 100%;
+  }
+  .ids input:focus-visible, button:focus-visible { outline: 2px solid var(--structure); outline-offset: 2px; }
+
+  .stages { display: flex; flex-direction: column; gap: 40px; counter-reset: stage; }
+  .stage { display: grid; grid-template-columns: 44px 1fr; gap: 0 16px; }
+  .stage > .num {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.05rem;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--structure);
+    color: var(--surface);
+    font-variant-numeric: tabular-nums;
+  }
+  .stage.optional > .num { background: var(--surface-2); color: var(--ink); border: 1px solid var(--rule); }
+  .stage > .body { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .stage .intro { color: var(--ink-2); }
+  .stage .where { font-size: .9rem; color: var(--ink-3); }
+  .stage ol > li::marker { font-family: var(--font-display); font-weight: 600; color: var(--structure); }
+
+  .code {
+    position: relative;
+    background: var(--code-bg);
+    border-radius: 8px;
+    direction: ltr;
+    text-align: left;
+  }
+  .code pre {
+    margin: 0;
+    padding: 14px 16px;
+    padding-right: 76px;
+    overflow-x: auto;
+    color: var(--code-ink);
+    font-family: var(--font-mono);
+    font-size: .84rem;
+    line-height: 1.6;
+  }
+  .code .ph { color: var(--code-ph); }
+  .code .cm { color: #8C9AA6; }
+  .copy {
+    position: absolute;
+    top: 8px; right: 8px;
+    font-family: var(--font-body);
+    font-size: .8rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,.25);
+    background: transparent;
+    color: var(--code-ink);
+    cursor: pointer;
+  }
+  .copy:hover { background: rgba(255,255,255,.08); }
+
+  table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+  th, td { text-align: start; padding: 10px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { font-family: var(--font-display); font-weight: 600; font-size: .85rem; color: var(--ink-2); background: var(--surface-2); }
+  td.k { white-space: nowrap; font-weight: 600; }
+
+  .later { display: flex; flex-direction: column; gap: 14px; border-top: 1px solid var(--rule); padding-top: 32px; }
+  footer { color: var(--ink-3); font-size: .85rem; }
+
+  @media (max-width: 520px) {
+    body { font-size: 16px; }
+    h1 { font-size: 1.7rem; }
+    .stage { grid-template-columns: 1fr; gap: 10px; }
+  }
+</style>
+
+<main class="page">
+
+  <header>
+    <span class="eyebrow">מדריך למנהל/ת Microsoft 365 · דונה דום</span>
+    <h1>כניסה של הצוות עם חשבון Microsoft</h1>
+    <p class="lede">מה צריך להגדיר ב-Entra כדי שעובדי דונה דום ייכנסו למערכת דונה עם חשבון ה-Microsoft שלהם, בלי חשבון Google. רישום אפליקציה אחד, בלי PowerShell. כ-10 דקות.</p>
+    <dl class="facts">
+      <div><dt>אפליקציה חדשה</dt><dd class="mono">Dona Sign-in - Staging</dd></div>
+      <div><dt>סביבה</dt><dd>בדיקות (Staging)</dd></div>
+      <div><dt>הרשאות נדרשות</dt><dd>זיהוי בלבד: openid, email</dd></div>
+    </dl>
+  </header>
+
+  <section class="why">
+    <h2>למה ומה</h2>
+    <p>מסך הכניסה של דונה יציג שני כפתורים: Google, כמו היום, ו-Microsoft. כפתור Microsoft מקבל רק חשבון מהארגון של דונה דום, ורק כתובת <code>@dona.co.il</code>. מי שאין לו חשבון צוות במערכת לא נכנס, גם עם חשבון Microsoft תקין.</p>
+    <ul>
+      <li><strong>מזהה בלבד:</strong> המערכת מקבלת מ-Microsoft את כתובת המייל של העובד ואישור שהוא מהארגון. זה הכל.</li>
+      <li><strong>לא נוגעת:</strong> אין גישה לדואר, ליומן, לקבצים או לרשימת המשתמשים.</li>
+      <li><strong>ארגון אחד בלבד:</strong> חשבונות אישיים (outlook.com, hotmail) וחשבונות מארגונים אחרים נדחים.</li>
+      <li><strong>נפרד מחיבור התיבה:</strong> אפליקציה חדשה באותו ארגון. שינוי בכניסה לא יכול לעצור את קליטת המיילים, וסוד הכניסה לא פותח שום תיבה.</li>
+    </ul>
+    <div class="callout">
+      <strong>לא לגעת באפליקציית התיבה.</strong> <code>DevMail-DonaAi</code> נשארת כפי שהיא. לא מוסיפים לה כתובת הפניה, לא מוסיפים לה <code>openid</code>, ולא מוסיפים הרשאת דואר או יומן לרישום החדש.
+    </div>
+  </section>
+
+  <section class="stages" aria-label="רישום כניסה עם Microsoft">
+
+    <article class="stage">
+      <span class="num">0</span>
+      <div class="body">
+        <h2>מה צריך לפני שמתחילים</h2>
+        <p class="intro">הרשאת מנהל אחת, ומשתמש אחד לבדיקה.</p>
+        <ul>
+          <li>תפקיד <strong>Application Administrator</strong> (או Global Administrator) ב-Entra. הוא נדרש גם לאישור ההרשאות בשלב 3.</li>
+          <li>משתמש לבדיקה שכתובת הדואר הראשית שלו ב-<code>dona.co.il</code>. בודקים ב-Entra: Users ← המשתמש ← Properties ← השדה <strong>Email</strong>.</li>
+        </ul>
+        <div class="callout info">
+          המערכת קוראת את השדה Email, לא את שם המשתמש לכניסה. משתמש ששם הכניסה שלו ב-<code>dona.co.il</code> אבל הכתובת הראשית שלו ב-<code>onmicrosoft.com</code> יידחה. לבדיקה בוחרים משתמש שהשדה Email שלו מסתיים ב-<code>@dona.co.il</code>.<br>
+          לכן תיבת הפיילוט של חיבור הדואר לא מתאימה כאן: הכתובת הראשית שלה היא <code>asafv@donail.onmicrosoft.com</code>. זה תקין לקליטת המיילים, ולא משנה שום הגדרה בשלבים הבאים.
+
+        </div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">1</span>
+      <div class="body">
+        <h2>רישום אפליקציה חדשה</h2>
+        <p class="intro">זהות נפרדת, לארגון הזה בלבד. סוג הפלטפורמה הוא Web, כי לאפליקציה יש סוד.</p>
+        <p class="where">entra.microsoft.com ← Applications ← App registrations ← New registration</p>
+        <ol>
+          <li>Name: <code>Dona Sign-in - Staging</code></li>
+          <li>Supported account types: <strong>Accounts in this organizational directory only (Single tenant)</strong>. לא לסמן חשבונות Microsoft אישיים.</li>
+          <li>Redirect URI: לבחור <strong>Web</strong>, ולהדביק את הכתובת הראשונה (סביבת הבדיקות):</li>
+        </ol>
+        <div class="code"><pre>https://dona-staging-r44j24yuaa-zf.a.run.app/staff/auth/microsoft/callback</pre></div>
+        <ol start="4">
+          <li>Register.</li>
+          <li>את הכתובת השנייה (פיתוח מקומי) מוסיפים דרך <strong>Manifest</strong>, לא דרך מסך Authentication: המסך הזה לא מקבל כתובת <code>http</code> עם <code>127.0.0.1</code>.<br>
+            App registrations ← Dona Sign-in - Staging ← Manifest ← בתוך <code>"web"</code>, ברשימה <code>"redirectUris"</code>, להוסיף את השורה השנייה. התוצאה:</li>
+        </ol>
+        <div class="code"><pre>"redirectUris": [
+  "https://dona-staging-r44j24yuaa-zf.a.run.app/staff/auth/microsoft/callback",
+  "http://127.0.0.1:3000/staff/auth/microsoft/callback"
+],</pre></div>
+        <ol start="6">
+          <li>Save. במסך Authentication, תחת Web, מופיעות עכשיו שתי הכתובות.</li>
+          <li>לא לסמן Access tokens ולא ID tokens תחת Implicit grant and hybrid flows.</li>
+          <li>בדף Overview להעתיק את <strong>Application (client) ID</strong>.</li>
+        </ol>
+        <div class="callout info">
+          שתי הכתובות חייבות להיות זהות תו-בתו, כולל <code>https</code> מול <code>http</code>, ו-<code>127.0.0.1</code> ולא <code>localhost</code>. כתובת אחת חסרה או שונה והכניסה נכשלת בשגיאה AADSTS50011.
+        </div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">2</span>
+      <div class="body">
+        <h2>יצירת סוד (Client secret)</h2>
+        <p class="intro">סיסמה נפרדת משל אפליקציית התיבה. המערכת מתריעה 30 יום לפני שהיא פגה, ולכן צריך גם את תאריך התפוגה.</p>
+        <p class="where">App registrations ← Dona Sign-in - Staging ← Certificates &amp; secrets ← New client secret</p>
+        <ol>
+          <li>Description: <code>dona-signin-staging</code></li>
+          <li>Expires: <strong>Custom</strong>, ל-24 חודשים (המקסימום).</li>
+          <li>Add.</li>
+          <li>להעתיק מיד את עמודת <strong>Value</strong> (לא את Secret ID). הערך מוצג פעם אחת בלבד.</li>
+          <li>לרשום את תאריך התפוגה שמופיע בעמודת Expires, בצורת <code>YYYY-MM-DD</code>.</li>
+        </ol>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">3</span>
+      <div class="body">
+        <h2>הרשאות: openid ו-email בלבד</h2>
+        <p class="intro">הרשאה מואצלת (Delegated) בלבד, שתי אלה, ושום דבר אחר. לא דואר, לא יומן, ולא הרשאת Application.</p>
+        <p class="where">App registrations ← Dona Sign-in - Staging ← API permissions</p>
+        <ol>
+          <li>להסיר את <code>User.Read</code> שנוסף כברירת מחדל.</li>
+          <li>Add a permission ← Microsoft Graph ← <strong>Delegated permissions</strong> ← לסמן רק <code>openid</code> ו-<code>email</code>.</li>
+          <li>לא להוסיף <code>Mail.Read</code>, <code>Mail.Send</code>, <code>Calendars.Read</code>, או כל הרשאה אחרת.</li>
+          <li>לא לעבור ללשונית Application permissions.</li>
+          <li>ללחוץ <strong>Grant admin consent</strong> ולאשר, כשברשימה רק שתי אלה. כך עובדי הצוות לא יתבקשו לאשר בעצמם, והכניסה עובדת גם אם הארגון חוסם אישור של משתמשים.</li>
+        </ol>
+        <div class="callout">
+          <strong>התוצאה ברשימה:</strong> <code>openid</code> ו-<code>email</code>, מסוג Delegated, עם סימון ירוק של Granted, וזהו. הרשאת דואר או יומן כאן אסורה. הדואר נשאר באפליקציה השנייה, ושם רק דרך Exchange.
+        </div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <span class="num">4</span>
+      <div class="body">
+        <h2>מסירת הפרטים</h2>
+        <p class="intro">המערכת צריכה חמישה ערכים. שניים כבר אצלנו. שלושה מוסרים מכאן.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ערך</th><th>מאיפה</th><th>סודי?</th></tr></thead>
+            <tbody>
+              <tr><td class="k">Application (client) ID</td><td>שלב 1, Overview</td><td>לא</td></tr>
+              <tr><td class="k">Client secret (Value)</td><td>שלב 2</td><td><strong>כן</strong></td></tr>
+              <tr><td class="k">תאריך תפוגת הסוד</td><td>שלב 2, צורה <span class="mono">YYYY-MM-DD</span></td><td>לא</td></tr>
+              <tr><td class="k">Directory (tenant) ID</td><td>כבר אצלנו: אותו ארגון כמו אפליקציית התיבה (<span class="mono">DevMail-DonaAi</span>). לא שולחים.</td><td>לא</td></tr>
+              <tr><td class="k">דומיין</td><td>כבר מוגדר: <span class="mono">dona.co.il</span>. לא שולחים.</td><td>לא</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ul>
+          <li>את כל שלושת הערכים: בערוץ מאובטח בלבד. לא במייל ולא בצ'אט (לא וואטסאפ ולא Teams).</li>
+          <li>את הסוד: בנפרד משני האחרים. בטלפון, או בקישור חד-פעמי (מנהל סיסמאות או OneTimeSecret).</li>
+          <li>אם האפליקציה נרשמה בארגון אחר מזה של אפליקציית התיבה, לעדכן אותנו ולמסור גם את ה-Directory (tenant) ID.</li>
+        </ul>
+        <div class="callout ok">
+          זהו. אנחנו מכניסים את הערכים לסביבת הבדיקות, ומשתמש הבדיקה משלב 0 נכנס פעם אחת עם Microsoft. עד אז כפתור Microsoft לא מופיע במסך הכניסה.
+        </div>
+      </div>
+    </article>
+
+  </section>
+
+  <section class="later">
+    <h2>להמשך</h2>
+    <ul>
+      <li><strong>סביבת הייצור:</strong> כשהיא קיימת, חוזרים על שלבים 1–4 עם אפליקציה נפרדת (<code>Dona Sign-in - Production</code>) וכתובת הפניה של הייצור, בלי כתובת <code>127.0.0.1</code>.</li>
+      <li><strong>חידוש הסוד:</strong> המערכת תתריע 30 יום לפני התפוגה. החידוש הוא סוד חדש ותאריך חדש (שלבים 2 ו-4). שום דבר אחר לא משתנה.</li>
+      <li><strong>הוספת עובד:</strong> לא נעשית כאן. מנהל במערכת דונה מוסיף את כתובת ה-<code>@dona.co.il</code> ותפקיד במסך הצוות, והכניסה הראשונה של העובד קושרת את החשבון.</li>
+      <li><strong>ביטול הכניסה בכל רגע:</strong> מחיקת ה-Client secret ב-Entra עוצרת את כניסת Microsoft מיד. כניסה עם Google לא מושפעת, וגם לא קליטת המיילים. להסרה מלאה: מחיקת הרישום <code>Dona Sign-in - Staging</code>.</li>
+      <li><strong>גישה מותנית (Conditional Access):</strong> מדיניות כמו אימות דו-שלבי חלה על הכניסה הזו כמו על כל כניסה ל-Microsoft, וזה רצוי. אם יש מדיניות שמגבילה לפי כתובת IP או מכשיר, לעדכן אותנו.</li>
+    </ul>
+  </section>
+
+  <footer>שאלות: אסף וילדר · Microsoft identity platform, OpenID Connect</footer>
+</main>
+
+<script>
+  (function () {
+    document.querySelectorAll('.code').forEach(function (box) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'copy';
+      btn.textContent = 'העתקה';
+      btn.addEventListener('click', function () {
+        var text = box.querySelector('pre').innerText;
+        var done = function () { btn.textContent = 'הועתק'; setTimeout(function () { btn.textContent = 'העתקה'; }, 1500); };
+        var fallback = function () {
+          var r = document.createRange(); r.selectNodeContents(box.querySelector('pre'));
+          var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        };
+        try { navigator.clipboard.writeText(text).then(done, fallback); } catch (e) { fallback(); }
+      });
+      box.appendChild(btn);
+    });
+  })();
+</script>
