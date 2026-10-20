@@ -174,13 +174,13 @@ export interface NoiseMessage {
   bodyHe: string | null;
   sender: string;
   at: Date;
-  channel: 'EMAIL' | 'WHATSAPP';
+  channel: 'EMAIL' | 'WHATSAPP' | 'PORTAL';
   sorterModel: string | null;
   sorterPrompt: string | null;
 }
 
 interface Normalized {
-  sourceChannel: 'EMAIL' | 'WHATSAPP';
+  sourceChannel: 'EMAIL' | 'WHATSAPP' | 'PORTAL';
   externalMessageId: string;
   externalThreadId: string;
   senderAddress: string;
@@ -593,7 +593,7 @@ export async function listNoiseMessages(
     sender_address: string;
     received_at: Date;
     body_he: string | null;
-    source_channel: 'EMAIL' | 'WHATSAPP';
+    source_channel: 'EMAIL' | 'WHATSAPP' | 'PORTAL';
     sorter_model: string | null;
     sorter_prompt: string | null;
   }>(
@@ -631,7 +631,7 @@ export async function rescueNoise(
   const actorId = validId(spec.actorId, 'actor');
   return inTransaction(db, async (tx) => {
     const { rows } = await tx.query<{
-      source_channel: 'EMAIL' | 'WHATSAPP';
+      source_channel: 'EMAIL' | 'WHATSAPP' | 'PORTAL';
       sender_address: string;
       subject: string | null;
       body_original: string;
@@ -729,8 +729,10 @@ function normalize(raw: IncomingMessage): Normalized {
   };
 }
 
-function intakeChannel(value: string): 'EMAIL' | 'WHATSAPP' {
-  if (value === 'EMAIL' || value === 'WHATSAPP') return value;
+function intakeChannel(value: string): 'EMAIL' | 'WHATSAPP' | 'PORTAL' {
+  if (value === 'EMAIL' || value === 'WHATSAPP' || value === 'PORTAL') {
+    return value;
+  }
   throw new KernelError('invalid', 'channel is not an intake channel', {
     field: 'channel',
   });
@@ -1079,8 +1081,8 @@ async function settleVerdict(
     const call = await openIntakeCall(tx, clock, {
       sourceChannel: message.sourceChannel,
       description: heading(
-        verdict?.summary ?? null,
-        message.subject,
+        message.sourceChannel === 'PORTAL' ? null : (verdict?.summary ?? null),
+        message.sourceChannel === 'PORTAL' ? null : message.subject,
         message.body,
       ),
       senderAddress: message.senderAddress,
@@ -1142,6 +1144,19 @@ async function partiesFor(
   clock: Clock,
   message: Normalized,
 ): Promise<string[]> {
+  if (message.sourceChannel === 'PORTAL') {
+    try {
+      const holder = await partyHoldingContact(db, {
+        channel: 'PHONE',
+        value: normalisePhone(message.senderAddress),
+        day: today(clock),
+      });
+      return holder === null ? [] : [holder];
+    } catch (error) {
+      if (error instanceof KernelError && error.code === 'invalid') return [];
+      throw error;
+    }
+  }
   try {
     const rows =
       message.sourceChannel === 'EMAIL'

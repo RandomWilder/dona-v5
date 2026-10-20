@@ -8,6 +8,8 @@ import type { CodeChannel, CodeSender } from '../../channel/contract.ts';
 import { createAuditLog } from '../../kernel/audit.ts';
 import { type Clock, dayIn } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
+import { newId } from '../../kernel/ids.ts';
+import { validId } from '../../kernel/validate.ts';
 import { csrfTokenFor, verifyCsrf } from '../../staff/contract.ts';
 import { describeChallenge, requestCode, verifyCode } from './codes.ts';
 import { portalText } from './copy.ts';
@@ -42,6 +44,8 @@ import {
   sessionCookie,
 } from './sessions.ts';
 import {
+  renderAskPage,
+  renderAskReceived,
   renderCodePage,
   renderHomePage,
   renderNoticeFullPage,
@@ -53,10 +57,26 @@ import {
 
 const TENANT = { config: { tenant: 'public' } } as const;
 
+export interface PortalQuestion {
+  phone: string;
+  key: string;
+  body: string;
+}
+
+export interface PortalReceipt {
+  callNumber: number;
+  duty: string | null;
+}
+
 export interface PortalDeps {
   pool: Pool;
   clock: Clock;
   sender: CodeSender;
+  /**
+   * The intake door. The composition root wires it, because this module
+   * reaching calls or channel pulls a cycle through the building switch.
+   */
+  submitQuestion?: (question: PortalQuestion) => Promise<PortalReceipt | null>;
 }
 
 function secureOf(request: {
@@ -202,6 +222,98 @@ export function registerPortalRoutes(
       ],
     );
   });
+
+  app.get('/ask', TENANT, async (request, reply) => {
+    const session = await signedIn(request);
+    if (session === null) return go(reply, '/', []);
+    return html(
+      reply,
+      renderAskPage({
+        csrf: csrfTokenFor(session.token),
+        submission: newId(clock),
+        question: '',
+        notice: null,
+      }),
+    );
+  });
+
+  app.post('/ask', TENANT, async (request, reply) => {
+    const session = await signedIn(request);
+    if (session === null) return go(reply, '/', []);
+    const submission = field(request.body, 'submission');
+    const question = field(request.body, 'question').trim();
+    if (!csrfOk(session.token, request.body)) {
+      return html(
+        reply,
+        renderAskPage({
+          csrf: csrfTokenFor(session.token),
+          submission: newId(clock),
+          question,
+          notice: 'ask.retry',
+        }),
+      );
+    }
+    let key: string;
+    try {
+      key = validId(submission, 'submission');
+    } catch (error) {
+      if (!(error instanceof KernelError)) throw error;
+      return html(
+        reply,
+        renderAskPage({
+          csrf: csrfTokenFor(session.token),
+          submission: newId(clock),
+          question,
+          notice: 'ask.retry',
+        }),
+      );
+    }
+    if (question === '') {
+      return html(
+        reply,
+        renderAskPage({
+          csrf: csrfTokenFor(session.token),
+          submission: key,
+          question: '',
+          notice: 'ask.empty',
+        }),
+      );
+    }
+    const submit = deps.submitQuestion;
+    if (submit === undefined) {
+      throw new KernelError('unavailable', 'portal intake is not wired');
+    }
+    const receipt = await submit({
+      phone: session.phone,
+      key,
+      body: question,
+    });
+    if (receipt === null) {
+      return html(
+        reply,
+        renderAskPage({
+          csrf: csrfTokenFor(session.token),
+          submission: newId(clock),
+          question,
+          notice: 'ask.retry',
+        }),
+      );
+    }
+    return html(reply, renderAskReceived(receipt));
+  });
+
+  async function signedIn(request: {
+    headers: IncomingHttpHeaders;
+  }): Promise<{ token: string; phone: string } | null> {
+    const token = readPortalCookie(
+      request.headers.cookie,
+      PORTAL_SESSION_COOKIE,
+    );
+    if (token === null) return null;
+    const session = await resolvePortalSession(pool, clock, token);
+    if (session === null) return null;
+    return { token, phone: session.phone };
+  }
 
   app.post('/sign-in', TENANT, async (request, reply) => {
     const secure = secureOf(request);

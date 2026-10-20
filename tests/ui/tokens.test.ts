@@ -73,6 +73,8 @@ import {
   renderPartyProfile,
 } from '../../src/party-directory.ts';
 import {
+  renderAskPage,
+  renderAskReceived,
   renderCodePage,
   renderHomePage,
   renderNoticeFullPage,
@@ -611,6 +613,20 @@ const SCREENS: Array<[string, () => string]> = [
       }),
   ],
   ['portal · home', () => renderHomePage({ csrf: CSRF })],
+  [
+    'portal · ask',
+    () =>
+      renderAskPage({
+        csrf: CSRF,
+        submission: '00000000-0000-4000-8000-000000000278',
+        question: '',
+        notice: null,
+      }),
+  ],
+  [
+    'portal · ask received',
+    () => renderAskReceived({ callNumber: 1043, duty: null }),
+  ],
   [
     'portal · notice',
     () =>

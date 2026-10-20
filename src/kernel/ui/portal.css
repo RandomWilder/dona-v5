@@ -66,7 +66,7 @@ body.portal :where(h1, h2, h3, p, ul, ol, li) {
 body.portal :where(p) {
   text-wrap: pretty;
 }
-body.portal :where(button, input) {
+body.portal :where(button, input, textarea) {
   font: inherit;
   color: inherit;
 }
@@ -641,4 +641,65 @@ body.portal .tp-otp input {
   min-block-size: 44px;
   text-align: start;
   inline-size: 100%;
+}
+
+.tp-ask {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100dvh;
+}
+.tp-ask .tp-body {
+  flex: 1;
+  min-block-size: 0;
+}
+.tp-ask .tp-body > form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-inline-size: 0;
+}
+.tp-bar {
+  display: grid;
+  padding: 4px 20px 8px;
+}
+.tp-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-block-size: 44px;
+}
+.tp-bar-title {
+  flex: 1;
+  min-inline-size: 0;
+}
+.tp-bar-title b {
+  font-size: 16px;
+  font-weight: 700;
+}
+.tp-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--tp-r-md);
+  background: var(--tp-accent-100);
+  color: var(--tp-accent-800);
+  font-size: 14px;
+}
+.tp-textarea {
+  display: block;
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 180px;
+  padding: 14px;
+  border: 1.5px solid var(--tp-line);
+  border-radius: var(--tp-r-md);
+  background: var(--tp-surface);
+  font-size: 15px;
+  line-height: 1.55;
+  resize: vertical;
+}
+.tp-spacer {
+  flex: 1;
 }

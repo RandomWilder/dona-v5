@@ -25,6 +25,7 @@ export const SOURCE_CHANNELS = [
   'EMAIL',
   'PHONE',
   'WALK_IN',
+  'PORTAL',
 ] as const;
 export type SourceChannel = (typeof SOURCE_CHANNELS)[number];
 
@@ -69,7 +70,7 @@ export type CallSender = { kind: 'named'; name: string } | { kind: 'unknown' };
 
 export type SorterLabel = 'call' | 'unsure' | 'noise';
 
-export const INTAKE_CHANNELS = ['WHATSAPP', 'EMAIL'] as const;
+export const INTAKE_CHANNELS = ['WHATSAPP', 'EMAIL', 'PORTAL'] as const;
 export type IntakeChannel = (typeof INTAKE_CHANNELS)[number];
 
 export interface CallParty {
@@ -107,6 +108,8 @@ export interface RequesterCall {
 
 export interface ServiceCall {
   id: string;
+  /** The number the sender is shown. Set when the row is read from the table. */
+  callNumber?: number;
   sourceChannel: SourceChannel;
   state: CallState;
   description: string;
@@ -389,6 +392,7 @@ function pgError(error: unknown): PgError {
 
 interface CallRow {
   service_call_id: string;
+  call_number: number;
   source_channel: SourceChannel;
   state: CallState;
   description: string;
@@ -431,7 +435,7 @@ interface CallRow {
   sorter_prompt: string | null;
 }
 
-const CALL_SELECT = `SELECT sc.service_call_id, sc.source_channel, sc.state, sc.description,
+const CALL_SELECT = `SELECT sc.service_call_id, sc.call_number, sc.source_channel, sc.state, sc.description,
             sc.sender_label, sc.sender_unknown, sc.opened_at, sc.opened_by,
             COALESCE(NULLIF(btrim(opener.display_name), ''), opener.email) AS opener_label,
             sc.requester_party_id, requester.full_name AS requester_name,
@@ -494,6 +498,7 @@ function sorterLabelOf(value: string | null): SorterLabel | null {
 function toCall(row: CallRow): ServiceCall {
   return {
     id: row.service_call_id,
+    callNumber: Number(row.call_number),
     sourceChannel: row.source_channel,
     state: row.state,
     description: row.description,

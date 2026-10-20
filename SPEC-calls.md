@@ -20,14 +20,15 @@ mark, not a state.** The door sets it when the sorter is unsure or fails, and wh
 term matched and the verdict was not a plain call. No command reads the mark to choose a
 transition.
 
-**An intake call** (EMAIL or WHATSAPP) is opened by the door with no staff account. The list shows
-the raw sender address until the requester is identified. A call opened by hand still names
-the staff account that logged it.
+**An intake call** (EMAIL, WHATSAPP or PORTAL) is opened by the door with no staff account. The
+list shows the raw sender address until the requester is identified. A call opened by hand still
+names the staff account that logged it.
 
 **A ServiceCall is any request that reached the office**, on any Source channel: `WHATSAPP · EMAIL ·
-PHONE · WALK_IN`, set once at intake and never changed. A question is a ServiceCall, closed by the
-Answered Exit. The requester is identified, never presumed. A call whose sender resolves to no Party,
-or to more than one, waits in NEW with the raw sender address until a person identifies it.
+PHONE · WALK_IN · PORTAL`, set once at intake and never changed. A question is a ServiceCall, closed
+by the Answered Exit. The requester is identified, never presumed. A call whose sender resolves to
+no Party, or to more than one, waits in NEW with the raw sender address until a person identifies
+it.
 
 **Identifying a sender links that call and nothing else.** Adding the address to the Party as a
 PartyContact is a separate, explicit act ("save this contact") through parties' contract. A
@@ -64,7 +65,8 @@ together with that Building's own paper (documents linked to the Building, not a
 lease). With no live Tenancy, the bound is the Unit of the requester's latest letting — the
 office Unit bound. A service provider is answered from their own provider record and from no
 lease. A requester who is only a guarantor gets no brief; the page says so. A WHATSAPP call
-gets no brief. The on/off switch (`calls.brief`) and the model id (`calls.brief.model`) are
+gets no brief. A PORTAL call's brief does not search a live letting: the question is identified
+by the number and is not attached to a Tenancy. The on/off switch (`calls.brief`) and the model id (`calls.brief.model`) are
 settings rows. When the switch is off, no turn is written and the model is not called.
 
 **#253. A follow-up.** Under the brief, anyone who can read the call can ask a question. The
@@ -154,8 +156,9 @@ channel's. On WHATSAPP that send is one session message on the same conversation
 24-hour window the inbound message opened, once for that call, and it happens before a model reads
 the message. On EMAIL that send is one reply on the same thread, from the shared mailbox, once for
 that call, before a model reads the message. It uses Mail.Send and lands in that mailbox's Sent
-Items. A hand flag sends nothing. PHONE and WALK_IN send nothing. The reply is on the call's
-timeline and audited.
+Items. A hand flag sends nothing. PHONE and WALK_IN send nothing. On PORTAL the same sentence is
+shown to the sender on the confirmation, once, and nothing is sent: the portal has no conversation
+to reply on. The reply is on the call's timeline and audited when a channel sent it.
 
 **Category** is the trade a call needs. It is an admin-managed list of rows, deactivated and never
 deleted, seeded with a placeholder list until Dona Dom supplies theirs. It is distinct from

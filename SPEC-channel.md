@@ -52,6 +52,16 @@ the thread has an open call, on that call's timeline. It is not an incoming requ
 not check it for an emergency, does not sort it, and never opens a call from it. Manual PHONE and
 WALK_IN entries are calls' own and do not pass through this door.
 
+**The portal** posts one question from a signed-in verified number through this same door. The
+message is Source channel `PORTAL`, the form's idempotency key as the external message id and as
+the thread id, the verified number in E.164 as the sender, and the question as the body and as the
+call's description. A second post of that key is the first message again, and it does not open a
+second call. Identification on this channel is the one Party who holds that number today, and it
+records no Tenancy. No party, or a guarantor the link refuses, leaves the call in NEW. The office
+page then marks it as from a verified number. An emergency term flags the call before the sorter,
+the same check as every other channel. The duty sentence is shown on the confirmation and is not
+sent.
+
 **A dev-only form** pushes a fabricated message through this door. When no sorter is
 configured, the person at the form picks the verdict, so the path can be clicked before a key is
 present. When the sorter is configured, the form sends the message through it. The form is

@@ -17,7 +17,9 @@ import {
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import {
+  composeDutyReply,
   countOpenCalls,
+  getCall,
   listCategories,
   readEmergencySettings,
   readResponseGoal,
@@ -30,12 +32,14 @@ import {
 import {
   type CodeSender,
   createUnavailableCodeSender,
+  emergencyMatch,
   fileAttachment as fileCallAttachment,
   graphMailboxFrom,
   listMessagesOnCall,
   listNoiseMessages,
   mailboxWarning,
   readAttachment,
+  receiveIncoming,
   registerChannelRoutes,
   replyOnInboundEmail,
   rescueNoise,
@@ -853,11 +857,6 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   }
 
   const clock = deps.clock ?? systemClock;
-  registerPortalRoutes(app, {
-    pool: deps.pool,
-    clock,
-    sender: deps.codeSender ?? createUnavailableCodeSender(),
-  });
   const objects = deps.objects ?? createMemoryStore();
   const bucket = deps.bucket ?? configuredBucket();
   const pdf = deps.pdf ?? createPdfjsText();
@@ -1067,6 +1066,46 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     objects,
     whatsappFetch: deps.whatsappFetch,
     onCallIdentified,
+  });
+  const portalSorter: Sorter = deps.sorter ?? {
+    async sort() {
+      throw new Error('sorter is not configured');
+    },
+    async translate() {
+      return { bodyHe: null };
+    },
+  };
+  registerPortalRoutes(app, {
+    pool: deps.pool,
+    clock,
+    sender: deps.codeSender ?? createUnavailableCodeSender(),
+    submitQuestion: async (question) => {
+      const outcome = await receiveIncoming(
+        deps.pool,
+        clock,
+        {
+          sorter: portalSorter,
+          matchesEmergency: emergencyMatch(deps.pool),
+          onCallIdentified,
+        },
+        {
+          sourceChannel: 'PORTAL',
+          externalMessageId: question.key,
+          externalThreadId: question.key,
+          senderAddress: question.phone,
+          receivedAt: clock.now(),
+          body: question.body,
+        },
+      );
+      const callId = outcome.kind === 'filtered' ? null : outcome.callId;
+      if (callId === null) return null;
+      const call = await getCall(deps.pool, callId);
+      if (call?.callNumber === undefined) return null;
+      const duty = call.emergency.flagged
+        ? composeDutyReply(await readEmergencySettings(deps.pool))
+        : null;
+      return { callNumber: call.callNumber, duty };
+    },
   });
   registerDocumentRoutes(app, {
     pool: deps.pool,

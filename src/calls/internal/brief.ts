@@ -164,6 +164,7 @@ async function resolveBrief(
   callId: string,
   partyId: string,
   requester: string,
+  channel: string,
 ): Promise<ResolvedBrief | 'guarantor'> {
   const related = await relatedCalls(db, callId, partyId);
   const providers = await listProvidersForParties(db, [partyId]);
@@ -197,7 +198,8 @@ async function resolveBrief(
   const current = roles
     .filter((role) => live(role, day))
     .sort((a, b) => (ROLE_RANK[a.role] ?? 9) - (ROLE_RANK[b.role] ?? 9));
-  const letting = current[0];
+  // A portal question is identified by the number and is not a tenancy's call.
+  const letting = channel === 'PORTAL' ? undefined : current[0];
   if (letting) {
     const facts = {
       requester,
@@ -271,7 +273,14 @@ export async function loadCallBriefPanel(
   const resolved =
     partyId === null
       ? null
-      : await resolveBrief(db, clock, callId, partyId, name);
+      : await resolveBrief(
+          db,
+          clock,
+          callId,
+          partyId,
+          name,
+          call?.sourceChannel ?? '',
+        );
   const facts =
     resolved === null || resolved === 'guarantor' ? null : resolved.facts;
   const drafts = thread.turns.filter((turn) => turn.kind === 'draft');
@@ -307,6 +316,7 @@ async function resolvedFor(
     callId,
     partyId,
     call.requester?.name ?? '',
+    call.sourceChannel,
   );
   if (resolved === 'guarantor') return null;
   return resolved;

@@ -185,6 +185,7 @@ export function renderHomePage(screen: { csrf: string }): string {
         <h1 class="tp-display">${portalText('home.title')}</h1>
         <p class="tp-lede">${portalText('home.empty')}</p>
       </div>
+      <p><a class="tp-text-btn" href="/ask">${portalText('home.ask')}</a></p>
       <p><a class="tp-text-btn" href="/passkeys">${portalText('home.passkeys')}</a></p>
       <form method="post" action="/sign-out">
         ${csrfInput(screen.csrf)}
@@ -443,6 +444,58 @@ export function renderNoticeFullPage(screen: {
         ${paragraphs(screen.terms.body)}
       </article>
       <a class="tp-text-btn" href="/notice">${portalText('notice.back')}</a>
+    </div>`,
+  );
+}
+
+export function renderAskPage(screen: {
+  csrf: string;
+  submission: string;
+  question: string;
+  notice: string | null;
+}): string {
+  return page(
+    portalText('ask.page'),
+    h`<div class="tp-ask">
+      <header class="tp-bar">
+        <div class="tp-bar-row">
+          <span class="tp-bar-title"><b>${portalText('ask.title')}</b></span>
+          <a class="tp-icon-btn" href="/" aria-label="${portalText('ask.close')}">${icon('x', { class: 'tp-i i18' })}</a>
+        </div>
+      </header>
+      <div class="tp-body">
+        ${notice(screen.notice)}
+        <p class="tp-strip">${icon('message-circle', { class: 'tp-i' })}${portalText('ask.strip')}</p>
+        <form method="post" action="/ask">
+          ${csrfInput(screen.csrf)}
+          <input type="hidden" name="submission" value="${screen.submission}" />
+          <label class="tp-label" for="question">${portalText('ask.question')}</label>
+          <textarea class="tp-textarea is-tall" id="question" name="question" required>${screen.question}</textarea>
+          <div class="tp-spacer"></div>
+          <button class="tp-primary" type="submit">${portalText('ask.send')}</button>
+        </form>
+      </div>
+    </div>`,
+  );
+}
+
+export function renderAskReceived(screen: {
+  callNumber: number;
+  duty: string | null;
+}): string {
+  const duty =
+    screen.duty === null
+      ? h``
+      : h`<p class="tp-strip" role="status">${screen.duty}</p>`;
+  return page(
+    portalText('ask.received'),
+    h`<div class="tp-body is-auth is-center">
+      <div class="tp-spacer"></div>
+      <h1 class="tp-display">${portalText('ask.received')}</h1>
+      <p class="tp-lede" data-call-number="${screen.callNumber}">${portalText('ask.number')} <span dir="ltr">${screen.callNumber}</span></p>
+      ${duty}
+      <div class="tp-spacer"></div>
+      <a class="tp-text-btn" href="/">${portalText('ask.back')}</a>
     </div>`,
   );
 }

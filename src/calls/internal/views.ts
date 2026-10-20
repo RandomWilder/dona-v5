@@ -201,6 +201,7 @@ const CHANNEL_HE: Record<SourceChannel, string> = {
   WALK_IN: 'הגעה',
   WHATSAPP: 'וואטסאפ',
   EMAIL: 'דוא״ל',
+  PORTAL: 'פורטל',
 };
 
 const CHANNEL_ICON: Record<SourceChannel, IconName> = {
@@ -208,6 +209,7 @@ const CHANNEL_ICON: Record<SourceChannel, IconName> = {
   PHONE: 'phone',
   WHATSAPP: 'message',
   WALK_IN: 'door',
+  PORTAL: 'message-circle',
 };
 
 function channelTile(channel: SourceChannel): Html {
@@ -2039,6 +2041,16 @@ export function renderCallPage(screen: CallScreen): string {
         <dl class="facts">
           <div><dt>מצב</dt><dd>${CALL_STATE_HE[call.state]}</dd></div>
           <div><dt>נרשם</dt><dd>${bidi(sender)}</dd></div>
+          ${
+            call.callNumber === undefined
+              ? h``
+              : h`<div><dt>מספר</dt><dd data-call-number="${call.callNumber}">${ltr(call.callNumber)}</dd></div>`
+          }
+          ${
+            call.sourceChannel === 'PORTAL' && call.requester === null
+              ? h`<div><dt>שולח</dt><dd data-verified-number="true">מספר מאומת</dd></div>`
+              : h``
+          }
           <div><dt>פונה</dt><dd>${requesterName(screen)}</dd></div>
           <div><dt>קטגוריה</dt><dd>${category}</dd></div>
           ${proposal}

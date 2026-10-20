@@ -17,6 +17,8 @@ export {
   SESSION_IDLE_MS,
 } from './internal/sessions.ts';
 export {
+  renderAskPage,
+  renderAskReceived,
   renderCodePage,
   renderHomePage,
   renderNoticeFullPage,

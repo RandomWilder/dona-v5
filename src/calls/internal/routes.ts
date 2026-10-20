@@ -71,7 +71,7 @@ export interface NoiseMessage {
   body: string;
   sender: string;
   at: Date;
-  channel: 'EMAIL' | 'WHATSAPP';
+  channel: 'EMAIL' | 'WHATSAPP' | 'PORTAL';
   bodyHe: string | null;
 }
 
