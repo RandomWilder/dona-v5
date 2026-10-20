@@ -4,7 +4,7 @@
 import type { IncomingHttpHeaders } from 'node:http';
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
-import type { CodeSender } from '../../channel/contract.ts';
+import type { CodeChannel, CodeSender } from '../../channel/contract.ts';
 import { createAuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
@@ -100,6 +100,45 @@ function waitSeconds(retryAt: Date, now: Date): number {
   return Math.max(0, Math.ceil((retryAt.getTime() - now.getTime()) / 1000));
 }
 
+function preferred(sender: CodeSender): CodeChannel {
+  if (sender.channels.includes('whatsapp')) return 'whatsapp';
+  if (sender.channels.includes('sms')) return 'sms';
+  return 'whatsapp';
+}
+
+function captionKey(sender: CodeSender): string {
+  const whatsapp = sender.channels.includes('whatsapp');
+  const sms = sender.channels.includes('sms');
+  if (whatsapp && sms) return 'sign_in.caption_both';
+  if (sms) return 'sign_in.caption_sms';
+  if (whatsapp) return 'sign_in.caption';
+  return 'sign_in.unavailable';
+}
+
+function otherChannel(
+  sender: CodeSender,
+  sent: CodeChannel,
+): CodeChannel | null {
+  if (
+    !sender.channels.includes('whatsapp') ||
+    !sender.channels.includes('sms')
+  ) {
+    return null;
+  }
+  return sent === 'whatsapp' ? 'sms' : 'whatsapp';
+}
+
+function chosen(
+  sender: CodeSender,
+  raw: string,
+  fallback: CodeChannel,
+): CodeChannel {
+  if ((raw === 'whatsapp' || raw === 'sms') && sender.channels.includes(raw)) {
+    return raw;
+  }
+  return fallback;
+}
+
 export function registerPortalRoutes(
   app: FastifyInstance,
   deps: PortalDeps,
@@ -122,7 +161,11 @@ export function registerPortalRoutes(
     const form = newOpaqueToken();
     return html(
       reply,
-      renderPhonePage({ csrf: csrfTokenFor(form), notice: null }),
+      renderPhonePage({
+        csrf: csrfTokenFor(form),
+        notice: null,
+        caption: captionKey(sender),
+      }),
       [
         formCookie(form, secure),
         ...(token === null
@@ -139,19 +182,28 @@ export function registerPortalRoutes(
       const next = newOpaqueToken();
       return html(
         reply,
-        renderPhonePage({ csrf: csrfTokenFor(next), notice: 'sign_in.retry' }),
+        renderPhonePage({
+          csrf: csrfTokenFor(next),
+          notice: 'sign_in.retry',
+          caption: captionKey(sender),
+        }),
         [formCookie(next, secure)],
       );
     }
     const issued = await requestCode(pool, clock, audit, sender, {
       phoneRaw: field(request.body, 'phone'),
       address: addressOf(request),
+      channel: preferred(sender),
     });
     if ('notice' in issued) {
       const next = newOpaqueToken();
       return html(
         reply,
-        renderPhonePage({ csrf: csrfTokenFor(next), notice: issued.notice }),
+        renderPhonePage({
+          csrf: csrfTokenFor(next),
+          notice: issued.notice,
+          caption: captionKey(sender),
+        }),
         [formCookie(next, secure)],
       );
     }
@@ -178,6 +230,8 @@ export function registerPortalRoutes(
       renderCodePage({
         csrf: csrfTokenFor(challenge),
         phone: described.phone,
+        channel: described.channel,
+        alternate: otherChannel(sender, described.channel),
         waitSeconds: waitSeconds(described.retryAt, clock.now()),
         notice: described.notice,
       }),
@@ -208,6 +262,8 @@ export function registerPortalRoutes(
         renderCodePage({
           csrf: csrfTokenFor(challenge),
           phone: result.phone,
+          channel: result.channel,
+          alternate: otherChannel(sender, result.channel),
           waitSeconds: waitSeconds(result.retryAt, clock.now()),
           notice: result.notice,
         }),
@@ -233,6 +289,11 @@ export function registerPortalRoutes(
     const issued = await requestCode(pool, clock, audit, sender, {
       phoneRaw: described.phone,
       address: addressOf(request),
+      channel: chosen(
+        sender,
+        field(request.body, 'channel'),
+        described.channel,
+      ),
     });
     if ('notice' in issued) {
       return html(
@@ -240,6 +301,8 @@ export function registerPortalRoutes(
         renderCodePage({
           csrf: csrfTokenFor(challenge),
           phone: described.phone,
+          channel: described.channel,
+          alternate: otherChannel(sender, described.channel),
           waitSeconds: waitSeconds(described.retryAt, clock.now()),
           notice: issued.notice,
         }),

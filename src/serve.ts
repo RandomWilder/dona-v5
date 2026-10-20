@@ -125,6 +125,16 @@ if (outlook) {
 // working copy, not a release.
 // The store, the reader and the bucket name reach the app from here and nowhere deeper — the same
 // rule the pool and the clock follow. Slice 3.3, which is the first slice with a route that writes.
+const codeSender = codeSenderFromEnv(process.env, (line) => {
+  console.log(line);
+});
+function portalCodeLabel(): string {
+  if (codeSender.channels.length === 0) return 'unconfigured';
+  const template = (process.env.PORTAL_WHATSAPP_TEMPLATE ?? '').trim();
+  const username = (process.env.INFORU_USERNAME ?? '').trim();
+  if (template === '' && username === '') return 'log';
+  return codeSender.channels.join('+');
+}
 const app = buildApp({
   pool,
   clock,
@@ -141,9 +151,7 @@ const app = buildApp({
   // rather than letting a proxy header decide it.
   staffBaseUrl: process.env.STAFF_BASE_URL,
   tenantHost: process.env.TENANT_HOST ?? DEFAULT_TENANT_HOST,
-  codeSender: codeSenderFromEnv(process.env, (line) => {
-    console.log(line);
-  }),
+  codeSender,
   staffHostedDomain: configuredHostedDomain(),
   devMockups: (process.env.VERSION ?? '0.0.0-dev').endsWith('-dev'),
   http2,
@@ -167,7 +175,7 @@ console.log(
 console.log(`embed: ${embedder.describe()}`);
 console.log(`identity: ${identity.describe()}`);
 console.log(`tenant host: ${process.env.TENANT_HOST ?? DEFAULT_TENANT_HOST}`);
-console.log(`portal codes: ${process.env.K_SERVICE ? 'unconfigured' : 'log'}`);
+console.log(`portal codes: ${portalCodeLabel()}`);
 console.log(`clock: ${clock.zone}`);
 console.log(`outlook: ${outlook ? 'configured' : 'unconfigured'}`);
 console.log(`whatsapp: ${whatsapp ? 'configured' : 'unconfigured'}`);

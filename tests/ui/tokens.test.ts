@@ -557,13 +557,31 @@ const SCREENS: Array<[string, () => string]> = [
     () => renderIndexPage({ csrf: CSRF, mayFile: true, mayReadParties: true }),
   ],
   // #273. Sign-in, the code, and the empty home. No office rail.
-  ['portal · phone', () => renderPhonePage({ csrf: CSRF, notice: null })],
+  [
+    'portal · phone',
+    () =>
+      renderPhonePage({ csrf: CSRF, notice: null, caption: 'sign_in.caption' }),
+  ],
   [
     'portal · code, waiting',
     () =>
       renderCodePage({
         csrf: CSRF,
         phone: '+972500000000',
+        channel: 'whatsapp',
+        alternate: null,
+        waitSeconds: 42,
+        notice: null,
+      }),
+  ],
+  [
+    'portal · code, sms choice',
+    () =>
+      renderCodePage({
+        csrf: CSRF,
+        phone: '+972500000000',
+        channel: 'whatsapp',
+        alternate: 'sms',
         waitSeconds: 42,
         notice: null,
       }),
@@ -574,6 +592,8 @@ const SCREENS: Array<[string, () => string]> = [
       renderCodePage({
         csrf: CSRF,
         phone: '+972500000000',
+        channel: 'whatsapp',
+        alternate: null,
         waitSeconds: 0,
         notice: 'code.wrong',
       }),

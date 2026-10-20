@@ -306,6 +306,44 @@ body.portal :is(span, b)[dir="ltr"] {
   align-items: center;
   gap: 12px;
 }
+.tp-fallback {
+  margin-block-start: auto;
+}
+.tp-row-text {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+  flex: 1;
+}
+.tp-row-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.tp-well {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 36px;
+  block-size: 36px;
+  border-radius: 11px;
+  background: var(--tp-accent-100);
+  color: var(--tp-accent-700);
+}
+.tp-well.is-40 {
+  inline-size: 40px;
+  block-size: 40px;
+  border-radius: var(--tp-r-sm);
+}
+button.tp-link {
+  flex: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--tp-accent-700);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
 .tp-pill {
   display: inline-flex;
   align-items: center;

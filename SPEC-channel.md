@@ -157,12 +157,42 @@ attachment again is that document, not a second one. A file this system does not
 ## Sign-in codes
 
 The portal asks the channel to deliver a one-time code. The channel does not choose the code,
-store it or check it. A **code sender** is that delivery: `send({ to, code })`, injected the way
-the WhatsApp fetch is. #273 ships no provider. Tests inject a recording sender. `npm run dev`
-uses a log sender that writes the code, and not the number, to the server log, so the flow can
-be clicked with nothing configured. That sender is built only when `K_SERVICE` is unset. Setting
-`PORTAL_CODE_LOG=1` where `K_SERVICE` is set — staging and production — refuses to boot. The
-WhatsApp authentication template and the SMS gateway are #274, and neither is called here.
+store it or check it. A **code sender** is that delivery: `send({ to, code, channel })`, injected
+the way the WhatsApp fetch is. `channel` is `whatsapp` or `sms`. ADR-0013 §5's ban on an SMS code
+is superseded by ADR-0019: a tenant code may go by SMS. Twilio is not the provider.
+
+Two real senders, each off until it is configured:
+
+- **WhatsApp** posts an authentication template on Dona Dom's WhatsApp Business account, using the
+  same Cloud API access token and phone-number id as the adapter. It is on when
+  `PORTAL_WHATSAPP_TEMPLATE`, `WHATSAPP_ACCESS_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID` are all set.
+  The template name is the first of those; the language is Hebrew (`he`). The code is the
+  template's body parameter and its copy-code button parameter. Setting the template name without
+  the other two refuses to boot.
+- **SMS** posts to InforU, where we generate the code
+  (`https://cloud.inforu.co.il/api/v2/Otp/Message/Send`), with HTTP Basic auth. It is on when
+  `INFORU_USERNAME`, `INFORU_TOKEN` and `SMS_SENDER` are all set, and off when none of them is.
+  Setting some but not all refuses to boot. `SMS_SENDER` is at most 11 Latin letters or digits
+  and contains no spaces; anything else refuses to boot. The text is one Hebrew SMS, at most 70
+  characters once the code is filled in. The number is an Israeli mobile in national form
+  (`05` and eight digits); anything else is refused before the request. InforU's IP allowlist is
+  how the gateway rejects a caller it was not told about. That list is configured at InforU, not
+  stored here.
+
+A provider error, from either, is a refusal the tenant can retry. The provider's response is not
+shown and not written to the audit row or the log.
+
+Neither sender is called from a test. Tests inject the fetch. With neither configured, `npm run dev`
+uses a log sender that writes the code, and not the number, to the server log, so the flow can be
+clicked. That sender is built only when `K_SERVICE` is unset. Setting `PORTAL_CODE_LOG=1` where
+`K_SERVICE` is set — staging and production — refuses to boot. A revision with neither real sender
+configured does not fall back to that log: sending is refused.
+
+When only one real sender is configured, that is the only channel, the phone screen does not
+mention the other, and the code screen has no fallback card. When both are, WhatsApp is sent
+first. The code screen then offers SMS as a card at the bottom, not as a switch at the top.
+Choosing it sends a new code by SMS, and the screen's line names SMS. After an SMS send the card
+offers WhatsApp again. The caps below count a code row whichever channel delivered it.
 
 What the portal enforces, and the sender never sees:
 
@@ -178,8 +208,8 @@ What the portal enforces, and the sender never sees:
   number nor the code.
 - Email is not a way to ask for a code.
 
-The phone screen says the code comes by WhatsApp. There is no SMS choice on the code screen until
-a real sender exists.
+The phone screen names the channel the code will use. With both senders configured it names
+WhatsApp and says the next screen can send an SMS instead.
 
 ## Later
 
@@ -193,8 +223,9 @@ traffic, and until then are undecided:
 - what it says about money.
 
 What is settled for that work:
-- **Tenant OTP goes by WhatsApp authentication template only.** There is no SMS fallback and no SMS
-  provider (ADR-0013).
+- **A tenant code goes by WhatsApp authentication template, or by SMS when the tenant chooses it**
+  (ADR-0019, which supersedes ADR-0013 §5). The sign-in section above is that rule. There is no
+  email fallback.
 - **An acknowledgement or feedback message goes only to an identified sender**, and never moves a
   call (foundation rule 3).
 - **Foundation rule 2 is retired** ([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)).

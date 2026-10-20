@@ -22,17 +22,21 @@ Two real implementations of the code sender, each off until it is configured: a 
 
 ## Acceptance criteria
 
-- [ ] SPEC.md's third-party table gains the SMS gateway row (what it receives: a phone number and a code; where it processes; processor terms) before any call to it.
-- [ ] SPEC-channel and ADR-0013 §5's supersession are consistent: a tenant code may go by SMS.
-- [ ] With no real sender configured, staging refuses to start the sign-in flow rather than silently falling back to the dev sender.
-- [ ] With one sender configured, no choice is shown; with both, WhatsApp is sent first and SMS is offered from the code screen's fallback card.
-- [ ] The SMS sender name is at most 11 Latin characters and is configuration.
-- [ ] SMS is sent only to Israeli mobile numbers; the send caps from #273 apply to both senders.
-- [ ] A provider error shows the tenant a retry message and is an audit row; it never reveals the provider's response.
+- [x] SPEC.md's third-party table gains the SMS gateway row (what it receives: a phone number and a code; where it processes; processor terms) before any call to it.
+- [x] SPEC-channel and ADR-0013 §5's supersession are consistent: a tenant code may go by SMS.
+- [x] With no real sender configured, staging refuses to start the sign-in flow rather than silently falling back to the dev sender.
+- [x] With one sender configured, no choice is shown; with both, WhatsApp is sent first and SMS is offered from the code screen's fallback card.
+- [x] The SMS sender name is at most 11 Latin characters and is configuration.
+- [x] SMS is sent only to Israeli mobile numbers; the send caps from #273 apply to both senders.
+- [x] A provider error shows the tenant a retry message and is an audit row; it never reveals the provider's response.
 - [ ] Turning either sender on in staging is the director's step (Meta template and payment method; gateway contract and processor annex), recorded as a comment here when done.
-- [ ] With both senders, the code screen offers SMS only as the bottom fallback card; choosing it sends a new code by SMS and the screen's line names SMS.
-- [ ] With one sender configured, the fallback card is absent and the phone screen's caption does not mention the other channel.
+- [x] With both senders, the code screen offers SMS only as the bottom fallback card; choosing it sends a new code by SMS and the screen's line names SMS.
+- [x] With one sender configured, the fallback card is absent and the phone screen's caption does not mention the other channel.
 
 ## Blocked by
 
 - #273
+
+## Comment — 2026-10-20
+
+Both senders are in, and both stay off until configured. WhatsApp is the authentication template (`PORTAL_WHATSAPP_TEMPLATE` plus the existing Cloud API token and phone-number id). SMS is InforU's client-generated endpoint, Basic auth, `SMS_SENDER` at most 11 Latin characters. A half-set sender refuses to boot. A revision with neither does not fall back to the log. With both, WhatsApp goes first and the code screen's bottom card sends a new code by SMS, then offers WhatsApp again. A provider failure is "נסו שוב" and an audit row whose message is `sender`; the provider body is not in the page or the row. Not called against a live account. Staging stays off until the director mounts the template and the gateway (contract, processor annex, IP allowlist, payment method).

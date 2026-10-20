@@ -2,6 +2,7 @@
 // portal.css. The one script submits the code form on the sixth digit; without it the button
 // under the cells still posts (SPEC.md).
 
+import type { CodeChannel } from '../../channel/contract.ts';
 import { type Html, h } from '../../kernel/ui/html.ts';
 import { icon } from '../../kernel/ui/icons.ts';
 import { csrfInput } from '../../kernel/ui/page.ts';
@@ -46,6 +47,7 @@ function languageSheet(): Html {
 export function renderPhonePage(screen: {
   csrf: string;
   notice: string | null;
+  caption: string;
 }): string {
   return page(
     portalText('sign_in.page'),
@@ -69,7 +71,7 @@ export function renderPhonePage(screen: {
         </div>
         <div class="tp-stack tp-auth-actions">
           <button class="tp-primary" type="submit">${portalText('sign_in.submit')}</button>
-          <p class="tp-caption">${portalText('sign_in.caption')}</p>
+          <p class="tp-caption">${portalText(screen.caption)}</p>
         </div>
       </form>
     </div>`,
@@ -83,9 +85,29 @@ function waitLabel(seconds: number): string {
   return `${minutes}:${rest.toString().padStart(2, '0')}`;
 }
 
+function fallbackCard(screen: {
+  csrf: string;
+  alternate: CodeChannel | null;
+}): Html {
+  if (screen.alternate === null) return h``;
+  const toSms = screen.alternate === 'sms';
+  return h`<form class="tp-card is-row tp-fallback" method="post" action="/sign-in/code/send">
+    ${csrfInput(screen.csrf)}
+    <input type="hidden" name="channel" value="${screen.alternate}" />
+    <span class="tp-well is-40">${icon(toSms ? 'message-square' : 'message-circle', { class: 'tp-i i18' })}</span>
+    <span class="tp-row-text">
+      <b class="tp-row-title">${portalText(toSms ? 'code.fallback_to_sms_title' : 'code.fallback_to_wa_title')}</b>
+      <span class="tp-meta">${portalText(toSms ? 'code.fallback_to_sms_body' : 'code.fallback_to_wa_body')}</span>
+    </span>
+    <button class="tp-link" type="submit">${portalText(toSms ? 'code.fallback_to_sms' : 'code.fallback_to_wa')}</button>
+  </form>`;
+}
+
 export function renderCodePage(screen: {
   csrf: string;
   phone: string;
+  channel: CodeChannel;
+  alternate: CodeChannel | null;
   waitSeconds: number;
   notice: string | null;
 }): string {
@@ -104,7 +126,7 @@ export function renderCodePage(screen: {
       </div>
       <div class="tp-stack">
         <h1 class="tp-display">${portalText('code.title')}</h1>
-        <p class="tp-lede">${portalText('code.sent')} <b dir="ltr">${nationalDisplay(screen.phone)}</b> · <a class="tp-link" href="/">${portalText('code.change')}</a></p>
+        <p class="tp-lede">${portalText(screen.channel === 'sms' ? 'code.sent_sms' : 'code.sent')} <b dir="ltr">${nationalDisplay(screen.phone)}</b> · <a class="tp-link" href="/">${portalText('code.change')}</a></p>
       </div>
       ${notice(screen.notice)}
       <form method="post" action="/sign-in/code" data-portal-code="true">
@@ -117,6 +139,7 @@ export function renderCodePage(screen: {
         <button class="tp-primary" type="submit" data-portal-submit="true">${portalText('code.submit')}</button>
       </form>
       ${again}
+      ${fallbackCard(screen)}
       <script>
         /* dona.portal.code */
         document.querySelectorAll('[data-portal-code]').forEach((form) => {

@@ -154,6 +154,59 @@ describe('policy · portal sign-in codes', () => {
     assert.equal(refusedAtCap, true);
   });
 
+  it('counts an SMS code toward the same daily cap as WhatsApp', async (t) => {
+    const pool = await policyPool();
+    if (pool === null) return t.skip(skipReason);
+    t.after(() => pool.end());
+    await pool.query(
+      `DELETE FROM portal_sign_in_code WHERE phone = '+972521110088' OR client_address = '10.73.1.11'`,
+    );
+    const clock = fixedClock(new Date('2026-10-20T12:00:00.000Z'));
+    const sender = createRecordingCodeSender(['whatsapp', 'sms']);
+    const app = buildApp({
+      pool,
+      clock,
+      version: '9.9.9-test',
+      codeSender: sender,
+    });
+    t.after(() => app.close());
+    const phone = '052-111-0088';
+    let challenge = '';
+    for (let n = 1; n <= 4; n += 1) {
+      if (n > 1) clock.advance(61_000);
+      const sent = await send(app, phone, '10.73.1.11');
+      assert.equal(sent.statusCode, 303, `send ${n}`);
+      challenge =
+        pairNamed(sent.headers['set-cookie'], 'dona_portal_code') ?? challenge;
+    }
+    clock.advance(61_000);
+    const codePage = await app.inject({
+      method: 'GET',
+      url: '/sign-in/code',
+      headers: { ...HOST, cookie: challenge },
+      remoteAddress: '10.73.1.11',
+    });
+    const sms = await app.inject({
+      method: 'POST',
+      url: '/sign-in/code/send',
+      headers: {
+        ...HOST,
+        cookie: challenge,
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      payload: `channel=sms&csrf=${csrfOf(codePage.body)}`,
+      remoteAddress: '10.73.1.11',
+    });
+    assert.equal(sms.statusCode, 303);
+    assert.equal(sender.sent.length, 5);
+    assert.equal(sender.sent.filter((row) => row.channel === 'sms').length, 1);
+    clock.advance(61_000);
+    const capped = await send(app, phone, '10.73.1.11');
+    assert.equal(capped.statusCode, 200);
+    assert.match(capped.body, /לא ניתן לשלוח עוד קוד היום/);
+    assert.equal(sender.sent.length, 5);
+  });
+
   it('does not take a tenant session on the office host', async (t) => {
     const pool = await policyPool();
     if (pool === null) return t.skip(skipReason);

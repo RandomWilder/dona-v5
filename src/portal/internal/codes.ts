@@ -2,7 +2,7 @@
 // delivers; this file is the only place that knows whether the digits were right.
 import { createHash, randomBytes, randomInt } from 'node:crypto';
 import type { Pool } from 'pg';
-import type { CodeSender } from '../../channel/contract.ts';
+import type { CodeChannel, CodeSender } from '../../channel/contract.ts';
 import type { AuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import { sameValue } from '../../kernel/compare.ts';
@@ -31,6 +31,7 @@ export type CodeNotice =
 export interface IssuedCode {
   challenge: string;
   phone: string;
+  channel: CodeChannel;
   retryAt: Date;
   sent: boolean;
 }
@@ -90,6 +91,7 @@ function sendsForAddress(
 async function auditSend(
   audit: AuditLog,
   outcome: 'ok' | 'error',
+  channel: CodeChannel,
   reason: string | undefined,
   subjectId?: string,
 ): Promise<void> {
@@ -98,7 +100,7 @@ async function auditSend(
       actorKind: 'tenant',
       action: 'portal.code.send',
       subjectId,
-      inputs: reason === undefined ? {} : { reason },
+      inputs: reason === undefined ? { channel } : { reason, channel },
     },
     outcome === 'ok'
       ? { outcome: 'ok' }
@@ -108,9 +110,14 @@ async function auditSend(
 
 interface RecentCode {
   code_id: string;
+  channel: string;
   created_at: Date;
   consumed_at: Date | null;
   expires_at: Date;
+}
+
+function channelOf(value: string): CodeChannel {
+  return value === 'sms' ? 'sms' : 'whatsapp';
 }
 
 type Prepared =
@@ -161,10 +168,11 @@ async function prepareCode(
   audit: AuditLog,
   phone: string,
   address: string,
+  channel: CodeChannel,
 ): Promise<Prepared> {
   const now = clock.now();
   const { rows } = await db.query<RecentCode>(
-    `SELECT code_id, created_at, consumed_at, expires_at
+    `SELECT code_id, channel, created_at, consumed_at, expires_at
        FROM portal_sign_in_code
       WHERE phone = $1
       ORDER BY created_at DESC
@@ -180,22 +188,29 @@ async function prepareCode(
     const live =
       latest.consumed_at === null &&
       latest.expires_at.getTime() > now.getTime();
-    if (!live) return { notice: 'sign_in.wait' };
+    const same = channelOf(latest.channel) === channel;
+    if (!live || !same) return { notice: 'sign_in.wait' };
     const challenge = randomBytes(32).toString('base64url');
     await db.query(
       'UPDATE portal_sign_in_code SET challenge_hash = $2 WHERE code_id = $1',
       [latest.code_id, hashToken(challenge)],
     );
-    return { challenge, phone, retryAt, sent: false };
+    return {
+      challenge,
+      phone,
+      channel: channelOf(latest.channel),
+      retryAt,
+      sent: false,
+    };
   }
 
   const since = new Date(now.getTime() - DAY_MS);
   if ((await sendsForPhone(db, phone, since)) >= SENDS_PER_NUMBER) {
-    await auditSend(audit, 'error', 'number');
+    await auditSend(audit, 'error', channel, 'number');
     return { notice: 'sign_in.capped' };
   }
   if ((await sendsForAddress(db, address, since)) >= SENDS_PER_ADDRESS) {
-    await auditSend(audit, 'error', 'address');
+    await auditSend(audit, 'error', channel, 'address');
     return { notice: 'sign_in.capped' };
   }
 
@@ -207,8 +222,8 @@ async function prepareCode(
   await db.query(
     `INSERT INTO portal_sign_in_code
        (code_id, phone, code_hash, code_salt, client_address, challenge_hash,
-        attempts, created_at, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8)`,
+        attempts, channel, created_at, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9)`,
     [
       codeId,
       phone,
@@ -216,6 +231,7 @@ async function prepareCode(
       salt,
       address,
       hashToken(challenge),
+      channel,
       now,
       expiresAt,
     ],
@@ -228,18 +244,22 @@ export async function requestCode(
   clock: Clock,
   audit: AuditLog,
   sender: CodeSender,
-  input: { phoneRaw: string; address: string },
+  input: { phoneRaw: string; address: string; channel: CodeChannel },
 ): Promise<{ notice: CodeNotice } | IssuedCode> {
   const phone = israeliMobile(input.phoneRaw);
   if (phone === null) return { notice: 'sign_in.not_mobile' };
 
   const prepared = await locked(db, phone, input.address, (tx) =>
-    prepareCode(tx, clock, audit, phone, input.address),
+    prepareCode(tx, clock, audit, phone, input.address, input.channel),
   );
   if (!('deliver' in prepared)) return prepared;
 
   try {
-    await sender.send({ to: phone, code: prepared.code });
+    await sender.send({
+      to: phone,
+      code: prepared.code,
+      channel: input.channel,
+    });
   } catch {
     // The row stays, marked used, so the attempt counts and the minute still applies.
     await db.query(
@@ -250,7 +270,7 @@ export async function requestCode(
       {
         actorKind: 'tenant',
         action: 'portal.code.send',
-        inputs: { reason: 'sender' },
+        inputs: { reason: 'sender', channel: input.channel },
       },
       { outcome: 'error', code: 'unavailable', message: 'sender' },
     );
@@ -264,10 +284,11 @@ export async function requestCode(
         AND consumed_at IS NULL`,
     [phone, prepared.codeId, prepared.now],
   );
-  await auditSend(audit, 'ok', undefined, prepared.codeId);
+  await auditSend(audit, 'ok', input.channel, undefined, prepared.codeId);
   return {
     challenge: prepared.challenge,
     phone,
+    channel: input.channel,
     retryAt: new Date(prepared.now.getTime() + RESEND_WAIT_MS),
     sent: true,
   };
@@ -276,6 +297,7 @@ export async function requestCode(
 interface CodeRow {
   code_id: string;
   phone: string;
+  channel: string;
   code_hash: string;
   code_salt: string;
   attempts: number;
@@ -289,7 +311,8 @@ async function loadCode(
   challenge: string,
 ): Promise<CodeRow | undefined> {
   const { rows } = await db.query<CodeRow>(
-    `SELECT code_id, phone, code_hash, code_salt, attempts, created_at, expires_at, consumed_at
+    `SELECT code_id, phone, channel, code_hash, code_salt, attempts,
+            created_at, expires_at, consumed_at
        FROM portal_sign_in_code
       WHERE challenge_hash = $1`,
     [hashToken(challenge)],
@@ -301,7 +324,12 @@ export async function describeChallenge(
   db: Queryable,
   clock: Clock,
   challenge: string,
-): Promise<{ phone: string; retryAt: Date; notice: CodeNotice | null } | null> {
+): Promise<{
+  phone: string;
+  channel: CodeChannel;
+  retryAt: Date;
+  notice: CodeNotice | null;
+} | null> {
   const row = await loadCode(db, challenge);
   if (row === undefined) return null;
   const now = clock.now();
@@ -311,6 +339,7 @@ export async function describeChallenge(
   else if (row.attempts >= CODE_ATTEMPTS) notice = 'code.exhausted';
   return {
     phone: row.phone,
+    channel: channelOf(row.channel),
     retryAt: new Date(row.created_at.getTime() + RESEND_WAIT_MS),
     notice,
   };
@@ -318,7 +347,13 @@ export async function describeChallenge(
 
 export type VerifyResult =
   | { status: 'missing' }
-  | { status: 'notice'; notice: CodeNotice; phone: string; retryAt: Date }
+  | {
+      status: 'notice';
+      notice: CodeNotice;
+      phone: string;
+      channel: CodeChannel;
+      retryAt: Date;
+    }
   | {
       status: 'signed-in';
       token: string;
@@ -365,7 +400,13 @@ export async function verifyCode(
   const retryAt = new Date(row.created_at.getTime() + RESEND_WAIT_MS);
   const fail = async (notice: CodeNotice): Promise<VerifyResult> => {
     await auditVerify(audit, 'error', notice);
-    return { status: 'notice', notice, phone: row.phone, retryAt };
+    return {
+      status: 'notice',
+      notice,
+      phone: row.phone,
+      channel: channelOf(row.channel),
+      retryAt,
+    };
   };
   if (row.consumed_at !== null) return fail('code.used');
   if (row.expires_at.getTime() <= now.getTime()) return fail('code.expired');

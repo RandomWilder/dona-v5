@@ -5,12 +5,18 @@
 // standby: recorded payloads only, wired to no mailbox.
 
 export { fileAttachment, readAttachment } from './internal/attachments.ts';
-export type { CodeDelivery, CodeSender } from './internal/code-sender.ts';
+export type {
+  CodeChannel,
+  CodeDelivery,
+  CodeSender,
+} from './internal/code-sender.ts';
 export {
   codeSenderFromEnv,
   createLogCodeSender,
   createRecordingCodeSender,
+  createSmsCodeSender,
   createUnavailableCodeSender,
+  createWhatsappCodeSender,
 } from './internal/code-sender.ts';
 export type {
   IncomingAttachment,

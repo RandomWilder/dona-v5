@@ -22,6 +22,12 @@ export const PORTAL_COPY: readonly PortalCopy[] = [
   { key: 'sign_in.prefix', language: 'he', text: '+972' },
   { key: 'sign_in.submit', language: 'he', text: 'שליחת קוד' },
   { key: 'sign_in.caption', language: 'he', text: 'הקוד יגיע בוואטסאפ.' },
+  { key: 'sign_in.caption_sms', language: 'he', text: 'הקוד יגיע במסרון.' },
+  {
+    key: 'sign_in.caption_both',
+    language: 'he',
+    text: 'הקוד יגיע בוואטסאפ. אין וואטסאפ? אפשר לבקש במסרון במסך הבא.',
+  },
   { key: 'sign_in.language', language: 'he', text: 'שפה' },
   { key: 'sign_in.language_title', language: 'he', text: 'שפה' },
   { key: 'sign_in.language_current', language: 'he', text: 'עברית' },
@@ -38,7 +44,7 @@ export const PORTAL_COPY: readonly PortalCopy[] = [
   {
     key: 'sign_in.unavailable',
     language: 'he',
-    text: 'לא ניתן לשלוח קוד כרגע.',
+    text: 'לא ניתן לשלוח קוד כרגע. נסו שוב.',
   },
   {
     key: 'sign_in.wait',
@@ -53,6 +59,29 @@ export const PORTAL_COPY: readonly PortalCopy[] = [
     language: 'he',
     text: 'שלחנו קוד בן 6 ספרות לוואטסאפ של',
   },
+  {
+    key: 'code.sent_sms',
+    language: 'he',
+    text: 'שלחנו קוד בן 6 ספרות במסרון אל',
+  },
+  {
+    key: 'code.fallback_to_sms_title',
+    language: 'he',
+    text: 'לא הגיע בוואטסאפ?',
+  },
+  {
+    key: 'code.fallback_to_sms_body',
+    language: 'he',
+    text: 'שלחו במסרון. עובד גם בלי אינטרנט.',
+  },
+  { key: 'code.fallback_to_sms', language: 'he', text: 'מסרון' },
+  { key: 'code.fallback_to_wa_title', language: 'he', text: 'לא הגיע במסרון?' },
+  {
+    key: 'code.fallback_to_wa_body',
+    language: 'he',
+    text: 'אפשר לחזור לקוד בוואטסאפ.',
+  },
+  { key: 'code.fallback_to_wa', language: 'he', text: 'וואטסאפ' },
   { key: 'code.change', language: 'he', text: 'שינוי' },
   { key: 'code.label', language: 'he', text: 'קוד כניסה, 6 ספרות' },
   { key: 'code.wait', language: 'he', text: 'אפשר לבקש קוד חדש בעוד' },

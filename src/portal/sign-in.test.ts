@@ -137,6 +137,7 @@ describe('portal sign-in', () => {
     assert.match(page.body, /autocomplete="tel-national"/);
     assert.match(page.body, /שליחת קוד/);
     assert.match(page.body, /הקוד יגיע בוואטסאפ/);
+    assert.doesNotMatch(page.body, /מסרון/);
     assert.doesNotMatch(page.body, /type="email"/);
     assert.doesNotMatch(page.body, /<script/);
 
@@ -315,10 +316,10 @@ describe('portal sign-in', () => {
     assert.equal(sender.sent.length, 1);
 
     const down = {
-      kind: 'recording' as const,
+      channels: ['whatsapp'] as const,
       sent: [] as { to: string; code: string }[],
       async send(): Promise<void> {
-        throw new Error('down');
+        throw new Error('provider said TRACE-99');
       },
     };
     const other = '052-000-0192';
@@ -343,6 +344,15 @@ describe('portal sign-in', () => {
     });
     assert.equal(failed.statusCode, 200);
     assert.match(failed.body, /לא ניתן לשלוח קוד כרגע/);
+    assert.equal(failed.body.includes('TRACE-99'), false);
+    const leaked = await pool.query<{ error_message: string; inputs: string }>(
+      `SELECT error_message, inputs::text
+         FROM audit_log
+        WHERE action = 'portal.code.send' AND outcome = 'error' AND at = $1`,
+      [new Date(AT.getTime() + 61_000)],
+    );
+    assert.equal(leaked.rows[0]?.error_message, 'sender');
+    assert.equal(leaked.rows[0]?.inputs.includes('TRACE-99'), false);
     const counted = await pool.query<{ n: string }>(
       `SELECT count(*)::text AS n FROM portal_sign_in_code WHERE phone = $1`,
       ['+972520000192'],
@@ -372,5 +382,114 @@ describe('portal sign-in', () => {
       ['+972520000192'],
     );
     assert.equal(still.rows[0]?.n, '1');
+  });
+
+  it('sends WhatsApp first and offers SMS only as the bottom card', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (pool === null) return t.skip(skipReason);
+    t.after(() => pool.end());
+    await cleanup(pool);
+    const clock = fixedClock(AT);
+    const sender = createRecordingCodeSender(['whatsapp', 'sms']);
+    const app = buildApp({
+      pool,
+      clock,
+      version: '9.9.9-test',
+      codeSender: sender,
+    });
+    t.after(() => app.close());
+
+    const page = await app.inject({ method: 'GET', url: '/', headers: HOST });
+    assert.match(page.body, /הקוד יגיע בוואטסאפ/);
+    assert.match(page.body, /מסרון במסך הבא/);
+    const sent = await app.inject({
+      method: 'POST',
+      url: '/sign-in',
+      headers: {
+        ...HOST,
+        cookie: pairNamed(page.headers['set-cookie'], 'dona_portal_form') ?? '',
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      payload: `phone=${encodeURIComponent(PHONE)}&csrf=${csrfOf(page.body)}`,
+    });
+    assert.equal(sent.statusCode, 303);
+    assert.equal(sender.sent[0]?.channel, 'whatsapp');
+    const challenge =
+      pairNamed(sent.headers['set-cookie'], 'dona_portal_code') ?? '';
+    const codePage = await app.inject({
+      method: 'GET',
+      url: '/sign-in/code',
+      headers: { ...HOST, cookie: challenge },
+    });
+    assert.match(codePage.body, /לוואטסאפ של/);
+    assert.match(codePage.body, /לא הגיע בוואטסאפ\?/);
+    assert.match(codePage.body, /שלחו במסרון\. עובד גם בלי אינטרנט\./);
+    assert.doesNotMatch(codePage.body, /לא הגיע במסרון/);
+    const smsButton = /name="channel" value="sms"/.exec(codePage.body);
+    assert.ok(smsButton);
+
+    clock.advance(61_000);
+    const sms = await app.inject({
+      method: 'POST',
+      url: '/sign-in/code/send',
+      headers: {
+        ...HOST,
+        cookie: challenge,
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      payload: `channel=sms&csrf=${csrfOf(codePage.body)}`,
+    });
+    assert.equal(sms.statusCode, 303);
+    assert.equal(sender.sent[1]?.channel, 'sms');
+    assert.equal(sender.sent.length, 2);
+    const next = pairNamed(sms.headers['set-cookie'], 'dona_portal_code') ?? '';
+    const smsPage = await app.inject({
+      method: 'GET',
+      url: '/sign-in/code',
+      headers: { ...HOST, cookie: next },
+    });
+    assert.match(smsPage.body, /במסרון אל/);
+    assert.match(smsPage.body, /לא הגיע במסרון\?/);
+    assert.match(smsPage.body, /name="channel" value="whatsapp"/);
+    assert.doesNotMatch(smsPage.body, /לא הגיע בוואטסאפ/);
+  });
+
+  it('hides the other channel when only SMS is configured', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (pool === null) return t.skip(skipReason);
+    t.after(() => pool.end());
+    await cleanup(pool);
+    const sender = createRecordingCodeSender(['sms']);
+    const app = buildApp({
+      pool,
+      clock: fixedClock(AT),
+      version: '9.9.9-test',
+      codeSender: sender,
+    });
+    t.after(() => app.close());
+    const page = await app.inject({ method: 'GET', url: '/', headers: HOST });
+    assert.match(page.body, /הקוד יגיע במסרון/);
+    assert.doesNotMatch(page.body, /וואטסאפ/);
+    const sent = await app.inject({
+      method: 'POST',
+      url: '/sign-in',
+      headers: {
+        ...HOST,
+        cookie: pairNamed(page.headers['set-cookie'], 'dona_portal_form') ?? '',
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      payload: `phone=${encodeURIComponent(PHONE)}&csrf=${csrfOf(page.body)}`,
+    });
+    assert.equal(sender.sent[0]?.channel, 'sms');
+    const challenge =
+      pairNamed(sent.headers['set-cookie'], 'dona_portal_code') ?? '';
+    const codePage = await app.inject({
+      method: 'GET',
+      url: '/sign-in/code',
+      headers: { ...HOST, cookie: challenge },
+    });
+    assert.match(codePage.body, /במסרון אל/);
+    assert.doesNotMatch(codePage.body, /וואטסאפ/);
+    assert.doesNotMatch(codePage.body, /לא הגיע/);
   });
 });
