@@ -313,6 +313,14 @@ byte for byte. A screen that handles its own refusal still does; this is only th
   is its own switch, off until the tenant turns it on, and the same switch turns it off. Reading
   the notice is not consent, and the service is not conditional on it or on any opt-in. The
   entry-permission wording is held the same way and is not on this screen.
+- **A building is in the portal only when an administrator has switched it on** (#277). The flag
+  is a column on the building, false until then. The switch is on that building's page in נכסים
+  and needs `portal.switch` (SPEC-staff). Anyone who can open the page sees whether it is on.
+  Turning it on is refused while any current legal text, in any portal language, is still a
+  placeholder, and the page names that text and its language. Nothing is written on that refusal.
+  Turning it on and turning it off are each an audit row naming who and when. The flag is read
+  from the column on the request that needs it. It is not stored on the tenant session, so
+  turning it off is what the tenant's next request sees.
 - **Every write route carries a CSRF token, and the token is derived rather than stored** (slice
   5.2): `sha256('csrf:' + <session token>)`, computed from the `HttpOnly` cookie the request already
   carries, held in no column and defended by the same policy case that forbids a stored token.

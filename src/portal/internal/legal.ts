@@ -5,6 +5,7 @@
 
 import type { Pool } from 'pg';
 import type { Clock } from '../../kernel/clock.ts';
+import type { Queryable } from '../../kernel/db.ts';
 import { newId } from '../../kernel/ids.ts';
 
 export const PORTAL_LANGUAGE = 'he';
@@ -189,4 +190,52 @@ export async function acknowledgeNotice(
     );
   }
   return true;
+}
+
+export interface PlaceholderText {
+  title: string;
+  language: string;
+}
+
+const LANGUAGE_ORDER = ['he', 'en', 'ru'];
+const KIND_ORDER = ['privacy', 'terms', 'entry', 'opt_in'];
+
+/**
+ * The current texts that are still placeholders, in every portal language.
+ * Current is the highest version at or before `now`, the same rule a tenant
+ * request uses. An older placeholder does not count once a later version exists.
+ */
+export async function currentPlaceholderTexts(
+  db: Queryable,
+  now: Date,
+): Promise<PlaceholderText[]> {
+  const { rows } = await db.query<{
+    title: string;
+    language: string;
+    kind: string;
+    opt_in_key: string;
+  }>(
+    `SELECT title, language, kind, opt_in_key
+       FROM (
+         SELECT DISTINCT ON (language, kind, opt_in_key)
+                title, language, kind, opt_in_key, placeholder
+           FROM portal_legal_text
+          WHERE created_at <= $1
+          ORDER BY language, kind, opt_in_key, version DESC
+       ) current
+      WHERE placeholder`,
+    [now],
+  );
+  return rows
+    .sort((left, right) => {
+      const byLanguage =
+        LANGUAGE_ORDER.indexOf(left.language) -
+        LANGUAGE_ORDER.indexOf(right.language);
+      if (byLanguage !== 0) return byLanguage;
+      const byKind =
+        KIND_ORDER.indexOf(left.kind) - KIND_ORDER.indexOf(right.kind);
+      if (byKind !== 0) return byKind;
+      return left.opt_in_key.localeCompare(right.opt_in_key);
+    })
+    .map((row) => ({ title: row.title, language: row.language }));
 }

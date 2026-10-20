@@ -1381,6 +1381,60 @@ function trackFilter(
   </nav>`;
 }
 
+/** #277. What the building page shows for the portal switch. */
+export interface PortalSwitchView {
+  enabled: boolean;
+  /** Holds `portal.switch`. Otherwise the control is shown and cannot be posted. */
+  maySwitch: boolean;
+  csrf: string;
+  /** Current placeholder texts. Empty once the switch may turn on, and while it is on. */
+  blocked: readonly { title: string; language: string }[];
+}
+
+function portalLanguage(language: string): string {
+  if (language === 'he') return 'עברית';
+  if (language === 'en') return 'אנגלית';
+  if (language === 'ru') return 'רוסית';
+  return language;
+}
+
+function portalControl(portal: PortalSwitchView): Html {
+  const checked = portal.enabled ? h`checked` : h``;
+  const input = portal.maySwitch
+    ? h`<input type="checkbox" role="switch" name="enabled" value="on" ${checked} />`
+    : h`<input type="checkbox" role="switch" disabled ${checked} />`;
+  return h`<label class="check">${input}הבניין בפורטל</label>`;
+}
+
+function portalSwitch(buildingId: string, portal: PortalSwitchView): Html {
+  const blocked =
+    !portal.enabled && portal.blocked.length > 0
+      ? h`<p>לא ניתן להדליק את הפורטל כל עוד נוסח משפטי הוא מציין מקום.</p>
+          <ul>${portal.blocked.map(
+            (item) =>
+              h`<li>${item.title} · ${portalLanguage(item.language)}</li>`,
+          )}</ul>`
+      : h``;
+  const note = h`<p class="lede">דייר פעיל רואה את הדירה, את המסמכים ואת הקריאות. כיבוי נכנס לתוקף בבקשה הבאה.</p>`;
+  const control = portalControl(portal);
+  const body = portal.maySwitch
+    ? h`<form method="post" action="/estate/inventory/${buildingId}/portal">
+          ${csrfInput(portal.csrf)}
+          <input type="hidden" name="enabled" value="off" />
+          ${control}
+          ${note}
+          ${blocked}
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">שמירה</button>
+          </div>
+        </form>`
+    : h`${control}${note}${blocked}`;
+  return h`<section class="card glass" aria-labelledby="portal-h">
+    <h2 id="portal-h">פורטל הדיירים</h2>
+    ${body}
+  </section>`;
+}
+
 export function renderInventoryBuildingPage(screen: {
   building: BuildingSummary;
   spaces: readonly InventorySpaceRow[];
@@ -1398,6 +1452,8 @@ export function renderInventoryBuildingPage(screen: {
   retrieval?: OfficeRetrievalView;
   /** #212. Absent is every flat. */
   track?: string | null;
+  /** #277. The portal switch. The page always shows it. */
+  portal: PortalSwitchView;
 }): string {
   const track = screen.track ?? null;
   const visible = track
@@ -1443,6 +1499,7 @@ export function renderInventoryBuildingPage(screen: {
           }
         </div>
       </header>
+      ${portalSwitch(screen.building.building_id, screen.portal)}
       <section class="stat-row" aria-label="סיכום">
         <div class="stat glass"><span class="stat-label">יחידות דיור</span><span class="stat-value">${ltr(unitRows.length)}</span></div>
         <div class="stat glass"><span class="stat-label">מאוכלסות היום</span><span class="stat-value">${ltr(letToday)}</span>${meter(letToday, unitRows.length, `${letToday} מתוך ${unitRows.length}`)}</div>

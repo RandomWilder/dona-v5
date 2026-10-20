@@ -3,6 +3,8 @@
 // document of its own.
 
 export type { CodeNotice } from './internal/codes.ts';
+export type { PlaceholderText } from './internal/legal.ts';
+export { currentPlaceholderTexts } from './internal/legal.ts';
 export type { PortalDeps } from './internal/routes.ts';
 export { registerPortalRoutes } from './internal/routes.ts';
 export {

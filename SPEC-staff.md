@@ -182,6 +182,7 @@ Three roles, and the permission names are the vocabulary the rest of the console
 | `staff.invite` | ✓ | | |
 | `party.national_id.read` | ✓ | | |
 | `calls.reply` | ✓ | ✓ | |
+| `portal.switch` | ✓ | | |
 
 `staff.invite` keeps its name after 5.1b deleted the invite, because the permission names the
 authority — *may add an operator* — and renaming a permission is a schema-shaped change to every
@@ -205,6 +206,8 @@ for a role that holds the permission.
 `party.read` is the אנשי קשר tab (`GET /parties` and `GET /parties/:partyId`, #202). A viewer holds neither it nor `party.write`, so the tab is absent from the rail and both routes refuse. `party.write` guards correcting a party's name and language (`POST /parties/:partyId`, #205), the three contact posts (#206), creating a party by hand (`GET /parties/new` and `POST /parties`, #207), and marking a company a service provider (`POST /parties/:partyId/provider`, #208). An operator who posts a ת.ז. on that create is refused. Writing one stays `party.national_id.read`.
 
 `calls.reply` is ADMIN and OPERATOR (#256). It is the send on an EMAIL call. A viewer does not hold it, so that page offers copy and the route refuses a send.
+
+`portal.switch` is ADMIN only (#277). It is the switch that puts a Building into the portal or takes it out. The building page shows the switch to anyone who can read the building. Posting it without this permission is refused. `estate.write` does not cover it: shaping the estate and deciding what tenants see are different authorities.
 
 `party.national_id.read` is ADMIN only. It was named before it had a reader, because `SPEC.md`'s
 security default says `national_id` is **admin-only, unreachable by any agent tool, and

@@ -441,6 +441,7 @@ describe('estate · the schema is the constraint', () => {
           'handover_date',
           'helka',
           'name',
+          'portal_enabled',
           'project_id',
           'status',
           'warranty_end_date',

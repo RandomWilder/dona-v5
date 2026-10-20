@@ -68,7 +68,7 @@ avoids both.
 **Project sits above Building and is optional** (R15). `Building.project_id` is nullable and nothing
 downstream requires it; `project_code` lives on Project, so the tender code has one home.
 
-## Tables — `src/kernel/migrations/0004_estate.sql`, `0012_assets.sql`, `0064_unit_tenure.sql`, `0065_rental_track.sql` and `0066_flat_markings.sql`
+## Tables — `src/kernel/migrations/0004_estate.sql`, `0012_assets.sql`, `0064_unit_tenure.sql`, `0065_rental_track.sql`, `0066_flat_markings.sql` and `0081_building_portal.sql`
 
 The workbook's 28 columns, plus what enforcement needs — `address_key` on Building and the three
 constant discriminators on Unit, none of which carry a fact. Ids are `uuid`, enums are `text` with a
@@ -78,7 +78,7 @@ written by anything but the injected clock is a second source of truth no test c
 | Table | Columns |
 |---|---|
 | `project` | `project_id` PK · `name` · `project_code` · `tender_ref?` · `status` |
-| `building` | `building_id` PK · `name` · `address_line` · `city` · `project_id?` FK → project · `handover_date` · `warranty_end_date` · `status` · `gush?` · `helka?` · `building_number?` · `address_key` generated, UNIQUE |
+| `building` | `building_id` PK · `name` · `address_line` · `city` · `project_id?` FK → project · `handover_date` · `warranty_end_date` · `status` · `gush?` · `helka?` · `building_number?` · `address_key` generated, UNIQUE · `portal_enabled` (#277) |
 | `space` | `space_id` PK · `building_id` FK → building · `space_kind` · `name` · `floor?` · `access_note?` · `disabled_bay` · `area_sqm?` · `over_parking` |
 | `unit` | `unit_id` PK, FK → space · `unit_number` · `rooms` · `area_sqm?` · `has_mamad` · `parking_space_id?` · `storage_space_id?` · `warranty_end_date?` · `condition_status` · `tenure` · `rental_track` · `flat_type?` · `balcony_sqm?` · `garden_sqm?` · `sukkah_balcony` · `attached_storage?` |
 | `provider` | `provider_id` PK · `name` · `provider_kind` · `party_id` FK → party, NOT NULL, UNIQUE · `party_kind` constant `COMPANY` — #208. A service provider is a company party. |
@@ -984,6 +984,29 @@ against.
 - **`current_tenant`** — foundation rule 1. The scope is a view, never a column; a grep guard over
   `src/kernel/migrations/*.sql` fails the build over the string, and `src/estate/schema.test.ts`
   asserts the absence of all three against `information_schema`.
+
+## The portal switch — #277, `0081_building_portal.sql`
+
+`building.portal_enabled` is false on every building until an administrator turns it on. It is not
+derived and it is not a pilot list: one building is in the portal, another is not, and the column
+is the whole of that fact.
+
+The switch is on the נכסים building page, `GET /estate/inventory/:buildingId`. Anyone who can read
+the building sees whether it is on. Changing it is `POST /estate/inventory/:buildingId/portal`,
+and that route requires `portal.switch` (SPEC-staff). An account without the permission sees the
+same state and cannot post it.
+
+The command refuses to turn the switch on while any **current** legal text, in any portal
+language, is a placeholder. Current is the same rule the portal already uses for what a tenant is
+shown: the highest version of each text whose time is at or before the request, per language. An
+older placeholder does not count once a later version has replaced it. The page names each text
+that still blocks, with its language, and the command writes nothing: not the column, and not an
+audit row.
+
+Turning the switch on, and turning it off, each write one audit row: who, when, and which way.
+Posting the state the building is already in writes nothing. The column is what a later tenant
+request reads. It is not copied onto the tenant session, so turning it off is visible on the next
+request that reads it.
 
 ## Open
 

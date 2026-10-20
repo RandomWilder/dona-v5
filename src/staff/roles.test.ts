@@ -58,6 +58,9 @@ describe('the role matrix is code', () => {
     assert.equal(can('ADMIN', 'calls.reply'), true);
     assert.equal(can('OPERATOR', 'calls.reply'), true);
     assert.equal(can('VIEWER', 'calls.reply'), false);
+    assert.equal(can('ADMIN', 'portal.switch'), true);
+    assert.equal(can('OPERATOR', 'portal.switch'), false);
+    assert.equal(can('VIEWER', 'portal.switch'), false);
   });
 
   it('leaves no permission unheld by any role', () => {

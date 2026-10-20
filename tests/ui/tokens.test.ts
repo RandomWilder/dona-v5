@@ -820,6 +820,12 @@ const SCREENS: Array<[string, () => string]> = [
         documents: [],
         nav: NAV_INVENTORY,
         write: { csrf: CSRF },
+        portal: {
+          enabled: false,
+          maySwitch: true,
+          csrf: CSRF,
+          blocked: [],
+        },
       }),
   ],
   ['estate · one building', () => renderBuildingPage(detail, occupancy, NAV)],
@@ -3799,6 +3805,12 @@ describe('shared UI tokens', () => {
       states: new Map(),
       documents: [],
       nav: NAV_INVENTORY,
+      portal: {
+        enabled: false,
+        maySwitch: false,
+        csrf: CSRF,
+        blocked: [],
+      },
     });
     assert.match(
       html,
