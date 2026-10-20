@@ -131,8 +131,11 @@ here:
   for a role that may file. אנשי קשר is on the rail only for a role that may read parties. The login screen has none of
   those links and no sidebar. **From 5.2d the shell is a phone first:** below 840px the rail is a
   drawer behind a menu control in that same shell, so a new screen inherits the drawer by calling
-  `renderPage` with `nav` and never draws its own. Still no client JavaScript, except the call
-  page's copy control, and only when that call has a draft (SPEC-calls). The drawer's open state is a
+  `renderPage` with `nav` and never draws its own.   Still no client JavaScript, except the call
+  page's copy control, and only when that call has a draft (SPEC-calls), and except the tenant
+  portal's code screen, which submits the form when the sixth digit is entered (#273). That script
+  has no `src`. It only submits. Without it the page shows a submit button, so the sign-in still
+  works. The drawer's open state is a
   checkbox the menu label and the scrim both drive. The viewport is `viewport-fit=cover`. Login
   stays a centred guest card.
 - **Icons are inline SVG drawn from one kernel table, `src/kernel/ui/icons.ts` (#241).** A screen
@@ -267,11 +270,19 @@ byte for byte. A screen that handles its own refusal still does; this is only th
   the office host, and tenant routes only on the tenant host** (`TENANT_HOST`, default
   `tenant.localhost`). A staff route requested on the tenant host is not found, and a tenant route
   requested on the office host is not found. The liveness probe, the stylesheet and the fonts are
-  the process rather than an audience, and are served on both hosts. **A staff session is not a
+  the process rather than an audience, and are served on both hosts. The portal stylesheet
+  (`/ui/portal.css`) is the same kind of asset: it is not the office shell, and a portal page is
+  the only page that links it. **A staff session is not a
   session on the tenant host, and a tenant session is not a session on the office host.** The staff
-  cookie (`dona_session`) is read only on the office host. The tenant cookie is `dona_portal`. The
-  office host does not read it. There is no tenant session yet, so that cookie is not a session on
-  the tenant host either, and the tenant host serves one placeholder page.
+  cookie (`dona_session`) is read only on the office host. The tenant cookie is `dona_portal`.
+  The office host does not read it. It is opaque, `HttpOnly`, `Secure` — omitted only when the
+  request itself is plain http, which is local dev and nothing else — `SameSite=Strict`, and
+  host-only: no `Domain` attribute. The session is a server-side row, `portal_session`, holding
+  the hash of that token and never the token. It lasts 30 days absolutely and 14 days idle, both
+  read from the injected clock. Sign-out revokes the one row. Sign-out of every device revokes
+  every row of that identity and writes an audit row. A **Portal identity** is the verified phone
+  number, created the first time a code for it verifies. It is not a Party and it has no role.
+  The code, the caps and the sender are SPEC-channel's.
 - **Every write route carries a CSRF token, and the token is derived rather than stored** (slice
   5.2): `sha256('csrf:' + <session token>)`, computed from the `HttpOnly` cookie the request already
   carries, held in no column and defended by the same policy case that forbids a stored token.

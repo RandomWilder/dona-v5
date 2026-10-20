@@ -72,7 +72,11 @@ import {
   renderPartyDirectory,
   renderPartyProfile,
 } from '../../src/party-directory.ts';
-import { renderPortalPlaceholder } from '../../src/portal-placeholder.ts';
+import {
+  renderCodePage,
+  renderHomePage,
+  renderPhonePage,
+} from '../../src/portal/contract.ts';
 import { renderSettingsPage } from '../../src/settings-page.ts';
 import {
   renderLoginPage,
@@ -552,8 +556,29 @@ const SCREENS: Array<[string, () => string]> = [
     'root · index, may file',
     () => renderIndexPage({ csrf: CSRF, mayFile: true, mayReadParties: true }),
   ],
-  // #272. The tenant host's one page. No session, no rail.
-  ['tenant · placeholder', () => renderPortalPlaceholder()],
+  // #273. Sign-in, the code, and the empty home. No office rail.
+  ['portal · phone', () => renderPhonePage({ csrf: CSRF, notice: null })],
+  [
+    'portal · code, waiting',
+    () =>
+      renderCodePage({
+        csrf: CSRF,
+        phone: '+972500000000',
+        waitSeconds: 42,
+        notice: null,
+      }),
+  ],
+  [
+    'portal · code, wrong',
+    () =>
+      renderCodePage({
+        csrf: CSRF,
+        phone: '+972500000000',
+        waitSeconds: 0,
+        notice: 'code.wrong',
+      }),
+  ],
+  ['portal · home', () => renderHomePage({ csrf: CSRF })],
   // #233: the floor under every screen's own refusal, in both frames.
   [
     'root · error page, guest',
@@ -2696,7 +2721,12 @@ describe('shared UI tokens', () => {
       const resize =
         /data-split-resize/.test(html) &&
         /dona\.calls\.split-inbox/.test(scripts[0] ?? '');
-      assert.ok(copy || resize, name);
+      // #273. The code screen submits on the sixth digit. SPEC.md names it. The button
+      // stays in the page for a browser with no script.
+      const portalCode =
+        /autocomplete="one-time-code"/.test(html) &&
+        /dona\.portal\.code/.test(scripts[0] ?? '');
+      assert.ok(copy || resize || portalCode, name);
       if (copy) assert.match(html, /data-draft=/, name);
     }
   });
@@ -2786,8 +2816,8 @@ describe('shared UI tokens', () => {
       if (name.startsWith('staff · login')) continue;
       // #233: a refusal with no resolved session is drawn in login's guest frame, on purpose.
       if (name === 'root · error page, guest') continue;
-      // #272: the tenant host's placeholder is a guest page. It has no office rail.
-      if (name === 'tenant · placeholder') continue;
+      // #273: the portal is not the office shell.
+      if (name.startsWith('portal · ')) continue;
       const html = render();
       assert.match(html, /class="ops"/, name);
       assert.match(html, /<aside class="ops-nav"/, name);
@@ -3107,6 +3137,15 @@ describe('shared UI tokens', () => {
     ]);
     for (const [name, render] of SCREENS) {
       const html = render();
+      // #273. The sign-in screen is a phone number. The office rule is about not naming a
+      // household on an office screen.
+      if (name.startsWith('portal · ')) {
+        if (name === 'portal · phone') assert.match(html, /\+972/, name);
+        if (name.startsWith('portal · code')) {
+          assert.match(html, /050-000-0000/, name);
+        }
+        continue;
+      }
       if (MAY_SHOW_A_PHONE.has(name)) {
         assert.match(html, /\+972/, name);
         continue;

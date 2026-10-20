@@ -20,6 +20,7 @@ const fontFiles = [
 // than on each request.
 export function registerUiAssets(app: FastifyInstance): void {
   const tokens = readFileSync(path.join(uiRoot, 'tokens.css'));
+  const portal = readFileSync(path.join(uiRoot, 'portal.css'));
   const fonts = new Map<string, Buffer>(
     fontFiles.map((name) => [
       name,
@@ -33,6 +34,14 @@ export function registerUiAssets(app: FastifyInstance): void {
       .header('cache-control', 'no-cache')
       .header('x-content-type-options', 'nosniff');
     return tokens;
+  });
+
+  app.get('/ui/portal.css', async (_request, reply) => {
+    reply
+      .header('content-type', 'text/css; charset=utf-8')
+      .header('cache-control', 'no-cache')
+      .header('x-content-type-options', 'nosniff');
+    return portal;
   });
 
   app.get('/ui/fonts/:file', async (request, reply) => {

@@ -154,6 +154,33 @@ the file to the unit the isolation join names, when that address is exactly one 
 leaves the document with no tenancy link. A guarantor's contact is not a match. Filing that same
 attachment again is that document, not a second one. A file this system does not store is refused.
 
+## Sign-in codes
+
+The portal asks the channel to deliver a one-time code. The channel does not choose the code,
+store it or check it. A **code sender** is that delivery: `send({ to, code })`, injected the way
+the WhatsApp fetch is. #273 ships no provider. Tests inject a recording sender. `npm run dev`
+uses a log sender that writes the code, and not the number, to the server log, so the flow can
+be clicked with nothing configured. That sender is built only when `K_SERVICE` is unset. Setting
+`PORTAL_CODE_LOG=1` where `K_SERVICE` is set — staging and production — refuses to boot. The
+WhatsApp authentication template and the SMS gateway are #274, and neither is called here.
+
+What the portal enforces, and the sender never sees:
+
+- Six digits, one use, five minutes, five wrong attempts, then the code is dead. Stored as a
+  salted hash. The row holds no column a person could type back in.
+- Sixty seconds before another code to the same number. The page says how long is left, rendered
+  by the server. The control that asks for a new code is on the page only after that wait.
+- Five sends per number and twenty per network address, each in a rolling day, counted from the
+  code rows. A refusal at the cap is still an audit row.
+- An Israeli mobile only: `+972`, then `5`, then eight digits. Anything else is refused before a
+  send, and nothing is stored.
+- Every send and every verify, passed or failed, is an audit row. The row carries neither the
+  number nor the code.
+- Email is not a way to ask for a code.
+
+The phone screen says the code comes by WhatsApp. There is no SMS choice on the code screen until
+a real sender exists.
+
 ## Later
 
 **The agent is a client, not a brain**: scoped tools only, every call audited, and it reaches data

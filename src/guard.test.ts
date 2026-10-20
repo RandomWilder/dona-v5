@@ -126,7 +126,8 @@ describe('every route in the application', () => {
     // **The whole public surface of this system, enumerated.** Every one of them
     // is a route somebody with no session must be able to reach: the liveness probe, the assets the
     // login screen itself loads, the login screen, the redirect to Google, the callback that mints
-    // the first session, the way out, and Meta's WhatsApp webhook. Anything else appearing in this
+    // the first session, the way out, Meta's WhatsApp webhook, and the portal stylesheet the
+    // tenant host loads before a session exists. Anything else appearing in this
     // list is the regression this slice exists to make loud.
     assert.deepEqual(open, [
       'GET /health',
@@ -134,6 +135,7 @@ describe('every route in the application', () => {
       'GET /staff/auth/start',
       'GET /staff/login',
       'GET /ui/fonts/:file',
+      'GET /ui/portal.css',
       'GET /ui/tokens.css',
       'GET /webhooks/whatsapp',
       'POST /staff/logout',

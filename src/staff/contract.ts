@@ -103,6 +103,7 @@ export {
   hashToken,
   mintSession,
   OAUTH_COOKIE,
+  readCookie,
   readSessionCookie,
   resolveSession,
   revokeSession,

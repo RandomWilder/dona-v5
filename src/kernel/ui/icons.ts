@@ -68,6 +68,9 @@ export const ICON_NAMES = [
   'mail',
   'message',
   'door',
+  'globe',
+  'clock',
+  'chevron-right',
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -104,6 +107,10 @@ const drawings: Record<IconName, string> = {
   message:
     '<path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/>',
   door: '<path d="M10 21H2"/><path d="M10 3H7a2 2 0 00-2 2v16"/><path d="M14 12h.01"/><path d="M19 21V5a2 2 0 00-1.675-1.974l-6.163-1.013A1 1 0 0010 3v18a1 1 0 001.124.992z"/><path d="M22 21h-3"/>',
+  globe:
+    '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  'chevron-right': '<path d="m9 18 6-6-6-6"/>',
 };
 
 const WRAPPER =

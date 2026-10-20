@@ -97,9 +97,10 @@ describe('policy · no column in this database holds a bearer token', () => {
     // so the case fails if a later migration renames the hash back to the thing it is a hash of.
     //
     // **It was two columns until slice 5.1b**: staff_invite.token_hash went with the invite when the
-    // credential became Google's, and the only bearer value this system still stores is a session's
-    // (ADR-0005). The count is what makes that a fact rather than a claim — a later table that
-    // starts keeping a token has to come through this case.
+    // credential became Google's, and the bearer values this system stores are sessions
+    // (ADR-0005): the staff session, and the portal session (#273). The count is what makes that
+    // a fact rather than a claim — a later table that starts keeping a token has to come through
+    // this case.
     const pool = await policyPool();
     if (pool === null) return t.skip(skipReason);
     t.after(() => pool.end());
@@ -113,7 +114,7 @@ describe('policy · no column in this database holds a bearer token', () => {
     );
     assert.deepEqual(
       rows.map((row) => row.table_name),
-      ['staff_session'],
+      ['portal_session', 'staff_session'],
     );
   });
 });

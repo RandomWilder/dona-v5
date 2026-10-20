@@ -5,6 +5,7 @@
 import { buildApp, DEFAULT_TENANT_HOST } from './app.ts';
 import { startCallBrief } from './calls/contract.ts';
 import {
+  codeSenderFromEnv,
   createGraphReader,
   createSorter,
   emergencyMatch,
@@ -140,6 +141,9 @@ const app = buildApp({
   // rather than letting a proxy header decide it.
   staffBaseUrl: process.env.STAFF_BASE_URL,
   tenantHost: process.env.TENANT_HOST ?? DEFAULT_TENANT_HOST,
+  codeSender: codeSenderFromEnv(process.env, (line) => {
+    console.log(line);
+  }),
   staffHostedDomain: configuredHostedDomain(),
   devMockups: (process.env.VERSION ?? '0.0.0-dev').endsWith('-dev'),
   http2,
@@ -163,6 +167,7 @@ console.log(
 console.log(`embed: ${embedder.describe()}`);
 console.log(`identity: ${identity.describe()}`);
 console.log(`tenant host: ${process.env.TENANT_HOST ?? DEFAULT_TENANT_HOST}`);
+console.log(`portal codes: ${process.env.K_SERVICE ? 'unconfigured' : 'log'}`);
 console.log(`clock: ${clock.zone}`);
 console.log(`outlook: ${outlook ? 'configured' : 'unconfigured'}`);
 console.log(`whatsapp: ${whatsapp ? 'configured' : 'unconfigured'}`);

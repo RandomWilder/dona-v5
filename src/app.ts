@@ -28,6 +28,8 @@ import {
   upsertCategory,
 } from './calls/contract.ts';
 import {
+  type CodeSender,
+  createUnavailableCodeSender,
   fileAttachment as fileCallAttachment,
   graphMailboxFrom,
   listMessagesOnCall,
@@ -94,7 +96,11 @@ import type { WorkRunner } from './kernel/work.ts';
 import { listPartyNames } from './parties/contract.ts';
 import { registerPartyDirectoryRoutes } from './party-directory.ts';
 import { registerPolicyRoutes } from './policy/contract.ts';
-import { renderPortalPlaceholder } from './portal-placeholder.ts';
+import {
+  PORTAL_SESSION_COOKIE,
+  readPortalCookie,
+  registerPortalRoutes,
+} from './portal/contract.ts';
 import {
   parseCategoryForm,
   parseDocumentTypeForm,
@@ -211,6 +217,11 @@ export interface AppDeps {
   http2?: boolean;
   /** WhatsApp media download. Absent, the webhook calls Meta. */
   whatsappFetch?: WhatsappFetch;
+  /**
+   * Delivers a portal sign-in code. Absent, sends are refused. `serve.ts` passes the log
+   * sender on a laptop and the refusing sender on a revision (#273).
+   */
+  codeSender?: CodeSender;
 }
 
 /**
@@ -262,8 +273,8 @@ export interface RouteStance {
 /** Hostname the tenant host answers on when nothing else is configured. #272. */
 export const DEFAULT_TENANT_HOST = 'tenant.localhost';
 
-/** The tenant session's cookie. Read on the tenant host only. There is no session behind it yet. */
-export const TENANT_SESSION_COOKIE = 'dona_portal';
+/** The tenant session's cookie. Read on the tenant host only. #273. */
+export const TENANT_SESSION_COOKIE = PORTAL_SESSION_COOKIE;
 
 type Audience = 'office' | 'tenant';
 
@@ -323,7 +334,12 @@ function patternMatches(pattern: string, path: string): boolean {
  * application's and the kernel is not allowed to know it (SPEC.md rule 9). They are not an
  * audience: both hosts serve them. #272.
  */
-const ROOT_PUBLIC = ['/health', '/ui/tokens.css', '/ui/fonts/:file'];
+const ROOT_PUBLIC = [
+  '/health',
+  '/ui/tokens.css',
+  '/ui/portal.css',
+  '/ui/fonts/:file',
+];
 
 /** Absent is not the same as a typo: a typo next to a tenant stance must not boot as tenant. */
 function declaredStance(config: unknown): Stance | 'absent' | 'invalid' {
@@ -520,6 +536,11 @@ export function buildApp(deps: AppDeps): FastifyInstance {
         !request.is404 &&
         (ROOT_PUBLIC.includes(url) || tenant === 'public')
       ) {
+        const portalToken = readPortalCookie(
+          request.headers.cookie,
+          PORTAL_SESSION_COOKIE,
+        );
+        if (portalToken !== null) request.csrf = csrfTokenFor(portalToken);
         return;
       }
       // Not a tenant route. Do not read `dona_session`: it is not a session on this host.
@@ -581,8 +602,28 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   // and calls the same `verifyCsrf`. The early-end route is one, because the notice letter
   // is a file.
   app.addHook('preHandler', async (request) => {
-    // A staff cookie on the tenant host is not a session, so it does not carry a token to check.
-    if (audienceOf(request.headers) === 'tenant') return;
+    // A staff cookie on the tenant host is not a session, so it is not read here. The portal
+    // cookie is. Sign-in posts carry no session yet; their token is the form or the challenge,
+    // and those routes check it themselves.
+    if (audienceOf(request.headers) === 'tenant') {
+      if (request.method === 'GET' || request.method === 'HEAD') return;
+      const path = pathOf(request.url);
+      if (path === '/sign-in' || path.startsWith('/sign-in/')) return;
+      const portalConfig = request.routeOptions?.config as
+        | { csrf?: unknown }
+        | undefined;
+      if (portalConfig?.csrf === 'in-body') return;
+      const portalToken = readPortalCookie(
+        request.headers.cookie,
+        PORTAL_SESSION_COOKIE,
+      );
+      if (portalToken === null) return;
+      verifyCsrf(
+        portalToken,
+        (request.body as Record<string, unknown> | undefined)?.[CSRF_FIELD],
+      );
+      return;
+    }
     if (request.method === 'GET' || request.method === 'HEAD') return;
     const config = request.routeOptions?.config as
       | { csrf?: unknown }
@@ -682,13 +723,6 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       mayReadParties: can(request.staff?.role ?? null, 'party.read'),
       openCalls: request.openCalls,
     });
-  });
-
-  // The tenant host's home. The office home is the route above; this one exists because the path
-  // is the same and the host is not. #272.
-  app.get('/', { config: { tenant: 'public' } }, async (_request, reply) => {
-    stubHeaders(reply);
-    return renderPortalPlaceholder();
   });
 
   const SETTINGS_READ = { config: { staff: 'estate.read' } } as const;
@@ -819,6 +853,11 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   }
 
   const clock = deps.clock ?? systemClock;
+  registerPortalRoutes(app, {
+    pool: deps.pool,
+    clock,
+    sender: deps.codeSender ?? createUnavailableCodeSender(),
+  });
   const objects = deps.objects ?? createMemoryStore();
   const bucket = deps.bucket ?? configuredBucket();
   const pdf = deps.pdf ?? createPdfjsText();

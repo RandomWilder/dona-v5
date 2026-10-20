@@ -201,6 +201,9 @@ const PII_COLUMNS = new Set([
   'passport_number',
   'phone',
   'phone_number',
+  // #273. The network address a portal sign-in code was asked from. An address is personal data,
+  // and the cap is counted from it.
+  'client_address',
   'mobile',
   'email',
   'email_address',

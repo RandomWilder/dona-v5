@@ -82,7 +82,8 @@ describe('the two hosts', () => {
         headers: { host: TENANT_HOST },
       });
       assert.equal(tenant.statusCode, 200);
-      assert.match(tenant.body, /הפורטל ייפתח כאן/);
+      assert.match(tenant.body, /כניסה לפורטל הדיירים/);
+      assert.match(tenant.body, /href="\/ui\/portal.css"/);
 
       const office = await app.inject({
         method: 'GET',
@@ -91,7 +92,7 @@ describe('the two hosts', () => {
       });
       assert.equal(office.statusCode, 303);
       assert.equal(office.headers.location, '/staff/login');
-      assert.equal(office.body.includes('הפורטל ייפתח כאן'), false);
+      assert.equal(office.body.includes('שליחת קוד'), false);
     } finally {
       await app.close();
       await pool.end();
