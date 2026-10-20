@@ -14,9 +14,15 @@ export interface CodeDelivery {
   channel: CodeChannel;
 }
 
+export interface NoticeDelivery {
+  to: string;
+  channel: CodeChannel;
+}
+
 export interface CodeSender {
   readonly channels: readonly CodeChannel[];
   send(delivery: CodeDelivery): Promise<void>;
+  notify(delivery: NoticeDelivery): Promise<void>;
 }
 
 type CodeFetch = (
@@ -29,22 +35,29 @@ const INFORU_URL = 'https://cloud.inforu.co.il/api/v2/Otp/Message/Send';
 const ISRAELI_MOBILE = /^\+9725\d{8}$/;
 const SENDER_NAME = /^[A-Za-z0-9]{1,11}$/;
 const SMS_TEXT = "קוד הכניסה לדונה דום: {OtpCode}. בתוקף 5 דק'.";
+const NOTICE_TEXT = 'כניסה חדשה לפורטל דונה דום. לא אתם? פנו למשרד.';
+const SMS_NOTICE_URL = 'https://cloud.inforu.co.il/api/v2/SMS/SendSms';
 
 const NOT_SENT = new KernelError('unavailable', 'code was not sent');
 
 export function createRecordingCodeSender(
   channels: readonly CodeChannel[] = ['whatsapp'],
-): CodeSender & { sent: CodeDelivery[] } {
+): CodeSender & { sent: CodeDelivery[]; notices: NoticeDelivery[] } {
   const sent: CodeDelivery[] = [];
+  const notices: NoticeDelivery[] = [];
   return {
     channels,
     sent,
+    notices,
     async send(delivery) {
       sent.push({
         to: delivery.to,
         code: delivery.code,
         channel: delivery.channel,
       });
+    },
+    async notify(delivery) {
+      notices.push({ to: delivery.to, channel: delivery.channel });
     },
   };
 }
@@ -55,6 +68,9 @@ export function createLogCodeSender(write: (line: string) => void): CodeSender {
     async send(delivery) {
       write(`portal sign-in code ${delivery.code}`);
     },
+    async notify() {
+      write('portal new-device notice');
+    },
   };
 }
 
@@ -64,6 +80,9 @@ export function createUnavailableCodeSender(): CodeSender {
     async send() {
       throw new KernelError('unavailable', 'code sender is not configured');
     },
+    async notify() {
+      throw new KernelError('unavailable', 'code sender is not configured');
+    },
   };
 }
 
@@ -71,6 +90,7 @@ export interface WhatsappCodeConfig {
   phoneNumberId: string;
   accessToken: string;
   templateName: string;
+  noticeTemplateName?: string | null;
 }
 
 export function createWhatsappCodeSender(
@@ -115,6 +135,42 @@ export function createWhatsappCodeSender(
                   },
                 ],
               },
+            }),
+          },
+        );
+      } catch {
+        throw NOT_SENT;
+      }
+      if (!response.ok) throw NOT_SENT;
+      const payload = (await response.json()) as {
+        messages?: { id?: string }[];
+      };
+      const id = payload.messages?.[0]?.id ?? '';
+      if (id === '') throw NOT_SENT;
+    },
+    async notify(delivery) {
+      const name = config.noticeTemplateName ?? '';
+      if (name === '') throw NOT_SENT;
+      if (delivery.channel !== 'whatsapp') throw NOT_SENT;
+      if (!ISRAELI_MOBILE.test(delivery.to)) {
+        throw new KernelError('invalid', 'whatsapp recipient is not a mobile');
+      }
+      let response: Pick<Response, 'ok' | 'json' | 'text'>;
+      try {
+        response = await fetchImpl(
+          `https://graph.facebook.com/${GRAPH_VERSION}/${config.phoneNumberId}/messages`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${config.accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              messaging_product: 'whatsapp',
+              recipient_type: 'individual',
+              to: delivery.to.slice(1),
+              type: 'template',
+              template: { name, language: { code: 'he' } },
             }),
           },
         );
@@ -182,6 +238,37 @@ export function createSmsCodeSender(
       const payload = (await response.json()) as { StatusId?: number };
       if (payload.StatusId !== 1) throw NOT_SENT;
     },
+    async notify(delivery) {
+      if (delivery.channel !== 'sms') throw NOT_SENT;
+      if (!ISRAELI_MOBILE.test(delivery.to)) {
+        throw new KernelError(
+          'invalid',
+          'sms recipient is not an Israeli mobile',
+        );
+      }
+      let response: Pick<Response, 'ok' | 'json' | 'text'>;
+      try {
+        response = await fetchImpl(SMS_NOTICE_URL, {
+          method: 'POST',
+          headers: {
+            Authorization: authorization,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            Data: {
+              Message: NOTICE_TEXT,
+              Recipients: [{ Phone: `0${delivery.to.slice(4)}` }],
+              Settings: { Sender: config.senderName },
+            },
+          }),
+        });
+      } catch {
+        throw NOT_SENT;
+      }
+      if (!response.ok) throw NOT_SENT;
+      const payload = (await response.json()) as { StatusId?: number };
+      if (payload.StatusId !== 1) throw NOT_SENT;
+    },
   };
 }
 
@@ -202,7 +289,12 @@ function whatsappFrom(env: NodeJS.ProcessEnv): WhatsappCodeConfig | null {
   if (accessToken === null || phoneNumberId === null) {
     throw new Error('the WhatsApp code sender is only partly configured');
   }
-  return { templateName, accessToken, phoneNumberId };
+  return {
+    templateName,
+    accessToken,
+    phoneNumberId,
+    noticeTemplateName: set(env, 'PORTAL_WHATSAPP_NOTICE_TEMPLATE'),
+  };
 }
 
 function smsFrom(env: NodeJS.ProcessEnv): SmsCodeConfig | null {
@@ -226,6 +318,11 @@ function route(parts: Partial<Record<CodeChannel, CodeSender>>): CodeSender {
       const part = parts[delivery.channel];
       if (part === undefined) throw NOT_SENT;
       await part.send(delivery);
+    },
+    async notify(delivery) {
+      const part = parts[delivery.channel];
+      if (part === undefined) throw NOT_SENT;
+      await part.notify(delivery);
     },
   };
 }

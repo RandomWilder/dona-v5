@@ -542,3 +542,51 @@ body.portal .tp-otp input {
   color: var(--tp-on-accent);
   box-shadow: var(--tp-shadow-fab);
 }
+
+.tp-body.is-center {
+  text-align: center;
+}
+.tp-spacer {
+  flex: 1 0 0;
+}
+.tp-i.i48 {
+  inline-size: 48px;
+  block-size: 48px;
+}
+.tp-i.is-ok {
+  color: var(--tp-ok);
+}
+.tp-hero-well {
+  display: grid;
+  place-items: center;
+  inline-size: 96px;
+  block-size: 96px;
+  margin-inline: auto;
+}
+.tp-hero-well.is-passkey {
+  border-radius: 30px;
+  background: var(--tp-accent-200);
+  color: var(--tp-accent-700);
+}
+.tp-list {
+  display: grid;
+  padding: 4px 14px;
+  border-radius: var(--tp-r-lg);
+  background: var(--tp-surface);
+  text-align: start;
+}
+.tp-list > * {
+  padding-block: 12px;
+  border-block-end: 1px solid var(--tp-line-soft);
+}
+.tp-list > :last-child {
+  border-block-end: 0;
+}
+.tp-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-block-size: 44px;
+  text-align: start;
+  inline-size: 100%;
+}

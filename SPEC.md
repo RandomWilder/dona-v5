@@ -135,7 +135,10 @@ here:
   page's copy control, and only when that call has a draft (SPEC-calls), and except the tenant
   portal's code screen, which submits the form when the sixth digit is entered (#273). That script
   has no `src`. It only submits. Without it the page shows a submit button, so the sign-in still
-  works. The drawer's open state is a
+  works. The same rule names one further exception (#275): the passkey offer and the phone screen
+  call the WebAuthn API to create or use a passkey. That script has no `src` either. It only runs
+  the ceremony and posts the result. Without it the offer still shows **לא עכשיו**, which leaves
+  the tenant signed in, and the phone screen still sends a code. The drawer's open state is a
   checkbox the menu label and the scrim both drive. The viewport is `viewport-fit=cover`. Login
   stays a centred guest card.
 - **Icons are inline SVG drawn from one kernel table, `src/kernel/ui/icons.ts` (#241).** A screen
@@ -282,7 +285,19 @@ byte for byte. A screen that handles its own refusal still does; this is only th
   read from the injected clock. Sign-out revokes the one row. Sign-out of every device revokes
   every row of that identity and writes an audit row. A **Portal identity** is the verified phone
   number, created the first time a code for it verifies. It is not a Party and it has no role.
-  The code, the caps and the sender are SPEC-channel's.
+  The code, the caps and the sender are SPEC-channel's. A **passkey** is a WebAuthn credential on
+  that identity, one or more, created only after a code has signed the tenant in, and removed only
+  by that tenant. The offer is shown after every code sign-in. Declining it leaves the tenant
+  signed in, stores nothing, and does not suppress the next offer. A later sign-in on a device that holds a passkey uses it and skips
+  the code. A code that verifies for an identity that already exists is a new-device sign-in: one
+  audit row, and exactly one notice through the code sender (SPEC-channel). The first code, the one
+  that creates the identity, sends no notice. Adding a passkey and removing one are audit rows.
+  The ceremony checks the challenge, the origin and the relying-party id; an assertion also checks
+  the signature. Attestation is `none`. The challenge is written into the page when that page is
+  rendered, and the tap calls the API with that challenge. The prompt is not deferred behind a
+  request, which mobile Safari would drop. If that challenge cannot be issued, the phone page
+  still renders and the code form still sends. The list of passkeys is a page this module serves; the
+  עוד tab that will hold it is #279.
 - **Every write route carries a CSRF token, and the token is derived rather than stored** (slice
   5.2): `sha256('csrf:' + <session token>)`, computed from the `HttpOnly` cookie the request already
   carries, held in no column and defended by the same policy case that forbids a stored token.
@@ -304,10 +319,10 @@ byte for byte. A screen that handles its own refusal still does; this is only th
   |---|---|---|
   | **OpenAI** | Passage text sent for embedding, and document text sent for comprehension; from #181, the subject and text of every incoming email and WhatsApp message, sent to the sorter and for translation | Today, through the CI-only `OPENAI_API_KEY` — authored fixture text with no personal data in it. Tenant text from week 4. |
   | **Google Cloud** | Document bytes for OCR (Document AI, ADR-0002, imageless mode, processor location **`eu`** — Document AI does not serve `me-west1`); every stored document and row (Cloud Storage, Cloud SQL) as processor | Week 4 for OCR (slice 4.1); today for storage |
-  | **Meta — WhatsApp Cloud API** | Every message either end of a conversation sends, including what the receptionist sends from the office phone under coexistence (ADR-0013). From #274, a tenant's phone number and the sign-in code, inside an authentication template, and only when that sender is configured | #181, staging on Meta's test number first; the sign-in template when the director turns it on |
+  | **Meta — WhatsApp Cloud API** | Every message either end of a conversation sends, including what the receptionist sends from the office phone under coexistence (ADR-0013). From #274, a tenant's phone number and the sign-in code, inside an authentication template, and only when that sender is configured. From #275, the same number inside a utility template whose body is the fixed new-device sentence, and only when `PORTAL_WHATSAPP_NOTICE_TEMPLATE` is set | #181, staging on Meta's test number first; the sign-in template when the director turns it on; the notice template with it |
   | **Microsoft 365 — Dona Dom's own** | The shared mailbox, read through Graph with `Mail.Read`, and `Mail.Send` for a reply on an inbound message (the fixed duty reply, and the office reply on an EMAIL call), both scoped to that one mailbox. Not a new processor: the mail is already Dona Dom's provider's | #181, #256 |
   | **Anthropic** | This repository, read by Claude Code as it is built | Today, **development-time only**. It never sees tenant text, and the mechanism that makes that true is that tier 2 never enters the repo — `.gitignore`, the bucket, and this rule, not an assurance. |
-  | **InforU (InforUMobile, Shamir Systems)** | A tenant's phone number and the sign-in code, as one SMS. Nothing else: not a name, not a message the tenant wrote | #274, and only once `INFORU_USERNAME`, `INFORU_TOKEN` and `SMS_SENDER` are set. Processing and storage in Israel (Bezeq International, disaster recovery at Netvision). The instrument is InforU's processor annex, נספח לתנאי ההתקשרות – פרטיות, v2.1. The gateway's IP allowlist is part of turning it on, and it is the director's |
+  | **InforU (InforUMobile, Shamir Systems)** | A tenant's phone number and the sign-in code, as one SMS. From #275, the same number and the fixed new-device sentence, as one further SMS. Nothing else: not a name, not a message the tenant wrote | #274, and only once `INFORU_USERNAME`, `INFORU_TOKEN` and `SMS_SENDER` are set. Processing and storage in Israel (Bezeq International, disaster recovery at Netvision). The instrument is InforU's processor annex, נספח לתנאי ההתקשרות – פרטיות, v2.1. The gateway's IP allowlist is part of turning it on, and it is the director's |
 
   Naming them is the engineering half of ADR-0004. The other half is the owner's, is tracked as **F6**
   on [docs/fuses.md](docs/fuses.md), and is owed **before the tier-2 corpus lands**. As of
@@ -452,8 +467,9 @@ week a second module had one. **Slice 5.8 put the settings screen beside that in
 two catalogues it edits belong to two modules and a third module may not own either. **Slice 5.2b put one chrome on every signed-in screen**, and **5.2c
 gave that chrome v3's ops sidebar** rather than a top bar. **5.2d put that rail behind a menu control below 840px**, in the kernel
 shell so every later screen inherits it, still with no `<script>` except the call page's copy
-control, and only on a call that has a draft (SPEC-calls). **Slice 5.3 added the remaining destinations** — קריאות and הגדרות — as stubs that name the week and slice that own them. The login screen stays without that rail. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
-physical side or a `<script>` other than that copy control, and from 2.6 also on a phone number or an E.164 prefix: what a screen
+control, and only on a call that has a draft (SPEC-calls), the portal code screen's sixth-digit
+submit (#273), and the portal passkey ceremony (#275). **Slice 5.3 added the remaining destinations** — קריאות and הגדרות — as stubs that name the week and slice that own them. The login screen stays without that rail. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
+physical side or a `<script>` other than those named exceptions, and from 2.6 also on a phone number or an E.164 prefix: what a screen
 may say about a household is **a state and a count, never a tenant's name**, so the
 occupancy chip is derived on every load and search never reaches `party`.
 

@@ -105,6 +105,52 @@ export const PORTAL_COPY: readonly PortalCopy[] = [
   { key: 'home.empty', language: 'he', text: 'אין כאן עדיין מה להציג.' },
   { key: 'home.sign_out', language: 'he', text: 'יציאה' },
   { key: 'home.sign_out_all', language: 'he', text: 'יציאה מכל המכשירים' },
+  { key: 'home.passkeys', language: 'he', text: 'מפתחות כניסה' },
+  { key: 'sign_in.passkey', language: 'he', text: 'כניסה מהירה' },
+  { key: 'passkey.page', language: 'he', text: 'כניסה מהירה בפעם הבאה' },
+  {
+    key: 'passkey.title',
+    language: 'he',
+    text: 'כניסה מהירה בפעם הבאה',
+  },
+  {
+    key: 'passkey.lede',
+    language: 'he',
+    text: 'בפעם הבאה נכנסים בטביעת אצבע, בזיהוי פנים או בקוד המכשיר.',
+  },
+  { key: 'passkey.reason_wait', language: 'he', text: 'בלי לחכות לקוד' },
+  {
+    key: 'passkey.reason_device',
+    language: 'he',
+    text: 'המפתח נשאר רק בטלפון שלכם',
+  },
+  {
+    key: 'passkey.reason_control',
+    language: 'he',
+    text: 'אפשר להוסיף או להסיר מתי שתרצו',
+  },
+  { key: 'passkey.enable', language: 'he', text: 'הפעלת כניסה מהירה' },
+  { key: 'passkey.later', language: 'he', text: 'לא עכשיו' },
+  {
+    key: 'passkey.failed',
+    language: 'he',
+    text: 'לא הצלחנו להפעיל את הכניסה המהירה. אפשר לנסות שוב, או להמשיך בלי.',
+  },
+  { key: 'passkeys.page', language: 'he', text: 'מפתחות כניסה' },
+  { key: 'passkeys.title', language: 'he', text: 'מפתחות כניסה' },
+  {
+    key: 'passkeys.empty',
+    language: 'he',
+    text: 'אין עדיין מפתח כניסה על השם שלכם.',
+  },
+  { key: 'passkeys.one', language: 'he', text: 'מפתח כניסה' },
+  { key: 'passkeys.remove', language: 'he', text: 'הסרה' },
+  {
+    key: 'passkeys.missing',
+    language: 'he',
+    text: 'המפתח כבר לא ברשימה.',
+  },
+  { key: 'passkeys.back', language: 'he', text: 'חזרה' },
 ];
 
 const byKey = new Map(PORTAL_COPY.map((row) => [row.key, row.text]));

@@ -9,6 +9,7 @@ export type {
   CodeChannel,
   CodeDelivery,
   CodeSender,
+  NoticeDelivery,
 } from './internal/code-sender.ts';
 export {
   codeSenderFromEnv,

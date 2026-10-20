@@ -1,9 +1,10 @@
 // The tenant portal's pages. Strings come from the copy rows. Colour, type and side live in
-// portal.css. The one script submits the code form on the sixth digit; without it the button
-// under the cells still posts (SPEC.md).
+// portal.css. Two scripts, both named in SPEC.md: the code form submits on the
+// sixth digit, and the passkey pages call WebAuthn. Without either, the button
+// that does not need a ceremony still posts.
 
 import type { CodeChannel } from '../../channel/contract.ts';
-import { type Html, h } from '../../kernel/ui/html.ts';
+import { Html, h } from '../../kernel/ui/html.ts';
 import { icon } from '../../kernel/ui/icons.ts';
 import { csrfInput } from '../../kernel/ui/page.ts';
 import { portalText } from './copy.ts';
@@ -49,6 +50,7 @@ export function renderPhonePage(screen: {
   notice: string | null;
   caption: string;
   canSend: boolean;
+  options: unknown;
 }): string {
   return page(
     portalText('sign_in.page'),
@@ -75,10 +77,18 @@ export function renderPhonePage(screen: {
         <div class="tp-stack tp-auth-actions">
           <button class="tp-primary" type="submit">${portalText('sign_in.submit')}</button>
           <p class="tp-caption">${portalText(screen.caption)}</p>
+          <button class="tp-text-btn" type="button" data-portal-passkey="get">${portalText('sign_in.passkey')}</button>
         </div>
       </form>`
-          : h`<p class="tp-caption">${portalText(screen.caption)}</p>`
+          : h`<div class="tp-stack">
+        <p class="tp-caption">${portalText(screen.caption)}</p>
+        <input type="hidden" name="csrf" value="${screen.csrf}" />
+        <button class="tp-text-btn" type="button" data-portal-passkey="get">${portalText('sign_in.passkey')}</button>
+      </div>`
       }
+      <p class="tp-notice" role="alert" data-portal-passkey-error hidden>${portalText('passkey.failed')}</p>
+      ${passkeyOptions(screen.options)}
+      ${passkeyScript()}
     </div>`,
   );
 }
@@ -175,6 +185,7 @@ export function renderHomePage(screen: { csrf: string }): string {
         <h1 class="tp-display">${portalText('home.title')}</h1>
         <p class="tp-lede">${portalText('home.empty')}</p>
       </div>
+      <p><a class="tp-text-btn" href="/passkeys">${portalText('home.passkeys')}</a></p>
       <form method="post" action="/sign-out">
         ${csrfInput(screen.csrf)}
         <button class="tp-text-btn" type="submit">${portalText('home.sign_out')}</button>
@@ -185,4 +196,167 @@ export function renderHomePage(screen: { csrf: string }): string {
       </form>
     </div>`,
   );
+}
+
+function reason(key: string): Html {
+  return h`<li class="tp-row">${icon('check', { class: 'tp-i is-ok' })}${portalText(key)}</li>`;
+}
+
+export function renderPasskeyOffer(screen: {
+  csrf: string;
+  options: unknown;
+}): string {
+  return page(
+    portalText('passkey.page'),
+    h`<div class="tp-body is-auth is-center">
+      <div class="tp-spacer"></div>
+      <span class="tp-hero-well is-passkey">${icon('scan', { class: 'tp-i i48' })}</span>
+      <div class="tp-stack">
+        <h1 class="tp-display">${portalText('passkey.title')}</h1>
+        <p class="tp-lede">${portalText('passkey.lede')}</p>
+      </div>
+      <ul class="tp-list">
+        ${reason('passkey.reason_wait')}
+        ${reason('passkey.reason_device')}
+        ${reason('passkey.reason_control')}
+      </ul>
+      <p class="tp-notice" role="alert" data-portal-passkey-error hidden>${portalText('passkey.failed')}</p>
+      ${passkeyOptions(screen.options)}
+      <div class="tp-spacer"></div>
+      <div class="tp-stack">
+        <button class="tp-primary" type="button" data-portal-passkey="create">${portalText('passkey.enable')}</button>
+        <form method="post" action="/passkey/later">
+          ${csrfInput(screen.csrf)}
+          <button class="tp-text-btn" type="submit">${portalText('passkey.later')}</button>
+        </form>
+      </div>
+      ${passkeyScript()}
+    </div>`,
+  );
+}
+
+export function renderPasskeysPage(screen: {
+  csrf: string;
+  passkeys: ReadonlyArray<{ id: string; added: string }>;
+  notice: string | null;
+}): string {
+  const rows = screen.passkeys.map(
+    (row) => h`<li>
+      <div class="tp-row">
+        <span class="tp-row-text">
+          <span class="tp-row-title" id="pk-${row.id}">${portalText('passkeys.one')}</span>
+          <span class="tp-meta" dir="ltr">${row.added}</span>
+        </span>
+      </div>
+      <form method="post" action="/passkeys/remove">
+        ${csrfInput(screen.csrf)}
+        <input type="hidden" name="passkey" value="${row.id}" />
+        <button class="tp-text-btn" type="submit" aria-describedby="pk-${row.id}">${portalText('passkeys.remove')}</button>
+      </form>
+    </li>`,
+  );
+  return page(
+    portalText('passkeys.page'),
+    h`<div class="tp-body is-auth">
+      <div class="tp-stack tp-auth-head">
+        <h1 class="tp-display">${portalText('passkeys.title')}</h1>
+        ${screen.passkeys.length === 0 ? h`<p class="tp-lede">${portalText('passkeys.empty')}</p>` : h``}
+      </div>
+      ${notice(screen.notice)}
+      ${rows.length === 0 ? h`` : h`<ul class="tp-list">${rows}</ul>`}
+      <a class="tp-text-btn" href="/">${portalText('passkeys.back')}</a>
+    </div>`,
+  );
+}
+
+function passkeyOptions(options: unknown): Html {
+  return h`<input type="hidden" data-portal-passkey-options value="${JSON.stringify(options)}" />`;
+}
+
+function passkeyScript(): Html {
+  return new Html(`<script>
+    /* dona.portal.passkey */
+    (function () {
+      var button = document.querySelector('[data-portal-passkey]');
+      if (!button) return;
+      var fail = document.querySelector('[data-portal-passkey-error]');
+      function show() {
+        if (fail) fail.hidden = false;
+      }
+      function b64url(buffer) {
+        var bytes = new Uint8Array(buffer);
+        var bin = '';
+        for (var i = 0; i < bytes.length; i += 1) bin += String.fromCharCode(bytes[i]);
+        return btoa(bin).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/g, '');
+      }
+      function bytes(value) {
+        var pad = value.length % 4 === 0 ? '' : '===='.slice(value.length % 4);
+        var bin = atob(value.replace(/-/g, '+').replace(/_/g, '/') + pad);
+        var out = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+        return out.buffer;
+      }
+      button.addEventListener('click', function () {
+        if (!window.PublicKeyCredential || !navigator.credentials) {
+          show();
+          return;
+        }
+        var stored = document.querySelector('[data-portal-passkey-options]');
+        if (!stored || !stored.value) {
+          show();
+          return;
+        }
+        var csrfInput = document.querySelector('input[name="csrf"]');
+        var csrf = csrfInput ? csrfInput.value : '';
+        var mode = button.getAttribute('data-portal-passkey');
+        var finishUrl = mode === 'create' ? '/passkey/register' : '/passkey/sign-in';
+        var options;
+        try {
+          options = JSON.parse(stored.value);
+          options.publicKey.challenge = bytes(options.publicKey.challenge);
+          if (options.publicKey.user) {
+            options.publicKey.user.id = bytes(options.publicKey.user.id);
+          }
+          var excluded = options.publicKey.excludeCredentials || [];
+          for (var i = 0; i < excluded.length; i += 1) {
+            excluded[i].id = bytes(excluded[i].id);
+          }
+        } catch (error) {
+          show();
+          return;
+        }
+        button.disabled = true;
+        var op = mode === 'create'
+          ? navigator.credentials.create(options)
+          : navigator.credentials.get(options);
+        Promise.resolve(op).then(function (cred) {
+          if (!cred) throw new Error('empty');
+          var response = cred.response;
+          var body = {
+            csrf: csrf,
+            id: cred.id,
+            clientDataJSON: b64url(response.clientDataJSON),
+          };
+          if (mode === 'create') {
+            body.attestationObject = b64url(response.attestationObject);
+          } else {
+            body.authenticatorData = b64url(response.authenticatorData);
+            body.signature = b64url(response.signature);
+            body.userHandle = response.userHandle ? b64url(response.userHandle) : '';
+          }
+          return fetch(finishUrl, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+        }).then(function (response) {
+          if (!response.ok) throw new Error('finish');
+          window.location.assign('/');
+        }).catch(function () {
+          button.disabled = false;
+          show();
+        });
+      });
+    })();
+  </script>`);
 }

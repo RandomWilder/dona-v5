@@ -359,6 +359,9 @@ export type VerifyResult =
       token: string;
       expiresAt: Date;
       portalIdentityId: string;
+      phone: string;
+      channel: CodeChannel;
+      newDevice: boolean;
     };
 
 async function auditVerify(
@@ -441,6 +444,10 @@ export async function verifyCode(
   );
   if (consumed.rowCount === 0) return fail('code.used');
 
+  const prior = await db.query<{ portal_identity_id: string }>(
+    'SELECT portal_identity_id FROM portal_identity WHERE phone = $1',
+    [row.phone],
+  );
   const identityId = await ensureIdentity(db, clock, row.phone, now);
   const session = await mint(identityId);
   await auditVerify(audit, 'ok', undefined, identityId);
@@ -449,6 +456,9 @@ export async function verifyCode(
     token: session.token,
     expiresAt: session.expiresAt,
     portalIdentityId: identityId,
+    phone: row.phone,
+    channel: channelOf(row.channel),
+    newDevice: prior.rows.length > 0,
   };
 }
 

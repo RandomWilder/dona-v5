@@ -212,6 +212,31 @@ What the portal enforces, and the sender never sees:
 The phone screen names the channel the code will use. With both senders configured it names
 WhatsApp and says the next screen can send an SMS instead.
 
+## New-device notice
+
+A code that verifies for a portal identity that already exists is a new-device sign-in. The portal
+asks the code sender once: `notify({ to, channel })`, on the channel that just delivered the code.
+The first code, which creates the identity, is not one of these, and a passkey sign-in is not one
+either. A failure to deliver does not undo the sign-in. The sender does not retry.
+
+The sentence is fixed, and it is this one, in both channels:
+
+`כניסה חדשה לפורטל דונה דום. לא אתם? פנו למשרד.`
+
+Forty-six characters, so the SMS is one unit. The sender never accepts a sentence from the caller,
+which is what keeps a notice from becoming a second channel for whatever a route wants to say.
+
+- **WhatsApp** posts a utility template named by `PORTAL_WHATSAPP_NOTICE_TEMPLATE`, Hebrew, with no
+  parameters: the sentence above is the template body, approved in Meta's console. The same access
+  token and phone-number id as the code. When the name is unset, this sender refuses the notice.
+  That refusal does not refuse to boot, and it does not refuse the sign-in.
+- **SMS** posts to InforU's SMS send (`https://cloud.inforu.co.il/api/v2/SMS/SendSms`), not the OTP
+  endpoint, with the same Basic auth and the same sender name. The number is the Israeli mobile in
+  national form. Anything else is refused before the request.
+
+The log sender writes `portal new-device notice` and not the number. A test injects the fetch.
+Neither real sender is called from a test.
+
 ## Later
 
 **The agent is a client, not a brain**: scoped tools only, every call audited, and it reaches data

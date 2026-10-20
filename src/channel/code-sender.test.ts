@@ -296,3 +296,76 @@ describe('the SMS gateway', () => {
     );
   });
 });
+
+const NOTICE = 'כניסה חדשה לפורטל דונה דום. לא אתם? פנו למשרד.';
+
+describe('the new-device notice', () => {
+  it('logs that a notice was sent and not the number', async () => {
+    const lines: string[] = [];
+    const sender = codeSenderFromEnv({}, (line) => {
+      lines.push(line);
+    });
+    await sender.notify({ to: '+972521275001', channel: 'whatsapp' });
+    assert.deepEqual(lines, ['portal new-device notice']);
+    assert.equal(lines.join('').includes('521275'), false);
+  });
+
+  it('sends one Hebrew SMS, not a code', async () => {
+    assert.ok([...NOTICE].length <= 70);
+    const calls: { url: string; init: RequestInit | undefined }[] = [];
+    const sender = createSmsCodeSender(
+      { username: 'dona', token: 'api-token', senderName: 'DonaDom' },
+      async (url, init) => {
+        calls.push({ url, init });
+        return jsonResponse(200, { StatusId: 1 });
+      },
+    );
+    await sender.notify({ to: '+972521275001', channel: 'sms' });
+    const body = JSON.parse(String(calls[0]?.init?.body));
+    assert.equal(
+      calls[0]?.url,
+      'https://cloud.inforu.co.il/api/v2/SMS/SendSms',
+    );
+    assert.equal(body.Data.Message, NOTICE);
+    assert.equal(body.Data.Recipients[0].Phone, '0521275001');
+    assert.equal(body.Data.OtpCode, undefined);
+  });
+
+  it('sends the WhatsApp utility template and nothing else', async () => {
+    const calls: { url: string; init: RequestInit | undefined }[] = [];
+    const sender = createWhatsappCodeSender(
+      {
+        phoneNumberId: '1099',
+        accessToken: 'token-not-logged',
+        templateName: 'portal_sign_in',
+        noticeTemplateName: 'portal_new_device',
+      },
+      async (url, init) => {
+        calls.push({ url, init });
+        return jsonResponse(200, { messages: [{ id: 'wamid.notice' }] });
+      },
+    );
+    await sender.notify({ to: '+972521275001', channel: 'whatsapp' });
+    const body = JSON.parse(String(calls[0]?.init?.body));
+    assert.equal(body.template.name, 'portal_new_device');
+    assert.equal(body.template.components, undefined);
+    assert.equal(body.to, '972521275001');
+  });
+
+  it('refuses a WhatsApp notice when no template is configured', async () => {
+    const sender = createWhatsappCodeSender(
+      {
+        phoneNumberId: '1099',
+        accessToken: 'token',
+        templateName: 'portal_sign_in',
+      },
+      async () => {
+        throw new Error('not called');
+      },
+    );
+    await assert.rejects(
+      () => sender.notify({ to: '+972521275001', channel: 'whatsapp' }),
+      /not sent/,
+    );
+  });
+});

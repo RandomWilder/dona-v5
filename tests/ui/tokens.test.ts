@@ -75,6 +75,8 @@ import {
 import {
   renderCodePage,
   renderHomePage,
+  renderPasskeyOffer,
+  renderPasskeysPage,
   renderPhonePage,
 } from '../../src/portal/contract.ts';
 import { renderSettingsPage } from '../../src/settings-page.ts';
@@ -565,6 +567,9 @@ const SCREENS: Array<[string, () => string]> = [
         notice: null,
         caption: 'sign_in.caption',
         canSend: true,
+        options: {
+          publicKey: { challenge: 'dGVzdA', userVerification: 'required' },
+        },
       }),
   ],
   [
@@ -604,6 +609,33 @@ const SCREENS: Array<[string, () => string]> = [
       }),
   ],
   ['portal · home', () => renderHomePage({ csrf: CSRF })],
+  [
+    'portal · passkey offer',
+    () =>
+      renderPasskeyOffer({
+        csrf: CSRF,
+        options: {
+          publicKey: {
+            challenge: 'dGVzdA',
+            user: { id: 'dGVzdA', name: 'x', displayName: 'x' },
+          },
+        },
+      }),
+  ],
+  [
+    'portal · passkeys',
+    () =>
+      renderPasskeysPage({
+        csrf: CSRF,
+        notice: null,
+        passkeys: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            added: '2026-10-20',
+          },
+        ],
+      }),
+  ],
   // #233: the floor under every screen's own refusal, in both frames.
   [
     'root · error page, guest',
@@ -2751,7 +2783,12 @@ describe('shared UI tokens', () => {
       const portalCode =
         /autocomplete="one-time-code"/.test(html) &&
         /dona\.portal\.code/.test(scripts[0] ?? '');
-      assert.ok(copy || resize || portalCode, name);
+      // #275. The passkey ceremony is the other portal script. SPEC.md names it.
+      // לא עכשיו stays a real submit, so declining needs no script.
+      const portalPasskey =
+        /data-portal-passkey=/.test(html) &&
+        /dona\.portal\.passkey/.test(scripts[0] ?? '');
+      assert.ok(copy || resize || portalCode || portalPasskey, name);
       if (copy) assert.match(html, /data-draft=/, name);
     }
   });

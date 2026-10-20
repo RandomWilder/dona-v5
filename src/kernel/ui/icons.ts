@@ -73,6 +73,7 @@ export const ICON_NAMES = [
   'chevron-right',
   'message-square',
   'message-circle',
+  'scan',
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -116,6 +117,7 @@ const drawings: Record<IconName, string> = {
   'message-square':
     '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   'message-circle': '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+  scan: '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/>',
 };
 
 const WRAPPER =

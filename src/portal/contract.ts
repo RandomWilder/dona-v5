@@ -17,5 +17,7 @@ export {
 export {
   renderCodePage,
   renderHomePage,
+  renderPasskeyOffer,
+  renderPasskeysPage,
   renderPhonePage,
 } from './internal/views.ts';

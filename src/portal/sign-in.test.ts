@@ -39,6 +39,16 @@ async function cleanup(pool: {
   query: (sql: string, params?: unknown[]) => Promise<unknown>;
 }): Promise<void> {
   await pool.query(
+    `DELETE FROM portal_passkey WHERE portal_identity_id IN
+       (SELECT portal_identity_id FROM portal_identity WHERE phone LIKE '+972520000%')`,
+  );
+  await pool.query(
+    `DELETE FROM portal_passkey_challenge WHERE portal_identity_id IN
+       (SELECT portal_identity_id FROM portal_identity WHERE phone LIKE '+972520000%')
+        OR (portal_identity_id IS NULL AND expires_at >= $1 AND expires_at < $2)`,
+    [AT, new Date(AT.getTime() + 60 * 60 * 1000)],
+  );
+  await pool.query(
     `DELETE FROM portal_session WHERE portal_identity_id IN
        (SELECT portal_identity_id FROM portal_identity WHERE phone LIKE '+972520000%')`,
   );
@@ -143,7 +153,8 @@ describe('portal sign-in', () => {
     assert.match(page.body, /הקוד יגיע בוואטסאפ/);
     assert.doesNotMatch(page.body, /מסרון/);
     assert.doesNotMatch(page.body, /type="email"/);
-    assert.doesNotMatch(page.body, /<script/);
+    assert.match(page.body, /dona\.portal\.passkey/);
+    assert.doesNotMatch(page.body, /<script[^>]*\ssrc=/);
 
     const sent = await app.inject({
       method: 'POST',
@@ -323,6 +334,9 @@ describe('portal sign-in', () => {
       channels: ['whatsapp'] as const,
       sent: [] as { to: string; code: string }[],
       async send(): Promise<void> {
+        throw new Error('provider said TRACE-99');
+      },
+      async notify(): Promise<void> {
         throw new Error('provider said TRACE-99');
       },
     };
