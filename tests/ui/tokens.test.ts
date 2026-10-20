@@ -560,7 +560,12 @@ const SCREENS: Array<[string, () => string]> = [
   [
     'portal · phone',
     () =>
-      renderPhonePage({ csrf: CSRF, notice: null, caption: 'sign_in.caption' }),
+      renderPhonePage({
+        csrf: CSRF,
+        notice: null,
+        caption: 'sign_in.caption',
+        canSend: true,
+      }),
   ],
   [
     'portal · code, waiting',
@@ -582,7 +587,7 @@ const SCREENS: Array<[string, () => string]> = [
         phone: '+972500000000',
         channel: 'whatsapp',
         alternate: 'sms',
-        waitSeconds: 42,
+        waitSeconds: 0,
         notice: null,
       }),
   ],

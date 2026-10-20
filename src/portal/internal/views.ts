@@ -48,6 +48,7 @@ export function renderPhonePage(screen: {
   csrf: string;
   notice: string | null;
   caption: string;
+  canSend: boolean;
 }): string {
   return page(
     portalText('sign_in.page'),
@@ -61,7 +62,9 @@ export function renderPhonePage(screen: {
         <p class="tp-lede">${portalText('sign_in.lede')}</p>
       </div>
       ${notice(screen.notice)}
-      <form method="post" action="/sign-in">
+      ${
+        screen.canSend
+          ? h`<form method="post" action="/sign-in">
         ${csrfInput(screen.csrf)}
         <label class="tp-label" for="phone">${portalText('sign_in.phone')}</label>
         <div class="tp-phone" dir="ltr">
@@ -73,7 +76,9 @@ export function renderPhonePage(screen: {
           <button class="tp-primary" type="submit">${portalText('sign_in.submit')}</button>
           <p class="tp-caption">${portalText(screen.caption)}</p>
         </div>
-      </form>
+      </form>`
+          : h`<p class="tp-caption">${portalText(screen.caption)}</p>`
+      }
     </div>`,
   );
 }
@@ -139,7 +144,7 @@ export function renderCodePage(screen: {
         <button class="tp-primary" type="submit" data-portal-submit="true">${portalText('code.submit')}</button>
       </form>
       ${again}
-      ${fallbackCard(screen)}
+      ${screen.waitSeconds > 0 ? h`` : fallbackCard(screen)}
       <script>
         /* dona.portal.code */
         document.querySelectorAll('[data-portal-code]').forEach((form) => {

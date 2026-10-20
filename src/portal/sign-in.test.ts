@@ -3,9 +3,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { asTenant } from '../../tests/support/session.ts';
 import { buildApp } from '../app.ts';
-import { createRecordingCodeSender } from '../channel/contract.ts';
+import {
+  createRecordingCodeSender,
+  createUnavailableCodeSender,
+} from '../channel/contract.ts';
 import { fixedClock } from '../kernel/clock.ts';
 import { migratedPoolOrNull, skipReason } from '../kernel/pg-support.ts';
+import { csrfTokenFor } from '../staff/contract.ts';
 
 const AT = new Date('2026-10-20T09:41:00.000Z');
 const HOST = { host: 'tenant.localhost' };
@@ -422,13 +426,18 @@ describe('portal sign-in', () => {
       headers: { ...HOST, cookie: challenge },
     });
     assert.match(codePage.body, /לוואטסאפ של/);
-    assert.match(codePage.body, /לא הגיע בוואטסאפ\?/);
-    assert.match(codePage.body, /שלחו במסרון\. עובד גם בלי אינטרנט\./);
-    assert.doesNotMatch(codePage.body, /לא הגיע במסרון/);
-    const smsButton = /name="channel" value="sms"/.exec(codePage.body);
-    assert.ok(smsButton);
-
+    assert.doesNotMatch(codePage.body, /לא הגיע/);
     clock.advance(61_000);
+    const ready = await app.inject({
+      method: 'GET',
+      url: '/sign-in/code',
+      headers: { ...HOST, cookie: challenge },
+    });
+    assert.match(ready.body, /לא הגיע בוואטסאפ\?/);
+    assert.match(ready.body, /שלחו במסרון\. עובד גם בלי אינטרנט\./);
+    assert.doesNotMatch(ready.body, /לא הגיע במסרון/);
+    assert.match(ready.body, /name="channel" value="sms"/);
+
     const sms = await app.inject({
       method: 'POST',
       url: '/sign-in/code/send',
@@ -437,7 +446,7 @@ describe('portal sign-in', () => {
         cookie: challenge,
         'content-type': 'application/x-www-form-urlencoded',
       },
-      payload: `channel=sms&csrf=${csrfOf(codePage.body)}`,
+      payload: `channel=sms&csrf=${csrfOf(ready.body)}`,
     });
     assert.equal(sms.statusCode, 303);
     assert.equal(sender.sent[1]?.channel, 'sms');
@@ -449,9 +458,16 @@ describe('portal sign-in', () => {
       headers: { ...HOST, cookie: next },
     });
     assert.match(smsPage.body, /במסרון אל/);
-    assert.match(smsPage.body, /לא הגיע במסרון\?/);
-    assert.match(smsPage.body, /name="channel" value="whatsapp"/);
-    assert.doesNotMatch(smsPage.body, /לא הגיע בוואטסאפ/);
+    assert.doesNotMatch(smsPage.body, /לא הגיע/);
+    clock.advance(61_000);
+    const smsReady = await app.inject({
+      method: 'GET',
+      url: '/sign-in/code',
+      headers: { ...HOST, cookie: next },
+    });
+    assert.match(smsReady.body, /לא הגיע במסרון\?/);
+    assert.match(smsReady.body, /name="channel" value="whatsapp"/);
+    assert.doesNotMatch(smsReady.body, /לא הגיע בוואטסאפ/);
   });
 
   it('hides the other channel when only SMS is configured', async (t) => {
@@ -491,5 +507,39 @@ describe('portal sign-in', () => {
     assert.match(codePage.body, /במסרון אל/);
     assert.doesNotMatch(codePage.body, /וואטסאפ/);
     assert.doesNotMatch(codePage.body, /לא הגיע/);
+  });
+
+  it('does not start sign-in when no sender is configured', async (t) => {
+    const pool = await migratedPoolOrNull();
+    if (pool === null) return t.skip(skipReason);
+    t.after(() => pool.end());
+    const app = buildApp({
+      pool,
+      clock: fixedClock(AT),
+      version: '9.9.9-test',
+      codeSender: createUnavailableCodeSender(),
+    });
+    t.after(() => app.close());
+    const page = await app.inject({ method: 'GET', url: '/', headers: HOST });
+    assert.equal(page.statusCode, 200);
+    assert.match(page.body, /לא ניתן לשלוח קוד כרגע/);
+    assert.doesNotMatch(page.body, /שליחת קוד/);
+    assert.doesNotMatch(page.body, /וואטסאפ/);
+    assert.doesNotMatch(page.body, /מסרון/);
+    const form =
+      pairNamed(page.headers['set-cookie'], 'dona_portal_form') ?? '';
+    const posted = await app.inject({
+      method: 'POST',
+      url: '/sign-in',
+      headers: {
+        ...HOST,
+        cookie: form,
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      payload: `phone=${encodeURIComponent(PHONE)}&csrf=${csrfTokenFor(form.slice('dona_portal_form='.length))}`,
+    });
+    assert.equal(posted.statusCode, 200);
+    assert.match(posted.body, /נסו שוב/);
+    assert.doesNotMatch(posted.body, /שליחת קוד/);
   });
 });

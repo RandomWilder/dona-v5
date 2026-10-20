@@ -165,6 +165,7 @@ export function registerPortalRoutes(
         csrf: csrfTokenFor(form),
         notice: null,
         caption: captionKey(sender),
+        canSend: sender.channels.length > 0,
       }),
       [
         formCookie(form, secure),
@@ -186,6 +187,20 @@ export function registerPortalRoutes(
           csrf: csrfTokenFor(next),
           notice: 'sign_in.retry',
           caption: captionKey(sender),
+          canSend: sender.channels.length > 0,
+        }),
+        [formCookie(next, secure)],
+      );
+    }
+    if (sender.channels.length === 0) {
+      const next = newOpaqueToken();
+      return html(
+        reply,
+        renderPhonePage({
+          csrf: csrfTokenFor(next),
+          notice: 'sign_in.unavailable',
+          caption: captionKey(sender),
+          canSend: false,
         }),
         [formCookie(next, secure)],
       );
@@ -203,6 +218,7 @@ export function registerPortalRoutes(
           csrf: csrfTokenFor(next),
           notice: issued.notice,
           caption: captionKey(sender),
+          canSend: true,
         }),
         [formCookie(next, secure)],
       );

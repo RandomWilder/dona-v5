@@ -190,9 +190,10 @@ configured does not fall back to that log: sending is refused.
 
 When only one real sender is configured, that is the only channel, the phone screen does not
 mention the other, and the code screen has no fallback card. When both are, WhatsApp is sent
-first. The code screen then offers SMS as a card at the bottom, not as a switch at the top.
-Choosing it sends a new code by SMS, and the screen's line names SMS. After an SMS send the card
-offers WhatsApp again. The caps below count a code row whichever channel delivered it.
+first. Once the minute before another code has passed, the code screen offers SMS as a card at
+the bottom, not as a switch at the top. Choosing it sends a new code by SMS, and the screen's
+line names SMS. After an SMS send, and once that minute has passed again, the card offers
+WhatsApp. A revision with no sender configured does not show the phone form. The caps below count a code row whichever channel delivered it.
 
 What the portal enforces, and the sender never sees:
 

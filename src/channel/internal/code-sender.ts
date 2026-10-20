@@ -168,8 +168,6 @@ export function createSmsCodeSender(
               Channel: 'SMS',
               OtpCode: delivery.code,
               Phone: `0${delivery.to.slice(4)}`,
-              IgnorePossibleSendingTime: true,
-              IgnoreUnsubscribeCheck: true,
               SMSSettings: {
                 Sender: config.senderName,
                 Message: SMS_TEXT,
