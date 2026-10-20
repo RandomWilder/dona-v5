@@ -8,6 +8,7 @@ import {
   sign,
 } from 'node:crypto';
 import { describe, it } from 'node:test';
+import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../app.ts';
 import { createRecordingCodeSender } from '../channel/contract.ts';
 import { fixedClock } from '../kernel/clock.ts';
@@ -39,6 +40,34 @@ function csrfOf(html: string): string {
   const match = /name="csrf" value="([^"]+)"/.exec(html);
   assert.ok(match?.[1]);
   return match[1];
+}
+
+function hiddenOf(html: string, name: string): string {
+  const match = new RegExp(`name="${name}" value="([^"]*)"`).exec(html);
+  return match?.[1] ?? '';
+}
+
+async function acknowledge(
+  app: FastifyInstance,
+  cookie: string,
+): Promise<void> {
+  const notice = await app.inject({
+    method: 'GET',
+    url: '/notice',
+    headers: { ...HOST, cookie },
+  });
+  if (notice.statusCode === 303) return;
+  const posted = await app.inject({
+    method: 'POST',
+    url: '/notice',
+    headers: {
+      ...HOST,
+      cookie,
+      'content-type': 'application/x-www-form-urlencoded',
+    },
+    payload: `csrf=${csrfOf(notice.body)}&privacy=${hiddenOf(notice.body, 'privacy')}&terms=${hiddenOf(notice.body, 'terms')}`,
+  });
+  assert.equal(posted.statusCode, 303);
 }
 
 function optionsOf(html: string): {
@@ -292,7 +321,8 @@ describe('portal passkeys', () => {
       payload: `csrf=${csrfOf(offer.body)}`,
     });
     assert.equal(later.statusCode, 303);
-    assert.equal(later.headers.location, '/');
+    assert.equal(later.headers.location, '/notice');
+    await acknowledge(app, session);
     const home = await app.inject({
       method: 'GET',
       url: '/',
@@ -428,6 +458,7 @@ describe('portal passkeys', () => {
     );
     assert.equal(added.rows[0]?.n, '1');
 
+    await acknowledge(app, session);
     const list = await app.inject({
       method: 'GET',
       url: '/passkeys',
@@ -477,6 +508,7 @@ describe('portal passkeys', () => {
     assert.equal(sender.sent.length, codesBefore);
     assert.equal(sender.notices.length, 0);
     const next = pairNamed(entered.headers['set-cookie'], 'dona_portal') ?? '';
+    await acknowledge(app, next);
     const inside = await app.inject({
       method: 'GET',
       url: '/',
@@ -601,10 +633,12 @@ describe('portal passkeys', () => {
     assert.equal(second.location, '/passkey');
     assert.ok(second.cookie);
     assert.equal(calls, 1);
+    const homeCookie = second.cookie ?? '';
+    await acknowledge(app, homeCookie);
     const home = await app.inject({
       method: 'GET',
       url: '/',
-      headers: { ...HOST, cookie: second.cookie ?? '' },
+      headers: { ...HOST, cookie: homeCookie },
     });
     assert.match(home.body, /אין כאן עדיין מה להציג/);
     const { rows } = await pool.query<{ n: string }>(

@@ -151,6 +151,17 @@ export const PORTAL_COPY: readonly PortalCopy[] = [
     text: 'המפתח כבר לא ברשימה.',
   },
   { key: 'passkeys.back', language: 'he', text: 'חזרה' },
+  { key: 'notice.page', language: 'he', text: 'לפני שמתחילים' },
+  { key: 'notice.title', language: 'he', text: 'לפני שמתחילים' },
+  {
+    key: 'notice.lede',
+    language: 'he',
+    text: 'שני דברים קצרים. השירות אינו מותנה באישור.',
+  },
+  { key: 'notice.full', language: 'he', text: 'קריאת הנוסח המלא' },
+  { key: 'notice.continue', language: 'he', text: 'קראתי, המשך' },
+  { key: 'notice.full_page', language: 'he', text: 'הנוסח המלא' },
+  { key: 'notice.back', language: 'he', text: 'חזרה' },
 ];
 
 const byKey = new Map(PORTAL_COPY.map((row) => [row.key, row.text]));

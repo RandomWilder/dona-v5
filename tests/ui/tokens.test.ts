@@ -75,6 +75,8 @@ import {
 import {
   renderCodePage,
   renderHomePage,
+  renderNoticeFullPage,
+  renderNoticePage,
   renderPasskeyOffer,
   renderPasskeysPage,
   renderPhonePage,
@@ -609,6 +611,45 @@ const SCREENS: Array<[string, () => string]> = [
       }),
   ],
   ['portal · home', () => renderHomePage({ csrf: CSRF })],
+  [
+    'portal · notice',
+    () =>
+      renderNoticePage({
+        csrf: CSRF,
+        privacy: {
+          id: '11111111-1111-4111-8111-111111111111',
+          title: 'הודעת פרטיות',
+          summary: 'הפורטל שומר את המספר המאומת.',
+        },
+        terms: {
+          id: '22222222-2222-4222-8222-222222222222',
+          title: 'תנאי שימוש',
+          summary: 'השימוש הוא לצפייה בשכירות.',
+        },
+        optIns: [
+          {
+            key: 'building_notices',
+            title: 'עדכונים על הבניין',
+            summary: 'עבודות, הפסקות מים וכדומה. לא חובה.',
+            on: false,
+          },
+        ],
+      }),
+  ],
+  [
+    'portal · notice, full',
+    () =>
+      renderNoticeFullPage({
+        privacy: {
+          title: 'הודעת פרטיות',
+          body: 'אפשר לבקש עיון, תיקון או מחיקה.',
+        },
+        terms: {
+          title: 'תנאי שימוש',
+          body: 'הפורטל מיועד למי שהמספר שלו רשום במשרד.',
+        },
+      }),
+  ],
   [
     'portal · passkey offer',
     () =>

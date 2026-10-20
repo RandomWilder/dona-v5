@@ -12,6 +12,12 @@ import { csrfTokenFor, verifyCsrf } from '../../staff/contract.ts';
 import { describeChallenge, requestCode, verifyCode } from './codes.ts';
 import { portalText } from './copy.ts';
 import {
+  acknowledgeNotice,
+  chosenOptIns,
+  loadNotice,
+  shownTextId,
+} from './legal.ts';
+import {
   beginAuthentication,
   beginRegistration,
   finishAuthentication,
@@ -38,6 +44,8 @@ import {
 import {
   renderCodePage,
   renderHomePage,
+  renderNoticeFullPage,
+  renderNoticePage,
   renderPasskeyOffer,
   renderPasskeysPage,
   renderPhonePage,
@@ -171,6 +179,9 @@ export function registerPortalRoutes(
     if (token !== null) {
       const session = await resolvePortalSession(pool, clock, token);
       if (session !== null) {
+        if (await noticeDue(session.portalIdentityId)) {
+          return go(reply, '/notice', []);
+        }
         return html(reply, renderHomePage({ csrf: csrfTokenFor(token) }));
       }
     }
@@ -482,6 +493,11 @@ export function registerPortalRoutes(
     };
   }
 
+  async function noticeDue(identityId: string): Promise<boolean> {
+    const screen = await loadNotice(pool, identityId, clock.now());
+    return screen?.due === true;
+  }
+
   function posted(body: unknown, name: string): string | null {
     const value = field(body, name);
     return value === '' ? null : value;
@@ -511,7 +527,11 @@ export function registerPortalRoutes(
     if (open === null || !csrfOk(open.token, request.body)) {
       return go(reply, '/', []);
     }
-    return go(reply, '/', []);
+    return go(
+      reply,
+      (await noticeDue(open.portalIdentityId)) ? '/notice' : '/',
+      [],
+    );
   });
 
   app.post('/passkey/register', TENANT, async (request, reply) => {
@@ -596,15 +616,83 @@ export function registerPortalRoutes(
     );
   }
 
+  app.get('/notice', TENANT, async (request, reply) => {
+    const open = await openSession(request.headers.cookie);
+    if (open === null) return go(reply, '/', []);
+    const screen = await loadNotice(pool, open.portalIdentityId, clock.now());
+    if (screen === null || !screen.due) return go(reply, '/', []);
+    return html(
+      reply,
+      renderNoticePage({
+        csrf: csrfTokenFor(open.token),
+        privacy: screen.privacy,
+        terms: screen.terms,
+        optIns: screen.optIns,
+      }),
+    );
+  });
+
+  app.get('/notice/full', TENANT, async (request, reply) => {
+    const open = await openSession(request.headers.cookie);
+    if (open === null) return go(reply, '/', []);
+    const screen = await loadNotice(pool, open.portalIdentityId, clock.now());
+    if (screen === null) return go(reply, '/', []);
+    return html(
+      reply,
+      renderNoticeFullPage({
+        privacy: screen.privacy,
+        terms: screen.terms,
+      }),
+    );
+  });
+
+  app.post('/notice', TENANT, async (request, reply) => {
+    const open = await openSession(request.headers.cookie);
+    if (open === null || !csrfOk(open.token, request.body)) {
+      return go(reply, '/', []);
+    }
+    const screen = await loadNotice(pool, open.portalIdentityId, clock.now());
+    if (screen === null) return go(reply, '/', []);
+    const privacyId = shownTextId(request.body, 'privacy');
+    const termsId = shownTextId(request.body, 'terms');
+    const recorded =
+      privacyId !== null &&
+      termsId !== null &&
+      (await acknowledgeNotice(
+        pool,
+        clock,
+        open.portalIdentityId,
+        { privacyId, termsId },
+        chosenOptIns(
+          request.body,
+          screen.optIns.map((opt) => opt.key),
+        ),
+      ));
+    if (!recorded) {
+      return html(
+        reply,
+        renderNoticePage({
+          csrf: csrfTokenFor(open.token),
+          privacy: screen.privacy,
+          terms: screen.terms,
+          optIns: screen.optIns,
+        }),
+      );
+    }
+    return go(reply, '/', []);
+  });
+
   app.get('/passkeys', TENANT, async (request, reply) => {
     const open = await openSession(request.headers.cookie);
     if (open === null) return go(reply, '/', []);
+    if (await noticeDue(open.portalIdentityId)) return go(reply, '/notice', []);
     return passkeyPage(reply, open.token, open.portalIdentityId, null);
   });
 
   app.post('/passkeys/remove', TENANT, async (request, reply) => {
     const open = await openSession(request.headers.cookie);
     if (open === null) return go(reply, '/', []);
+    if (await noticeDue(open.portalIdentityId)) return go(reply, '/notice', []);
     if (!csrfOk(open.token, request.body)) {
       return passkeyPage(
         reply,

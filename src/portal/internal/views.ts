@@ -360,3 +360,89 @@ function passkeyScript(): Html {
     })();
   </script>`);
 }
+
+function paragraphs(body: string): Html {
+  return h`${body
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .map((line) => h`<p class="tp-long">${line}</p>`)}`;
+}
+
+function optSwitch(opt: {
+  key: string;
+  title: string;
+  summary: string;
+  on: boolean;
+}): Html {
+  const checked = opt.on ? h` checked` : h``;
+  return h`<label class="tp-card is-row" for="opt-${opt.key}">
+    <span class="tp-row-text">
+      <b class="tp-row-title">${opt.title}</b>
+      <span class="tp-meta">${opt.summary}</span>
+    </span>
+    <span class="tp-switch"><input id="opt-${opt.key}" name="opt_${opt.key}" type="checkbox" role="switch" value="on"${checked} /></span>
+  </label>`;
+}
+
+export function renderNoticePage(screen: {
+  csrf: string;
+  privacy: { id: string; title: string; summary: string };
+  terms: { id: string; title: string; summary: string };
+  optIns: ReadonlyArray<{
+    key: string;
+    title: string;
+    summary: string;
+    on: boolean;
+  }>;
+}): string {
+  return page(
+    portalText('notice.page'),
+    h`<div class="tp-body is-auth">
+      <div class="tp-stack">
+        <h1 class="tp-display">${portalText('notice.title')}</h1>
+        <p class="tp-lede">${portalText('notice.lede')}</p>
+      </div>
+      <form method="post" action="/notice">
+        ${csrfInput(screen.csrf)}
+        <input type="hidden" name="privacy" value="${screen.privacy.id}" />
+        <input type="hidden" name="terms" value="${screen.terms.id}" />
+        <article class="tp-card">
+          <div class="tp-row">
+            <span class="tp-well">${icon('shield', { class: 'tp-i i18' })}</span>
+            <h2 class="tp-section">${screen.privacy.title}</h2>
+          </div>
+          <p class="tp-long">${screen.privacy.summary}</p>
+          <div class="tp-row">
+            <span class="tp-well">${icon('file', { class: 'tp-i i18' })}</span>
+            <h2 class="tp-section">${screen.terms.title}</h2>
+          </div>
+          <p class="tp-long">${screen.terms.summary}</p>
+          <a class="tp-link" href="/notice/full">${portalText('notice.full')}</a>
+        </article>
+        ${screen.optIns.map((opt) => optSwitch(opt))}
+        <button class="tp-primary" type="submit">${portalText('notice.continue')}</button>
+      </form>
+    </div>`,
+  );
+}
+
+export function renderNoticeFullPage(screen: {
+  privacy: { title: string; body: string };
+  terms: { title: string; body: string };
+}): string {
+  return page(
+    portalText('notice.full_page'),
+    h`<div class="tp-body is-auth">
+      <h1 class="tp-display">${portalText('notice.full_page')}</h1>
+      <article class="tp-card">
+        <h2 class="tp-section">${screen.privacy.title}</h2>
+        ${paragraphs(screen.privacy.body)}
+      </article>
+      <article class="tp-card">
+        <h2 class="tp-section">${screen.terms.title}</h2>
+        ${paragraphs(screen.terms.body)}
+      </article>
+      <a class="tp-text-btn" href="/notice">${portalText('notice.back')}</a>
+    </div>`,
+  );
+}

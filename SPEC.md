@@ -296,8 +296,23 @@ byte for byte. A screen that handles its own refusal still does; this is only th
   the signature. Attestation is `none`. The challenge is written into the page when that page is
   rendered, and the tap calls the API with that challenge. The prompt is not deferred behind a
   request, which mobile Safari would drop. If that challenge cannot be issued, the phone page
-  still renders and the code form still sends. The list of passkeys is a page this module serves; the
+  still renders and the code form still sends.   The list of passkeys is a page this module serves; the
   עוד tab that will hold it is #279.
+- **Legal texts are versioned rows, and the service does not depend on consent** (#276). The privacy
+  notice, the terms, the entry-permission wording and the optional opt-ins are each a row per
+  language (`he`, `en`, `ru`) with a version and a placeholder flag. The wording shipped with the
+  portal is a placeholder written to the notification duty in Amendment 13 of the Privacy Protection
+  Law. Dona Dom's legal team replaces it by adding a new version; a version is never edited in
+  place. The version a request shows is the highest version number recorded at or before that
+  request. An acknowledgement is a row: the portal identity, the text that was on the page (that
+  row carries the version and the language), and the time. A version that was not on the page is
+  not recorded as read. The first request after sign-in that is not the passkey offer,
+  and any later request once the current privacy notice or terms is a version that identity has not
+  acknowledged, shows those two texts and each optional opt-in. The acknowledgement is the
+  continuation button. It is not a checkbox, and it does not sit on an opt-in's card. Each opt-in
+  is its own switch, off until the tenant turns it on, and the same switch turns it off. Reading
+  the notice is not consent, and the service is not conditional on it or on any opt-in. The
+  entry-permission wording is held the same way and is not on this screen.
 - **Every write route carries a CSRF token, and the token is derived rather than stored** (slice
   5.2): `sha256('csrf:' + <session token>)`, computed from the `HttpOnly` cookie the request already
   carries, held in no column and defended by the same policy case that forbids a stored token.
@@ -468,7 +483,7 @@ two catalogues it edits belong to two modules and a third module may not own eit
 gave that chrome v3's ops sidebar** rather than a top bar. **5.2d put that rail behind a menu control below 840px**, in the kernel
 shell so every later screen inherits it, still with no `<script>` except the call page's copy
 control, and only on a call that has a draft (SPEC-calls), the portal code screen's sixth-digit
-submit (#273), and the portal passkey ceremony (#275). **Slice 5.3 added the remaining destinations** — קריאות and הגדרות — as stubs that name the week and slice that own them. The login screen stays without that rail. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
+submit (#273), and the portal passkey ceremony (#275). **#276 shows the privacy notice and the terms before the empty home, records the acknowledgement, and does not make the service conditional on consent.** **Slice 5.3 added the remaining destinations** — קריאות and הגדרות — as stubs that name the week and slice that own them. The login screen stays without that rail. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
 physical side or a `<script>` other than those named exceptions, and from 2.6 also on a phone number or an E.164 prefix: what a screen
 may say about a household is **a state and a count, never a tenant's name**, so the
 occupancy chip is derived on every load and search never reaches `party`.

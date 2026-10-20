@@ -17,6 +17,8 @@ export {
 export {
   renderCodePage,
   renderHomePage,
+  renderNoticeFullPage,
+  renderNoticePage,
   renderPasskeyOffer,
   renderPasskeysPage,
   renderPhonePage,

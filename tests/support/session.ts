@@ -163,6 +163,11 @@ function hiddenCsrf(html: string): string {
   return value;
 }
 
+function hiddenValue(html: string, name: string): string {
+  const match = new RegExp(`name="${name}" value="([^"]*)"`).exec(html);
+  return match?.[1] ?? '';
+}
+
 /**
  * Signs in through the portal's real code flow and returns the application as that tenant.
  *
@@ -231,6 +236,36 @@ export async function asTenant(
     throw new Error('portal session cookie was not set');
   }
   const token = pair.slice(pair.indexOf('=') + 1);
+  const gate = await app.inject({
+    method: 'GET',
+    url: '/',
+    headers: { host: TENANT_HOST, cookie: pair },
+    remoteAddress,
+  });
+  if (gate.statusCode === 303 && gate.headers.location === '/notice') {
+    const notice = await app.inject({
+      method: 'GET',
+      url: '/notice',
+      headers: { host: TENANT_HOST, cookie: pair },
+      remoteAddress,
+    });
+    const accepted = await app.inject({
+      method: 'POST',
+      url: '/notice',
+      headers: {
+        host: TENANT_HOST,
+        cookie: pair,
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      payload: `csrf=${hiddenCsrf(notice.body)}&privacy=${hiddenValue(notice.body, 'privacy')}&terms=${hiddenValue(notice.body, 'terms')}`,
+      remoteAddress,
+    });
+    if (accepted.statusCode !== 303) {
+      throw new Error(
+        `portal notice was not accepted (${accepted.statusCode})`,
+      );
+    }
+  }
   const session: TenantSession = {
     cookie: pair,
     csrf: csrfTokenFor(token),

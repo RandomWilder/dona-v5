@@ -306,6 +306,48 @@ body.portal :is(span, b)[dir="ltr"] {
   align-items: center;
   gap: 12px;
 }
+label.tp-card {
+  cursor: pointer;
+}
+.tp-switch {
+  position: relative;
+  flex: none;
+  inline-size: 46px;
+  block-size: 28px;
+  border-radius: var(--tp-r-pill);
+  background: var(--tp-frame);
+}
+.tp-switch input {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.tp-switch::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 3px;
+  inset-inline-start: 3px;
+  inline-size: 22px;
+  block-size: 22px;
+  border-radius: 50%;
+  background: var(--tp-surface);
+  box-shadow: var(--tp-shadow-thumb);
+  pointer-events: none;
+}
+.tp-switch:has(input:checked) {
+  background: var(--tp-accent-600);
+}
+.tp-switch:has(input:checked)::after {
+  inset-inline-start: 21px;
+}
+.tp-switch:has(input:focus-visible) {
+  outline: 2px solid var(--tp-accent-600);
+  outline-offset: 2px;
+}
 .tp-fallback {
   margin-block-start: auto;
 }
@@ -581,6 +623,16 @@ body.portal .tp-otp input {
 }
 .tp-list > :last-child {
   border-block-end: 0;
+}
+.tp-section {
+  font-size: 15px;
+  font-weight: 700;
+}
+.tp-long {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--tp-ink-2);
+  overflow-wrap: anywhere;
 }
 .tp-row {
   display: flex;
