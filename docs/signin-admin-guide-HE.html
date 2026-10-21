@@ -228,26 +228,22 @@
   <header>
     <span class="eyebrow">מדריך למנהל/ת Microsoft 365 · דונה דום</span>
     <h1>כניסה של הצוות עם חשבון Microsoft</h1>
-    <p class="lede">מה צריך להגדיר ב-Entra כדי שעובדי דונה דום ייכנסו למערכת דונה עם חשבון ה-Microsoft שלהם, בלי חשבון Google. רישום אפליקציה אחד, בלי PowerShell. כ-10 דקות.</p>
+    <p class="lede">רישום אפליקציה אחד ב-Entra, כדי שעובדי דונה דום ייכנסו למערכת דונה עם חשבון ה-Microsoft שלהם. כ-10 דקות.</p>
     <dl class="facts">
       <div><dt>אפליקציה חדשה</dt><dd class="mono">Dona Sign-in - Staging</dd></div>
       <div><dt>סביבה</dt><dd>בדיקות (Staging)</dd></div>
-      <div><dt>הרשאות נדרשות</dt><dd>זיהוי בלבד: openid, User.Read</dd></div>
+      <div><dt>הרשאות</dt><dd>openid, User.Read</dd></div>
     </dl>
   </header>
 
   <section class="why">
-    <h2>למה ומה</h2>
-    <p>מסך הכניסה של דונה יציג שני כפתורים: Google, כמו היום, ו-Microsoft. כפתור Microsoft מקבל רק חשבון מהארגון של דונה דום, ורק עובד שיש לו כתובת <code>@dona.co.il</code>, ראשית או נוספת (alias). מי שאין לו חשבון צוות במערכת לא נכנס, גם עם חשבון Microsoft תקין.</p>
+    <h2>מה זה עושה</h2>
     <ul>
-      <li><strong>מזהה בלבד:</strong> המערכת מקבלת מ-Microsoft אישור שהעובד מהארגון, וקוראת מהפרופיל שלו את כתובות המייל שלו. זה הכל.</li>
-      <li><strong>לא נוגעת:</strong> אין גישה לדואר, ליומן, לקבצים, או לפרטים של משתמשים אחרים.</li>
-      <li><strong>ארגון אחד בלבד:</strong> חשבונות אישיים (outlook.com, hotmail) וחשבונות מארגונים אחרים נדחים.</li>
-      <li><strong>נפרד מחיבור התיבה:</strong> אפליקציה חדשה באותו ארגון. שינוי בכניסה לא יכול לעצור את קליטת המיילים, וסוד הכניסה לא פותח שום תיבה.</li>
+      <li><strong>כפתור Microsoft</strong> במסך הכניסה של דונה, לצד Google.</li>
+      <li><strong>זיהוי בלבד:</strong> Microsoft מאשרת שהעובד מהארגון, והמערכת קוראת מהפרופיל שלו את כתובות המייל שלו.</li>
+      <li><strong>עובדי דונה דום בלבד:</strong> נכנס מי שיש לו כתובת <code>@dona.co.il</code> (ראשית או נוספת) וחשבון צוות במערכת.</li>
+      <li><strong>אפליקציה נפרדת</strong> באותו ארגון, לצד <code>DevMail-DonaAi</code>, עם מזהה וסוד משלה.</li>
     </ul>
-    <div class="callout">
-      <strong>לא לגעת באפליקציית התיבה.</strong> <code>DevMail-DonaAi</code> נשארת כפי שהיא. לא מוסיפים לה כתובת הפניה, לא מוסיפים לה <code>openid</code>, ולא מוסיפים הרשאת דואר או יומן לרישום החדש.
-    </div>
   </section>
 
   <section class="stages" aria-label="רישום כניסה עם Microsoft">
@@ -255,47 +251,40 @@
     <article class="stage">
       <span class="num">0</span>
       <div class="body">
-        <h2>מה צריך לפני שמתחילים</h2>
-        <p class="intro">הרשאת מנהל אחת, ומשתמש אחד לבדיקה.</p>
+        <h2>לפני שמתחילים</h2>
         <ul>
-          <li>תפקיד <strong>Application Administrator</strong> (או Global Administrator) ב-Entra. הוא נדרש גם לאישור ההרשאות בשלב 3.</li>
-          <li>משתמש לבדיקה שיש לו כתובת <code>@dona.co.il</code>, ראשית או נוספת. בודקים ב-Exchange admin center: Recipients ← Mailboxes ← המשתמש ← <strong>Email addresses</strong>.</li>
+          <li>תפקיד <strong>Application Administrator</strong> או Global Administrator ב-Entra.</li>
+          <li>משתמש לבדיקה: <code>asafv@dona.co.il</code>.</li>
         </ul>
-        <div class="callout info">
-          <strong>לא משנים את הכתובת הראשית של אף אחד.</strong> אצל רוב העובדים הכתובת הראשית היא <code>@donail.onmicrosoft.com</code>, ו-<code>@dona.co.il</code> היא כתובת נוספת באותה תיבה. כך זה צריך להישאר. המערכת בודקת את כל הכתובות של העובד, ומספיק שאחת מהן ב-<code>dona.co.il</code>.<br>
-          גם <code>asafv@dona.co.il</code> מתאים לבדיקה. הכתובת הראשית שלו, <code>asafv@donail.onmicrosoft.com</code>, נשארת כפי שהיא, וחיבור התיבה לא מושפע.
-        </div>
       </div>
     </article>
 
     <article class="stage">
       <span class="num">1</span>
       <div class="body">
-        <h2>רישום אפליקציה חדשה</h2>
-        <p class="intro">זהות נפרדת, לארגון הזה בלבד. סוג הפלטפורמה הוא Web, כי לאפליקציה יש סוד.</p>
+        <h2>רישום אפליקציה</h2>
+        <p class="intro">זהות נפרדת לכניסה, לארגון הזה בלבד.</p>
         <p class="where">entra.microsoft.com ← Applications ← App registrations ← New registration</p>
         <ol>
           <li>Name: <code>Dona Sign-in - Staging</code></li>
-          <li>Supported account types: <strong>Accounts in this organizational directory only (Single tenant)</strong>. לא לסמן חשבונות Microsoft אישיים.</li>
-          <li>Redirect URI: לבחור <strong>Web</strong>, ולהדביק את הכתובת הראשונה (סביבת הבדיקות):</li>
+          <li>Supported account types: <strong>Accounts in this organizational directory only (Single tenant)</strong>.</li>
+          <li>Redirect URI: <strong>Web</strong>, ולהדביק:</li>
         </ol>
         <div class="code"><pre>https://dona-staging-r44j24yuaa-zf.a.run.app/staff/auth/microsoft/callback</pre></div>
         <ol start="4">
           <li>Register.</li>
-          <li>את הכתובת השנייה (פיתוח מקומי) מוסיפים דרך <strong>Manifest</strong>, לא דרך מסך Authentication: המסך הזה לא מקבל כתובת <code>http</code> עם <code>127.0.0.1</code>.<br>
-            App registrations ← Dona Sign-in - Staging ← Manifest ← בתוך <code>"web"</code>, ברשימה <code>"redirectUris"</code>, להוסיף את השורה השנייה. התוצאה:</li>
+          <li>כתובת שנייה, לפיתוח מקומי, מוסיפים דרך <strong>Manifest</strong>: בתוך <code>"web"</code>, ברשימה <code>"redirectUris"</code>. התוצאה:</li>
         </ol>
         <div class="code"><pre>"redirectUris": [
   "https://dona-staging-r44j24yuaa-zf.a.run.app/staff/auth/microsoft/callback",
   "http://127.0.0.1:3000/staff/auth/microsoft/callback"
 ],</pre></div>
         <ol start="6">
-          <li>Save. במסך Authentication, תחת Web, מופיעות עכשיו שתי הכתובות.</li>
-          <li>לא לסמן Access tokens ולא ID tokens תחת Implicit grant and hybrid flows.</li>
-          <li>בדף Overview להעתיק את <strong>Application (client) ID</strong>.</li>
+          <li>Save. במסך Authentication, תחת Web, מופיעות שתי הכתובות.</li>
+          <li>בדף Overview, להעתיק את <strong>Application (client) ID</strong>.</li>
         </ol>
         <div class="callout info">
-          שתי הכתובות חייבות להיות זהות תו-בתו, כולל <code>https</code> מול <code>http</code>, ו-<code>127.0.0.1</code> ולא <code>localhost</code>. כתובת אחת חסרה או שונה והכניסה נכשלת בשגיאה AADSTS50011.
+          להעתיק את הכתובות בדיוק כפי שהן, תו-בתו.
         </div>
       </div>
     </article>
@@ -304,14 +293,14 @@
       <span class="num">2</span>
       <div class="body">
         <h2>יצירת סוד (Client secret)</h2>
-        <p class="intro">סיסמה נפרדת משל אפליקציית התיבה. המערכת מתריעה 30 יום לפני שהיא פגה, ולכן צריך גם את תאריך התפוגה.</p>
+        <p class="intro">סיסמת האפליקציה. המערכת מתריעה 30 יום לפני התפוגה.</p>
         <p class="where">App registrations ← Dona Sign-in - Staging ← Certificates &amp; secrets ← New client secret</p>
         <ol>
           <li>Description: <code>dona-signin-staging</code></li>
-          <li>Expires: <strong>Custom</strong>, ל-24 חודשים (המקסימום).</li>
+          <li>Expires: <strong>Custom</strong>, 24 חודשים.</li>
           <li>Add.</li>
-          <li>להעתיק מיד את עמודת <strong>Value</strong> (לא את Secret ID). הערך מוצג פעם אחת בלבד.</li>
-          <li>לרשום את תאריך התפוגה שמופיע בעמודת Expires, בצורת <code>YYYY-MM-DD</code>.</li>
+          <li>להעתיק מיד את עמודת <strong>Value</strong>. היא מוצגת פעם אחת.</li>
+          <li>לרשום את תאריך התפוגה (עמודת Expires), בצורה <code>YYYY-MM-DD</code>.</li>
         </ol>
       </div>
     </article>
@@ -319,18 +308,16 @@
     <article class="stage">
       <span class="num">3</span>
       <div class="body">
-        <h2>הרשאות: openid ו-User.Read בלבד</h2>
-        <p class="intro">הרשאה מואצלת (Delegated) בלבד, שתי אלה, ושום דבר אחר. לא דואר, לא יומן, ולא הרשאת Application.</p>
+        <h2>הרשאות: openid ו-User.Read</h2>
+        <p class="intro">שתי הרשאות מואצלות (Delegated): זיהוי, וקריאת הפרופיל של העובד שנכנס.</p>
         <p class="where">App registrations ← Dona Sign-in - Staging ← API permissions</p>
         <ol>
-          <li>להשאיר את <code>User.Read</code> שנוסף כברירת מחדל. הוא קורא רק את הפרופיל של העובד שנכנס, ומשם המערכת לוקחת את כתובות המייל שלו.</li>
-          <li>Add a permission ← Microsoft Graph ← <strong>Delegated permissions</strong> ← לסמן רק <code>openid</code>.</li>
-          <li>לא להוסיף <code>Mail.Read</code>, <code>Mail.Send</code>, <code>Calendars.Read</code>, או כל הרשאה אחרת.</li>
-          <li>לא לעבור ללשונית Application permissions.</li>
-          <li>ללחוץ <strong>Grant admin consent</strong> ולאשר, כשברשימה רק שתיים: <code>openid</code> ו-<code>User.Read</code>. כך עובדי הצוות לא יתבקשו לאשר בעצמם, והכניסה עובדת גם אם הארגון חוסם אישור של משתמשים.</li>
+          <li><code>User.Read</code> כבר ברשימה.</li>
+          <li>Add a permission ← Microsoft Graph ← <strong>Delegated permissions</strong> ← לסמן <code>openid</code> ← Add permissions.</li>
+          <li>ללחוץ <strong>Grant admin consent</strong> ולאשר.</li>
         </ol>
-        <div class="callout">
-          <strong>התוצאה ברשימה:</strong> <code>openid</code> ו-<code>User.Read</code>, מסוג Delegated, עם סימון ירוק של Granted, וזהו. הרשאת דואר או יומן כאן אסורה. הדואר נשאר באפליקציה השנייה, ושם רק דרך Exchange.
+        <div class="callout ok">
+          <strong>התוצאה:</strong> <code>openid</code> ו-<code>User.Read</code>, מסוג Delegated, עם סימון ירוק Granted.
         </div>
       </div>
     </article>
@@ -339,7 +326,7 @@
       <span class="num">4</span>
       <div class="body">
         <h2>מסירת הפרטים</h2>
-        <p class="intro">המערכת צריכה חמישה ערכים. שניים כבר אצלנו. שלושה מוסרים מכאן.</p>
+        <p class="intro">שלושה ערכים.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th>ערך</th><th>מאיפה</th><th>סודי?</th></tr></thead>
@@ -347,18 +334,15 @@
               <tr><td class="k">Application (client) ID</td><td>שלב 1, Overview</td><td>לא</td></tr>
               <tr><td class="k">Client secret (Value)</td><td>שלב 2</td><td><strong>כן</strong></td></tr>
               <tr><td class="k">תאריך תפוגת הסוד</td><td>שלב 2, צורה <span class="mono">YYYY-MM-DD</span></td><td>לא</td></tr>
-              <tr><td class="k">Directory (tenant) ID</td><td>כבר אצלנו: אותו ארגון כמו אפליקציית התיבה (<span class="mono">DevMail-DonaAi</span>). לא שולחים.</td><td>לא</td></tr>
-              <tr><td class="k">דומיין</td><td>כבר מוגדר: <span class="mono">dona.co.il</span>. לא שולחים.</td><td>לא</td></tr>
             </tbody>
           </table>
         </div>
         <ul>
-          <li>את כל שלושת הערכים: בערוץ מאובטח בלבד. לא במייל ולא בצ'אט (לא וואטסאפ ולא Teams).</li>
-          <li>את הסוד: בנפרד משני האחרים. בטלפון, או בקישור חד-פעמי (מנהל סיסמאות או OneTimeSecret).</li>
-          <li>אם האפליקציה נרשמה בארגון אחר מזה של אפליקציית התיבה, לעדכן אותנו ולמסור גם את ה-Directory (tenant) ID.</li>
+          <li>מוסרים בערוץ מאובטח.</li>
+          <li>את הסוד: בנפרד, בטלפון או בקישור חד-פעמי (מנהל סיסמאות או OneTimeSecret).</li>
         </ul>
         <div class="callout ok">
-          זהו. אנחנו מכניסים את הערכים לסביבת הבדיקות, ומשתמש הבדיקה משלב 0 נכנס פעם אחת עם Microsoft. עד אז כפתור Microsoft לא מופיע במסך הכניסה.
+          זהו. אנחנו מגדירים את סביבת הבדיקות, ו-<code>asafv@dona.co.il</code> נכנס פעם אחת לבדיקה.
         </div>
       </div>
     </article>
@@ -368,15 +352,15 @@
   <section class="later">
     <h2>להמשך</h2>
     <ul>
-      <li><strong>סביבת הייצור:</strong> כשהיא קיימת, חוזרים על שלבים 1–4 עם אפליקציה נפרדת (<code>Dona Sign-in - Production</code>) וכתובת הפניה של הייצור, בלי כתובת <code>127.0.0.1</code>.</li>
-      <li><strong>חידוש הסוד:</strong> המערכת תתריע 30 יום לפני התפוגה. החידוש הוא סוד חדש ותאריך חדש (שלבים 2 ו-4). שום דבר אחר לא משתנה.</li>
-      <li><strong>הוספת עובד:</strong> לא נעשית כאן. מנהל במערכת דונה מוסיף את כתובת ה-<code>@dona.co.il</code> של העובד (גם אם היא כתובת נוספת) ותפקיד במסך הצוות, והכניסה הראשונה של העובד קושרת את החשבון.</li>
-      <li><strong>ביטול הכניסה בכל רגע:</strong> מחיקת ה-Client secret ב-Entra עוצרת את כניסת Microsoft מיד. כניסה עם Google לא מושפעת, וגם לא קליטת המיילים. להסרה מלאה: מחיקת הרישום <code>Dona Sign-in - Staging</code>.</li>
-      <li><strong>גישה מותנית (Conditional Access):</strong> מדיניות כמו אימות דו-שלבי חלה על הכניסה הזו כמו על כל כניסה ל-Microsoft, וזה רצוי. אם יש מדיניות שמגבילה לפי כתובת IP או מכשיר, לעדכן אותנו.</li>
+      <li><strong>סביבת הייצור:</strong> שלבים 1–4 עם אפליקציה <code>Dona Sign-in - Production</code> וכתובת ההפניה של הייצור בלבד.</li>
+      <li><strong>חידוש הסוד:</strong> סוד חדש ותאריך חדש (שלבים 2 ו-4).</li>
+      <li><strong>הוספת עובד:</strong> נעשית במערכת דונה, לפי כתובת ה-<code>@dona.co.il</code> שלו.</li>
+      <li><strong>עצירת הכניסה:</strong> מחיקת ה-Client secret עוצרת את כניסת Microsoft מיד.</li>
+      <li><strong>גישה מותנית (Conditional Access):</strong> אם יש מדיניות לפי כתובת IP או מכשיר, לעדכן אותנו.</li>
     </ul>
   </section>
 
-  <footer>שאלות: אסף וילדר · Microsoft identity platform, OpenID Connect</footer>
+  <footer>שאלות: אסף וילדר</footer>
 </main>
 
 <script>
