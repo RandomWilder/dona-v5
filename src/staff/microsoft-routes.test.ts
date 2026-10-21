@@ -160,7 +160,9 @@ describe('staff · signing in with Microsoft', () => {
       objectId: OBJECT_ID,
       tenantId: TENANT,
       issuer: issuer(TENANT),
-      email: `${PREFIX}Yael@${DOMAIN}`,
+      profileId: OBJECT_ID,
+      userType: 'Member',
+      addresses: [`SMTP:${PREFIX}Yael@${DOMAIN}`],
       nonce: begun.nonce,
     });
 
@@ -210,7 +212,9 @@ describe('staff · signing in with Microsoft', () => {
       objectId: OBJECT_ID,
       tenantId: TENANT,
       issuer: issuer(TENANT),
-      email,
+      profileId: OBJECT_ID,
+      userType: 'Member',
+      addresses: [`SMTP:${email}`],
       nonce: again.nonce,
     });
     const second = await app.inject({
@@ -282,16 +286,19 @@ describe('staff · signing in with Microsoft', () => {
     assert.equal(googleRefusal.statusCode, 403);
 
     const attempt = async (
-      claims: Partial<MicrosoftClaims> & { email: string | null },
+      claims: Partial<MicrosoftClaims>,
       over: { state?: string; cookie?: string } = {},
     ) => {
       const begun = await begin(app, '/staff/auth/microsoft/start');
       const code = `code-${Math.random()}`;
       microsoft.codes.set(code, {
         objectId: OBJECT_ID,
+        profileId: OBJECT_ID,
+        userType: 'Member',
         tenantId: TENANT,
         issuer: issuer(TENANT),
         nonce: begun.nonce,
+        addresses: [],
         ...claims,
       });
       return app.inject({
@@ -303,24 +310,27 @@ describe('staff · signing in with Microsoft', () => {
     };
 
     const answers = [
-      await attempt({ email: `${PREFIX}lookalike@evil-${DOMAIN}` }),
-      await attempt({ email: `${PREFIX}lookalike@${DOMAIN}.evil` }),
+      await attempt({ addresses: [`SMTP:${PREFIX}lookalike@evil-${DOMAIN}`] }),
+      await attempt({ addresses: [`SMTP:${PREFIX}lookalike@${DOMAIN}.evil`] }),
       await attempt({
-        email: `${PREFIX}personal@${DOMAIN}`,
+        addresses: [`SMTP:${PREFIX}personal@${DOMAIN}`],
         tenantId: CONSUMERS,
         issuer: issuer(CONSUMERS),
       }),
       await attempt({
-        email: `${PREFIX}nonce@${DOMAIN}`,
+        addresses: [`SMTP:${PREFIX}nonce@${DOMAIN}`],
         nonce: 'somebody-elses-nonce',
       }),
-      await attempt({ email: null }),
-      await attempt({ email: `${PREFIX}bound@${DOMAIN}` }),
+      await attempt({ addresses: [] }),
+      await attempt({ addresses: [`SMTP:${PREFIX}bound@${DOMAIN}`] }),
       await attempt(
-        { email: `${PREFIX}nonce@${DOMAIN}` },
+        { addresses: [`SMTP:${PREFIX}nonce@${DOMAIN}`] },
         { state: 'not-the-state' },
       ),
-      await attempt({ email: `${PREFIX}nonce@${DOMAIN}` }, { cookie: '' }),
+      await attempt(
+        { addresses: [`SMTP:${PREFIX}nonce@${DOMAIN}`] },
+        { cookie: '' },
+      ),
     ];
 
     for (const answer of answers) {
@@ -394,7 +404,9 @@ describe('staff · signing in with Microsoft', () => {
       objectId: '99999999-9999-9999-9999-999999999999',
       tenantId: TENANT,
       issuer: issuer(TENANT),
-      email,
+      profileId: '99999999-9999-9999-9999-999999999999',
+      userType: 'Member',
+      addresses: [`SMTP:${email}`],
       nonce: msBegun.nonce,
     });
     const msRefusal = await app.inject({
@@ -434,7 +446,9 @@ describe('staff · signing in with Microsoft', () => {
         objectId: '99999999-9999-9999-9999-999999999999',
         tenantId: TENANT,
         issuer: issuer(TENANT),
-        email,
+        profileId: '99999999-9999-9999-9999-999999999999',
+        userType: 'Member',
+        addresses: [`SMTP:${email}`],
         nonce: next.nonce,
       });
       const answer = await app.inject({
@@ -461,7 +475,9 @@ describe('staff · signing in with Microsoft', () => {
       objectId: OBJECT_ID,
       tenantId: TENANT,
       issuer: issuer(TENANT),
-      email,
+      profileId: OBJECT_ID,
+      userType: 'Member',
+      addresses: [`SMTP:${email}`],
       nonce: clear.nonce,
     });
     const signedIn = await app.inject({

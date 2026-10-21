@@ -26,7 +26,7 @@ import { sameValue } from '../../kernel/compare.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { Html } from '../../kernel/ui/html.ts';
 import { requireText } from '../../kernel/validate.ts';
-import { addOperator, notAllowed } from './accounts.ts';
+import { accountsByEmails, addOperator, notAllowed } from './accounts.ts';
 import { csrfFrom } from './csrf.ts';
 import { acceptClaims, type IdentityProvider } from './identity.ts';
 import {
@@ -363,6 +363,13 @@ export function registerStaffRoutes(
         });
         if (accepted === null) return refuse();
 
+        // The person's addresses are the primary and its aliases (#289). Exactly one may name a
+        // staff account: two would be a choice this system has no basis to make, and the refusal
+        // names no account, so it spends neither one's lockout.
+        const named = await accountsByEmails(deps.pool, accepted.addresses);
+        const [account] = named;
+        if (named.length !== 1 || account === undefined) return refuse();
+
         return completeSignIn(
           signing,
           audit,
@@ -371,7 +378,7 @@ export function registerStaffRoutes(
           cookies,
           {
             bindingId: accepted.bindingId,
-            address: accepted.email,
+            address: account.email,
           },
         );
       },

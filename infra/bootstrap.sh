@@ -272,9 +272,9 @@ done
 if [ "$ENV" = staging ]; then
   say "Microsoft sign-in — the director's act, not this script"
   # #264. A separate single-tenant app in Dona Dom's tenant, delegated
-  # openid email only. This script cannot create it. Staging mounts the
+  # openid User.Read only. This script cannot create it. Staging mounts the
   # secrets when they exist.
-  echo "  app:      separate single-tenant registration, delegated openid email only"
+  echo "  app:      separate single-tenant registration, delegated openid User.Read only"
   echo "  redirect: ${SERVICE_URL:-<the dona-$ENV service URL, once it exists>}/staff/auth/microsoft/callback"
   echo "  redirect: http://127.0.0.1:3000/staff/auth/microsoft/callback  (Manifest, web.redirectUris: the portal box refuses http loopback)"
   echo "  then:    ./infra/set-secret.sh $ENV microsoft-oauth-client-id"

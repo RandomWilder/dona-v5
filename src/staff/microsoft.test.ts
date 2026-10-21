@@ -31,8 +31,17 @@ const CLAIMS: MicrosoftClaims = {
   objectId: '33333333-3333-3333-3333-333333333333',
   tenantId: TENANT,
   issuer: ISSUER,
-  email: 'Yael@Dona.co.il',
   nonce: 'nonce-abc',
+  profileId: '33333333-3333-3333-3333-333333333333',
+  userType: 'Member',
+  addresses: ['SMTP:yael@donail.onmicrosoft.com', 'smtp:Yael@Dona.co.il'],
+};
+
+/** Graph's answer to `/me` for CLAIMS' person. */
+const PROFILE = {
+  id: CLAIMS.objectId,
+  userType: 'Member',
+  proxyAddresses: CLAIMS.addresses,
 };
 
 function configured(
@@ -51,7 +60,7 @@ function configured(
 }
 
 describe('staff · the Microsoft authorization request', () => {
-  it('sends the operator to this tenant, with an account chooser and no more scope than an address', () => {
+  it('sends the operator to this tenant, with an account chooser and no more scope than their own profile', () => {
     const url = new URL(
       configured().authorizeUrl({
         state: 'state-abc',
@@ -71,7 +80,7 @@ describe('staff · the Microsoft authorization request', () => {
     );
     assert.equal(url.searchParams.get('state'), 'state-abc');
     assert.equal(url.searchParams.get('nonce'), 'nonce-abc');
-    assert.equal(url.searchParams.get('scope'), 'openid email');
+    assert.equal(url.searchParams.get('scope'), 'openid User.Read');
     assert.equal(url.searchParams.get('prompt'), 'select_account');
     assert.equal(url.searchParams.get('client_secret'), null);
     assert.doesNotMatch(url.toString(), /microsoft-client-secret-value/);
@@ -81,14 +90,30 @@ describe('staff · the Microsoft authorization request', () => {
 describe('staff · what a Microsoft callback will accept', () => {
   const expected = { nonce: 'nonce-abc', tenantId: TENANT, domain: DOMAIN };
 
-  it('accepts this tenant and this domain, and binds ms:<tenant>:<object id>', () => {
+  it('accepts this tenant and this domain, alias or primary, and binds ms:<tenant>:<object id>', () => {
     assert.deepEqual(acceptMicrosoftClaims(CLAIMS, expected), {
       bindingId: `ms:${TENANT}:${CLAIMS.objectId}`,
-      email: 'yael@dona.co.il',
+      addresses: ['yael@dona.co.il'],
     });
+    assert.deepEqual(
+      acceptMicrosoftClaims(
+        {
+          ...CLAIMS,
+          addresses: [
+            'SMTP:yael@dona.co.il',
+            'smtp:YAEL@dona.co.il',
+            'smtp:office@dona.co.il',
+            'SIP:sip-only@dona.co.il',
+            'X500:/o=ExchangeLabs/cn=yael',
+          ],
+        },
+        expected,
+      )?.addresses,
+      ['yael@dona.co.il', 'office@dona.co.il'],
+    );
   });
 
-  it('refuses a foreign tenant, a personal account, a look-alike, a nonce mismatch and a missing address', () => {
+  it('refuses a foreign tenant, a personal account, a look-alike, a nonce mismatch, a missing address, a guest and a profile that is not the token’s', () => {
     assert.equal(
       acceptMicrosoftClaims(
         { ...CLAIMS, tenantId: 'someone-else', issuer: ISSUER },
@@ -102,7 +127,6 @@ describe('staff · what a Microsoft callback will accept', () => {
           ...CLAIMS,
           tenantId: CONSUMERS,
           issuer: `https://login.microsoftonline.com/${CONSUMERS}/v2.0`,
-          email: 'yael@dona.co.il',
         },
         expected,
       ),
@@ -110,14 +134,14 @@ describe('staff · what a Microsoft callback will accept', () => {
     );
     assert.equal(
       acceptMicrosoftClaims(
-        { ...CLAIMS, email: 'x@evil-dona.co.il' },
+        { ...CLAIMS, addresses: ['smtp:x@evil-dona.co.il'] },
         expected,
       ),
       null,
     );
     assert.equal(
       acceptMicrosoftClaims(
-        { ...CLAIMS, email: 'x@dona.co.il.evil' },
+        { ...CLAIMS, addresses: ['smtp:x@dona.co.il.evil'] },
         expected,
       ),
       null,
@@ -131,15 +155,40 @@ describe('staff · what a Microsoft callback will accept', () => {
       null,
     );
     assert.equal(
-      acceptMicrosoftClaims({ ...CLAIMS, email: null }, expected),
+      acceptMicrosoftClaims({ ...CLAIMS, addresses: [] }, expected),
       null,
     );
     assert.equal(
-      acceptMicrosoftClaims({ ...CLAIMS, email: '   ' }, expected),
+      acceptMicrosoftClaims(
+        { ...CLAIMS, addresses: ['SMTP:yael@donail.onmicrosoft.com'] },
+        expected,
+      ),
       null,
     );
     assert.equal(
-      acceptMicrosoftClaims({ ...CLAIMS, objectId: '' }, expected),
+      acceptMicrosoftClaims(
+        { ...CLAIMS, addresses: ['SIP:yael@dona.co.il', 'smtp:@dona.co.il'] },
+        expected,
+      ),
+      null,
+    );
+    assert.equal(
+      acceptMicrosoftClaims({ ...CLAIMS, userType: 'Guest' }, expected),
+      null,
+    );
+    assert.equal(
+      acceptMicrosoftClaims({ ...CLAIMS, userType: null }, expected),
+      null,
+    );
+    assert.equal(
+      acceptMicrosoftClaims({ ...CLAIMS, profileId: 'someone-else' }, expected),
+      null,
+    );
+    assert.equal(
+      acceptMicrosoftClaims(
+        { ...CLAIMS, objectId: '', profileId: '' },
+        expected,
+      ),
       null,
     );
     assert.equal(
@@ -159,8 +208,13 @@ describe('staff · exchanging a Microsoft code', () => {
     );
   }
 
-  it('posts the code to this tenant and reads the object id off the verified token', async () => {
-    const seen: { url?: string; body?: string } = {};
+  it('posts the code to this tenant, reads the object id off the verified token and the addresses off the person’s own profile', async () => {
+    const seen: {
+      url?: string;
+      body?: string;
+      profileUrl?: string;
+      bearer?: string;
+    } = {};
     const jwt = `${header('kid-1')}.payload.sig`;
     const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
     const jwk = publicKey.export({ format: 'jwk' });
@@ -170,9 +224,15 @@ describe('staff · exchanging a Microsoft code', () => {
         if (url.endsWith('/token')) {
           seen.url = url;
           seen.body = String(init?.body);
-          return new Response(JSON.stringify({ id_token: jwt }), {
-            status: 200,
-          });
+          return new Response(
+            JSON.stringify({ id_token: jwt, access_token: 'graph-token' }),
+            { status: 200 },
+          );
+        }
+        if (url.startsWith('https://graph.microsoft.com/')) {
+          seen.profileUrl = url;
+          seen.bearer = new Headers(init?.headers).get('authorization') ?? '';
+          return new Response(JSON.stringify(PROFILE), { status: 200 });
         }
         assert.equal(
           url,
@@ -218,8 +278,78 @@ describe('staff · exchanging a Microsoft code', () => {
       posted.get('redirect_uri'),
       'https://example.test/staff/auth/microsoft/callback',
     );
+    assert.equal(posted.get('scope'), 'openid User.Read');
     assert.equal(claims.objectId, CLAIMS.objectId);
     assert.notEqual(claims.objectId, 'app-scoped-subject');
+    assert.equal(
+      seen.profileUrl,
+      'https://graph.microsoft.com/v1.0/me?$select=id,userType,proxyAddresses',
+    );
+    assert.equal(seen.bearer, 'Bearer graph-token');
+    assert.equal(claims.profileId, CLAIMS.objectId);
+    assert.equal(claims.userType, 'Member');
+    assert.deepEqual(claims.addresses, CLAIMS.addresses);
+    assert.equal('email' in claims, false);
+  });
+
+  it('refuses a token response with no access token, and a profile Graph will not give; Graph down is unavailable', async () => {
+    const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const jwk = publicKey.export({ format: 'jwk' });
+    const provider = (
+      token: object,
+      graph: () => Response | Promise<Response>,
+    ) =>
+      configured({
+        fetch: async (input) => {
+          const url = String(input);
+          if (url.endsWith('/token')) {
+            return new Response(
+              JSON.stringify({ id_token: `${header('kid-1')}.p.s`, ...token }),
+              { status: 200 },
+            );
+          }
+          if (url.startsWith('https://graph.microsoft.com/')) return graph();
+          return new Response(
+            JSON.stringify({ keys: [{ ...jwk, kid: 'kid-1' }] }),
+            { status: 200 },
+          );
+        },
+        verify: async () => ({
+          getPayload: () => ({
+            oid: 'oid-1',
+            tid: TENANT,
+            iss: ISSUER,
+            nonce: 'n',
+          }),
+        }),
+      });
+    const exchange = (p: ReturnType<typeof provider>) =>
+      p.exchangeCode({ code: 'c', redirectUri: 'https://e.test/cb' });
+    const ok = () => new Response(JSON.stringify(PROFILE), { status: 200 });
+
+    await assert.rejects(() => exchange(provider({}, ok)), IdentityRefusal);
+    await assert.rejects(
+      () =>
+        exchange(
+          provider(
+            { access_token: 't' },
+            () => new Response('forbidden', { status: 403 }),
+          ),
+        ),
+      IdentityRefusal,
+    );
+    for (const graph of [
+      () => new Response('down', { status: 503 }),
+      () => {
+        throw new TypeError('fetch failed');
+      },
+    ]) {
+      await assert.rejects(
+        () => exchange(provider({ access_token: 't' }, graph)),
+        (error: unknown) =>
+          error instanceof KernelError && error.code === 'unavailable',
+      );
+    }
   });
 
   it('fetches the keys again when the token names a key the cache does not have', async () => {
@@ -231,9 +361,15 @@ describe('staff · exchanging a Microsoft code', () => {
         const url = String(input);
         if (url.endsWith('/token')) {
           return new Response(
-            JSON.stringify({ id_token: `${header('kid-new')}.p.s` }),
+            JSON.stringify({
+              id_token: `${header('kid-new')}.p.s`,
+              access_token: 't',
+            }),
             { status: 200 },
           );
+        }
+        if (url.startsWith('https://graph.microsoft.com/')) {
+          return new Response(JSON.stringify(PROFILE), { status: 200 });
         }
         keys += 1;
         const kid = keys === 1 ? 'kid-old' : 'kid-new';
@@ -246,7 +382,6 @@ describe('staff · exchanging a Microsoft code', () => {
           oid: 'oid-1',
           tid: TENANT,
           iss: ISSUER,
-          email: 'a@dona.co.il',
           nonce: 'n',
         }),
       }),
@@ -314,16 +449,19 @@ describe('staff · exchanging a Microsoft code', () => {
       sub: 'app-scoped-subject',
       oid: CLAIMS.objectId,
       tid: TENANT,
-      email: 'yael@dona.co.il',
       nonce: 'nonce-abc',
     });
     const jwk = publicKey.export({ format: 'jwk' });
     const provider = configured({
       fetch: async (input) => {
         if (String(input).endsWith('/token')) {
-          return new Response(JSON.stringify({ id_token: token }), {
-            status: 200,
-          });
+          return new Response(
+            JSON.stringify({ id_token: token, access_token: 't' }),
+            { status: 200 },
+          );
+        }
+        if (String(input).startsWith('https://graph.microsoft.com/')) {
+          return new Response(JSON.stringify(PROFILE), { status: 200 });
         }
         return new Response(
           JSON.stringify({ keys: [{ ...jwk, kid: 'kid-1' }] }),
@@ -338,7 +476,7 @@ describe('staff · exchanging a Microsoft code', () => {
     assert.equal(claims.objectId, CLAIMS.objectId);
     assert.equal(claims.tenantId, TENANT);
     assert.equal(claims.issuer, ISSUER);
-    assert.equal(claims.email, 'yael@dona.co.il');
+    assert.deepEqual(claims.addresses, CLAIMS.addresses);
 
     const wrongAudience = mint(privateKey, 'kid-1', {
       iss: ISSUER,
@@ -463,7 +601,7 @@ describe('staff · Microsoft secret expiry', () => {
     assert.match(bootstrap, /microsoft-oauth-client-secret/);
     assert.match(bootstrap, /microsoft-oauth-tenant-id/);
     assert.match(bootstrap, /microsoft-oauth-secret-expires/);
-    assert.match(bootstrap, /openid email/);
+    assert.match(bootstrap, /openid User\.Read/);
     assert.match(bootstrap, /\/staff\/auth\/microsoft\/callback/);
     assert.match(bootstrap, /microsoft:unconfigured/);
   });

@@ -8,9 +8,16 @@
 // as a JWKS document; this file turns each key into the PEM that verifier already accepts. A second
 // auth library would be a dependency for a job the first one does (ADR-0018).
 //
+// **The address is read from the person's own Graph profile, not the ID token** (#289). Dona Dom's
+// staff have `@donail.onmicrosoft.com` as their primary address and `@dona.co.il` as an alias, and
+// the token's `email` claim carries only the primary. `/me` lists every address the tenant gave the
+// person.
+//
 // Sources:
 //   https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow
 //   https://learn.microsoft.com/en-us/entra/identity-platform/access-tokens
+//   https://learn.microsoft.com/en-us/graph/api/user-get
+//   https://learn.microsoft.com/en-us/graph/api/resources/user (proxyAddresses)
 import { createPublicKey } from 'node:crypto';
 import { OAuth2Client } from 'google-auth-library';
 import { addDays, type Clock, today } from '../../kernel/clock.ts';
@@ -18,7 +25,10 @@ import { sameValue } from '../../kernel/compare.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { IdentityRefusal } from './identity.ts';
 
-/** The claims this system reads out of a verified Microsoft ID token, and no others. */
+/**
+ * What this system reads out of a verified Microsoft ID token, and out of the signed-in person's own
+ * Graph profile fetched with the same exchange's access token. Nothing else.
+ */
 export interface MicrosoftClaims {
   /** Entra object id (`oid`). The binding is this, not the app-scoped `sub`. */
   objectId: string;
@@ -26,8 +36,13 @@ export interface MicrosoftClaims {
   tenantId: string;
   /** The `iss` claim. */
   issuer: string;
-  email: string | null;
   nonce: string | null;
+  /** The Graph profile's `id`. It must be `objectId`, or the profile is not the token's person. */
+  profileId: string;
+  /** The Graph profile's `userType`: `Member` or `Guest`. */
+  userType: string | null;
+  /** The profile's `proxyAddresses`, as Graph returned them (`SMTP:primary`, `smtp:alias`, `SIP:…`). */
+  addresses: string[];
 }
 
 export interface MicrosoftExpected {
@@ -60,10 +75,13 @@ export interface MicrosoftProvider {
 }
 
 /**
- * An address and nothing else. The sign-in registration holds no mail permission; the mailbox app
- * is a different registration (ADR-0018).
+ * Sign-in and the person's own profile, nothing else. `User.Read` cannot read mail or anyone else;
+ * the mailbox app is a different registration (ADR-0018).
  */
-const SCOPE = 'openid email';
+const SCOPE = 'openid User.Read';
+
+const PROFILE_URL =
+  'https://graph.microsoft.com/v1.0/me?$select=id,userType,proxyAddresses';
 
 /** What `verifySignedJwtWithCertsAsync` accepts: a key id to a PEM. */
 export type SigningKeys = Record<string, string>;
@@ -89,37 +107,52 @@ export interface MicrosoftOidcOptions {
 }
 
 /**
- * What the callback will accept, as a pure function. Returns the identity, or null, and the caller
- * turns null into the one refusal. It never says which condition failed (SPEC-staff.md).
+ * What the callback will accept, as a pure function. Returns the binding and the candidate
+ * addresses, or null, and the caller turns null into the one refusal. It never says which condition
+ * failed (SPEC-staff.md). Which staff account the candidates name is the caller's question: exactly
+ * one must, and that needs the database.
  *
- * The address is trusted only after the tenant and the issuer match. The email string alone is not
- * evidence: the directory that issued the token can set it to any address, including one a staff
+ * The addresses are trusted only after the tenant and the issuer match. An address alone is not
+ * evidence: the directory that issued the token can set it to anything, including one a staff
  * account already uses. The domain is the second gate, so a look-alike inside the right tenant is
  * still refused. A personal Microsoft account is a different tenant and a different issuer, and it
- * fails those same gates.
+ * fails those same gates. The profile must be the token's person, and a member rather than a guest.
  */
 export function acceptMicrosoftClaims(
   claims: MicrosoftClaims,
   expected: { nonce: string; tenantId: string; domain: string },
-): { bindingId: string; email: string } | null {
+): { bindingId: string; addresses: string[] } | null {
   if (claims.nonce === null || !sameValue(claims.nonce, expected.nonce)) {
     return null;
   }
   if (claims.tenantId !== expected.tenantId) return null;
   const issuer = `https://login.microsoftonline.com/${expected.tenantId}/v2.0`;
   if (claims.issuer !== issuer) return null;
-  const email = claims.email?.trim().toLowerCase() ?? '';
-  const at = email.lastIndexOf('@');
-  if (at <= 0 || email.slice(at + 1) !== expected.domain.trim().toLowerCase()) {
-    return null;
-  }
   if (typeof claims.objectId !== 'string' || claims.objectId.length === 0) {
     return null;
   }
+  if (claims.profileId !== claims.objectId) return null;
+  if (claims.userType !== 'Member') return null;
+  const domain = expected.domain.trim().toLowerCase();
+  const addresses = smtpAddresses(claims.addresses).filter(
+    (address) => address.slice(address.lastIndexOf('@') + 1) === domain,
+  );
+  if (addresses.length === 0) return null;
   return {
     bindingId: `ms:${expected.tenantId}:${claims.objectId}`,
-    email,
+    addresses,
   };
+}
+
+/** The mail addresses among proxy addresses, primary or not, lower case, each once. `SIP:`, `X500:` and the rest are not mail. */
+function smtpAddresses(proxies: string[]): string[] {
+  const found = new Set<string>();
+  for (const proxy of proxies) {
+    if (typeof proxy !== 'string' || !/^smtp:/i.test(proxy)) continue;
+    const address = proxy.slice('smtp:'.length).trim().toLowerCase();
+    if (address.lastIndexOf('@') > 0) found.add(address);
+  }
+  return [...found];
 }
 
 function authority(tenantId: string): string {
@@ -236,6 +269,50 @@ export function createMicrosoftOidc(
     return certs;
   }
 
+  async function ownProfile(
+    accessToken: string,
+  ): Promise<Pick<MicrosoftClaims, 'profileId' | 'userType' | 'addresses'>> {
+    let response: Response;
+    try {
+      response = await fetchImpl(PROFILE_URL, {
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+    } catch {
+      throw new KernelError(
+        'unavailable',
+        'the identity provider is unavailable',
+      );
+    }
+    if (!response.ok) {
+      if (response.status >= 500) {
+        throw new KernelError(
+          'unavailable',
+          'the identity provider is unavailable',
+        );
+      }
+      throw new IdentityRefusal('profile read failed', response.status);
+    }
+    let body: Record<string, unknown>;
+    try {
+      body = (await response.json()) as Record<string, unknown>;
+    } catch {
+      throw new KernelError(
+        'unavailable',
+        'the identity provider returned no profile',
+      );
+    }
+    const proxies = Array.isArray(body.proxyAddresses)
+      ? body.proxyAddresses.filter(
+          (entry): entry is string => typeof entry === 'string',
+        )
+      : [];
+    return {
+      profileId: claimString(body, 'id') ?? '',
+      userType: claimString(body, 'userType'),
+      addresses: proxies,
+    };
+  }
+
   return {
     authorizeUrl({ state, nonce, redirectUri }) {
       const url = new URL(`${authority(tenantId)}/oauth2/v2.0/authorize`);
@@ -282,9 +359,12 @@ export function createMicrosoftOidc(
         }
         throw new IdentityRefusal('token exchange failed', response.status);
       }
-      let token: { id_token?: unknown };
+      let token: { id_token?: unknown; access_token?: unknown };
       try {
-        token = (await response.json()) as { id_token?: unknown };
+        token = (await response.json()) as {
+          id_token?: unknown;
+          access_token?: unknown;
+        };
       } catch {
         throw new KernelError(
           'unavailable',
@@ -321,12 +401,21 @@ export function createMicrosoftOidc(
           'the identity provider returned no claims',
         );
       }
+      // Only once the ID token has verified. The access token is used for this one request and
+      // dropped: never stored, never logged.
+      if (
+        typeof token.access_token !== 'string' ||
+        token.access_token.length === 0
+      ) {
+        throw new IdentityRefusal('token exchange failed', 400);
+      }
+      const profile = await ownProfile(token.access_token);
       return {
         objectId: claimString(payload, 'oid') ?? '',
         tenantId: claimString(payload, 'tid') ?? '',
         issuer: claimString(payload, 'iss') ?? '',
-        email: claimString(payload, 'email'),
         nonce: claimString(payload, 'nonce'),
+        ...profile,
       };
     },
 

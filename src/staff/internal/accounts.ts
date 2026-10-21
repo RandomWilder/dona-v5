@@ -121,6 +121,19 @@ export async function accountByEmail(
   return rows[0] ? toAccount(rows[0]) : null;
 }
 
+/** Every account any of these addresses names. A provider that hands over several addresses asks this, and needs exactly one back. */
+export async function accountsByEmails(
+  db: Queryable,
+  emails: string[],
+): Promise<StaffAccount[]> {
+  if (emails.length === 0) return [];
+  const { rows } = await db.query<AccountRow>(
+    `${SELECT_ACCOUNT} WHERE email = ANY($1::text[])`,
+    [emails.map(normaliseEmail)],
+  );
+  return rows.map(toAccount);
+}
+
 /**
  * Created by an admin, with a role and **no credential at all** — that is the whole of what adding
  * an operator means since 5.1b. `idpLocalId` is null until the first sign-in learns which Google
