@@ -781,6 +781,7 @@ const SCREENS: Array<[string, () => string]> = [
         dutyTel: 'tel:+972500000001',
         flat: 'דירה 12 · הדגמה 8',
         notice: null,
+        files: [],
       }),
   ],
   [

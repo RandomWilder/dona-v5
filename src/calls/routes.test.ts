@@ -1277,6 +1277,11 @@ describe('calls · the קריאות tab', () => {
           },
           matchesEmergency: async () => false,
           objects,
+          scanner: {
+            async scan() {
+              return 'clean' as const;
+            },
+          },
         });
         const arrived = await receiveIncoming(
           db,
@@ -2725,6 +2730,11 @@ describe('calls · the קריאות tab', () => {
             },
             matchesEmergency: async () => false,
             objects,
+            scanner: {
+              async scan() {
+                return 'clean' as const;
+              },
+            },
           },
           message(domain, {
             senderAddress: sender,

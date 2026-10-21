@@ -45,6 +45,8 @@ import {
   type ListedAttachment,
   listedAttachments,
 } from './attachments.ts';
+import { filesFromHolds, REPORT_FILE_MAX } from './holds.ts';
+import type { MalwareScanner } from './scanner.ts';
 import type { Queryable } from './types.ts';
 
 const BODY_MAX = 100_000;
@@ -84,6 +86,15 @@ export interface IncomingMessage {
   suggestedCategoryId?: string | null;
   entryPermission?: string | null;
   tenancyId?: string | null;
+  /**
+   * Files already in quarantine for this sender. The composition root sets
+   * this from rows it loaded. A channel adapter does not.
+   */
+  holds?: {
+    ownerId: string;
+    submissionId: string;
+    ids: readonly string[];
+  };
 }
 
 export interface SortCategory {
@@ -135,6 +146,8 @@ export interface IntakeDeps {
   matchesEmergency: (text: string) => Promise<boolean>;
   /** Where an attachment's bytes are kept. Required when a message carries any. */
   objects?: ObjectStore;
+  /** Clean or infected. Absent, or a throw, leaves the file unopenable. */
+  scanner?: MalwareScanner;
   /**
    * Sends the fixed duty reply on WhatsApp. Absent, an emergency is still
    * flagged and nothing is sent — the dev form has no Meta number.
@@ -204,6 +217,11 @@ interface Normalized {
   suggestedCategoryId: string | null;
   entryPermission: 'YES' | 'ARRANGE' | 'HOME' | null;
   tenancyId: string | null;
+  holds: {
+    ownerId: string;
+    submissionId: string;
+    ids: readonly string[];
+  } | null;
 }
 
 interface StoredRow {
@@ -255,9 +273,9 @@ async function intake(
   const already = await settledOutcome(db, message);
   if (already) return already;
 
-  if (message.echo) return storeEcho(db, clock, deps.objects, message);
+  if (message.echo) return storeEcho(db, clock, deps, message);
 
-  const messageId = await ensureMessage(db, clock, deps.objects, message);
+  const messageId = await ensureMessage(db, clock, deps, message);
   const raced = await settledOutcome(db, message);
   if (raced) return raced;
 
@@ -417,6 +435,7 @@ async function sendDutyReply(
       suggestedCategoryId: null,
       entryPermission: null,
       tenancyId: null,
+      holds: null,
     },
     {
       callId: openCallId,
@@ -739,7 +758,28 @@ function normalize(raw: IncomingMessage): Normalized {
     body: requireText(raw.body, 'body', BODY_MAX),
     attachments: attachmentsOf(raw.attachments),
     echo: raw.echo === true,
+    holds: holdsOf(raw.holds),
     ...reportFields(raw),
+  };
+}
+
+function holdsOf(value: IncomingMessage['holds']): Normalized['holds'] {
+  if (value == null) return null;
+  if (typeof value !== 'object' || !Array.isArray(value.ids)) {
+    throw new KernelError('invalid', 'attachments are not a short list', {
+      field: 'attachments',
+    });
+  }
+  if (value.ids.length === 0) return null;
+  if (value.ids.length > REPORT_FILE_MAX) {
+    throw new KernelError('invalid', 'attachments are not a short list', {
+      field: 'attachments',
+    });
+  }
+  return {
+    ownerId: validId(value.ownerId, 'owner'),
+    submissionId: validId(value.submissionId, 'submission'),
+    ids: value.ids.map((id) => validId(id, 'file')),
   };
 }
 
@@ -1007,13 +1047,13 @@ async function threadOf(
 async function ensureMessage(
   db: Queryable,
   clock: Clock,
-  objects: ObjectStore | undefined,
+  deps: IntakeDeps,
   message: Normalized,
 ): Promise<string> {
   return inTransaction(db, async (tx) => {
     const existing = await lookupRow(tx, message);
     if (existing) return existing.message_id;
-    const messageId = await insertMessage(tx, clock, objects, message, {
+    const messageId = await insertMessage(tx, clock, deps, message, {
       callId: null,
       label: null,
       summary: null,
@@ -1029,7 +1069,7 @@ async function ensureMessage(
 async function storeEcho(
   db: Queryable,
   clock: Clock,
-  objects: ObjectStore | undefined,
+  deps: IntakeDeps,
   message: Normalized,
 ): Promise<IntakeOutcome> {
   return inTransaction(db, async (tx) => {
@@ -1041,7 +1081,7 @@ async function storeEcho(
       (await callIsAttachable(tx, thread.openCallId))
         ? thread.openCallId
         : null;
-    const messageId = await insertMessage(tx, clock, objects, message, {
+    const messageId = await insertMessage(tx, clock, deps, message, {
       callId,
       label: null,
       summary: null,
@@ -1261,7 +1301,7 @@ function bufferOf(value: unknown): Buffer | null {
 async function insertMessage(
   db: Queryable,
   clock: Clock,
-  objects: ObjectStore | undefined,
+  deps: { objects?: ObjectStore; scanner?: MalwareScanner } | undefined,
   message: Normalized,
   link: {
     callId: string | null;
@@ -1272,11 +1312,17 @@ async function insertMessage(
 ): Promise<string | null> {
   const conversationId = await conversationOf(db, clock, message);
   const messageId = newId(clock);
-  const attachments = await keepAttachmentBytes(
-    objects,
-    messageId,
-    message.attachments,
-  );
+  const attachments = [
+    ...(await keepAttachmentBytes(
+      db,
+      clock,
+      deps?.objects,
+      deps?.scanner,
+      messageId,
+      message.attachments,
+    )),
+    ...(await filesFromHolds(db, message.holds)),
+  ];
   const { rows } = await db.query<{ message_id: string }>(
     `INSERT INTO message
        (message_id, conversation_id, source_channel, external_message_id,

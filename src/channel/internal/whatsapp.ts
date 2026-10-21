@@ -17,6 +17,7 @@ import {
   receiveIncoming,
   type Sorter,
 } from './door.ts';
+import type { MalwareScanner } from './scanner.ts';
 import type { Queryable } from './types.ts';
 
 /** Seven days, the warning ahead of Meta's roughly fourteen-day disconnect. */
@@ -225,6 +226,7 @@ export function registerWhatsappWebhook(
     pool: Pool;
     clock: Clock;
     objects?: ObjectStore;
+    scanner?: MalwareScanner;
     sorter?: Sorter;
     fetch?: WhatsappFetch;
     onCallIdentified?: (callId: string) => Promise<void>;
@@ -285,6 +287,7 @@ export function registerWhatsappWebhook(
           sorter,
           matchesEmergency: emergencyMatch(deps.pool),
           objects: deps.objects,
+          scanner: deps.scanner,
           replyOnWhatsapp: (reply) =>
             sendWhatsappReply(config, fetchImpl, reply),
           onCallIdentified: deps.onCallIdentified,

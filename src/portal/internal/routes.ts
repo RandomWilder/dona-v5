@@ -2,7 +2,7 @@
 // exist yet; the session is what this file checks, and a missing one is the phone screen.
 
 import type { IncomingHttpHeaders } from 'node:http';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import type { CodeChannel, CodeSender } from '../../channel/contract.ts';
 import { createAuditLog } from '../../kernel/audit.ts';
@@ -104,6 +104,7 @@ export interface PortalReceipt {
 
 export interface PortalReport {
   phone: string;
+  ownerId: string;
   key: string;
   body: string;
   categoryId: string;
@@ -135,6 +136,33 @@ export interface PortalDeps {
   }>;
   /** The intake door for a report. Absent in a process that has not wired it. */
   submitReport?: (report: PortalReport) => Promise<PortalReportReceipt | null>;
+  /** A file on a report that is not a call yet. Clean files come back as rows. */
+  listReportFiles?: (
+    ownerId: string,
+    submissionId: string,
+  ) => Promise<{ id: string; fileName: string; contentType: string }[]>;
+  saveReportFile?: (file: {
+    ownerId: string;
+    submissionId: string;
+    fileName: string;
+    bytes: Buffer;
+  }) => Promise<
+    | { status: 'clean' }
+    | {
+        status: 'refused';
+        reason: 'type' | 'size' | 'infected' | 'unavailable' | 'many';
+      }
+  >;
+  removeReportFile?: (
+    ownerId: string,
+    submissionId: string,
+    holdId: string,
+  ) => Promise<void>;
+  /** The picture on a thumbnail. Only the tenant who added that file. */
+  readReportFile?: (
+    ownerId: string,
+    holdId: string,
+  ) => Promise<{ bytes: Buffer; contentType: string; fileName: string } | null>;
   /**
    * The tenant's calls. Wired at the composition root: this file importing
    * the calls contract pulls the brief through the building switch.
@@ -231,13 +259,25 @@ function dutyHref(phone: string): string {
   return `tel:${compact}`;
 }
 
+const FILE_NOTICE = {
+  type: 'report.file_type',
+  size: 'report.file_size',
+  infected: 'report.file_infected',
+  unavailable: 'report.file_unavailable',
+  many: 'report.file_many',
+} as const;
+
 function readReport(body: unknown): {
+  csrf: string;
   key: string | null;
   categoryId: string;
   description: string;
   entry: ReportForm['entry'];
   step: 1 | 2 | 3;
   action: 'back' | 'send' | 'next';
+  remove: string | null;
+  file: { fileName: string; bytes: Buffer } | null;
+  oversized: boolean;
 } {
   let key: string | null = null;
   try {
@@ -248,7 +288,15 @@ function readReport(body: unknown): {
   const stepRaw = field(body, 'step');
   const actionRaw = field(body, 'action');
   const entryRaw = field(body, 'entry');
+  let remove: string | null = null;
+  try {
+    const raw = field(body, 'remove');
+    remove = raw === '' ? null : validId(raw, 'file');
+  } catch (error) {
+    if (!(error instanceof KernelError)) throw error;
+  }
   return {
+    csrf: field(body, 'csrf'),
     key,
     categoryId: field(body, 'category'),
     description: field(body, 'description').trim(),
@@ -259,7 +307,59 @@ function readReport(body: unknown): {
     step: stepRaw === '2' ? 2 : stepRaw === '3' ? 3 : 1,
     action:
       actionRaw === 'back' ? 'back' : actionRaw === 'send' ? 'send' : 'next',
+    remove,
+    file: null,
+    oversized: false,
   };
+}
+
+async function readPostedReport(
+  request: FastifyRequest,
+): Promise<ReturnType<typeof readReport>> {
+  const header = request.headers['content-type'];
+  const type = Array.isArray(header) ? header[0] : header;
+  if (!type?.includes('multipart/form-data')) {
+    return readReport(request.body);
+  }
+  const fields: Record<string, string> = {};
+  let file: { fileName: string; bytes: Buffer } | null = null;
+  let oversized = false;
+  // The published type omits this flag. The runtime reads it, and a cut file
+  // stays a sentence on the report instead of a bare 413.
+  const limited = { throwFileSizeLimit: false } as Parameters<
+    FastifyRequest['parts']
+  >[0];
+  for await (const part of request.parts(limited)) {
+    if (part.type === 'file') {
+      const stream = part.file;
+      const chunks: Buffer[] = [];
+      let truncated = false;
+      if (stream) {
+        for await (const chunk of stream) {
+          if (stream.truncated) {
+            truncated = true;
+            chunks.length = 0;
+            continue;
+          }
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+      }
+      if (truncated || stream?.truncated) {
+        oversized = true;
+        continue;
+      }
+      const read = Buffer.concat(chunks);
+      if (part.fieldname === 'file' && read.length > 0 && file === null) {
+        file = { fileName: part.filename ?? 'file', bytes: read };
+      }
+      continue;
+    }
+    if (part.fieldname !== '' && fields[part.fieldname] === undefined) {
+      fields[part.fieldname] = String(part.value ?? '');
+    }
+  }
+  const posted = readReport(fields);
+  return { ...posted, file, oversized };
 }
 
 function html(
@@ -731,6 +831,34 @@ export function registerPortalRoutes(
     return html(reply, renderMorePage({ csrf: csrfTokenFor(who.token) }));
   });
 
+  app.get('/report/files/:holdId', TENANT, async (request, reply) => {
+    const who = await portalOf(request);
+    if (who === null || who.kind !== 'open' || !deps.readReportFile) {
+      reply.code(404);
+      return '';
+    }
+    let holdId = '';
+    try {
+      holdId = validId(
+        (request.params as { holdId?: string }).holdId ?? '',
+        'file',
+      );
+    } catch (error) {
+      if (!(error instanceof KernelError)) throw error;
+      reply.code(404);
+      return '';
+    }
+    const file = await deps.readReportFile(who.identityId, holdId);
+    if (file === null) {
+      reply.code(404);
+      return '';
+    }
+    reply.header('content-type', file.contentType);
+    reply.header('cache-control', 'private, no-store');
+    reply.header('x-content-type-options', 'nosniff');
+    return reply.send(file.bytes);
+  });
+
   app.get('/report', TENANT, async (request, reply) => {
     const who = await portalOf(request);
     if (who === null) return go(reply, '/', []);
@@ -739,72 +867,115 @@ export function registerPortalRoutes(
     return html(reply, await reportPage(who, freshReport()));
   });
 
-  app.post('/report', TENANT, async (request, reply) => {
-    const who = await portalOf(request);
-    if (who === null) return go(reply, '/', []);
-    if (who.kind === 'notice') return go(reply, '/notice', []);
-    if (who.chosen === null) return noTenancy(reply, who);
-    const posted = readReport(request.body);
-    if (!csrfOk(who.token, request.body) || posted.key === null) {
-      return html(
-        reply,
-        await reportPage(who, {
-          ...freshReport(),
-          description: posted.description,
-          notice: 'report.retry',
-        }),
-      );
-    }
-    const loaded = await deps.loadReport();
-    const category =
-      loaded.categories.find((row) => row.id === posted.categoryId) ?? null;
-    const draft: ReportForm = {
-      submission: posted.key,
-      step: posted.step,
-      categoryId: category?.id ?? '',
-      description: posted.description,
-      entry: posted.entry,
-      notice: null,
-    };
-    if (posted.action === 'back') {
-      return html(
-        reply,
-        await reportPage(who, {
-          ...draft,
-          step: posted.step === 3 ? 2 : 1,
-        }),
-      );
-    }
-    if (posted.action === 'send' && posted.step === 3) {
-      return sendReport(reply, who, draft, category);
-    }
-    if (posted.step <= 1) {
-      if (category === null) {
+  app.post(
+    '/report',
+    { config: { tenant: 'public', csrf: 'in-body' } },
+    async (request, reply) => {
+      const who = await portalOf(request);
+      if (who === null) return go(reply, '/', []);
+      if (who.kind === 'notice') return go(reply, '/notice', []);
+      if (who.chosen === null) return noTenancy(reply, who);
+      const posted = await readPostedReport(request);
+      if (!csrfOk(who.token, { csrf: posted.csrf }) || posted.key === null) {
+        return html(
+          reply,
+          await reportPage(who, {
+            ...freshReport(),
+            description: posted.description,
+            notice: 'report.retry',
+          }),
+        );
+      }
+      const loaded = await deps.loadReport();
+      const category =
+        loaded.categories.find((row) => row.id === posted.categoryId) ?? null;
+      const draft: ReportForm = {
+        submission: posted.key,
+        step: posted.step,
+        categoryId: category?.id ?? '',
+        description: posted.description,
+        entry: posted.entry,
+        notice: null,
+      };
+      if (posted.step === 2 && posted.oversized) {
         return html(
           reply,
           await reportPage(who, {
             ...draft,
-            step: 1,
-            notice: 'report.category_missing',
+            step: 2,
+            notice: 'report.file_size',
           }),
         );
       }
-      return html(reply, await reportPage(who, { ...draft, step: 2 }));
-    }
-    if (posted.description === '') {
-      return html(
-        reply,
-        await reportPage(who, { ...draft, step: 2, notice: 'report.empty' }),
-      );
-    }
-    if (posted.description.length > REPORT_TEXT_MAX) {
-      return html(
-        reply,
-        await reportPage(who, { ...draft, step: 2, notice: 'report.long' }),
-      );
-    }
-    return html(reply, await reportPage(who, { ...draft, step: 3 }));
-  });
+      if (posted.step === 2 && posted.file && posted.file.bytes.length > 0) {
+        const save = deps.saveReportFile;
+        if (save !== undefined) {
+          const saved = await save({
+            ownerId: who.identityId,
+            submissionId: posted.key,
+            fileName: posted.file.fileName,
+            bytes: posted.file.bytes,
+          });
+          if (saved.status === 'refused') {
+            return html(
+              reply,
+              await reportPage(who, {
+                ...draft,
+                step: 2,
+                notice: FILE_NOTICE[saved.reason],
+              }),
+            );
+          }
+        }
+      }
+      if (posted.remove !== null && posted.step === 2) {
+        await deps.removeReportFile?.(
+          who.identityId,
+          posted.key,
+          posted.remove,
+        );
+        return html(reply, await reportPage(who, { ...draft, step: 2 }));
+      }
+      if (posted.action === 'back') {
+        return html(
+          reply,
+          await reportPage(who, {
+            ...draft,
+            step: posted.step === 3 ? 2 : 1,
+          }),
+        );
+      }
+      if (posted.action === 'send' && posted.step === 3) {
+        return sendReport(reply, who, draft, category);
+      }
+      if (posted.step <= 1) {
+        if (category === null) {
+          return html(
+            reply,
+            await reportPage(who, {
+              ...draft,
+              step: 1,
+              notice: 'report.category_missing',
+            }),
+          );
+        }
+        return html(reply, await reportPage(who, { ...draft, step: 2 }));
+      }
+      if (posted.description === '') {
+        return html(
+          reply,
+          await reportPage(who, { ...draft, step: 2, notice: 'report.empty' }),
+        );
+      }
+      if (posted.description.length > REPORT_TEXT_MAX) {
+        return html(
+          reply,
+          await reportPage(who, { ...draft, step: 2, notice: 'report.long' }),
+        );
+      }
+      return html(reply, await reportPage(who, { ...draft, step: 3 }));
+    },
+  );
 
   function noTenancy(reply: Parameters<typeof html>[0], who: OpenPortal) {
     return html(
@@ -836,9 +1007,13 @@ export function registerPortalRoutes(
       throw new KernelError('invalid', 'tenancy is not open');
     }
     const loaded = await deps.loadReport();
+    const files = deps.listReportFiles
+      ? await deps.listReportFiles(who.identityId, draft.submission)
+      : [];
     return renderReportPage({
       csrf: csrfTokenFor(who.token),
       submission: draft.submission,
+      files,
       step: draft.step,
       categories: loaded.categories.map((row) => ({
         id: row.id,
@@ -903,6 +1078,7 @@ export function registerPortalRoutes(
     try {
       receipt = await submit({
         phone: who.phone,
+        ownerId: who.identityId,
         key: draft.submission,
         body: draft.description,
         categoryId: category.id,

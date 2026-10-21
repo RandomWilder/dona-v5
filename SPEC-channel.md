@@ -171,6 +171,26 @@ the file to the unit the isolation join names, when that address is exactly one 
 leaves the document with no tenancy link. A guarantor's contact is not a match. Filing that same
 attachment again is that document, not a second one. A file this system does not store is refused.
 
+**Quarantine and scan.** Every attachment, on every channel, is stored under a name this system
+chooses and scanned before anyone can open it. The name the sender gave is a label. The scanner is
+injected. It answers clean or infected. When it is absent or it fails, the file stays in quarantine
+and cannot be opened, and that failure is not an infection. An infected file cannot be opened by
+staff or by a tenant, and the scan writes an audit row `channel.attachment_infected`. Filing an
+attachment as a document requires a clean scan.
+
+The bytes are allowlisted by their content, not by the name or the declared type: JPEG, PNG, GIF,
+WEBP, HEIC, AVIF, PDF, MP4, QuickTime and WEBM. Anything else is not stored. A file over 100 MB is
+not stored. On the portal the refusal is a sentence on the report. On the other channels the
+message is still kept and the file is not openable.
+
+A portal report carries at most 8 such files. The tenant adds one on the report's second step. A
+clean file shows as a square thumbnail with its name and a labelled remove button. The button's
+target is at least 44 by 44 CSS pixels and the mark is drawn at 22.
+
+`npm run dev`, when `K_SERVICE` is unset, uses a local scanner that treats the EICAR test string as
+infected and every other file as clean. A revision where `K_SERVICE` is set does not use that
+scanner. With no other scanner configured, files stay in quarantine and cannot be opened.
+
 ## Sign-in codes
 
 The portal asks the channel to deliver a one-time code. The channel does not choose the code,

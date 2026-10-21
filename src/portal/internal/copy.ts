@@ -210,6 +210,24 @@ export const PORTAL_COPY: readonly PortalCopy[] = [
   { key: 'report.long', language: 'he', text: 'התיאור ארוך מדי.' },
   { key: 'report.photos', language: 'he', text: 'תמונות או סרטון קצר' },
   { key: 'report.add', language: 'he', text: 'הוספה' },
+  {
+    key: 'report.file_type',
+    language: 'he',
+    text: 'אפשר לצרף תמונה, סרטון קצר או PDF.',
+  },
+  { key: 'report.file_size', language: 'he', text: 'הקובץ גדול מדי.' },
+  {
+    key: 'report.file_infected',
+    language: 'he',
+    text: 'הקובץ נחסם בבדיקת האבטחה.',
+  },
+  {
+    key: 'report.file_unavailable',
+    language: 'he',
+    text: 'לא הצלחנו לבדוק את הקובץ. נסו שוב.',
+  },
+  { key: 'report.file_many', language: 'he', text: 'אפשר לצרף עד 8 קבצים.' },
+  { key: 'report.remove', language: 'he', text: 'הסרת קובץ' },
   { key: 'report.almost', language: 'he', text: 'כמעט סיימנו' },
   {
     key: 'report.entry_q',

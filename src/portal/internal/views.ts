@@ -545,6 +545,7 @@ export interface ReportDraft {
   dutyTel: string;
   flat: string;
   notice: string | null;
+  files: readonly { id: string; fileName: string; contentType: string }[];
 }
 
 export function renderReportPage(screen: ReportDraft): string {
@@ -567,9 +568,10 @@ export function renderReportPage(screen: ReportDraft): string {
     screen.step === 1
       ? h`<a class="tp-icon-btn" href="/" aria-label="${portalText('report.close')}">${icon('x', { class: 'tp-i i18' })}</a>`
       : h``;
+  const enc = screen.step === 2 ? 'multipart/form-data' : null;
   return page(
     portalText('report.page'),
-    h`<form class="tp-ask" method="post" action="/report">
+    h`<form class="tp-ask" method="post" action="/report"${enc === null ? h`` : h` enctype="multipart/form-data"`}>
       ${screen.step === 1 ? h`` : implicit}
       <header class="tp-bar">
         <div class="tp-bar-row">
@@ -621,7 +623,8 @@ function stepBody(screen: ReportDraft, categoryLabel: string): Html {
       </div>
       <h3 class="tp-section">${portalText('report.photos')}</h3>
       <div class="tp-thumbs">
-        <label class="tp-add"><input class="tp-sr" type="file" accept="image/*,video/*,.pdf" multiple />${icon('camera', { class: 'tp-i i22' })}${portalText('report.add')}</label>
+        ${screen.files.map((file) => fileThumb(file))}
+        <label class="tp-add"><input class="tp-sr" type="file" name="file" accept="image/*,video/*,.pdf" />${icon('camera', { class: 'tp-i i22' })}${portalText('report.add')}</label>
       </div>`;
   }
   return h`<h2 class="tp-q" id="entry-q">${portalText('report.entry_q')}</h2>
@@ -635,10 +638,27 @@ function stepBody(screen: ReportDraft, categoryLabel: string): Html {
       <dl class="tp-stack">
         <div><dt>${portalText('report.category')}</dt><dd>${categoryLabel}</dd></div>
         <div><dt>${portalText('report.description')}</dt><dd>${screen.description}</dd></div>
-        <div><dt>${portalText('report.files')}</dt><dd>${portalText('report.files_none')}</dd></div>
+        <div><dt>${portalText('report.files')}</dt><dd>${fileSummary(screen.files)}</dd></div>
         <div><dt>${portalText('report.flat')}</dt><dd>${screen.flat}</dd></div>
       </dl>
     </div>`;
+}
+
+function fileThumb(file: {
+  id: string;
+  fileName: string;
+  contentType: string;
+}): Html {
+  const label = `${portalText('report.remove')}: ${file.fileName}`;
+  const picture = file.contentType.startsWith('image/')
+    ? h`<img src="/report/files/${file.id}" alt="" />`
+    : h``;
+  return h`<div class="tp-thumb">${picture}<span class="tp-thumb-name">${file.fileName}</span><button class="tp-thumb-x" type="submit" name="remove" value="${file.id}" aria-label="${label}">${icon('x', { class: 'tp-i i14' })}</button></div>`;
+}
+
+function fileSummary(files: ReportDraft['files']): string {
+  if (files.length === 0) return portalText('report.files_none');
+  return files.map((file) => file.fileName).join(', ');
 }
 
 function categoryTile(category: ReportCategory, on: boolean): Html {

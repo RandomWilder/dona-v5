@@ -1366,6 +1366,52 @@ button.tp-icon-btn {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
+.tp-thumb {
+  position: relative;
+  display: grid;
+  align-content: end;
+  aspect-ratio: 1;
+  min-inline-size: 0;
+  border-radius: var(--tp-r-md);
+  background: var(--tp-surface-muted);
+}
+.tp-thumb img {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+.tp-thumb-name {
+  position: relative;
+  z-index: 1;
+  padding: 8px;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tp-thumb-x {
+  position: absolute;
+  inset-block-start: 6px;
+  inset-inline-end: 6px;
+  display: grid;
+  place-items: center;
+  inline-size: 22px;
+  block-size: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--tp-r-pill);
+  background: rgba(29, 31, 32, 0.72);
+  color: #fff;
+}
+.tp-thumb-x::after {
+  content: "";
+  position: absolute;
+  inset: -11px;
+}
 .tp-add {
   display: grid;
   place-content: center;

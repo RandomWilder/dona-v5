@@ -38,12 +38,17 @@ import {
   emergencyMatch,
   fileAttachment as fileCallAttachment,
   graphMailboxFrom,
+  holdAttachment,
+  listHolds,
   listMessagesOnCall,
   listNoiseMessages,
+  type MalwareScanner,
   mailboxWarning,
+  openHold,
   readAttachment,
   receiveIncoming,
   registerChannelRoutes,
+  removeHold,
   replyOnInboundEmail,
   rescueNoise,
   type Sorter,
@@ -225,6 +230,12 @@ export interface AppDeps {
   http2?: boolean;
   /** WhatsApp media download. Absent, the webhook calls Meta. */
   whatsappFetch?: WhatsappFetch;
+  /**
+   * Malware scan for every channel's attachments. Absent, a file is stored
+   * and cannot be opened. `serve.ts` passes the local scanner when `K_SERVICE`
+   * is unset.
+   */
+  scanner?: MalwareScanner;
   /**
    * Delivers a portal sign-in code. Absent, sends are refused. `serve.ts` passes the log
    * sender on a laptop and the refusing sender on a revision (#273).
@@ -1068,6 +1079,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     devIntake: deps.devMockups === true,
     sorter: deps.sorter,
     objects,
+    scanner: deps.scanner,
     whatsappFetch: deps.whatsappFetch,
     onCallIdentified,
   });
@@ -1093,6 +1105,14 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       status: tenantStatus,
     },
     messagesOnCall: (callId) => listMessagesOnCall(deps.pool, callId),
+    listReportFiles: (ownerId, submissionId) =>
+      listHolds(deps.pool, ownerId, submissionId),
+    removeReportFile: (ownerId, submissionId, holdId) =>
+      removeHold(deps.pool, ownerId, submissionId, holdId),
+    readReportFile: (ownerId, holdId) =>
+      openHold(deps.pool, objects, ownerId, holdId),
+    saveReportFile: (file) =>
+      holdAttachment(deps.pool, clock, objects, deps.scanner, file),
     loadReport: async () => {
       const [categories, duty] = await Promise.all([
         listCategories(deps.pool, { activeOnly: true }),
@@ -1114,6 +1134,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
         {
           sorter: portalSorter,
           matchesEmergency: emergencyMatch(deps.pool),
+          objects,
+          scanner: deps.scanner,
           onCallIdentified,
         },
         {
@@ -1126,6 +1148,13 @@ export function buildApp(deps: AppDeps): FastifyInstance {
           suggestedCategoryId: report.categoryId,
           entryPermission: report.entry,
           tenancyId: report.tenancyId,
+          holds: {
+            ownerId: report.ownerId,
+            submissionId: report.key,
+            ids: (await listHolds(deps.pool, report.ownerId, report.key)).map(
+              (file) => file.id,
+            ),
+          },
         },
       );
       const callId = outcome.kind === 'filtered' ? null : outcome.callId;
@@ -1144,6 +1173,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
         {
           sorter: portalSorter,
           matchesEmergency: emergencyMatch(deps.pool),
+          objects,
+          scanner: deps.scanner,
           onCallIdentified,
         },
         {

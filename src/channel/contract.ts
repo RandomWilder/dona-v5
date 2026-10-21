@@ -42,6 +42,14 @@ export {
 } from './internal/door.ts';
 export { replyOnInboundEmail } from './internal/email-reply.ts';
 export { GMAIL_SCOPE, normaliseGmailMessage } from './internal/gmail.ts';
+export type { HoldResult } from './internal/holds.ts';
+export {
+  filesFromHolds,
+  holdAttachment,
+  listHolds,
+  openHold,
+  removeHold,
+} from './internal/holds.ts';
 export type {
   GraphFetch,
   OutlookReader,
@@ -62,6 +70,11 @@ export type { SweepReport } from './internal/retention.ts';
 export { sweepFilteredMessages } from './internal/retention.ts';
 export type { ChannelDeps } from './internal/routes.ts';
 export { registerChannelRoutes } from './internal/routes.ts';
+export type { MalwareScanner } from './internal/scanner.ts';
+export {
+  createDevMalwareScanner,
+  scannerFromEnv,
+} from './internal/scanner.ts';
 export { createSorter, SORTER_PROMPT_VERSION } from './internal/sorter.ts';
 export { renderIntakeForm } from './internal/views.ts';
 export type { WhatsappConfig, WhatsappFetch } from './internal/whatsapp.ts';

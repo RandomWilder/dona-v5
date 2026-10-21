@@ -12,6 +12,7 @@ import {
   graphMailboxFrom,
   receiveIncoming,
   SORTER_PROMPT_VERSION,
+  scannerFromEnv,
   sendOutlookReply,
   startOutlookPolling,
   watchWhatsapp,
@@ -56,6 +57,7 @@ const pool = createPool();
 // start — but `docs: memory` on a deployed revision is now visible, and is as wrong as a `-dev`
 // version string.
 const objects = createConfiguredStore();
+const scanner = scannerFromEnv(process.env);
 const ocr = createConfiguredOcr();
 const extractor = createConfiguredExtractor();
 // Who signs in (slice 5.1, Google from 5.1b). Same shape as the store and the readers above, and
@@ -105,6 +107,7 @@ if (outlook) {
           },
           matchesEmergency: emergencyMatch(pool),
           objects,
+          scanner,
           replyOnEmail: (reply) => sendOutlookReply(outlook, reply),
           onCallIdentified: (callId) =>
             startCallBrief({ db: pool, clock, extractor, embedder }, callId),
@@ -152,6 +155,7 @@ const app = buildApp({
   staffBaseUrl: process.env.STAFF_BASE_URL,
   tenantHost: process.env.TENANT_HOST ?? DEFAULT_TENANT_HOST,
   codeSender,
+  scanner,
   staffHostedDomain: configuredHostedDomain(),
   devMockups: (process.env.VERSION ?? '0.0.0-dev').endsWith('-dev'),
   http2,
@@ -176,6 +180,7 @@ console.log(`embed: ${embedder.describe()}`);
 console.log(`identity: ${identity.describe()}`);
 console.log(`tenant host: ${process.env.TENANT_HOST ?? DEFAULT_TENANT_HOST}`);
 console.log(`portal codes: ${portalCodeLabel()}`);
+console.log(`scanner: ${scanner ? 'dev' : 'unconfigured'}`);
 console.log(`clock: ${clock.zone}`);
 console.log(`outlook: ${outlook ? 'configured' : 'unconfigured'}`);
 console.log(`whatsapp: ${whatsapp ? 'configured' : 'unconfigured'}`);
