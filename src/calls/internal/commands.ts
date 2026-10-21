@@ -9,7 +9,7 @@
 // who is not a service contact is refused by the database, not by this file
 // hiding the name.
 import { createAuditLog } from '../../kernel/audit.ts';
-import { type Clock, today } from '../../kernel/clock.ts';
+import { type Clock, calendarDate, today } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
@@ -17,6 +17,7 @@ import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
 import { upsertPartyContact } from '../../parties/contract.ts';
 import { normaliseEmail, normalisePhone } from '../../scope/contract.ts';
+import { businessDaysElapsed } from './business-days.ts';
 import { emergencyTermMatches } from './emergency.ts';
 import type { Queryable } from './types.ts';
 
@@ -316,6 +317,34 @@ export interface ResponseGoal {
 export interface SaveResponseGoalSpec {
   amberMinutes: number;
   redMinutes: number;
+  actorId: string;
+  actorRole?: string | null;
+}
+
+/** Whole business days. Amber is the first band; red is the later one. */
+export interface HandlingGoal {
+  amberDays: number;
+  redDays: number;
+}
+
+/** The two clocks, the dates the handling clock skips, and the office zone. */
+export interface OfficeMeasure {
+  goal: ResponseGoal;
+  handling: HandlingGoal;
+  nonWorkingDates: readonly string[];
+  zone: string;
+}
+
+export interface SaveHandlingGoalSpec {
+  amberDays: number;
+  redDays: number;
+  actorId: string;
+  actorRole?: string | null;
+}
+
+export interface ChangeNonWorkingDateSpec {
+  op: 'add' | 'remove';
+  date: string;
   actorId: string;
   actorRole?: string | null;
 }
@@ -2026,7 +2055,7 @@ async function writeSetting(
   db: Queryable,
   clock: Clock,
   key: string,
-  value: string | number,
+  value: string | number | readonly string[],
 ): Promise<void> {
   await db.query(
     `INSERT INTO config_settings (key, value, updated_at)
@@ -2084,6 +2113,16 @@ export function ageMinutes(openedAt: Date, now: Date): number {
  * Amber, then red. Exactly on a threshold has not passed it. A closed call
  * is neither, whatever its age.
  */
+function bandPast(
+  age: number,
+  amber: number,
+  red: number,
+): ResponseBand | null {
+  if (age > red) return 'red';
+  if (age > amber) return 'amber';
+  return null;
+}
+
 export function responseGoalBand(
   state: CallState,
   openedAt: Date,
@@ -2091,10 +2130,38 @@ export function responseGoalBand(
   goal: ResponseGoal,
 ): ResponseBand | null {
   if (state === 'CLOSED') return null;
-  const age = ageMinutes(openedAt, now);
-  if (age > goal.redMinutes) return 'red';
-  if (age > goal.amberMinutes) return 'amber';
-  return null;
+  return bandPast(
+    ageMinutes(openedAt, now),
+    goal.amberMinutes,
+    goal.redMinutes,
+  );
+}
+
+/**
+ * The clock that applies to this call. An open emergency uses the minute goal.
+ * Every other open call uses the handling age in business days. A closed call
+ * is neither.
+ */
+export function officeBand(
+  call: {
+    state: CallState;
+    openedAt: Date;
+    emergency: { flagged: boolean };
+  },
+  now: Date,
+  measure: OfficeMeasure,
+): ResponseBand | null {
+  if (call.emergency.flagged) {
+    return responseGoalBand(call.state, call.openedAt, now, measure.goal);
+  }
+  if (call.state === 'CLOSED') return null;
+  const age = businessDaysElapsed(
+    call.openedAt,
+    now,
+    measure.zone,
+    measure.nonWorkingDates,
+  );
+  return bandPast(age, measure.handling.amberDays, measure.handling.redDays);
 }
 
 function wholeMinutes(value: number, field: string): number {
@@ -2154,6 +2221,133 @@ export async function saveResponseGoal(
     );
   });
   return { amberMinutes, redMinutes };
+}
+
+const HANDLING_AMBER_KEY = 'calls.handling_amber_days';
+const HANDLING_RED_KEY = 'calls.handling_red_days';
+const NON_WORKING_KEY = 'calls.non_working_dates';
+const HANDLING_AMBER_FALLBACK = 2;
+const HANDLING_RED_FALLBACK = 5;
+const HANDLING_DAYS_MAX = 366;
+
+function wholeDays(value: number, field: string): number {
+  if (!Number.isInteger(value) || value < 0 || value > HANDLING_DAYS_MAX) {
+    throw new KernelError('invalid', `${field} must be whole business days`, {
+      field,
+    });
+  }
+  return value;
+}
+
+function storedDays(value: unknown, fallback: number): number {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
+    return value;
+  }
+  throw new KernelError('invalid', 'handling clock is not whole days');
+}
+
+function storedDates(value: unknown): readonly string[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new KernelError('invalid', 'non-working dates are not a date list');
+  }
+  return [...new Set(value.map((item) => calendarDate(String(item))))].sort();
+}
+
+export async function readHandlingGoal(db: Queryable): Promise<HandlingGoal> {
+  const { rows } = await db.query<{ key: string; value: unknown }>(
+    `SELECT key, value FROM config_settings WHERE key = ANY($1::text[])`,
+    [[HANDLING_AMBER_KEY, HANDLING_RED_KEY]],
+  );
+  const byKey = new Map(rows.map((row) => [row.key, row.value]));
+  return {
+    amberDays: storedDays(
+      byKey.get(HANDLING_AMBER_KEY),
+      HANDLING_AMBER_FALLBACK,
+    ),
+    redDays: storedDays(byKey.get(HANDLING_RED_KEY), HANDLING_RED_FALLBACK),
+  };
+}
+
+export async function saveHandlingGoal(
+  db: Queryable,
+  clock: Clock,
+  spec: SaveHandlingGoalSpec,
+): Promise<HandlingGoal> {
+  const actorId = validId(spec.actorId, 'actor');
+  const amberDays = wholeDays(spec.amberDays, 'amber');
+  const redDays = wholeDays(spec.redDays, 'red');
+  if (redDays <= amberDays) {
+    throw new KernelError('invalid', 'red must be older than amber', {
+      field: 'red',
+    });
+  }
+  await inTransaction(db, async (tx) => {
+    await writeSetting(tx, clock, HANDLING_AMBER_KEY, amberDays);
+    await writeSetting(tx, clock, HANDLING_RED_KEY, redDays);
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'staff',
+        actorId,
+        actorRole: spec.actorRole ?? undefined,
+        action: 'calls.handling_clock',
+        inputs: { amberDays, redDays },
+      },
+      { outcome: 'ok' },
+    );
+  });
+  return { amberDays, redDays };
+}
+
+export async function readNonWorkingDates(
+  db: Queryable,
+): Promise<readonly string[]> {
+  const { rows } = await db.query<{ value: unknown }>(
+    `SELECT value FROM config_settings WHERE key = $1`,
+    [NON_WORKING_KEY],
+  );
+  return storedDates(rows[0]?.value);
+}
+
+/**
+ * Adds or removes one non-working date. A date already kept, or a removal of
+ * one that is not, changes nothing and writes no audit row.
+ */
+export async function changeNonWorkingDate(
+  db: Queryable,
+  clock: Clock,
+  spec: ChangeNonWorkingDateSpec,
+): Promise<readonly string[]> {
+  const actorId = validId(spec.actorId, 'actor');
+  const date = calendarDate(spec.date);
+  if (spec.op !== 'add' && spec.op !== 'remove') {
+    throw new KernelError('invalid', 'op is not add or remove', {
+      field: 'op',
+    });
+  }
+  return inTransaction(db, async (tx) => {
+    const current = await readNonWorkingDates(tx);
+    const has = current.includes(date);
+    if (spec.op === 'add' && has) return current;
+    if (spec.op === 'remove' && !has) return current;
+    const next =
+      spec.op === 'add'
+        ? [...current, date].sort()
+        : current.filter((kept) => kept !== date);
+    await writeSetting(tx, clock, NON_WORKING_KEY, next);
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'staff',
+        actorId,
+        actorRole: spec.actorRole ?? undefined,
+        action: 'calls.non_working_date',
+        inputs: { change: spec.op, date },
+      },
+      { outcome: 'ok' },
+    );
+    return next;
+  });
 }
 
 function categoryCode(value: string): string {

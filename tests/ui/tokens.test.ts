@@ -2524,6 +2524,9 @@ const SCREENS: Array<[string, () => string]> = [
         },
         filteredCount: 0,
         goal: { amberMinutes: 240, redMinutes: 1440 },
+        handling: { amberDays: 2, redDays: 5 },
+        nonWorkingDates: [],
+        zone: 'Asia/Jerusalem',
         devIntake: false,
       }),
   ],
@@ -2585,6 +2588,9 @@ const SCREENS: Array<[string, () => string]> = [
         },
         filteredCount: 0,
         goal: { amberMinutes: 240, redMinutes: 1440 },
+        handling: { amberDays: 2, redDays: 5 },
+        nonWorkingDates: [],
+        zone: 'Asia/Jerusalem',
         devIntake: false,
         closedList: {
           exit: null,
@@ -2612,6 +2618,9 @@ const SCREENS: Array<[string, () => string]> = [
         dupMatches: [],
         messages: [],
         goal: { amberMinutes: 240, redMinutes: 1440 },
+        handling: { amberDays: 2, redDays: 5 },
+        nonWorkingDates: [],
+        zone: 'Asia/Jerusalem',
         matches: [
           {
             id: '66666666-6666-4666-8666-666666666666',
@@ -2671,6 +2680,9 @@ const SCREENS: Array<[string, () => string]> = [
         dupMatches: [],
         messages: [],
         goal: { amberMinutes: 240, redMinutes: 1440 },
+        handling: { amberDays: 2, redDays: 5 },
+        nonWorkingDates: [],
+        zone: 'Asia/Jerusalem',
         matches: [],
         categories: [
           {
@@ -2825,6 +2837,8 @@ const SCREENS: Array<[string, () => string]> = [
           hours: 'טרם נקבעו',
         },
         goal: { amberMinutes: 240, redMinutes: 1440 },
+        handling: { amberDays: 2, redDays: 5 },
+        nonWorkingDates: ['2026-10-11'],
       }),
   ],
   [
@@ -2846,6 +2860,8 @@ const SCREENS: Array<[string, () => string]> = [
           hours: 'טרם נקבעו',
         },
         goal: { amberMinutes: 240, redMinutes: 1440 },
+        handling: { amberDays: 2, redDays: 5 },
+        nonWorkingDates: [],
       }),
   ],
   [

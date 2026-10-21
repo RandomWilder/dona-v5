@@ -120,3 +120,30 @@ export function addDays(isoDate: string, days: number): string {
   const anchor = Date.parse(`${isoDate}T00:00:00.000Z`);
   return new Date(anchor + days * 86_400_000).toISOString().slice(0, 10);
 }
+
+function calendarParts(value: string): [number, number, number] {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    throw new KernelError('invalid', 'not a calendar date', { field: 'date' });
+  }
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+/**
+ * A real `YYYY-MM-DD`. Anchored at midnight UTC the way `addDays` is: the date is already a
+ * calendar date, so the round trip does not depend on a zone. 31 February does not survive it.
+ */
+export function calendarDate(value: string): string {
+  const [year, month, day] = calendarParts(value);
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  if (probe.toISOString().slice(0, 10) !== value) {
+    throw new KernelError('invalid', 'not a calendar date', { field: 'date' });
+  }
+  return value;
+}
+
+/** Sunday is 0. A calendar date, so the weekday does not depend on a zone. */
+export function weekdayIndex(isoDate: string): number {
+  const [year, month, day] = calendarParts(isoDate);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}

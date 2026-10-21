@@ -170,20 +170,47 @@ report is not this Category. It is a suggestion, stored beside the call. The sor
 a person's Category command may name a different one. The suggestion does not move the state.
 
 **Editable at /settings without a deploy:** the emergency terms (one per line, like verification
-terms), the duty phone number and hours, the Category list, and the amber and red age thresholds of
-the internal response goal. The goal is internal and is shown to no tenant. A promise to tenants is
+terms), the duty phone number and hours, the Category list, the amber and red age thresholds of
+the internal response goal, the amber and red handling thresholds in business days, and the
+non-working dates. Both clocks are internal and are shown to no tenant. A promise to tenants is
 an SLA, and it is the director's decision when one is made.
 
-**The response goal** is two whole-minute thresholds, amber then red. Placeholders, until Dona Dom
-supplies theirs, are 240 and 1440. Age is whole minutes since the call opened. A call older than
-amber, and not older than red, is near the goal. A call older than red is past it. A call that has
-passed neither is inside the goal. A call exactly as old as a threshold has not passed it. On an
-open call those three are the words בזמן, קרוב ליעד, and מעבר ליעד. A closed call has no
-response-goal band: none of those words, no goal colour, and no goal mark, on the list and on its
-own page. The list filters on the band. The amber filter does not include red. Red means past the
-goal only. A late filter, labeled לא בזמן, means near or past. Amber and red remain valid and have
-no segment of their own. Red must be greater than amber. A threshold above a year of minutes is
-refused. A save is audited and is read on the next request, so it takes effect with no deploy.
+**The response goal** is two whole-minute thresholds, amber then red. It applies to an open
+Emergency call. Placeholders, until Dona Dom supplies theirs, are 240 and 1440. Age is whole
+minutes since the call opened. A call older than amber, and not older than red, is near the goal.
+A call older than red is past it. A call that has passed neither is inside the goal. A call
+exactly as old as a threshold has not passed it. On an open call those three are the words בזמן,
+קרוב ליעד, and מעבר ליעד. A closed call has no response-goal band: none of those words, no goal
+colour, and no goal mark, on the list and on its own page. The list filters on the band. The
+amber filter does not include red. Red means past the goal only. A late filter, labeled לא בזמן,
+means near or past. Amber and red remain valid and have no segment of their own. Red must be
+greater than amber. A threshold above a year of minutes is refused. A save is audited and is
+read on the next request, so it takes effect with no deploy.
+
+**Two clocks (#287).** The response goal above is the Emergency clock. Every other open call is
+measured by the handling clock, in business days. A closed call has neither band. The band on the
+list and on the call's own page, the band filter, the past group, and the near and past counts
+each use whichever clock applies to that call. The age words beside the band stay the elapsed
+time, the same words the response goal already uses.
+
+**A business day** is a calendar date in the office zone whose weekday is Sunday, Monday, Tuesday,
+Wednesday or Thursday, and which is not a non-working date. Friday and Saturday are not business
+days. The handling age is how many business days lie in the half-open span from the open date,
+inclusive, to today, exclusive. The open date and today are that instant's calendar date in the
+office zone. The same calendar day is zero. A Friday, a Saturday or a non-working date in the span
+does not count. The count is a pure function of the open instant, now, the office zone and the
+non-working dates.
+
+**The handling clock** is two whole-day thresholds, amber then red. Placeholders, until Dona Dom
+supplies theirs, are 2 and 5. The bands and the words are the response goal's: older than amber
+and not older than red is near, older than red is past, and exactly on a threshold has not passed
+it. The list shows that band on each non-emergency open call. Red must be greater than amber. A
+threshold above 366 is refused. A save is audited and is read on the next request.
+
+**Non-working dates** are calendar dates an administrator adds and removes at `/settings`. A value
+that is not a real calendar date is refused. Adding a date already kept, or removing one that is
+not, changes nothing and writes no audit row. Each add and each remove that changes the list is
+its own audit row. The list is read on the next request.
 
 **Tenant status (#281).** Derived when the portal reads a call, never stored, and never a
 response-goal band. The words are the portal's copy rows. A state this table does not name,
@@ -253,8 +280,8 @@ list, with the filters cleared. The dialog is not modal and does not trap the ke
 open rows are one read of every open call. The counts of open calls, emergencies, calls near or
 past the goal, and calls marked for review are taken from that read and ignore the filter on
 screen, so a short list can sit under a larger open total. The same numbers are on the segments,
-the summary, and the stat row. The red stat is titled מעבר ליעד המענה, with the near-goal count
-beside it. The closed segment is a second read, because a closed call is not in the open read, and
+the summary, and the stat row. The red stat is titled מעבר ליעד, with the near-goal count
+beside it. Both counts use whichever clock applies to the call. The closed segment is a second read, because a closed call is not in the open read, and
 that segment shows no count.
 
 The segments are every open call, emergencies, לא בזמן, calls to review, and closed. The category

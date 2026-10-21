@@ -24,11 +24,12 @@ import {
   type EntryPermission,
   EXIT_KINDS,
   type ExitKind,
+  type HandlingGoal,
   MANUAL_CHANNELS,
   NOTE_MAX,
+  officeBand,
   type ResponseBand,
   type ResponseGoal,
-  responseGoalBand,
   SENDER_MAX,
   type ServiceCall,
   type ServiceCallDetail,
@@ -112,6 +113,9 @@ export interface CallsScreen {
   /** Noise messages plus returned calls, the rows the filtered list will show. */
   filteredCount: number;
   goal: ResponseGoal;
+  handling: HandlingGoal;
+  nonWorkingDates: readonly string[];
+  zone: string;
   devIntake: boolean;
   now: Date;
   /** The shared mailbox has not been read successfully for an hour. */
@@ -170,6 +174,9 @@ export interface CallScreen {
   dupMatches: readonly { id: string; description: string }[];
   messages: readonly TimelineMessage[];
   goal: ResponseGoal;
+  handling: HandlingGoal;
+  nonWorkingDates: readonly string[];
+  zone: string;
   now: Date;
   /** Staff who may file a document. The button is absent otherwise. */
   mayFile?: boolean;
@@ -698,12 +705,7 @@ function emergencyChip(call: ServiceCall, ever: boolean): Html {
 
 function goalChip(call: ServiceCall, screen: CallsScreen): Html {
   if (call.state === 'CLOSED') return h``;
-  const band = responseGoalBand(
-    call.state,
-    call.openedAt,
-    screen.now,
-    screen.goal,
-  );
+  const band = officeBand(call, screen.now, screen);
   if (band === null) return h`<span class="chip">בזמן</span>`;
   return h`<span class="chip" data-goal="${band}">${BAND_HE[band]}</span>`;
 }
@@ -725,6 +727,9 @@ function arrange(screen: {
   state: CallState | null;
   now: Date;
   goal: ResponseGoal;
+  handling: HandlingGoal;
+  nonWorkingDates: readonly string[];
+  zone: string;
 }): {
   urgent: ServiceCall[];
   rest: ServiceCall[];
@@ -735,10 +740,7 @@ function arrange(screen: {
   const rest: ServiceCall[] = [];
   for (const call of screen.calls) {
     if (call.emergency.flagged) emergency.push(call);
-    else if (
-      responseGoalBand(call.state, call.openedAt, screen.now, screen.goal) ===
-      'red'
-    ) {
+    else if (officeBand(call, screen.now, screen) === 'red') {
       past.push(call);
     } else rest.push(call);
   }
@@ -754,6 +756,9 @@ export function shownCalls(screen: {
   state: CallState | null;
   now: Date;
   goal: ResponseGoal;
+  handling: HandlingGoal;
+  nonWorkingDates: readonly string[];
+  zone: string;
 }): ServiceCall[] {
   const groups = arrange(screen);
   if (groups === null) return [...screen.calls];
@@ -1143,7 +1148,7 @@ function statRow(screen: CallsScreen): Html {
   return h`<section class="stat-row" aria-label="סיכום">
     <div class="stat glass"><span class="stat-label">פתוחות</span><span class="stat-value">${ltr(counts.open)}</span></div>
     <div class="stat glass"><span class="stat-label">חירום</span><span class="stat-value">${ltr(counts.emergency)}</span></div>
-    <div class="stat glass is-alert"><span class="stat-label">מעבר ליעד המענה</span><span class="stat-value">${ltr(counts.past)}</span><span class="stat-note">קרוב ליעד ${ltr(counts.near)}</span></div>
+    <div class="stat glass is-alert"><span class="stat-label">מעבר ליעד</span><span class="stat-value">${ltr(counts.past)}</span><span class="stat-note">קרוב ליעד ${ltr(counts.near)}</span></div>
     <div class="stat glass"><span class="stat-label">לבדיקה</span><span class="stat-value">${ltr(counts.toReview)}</span></div>
   </section>`;
 }
@@ -1837,12 +1842,7 @@ function stateSteps(state: CallState): Html {
 
 function ageFact(screen: CallScreen): Html {
   const age = ageLabel(screen.call.openedAt, screen.now);
-  const band = responseGoalBand(
-    screen.call.state,
-    screen.call.openedAt,
-    screen.now,
-    screen.goal,
-  );
+  const band = officeBand(screen.call, screen.now, screen);
   if (band === null) {
     const words = screen.call.state === 'CLOSED' ? age : h`${age} · בזמן`;
     return h`<div><dt>גיל</dt><dd>${words}</dd></div>`;

@@ -17,16 +17,20 @@ import {
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import {
+  changeNonWorkingDate,
   composeDutyReply,
   countOpenCalls,
   getCall,
   listCategories,
   listPortalCalls,
   readEmergencySettings,
+  readHandlingGoal,
+  readNonWorkingDates,
   readPortalCall,
   readResponseGoal,
   registerCallsRoutes,
   saveEmergencySettings,
+  saveHandlingGoal,
   saveResponseGoal,
   startCallBrief,
   tenantStatus,
@@ -118,6 +122,8 @@ import {
   parseCategoryForm,
   parseDocumentTypeForm,
   parseEmergencyForm,
+  parseHandlingGoalForm,
+  parseNonWorkingDateForm,
   parseObligationTypeForm,
   parseResponseGoalForm,
   renderSettingsPage,
@@ -755,7 +761,14 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       openCalls?: number;
     },
     reply: { header: (name: string, value: string) => unknown },
-    saved?: 'obligation' | 'document' | 'category' | 'emergency' | 'goal',
+    saved?:
+      | 'obligation'
+      | 'document'
+      | 'category'
+      | 'emergency'
+      | 'goal'
+      | 'handling'
+      | 'dates',
   ) => {
     stubHeaders(reply);
     const role = request.staff?.role ?? null;
@@ -771,6 +784,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       categories: await listCategories(deps.pool),
       emergency: await readEmergencySettings(deps.pool),
       goal: await readResponseGoal(deps.pool),
+      handling: await readHandlingGoal(deps.pool),
+      nonWorkingDates: await readNonWorkingDates(deps.pool),
       saved,
     });
   };
@@ -784,7 +799,9 @@ export function buildApp(deps: AppDeps): FastifyInstance {
         saved === 'document' ||
         saved === 'category' ||
         saved === 'emergency' ||
-        saved === 'goal'
+        saved === 'goal' ||
+        saved === 'handling' ||
+        saved === 'dates'
         ? saved
         : undefined,
     );
@@ -841,6 +858,39 @@ export function buildApp(deps: AppDeps): FastifyInstance {
         actorRole: staff.role,
       });
       return reply.code(303).header('location', '/settings?saved=goal').send();
+    },
+  );
+  app.post(
+    '/settings/handling-clock',
+    SETTINGS_WRITE,
+    async (request, reply) => {
+      const staff = request.staff;
+      if (staff == null) throw new KernelError('not_allowed', 'not_allowed');
+      const clock = deps.clock ?? systemClock;
+      await saveHandlingGoal(deps.pool, clock, {
+        ...parseHandlingGoalForm(request.body),
+        actorId: staff.staffAccountId,
+        actorRole: staff.role,
+      });
+      return reply
+        .code(303)
+        .header('location', '/settings?saved=handling')
+        .send();
+    },
+  );
+  app.post(
+    '/settings/non-working-dates',
+    SETTINGS_WRITE,
+    async (request, reply) => {
+      const staff = request.staff;
+      if (staff == null) throw new KernelError('not_allowed', 'not_allowed');
+      const clock = deps.clock ?? systemClock;
+      await changeNonWorkingDate(deps.pool, clock, {
+        ...parseNonWorkingDateForm(request.body),
+        actorId: staff.staffAccountId,
+        actorRole: staff.role,
+      });
+      return reply.code(303).header('location', '/settings?saved=dates').send();
     },
   );
   app.post('/settings/categories', SETTINGS_WRITE, async (request, reply) => {

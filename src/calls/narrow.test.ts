@@ -13,6 +13,7 @@ import {
 
 const NOW = new Date('2026-10-06T12:00:00.000Z');
 const GOAL = { amberMinutes: 240, redMinutes: 1440 };
+const HANDLING = { amberDays: 2, redDays: 5 };
 const COUNTS = {
   open: 1,
   emergency: 0,
@@ -95,6 +96,9 @@ function callPage(overrides: Partial<ServiceCallDetail> = {}, receipt = false) {
       },
     ],
     goal: GOAL,
+    handling: HANDLING,
+    nonWorkingDates: [],
+    zone: 'Asia/Jerusalem',
     now: NOW,
     receipt,
     nextOpen: receipt
@@ -124,6 +128,9 @@ describe('a narrow Hebrew page', () => {
       counts: COUNTS,
       filteredCount: 0,
       goal: GOAL,
+      handling: HANDLING,
+      nonWorkingDates: [],
+      zone: 'Asia/Jerusalem',
       devIntake: false,
       now: NOW,
       layout: 'list',

@@ -19,6 +19,7 @@ import type {
   CategoryRow,
   CategorySpec,
   EmergencySettings,
+  HandlingGoal,
   ResponseGoal,
 } from './calls/contract.ts';
 import { signedInChrome } from './chrome.ts';
@@ -48,7 +49,16 @@ export interface SettingsScreen {
   categories: readonly CategoryRow[];
   emergency: EmergencySettings;
   goal: ResponseGoal;
-  saved?: 'obligation' | 'document' | 'category' | 'emergency' | 'goal';
+  handling: HandlingGoal;
+  nonWorkingDates: readonly string[];
+  saved?:
+    | 'obligation'
+    | 'document'
+    | 'category'
+    | 'emergency'
+    | 'goal'
+    | 'handling'
+    | 'dates';
 }
 
 const styles = h`<style>
@@ -154,7 +164,7 @@ function goalForm(screen: SettingsScreen): Html {
   return h`<form class="settings-form" method="post" action="/settings/response-goal">
     ${csrfInput(screen.csrf)}
     <h2>יעד מענה פנימי</h2>
-    <p class="lede">דקות שלמות. לא מוצג לדייר. נכנס לתוקף בלי העלאה.</p>
+    <p class="lede">לקריאת חירום. דקות שלמות. לא מוצג לדייר. נכנס לתוקף בלי העלאה.</p>
     <div class="field">
       <label for="goal-amber">כתום (דקות)</label>
       <input id="goal-amber" name="amber_minutes" type="text" inputmode="numeric" dir="ltr" required maxlength="6" value="${String(goal.amberMinutes)}" />
@@ -165,6 +175,71 @@ function goalForm(screen: SettingsScreen): Html {
     </div>
     <button class="btn btn-primary" type="submit">שמירה</button>
   </form>`;
+}
+
+function shownDate(iso: string): string {
+  const [year, month, day] = iso.split('-');
+  if (!year || !month || !day) return iso;
+  return `${day}.${month}.${year}`;
+}
+
+function handlingForm(screen: SettingsScreen): Html {
+  const handling = screen.handling;
+  if (!screen.mayWrite) {
+    return h`<dl class="facts">
+      <div><dt>כתום</dt><dd>${String(handling.amberDays)} ימים</dd></div>
+      <div><dt>אדום</dt><dd>${String(handling.redDays)} ימים</dd></div>
+    </dl>`;
+  }
+  return h`<form class="settings-form" method="post" action="/settings/handling-clock">
+    ${csrfInput(screen.csrf)}
+    <h2>סף טיפול</h2>
+    <p class="lede">לקריאה שאינה חירום. ימי עסקים שלמים. לא מוצג לדייר. נכנס לתוקף בלי העלאה.</p>
+    <div class="field">
+      <label for="handling-amber">כתום (ימים)</label>
+      <input id="handling-amber" name="amber_days" type="text" inputmode="numeric" dir="ltr" required maxlength="3" value="${String(handling.amberDays)}" />
+    </div>
+    <div class="field">
+      <label for="handling-red">אדום (ימים)</label>
+      <input id="handling-red" name="red_days" type="text" inputmode="numeric" dir="ltr" required maxlength="3" value="${String(handling.redDays)}" />
+    </div>
+    <button class="btn btn-primary" type="submit">שמירה</button>
+  </form>`;
+}
+
+function dateRow(screen: SettingsScreen, iso: string): Html {
+  const label = h`<span dir="ltr">${shownDate(iso)}</span>`;
+  if (!screen.mayWrite)
+    return h`<article class="type-card"><h2>${label}</h2></article>`;
+  return h`<article class="type-card">
+    <h2>${label}</h2>
+    <form method="post" action="/settings/non-working-dates">
+      ${csrfInput(screen.csrf)}
+      <input type="hidden" name="op" value="remove" />
+      <input type="hidden" name="date" value="${iso}" />
+      <button class="btn" type="submit">הסרה</button>
+    </form>
+  </article>`;
+}
+
+function datesBlock(screen: SettingsScreen): Html {
+  const rows =
+    screen.nonWorkingDates.length === 0
+      ? h`<p class="lede">אין ימים לא עובדים.</p>`
+      : h`<div class="row-list">${screen.nonWorkingDates.map((iso) => dateRow(screen, iso))}</div>`;
+  if (!screen.mayWrite) return rows;
+  return h`${rows}
+    <form class="settings-form" method="post" action="/settings/non-working-dates">
+      ${csrfInput(screen.csrf)}
+      <input type="hidden" name="op" value="add" />
+      <h2>יום לא עובד</h2>
+      <p class="lede">תאריך ביומן. יום ו׳ ושבת כבר אינם ימי עסקים.</p>
+      <div class="field">
+        <label for="non-working-date">תאריך</label>
+        <input id="non-working-date" name="date" type="date" dir="ltr" required />
+      </div>
+      <button class="btn btn-primary" type="submit">הוספה</button>
+    </form>`;
 }
 
 function categoryForm(csrf: string): Html {
@@ -241,6 +316,11 @@ export function renderSettingsPage(screen: SettingsScreen): string {
       <section class="settings-block">
         <h2>יעד מענה</h2>
         ${goalForm(screen)}
+      </section>
+      <section class="settings-block">
+        <h2>ימי עסקים</h2>
+        ${handlingForm(screen)}
+        ${datesBlock(screen)}
       </section>
       <section class="settings-block">
         <h2>קטגוריות לקריאות</h2>
@@ -372,6 +452,39 @@ export function parseResponseGoalForm(body: unknown): {
     amberMinutes: wholeMinutesField(body, 'amber_minutes', 'amber'),
     redMinutes: wholeMinutesField(body, 'red_minutes', 'red'),
   };
+}
+
+function wholeDaysField(body: unknown, name: string, field: string): number {
+  const raw = (body as Form | undefined)?.[name];
+  if (typeof raw !== 'string' || !/^\d{1,3}$/.test(raw.trim())) {
+    throw new KernelError('invalid', `${field} must be whole business days`, {
+      field,
+    });
+  }
+  return Number(raw.trim());
+}
+
+export function parseHandlingGoalForm(body: unknown): {
+  amberDays: number;
+  redDays: number;
+} {
+  return {
+    amberDays: wholeDaysField(body, 'amber_days', 'amber'),
+    redDays: wholeDaysField(body, 'red_days', 'red'),
+  };
+}
+
+export function parseNonWorkingDateForm(body: unknown): {
+  op: 'add' | 'remove';
+  date: string;
+} {
+  const op = field(body, 'op', 8);
+  if (op !== 'add' && op !== 'remove') {
+    throw new KernelError('invalid', 'op is not add or remove', {
+      field: 'op',
+    });
+  }
+  return { op, date: field(body, 'date', 10) };
 }
 
 export function parseEmergencyForm(body: unknown): {

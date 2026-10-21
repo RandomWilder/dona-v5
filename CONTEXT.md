@@ -134,7 +134,8 @@ be met. Editable at `/settings` without a deploy.
 | **Source channel** | How a ServiceCall arrived: `WHATSAPP · EMAIL · PHONE · WALK_IN · PORTAL`. Set once, at intake. `PORTAL` covers the web portal and any later native app. |
 | **Category** | The trade a ServiceCall needs — plumbing, electrical, A/C, locks, gates and the like, plus administrative. Dona Dom's list. Distinct from `asset_type`, which is what the call is filed against. |
 | **Emergency** | A ServiceCall flagged because its text contains an emergency term, or because a person flagged it. The flag records which. Pinned first in קריאות. Not a state, and no model sets it. Closing the call does not clear the flag. |
-| **Response goal** | How long an open ServiceCall has waited, in three bands: **בזמן** (inside the goal), **קרוב ליעד** (near), **מעבר ליעד** (past). The office's own measure. Not an SLA, and not the words כתום or אדום. |
+| **Response goal** | How long an open Emergency has waited, in minutes, in three bands: **בזמן** (inside the goal), **קרוב ליעד** (near), **מעבר ליעד** (past). The office's own measure. Not an SLA, and not the words כתום or אדום. |
+| **Handling clock** | How long every other open ServiceCall has waited, in business days, in those same three bands. Office-only, like the Response goal. |
 | **Tenant status** | The word a tenant sees for their ServiceCall in the Portal — **התקבלה**, **בטיפול**, **ממתין לתיאום**, **נקבע ביקור**, or the exit. Derived from the call's state, never stored, and never an office band. |
 | **Reply target** | The number of business days within which a person replies to a ServiceCall. A reply, not a resolution: it promises no closing, visit or appointment, and the automatic acknowledgement is not a reply. Shown to tenants only when the office switches it on. |
 | **Business day** | Sunday to Thursday, less the non-working dates the office keeps at `/settings`. |

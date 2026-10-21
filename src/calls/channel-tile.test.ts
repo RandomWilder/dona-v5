@@ -56,6 +56,9 @@ function screen(): CallsScreen {
     counts: { open: 5, emergency: 0, near: 0, past: 0, late: 0, toReview: 0 },
     filteredCount: 0,
     goal: { amberMinutes: 240, redMinutes: 1440 },
+    handling: { amberDays: 2, redDays: 5 },
+    nonWorkingDates: [],
+    zone: 'Asia/Jerusalem',
     devIntake: false,
     now: new Date('2026-10-06T12:00:00.000Z'),
   };

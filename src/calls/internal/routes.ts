@@ -39,11 +39,13 @@ import {
   listOpenCalls,
   listReturnedCalls,
   newestCloseAtOrBefore,
+  type OfficeMeasure,
   type OpenCallSpec,
+  officeBand,
   openCall,
-  type ResponseGoal,
+  readHandlingGoal,
+  readNonWorkingDates,
   readResponseGoal,
-  responseGoalBand,
   restoreReturnedCall,
   returnToFiltered,
   type ServiceCall,
@@ -220,9 +222,9 @@ function matchesBand(
   call: ServiceCall,
   band: 'amber' | 'red' | 'late',
   now: Date,
-  goal: ResponseGoal,
+  measure: OfficeMeasure,
 ): boolean {
-  const actual = responseGoalBand(call.state, call.openedAt, now, goal);
+  const actual = officeBand(call, now, measure);
   if (band === 'late') return actual === 'amber' || actual === 'red';
   return actual === band;
 }
@@ -231,7 +233,7 @@ function shownCall(
   call: ServiceCall,
   filter: CallListFilter,
   now: Date,
-  goal: ResponseGoal,
+  measure: OfficeMeasure,
 ): boolean {
   if (filter.state !== undefined && call.state !== filter.state) return false;
   if (
@@ -242,7 +244,10 @@ function shownCall(
   }
   if (filter.emergency === true && !call.emergency.flagged) return false;
   if (filter.toReview === true && !call.toReview) return false;
-  if (filter.band !== undefined && !matchesBand(call, filter.band, now, goal)) {
+  if (
+    filter.band !== undefined &&
+    !matchesBand(call, filter.band, now, measure)
+  ) {
     return false;
   }
   return true;
@@ -430,6 +435,8 @@ async function callsPage(
     categories,
     mailboxWarning,
     goal,
+    handling,
+    nonWorking,
     echoWarning,
     noise,
     returned,
@@ -451,13 +458,21 @@ async function callsPage(
     listCategories(deps.pool),
     deps.mailboxWarning ? deps.mailboxWarning() : Promise.resolve(false),
     readResponseGoal(deps.pool),
+    readHandlingGoal(deps.pool),
+    readNonWorkingDates(deps.pool),
     deps.whatsappWarning ? deps.whatsappWarning() : Promise.resolve(false),
     deps.listNoise ? deps.listNoise() : Promise.resolve([]),
     listReturnedCalls(deps.pool),
   ]);
+  const measure: OfficeMeasure = {
+    goal,
+    handling,
+    nonWorkingDates: nonWorking,
+    zone: deps.clock.zone,
+  };
   const calls =
     closedRows === null
-      ? everyOpen.filter((call) => shownCall(call, filter, now, goal))
+      ? everyOpen.filter((call) => shownCall(call, filter, now, measure))
       : closedRows.filter((call) => exit === null || call.exit?.kind === exit);
   const exitCounts: Record<ExitKind | 'all', number> | null =
     closedRows === null
@@ -481,7 +496,7 @@ async function callsPage(
   for (const call of everyOpen) {
     if (call.emergency.flagged) emergency += 1;
     if (call.toReview) toReview += 1;
-    const band = responseGoalBand(call.state, call.openedAt, now, goal);
+    const band = officeBand(call, now, measure);
     if (band === 'amber') near += 1;
     else if (band === 'red') past += 1;
   }
@@ -495,6 +510,9 @@ async function callsPage(
     state: filter.state ?? null,
     now,
     goal,
+    handling,
+    nonWorkingDates: nonWorking,
+    zone: deps.clock.zone,
   });
   const chosen = listOnly
     ? null
@@ -525,6 +543,9 @@ async function callsPage(
     toReview: filter.toReview === true,
     band: filter.band ?? null,
     goal,
+    handling,
+    nonWorkingDates: nonWorking,
+    zone: deps.clock.zone,
     counts: {
       open: everyOpen.length,
       emergency,
@@ -560,14 +581,17 @@ async function callsPage(
 
 async function firstOpenCall(
   deps: CallsDeps,
-  goal: ResponseGoal,
+  measure: OfficeMeasure,
 ): Promise<{ id: string; description: string } | null> {
   const open = await listOpenCalls(deps.pool);
   const first = shownCalls({
     calls: open,
     state: null,
     now: deps.clock.now(),
-    goal,
+    goal: measure.goal,
+    handling: measure.handling,
+    nonWorkingDates: measure.nonWorkingDates,
+    zone: measure.zone,
   })[0];
   if (!first) return null;
   return { id: first.id, description: first.description };
@@ -608,21 +632,37 @@ async function callPage(
     call.state === 'NEW' && query.length > 0 && query.length <= 80;
   const dupSearching =
     canExit(call.state) && dup.length > 0 && dup.length <= 80;
-  const [categories, matches, foundDup, messages, documentTypes, goal] =
-    await Promise.all([
-      listCategories(deps.pool, { activeOnly: call.state !== 'NEW' }),
-      searching ? findPartiesByName(deps.pool, query) : Promise.resolve([]),
-      dupSearching
-        ? findCallsByDescription(deps.pool, dup, callId)
-        : Promise.resolve([]),
-      deps.messagesOnCall ? deps.messagesOnCall(callId) : Promise.resolve([]),
-      deps.documentTypes ? deps.documentTypes() : Promise.resolve([]),
-      readResponseGoal(deps.pool),
-    ]);
+  const [
+    categories,
+    matches,
+    foundDup,
+    messages,
+    documentTypes,
+    goal,
+    handling,
+    nonWorking,
+  ] = await Promise.all([
+    listCategories(deps.pool, { activeOnly: call.state !== 'NEW' }),
+    searching ? findPartiesByName(deps.pool, query) : Promise.resolve([]),
+    dupSearching
+      ? findCallsByDescription(deps.pool, dup, callId)
+      : Promise.resolve([]),
+    deps.messagesOnCall ? deps.messagesOnCall(callId) : Promise.resolve([]),
+    deps.documentTypes ? deps.documentTypes() : Promise.resolve([]),
+    readResponseGoal(deps.pool),
+    readHandlingGoal(deps.pool),
+    readNonWorkingDates(deps.pool),
+  ]);
+  const measure: OfficeMeasure = {
+    goal,
+    handling,
+    nonWorkingDates: nonWorking,
+    zone: deps.clock.zone,
+  };
   const dupMatches = await heldDuplicate(deps, foundDup, exitDraft);
   const receipt =
     textOf(formOf(request.query).receipt) === '1' && call.state === 'CLOSED';
-  const nextOpen = receipt ? await firstOpenCall(deps, goal) : null;
+  const nextOpen = receipt ? await firstOpenCall(deps, measure) : null;
   const role = request.staff?.role ?? null;
   const csrf = csrfFrom(request);
   const brief =
@@ -649,6 +689,9 @@ async function callPage(
     dupMatches,
     messages,
     goal,
+    handling,
+    nonWorkingDates: nonWorking,
+    zone: deps.clock.zone,
     mayFile: can(role, 'documents.write'),
     mayReply: can(role, 'calls.reply'),
     mayReadParties: can(role, 'party.read'),

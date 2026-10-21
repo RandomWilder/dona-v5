@@ -7,6 +7,7 @@
 // #184 closes a call by one of the four Exits.
 // #186 opens a call from the intake door and returns one to the filtered list.
 
+export { businessDaysElapsed } from './internal/business-days.ts';
 export type {
   CallCategory,
   CallExit,
@@ -18,12 +19,14 @@ export type {
   CallTransition,
   CategoryRow,
   CategorySpec,
+  ChangeNonWorkingDateSpec,
   EmergencyActorSpec,
   EmergencyMark,
   EmergencySettings,
   EntryPermission,
   ExitCallSpec,
   ExitKind,
+  HandlingGoal,
   IdentifyByAddressSpec,
   IdentifyCallSpec,
   ManualChannel,
@@ -35,6 +38,7 @@ export type {
   ReturnCallSpec,
   ReturnedCall,
   SaveEmergencySettingsSpec,
+  SaveHandlingGoalSpec,
   SaveResponseGoalSpec,
   SaveSenderContactSpec,
   ServiceCall,
@@ -46,6 +50,7 @@ export type {
 export {
   ADDRESS_MAX,
   callIsAttachable,
+  changeNonWorkingDate,
   clearEmergency,
   countOpenCalls,
   DESCRIPTION_MAX,
@@ -62,10 +67,13 @@ export {
   openCall,
   openIntakeCall,
   readEmergencySettings,
+  readHandlingGoal,
+  readNonWorkingDates,
   readResponseGoal,
   restoreReturnedCall,
   returnToFiltered,
   saveEmergencySettings,
+  saveHandlingGoal,
   saveResponseGoal,
   saveSenderContact,
   setCallCategory,
