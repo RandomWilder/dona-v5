@@ -1155,6 +1155,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
               (file) => file.id,
             ),
           },
+          followCallId: report.predecessorId,
         },
       );
       const callId = outcome.kind === 'filtered' ? null : outcome.callId;
@@ -1194,6 +1195,39 @@ export function buildApp(deps: AppDeps): FastifyInstance {
         ? composeDutyReply(await readEmergencySettings(deps.pool))
         : null;
       return { callNumber: call.callNumber, duty };
+    },
+    submitFollowUp: async (follow) => {
+      const held = await listHolds(deps.pool, follow.ownerId, follow.key);
+      const outcome = await receiveIncoming(
+        deps.pool,
+        clock,
+        {
+          sorter: portalSorter,
+          matchesEmergency: emergencyMatch(deps.pool),
+          objects,
+          scanner: deps.scanner,
+          onCallIdentified,
+        },
+        {
+          sourceChannel: 'PORTAL',
+          externalMessageId: follow.key,
+          externalThreadId: follow.callId,
+          senderAddress: follow.phone,
+          receivedAt: clock.now(),
+          body: follow.body,
+          followCallId: follow.callId,
+          holds:
+            held.length === 0
+              ? undefined
+              : {
+                  ownerId: follow.ownerId,
+                  submissionId: follow.key,
+                  ids: held.map((file) => file.id),
+                },
+        },
+      );
+      if (outcome.kind === 'filtered' || outcome.callId === null) return null;
+      return { callId: outcome.callId };
     },
   });
   registerDocumentRoutes(app, {

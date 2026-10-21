@@ -284,7 +284,7 @@ function refusalHe(error: KernelError): string {
     return 'יש לזהות את הפונה לפני השליחה.';
   }
   if (field === 'reply' && reason === 'channel') {
-    return 'אפשר לשלוח רק על דוא״ל.';
+    return 'אפשר לשלוח תשובה רק בדוא״ל או בפורטל.';
   }
   if (field === 'reply' && reason === 'message') {
     return 'אין הודעה נכנסת לשלוח אליה.';
@@ -295,6 +295,9 @@ function refusalHe(error: KernelError): string {
     return 'לא ניתן לסגור קריאה שנקבעה.';
   }
   if (field === 'exit') return 'יש לבחור יציאה.';
+  if (field === 'call' && reason === 'portal') {
+    return 'קריאה מהפורטל לא חוזרת למסוננות. אפשר לבטל אותה עם הערה.';
+  }
   if (field === 'call' && reason === 'returned') {
     return 'הקריאה כבר במסוננות.';
   }
@@ -923,7 +926,8 @@ export function registerCallsRoutes(
       const staff = staffOf(request);
       const callId = callIdOf(request.params);
       const body = textOf(formOf(request.body).body);
-      if (!deps.sendEmailReply) {
+      const current = await getCall(deps.pool, callId);
+      if (current?.sourceChannel !== 'PORTAL' && !deps.sendEmailReply) {
         html(reply);
         reply.code(400);
         return callPage(deps, request, callId, 'הדואר אינו מוגדר.');

@@ -69,6 +69,11 @@ and the tenancy. A question carries none of the three. A noise verdict does not 
 the tenant asked for a call, so one is opened and marked to review when the verdict was not a
 plain call. The sorter's own Category is still the proposal. It does not replace the suggestion.
 
+**A portal follow-up (#284)** is the same door, on a call the tenant can already read. The message
+names that call. An open call takes the message onto its timeline and does not open another. A
+report that names a closed call opens a new call with that call as Predecessor. The idempotency
+key is still the external message id, so the same post twice is one message.
+
 **A dev-only form** pushes a fabricated message through this door. When no sorter is
 configured, the person at the form picks the verdict, so the path can be clicked before a key is
 present. When the sorter is configured, the form sends the message through it. The form is

@@ -205,8 +205,9 @@ describe('every route in the application', () => {
   it('marks exactly the multipart routes as verifying their own token', async () => {
     // `csrf: 'in-body'` is an exemption from the hook, and an exemption that spreads is the hook
     // being switched off one route at a time. These are the multipart uploads, and each
-    // calls the same `verifyCsrf` the hook calls. The report route is here because a
-    // file post is a stream. The early-end route is here because the notice letter is a file.
+    // calls the same `verifyCsrf` the hook calls. The report route and the
+    // follow-up are here because a file post is a stream. The early-end route
+    // is here because the notice letter is a file.
     const pool = deadPool();
     const app = buildApp({ pool, version: '9.9.9-test' });
     await app.ready();
@@ -214,6 +215,7 @@ describe('every route in the application', () => {
       .filter((route) => route.csrf === 'in-body')
       .map((route) => `${route.method} ${route.url}`);
     assert.deepEqual(exempt, [
+      'POST /calls/:callId/follow-up',
       'POST /report',
       'POST /documents/filing',
       'POST /documents',

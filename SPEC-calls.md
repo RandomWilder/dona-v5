@@ -101,12 +101,13 @@ draft, because the clipboard is not a form; a call with no draft has no script.
 **#256. Send the reply.** On an EMAIL call, a person who holds `calls.reply` can send the draft,
 edited or as written, as a reply to the inbound message the call was opened from. The server
 refuses unless the actor holds `calls.reply`, the call is IDENTIFIED or later and not closed, and
-the channel is EMAIL. Only one recipient is possible. The server resolves it, and the thread, from
-that inbound message. The page never supplies an address, and a recipient a client posts is
-ignored. The send is one Graph reply through the same Outlook send the duty reply uses. It is a
-timeline row and an audit row. Each row names the actor, the text sent, and whether that text was
-the stored draft or an edit of it. A viewer sees the copy control and not send. PHONE, WALK_IN and
-WHATSAPP are not this command. Production `Mail.Send` is the director's to request; until it is
+the channel is EMAIL or PORTAL. Only one recipient is possible on EMAIL. The server resolves it,
+and the thread, from that inbound message. The page never supplies an address, and a recipient a
+client posts is ignored. On EMAIL the send is one Graph reply through the same Outlook send the
+duty reply uses. On PORTAL nothing is sent outside (#284): the same row is the reply, and the
+tenant's thread shows it. It is a timeline row and an audit row. Each row names the actor, the
+text sent, and whether that text was the stored draft or an edit of it. A viewer sees the copy
+control and not send. PHONE, WALK_IN and WHATSAPP are not this command. Production `Mail.Send` is the director's to request; until it is
 granted, the send is verified on the development mailbox only.
 
 **Save this contact** is a command on a call a person identified, when the sender is an email
@@ -130,7 +131,9 @@ A call with no Exit reason is not closed.
 **Return to filtered** is not an Exit. A call the office judges not to be a call at all (spam, an
 advertisement, a misdirected message) becomes a Filtered message again. The call record is kept and
 marked returned, so it counts in no closed-call figure. The sorter's original label is kept beside
-the office's, as a labelled case for the golden set.
+the office's, as a labelled case for the golden set. A `PORTAL` call is not returned (#284). The
+command refuses, and the control is absent on its page. The office cancels it with a note. The
+tenant sees בוטלה with that note.
 
 **A message on a thread whose call is closed opens a new call** linked to the closed one. A closed
 call is never reopened.
@@ -199,6 +202,13 @@ tenancy the number reaches today, on any Source channel, newest first. A call re
 filtered list is not on it. Opening one shows the tenant's messages and the office's replies.
 A brief, a draft, a band, a clock and an internal state name are not on any tenant page. Another
 tenant's call, asked for by its identifier, is not found.
+
+**A follow-up (#284).** On an open call the tenant writes from its thread. The message is stored
+on that call and does not open another. A photo, a short video or a PDF on that write is an
+attachment of the message. On a closed call the thread has no message field. One button, פתיחת
+קריאה המשך, opens the report as a new call that names the closed one as Predecessor. The office
+replies to a `PORTAL` call from its page. That reply is the row above, shown in the thread as the
+office. A cancelled call shows בוטלה with the note.
 
 **A portal report (#282).** A tenant with tenancy access reports an issue on the tenancy chosen
 for the session. It is a ServiceCall on `PORTAL` through the intake door, and nothing is a
@@ -338,7 +348,8 @@ for cancelled, a note and a department for forwarded, and the other call for a d
 close control names the exit and says that closing is final and a new message opens a new call.
 A refused exit keeps the exit and the values. Flagging and clearing an emergency, and sending
 the call back to the filtered list, are in the header. They are absent when they do not apply:
-a closed call has neither, and a call already returned is not sent back again. A posted flag or
+a closed call has neither, a `PORTAL` call is not sent back, and a call already returned is not
+sent back again. A posted flag or
 clear on a closed call is refused by that same command, and the stored flag is unchanged. No new
 database constraint is added for the flag. The requester's
 name links to the party profile when this person holds `party.read`. The stacked cards those

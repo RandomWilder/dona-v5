@@ -460,6 +460,12 @@ export function renderPortalCallPage(screen: {
   status: TenantStatus;
   visit: VisitCard | null;
   days: readonly ThreadDay[];
+  callId: string;
+  note: string | null;
+  notice: string | null;
+  csrf: string;
+  /** Set on an open call. A closed call has none, and shows the continuation. */
+  followKey: string | null;
 }): string {
   const closed = isClosedStatus(screen.status);
   const visit =
@@ -477,9 +483,26 @@ export function renderPortalCallPage(screen: {
           : h`<div class="tp-msg is-tenant"><p class="tp-bubble">${bubble.body}<span class="tp-time"><span dir="ltr">${bubble.time}</span></span></p></div>`,
       )}</div>`,
   );
+  const note =
+    screen.note === null
+      ? h``
+      : h`<p class="tp-call-note">${portalText('calls.office_note')} ${screen.note}</p>`;
+  const foot =
+    screen.followKey === null
+      ? h`<div class="tp-dock">
+          <p class="tp-caption">${portalText('calls.closed_caption')}</p>
+          <a class="tp-primary" href="/report?from=${screen.callId}">${portalText('calls.continue')}</a>
+        </div>`
+      : h`<form class="tp-composer" method="post" action="/calls/${screen.callId}/follow-up" enctype="multipart/form-data">
+          ${csrfInput(screen.csrf)}
+          <input type="hidden" name="key" value="${screen.followKey}" />
+          <label class="tp-cam">${icon('camera', { class: 'tp-i i22' })}<input class="tp-sr" type="file" name="file" accept="image/*,video/*,.pdf" aria-label="${portalText('calls.follow_photo')}" /></label>
+          <input type="text" name="body" required maxlength="4000" aria-label="${portalText('calls.follow_label')}" placeholder="${portalText('calls.follow_placeholder')}" />
+          <button class="tp-send" type="submit" aria-label="${portalText('calls.follow_send')}">${icon('send', { class: 'tp-i i18' })}</button>
+        </form>`;
   return page(
     screen.title,
-    h`<div class="tp-ask">
+    h`<div class="tp-ask is-thread">
       <header class="tp-bar">
         <div class="tp-bar-row">
           <a class="tp-icon-btn" href="/calls" aria-label="${portalText('calls.back')}">${icon('chevron-right', { class: 'tp-i i18' })}</a>
@@ -488,10 +511,13 @@ export function renderPortalCallPage(screen: {
         </div>
       </header>
       <div class="tp-body">
+        ${notice(screen.notice)}
         ${stepper(screen.status)}
         ${visit}
+        ${note}
         ${days}
       </div>
+      ${foot}
     </div>`,
   );
 }
@@ -546,6 +572,7 @@ export interface ReportDraft {
   flat: string;
   notice: string | null;
   files: readonly { id: string; fileName: string; contentType: string }[];
+  predecessorId: string;
 }
 
 export function renderReportPage(screen: ReportDraft): string {
@@ -700,6 +727,7 @@ function carried(screen: ReportDraft): Html {
       : h`<input type="hidden" name="category" value="${screen.categoryId}" />`;
   return h`${csrfInput(screen.csrf)}
     <input type="hidden" name="submission" value="${screen.submission}" />
+    <input type="hidden" name="predecessor" value="${screen.predecessorId}" />
     <input type="hidden" name="step" value="${screen.step}" />
     ${description}${entry}${category}`;
 }

@@ -95,6 +95,12 @@ export interface IncomingMessage {
     submissionId: string;
     ids: readonly string[];
   };
+  /**
+   * A portal follow-up. The call the tenant is writing on, or the closed
+   * call a continuation report names. The portal sets this after it has
+   * checked the tenant can read that call.
+   */
+  followCallId?: string | null;
 }
 
 export interface SortCategory {
@@ -222,6 +228,7 @@ interface Normalized {
     submissionId: string;
     ids: readonly string[];
   } | null;
+  followCallId: string | null;
 }
 
 interface StoredRow {
@@ -280,7 +287,10 @@ async function intake(
   if (raced) return raced;
 
   const emergency = await deps.matchesEmergency(messageText(message));
-  const thread = await threadOf(db, message);
+  const thread =
+    message.followCallId === null
+      ? await threadOf(db, message)
+      : await followThread(db, message.followCallId);
   await prepareDutyReply(
     db,
     clock,
@@ -436,6 +446,7 @@ async function sendDutyReply(
       entryPermission: null,
       tenancyId: null,
       holds: null,
+      followCallId: null,
     },
     {
       callId: openCallId,
@@ -759,8 +770,36 @@ function normalize(raw: IncomingMessage): Normalized {
     attachments: attachmentsOf(raw.attachments),
     echo: raw.echo === true,
     holds: holdsOf(raw.holds),
+    followCallId:
+      raw.followCallId == null || raw.followCallId === ''
+        ? null
+        : validId(raw.followCallId, 'call'),
     ...reportFields(raw),
   };
+}
+
+/** The call a portal follow-up names. Open takes the message. Closed is the predecessor. */
+async function followThread(
+  db: Queryable,
+  callId: string,
+): Promise<{ openCallId: string | null; predecessorId: string | null }> {
+  const { rows } = await db.query<{
+    state: string;
+    returned_at: Date | null;
+  }>(`SELECT state, returned_at FROM service_call WHERE service_call_id = $1`, [
+    callId,
+  ]);
+  const row = rows[0];
+  if (!row || row.returned_at !== null) {
+    throw new KernelError('invalid', 'follow-up names no call', {
+      field: 'call',
+      reason: 'follow',
+    });
+  }
+  if (row.state === 'CLOSED') {
+    return { openCallId: null, predecessorId: callId };
+  }
+  return { openCallId: callId, predecessorId: null };
 }
 
 function holdsOf(value: IncomingMessage['holds']): Normalized['holds'] {

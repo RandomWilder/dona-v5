@@ -642,6 +642,7 @@ function isState(value: string): value is CallState {
 
 interface LockedCall {
   state: CallState;
+  source_channel: SourceChannel;
   requester_party_id: string | null;
   category_id: string | null;
   emergency: boolean;
@@ -650,7 +651,8 @@ interface LockedCall {
 
 async function lockCall(db: Queryable, id: string): Promise<LockedCall> {
   const { rows } = await db.query<LockedCall>(
-    `SELECT state, requester_party_id, category_id, emergency, returned_at
+    `SELECT state, source_channel, requester_party_id, category_id, emergency,
+            returned_at
        FROM service_call
       WHERE service_call_id = $1
       FOR UPDATE`,
@@ -1040,6 +1042,12 @@ export async function returnToFiltered(
       throw new KernelError('invalid', 'call is already filtered', {
         field: 'call',
         reason: 'returned',
+      });
+    }
+    if (current.source_channel === 'PORTAL') {
+      throw new KernelError('invalid', 'a portal call is not returned', {
+        field: 'call',
+        reason: 'portal',
       });
     }
     await tx.query(

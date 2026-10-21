@@ -110,6 +110,16 @@ export interface PortalReport {
   categoryId: string;
   entry: 'YES' | 'ARRANGE' | 'HOME';
   tenancyId: string;
+  /** A closed call this report continues. Null on a report that stands alone. */
+  predecessorId: string | null;
+}
+
+export interface PortalFollowUp {
+  phone: string;
+  ownerId: string;
+  key: string;
+  body: string;
+  callId: string;
 }
 
 export interface PortalReportReceipt {
@@ -136,6 +146,10 @@ export interface PortalDeps {
   }>;
   /** The intake door for a report. Absent in a process that has not wired it. */
   submitReport?: (report: PortalReport) => Promise<PortalReportReceipt | null>;
+  /** A follow-up on a call the tenant can already read. */
+  submitFollowUp?: (
+    follow: PortalFollowUp,
+  ) => Promise<{ callId: string } | null>;
   /** A file on a report that is not a call yet. Clean files come back as rows. */
   listReportFiles?: (
     ownerId: string,
@@ -250,6 +264,7 @@ interface ReportForm {
   description: string;
   entry: 'YES' | 'ARRANGE' | 'HOME' | '';
   notice: string | null;
+  predecessorId: string;
 }
 
 function dutyHref(phone: string): string {
@@ -278,6 +293,7 @@ function readReport(body: unknown): {
   remove: string | null;
   file: { fileName: string; bytes: Buffer } | null;
   oversized: boolean;
+  predecessor: string;
 } {
   let key: string | null = null;
   try {
@@ -295,9 +311,17 @@ function readReport(body: unknown): {
   } catch (error) {
     if (!(error instanceof KernelError)) throw error;
   }
+  let predecessor = '';
+  try {
+    const raw = field(body, 'predecessor');
+    predecessor = raw === '' ? '' : validId(raw, 'call');
+  } catch (error) {
+    if (!(error instanceof KernelError)) throw error;
+  }
   return {
     csrf: field(body, 'csrf'),
     key,
+    predecessor,
     categoryId: field(body, 'category'),
     description: field(body, 'description').trim(),
     entry:
@@ -313,13 +337,24 @@ function readReport(body: unknown): {
   };
 }
 
-async function readPostedReport(
-  request: FastifyRequest,
-): Promise<ReturnType<typeof readReport>> {
+async function readBody(request: FastifyRequest): Promise<{
+  fields: Record<string, string>;
+  file: { fileName: string; bytes: Buffer } | null;
+  oversized: boolean;
+}> {
   const header = request.headers['content-type'];
   const type = Array.isArray(header) ? header[0] : header;
   if (!type?.includes('multipart/form-data')) {
-    return readReport(request.body);
+    const fields: Record<string, string> = {};
+    const body = request.body;
+    if (body !== null && typeof body === 'object') {
+      for (const [name, value] of Object.entries(
+        body as Record<string, unknown>,
+      )) {
+        if (typeof value === 'string') fields[name] = value;
+      }
+    }
+    return { fields, file: null, oversized: false };
   }
   const fields: Record<string, string> = {};
   let file: { fileName: string; bytes: Buffer } | null = null;
@@ -358,8 +393,18 @@ async function readPostedReport(
       fields[part.fieldname] = String(part.value ?? '');
     }
   }
-  const posted = readReport(fields);
-  return { ...posted, file, oversized };
+  return { fields, file, oversized };
+}
+
+async function readPostedReport(
+  request: FastifyRequest,
+): Promise<ReturnType<typeof readReport>> {
+  const posted = await readBody(request);
+  return {
+    ...readReport(posted.fields),
+    file: posted.file,
+    oversized: posted.oversized,
+  };
 }
 
 function html(
@@ -789,7 +834,6 @@ export function registerPortalRoutes(
       );
       return html(reply, renderMissingPage({ chosenId: who.chosen.tenancyId }));
     }
-    const messages = await deps.messagesOnCall(call.id);
     await audit.write(
       {
         actorKind: 'tenant',
@@ -800,20 +844,131 @@ export function registerPortalRoutes(
       },
       { outcome: 'ok' },
     );
-    const zone = clock.zone;
-    const screen = threadScreen(
-      call,
-      messages.map((message) => ({
-        at: message.at,
-        body: message.body,
-        echo: message.echo,
-      })),
-      zone,
-      zoned(clock.now(), zone).key,
-      deps.calls.status,
-    );
-    return html(reply, renderPortalCallPage(screen));
+    return html(reply, await threadHtml(who, call, null));
   });
+
+  app.post(
+    '/calls/:callId/follow-up',
+    { config: { tenant: 'public', csrf: 'in-body' } },
+    async (request, reply) => {
+      const who = await portalOf(request);
+      if (who === null) return go(reply, '/', []);
+      if (who.kind === 'notice') return go(reply, '/notice', []);
+      if (who.chosen === null) return noTenancy(reply, who);
+      const callId = idOrEmpty(
+        (request.params as { callId?: string }).callId,
+        'call',
+      );
+      const call =
+        callId === '' ? null : await deps.calls.read(callId, reached(who));
+      if (call === null) {
+        reply.code(404);
+        await audit.write(
+          {
+            actorKind: 'tenant',
+            actorId: who.identityId,
+            action: 'portal.read_call',
+            subjectId: callId === '' ? who.chosen.tenancyId : callId,
+            inputs: { from: 'follow-up' },
+          },
+          { outcome: 'error', code: 'not_found' },
+        );
+        return html(
+          reply,
+          renderMissingPage({ chosenId: who.chosen.tenancyId }),
+        );
+      }
+      await audit.write(
+        {
+          actorKind: 'tenant',
+          actorId: who.identityId,
+          action: 'portal.read_call',
+          subjectId: call.id,
+          inputs: { from: 'follow-up' },
+        },
+        { outcome: 'ok' },
+      );
+      const posted = await readBody(request);
+      if (!csrfOk(who.token, { csrf: posted.fields.csrf ?? '' })) {
+        return html(reply, await threadHtml(who, call, 'report.retry'));
+      }
+      if (call.state === 'CLOSED') {
+        return html(reply, await threadHtml(who, call, 'calls.follow_closed'));
+      }
+      const text = (posted.fields.body ?? '').trim();
+      if (text === '') {
+        return html(reply, await threadHtml(who, call, 'calls.follow_empty'));
+      }
+      if (text.length > REPORT_TEXT_MAX) {
+        return html(reply, await threadHtml(who, call, 'calls.follow_long'));
+      }
+      let key = '';
+      try {
+        key = validId(posted.fields.key ?? '', 'key');
+      } catch (error) {
+        if (!(error instanceof KernelError)) throw error;
+      }
+      if (key === '') {
+        return html(reply, await threadHtml(who, call, 'report.retry'));
+      }
+      if (posted.oversized) {
+        return html(reply, await threadHtml(who, call, 'report.file_size'));
+      }
+      if (posted.file && posted.file.bytes.length > 0) {
+        const save = deps.saveReportFile;
+        if (save === undefined) {
+          return html(
+            reply,
+            await threadHtml(who, call, 'report.file_unavailable'),
+          );
+        }
+        const saved = await save({
+          ownerId: who.identityId,
+          submissionId: key,
+          fileName: posted.file.fileName,
+          bytes: posted.file.bytes,
+        });
+        if (saved.status === 'refused') {
+          return html(
+            reply,
+            await threadHtml(who, call, FILE_NOTICE[saved.reason]),
+          );
+        }
+      }
+      const submit = deps.submitFollowUp;
+      if (submit === undefined) {
+        throw new KernelError('unavailable', 'portal intake is not wired');
+      }
+      let result: { callId: string } | null = null;
+      try {
+        result = await submit({
+          phone: who.phone,
+          ownerId: who.identityId,
+          key,
+          body: text,
+          callId: call.id,
+        });
+      } catch (error) {
+        if (!(error instanceof KernelError) || error.code !== 'invalid') {
+          throw error;
+        }
+      }
+      if (result === null) {
+        return html(reply, await threadHtml(who, call, 'report.retry'));
+      }
+      await audit.write(
+        {
+          actorKind: 'tenant',
+          actorId: who.identityId,
+          action: 'portal.follow_up',
+          subjectId: result.callId,
+          inputs: {},
+        },
+        { outcome: 'ok' },
+      );
+      return go(reply, `/calls/${result.callId}`, []);
+    },
+  );
 
   app.get('/more', TENANT, async (request, reply) => {
     const who = await portalOf(request);
@@ -864,7 +1019,37 @@ export function registerPortalRoutes(
     if (who === null) return go(reply, '/', []);
     if (who.kind === 'notice') return go(reply, '/notice', []);
     if (who.chosen === null) return noTenancy(reply, who);
-    return html(reply, await reportPage(who, freshReport()));
+    const from = idOrEmpty((request.query as { from?: string }).from, 'call');
+    if (from === '') return html(reply, await reportPage(who, freshReport()));
+    const prior = await deps.calls.read(from, reached(who));
+    if (prior === null || prior.state !== 'CLOSED') {
+      await audit.write(
+        {
+          actorKind: 'tenant',
+          actorId: who.identityId,
+          action: 'portal.read_call',
+          subjectId: from,
+          inputs: { from: 'report' },
+        },
+        { outcome: 'error', code: 'not_found' },
+      );
+      reply.code(404);
+      return html(reply, renderMissingPage({ chosenId: who.chosen.tenancyId }));
+    }
+    await audit.write(
+      {
+        actorKind: 'tenant',
+        actorId: who.identityId,
+        action: 'portal.read_call',
+        subjectId: prior.id,
+        inputs: { from: 'report' },
+      },
+      { outcome: 'ok' },
+    );
+    return html(
+      reply,
+      await reportPage(who, { ...freshReport(), predecessorId: prior.id }),
+    );
   });
 
   app.post(
@@ -896,6 +1081,7 @@ export function registerPortalRoutes(
         description: posted.description,
         entry: posted.entry,
         notice: null,
+        predecessorId: posted.predecessor,
       };
       if (posted.step === 2 && posted.oversized) {
         return html(
@@ -995,7 +1181,36 @@ export function registerPortalRoutes(
       description: '',
       entry: '',
       notice: null,
+      predecessorId: '',
     };
+  }
+
+  async function threadHtml(
+    who: OpenPortal,
+    call: ShownCall,
+    noticeKey: string | null,
+  ): Promise<string> {
+    const messages = await deps.messagesOnCall(call.id);
+    const zone = clock.zone;
+    const screen = threadScreen(
+      call,
+      messages.map((message) => ({
+        at: message.at,
+        body: message.body,
+        echo: message.echo,
+      })),
+      zone,
+      zoned(clock.now(), zone).key,
+      deps.calls.status,
+    );
+    return renderPortalCallPage({
+      ...screen,
+      callId: call.id,
+      note: screen.status === 'cancelled' ? call.cancelNote : null,
+      notice: noticeKey,
+      csrf: csrfTokenFor(who.token),
+      followKey: call.state === 'CLOSED' ? null : newId(clock),
+    });
   }
 
   async function reportPage(
@@ -1027,6 +1242,7 @@ export function registerPortalRoutes(
       dutyTel: dutyHref(loaded.dutyPhone),
       flat: `${portalText('flat.unit')} ${chosen.unitNumber} · ${chosen.addressLine}`,
       notice: draft.notice,
+      predecessorId: draft.predecessorId,
     });
   }
 
@@ -1074,6 +1290,17 @@ export function registerPortalRoutes(
     if (submit === undefined) {
       throw new KernelError('unavailable', 'portal intake is not wired');
     }
+    let predecessorId: string | null = null;
+    if (draft.predecessorId !== '') {
+      const prior = await deps.calls.read(draft.predecessorId, reached(who));
+      if (prior === null || prior.state !== 'CLOSED') {
+        return html(
+          reply,
+          await reportPage(who, { ...draft, step: 3, notice: 'report.retry' }),
+        );
+      }
+      predecessorId = prior.id;
+    }
     let receipt: PortalReportReceipt | null = null;
     try {
       receipt = await submit({
@@ -1084,6 +1311,7 @@ export function registerPortalRoutes(
         categoryId: category.id,
         entry: draft.entry,
         tenancyId: chosen.tenancyId,
+        predecessorId,
       });
     } catch (error) {
       if (!(error instanceof KernelError) || error.code !== 'invalid') {

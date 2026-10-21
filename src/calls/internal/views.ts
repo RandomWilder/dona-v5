@@ -1646,6 +1646,7 @@ function exitForm(screen: CallScreen): Html {
 function returnControl(screen: CallScreen): Html {
   const call = screen.call;
   if (call.state === 'CLOSED' || call.returned) return h``;
+  if (call.sourceChannel === 'PORTAL') return h``;
   return h`<form method="post" action="/calls/${call.id}/return">
     ${csrfInput(screen.csrf)}
     <button class="btn" type="submit">החזרה למסוננות</button>
@@ -1662,6 +1663,27 @@ function rescueForm(screen: CallScreen): Html {
       <button class="btn btn-primary" type="submit">הצלה — זו קריאה</button>
     </form>
   </div>`;
+}
+
+function portalReply(screen: CallScreen): Html {
+  const call = screen.call;
+  if (call.sourceChannel !== 'PORTAL' || screen.mayReply !== true) return h``;
+  if (call.state === 'NEW' || call.state === 'CLOSED' || call.returned) {
+    return h``;
+  }
+  const brief = screen.brief;
+  const seeded =
+    brief?.kind === 'ready' && brief.draft !== null ? brief.draft.text : '';
+  return h`<section class="glass sheet" data-portal-reply>
+    <h2>תשובה לדייר</h2>
+    <form method="post" action="/calls/${call.id}/send">
+      ${csrfInput(screen.csrf)}
+      <label class="form-row">תשובה לדייר
+        <textarea name="body" required maxlength="20000" rows="4">${seeded}</textarea>
+      </label>
+      <button class="btn btn-primary" type="submit">שליחה</button>
+    </form>
+  </section>`;
 }
 
 function headerActions(screen: CallScreen): Html {
@@ -2087,6 +2109,7 @@ export function renderCallPage(screen: CallScreen): string {
         <h2>מהלך</h2>
         <ol class="timeline" data-conversation>${timelineOf(screen)}</ol>
       </section>
+      ${portalReply(screen)}
       ${continuedBy(screen)}
       ${repeatedBy(screen)}
         </div>
