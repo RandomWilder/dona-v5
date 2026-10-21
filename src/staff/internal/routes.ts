@@ -116,7 +116,7 @@ function field(body: unknown, name: string, max: number): string {
 function secretNoticeFor(
   deps: StaffDeps,
   role: Role,
-): { expires: string } | null {
+): { expires: string; expired: boolean } | null {
   if (role !== 'ADMIN') return null;
   return microsoftSecretNotice(process.env, deps.clock);
 }
