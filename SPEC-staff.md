@@ -167,7 +167,7 @@ The Microsoft start route is `GET /staff/auth/microsoft/start` and the callback 
 redirect URI. They sit outside the CSRF token for the same reason Google's do: they change no row
 of ours, and `state` is the anti-forgery value the flow carries. `state` and `nonce` ride the same
 short-lived `dona_oauth` cookie. The start redirects to Dona Dom's tenant-specific authority, forces
-the account chooser, and asks only for `openid` and `email`.
+the account chooser, and asks only for `openid` and `User.Read`.
 
 ### The tenant, the domain, and why the address is trusted
 
@@ -175,19 +175,40 @@ Two gates, both required:
 
 - **Tenant.** `tid` equals the configured tenant, and the issuer equals that tenant's v2 issuer
   (`https://login.microsoftonline.com/<tenant id>/v2.0`). The authority is Dona Dom's Entra tenant.
-  A token from any other tenant is refused, including one whose email claim is a staff account's
-  address.
-- **Domain.** The email claim is present and its domain equals the configured domain exactly
-  (`dona.co.il`). A look-alike (`evil-dona.co.il`, `dona.co.il.evil`) fails this gate.
+  A token from any other tenant is refused, whatever addresses its directory gives the person.
+- **Domain.** The person has at least one address whose domain equals the configured domain
+  exactly (`dona.co.il`). A look-alike (`evil-dona.co.il`, `dona.co.il.evil`) fails this gate.
 
-The address is trusted only after both gates. The email string alone is not evidence: the directory
-that issued the token can set it to any address, including one a staff account already uses.
-Matching the tenant ties the address to Dona Dom; matching the domain still refuses a look-alike
-inside that tenant. Personal Microsoft accounts (outlook.com, hotmail, live)
-are a different tenant and a different issuer, and they fail the same gates.
+**The addresses are the person's own, primary and aliases.** In Dona Dom's tenant the primary
+address of the people known as `@dona.co.il` is `@donail.onmicrosoft.com`; `@dona.co.il` is an alias
+on the same mailbox. The ID token's `email` claim carries only the primary, so it is not read. After
+the code exchange the callback reads the signed-in person's own profile from Microsoft Graph —
+`GET /me?$select=id,userType,proxyAddresses`, with the access token from that same exchange — and the
+candidates are its `smtp:` entries (primary or not, case-insensitive) whose domain is the configured
+one. The primary address is not changed to make this work: the mailbox registration's Exchange scope
+filter is keyed on it.
+
+Three more conditions bind the profile to the token:
+
+- the profile's `id` equals the token's `oid` — the profile read is the identity that was verified;
+- `userType` is `Member` — a guest from another organisation is not staff, whatever address it holds;
+- **exactly one** candidate names a staff account. Two candidates naming two accounts is a refusal,
+  never a choice between them.
+
+The addresses are trusted only after the tenant gate. An address is a string the issuing
+directory's administrator sets, so it is evidence only when that directory is Dona Dom's. Inside the
+tenant it is admin-set too: `proxyAddresses` is read-only through Graph and changed only in the
+Microsoft 365 admin center, and Exchange keeps every address unique in the tenant, so a person
+cannot add a colleague's address to themselves. Personal Microsoft accounts (outlook.com, hotmail,
+live) are a different tenant and a different issuer, and they fail the first gate.
+
+The Graph access token is used for that one request and dropped. It is not stored, logged or put in
+a cookie. Graph unreachable, or answering 5xx, is **unavailable**, not a refusal; any other failed
+answer is a refusal.
 
 The sign-in app is a separate registration from the mailbox app, in that same tenant, one per
-environment. It holds `openid` and `email` and no mail permission. The mailbox registration is not
+environment. It holds `openid` and `User.Read` — the signed-in person's own profile — and no mail
+permission and no permission to read anyone else. The mailbox registration is not
 widened to sign staff in: a change to sign-in must not stop inbound mail, and the sign-in secret
 must not be able to read a mailbox.
 
@@ -198,9 +219,10 @@ no `details` and nothing in the body that varies with the cause:
 
 - `state` is missing or does not match; the `nonce` does not match the one this browser started with;
 - `tid` is not the configured tenant, or the issuer is not that tenant's v2 issuer;
-- the email claim is absent, or its domain is not exactly the configured domain;
+- the Graph profile's `id` is not the token's `oid`, or its `userType` is not `Member`;
+- none of the person's addresses has exactly the configured domain;
 - the account is a personal Microsoft account;
-- no `staff_account` row names the email;
+- no `staff_account` row names any of those addresses, or more than one row does;
 - the row exists and its `role` is null;
 - the row exists, has a role, and is disabled;
 - the row's `idp_local_id` is set and is not this Microsoft identity — including a row already bound
@@ -242,7 +264,7 @@ client secret mount only when those secrets exist. The domain is `dona.co.il`, s
 The tenant id and the expiry date are not known until the registration exists, so they mount when
 `<env>-microsoft-oauth-tenant-id` and `<env>-microsoft-oauth-secret-expires` exist and stay unset
 otherwise. `infra/bootstrap.sh` names the Entra registration (a separate single-tenant app,
-delegated `openid email` only, and the two redirect URIs) and these secrets. It does not create
+delegated `openid` and `User.Read` only, and the two redirect URIs) and these secrets. It does not create
 the app. Production is a later ticket and is not mounted.
 
 Missing any of the first four leaves Microsoft **unconfigured**: the button is hidden, both routes
