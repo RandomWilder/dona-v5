@@ -3043,27 +3043,44 @@ describe('shared UI tokens', () => {
       // v3 forbade `<script src=`. These pages are rendered on the server and need no script at
       // all, except two calls controls (SPEC-calls): the copy button once a draft exists, because
       // the clipboard is not a form, and the split inbox separator, because a shared drag is not
-      // CSS. Any other script still fails.
+      // CSS. A portal page may also register the service worker (#286). That script has no src.
+      // Any other script still fails.
       const scripts = html.match(/<script\b[^>]*>[\s\S]*?<\/script>/g) ?? [];
-      if (scripts.length === 0) continue;
-      assert.equal(scripts.length, 1, name);
-      assert.doesNotMatch(scripts[0] ?? '', /\ssrc=/, name);
+      const install = scripts.filter((script) =>
+        /dona\.portal\.install/.test(script),
+      );
+      const rest = scripts.filter(
+        (script) => !/dona\.portal\.install/.test(script),
+      );
+      if (name.startsWith('portal ·')) {
+        assert.equal(install.length, 1, name);
+        assert.doesNotMatch(install[0] ?? '', /\ssrc=/, name);
+        assert.match(
+          install[0] ?? '',
+          /serviceWorker\.register\('\/sw\.js'\)/,
+          name,
+        );
+      } else {
+        assert.equal(install.length, 0, name);
+      }
+      if (rest.length === 0) continue;
+      assert.equal(rest.length, 1, name);
+      assert.doesNotMatch(rest[0] ?? '', /\ssrc=/, name);
       const copy =
-        /data-draft/.test(scripts[0] ?? '') &&
-        /clipboard/.test(scripts[0] ?? '');
+        /data-draft/.test(rest[0] ?? '') && /clipboard/.test(rest[0] ?? '');
       const resize =
         /data-split-resize/.test(html) &&
-        /dona\.calls\.split-inbox/.test(scripts[0] ?? '');
+        /dona\.calls\.split-inbox/.test(rest[0] ?? '');
       // #273. The code screen submits on the sixth digit. SPEC.md names it. The button
       // stays in the page for a browser with no script.
       const portalCode =
         /autocomplete="one-time-code"/.test(html) &&
-        /dona\.portal\.code/.test(scripts[0] ?? '');
+        /dona\.portal\.code/.test(rest[0] ?? '');
       // #275. The passkey ceremony is the other portal script. SPEC.md names it.
       // לא עכשיו stays a real submit, so declining needs no script.
       const portalPasskey =
         /data-portal-passkey=/.test(html) &&
-        /dona\.portal\.passkey/.test(scripts[0] ?? '');
+        /dona\.portal\.passkey/.test(rest[0] ?? '');
       assert.ok(copy || resize || portalCode || portalPasskey, name);
       if (copy) assert.match(html, /data-draft=/, name);
     }

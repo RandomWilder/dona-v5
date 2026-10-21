@@ -183,7 +183,8 @@ describe('policy · report an issue', { concurrency: 1 }, () => {
     const first = await tenant.inject({ method: 'GET', url: '/report' });
     assert.equal(first.statusCode, 200);
     assert.equal(first.body.includes('<select'), false);
-    assert.equal(first.body.includes('<script'), false);
+    assert.match(first.body, /dona\.portal\.install/);
+    assert.equal((first.body.match(/<script\b/g) ?? []).length, 1);
     const telAt = first.body.indexOf(DUTY_TEL);
     const radioAt = first.body.indexOf('type="radio"');
     assert.ok(telAt >= 0 && radioAt > telAt);

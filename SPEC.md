@@ -138,12 +138,21 @@ here:
   works. The same rule names one further exception (#275): the passkey offer and the phone screen
   call the WebAuthn API to create or use a passkey. That script has no `src` either. It only runs
   the ceremony and posts the result. Without it the offer still shows **לא עכשיו**, which leaves
-  the tenant signed in, and the phone screen still sends a code. The drawer's open state is a
+  the tenant signed in, and the phone screen still sends a code. The same rule names two further
+  exceptions (#286): the web app manifest, and a service worker. The manifest is JSON, not a script.
+  The worker is `/sw.js`. Each portal page carries a short inline script that only registers it.
+  The worker's cache holds static assets — the stylesheets, the fonts and the icons — and never a
+  page or any response that can contain tenant data. A page still loads from the network when the
+  worker is absent, and Add to Home Screen still has the manifest. The manifest's background and
+  theme colours are the same two values as `--tp-bg` and `--tp-accent-800`; a manifest cannot read
+  the stylesheet. The drawer's open state is a
   checkbox the menu label and the scrim both drive. The viewport is `viewport-fit=cover`. Login
   stays a centred guest card.
 - **Icons are inline SVG drawn from one kernel table, `src/kernel/ui/icons.ts` (#241).** A screen
   never writes its own `<svg>`; a guard test fails the build on one. Icon names are generic, and the
-  module that uses an icon owns the mapping from its own nouns to a name.
+  module that uses an icon owns the mapping from its own nouns to a name. The portal's home-screen
+  marks are the exception (#286): three PNG files at `/ui/icons/`, because Add to Home Screen cannot
+  use an inline SVG.
 
 ## Error shape
 
@@ -513,7 +522,8 @@ two catalogues it edits belong to two modules and a third module may not own eit
 gave that chrome v3's ops sidebar** rather than a top bar. **5.2d put that rail behind a menu control below 840px**, in the kernel
 shell so every later screen inherits it, still with no `<script>` except the call page's copy
 control, and only on a call that has a draft (SPEC-calls), the portal code screen's sixth-digit
-submit (#273), and the portal passkey ceremony (#275). **#276 shows the privacy notice and the terms before the empty home, records the acknowledgement, and does not make the service conditional on consent.** **Slice 5.3 added the remaining destinations** — קריאות and הגדרות — as stubs that name the week and slice that own them. The login screen stays without that rail. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
+submit (#273), the portal passkey ceremony (#275), and the portal page's service-worker
+registration (#286). The worker itself is `/sw.js` and caches no tenant data. **#276 shows the privacy notice and the terms before the empty home, records the acknowledgement, and does not make the service conditional on consent.** **Slice 5.3 added the remaining destinations** — קריאות and הגדרות — as stubs that name the week and slice that own them. The login screen stays without that rail. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
 physical side or a `<script>` other than those named exceptions, and from 2.6 also on a phone number or an E.164 prefix: what a screen
 may say about a household is **a state and a count, never a tenant's name**, so the
 occupancy chip is derived on every load and search never reaches `party`.

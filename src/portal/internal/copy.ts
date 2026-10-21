@@ -13,6 +13,8 @@ export interface PortalCopy {
 const HEBREW: readonly PortalCopy[] = [
   { key: 'brand', language: 'he', text: 'דונה דום' },
   { key: 'brand.mark', language: 'he', text: 'ד' },
+  { key: 'install.name', language: 'he', text: 'פורטל הדיירים' },
+  { key: 'install.short', language: 'he', text: 'דונה' },
   { key: 'sign_in.page', language: 'he', text: 'כניסה לפורטל הדיירים' },
   { key: 'sign_in.title', language: 'he', text: 'כניסה לפורטל הדיירים' },
   {
@@ -387,6 +389,10 @@ const TRANSLATED: readonly PortalCopy[] = [
   { key: 'brand', language: 'ru', text: 'Дона Дом' },
   { key: 'brand.mark', language: 'en', text: 'D' },
   { key: 'brand.mark', language: 'ru', text: 'Д' },
+  { key: 'install.name', language: 'en', text: 'Tenant portal' },
+  { key: 'install.name', language: 'ru', text: 'Портал жильцов' },
+  { key: 'install.short', language: 'en', text: 'Dona' },
+  { key: 'install.short', language: 'ru', text: 'Дона' },
   { key: 'sign_in.page', language: 'en', text: 'Tenant portal sign-in' },
   { key: 'sign_in.page', language: 'ru', text: 'Вход в портал жильцов' },
   { key: 'sign_in.title', language: 'en', text: 'Tenant portal sign-in' },

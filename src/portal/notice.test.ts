@@ -200,7 +200,8 @@ describe('portal first visit', () => {
       /<button class="tp-primary" type="submit">קראתי, המשך<\/button>/,
     );
     assert.equal((notice.body.match(/type="checkbox"/g) ?? []).length, 1);
-    assert.doesNotMatch(notice.body, /<script/);
+    assert.match(notice.body, /dona\.portal\.install/);
+    assert.equal((notice.body.match(/<script\b/g) ?? []).length, 1);
 
     const full = await app.inject({
       method: 'GET',

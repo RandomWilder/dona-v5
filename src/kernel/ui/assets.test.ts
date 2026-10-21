@@ -56,6 +56,32 @@ describe('shared UI assets', () => {
     }
   });
 
+  it('serves the portal icons as PNG', async () => {
+    const app = appWithAssets();
+    try {
+      for (const name of [
+        'portal-icon-180.png',
+        'portal-icon-192.png',
+        'portal-icon-512.png',
+      ]) {
+        const response = await app.inject({
+          method: 'GET',
+          url: `/ui/icons/${name}`,
+        });
+        assert.equal(response.statusCode, 200, name);
+        assert.equal(response.headers['content-type'], 'image/png');
+        assert.equal(response.rawPayload[0], 0x89, name);
+      }
+      const missing = await app.inject({
+        method: 'GET',
+        url: '/ui/icons/nope.png',
+      });
+      assert.equal(missing.statusCode, 404);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('refuses anything not on the allowlist, traversal included', async () => {
     const app = appWithAssets();
     const attempts = [

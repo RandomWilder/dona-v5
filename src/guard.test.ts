@@ -135,6 +135,7 @@ describe('every route in the application', () => {
       'GET /staff/auth/start',
       'GET /staff/login',
       'GET /ui/fonts/:file',
+      'GET /ui/icons/:file',
       'GET /ui/portal.css',
       'GET /ui/tokens.css',
       'GET /webhooks/whatsapp',

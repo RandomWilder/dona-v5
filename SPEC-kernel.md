@@ -439,13 +439,15 @@ and every screen in every module is a self-contained HTML file that links it.
   Noto Sans on the same family, with its OFL licence beside it. No Google Fonts request: tenant
   screens must not leak a visit to a third party, and the pages must render on a slow Israeli
   mobile connection without a second DNS lookup.
-- **`ui/assets.ts`** — `registerUiAssets(app)` serves `GET /ui/tokens.css` and `GET /ui/fonts/:file`.
-  Files are read once at registration, not per request: the deployed image is immutable.
-- **Font names are an allowlist, never a path.** The `:file` parameter is matched against a fixed set
-  and otherwise 404s; no request-derived string is ever joined onto a filesystem path. This is the
-  rule for every static route the system ever grows.
-- **Caching** — fonts `public, max-age=31536000, immutable`; HTML and `tokens.css` `no-cache` until
-  assets are content-hashed, so a deploy cannot leave a stale stylesheet against fresh markup.
+- **`ui/assets.ts`** — `registerUiAssets(app)` serves `GET /ui/tokens.css`, `GET /ui/portal.css`,
+  `GET /ui/fonts/:file` and `GET /ui/icons/:file`. Files are read once at registration, not per
+  request: the deployed image is immutable. The icons are the portal's home-screen mark (#286).
+- **Font names and icon names are an allowlist, never a path.** The `:file` parameter is matched
+  against a fixed set and otherwise 404s; no request-derived string is ever joined onto a filesystem
+  path. This is the rule for every static route the system ever grows.
+- **Caching** — fonts and icons `public, max-age=31536000, immutable`; HTML and the stylesheets
+  `no-cache` until assets are content-hashed, so a deploy cannot leave a stale stylesheet against
+  fresh markup.
 
 **Owed to the first screen (slice 1.11):** v3's `ui/tokens.test.ts` enforces the invariant from the
 outside — no shell may contain a hex colour, a `fonts.googleapis` URL or a physical `left:`/`right:`

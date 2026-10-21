@@ -27,6 +27,7 @@ import {
 } from './call-screen.ts';
 import { describeChallenge, requestCode, verifyCode } from './codes.ts';
 import { portalLanguages, portalText, runPortalLanguage } from './copy.ts';
+import { portalManifest, portalWorkerSource } from './install.ts';
 import {
   languageReturn,
   PORTAL_LANG_COOKIE,
@@ -524,6 +525,23 @@ export function registerPortalRoutes(
 ): void {
   const audit = createAuditLog(deps.pool, deps.clock);
   const { pool, clock, sender } = deps;
+
+  app.get('/manifest.webmanifest', TENANT, async (request, reply) => {
+    const language = languageNow(request.headers.cookie, null);
+    reply
+      .header('content-type', 'application/manifest+json; charset=utf-8')
+      .header('cache-control', 'no-cache')
+      .header('x-content-type-options', 'nosniff');
+    return JSON.stringify(paint(language, () => portalManifest()));
+  });
+
+  app.get('/sw.js', TENANT, async (_request, reply) => {
+    reply
+      .header('content-type', 'text/javascript; charset=utf-8')
+      .header('cache-control', 'no-cache')
+      .header('x-content-type-options', 'nosniff');
+    return portalWorkerSource();
+  });
 
   app.get('/', TENANT, async (request, reply) => {
     const secure = secureOf(request);

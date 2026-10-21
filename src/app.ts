@@ -358,6 +358,7 @@ const ROOT_PUBLIC = [
   '/ui/tokens.css',
   '/ui/portal.css',
   '/ui/fonts/:file',
+  '/ui/icons/:file',
 ];
 
 /** Absent is not the same as a typo: a typo next to a tenant stance must not boot as tenant. */

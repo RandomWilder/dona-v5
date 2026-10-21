@@ -1,7 +1,8 @@
 // The tenant portal's pages. Strings come from the copy rows. Colour, type and side live in
-// portal.css. Two scripts, both named in SPEC.md: the code form submits on the
-// sixth digit, and the passkey pages call WebAuthn. Without either, the button
-// that does not need a ceremony still posts.
+// portal.css. Three scripts, each named in SPEC.md: the code form submits on the
+// sixth digit, the passkey pages call WebAuthn, and every page registers the
+// service worker. Without the first two, the button that does not need a
+// ceremony still posts. Without the worker, the page still loads.
 
 import type { CodeChannel } from '../../channel/contract.ts';
 import { Html, h } from '../../kernel/ui/html.ts';
@@ -31,8 +32,21 @@ ${h`<html lang="${language}" dir="${portalDir(language)}">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="robots" content="noindex" />
     <title>${title}</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/ui/icons/portal-icon-192.png" />
+    <link rel="apple-touch-icon" href="/ui/icons/portal-icon-180.png" />
+    <meta name="theme-color" content="rgb(44, 69, 93)" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="${portalText('install.short')}" />
     <link rel="stylesheet" href="/ui/tokens.css" />
     <link rel="stylesheet" href="/ui/portal.css" />
+    <script>
+      /* dona.portal.install */
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      }
+    </script>
   </head>
   <body class="portal">${body}</body>
 </html>`}`;
