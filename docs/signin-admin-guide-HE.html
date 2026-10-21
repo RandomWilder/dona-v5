@@ -169,7 +169,8 @@
   .stage.optional > .num { background: var(--surface-2); color: var(--ink); border: 1px solid var(--rule); }
   .stage > .body { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
   .stage .intro { color: var(--ink-2); }
-  .stage .where { font-size: .9rem; color: var(--ink-3); }
+  .stage .where { font-size: .9rem; color: var(--ink-3); direction: ltr; text-align: right; unicode-bidi: isolate; }
+  .path { display: block; direction: ltr; text-align: right; unicode-bidi: isolate; }
   .stage ol > li::marker { font-family: var(--font-display); font-weight: 600; color: var(--structure); }
 
   .code {
@@ -264,15 +265,15 @@
       <div class="body">
         <h2>רישום אפליקציה</h2>
         <p class="intro">זהות נפרדת לכניסה, לארגון הזה בלבד.</p>
-        <p class="where">entra.microsoft.com ← Applications ← App registrations ← New registration</p>
+        <p class="where" dir="ltr">entra.microsoft.com → Applications → App registrations → New registration</p>
         <ol>
-          <li>Name: <code>Dona Sign-in - Staging</code></li>
-          <li>Supported account types: <strong>Accounts in this organizational directory only (Single tenant)</strong>.</li>
-          <li>Redirect URI: <strong>Web</strong>, ולהדביק:</li>
+          <li>בשדה <bdi>Name</bdi>: <code dir="ltr">Dona Sign-in - Staging</code></li>
+          <li>בשדה <bdi>Supported account types</bdi>, לבחור: <bdi><strong>Accounts in this organizational directory only (Single tenant)</strong></bdi></li>
+          <li>בשדה <bdi>Redirect URI</bdi>, לבחור <strong>Web</strong> ולהדביק:</li>
         </ol>
         <div class="code"><pre>https://dona-staging-r44j24yuaa-zf.a.run.app/staff/auth/microsoft/callback</pre></div>
         <ol start="4">
-          <li>Register.</li>
+          <li>ללחוץ <strong>Register</strong>.</li>
           <li>כתובת שנייה, לפיתוח מקומי, מוסיפים דרך <strong>Manifest</strong>: בתוך <code>"web"</code>, ברשימה <code>"redirectUris"</code>. התוצאה:</li>
         </ol>
         <div class="code"><pre>"redirectUris": [
@@ -280,7 +281,7 @@
   "http://127.0.0.1:3000/staff/auth/microsoft/callback"
 ],</pre></div>
         <ol start="6">
-          <li>Save. במסך Authentication, תחת Web, מופיעות שתי הכתובות.</li>
+          <li>ללחוץ <strong>Save</strong>. במסך Authentication, תחת Web, מופיעות שתי הכתובות.</li>
           <li>בדף Overview, להעתיק את <strong>Application (client) ID</strong>.</li>
         </ol>
         <div class="callout info">
@@ -294,11 +295,11 @@
       <div class="body">
         <h2>יצירת סוד (Client secret)</h2>
         <p class="intro">סיסמת האפליקציה. המערכת מתריעה 30 יום לפני התפוגה.</p>
-        <p class="where">App registrations ← Dona Sign-in - Staging ← Certificates &amp; secrets ← New client secret</p>
+        <p class="where" dir="ltr">App registrations → Dona Sign-in - Staging → Certificates &amp; secrets → New client secret</p>
         <ol>
-          <li>Description: <code>dona-signin-staging</code></li>
-          <li>Expires: <strong>Custom</strong>, 24 חודשים.</li>
-          <li>Add.</li>
+          <li>בשדה <bdi>Description</bdi>: <code dir="ltr">dona-signin-staging</code></li>
+          <li>בשדה <bdi>Expires</bdi>, לבחור <strong>Custom</strong>, 24 חודשים.</li>
+          <li>ללחוץ <strong>Add</strong>.</li>
           <li>להעתיק מיד את עמודת <strong>Value</strong>. היא מוצגת פעם אחת.</li>
           <li>לרשום את תאריך התפוגה (עמודת Expires), בצורה <code>YYYY-MM-DD</code>.</li>
         </ol>
@@ -310,10 +311,10 @@
       <div class="body">
         <h2>הרשאות: openid ו-User.Read</h2>
         <p class="intro">שתי הרשאות מואצלות (Delegated): זיהוי, וקריאת הפרופיל של העובד שנכנס.</p>
-        <p class="where">App registrations ← Dona Sign-in - Staging ← API permissions</p>
+        <p class="where" dir="ltr">App registrations → Dona Sign-in - Staging → API permissions</p>
         <ol>
           <li><code>User.Read</code> כבר ברשימה.</li>
-          <li>Add a permission ← Microsoft Graph ← <strong>Delegated permissions</strong> ← לסמן <code>openid</code> ← Add permissions.</li>
+          <li>להוסיף את <code>openid</code>: <bdi class="path" dir="ltr">Add a permission → Microsoft Graph → <strong>Delegated permissions</strong> → openid → Add permissions</bdi></li>
           <li>ללחוץ <strong>Grant admin consent</strong> ולאשר.</li>
         </ol>
         <div class="callout ok">
