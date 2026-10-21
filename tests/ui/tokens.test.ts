@@ -2025,6 +2025,10 @@ const SCREENS: Array<[string, () => string]> = [
     () => renderLoginPage({ unconfigured: true }),
   ],
   [
+    'staff · login, Google and Microsoft',
+    () => renderLoginPage({ microsoft: true }),
+  ],
+  [
     'staff · home, an admin',
     () =>
       renderStaffHomePage({

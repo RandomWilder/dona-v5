@@ -247,12 +247,12 @@ byte for byte. A screen that handles its own refusal still does; this is only th
   value stays behind `party.national_id.read`: revealing it, searching the directory by one, and
   writing one are that permission, and each writes an audit line that does not carry the value.
   The directory never shows the suffix. The policy case is `tests/policy/party-national-id.test.ts`.
-- **The staff credential is Google's; the session is ours** (slice 5.1, amended at 5.1b —
-  `SPEC-staff.md`, ADR-0005). No password hash and no second-factor secret exist in this schema.
-  **What this system asserts is an allowlist and not a factor**: only an email that already has a
-  `staff_account` row may sign in at all, and that row is bound to the first Google `sub` that uses
-  it. Whatever second factor Google enforces on the account is Google's to enforce and ours to
-  inherit rather than to prove. Sessions store
+- **The staff credential is Google's or Microsoft's; the session is ours** (slice 5.1, amended at
+  5.1b — `SPEC-staff.md`, ADR-0005 — and by ADR-0018). No password hash and no second-factor secret
+  exist in this schema. **What this system asserts is an allowlist and not a factor**: only an email
+  that already has a `staff_account` row may sign in at all, and that row is bound to the first
+  identity that uses it, Google or Microsoft. Whatever second factor the provider enforces on the
+  account is the provider's to enforce and ours to inherit rather than to prove. Sessions store
   `token_hash` and never the token — 32 CSPRNG bytes, SHA-256, no pepper, because a pepper defends a
   secret whose preimage space can be searched. **The refusal says `not_allowed` and nothing more**,
   byte-identically for an unknown account, an account with no role and a disabled one, because the
@@ -509,9 +509,9 @@ every seeded type, and it was red before the terms were tuned.
 
 **5.1 gave this system its first session, and `src/staff/` is the admin edge that holds it.** It owns
 none of E1–E16: what it answers is who is asking and what they may do, never which rows a person may
-see about a tenant, which is `src/scope/`'s and nobody else's. **Google holds the credential and this
-schema holds none of it** — no password hash, no second-factor secret. Sign-in is the standard OIDC
-authorization-code flow, server-side: one link, one redirect, one code exchange, one verified ID
+see about a tenant, which is `src/scope/`'s and nobody else's. **Google or Microsoft holds the
+credential and this schema holds none of it** — no password hash, no second-factor secret. Sign-in is the standard OIDC
+authorization-code flow, server-side: a link, a redirect, a code exchange, a verified ID
 token, and **not one line of client JavaScript**, which is the UI rule holding on the screens that
 guard everything else. `state` and `nonce` ride a short-lived `HttpOnly` cookie and never reach the
 database.
@@ -580,8 +580,8 @@ the two index decisions 2.6 · the document-type catalogue in the workbook 3.0 �
 its catalogue commands and the nine-type seed 3.1 · the object path convention, the docs bucket's
 four controls and the proved delete refusal 3.2 · the declared-type upload, its verification guard
 and the first write route 3.3 · Asset, the Provider stub, Q3 and Q7, and flow A6 3.5 · document
-search and the documents panels, with the guard verdict stored on the row 3.6 · the staff session,
-Google-held credential and the role matrix in code 5.1 · **every route behind that session, every
+search and the documents panels, with the guard verdict stored on the row 3.6 · the staff session
+and the role matrix in code 5.1 · the credential Google's or Microsoft's (ADR-0005, ADR-0018) · **every route behind that session, every
 write route behind a derived CSRF token, and a per-caller upload cap 5.2.**
 Production exists and has been released to — `v0.1.0`–`v0.1.2`, rolled back and rolled forward on
 purpose — and is then **parked until week 12**: the Cloud SQL instance is stopped and the service

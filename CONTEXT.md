@@ -9,6 +9,8 @@ they win wherever the two could be read as disagreeing. Decisions are in `docs/d
 ## The system
 
 **Dona Dom** — the operator. ~1,500 long-term rental apartments under **דירה להשכיר** tenders.
+In this glossary **operator** means Dona Dom. The staff spec and the `OPERATOR` role use the same
+word for a person.
 **The agent** — the WhatsApp-facing model, on both ends of a service call. **The office retrieval
 model** — the model on an **office retrieval thread**. Neither is a brain: both act only through
 documented module commands, never by writing a store query. Distinct from each other. **The sorter**
@@ -66,6 +68,8 @@ different; writing a lease's bay number onto the Unit is the same class of error
 | **Lead** | A prospective tenant in the leasing funnel. **Not a Party** ([ADR-0014](docs/decisions/ADR-0014-a-lead-is-not-a-party.md)). It becomes one when a lease is drafted for it; until then it lives outside the directory and outside the isolation join. |
 | **Party directory** (**אנשי קשר**) | The administrator's list of every Party, searchable, each opening a **party profile**. Shows Parties only — never Leads. The Hebrew tab name says "contacts"; in English and in code "contact" still means only a PartyContact, a phone or an email. |
 | **Party label** | What a Party is to us today — current tenant, past tenant, draft tenancy, guarantor, service provider, no relationship. **Computed on every load, never stored**; one Party can carry several. Say "label", not "type" or "status". |
+| **Staff account** | A person allowed into the office console, named by an email address and a role. Not a Party. |
+| **Sign-in provider** | Google or Microsoft: the credential a staff account signs in with. |
 
 ## Scope
 

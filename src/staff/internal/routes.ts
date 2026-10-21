@@ -26,15 +26,14 @@ import { sameValue } from '../../kernel/compare.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { Html } from '../../kernel/ui/html.ts';
 import { requireText } from '../../kernel/validate.ts';
-import {
-  accountByEmail,
-  addOperator,
-  linkLocalId,
-  notAllowed,
-  requireUsableAccount,
-} from './accounts.ts';
+import { accountsByEmails, addOperator, notAllowed } from './accounts.ts';
 import { csrfFrom } from './csrf.ts';
 import { acceptClaims, type IdentityProvider } from './identity.ts';
+import {
+  acceptMicrosoftClaims,
+  type MicrosoftProvider,
+  microsoftSecretNotice,
+} from './microsoft.ts';
 import {
   can,
   isRole,
@@ -45,7 +44,6 @@ import {
 import {
   clearedOauthCookie,
   clearedSessionCookie,
-  mintSession,
   newSessionToken,
   oauthCookie,
   type ResolvedSession,
@@ -53,14 +51,16 @@ import {
   readSessionCookie,
   resolveSession,
   revokeSession,
-  sessionCookie,
 } from './sessions.ts';
-import { REFUSED_HE, renderLoginPage, renderStaffHomePage } from './views.ts';
+import { completeSignIn, refuseSignIn } from './sign-in.ts';
+import { renderLoginPage, renderStaffHomePage } from './views.ts';
 
 export interface StaffDeps {
   pool: Pool;
   clock: Clock;
   identity: IdentityProvider;
+  /** Microsoft, beside Google. Unconfigured unless the caller says otherwise, and Google is unaffected either way. */
+  microsoft: MicrosoftProvider;
   /** Where Google is told to send the operator back. The request's own origin when absent, which is what `npm run dev` wants. */
   baseUrl?: string;
   /** The Workspace domain to require, when Dona Dom's answer is known. Null means the allowlist is the only fence. */
@@ -112,12 +112,25 @@ function field(body: unknown, name: string, max: number): string {
   return requireText((body as Form | undefined)?.[name], name, max);
 }
 
+/** Admins see the Microsoft client-secret warning. Operators and viewers do not. */
+function secretNoticeFor(
+  deps: StaffDeps,
+  role: Role,
+): { expires: string; expired: boolean } | null {
+  if (role !== 'ADMIN') return null;
+  return microsoftSecretNotice(process.env, deps.clock);
+}
+
 /** Where Google sends the operator back, and the value Google matches character for character. */
-function callbackUrl(deps: StaffDeps, request: FastifyRequest): string {
+function callbackUrl(
+  deps: StaffDeps,
+  request: FastifyRequest,
+  path = '/staff/auth/callback',
+): string {
   const base =
     deps.baseUrl ??
     `${isSecure(request) ? 'https' : 'http'}://${request.headers.host ?? '127.0.0.1'}`;
-  return `${base.replace(/\/$/, '')}/staff/auth/callback`;
+  return `${base.replace(/\/$/, '')}${path}`;
 }
 
 /**
@@ -176,6 +189,11 @@ export function registerStaffRoutes(
 ): void {
   const audit = createAuditLog(deps.pool, deps.clock);
   const unconfigured = () => deps.identity.describe() === 'unconfigured';
+  const signing = {
+    pool: deps.pool,
+    clock: deps.clock,
+    offerMicrosoft: deps.microsoft.expected() !== null,
+  };
 
   // The urlencoded body these forms post is parsed by `src/kernel/ui/forms.ts`, registered once by
   // the composition root — estate has posted a form since 2.6 and staff is the second module to,
@@ -184,7 +202,10 @@ export function registerStaffRoutes(
   app.register(async (scope) => {
     scope.get('/staff/login', PUBLIC, async (_request, reply) => {
       html(reply);
-      return renderLoginPage({ unconfigured: unconfigured() });
+      return renderLoginPage({
+        unconfigured: unconfigured(),
+        microsoft: signing.offerMicrosoft,
+      });
     });
 
     // **The redirect begins here so that the one-shot cookie is set by this system**, on this
@@ -221,20 +242,7 @@ export function registerStaffRoutes(
       const cookies = [clearedOauthCookie(isSecure(request))];
       html(reply);
 
-      const refuse = async (accountId?: string): Promise<string> => {
-        await audit.write(
-          {
-            actorKind: 'staff',
-            actorId: accountId,
-            action: 'staff.login.refused',
-            inputs: {},
-          },
-          { outcome: 'error', code: 'not_allowed' },
-        );
-        reply.header('set-cookie', cookies);
-        reply.code(403);
-        return renderLoginPage({ refused: REFUSED_HE });
-      };
+      const refuse = () => refuseSignIn(signing, audit, reply, cookies);
 
       // Google declined, or the callback arrived without the redirect that should have started it.
       if (
@@ -266,46 +274,115 @@ export function registerStaffRoutes(
       });
       if (accepted === null) return refuse();
 
-      // **The allowlist.** An address with no row reaches exactly the same answer as an address
-      // with no Google account behind it (ADR-0005).
-      const account = await accountByEmail(deps.pool, accepted.email);
-      let role: Role;
-      try {
-        role = requireUsableAccount(account, deps.clock);
-      } catch {
-        // No row, no role, disabled, locked — one answer, and the audit line names the account only
-        // when there is one to name. PII never in logs: no email here, ever (SPEC.md).
-        return refuse(account?.staffAccountId);
-      }
-      const usable = account as NonNullable<typeof account>;
-
-      // **The row is bound to the first Google account that ever uses it.** A re-created address is
-      // not the same operator, and rebinding silently is how a stranger inherits a role.
-      if (usable.idpLocalId === null) {
-        await linkLocalId(deps.pool, usable.staffAccountId, accepted.subject);
-      } else if (!sameValue(usable.idpLocalId, accepted.subject)) {
-        return refuse(usable.staffAccountId);
-      }
-
-      const { token, expiresAt } = await mintSession(
-        deps.pool,
-        deps.clock,
-        usable.staffAccountId,
-      );
-      await audit.write(
-        {
-          actorKind: 'staff',
-          actorId: usable.staffAccountId,
-          actorRole: role,
-          action: 'staff.login',
-          inputs: {},
-        },
-        { outcome: 'ok' },
-      );
-      cookies.push(sessionCookie(token, expiresAt, isSecure(request)));
-      reply.header('set-cookie', cookies);
-      return redirect(reply, '/staff');
+      return completeSignIn(signing, audit, reply, isSecure(request), cookies, {
+        bindingId: accepted.subject,
+        address: accepted.email,
+      });
     });
+
+    // Microsoft's own redirect URI, so a change to one provider's registration cannot move the
+    // other's. Unconfigured is not a refusal: both routes answer unavailable, and the login screen
+    // is what hides the button (SPEC-staff.md).
+    scope.get('/staff/auth/microsoft/start', PUBLIC, async (request, reply) => {
+      const expected = deps.microsoft.expected();
+      if (expected === null) {
+        throw new KernelError(
+          'unavailable',
+          'microsoft sign-in is not configured',
+        );
+      }
+      const state = newSessionToken();
+      const nonce = newSessionToken();
+      reply.header('set-cookie', oauthCookie(state, nonce, isSecure(request)));
+      return redirect(
+        reply,
+        deps.microsoft.authorizeUrl({
+          state,
+          nonce,
+          redirectUri: callbackUrl(
+            deps,
+            request,
+            '/staff/auth/microsoft/callback',
+          ),
+        }),
+      );
+    });
+
+    scope.get(
+      '/staff/auth/microsoft/callback',
+      PUBLIC,
+      async (request, reply) => {
+        const expected = deps.microsoft.expected();
+        if (expected === null) {
+          throw new KernelError(
+            'unavailable',
+            'microsoft sign-in is not configured',
+          );
+        }
+        const query = request.query as {
+          code?: string;
+          state?: string;
+          error?: string;
+        };
+        const carried = readOauthCookie(request.headers.cookie);
+        const cookies = [clearedOauthCookie(isSecure(request))];
+        html(reply);
+        const refuse = () => refuseSignIn(signing, audit, reply, cookies);
+
+        if (
+          query.error !== undefined ||
+          typeof query.code !== 'string' ||
+          typeof query.state !== 'string' ||
+          carried === null ||
+          !sameValue(carried.state, query.state)
+        ) {
+          return refuse();
+        }
+
+        let claims: Awaited<ReturnType<MicrosoftProvider['exchangeCode']>>;
+        try {
+          claims = await deps.microsoft.exchangeCode({
+            code: query.code,
+            redirectUri: callbackUrl(
+              deps,
+              request,
+              '/staff/auth/microsoft/callback',
+            ),
+          });
+        } catch (error) {
+          if (error instanceof KernelError && error.code === 'unavailable') {
+            throw error;
+          }
+          return refuse();
+        }
+
+        const accepted = acceptMicrosoftClaims(claims, {
+          nonce: carried.nonce,
+          tenantId: expected.tenantId,
+          domain: expected.domain,
+        });
+        if (accepted === null) return refuse();
+
+        // The person's addresses are the primary and its aliases (#289). Exactly one may name a
+        // staff account: two would be a choice this system has no basis to make, and the refusal
+        // names no account, so it spends neither one's lockout.
+        const named = await accountsByEmails(deps.pool, accepted.addresses);
+        const [account] = named;
+        if (named.length !== 1 || account === undefined) return refuse();
+
+        return completeSignIn(
+          signing,
+          audit,
+          reply,
+          isSecure(request),
+          cookies,
+          {
+            bindingId: accepted.bindingId,
+            address: account.email,
+          },
+        );
+      },
+    );
 
     scope.post('/staff/logout', PUBLIC, async (request, reply) => {
       const token = readSessionCookie(request.headers.cookie);
@@ -334,6 +411,7 @@ export function registerStaffRoutes(
         role,
         permissions: permissionsOf(role),
         mayInvite: can(role, 'staff.invite'),
+        secretNotice: secretNoticeFor(deps, role),
       });
     });
 
@@ -372,6 +450,7 @@ export function registerStaffRoutes(
         role,
         permissions: permissionsOf(role),
         mayInvite: true,
+        secretNotice: secretNoticeFor(deps, role),
         addedOperator: {
           email: added.account.email,
           role: asked,

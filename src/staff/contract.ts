@@ -76,6 +76,18 @@ export {
   IdentityRefusal,
 } from './internal/identity.ts';
 export type {
+  MicrosoftClaims,
+  MicrosoftProvider,
+} from './internal/microsoft.ts';
+export {
+  acceptMicrosoftClaims,
+  createConfiguredMicrosoft,
+  createMicrosoftOidc,
+  createUnconfiguredMicrosoft,
+  microsoftBootLine,
+  microsoftSecretNotice,
+} from './internal/microsoft.ts';
+export type {
   AppendOfficeTurnSpec,
   OfficeCitation,
   OfficeDocumentCitation,

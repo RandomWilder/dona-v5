@@ -131,6 +131,8 @@ describe('every route in the application', () => {
     assert.deepEqual(open, [
       'GET /health',
       'GET /staff/auth/callback',
+      'GET /staff/auth/microsoft/callback',
+      'GET /staff/auth/microsoft/start',
       'GET /staff/auth/start',
       'GET /staff/login',
       'GET /ui/fonts/:file',

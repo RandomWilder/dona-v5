@@ -2,6 +2,10 @@
 
 - **Date:** 2026-09-10
 - **Status:** accepted
+- **Amended by:** [ADR-0018](ADR-0018-the-staff-credential-is-google-s-or-microsoft-s.md), 2026-10-18 —
+  the staff credential is Google's **or Microsoft's**. Decision 1 is no longer Google alone.
+  Decision 4's allowlist and first-identity binding are unchanged and apply to both providers.
+  Decisions 2, 3 and 5 still bind on the Google path.
 - **Context slice:** 5.1b — amending 5.1, which shipped the arrangement this replaces
 - **Supersedes:** the identity half of `SPEC-staff.md` as written at slice 5.1. Nothing in ADR-0001–0004 changes.
 

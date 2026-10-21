@@ -70,6 +70,14 @@ GRAPH_SECRET_SECRET="$ENV-graph-client-secret"
 GRAPH_MAILBOX_SECRET="$ENV-graph-mailbox"
 GRAPH_EXPIRES_SECRET="$ENV-graph-secret-expires"
 
+# #264. Staging only. Microsoft sign-in, a separate app from the mailbox.
+# The client id, secret, tenant and expiry arrive through set-secret.sh.
+# The domain is set by the staging deploy. Production is a later ticket.
+MS_ID_SECRET="$ENV-microsoft-oauth-client-id"
+MS_SECRET_SECRET="$ENV-microsoft-oauth-client-secret"
+MS_TENANT_SECRET="$ENV-microsoft-oauth-tenant-id"
+MS_EXPIRES_SECRET="$ENV-microsoft-oauth-secret-expires"
+
 # #193. Staging only. WhatsApp on Meta's developer test number. The four
 # values arrive through set-secret.sh. Production is a later ticket, so this
 # script does not grant or mention them there.
@@ -262,6 +270,20 @@ for secret in "$OAUTH_ID_SECRET" "$OAUTH_SECRET_SECRET"; do
 done
 
 if [ "$ENV" = staging ]; then
+  say "Microsoft sign-in — the director's act, not this script"
+  # #264. A separate single-tenant app in Dona Dom's tenant, delegated
+  # openid User.Read only. This script cannot create it. Staging mounts the
+  # secrets when they exist.
+  echo "  app:      separate single-tenant registration, delegated openid User.Read only"
+  echo "  redirect: ${SERVICE_URL:-<the dona-$ENV service URL, once it exists>}/staff/auth/microsoft/callback"
+  echo "  redirect: http://127.0.0.1:3000/staff/auth/microsoft/callback  (Manifest, web.redirectUris: the portal box refuses http loopback)"
+  echo "  then:    ./infra/set-secret.sh $ENV microsoft-oauth-client-id"
+  echo "            ./infra/set-secret.sh $ENV microsoft-oauth-client-secret"
+  echo "            ./infra/set-secret.sh $ENV microsoft-oauth-tenant-id"
+  echo "            ./infra/set-secret.sh $ENV microsoft-oauth-secret-expires   (YYYY-MM-DD)"
+  echo "  domain:   dona.co.il, set by the staging deploy"
+  echo "  boot:     microsoft:unconfigured until client id, secret, tenant and domain are present"
+
   say "Outlook mailbox — the director's act, not this script"
   # #188. An app registration in Dona Dom's Microsoft 365 tenant, and the
   # Exchange role Application Mail.Read scoped to one mailbox, done by Dona
@@ -305,7 +327,8 @@ if [ "$ENV" = staging ]; then
   BIND_SECRETS+=("$GRAPH_TENANT_SECRET" "$GRAPH_CLIENT_SECRET" \
     "$GRAPH_SECRET_SECRET" "$GRAPH_MAILBOX_SECRET" "$GRAPH_EXPIRES_SECRET" \
     "$WHATSAPP_SECRET_SECRET" "$WHATSAPP_VERIFY_SECRET" \
-    "$WHATSAPP_TOKEN_SECRET" "$WHATSAPP_PHONE_SECRET")
+    "$WHATSAPP_TOKEN_SECRET" "$WHATSAPP_PHONE_SECRET" \
+    "$MS_ID_SECRET" "$MS_SECRET_SECRET" "$MS_TENANT_SECRET" "$MS_EXPIRES_SECRET")
 fi
 for secret in "${BIND_SECRETS[@]}"; do
   # The model key may not exist yet -- a fresh environment has no OpenAI key
