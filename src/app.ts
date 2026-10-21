@@ -27,10 +27,13 @@ import {
   readHandlingGoal,
   readNonWorkingDates,
   readPortalCall,
+  readReplyShare,
+  readReplyTarget,
   readResponseGoal,
   registerCallsRoutes,
   saveEmergencySettings,
   saveHandlingGoal,
+  saveReplyTarget,
   saveResponseGoal,
   startCallBrief,
   tenantStatus,
@@ -85,7 +88,13 @@ import {
 } from './evidence/contract.ts';
 import { renderIndexPage } from './index-page.ts';
 import { createAuditLog } from './kernel/audit.ts';
-import { type Clock, systemClock } from './kernel/clock.ts';
+import {
+  addDays,
+  type Clock,
+  calendarDate,
+  systemClock,
+  today,
+} from './kernel/clock.ts';
 import {
   createSettings,
   readExtractionSettings,
@@ -125,6 +134,7 @@ import {
   parseHandlingGoalForm,
   parseNonWorkingDateForm,
   parseObligationTypeForm,
+  parseReplyTargetForm,
   parseResponseGoalForm,
   renderSettingsPage,
 } from './settings-page.ts';
@@ -751,6 +761,19 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     });
   });
 
+  function chosenPeriod(
+    query: { from?: string; to?: string } | undefined,
+    day: string,
+  ): { from: string; to: string } {
+    try {
+      const from = calendarDate(query?.from ?? '');
+      const to = calendarDate(query?.to ?? '');
+      return from <= to ? { from, to } : { from: to, to: from };
+    } catch {
+      return { from: addDays(day, -29), to: day };
+    }
+  }
+
   const SETTINGS_READ = { config: { staff: 'estate.read' } } as const;
   const SETTINGS_WRITE = { config: { staff: 'settings.write' } } as const;
 
@@ -768,10 +791,22 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       | 'emergency'
       | 'goal'
       | 'handling'
-      | 'dates',
+      | 'dates'
+      | 'reply',
+    period?: { from?: string; to?: string },
   ) => {
     stubHeaders(reply);
     const role = request.staff?.role ?? null;
+    const clock = deps.clock ?? systemClock;
+    const replyTarget = await readReplyTarget(deps.pool);
+    const periodDates = chosenPeriod(period, today(clock));
+    const share = await readReplyShare(
+      deps.pool,
+      clock.zone,
+      periodDates.from,
+      periodDates.to,
+      replyTarget.days,
+    );
     return renderSettingsPage({
       csrf: csrfFrom(request),
       mayWrite: can(role, 'settings.write'),
@@ -786,12 +821,19 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       goal: await readResponseGoal(deps.pool),
       handling: await readHandlingGoal(deps.pool),
       nonWorkingDates: await readNonWorkingDates(deps.pool),
+      replyTarget,
+      share,
       saved,
     });
   };
 
   app.get('/settings', SETTINGS_READ, async (request, reply) => {
-    const saved = (request.query as { saved?: string }).saved;
+    const query = request.query as {
+      saved?: string;
+      from?: string;
+      to?: string;
+    };
+    const saved = query.saved;
     return settingsPage(
       request,
       reply,
@@ -801,9 +843,11 @@ export function buildApp(deps: AppDeps): FastifyInstance {
         saved === 'emergency' ||
         saved === 'goal' ||
         saved === 'handling' ||
-        saved === 'dates'
+        saved === 'dates' ||
+        saved === 'reply'
         ? saved
         : undefined,
+      { from: query.from, to: query.to },
     );
   });
   app.post(
@@ -876,6 +920,21 @@ export function buildApp(deps: AppDeps): FastifyInstance {
         .code(303)
         .header('location', '/settings?saved=handling')
         .send();
+    },
+  );
+  app.post(
+    '/settings/answer-target',
+    SETTINGS_WRITE,
+    async (request, reply) => {
+      const staff = request.staff;
+      if (staff == null) throw new KernelError('not_allowed', 'not_allowed');
+      const clock = deps.clock ?? systemClock;
+      await saveReplyTarget(deps.pool, clock, {
+        ...parseReplyTargetForm(request.body),
+        actorId: staff.staffAccountId,
+        actorRole: staff.role,
+      });
+      return reply.code(303).header('location', '/settings?saved=reply').send();
     },
   );
   app.post(
@@ -1177,6 +1236,10 @@ export function buildApp(deps: AppDeps): FastifyInstance {
         })),
         dutyPhone: duty.phone,
       };
+    },
+    replyLine: async () => {
+      const target = await readReplyTarget(deps.pool);
+      return target.shown ? { days: target.days } : null;
     },
     submitReport: async (report) => {
       const outcome = await receiveIncoming(

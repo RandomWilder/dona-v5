@@ -20,6 +20,8 @@ import type {
   CategorySpec,
   EmergencySettings,
   HandlingGoal,
+  ReplyShare,
+  ReplyTarget,
   ResponseGoal,
 } from './calls/contract.ts';
 import { signedInChrome } from './chrome.ts';
@@ -51,6 +53,8 @@ export interface SettingsScreen {
   goal: ResponseGoal;
   handling: HandlingGoal;
   nonWorkingDates: readonly string[];
+  replyTarget: ReplyTarget;
+  share: ReplyShare;
   saved?:
     | 'obligation'
     | 'document'
@@ -58,7 +62,8 @@ export interface SettingsScreen {
     | 'emergency'
     | 'goal'
     | 'handling'
-    | 'dates';
+    | 'dates'
+    | 'reply';
 }
 
 const styles = h`<style>
@@ -222,6 +227,53 @@ function dateRow(screen: SettingsScreen, iso: string): Html {
   </article>`;
 }
 
+function replyForm(screen: SettingsScreen): Html {
+  const target = screen.replyTarget;
+  const line = `אנחנו עונים בתוך ${String(target.days)} ימי עסקים`;
+  if (!screen.mayWrite) {
+    return h`<dl class="facts">
+      <div><dt>יעד</dt><dd><span dir="ltr">${String(target.days)}</span> ימים</dd></div>
+      <div><dt>הצגה לדיירים</dt><dd>${target.shown ? 'דולק' : 'כבוי'}</dd></div>
+    </dl>`;
+  }
+  return h`<form class="settings-form" method="post" action="/settings/answer-target">
+    ${csrfInput(screen.csrf)}
+    <p class="lede">מענה של אדם, לא האישור האוטומטי. אינו מבטיח סגירה או ביקור.</p>
+    <div class="field">
+      <label for="reply-target">יעד מענה (ימי עסקים)</label>
+      <input id="reply-target" name="days" type="text" inputmode="numeric" dir="ltr" required maxlength="3" value="${String(target.days)}" />
+    </div>
+    <label class="check">
+      <input type="checkbox" name="shown" value="true"${target.shown ? h` checked` : h``} />
+      הצגה לדיירים
+    </label>
+    <p class="lede">כבוי כברירת מחדל. כשדולק, הדייר רואה: ${line}.</p>
+    <button class="btn btn-primary" type="submit">שמירה</button>
+  </form>`;
+}
+
+function shareBlock(screen: SettingsScreen): Html {
+  const share = screen.share;
+  const result =
+    share.calls === 0
+      ? h`<p class="lede">אין קריאות בתקופה.</p>`
+      : h`<p class="lede"><span dir="ltr">${String(share.replied)}</span> מתוך <span dir="ltr">${String(share.calls)}</span> נענו בתוך היעד.</p>`;
+  return h`<form class="settings-form" method="get" action="/settings">
+    <h2>החלק שנענה</h2>
+    <p class="lede">קריאות שנפתחו בתקופה, ומענה של אדם בתוך היעד. לא מוצג לדייר.</p>
+    <div class="field">
+      <label for="share-from">מ־</label>
+      <input id="share-from" name="from" type="date" dir="ltr" required value="${share.from}" />
+    </div>
+    <div class="field">
+      <label for="share-to">עד</label>
+      <input id="share-to" name="to" type="date" dir="ltr" required value="${share.to}" />
+    </div>
+    <button class="btn" type="submit">הצגה</button>
+    ${result}
+  </form>`;
+}
+
 function datesBlock(screen: SettingsScreen): Html {
   const rows =
     screen.nonWorkingDates.length === 0
@@ -321,6 +373,11 @@ export function renderSettingsPage(screen: SettingsScreen): string {
         <h2>ימי עסקים</h2>
         ${handlingForm(screen)}
         ${datesBlock(screen)}
+      </section>
+      <section class="settings-block">
+        <h2>יעד מענה לדייר</h2>
+        ${replyForm(screen)}
+        ${shareBlock(screen)}
       </section>
       <section class="settings-block">
         <h2>קטגוריות לקריאות</h2>
@@ -471,6 +528,16 @@ export function parseHandlingGoalForm(body: unknown): {
   return {
     amberDays: wholeDaysField(body, 'amber_days', 'amber'),
     redDays: wholeDaysField(body, 'red_days', 'red'),
+  };
+}
+
+export function parseReplyTargetForm(body: unknown): {
+  days: number;
+  shown: boolean;
+} {
+  return {
+    days: wholeDaysField(body, 'days', 'days'),
+    shown: checked(body, 'shown'),
   };
 }
 

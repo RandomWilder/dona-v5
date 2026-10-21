@@ -342,6 +342,27 @@ export interface SaveHandlingGoalSpec {
   actorRole?: string | null;
 }
 
+/** Whole business days, and whether the portal may say so. */
+export interface ReplyTarget {
+  days: number;
+  shown: boolean;
+}
+
+export interface SaveReplyTargetSpec {
+  days: number;
+  shown: boolean;
+  actorId: string;
+  actorRole?: string | null;
+}
+
+/** Calls opened in the period, and how many got a person's reply within the target. */
+export interface ReplyShare {
+  from: string;
+  to: string;
+  calls: number;
+  replied: number;
+}
+
 export interface ChangeNonWorkingDateSpec {
   op: 'add' | 'remove';
   date: string;
@@ -2055,7 +2076,7 @@ async function writeSetting(
   db: Queryable,
   clock: Clock,
   key: string,
-  value: string | number | readonly string[],
+  value: string | number | boolean | readonly string[],
 ): Promise<void> {
   await db.query(
     `INSERT INTO config_settings (key, value, updated_at)
@@ -2298,6 +2319,93 @@ export async function saveHandlingGoal(
     );
   });
   return { amberDays, redDays };
+}
+
+const REPLY_DAYS_KEY = 'calls.reply_target_days';
+const REPLY_SHOWN_KEY = 'calls.reply_target_shown';
+const REPLY_DAYS_FALLBACK = 2;
+
+function storedShown(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'boolean') return value;
+  throw new KernelError('invalid', 'show to tenants is not a switch');
+}
+
+export async function readReplyTarget(db: Queryable): Promise<ReplyTarget> {
+  const { rows } = await db.query<{ key: string; value: unknown }>(
+    `SELECT key, value FROM config_settings WHERE key = ANY($1::text[])`,
+    [[REPLY_DAYS_KEY, REPLY_SHOWN_KEY]],
+  );
+  const byKey = new Map(rows.map((row) => [row.key, row.value]));
+  return {
+    days: storedDays(byKey.get(REPLY_DAYS_KEY), REPLY_DAYS_FALLBACK),
+    shown: storedShown(byKey.get(REPLY_SHOWN_KEY)),
+  };
+}
+
+export async function saveReplyTarget(
+  db: Queryable,
+  clock: Clock,
+  spec: SaveReplyTargetSpec,
+): Promise<ReplyTarget> {
+  const actorId = validId(spec.actorId, 'actor');
+  const days = wholeDays(spec.days, 'days');
+  const shown = spec.shown === true;
+  await inTransaction(db, async (tx) => {
+    await writeSetting(tx, clock, REPLY_DAYS_KEY, days);
+    await writeSetting(tx, clock, REPLY_SHOWN_KEY, shown);
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'staff',
+        actorId,
+        actorRole: spec.actorRole ?? undefined,
+        action: 'calls.reply_target',
+        inputs: { days, shown },
+      },
+      { outcome: 'ok' },
+    );
+  });
+  return { days, shown };
+}
+
+/**
+ * Calls opened on a calendar date in the period, in the office zone. A person's
+ * reply is a reply a staff account sent. The duty reply is not one of those,
+ * and a call sent back to filtered is not in the count.
+ */
+export async function readReplyShare(
+  db: Queryable,
+  zone: string,
+  from: string,
+  to: string,
+  days: number,
+): Promise<ReplyShare> {
+  const dates = await readNonWorkingDates(db);
+  const { rows } = await db.query<{
+    opened_at: Date;
+    replied_at: Date | null;
+  }>(
+    `SELECT sc.opened_at,
+            (
+              SELECT min(t.at)
+                FROM service_call_transition t
+               WHERE t.service_call_id = sc.service_call_id
+                 AND t.kind = 'REPLIED'
+                 AND t.actor_id IS NOT NULL
+            ) AS replied_at
+       FROM service_call sc
+      WHERE sc.returned_at IS NULL
+        AND (sc.opened_at AT TIME ZONE $3)::date >= $1::date
+        AND (sc.opened_at AT TIME ZONE $3)::date <= $2::date`,
+    [from, to, zone],
+  );
+  let replied = 0;
+  for (const row of rows) {
+    if (row.replied_at === null) continue;
+    const age = businessDaysElapsed(row.opened_at, row.replied_at, zone, dates);
+    if (age <= days) replied += 1;
+  }
+  return { from, to, calls: rows.length, replied };
 }
 
 export async function readNonWorkingDates(

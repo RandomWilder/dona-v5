@@ -1510,6 +1510,27 @@ button.tp-icon-btn {
   background: var(--tp-ok-tint);
   color: var(--tp-ok);
 }
+.tp-reply {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--tp-accent-700);
+}
+.tp-reply-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: var(--tp-r-pill);
+  background: var(--tp-accent-100);
+  color: var(--tp-accent-700);
+  font-size: 13px;
+  font-weight: 500;
+}
 [dir="rtl"] .tp-send .tp-i {
   transform: scaleX(-1);
 }

@@ -151,6 +151,11 @@ export interface PortalDeps {
     categories: readonly { id: string; code: string; labelHe: string }[];
     dutyPhone: string;
   }>;
+  /**
+   * The reply-target line, when an administrator has switched it on.
+   * Null means the portal names no reply time.
+   */
+  replyLine: () => Promise<{ days: number } | null>;
   /** The intake door for a report. Absent in a process that has not wired it. */
   submitReport?: (report: PortalReport) => Promise<PortalReportReceipt | null>;
   /** A follow-up on a call the tenant can already read. */
@@ -665,6 +670,7 @@ export function registerPortalRoutes(
     const open = calls.filter((call) => call.state !== 'CLOSED');
     const zone = clock.zone;
     const chosen = who.chosen;
+    const reply = await deps.replyLine();
     return paint(who.language, () =>
       renderHomePage({
         csrf: csrfTokenFor(who.token),
@@ -676,6 +682,7 @@ export function registerPortalRoutes(
           .slice(0, 2)
           .map((call) => callCard(call, zone, deps.calls.status)),
         visit: nextVisit(calls, clock.now(), zone),
+        replyDays: reply?.days ?? null,
       }),
     );
   }
@@ -1441,6 +1448,7 @@ export function registerPortalRoutes(
         await reportPage(who, { ...draft, step: 3, notice: 'report.retry' }),
       );
     }
+    const line = await deps.replyLine();
     return html(
       reply,
       paint(who.language, () =>
@@ -1449,6 +1457,7 @@ export function registerPortalRoutes(
           callNumber: receipt.callNumber,
           category: category.labelHe,
           duty: receipt.duty,
+          replyDays: line?.days ?? null,
         }),
       ),
     );

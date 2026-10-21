@@ -656,6 +656,7 @@ const SCREENS: Array<[string, () => string]> = [
           from: '10:00',
           to: '12:00',
         },
+        replyDays: 2,
       }),
   ],
   [
@@ -798,6 +799,7 @@ const SCREENS: Array<[string, () => string]> = [
         callNumber: 1043,
         category: 'אינסטלציה',
         duty: null,
+        replyDays: 2,
       }),
   ],
   [
@@ -2839,6 +2841,8 @@ const SCREENS: Array<[string, () => string]> = [
         goal: { amberMinutes: 240, redMinutes: 1440 },
         handling: { amberDays: 2, redDays: 5 },
         nonWorkingDates: ['2026-10-11'],
+        replyTarget: { days: 2, shown: false },
+        share: { from: '2026-09-22', to: '2026-10-21', calls: 0, replied: 0 },
       }),
   ],
   [
@@ -2862,6 +2866,8 @@ const SCREENS: Array<[string, () => string]> = [
         goal: { amberMinutes: 240, redMinutes: 1440 },
         handling: { amberDays: 2, redDays: 5 },
         nonWorkingDates: [],
+        replyTarget: { days: 2, shown: false },
+        share: { from: '2026-09-22', to: '2026-10-21', calls: 0, replied: 0 },
       }),
   ],
   [

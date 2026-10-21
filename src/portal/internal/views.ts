@@ -410,6 +410,8 @@ export function renderHomePage(screen: {
   openCount: number;
   calls: readonly CallCard[];
   visit: VisitCard | null;
+  /** Set when an administrator has switched the reply target on. */
+  replyDays: number | null;
 }): string {
   const flatHref = `/flat/${screen.chosenId}`;
   const rows =
@@ -420,7 +422,10 @@ export function renderHomePage(screen: {
     portalText('home.page'),
     h`<div class="tp-body">
       <div class="tp-head">${pill(screen.choices, screen.chosenId, screen.csrf, '/')}${languageSheet(screen.csrf, '/', false)}</div>
-      <h1 class="tp-page-title">${screen.greeting}</h1>
+      <div class="tp-stack">
+        <h1 class="tp-page-title">${screen.greeting}</h1>
+        ${replyMark(screen.replyDays, 'home.reply', 'tp-reply')}
+      </div>
       ${screen.visit === null ? h`` : visitHero(screen.visit)}
       <div class="tp-stack-10">
         <div class="tp-section-row">
@@ -795,11 +800,18 @@ function carried(screen: ReportDraft): Html {
     ${description}${entry}${category}`;
 }
 
+function replyMark(days: number | null, key: string, klass: string): Html {
+  if (days === null) return h``;
+  const text = portalText(key).replaceAll('{days}', String(days));
+  return h`<p class="${klass}">${icon('clock', { class: 'tp-i i15' })}${text}</p>`;
+}
+
 export function renderReportReceived(screen: {
   callId: string;
   callNumber: number;
   category: string;
   duty: string | null;
+  replyDays: number | null;
 }): string {
   const duty =
     screen.duty === null
@@ -814,6 +826,7 @@ export function renderReportReceived(screen: {
         <h1 class="tp-display">${portalText('report.received')}</h1>
         <p class="tp-lede" data-call-number="${screen.callNumber}">${portalText('ask.number')} <span dir="ltr">${screen.callNumber}</span> · ${screen.category}. ${portalText('report.received_line')}</p>
       </div>
+      ${replyMark(screen.replyDays, 'report.reply', 'tp-reply-pill')}
       ${duty}
       <div class="tp-spacer"></div>
       <div class="tp-stack">

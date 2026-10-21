@@ -115,6 +115,11 @@ const HEBREW: readonly PortalCopy[] = [
   { key: 'home.passkeys', language: 'he', text: 'מפתחות כניסה' },
   { key: 'home.ask', language: 'he', text: 'שאלה למשרד' },
   { key: 'home.papers', language: 'he', text: 'המסמכים שלי' },
+  {
+    key: 'home.reply',
+    language: 'he',
+    text: 'אנחנו עונים בתוך {days} ימי עסקים',
+  },
   { key: 'nav.label', language: 'he', text: 'ניווט' },
   { key: 'nav.home', language: 'he', text: 'בית' },
   { key: 'nav.calls', language: 'he', text: 'קריאות' },
@@ -277,6 +282,11 @@ const HEBREW: readonly PortalCopy[] = [
   { key: 'report.flat', language: 'he', text: 'דירה' },
   { key: 'report.send', language: 'he', text: 'שליחת הדיווח' },
   { key: 'report.received', language: 'he', text: 'הדיווח התקבל' },
+  {
+    key: 'report.reply',
+    language: 'he',
+    text: 'אדם מהמשרד יענה בתוך {days} ימי עסקים',
+  },
   {
     key: 'report.received_line',
     language: 'he',
@@ -640,7 +650,17 @@ const TRANSLATED: readonly PortalCopy[] = [
   { key: 'home.ask', language: 'en', text: 'Ask the office' },
   { key: 'home.ask', language: 'ru', text: 'Вопрос в офис' },
   { key: 'home.papers', language: 'en', text: 'My documents' },
+  {
+    key: 'home.reply',
+    language: 'en',
+    text: 'We reply within {days} business days',
+  },
   { key: 'home.papers', language: 'ru', text: 'Мои документы' },
+  {
+    key: 'home.reply',
+    language: 'ru',
+    text: 'Мы отвечаем в течение {days} рабочих дней',
+  },
   { key: 'nav.label', language: 'en', text: 'Navigation' },
   { key: 'nav.label', language: 'ru', text: 'Навигация' },
   { key: 'nav.home', language: 'en', text: 'Home' },
@@ -1021,6 +1041,16 @@ const TRANSLATED: readonly PortalCopy[] = [
   { key: 'report.send', language: 'ru', text: 'Отправить сообщение' },
   { key: 'report.received', language: 'en', text: 'Report received' },
   { key: 'report.received', language: 'ru', text: 'Сообщение принято' },
+  {
+    key: 'report.reply',
+    language: 'en',
+    text: 'Someone from the office will reply within {days} business days',
+  },
+  {
+    key: 'report.reply',
+    language: 'ru',
+    text: 'Сотрудник офиса ответит в течение {days} рабочих дней',
+  },
   {
     key: 'report.received_line',
     language: 'en',

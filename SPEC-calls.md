@@ -171,9 +171,10 @@ a person's Category command may name a different one. The suggestion does not mo
 
 **Editable at /settings without a deploy:** the emergency terms (one per line, like verification
 terms), the duty phone number and hours, the Category list, the amber and red age thresholds of
-the internal response goal, the amber and red handling thresholds in business days, and the
-non-working dates. Both clocks are internal and are shown to no tenant. A promise to tenants is
-an SLA, and it is the director's decision when one is made.
+the internal response goal, the amber and red handling thresholds in business days, the
+non-working dates, the reply target in business days, and whether tenants are shown that target.
+Both clocks are internal and are shown to no tenant. The reply target is the promise, and tenants
+see it only when an administrator has switched that on.
 
 **The response goal** is two whole-minute thresholds, amber then red. It applies to an open
 Emergency call. Placeholders, until Dona Dom supplies theirs, are 240 and 1440. Age is whole
@@ -206,6 +207,23 @@ supplies theirs, are 2 and 5. The bands and the words are the response goal's: o
 and not older than red is near, older than red is past, and exactly on a threshold has not passed
 it. The list shows that band on each non-emergency open call. Red must be greater than amber. A
 threshold above 366 is refused. A save is audited and is read on the next request.
+
+**The reply target (#288)** is one whole number of business days. A placeholder, until Dona Dom
+supplies it, is 2. A number above 366 is refused. A call counts as replied when a person sends a
+reply on it. The fixed emergency reply does not count, and an automatic acknowledgement does not
+count. The age of that reply is the business-day count from the open instant to the reply
+instant. A reply whose age is the target or less is within it. A reply older than the target
+is not. The office sees, at `/settings`, how many calls opened in a chosen period were replied
+to within the target, and how many calls opened in that period. The period is two calendar dates
+in the office zone, both included. A call sent back to the filtered list is not in either number.
+The share is shown to no tenant.
+
+**Show to tenants** is off until an administrator turns it on. Saving the number, and turning the
+switch on or off, are each an audit row, and both need an administrator. The rows are read on the
+next request. Off, no tenant page names a reply time. On, the portal home shows a clock mark and
+"אנחנו עונים בתוך X ימי עסקים" under the greeting, and the report confirmation shows "אדם מהמשרד
+יענה בתוך X ימי עסקים" as a pill. The same sentences exist in English and Russian. The portal
+does not say why the line is there, and no other tenant page carries it.
 
 **Non-working dates** are calendar dates an administrator adds and removes at `/settings`. A value
 that is not a real calendar date is refused. Adding a date already kept, or removing one that is
@@ -246,7 +264,7 @@ stored on the call. The office's call page shows the suggestion, the permission 
 The first step shows the duty phone from `/settings`, as a `tel:` link, before the first question.
 An emergency term in the description flags the call the same way as any other intake. On `PORTAL`
 the duty sentence is shown on the confirmation and nothing is sent. The reply-target line is
-shown on that confirmation only when that setting is on.
+shown under the home greeting and on that confirmation only when that setting is on.
 
 A visit's time is two timestamps on the call, `visit_starts_at` and `visit_ends_at`, both set or
 neither, and the end after the start. No command writes them yet; the visit flow will. The home
