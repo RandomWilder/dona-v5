@@ -243,6 +243,16 @@ function tabBar(current: 'home' | 'calls' | 'flat', flatHref: string): Html {
   </nav>`;
 }
 
+function documentList(
+  documents: readonly { href: string; name: string; kind: string }[],
+): Html {
+  if (documents.length === 0) return h``;
+  return h`<div class="tp-list">${documents.map(
+    (doc) =>
+      h`<a class="tp-row tp-doc" href="${doc.href}"><span class="tp-well">${icon('file', { class: 'tp-i i18' })}</span><span class="tp-row-text"><span class="tp-row-title">${doc.name}</span><span class="tp-meta">${doc.kind}</span></span>${icon('download', { class: 'tp-i tp-dl', label: portalText('papers.download') })}</a>`,
+  )}</div>`;
+}
+
 function shell(title: string, body: Html, bar: Html): string {
   return page(title, h`<div class="tp-shell">${body}${bar}</div>`);
 }
@@ -280,6 +290,7 @@ export function renderFlatPage(screen: {
   percent: number;
   parking: string;
   storage: string;
+  documents: readonly { href: string; name: string; kind: string }[];
 }): string {
   return shell(
     portalText('flat.page'),
@@ -305,6 +316,7 @@ export function renderFlatPage(screen: {
         </dl>
       </article>
       <h2 class="tp-section" id="documents">${portalText('flat.documents')}</h2>
+      ${documentList(screen.documents)}
     </div>`,
     tabBar('flat', `/flat/${screen.chosenId}`),
   );

@@ -660,6 +660,7 @@ const SCREENS: Array<[string, () => string]> = [
         percent: 64,
         parking: '12',
         storage: '4',
+        documents: [],
       }),
   ],
   [

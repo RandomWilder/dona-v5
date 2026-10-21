@@ -64,6 +64,7 @@ import {
   listPromotedFieldsForUnit,
   listTenancyDocumentFacts,
   listUnopenedLeases,
+  parseStorageUri,
   registerDocumentRoutes,
   runOfficeTurn,
   searchDocuments,
@@ -1078,6 +1079,10 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   registerPortalRoutes(app, {
     pool: deps.pool,
     clock,
+    readDocument: async (storageUri) => {
+      const { path } = parseStorageUri(storageUri, bucket);
+      return (await objects.read(path)).bytes;
+    },
     sender: deps.codeSender ?? createUnavailableCodeSender(),
     submitQuestion: async (question) => {
       const outcome = await receiveIncoming(

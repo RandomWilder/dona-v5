@@ -11,7 +11,10 @@ import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { validId } from '../../kernel/validate.ts';
 import {
+  listPortalDocuments,
+  type PortalDocumentKind,
   type PortalTenancy,
+  resolvePortalDocument,
   resolvePortalTenancies,
 } from '../../scope/contract.ts';
 import { csrfTokenFor, verifyCsrf } from '../../staff/contract.ts';
@@ -93,6 +96,8 @@ export interface PortalDeps {
   pool: Pool;
   clock: Clock;
   sender: CodeSender;
+  /** The tenancy file's bytes. The composition root reads the object store. */
+  readDocument: (storageUri: string) => Promise<Buffer>;
   /**
    * The intake door. The composition root wires it, because this module
    * reaching calls or channel pulls a cycle through the building switch.
@@ -114,6 +119,34 @@ function secureOf(request: {
 function addressOf(request: { ip: string }): string {
   const ip = request.ip.trim();
   return (ip.length > 0 ? ip : 'unknown').slice(0, 64);
+}
+
+function idOrEmpty(raw: string | undefined, label: string): string {
+  try {
+    return validId(raw ?? '', label);
+  } catch (error) {
+    if (!(error instanceof KernelError)) throw error;
+    return '';
+  }
+}
+
+// The same four kinds evidence stores. Importing that map from here cycles
+// through estate, which already imports this module.
+const FILE_TYPE: Record<PortalDocumentKind, string> = {
+  pdf: 'application/pdf',
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  tif: 'image/tiff',
+};
+
+function fileType(kind: PortalDocumentKind): string {
+  return FILE_TYPE[kind];
+}
+
+function contentDisposition(fileName: string): string {
+  const ascii = fileName.replace(/[^A-Za-z0-9._ -]/g, '').trim() || 'file';
+  const utf8 = encodeURIComponent(fileName);
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${utf8}`;
 }
 
 function field(body: unknown, name: string): string {
@@ -250,6 +283,7 @@ export function registerPortalRoutes(
     kind: 'open';
     token: string;
     phone: string;
+    identityId: string;
     rows: PortalTenancy[];
     chosen: PortalTenancy | null;
   }
@@ -267,7 +301,14 @@ export function registerPortalRoutes(
     const picked = readPortalCookie(cookie, PORTAL_CHOICE_COOKIE);
     const chosen =
       open.find((row) => row.tenancyId === picked) ?? open[0] ?? null;
-    return { kind: 'open', token, phone: session.phone, rows: open, chosen };
+    return {
+      kind: 'open',
+      token,
+      phone: session.phone,
+      identityId: session.portalIdentityId,
+      rows: open,
+      chosen,
+    };
   }
 
   function choicesOf(rows: readonly PortalTenancy[]): PortalChoice[] {
@@ -303,7 +344,7 @@ export function registerPortalRoutes(
     });
   }
 
-  function flatOf(who: OpenPortal, tenancyId: string): string {
+  async function flatOf(who: OpenPortal, tenancyId: string): Promise<string> {
     if (who.chosen === null) {
       return renderNoAccessPage({
         csrf: csrfTokenFor(who.token),
@@ -323,6 +364,9 @@ export function registerPortalRoutes(
       row.storage.length === 0
         ? portalText('flat.none')
         : row.storage.join(' · ');
+    const listed = await listPortalDocuments(pool, row.tenancyId, clock, {
+      actor: { actorKind: 'tenant', actorId: who.identityId },
+    });
     return renderFlatPage({
       csrf: csrfTokenFor(who.token),
       choices: choicesOf(who.rows),
@@ -335,6 +379,11 @@ export function registerPortalRoutes(
       percent: leasePercent(row.startDate, row.endDate, day),
       parking,
       storage,
+      documents: listed.map((doc) => ({
+        href: `/flat/${row.tenancyId}/documents/${doc.documentId}`,
+        name: doc.name,
+        kind: portalText(`papers.kind.${doc.kind}`),
+      })),
     });
   }
 
@@ -363,7 +412,7 @@ export function registerPortalRoutes(
       if (!(error instanceof KernelError)) throw error;
       tenancyId = '';
     }
-    const body = flatOf(who, tenancyId);
+    const body = await flatOf(who, tenancyId);
     if (
       who.chosen !== null &&
       !who.rows.some((row) => row.tenancyId === tenancyId)
@@ -372,6 +421,88 @@ export function registerPortalRoutes(
     }
     return html(reply, body);
   });
+
+  app.get(
+    '/flat/:tenancyId/documents/:documentId',
+    TENANT,
+    async (request, reply) => {
+      const who = await portalOf(request);
+      if (who === null) return go(reply, '/', []);
+      if (who.kind === 'notice') return go(reply, '/notice', []);
+      const params = request.params as {
+        tenancyId?: string;
+        documentId?: string;
+      };
+      const tenancyId = idOrEmpty(params.tenancyId, 'tenancy');
+      const documentId = idOrEmpty(params.documentId, 'document');
+      if (who.chosen === null) {
+        return html(
+          reply,
+          renderNoAccessPage({
+            csrf: csrfTokenFor(who.token),
+            phone: nationalDisplay(who.phone),
+          }),
+        );
+      }
+      if (
+        documentId === '' ||
+        !who.rows.some((row) => row.tenancyId === tenancyId)
+      ) {
+        reply.code(404);
+        return html(
+          reply,
+          renderMissingPage({ chosenId: who.chosen.tenancyId }),
+        );
+      }
+      const doc = await resolvePortalDocument(
+        pool,
+        tenancyId,
+        documentId,
+        clock,
+        { actor: { actorKind: 'tenant', actorId: who.identityId } },
+      );
+      if (doc === null) {
+        reply.code(404);
+        return html(
+          reply,
+          renderMissingPage({ chosenId: who.chosen.tenancyId }),
+        );
+      }
+      let bytes: Buffer;
+      try {
+        bytes = await deps.readDocument(doc.storageUri);
+      } catch (error) {
+        if (!(error instanceof KernelError)) throw error;
+        reply.code(404);
+        return html(
+          reply,
+          renderMissingPage({ chosenId: who.chosen.tenancyId }),
+        );
+      }
+      const entry = {
+        actorKind: 'tenant' as const,
+        actorId: who.identityId,
+        subjectId: doc.documentId,
+        inputs: {},
+      };
+      await audit.write(
+        { ...entry, action: 'portal.open_document' },
+        { outcome: 'ok' },
+      );
+      await audit.write(
+        { ...entry, action: 'portal.download_document' },
+        { outcome: 'ok' },
+      );
+      reply.header('content-type', fileType(doc.kind));
+      reply.header(
+        'content-disposition',
+        contentDisposition(`${doc.name}.${doc.kind}`),
+      );
+      reply.header('cache-control', 'no-store');
+      reply.header('x-content-type-options', 'nosniff');
+      return reply.send(bytes);
+    },
+  );
 
   app.get('/calls', TENANT, async (request, reply) => {
     const who = await portalOf(request);

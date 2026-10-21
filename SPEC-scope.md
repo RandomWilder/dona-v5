@@ -136,6 +136,25 @@ The row carries what the flat page shows — address, city, dates, the assigned 
 name, the party's given name — so the portal does not write a second join. The audit line is the
 phone line's: the party reached and how many rows, never the number, the name or the address.
 
+### The portal's papers — `listPortalDocuments`, `resolvePortalDocument`, #280
+
+A tenant may read a document only when `document_link` binds it to their tenancy
+(`entity_type = 'TENANCY'`). That predicate is the whole of the rule, and it lives here. A document
+bound to the Unit, or to the Building, and not to the tenancy, is not found by its identifier. A
+document bound to another tenancy is not found either. A document bound to the tenancy and also to
+the unit is the tenancy's, and it is one row.
+
+`listPortalDocuments` is what the flat page lists: the type's Hebrew name, the stored kind (one of
+the four file kinds evidence keeps), and where the bytes are, so the portal can send them without a
+second query that forgets the predicate. `resolvePortalDocument` is the same predicate for one
+identifier, and it returns nothing when the predicate misses. Both are scoped reads, so both write
+the audit line this file already describes — what was reached and how many rows, on the caller's
+connection. The list is ordered by the Hebrew name, then the newest filing.
+
+Opening the file and downloading it are the portal's own audit rows, `portal.open_document` and
+`portal.download_document`, written when the bytes go out. The subject is the document. The inputs
+carry nothing of the file. A miss writes neither of those two.
+
 ## The audit line records what was reached, not what was asked
 
 SPEC.md's security defaults require **every scoped read of tenant data to be logged**, not only

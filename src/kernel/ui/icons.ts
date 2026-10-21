@@ -48,6 +48,7 @@ export const ICON_NAMES = [
   'layout',
   'upload',
   'file',
+  'download',
   'bars',
   'book',
   'check',
@@ -88,6 +89,8 @@ const drawings: Record<IconName, string> = {
   upload:
     '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M12 18v-6" /><path d="m9 15 3-3 3 3" />',
   file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M16 13H8" /><path d="M16 17H8" /><path d="M10 9H8" />',
+  download:
+    '<path d="M12 15V3" /><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m7 10 5 5 5-5" />',
   bars: '<path d="M3 21h18" /><path d="M7 21V10" /><path d="M12 21V4" /><path d="M17 21v-7" />',
   book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />',
   check: '<path d="m9 12 2 2 4-4" /><circle cx="12" cy="12" r="9" />',

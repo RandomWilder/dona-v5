@@ -364,6 +364,16 @@ label.tp-card {
 .tp-row-title {
   font-size: 15px;
   font-weight: 600;
+  overflow-wrap: anywhere;
+}
+a.tp-doc {
+  color: inherit;
+  text-decoration: none;
+  min-inline-size: 0;
+}
+.tp-doc .tp-dl {
+  flex: none;
+  color: var(--tp-accent-700);
 }
 .tp-well {
   display: grid;

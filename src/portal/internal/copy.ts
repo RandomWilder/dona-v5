@@ -123,6 +123,11 @@ export const PORTAL_COPY: readonly PortalCopy[] = [
   { key: 'flat.storage', language: 'he', text: 'מחסן' },
   { key: 'flat.none', language: 'he', text: '—' },
   { key: 'flat.documents', language: 'he', text: 'מסמכים' },
+  { key: 'papers.download', language: 'he', text: 'הורדה' },
+  { key: 'papers.kind.pdf', language: 'he', text: 'PDF' },
+  { key: 'papers.kind.jpg', language: 'he', text: 'JPG' },
+  { key: 'papers.kind.png', language: 'he', text: 'PNG' },
+  { key: 'papers.kind.tif', language: 'he', text: 'TIFF' },
   { key: 'flat.sheet_title', language: 'he', text: 'בחירת דירה' },
   {
     key: 'flat.sheet_help',

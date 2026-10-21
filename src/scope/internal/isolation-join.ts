@@ -17,6 +17,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { type ActorKind, createAuditLog } from '../../kernel/audit.ts';
 import { type Clock, today } from '../../kernel/clock.ts';
+import { validId } from '../../kernel/validate.ts';
 import { normaliseEmail } from './email.ts';
 import { normalisePhone } from './phone.ts';
 
@@ -538,4 +539,115 @@ export async function resolvePortalTenancies(
         left.unitNumber.localeCompare(right.unitNumber, 'he') ||
         left.tenancyId.localeCompare(right.tenancyId),
     );
+}
+
+// The four kinds evidence stores. A wider suffix is not a file this portal can hand out.
+const PORTAL_DOCUMENT_KINDS = ['pdf', 'jpg', 'png', 'tif'] as const;
+
+export type PortalDocumentKind = (typeof PORTAL_DOCUMENT_KINDS)[number];
+
+export interface PortalDocument {
+  documentId: string;
+  name: string;
+  kind: PortalDocumentKind;
+  storageUri: string;
+}
+
+// Tenancy-bound only. A unit or building link does not qualify, and a second link
+// to the unit does not duplicate the row. #280.
+const PORTAL_DOCUMENTS_SQL = `
+  SELECT d.document_id,
+         dt.label_he,
+         d.storage_uri
+    FROM document d
+    JOIN document_type dt ON dt.document_type_id = d.document_type_id
+   WHERE EXISTS (
+           SELECT 1
+             FROM document_link l
+            WHERE l.document_id = d.document_id
+              AND l.entity_type = 'TENANCY'
+              AND l.entity_id = $1
+         )
+     AND ($2::uuid IS NULL OR d.document_id = $2)
+   ORDER BY dt.label_he, d.ingested_at DESC, d.document_id
+`;
+
+function portalKind(uri: string): PortalDocumentKind | null {
+  const match = /\.(pdf|jpg|png|tif)$/i.exec(uri);
+  const kind = match?.[1]?.toLowerCase();
+  if (kind === 'pdf' || kind === 'jpg' || kind === 'png' || kind === 'tif') {
+    return kind;
+  }
+  return null;
+}
+
+function portalDocuments(
+  rows: readonly {
+    document_id: string;
+    label_he: string;
+    storage_uri: string;
+  }[],
+): PortalDocument[] {
+  const out: PortalDocument[] = [];
+  for (const row of rows) {
+    const kind = portalKind(row.storage_uri);
+    if (kind === null) continue;
+    out.push({
+      documentId: row.document_id,
+      name: row.label_he,
+      kind,
+      storageUri: row.storage_uri,
+    });
+  }
+  return out;
+}
+
+async function portalDocumentRows(
+  db: Queryable,
+  tenancyId: string,
+  documentId: string | null,
+): Promise<PortalDocument[]> {
+  const result = await db.query<{
+    document_id: string;
+    label_he: string;
+    storage_uri: string;
+  }>(PORTAL_DOCUMENTS_SQL, [tenancyId, documentId]);
+  return portalDocuments(result.rows);
+}
+
+/** The flat page's list. Documents bound to this tenancy, and no others. #280. */
+export async function listPortalDocuments(
+  db: Queryable,
+  tenancyId: string,
+  clock: Clock,
+  options: ScopeOptions = {},
+): Promise<PortalDocument[]> {
+  const id = validId(tenancyId, 'tenancy');
+  return audited(db, clock, options, 'scope.portal_documents', id, async () =>
+    portalDocumentRows(db, id, null),
+  );
+}
+
+/**
+ * One document, if it is bound to this tenancy. A unit file, a building file and
+ * another tenancy's file are the same answer: nothing. #280.
+ */
+export async function resolvePortalDocument(
+  db: Queryable,
+  tenancyId: string,
+  documentId: string,
+  clock: Clock,
+  options: ScopeOptions = {},
+): Promise<PortalDocument | null> {
+  const tenancy = validId(tenancyId, 'tenancy');
+  const document = validId(documentId, 'document');
+  const rows = await audited(
+    db,
+    clock,
+    options,
+    'scope.portal_document',
+    tenancy,
+    async () => portalDocumentRows(db, tenancy, document),
+  );
+  return rows[0] ?? null;
 }
