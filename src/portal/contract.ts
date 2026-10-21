@@ -31,6 +31,7 @@ export {
   renderPasskeyOffer,
   renderPasskeysPage,
   renderPhonePage,
+  renderPortalCallPage,
   renderPortalCallsPage,
   renderReportPage,
 } from './internal/views.ts';

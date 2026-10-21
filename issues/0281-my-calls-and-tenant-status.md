@@ -1,13 +1,13 @@
 ---
 number: 281
 title: "My calls and Tenant status"
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: [278, 279]
 parent: 270
 created: 2026-10-19
-closed:
+closed: 2026-10-21
 ---
 
 ## Parent
@@ -22,18 +22,28 @@ The tenant sees a list of their calls, newest first, each with its date, categor
 
 ## Acceptance criteria
 
-- [ ] SPEC-calls is edited first: the Tenant status table.
-- [ ] The status mapping is a pure function with its own small test; a state the table does not name maps to בטיפול.
-- [ ] The list shows calls whose requester the number resolves to and whose tenancy the number reaches today, whatever the Source channel.
-- [ ] Policy case, red first: no tenant page contains a band, a clock, a brief or a draft.
-- [ ] Another tenant's call by identifier is not found.
-- [ ] Every page in this ticket works at phone width with no sideways scroll, by keyboard alone and with a screen reader (IS 5568), and its strings are Hebrew rows, not literals.
-- [ ] Clicked on `:3000` before merge.
-- [ ] Each status chip uses its own `data-status` colour from the portal stylesheet; ממתין לתיאום is the only warm one, because it is the only status that asks the tenant to act.
-- [ ] A call card's meta line is one line, ellipsised, and never wraps into the progress bar.
-- [ ] The home page's next-visit card appears only when an open call has a Visit with a time, and shows that time; with none, the card is absent.
+- [x] SPEC-calls is edited first: the Tenant status table.
+- [x] The status mapping is a pure function with its own small test; a state the table does not name maps to בטיפול.
+- [x] The list shows calls whose requester the number resolves to and whose tenancy the number reaches today, whatever the Source channel.
+- [x] Policy case, red first: no tenant page contains a band, a clock, a brief or a draft.
+- [x] Another tenant's call by identifier is not found.
+- [x] Every page in this ticket works at phone width with no sideways scroll, by keyboard alone and with a screen reader (IS 5568), and its strings are Hebrew rows, not literals.
+- [x] Clicked on `:3000` before merge.
+- [x] Each status chip uses its own `data-status` colour from the portal stylesheet; ממתין לתיאום is the only warm one, because it is the only status that asks the tenant to act.
+- [x] A call card's meta line is one line, ellipsised, and never wraps into the progress bar.
+- [x] The home page's next-visit card appears only when an open call has a Visit with a time, and shows that time; with none, the card is absent.
 
 ## Blocked by
 
 - #278
 - #279
+
+## Comment — 2026-10-21
+
+Closed. Tenant status is derived, never stored: a state the table does not name, including a closed call with no exit, is בטיפול. The list is that party's calls on a tenancy the number reaches today, any source channel, newest first. A call returned to the filtered list is absent. Opening one shows the tenant's messages and the office's replies. A brief, a draft, a band and an internal name are not on the page. Another tenant's call is not found.
+
+A visit is two timestamps on the call, both or neither. No command writes them yet. The home card shows the earliest open visit that has not ended, and is absent otherwise. The calls page is two links, not a tab widget, so it works with no script.
+
+The portal does not import the calls or channel modules. Those reads are passed in from the composition root, because a value import cycles through the building switch.
+
+Clicked on the restarted `:3000`. The browser session already open belongs to a building that is not in the portal, and that session was left signed in. The portal tenancy was signed in over HTTP on the same server: home (open calls, no visit card, because that tenancy has no visit time), the calls list, the closed list, and one thread. The served stylesheet has the one-line meta, the warm waiting border, and the dark visit card. Not pushed.

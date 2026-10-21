@@ -21,12 +21,15 @@ import {
   countOpenCalls,
   getCall,
   listCategories,
+  listPortalCalls,
   readEmergencySettings,
+  readPortalCall,
   readResponseGoal,
   registerCallsRoutes,
   saveEmergencySettings,
   saveResponseGoal,
   startCallBrief,
+  tenantStatus,
   upsertCategory,
 } from './calls/contract.ts';
 import {
@@ -1084,6 +1087,12 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       return (await objects.read(path)).bytes;
     },
     sender: deps.codeSender ?? createUnavailableCodeSender(),
+    calls: {
+      list: (partyIds) => listPortalCalls(deps.pool, partyIds),
+      read: (callId, partyIds) => readPortalCall(deps.pool, callId, partyIds),
+      status: tenantStatus,
+    },
+    messagesOnCall: (callId) => listMessagesOnCall(deps.pool, callId),
     submitQuestion: async (question) => {
       const outcome = await receiveIncoming(
         deps.pool,

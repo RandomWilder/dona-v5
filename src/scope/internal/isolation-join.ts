@@ -482,6 +482,8 @@ export interface PortalTenancy {
   addressLine: string;
   city: string;
   portalEnabled: boolean;
+  /** The party the number resolves to on this tenancy. Calls are asked by it. */
+  partyId: string;
   parking: string[];
   storage: string[];
 }
@@ -530,6 +532,7 @@ export async function resolvePortalTenancies(
       addressLine: row.address_line,
       city: row.city,
       portalEnabled: row.portal_enabled,
+      partyId: row.party_id,
       parking: assignedNames(row.parking_name, row.second_parking_name),
       storage: assignedNames(row.storage_name, row.second_storage_name),
     }))

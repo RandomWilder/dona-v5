@@ -180,6 +180,29 @@ goal only. A late filter, labeled לא בזמן, means near or past. Amber and r
 no segment of their own. Red must be greater than amber. A threshold above a year of minutes is
 refused. A save is audited and is read on the next request, so it takes effect with no deploy.
 
+**Tenant status (#281).** Derived when the portal reads a call, never stored, and never a
+response-goal band. The words are the portal's copy rows. A state this table does not name,
+including a closed call with no exit, is בטיפול, so an internal name never reaches the tenant.
+
+| Call state | Tenant status |
+|---|---|
+| NEW, IDENTIFIED | התקבלה |
+| TRIAGED, RESPONSIBILITY SET | בטיפול |
+| WINDOWS COLLECTED, OFFERED | ממתין לתיאום |
+| SCHEDULED | נקבע ביקור |
+| Exit Answered / Forwarded / Duplicate / Cancelled | נענתה / הועברה / אוחדה / בוטלה |
+
+The portal's list is every ServiceCall whose requester is a party the number resolves to on a
+tenancy the number reaches today, on any Source channel, newest first. A call returned to the
+filtered list is not on it. Opening one shows the tenant's messages and the office's replies.
+A brief, a draft, a band, a clock and an internal state name are not on any tenant page. Another
+tenant's call, asked for by its identifier, is not found.
+
+A visit's time is two timestamps on the call, `visit_starts_at` and `visit_ends_at`, both set or
+neither, and the end after the start. No command writes them yet; the visit flow will. The home
+page shows the next visit only when an open call has both and the visit has not ended, and it
+shows that time. With no such visit the card is absent.
+
 **Filtered messages** are kept for 6 months and then deleted by a scheduled sweep, unless rescued
 into a call. Six months is counted from when the message arrived. A message exactly that old is
 kept. A call returned to filtered is a filtered message again, counted from the return: once that

@@ -95,10 +95,14 @@ export {
   startCallBrief,
 } from './internal/brief.ts';
 export { replyLanguage, writeCallDraft } from './internal/draft.ts';
+export type { PortalCall, PortalReply } from './internal/portal-read.ts';
+export { listPortalCalls, readPortalCall } from './internal/portal-read.ts';
 export type { CallsDeps } from './internal/routes.ts';
 export { registerCallsRoutes } from './internal/routes.ts';
 export type { SendCallReplySpec } from './internal/send.ts';
 export { sendCallReply } from './internal/send.ts';
+export type { TenantStatus } from './internal/tenant-status.ts';
+export { tenantStatus } from './internal/tenant-status.ts';
 export type {
   CallScreen,
   CallsScreen,

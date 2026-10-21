@@ -18,6 +18,13 @@ import {
   resolvePortalTenancies,
 } from '../../scope/contract.ts';
 import { csrfTokenFor, verifyCsrf } from '../../staff/contract.ts';
+import {
+  callCard,
+  nextVisit,
+  type ShownCall,
+  type TenantStatus,
+  threadScreen,
+} from './call-screen.ts';
 import { describeChallenge, requestCode, verifyCode } from './codes.ts';
 import { portalText } from './copy.ts';
 import {
@@ -75,9 +82,11 @@ import {
   renderPasskeyOffer,
   renderPasskeysPage,
   renderPhonePage,
+  renderPortalCallPage,
   renderPortalCallsPage,
   renderReportPage,
 } from './views.ts';
+import { zoned } from './when.ts';
 
 const TENANT = { config: { tenant: 'public' } } as const;
 
@@ -103,6 +112,22 @@ export interface PortalDeps {
    * reaching calls or channel pulls a cycle through the building switch.
    */
   submitQuestion?: (question: PortalQuestion) => Promise<PortalReceipt | null>;
+  /**
+   * The tenant's calls. Wired at the composition root: this file importing
+   * the calls contract pulls the brief through the building switch.
+   */
+  calls: {
+    list(partyIds: readonly string[]): Promise<ShownCall[]>;
+    read(
+      callId: string,
+      partyIds: readonly string[],
+    ): Promise<ShownCall | null>;
+    status(state: string, exitKind: string | null): TenantStatus;
+  };
+  /** Messages on a call. Wired beside the calls, for the same cycle. */
+  messagesOnCall(
+    callId: string,
+  ): Promise<readonly { at: Date; body: string; echo: boolean }[]>;
 }
 
 function secureOf(request: {
@@ -255,7 +280,7 @@ export function registerPortalRoutes(
       if (session !== null) {
         const who = await openPortal(request.headers.cookie, token, session);
         if (who.kind === 'notice') return go(reply, '/notice', []);
-        return html(reply, pageFor(who, 'home'));
+        return html(reply, await homePage(who));
       }
     }
     const form = newOpaqueToken();
@@ -325,22 +350,69 @@ export function registerPortalRoutes(
     return name === '' ? hello : `${hello}, ${name}`;
   }
 
-  function pageFor(who: OpenPortal, where: 'home' | 'calls'): string {
+  function reached(who: OpenPortal): string[] {
+    return [...new Set(who.rows.map((row) => row.partyId))];
+  }
+
+  async function callsOf(who: OpenPortal): Promise<ShownCall[]> {
+    if (who.chosen === null) return [];
+    const calls = await deps.calls.list([who.chosen.partyId]);
+    await audit.write(
+      {
+        actorKind: 'tenant',
+        actorId: who.identityId,
+        action: 'portal.list_calls',
+        subjectId: who.chosen.tenancyId,
+        inputs: { count: calls.length },
+      },
+      { outcome: 'ok' },
+    );
+    return calls;
+  }
+
+  async function homePage(who: OpenPortal): Promise<string> {
     if (who.chosen === null) {
       return renderNoAccessPage({
         csrf: csrfTokenFor(who.token),
         phone: nationalDisplay(who.phone),
       });
     }
-    const screen = {
+    const calls = await callsOf(who);
+    const open = calls.filter((call) => call.state !== 'CLOSED');
+    const zone = clock.zone;
+    return renderHomePage({
       csrf: csrfTokenFor(who.token),
       choices: choicesOf(who.rows),
       chosenId: who.chosen.tenancyId,
-    };
-    if (where === 'calls') return renderPortalCallsPage(screen);
-    return renderHomePage({
-      ...screen,
       greeting: greetingFor(who.chosen),
+      openCount: open.length,
+      calls: open
+        .slice(0, 2)
+        .map((call) => callCard(call, zone, deps.calls.status)),
+      visit: nextVisit(calls, clock.now(), zone),
+    });
+  }
+
+  async function callsPage(who: OpenPortal, closed: boolean): Promise<string> {
+    if (who.chosen === null) {
+      return renderNoAccessPage({
+        csrf: csrfTokenFor(who.token),
+        phone: nationalDisplay(who.phone),
+      });
+    }
+    const calls = await callsOf(who);
+    const zone = clock.zone;
+    const open = calls.filter((call) => call.state !== 'CLOSED');
+    const done = calls.filter((call) => call.state === 'CLOSED');
+    const shown = closed ? done : open;
+    return renderPortalCallsPage({
+      csrf: csrfTokenFor(who.token),
+      choices: choicesOf(who.rows),
+      chosenId: who.chosen.tenancyId,
+      closed,
+      openCount: open.length,
+      closedCount: done.length,
+      calls: shown.map((call) => callCard(call, zone, deps.calls.status)),
     });
   }
 
@@ -508,7 +580,67 @@ export function registerPortalRoutes(
     const who = await portalOf(request);
     if (who === null) return go(reply, '/', []);
     if (who.kind === 'notice') return go(reply, '/notice', []);
-    return html(reply, pageFor(who, 'calls'));
+    const closed = (request.query as { closed?: string }).closed === '1';
+    return html(reply, await callsPage(who, closed));
+  });
+
+  app.get('/calls/:callId', TENANT, async (request, reply) => {
+    const who = await portalOf(request);
+    if (who === null) return go(reply, '/', []);
+    if (who.kind === 'notice') return go(reply, '/notice', []);
+    if (who.chosen === null) {
+      return html(
+        reply,
+        renderNoAccessPage({
+          csrf: csrfTokenFor(who.token),
+          phone: nationalDisplay(who.phone),
+        }),
+      );
+    }
+    const callId = idOrEmpty(
+      (request.params as { callId?: string }).callId,
+      'call',
+    );
+    const call =
+      callId === '' ? null : await deps.calls.read(callId, reached(who));
+    if (call === null) {
+      reply.code(404);
+      await audit.write(
+        {
+          actorKind: 'tenant',
+          actorId: who.identityId,
+          action: 'portal.read_call',
+          subjectId: callId === '' ? who.chosen.tenancyId : callId,
+          inputs: {},
+        },
+        { outcome: 'error', code: 'not_found' },
+      );
+      return html(reply, renderMissingPage({ chosenId: who.chosen.tenancyId }));
+    }
+    const messages = await deps.messagesOnCall(call.id);
+    await audit.write(
+      {
+        actorKind: 'tenant',
+        actorId: who.identityId,
+        action: 'portal.read_call',
+        subjectId: call.id,
+        inputs: {},
+      },
+      { outcome: 'ok' },
+    );
+    const zone = clock.zone;
+    const screen = threadScreen(
+      call,
+      messages.map((message) => ({
+        at: message.at,
+        body: message.body,
+        echo: message.echo,
+      })),
+      zone,
+      zoned(clock.now(), zone).key,
+      deps.calls.status,
+    );
+    return html(reply, renderPortalCallPage(screen));
   });
 
   app.get('/more', TENANT, async (request, reply) => {

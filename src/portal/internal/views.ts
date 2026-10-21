@@ -7,6 +7,13 @@ import type { CodeChannel } from '../../channel/contract.ts';
 import { Html, h } from '../../kernel/ui/html.ts';
 import { icon } from '../../kernel/ui/icons.ts';
 import { csrfInput } from '../../kernel/ui/page.ts';
+import type {
+  CallCard,
+  TenantStatus,
+  ThreadDay,
+  VisitCard,
+} from './call-screen.ts';
+import { isClosedStatus } from './call-screen.ts';
 import { portalText } from './copy.ts';
 import { nationalDisplay } from './phone.ts';
 
@@ -257,18 +264,108 @@ function shell(title: string, body: Html, bar: Html): string {
   return page(title, h`<div class="tp-shell">${body}${bar}</div>`);
 }
 
+function statusChip(status: TenantStatus): Html {
+  return h`<span class="tp-chip" data-status="${status}">${portalText(`calls.status.${status}`)}</span>`;
+}
+
+function callMeta(card: CallCard): Html {
+  const tail =
+    card.visitOn === null
+      ? h`${card.channel}`
+      : h`${portalText('calls.visit_on')}<span dir="ltr">${card.visitOn}</span>`;
+  return h`<span class="tp-meta tp-ellipsis">${card.category} · <span dir="ltr">${card.opened}</span> · ${tail}</span>`;
+}
+
+function stepOf(status: TenantStatus): number {
+  if (status === 'received') return 1;
+  if (status === 'handling' || status === 'waiting') return 2;
+  if (status === 'visit') return 3;
+  return 4;
+}
+
+function progress(status: TenantStatus): Html {
+  if (status === 'waiting') {
+    return h`<span class="tp-wait-line">${portalText('calls.waiting')}</span>`;
+  }
+  const step = String(stepOf(status));
+  const closed = isClosedStatus(status) ? ' is-closed' : '';
+  return h`<span class="tp-progress${closed}" data-step="${step}" aria-hidden="true"><i></i><i></i><i></i><i></i></span>`;
+}
+
+function callLink(card: CallCard, boxed: boolean): Html {
+  const note =
+    card.note === null
+      ? h``
+      : h`<span class="tp-call-note">${portalText('calls.office_note')} ${card.note}</span>`;
+  if (!boxed) {
+    return h`<a class="tp-row" href="${card.href}"><span class="tp-row-text"><span class="tp-row-title">${card.title}</span>${callMeta(card)}</span>${statusChip(card.status)}</a>`;
+  }
+  const waiting = card.status === 'waiting' ? ' is-waiting' : '';
+  return h`<a class="tp-card tp-call${waiting}" href="${card.href}">
+    <span class="tp-call-head"><span class="tp-call-text"><span class="tp-call-title">${card.title}</span>${callMeta(card)}${note}</span>${statusChip(card.status)}</span>
+    ${progress(card.status)}
+  </a>`;
+}
+
+function visitHero(visit: VisitCard): Html {
+  return h`<a class="tp-hero" href="${visit.href}">
+    <span class="tp-hero-top"><span class="tp-kicker">${portalText('calls.next_visit')}</span>${statusChip('visit')}</span>
+    <span class="tp-hero-title">${visit.title}</span>
+    <span class="tp-hero-when">${icon('calendar', { class: 'tp-i i18' })}${visit.weekday} · <span dir="ltr">${visit.date}</span> · <span dir="ltr">${visit.from}–${visit.to}</span></span>
+  </a>`;
+}
+
+function stepper(status: TenantStatus): Html {
+  const keys = [
+    'calls.status.received',
+    'calls.status.handling',
+    'calls.status.visit',
+    'calls.status.done',
+  ] as const;
+  const step = stepOf(status);
+  const current = step === 4 ? null : step - 1;
+  return h`<ol class="tp-stepper" aria-label="${portalText('calls.stepper')}">${keys.map(
+    (key, index) => {
+      const done = current === null || index < current;
+      const here = current === index;
+      const mark = done ? icon('check', { class: 'tp-i i14' }) : h``;
+      return h`<li class="${done ? 'is-done' : here ? 'is-current' : ''}"${here ? h` aria-current="step"` : h``}><span class="tp-dot">${mark}</span>${portalText(key)}</li>`;
+    },
+  )}</ol>`;
+}
+
+function dayLabel(day: ThreadDay): Html {
+  const name = day.label === 'today' ? portalText('calls.today') : day.weekday;
+  return h`${name} · <span dir="ltr">${day.date}</span>`;
+}
+
 export function renderHomePage(screen: {
   csrf: string;
   greeting: string;
   choices: readonly PortalChoice[];
   chosenId: string;
+  openCount: number;
+  calls: readonly CallCard[];
+  visit: VisitCard | null;
 }): string {
   const flatHref = `/flat/${screen.chosenId}`;
+  const rows =
+    screen.calls.length === 0
+      ? h`<p class="tp-meta">${portalText('calls.empty_open')}</p>`
+      : h`<div class="tp-list">${screen.calls.map((card) => callLink(card, false))}</div>`;
   return shell(
     portalText('home.page'),
     h`<div class="tp-body">
       <div class="tp-head">${pill(screen.choices, screen.chosenId, screen.csrf, '/')}</div>
       <h1 class="tp-page-title">${screen.greeting}</h1>
+      ${screen.visit === null ? h`` : visitHero(screen.visit)}
+      <div class="tp-stack-10">
+        <div class="tp-section-row">
+          <h2 class="tp-section">${portalText('calls.open_home')} · <span dir="ltr">${String(screen.openCount)}</span></h2>
+          <a class="tp-link" href="/calls">${portalText('calls.all')}</a>
+        </div>
+        ${rows}
+      </div>
       <div class="tp-shortcuts">
         <a class="tp-shortcut" href="/ask"><span class="tp-well">${icon('message-circle', { class: 'tp-i i18' })}</span>${portalText('home.ask')}</a>
         <a class="tp-shortcut" href="${flatHref}#documents"><span class="tp-well">${icon('file', { class: 'tp-i i18' })}</span>${portalText('home.papers')}</a>
@@ -326,8 +423,18 @@ export function renderPortalCallsPage(screen: {
   csrf: string;
   choices: readonly PortalChoice[];
   chosenId: string;
+  closed: boolean;
+  openCount: number;
+  closedCount: number;
+  calls: readonly CallCard[];
 }): string {
   const flatHref = `/flat/${screen.chosenId}`;
+  const tab = (href: string, key: string, count: number, on: boolean): Html =>
+    h`<a href="${href}"${on ? h` aria-current="page"` : h``}>${portalText(key)} · <span dir="ltr">${String(count)}</span></a>`;
+  const list =
+    screen.calls.length === 0
+      ? h`<p class="tp-meta">${portalText(screen.closed ? 'calls.empty_closed' : 'calls.empty_open')}</p>`
+      : h`<div class="tp-calls">${screen.calls.map((card) => callLink(card, true))}</div>`;
   return shell(
     portalText('calls.page'),
     h`<div class="tp-body">
@@ -335,8 +442,57 @@ export function renderPortalCallsPage(screen: {
         <h1 class="tp-page-title">${portalText('calls.title')}</h1>
         ${pill(screen.choices, screen.chosenId, screen.csrf, '/calls')}
       </div>
+      <div class="tp-seg">
+        ${tab('/calls', 'calls.open', screen.openCount, !screen.closed)}
+        ${tab('/calls?closed=1', 'calls.closed', screen.closedCount, screen.closed)}
+      </div>
+      ${list}
     </div>`,
     tabBar('calls', flatHref),
+  );
+}
+
+export function renderPortalCallPage(screen: {
+  title: string;
+  number: string;
+  category: string;
+  opened: string;
+  status: TenantStatus;
+  visit: VisitCard | null;
+  days: readonly ThreadDay[];
+}): string {
+  const closed = isClosedStatus(screen.status);
+  const visit =
+    screen.visit === null
+      ? h``
+      : h`<div class="tp-strip">
+          <span class="tp-datetile"><small>${screen.visit.weekdayShort}</small><b dir="ltr">${screen.visit.date}</b></span>
+          <span class="tp-visit-text"><b>${portalText('calls.visit_name')}</b><span>${screen.visit.weekday} · <span dir="ltr">${screen.visit.from}–${screen.visit.to}</span></span></span>
+        </div>`;
+  const days = screen.days.map(
+    (day) => h`<p class="tp-day">${dayLabel(day)}</p>
+      <div class="tp-thread">${day.bubbles.map((bubble) =>
+        bubble.side === 'office'
+          ? h`<div class="tp-msg is-office"><span class="tp-who">${portalText('calls.office')}</span><p class="tp-bubble">${bubble.body}<span class="tp-time"><span dir="ltr">${bubble.time}</span></span></p></div>`
+          : h`<div class="tp-msg is-tenant"><p class="tp-bubble">${bubble.body}<span class="tp-time"><span dir="ltr">${bubble.time}</span></span></p></div>`,
+      )}</div>`,
+  );
+  return page(
+    screen.title,
+    h`<div class="tp-ask">
+      <header class="tp-bar">
+        <div class="tp-bar-row">
+          <a class="tp-icon-btn" href="/calls" aria-label="${portalText('calls.back')}">${icon('chevron-right', { class: 'tp-i i18' })}</a>
+          <span class="tp-bar-title"><b>${screen.title}</b><small>${portalText('calls.number')} <span dir="ltr">${screen.number}</span> · ${screen.category} · <span dir="ltr">${screen.opened}</span></small></span>
+          ${closed ? statusChip(screen.status) : h``}
+        </div>
+      </header>
+      <div class="tp-body">
+        ${stepper(screen.status)}
+        ${visit}
+        ${days}
+      </div>
+    </div>`,
   );
 }
 
