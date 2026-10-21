@@ -407,7 +407,7 @@ export function createMicrosoftOidc(
         typeof token.access_token !== 'string' ||
         token.access_token.length === 0
       ) {
-        throw new IdentityRefusal('token exchange failed', 400);
+        throw new IdentityRefusal('no access token', 400);
       }
       const profile = await ownProfile(token.access_token);
       return {

@@ -263,13 +263,21 @@ describe('policy · a Microsoft sign-in is Dona Dom’s tenant and dona.co.il, o
       );
       assert.equal(answer.body, refusals[0]?.body);
     }
-    const untouched = await pool.query<{ idp_local_id: string | null }>(
-      'SELECT idp_local_id FROM staff_account WHERE email = ANY($1::text[])',
+    // Unbound, and no lockout spent: an address that was refused, or two that name two accounts,
+    // is not evidence against either account.
+    const untouched = await pool.query<{
+      idp_local_id: string | null;
+      failed_attempts: number;
+    }>(
+      'SELECT idp_local_id, failed_attempts FROM staff_account WHERE email = ANY($1::text[])',
       [[ALIASED, OTHER]],
     );
     assert.deepEqual(
-      untouched.rows.map((row) => row.idp_local_id),
-      [null, null],
+      untouched.rows.map((row) => [row.idp_local_id, row.failed_attempts]),
+      [
+        [null, 0],
+        [null, 0],
+      ],
     );
 
     // The primary address is the onmicrosoft one; the staff row names the alias. Proxy entries

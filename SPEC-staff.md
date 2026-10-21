@@ -203,8 +203,8 @@ cannot add a colleague's address to themselves. Personal Microsoft accounts (out
 live) are a different tenant and a different issuer, and they fail the first gate.
 
 The Graph access token is used for that one request and dropped. It is not stored, logged or put in
-a cookie. Graph unreachable, or answering 5xx, is **unavailable**, not a refusal; any other failed
-answer is a refusal.
+a cookie. Graph unreachable, answering 5xx, or answering 200 with a body that is not a profile is
+**unavailable**, not a refusal — the same as the token endpoint; any other failed answer is a refusal.
 
 The sign-in app is a separate registration from the mailbox app, in that same tenant, one per
 environment. It holds `openid` and `User.Read` — the signed-in person's own profile — and no mail
