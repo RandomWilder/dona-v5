@@ -434,9 +434,11 @@ and every screen in every module is a self-contained HTML file that links it.
   bar and an off-canvas rail, not a wrapping wrap of the same links. The destinations still arrive
   as `nav`; the kernel still learns no path. A module that needs a phone layout of *its* cards keeps
   that in its own `styles`. The guest frame (login) has no rail and no menu.
-- **`ui/fonts/*.woff2`** — Heebo (Hebrew + Latin subsets) and IBM Plex Mono, self-hosted with their
-  OFL licences beside them. No Google Fonts request: tenant screens must not leak a visit to a third
-  party, and the pages must render on a slow Israeli mobile connection without a second DNS lookup.
+- **`ui/fonts/*.woff2`** — Heebo (Hebrew + Latin subsets, weight axis through 800) and IBM Plex Mono,
+  self-hosted with their OFL licences beside them. Heebo has no Cyrillic glyphs, so that range is
+  Noto Sans on the same family, with its OFL licence beside it. No Google Fonts request: tenant
+  screens must not leak a visit to a third party, and the pages must render on a slow Israeli
+  mobile connection without a second DNS lookup.
 - **`ui/assets.ts`** — `registerUiAssets(app)` serves `GET /ui/tokens.css` and `GET /ui/fonts/:file`.
   Files are read once at registration, not per request: the deployed image is immutable.
 - **Font names are an allowlist, never a path.** The `:file` parameter is matched against a fixed set

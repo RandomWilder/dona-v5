@@ -14,12 +14,18 @@ import type {
   VisitCard,
 } from './call-screen.ts';
 import { isClosedStatus } from './call-screen.ts';
-import { portalText } from './copy.ts';
+import {
+  currentPortalLanguage,
+  portalDir,
+  portalLanguages,
+  portalText,
+} from './copy.ts';
 import { nationalDisplay } from './phone.ts';
 
 function page(title: string, body: Html): string {
+  const language = currentPortalLanguage();
   return `<!doctype html>
-${h`<html lang="he" dir="rtl">
+${h`<html lang="${language}" dir="${portalDir(language)}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -37,16 +43,49 @@ function notice(key: string | null): Html {
   return h`<p class="tp-notice" role="alert">${portalText(key)}</p>`;
 }
 
-function languageSheet(): Html {
-  return h`<div class="tp-lang">
-    <input id="tp-lang" class="tp-lang-toggle" type="checkbox" aria-label="${portalText('sign_in.language')}" />
-    <label for="tp-lang" class="tp-icon-btn is-globe" aria-hidden="true">${icon('globe', { class: 'tp-i i22' })}</label>
+function languageLabel(): string {
+  return portalLanguages()
+    .map((language) => portalText('lang.word', language))
+    .join(' · ');
+}
+
+function languageTitle(): Html {
+  const parts = portalLanguages().map(
+    (language) =>
+      h`<bdi lang="${language}" dir="${portalDir(language)}">${portalText('lang.word', language)}</bdi>`,
+  );
+  return parts.reduce(
+    (title, part, index) => (index === 0 ? part : h`${title} · ${part}`),
+    h``,
+  );
+}
+
+function languageSheet(csrf: string, next: string, row: boolean): Html {
+  const current = currentPortalLanguage();
+  const opener = row
+    ? h`<label for="tp-lang" class="tp-menu-row">${portalText('sign_in.language')}</label>`
+    : h`<label for="tp-lang" class="tp-icon-btn is-globe">${icon('globe', { class: 'tp-i i22' })}<span class="tp-sr">${languageLabel()}</span></label>`;
+  const choices = portalLanguages().map((language) => {
+    const on = language === current;
+    return h`<form method="post" action="/language">
+      ${csrfInput(csrf)}
+      <input type="hidden" name="language" value="${language}" />
+      <input type="hidden" name="next" value="${next}" />
+      <button class="tp-lang-row" type="submit" lang="${language}" dir="${portalDir(language)}">
+        <span class="tp-lang-name">${portalText('lang.name', language)}${on ? h`` : h`<small>${portalText('lang.hint', language)}</small>`}</span>
+        ${on ? icon('check', { class: 'tp-i' }) : h``}
+      </button>
+    </form>`;
+  });
+  return h`<div class="tp-lang${row ? ' is-row' : ''}">
+    <input id="tp-lang" class="tp-lang-toggle" type="checkbox" aria-label="${languageLabel()}" />
+    ${opener}
     <div class="tp-sheet-layer">
-      <label for="tp-lang" class="tp-scrim-close"><span class="tp-sr">${portalText('code.back')}</span></label>
+      <label for="tp-lang" class="tp-scrim-close"><span class="tp-sr">${portalText('ask.close')}</span></label>
       <div class="tp-sheet" role="dialog" aria-labelledby="tp-lang-title">
         <span class="tp-grabber" aria-hidden="true"></span>
-        <h2 id="tp-lang-title" class="tp-sheet-title">${portalText('sign_in.language_title')}</h2>
-        <p class="tp-lang-row"><b>${portalText('sign_in.language_current')}</b>${icon('check', { class: 'tp-i' })}</p>
+        <h2 id="tp-lang-title" class="tp-sheet-title">${languageTitle()}</h2>
+        <div class="tp-list">${choices}</div>
       </div>
     </div>
   </div>`;
@@ -64,7 +103,7 @@ export function renderPhonePage(screen: {
     h`<div class="tp-body is-auth">
       <div class="tp-auth-top">
         <span class="tp-brand"><span class="tp-brand-mark">${portalText('brand.mark')}</span>${portalText('brand')}</span>
-        ${languageSheet()}
+        ${languageSheet(screen.csrf, '/', false)}
       </div>
       <div class="tp-stack tp-auth-head">
         <h1 class="tp-display">${portalText('sign_in.title')}</h1>
@@ -144,7 +183,8 @@ export function renderCodePage(screen: {
     portalText('code.page'),
     h`<div class="tp-body is-auth">
       <div class="tp-auth-top">
-        <a class="tp-icon-btn" href="/" aria-label="${portalText('code.back')}">${icon('chevron-right', { class: 'tp-i i18' })}</a>
+        <a class="tp-icon-btn tp-back" href="/" aria-label="${portalText('code.back')}">${icon('chevron-right', { class: 'tp-i i18' })}</a>
+        ${languageSheet(screen.csrf, '/sign-in/code', false)}
       </div>
       <div class="tp-stack">
         <h1 class="tp-display">${portalText('code.title')}</h1>
@@ -194,7 +234,16 @@ function monthsLeft(months: number): Html {
   if (months <= 0) return h`${portalText('flat.under_month')}`;
   if (months === 1) return h`${portalText('flat.one_month')}`;
   if (months === 2) return h`${portalText('flat.two_months')}`;
-  return h`${portalText('flat.months_left')} <span dir="ltr">${String(months)}</span> ${portalText('flat.months')}`;
+  const form = new Intl.PluralRules(currentPortalLanguage()).select(months);
+  const word =
+    form === 'one'
+      ? portalText('flat.months_one')
+      : form === 'few'
+        ? portalText('flat.months_few')
+        : portalText('flat.months');
+  const number = h`<span dir="ltr">${String(months)}</span>`;
+  const left = portalText('flat.months_left');
+  return left === '' ? h`${number} ${word}` : h`${left} ${number} ${word}`;
 }
 
 function pill(
@@ -356,7 +405,7 @@ export function renderHomePage(screen: {
   return shell(
     portalText('home.page'),
     h`<div class="tp-body">
-      <div class="tp-head">${pill(screen.choices, screen.chosenId, screen.csrf, '/')}</div>
+      <div class="tp-head">${pill(screen.choices, screen.chosenId, screen.csrf, '/')}${languageSheet(screen.csrf, '/', false)}</div>
       <h1 class="tp-page-title">${screen.greeting}</h1>
       ${screen.visit === null ? h`` : visitHero(screen.visit)}
       <div class="tp-stack-10">
@@ -505,7 +554,7 @@ export function renderPortalCallPage(screen: {
     h`<div class="tp-ask is-thread">
       <header class="tp-bar">
         <div class="tp-bar-row">
-          <a class="tp-icon-btn" href="/calls" aria-label="${portalText('calls.back')}">${icon('chevron-right', { class: 'tp-i i18' })}</a>
+          <a class="tp-icon-btn tp-back" href="/calls" aria-label="${portalText('calls.back')}">${icon('chevron-right', { class: 'tp-i i18' })}</a>
           <span class="tp-bar-title"><b>${screen.title}</b><small>${portalText('calls.number')} <span dir="ltr">${screen.number}</span> · ${screen.category} · <span dir="ltr">${screen.opened}</span></small></span>
           ${closed ? statusChip(screen.status) : h``}
         </div>
@@ -535,7 +584,7 @@ export function renderMorePage(screen: { csrf: string }): string {
       <div class="tp-body">
         <div class="tp-menu">
           <a class="tp-menu-row" href="/ask">${portalText('home.ask')}</a>
-          <div class="tp-menu-row"><span>${portalText('sign_in.language')}</span>${languageSheet()}</div>
+          ${languageSheet(screen.csrf, '/more', true)}
           <a class="tp-menu-row" href="/passkeys">${portalText('home.passkeys')}</a>
         </div>
         <form method="post" action="/sign-out">
@@ -590,7 +639,7 @@ export function renderReportPage(screen: ReportDraft): string {
   const back =
     screen.step === 1
       ? h``
-      : h`<button class="tp-icon-btn" type="submit" name="action" value="back" aria-label="${portalText('report.back')}">${icon('chevron-right', { class: 'tp-i i18' })}</button>`;
+      : h`<button class="tp-icon-btn tp-back" type="submit" name="action" value="back" aria-label="${portalText('report.back')}">${icon('chevron-right', { class: 'tp-i i18' })}</button>`;
   const close =
     screen.step === 1
       ? h`<a class="tp-icon-btn" href="/" aria-label="${portalText('report.close')}">${icon('x', { class: 'tp-i i18' })}</a>`
@@ -969,31 +1018,47 @@ function paragraphs(body: string): Html {
     .map((line) => h`<p class="tp-long">${line}</p>`)}`;
 }
 
+function fallbackNote(fallback: boolean | undefined): Html {
+  if (!fallback) return h``;
+  return h`<p class="tp-legal-fallback">${portalText('legal.fallback')}</p>`;
+}
+
+function shownLegal(fallback: boolean | undefined, inner: Html): Html {
+  if (!fallback) return inner;
+  return h`<div lang="he" dir="rtl">${inner}</div>`;
+}
+
 function optSwitch(opt: {
   key: string;
   title: string;
   summary: string;
   on: boolean;
+  fallback?: boolean;
 }): Html {
   const checked = opt.on ? h` checked` : h``;
   return h`<label class="tp-card is-row" for="opt-${opt.key}">
-    <span class="tp-row-text">
+    ${fallbackNote(opt.fallback)}
+    ${shownLegal(
+      opt.fallback,
+      h`<span class="tp-row-text">
       <b class="tp-row-title">${opt.title}</b>
       <span class="tp-meta">${opt.summary}</span>
-    </span>
+    </span>`,
+    )}
     <span class="tp-switch"><input id="opt-${opt.key}" name="opt_${opt.key}" type="checkbox" role="switch" value="on"${checked} /></span>
   </label>`;
 }
 
 export function renderNoticePage(screen: {
   csrf: string;
-  privacy: { id: string; title: string; summary: string };
-  terms: { id: string; title: string; summary: string };
+  privacy: { id: string; title: string; summary: string; fallback?: boolean };
+  terms: { id: string; title: string; summary: string; fallback?: boolean };
   optIns: ReadonlyArray<{
     key: string;
     title: string;
     summary: string;
     on: boolean;
+    fallback?: boolean;
   }>;
 }): string {
   return page(
@@ -1008,16 +1073,24 @@ export function renderNoticePage(screen: {
         <input type="hidden" name="privacy" value="${screen.privacy.id}" />
         <input type="hidden" name="terms" value="${screen.terms.id}" />
         <article class="tp-card">
-          <div class="tp-row">
+          ${fallbackNote(screen.privacy.fallback)}
+          ${shownLegal(
+            screen.privacy.fallback,
+            h`<div class="tp-row">
             <span class="tp-well">${icon('shield', { class: 'tp-i i18' })}</span>
             <h2 class="tp-section">${screen.privacy.title}</h2>
           </div>
-          <p class="tp-long">${screen.privacy.summary}</p>
-          <div class="tp-row">
+          <p class="tp-long">${screen.privacy.summary}</p>`,
+          )}
+          ${fallbackNote(screen.terms.fallback)}
+          ${shownLegal(
+            screen.terms.fallback,
+            h`<div class="tp-row">
             <span class="tp-well">${icon('file', { class: 'tp-i i18' })}</span>
             <h2 class="tp-section">${screen.terms.title}</h2>
           </div>
-          <p class="tp-long">${screen.terms.summary}</p>
+          <p class="tp-long">${screen.terms.summary}</p>`,
+          )}
           <a class="tp-link" href="/notice/full">${portalText('notice.full')}</a>
         </article>
         ${screen.optIns.map((opt) => optSwitch(opt))}
@@ -1028,20 +1101,28 @@ export function renderNoticePage(screen: {
 }
 
 export function renderNoticeFullPage(screen: {
-  privacy: { title: string; body: string };
-  terms: { title: string; body: string };
+  privacy: { title: string; body: string; fallback?: boolean };
+  terms: { title: string; body: string; fallback?: boolean };
 }): string {
   return page(
     portalText('notice.full_page'),
     h`<div class="tp-body is-auth">
       <h1 class="tp-display">${portalText('notice.full_page')}</h1>
       <article class="tp-card">
-        <h2 class="tp-section">${screen.privacy.title}</h2>
-        ${paragraphs(screen.privacy.body)}
+        ${fallbackNote(screen.privacy.fallback)}
+        ${shownLegal(
+          screen.privacy.fallback,
+          h`<h2 class="tp-section">${screen.privacy.title}</h2>
+        ${paragraphs(screen.privacy.body)}`,
+        )}
       </article>
       <article class="tp-card">
-        <h2 class="tp-section">${screen.terms.title}</h2>
-        ${paragraphs(screen.terms.body)}
+        ${fallbackNote(screen.terms.fallback)}
+        ${shownLegal(
+          screen.terms.fallback,
+          h`<h2 class="tp-section">${screen.terms.title}</h2>
+        ${paragraphs(screen.terms.body)}`,
+        )}
       </article>
       <a class="tp-text-btn" href="/notice">${portalText('notice.back')}</a>
     </div>`,

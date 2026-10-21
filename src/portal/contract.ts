@@ -3,6 +3,10 @@
 // document of its own.
 
 export type { CodeNotice } from './internal/codes.ts';
+export {
+  PORTAL_LANG_COOKIE,
+  PORTAL_LANG_MAX_AGE,
+} from './internal/language.ts';
 export type { PlaceholderText } from './internal/legal.ts';
 export { currentPlaceholderTexts } from './internal/legal.ts';
 export type { PortalDeps } from './internal/routes.ts';

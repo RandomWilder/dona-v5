@@ -332,6 +332,17 @@ byte for byte. A screen that handles its own refusal still does; this is only th
   no tab bar. The tab bar — home, calls, report, the flat, more — is on the home, calls and flat
   pages. Report is the raised control; its form is #282. More holds ask the office, the language,
   the passkeys and sign out. The lease bar is the tenancy's dates against the clock's today.
+- **The portal's three languages** (#285). Every user-facing sentence is a row keyed by language
+  (`he`, `en`, `ru`). A page carries no sentence of its own, and a language added later is rows in
+  that same list. `lang` and `dir` follow the language in use: Hebrew is right to left, English and
+  Russian are left to right, and the layout is logical properties, so a back arrow and the send
+  mark flip with the direction. The starting language is the Party's `preferred_language` when it
+  is one of the three, otherwise Hebrew. The tenant's later choice, from the language sheet on the
+  sign-in screens, the home page and the עוד tab, is kept in `dona_portal_lang` and wins over the
+  record. A legal text is the current row in the chosen language. A missing translation is the
+  Hebrew row, and the page says so. Heebo's Hebrew and Latin files include weight 800, and the
+  face allows it. Heebo has no Cyrillic glyphs, so that range is Noto Sans on the same family
+  and Russian does not fall back to a system face.
 - **Every write route carries a CSRF token, and the token is derived rather than stored** (slice
   5.2): `sha256('csrf:' + <session token>)`, computed from the `HttpOnly` cookie the request already
   carries, held in no column and defended by the same policy case that forbids a stored token.

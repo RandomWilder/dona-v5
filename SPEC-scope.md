@@ -133,7 +133,7 @@ the cache this read exists to avoid.
 
 Rows come back lowest unit number first, so a request that has not chosen yet has one answer.
 The row carries what the flat page shows — address, city, dates, the assigned bay and storage by
-name, the party's given name, and that party's id — so the portal does not write a second join.
+name, the party's given name, that party's preferred language, and that party's id — so the portal does not write a second join.
 The id is how the portal asks for that party's calls without copying this predicate. The audit line is the
 phone line's: the party reached and how many rows, never the number, the name or the address.
 

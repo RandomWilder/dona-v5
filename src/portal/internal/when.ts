@@ -2,6 +2,14 @@
 // file only formats the time and the weekday a tenant reads.
 
 import { dayIn } from '../../kernel/clock.ts';
+import { currentPortalLanguage } from './copy.ts';
+
+function weekdayLocale(): string {
+  const language = currentPortalLanguage();
+  if (language === 'ru') return 'ru-RU';
+  if (language === 'en') return 'en-GB';
+  return 'he-IL';
+}
 
 export interface Zoned {
   key: string;
@@ -32,11 +40,11 @@ export function zoned(at: Date, zone: string): Zoned {
     short: `${day}.${month}`,
     full: `${day}.${month}.${year}`,
     time: `${read('hour')}:${read('minute')}`,
-    weekdayShort: new Intl.DateTimeFormat('he-IL', {
+    weekdayShort: new Intl.DateTimeFormat(weekdayLocale(), {
       timeZone: zone,
       weekday: 'short',
     }).format(at),
-    weekdayLong: new Intl.DateTimeFormat('he-IL', {
+    weekdayLong: new Intl.DateTimeFormat(weekdayLocale(), {
       timeZone: zone,
       weekday: 'long',
     }).format(at),

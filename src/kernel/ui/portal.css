@@ -519,6 +519,34 @@ body.portal .tp-otp input {
   inline-size: 44px;
   block-size: 44px;
 }
+.tp-lang.is-row {
+  inline-size: auto;
+  block-size: auto;
+}
+.tp-lang-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  inline-size: 100%;
+  margin: 0;
+  padding-block: 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.tp-lang-name {
+  display: grid;
+  gap: 2px;
+}
+.tp-lang-name small {
+  color: var(--tp-ink-subtle);
+  font-size: 12px;
+  font-weight: 400;
+}
 .tp-lang-toggle {
   position: absolute;
   inset: 0;
@@ -562,13 +590,6 @@ body.portal .tp-otp input {
 .tp-sheet-title {
   font-size: 20px;
   font-weight: 700;
-}
-.tp-lang-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-block: 14px;
 }
 .tp-lang-row .tp-i {
   color: var(--tp-accent-700);
@@ -712,9 +733,6 @@ body.portal .tp-otp input {
 .tp-send {
   background: var(--tp-accent-600);
   color: var(--tp-on-accent);
-}
-.tp-send .tp-i {
-  transform: scaleX(-1);
 }
 .tp-composer input[type="text"] {
   flex: 1;
@@ -1491,4 +1509,10 @@ button.tp-icon-btn {
   border-radius: var(--tp-r-pill);
   background: var(--tp-ok-tint);
   color: var(--tp-ok);
+}
+[dir="rtl"] .tp-send .tp-i {
+  transform: scaleX(-1);
+}
+[dir="ltr"] .tp-back .tp-i {
+  transform: scaleX(-1);
 }

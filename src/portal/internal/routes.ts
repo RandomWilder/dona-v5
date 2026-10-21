@@ -26,7 +26,13 @@ import {
   threadScreen,
 } from './call-screen.ts';
 import { describeChallenge, requestCode, verifyCode } from './codes.ts';
-import { portalText } from './copy.ts';
+import { portalLanguages, portalText, runPortalLanguage } from './copy.ts';
+import {
+  languageReturn,
+  PORTAL_LANG_COOKIE,
+  PORTAL_LANG_MAX_AGE,
+  startingLanguage,
+} from './language.ts';
 import {
   displayDate,
   greetingKey,
@@ -253,6 +259,39 @@ function csrfOk(token: string | null, body: unknown): boolean {
     if (error instanceof KernelError) return false;
     throw error;
   }
+}
+
+function languageNow(
+  cookie: string | undefined,
+  preferred: string | null,
+): string {
+  return startingLanguage({
+    chosen: readPortalCookie(cookie, PORTAL_LANG_COOKIE),
+    preferred,
+  });
+}
+
+function paint<T>(language: string, body: () => T): T {
+  return runPortalLanguage(language, body);
+}
+
+async function preferredLanguage(
+  pool: Pool,
+  clock: Clock,
+  cookie: string | undefined,
+  phone: string,
+  actorId: string,
+): Promise<string | null> {
+  const chosen = readPortalCookie(cookie, PORTAL_LANG_COOKIE);
+  if (chosen !== null && portalLanguages().includes(chosen)) return null;
+  const rows = await resolvePortalTenancies(pool, phone, clock, {
+    actor: { actorKind: 'tenant', actorId },
+  });
+  const open = rows.filter((row) => row.portalEnabled);
+  const picked = readPortalCookie(cookie, PORTAL_CHOICE_COOKIE);
+  const match =
+    open.find((row) => row.tenancyId === picked) ?? open[0] ?? rows[0];
+  return match?.preferredLanguage ?? null;
 }
 
 const REPORT_TEXT_MAX = 4000;
@@ -526,6 +565,7 @@ export function registerPortalRoutes(
     token: string;
     phone: string;
     identityId: string;
+    language: string;
     rows: PortalTenancy[];
     chosen: PortalTenancy | null;
   }
@@ -534,8 +574,7 @@ export function registerPortalRoutes(
     cookie: string | undefined,
     token: string,
     session: { portalIdentityId: string; phone: string },
-  ): Promise<{ kind: 'notice' } | OpenPortal> {
-    if (await noticeDue(session.portalIdentityId)) return { kind: 'notice' };
+  ): Promise<{ kind: 'notice'; language: string } | OpenPortal> {
     const rows = await resolvePortalTenancies(pool, session.phone, clock, {
       actor: { actorKind: 'tenant', actorId: session.portalIdentityId },
     });
@@ -543,11 +582,19 @@ export function registerPortalRoutes(
     const picked = readPortalCookie(cookie, PORTAL_CHOICE_COOKIE);
     const chosen =
       open.find((row) => row.tenancyId === picked) ?? open[0] ?? null;
+    const language = languageNow(
+      cookie,
+      (chosen ?? rows[0])?.preferredLanguage ?? null,
+    );
+    if (await noticeDue(session.portalIdentityId, language)) {
+      return { kind: 'notice', language };
+    }
     return {
       kind: 'open',
       token,
       phone: session.phone,
       identityId: session.portalIdentityId,
+      language,
       rows: open,
       chosen,
     };
@@ -589,96 +636,113 @@ export function registerPortalRoutes(
 
   async function homePage(who: OpenPortal): Promise<string> {
     if (who.chosen === null) {
-      return renderNoAccessPage({
-        csrf: csrfTokenFor(who.token),
-        phone: nationalDisplay(who.phone),
-      });
+      return paint(who.language, () =>
+        renderNoAccessPage({
+          csrf: csrfTokenFor(who.token),
+          phone: nationalDisplay(who.phone),
+        }),
+      );
     }
     const calls = await callsOf(who);
     const open = calls.filter((call) => call.state !== 'CLOSED');
     const zone = clock.zone;
-    return renderHomePage({
-      csrf: csrfTokenFor(who.token),
-      choices: choicesOf(who.rows),
-      chosenId: who.chosen.tenancyId,
-      greeting: greetingFor(who.chosen),
-      openCount: open.length,
-      calls: open
-        .slice(0, 2)
-        .map((call) => callCard(call, zone, deps.calls.status)),
-      visit: nextVisit(calls, clock.now(), zone),
-    });
+    const chosen = who.chosen;
+    return paint(who.language, () =>
+      renderHomePage({
+        csrf: csrfTokenFor(who.token),
+        choices: choicesOf(who.rows),
+        chosenId: chosen.tenancyId,
+        greeting: greetingFor(chosen),
+        openCount: open.length,
+        calls: open
+          .slice(0, 2)
+          .map((call) => callCard(call, zone, deps.calls.status)),
+        visit: nextVisit(calls, clock.now(), zone),
+      }),
+    );
   }
 
   async function callsPage(who: OpenPortal, closed: boolean): Promise<string> {
     if (who.chosen === null) {
-      return renderNoAccessPage({
-        csrf: csrfTokenFor(who.token),
-        phone: nationalDisplay(who.phone),
-      });
+      return paint(who.language, () =>
+        renderNoAccessPage({
+          csrf: csrfTokenFor(who.token),
+          phone: nationalDisplay(who.phone),
+        }),
+      );
     }
     const calls = await callsOf(who);
     const zone = clock.zone;
     const open = calls.filter((call) => call.state !== 'CLOSED');
     const done = calls.filter((call) => call.state === 'CLOSED');
     const shown = closed ? done : open;
-    return renderPortalCallsPage({
-      csrf: csrfTokenFor(who.token),
-      choices: choicesOf(who.rows),
-      chosenId: who.chosen.tenancyId,
-      closed,
-      openCount: open.length,
-      closedCount: done.length,
-      calls: shown.map((call) => callCard(call, zone, deps.calls.status)),
-    });
+    const chosen = who.chosen;
+    return paint(who.language, () =>
+      renderPortalCallsPage({
+        csrf: csrfTokenFor(who.token),
+        choices: choicesOf(who.rows),
+        chosenId: chosen.tenancyId,
+        closed,
+        openCount: open.length,
+        closedCount: done.length,
+        calls: shown.map((call) => callCard(call, zone, deps.calls.status)),
+      }),
+    );
   }
 
   async function flatOf(who: OpenPortal, tenancyId: string): Promise<string> {
     if (who.chosen === null) {
-      return renderNoAccessPage({
-        csrf: csrfTokenFor(who.token),
-        phone: nationalDisplay(who.phone),
-      });
+      return paint(who.language, () =>
+        renderNoAccessPage({
+          csrf: csrfTokenFor(who.token),
+          phone: nationalDisplay(who.phone),
+        }),
+      );
     }
     const row = who.rows.find((item) => item.tenancyId === tenancyId);
+    const chosen = who.chosen;
     if (row === undefined) {
-      return renderMissingPage({ chosenId: who.chosen.tenancyId });
+      return paint(who.language, () =>
+        renderMissingPage({ chosenId: chosen.tenancyId }),
+      );
     }
     const day = today(clock);
-    const parking =
-      row.parking.length === 0
-        ? portalText('flat.none')
-        : row.parking.join(' · ');
-    const storage =
-      row.storage.length === 0
-        ? portalText('flat.none')
-        : row.storage.join(' · ');
     const listed = await listPortalDocuments(pool, row.tenancyId, clock, {
       actor: { actorKind: 'tenant', actorId: who.identityId },
     });
-    return renderFlatPage({
-      csrf: csrfTokenFor(who.token),
-      choices: choicesOf(who.rows),
-      chosenId: row.tenancyId,
-      address: `${row.addressLine}, ${portalText('flat.unit')} ${row.unitNumber}`,
-      city: row.city,
-      start: displayDate(row.startDate),
-      end: displayDate(row.endDate),
-      months: monthsRemaining(day, row.endDate),
-      percent: leasePercent(row.startDate, row.endDate, day),
-      parking,
-      storage,
-      documents: listed.map((doc) => ({
-        href: `/flat/${row.tenancyId}/documents/${doc.documentId}`,
-        name: doc.name,
-        kind: portalText(`papers.kind.${doc.kind}`),
-      })),
+    return paint(who.language, () => {
+      const parking =
+        row.parking.length === 0
+          ? portalText('flat.none')
+          : row.parking.join(' · ');
+      const storage =
+        row.storage.length === 0
+          ? portalText('flat.none')
+          : row.storage.join(' · ');
+      return renderFlatPage({
+        csrf: csrfTokenFor(who.token),
+        choices: choicesOf(who.rows),
+        chosenId: row.tenancyId,
+        address: `${row.addressLine}, ${portalText('flat.unit')} ${row.unitNumber}`,
+        city: row.city,
+        start: displayDate(row.startDate),
+        end: displayDate(row.endDate),
+        months: monthsRemaining(day, row.endDate),
+        percent: leasePercent(row.startDate, row.endDate, day),
+        parking,
+        storage,
+        documents: listed.map((doc) => ({
+          href: `/flat/${row.tenancyId}/documents/${doc.documentId}`,
+          name: doc.name,
+          kind: portalText(`papers.kind.${doc.kind}`),
+        })),
+      });
     });
   }
 
   async function portalOf(request: {
     headers: IncomingHttpHeaders;
-  }): Promise<null | { kind: 'notice' } | OpenPortal> {
+  }): Promise<null | { kind: 'notice'; language: string } | OpenPortal> {
     const token = readPortalCookie(
       request.headers.cookie,
       PORTAL_SESSION_COOKIE,
@@ -727,10 +791,12 @@ export function registerPortalRoutes(
       if (who.chosen === null) {
         return html(
           reply,
-          renderNoAccessPage({
-            csrf: csrfTokenFor(who.token),
-            phone: nationalDisplay(who.phone),
-          }),
+          paint(who.language, () =>
+            renderNoAccessPage({
+              csrf: csrfTokenFor(who.token),
+              phone: nationalDisplay(who.phone),
+            }),
+          ),
         );
       }
       if (
@@ -740,7 +806,9 @@ export function registerPortalRoutes(
         reply.code(404);
         return html(
           reply,
-          renderMissingPage({ chosenId: who.chosen.tenancyId }),
+          paint(who.language, () =>
+            renderMissingPage({ chosenId: who.chosen?.tenancyId ?? '' }),
+          ),
         );
       }
       const doc = await resolvePortalDocument(
@@ -754,7 +822,9 @@ export function registerPortalRoutes(
         reply.code(404);
         return html(
           reply,
-          renderMissingPage({ chosenId: who.chosen.tenancyId }),
+          paint(who.language, () =>
+            renderMissingPage({ chosenId: who.chosen?.tenancyId ?? '' }),
+          ),
         );
       }
       let bytes: Buffer;
@@ -765,7 +835,9 @@ export function registerPortalRoutes(
         reply.code(404);
         return html(
           reply,
-          renderMissingPage({ chosenId: who.chosen.tenancyId }),
+          paint(who.language, () =>
+            renderMissingPage({ chosenId: who.chosen?.tenancyId ?? '' }),
+          ),
         );
       }
       const entry = {
@@ -808,10 +880,12 @@ export function registerPortalRoutes(
     if (who.chosen === null) {
       return html(
         reply,
-        renderNoAccessPage({
-          csrf: csrfTokenFor(who.token),
-          phone: nationalDisplay(who.phone),
-        }),
+        paint(who.language, () =>
+          renderNoAccessPage({
+            csrf: csrfTokenFor(who.token),
+            phone: nationalDisplay(who.phone),
+          }),
+        ),
       );
     }
     const callId = idOrEmpty(
@@ -832,7 +906,12 @@ export function registerPortalRoutes(
         },
         { outcome: 'error', code: 'not_found' },
       );
-      return html(reply, renderMissingPage({ chosenId: who.chosen.tenancyId }));
+      return html(
+        reply,
+        paint(who.language, () =>
+          renderMissingPage({ chosenId: who.chosen?.tenancyId ?? '' }),
+        ),
+      );
     }
     await audit.write(
       {
@@ -875,7 +954,9 @@ export function registerPortalRoutes(
         );
         return html(
           reply,
-          renderMissingPage({ chosenId: who.chosen.tenancyId }),
+          paint(who.language, () =>
+            renderMissingPage({ chosenId: who.chosen?.tenancyId ?? '' }),
+          ),
         );
       }
       await audit.write(
@@ -977,13 +1058,20 @@ export function registerPortalRoutes(
     if (who.chosen === null) {
       return html(
         reply,
-        renderNoAccessPage({
-          csrf: csrfTokenFor(who.token),
-          phone: nationalDisplay(who.phone),
-        }),
+        paint(who.language, () =>
+          renderNoAccessPage({
+            csrf: csrfTokenFor(who.token),
+            phone: nationalDisplay(who.phone),
+          }),
+        ),
       );
     }
-    return html(reply, renderMorePage({ csrf: csrfTokenFor(who.token) }));
+    return html(
+      reply,
+      paint(who.language, () =>
+        renderMorePage({ csrf: csrfTokenFor(who.token) }),
+      ),
+    );
   });
 
   app.get('/report/files/:holdId', TENANT, async (request, reply) => {
@@ -1034,7 +1122,12 @@ export function registerPortalRoutes(
         { outcome: 'error', code: 'not_found' },
       );
       reply.code(404);
-      return html(reply, renderMissingPage({ chosenId: who.chosen.tenancyId }));
+      return html(
+        reply,
+        paint(who.language, () =>
+          renderMissingPage({ chosenId: who.chosen?.tenancyId ?? '' }),
+        ),
+      );
     }
     await audit.write(
       {
@@ -1166,10 +1259,12 @@ export function registerPortalRoutes(
   function noTenancy(reply: Parameters<typeof html>[0], who: OpenPortal) {
     return html(
       reply,
-      renderNoAccessPage({
-        csrf: csrfTokenFor(who.token),
-        phone: nationalDisplay(who.phone),
-      }),
+      paint(who.language, () =>
+        renderNoAccessPage({
+          csrf: csrfTokenFor(who.token),
+          phone: nationalDisplay(who.phone),
+        }),
+      ),
     );
   }
 
@@ -1192,24 +1287,26 @@ export function registerPortalRoutes(
   ): Promise<string> {
     const messages = await deps.messagesOnCall(call.id);
     const zone = clock.zone;
-    const screen = threadScreen(
-      call,
-      messages.map((message) => ({
-        at: message.at,
-        body: message.body,
-        echo: message.echo,
-      })),
-      zone,
-      zoned(clock.now(), zone).key,
-      deps.calls.status,
-    );
-    return renderPortalCallPage({
-      ...screen,
-      callId: call.id,
-      note: screen.status === 'cancelled' ? call.cancelNote : null,
-      notice: noticeKey,
-      csrf: csrfTokenFor(who.token),
-      followKey: call.state === 'CLOSED' ? null : newId(clock),
+    return paint(who.language, () => {
+      const screen = threadScreen(
+        call,
+        messages.map((message) => ({
+          at: message.at,
+          body: message.body,
+          echo: message.echo,
+        })),
+        zone,
+        zoned(clock.now(), zone).key,
+        deps.calls.status,
+      );
+      return renderPortalCallPage({
+        ...screen,
+        callId: call.id,
+        note: screen.status === 'cancelled' ? call.cancelNote : null,
+        notice: noticeKey,
+        csrf: csrfTokenFor(who.token),
+        followKey: call.state === 'CLOSED' ? null : newId(clock),
+      });
     });
   }
 
@@ -1225,25 +1322,27 @@ export function registerPortalRoutes(
     const files = deps.listReportFiles
       ? await deps.listReportFiles(who.identityId, draft.submission)
       : [];
-    return renderReportPage({
-      csrf: csrfTokenFor(who.token),
-      submission: draft.submission,
-      files,
-      step: draft.step,
-      categories: loaded.categories.map((row) => ({
-        id: row.id,
-        code: row.code,
-        label: row.labelHe,
-      })),
-      categoryId: draft.categoryId,
-      description: draft.description,
-      entry: draft.entry,
-      dutyPhone: loaded.dutyPhone,
-      dutyTel: dutyHref(loaded.dutyPhone),
-      flat: `${portalText('flat.unit')} ${chosen.unitNumber} · ${chosen.addressLine}`,
-      notice: draft.notice,
-      predecessorId: draft.predecessorId,
-    });
+    return paint(who.language, () =>
+      renderReportPage({
+        csrf: csrfTokenFor(who.token),
+        submission: draft.submission,
+        files,
+        step: draft.step,
+        categories: loaded.categories.map((row) => ({
+          id: row.id,
+          code: row.code,
+          label: row.labelHe,
+        })),
+        categoryId: draft.categoryId,
+        description: draft.description,
+        entry: draft.entry,
+        dutyPhone: loaded.dutyPhone,
+        dutyTel: dutyHref(loaded.dutyPhone),
+        flat: `${portalText('flat.unit')} ${chosen.unitNumber} · ${chosen.addressLine}`,
+        notice: draft.notice,
+        predecessorId: draft.predecessorId,
+      }),
+    );
   }
 
   async function sendReport(
@@ -1326,12 +1425,14 @@ export function registerPortalRoutes(
     }
     return html(
       reply,
-      renderReportReceived({
-        callId: receipt.callId,
-        callNumber: receipt.callNumber,
-        category: category.labelHe,
-        duty: receipt.duty,
-      }),
+      paint(who.language, () =>
+        renderReportReceived({
+          callId: receipt.callId,
+          callNumber: receipt.callNumber,
+          category: category.labelHe,
+          duty: receipt.duty,
+        }),
+      ),
     );
   }
 
@@ -1364,88 +1465,111 @@ export function registerPortalRoutes(
     ]);
   });
 
+  app.post('/language', TENANT, async (request, reply) => {
+    const cookie = request.headers.cookie;
+    const language = field(request.body, 'language');
+    const next = languageReturn(field(request.body, 'next'));
+    const token =
+      readPortalCookie(cookie, PORTAL_SESSION_COOKIE) ??
+      readPortalCookie(cookie, PORTAL_FORM_COOKIE) ??
+      readPortalCookie(cookie, PORTAL_CHALLENGE_COOKIE);
+    if (!portalLanguages().includes(language) || !csrfOk(token, request.body)) {
+      return go(reply, next, []);
+    }
+    return go(reply, next, [
+      portalCookie(PORTAL_LANG_COOKIE, language, {
+        secure: secureOf(request),
+        maxAge: PORTAL_LANG_MAX_AGE,
+      }),
+    ]);
+  });
+
   app.get('/ask', TENANT, async (request, reply) => {
     const session = await signedIn(request);
     if (session === null) return go(reply, '/', []);
     return html(
       reply,
-      renderAskPage({
-        csrf: csrfTokenFor(session.token),
-        submission: newId(clock),
-        question: '',
-        notice: null,
-      }),
+      paint(session.language, () =>
+        renderAskPage({
+          csrf: csrfTokenFor(session.token),
+          submission: newId(clock),
+          question: '',
+          notice: null,
+        }),
+      ),
     );
   });
 
   app.post('/ask', TENANT, async (request, reply) => {
     const session = await signedIn(request);
     if (session === null) return go(reply, '/', []);
-    const submission = field(request.body, 'submission');
-    const question = field(request.body, 'question').trim();
-    if (!csrfOk(session.token, request.body)) {
-      return html(
-        reply,
-        renderAskPage({
-          csrf: csrfTokenFor(session.token),
-          submission: newId(clock),
-          question,
-          notice: 'ask.retry',
-        }),
-      );
-    }
-    let key: string;
-    try {
-      key = validId(submission, 'submission');
-    } catch (error) {
-      if (!(error instanceof KernelError)) throw error;
-      return html(
-        reply,
-        renderAskPage({
-          csrf: csrfTokenFor(session.token),
-          submission: newId(clock),
-          question,
-          notice: 'ask.retry',
-        }),
-      );
-    }
-    if (question === '') {
-      return html(
-        reply,
-        renderAskPage({
-          csrf: csrfTokenFor(session.token),
-          submission: key,
-          question: '',
-          notice: 'ask.empty',
-        }),
-      );
-    }
-    const submit = deps.submitQuestion;
-    if (submit === undefined) {
-      throw new KernelError('unavailable', 'portal intake is not wired');
-    }
-    const receipt = await submit({
-      phone: session.phone,
-      key,
-      body: question,
+    return runPortalLanguage(session.language, async () => {
+      const submission = field(request.body, 'submission');
+      const question = field(request.body, 'question').trim();
+      if (!csrfOk(session.token, request.body)) {
+        return html(
+          reply,
+          renderAskPage({
+            csrf: csrfTokenFor(session.token),
+            submission: newId(clock),
+            question,
+            notice: 'ask.retry',
+          }),
+        );
+      }
+      let key: string;
+      try {
+        key = validId(submission, 'submission');
+      } catch (error) {
+        if (!(error instanceof KernelError)) throw error;
+        return html(
+          reply,
+          renderAskPage({
+            csrf: csrfTokenFor(session.token),
+            submission: newId(clock),
+            question,
+            notice: 'ask.retry',
+          }),
+        );
+      }
+      if (question === '') {
+        return html(
+          reply,
+          renderAskPage({
+            csrf: csrfTokenFor(session.token),
+            submission: key,
+            question: '',
+            notice: 'ask.empty',
+          }),
+        );
+      }
+      const submit = deps.submitQuestion;
+      if (submit === undefined) {
+        throw new KernelError('unavailable', 'portal intake is not wired');
+      }
+      const receipt = await submit({
+        phone: session.phone,
+        key,
+        body: question,
+      });
+      if (receipt === null) {
+        return html(
+          reply,
+          renderAskPage({
+            csrf: csrfTokenFor(session.token),
+            submission: newId(clock),
+            question,
+            notice: 'ask.retry',
+          }),
+        );
+      }
+      return html(reply, renderAskReceived(receipt));
     });
-    if (receipt === null) {
-      return html(
-        reply,
-        renderAskPage({
-          csrf: csrfTokenFor(session.token),
-          submission: newId(clock),
-          question,
-          notice: 'ask.retry',
-        }),
-      );
-    }
-    return html(reply, renderAskReceived(receipt));
   });
 
   async function signedIn(request: {
     headers: IncomingHttpHeaders;
-  }): Promise<{ token: string; phone: string } | null> {
+  }): Promise<{ token: string; phone: string; language: string } | null> {
     const token = readPortalCookie(
       request.headers.cookie,
       PORTAL_SESSION_COOKIE,
@@ -1453,7 +1577,18 @@ export function registerPortalRoutes(
     if (token === null) return null;
     const session = await resolvePortalSession(pool, clock, token);
     if (session === null) return null;
-    return { token, phone: session.phone };
+    const preferred = await preferredLanguage(
+      pool,
+      clock,
+      request.headers.cookie,
+      session.phone,
+      session.portalIdentityId,
+    );
+    return {
+      token,
+      phone: session.phone,
+      language: languageNow(request.headers.cookie, preferred),
+    };
   }
 
   app.post('/sign-in', TENANT, async (request, reply) => {
@@ -1523,14 +1658,16 @@ export function registerPortalRoutes(
     }
     return html(
       reply,
-      renderCodePage({
-        csrf: csrfTokenFor(challenge),
-        phone: described.phone,
-        channel: described.channel,
-        alternate: otherChannel(sender, described.channel),
-        waitSeconds: waitSeconds(described.retryAt, clock.now()),
-        notice: described.notice,
-      }),
+      paint(languageNow(request.headers.cookie, null), () =>
+        renderCodePage({
+          csrf: csrfTokenFor(challenge),
+          phone: described.phone,
+          channel: described.channel,
+          alternate: otherChannel(sender, described.channel),
+          waitSeconds: waitSeconds(described.retryAt, clock.now()),
+          notice: described.notice,
+        }),
+      ),
     );
   });
 
@@ -1555,14 +1692,16 @@ export function registerPortalRoutes(
     if (result.status === 'notice') {
       return html(
         reply,
-        renderCodePage({
-          csrf: csrfTokenFor(challenge),
-          phone: result.phone,
-          channel: result.channel,
-          alternate: otherChannel(sender, result.channel),
-          waitSeconds: waitSeconds(result.retryAt, clock.now()),
-          notice: result.notice,
-        }),
+        paint(languageNow(request.headers.cookie, null), () =>
+          renderCodePage({
+            csrf: csrfTokenFor(challenge),
+            phone: result.phone,
+            channel: result.channel,
+            alternate: otherChannel(sender, result.channel),
+            waitSeconds: waitSeconds(result.retryAt, clock.now()),
+            notice: result.notice,
+          }),
+        ),
       );
     }
     if (result.newDevice) {
@@ -1613,14 +1752,16 @@ export function registerPortalRoutes(
     if ('notice' in issued) {
       return html(
         reply,
-        renderCodePage({
-          csrf: csrfTokenFor(challenge),
-          phone: described.phone,
-          channel: described.channel,
-          alternate: otherChannel(sender, described.channel),
-          waitSeconds: waitSeconds(described.retryAt, clock.now()),
-          notice: issued.notice,
-        }),
+        paint(languageNow(request.headers.cookie, null), () =>
+          renderCodePage({
+            csrf: csrfTokenFor(challenge),
+            phone: described.phone,
+            channel: described.channel,
+            alternate: otherChannel(sender, described.channel),
+            waitSeconds: waitSeconds(described.retryAt, clock.now()),
+            notice: issued.notice,
+          }),
+        ),
       );
     }
     return go(reply, '/sign-in/code', [
@@ -1688,13 +1829,15 @@ export function registerPortalRoutes(
     }
     return html(
       reply,
-      renderPhonePage({
-        csrf: screen.csrf,
-        notice: screen.notice,
-        caption: captionKey(sender),
-        canSend: screen.canSend,
-        options,
-      }),
+      paint(languageNow(request.headers.cookie, null), () =>
+        renderPhonePage({
+          csrf: screen.csrf,
+          notice: screen.notice,
+          caption: captionKey(sender),
+          canSend: screen.canSend,
+          options,
+        }),
+      ),
       cookies,
     );
   }
@@ -1740,20 +1883,32 @@ export function registerPortalRoutes(
     token: string;
     portalIdentityId: string;
     phone: string;
+    language: string;
   } | null> {
     const token = readPortalCookie(cookie, PORTAL_SESSION_COOKIE);
     if (token === null) return null;
     const session = await resolvePortalSession(pool, clock, token);
     if (session === null) return null;
+    const preferred = await preferredLanguage(
+      pool,
+      clock,
+      cookie,
+      session.phone,
+      session.portalIdentityId,
+    );
     return {
       token,
       portalIdentityId: session.portalIdentityId,
       phone: session.phone,
+      language: languageNow(cookie, preferred),
     };
   }
 
-  async function noticeDue(identityId: string): Promise<boolean> {
-    const screen = await loadNotice(pool, identityId, clock.now());
+  async function noticeDue(
+    identityId: string,
+    language: string,
+  ): Promise<boolean> {
+    const screen = await loadNotice(pool, identityId, clock.now(), language);
     return screen?.due === true;
   }
 
@@ -1765,19 +1920,22 @@ export function registerPortalRoutes(
   app.get('/passkey', TENANT, async (request, reply) => {
     const open = await openSession(request.headers.cookie);
     if (open === null) return go(reply, '/', []);
+    const displayName = paint(open.language, () => portalText('brand'));
     const options = await beginRegistration(
       pool,
       clock,
       {
         portalIdentityId: open.portalIdentityId,
         accountName: nationalDisplay(open.phone),
-        displayName: portalText('brand'),
+        displayName,
       },
       ceremonyOf(request),
     );
     return html(
       reply,
-      renderPasskeyOffer({ csrf: csrfTokenFor(open.token), options }),
+      paint(open.language, () =>
+        renderPasskeyOffer({ csrf: csrfTokenFor(open.token), options }),
+      ),
     );
   });
 
@@ -1788,7 +1946,7 @@ export function registerPortalRoutes(
     }
     return go(
       reply,
-      (await noticeDue(open.portalIdentityId)) ? '/notice' : '/',
+      (await noticeDue(open.portalIdentityId, open.language)) ? '/notice' : '/',
       [],
     );
   });
@@ -1859,49 +2017,66 @@ export function registerPortalRoutes(
     },
     token: string,
     identityId: string,
+    language: string,
     notice: string | null,
   ): Promise<string> {
     const rows = await listPasskeys(pool, identityId);
     return html(
       reply,
-      renderPasskeysPage({
-        csrf: csrfTokenFor(token),
-        notice,
-        passkeys: rows.map((row) => ({
-          id: row.passkeyId,
-          added: dayIn(row.addedOn, clock.zone),
-        })),
-      }),
+      paint(language, () =>
+        renderPasskeysPage({
+          csrf: csrfTokenFor(token),
+          notice,
+          passkeys: rows.map((row) => ({
+            id: row.passkeyId,
+            added: dayIn(row.addedOn, clock.zone),
+          })),
+        }),
+      ),
     );
   }
 
   app.get('/notice', TENANT, async (request, reply) => {
     const open = await openSession(request.headers.cookie);
     if (open === null) return go(reply, '/', []);
-    const screen = await loadNotice(pool, open.portalIdentityId, clock.now());
+    const screen = await loadNotice(
+      pool,
+      open.portalIdentityId,
+      clock.now(),
+      open.language,
+    );
     if (screen === null || !screen.due) return go(reply, '/', []);
     return html(
       reply,
-      renderNoticePage({
-        csrf: csrfTokenFor(open.token),
-        privacy: screen.privacy,
-        terms: screen.terms,
-        optIns: screen.optIns,
-      }),
+      paint(open.language, () =>
+        renderNoticePage({
+          csrf: csrfTokenFor(open.token),
+          privacy: screen.privacy,
+          terms: screen.terms,
+          optIns: screen.optIns,
+        }),
+      ),
     );
   });
 
   app.get('/notice/full', TENANT, async (request, reply) => {
     const open = await openSession(request.headers.cookie);
     if (open === null) return go(reply, '/', []);
-    const screen = await loadNotice(pool, open.portalIdentityId, clock.now());
+    const screen = await loadNotice(
+      pool,
+      open.portalIdentityId,
+      clock.now(),
+      open.language,
+    );
     if (screen === null) return go(reply, '/', []);
     return html(
       reply,
-      renderNoticeFullPage({
-        privacy: screen.privacy,
-        terms: screen.terms,
-      }),
+      paint(open.language, () =>
+        renderNoticeFullPage({
+          privacy: screen.privacy,
+          terms: screen.terms,
+        }),
+      ),
     );
   });
 
@@ -1910,7 +2085,12 @@ export function registerPortalRoutes(
     if (open === null || !csrfOk(open.token, request.body)) {
       return go(reply, '/', []);
     }
-    const screen = await loadNotice(pool, open.portalIdentityId, clock.now());
+    const screen = await loadNotice(
+      pool,
+      open.portalIdentityId,
+      clock.now(),
+      open.language,
+    );
     if (screen === null) return go(reply, '/', []);
     const privacyId = shownTextId(request.body, 'privacy');
     const termsId = shownTextId(request.body, 'terms');
@@ -1926,16 +2106,19 @@ export function registerPortalRoutes(
           request.body,
           screen.optIns.map((opt) => opt.key),
         ),
+        open.language,
       ));
     if (!recorded) {
       return html(
         reply,
-        renderNoticePage({
-          csrf: csrfTokenFor(open.token),
-          privacy: screen.privacy,
-          terms: screen.terms,
-          optIns: screen.optIns,
-        }),
+        paint(open.language, () =>
+          renderNoticePage({
+            csrf: csrfTokenFor(open.token),
+            privacy: screen.privacy,
+            terms: screen.terms,
+            optIns: screen.optIns,
+          }),
+        ),
       );
     }
     return go(reply, '/', []);
@@ -1944,19 +2127,28 @@ export function registerPortalRoutes(
   app.get('/passkeys', TENANT, async (request, reply) => {
     const open = await openSession(request.headers.cookie);
     if (open === null) return go(reply, '/', []);
-    if (await noticeDue(open.portalIdentityId)) return go(reply, '/notice', []);
-    return passkeyPage(reply, open.token, open.portalIdentityId, null);
+    if (await noticeDue(open.portalIdentityId, open.language))
+      return go(reply, '/notice', []);
+    return passkeyPage(
+      reply,
+      open.token,
+      open.portalIdentityId,
+      open.language,
+      null,
+    );
   });
 
   app.post('/passkeys/remove', TENANT, async (request, reply) => {
     const open = await openSession(request.headers.cookie);
     if (open === null) return go(reply, '/', []);
-    if (await noticeDue(open.portalIdentityId)) return go(reply, '/notice', []);
+    if (await noticeDue(open.portalIdentityId, open.language))
+      return go(reply, '/notice', []);
     if (!csrfOk(open.token, request.body)) {
       return passkeyPage(
         reply,
         open.token,
         open.portalIdentityId,
+        open.language,
         'sign_in.retry',
       );
     }
@@ -1971,6 +2163,7 @@ export function registerPortalRoutes(
       reply,
       open.token,
       open.portalIdentityId,
+      open.language,
       removed ? null : 'passkeys.missing',
     );
   });

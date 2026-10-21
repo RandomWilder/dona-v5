@@ -428,6 +428,7 @@ const PORTAL_TENANCIES_SQL = `
          b.address_line,
          b.city,
          b.portal_enabled,
+         p.preferred_language,
          bay.name AS parking_name,
          bay2.name AS second_parking_name,
          store.name AS storage_name,
@@ -466,6 +467,7 @@ interface PortalTenancyRow {
   address_line: string;
   city: string;
   portal_enabled: boolean;
+  preferred_language: string;
   parking_name: string | null;
   second_parking_name: string | null;
   storage_name: string | null;
@@ -482,6 +484,8 @@ export interface PortalTenancy {
   addressLine: string;
   city: string;
   portalEnabled: boolean;
+  /** The party's preferred language. The portal uses it when it is one of the three. */
+  preferredLanguage: string;
   /** The party the number resolves to on this tenancy. Calls are asked by it. */
   partyId: string;
   parking: string[];
@@ -532,6 +536,7 @@ export async function resolvePortalTenancies(
       addressLine: row.address_line,
       city: row.city,
       portalEnabled: row.portal_enabled,
+      preferredLanguage: row.preferred_language,
       partyId: row.party_id,
       parking: assignedNames(row.parking_name, row.second_parking_name),
       storage: assignedNames(row.storage_name, row.second_storage_name),

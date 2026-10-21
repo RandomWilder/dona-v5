@@ -8,7 +8,7 @@ import type { Clock } from '../../kernel/clock.ts';
 import type { Queryable } from '../../kernel/db.ts';
 import { newId } from '../../kernel/ids.ts';
 
-export const PORTAL_LANGUAGE = 'he';
+export const FALLBACK_LANGUAGE = 'he';
 
 const OPT_IN_KEY = /^[a-z0-9_]{1,40}$/;
 
@@ -17,6 +17,8 @@ export interface NoticeText {
   title: string;
   summary: string;
   body: string;
+  /** True when this text is Hebrew because the chosen language has no row. */
+  fallback: boolean;
 }
 
 export interface NoticeOptIn {
@@ -24,6 +26,7 @@ export interface NoticeOptIn {
   title: string;
   summary: string;
   on: boolean;
+  fallback: boolean;
 }
 
 export interface NoticeScreen {
@@ -35,6 +38,7 @@ export interface NoticeScreen {
 
 interface CurrentRow {
   legal_text_id: string;
+  language: string;
   kind: string;
   opt_in_key: string;
   title: string;
@@ -44,14 +48,38 @@ interface CurrentRow {
   enabled: boolean;
 }
 
+export function chooseShown<
+  T extends { language: string; kind: string; opt_in_key: string },
+>(rows: readonly T[], language: string): { row: T; fallback: boolean }[] {
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const key = `${row.kind}\n${row.opt_in_key}`;
+    const list = groups.get(key) ?? [];
+    list.push(row);
+    groups.set(key, list);
+  }
+  const chosen: { row: T; fallback: boolean }[] = [];
+  for (const list of groups.values()) {
+    const exact = list.find((row) => row.language === language);
+    const hebrew = list.find((row) => row.language === FALLBACK_LANGUAGE);
+    const row = exact ?? hebrew;
+    if (row === undefined) continue;
+    chosen.push({ row, fallback: row.language !== language });
+  }
+  return chosen;
+}
+
 async function current(
   pool: Pool,
   identityId: string,
   now: Date,
+  language: string,
 ): Promise<CurrentRow[]> {
+  const languages =
+    language === FALLBACK_LANGUAGE ? [language] : [language, FALLBACK_LANGUAGE];
   const { rows } = await pool.query<CurrentRow>(
-    `SELECT DISTINCT ON (t.kind, t.opt_in_key)
-            t.legal_text_id, t.kind, t.opt_in_key, t.title, t.summary, t.body,
+    `SELECT DISTINCT ON (t.language, t.kind, t.opt_in_key)
+            t.legal_text_id, t.language, t.kind, t.opt_in_key, t.title, t.summary, t.body,
             (a.acknowledgement_id IS NOT NULL) AS acknowledged,
             COALESCE(o.enabled, false) AS enabled
        FROM portal_legal_text t
@@ -62,22 +90,26 @@ async function current(
          ON o.opt_in_key = t.opt_in_key
         AND t.kind = 'opt_in'
         AND o.portal_identity_id = $2
-      WHERE t.language = $1
+      WHERE t.language = ANY($1::text[])
         AND t.created_at <= $3
-      ORDER BY t.kind, t.opt_in_key, t.version DESC`,
-    [PORTAL_LANGUAGE, identityId, now],
+      ORDER BY t.language, t.kind, t.opt_in_key, t.version DESC`,
+    [languages, identityId, now],
   );
   return rows;
 }
 
-function textOf(rows: CurrentRow[], kind: string): NoticeText | null {
-  const row = rows.find((item) => item.kind === kind);
-  if (row === undefined) return null;
+function textOf(
+  rows: { row: CurrentRow; fallback: boolean }[],
+  kind: string,
+): NoticeText | null {
+  const found = rows.find((item) => item.row.kind === kind);
+  if (found === undefined) return null;
   return {
-    id: row.legal_text_id,
-    title: row.title,
-    summary: row.summary,
-    body: row.body,
+    id: found.row.legal_text_id,
+    title: found.row.title,
+    summary: found.row.summary,
+    body: found.row.body,
+    fallback: found.fallback,
   };
 }
 
@@ -85,36 +117,42 @@ export async function loadNotice(
   pool: Pool,
   identityId: string,
   now: Date,
+  language: string,
 ): Promise<NoticeScreen | null> {
-  const rows = await current(pool, identityId, now);
-  const privacy = textOf(rows, 'privacy');
-  const terms = textOf(rows, 'terms');
+  const chosen = chooseShown(
+    await current(pool, identityId, now, language),
+    language,
+  );
+  const privacy = textOf(chosen, 'privacy');
+  const terms = textOf(chosen, 'terms');
   if (privacy === null || terms === null) return null;
   return {
     due:
-      !rows.some(
+      !chosen.some(
         (item) =>
-          item.kind === 'privacy' &&
-          item.legal_text_id === privacy.id &&
-          item.acknowledged,
+          item.row.kind === 'privacy' &&
+          item.row.legal_text_id === privacy.id &&
+          item.row.acknowledged,
       ) ||
-      !rows.some(
+      !chosen.some(
         (item) =>
-          item.kind === 'terms' &&
-          item.legal_text_id === terms.id &&
-          item.acknowledged,
+          item.row.kind === 'terms' &&
+          item.row.legal_text_id === terms.id &&
+          item.row.acknowledged,
       ),
     privacy,
     terms,
-    optIns: rows
+    optIns: chosen
       .filter(
-        (item) => item.kind === 'opt_in' && OPT_IN_KEY.test(item.opt_in_key),
+        (item) =>
+          item.row.kind === 'opt_in' && OPT_IN_KEY.test(item.row.opt_in_key),
       )
       .map((item) => ({
-        key: item.opt_in_key,
-        title: item.title,
-        summary: item.summary,
-        on: item.enabled,
+        key: item.row.opt_in_key,
+        title: item.row.title,
+        summary: item.row.summary,
+        on: item.row.enabled,
+        fallback: item.fallback,
       })),
   };
 }
@@ -151,14 +189,14 @@ export async function acknowledgeNotice(
   identityId: string,
   shown: { privacyId: string; termsId: string },
   enabled: ReadonlySet<string>,
+  language: string,
 ): Promise<boolean> {
   const { rows } = await pool.query<{ legal_text_id: string; kind: string }>(
     `SELECT legal_text_id, kind
        FROM portal_legal_text
       WHERE legal_text_id = ANY($1::uuid[])
-        AND language = $2
         AND kind IN ('privacy', 'terms')`,
-    [[shown.privacyId, shown.termsId], PORTAL_LANGUAGE],
+    [[shown.privacyId, shown.termsId]],
   );
   const privacy = rows.find(
     (row) => row.legal_text_id === shown.privacyId && row.kind === 'privacy',
@@ -177,16 +215,21 @@ export async function acknowledgeNotice(
       [newId(clock), identityId, row.legal_text_id, now],
     );
   }
-  const texts = await current(pool, identityId, now);
-  for (const row of texts) {
-    if (row.kind !== 'opt_in' || !OPT_IN_KEY.test(row.opt_in_key)) continue;
+  const texts = chooseShown(
+    await current(pool, identityId, now, language),
+    language,
+  );
+  for (const item of texts) {
+    if (item.row.kind !== 'opt_in' || !OPT_IN_KEY.test(item.row.opt_in_key)) {
+      continue;
+    }
     await pool.query(
       `INSERT INTO portal_opt_in
          (portal_identity_id, opt_in_key, enabled, updated_at)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (portal_identity_id, opt_in_key)
        DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at`,
-      [identityId, row.opt_in_key, enabled.has(row.opt_in_key), now],
+      [identityId, item.row.opt_in_key, enabled.has(item.row.opt_in_key), now],
     );
   }
   return true;

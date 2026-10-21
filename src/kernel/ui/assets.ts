@@ -12,6 +12,7 @@ const uiRoot = path.dirname(fileURLToPath(import.meta.url));
 const fontFiles = [
   'heebo-hebrew.woff2',
   'heebo-latin.woff2',
+  'noto-sans-cyrillic.woff2',
   'ibm-plex-mono-latin-400.woff2',
   'ibm-plex-mono-latin-500.woff2',
 ] as const;
