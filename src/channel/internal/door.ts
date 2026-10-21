@@ -77,6 +77,13 @@ export interface IncomingMessage {
   body: string;
   attachments?: readonly IncomingAttachment[];
   echo?: boolean;
+  /**
+   * A portal report. All three, or none. The category is the tenant's
+   * suggestion. The sorter's proposal stays its own.
+   */
+  suggestedCategoryId?: string | null;
+  entryPermission?: string | null;
+  tenancyId?: string | null;
 }
 
 export interface SortCategory {
@@ -194,6 +201,9 @@ interface Normalized {
     bytes: Buffer | null;
   }[];
   echo: boolean;
+  suggestedCategoryId: string | null;
+  entryPermission: 'YES' | 'ARRANGE' | 'HOME' | null;
+  tenancyId: string | null;
 }
 
 interface StoredRow {
@@ -404,6 +414,9 @@ async function sendDutyReply(
       body,
       attachments: [],
       echo: true,
+      suggestedCategoryId: null,
+      entryPermission: null,
+      tenancyId: null,
     },
     {
       callId: openCallId,
@@ -726,7 +739,41 @@ function normalize(raw: IncomingMessage): Normalized {
     body: requireText(raw.body, 'body', BODY_MAX),
     attachments: attachmentsOf(raw.attachments),
     echo: raw.echo === true,
+    ...reportFields(raw),
   };
+}
+
+function reportFields(raw: IncomingMessage): {
+  suggestedCategoryId: string | null;
+  entryPermission: 'YES' | 'ARRANGE' | 'HOME' | null;
+  tenancyId: string | null;
+} {
+  const suggested = optionalText(raw.suggestedCategoryId, 'category', 80);
+  const tenancy = optionalText(raw.tenancyId, 'tenancy', 80);
+  const entry = optionalEntry(raw.entryPermission);
+  const named = [suggested, entry, tenancy].filter((value) => value !== null);
+  if (named.length !== 0 && named.length !== 3) {
+    throw new KernelError(
+      'invalid',
+      'a report names a category, an entry and a tenancy',
+      { field: 'report' },
+    );
+  }
+  return {
+    suggestedCategoryId: suggested,
+    entryPermission: entry,
+    tenancyId: tenancy,
+  };
+}
+
+function optionalEntry(
+  value: string | null | undefined,
+): 'YES' | 'ARRANGE' | 'HOME' | null {
+  if (value == null || value === '') return null;
+  if (value === 'YES' || value === 'ARRANGE' || value === 'HOME') return value;
+  throw new KernelError('invalid', 'entry is not a permission', {
+    field: 'entry',
+  });
 }
 
 function intakeChannel(value: string): 'EMAIL' | 'WHATSAPP' | 'PORTAL' {
@@ -1046,7 +1093,8 @@ async function settleVerdict(
   predecessorId: string | null,
   bodyHe: string | null,
 ): Promise<IntakeOutcome> {
-  const noise = verdict?.label === 'noise' && !emergency;
+  const report = message.suggestedCategoryId !== null;
+  const noise = verdict?.label === 'noise' && !emergency && !report;
   return inTransaction(db, async (tx) => {
     const row = await lockMessage(tx, messageId);
     if (isSettled(row)) return outcomeOf(row);
@@ -1076,6 +1124,7 @@ async function settleVerdict(
     const toReview =
       verdict === null ||
       verdict.label === 'unsure' ||
+      (report && verdict.label === 'noise') ||
       (emergency && verdict.label !== 'call');
     const parties = await partiesFor(tx, clock, message);
     const call = await openIntakeCall(tx, clock, {
@@ -1096,6 +1145,9 @@ async function settleVerdict(
       actorRole: null,
       sorterModel: verdict?.modelId ?? null,
       sorterPrompt: verdict?.promptVersion ?? null,
+      suggestedCategoryId: message.suggestedCategoryId,
+      entryPermission: message.entryPermission,
+      tenancyId: message.tenancyId,
     });
     if (parties.length === 1 && parties[0] !== undefined) {
       try {

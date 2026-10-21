@@ -1093,6 +1093,50 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       status: tenantStatus,
     },
     messagesOnCall: (callId) => listMessagesOnCall(deps.pool, callId),
+    loadReport: async () => {
+      const [categories, duty] = await Promise.all([
+        listCategories(deps.pool, { activeOnly: true }),
+        readEmergencySettings(deps.pool),
+      ]);
+      return {
+        categories: categories.map((row) => ({
+          id: row.id,
+          code: row.code,
+          labelHe: row.labelHe,
+        })),
+        dutyPhone: duty.phone,
+      };
+    },
+    submitReport: async (report) => {
+      const outcome = await receiveIncoming(
+        deps.pool,
+        clock,
+        {
+          sorter: portalSorter,
+          matchesEmergency: emergencyMatch(deps.pool),
+          onCallIdentified,
+        },
+        {
+          sourceChannel: 'PORTAL',
+          externalMessageId: report.key,
+          externalThreadId: report.key,
+          senderAddress: report.phone,
+          receivedAt: clock.now(),
+          body: report.body,
+          suggestedCategoryId: report.categoryId,
+          entryPermission: report.entry,
+          tenancyId: report.tenancyId,
+        },
+      );
+      const callId = outcome.kind === 'filtered' ? null : outcome.callId;
+      if (callId === null) return null;
+      const call = await getCall(deps.pool, callId);
+      if (call?.callNumber === undefined) return null;
+      const duty = call.emergency.flagged
+        ? composeDutyReply(await readEmergencySettings(deps.pool))
+        : null;
+      return { callId: call.id, callNumber: call.callNumber, duty };
+    },
     submitQuestion: async (question) => {
       const outcome = await receiveIncoming(
         deps.pool,

@@ -85,6 +85,9 @@ export interface CallCategory {
   active: boolean;
 }
 
+/** Whether the office may enter while the tenant is out. #282. */
+export type EntryPermission = 'YES' | 'ARRANGE' | 'HOME';
+
 export type EmergencyMark =
   | { flagged: false }
   | { flagged: true; by: 'terms' }
@@ -125,6 +128,12 @@ export interface ServiceCall {
   summary: string | null;
   /** The sorter's Category. Not the one a person set, and it does not move the call. */
   proposal: CallCategory | null;
+  /** The tenant's Category on a portal report. Not the call's Category. #282. */
+  suggestion: CallCategory | null;
+  /** Null on a call that is not a portal report. */
+  entry: EntryPermission | null;
+  /** The tenancy a portal report names. Null on every other call. */
+  tenancy: { id: string; unitNumber: string; addressLine: string } | null;
   sorterLabel: SorterLabel | null;
   /** The model that produced the proposal. Null when there was no verdict. */
   sorterModel: string | null;
@@ -261,6 +270,10 @@ export interface OpenIntakeCallSpec {
   actorRole?: string | null;
   sorterModel: string | null;
   sorterPrompt: string | null;
+  /** A portal report. All three, or none. */
+  suggestedCategoryId?: string | null;
+  entryPermission?: EntryPermission | null;
+  tenancyId?: string | null;
 }
 
 export interface ReturnCallSpec {
@@ -427,6 +440,14 @@ interface CallRow {
   proposed_code: string | null;
   proposed_label_he: string | null;
   proposed_active: boolean | null;
+  suggested_category_id: string | null;
+  suggested_code: string | null;
+  suggested_label_he: string | null;
+  suggested_active: boolean | null;
+  entry_permission: string | null;
+  tenancy_id: string | null;
+  report_unit_number: string | null;
+  report_address_line: string | null;
   predecessor_id: string | null;
   predecessor_description: string | null;
   returned_at: Date | null;
@@ -455,6 +476,12 @@ const CALL_SELECT = `SELECT sc.service_call_id, sc.call_number, sc.source_channe
             sc.proposed_category_id, proposed.code AS proposed_code,
             proposed.label_he AS proposed_label_he,
             proposed.is_active AS proposed_active,
+            sc.suggested_category_id, suggested.code AS suggested_code,
+            suggested.label_he AS suggested_label_he,
+            suggested.is_active AS suggested_active,
+            sc.entry_permission, sc.tenancy_id,
+            report_unit.unit_number AS report_unit_number,
+            report_building.address_line AS report_address_line,
             sc.predecessor_id, predecessor.description AS predecessor_description,
             sc.returned_at, sc.sorter_model, sc.sorter_prompt,
             COALESCE(
@@ -472,6 +499,11 @@ const CALL_SELECT = `SELECT sc.service_call_id, sc.call_number, sc.source_channe
        LEFT JOIN party requester ON requester.party_id = sc.requester_party_id
        LEFT JOIN call_category category ON category.category_id = sc.category_id
        LEFT JOIN call_category proposed ON proposed.category_id = sc.proposed_category_id
+       LEFT JOIN call_category suggested ON suggested.category_id = sc.suggested_category_id
+       LEFT JOIN tenancy report_tenancy ON report_tenancy.tenancy_id = sc.tenancy_id
+       LEFT JOIN unit report_unit ON report_unit.unit_id = report_tenancy.unit_id
+       LEFT JOIN space report_space ON report_space.space_id = report_unit.unit_id
+       LEFT JOIN building report_building ON report_building.building_id = report_space.building_id
        LEFT JOIN service_call predecessor ON predecessor.service_call_id = sc.predecessor_id
        LEFT JOIN service_call other ON other.service_call_id = sc.duplicate_of
        LEFT JOIN staff_account closer ON closer.staff_account_id = sc.closed_by
@@ -488,6 +520,11 @@ function categoryOf(
     return null;
   }
   return { id, code, labelHe: label, active };
+}
+
+function entryPermissionOf(value: string | null): EntryPermission | null {
+  if (value === 'YES' || value === 'ARRANGE' || value === 'HOME') return value;
+  return null;
 }
 
 function sorterLabelOf(value: string | null): SorterLabel | null {
@@ -524,6 +561,21 @@ function toCall(row: CallRow): ServiceCall {
       row.proposed_label_he,
       row.proposed_active,
     ),
+    suggestion: categoryOf(
+      row.suggested_category_id,
+      row.suggested_code,
+      row.suggested_label_he,
+      row.suggested_active,
+    ),
+    entry: entryPermissionOf(row.entry_permission),
+    tenancy:
+      row.tenancy_id === null
+        ? null
+        : {
+            id: row.tenancy_id,
+            unitNumber: row.report_unit_number ?? '',
+            addressLine: row.report_address_line ?? '',
+          },
     sorterLabel: sorterLabelOf(row.sorter_label),
     sorterModel: row.sorter_model,
     sorterPrompt: row.sorter_prompt,
@@ -700,11 +752,52 @@ export async function openCall(
     toReview: false,
     summary: null,
     proposal: null,
+    suggestion: null,
+    entry: null,
+    tenancy: null,
     sorterLabel: null,
     sorterModel: null,
     sorterPrompt: null,
     returned: false,
     exit: null,
+  };
+}
+
+function reportOf(spec: OpenIntakeCallSpec): {
+  suggestedCategoryId: string;
+  entryPermission: EntryPermission;
+  tenancyId: string;
+} | null {
+  const suggested =
+    spec.suggestedCategoryId == null
+      ? null
+      : validId(spec.suggestedCategoryId, 'category');
+  const tenancy =
+    spec.tenancyId == null ? null : validId(spec.tenancyId, 'tenancy');
+  const entry = spec.entryPermission ?? null;
+  if (
+    entry !== null &&
+    entry !== 'YES' &&
+    entry !== 'ARRANGE' &&
+    entry !== 'HOME'
+  ) {
+    throw new KernelError('invalid', 'entry is not a permission', {
+      field: 'entry',
+    });
+  }
+  const named = [suggested, entry, tenancy].filter((value) => value !== null);
+  if (named.length === 0) return null;
+  if (suggested === null || entry === null || tenancy === null) {
+    throw new KernelError(
+      'invalid',
+      'a report names a category, an entry and a tenancy',
+      { field: 'report' },
+    );
+  }
+  return {
+    suggestedCategoryId: suggested,
+    entryPermission: entry,
+    tenancyId: tenancy,
   };
 }
 
@@ -756,6 +849,7 @@ export async function openIntakeCall(
       ? null
       : validId(spec.proposedCategoryId, 'category');
   const summary = summaryOf(spec.summary);
+  const report = reportOf(spec);
   const id = newId(clock);
   const openedAt = clock.now();
 
@@ -782,14 +876,35 @@ export async function openIntakeCall(
         });
       }
     }
+    if (report !== null) {
+      const category = await tx.query<{ is_active: boolean }>(
+        `SELECT is_active FROM call_category WHERE category_id = $1`,
+        [report.suggestedCategoryId],
+      );
+      if (category.rows[0]?.is_active !== true) {
+        throw new KernelError('invalid', 'category is not active', {
+          field: 'category',
+        });
+      }
+      const tenancy = await tx.query(
+        `SELECT 1 FROM tenancy WHERE tenancy_id = $1`,
+        [report.tenancyId],
+      );
+      if (!tenancy.rows[0]) {
+        throw new KernelError('invalid', 'tenancy not found', {
+          field: 'tenancy',
+        });
+      }
+    }
     await tx.query(
       `INSERT INTO service_call
          (service_call_id, source_channel, state, description, sender_label,
           sender_unknown, opened_at, opened_by, emergency, emergency_by,
           to_review, sorter_label, sorter_summary, proposed_category_id,
-          predecessor_id, sorter_model, sorter_prompt)
+          predecessor_id, sorter_model, sorter_prompt,
+          suggested_category_id, entry_permission, tenancy_id)
        VALUES ($1, $2, 'NEW', $3, $4, false, $5, $6, $7, $8, $9, $10, $11, $12,
-               $13, $14, $15)`,
+               $13, $14, $15, $16, $17, $18)`,
       [
         id,
         sourceChannel,
@@ -806,6 +921,9 @@ export async function openIntakeCall(
         predecessorId,
         spec.sorterModel,
         spec.sorterPrompt,
+        report?.suggestedCategoryId ?? null,
+        report?.entryPermission ?? null,
+        report?.tenancyId ?? null,
       ],
     );
     if (spec.emergency) {

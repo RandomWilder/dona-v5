@@ -85,6 +85,7 @@ import {
   renderPortalCallPage,
   renderPortalCallsPage,
   renderReportPage,
+  renderReportReceived,
 } from './views.ts';
 import { zoned } from './when.ts';
 
@@ -101,6 +102,21 @@ export interface PortalReceipt {
   duty: string | null;
 }
 
+export interface PortalReport {
+  phone: string;
+  key: string;
+  body: string;
+  categoryId: string;
+  entry: 'YES' | 'ARRANGE' | 'HOME';
+  tenancyId: string;
+}
+
+export interface PortalReportReceipt {
+  callId: string;
+  callNumber: number;
+  duty: string | null;
+}
+
 export interface PortalDeps {
   pool: Pool;
   clock: Clock;
@@ -112,6 +128,13 @@ export interface PortalDeps {
    * reaching calls or channel pulls a cycle through the building switch.
    */
   submitQuestion?: (question: PortalQuestion) => Promise<PortalReceipt | null>;
+  /** Active categories and the duty phone from /settings. */
+  loadReport: () => Promise<{
+    categories: readonly { id: string; code: string; labelHe: string }[];
+    dutyPhone: string;
+  }>;
+  /** The intake door for a report. Absent in a process that has not wired it. */
+  submitReport?: (report: PortalReport) => Promise<PortalReportReceipt | null>;
   /**
    * The tenant's calls. Wired at the composition root: this file importing
    * the calls contract pulls the brief through the building switch.
@@ -188,6 +211,55 @@ function csrfOk(token: string | null, body: unknown): boolean {
     if (error instanceof KernelError) return false;
     throw error;
   }
+}
+
+const REPORT_TEXT_MAX = 4000;
+
+interface ReportForm {
+  submission: string;
+  step: 1 | 2 | 3;
+  categoryId: string;
+  description: string;
+  entry: 'YES' | 'ARRANGE' | 'HOME' | '';
+  notice: string | null;
+}
+
+function dutyHref(phone: string): string {
+  const compact = phone.replace(/[^\d+]/g, '');
+  if (compact.startsWith('+')) return `tel:${compact}`;
+  if (compact.startsWith('0')) return `tel:+972${compact.slice(1)}`;
+  return `tel:${compact}`;
+}
+
+function readReport(body: unknown): {
+  key: string | null;
+  categoryId: string;
+  description: string;
+  entry: ReportForm['entry'];
+  step: 1 | 2 | 3;
+  action: 'back' | 'send' | 'next';
+} {
+  let key: string | null = null;
+  try {
+    key = validId(field(body, 'submission'), 'submission');
+  } catch (error) {
+    if (!(error instanceof KernelError)) throw error;
+  }
+  const stepRaw = field(body, 'step');
+  const actionRaw = field(body, 'action');
+  const entryRaw = field(body, 'entry');
+  return {
+    key,
+    categoryId: field(body, 'category'),
+    description: field(body, 'description').trim(),
+    entry:
+      entryRaw === 'YES' || entryRaw === 'ARRANGE' || entryRaw === 'HOME'
+        ? entryRaw
+        : '',
+    step: stepRaw === '2' ? 2 : stepRaw === '3' ? 3 : 1,
+    action:
+      actionRaw === 'back' ? 'back' : actionRaw === 'send' ? 'send' : 'next',
+  };
 }
 
 function html(
@@ -663,17 +735,201 @@ export function registerPortalRoutes(
     const who = await portalOf(request);
     if (who === null) return go(reply, '/', []);
     if (who.kind === 'notice') return go(reply, '/notice', []);
-    if (who.chosen === null) {
+    if (who.chosen === null) return noTenancy(reply, who);
+    return html(reply, await reportPage(who, freshReport()));
+  });
+
+  app.post('/report', TENANT, async (request, reply) => {
+    const who = await portalOf(request);
+    if (who === null) return go(reply, '/', []);
+    if (who.kind === 'notice') return go(reply, '/notice', []);
+    if (who.chosen === null) return noTenancy(reply, who);
+    const posted = readReport(request.body);
+    if (!csrfOk(who.token, request.body) || posted.key === null) {
       return html(
         reply,
-        renderNoAccessPage({
-          csrf: csrfTokenFor(who.token),
-          phone: nationalDisplay(who.phone),
+        await reportPage(who, {
+          ...freshReport(),
+          description: posted.description,
+          notice: 'report.retry',
         }),
       );
     }
-    return html(reply, renderReportPage());
+    const loaded = await deps.loadReport();
+    const category =
+      loaded.categories.find((row) => row.id === posted.categoryId) ?? null;
+    const draft: ReportForm = {
+      submission: posted.key,
+      step: posted.step,
+      categoryId: category?.id ?? '',
+      description: posted.description,
+      entry: posted.entry,
+      notice: null,
+    };
+    if (posted.action === 'back') {
+      return html(
+        reply,
+        await reportPage(who, {
+          ...draft,
+          step: posted.step === 3 ? 2 : 1,
+        }),
+      );
+    }
+    if (posted.action === 'send' && posted.step === 3) {
+      return sendReport(reply, who, draft, category);
+    }
+    if (posted.step <= 1) {
+      if (category === null) {
+        return html(
+          reply,
+          await reportPage(who, {
+            ...draft,
+            step: 1,
+            notice: 'report.category_missing',
+          }),
+        );
+      }
+      return html(reply, await reportPage(who, { ...draft, step: 2 }));
+    }
+    if (posted.description === '') {
+      return html(
+        reply,
+        await reportPage(who, { ...draft, step: 2, notice: 'report.empty' }),
+      );
+    }
+    if (posted.description.length > REPORT_TEXT_MAX) {
+      return html(
+        reply,
+        await reportPage(who, { ...draft, step: 2, notice: 'report.long' }),
+      );
+    }
+    return html(reply, await reportPage(who, { ...draft, step: 3 }));
   });
+
+  function noTenancy(reply: Parameters<typeof html>[0], who: OpenPortal) {
+    return html(
+      reply,
+      renderNoAccessPage({
+        csrf: csrfTokenFor(who.token),
+        phone: nationalDisplay(who.phone),
+      }),
+    );
+  }
+
+  function freshReport(): ReportForm {
+    return {
+      submission: newId(clock),
+      step: 1,
+      categoryId: '',
+      description: '',
+      entry: '',
+      notice: null,
+    };
+  }
+
+  async function reportPage(
+    who: OpenPortal,
+    draft: ReportForm,
+  ): Promise<string> {
+    const chosen = who.chosen;
+    if (chosen === null) {
+      throw new KernelError('invalid', 'tenancy is not open');
+    }
+    const loaded = await deps.loadReport();
+    return renderReportPage({
+      csrf: csrfTokenFor(who.token),
+      submission: draft.submission,
+      step: draft.step,
+      categories: loaded.categories.map((row) => ({
+        id: row.id,
+        code: row.code,
+        label: row.labelHe,
+      })),
+      categoryId: draft.categoryId,
+      description: draft.description,
+      entry: draft.entry,
+      dutyPhone: loaded.dutyPhone,
+      dutyTel: dutyHref(loaded.dutyPhone),
+      flat: `${portalText('flat.unit')} ${chosen.unitNumber} · ${chosen.addressLine}`,
+      notice: draft.notice,
+    });
+  }
+
+  async function sendReport(
+    reply: Parameters<typeof html>[0],
+    who: OpenPortal,
+    draft: ReportForm,
+    category: { id: string; labelHe: string } | null,
+  ) {
+    const chosen = who.chosen;
+    if (chosen === null) return noTenancy(reply, who);
+    if (category === null) {
+      return html(
+        reply,
+        await reportPage(who, {
+          ...draft,
+          step: 1,
+          notice: 'report.category_missing',
+        }),
+      );
+    }
+    if (draft.description === '') {
+      return html(
+        reply,
+        await reportPage(who, { ...draft, step: 2, notice: 'report.empty' }),
+      );
+    }
+    if (draft.description.length > REPORT_TEXT_MAX) {
+      return html(
+        reply,
+        await reportPage(who, { ...draft, step: 2, notice: 'report.long' }),
+      );
+    }
+    if (draft.entry === '') {
+      return html(
+        reply,
+        await reportPage(who, {
+          ...draft,
+          step: 3,
+          notice: 'report.entry_missing',
+        }),
+      );
+    }
+    const submit = deps.submitReport;
+    if (submit === undefined) {
+      throw new KernelError('unavailable', 'portal intake is not wired');
+    }
+    let receipt: PortalReportReceipt | null = null;
+    try {
+      receipt = await submit({
+        phone: who.phone,
+        key: draft.submission,
+        body: draft.description,
+        categoryId: category.id,
+        entry: draft.entry,
+        tenancyId: chosen.tenancyId,
+      });
+    } catch (error) {
+      if (!(error instanceof KernelError) || error.code !== 'invalid') {
+        throw error;
+      }
+    }
+    if (receipt === null) {
+      return html(
+        reply,
+        await reportPage(who, { ...draft, step: 3, notice: 'report.retry' }),
+      );
+    }
+    return html(
+      reply,
+      renderReportReceived({
+        callId: receipt.callId,
+        callNumber: receipt.callNumber,
+        category: category.labelHe,
+        duty: receipt.duty,
+      }),
+    );
+  }
 
   app.post('/tenancy', TENANT, async (request, reply) => {
     const who = await portalOf(request);

@@ -5,7 +5,7 @@
 
 import type { CodeChannel } from '../../channel/contract.ts';
 import { Html, h } from '../../kernel/ui/html.ts';
-import { icon } from '../../kernel/ui/icons.ts';
+import { type IconName, icon } from '../../kernel/ui/icons.ts';
 import { csrfInput } from '../../kernel/ui/page.ts';
 import type {
   CallCard,
@@ -525,16 +525,190 @@ export function renderMorePage(screen: { csrf: string }): string {
   );
 }
 
-export function renderReportPage(): string {
+export type ReportEntry = 'YES' | 'ARRANGE' | 'HOME';
+
+export interface ReportCategory {
+  id: string;
+  code: string;
+  label: string;
+}
+
+export interface ReportDraft {
+  csrf: string;
+  submission: string;
+  step: 1 | 2 | 3;
+  categories: readonly ReportCategory[];
+  categoryId: string;
+  description: string;
+  entry: ReportEntry | '';
+  dutyPhone: string;
+  dutyTel: string;
+  flat: string;
+  notice: string | null;
+}
+
+export function renderReportPage(screen: ReportDraft): string {
+  const chosen = screen.categories.find((row) => row.id === screen.categoryId);
+  const title =
+    screen.step === 2
+      ? (chosen?.label ?? portalText('report.title'))
+      : screen.step === 3
+        ? portalText('report.almost')
+        : portalText('report.title');
+  const primary = screen.step === 3 ? 'send' : 'next';
+  const primaryLabel =
+    screen.step === 3 ? portalText('report.send') : portalText('report.next');
+  const implicit = h`<button hidden type="submit" name="action" value="${primary}">${primaryLabel}</button>`;
+  const back =
+    screen.step === 1
+      ? h``
+      : h`<button class="tp-icon-btn" type="submit" name="action" value="back" aria-label="${portalText('report.back')}">${icon('chevron-right', { class: 'tp-i i18' })}</button>`;
+  const close =
+    screen.step === 1
+      ? h`<a class="tp-icon-btn" href="/" aria-label="${portalText('report.close')}">${icon('x', { class: 'tp-i i18' })}</a>`
+      : h``;
   return page(
     portalText('report.page'),
-    h`<div class="tp-ask">
+    h`<form class="tp-ask" method="post" action="/report">
+      ${screen.step === 1 ? h`` : implicit}
       <header class="tp-bar">
         <div class="tp-bar-row">
-          <span class="tp-bar-title"><b>${portalText('report.title')}</b></span>
-          <a class="tp-icon-btn" href="/" aria-label="${portalText('ask.close')}">${icon('x', { class: 'tp-i i18' })}</a>
+          ${back}
+          <span class="tp-bar-title"><b>${title}</b></span>
+          ${close}
         </div>
+        <div class="tp-steps" data-step="${screen.step}" aria-label="${stepLabel(screen.step)}"><i></i><i></i><i></i></div>
       </header>
+      <div class="tp-body">
+        ${screen.step === 1 ? emergencyCard(screen) : h``}
+        ${screen.step === 1 ? implicit : h``}
+        ${notice(screen.notice)}
+        ${stepBody(screen, chosen?.label ?? '')}
+        ${carried(screen)}
+        <div class="tp-spacer"></div>
+        <button class="tp-primary" type="submit" name="action" value="${primary}">${primaryLabel}</button>
+      </div>
+    </form>`,
+  );
+}
+
+function stepLabel(step: 1 | 2 | 3): string {
+  if (step === 1) return portalText('report.step1');
+  if (step === 2) return portalText('report.step2');
+  return portalText('report.step3');
+}
+
+function emergencyCard(screen: ReportDraft): Html {
+  return h`<div class="tp-emergency">
+    <b>${portalText('report.emergency_title')}</b>
+    <p>${portalText('report.emergency_body')}</p>
+    <a class="tp-danger" href="${screen.dutyTel}">${icon('phone', { class: 'tp-i i18' })}${portalText('report.duty')} · <span dir="ltr">${screen.dutyPhone}</span></a>
+  </div>`;
+}
+
+function stepBody(screen: ReportDraft, categoryLabel: string): Html {
+  if (screen.step === 1) {
+    return h`<h2 class="tp-q">${portalText('report.what')}</h2>
+      <div class="tp-tiles" role="radiogroup" aria-label="${portalText('report.category')}">
+        ${screen.categories.map((category) => categoryTile(category, category.id === screen.categoryId))}
+      </div>`;
+  }
+  if (screen.step === 2) {
+    return h`<h2 class="tp-q"><label for="report-text">${portalText('report.tell')}</label></h2>
+      <div>
+        <textarea class="tp-textarea" id="report-text" name="description" required maxlength="4000" aria-describedby="report-help">${screen.description}</textarea>
+        <p class="tp-help" id="report-help">${portalText('report.hint')}</p>
+      </div>
+      <h3 class="tp-section">${portalText('report.photos')}</h3>
+      <div class="tp-thumbs">
+        <label class="tp-add"><input class="tp-sr" type="file" accept="image/*,video/*,.pdf" multiple />${icon('camera', { class: 'tp-i i22' })}${portalText('report.add')}</label>
+      </div>`;
+  }
+  return h`<h2 class="tp-q" id="entry-q">${portalText('report.entry_q')}</h2>
+    <div class="tp-stack" role="radiogroup" aria-labelledby="entry-q">
+      ${entryCard('YES', portalText('report.entry_yes'), screen.entry === 'YES')}
+      ${entryCard('ARRANGE', portalText('report.entry_arrange'), screen.entry === 'ARRANGE')}
+      ${entryCard('HOME', portalText('report.entry_home'), screen.entry === 'HOME')}
+    </div>
+    <div class="tp-summary">
+      <span class="tp-kicker">${portalText('report.summary')}</span>
+      <dl class="tp-stack">
+        <div><dt>${portalText('report.category')}</dt><dd>${categoryLabel}</dd></div>
+        <div><dt>${portalText('report.description')}</dt><dd>${screen.description}</dd></div>
+        <div><dt>${portalText('report.files')}</dt><dd>${portalText('report.files_none')}</dd></div>
+        <div><dt>${portalText('report.flat')}</dt><dd>${screen.flat}</dd></div>
+      </dl>
+    </div>`;
+}
+
+function categoryTile(category: ReportCategory, on: boolean): Html {
+  const mark = icon(categoryIcon(category.code), { class: 'tp-i i26' });
+  const input = on
+    ? h`<input class="tp-sr" type="radio" name="category" required data-code="${category.code}" value="${category.id}" checked />`
+    : h`<input class="tp-sr" type="radio" name="category" required data-code="${category.code}" value="${category.id}" />`;
+  return h`<label class="tp-tile">${input}${mark}${category.label}</label>`;
+}
+
+function categoryIcon(code: string): IconName {
+  if (code === 'PLUMBING') return 'droplet';
+  if (code === 'ELECTRICAL') return 'zap';
+  if (code === 'LOCKS') return 'door';
+  if (code === 'GATES') return 'building';
+  if (code === 'AIR_CONDITIONING') return 'sun';
+  return 'ellipsis';
+}
+
+function entryCard(value: ReportEntry, label: string, on: boolean): Html {
+  const input = on
+    ? h`<input class="tp-sr" type="radio" name="entry" required value="${value}" checked />`
+    : h`<input class="tp-sr" type="radio" name="entry" required value="${value}" />`;
+  return h`<label class="tp-radio">${input}<span class="tp-ring" aria-hidden="true"></span><span class="tp-radio-text">${label}</span></label>`;
+}
+
+function carried(screen: ReportDraft): Html {
+  const description =
+    screen.step === 2
+      ? h``
+      : h`<input type="hidden" name="description" value="${screen.description}" />`;
+  const entry =
+    screen.step === 3
+      ? h``
+      : h`<input type="hidden" name="entry" value="${screen.entry}" />`;
+  const category =
+    screen.step === 1
+      ? h``
+      : h`<input type="hidden" name="category" value="${screen.categoryId}" />`;
+  return h`${csrfInput(screen.csrf)}
+    <input type="hidden" name="submission" value="${screen.submission}" />
+    <input type="hidden" name="step" value="${screen.step}" />
+    ${description}${entry}${category}`;
+}
+
+export function renderReportReceived(screen: {
+  callId: string;
+  callNumber: number;
+  category: string;
+  duty: string | null;
+}): string {
+  const duty =
+    screen.duty === null
+      ? h``
+      : h`<p class="tp-strip" role="status">${screen.duty}</p>`;
+  return page(
+    portalText('report.received'),
+    h`<div class="tp-body is-auth is-center">
+      <div class="tp-spacer"></div>
+      <span class="tp-hero-well is-sent">${icon('check', { class: 'tp-i i48' })}</span>
+      <div class="tp-stack">
+        <h1 class="tp-display">${portalText('report.received')}</h1>
+        <p class="tp-lede" data-call-number="${screen.callNumber}">${portalText('ask.number')} <span dir="ltr">${screen.callNumber}</span> · ${screen.category}. ${portalText('report.received_line')}</p>
+      </div>
+      ${duty}
+      <div class="tp-spacer"></div>
+      <div class="tp-stack">
+        <a class="tp-primary" href="/calls/${screen.callId}">${portalText('report.view')}</a>
+        <a class="tp-text-btn" href="/">${portalText('report.home')}</a>
+      </div>
     </div>`,
   );
 }

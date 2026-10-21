@@ -34,4 +34,5 @@ export {
   renderPortalCallPage,
   renderPortalCallsPage,
   renderReportPage,
+  renderReportReceived,
 } from './internal/views.ts';

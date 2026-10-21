@@ -57,10 +57,17 @@ message is Source channel `PORTAL`, the form's idempotency key as the external m
 the thread id, the verified number in E.164 as the sender, and the question as the body and as the
 call's description. A second post of that key is the first message again, and it does not open a
 second call. Identification on this channel is the one Party who holds that number today, and it
-records no Tenancy. No party, or a guarantor the link refuses, leaves the call in NEW. The office
+records no Tenancy on a question. No party, or a guarantor the link refuses, leaves the call in NEW. The office
 page then marks it as from a verified number. An emergency term flags the call before the sorter,
 the same check as every other channel. The duty sentence is shown on the confirmation and is not
 sent.
+
+**A portal report** is the same door, from a tenant with tenancy access. The body is the
+description, the form's idempotency key is the external message id and the thread id, and the
+verified number is the sender. The door also records the suggested Category, the entry permission
+and the tenancy. A question carries none of the three. A noise verdict does not filter a report:
+the tenant asked for a call, so one is opened and marked to review when the verdict was not a
+plain call. The sorter's own Category is still the proposal. It does not replace the suggestion.
 
 **A dev-only form** pushes a fabricated message through this door. When no sorter is
 configured, the person at the form picks the verdict, so the path can be clicked before a key is

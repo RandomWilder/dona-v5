@@ -21,6 +21,7 @@ import {
   canExit,
   DEPARTMENT_MAX,
   DESCRIPTION_MAX,
+  type EntryPermission,
   EXIT_KINDS,
   type ExitKind,
   MANUAL_CHANNELS,
@@ -1348,6 +1349,12 @@ function eventLine(event: CallTransition): Html {
   return h`<li data-kind="CANCELLED">בוטלה · ${event.note} · ${who}</li>`;
 }
 
+function entryWords(entry: EntryPermission): string {
+  if (entry === 'YES') return 'כן, מותר להיכנס';
+  if (entry === 'ARRANGE') return 'רק בתיאום מראש';
+  return 'לא, רק כשאני בבית';
+}
+
 function sorterLabel(label: SorterLabel | null): Html {
   if (label === null) return h``;
   return h`<span data-sorter="${label}">מסווג: ${SORTER_HE[label]}</span>`;
@@ -1990,6 +1997,18 @@ export function renderCallPage(screen: CallScreen): string {
     call.proposal === null
       ? h``
       : h`<div><dt>הצעה</dt><dd data-proposal="${call.proposal.code}">${call.proposal.labelHe}</dd></div>`;
+  const suggestion =
+    call.suggestion === null
+      ? h``
+      : h`<div><dt>הצעת הדייר</dt><dd data-suggested="${call.suggestion.code}">${call.suggestion.labelHe}</dd></div>`;
+  const entry =
+    call.entry === null
+      ? h``
+      : h`<div><dt>כניסה</dt><dd data-entry="${call.entry}">${entryWords(call.entry)}</dd></div>`;
+  const flat =
+    call.tenancy === null
+      ? h``
+      : h`<div><dt>דירה</dt><dd data-tenancy="${call.tenancy.id}">דירה ${call.tenancy.unitNumber} · ${call.tenancy.addressLine}</dd></div>`;
   const summary =
     call.summary === null
       ? h``
@@ -2053,6 +2072,9 @@ export function renderCallPage(screen: CallScreen): string {
           }
           <div><dt>פונה</dt><dd>${requesterName(screen)}</dd></div>
           <div><dt>קטגוריה</dt><dd>${category}</dd></div>
+          ${suggestion}
+          ${entry}
+          ${flat}
           ${proposal}
           ${summary}
           ${sorted}

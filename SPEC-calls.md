@@ -162,7 +162,9 @@ to reply on. The reply is on the call's timeline and audited when a channel sent
 
 **Category** is the trade a call needs. It is an admin-managed list of rows, deactivated and never
 deleted, seeded with a placeholder list until Dona Dom supplies theirs. It is distinct from
-`asset_type` and does not feed the responsibility matrix.
+`asset_type` and does not feed the responsibility matrix. A category a tenant picks on a portal
+report is not this Category. It is a suggestion, stored beside the call. The sorter's proposal and
+a person's Category command may name a different one. The suggestion does not move the state.
 
 **Editable at /settings without a deploy:** the emergency terms (one per line, like verification
 terms), the duty phone number and hours, the Category list, and the amber and red age thresholds of
@@ -197,6 +199,17 @@ tenancy the number reaches today, on any Source channel, newest first. A call re
 filtered list is not on it. Opening one shows the tenant's messages and the office's replies.
 A brief, a draft, a band, a clock and an internal state name are not on any tenant page. Another
 tenant's call, asked for by its identifier, is not found.
+
+**A portal report (#282).** A tenant with tenancy access reports an issue on the tenancy chosen
+for the session. It is a ServiceCall on `PORTAL` through the intake door, and nothing is a
+ServiceCall until they send it. The same submission twice is one call. The description may be in
+any language. The category they pick is the suggestion above. The entry permission is one of
+three answers — the office may enter, only by arrangement, or only while the tenant is home —
+stored on the call. The office's call page shows the suggestion, the permission and the flat.
+The first step shows the duty phone from `/settings`, as a `tel:` link, before the first question.
+An emergency term in the description flags the call the same way as any other intake. On `PORTAL`
+the duty sentence is shown on the confirmation and nothing is sent. The reply-target line is
+shown on that confirmation only when that setting is on.
 
 A visit's time is two timestamps on the call, `visit_starts_at` and `visit_ends_at`, both set or
 neither, and the end after the start. No command writes them yet; the visit flow will. The home

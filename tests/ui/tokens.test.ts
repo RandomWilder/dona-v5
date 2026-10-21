@@ -89,6 +89,7 @@ import {
   renderPortalCallPage,
   renderPortalCallsPage,
   renderReportPage,
+  renderReportReceived,
 } from '../../src/portal/contract.ts';
 import { renderSettingsPage } from '../../src/settings-page.ts';
 import {
@@ -759,7 +760,39 @@ const SCREENS: Array<[string, () => string]> = [
       }),
   ],
   ['portal · more', () => renderMorePage({ csrf: CSRF })],
-  ['portal · report', () => renderReportPage()],
+  [
+    'portal · report',
+    () =>
+      renderReportPage({
+        csrf: CSRF,
+        submission: '00000000-0000-4000-8000-000000000282',
+        step: 1,
+        categories: [
+          {
+            id: 'a1830001-0000-4000-8000-000000000001',
+            code: 'PLUMBING',
+            label: 'אינסטלציה',
+          },
+        ],
+        categoryId: '',
+        description: '',
+        entry: '',
+        dutyPhone: '050-000-0001',
+        dutyTel: 'tel:+972500000001',
+        flat: 'דירה 12 · הדגמה 8',
+        notice: null,
+      }),
+  ],
+  [
+    'portal · report sent',
+    () =>
+      renderReportReceived({
+        callId: '11111111-1111-4111-8111-111111111111',
+        callNumber: 1043,
+        category: 'אינסטלציה',
+        duty: null,
+      }),
+  ],
   [
     'portal · no access',
     () => renderNoAccessPage({ csrf: CSRF, phone: '050-000-0000' }),
@@ -2419,6 +2452,9 @@ const SCREENS: Array<[string, () => string]> = [
             toReview: false,
             summary: null,
             proposal: null,
+            suggestion: null,
+            entry: null,
+            tenancy: null,
             sorterLabel: null,
             sorterModel: null,
             sorterPrompt: null,
@@ -2447,6 +2483,9 @@ const SCREENS: Array<[string, () => string]> = [
             toReview: false,
             summary: null,
             proposal: null,
+            suggestion: null,
+            entry: null,
+            tenancy: null,
             sorterLabel: null,
             sorterModel: null,
             sorterPrompt: null,
@@ -2505,6 +2544,9 @@ const SCREENS: Array<[string, () => string]> = [
             toReview: false,
             summary: null,
             proposal: null,
+            suggestion: null,
+            entry: null,
+            tenancy: null,
             sorterLabel: null,
             sorterModel: null,
             sorterPrompt: null,
@@ -2584,6 +2626,9 @@ const SCREENS: Array<[string, () => string]> = [
           toReview: false,
           summary: null,
           proposal: null,
+          suggestion: null,
+          entry: null,
+          tenancy: null,
           sorterLabel: null,
           sorterModel: null,
           sorterPrompt: null,
@@ -2651,6 +2696,9 @@ const SCREENS: Array<[string, () => string]> = [
           toReview: false,
           summary: null,
           proposal: null,
+          suggestion: null,
+          entry: null,
+          tenancy: null,
           sorterLabel: null,
           sorterModel: null,
           sorterPrompt: null,

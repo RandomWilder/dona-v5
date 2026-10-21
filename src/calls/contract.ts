@@ -21,6 +21,7 @@ export type {
   EmergencyActorSpec,
   EmergencyMark,
   EmergencySettings,
+  EntryPermission,
   ExitCallSpec,
   ExitKind,
   IdentifyByAddressSpec,
