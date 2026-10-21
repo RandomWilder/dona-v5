@@ -38,3 +38,7 @@ The privacy notice, the terms, the entry-permission wording and the optional opt
 ## Comment — 2026-10-20
 
 A signed-in tenant who has not read the current privacy notice or terms is shown them before the empty home. The passkey offer still comes first. The acknowledgement is the continue button, and the building-notices switch is a separate card, off until turned on. Turning it off is the same switch, on that screen and again when a new version asks. The button records the text that was on the page, not a version published after the page was drawn. Placeholder wording is seeded in Hebrew, English and Russian; the portal still speaks Hebrew, so the other two are held until the language choice exists. On :3000 at 390px the notice and the full wording did not scroll sideways. Enter opened the full wording and submitted the continue button. A screen reader was not run. The accessibility tree names the switch, the link and the button.
+
+## Comment — 2026-10-20
+
+The director signed in on `tenant.localhost:3000` with a fresh number, used the logged code, and landed on לפני שמתחילים. The flow looks right. A screen reader was still not run.
