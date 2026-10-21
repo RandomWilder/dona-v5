@@ -9,6 +9,7 @@ export type { PortalDeps } from './internal/routes.ts';
 export { registerPortalRoutes } from './internal/routes.ts';
 export {
   PORTAL_CHALLENGE_COOKIE,
+  PORTAL_CHOICE_COOKIE,
   PORTAL_FORM_COOKIE,
   PORTAL_SESSION_COOKIE,
   portalCookie,
@@ -20,10 +21,16 @@ export {
   renderAskPage,
   renderAskReceived,
   renderCodePage,
+  renderFlatPage,
   renderHomePage,
+  renderMissingPage,
+  renderMorePage,
+  renderNoAccessPage,
   renderNoticeFullPage,
   renderNoticePage,
   renderPasskeyOffer,
   renderPasskeysPage,
   renderPhonePage,
+  renderPortalCallsPage,
+  renderReportPage,
 } from './internal/views.ts';

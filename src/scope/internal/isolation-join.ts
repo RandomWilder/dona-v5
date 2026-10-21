@@ -399,3 +399,143 @@ export async function partyHoldingContact(
   if (result.rows.length !== 1) return null;
   return result.rows[0]?.party_id ?? null;
 }
+
+/**
+ * The portal's question. #279.
+ *
+ * Q2's contact predicate and guarantor exclusion, and a tenancy that has
+ * reached its end date is already over: `end_date > today`, not `>=`. The
+ * office join stays inclusive. The building's portal flag is returned and not
+ * applied here.
+ *
+ * The end-date columns are qualified because `tenancy` is joined for the
+ * assigned bay and storage, and an unqualified `end_date` would be ambiguous.
+ */
+const PORTAL_TENANCY_OPEN = `o.status = 'ACTIVE'
+    AND o.start_date <= $2
+    AND o.end_date > $2`;
+
+const PORTAL_TENANCIES_SQL = `
+  SELECT DISTINCT ON (o.tenancy_id)
+         o.tenancy_id,
+         o.unit_number,
+         o.party_id,
+         o.full_name,
+         p.given_name,
+         o.start_date::text AS start_date,
+         o.end_date::text AS end_date,
+         b.address_line,
+         b.city,
+         b.portal_enabled,
+         bay.name AS parking_name,
+         bay2.name AS second_parking_name,
+         store.name AS storage_name,
+         store2.name AS second_storage_name
+    FROM ${OCCUPANCY_VIEW} o
+    JOIN space flat ON flat.space_id = o.unit_id
+    JOIN building b ON b.building_id = flat.building_id
+    JOIN tenancy t ON t.tenancy_id = o.tenancy_id
+    JOIN party p ON p.party_id = o.party_id
+    LEFT JOIN space bay ON bay.space_id = t.parking_space_id
+    LEFT JOIN space bay2 ON bay2.space_id = t.second_parking_space_id
+    LEFT JOIN space store ON store.space_id = t.storage_space_id
+    LEFT JOIN space store2 ON store2.space_id = t.second_storage_space_id
+   WHERE o.channel = 'PHONE'
+     AND o.contact_value = $1
+     AND ${CONTACT_VALID_TODAY}
+     AND ${PORTAL_TENANCY_OPEN}
+     AND o.is_service_contact
+   ORDER BY o.tenancy_id,
+            CASE o.role
+              WHEN 'PRIMARY_TENANT' THEN 0
+              WHEN 'CO_TENANT' THEN 1
+              WHEN 'OCCUPANT' THEN 2
+              ELSE 3
+            END
+`;
+
+interface PortalTenancyRow {
+  tenancy_id: string;
+  unit_number: string;
+  party_id: string;
+  full_name: string;
+  given_name: string | null;
+  start_date: string;
+  end_date: string;
+  address_line: string;
+  city: string;
+  portal_enabled: boolean;
+  parking_name: string | null;
+  second_parking_name: string | null;
+  storage_name: string | null;
+  second_storage_name: string | null;
+}
+
+export interface PortalTenancy {
+  tenancyId: string;
+  unitNumber: string;
+  fullName: string;
+  givenName: string | null;
+  startDate: string;
+  endDate: string;
+  addressLine: string;
+  city: string;
+  portalEnabled: boolean;
+  parking: string[];
+  storage: string[];
+}
+
+function assignedNames(first: string | null, second: string | null): string[] {
+  const names: string[] = [];
+  if (first !== null && first !== '') names.push(first);
+  if (second !== null && second !== '') names.push(second);
+  return names;
+}
+
+function unitRank(value: string): number {
+  const rank = Number(value);
+  return Number.isFinite(rank) ? rank : Number.POSITIVE_INFINITY;
+}
+
+export async function resolvePortalTenancies(
+  db: Queryable,
+  phone: string,
+  clock: Clock,
+  options: ScopeOptions = {},
+): Promise<PortalTenancy[]> {
+  const value = normalisePhone(phone);
+  const rows = await audited(
+    db,
+    clock,
+    options,
+    'scope.resolve_portal',
+    null,
+    async () => {
+      const result = await db.query<PortalTenancyRow>(PORTAL_TENANCIES_SQL, [
+        value,
+        today(clock),
+      ]);
+      return result.rows;
+    },
+  );
+  return rows
+    .map((row) => ({
+      tenancyId: row.tenancy_id,
+      unitNumber: row.unit_number,
+      fullName: row.full_name,
+      givenName: row.given_name,
+      startDate: row.start_date,
+      endDate: row.end_date,
+      addressLine: row.address_line,
+      city: row.city,
+      portalEnabled: row.portal_enabled,
+      parking: assignedNames(row.parking_name, row.second_parking_name),
+      storage: assignedNames(row.storage_name, row.second_storage_name),
+    }))
+    .sort(
+      (left, right) =>
+        unitRank(left.unitNumber) - unitRank(right.unitNumber) ||
+        left.unitNumber.localeCompare(right.unitNumber, 'he') ||
+        left.tenancyId.localeCompare(right.tenancyId),
+    );
+}

@@ -90,8 +90,8 @@ describe('portal sign-in', () => {
     clock.advance(61_000);
     const home = await tenant.inject({ method: 'GET', url: '/' });
     assert.equal(home.statusCode, 200);
-    assert.match(home.body, /אין כאן עדיין מה להציג/);
-    assert.match(home.body, /יציאה מכל המכשירים/);
+    assert.match(home.body, /הבניין שלכם עוד לא בפורטל/);
+    assert.match(home.body, /יציאה/);
     assert.doesNotMatch(home.body, /type="email"/);
     assert.doesNotMatch(home.body, /mailto:/);
 
@@ -106,7 +106,7 @@ describe('portal sign-in', () => {
     const afterOne = await tenant.inject({ method: 'GET', url: '/' });
     assert.match(afterOne.body, /שליחת קוד/);
     const still = await other.inject({ method: 'GET', url: '/' });
-    assert.match(still.body, /אין כאן עדיין מה להציג/);
+    assert.match(still.body, /הבניין שלכם עוד לא בפורטל/);
 
     const everywhere = await other.inject({
       method: 'POST',

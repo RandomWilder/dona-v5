@@ -328,7 +328,7 @@ describe('portal passkeys', () => {
       url: '/',
       headers: { ...HOST, cookie: session },
     });
-    assert.match(home.body, /אין כאן עדיין מה להציג/);
+    assert.match(home.body, /הבניין שלכם עוד לא בפורטל/);
 
     clock.advance(61_000);
     const again = await app.inject({
@@ -514,7 +514,7 @@ describe('portal passkeys', () => {
       url: '/',
       headers: { ...HOST, cookie: next },
     });
-    assert.match(inside.body, /אין כאן עדיין מה להציג/);
+    assert.match(inside.body, /הבניין שלכם עוד לא בפורטל/);
     const nextToken = next.slice(next.indexOf('=') + 1);
 
     const removed = await app.inject({
@@ -640,7 +640,7 @@ describe('portal passkeys', () => {
       url: '/',
       headers: { ...HOST, cookie: homeCookie },
     });
-    assert.match(home.body, /אין כאן עדיין מה להציג/);
+    assert.match(home.body, /הבניין שלכם עוד לא בפורטל/);
     const { rows } = await pool.query<{ n: string }>(
       `SELECT count(*)::text AS n FROM audit_log
         WHERE action = 'portal.session.new_device' AND outcome = 'error'

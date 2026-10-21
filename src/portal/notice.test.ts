@@ -223,7 +223,7 @@ describe('portal first visit', () => {
       url: '/',
       headers: { ...HOST, cookie: session },
     });
-    assert.match(home.body, /אין כאן עדיין מה להציג/);
+    assert.match(home.body, /הבניין שלכם עוד לא בפורטל/);
 
     await publish(pool, 'privacy', 'נוסח שני של הודעת הפרטיות', 2);
     const again = await app.inject({

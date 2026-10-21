@@ -6,13 +6,24 @@ import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import type { CodeChannel, CodeSender } from '../../channel/contract.ts';
 import { createAuditLog } from '../../kernel/audit.ts';
-import { type Clock, dayIn } from '../../kernel/clock.ts';
+import { type Clock, dayIn, today } from '../../kernel/clock.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
 import { validId } from '../../kernel/validate.ts';
+import {
+  type PortalTenancy,
+  resolvePortalTenancies,
+} from '../../scope/contract.ts';
 import { csrfTokenFor, verifyCsrf } from '../../staff/contract.ts';
 import { describeChallenge, requestCode, verifyCode } from './codes.ts';
 import { portalText } from './copy.ts';
+import {
+  displayDate,
+  greetingKey,
+  hourInZone,
+  leasePercent,
+  monthsRemaining,
+} from './lease.ts';
 import {
   acknowledgeNotice,
   chosenOptIns,
@@ -35,24 +46,34 @@ import {
   mintPortalSession,
   newOpaqueToken,
   PORTAL_CHALLENGE_COOKIE,
+  PORTAL_CHOICE_COOKIE,
   PORTAL_FORM_COOKIE,
   PORTAL_SESSION_COOKIE,
+  portalCookie,
   readPortalCookie,
   resolvePortalSession,
   revokeEveryPortalSession,
   revokePortalSession,
+  SESSION_ABSOLUTE_MS,
   sessionCookie,
 } from './sessions.ts';
 import {
+  type PortalChoice,
   renderAskPage,
   renderAskReceived,
   renderCodePage,
+  renderFlatPage,
   renderHomePage,
+  renderMissingPage,
+  renderMorePage,
+  renderNoAccessPage,
   renderNoticeFullPage,
   renderNoticePage,
   renderPasskeyOffer,
   renderPasskeysPage,
   renderPhonePage,
+  renderPortalCallsPage,
+  renderReportPage,
 } from './views.ts';
 
 const TENANT = { config: { tenant: 'public' } } as const;
@@ -199,10 +220,9 @@ export function registerPortalRoutes(
     if (token !== null) {
       const session = await resolvePortalSession(pool, clock, token);
       if (session !== null) {
-        if (await noticeDue(session.portalIdentityId)) {
-          return go(reply, '/notice', []);
-        }
-        return html(reply, renderHomePage({ csrf: csrfTokenFor(token) }));
+        const who = await openPortal(request.headers.cookie, token, session);
+        if (who.kind === 'notice') return go(reply, '/notice', []);
+        return html(reply, pageFor(who, 'home'));
       }
     }
     const form = newOpaqueToken();
@@ -218,9 +238,207 @@ export function registerPortalRoutes(
         formCookie(form, secure),
         ...(token === null
           ? []
-          : [clearedCookie(PORTAL_SESSION_COOKIE, secure)]),
+          : [
+              clearedCookie(PORTAL_SESSION_COOKIE, secure),
+              clearedCookie(PORTAL_CHOICE_COOKIE, secure),
+            ]),
       ],
     );
+  });
+
+  interface OpenPortal {
+    kind: 'open';
+    token: string;
+    phone: string;
+    rows: PortalTenancy[];
+    chosen: PortalTenancy | null;
+  }
+
+  async function openPortal(
+    cookie: string | undefined,
+    token: string,
+    session: { portalIdentityId: string; phone: string },
+  ): Promise<{ kind: 'notice' } | OpenPortal> {
+    if (await noticeDue(session.portalIdentityId)) return { kind: 'notice' };
+    const rows = await resolvePortalTenancies(pool, session.phone, clock, {
+      actor: { actorKind: 'tenant', actorId: session.portalIdentityId },
+    });
+    const open = rows.filter((row) => row.portalEnabled);
+    const picked = readPortalCookie(cookie, PORTAL_CHOICE_COOKIE);
+    const chosen =
+      open.find((row) => row.tenancyId === picked) ?? open[0] ?? null;
+    return { kind: 'open', token, phone: session.phone, rows: open, chosen };
+  }
+
+  function choicesOf(rows: readonly PortalTenancy[]): PortalChoice[] {
+    return rows.map((row) => ({
+      id: row.tenancyId,
+      label: `${portalText('flat.unit')} ${row.unitNumber} · ${row.addressLine}`,
+      city: row.city,
+    }));
+  }
+
+  function greetingFor(row: PortalTenancy): string {
+    const hello = portalText(greetingKey(hourInZone(clock.now(), clock.zone)));
+    const name = row.givenName?.trim() || row.fullName.trim();
+    return name === '' ? hello : `${hello}, ${name}`;
+  }
+
+  function pageFor(who: OpenPortal, where: 'home' | 'calls'): string {
+    if (who.chosen === null) {
+      return renderNoAccessPage({
+        csrf: csrfTokenFor(who.token),
+        phone: nationalDisplay(who.phone),
+      });
+    }
+    const screen = {
+      csrf: csrfTokenFor(who.token),
+      choices: choicesOf(who.rows),
+      chosenId: who.chosen.tenancyId,
+    };
+    if (where === 'calls') return renderPortalCallsPage(screen);
+    return renderHomePage({
+      ...screen,
+      greeting: greetingFor(who.chosen),
+    });
+  }
+
+  function flatOf(who: OpenPortal, tenancyId: string): string {
+    if (who.chosen === null) {
+      return renderNoAccessPage({
+        csrf: csrfTokenFor(who.token),
+        phone: nationalDisplay(who.phone),
+      });
+    }
+    const row = who.rows.find((item) => item.tenancyId === tenancyId);
+    if (row === undefined) {
+      return renderMissingPage({ chosenId: who.chosen.tenancyId });
+    }
+    const day = today(clock);
+    const parking =
+      row.parking.length === 0
+        ? portalText('flat.none')
+        : row.parking.join(' · ');
+    const storage =
+      row.storage.length === 0
+        ? portalText('flat.none')
+        : row.storage.join(' · ');
+    return renderFlatPage({
+      csrf: csrfTokenFor(who.token),
+      choices: choicesOf(who.rows),
+      chosenId: row.tenancyId,
+      address: `${row.addressLine}, ${portalText('flat.unit')} ${row.unitNumber}`,
+      city: row.city,
+      start: displayDate(row.startDate),
+      end: displayDate(row.endDate),
+      months: monthsRemaining(day, row.endDate),
+      percent: leasePercent(row.startDate, row.endDate, day),
+      parking,
+      storage,
+    });
+  }
+
+  async function portalOf(request: {
+    headers: IncomingHttpHeaders;
+  }): Promise<null | { kind: 'notice' } | OpenPortal> {
+    const token = readPortalCookie(
+      request.headers.cookie,
+      PORTAL_SESSION_COOKIE,
+    );
+    if (token === null) return null;
+    const session = await resolvePortalSession(pool, clock, token);
+    if (session === null) return null;
+    return openPortal(request.headers.cookie, token, session);
+  }
+
+  app.get('/flat/:tenancyId', TENANT, async (request, reply) => {
+    const who = await portalOf(request);
+    if (who === null) return go(reply, '/', []);
+    if (who.kind === 'notice') return go(reply, '/notice', []);
+    const raw = (request.params as { tenancyId?: string }).tenancyId ?? '';
+    let tenancyId = raw;
+    try {
+      tenancyId = validId(raw, 'tenancy');
+    } catch (error) {
+      if (!(error instanceof KernelError)) throw error;
+      tenancyId = '';
+    }
+    const body = flatOf(who, tenancyId);
+    if (
+      who.chosen !== null &&
+      !who.rows.some((row) => row.tenancyId === tenancyId)
+    ) {
+      reply.code(404);
+    }
+    return html(reply, body);
+  });
+
+  app.get('/calls', TENANT, async (request, reply) => {
+    const who = await portalOf(request);
+    if (who === null) return go(reply, '/', []);
+    if (who.kind === 'notice') return go(reply, '/notice', []);
+    return html(reply, pageFor(who, 'calls'));
+  });
+
+  app.get('/more', TENANT, async (request, reply) => {
+    const who = await portalOf(request);
+    if (who === null) return go(reply, '/', []);
+    if (who.kind === 'notice') return go(reply, '/notice', []);
+    if (who.chosen === null) {
+      return html(
+        reply,
+        renderNoAccessPage({
+          csrf: csrfTokenFor(who.token),
+          phone: nationalDisplay(who.phone),
+        }),
+      );
+    }
+    return html(reply, renderMorePage({ csrf: csrfTokenFor(who.token) }));
+  });
+
+  app.get('/report', TENANT, async (request, reply) => {
+    const who = await portalOf(request);
+    if (who === null) return go(reply, '/', []);
+    if (who.kind === 'notice') return go(reply, '/notice', []);
+    if (who.chosen === null) {
+      return html(
+        reply,
+        renderNoAccessPage({
+          csrf: csrfTokenFor(who.token),
+          phone: nationalDisplay(who.phone),
+        }),
+      );
+    }
+    return html(reply, renderReportPage());
+  });
+
+  app.post('/tenancy', TENANT, async (request, reply) => {
+    const who = await portalOf(request);
+    if (who === null) return go(reply, '/', []);
+    if (who.kind === 'notice') return go(reply, '/notice', []);
+    const next = field(request.body, 'next');
+    let tenancyId = '';
+    try {
+      tenancyId = validId(field(request.body, 'tenancy'), 'tenancy');
+    } catch (error) {
+      if (!(error instanceof KernelError)) throw error;
+    }
+    const allowed =
+      csrfOk(who.token, request.body) &&
+      who.rows.some((row) => row.tenancyId === tenancyId);
+    const destination =
+      next === '/calls'
+        ? '/calls'
+        : next === '/flat'
+          ? `/flat/${tenancyId}`
+          : '/';
+    if (!allowed) return go(reply, '/', []);
+    return go(reply, destination, [
+      portalCookie(PORTAL_CHOICE_COOKIE, tenancyId, {
+        secure: secureOf(request),
+        maxAge: SESSION_ABSOLUTE_MS / 1000,
+      }),
+    ]);
   });
 
   app.get('/ask', TENANT, async (request, reply) => {
@@ -494,7 +712,10 @@ export function registerPortalRoutes(
       PORTAL_SESSION_COOKIE,
     );
     if (token !== null) await revokePortalSession(pool, clock, token);
-    return go(reply, '/', [clearedCookie(PORTAL_SESSION_COOKIE, secure)]);
+    return go(reply, '/', [
+      clearedCookie(PORTAL_SESSION_COOKIE, secure),
+      clearedCookie(PORTAL_CHOICE_COOKIE, secure),
+    ]);
   });
 
   app.post('/sign-out/all', TENANT, async (request, reply) => {
@@ -519,7 +740,10 @@ export function registerPortalRoutes(
         );
       }
     }
-    return go(reply, '/', [clearedCookie(PORTAL_SESSION_COOKIE, secure)]);
+    return go(reply, '/', [
+      clearedCookie(PORTAL_SESSION_COOKIE, secure),
+      clearedCookie(PORTAL_CHOICE_COOKIE, secure),
+    ]);
   });
 
   async function phoneScreen(

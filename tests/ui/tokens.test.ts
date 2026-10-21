@@ -76,12 +76,18 @@ import {
   renderAskPage,
   renderAskReceived,
   renderCodePage,
+  renderFlatPage,
   renderHomePage,
+  renderMissingPage,
+  renderMorePage,
+  renderNoAccessPage,
   renderNoticeFullPage,
   renderNoticePage,
   renderPasskeyOffer,
   renderPasskeysPage,
   renderPhonePage,
+  renderPortalCallsPage,
+  renderReportPage,
 } from '../../src/portal/contract.ts';
 import { renderSettingsPage } from '../../src/settings-page.ts';
 import {
@@ -612,7 +618,78 @@ const SCREENS: Array<[string, () => string]> = [
         notice: 'code.wrong',
       }),
   ],
-  ['portal · home', () => renderHomePage({ csrf: CSRF })],
+  [
+    'portal · home',
+    () =>
+      renderHomePage({
+        csrf: CSRF,
+        greeting: 'בוקר טוב, נועה',
+        choices: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            label: 'דירה 12 · הדגמה 8',
+            city: 'תל אביב',
+          },
+        ],
+        chosenId: '11111111-1111-4111-8111-111111111111',
+      }),
+  ],
+  [
+    'portal · flat',
+    () =>
+      renderFlatPage({
+        csrf: CSRF,
+        choices: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            label: 'דירה 12 · הדגמה 8',
+            city: 'תל אביב',
+          },
+          {
+            id: '22222222-2222-4222-8222-222222222222',
+            label: 'דירה 3 · אחר 2',
+            city: 'חיפה',
+          },
+        ],
+        chosenId: '11111111-1111-4111-8111-111111111111',
+        address: 'הדגמה 8, דירה 12',
+        city: 'תל אביב',
+        start: '01.03.2026',
+        end: '28.02.2027',
+        months: 4,
+        percent: 64,
+        parking: '12',
+        storage: '4',
+      }),
+  ],
+  [
+    'portal · calls',
+    () =>
+      renderPortalCallsPage({
+        csrf: CSRF,
+        choices: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            label: 'דירה 12 · הדגמה 8',
+            city: 'תל אביב',
+          },
+        ],
+        chosenId: '11111111-1111-4111-8111-111111111111',
+      }),
+  ],
+  ['portal · more', () => renderMorePage({ csrf: CSRF })],
+  ['portal · report', () => renderReportPage()],
+  [
+    'portal · no access',
+    () => renderNoAccessPage({ csrf: CSRF, phone: '050-000-0000' }),
+  ],
+  [
+    'portal · missing',
+    () =>
+      renderMissingPage({
+        chosenId: '11111111-1111-4111-8111-111111111111',
+      }),
+  ],
   [
     'portal · ask',
     () =>

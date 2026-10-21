@@ -10,6 +10,8 @@ import type { Queryable } from './types.ts';
 export const PORTAL_SESSION_COOKIE = 'dona_portal';
 export const PORTAL_CHALLENGE_COOKIE = 'dona_portal_code';
 export const PORTAL_FORM_COOKIE = 'dona_portal_form';
+/** The chosen tenancy id. Not a column on the session: the next request re-reads. */
+export const PORTAL_CHOICE_COOKIE = 'dona_portal_choice';
 
 /** 30 days absolute, 14 days idle. Both walked by the injected clock. */
 export const SESSION_ABSOLUTE_MS = 30 * 24 * 60 * 60 * 1000;

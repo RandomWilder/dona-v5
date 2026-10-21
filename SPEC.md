@@ -321,6 +321,17 @@ byte for byte. A screen that handles its own refusal still does; this is only th
   Turning it on and turning it off are each an audit row naming who and when. The flag is read
   from the column on the request that needs it. It is not stored on the tenant session, so
   turning it off is what the tenant's next request sees.
+- **The tenant shell and the flat** (#279). A signed-in request resolves the number through
+  `resolvePortalTenancies` (SPEC-scope) and then keeps only tenancies whose building is
+  portal-enabled. Nothing about the tenancy is stored on the session. The browser may hold the
+  chosen tenancy id in `dona_portal_choice`; the next request checks that id against the read, and a
+  miss falls back to the first tenancy the read returned. One tenancy draws the pill with no chevron
+  and offers no sheet. The flat's address carries the tenancy id; an id the read did not return is
+  not found. A number the read does not place in a portal-enabled tenancy sees only the
+  building-not-in-the-portal page: the number they signed in with, ask the office, and sign out, and
+  no tab bar. The tab bar — home, calls, report, the flat, more — is on the home, calls and flat
+  pages. Report is the raised control; its form is #282. More holds ask the office, the language,
+  the passkeys and sign out. The lease bar is the tenancy's dates against the clock's today.
 - **Every write route carries a CSRF token, and the token is derived rather than stored** (slice
   5.2): `sha256('csrf:' + <session token>)`, computed from the `HttpOnly` cookie the request already
   carries, held in no column and defended by the same policy case that forbids a stored token.

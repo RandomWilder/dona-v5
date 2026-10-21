@@ -177,25 +177,235 @@ export function renderCodePage(screen: {
   );
 }
 
-export function renderHomePage(screen: { csrf: string }): string {
-  return page(
-    portalText('home.page'),
-    h`<div class="tp-body is-auth">
-      <div class="tp-stack tp-auth-head">
-        <h1 class="tp-display">${portalText('home.title')}</h1>
-        <p class="tp-lede">${portalText('home.empty')}</p>
+export interface PortalChoice {
+  id: string;
+  label: string;
+  city: string;
+}
+
+function monthsLeft(months: number): Html {
+  if (months <= 0) return h`${portalText('flat.under_month')}`;
+  if (months === 1) return h`${portalText('flat.one_month')}`;
+  if (months === 2) return h`${portalText('flat.two_months')}`;
+  return h`${portalText('flat.months_left')} <span dir="ltr">${String(months)}</span> ${portalText('flat.months')}`;
+}
+
+function pill(
+  choices: readonly PortalChoice[],
+  chosenId: string,
+  csrf: string,
+  next: string,
+): Html {
+  const chosen = choices.find((item) => item.id === chosenId) ?? choices[0];
+  if (chosen === undefined) return h``;
+  if (choices.length < 2) {
+    return h`<p class="tp-pill">${icon('house', { class: 'tp-i i16' })}<span data-current>${chosen.label}</span></p>`;
+  }
+  return h`<div class="tp-choice">
+    <input id="tp-tenancy" class="tp-choice-toggle" type="checkbox" />
+    <label for="tp-tenancy" class="tp-pill">${icon('house', { class: 'tp-i i16' })}<span class="tp-sr">${portalText('flat.sheet_title')}</span><span data-current>${chosen.label}</span>${icon('chevron', { class: 'tp-i i16' })}</label>
+    <div class="tp-sheet-layer">
+      <label for="tp-tenancy" class="tp-scrim-close"><span class="tp-sr">${portalText('ask.close')}</span></label>
+      <div class="tp-sheet" role="dialog" aria-labelledby="tp-tenancy-title">
+        <span class="tp-grabber" aria-hidden="true"></span>
+        <h2 id="tp-tenancy-title" class="tp-sheet-title">${portalText('flat.sheet_title')}</h2>
+        <p class="tp-sheet-help">${portalText(choices.length === 2 ? 'flat.sheet_help' : 'flat.sheet_help_many')}</p>
+        <form class="tp-picks" method="post" action="/tenancy">
+          ${csrfInput(csrf)}
+          <input type="hidden" name="next" value="${next}" />
+          ${choices.map(
+            (item) =>
+              h`<button class="tp-pick${item.id === chosen.id ? ' is-chosen' : ''}" type="submit" name="tenancy" value="${item.id}">
+                <span class="tp-row-title">${item.label}</span>
+                <span class="tp-meta">${item.city}</span>
+              </button>`,
+          )}
+        </form>
       </div>
-      <p><a class="tp-text-btn" href="/ask">${portalText('home.ask')}</a></p>
-      <p><a class="tp-text-btn" href="/passkeys">${portalText('home.passkeys')}</a></p>
-      <form method="post" action="/sign-out">
-        ${csrfInput(screen.csrf)}
-        <button class="tp-text-btn" type="submit">${portalText('home.sign_out')}</button>
-      </form>
-      <form method="post" action="/sign-out/all">
-        ${csrfInput(screen.csrf)}
-        <button class="tp-primary" type="submit">${portalText('home.sign_out_all')}</button>
-      </form>
+    </div>
+  </div>`;
+}
+
+function tabBar(current: 'home' | 'calls' | 'flat', flatHref: string): Html {
+  const tab = (
+    href: string,
+    key: string,
+    name: 'house' | 'message-square' | 'building' | 'ellipsis',
+    on: boolean,
+  ): Html =>
+    h`<a href="${href}"${on ? h` aria-current="page" class="is-active"` : h``}>${icon(name, { class: 'tp-i i22' })}${portalText(key)}</a>`;
+  return h`<nav class="tp-tabs" aria-label="${portalText('nav.label')}">
+    ${tab('/', 'nav.home', 'house', current === 'home')}
+    ${tab('/calls', 'nav.calls', 'message-square', current === 'calls')}
+    <a class="tp-fab" href="/report"><span class="tp-fab-btn">${icon('plus', { class: 'tp-i i24' })}</span>${portalText('nav.report')}</a>
+    ${tab(flatHref, 'nav.flat', 'building', current === 'flat')}
+    ${tab('/more', 'nav.more', 'ellipsis', false)}
+  </nav>`;
+}
+
+function shell(title: string, body: Html, bar: Html): string {
+  return page(title, h`<div class="tp-shell">${body}${bar}</div>`);
+}
+
+export function renderHomePage(screen: {
+  csrf: string;
+  greeting: string;
+  choices: readonly PortalChoice[];
+  chosenId: string;
+}): string {
+  const flatHref = `/flat/${screen.chosenId}`;
+  return shell(
+    portalText('home.page'),
+    h`<div class="tp-body">
+      <div class="tp-head">${pill(screen.choices, screen.chosenId, screen.csrf, '/')}</div>
+      <h1 class="tp-page-title">${screen.greeting}</h1>
+      <div class="tp-shortcuts">
+        <a class="tp-shortcut" href="/ask"><span class="tp-well">${icon('message-circle', { class: 'tp-i i18' })}</span>${portalText('home.ask')}</a>
+        <a class="tp-shortcut" href="${flatHref}#documents"><span class="tp-well">${icon('file', { class: 'tp-i i18' })}</span>${portalText('home.papers')}</a>
+      </div>
     </div>`,
+    tabBar('home', flatHref),
+  );
+}
+
+export function renderFlatPage(screen: {
+  csrf: string;
+  choices: readonly PortalChoice[];
+  chosenId: string;
+  address: string;
+  city: string;
+  start: string;
+  end: string;
+  months: number;
+  percent: number;
+  parking: string;
+  storage: string;
+}): string {
+  return shell(
+    portalText('flat.page'),
+    h`<div class="tp-body">
+      <div class="tp-head">
+        <h1 class="tp-page-title">${portalText('flat.title')}</h1>
+        ${pill(screen.choices, screen.chosenId, screen.csrf, '/flat')}
+      </div>
+      <article class="tp-card">
+        <h2 class="tp-flat-title">${screen.address}</h2>
+        <p class="tp-meta">${screen.city}</p>
+        <div class="tp-lease">
+          <div class="tp-lease-row">
+            <span dir="ltr">${screen.start}</span>
+            <b>${monthsLeft(screen.months)}</b>
+            <span dir="ltr">${screen.end}</span>
+          </div>
+          <div class="tp-track" role="progressbar" aria-label="${portalText('flat.progress')}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${String(screen.percent)}"><i style="inline-size: ${String(screen.percent)}%"></i></div>
+        </div>
+        <dl class="tp-facts">
+          <div><dt>${portalText('flat.parking')}</dt><dd>${screen.parking}</dd></div>
+          <div><dt>${portalText('flat.storage')}</dt><dd>${screen.storage}</dd></div>
+        </dl>
+      </article>
+      <h2 class="tp-section" id="documents">${portalText('flat.documents')}</h2>
+    </div>`,
+    tabBar('flat', `/flat/${screen.chosenId}`),
+  );
+}
+
+export function renderPortalCallsPage(screen: {
+  csrf: string;
+  choices: readonly PortalChoice[];
+  chosenId: string;
+}): string {
+  const flatHref = `/flat/${screen.chosenId}`;
+  return shell(
+    portalText('calls.page'),
+    h`<div class="tp-body">
+      <div class="tp-head">
+        <h1 class="tp-page-title">${portalText('calls.title')}</h1>
+        ${pill(screen.choices, screen.chosenId, screen.csrf, '/calls')}
+      </div>
+    </div>`,
+    tabBar('calls', flatHref),
+  );
+}
+
+export function renderMorePage(screen: { csrf: string }): string {
+  return page(
+    portalText('more.page'),
+    h`<div class="tp-ask">
+      <header class="tp-bar">
+        <div class="tp-bar-row">
+          <span class="tp-bar-title"><b>${portalText('more.title')}</b></span>
+          <a class="tp-icon-btn" href="/" aria-label="${portalText('ask.close')}">${icon('x', { class: 'tp-i i18' })}</a>
+        </div>
+      </header>
+      <div class="tp-body">
+        <div class="tp-menu">
+          <a class="tp-menu-row" href="/ask">${portalText('home.ask')}</a>
+          <div class="tp-menu-row"><span>${portalText('sign_in.language')}</span>${languageSheet()}</div>
+          <a class="tp-menu-row" href="/passkeys">${portalText('home.passkeys')}</a>
+        </div>
+        <form method="post" action="/sign-out">
+          ${csrfInput(screen.csrf)}
+          <button class="tp-text-btn" type="submit">${portalText('home.sign_out')}</button>
+        </form>
+        <form method="post" action="/sign-out/all">
+          ${csrfInput(screen.csrf)}
+          <button class="tp-text-btn" type="submit">${portalText('home.sign_out_all')}</button>
+        </form>
+      </div>
+    </div>`,
+  );
+}
+
+export function renderReportPage(): string {
+  return page(
+    portalText('report.page'),
+    h`<div class="tp-ask">
+      <header class="tp-bar">
+        <div class="tp-bar-row">
+          <span class="tp-bar-title"><b>${portalText('report.title')}</b></span>
+          <a class="tp-icon-btn" href="/" aria-label="${portalText('ask.close')}">${icon('x', { class: 'tp-i i18' })}</a>
+        </div>
+      </header>
+    </div>`,
+  );
+}
+
+export function renderNoAccessPage(screen: {
+  csrf: string;
+  phone: string;
+}): string {
+  return page(
+    portalText('no_access.title'),
+    h`<div class="tp-body is-auth is-center">
+      <div class="tp-spacer"></div>
+      <span class="tp-hero-well is-muted">${icon('building', { class: 'tp-i i48' })}</span>
+      <div class="tp-stack">
+        <h1 class="tp-display">${portalText('no_access.title')}</h1>
+        <p class="tp-lede">${portalText('no_access.signed')} <span dir="ltr">${screen.phone}</span>. ${portalText('no_access.body')}</p>
+        <p class="tp-meta">${portalText('no_access.meanwhile')}</p>
+      </div>
+      <div class="tp-spacer"></div>
+      <div class="tp-stack">
+        <a class="tp-primary" href="/ask">${portalText('home.ask')}</a>
+        <form method="post" action="/sign-out">
+          ${csrfInput(screen.csrf)}
+          <button class="tp-text-btn" type="submit">${portalText('home.sign_out')}</button>
+        </form>
+      </div>
+    </div>`,
+  );
+}
+
+export function renderMissingPage(screen: { chosenId: string }): string {
+  const flatHref = `/flat/${screen.chosenId}`;
+  return shell(
+    portalText('flat.missing'),
+    h`<div class="tp-body">
+      <h1 class="tp-page-title">${portalText('flat.missing')}</h1>
+      <a class="tp-text-btn" href="/">${portalText('code.back')}</a>
+    </div>`,
+    tabBar('flat', flatHref),
   );
 }
 

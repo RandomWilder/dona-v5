@@ -6,6 +6,7 @@ export type {
   IsolationJoinRelation,
   OccupantRow,
   OccupiedUnit,
+  PortalTenancy,
   Queryable,
   ScopeActor,
   ScopedUnit,
@@ -20,6 +21,7 @@ export {
   resolveActiveTenancy,
   resolveOccupiedUnits,
   resolvePartiesInUnit,
+  resolvePortalTenancies,
   resolveUnitsByEmail,
   resolveUnitsByPhone,
 } from './internal/isolation-join.ts';

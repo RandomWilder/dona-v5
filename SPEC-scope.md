@@ -118,6 +118,24 @@ file. It returns no party and no name and writes no access line; the office turn
 then asks `resolvePartiesInUnit` for the people, which does. `one_active_tenancy_per_unit` makes it
 one row at most.
 
+### The portal's question — `resolvePortalTenancies`, #279
+
+A verified number, asked on a portal request: the parties it reaches and the tenancies the isolation
+join reaches for them, each with its unit and its building. One query, in this file, on `occupancy`,
+with the same contact-valid predicate and the same guarantor exclusion (`is_service_contact`) as Q2.
+The office's tenancy-active predicate stays inclusive of the end date. This read does not: a tenancy
+counts while `start_date <= today` and `end_date > today`, so the end date is the first day the
+portal stops showing it. That is the portal's rule and it lives here, qualified on the view, because
+the query also joins the letting's assigned bay and storage and an unqualified `end_date` would be
+ambiguous. The building's portal flag comes back on the row and is not a filter. The portal decides
+access from it on that request; storing the flag, or any other tenancy fact, on the session would be
+the cache this read exists to avoid.
+
+Rows come back lowest unit number first, so a request that has not chosen yet has one answer.
+The row carries what the flat page shows — address, city, dates, the assigned bay and storage by
+name, the party's given name — so the portal does not write a second join. The audit line is the
+phone line's: the party reached and how many rows, never the number, the name or the address.
+
 ## The audit line records what was reached, not what was asked
 
 SPEC.md's security defaults require **every scoped read of tenant data to be logged**, not only
