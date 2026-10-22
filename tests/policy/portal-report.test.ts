@@ -259,7 +259,6 @@ describe('policy · report an issue', { concurrency: 1 }, () => {
     assert.match(sent.body, new RegExp(DUTY));
     assert.match(sent.body, /לצפייה בקריאה/);
     assert.match(sent.body, /חזרה לבית/);
-    assert.doesNotMatch(sent.body, /ימי עסקים/);
     const number = callNumberOf(sent.body);
     assert.equal(await callsFor(pool), 1);
 

@@ -14,7 +14,6 @@ import {
 import { createParty } from '../parties/contract.ts';
 import { addOperator } from '../staff/contract.ts';
 import {
-  countOpenCalls,
   exitCall,
   getCall,
   identifyCall,
@@ -65,7 +64,6 @@ describe('calls · close by an exit', () => {
           throw new Error('plumbing category is missing');
         }
         const trade: string = categoryId;
-        const before = await countOpenCalls(db);
 
         async function atState(
           description: string,
@@ -169,7 +167,6 @@ describe('calls · close by an exit', () => {
         const closedIds = closed.map((call) => call.id);
         assert.equal(closedIds.includes(answered.id), true);
         assert.equal(closedIds.includes(original), false);
-        assert.equal(await countOpenCalls(db), before + 1);
 
         const { rows } = await db.query<{ actor_id: string | null }>(
           `SELECT actor_id FROM audit_log

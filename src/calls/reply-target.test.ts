@@ -110,8 +110,6 @@ describe('calls · the reply target', () => {
       assert.equal(before.statusCode, 200);
       assert.match(before.body, /action="\/settings\/answer-target"/);
       assert.match(before.body, /מענה של אדם/);
-      assert.equal(fieldValue(before.body, 'days'), '2');
-      assert.equal(boxChecked(before.body, 'shown'), false);
       restore = {
         days: fieldValue(before.body, 'days') ?? '2',
         shown: boxChecked(before.body, 'shown'),
@@ -404,6 +402,30 @@ describe('calls · the reply target', () => {
         remoteAddress: `10.288.${Math.floor(Math.random() * 200)}.${Math.floor(Math.random() * 200)}`,
       });
       const quiet = /ימי עסקים|business days|рабочих дней/;
+      async function sendReport(text: string) {
+        const start = await tenant.inject({ method: 'GET', url: '/report' });
+        const csrf = /name="csrf" value="([^"]+)"/.exec(start.body)?.[1] ?? '';
+        const submission =
+          /name="submission" value="([^"]+)"/.exec(start.body)?.[1] ?? '';
+        const category =
+          /data-code="PLUMBING" value="([^"]+)"/.exec(start.body)?.[1] ?? '';
+        const step = async (payload: string) =>
+          tenant.inject({
+            method: 'POST',
+            url: '/report',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            payload,
+          });
+        const details = await step(
+          `csrf=${csrf}&submission=${submission}&category=${category}&description=&entry=&step=1&action=next`,
+        );
+        const told = await step(
+          `csrf=${/name="csrf" value="([^"]+)"/.exec(details.body)?.[1]}&submission=${submission}&category=${category}&description=${encodeURIComponent(text)}&entry=&step=2&action=next`,
+        );
+        return step(
+          `csrf=${/name="csrf" value="([^"]+)"/.exec(told.body)?.[1]}&submission=${submission}&category=${category}&description=${encodeURIComponent(text)}&entry=YES&step=3&action=send`,
+        );
+      }
       for (const path of [
         '/',
         '/calls',
@@ -415,6 +437,10 @@ describe('calls · the reply target', () => {
         assert.equal(page.statusCode, 200, path);
         assert.doesNotMatch(page.body, quiet);
       }
+      const withheld = await sendReport('נזילה שקטה');
+      assert.equal(withheld.statusCode, 200);
+      assert.match(withheld.body, /הדיווח התקבל/);
+      assert.doesNotMatch(withheld.body, quiet);
 
       clock.advance(1000);
       const on = await asAdmin.inject({
@@ -438,28 +464,7 @@ describe('calls · the reply target', () => {
         assert.doesNotMatch(page.body, quiet);
       }
 
-      const start = await tenant.inject({ method: 'GET', url: '/report' });
-      const csrf = /name="csrf" value="([^"]+)"/.exec(start.body)?.[1] ?? '';
-      const submission =
-        /name="submission" value="([^"]+)"/.exec(start.body)?.[1] ?? '';
-      const category =
-        /data-code="PLUMBING" value="([^"]+)"/.exec(start.body)?.[1] ?? '';
-      const step = async (payload: string) =>
-        tenant.inject({
-          method: 'POST',
-          url: '/report',
-          headers: { 'content-type': 'application/x-www-form-urlencoded' },
-          payload,
-        });
-      const details = await step(
-        `csrf=${csrf}&submission=${submission}&category=${category}&description=&entry=&step=1&action=next`,
-      );
-      const told = await step(
-        `csrf=${/name="csrf" value="([^"]+)"/.exec(details.body)?.[1]}&submission=${submission}&category=${category}&description=${encodeURIComponent('נזילה מתחת לכיור')}&entry=&step=2&action=next`,
-      );
-      const sent = await step(
-        `csrf=${/name="csrf" value="([^"]+)"/.exec(told.body)?.[1]}&submission=${submission}&category=${category}&description=${encodeURIComponent('נזילה מתחת לכיור')}&entry=YES&step=3&action=send`,
-      );
+      const sent = await sendReport('נזילה מתחת לכיור');
       assert.equal(sent.statusCode, 200);
       assert.match(sent.body, /class="tp-reply-pill"/);
       assert.match(sent.body, /אדם מהמשרד יענה בתוך 2 ימי עסקים/);

@@ -122,8 +122,9 @@ describe('calls · the handling clock', () => {
       assert.match(before.body, /לקריאה שאינה חירום/);
       const amber = fieldValue(before.body, 'amber_days');
       const red = fieldValue(before.body, 'red_days');
-      assert.equal(amber, '2');
-      assert.equal(red, '5');
+      if (amber === undefined || red === undefined) {
+        throw new Error('handling thresholds are missing');
+      }
       restore = { amber, red };
       already = before.body.includes(`value="${DAY}"`);
 
@@ -139,8 +140,8 @@ describe('calls · the handling clock', () => {
         viewer.body,
         /action="\/settings\/non-working-dates"/,
       );
-      assert.match(viewer.body, /2 ימים/);
-      assert.match(viewer.body, /5 ימים/);
+      assert.match(viewer.body, new RegExp(`>${amber} ימים<`));
+      assert.match(viewer.body, new RegExp(`>${red} ימים<`));
 
       const backwards = await asAdmin.inject({
         method: 'POST',

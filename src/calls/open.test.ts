@@ -78,7 +78,6 @@ describe('calls · opening a phone or walk-in call', () => {
           role: 'OPERATOR',
         });
         const openedBy = account.staffAccountId;
-        const before = await listOpenCalls(db);
 
         await assert.rejects(
           () =>
@@ -120,7 +119,11 @@ describe('calls · opening a phone or walk-in call', () => {
             error.details?.field === 'sender',
         );
 
-        assert.equal((await listOpenCalls(db)).length, before.length);
+        const stored = await db.query<{ n: number }>(
+          `SELECT count(*)::int AS n FROM service_call WHERE opened_by = $1`,
+          [openedBy],
+        );
+        assert.equal(stored.rows[0]?.n, 0);
       });
     } finally {
       await pool.end();
