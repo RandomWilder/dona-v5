@@ -23,6 +23,38 @@ describe('createPool', () => {
     });
     await pool.end();
   });
+
+  it('defaults the maximum to 5', async () => {
+    const pool = createPool({
+      DATABASE_URL: 'postgres://dona:dona@127.0.0.1:5434/dona',
+    });
+    assert.equal(pool.options.max, 5);
+    await pool.end();
+  });
+
+  it('uses the maximum the environment sets', async () => {
+    const pool = createPool({
+      DATABASE_URL: 'postgres://dona:dona@127.0.0.1:5434/dona',
+      DATABASE_POOL_MAX: '3',
+    });
+    assert.equal(pool.options.max, 3);
+    await pool.end();
+  });
+
+  it('refuses a maximum that is not a positive whole number before connecting', () => {
+    for (const maximum of ['0', '-1', '1.5', 'many']) {
+      assert.throws(
+        () =>
+          createPool({
+            DATABASE_URL: 'postgres://dona:dona@127.0.0.1:1/dona',
+            DATABASE_POOL_MAX: maximum,
+          }),
+        (error: unknown) =>
+          error instanceof KernelError && error.code === 'invalid',
+        maximum,
+      );
+    }
+  });
 });
 
 // Only this pool's own backends are terminated, never every connection to the database: node --test

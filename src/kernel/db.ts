@@ -20,6 +20,7 @@ export function createPool(
   }
   const pool = new Pool({
     connectionString,
+    max: poolMaximum(env.DATABASE_POOL_MAX),
     allowExitOnIdle: true,
     // Bounded so a database that is down becomes a 503 while someone is still looking. Without it
     // a connection attempt waits on the OS, and infra/smoke.sh times out instead of reading an
@@ -78,6 +79,20 @@ export async function inTransaction<T>(
   } finally {
     client.release();
   }
+}
+
+// Absent keeps the stated budget of 5. Anything present that is not a positive whole number is the
+// same refusal as a missing DATABASE_URL, and it happens before a pool exists to connect.
+function poolMaximum(raw: string | undefined): number {
+  if (raw === undefined) return 5;
+  const max = Number(raw);
+  if (!/^[1-9]\d*$/.test(raw) || !Number.isSafeInteger(max)) {
+    throw new KernelError(
+      'invalid',
+      'DATABASE_POOL_MAX must be a positive whole number',
+    );
+  }
+  return max;
 }
 
 function asPool(db: Queryable): Pool | null {
