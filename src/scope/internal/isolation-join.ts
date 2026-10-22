@@ -17,6 +17,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { type ActorKind, createAuditLog } from '../../kernel/audit.ts';
 import { type Clock, today } from '../../kernel/clock.ts';
+import { validId } from '../../kernel/validate.ts';
 import { normaliseEmail } from './email.ts';
 import { normalisePhone } from './phone.ts';
 
@@ -398,4 +399,263 @@ export async function partyHoldingContact(
   );
   if (result.rows.length !== 1) return null;
   return result.rows[0]?.party_id ?? null;
+}
+
+/**
+ * The portal's question. #279.
+ *
+ * Q2's contact predicate and guarantor exclusion, and a tenancy that has
+ * reached its end date is already over: `end_date > today`, not `>=`. The
+ * office join stays inclusive. The building's portal flag is returned and not
+ * applied here.
+ *
+ * The end-date columns are qualified because `tenancy` is joined for the
+ * assigned bay and storage, and an unqualified `end_date` would be ambiguous.
+ */
+const PORTAL_TENANCY_OPEN = `o.status = 'ACTIVE'
+    AND o.start_date <= $2
+    AND o.end_date > $2`;
+
+const PORTAL_TENANCIES_SQL = `
+  SELECT DISTINCT ON (o.tenancy_id)
+         o.tenancy_id,
+         o.unit_number,
+         o.party_id,
+         o.full_name,
+         p.given_name,
+         o.start_date::text AS start_date,
+         o.end_date::text AS end_date,
+         b.address_line,
+         b.city,
+         b.portal_enabled,
+         p.preferred_language,
+         bay.name AS parking_name,
+         bay2.name AS second_parking_name,
+         store.name AS storage_name,
+         store2.name AS second_storage_name
+    FROM ${OCCUPANCY_VIEW} o
+    JOIN space flat ON flat.space_id = o.unit_id
+    JOIN building b ON b.building_id = flat.building_id
+    JOIN tenancy t ON t.tenancy_id = o.tenancy_id
+    JOIN party p ON p.party_id = o.party_id
+    LEFT JOIN space bay ON bay.space_id = t.parking_space_id
+    LEFT JOIN space bay2 ON bay2.space_id = t.second_parking_space_id
+    LEFT JOIN space store ON store.space_id = t.storage_space_id
+    LEFT JOIN space store2 ON store2.space_id = t.second_storage_space_id
+   WHERE o.channel = 'PHONE'
+     AND o.contact_value = $1
+     AND ${CONTACT_VALID_TODAY}
+     AND ${PORTAL_TENANCY_OPEN}
+     AND o.is_service_contact
+   ORDER BY o.tenancy_id,
+            CASE o.role
+              WHEN 'PRIMARY_TENANT' THEN 0
+              WHEN 'CO_TENANT' THEN 1
+              WHEN 'OCCUPANT' THEN 2
+              ELSE 3
+            END
+`;
+
+interface PortalTenancyRow {
+  tenancy_id: string;
+  unit_number: string;
+  party_id: string;
+  full_name: string;
+  given_name: string | null;
+  start_date: string;
+  end_date: string;
+  address_line: string;
+  city: string;
+  portal_enabled: boolean;
+  preferred_language: string;
+  parking_name: string | null;
+  second_parking_name: string | null;
+  storage_name: string | null;
+  second_storage_name: string | null;
+}
+
+export interface PortalTenancy {
+  tenancyId: string;
+  unitNumber: string;
+  fullName: string;
+  givenName: string | null;
+  startDate: string;
+  endDate: string;
+  addressLine: string;
+  city: string;
+  portalEnabled: boolean;
+  /** The party's preferred language. The portal uses it when it is one of the three. */
+  preferredLanguage: string;
+  /** The party the number resolves to on this tenancy. Calls are asked by it. */
+  partyId: string;
+  parking: string[];
+  storage: string[];
+}
+
+function assignedNames(first: string | null, second: string | null): string[] {
+  const names: string[] = [];
+  if (first !== null && first !== '') names.push(first);
+  if (second !== null && second !== '') names.push(second);
+  return names;
+}
+
+function unitRank(value: string): number {
+  const rank = Number(value);
+  return Number.isFinite(rank) ? rank : Number.POSITIVE_INFINITY;
+}
+
+export async function resolvePortalTenancies(
+  db: Queryable,
+  phone: string,
+  clock: Clock,
+  options: ScopeOptions = {},
+): Promise<PortalTenancy[]> {
+  const value = normalisePhone(phone);
+  const rows = await audited(
+    db,
+    clock,
+    options,
+    'scope.resolve_portal',
+    null,
+    async () => {
+      const result = await db.query<PortalTenancyRow>(PORTAL_TENANCIES_SQL, [
+        value,
+        today(clock),
+      ]);
+      return result.rows;
+    },
+  );
+  return rows
+    .map((row) => ({
+      tenancyId: row.tenancy_id,
+      unitNumber: row.unit_number,
+      fullName: row.full_name,
+      givenName: row.given_name,
+      startDate: row.start_date,
+      endDate: row.end_date,
+      addressLine: row.address_line,
+      city: row.city,
+      portalEnabled: row.portal_enabled,
+      preferredLanguage: row.preferred_language,
+      partyId: row.party_id,
+      parking: assignedNames(row.parking_name, row.second_parking_name),
+      storage: assignedNames(row.storage_name, row.second_storage_name),
+    }))
+    .sort(
+      (left, right) =>
+        unitRank(left.unitNumber) - unitRank(right.unitNumber) ||
+        left.unitNumber.localeCompare(right.unitNumber, 'he') ||
+        left.tenancyId.localeCompare(right.tenancyId),
+    );
+}
+
+// The four kinds evidence stores. A wider suffix is not a file this portal can hand out.
+const PORTAL_DOCUMENT_KINDS = ['pdf', 'jpg', 'png', 'tif'] as const;
+
+export type PortalDocumentKind = (typeof PORTAL_DOCUMENT_KINDS)[number];
+
+export interface PortalDocument {
+  documentId: string;
+  name: string;
+  kind: PortalDocumentKind;
+  storageUri: string;
+}
+
+// Tenancy-bound only. A unit or building link does not qualify, and a second link
+// to the unit does not duplicate the row. #280.
+const PORTAL_DOCUMENTS_SQL = `
+  SELECT d.document_id,
+         dt.label_he,
+         d.storage_uri
+    FROM document d
+    JOIN document_type dt ON dt.document_type_id = d.document_type_id
+   WHERE EXISTS (
+           SELECT 1
+             FROM document_link l
+            WHERE l.document_id = d.document_id
+              AND l.entity_type = 'TENANCY'
+              AND l.entity_id = $1
+         )
+     AND ($2::uuid IS NULL OR d.document_id = $2)
+   ORDER BY dt.label_he, d.ingested_at DESC, d.document_id
+`;
+
+function portalKind(uri: string): PortalDocumentKind | null {
+  const match = /\.(pdf|jpg|png|tif)$/i.exec(uri);
+  const kind = match?.[1]?.toLowerCase();
+  if (kind === 'pdf' || kind === 'jpg' || kind === 'png' || kind === 'tif') {
+    return kind;
+  }
+  return null;
+}
+
+function portalDocuments(
+  rows: readonly {
+    document_id: string;
+    label_he: string;
+    storage_uri: string;
+  }[],
+): PortalDocument[] {
+  const out: PortalDocument[] = [];
+  for (const row of rows) {
+    const kind = portalKind(row.storage_uri);
+    if (kind === null) continue;
+    out.push({
+      documentId: row.document_id,
+      name: row.label_he,
+      kind,
+      storageUri: row.storage_uri,
+    });
+  }
+  return out;
+}
+
+async function portalDocumentRows(
+  db: Queryable,
+  tenancyId: string,
+  documentId: string | null,
+): Promise<PortalDocument[]> {
+  const result = await db.query<{
+    document_id: string;
+    label_he: string;
+    storage_uri: string;
+  }>(PORTAL_DOCUMENTS_SQL, [tenancyId, documentId]);
+  return portalDocuments(result.rows);
+}
+
+/** The flat page's list. Documents bound to this tenancy, and no others. #280. */
+export async function listPortalDocuments(
+  db: Queryable,
+  tenancyId: string,
+  clock: Clock,
+  options: ScopeOptions = {},
+): Promise<PortalDocument[]> {
+  const id = validId(tenancyId, 'tenancy');
+  return audited(db, clock, options, 'scope.portal_documents', id, async () =>
+    portalDocumentRows(db, id, null),
+  );
+}
+
+/**
+ * One document, if it is bound to this tenancy. A unit file, a building file and
+ * another tenancy's file are the same answer: nothing. #280.
+ */
+export async function resolvePortalDocument(
+  db: Queryable,
+  tenancyId: string,
+  documentId: string,
+  clock: Clock,
+  options: ScopeOptions = {},
+): Promise<PortalDocument | null> {
+  const tenancy = validId(tenancyId, 'tenancy');
+  const document = validId(documentId, 'document');
+  const rows = await audited(
+    db,
+    clock,
+    options,
+    'scope.portal_document',
+    tenancy,
+    async () => portalDocumentRows(db, tenancy, document),
+  );
+  return rows[0] ?? null;
 }

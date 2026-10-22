@@ -72,6 +72,11 @@ with no body, so nothing can reach that path yet.
 quiet fallback to a developer's laptop. `npm run dev` supplies it from `.env.example`; staging and
 prod get it from Secret Manager.
 
+It reads `DATABASE_POOL_MAX` for the most connections this process may hold. Absent, the maximum
+is 5, so the driver's own default of 10 is never used. A value that is present and is not a
+positive whole number — zero, a negative, a fraction, a word — stops the process at boot with
+`invalid`, the same refusal a missing database URL gets, and no connection is attempted.
+
 **The pool carries an `'error'` listener, and that is the one line of this file that is not v3's.**
 `pg` emits `'error'` on an idle client whose backend goes away — a Cloud SQL restart, a failover, a
 maintenance window, `docker compose stop db` — and Node throws on an unhandled `'error'`, so a pool
@@ -434,16 +439,20 @@ and every screen in every module is a self-contained HTML file that links it.
   bar and an off-canvas rail, not a wrapping wrap of the same links. The destinations still arrive
   as `nav`; the kernel still learns no path. A module that needs a phone layout of *its* cards keeps
   that in its own `styles`. The guest frame (login) has no rail and no menu.
-- **`ui/fonts/*.woff2`** — Heebo (Hebrew + Latin subsets) and IBM Plex Mono, self-hosted with their
-  OFL licences beside them. No Google Fonts request: tenant screens must not leak a visit to a third
-  party, and the pages must render on a slow Israeli mobile connection without a second DNS lookup.
-- **`ui/assets.ts`** — `registerUiAssets(app)` serves `GET /ui/tokens.css` and `GET /ui/fonts/:file`.
-  Files are read once at registration, not per request: the deployed image is immutable.
-- **Font names are an allowlist, never a path.** The `:file` parameter is matched against a fixed set
-  and otherwise 404s; no request-derived string is ever joined onto a filesystem path. This is the
-  rule for every static route the system ever grows.
-- **Caching** — fonts `public, max-age=31536000, immutable`; HTML and `tokens.css` `no-cache` until
-  assets are content-hashed, so a deploy cannot leave a stale stylesheet against fresh markup.
+- **`ui/fonts/*.woff2`** — Heebo (Hebrew + Latin subsets, weight axis through 800) and IBM Plex Mono,
+  self-hosted with their OFL licences beside them. Heebo has no Cyrillic glyphs, so that range is
+  Noto Sans on the same family, with its OFL licence beside it. No Google Fonts request: tenant
+  screens must not leak a visit to a third party, and the pages must render on a slow Israeli
+  mobile connection without a second DNS lookup.
+- **`ui/assets.ts`** — `registerUiAssets(app)` serves `GET /ui/tokens.css`, `GET /ui/portal.css`,
+  `GET /ui/fonts/:file` and `GET /ui/icons/:file`. Files are read once at registration, not per
+  request: the deployed image is immutable. The icons are the portal's home-screen mark (#286).
+- **Font names and icon names are an allowlist, never a path.** The `:file` parameter is matched
+  against a fixed set and otherwise 404s; no request-derived string is ever joined onto a filesystem
+  path. This is the rule for every static route the system ever grows.
+- **Caching** — fonts and icons `public, max-age=31536000, immutable`; HTML and the stylesheets
+  `no-cache` until assets are content-hashed, so a deploy cannot leave a stale stylesheet against
+  fresh markup.
 
 **Owed to the first screen (slice 1.11):** v3's `ui/tokens.test.ts` enforces the invariant from the
 outside — no shell may contain a hex colour, a `fonts.googleapis` URL or a physical `left:`/`right:`

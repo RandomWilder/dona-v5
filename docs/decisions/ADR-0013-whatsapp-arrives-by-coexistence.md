@@ -20,7 +20,7 @@
    passed, and adopting one would supersede this decision rather than quietly extend it.
 4. **No unofficial client, ever.** Not Baileys, not whatsapp-web.js, not automation of WhatsApp Desktop
    or WhatsApp Web.
-5. **No SMS provider.** Tenant OTP goes by WhatsApp authentication template only, and Twilio leaves the
+5. **No SMS provider.** _(Superseded by [ADR-0019](ADR-0019-the-tenant-portal-is-a-source-channel.md): a tenant code may go by SMS.)_ Tenant OTP goes by WhatsApp authentication template only, and Twilio leaves the
    third-party table before it is ever called.
 6. **No history import.** The connection starts on the day it is made. The 180 days coexistence can
    sync are not read into the system.

@@ -45,6 +45,8 @@ import {
   type ListedAttachment,
   listedAttachments,
 } from './attachments.ts';
+import { filesFromHolds, REPORT_FILE_MAX } from './holds.ts';
+import type { MalwareScanner } from './scanner.ts';
 import type { Queryable } from './types.ts';
 
 const BODY_MAX = 100_000;
@@ -77,6 +79,28 @@ export interface IncomingMessage {
   body: string;
   attachments?: readonly IncomingAttachment[];
   echo?: boolean;
+  /**
+   * A portal report. All three, or none. The category is the tenant's
+   * suggestion. The sorter's proposal stays its own.
+   */
+  suggestedCategoryId?: string | null;
+  entryPermission?: string | null;
+  tenancyId?: string | null;
+  /**
+   * Files already in quarantine for this sender. The composition root sets
+   * this from rows it loaded. A channel adapter does not.
+   */
+  holds?: {
+    ownerId: string;
+    submissionId: string;
+    ids: readonly string[];
+  };
+  /**
+   * A portal follow-up. The call the tenant is writing on, or the closed
+   * call a continuation report names. The portal sets this after it has
+   * checked the tenant can read that call.
+   */
+  followCallId?: string | null;
 }
 
 export interface SortCategory {
@@ -128,6 +152,8 @@ export interface IntakeDeps {
   matchesEmergency: (text: string) => Promise<boolean>;
   /** Where an attachment's bytes are kept. Required when a message carries any. */
   objects?: ObjectStore;
+  /** Clean or infected. Absent, or a throw, leaves the file unopenable. */
+  scanner?: MalwareScanner;
   /**
    * Sends the fixed duty reply on WhatsApp. Absent, an emergency is still
    * flagged and nothing is sent — the dev form has no Meta number.
@@ -174,13 +200,13 @@ export interface NoiseMessage {
   bodyHe: string | null;
   sender: string;
   at: Date;
-  channel: 'EMAIL' | 'WHATSAPP';
+  channel: 'EMAIL' | 'WHATSAPP' | 'PORTAL';
   sorterModel: string | null;
   sorterPrompt: string | null;
 }
 
 interface Normalized {
-  sourceChannel: 'EMAIL' | 'WHATSAPP';
+  sourceChannel: 'EMAIL' | 'WHATSAPP' | 'PORTAL';
   externalMessageId: string;
   externalThreadId: string;
   senderAddress: string;
@@ -194,6 +220,15 @@ interface Normalized {
     bytes: Buffer | null;
   }[];
   echo: boolean;
+  suggestedCategoryId: string | null;
+  entryPermission: 'YES' | 'ARRANGE' | 'HOME' | null;
+  tenancyId: string | null;
+  holds: {
+    ownerId: string;
+    submissionId: string;
+    ids: readonly string[];
+  } | null;
+  followCallId: string | null;
 }
 
 interface StoredRow {
@@ -245,14 +280,17 @@ async function intake(
   const already = await settledOutcome(db, message);
   if (already) return already;
 
-  if (message.echo) return storeEcho(db, clock, deps.objects, message);
+  if (message.echo) return storeEcho(db, clock, deps, message);
 
-  const messageId = await ensureMessage(db, clock, deps.objects, message);
+  const messageId = await ensureMessage(db, clock, deps, message);
   const raced = await settledOutcome(db, message);
   if (raced) return raced;
 
   const emergency = await deps.matchesEmergency(messageText(message));
-  const thread = await threadOf(db, message);
+  const thread =
+    message.followCallId === null
+      ? await threadOf(db, message)
+      : await followThread(db, message.followCallId);
   await prepareDutyReply(
     db,
     clock,
@@ -404,6 +442,11 @@ async function sendDutyReply(
       body,
       attachments: [],
       echo: true,
+      suggestedCategoryId: null,
+      entryPermission: null,
+      tenancyId: null,
+      holds: null,
+      followCallId: null,
     },
     {
       callId: openCallId,
@@ -593,7 +636,7 @@ export async function listNoiseMessages(
     sender_address: string;
     received_at: Date;
     body_he: string | null;
-    source_channel: 'EMAIL' | 'WHATSAPP';
+    source_channel: 'EMAIL' | 'WHATSAPP' | 'PORTAL';
     sorter_model: string | null;
     sorter_prompt: string | null;
   }>(
@@ -631,7 +674,7 @@ export async function rescueNoise(
   const actorId = validId(spec.actorId, 'actor');
   return inTransaction(db, async (tx) => {
     const { rows } = await tx.query<{
-      source_channel: 'EMAIL' | 'WHATSAPP';
+      source_channel: 'EMAIL' | 'WHATSAPP' | 'PORTAL';
       sender_address: string;
       subject: string | null;
       body_original: string;
@@ -726,11 +769,96 @@ function normalize(raw: IncomingMessage): Normalized {
     body: requireText(raw.body, 'body', BODY_MAX),
     attachments: attachmentsOf(raw.attachments),
     echo: raw.echo === true,
+    holds: holdsOf(raw.holds),
+    followCallId:
+      raw.followCallId == null || raw.followCallId === ''
+        ? null
+        : validId(raw.followCallId, 'call'),
+    ...reportFields(raw),
   };
 }
 
-function intakeChannel(value: string): 'EMAIL' | 'WHATSAPP' {
-  if (value === 'EMAIL' || value === 'WHATSAPP') return value;
+/** The call a portal follow-up names. Open takes the message. Closed is the predecessor. */
+async function followThread(
+  db: Queryable,
+  callId: string,
+): Promise<{ openCallId: string | null; predecessorId: string | null }> {
+  const { rows } = await db.query<{
+    state: string;
+    returned_at: Date | null;
+  }>(`SELECT state, returned_at FROM service_call WHERE service_call_id = $1`, [
+    callId,
+  ]);
+  const row = rows[0];
+  if (!row || row.returned_at !== null) {
+    throw new KernelError('invalid', 'follow-up names no call', {
+      field: 'call',
+      reason: 'follow',
+    });
+  }
+  if (row.state === 'CLOSED') {
+    return { openCallId: null, predecessorId: callId };
+  }
+  return { openCallId: callId, predecessorId: null };
+}
+
+function holdsOf(value: IncomingMessage['holds']): Normalized['holds'] {
+  if (value == null) return null;
+  if (typeof value !== 'object' || !Array.isArray(value.ids)) {
+    throw new KernelError('invalid', 'attachments are not a short list', {
+      field: 'attachments',
+    });
+  }
+  if (value.ids.length === 0) return null;
+  if (value.ids.length > REPORT_FILE_MAX) {
+    throw new KernelError('invalid', 'attachments are not a short list', {
+      field: 'attachments',
+    });
+  }
+  return {
+    ownerId: validId(value.ownerId, 'owner'),
+    submissionId: validId(value.submissionId, 'submission'),
+    ids: value.ids.map((id) => validId(id, 'file')),
+  };
+}
+
+function reportFields(raw: IncomingMessage): {
+  suggestedCategoryId: string | null;
+  entryPermission: 'YES' | 'ARRANGE' | 'HOME' | null;
+  tenancyId: string | null;
+} {
+  const suggested = optionalText(raw.suggestedCategoryId, 'category', 80);
+  const tenancy = optionalText(raw.tenancyId, 'tenancy', 80);
+  const entry = optionalEntry(raw.entryPermission);
+  const named = [suggested, entry, tenancy].filter((value) => value !== null);
+  if (named.length !== 0 && named.length !== 3) {
+    throw new KernelError(
+      'invalid',
+      'a report names a category, an entry and a tenancy',
+      { field: 'report' },
+    );
+  }
+  return {
+    suggestedCategoryId: suggested,
+    entryPermission: entry,
+    tenancyId: tenancy,
+  };
+}
+
+function optionalEntry(
+  value: string | null | undefined,
+): 'YES' | 'ARRANGE' | 'HOME' | null {
+  if (value == null || value === '') return null;
+  if (value === 'YES' || value === 'ARRANGE' || value === 'HOME') return value;
+  throw new KernelError('invalid', 'entry is not a permission', {
+    field: 'entry',
+  });
+}
+
+function intakeChannel(value: string): 'EMAIL' | 'WHATSAPP' | 'PORTAL' {
+  if (value === 'EMAIL' || value === 'WHATSAPP' || value === 'PORTAL') {
+    return value;
+  }
   throw new KernelError('invalid', 'channel is not an intake channel', {
     field: 'channel',
   });
@@ -958,13 +1086,13 @@ async function threadOf(
 async function ensureMessage(
   db: Queryable,
   clock: Clock,
-  objects: ObjectStore | undefined,
+  deps: IntakeDeps,
   message: Normalized,
 ): Promise<string> {
   return inTransaction(db, async (tx) => {
     const existing = await lookupRow(tx, message);
     if (existing) return existing.message_id;
-    const messageId = await insertMessage(tx, clock, objects, message, {
+    const messageId = await insertMessage(tx, clock, deps, message, {
       callId: null,
       label: null,
       summary: null,
@@ -980,7 +1108,7 @@ async function ensureMessage(
 async function storeEcho(
   db: Queryable,
   clock: Clock,
-  objects: ObjectStore | undefined,
+  deps: IntakeDeps,
   message: Normalized,
 ): Promise<IntakeOutcome> {
   return inTransaction(db, async (tx) => {
@@ -992,7 +1120,7 @@ async function storeEcho(
       (await callIsAttachable(tx, thread.openCallId))
         ? thread.openCallId
         : null;
-    const messageId = await insertMessage(tx, clock, objects, message, {
+    const messageId = await insertMessage(tx, clock, deps, message, {
       callId,
       label: null,
       summary: null,
@@ -1044,7 +1172,8 @@ async function settleVerdict(
   predecessorId: string | null,
   bodyHe: string | null,
 ): Promise<IntakeOutcome> {
-  const noise = verdict?.label === 'noise' && !emergency;
+  const report = message.suggestedCategoryId !== null;
+  const noise = verdict?.label === 'noise' && !emergency && !report;
   return inTransaction(db, async (tx) => {
     const row = await lockMessage(tx, messageId);
     if (isSettled(row)) return outcomeOf(row);
@@ -1074,13 +1203,14 @@ async function settleVerdict(
     const toReview =
       verdict === null ||
       verdict.label === 'unsure' ||
+      (report && verdict.label === 'noise') ||
       (emergency && verdict.label !== 'call');
     const parties = await partiesFor(tx, clock, message);
     const call = await openIntakeCall(tx, clock, {
       sourceChannel: message.sourceChannel,
       description: heading(
-        verdict?.summary ?? null,
-        message.subject,
+        message.sourceChannel === 'PORTAL' ? null : (verdict?.summary ?? null),
+        message.sourceChannel === 'PORTAL' ? null : message.subject,
         message.body,
       ),
       senderAddress: message.senderAddress,
@@ -1094,6 +1224,9 @@ async function settleVerdict(
       actorRole: null,
       sorterModel: verdict?.modelId ?? null,
       sorterPrompt: verdict?.promptVersion ?? null,
+      suggestedCategoryId: message.suggestedCategoryId,
+      entryPermission: message.entryPermission,
+      tenancyId: message.tenancyId,
     });
     if (parties.length === 1 && parties[0] !== undefined) {
       try {
@@ -1142,6 +1275,19 @@ async function partiesFor(
   clock: Clock,
   message: Normalized,
 ): Promise<string[]> {
+  if (message.sourceChannel === 'PORTAL') {
+    try {
+      const holder = await partyHoldingContact(db, {
+        channel: 'PHONE',
+        value: normalisePhone(message.senderAddress),
+        day: today(clock),
+      });
+      return holder === null ? [] : [holder];
+    } catch (error) {
+      if (error instanceof KernelError && error.code === 'invalid') return [];
+      throw error;
+    }
+  }
   try {
     const rows =
       message.sourceChannel === 'EMAIL'
@@ -1194,7 +1340,7 @@ function bufferOf(value: unknown): Buffer | null {
 async function insertMessage(
   db: Queryable,
   clock: Clock,
-  objects: ObjectStore | undefined,
+  deps: { objects?: ObjectStore; scanner?: MalwareScanner } | undefined,
   message: Normalized,
   link: {
     callId: string | null;
@@ -1205,11 +1351,17 @@ async function insertMessage(
 ): Promise<string | null> {
   const conversationId = await conversationOf(db, clock, message);
   const messageId = newId(clock);
-  const attachments = await keepAttachmentBytes(
-    objects,
-    messageId,
-    message.attachments,
-  );
+  const attachments = [
+    ...(await keepAttachmentBytes(
+      db,
+      clock,
+      deps?.objects,
+      deps?.scanner,
+      messageId,
+      message.attachments,
+    )),
+    ...(await filesFromHolds(db, message.holds)),
+  ];
   const { rows } = await db.query<{ message_id: string }>(
     `INSERT INTO message
        (message_id, conversation_id, source_channel, external_message_id,

@@ -19,6 +19,8 @@ dist/
 *.jpeg
 *.png
 !docs/corpus/**
+# Portal home-screen marks (#286). Read at boot; not a tenant document.
+!src/kernel/ui/icons/*.png
 
 # And a measured specimen is the same document in another coat (ticket #127). A capture holds
 # every word of a signed lease; the hand reading in evals/fixtures/lease-extraction.ts is what

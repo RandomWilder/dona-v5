@@ -15,6 +15,11 @@ documented module commands, never by writing a store query. Distinct from each o
 (**המסווג**) — the model that reads one incoming message and proposes whether it is a ServiceCall,
 its **Category** and a Hebrew summary. It replies to nobody and reaches no store; distinct from the
 agent. **The office** — the humans who supervise exceptions.
+**The Portal** (**פורטל הדיירים**) — the tenant's home: a web application, installable on the phone, where a
+verified tenant sees their flat, their tenancy documents and their ServiceCalls, and reports or asks.
+A Source channel, not a second call flow. WhatsApp stays a door into the same system and is never
+closed ([ADR-0019](docs/decisions/ADR-0019-the-tenant-portal-is-a-source-channel.md)). Not "the app",
+not "the tenant console".
 
 ## Place
 
@@ -22,6 +27,7 @@ agent. **The office** — the humans who supervise exceptions.
 |---|---|
 | **Project** | Optional grouping above Building. `Building.project_id` is nullable. |
 | **Building** | A set of **Spaces**. Nothing else. |
+| **Portal-enabled building** | A Building the office has switched into the Portal. Its tenants see their tenancy there; a tenant of any other Building can only ask the office. A switch on the Building, not a pilot list. |
 | **Gush** | The land-registry block (גוש) a Building sits on. Typed on A11 from a tabu extract or a plan; a lease only recites it. Nullable text, not unique, not a promotion target. |
 | **Helka** | The land-registry parcel or parcels (חלקה). A list stored as text — order varies by page — so not an integer. Same standing as Gush. |
 | **Building number** | The number a Building has inside a Project (`206`). A fact, not a key: it collapses on a standalone Building, and a second unique key beside `address_key` is two writers' worth of disagreement. |
@@ -66,6 +72,8 @@ different; writing a lease's bay number onto the Unit is the same class of error
 | **Lead** | A prospective tenant in the leasing funnel. **Not a Party** ([ADR-0014](docs/decisions/ADR-0014-a-lead-is-not-a-party.md)). It becomes one when a lease is drafted for it; until then it lives outside the directory and outside the isolation join. |
 | **Party directory** (**אנשי קשר**) | The administrator's list of every Party, searchable, each opening a **party profile**. Shows Parties only — never Leads. The Hebrew tab name says "contacts"; in English and in code "contact" still means only a PartyContact, a phone or an email. |
 | **Party label** | What a Party is to us today — current tenant, past tenant, draft tenancy, guarantor, service provider, no relationship. **Computed on every load, never stored**; one Party can carry several. Say "label", not "type" or "status". |
+| **Portal identity** | A phone number the Portal has verified by a one-time code. Not a Party and not a role: on every request it resolves to a Party and its labels, or to nobody. Say "verified number", not "tenant account". |
+| **Tenant session** | A Portal identity signed in on one device. Distinct from a staff session. |
 
 ## Scope
 
@@ -123,10 +131,14 @@ be met. Editable at `/settings` without a deploy.
 | **ServiceCall** (**קריאה**) | A request that reached the office through a **Source channel**. A question is a ServiceCall too, closed by an exit. Has a state machine, with no AI in it. Not "ticket", not "inquiry". |
 | **Sender** (**נרשם**) | The name, number, or address captured when a ServiceCall is opened, or unknown. Not the requester. |
 | **Requester** (**פונה**) | The party a ServiceCall is for. Identified, never presumed from the sender. |
-| **Source channel** | How a ServiceCall arrived: `WHATSAPP · EMAIL · PHONE · WALK_IN`. Set once, at intake. |
+| **Source channel** | How a ServiceCall arrived: `WHATSAPP · EMAIL · PHONE · WALK_IN · PORTAL`. Set once, at intake. `PORTAL` covers the web portal and any later native app. |
 | **Category** | The trade a ServiceCall needs — plumbing, electrical, A/C, locks, gates and the like, plus administrative. Dona Dom's list. Distinct from `asset_type`, which is what the call is filed against. |
 | **Emergency** | A ServiceCall flagged because its text contains an emergency term, or because a person flagged it. The flag records which. Pinned first in קריאות. Not a state, and no model sets it. Closing the call does not clear the flag. |
-| **Response goal** | How long an open ServiceCall has waited, in three bands: **בזמן** (inside the goal), **קרוב ליעד** (near), **מעבר ליעד** (past). The office's own measure. Not an SLA, and not the words כתום or אדום. |
+| **Response goal** | How long an open Emergency has waited, in minutes, in three bands: **בזמן** (inside the goal), **קרוב ליעד** (near), **מעבר ליעד** (past). The office's own measure. Not an SLA, and not the words כתום or אדום. |
+| **Handling clock** | How long every other open ServiceCall has waited, in business days, in those same three bands. Office-only, like the Response goal. |
+| **Tenant status** | The word a tenant sees for their ServiceCall in the Portal — **התקבלה**, **בטיפול**, **ממתין לתיאום**, **נקבע ביקור**, or the exit. Derived from the call's state, never stored, and never an office band. |
+| **Reply target** | The number of business days within which a person replies to a ServiceCall. A reply, not a resolution: it promises no closing, visit or appointment, and the automatic acknowledgement is not a reply. Shown to tenants only when the office switches it on. |
+| **Business day** | Sunday to Thursday, less the non-working dates the office keeps at `/settings`. |
 | **Duty contact** | The duty phone number and the duty hours. Editable at `/settings`. The fixed emergency reply is composed from these rows. |
 | **Exit** | A ServiceCall closed by a person, with a reason, before a Visit: **Answered** (a question, settled), **Forwarded** (a legitimate request another department owns — finance, legal — named on the call), **Duplicate** (linked to the call it repeats), **Cancelled** (the requester withdrew). Not "rejected", and a call with no exit reason is not closed. |
 | **Predecessor** (**המשך של**) | The earlier ServiceCall a later one continues. A call names at most one. Several later calls may name the same earlier one. Not a Duplicate. |

@@ -18,6 +18,7 @@ import {
   receiveIncoming,
   type Sorter,
 } from './door.ts';
+import type { MalwareScanner } from './scanner.ts';
 import { renderIntakeForm } from './views.ts';
 import type { WhatsappFetch } from './whatsapp.ts';
 import { registerWhatsappWebhook } from './whatsapp.ts';
@@ -36,6 +37,7 @@ export interface ChannelDeps {
   /** The real sorter. Absent, the form picks the verdict itself. */
   sorter?: Sorter;
   objects?: ObjectStore;
+  scanner?: MalwareScanner;
   /** Media download. Absent, the webhook calls Meta. */
   whatsappFetch?: WhatsappFetch;
   /** After a new call is stored. The call brief. #252. */
@@ -133,6 +135,7 @@ export function registerChannelRoutes(
     pool: deps.pool,
     clock: deps.clock,
     objects: deps.objects,
+    scanner: deps.scanner,
     sorter: deps.sorter,
     fetch: deps.whatsappFetch,
     onCallIdentified: deps.onCallIdentified,
@@ -166,6 +169,8 @@ export function registerChannelRoutes(
         {
           sorter: deps.sorter ?? sorterFor(form),
           matchesEmergency: emergencyMatch(deps.pool),
+          objects: deps.objects,
+          scanner: deps.scanner,
           onCallIdentified: deps.onCallIdentified,
         },
         message,

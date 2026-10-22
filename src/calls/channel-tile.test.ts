@@ -11,6 +11,7 @@ const CHANNELS: Record<SourceChannel, { mark: string; chip: string }> = {
   PHONE: { mark: 'M22 16.92', chip: 'טלפון' },
   WHATSAPP: { mark: 'M2.992 16.342', chip: 'וואטסאפ' },
   WALK_IN: { mark: 'M10 21H2', chip: 'הגעה' },
+  PORTAL: { mark: 'M7.9 20A9', chip: 'פורטל' },
 };
 
 function call(channel: SourceChannel, n: number): ServiceCall {
@@ -28,6 +29,9 @@ function call(channel: SourceChannel, n: number): ServiceCall {
     toReview: false,
     summary: null,
     proposal: null,
+    suggestion: null,
+    entry: null,
+    tenancy: null,
     sorterLabel: null,
     sorterModel: null,
     sorterPrompt: null,
@@ -40,16 +44,21 @@ function screen(): CallsScreen {
   return {
     nav: h``,
     csrf: 'token',
-    calls: (['EMAIL', 'PHONE', 'WHATSAPP', 'WALK_IN'] as const).map(call),
+    calls: (['EMAIL', 'PHONE', 'WHATSAPP', 'WALK_IN', 'PORTAL'] as const).map(
+      call,
+    ),
     categories: [],
     state: null,
     categoryId: null,
     emergency: false,
     toReview: false,
     band: null,
-    counts: { open: 4, emergency: 0, near: 0, past: 0, late: 0, toReview: 0 },
+    counts: { open: 5, emergency: 0, near: 0, past: 0, late: 0, toReview: 0 },
     filteredCount: 0,
     goal: { amberMinutes: 240, redMinutes: 1440 },
+    handling: { amberDays: 2, redDays: 5 },
+    nonWorkingDates: [],
+    zone: 'Asia/Jerusalem',
     devIntake: false,
     now: new Date('2026-10-06T12:00:00.000Z'),
   };

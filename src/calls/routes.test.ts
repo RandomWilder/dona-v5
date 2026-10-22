@@ -943,6 +943,31 @@ describe('calls · the קריאות tab', () => {
     }
     const clock = fixedClock(AT);
     const app = buildApp({ pool, version: '9.9.9-test', clock });
+    const lock = await pool.connect();
+    await lock.query('SELECT pg_advisory_lock(287)');
+    const clockKeys = [
+      'calls.response_amber_minutes',
+      'calls.response_red_minutes',
+      'calls.handling_amber_days',
+      'calls.handling_red_days',
+      'calls.non_working_dates',
+    ];
+    const savedClocks = await lock.query<{ key: string; value: unknown }>(
+      `SELECT key, value FROM config_settings WHERE key = ANY($1::text[])`,
+      [clockKeys],
+    );
+    await lock.query(
+      `UPDATE config_settings AS settings
+          SET value = pinned.value::jsonb
+         FROM (VALUES
+           ('calls.response_amber_minutes', '240'),
+           ('calls.response_red_minutes', '1440'),
+           ('calls.handling_amber_days', '2'),
+           ('calls.handling_red_days', '5'),
+           ('calls.non_working_dates', '[]')
+         ) AS pinned(key, value)
+        WHERE settings.key = pinned.key`,
+    );
     const domain = 'calls-routes-attention.test';
     await cleanup(pool, domain);
     let client = asOperator(
@@ -1007,18 +1032,19 @@ describe('calls · the קריאות tab', () => {
       assert.equal(flagged.statusCode, 303);
     };
     try {
+      const day = 24 * hour;
       await open(emergencyOld);
-      clock.advance(4 * hour);
+      clock.advance(day);
       await open(pastOld);
-      clock.advance(hour);
+      clock.advance(day);
       await open(pastNew);
-      clock.advance(20 * hour);
+      clock.advance(3 * day);
       await open(near);
-      clock.advance(4 * hour);
+      clock.advance(4 * day);
+      await open(fresh);
+      clock.advance(day);
       await open(emergencyFresh);
       clock.advance(50 * minute);
-      await open(fresh);
-      clock.advance(10 * minute);
 
       await refresh();
       const created = await client.inject({ method: 'GET', url: '/calls' });
@@ -1130,7 +1156,7 @@ describe('calls · the קריאות tab', () => {
       assert.doesNotMatch(emergencies.body, new RegExp(fresh));
       assert.match(
         emergencies.body,
-        /מעבר ליעד המענה<\/span>\s*<span class="stat-value">\s*<span dir="ltr">\d+<\/span>\s*<\/span>\s*<span class="stat-note">\s*קרוב ליעד <span dir="ltr">\d+<\/span>/,
+        /מעבר ליעד<\/span>\s*<span class="stat-value">\s*<span dir="ltr">\d+<\/span>\s*<\/span>\s*<span class="stat-note">\s*קרוב ליעד <span dir="ltr">\d+<\/span>/,
       );
       assert.equal(
         labeledCount(emergencies.body, 'קרוב ליעד'),
@@ -1198,7 +1224,7 @@ describe('calls · the קריאות tab', () => {
       const closedRow = article(closedList.body, pastOld);
       assert.doesNotMatch(closedRow, /בזמן|קרוב ליעד|מעבר ליעד/);
       assert.doesNotMatch(closedRow, /data-goal=/);
-      assert.match(closedList.body, /מעבר ליעד המענה/);
+      assert.match(closedList.body, /מעבר ליעד/);
     } finally {
       if (gatesOff) {
         await pool.query(
@@ -1210,6 +1236,14 @@ describe('calls · the קריאות tab', () => {
         else process.env[key] = value;
       }
       await cleanup(pool, domain);
+      for (const row of savedClocks.rows) {
+        await lock.query(
+          `UPDATE config_settings SET value = $2::jsonb WHERE key = $1`,
+          [row.key, JSON.stringify(row.value)],
+        );
+      }
+      await lock.query('SELECT pg_advisory_unlock(287)');
+      lock.release();
       await app.close();
       await pool.end();
     }
@@ -1277,6 +1311,11 @@ describe('calls · the קריאות tab', () => {
           },
           matchesEmergency: async () => false,
           objects,
+          scanner: {
+            async scan() {
+              return 'clean' as const;
+            },
+          },
         });
         const arrived = await receiveIncoming(
           db,
@@ -2725,6 +2764,11 @@ describe('calls · the קריאות tab', () => {
             },
             matchesEmergency: async () => false,
             objects,
+            scanner: {
+              async scan() {
+                return 'clean' as const;
+              },
+            },
           },
           message(domain, {
             senderAddress: sender,

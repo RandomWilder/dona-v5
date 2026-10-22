@@ -7,6 +7,7 @@ import { createAuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
+import { newId } from '../../kernel/ids.ts';
 import type { ObjectStore } from '../../kernel/objects.ts';
 import type { PdfText } from '../../kernel/pdf.ts';
 import { validId } from '../../kernel/validate.ts';
@@ -15,16 +16,87 @@ import {
   resolveUnitsByPhone,
   type ScopeActor,
 } from '../../scope/contract.ts';
+import type { MalwareScanner } from './scanner.ts';
 import type { Queryable } from './types.ts';
 
-const FILE_BYTES_MAX = 100 * 1024 * 1024;
-const RENDERABLE = new Set([
+/** 100 MiB. A larger file is not stored. */
+export const ATTACHMENT_BYTES_MAX = 100 * 1024 * 1024;
+
+const ALLOWED = new Set([
   'application/pdf',
+  'image/avif',
   'image/gif',
+  'image/heic',
   'image/jpeg',
   'image/png',
   'image/webp',
+  'video/mp4',
+  'video/quicktime',
+  'video/webm',
 ]);
+
+const QUARANTINE =
+  /^quarantine\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+const VIDEO_BRANDS = new Set([
+  'isom',
+  'iso2',
+  'mp41',
+  'mp42',
+  'avc1',
+  'M4V ',
+  'qt  ',
+]);
+const HEIC_BRANDS = new Set([
+  'heic',
+  'heix',
+  'hevc',
+  'hevx',
+  'mif1',
+  'msf1',
+  'heim',
+  'heis',
+]);
+const AVIF_BRANDS = new Set(['avif', 'avis']);
+
+export type AttachmentScan = 'clean' | 'infected' | 'unavailable' | 'refused';
+
+export function isQuarantinePath(path: string): boolean {
+  return QUARANTINE.test(path);
+}
+
+/** The sender's name, kept as a label. Slashes and odd marks do not survive. */
+export function attachmentLabel(fileName: string): string {
+  const base = fileName.split(/[/\\]/).pop() ?? '';
+  const cleaned = base
+    .replace(/[^\p{L}\p{N}._ -]/gu, '')
+    .trim()
+    .slice(0, 80);
+  return cleaned === '' ? 'file' : cleaned;
+}
+
+export function classifyAttachment(
+  bytes: Buffer,
+): { ok: true; contentType: string } | { ok: false; reason: 'type' | 'size' } {
+  if (bytes.length > ATTACHMENT_BYTES_MAX) return { ok: false, reason: 'size' };
+  const contentType = sniffedType(bytes);
+  if (contentType === null) return { ok: false, reason: 'type' };
+  return { ok: true, contentType };
+}
+
+export async function scanAttachment(
+  scanner: MalwareScanner | undefined,
+  bytes: Buffer,
+): Promise<'clean' | 'infected' | 'unavailable'> {
+  if (!scanner) return 'unavailable';
+  try {
+    const verdict = await scanner.scan(bytes);
+    if (verdict === 'clean' || verdict === 'infected') return verdict;
+    return 'unavailable';
+  } catch {
+    return 'unavailable';
+  }
+}
 
 export interface ListedAttachment {
   fileName: string;
@@ -41,6 +113,7 @@ interface KeptFile {
   byteSize: number | null;
   objectPath: string | null;
   documentId: string | null;
+  scan: AttachmentScan | null;
 }
 
 export interface FilingDeps {
@@ -50,7 +123,10 @@ export interface FilingDeps {
 }
 
 export async function keepAttachmentBytes(
+  db: Queryable,
+  clock: Clock,
   objects: ObjectStore | undefined,
+  scanner: MalwareScanner | undefined,
   messageId: string,
   files: readonly {
     fileName: string;
@@ -60,23 +136,56 @@ export async function keepAttachmentBytes(
   }[],
 ): Promise<KeptFile[]> {
   const kept: KeptFile[] = [];
-  for (const [index, file] of files.entries()) {
-    let objectPath: string | null = null;
-    if (file.bytes && file.bytes.length <= FILE_BYTES_MAX) {
-      if (!objects) {
-        throw new KernelError('invalid', 'attachments cannot be kept', {
-          field: 'attachments',
-        });
-      }
-      objectPath = `channel/${messageId}/${index}`;
-      await objects.put(objectPath, file.bytes, servedType(file.contentType));
+  for (const file of files) {
+    if (file.bytes === null || file.bytes.length === 0) {
+      kept.push({
+        fileName: file.fileName,
+        contentType: file.contentType,
+        byteSize: file.byteSize,
+        objectPath: null,
+        documentId: null,
+        scan: 'refused',
+      });
+      continue;
+    }
+    const kind = classifyAttachment(file.bytes);
+    if (!kind.ok) {
+      kept.push({
+        fileName: attachmentLabel(file.fileName),
+        contentType: null,
+        byteSize: file.bytes.length,
+        objectPath: null,
+        documentId: null,
+        scan: 'refused',
+      });
+      continue;
+    }
+    if (!objects) {
+      throw new KernelError('invalid', 'attachments cannot be kept', {
+        field: 'attachments',
+      });
+    }
+    const objectPath = `quarantine/${newId(clock)}`;
+    await objects.put(objectPath, file.bytes, kind.contentType);
+    const scan = await scanAttachment(scanner, file.bytes);
+    if (scan === 'infected') {
+      await createAuditLog(db, clock).write(
+        {
+          actorKind: 'system',
+          action: 'channel.attachment_infected',
+          subjectId: messageId,
+          inputs: { byteSize: file.bytes.length },
+        },
+        { outcome: 'ok' },
+      );
     }
     kept.push({
-      fileName: file.fileName,
-      contentType: file.contentType,
-      byteSize: file.bytes ? file.bytes.length : file.byteSize,
+      fileName: attachmentLabel(file.fileName),
+      contentType: kind.contentType,
+      byteSize: file.bytes.length,
       objectPath,
       documentId: null,
+      scan,
     });
   }
   return kept;
@@ -91,7 +200,10 @@ export function listedAttachments(value: unknown): ListedAttachment[] {
       contentType: file.contentType,
       byteSize: file.byteSize,
       index,
-      openable: file.objectPath !== null,
+      openable:
+        file.scan === 'clean' &&
+        file.objectPath !== null &&
+        isQuarantinePath(file.objectPath),
       documentId: file.documentId,
     });
   }
@@ -101,7 +213,7 @@ export function listedAttachments(value: unknown): ListedAttachment[] {
 export function servedType(value: string | null): string {
   if (value === null) return 'application/octet-stream';
   const type = value.toLowerCase();
-  if (RENDERABLE.has(type)) return type;
+  if (ALLOWED.has(type)) return type;
   return 'application/octet-stream';
 }
 
@@ -122,10 +234,11 @@ export async function readAttachment(
     [messageId, callId],
   );
   const file = keptFiles(rows[0]?.attachments)[index];
-  if (!file || file.objectPath !== `channel/${messageId}/${index}`) {
+  const path = file?.scan === 'clean' ? file.objectPath : null;
+  if (path === null || !isQuarantinePath(path)) {
     throw new KernelError('not_found', 'attachment not found');
   }
-  const stored = await objects.read(file.objectPath);
+  const stored = await objects.read(path);
   return {
     bytes: stored.bytes,
     contentType: servedType(file.contentType),
@@ -181,12 +294,13 @@ export async function fileAttachment(
       throw new KernelError('not_found', 'attachment not found');
     }
     if (file.documentId !== null) return { documentId: file.documentId };
-    if (file.objectPath !== `channel/${messageId}/${index}`) {
+    const path = file.scan === 'clean' ? file.objectPath : null;
+    if (path === null || !isQuarantinePath(path)) {
       throw new KernelError('invalid', 'attachment has no file', {
         field: 'file',
       });
     }
-    const stored = await deps.objects.read(file.objectPath);
+    const stored = await deps.objects.read(path);
     const unitId = await oneUnit(tx, clock, row.sender_address, actor);
     const result = await fileOne(tx, clock, deps, {
       bytes: stored.bytes,
@@ -294,6 +408,78 @@ async function oneUnit(
   return ids[0];
 }
 
+function scanOf(value: unknown): AttachmentScan | null {
+  if (
+    value === 'clean' ||
+    value === 'infected' ||
+    value === 'unavailable' ||
+    value === 'refused'
+  ) {
+    return value;
+  }
+  return null;
+}
+
+function sniffedType(bytes: Buffer): string | null {
+  if (
+    bytes.length >= 3 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8 &&
+    bytes[2] === 0xff
+  ) {
+    return 'image/jpeg';
+  }
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return 'image/png';
+  }
+  if (bytes.length >= 6) {
+    const gif = bytes.subarray(0, 6).toString('ascii');
+    if (gif === 'GIF87a' || gif === 'GIF89a') return 'image/gif';
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    bytes.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  if (bytes.length >= 5 && bytes.subarray(0, 5).toString('ascii') === '%PDF-') {
+    return 'application/pdf';
+  }
+  if (
+    bytes.length >= 4 &&
+    bytes[0] === 0x1a &&
+    bytes[1] === 0x45 &&
+    bytes[2] === 0xdf &&
+    bytes[3] === 0xa3 &&
+    bytes
+      .subarray(0, Math.min(bytes.length, 256))
+      .toString('latin1')
+      .includes('webm')
+  ) {
+    return 'video/webm';
+  }
+  if (bytes.length >= 12 && bytes.subarray(4, 8).toString('ascii') === 'ftyp') {
+    const brand = bytes.subarray(8, 12).toString('ascii');
+    if (HEIC_BRANDS.has(brand)) return 'image/heic';
+    if (AVIF_BRANDS.has(brand)) return 'image/avif';
+    if (VIDEO_BRANDS.has(brand)) {
+      return brand === 'qt  ' ? 'video/quicktime' : 'video/mp4';
+    }
+  }
+  return null;
+}
+
 function keptFiles(value: unknown): KeptFile[] {
   if (!Array.isArray(value)) return [];
   return value.map((item) => {
@@ -304,6 +490,7 @@ function keptFiles(value: unknown): KeptFile[] {
         byteSize: null,
         objectPath: null,
         documentId: null,
+        scan: null,
       };
     }
     const row = item as Record<string, unknown>;
@@ -313,6 +500,7 @@ function keptFiles(value: unknown): KeptFile[] {
       byteSize: typeof row.byteSize === 'number' ? row.byteSize : null,
       objectPath: typeof row.objectPath === 'string' ? row.objectPath : null,
       documentId: typeof row.documentId === 'string' ? row.documentId : null,
+      scan: scanOf(row.scan),
     };
   });
 }

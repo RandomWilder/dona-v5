@@ -18,6 +18,7 @@ import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import type { Html } from '../../kernel/ui/html.ts';
 import { optionalText, requireText, validId } from '../../kernel/validate.ts';
+import { currentPlaceholderTexts } from '../../portal/contract.ts';
 import { resolveOccupiedUnits } from '../../scope/contract.ts';
 import {
   CSRF_FIELD,
@@ -59,6 +60,7 @@ import type {
   Tenure,
   UnitRowSpec,
 } from './plan.ts';
+import { buildingInPortal, setBuildingPortal } from './portal.ts';
 import {
   addressKeyOf,
   type BuildingSummary,
@@ -593,6 +595,9 @@ function tenureNoticeOf(request: FastifyRequest): string | undefined {
  */
 const ESTATE_WRITE = { config: { staff: 'estate.write' } } as const;
 
+/** #277. ADMIN only. Seeing the switch is `estate.read`; posting it is this. */
+const PORTAL_SWITCH = { config: { staff: 'portal.switch' } } as const;
+
 /** The form's own vocabularies, checked at the edge against the CHECK constraints they mirror. */
 const STATUSES: readonly BuildingStatus[] = [
   'ACTIVE',
@@ -967,6 +972,23 @@ async function unitStates(
   return states;
 }
 
+async function portalSwitchView(
+  deps: EstateDeps,
+  request: FastifyRequest,
+  buildingId: string,
+  csrf: string,
+) {
+  const enabled = await buildingInPortal(deps.pool, buildingId);
+  return {
+    enabled,
+    maySwitch: can(request.staff?.role ?? null, 'portal.switch'),
+    csrf,
+    blocked: enabled
+      ? []
+      : await currentPlaceholderTexts(deps.pool, deps.clock.now()),
+  };
+}
+
 export function registerEstateRoutes(
   app: FastifyInstance,
   deps: EstateDeps,
@@ -1193,7 +1215,33 @@ export function registerEstateRoutes(
           csrf,
           `/estate/inventory/${detail.building.building_id}`,
         ),
+        portal: await portalSwitchView(deps, request, buildingId, csrf),
       });
+    },
+  );
+
+  app.post<{ Params: { buildingId: string } }>(
+    '/estate/inventory/:buildingId/portal',
+    PORTAL_SWITCH,
+    async (request, reply) => {
+      const buildingId = validId(request.params.buildingId, 'buildingId');
+      const staff = request.staff;
+      if (staff?.staffAccountId == null || staff.role == null) {
+        throw new KernelError('not_allowed', 'not_allowed');
+      }
+      const posted = (request.body as { enabled?: unknown } | undefined)
+        ?.enabled;
+      await setBuildingPortal(
+        deps.pool,
+        deps.clock,
+        { staffAccountId: staff.staffAccountId, role: staff.role },
+        buildingId,
+        posted === 'on',
+      );
+      return reply
+        .code(303)
+        .header('location', `/estate/inventory/${buildingId}`)
+        .send();
     },
   );
 

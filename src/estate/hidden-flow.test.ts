@@ -89,7 +89,7 @@ function isExempt(url: string): boolean {
   return new RegExp(`^/estate/buildings/${UUID}/units/new$`, 'i').test(path);
 }
 
-function enqueueable(href: string): string | null {
+function enqueueable(href: string, ours: ReadonlySet<string>): string | null {
   const text = href.replaceAll('&amp;', '&').split('#')[0] ?? '';
   if (!text.startsWith('/') || text.startsWith('//')) return null;
   const path = bare(text);
@@ -103,11 +103,11 @@ function enqueueable(href: string): string | null {
   // #202. The directory links every party. The list is opened and checked; walking each
   // profile is the whole register, and this crawl's cap is about the buildings graph.
   if (new RegExp(`^/parties/${UUID}/?$`, 'i').test(path)) return null;
-  // #238. ממתינים לפתיחה on שכירויות links every unopened lease in the database, and other files
-  // leave theirs behind. A filing workspace links no building page; walking each one is the cap.
-  if (new RegExp(`^/documents/filing/${UUID}(/open)?/?$`, 'i').test(path)) {
-    return null;
-  }
+  // The shared database holds the whole portfolio. A screen is the same template for every
+  // row, so the crawl follows only this fixture's rows. #238: ממתינים לפתיחה links every
+  // unopened lease, and walking those filing workspaces used up the cap.
+  const ids = text.match(new RegExp(UUID, 'gi')) ?? [];
+  if (ids.some((id) => !ours.has(id.toLowerCase()))) return null;
   return text;
 }
 
@@ -282,7 +282,7 @@ describe('estate · the hidden buildings flow', () => {
           }
         }
         for (const match of response.body.matchAll(/href="([^"]*)"/g)) {
-          const next = enqueueable(match[1] ?? '');
+          const next = enqueueable(match[1] ?? '', ours);
           if (next && !seen.has(next)) queue.push(next);
         }
       }

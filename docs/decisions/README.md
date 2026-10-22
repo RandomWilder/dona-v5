@@ -35,10 +35,12 @@ for a week the register and the decision disagreed about whether three of four d
 | [0010](ADR-0010-office-building-bound-is-not-tenant-building-paper.md) | The office **Building retrieval bound** is the wide bag; tenant stance cannot use it; later tenant rules use **Building paper** only | accepted |
 | [0011](ADR-0011-the-tenancies-book-may-name-the-household.md) | **שכירויות** is the first list allowed to name a household; the Unit page names only the live letting; search and the work list stay nameless | accepted — the tile sentence is superseded by 0012 |
 | [0012](ADR-0012-the-nekasim-tile-shows-the-current-last-name.md) | The נכסים tile shows the last name of the household that counts today, under that letting's dates | accepted |
-| [0013](ADR-0013-whatsapp-arrives-by-coexistence.md) | WhatsApp arrives by coexistence, with Dona Dom as its own Tech Provider; no BSP, no unofficial client, no SMS provider | accepted |
+| [0013](ADR-0013-whatsapp-arrives-by-coexistence.md) | WhatsApp arrives by coexistence, with Dona Dom as its own Tech Provider; no BSP, no unofficial client; §5's ban on a tenant SMS code is superseded by 0019 | accepted |
 | [0014](ADR-0014-a-lead-is-not-a-party.md) | A Lead is not a Party; it stays outside the directory and the isolation join until a lease is drafted | accepted |
 | [0015](ADR-0015-a-lease-is-unassigned-until-its-draft-opens.md) | A lease is stored unassigned; the flat, terms and people are written together at **פתיחת טיוטה**; reverses A12's no-unfiled rule for leases | accepted |
 | [0016](ADR-0016-approval-is-the-only-act-the-press-writes-the-columns.md) | Approval is the only act; פתיחת טיוטה writes every approved mapped value through a map in code; `field_promotion`, `קדם` and the lease's regex place reading go | accepted |
+| [0019](ADR-0019-the-tenant-portal-is-a-source-channel.md) | The tenant portal is the tenant's home and the `PORTAL` Source channel; WhatsApp stays a door; phone sign-in by WhatsApp or SMS code then passkey; supersedes "WhatsApp is the app" and ADR-0013 §5 | accepted |
+| [0020](ADR-0020-staging-serves-the-portal-from-a-second-service.md) | Staging serves the portal from a second service, `dona-staging-portal`; production serves both hosts from one service behind a load balancer; no `dona-prod-portal` | accepted |
 
 **A1–A10 in [archive/tasks-w1-7/plan.md](../../archive/tasks-w1-7/plan.md) are numbered as they will
 become ADRs.** They are decisions of record already; they become files here as the work that

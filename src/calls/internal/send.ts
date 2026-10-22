@@ -1,6 +1,6 @@
-// #256. Send the draft, edited or as written, as a reply on the call's own
-// inbound email. The channel resolves the message. This command decides
-// whether the send is allowed, then records it.
+// #256, #284. Send a reply on an email call, or record one on a portal call.
+// The channel sends the email. This command decides whether the reply is
+// allowed, then records it. A portal reply is not sent anywhere.
 
 import { createAuditLog } from '../../kernel/audit.ts';
 import type { Clock } from '../../kernel/clock.ts';
@@ -33,7 +33,7 @@ export async function sendCallReply(
   db: Queryable,
   clock: Clock,
   spec: SendCallReplySpec,
-  send: (
+  send?: (
     callId: string,
     body: string,
   ) => Promise<{ externalMessageId: string }>,
@@ -59,21 +59,34 @@ export async function sendCallReply(
       reason: 'new',
     });
   }
-  if (call.sourceChannel !== 'EMAIL') {
-    throw new KernelError('invalid', 'only an email call can be replied to', {
-      field: 'reply',
-      reason: 'channel',
-    });
+  const portal = call.sourceChannel === 'PORTAL';
+  if (call.sourceChannel !== 'EMAIL' && !portal) {
+    throw new KernelError(
+      'invalid',
+      'only an email or portal call can be replied to',
+      {
+        field: 'reply',
+        reason: 'channel',
+      },
+    );
   }
 
-  try {
-    await send(callId, body);
-  } catch (error) {
-    if (error instanceof KernelError) throw error;
-    throw new KernelError('unavailable', 'the reply was not sent', {
-      field: 'reply',
-      reason: 'send',
-    });
+  if (!portal) {
+    if (send === undefined) {
+      throw new KernelError('unavailable', 'the reply was not sent', {
+        field: 'reply',
+        reason: 'send',
+      });
+    }
+    try {
+      await send(callId, body);
+    } catch (error) {
+      if (error instanceof KernelError) throw error;
+      throw new KernelError('unavailable', 'the reply was not sent', {
+        field: 'reply',
+        reason: 'send',
+      });
+    }
   }
 
   const thread = await loadCallThread(db, callId);

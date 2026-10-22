@@ -1640,7 +1640,8 @@ All four are nullable `ADD COLUMN`s when they come.
   control standing beside the isolation join**, and foundation rule 1 is that the scope is a view and
   never a column. A model that misbehaves cannot widen a scope it never held, but it can be handed a
   row whose boolean someone flipped. What a tenant may see is derived from `document_link` through
-  `src/scope/`. If week 9 needs a class of document that is admin-only even inside its own tenancy,
+  `src/scope/`. The portal's reading of that derivation is #280 in SPEC-scope: tenancy-bound
+  documents only. If week 9 needs a class of document that is admin-only even inside its own tenancy,
   that belongs on the **type** — one row, one rule, readable — and not on each document.
 - **`uploaded_by`** — **slice 5.4 added it** (`0024_document_uploaded_by.sql`): nullable
   `uuid REFERENCES staff_account`. Not `-- pii` — it is a staff id, like the other FKs to that

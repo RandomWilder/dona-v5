@@ -2,15 +2,17 @@
 // injects PORT and requires a bind on 0.0.0.0. `npm run dev` layers .env.example then .env in front
 // of it with --env-file-if-exists, neither of which overrides a variable already set in the shell —
 // which is why v3's hand-written .env loader (src/dev.ts) is not lifted.
-import { buildApp } from './app.ts';
+import { buildApp, tenantHostLine } from './app.ts';
 import { startCallBrief } from './calls/contract.ts';
 import {
+  codeSenderFromEnv,
   createGraphReader,
   createSorter,
   emergencyMatch,
   graphMailboxFrom,
   receiveIncoming,
   SORTER_PROMPT_VERSION,
+  scannerFromEnv,
   sendOutlookReply,
   startOutlookPolling,
   watchWhatsapp,
@@ -55,6 +57,7 @@ const pool = createPool();
 // start — but `docs: memory` on a deployed revision is now visible, and is as wrong as a `-dev`
 // version string.
 const objects = createConfiguredStore();
+const scanner = scannerFromEnv(process.env);
 const ocr = createConfiguredOcr();
 const extractor = createConfiguredExtractor();
 // Who signs in (slice 5.1, Google from 5.1b). Same shape as the store and the readers above, and
@@ -104,6 +107,7 @@ if (outlook) {
           },
           matchesEmergency: emergencyMatch(pool),
           objects,
+          scanner,
           replyOnEmail: (reply) => sendOutlookReply(outlook, reply),
           onCallIdentified: (callId) =>
             startCallBrief({ db: pool, clock, extractor, embedder }, callId),
@@ -124,6 +128,16 @@ if (outlook) {
 // working copy, not a release.
 // The store, the reader and the bucket name reach the app from here and nowhere deeper — the same
 // rule the pool and the clock follow. Slice 3.3, which is the first slice with a route that writes.
+const codeSender = codeSenderFromEnv(process.env, (line) => {
+  console.log(line);
+});
+function portalCodeLabel(): string {
+  if (codeSender.channels.length === 0) return 'unconfigured';
+  const template = (process.env.PORTAL_WHATSAPP_TEMPLATE ?? '').trim();
+  const username = (process.env.INFORU_USERNAME ?? '').trim();
+  if (template === '' && username === '') return 'log';
+  return codeSender.channels.join('+');
+}
 const app = buildApp({
   pool,
   clock,
@@ -139,6 +153,9 @@ const app = buildApp({
   // Google matches the redirect URI character for character, so a deployment says its own origin
   // rather than letting a proxy header decide it.
   staffBaseUrl: process.env.STAFF_BASE_URL,
+  tenantHost: process.env.TENANT_HOST,
+  codeSender,
+  scanner,
   staffHostedDomain: configuredHostedDomain(),
   devMockups: (process.env.VERSION ?? '0.0.0-dev').endsWith('-dev'),
   http2,
@@ -161,6 +178,9 @@ console.log(
 );
 console.log(`embed: ${embedder.describe()}`);
 console.log(`identity: ${identity.describe()}`);
+console.log(tenantHostLine(process.env.TENANT_HOST));
+console.log(`portal codes: ${portalCodeLabel()}`);
+console.log(`scanner: ${scanner ? 'dev' : 'unconfigured'}`);
 console.log(`clock: ${clock.zone}`);
 console.log(`outlook: ${outlook ? 'configured' : 'unconfigured'}`);
 console.log(`whatsapp: ${whatsapp ? 'configured' : 'unconfigured'}`);

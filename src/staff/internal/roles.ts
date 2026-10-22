@@ -34,6 +34,9 @@ export const PERMISSIONS = [
   'party.national_id.read',
   // #256. Sending the draft on an EMAIL call. ADMIN and OPERATOR. A viewer copies.
   'calls.reply',
+  // #277. Putting a building into the portal, or taking it out. ADMIN only.
+  // Seeing the switch is estate.read. estate.write does not cover this.
+  'portal.switch',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -53,6 +56,7 @@ const MATRIX: Readonly<Record<Role, readonly Permission[]>> = Object.freeze({
     'staff.invite',
     'party.national_id.read',
     'calls.reply',
+    'portal.switch',
   ] as const),
   OPERATOR: Object.freeze([
     'estate.read',

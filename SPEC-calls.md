@@ -20,14 +20,15 @@ mark, not a state.** The door sets it when the sorter is unsure or fails, and wh
 term matched and the verdict was not a plain call. No command reads the mark to choose a
 transition.
 
-**An intake call** (EMAIL or WHATSAPP) is opened by the door with no staff account. The list shows
-the raw sender address until the requester is identified. A call opened by hand still names
-the staff account that logged it.
+**An intake call** (EMAIL, WHATSAPP or PORTAL) is opened by the door with no staff account. The
+list shows the raw sender address until the requester is identified. A call opened by hand still
+names the staff account that logged it.
 
 **A ServiceCall is any request that reached the office**, on any Source channel: `WHATSAPP · EMAIL ·
-PHONE · WALK_IN`, set once at intake and never changed. A question is a ServiceCall, closed by the
-Answered Exit. The requester is identified, never presumed. A call whose sender resolves to no Party,
-or to more than one, waits in NEW with the raw sender address until a person identifies it.
+PHONE · WALK_IN · PORTAL`, set once at intake and never changed. A question is a ServiceCall, closed
+by the Answered Exit. The requester is identified, never presumed. A call whose sender resolves to
+no Party, or to more than one, waits in NEW with the raw sender address until a person identifies
+it.
 
 **Identifying a sender links that call and nothing else.** Adding the address to the Party as a
 PartyContact is a separate, explicit act ("save this contact") through parties' contract. A
@@ -64,7 +65,8 @@ together with that Building's own paper (documents linked to the Building, not a
 lease). With no live Tenancy, the bound is the Unit of the requester's latest letting — the
 office Unit bound. A service provider is answered from their own provider record and from no
 lease. A requester who is only a guarantor gets no brief; the page says so. A WHATSAPP call
-gets no brief. The on/off switch (`calls.brief`) and the model id (`calls.brief.model`) are
+gets no brief. A PORTAL call's brief does not search a live letting: the question is identified
+by the number and is not attached to a Tenancy. The on/off switch (`calls.brief`) and the model id (`calls.brief.model`) are
 settings rows. When the switch is off, no turn is written and the model is not called.
 
 **#253. A follow-up.** Under the brief, anyone who can read the call can ask a question. The
@@ -99,12 +101,13 @@ draft, because the clipboard is not a form; a call with no draft has no script.
 **#256. Send the reply.** On an EMAIL call, a person who holds `calls.reply` can send the draft,
 edited or as written, as a reply to the inbound message the call was opened from. The server
 refuses unless the actor holds `calls.reply`, the call is IDENTIFIED or later and not closed, and
-the channel is EMAIL. Only one recipient is possible. The server resolves it, and the thread, from
-that inbound message. The page never supplies an address, and a recipient a client posts is
-ignored. The send is one Graph reply through the same Outlook send the duty reply uses. It is a
-timeline row and an audit row. Each row names the actor, the text sent, and whether that text was
-the stored draft or an edit of it. A viewer sees the copy control and not send. PHONE, WALK_IN and
-WHATSAPP are not this command. Production `Mail.Send` is the director's to request; until it is
+the channel is EMAIL or PORTAL. Only one recipient is possible on EMAIL. The server resolves it,
+and the thread, from that inbound message. The page never supplies an address, and a recipient a
+client posts is ignored. On EMAIL the send is one Graph reply through the same Outlook send the
+duty reply uses. On PORTAL nothing is sent outside (#284): the same row is the reply, and the
+tenant's thread shows it. It is a timeline row and an audit row. Each row names the actor, the
+text sent, and whether that text was the stored draft or an edit of it. A viewer sees the copy
+control and not send. PHONE, WALK_IN and WHATSAPP are not this command. Production `Mail.Send` is the director's to request; until it is
 granted, the send is verified on the development mailbox only.
 
 **Save this contact** is a command on a call a person identified, when the sender is an email
@@ -128,7 +131,9 @@ A call with no Exit reason is not closed.
 **Return to filtered** is not an Exit. A call the office judges not to be a call at all (spam, an
 advertisement, a misdirected message) becomes a Filtered message again. The call record is kept and
 marked returned, so it counts in no closed-call figure. The sorter's original label is kept beside
-the office's, as a labelled case for the golden set.
+the office's, as a labelled case for the golden set. A `PORTAL` call is not returned (#284). The
+command refuses, and the control is absent on its page. The office cancels it with a note. The
+tenant sees בוטלה with that note.
 
 **A message on a thread whose call is closed opens a new call** linked to the closed one. A closed
 call is never reopened.
@@ -154,28 +159,117 @@ channel's. On WHATSAPP that send is one session message on the same conversation
 24-hour window the inbound message opened, once for that call, and it happens before a model reads
 the message. On EMAIL that send is one reply on the same thread, from the shared mailbox, once for
 that call, before a model reads the message. It uses Mail.Send and lands in that mailbox's Sent
-Items. A hand flag sends nothing. PHONE and WALK_IN send nothing. The reply is on the call's
-timeline and audited.
+Items. A hand flag sends nothing. PHONE and WALK_IN send nothing. On PORTAL the same sentence is
+shown to the sender on the confirmation, once, and nothing is sent: the portal has no conversation
+to reply on. The reply is on the call's timeline and audited when a channel sent it.
 
 **Category** is the trade a call needs. It is an admin-managed list of rows, deactivated and never
 deleted, seeded with a placeholder list until Dona Dom supplies theirs. It is distinct from
-`asset_type` and does not feed the responsibility matrix.
+`asset_type` and does not feed the responsibility matrix. A category a tenant picks on a portal
+report is not this Category. It is a suggestion, stored beside the call. The sorter's proposal and
+a person's Category command may name a different one. The suggestion does not move the state.
 
 **Editable at /settings without a deploy:** the emergency terms (one per line, like verification
-terms), the duty phone number and hours, the Category list, and the amber and red age thresholds of
-the internal response goal. The goal is internal and is shown to no tenant. A promise to tenants is
-an SLA, and it is the director's decision when one is made.
+terms), the duty phone number and hours, the Category list, the amber and red age thresholds of
+the internal response goal, the amber and red handling thresholds in business days, the
+non-working dates, the reply target in business days, and whether tenants are shown that target.
+Both clocks are internal and are shown to no tenant. The reply target is the promise, and tenants
+see it only when an administrator has switched that on.
 
-**The response goal** is two whole-minute thresholds, amber then red. Placeholders, until Dona Dom
-supplies theirs, are 240 and 1440. Age is whole minutes since the call opened. A call older than
-amber, and not older than red, is near the goal. A call older than red is past it. A call that has
-passed neither is inside the goal. A call exactly as old as a threshold has not passed it. On an
-open call those three are the words בזמן, קרוב ליעד, and מעבר ליעד. A closed call has no
-response-goal band: none of those words, no goal colour, and no goal mark, on the list and on its
-own page. The list filters on the band. The amber filter does not include red. Red means past the
-goal only. A late filter, labeled לא בזמן, means near or past. Amber and red remain valid and have
-no segment of their own. Red must be greater than amber. A threshold above a year of minutes is
-refused. A save is audited and is read on the next request, so it takes effect with no deploy.
+**The response goal** is two whole-minute thresholds, amber then red. It applies to an open
+Emergency call. Placeholders, until Dona Dom supplies theirs, are 240 and 1440. Age is whole
+minutes since the call opened. A call older than amber, and not older than red, is near the goal.
+A call older than red is past it. A call that has passed neither is inside the goal. A call
+exactly as old as a threshold has not passed it. On an open call those three are the words בזמן,
+קרוב ליעד, and מעבר ליעד. A closed call has no response-goal band: none of those words, no goal
+colour, and no goal mark, on the list and on its own page. The list filters on the band. The
+amber filter does not include red. Red means past the goal only. A late filter, labeled לא בזמן,
+means near or past. Amber and red remain valid and have no segment of their own. Red must be
+greater than amber. A threshold above a year of minutes is refused. A save is audited and is
+read on the next request, so it takes effect with no deploy.
+
+**Two clocks (#287).** The response goal above is the Emergency clock. Every other open call is
+measured by the handling clock, in business days. A closed call has neither band. The band on the
+list and on the call's own page, the band filter, the past group, and the near and past counts
+each use whichever clock applies to that call. The age words beside the band stay the elapsed
+time, the same words the response goal already uses.
+
+**A business day** is a calendar date in the office zone whose weekday is Sunday, Monday, Tuesday,
+Wednesday or Thursday, and which is not a non-working date. Friday and Saturday are not business
+days. The handling age is how many business days lie in the half-open span from the open date,
+inclusive, to today, exclusive. The open date and today are that instant's calendar date in the
+office zone. The same calendar day is zero. A Friday, a Saturday or a non-working date in the span
+does not count. The count is a pure function of the open instant, now, the office zone and the
+non-working dates.
+
+**The handling clock** is two whole-day thresholds, amber then red. Placeholders, until Dona Dom
+supplies theirs, are 2 and 5. The bands and the words are the response goal's: older than amber
+and not older than red is near, older than red is past, and exactly on a threshold has not passed
+it. The list shows that band on each non-emergency open call. Red must be greater than amber. A
+threshold above 366 is refused. A save is audited and is read on the next request.
+
+**The reply target (#288)** is one whole number of business days. A placeholder, until Dona Dom
+supplies it, is 2. A number above 366 is refused. A call counts as replied when a person sends a
+reply on it. The fixed emergency reply does not count, and an automatic acknowledgement does not
+count. The age of that reply is the business-day count from the open instant to the reply
+instant. A reply whose age is the target or less is within it. A reply older than the target
+is not. The office sees, at `/settings`, how many calls opened in a chosen period were replied
+to within the target, and how many calls opened in that period. The period is two calendar dates
+in the office zone, both included. A call sent back to the filtered list is not in either number.
+The share is shown to no tenant.
+
+**Show to tenants** is off until an administrator turns it on. Saving the number, and turning the
+switch on or off, are each an audit row, and both need an administrator. The rows are read on the
+next request. Off, no tenant page names a reply time. On, the portal home shows a clock mark and
+"אנחנו עונים בתוך X ימי עסקים" under the greeting, and the report confirmation shows "אדם מהמשרד
+יענה בתוך X ימי עסקים" as a pill. The same sentences exist in English and Russian. The portal
+does not say why the line is there, and no other tenant page carries it.
+
+**Non-working dates** are calendar dates an administrator adds and removes at `/settings`. A value
+that is not a real calendar date is refused. Adding a date already kept, or removing one that is
+not, changes nothing and writes no audit row. Each add and each remove that changes the list is
+its own audit row. The list is read on the next request.
+
+**Tenant status (#281).** Derived when the portal reads a call, never stored, and never a
+response-goal band. The words are the portal's copy rows. A state this table does not name,
+including a closed call with no exit, is בטיפול, so an internal name never reaches the tenant.
+
+| Call state | Tenant status |
+|---|---|
+| NEW, IDENTIFIED | התקבלה |
+| TRIAGED, RESPONSIBILITY SET | בטיפול |
+| WINDOWS COLLECTED, OFFERED | ממתין לתיאום |
+| SCHEDULED | נקבע ביקור |
+| Exit Answered / Forwarded / Duplicate / Cancelled | נענתה / הועברה / אוחדה / בוטלה |
+
+The portal's list is every ServiceCall whose requester is a party the number resolves to on a
+tenancy the number reaches today, on any Source channel, newest first. A call returned to the
+filtered list is not on it. Opening one shows the tenant's messages and the office's replies.
+A brief, a draft, a band, a clock and an internal state name are not on any tenant page. Another
+tenant's call, asked for by its identifier, is not found.
+
+**A follow-up (#284).** On an open call the tenant writes from its thread. The message is stored
+on that call and does not open another. A photo, a short video or a PDF on that write is an
+attachment of the message. On a closed call the thread has no message field. One button, פתיחת
+קריאה המשך, opens the report as a new call that names the closed one as Predecessor. The office
+replies to a `PORTAL` call from its page. That reply is the row above, shown in the thread as the
+office. A cancelled call shows בוטלה with the note.
+
+**A portal report (#282).** A tenant with tenancy access reports an issue on the tenancy chosen
+for the session. It is a ServiceCall on `PORTAL` through the intake door, and nothing is a
+ServiceCall until they send it. The same submission twice is one call. The description may be in
+any language. The category they pick is the suggestion above. The entry permission is one of
+three answers — the office may enter, only by arrangement, or only while the tenant is home —
+stored on the call. The office's call page shows the suggestion, the permission and the flat.
+The first step shows the duty phone from `/settings`, as a `tel:` link, before the first question.
+An emergency term in the description flags the call the same way as any other intake. On `PORTAL`
+the duty sentence is shown on the confirmation and nothing is sent. The reply-target line is
+shown under the home greeting and on that confirmation only when that setting is on.
+
+A visit's time is two timestamps on the call, `visit_starts_at` and `visit_ends_at`, both set or
+neither, and the end after the start. No command writes them yet; the visit flow will. The home
+page shows the next visit only when an open call has both and the visit has not ended, and it
+shows that time. With no such visit the card is absent.
 
 **Filtered messages** are kept for 6 months and then deleted by a scheduled sweep, unless rescued
 into a call. Six months is counted from when the message arrived. A message exactly that old is
@@ -204,8 +298,8 @@ list, with the filters cleared. The dialog is not modal and does not trap the ke
 open rows are one read of every open call. The counts of open calls, emergencies, calls near or
 past the goal, and calls marked for review are taken from that read and ignore the filter on
 screen, so a short list can sit under a larger open total. The same numbers are on the segments,
-the summary, and the stat row. The red stat is titled מעבר ליעד המענה, with the near-goal count
-beside it. The closed segment is a second read, because a closed call is not in the open read, and
+the summary, and the stat row. The red stat is titled מעבר ליעד, with the near-goal count
+beside it. Both counts use whichever clock applies to the call. The closed segment is a second read, because a closed call is not in the open read, and
 that segment shows no count.
 
 The segments are every open call, emergencies, לא בזמן, calls to review, and closed. The category
@@ -299,7 +393,8 @@ for cancelled, a note and a department for forwarded, and the other call for a d
 close control names the exit and says that closing is final and a new message opens a new call.
 A refused exit keeps the exit and the values. Flagging and clearing an emergency, and sending
 the call back to the filtered list, are in the header. They are absent when they do not apply:
-a closed call has neither, and a call already returned is not sent back again. A posted flag or
+a closed call has neither, a `PORTAL` call is not sent back, and a call already returned is not
+sent back again. A posted flag or
 clear on a closed call is refused by that same command, and the stored flag is unchanged. No new
 database constraint is added for the flag. The requester's
 name links to the party profile when this person holds `party.read`. The stacked cards those

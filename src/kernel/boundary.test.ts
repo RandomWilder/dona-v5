@@ -37,6 +37,7 @@ const modules = [
   'policy',
   'calls',
   'channel',
+  'portal',
 ];
 
 const importSpecifier =

@@ -72,6 +72,25 @@ import {
   renderPartyDirectory,
   renderPartyProfile,
 } from '../../src/party-directory.ts';
+import {
+  renderAskPage,
+  renderAskReceived,
+  renderCodePage,
+  renderFlatPage,
+  renderHomePage,
+  renderMissingPage,
+  renderMorePage,
+  renderNoAccessPage,
+  renderNoticeFullPage,
+  renderNoticePage,
+  renderPasskeyOffer,
+  renderPasskeysPage,
+  renderPhonePage,
+  renderPortalCallPage,
+  renderPortalCallsPage,
+  renderReportPage,
+  renderReportReceived,
+} from '../../src/portal/contract.ts';
 import { renderSettingsPage } from '../../src/settings-page.ts';
 import {
   renderLoginPage,
@@ -551,6 +570,329 @@ const SCREENS: Array<[string, () => string]> = [
     'root · index, may file',
     () => renderIndexPage({ csrf: CSRF, mayFile: true, mayReadParties: true }),
   ],
+  // #273. Sign-in, the code, and the empty home. No office rail.
+  [
+    'portal · phone',
+    () =>
+      renderPhonePage({
+        csrf: CSRF,
+        notice: null,
+        caption: 'sign_in.caption',
+        canSend: true,
+        options: {
+          publicKey: { challenge: 'dGVzdA', userVerification: 'required' },
+        },
+      }),
+  ],
+  [
+    'portal · code, waiting',
+    () =>
+      renderCodePage({
+        csrf: CSRF,
+        phone: '+972500000000',
+        channel: 'whatsapp',
+        alternate: null,
+        waitSeconds: 42,
+        notice: null,
+      }),
+  ],
+  [
+    'portal · code, sms choice',
+    () =>
+      renderCodePage({
+        csrf: CSRF,
+        phone: '+972500000000',
+        channel: 'whatsapp',
+        alternate: 'sms',
+        waitSeconds: 0,
+        notice: null,
+      }),
+  ],
+  [
+    'portal · code, wrong',
+    () =>
+      renderCodePage({
+        csrf: CSRF,
+        phone: '+972500000000',
+        channel: 'whatsapp',
+        alternate: null,
+        waitSeconds: 0,
+        notice: 'code.wrong',
+      }),
+  ],
+  [
+    'portal · home',
+    () =>
+      renderHomePage({
+        csrf: CSRF,
+        greeting: 'בוקר טוב, נועה',
+        choices: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            label: 'דירה 12 · הדגמה 8',
+            city: 'תל אביב',
+          },
+        ],
+        chosenId: '11111111-1111-4111-8111-111111111111',
+        openCount: 1,
+        calls: [
+          {
+            href: '/calls/22222222-2222-4222-8222-222222222222',
+            title: 'נזילה מתחת לכיור',
+            category: 'אינסטלציה',
+            opened: '19.10',
+            channel: 'בפורטל',
+            visitOn: null,
+            status: 'received',
+            note: null,
+          },
+        ],
+        visit: {
+          href: '/calls/33333333-3333-4333-8333-333333333333',
+          title: 'דוד המים לא מחמם',
+          weekday: 'יום חמישי',
+          weekdayShort: 'יום ה׳',
+          date: '22.10',
+          from: '10:00',
+          to: '12:00',
+        },
+        replyDays: 2,
+      }),
+  ],
+  [
+    'portal · flat',
+    () =>
+      renderFlatPage({
+        csrf: CSRF,
+        choices: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            label: 'דירה 12 · הדגמה 8',
+            city: 'תל אביב',
+          },
+          {
+            id: '22222222-2222-4222-8222-222222222222',
+            label: 'דירה 3 · אחר 2',
+            city: 'חיפה',
+          },
+        ],
+        chosenId: '11111111-1111-4111-8111-111111111111',
+        address: 'הדגמה 8, דירה 12',
+        city: 'תל אביב',
+        start: '01.03.2026',
+        end: '28.02.2027',
+        months: 4,
+        percent: 64,
+        parking: '12',
+        storage: '4',
+        documents: [],
+      }),
+  ],
+  [
+    'portal · calls',
+    () =>
+      renderPortalCallsPage({
+        csrf: CSRF,
+        choices: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            label: 'דירה 12 · הדגמה 8',
+            city: 'תל אביב',
+          },
+        ],
+        chosenId: '11111111-1111-4111-8111-111111111111',
+        closed: false,
+        openCount: 2,
+        closedCount: 1,
+        calls: [
+          {
+            href: '/calls/22222222-2222-4222-8222-222222222222',
+            title: 'תיאום ביקור חשמלאי',
+            category: 'חשמל',
+            opened: '02.10',
+            channel: null,
+            visitOn: null,
+            status: 'waiting',
+            note: null,
+          },
+          {
+            href: '/calls/33333333-3333-4333-8333-333333333333',
+            title: 'ביקור שכבר לא נדרש',
+            category: 'דוד',
+            opened: '01.08',
+            channel: 'בוואטסאפ',
+            visitOn: null,
+            status: 'cancelled',
+            note: 'הדיירת ביקשה לבטל.',
+          },
+        ],
+      }),
+  ],
+  [
+    'portal · call',
+    () =>
+      renderPortalCallPage({
+        title: 'דוד המים לא מחמם',
+        number: '1042',
+        category: 'דוד',
+        opened: '28.09.2026',
+        status: 'visit',
+        visit: {
+          href: '/calls/33333333-3333-4333-8333-333333333333',
+          title: 'דוד המים לא מחמם',
+          weekday: 'יום חמישי',
+          weekdayShort: 'יום ה׳',
+          date: '22.10',
+          from: '10:00',
+          to: '12:00',
+        },
+        days: [
+          {
+            key: '2026-09-28',
+            label: 'past',
+            weekday: 'יום שני',
+            date: '28.09',
+            bubbles: [
+              { side: 'tenant', body: 'דוד המים הפסיק לחמם.', time: '08:12' },
+              { side: 'office', body: 'קיבלנו, תודה.', time: '09:30' },
+            ],
+          },
+        ],
+        callId: '33333333-3333-4333-8333-333333333333',
+        note: null,
+        notice: null,
+        csrf: CSRF,
+        followKey: '44444444-4444-4444-8444-444444444444',
+      }),
+  ],
+  ['portal · more', () => renderMorePage({ csrf: CSRF })],
+  [
+    'portal · report',
+    () =>
+      renderReportPage({
+        csrf: CSRF,
+        submission: '00000000-0000-4000-8000-000000000282',
+        step: 1,
+        categories: [
+          {
+            id: 'a1830001-0000-4000-8000-000000000001',
+            code: 'PLUMBING',
+            label: 'אינסטלציה',
+          },
+        ],
+        categoryId: '',
+        description: '',
+        entry: '',
+        dutyPhone: '050-000-0001',
+        dutyTel: 'tel:+972500000001',
+        flat: 'דירה 12 · הדגמה 8',
+        notice: null,
+        files: [],
+        predecessorId: '',
+      }),
+  ],
+  [
+    'portal · report sent',
+    () =>
+      renderReportReceived({
+        callId: '11111111-1111-4111-8111-111111111111',
+        callNumber: 1043,
+        category: 'אינסטלציה',
+        duty: null,
+        replyDays: 2,
+      }),
+  ],
+  [
+    'portal · no access',
+    () => renderNoAccessPage({ csrf: CSRF, phone: '050-000-0000' }),
+  ],
+  [
+    'portal · missing',
+    () =>
+      renderMissingPage({
+        chosenId: '11111111-1111-4111-8111-111111111111',
+      }),
+  ],
+  [
+    'portal · ask',
+    () =>
+      renderAskPage({
+        csrf: CSRF,
+        submission: '00000000-0000-4000-8000-000000000278',
+        question: '',
+        notice: null,
+      }),
+  ],
+  [
+    'portal · ask received',
+    () => renderAskReceived({ callNumber: 1043, duty: null }),
+  ],
+  [
+    'portal · notice',
+    () =>
+      renderNoticePage({
+        csrf: CSRF,
+        privacy: {
+          id: '11111111-1111-4111-8111-111111111111',
+          title: 'הודעת פרטיות',
+          summary: 'הפורטל שומר את המספר המאומת.',
+        },
+        terms: {
+          id: '22222222-2222-4222-8222-222222222222',
+          title: 'תנאי שימוש',
+          summary: 'השימוש הוא לצפייה בשכירות.',
+        },
+        optIns: [
+          {
+            key: 'building_notices',
+            title: 'עדכונים על הבניין',
+            summary: 'עבודות, הפסקות מים וכדומה. לא חובה.',
+            on: false,
+          },
+        ],
+      }),
+  ],
+  [
+    'portal · notice, full',
+    () =>
+      renderNoticeFullPage({
+        privacy: {
+          title: 'הודעת פרטיות',
+          body: 'אפשר לבקש עיון, תיקון או מחיקה.',
+        },
+        terms: {
+          title: 'תנאי שימוש',
+          body: 'הפורטל מיועד למי שהמספר שלו רשום במשרד.',
+        },
+      }),
+  ],
+  [
+    'portal · passkey offer',
+    () =>
+      renderPasskeyOffer({
+        csrf: CSRF,
+        options: {
+          publicKey: {
+            challenge: 'dGVzdA',
+            user: { id: 'dGVzdA', name: 'x', displayName: 'x' },
+          },
+        },
+      }),
+  ],
+  [
+    'portal · passkeys',
+    () =>
+      renderPasskeysPage({
+        csrf: CSRF,
+        notice: null,
+        passkeys: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            added: '2026-10-20',
+          },
+        ],
+      }),
+  ],
   // #233: the floor under every screen's own refusal, in both frames.
   [
     'root · error page, guest',
@@ -694,6 +1036,12 @@ const SCREENS: Array<[string, () => string]> = [
         documents: [],
         nav: NAV_INVENTORY,
         write: { csrf: CSRF },
+        portal: {
+          enabled: false,
+          maySwitch: true,
+          csrf: CSRF,
+          blocked: [],
+        },
       }),
   ],
   ['estate · one building', () => renderBuildingPage(detail, occupancy, NAV)],
@@ -2113,6 +2461,9 @@ const SCREENS: Array<[string, () => string]> = [
             toReview: false,
             summary: null,
             proposal: null,
+            suggestion: null,
+            entry: null,
+            tenancy: null,
             sorterLabel: null,
             sorterModel: null,
             sorterPrompt: null,
@@ -2141,6 +2492,9 @@ const SCREENS: Array<[string, () => string]> = [
             toReview: false,
             summary: null,
             proposal: null,
+            suggestion: null,
+            entry: null,
+            tenancy: null,
             sorterLabel: null,
             sorterModel: null,
             sorterPrompt: null,
@@ -2172,6 +2526,9 @@ const SCREENS: Array<[string, () => string]> = [
         },
         filteredCount: 0,
         goal: { amberMinutes: 240, redMinutes: 1440 },
+        handling: { amberDays: 2, redDays: 5 },
+        nonWorkingDates: [],
+        zone: 'Asia/Jerusalem',
         devIntake: false,
       }),
   ],
@@ -2199,6 +2556,9 @@ const SCREENS: Array<[string, () => string]> = [
             toReview: false,
             summary: null,
             proposal: null,
+            suggestion: null,
+            entry: null,
+            tenancy: null,
             sorterLabel: null,
             sorterModel: null,
             sorterPrompt: null,
@@ -2230,6 +2590,9 @@ const SCREENS: Array<[string, () => string]> = [
         },
         filteredCount: 0,
         goal: { amberMinutes: 240, redMinutes: 1440 },
+        handling: { amberDays: 2, redDays: 5 },
+        nonWorkingDates: [],
+        zone: 'Asia/Jerusalem',
         devIntake: false,
         closedList: {
           exit: null,
@@ -2257,6 +2620,9 @@ const SCREENS: Array<[string, () => string]> = [
         dupMatches: [],
         messages: [],
         goal: { amberMinutes: 240, redMinutes: 1440 },
+        handling: { amberDays: 2, redDays: 5 },
+        nonWorkingDates: [],
+        zone: 'Asia/Jerusalem',
         matches: [
           {
             id: '66666666-6666-4666-8666-666666666666',
@@ -2278,6 +2644,9 @@ const SCREENS: Array<[string, () => string]> = [
           toReview: false,
           summary: null,
           proposal: null,
+          suggestion: null,
+          entry: null,
+          tenancy: null,
           sorterLabel: null,
           sorterModel: null,
           sorterPrompt: null,
@@ -2313,6 +2682,9 @@ const SCREENS: Array<[string, () => string]> = [
         dupMatches: [],
         messages: [],
         goal: { amberMinutes: 240, redMinutes: 1440 },
+        handling: { amberDays: 2, redDays: 5 },
+        nonWorkingDates: [],
+        zone: 'Asia/Jerusalem',
         matches: [],
         categories: [
           {
@@ -2345,6 +2717,9 @@ const SCREENS: Array<[string, () => string]> = [
           toReview: false,
           summary: null,
           proposal: null,
+          suggestion: null,
+          entry: null,
+          tenancy: null,
           sorterLabel: null,
           sorterModel: null,
           sorterPrompt: null,
@@ -2464,6 +2839,10 @@ const SCREENS: Array<[string, () => string]> = [
           hours: 'טרם נקבעו',
         },
         goal: { amberMinutes: 240, redMinutes: 1440 },
+        handling: { amberDays: 2, redDays: 5 },
+        nonWorkingDates: ['2026-10-11'],
+        replyTarget: { days: 2, shown: false },
+        share: { from: '2026-09-22', to: '2026-10-21', calls: 0, replied: 0 },
       }),
   ],
   [
@@ -2485,6 +2864,10 @@ const SCREENS: Array<[string, () => string]> = [
           hours: 'טרם נקבעו',
         },
         goal: { amberMinutes: 240, redMinutes: 1440 },
+        handling: { amberDays: 2, redDays: 5 },
+        nonWorkingDates: [],
+        replyTarget: { days: 2, shown: false },
+        share: { from: '2026-09-22', to: '2026-10-21', calls: 0, replied: 0 },
       }),
   ],
   [
@@ -2682,18 +3065,45 @@ describe('shared UI tokens', () => {
       // v3 forbade `<script src=`. These pages are rendered on the server and need no script at
       // all, except two calls controls (SPEC-calls): the copy button once a draft exists, because
       // the clipboard is not a form, and the split inbox separator, because a shared drag is not
-      // CSS. Any other script still fails.
+      // CSS. A portal page may also register the service worker (#286). That script has no src.
+      // Any other script still fails.
       const scripts = html.match(/<script\b[^>]*>[\s\S]*?<\/script>/g) ?? [];
-      if (scripts.length === 0) continue;
-      assert.equal(scripts.length, 1, name);
-      assert.doesNotMatch(scripts[0] ?? '', /\ssrc=/, name);
+      const install = scripts.filter((script) =>
+        /dona\.portal\.install/.test(script),
+      );
+      const rest = scripts.filter(
+        (script) => !/dona\.portal\.install/.test(script),
+      );
+      if (name.startsWith('portal ·')) {
+        assert.equal(install.length, 1, name);
+        assert.doesNotMatch(install[0] ?? '', /\ssrc=/, name);
+        assert.match(
+          install[0] ?? '',
+          /serviceWorker\.register\('\/sw\.js'\)/,
+          name,
+        );
+      } else {
+        assert.equal(install.length, 0, name);
+      }
+      if (rest.length === 0) continue;
+      assert.equal(rest.length, 1, name);
+      assert.doesNotMatch(rest[0] ?? '', /\ssrc=/, name);
       const copy =
-        /data-draft/.test(scripts[0] ?? '') &&
-        /clipboard/.test(scripts[0] ?? '');
+        /data-draft/.test(rest[0] ?? '') && /clipboard/.test(rest[0] ?? '');
       const resize =
         /data-split-resize/.test(html) &&
-        /dona\.calls\.split-inbox/.test(scripts[0] ?? '');
-      assert.ok(copy || resize, name);
+        /dona\.calls\.split-inbox/.test(rest[0] ?? '');
+      // #273. The code screen submits on the sixth digit. SPEC.md names it. The button
+      // stays in the page for a browser with no script.
+      const portalCode =
+        /autocomplete="one-time-code"/.test(html) &&
+        /dona\.portal\.code/.test(rest[0] ?? '');
+      // #275. The passkey ceremony is the other portal script. SPEC.md names it.
+      // לא עכשיו stays a real submit, so declining needs no script.
+      const portalPasskey =
+        /data-portal-passkey=/.test(html) &&
+        /dona\.portal\.passkey/.test(rest[0] ?? '');
+      assert.ok(copy || resize || portalCode || portalPasskey, name);
       if (copy) assert.match(html, /data-draft=/, name);
     }
   });
@@ -2783,6 +3193,8 @@ describe('shared UI tokens', () => {
       if (name.startsWith('staff · login')) continue;
       // #233: a refusal with no resolved session is drawn in login's guest frame, on purpose.
       if (name === 'root · error page, guest') continue;
+      // #273: the portal is not the office shell.
+      if (name.startsWith('portal · ')) continue;
       const html = render();
       assert.match(html, /class="ops"/, name);
       assert.match(html, /<aside class="ops-nav"/, name);
@@ -3102,6 +3514,15 @@ describe('shared UI tokens', () => {
     ]);
     for (const [name, render] of SCREENS) {
       const html = render();
+      // #273. The sign-in screen is a phone number. The office rule is about not naming a
+      // household on an office screen.
+      if (name.startsWith('portal · ')) {
+        if (name === 'portal · phone') assert.match(html, /\+972/, name);
+        if (name.startsWith('portal · code')) {
+          assert.match(html, /050-000-0000/, name);
+        }
+        continue;
+      }
       if (MAY_SHOW_A_PHONE.has(name)) {
         assert.match(html, /\+972/, name);
         continue;
@@ -3652,6 +4073,12 @@ describe('shared UI tokens', () => {
       states: new Map(),
       documents: [],
       nav: NAV_INVENTORY,
+      portal: {
+        enabled: false,
+        maySwitch: false,
+        csrf: CSRF,
+        blocked: [],
+      },
     });
     assert.match(
       html,

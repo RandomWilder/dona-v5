@@ -12,18 +12,33 @@ const uiRoot = path.dirname(fileURLToPath(import.meta.url));
 const fontFiles = [
   'heebo-hebrew.woff2',
   'heebo-latin.woff2',
+  'noto-sans-cyrillic.woff2',
   'ibm-plex-mono-latin-400.woff2',
   'ibm-plex-mono-latin-500.woff2',
+] as const;
+
+// Home-screen icons for the portal (#286). Same allowlist stance as the fonts.
+const iconFiles = [
+  'portal-icon-180.png',
+  'portal-icon-192.png',
+  'portal-icon-512.png',
 ] as const;
 
 // The image is immutable, so every asset is read once at registration rather
 // than on each request.
 export function registerUiAssets(app: FastifyInstance): void {
   const tokens = readFileSync(path.join(uiRoot, 'tokens.css'));
+  const portal = readFileSync(path.join(uiRoot, 'portal.css'));
   const fonts = new Map<string, Buffer>(
     fontFiles.map((name) => [
       name,
       readFileSync(path.join(uiRoot, 'fonts', name)),
+    ]),
+  );
+  const icons = new Map<string, Buffer>(
+    iconFiles.map((name) => [
+      name,
+      readFileSync(path.join(uiRoot, 'icons', name)),
     ]),
   );
 
@@ -33,6 +48,30 @@ export function registerUiAssets(app: FastifyInstance): void {
       .header('cache-control', 'no-cache')
       .header('x-content-type-options', 'nosniff');
     return tokens;
+  });
+
+  app.get('/ui/portal.css', async (_request, reply) => {
+    reply
+      .header('content-type', 'text/css; charset=utf-8')
+      .header('cache-control', 'no-cache')
+      .header('x-content-type-options', 'nosniff');
+    return portal;
+  });
+
+  app.get('/ui/icons/:file', async (request, reply) => {
+    const { file } = request.params as { file: string };
+    const body = icons.get(file);
+    if (!body) {
+      const error = new KernelError('not_found', 'asset not found');
+      reply.code(httpStatus(error.code));
+      return toErrorBody(error);
+    }
+    reply
+      .header('content-type', 'image/png')
+      // Names are stable and the bytes behind them never change.
+      .header('cache-control', 'public, max-age=31536000, immutable')
+      .header('x-content-type-options', 'nosniff');
+    return body;
   });
 
   app.get('/ui/fonts/:file', async (request, reply) => {

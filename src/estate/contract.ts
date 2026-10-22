@@ -43,6 +43,14 @@ export type {
   UnitRowSpec,
 } from './internal/plan.ts';
 export type {
+  PortalSwitchActor,
+  PortalSwitchResult,
+} from './internal/portal.ts';
+export {
+  buildingInPortal,
+  setBuildingPortal,
+} from './internal/portal.ts';
+export type {
   PromotedEstateField,
   PromotedEstateFieldSpec,
 } from './internal/promote.ts';

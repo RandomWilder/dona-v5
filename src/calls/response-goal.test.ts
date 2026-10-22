@@ -79,6 +79,8 @@ describe('calls · the response goal', () => {
     const domain = 'response-goal.test';
     const clock = fixedClock(AT);
     const app = buildApp({ pool, version: '9.9.9-test', clock });
+    const lock = await pool.connect();
+    await lock.query('SELECT pg_advisory_lock(287)');
     await cleanup(pool, domain);
     const admin = await signIn(pool, clock, {
       email: `admin@${domain}`,
@@ -146,6 +148,17 @@ describe('calls · the response goal', () => {
         }),
       });
       assert.equal(opened.statusCode, 303);
+      const openedList = await asAdmin.inject({ method: 'GET', url: '/calls' });
+      const openedId = openedList.body.match(
+        new RegExp(`href="/calls/([0-9a-f-]{36})">${late}`),
+      )?.[1];
+      assert.ok(openedId);
+      const flagged = await asAdmin.inject({
+        method: 'POST',
+        url: `/calls/${openedId}/emergency`,
+        ...form({ action: 'flag' }),
+      });
+      assert.equal(flagged.statusCode, 303);
 
       clock.advance(10 * MINUTE);
       const onAmber = await asAdmin.inject({ method: 'GET', url: '/calls' });
@@ -180,6 +193,17 @@ describe('calls · the response goal', () => {
         }),
       });
       assert.equal(second.statusCode, 303);
+      const secondList = await asAdmin.inject({ method: 'GET', url: '/calls' });
+      const freshId = secondList.body.match(
+        new RegExp(`href="/calls/([0-9a-f-]{36})">${fresh}`),
+      )?.[1];
+      assert.ok(freshId);
+      const flaggedFresh = await asAdmin.inject({
+        method: 'POST',
+        url: `/calls/${freshId}/emergency`,
+        ...form({ action: 'flag' }),
+      });
+      assert.equal(flaggedFresh.statusCode, 303);
       const both = await asAdmin.inject({ method: 'GET', url: '/calls' });
       assert.equal(band(both.body, late), 'red');
       assert.equal(band(both.body, fresh), null);
@@ -234,6 +258,8 @@ describe('calls · the response goal', () => {
         });
       }
       await cleanup(pool, domain);
+      await lock.query('SELECT pg_advisory_unlock(287)');
+      lock.release();
       await app.close();
       await pool.end();
     }

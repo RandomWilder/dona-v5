@@ -21,13 +21,15 @@ import {
   canExit,
   DEPARTMENT_MAX,
   DESCRIPTION_MAX,
+  type EntryPermission,
   EXIT_KINDS,
   type ExitKind,
+  type HandlingGoal,
   MANUAL_CHANNELS,
   NOTE_MAX,
+  officeBand,
   type ResponseBand,
   type ResponseGoal,
-  responseGoalBand,
   SENDER_MAX,
   type ServiceCall,
   type ServiceCallDetail,
@@ -111,6 +113,9 @@ export interface CallsScreen {
   /** Noise messages plus returned calls, the rows the filtered list will show. */
   filteredCount: number;
   goal: ResponseGoal;
+  handling: HandlingGoal;
+  nonWorkingDates: readonly string[];
+  zone: string;
   devIntake: boolean;
   now: Date;
   /** The shared mailbox has not been read successfully for an hour. */
@@ -169,6 +174,9 @@ export interface CallScreen {
   dupMatches: readonly { id: string; description: string }[];
   messages: readonly TimelineMessage[];
   goal: ResponseGoal;
+  handling: HandlingGoal;
+  nonWorkingDates: readonly string[];
+  zone: string;
   now: Date;
   /** Staff who may file a document. The button is absent otherwise. */
   mayFile?: boolean;
@@ -201,6 +209,7 @@ const CHANNEL_HE: Record<SourceChannel, string> = {
   WALK_IN: 'הגעה',
   WHATSAPP: 'וואטסאפ',
   EMAIL: 'דוא״ל',
+  PORTAL: 'פורטל',
 };
 
 const CHANNEL_ICON: Record<SourceChannel, IconName> = {
@@ -208,6 +217,7 @@ const CHANNEL_ICON: Record<SourceChannel, IconName> = {
   PHONE: 'phone',
   WHATSAPP: 'message',
   WALK_IN: 'door',
+  PORTAL: 'message-circle',
 };
 
 function channelTile(channel: SourceChannel): Html {
@@ -695,12 +705,7 @@ function emergencyChip(call: ServiceCall, ever: boolean): Html {
 
 function goalChip(call: ServiceCall, screen: CallsScreen): Html {
   if (call.state === 'CLOSED') return h``;
-  const band = responseGoalBand(
-    call.state,
-    call.openedAt,
-    screen.now,
-    screen.goal,
-  );
+  const band = officeBand(call, screen.now, screen);
   if (band === null) return h`<span class="chip">בזמן</span>`;
   return h`<span class="chip" data-goal="${band}">${BAND_HE[band]}</span>`;
 }
@@ -722,6 +727,9 @@ function arrange(screen: {
   state: CallState | null;
   now: Date;
   goal: ResponseGoal;
+  handling: HandlingGoal;
+  nonWorkingDates: readonly string[];
+  zone: string;
 }): {
   urgent: ServiceCall[];
   rest: ServiceCall[];
@@ -732,10 +740,7 @@ function arrange(screen: {
   const rest: ServiceCall[] = [];
   for (const call of screen.calls) {
     if (call.emergency.flagged) emergency.push(call);
-    else if (
-      responseGoalBand(call.state, call.openedAt, screen.now, screen.goal) ===
-      'red'
-    ) {
+    else if (officeBand(call, screen.now, screen) === 'red') {
       past.push(call);
     } else rest.push(call);
   }
@@ -751,6 +756,9 @@ export function shownCalls(screen: {
   state: CallState | null;
   now: Date;
   goal: ResponseGoal;
+  handling: HandlingGoal;
+  nonWorkingDates: readonly string[];
+  zone: string;
 }): ServiceCall[] {
   const groups = arrange(screen);
   if (groups === null) return [...screen.calls];
@@ -1140,7 +1148,7 @@ function statRow(screen: CallsScreen): Html {
   return h`<section class="stat-row" aria-label="סיכום">
     <div class="stat glass"><span class="stat-label">פתוחות</span><span class="stat-value">${ltr(counts.open)}</span></div>
     <div class="stat glass"><span class="stat-label">חירום</span><span class="stat-value">${ltr(counts.emergency)}</span></div>
-    <div class="stat glass is-alert"><span class="stat-label">מעבר ליעד המענה</span><span class="stat-value">${ltr(counts.past)}</span><span class="stat-note">קרוב ליעד ${ltr(counts.near)}</span></div>
+    <div class="stat glass is-alert"><span class="stat-label">מעבר ליעד</span><span class="stat-value">${ltr(counts.past)}</span><span class="stat-note">קרוב ליעד ${ltr(counts.near)}</span></div>
     <div class="stat glass"><span class="stat-label">לבדיקה</span><span class="stat-value">${ltr(counts.toReview)}</span></div>
   </section>`;
 }
@@ -1344,6 +1352,12 @@ function eventLine(event: CallTransition): Html {
     return h`<li data-kind="DUPLICATE">כפולה של ${event.duplicateOf?.description} · ${who}</li>`;
   }
   return h`<li data-kind="CANCELLED">בוטלה · ${event.note} · ${who}</li>`;
+}
+
+function entryWords(entry: EntryPermission): string {
+  if (entry === 'YES') return 'כן, מותר להיכנס';
+  if (entry === 'ARRANGE') return 'רק בתיאום מראש';
+  return 'לא, רק כשאני בבית';
 }
 
 function sorterLabel(label: SorterLabel | null): Html {
@@ -1637,6 +1651,7 @@ function exitForm(screen: CallScreen): Html {
 function returnControl(screen: CallScreen): Html {
   const call = screen.call;
   if (call.state === 'CLOSED' || call.returned) return h``;
+  if (call.sourceChannel === 'PORTAL') return h``;
   return h`<form method="post" action="/calls/${call.id}/return">
     ${csrfInput(screen.csrf)}
     <button class="btn" type="submit">החזרה למסוננות</button>
@@ -1653,6 +1668,27 @@ function rescueForm(screen: CallScreen): Html {
       <button class="btn btn-primary" type="submit">הצלה — זו קריאה</button>
     </form>
   </div>`;
+}
+
+function portalReply(screen: CallScreen): Html {
+  const call = screen.call;
+  if (call.sourceChannel !== 'PORTAL' || screen.mayReply !== true) return h``;
+  if (call.state === 'NEW' || call.state === 'CLOSED' || call.returned) {
+    return h``;
+  }
+  const brief = screen.brief;
+  const seeded =
+    brief?.kind === 'ready' && brief.draft !== null ? brief.draft.text : '';
+  return h`<section class="glass sheet" data-portal-reply>
+    <h2>תשובה לדייר</h2>
+    <form method="post" action="/calls/${call.id}/send">
+      ${csrfInput(screen.csrf)}
+      <label class="form-row">תשובה לדייר
+        <textarea name="body" required maxlength="20000" rows="4">${seeded}</textarea>
+      </label>
+      <button class="btn btn-primary" type="submit">שליחה</button>
+    </form>
+  </section>`;
 }
 
 function headerActions(screen: CallScreen): Html {
@@ -1806,12 +1842,7 @@ function stateSteps(state: CallState): Html {
 
 function ageFact(screen: CallScreen): Html {
   const age = ageLabel(screen.call.openedAt, screen.now);
-  const band = responseGoalBand(
-    screen.call.state,
-    screen.call.openedAt,
-    screen.now,
-    screen.goal,
-  );
+  const band = officeBand(screen.call, screen.now, screen);
   if (band === null) {
     const words = screen.call.state === 'CLOSED' ? age : h`${age} · בזמן`;
     return h`<div><dt>גיל</dt><dd>${words}</dd></div>`;
@@ -1988,6 +2019,18 @@ export function renderCallPage(screen: CallScreen): string {
     call.proposal === null
       ? h``
       : h`<div><dt>הצעה</dt><dd data-proposal="${call.proposal.code}">${call.proposal.labelHe}</dd></div>`;
+  const suggestion =
+    call.suggestion === null
+      ? h``
+      : h`<div><dt>הצעת הדייר</dt><dd data-suggested="${call.suggestion.code}">${call.suggestion.labelHe}</dd></div>`;
+  const entry =
+    call.entry === null
+      ? h``
+      : h`<div><dt>כניסה</dt><dd data-entry="${call.entry}">${entryWords(call.entry)}</dd></div>`;
+  const flat =
+    call.tenancy === null
+      ? h``
+      : h`<div><dt>דירה</dt><dd data-tenancy="${call.tenancy.id}">דירה ${call.tenancy.unitNumber} · ${call.tenancy.addressLine}</dd></div>`;
   const summary =
     call.summary === null
       ? h``
@@ -2039,8 +2082,21 @@ export function renderCallPage(screen: CallScreen): string {
         <dl class="facts">
           <div><dt>מצב</dt><dd>${CALL_STATE_HE[call.state]}</dd></div>
           <div><dt>נרשם</dt><dd>${bidi(sender)}</dd></div>
+          ${
+            call.callNumber === undefined
+              ? h``
+              : h`<div><dt>מספר</dt><dd data-call-number="${call.callNumber}">${ltr(call.callNumber)}</dd></div>`
+          }
+          ${
+            call.sourceChannel === 'PORTAL' && call.requester === null
+              ? h`<div><dt>שולח</dt><dd data-verified-number="true">מספר מאומת</dd></div>`
+              : h``
+          }
           <div><dt>פונה</dt><dd>${requesterName(screen)}</dd></div>
           <div><dt>קטגוריה</dt><dd>${category}</dd></div>
+          ${suggestion}
+          ${entry}
+          ${flat}
           ${proposal}
           ${summary}
           ${sorted}
@@ -2053,6 +2109,7 @@ export function renderCallPage(screen: CallScreen): string {
         <h2>מהלך</h2>
         <ol class="timeline" data-conversation>${timelineOf(screen)}</ol>
       </section>
+      ${portalReply(screen)}
       ${continuedBy(screen)}
       ${repeatedBy(screen)}
         </div>

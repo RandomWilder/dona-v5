@@ -52,6 +52,28 @@ the thread has an open call, on that call's timeline. It is not an incoming requ
 not check it for an emergency, does not sort it, and never opens a call from it. Manual PHONE and
 WALK_IN entries are calls' own and do not pass through this door.
 
+**The portal** posts one question from a signed-in verified number through this same door. The
+message is Source channel `PORTAL`, the form's idempotency key as the external message id and as
+the thread id, the verified number in E.164 as the sender, and the question as the body and as the
+call's description. A second post of that key is the first message again, and it does not open a
+second call. Identification on this channel is the one Party who holds that number today, and it
+records no Tenancy on a question. No party, or a guarantor the link refuses, leaves the call in NEW. The office
+page then marks it as from a verified number. An emergency term flags the call before the sorter,
+the same check as every other channel. The duty sentence is shown on the confirmation and is not
+sent.
+
+**A portal report** is the same door, from a tenant with tenancy access. The body is the
+description, the form's idempotency key is the external message id and the thread id, and the
+verified number is the sender. The door also records the suggested Category, the entry permission
+and the tenancy. A question carries none of the three. A noise verdict does not filter a report:
+the tenant asked for a call, so one is opened and marked to review when the verdict was not a
+plain call. The sorter's own Category is still the proposal. It does not replace the suggestion.
+
+**A portal follow-up (#284)** is the same door, on a call the tenant can already read. The message
+names that call. An open call takes the message onto its timeline and does not open another. A
+report that names a closed call opens a new call with that call as Predecessor. The idempotency
+key is still the external message id, so the same post twice is one message.
+
 **A dev-only form** pushes a fabricated message through this door. When no sorter is
 configured, the person at the form picks the verdict, so the path can be clicked before a key is
 present. When the sorter is configured, the form sends the message through it. The form is
@@ -154,6 +176,109 @@ the file to the unit the isolation join names, when that address is exactly one 
 leaves the document with no tenancy link. A guarantor's contact is not a match. Filing that same
 attachment again is that document, not a second one. A file this system does not store is refused.
 
+**Quarantine and scan.** Every attachment, on every channel, is stored under a name this system
+chooses and scanned before anyone can open it. The name the sender gave is a label. The scanner is
+injected. It answers clean or infected. When it is absent or it fails, the file stays in quarantine
+and cannot be opened, and that failure is not an infection. An infected file cannot be opened by
+staff or by a tenant, and the scan writes an audit row `channel.attachment_infected`. Filing an
+attachment as a document requires a clean scan.
+
+The bytes are allowlisted by their content, not by the name or the declared type: JPEG, PNG, GIF,
+WEBP, HEIC, AVIF, PDF, MP4, QuickTime and WEBM. Anything else is not stored. A file over 100 MB is
+not stored. On the portal the refusal is a sentence on the report. On the other channels the
+message is still kept and the file is not openable.
+
+A portal report carries at most 8 such files. The tenant adds one on the report's second step. A
+clean file shows as a square thumbnail with its name and a labelled remove button. The button's
+target is at least 44 by 44 CSS pixels and the mark is drawn at 22.
+
+`npm run dev`, when `K_SERVICE` is unset, uses a local scanner that treats the EICAR test string as
+infected and every other file as clean. A revision where `K_SERVICE` is set does not use that
+scanner. With no other scanner configured, files stay in quarantine and cannot be opened.
+
+## Sign-in codes
+
+The portal asks the channel to deliver a one-time code. The channel does not choose the code,
+store it or check it. A **code sender** is that delivery: `send({ to, code, channel })`, injected
+the way the WhatsApp fetch is. `channel` is `whatsapp` or `sms`. ADR-0013 §5's ban on an SMS code
+is superseded by ADR-0019: a tenant code may go by SMS. Twilio is not the provider.
+
+Two real senders, each off until it is configured:
+
+- **WhatsApp** posts an authentication template on Dona Dom's WhatsApp Business account, using the
+  same Cloud API access token and phone-number id as the adapter. It is on when
+  `PORTAL_WHATSAPP_TEMPLATE`, `WHATSAPP_ACCESS_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID` are all set.
+  The template name is the first of those; the language is Hebrew (`he`). The code is the
+  template's body parameter and its copy-code button parameter. Setting the template name without
+  the other two refuses to boot.
+- **SMS** posts to InforU, where we generate the code
+  (`https://cloud.inforu.co.il/api/v2/Otp/Message/Send`), with HTTP Basic auth. It is on when
+  `INFORU_USERNAME`, `INFORU_TOKEN` and `SMS_SENDER` are all set, and off when none of them is.
+  Setting some but not all refuses to boot. `SMS_SENDER` is at most 11 Latin letters or digits
+  and contains no spaces; anything else refuses to boot. The text is one Hebrew SMS, at most 70
+  characters once the code is filled in. The number is an Israeli mobile in national form
+  (`05` and eight digits); anything else is refused before the request. InforU's IP allowlist is
+  how the gateway rejects a caller it was not told about. That list is configured at InforU, not
+  stored here.
+
+A provider error, from either, is a refusal the tenant can retry. The provider's response is not
+shown and not written to the audit row or the log.
+
+Neither sender is called from a test. Tests inject the fetch. With neither configured, `npm run dev`
+uses a log sender that writes the code, and not the number, to the server log, so the flow can be
+clicked. That sender is built only when `K_SERVICE` is unset. Setting `PORTAL_CODE_LOG=1` where
+`K_SERVICE` is set — staging and production — refuses to boot. A revision with neither real sender
+configured does not fall back to that log: sending is refused.
+
+When only one real sender is configured, that is the only channel, the phone screen does not
+mention the other, and the code screen has no fallback card. When both are, WhatsApp is sent
+first. Once the minute before another code has passed, the code screen offers SMS as a card at
+the bottom, not as a switch at the top. Choosing it sends a new code by SMS, and the screen's
+line names SMS. After an SMS send, and once that minute has passed again, the card offers
+WhatsApp. A revision with no sender configured does not show the phone form. The caps below count a code row whichever channel delivered it.
+
+What the portal enforces, and the sender never sees:
+
+- Six digits, one use, five minutes, five wrong attempts, then the code is dead. Stored as a
+  salted hash. The row holds no column a person could type back in.
+- Sixty seconds before another code to the same number. The page says how long is left, rendered
+  by the server. The control that asks for a new code is on the page only after that wait.
+- Five sends per number and twenty per network address, each in a rolling day, counted from the
+  code rows. A refusal at the cap is still an audit row.
+- An Israeli mobile only: `+972`, then `5`, then eight digits. Anything else is refused before a
+  send, and nothing is stored.
+- Every send and every verify, passed or failed, is an audit row. The row carries neither the
+  number nor the code.
+- Email is not a way to ask for a code.
+
+The phone screen names the channel the code will use. With both senders configured it names
+WhatsApp and says the next screen can send an SMS instead.
+
+## New-device notice
+
+A code that verifies for a portal identity that already exists is a new-device sign-in. The portal
+asks the code sender once: `notify({ to, channel })`, on the channel that just delivered the code.
+The first code, which creates the identity, is not one of these, and a passkey sign-in is not one
+either. A failure to deliver does not undo the sign-in. The sender does not retry.
+
+The sentence is fixed, and it is this one, in both channels:
+
+`כניסה חדשה לפורטל דונה דום. לא אתם? פנו למשרד.`
+
+Forty-six characters, so the SMS is one unit. The sender never accepts a sentence from the caller,
+which is what keeps a notice from becoming a second channel for whatever a route wants to say.
+
+- **WhatsApp** posts a utility template named by `PORTAL_WHATSAPP_NOTICE_TEMPLATE`, Hebrew, with no
+  parameters: the sentence above is the template body, approved in Meta's console. The same access
+  token and phone-number id as the code. When the name is unset, this sender refuses the notice.
+  That refusal does not refuse to boot, and it does not refuse the sign-in.
+- **SMS** posts to InforU's SMS send (`https://cloud.inforu.co.il/api/v2/SMS/SendSms`), not the OTP
+  endpoint, with the same Basic auth and the same sender name. The number is the Israeli mobile in
+  national form. Anything else is refused before the request.
+
+The log sender writes `portal new-device notice` and not the number. A test injects the fetch.
+Neither real sender is called from a test.
+
 ## Later
 
 **The agent is a client, not a brain**: scoped tools only, every call audited, and it reaches data
@@ -166,8 +291,9 @@ traffic, and until then are undecided:
 - what it says about money.
 
 What is settled for that work:
-- **Tenant OTP goes by WhatsApp authentication template only.** There is no SMS fallback and no SMS
-  provider (ADR-0013).
+- **A tenant code goes by WhatsApp authentication template, or by SMS when the tenant chooses it**
+  (ADR-0019, which supersedes ADR-0013 §5). The sign-in section above is that rule. There is no
+  email fallback.
 - **An acknowledgement or feedback message goes only to an identified sender**, and never moves a
   call (foundation rule 3).
 - **Foundation rule 2 is retired** ([ADR-0008](docs/decisions/ADR-0008-money-is-ordinary-data.md)).

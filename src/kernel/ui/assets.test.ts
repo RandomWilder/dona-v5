@@ -31,6 +31,7 @@ describe('shared UI assets', () => {
     const names = [
       'heebo-hebrew.woff2',
       'heebo-latin.woff2',
+      'noto-sans-cyrillic.woff2',
       'ibm-plex-mono-latin-400.woff2',
       'ibm-plex-mono-latin-500.woff2',
     ];
@@ -50,6 +51,32 @@ describe('shared UI assets', () => {
         // wOF2 magic number: proof it is the real file, not an empty buffer.
         assert.equal(response.rawPayload.subarray(0, 4).toString(), 'wOF2');
       }
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('serves the portal icons as PNG', async () => {
+    const app = appWithAssets();
+    try {
+      for (const name of [
+        'portal-icon-180.png',
+        'portal-icon-192.png',
+        'portal-icon-512.png',
+      ]) {
+        const response = await app.inject({
+          method: 'GET',
+          url: `/ui/icons/${name}`,
+        });
+        assert.equal(response.statusCode, 200, name);
+        assert.equal(response.headers['content-type'], 'image/png');
+        assert.equal(response.rawPayload[0], 0x89, name);
+      }
+      const missing = await app.inject({
+        method: 'GET',
+        url: '/ui/icons/nope.png',
+      });
+      assert.equal(missing.statusCode, 404);
     } finally {
       await app.close();
     }

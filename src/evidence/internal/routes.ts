@@ -210,7 +210,8 @@ const LIMITS = {
   files: 1,
   fileSize: 100 * 1024 * 1024,
   fields: 40,
-  fieldSize: 200,
+  // A portal report's description rides this same parser. A document field is a short id.
+  fieldSize: 16_000,
 };
 
 /**

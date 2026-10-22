@@ -7,6 +7,7 @@
 // #184 closes a call by one of the four Exits.
 // #186 opens a call from the intake door and returns one to the filtered list.
 
+export { businessDaysElapsed } from './internal/business-days.ts';
 export type {
   CallCategory,
   CallExit,
@@ -18,22 +19,29 @@ export type {
   CallTransition,
   CategoryRow,
   CategorySpec,
+  ChangeNonWorkingDateSpec,
   EmergencyActorSpec,
   EmergencyMark,
   EmergencySettings,
+  EntryPermission,
   ExitCallSpec,
   ExitKind,
+  HandlingGoal,
   IdentifyByAddressSpec,
   IdentifyCallSpec,
   ManualChannel,
   OpenCallSpec,
   OpenIntakeCallSpec,
+  ReplyShare,
+  ReplyTarget,
   RequesterCall,
   ResponseBand,
   ResponseGoal,
   ReturnCallSpec,
   ReturnedCall,
   SaveEmergencySettingsSpec,
+  SaveHandlingGoalSpec,
+  SaveReplyTargetSpec,
   SaveResponseGoalSpec,
   SaveSenderContactSpec,
   ServiceCall,
@@ -45,6 +53,7 @@ export type {
 export {
   ADDRESS_MAX,
   callIsAttachable,
+  changeNonWorkingDate,
   clearEmergency,
   countOpenCalls,
   DESCRIPTION_MAX,
@@ -61,10 +70,16 @@ export {
   openCall,
   openIntakeCall,
   readEmergencySettings,
+  readHandlingGoal,
+  readNonWorkingDates,
+  readReplyShare,
+  readReplyTarget,
   readResponseGoal,
   restoreReturnedCall,
   returnToFiltered,
   saveEmergencySettings,
+  saveHandlingGoal,
+  saveReplyTarget,
   saveResponseGoal,
   saveSenderContact,
   setCallCategory,
@@ -95,10 +110,14 @@ export {
   startCallBrief,
 } from './internal/brief.ts';
 export { replyLanguage, writeCallDraft } from './internal/draft.ts';
+export type { PortalCall, PortalReply } from './internal/portal-read.ts';
+export { listPortalCalls, readPortalCall } from './internal/portal-read.ts';
 export type { CallsDeps } from './internal/routes.ts';
 export { registerCallsRoutes } from './internal/routes.ts';
 export type { SendCallReplySpec } from './internal/send.ts';
 export { sendCallReply } from './internal/send.ts';
+export type { TenantStatus } from './internal/tenant-status.ts';
+export { tenantStatus } from './internal/tenant-status.ts';
 export type {
   CallScreen,
   CallsScreen,

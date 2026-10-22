@@ -104,7 +104,16 @@ describe('channel · attachments on the call', () => {
         const outcome = await receiveIncoming(
           db,
           clock,
-          { sorter: sorter(), matchesEmergency: async () => false, objects },
+          {
+            sorter: sorter(),
+            matchesEmergency: async () => false,
+            objects,
+            scanner: {
+              async scan() {
+                return 'clean';
+              },
+            },
+          },
           incoming({
             externalMessageId: 'attach-190.test-1',
             externalThreadId: 'attach-190.test-thread',
@@ -171,7 +180,16 @@ describe('channel · attachments on the call', () => {
         const outcome = await receiveIncoming(
           db,
           clock,
-          { sorter: sorter(), matchesEmergency: async () => false, objects },
+          {
+            sorter: sorter(),
+            matchesEmergency: async () => false,
+            objects,
+            scanner: {
+              async scan() {
+                return 'clean';
+              },
+            },
+          },
           incoming(),
         );
         assert.equal(outcome.kind, 'call');

@@ -131,13 +131,28 @@ here:
   for a role that may file. אנשי קשר is on the rail only for a role that may read parties. The login screen has none of
   those links and no sidebar. **From 5.2d the shell is a phone first:** below 840px the rail is a
   drawer behind a menu control in that same shell, so a new screen inherits the drawer by calling
-  `renderPage` with `nav` and never draws its own. Still no client JavaScript, except the call
-  page's copy control, and only when that call has a draft (SPEC-calls). The drawer's open state is a
+  `renderPage` with `nav` and never draws its own.   Still no client JavaScript, except the call
+  page's copy control, and only when that call has a draft (SPEC-calls), and except the tenant
+  portal's code screen, which submits the form when the sixth digit is entered (#273). That script
+  has no `src`. It only submits. Without it the page shows a submit button, so the sign-in still
+  works. The same rule names one further exception (#275): the passkey offer and the phone screen
+  call the WebAuthn API to create or use a passkey. That script has no `src` either. It only runs
+  the ceremony and posts the result. Without it the offer still shows **לא עכשיו**, which leaves
+  the tenant signed in, and the phone screen still sends a code. The same rule names two further
+  exceptions (#286): the web app manifest, and a service worker. The manifest is JSON, not a script.
+  The worker is `/sw.js`. Each portal page carries a short inline script that only registers it.
+  The worker's cache holds static assets — the stylesheets, the fonts and the icons — and never a
+  page or any response that can contain tenant data. A page still loads from the network when the
+  worker is absent, and Add to Home Screen still has the manifest. The manifest's background and
+  theme colours are the same two values as `--tp-bg` and `--tp-accent-800`; a manifest cannot read
+  the stylesheet. The drawer's open state is a
   checkbox the menu label and the scrim both drive. The viewport is `viewport-fit=cover`. Login
   stays a centred guest card.
 - **Icons are inline SVG drawn from one kernel table, `src/kernel/ui/icons.ts` (#241).** A screen
   never writes its own `<svg>`; a guard test fails the build on one. Icon names are generic, and the
-  module that uses an icon owns the mapping from its own nouns to a name.
+  module that uses an icon owns the mapping from its own nouns to a name. The portal's home-screen
+  marks are the exception (#286): three PNG files at `/ui/icons/`, because Add to Home Screen cannot
+  use an inline SVG.
 
 ## Error shape
 
@@ -258,11 +273,91 @@ byte for byte. A screen that handles its own refusal still does; this is only th
   byte-identically for an unknown account, an account with no role and a disabled one, because the
   alternative is an account-enumeration oracle on the login screen. The role matrix is code and not
   a config row — a deliberate exception to rule 8, argued in `SPEC-staff.md`.
-- **Every route declares its stance, and the default is deny** (slice 5.2). A route carries
-  `config: { staff: <permission> }` or `config: { staff: 'public' }`; one `onRequest` hook in the
-  composition root calls `requireStaff`, and an `onRoute` hook **refuses to start the process** if a
-  route declares neither. Openness is a written word, never what happened when nobody said
-  otherwise.
+- **Every route declares its stance, and the default is deny** (slice 5.2, tenant audience #272).
+  A route carries `config: { staff: <permission> }` or `config: { staff: 'public' }`, or
+  `config: { tenant: 'public' }`. It declares one audience, never both. One `onRequest` hook in the
+  composition root calls `requireStaff` for a staff route, and an `onRoute` hook **refuses to start
+  the process** if a route declares neither a staff stance nor a tenant stance. Openness is a
+  written word, never what happened when nobody said otherwise. **Staff routes are served only on
+  the office host, and tenant routes only on the tenant host.** `TENANT_HOST` is one hostname or
+  several, separated by commas (#291). Each entry is lower case, with surrounding spaces and any
+  port removed, and an IPv6 address in brackets reduced to the address inside them — the same
+  reading a single hostname already had. An empty entry is ignored and matches no request. An
+  absent setting, or one that leaves no hostname, is the single default `tenant.localhost`. A
+  request whose hostname is any entry is the tenant audience; every other request is the office.
+  The boot line prints the whole list. A staff route requested on the tenant host is not found,
+  and a tenant route requested on the office host is not found. The liveness probe, the stylesheet
+  and the fonts are
+  the process rather than an audience, and are served on both hosts. The portal stylesheet
+  (`/ui/portal.css`) is the same kind of asset: it is not the office shell, and a portal page is
+  the only page that links it. **A staff session is not a
+  session on the tenant host, and a tenant session is not a session on the office host.** The staff
+  cookie (`dona_session`) is read only on the office host. The tenant cookie is `dona_portal`.
+  The office host does not read it. It is opaque, `HttpOnly`, `Secure` — omitted only when the
+  request itself is plain http, which is local dev and nothing else — `SameSite=Strict`, and
+  host-only: no `Domain` attribute. The session is a server-side row, `portal_session`, holding
+  the hash of that token and never the token. It lasts 30 days absolutely and 14 days idle, both
+  read from the injected clock. Sign-out revokes the one row. Sign-out of every device revokes
+  every row of that identity and writes an audit row. A **Portal identity** is the verified phone
+  number, created the first time a code for it verifies. It is not a Party and it has no role.
+  The code, the caps and the sender are SPEC-channel's. A **passkey** is a WebAuthn credential on
+  that identity, one or more, created only after a code has signed the tenant in, and removed only
+  by that tenant. The offer is shown after every code sign-in. Declining it leaves the tenant
+  signed in, stores nothing, and does not suppress the next offer. A later sign-in on a device that holds a passkey uses it and skips
+  the code. A code that verifies for an identity that already exists is a new-device sign-in: one
+  audit row, and exactly one notice through the code sender (SPEC-channel). The first code, the one
+  that creates the identity, sends no notice. Adding a passkey and removing one are audit rows.
+  The ceremony checks the challenge, the origin and the relying-party id; an assertion also checks
+  the signature. Attestation is `none`. The challenge is written into the page when that page is
+  rendered, and the tap calls the API with that challenge. The prompt is not deferred behind a
+  request, which mobile Safari would drop. If that challenge cannot be issued, the phone page
+  still renders and the code form still sends.   The list of passkeys is a page this module serves; the
+  עוד tab that will hold it is #279.
+- **Legal texts are versioned rows, and the service does not depend on consent** (#276). The privacy
+  notice, the terms, the entry-permission wording and the optional opt-ins are each a row per
+  language (`he`, `en`, `ru`) with a version and a placeholder flag. The wording shipped with the
+  portal is a placeholder written to the notification duty in Amendment 13 of the Privacy Protection
+  Law. Dona Dom's legal team replaces it by adding a new version; a version is never edited in
+  place. The version a request shows is the highest version number recorded at or before that
+  request. An acknowledgement is a row: the portal identity, the text that was on the page (that
+  row carries the version and the language), and the time. A version that was not on the page is
+  not recorded as read. The first request after sign-in that is not the passkey offer,
+  and any later request once the current privacy notice or terms is a version that identity has not
+  acknowledged, shows those two texts and each optional opt-in. The acknowledgement is the
+  continuation button. It is not a checkbox, and it does not sit on an opt-in's card. Each opt-in
+  is its own switch, off until the tenant turns it on, and the same switch turns it off. Reading
+  the notice is not consent, and the service is not conditional on it or on any opt-in. The
+  entry-permission wording is held the same way and is not on this screen.
+- **A building is in the portal only when an administrator has switched it on** (#277). The flag
+  is a column on the building, false until then. The switch is on that building's page in נכסים
+  and needs `portal.switch` (SPEC-staff). Anyone who can open the page sees whether it is on.
+  Turning it on is refused while any current legal text, in any portal language, is still a
+  placeholder, and the page names that text and its language. Nothing is written on that refusal.
+  Turning it on and turning it off are each an audit row naming who and when. The flag is read
+  from the column on the request that needs it. It is not stored on the tenant session, so
+  turning it off is what the tenant's next request sees.
+- **The tenant shell and the flat** (#279). A signed-in request resolves the number through
+  `resolvePortalTenancies` (SPEC-scope) and then keeps only tenancies whose building is
+  portal-enabled. Nothing about the tenancy is stored on the session. The browser may hold the
+  chosen tenancy id in `dona_portal_choice`; the next request checks that id against the read, and a
+  miss falls back to the first tenancy the read returned. One tenancy draws the pill with no chevron
+  and offers no sheet. The flat's address carries the tenancy id; an id the read did not return is
+  not found. A number the read does not place in a portal-enabled tenancy sees only the
+  building-not-in-the-portal page: the number they signed in with, ask the office, and sign out, and
+  no tab bar. The tab bar — home, calls, report, the flat, more — is on the home, calls and flat
+  pages. Report is the raised control; its form is #282. More holds ask the office, the language,
+  the passkeys and sign out. The lease bar is the tenancy's dates against the clock's today.
+- **The portal's three languages** (#285). Every user-facing sentence is a row keyed by language
+  (`he`, `en`, `ru`). A page carries no sentence of its own, and a language added later is rows in
+  that same list. `lang` and `dir` follow the language in use: Hebrew is right to left, English and
+  Russian are left to right, and the layout is logical properties, so a back arrow and the send
+  mark flip with the direction. The starting language is the Party's `preferred_language` when it
+  is one of the three, otherwise Hebrew. The tenant's later choice, from the language sheet on the
+  sign-in screens, the home page and the עוד tab, is kept in `dona_portal_lang` and wins over the
+  record. A legal text is the current row in the chosen language. A missing translation is the
+  Hebrew row, and the page says so. Heebo's Hebrew and Latin files include weight 800, and the
+  face allows it. Heebo has no Cyrillic glyphs, so that range is Noto Sans on the same family
+  and Russian does not fall back to a system face.
 - **Every write route carries a CSRF token, and the token is derived rather than stored** (slice
   5.2): `sha256('csrf:' + <session token>)`, computed from the `HttpOnly` cookie the request already
   carries, held in no column and defended by the same policy case that forbids a stored token.
@@ -284,9 +379,10 @@ byte for byte. A screen that handles its own refusal still does; this is only th
   |---|---|---|
   | **OpenAI** | Passage text sent for embedding, and document text sent for comprehension; from #181, the subject and text of every incoming email and WhatsApp message, sent to the sorter and for translation | Today, through the CI-only `OPENAI_API_KEY` — authored fixture text with no personal data in it. Tenant text from week 4. |
   | **Google Cloud** | Document bytes for OCR (Document AI, ADR-0002, imageless mode, processor location **`eu`** — Document AI does not serve `me-west1`); every stored document and row (Cloud Storage, Cloud SQL) as processor | Week 4 for OCR (slice 4.1); today for storage |
-  | **Meta — WhatsApp Cloud API** | Every message either end of a conversation sends, including what the receptionist sends from the office phone under coexistence (ADR-0013) | #181, staging on Meta's test number first |
+  | **Meta — WhatsApp Cloud API** | Every message either end of a conversation sends, including what the receptionist sends from the office phone under coexistence (ADR-0013). From #274, a tenant's phone number and the sign-in code, inside an authentication template, and only when that sender is configured. From #275, the same number inside a utility template whose body is the fixed new-device sentence, and only when `PORTAL_WHATSAPP_NOTICE_TEMPLATE` is set | #181, staging on Meta's test number first; the sign-in template when the director turns it on; the notice template with it |
   | **Microsoft 365 — Dona Dom's own** | The shared mailbox, read through Graph with `Mail.Read`, and `Mail.Send` for a reply on an inbound message (the fixed duty reply, and the office reply on an EMAIL call), both scoped to that one mailbox. Not a new processor: the mail is already Dona Dom's provider's | #181, #256 |
   | **Anthropic** | This repository, read by Claude Code as it is built | Today, **development-time only**. It never sees tenant text, and the mechanism that makes that true is that tier 2 never enters the repo — `.gitignore`, the bucket, and this rule, not an assurance. |
+  | **InforU (InforUMobile, Shamir Systems)** | A tenant's phone number and the sign-in code, as one SMS. From #275, the same number and the fixed new-device sentence, as one further SMS. Nothing else: not a name, not a message the tenant wrote | #274, and only once `INFORU_USERNAME`, `INFORU_TOKEN` and `SMS_SENDER` are set. Processing and storage in Israel (Bezeq International, disaster recovery at Netvision). The instrument is InforU's processor annex, נספח לתנאי ההתקשרות – פרטיות, v2.1. The gateway's IP allowlist is part of turning it on, and it is the director's |
 
   Naming them is the engineering half of ADR-0004. The other half is the owner's, is tracked as **F6**
   on [docs/fuses.md](docs/fuses.md), and is owed **before the tier-2 corpus lands**. As of
@@ -420,16 +516,21 @@ started.
 **The application serves screens from 1.11 and six estate routes from 3.6**: an index at `/`, the buildings
 list, one building, one unit, `/estate/search` and `/estate/expiring` — server-rendered Hebrew RTL off
 `/ui/tokens.css`, with no client JavaScript and, **from slice 5.2, behind the session 5.1 built**.
-Every route in this application declares its own stance — a permission, or the word `public` — and
-an `onRoute` hook refuses to start the process if one declares neither, so the default is deny and
-an open route is open because somebody wrote it down. The root index moved from `src/estate/` to the
+Every route in this application declares its own stance — a staff permission, the word `public`,
+or a tenant stance — and an `onRoute` hook refuses to start the process if one declares neither a
+staff stance nor a tenant stance, so the default is deny on both hosts and an open route is open
+because somebody wrote it down. Staff routes answer only on the office host and tenant routes only
+on a hostname in the tenant host list; any other host is told the route is not found. A staff session cookie is not a
+session on the tenant host, and a tenant session cookie is not a session on the office host. The root index moved from `src/estate/` to the
 composition root in the same slice, because an index of screens stopped being one module's fact the
 week a second module had one. **Slice 5.8 put the settings screen beside that index**, because the
 two catalogues it edits belong to two modules and a third module may not own either. **Slice 5.2b put one chrome on every signed-in screen**, and **5.2c
 gave that chrome v3's ops sidebar** rather than a top bar. **5.2d put that rail behind a menu control below 840px**, in the kernel
 shell so every later screen inherits it, still with no `<script>` except the call page's copy
-control, and only on a call that has a draft (SPEC-calls). **Slice 5.3 added the remaining destinations** — קריאות and הגדרות — as stubs that name the week and slice that own them. The login screen stays without that rail. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
-physical side or a `<script>` other than that copy control, and from 2.6 also on a phone number or an E.164 prefix: what a screen
+control, and only on a call that has a draft (SPEC-calls), the portal code screen's sixth-digit
+submit (#273), the portal passkey ceremony (#275), and the portal page's service-worker
+registration (#286). The worker itself is `/sw.js` and caches no tenant data. **#276 shows the privacy notice and the terms before the empty home, records the acknowledgement, and does not make the service conditional on consent.** **Slice 5.3 added the remaining destinations** — קריאות and הגדרות — as stubs that name the week and slice that own them. The login screen stays without that rail. `tests/ui/tokens.test.ts` renders every screen and fails on a hex colour, a face, a
+physical side or a `<script>` other than those named exceptions, and from 2.6 also on a phone number or an E.164 prefix: what a screen
 may say about a household is **a state and a count, never a tenant's name**, so the
 occupancy chip is derived on every load and search never reaches `party`.
 

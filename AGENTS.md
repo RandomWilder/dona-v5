@@ -17,7 +17,7 @@
 
 ## Architecture
 - Modular monolith, one deployable, `me-west1`. `src/<module>/`: estate · parties · tenancy · evidence ·
-  scope · register · policy · calls · channel · staff. Shared `src/kernel/` imports from no module.
+  scope · register · policy · calls · channel · staff · portal. Shared `src/kernel/` imports from no module.
 - A module imports another's `contract.ts`, never its `internal/`, and **`src/scope/` is the only
   place the isolation join is written**. A grep guard and `kernel/boundary.test.ts` enforce both.
 - Read `CONTEXT.md` for the vocabulary and `SPEC.md` for the rules; a module's `SPEC-<module>.md` is

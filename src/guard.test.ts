@@ -126,7 +126,8 @@ describe('every route in the application', () => {
     // **The whole public surface of this system, enumerated.** Every one of them
     // is a route somebody with no session must be able to reach: the liveness probe, the assets the
     // login screen itself loads, the login screen, the redirect to Google, the callback that mints
-    // the first session, the way out, and Meta's WhatsApp webhook. Anything else appearing in this
+    // the first session, the way out, Meta's WhatsApp webhook, and the portal stylesheet the
+    // tenant host loads before a session exists. Anything else appearing in this
     // list is the regression this slice exists to make loud.
     assert.deepEqual(open, [
       'GET /health',
@@ -134,6 +135,8 @@ describe('every route in the application', () => {
       'GET /staff/auth/start',
       'GET /staff/login',
       'GET /ui/fonts/:file',
+      'GET /ui/icons/:file',
+      'GET /ui/portal.css',
       'GET /ui/tokens.css',
       'GET /webhooks/whatsapp',
       'POST /staff/logout',
@@ -203,8 +206,9 @@ describe('every route in the application', () => {
   it('marks exactly the multipart routes as verifying their own token', async () => {
     // `csrf: 'in-body'` is an exemption from the hook, and an exemption that spreads is the hook
     // being switched off one route at a time. These are the multipart uploads, and each
-    // calls the same `verifyCsrf` the hook calls. The early-end route is here because the
-    // notice letter is a file.
+    // calls the same `verifyCsrf` the hook calls. The report route and the
+    // follow-up are here because a file post is a stream. The early-end route
+    // is here because the notice letter is a file.
     const pool = deadPool();
     const app = buildApp({ pool, version: '9.9.9-test' });
     await app.ready();
@@ -212,6 +216,8 @@ describe('every route in the application', () => {
       .filter((route) => route.csrf === 'in-body')
       .map((route) => `${route.method} ${route.url}`);
     assert.deepEqual(exempt, [
+      'POST /calls/:callId/follow-up',
+      'POST /report',
       'POST /documents/filing',
       'POST /documents',
       'POST /documents/tenancies/:tenancyId/protocol',

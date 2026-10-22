@@ -434,7 +434,7 @@ describe('channel · whatsapp', { concurrency: false }, () => {
       t.skip(skipReason);
       return;
     }
-    const bytes = Buffer.from('jpeg-bytes');
+    const bytes = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
     const fetched: string[] = [];
     const config = configured();
     try {
@@ -485,6 +485,11 @@ describe('channel · whatsapp', { concurrency: false }, () => {
             sorter,
             matchesEmergency: async () => false,
             objects: createMemoryStore(),
+            scanner: {
+              async scan() {
+                return 'clean' as const;
+              },
+            },
           },
           batch.messages[0]!,
         );

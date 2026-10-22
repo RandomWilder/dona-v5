@@ -9,7 +9,7 @@
 // who is not a service contact is refused by the database, not by this file
 // hiding the name.
 import { createAuditLog } from '../../kernel/audit.ts';
-import { type Clock, today } from '../../kernel/clock.ts';
+import { type Clock, calendarDate, today } from '../../kernel/clock.ts';
 import { inTransaction } from '../../kernel/db.ts';
 import { KernelError } from '../../kernel/errors.ts';
 import { newId } from '../../kernel/ids.ts';
@@ -17,6 +17,7 @@ import { INSERTED, type UpsertResult } from '../../kernel/upsert.ts';
 import { requireText, validId } from '../../kernel/validate.ts';
 import { upsertPartyContact } from '../../parties/contract.ts';
 import { normaliseEmail, normalisePhone } from '../../scope/contract.ts';
+import { businessDaysElapsed } from './business-days.ts';
 import { emergencyTermMatches } from './emergency.ts';
 import type { Queryable } from './types.ts';
 
@@ -25,6 +26,7 @@ export const SOURCE_CHANNELS = [
   'EMAIL',
   'PHONE',
   'WALK_IN',
+  'PORTAL',
 ] as const;
 export type SourceChannel = (typeof SOURCE_CHANNELS)[number];
 
@@ -69,7 +71,7 @@ export type CallSender = { kind: 'named'; name: string } | { kind: 'unknown' };
 
 export type SorterLabel = 'call' | 'unsure' | 'noise';
 
-export const INTAKE_CHANNELS = ['WHATSAPP', 'EMAIL'] as const;
+export const INTAKE_CHANNELS = ['WHATSAPP', 'EMAIL', 'PORTAL'] as const;
 export type IntakeChannel = (typeof INTAKE_CHANNELS)[number];
 
 export interface CallParty {
@@ -83,6 +85,9 @@ export interface CallCategory {
   labelHe: string;
   active: boolean;
 }
+
+/** Whether the office may enter while the tenant is out. #282. */
+export type EntryPermission = 'YES' | 'ARRANGE' | 'HOME';
 
 export type EmergencyMark =
   | { flagged: false }
@@ -107,6 +112,8 @@ export interface RequesterCall {
 
 export interface ServiceCall {
   id: string;
+  /** The number the sender is shown. Set when the row is read from the table. */
+  callNumber?: number;
   sourceChannel: SourceChannel;
   state: CallState;
   description: string;
@@ -122,6 +129,12 @@ export interface ServiceCall {
   summary: string | null;
   /** The sorter's Category. Not the one a person set, and it does not move the call. */
   proposal: CallCategory | null;
+  /** The tenant's Category on a portal report. Not the call's Category. #282. */
+  suggestion: CallCategory | null;
+  /** Null on a call that is not a portal report. */
+  entry: EntryPermission | null;
+  /** The tenancy a portal report names. Null on every other call. */
+  tenancy: { id: string; unitNumber: string; addressLine: string } | null;
   sorterLabel: SorterLabel | null;
   /** The model that produced the proposal. Null when there was no verdict. */
   sorterModel: string | null;
@@ -258,6 +271,10 @@ export interface OpenIntakeCallSpec {
   actorRole?: string | null;
   sorterModel: string | null;
   sorterPrompt: string | null;
+  /** A portal report. All three, or none. */
+  suggestedCategoryId?: string | null;
+  entryPermission?: EntryPermission | null;
+  tenancyId?: string | null;
 }
 
 export interface ReturnCallSpec {
@@ -300,6 +317,55 @@ export interface ResponseGoal {
 export interface SaveResponseGoalSpec {
   amberMinutes: number;
   redMinutes: number;
+  actorId: string;
+  actorRole?: string | null;
+}
+
+/** Whole business days. Amber is the first band; red is the later one. */
+export interface HandlingGoal {
+  amberDays: number;
+  redDays: number;
+}
+
+/** The two clocks, the dates the handling clock skips, and the office zone. */
+export interface OfficeMeasure {
+  goal: ResponseGoal;
+  handling: HandlingGoal;
+  nonWorkingDates: readonly string[];
+  zone: string;
+}
+
+export interface SaveHandlingGoalSpec {
+  amberDays: number;
+  redDays: number;
+  actorId: string;
+  actorRole?: string | null;
+}
+
+/** Whole business days, and whether the portal may say so. */
+export interface ReplyTarget {
+  days: number;
+  shown: boolean;
+}
+
+export interface SaveReplyTargetSpec {
+  days: number;
+  shown: boolean;
+  actorId: string;
+  actorRole?: string | null;
+}
+
+/** Calls opened in the period, and how many got a person's reply within the target. */
+export interface ReplyShare {
+  from: string;
+  to: string;
+  calls: number;
+  replied: number;
+}
+
+export interface ChangeNonWorkingDateSpec {
+  op: 'add' | 'remove';
+  date: string;
   actorId: string;
   actorRole?: string | null;
 }
@@ -389,6 +455,7 @@ function pgError(error: unknown): PgError {
 
 interface CallRow {
   service_call_id: string;
+  call_number: number;
   source_channel: SourceChannel;
   state: CallState;
   description: string;
@@ -423,6 +490,14 @@ interface CallRow {
   proposed_code: string | null;
   proposed_label_he: string | null;
   proposed_active: boolean | null;
+  suggested_category_id: string | null;
+  suggested_code: string | null;
+  suggested_label_he: string | null;
+  suggested_active: boolean | null;
+  entry_permission: string | null;
+  tenancy_id: string | null;
+  report_unit_number: string | null;
+  report_address_line: string | null;
   predecessor_id: string | null;
   predecessor_description: string | null;
   returned_at: Date | null;
@@ -431,7 +506,7 @@ interface CallRow {
   sorter_prompt: string | null;
 }
 
-const CALL_SELECT = `SELECT sc.service_call_id, sc.source_channel, sc.state, sc.description,
+const CALL_SELECT = `SELECT sc.service_call_id, sc.call_number, sc.source_channel, sc.state, sc.description,
             sc.sender_label, sc.sender_unknown, sc.opened_at, sc.opened_by,
             COALESCE(NULLIF(btrim(opener.display_name), ''), opener.email) AS opener_label,
             sc.requester_party_id, requester.full_name AS requester_name,
@@ -451,6 +526,12 @@ const CALL_SELECT = `SELECT sc.service_call_id, sc.source_channel, sc.state, sc.
             sc.proposed_category_id, proposed.code AS proposed_code,
             proposed.label_he AS proposed_label_he,
             proposed.is_active AS proposed_active,
+            sc.suggested_category_id, suggested.code AS suggested_code,
+            suggested.label_he AS suggested_label_he,
+            suggested.is_active AS suggested_active,
+            sc.entry_permission, sc.tenancy_id,
+            report_unit.unit_number AS report_unit_number,
+            report_building.address_line AS report_address_line,
             sc.predecessor_id, predecessor.description AS predecessor_description,
             sc.returned_at, sc.sorter_model, sc.sorter_prompt,
             COALESCE(
@@ -468,6 +549,11 @@ const CALL_SELECT = `SELECT sc.service_call_id, sc.source_channel, sc.state, sc.
        LEFT JOIN party requester ON requester.party_id = sc.requester_party_id
        LEFT JOIN call_category category ON category.category_id = sc.category_id
        LEFT JOIN call_category proposed ON proposed.category_id = sc.proposed_category_id
+       LEFT JOIN call_category suggested ON suggested.category_id = sc.suggested_category_id
+       LEFT JOIN tenancy report_tenancy ON report_tenancy.tenancy_id = sc.tenancy_id
+       LEFT JOIN unit report_unit ON report_unit.unit_id = report_tenancy.unit_id
+       LEFT JOIN space report_space ON report_space.space_id = report_unit.unit_id
+       LEFT JOIN building report_building ON report_building.building_id = report_space.building_id
        LEFT JOIN service_call predecessor ON predecessor.service_call_id = sc.predecessor_id
        LEFT JOIN service_call other ON other.service_call_id = sc.duplicate_of
        LEFT JOIN staff_account closer ON closer.staff_account_id = sc.closed_by
@@ -486,6 +572,11 @@ function categoryOf(
   return { id, code, labelHe: label, active };
 }
 
+function entryPermissionOf(value: string | null): EntryPermission | null {
+  if (value === 'YES' || value === 'ARRANGE' || value === 'HOME') return value;
+  return null;
+}
+
 function sorterLabelOf(value: string | null): SorterLabel | null {
   if (value === 'call' || value === 'unsure' || value === 'noise') return value;
   return null;
@@ -494,6 +585,7 @@ function sorterLabelOf(value: string | null): SorterLabel | null {
 function toCall(row: CallRow): ServiceCall {
   return {
     id: row.service_call_id,
+    callNumber: Number(row.call_number),
     sourceChannel: row.source_channel,
     state: row.state,
     description: row.description,
@@ -519,6 +611,21 @@ function toCall(row: CallRow): ServiceCall {
       row.proposed_label_he,
       row.proposed_active,
     ),
+    suggestion: categoryOf(
+      row.suggested_category_id,
+      row.suggested_code,
+      row.suggested_label_he,
+      row.suggested_active,
+    ),
+    entry: entryPermissionOf(row.entry_permission),
+    tenancy:
+      row.tenancy_id === null
+        ? null
+        : {
+            id: row.tenancy_id,
+            unitNumber: row.report_unit_number ?? '',
+            addressLine: row.report_address_line ?? '',
+          },
     sorterLabel: sorterLabelOf(row.sorter_label),
     sorterModel: row.sorter_model,
     sorterPrompt: row.sorter_prompt,
@@ -585,6 +692,7 @@ function isState(value: string): value is CallState {
 
 interface LockedCall {
   state: CallState;
+  source_channel: SourceChannel;
   requester_party_id: string | null;
   category_id: string | null;
   emergency: boolean;
@@ -593,7 +701,8 @@ interface LockedCall {
 
 async function lockCall(db: Queryable, id: string): Promise<LockedCall> {
   const { rows } = await db.query<LockedCall>(
-    `SELECT state, requester_party_id, category_id, emergency, returned_at
+    `SELECT state, source_channel, requester_party_id, category_id, emergency,
+            returned_at
        FROM service_call
       WHERE service_call_id = $1
       FOR UPDATE`,
@@ -695,11 +804,52 @@ export async function openCall(
     toReview: false,
     summary: null,
     proposal: null,
+    suggestion: null,
+    entry: null,
+    tenancy: null,
     sorterLabel: null,
     sorterModel: null,
     sorterPrompt: null,
     returned: false,
     exit: null,
+  };
+}
+
+function reportOf(spec: OpenIntakeCallSpec): {
+  suggestedCategoryId: string;
+  entryPermission: EntryPermission;
+  tenancyId: string;
+} | null {
+  const suggested =
+    spec.suggestedCategoryId == null
+      ? null
+      : validId(spec.suggestedCategoryId, 'category');
+  const tenancy =
+    spec.tenancyId == null ? null : validId(spec.tenancyId, 'tenancy');
+  const entry = spec.entryPermission ?? null;
+  if (
+    entry !== null &&
+    entry !== 'YES' &&
+    entry !== 'ARRANGE' &&
+    entry !== 'HOME'
+  ) {
+    throw new KernelError('invalid', 'entry is not a permission', {
+      field: 'entry',
+    });
+  }
+  const named = [suggested, entry, tenancy].filter((value) => value !== null);
+  if (named.length === 0) return null;
+  if (suggested === null || entry === null || tenancy === null) {
+    throw new KernelError(
+      'invalid',
+      'a report names a category, an entry and a tenancy',
+      { field: 'report' },
+    );
+  }
+  return {
+    suggestedCategoryId: suggested,
+    entryPermission: entry,
+    tenancyId: tenancy,
   };
 }
 
@@ -751,6 +901,7 @@ export async function openIntakeCall(
       ? null
       : validId(spec.proposedCategoryId, 'category');
   const summary = summaryOf(spec.summary);
+  const report = reportOf(spec);
   const id = newId(clock);
   const openedAt = clock.now();
 
@@ -777,14 +928,35 @@ export async function openIntakeCall(
         });
       }
     }
+    if (report !== null) {
+      const category = await tx.query<{ is_active: boolean }>(
+        `SELECT is_active FROM call_category WHERE category_id = $1`,
+        [report.suggestedCategoryId],
+      );
+      if (category.rows[0]?.is_active !== true) {
+        throw new KernelError('invalid', 'category is not active', {
+          field: 'category',
+        });
+      }
+      const tenancy = await tx.query(
+        `SELECT 1 FROM tenancy WHERE tenancy_id = $1`,
+        [report.tenancyId],
+      );
+      if (!tenancy.rows[0]) {
+        throw new KernelError('invalid', 'tenancy not found', {
+          field: 'tenancy',
+        });
+      }
+    }
     await tx.query(
       `INSERT INTO service_call
          (service_call_id, source_channel, state, description, sender_label,
           sender_unknown, opened_at, opened_by, emergency, emergency_by,
           to_review, sorter_label, sorter_summary, proposed_category_id,
-          predecessor_id, sorter_model, sorter_prompt)
+          predecessor_id, sorter_model, sorter_prompt,
+          suggested_category_id, entry_permission, tenancy_id)
        VALUES ($1, $2, 'NEW', $3, $4, false, $5, $6, $7, $8, $9, $10, $11, $12,
-               $13, $14, $15)`,
+               $13, $14, $15, $16, $17, $18)`,
       [
         id,
         sourceChannel,
@@ -801,6 +973,9 @@ export async function openIntakeCall(
         predecessorId,
         spec.sorterModel,
         spec.sorterPrompt,
+        report?.suggestedCategoryId ?? null,
+        report?.entryPermission ?? null,
+        report?.tenancyId ?? null,
       ],
     );
     if (spec.emergency) {
@@ -917,6 +1092,12 @@ export async function returnToFiltered(
       throw new KernelError('invalid', 'call is already filtered', {
         field: 'call',
         reason: 'returned',
+      });
+    }
+    if (current.source_channel === 'PORTAL') {
+      throw new KernelError('invalid', 'a portal call is not returned', {
+        field: 'call',
+        reason: 'portal',
       });
     }
     await tx.query(
@@ -1895,7 +2076,7 @@ async function writeSetting(
   db: Queryable,
   clock: Clock,
   key: string,
-  value: string | number,
+  value: string | number | boolean | readonly string[],
 ): Promise<void> {
   await db.query(
     `INSERT INTO config_settings (key, value, updated_at)
@@ -1953,6 +2134,16 @@ export function ageMinutes(openedAt: Date, now: Date): number {
  * Amber, then red. Exactly on a threshold has not passed it. A closed call
  * is neither, whatever its age.
  */
+function bandPast(
+  age: number,
+  amber: number,
+  red: number,
+): ResponseBand | null {
+  if (age > red) return 'red';
+  if (age > amber) return 'amber';
+  return null;
+}
+
 export function responseGoalBand(
   state: CallState,
   openedAt: Date,
@@ -1960,10 +2151,38 @@ export function responseGoalBand(
   goal: ResponseGoal,
 ): ResponseBand | null {
   if (state === 'CLOSED') return null;
-  const age = ageMinutes(openedAt, now);
-  if (age > goal.redMinutes) return 'red';
-  if (age > goal.amberMinutes) return 'amber';
-  return null;
+  return bandPast(
+    ageMinutes(openedAt, now),
+    goal.amberMinutes,
+    goal.redMinutes,
+  );
+}
+
+/**
+ * The clock that applies to this call. An open emergency uses the minute goal.
+ * Every other open call uses the handling age in business days. A closed call
+ * is neither.
+ */
+export function officeBand(
+  call: {
+    state: CallState;
+    openedAt: Date;
+    emergency: { flagged: boolean };
+  },
+  now: Date,
+  measure: OfficeMeasure,
+): ResponseBand | null {
+  if (call.emergency.flagged) {
+    return responseGoalBand(call.state, call.openedAt, now, measure.goal);
+  }
+  if (call.state === 'CLOSED') return null;
+  const age = businessDaysElapsed(
+    call.openedAt,
+    now,
+    measure.zone,
+    measure.nonWorkingDates,
+  );
+  return bandPast(age, measure.handling.amberDays, measure.handling.redDays);
 }
 
 function wholeMinutes(value: number, field: string): number {
@@ -2023,6 +2242,220 @@ export async function saveResponseGoal(
     );
   });
   return { amberMinutes, redMinutes };
+}
+
+const HANDLING_AMBER_KEY = 'calls.handling_amber_days';
+const HANDLING_RED_KEY = 'calls.handling_red_days';
+const NON_WORKING_KEY = 'calls.non_working_dates';
+const HANDLING_AMBER_FALLBACK = 2;
+const HANDLING_RED_FALLBACK = 5;
+const HANDLING_DAYS_MAX = 366;
+
+function wholeDays(value: number, field: string): number {
+  if (!Number.isInteger(value) || value < 0 || value > HANDLING_DAYS_MAX) {
+    throw new KernelError('invalid', `${field} must be whole business days`, {
+      field,
+    });
+  }
+  return value;
+}
+
+function storedDays(value: unknown, fallback: number): number {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
+    return value;
+  }
+  throw new KernelError('invalid', 'handling clock is not whole days');
+}
+
+function storedDates(value: unknown): readonly string[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new KernelError('invalid', 'non-working dates are not a date list');
+  }
+  return [...new Set(value.map((item) => calendarDate(String(item))))].sort();
+}
+
+export async function readHandlingGoal(db: Queryable): Promise<HandlingGoal> {
+  const { rows } = await db.query<{ key: string; value: unknown }>(
+    `SELECT key, value FROM config_settings WHERE key = ANY($1::text[])`,
+    [[HANDLING_AMBER_KEY, HANDLING_RED_KEY]],
+  );
+  const byKey = new Map(rows.map((row) => [row.key, row.value]));
+  return {
+    amberDays: storedDays(
+      byKey.get(HANDLING_AMBER_KEY),
+      HANDLING_AMBER_FALLBACK,
+    ),
+    redDays: storedDays(byKey.get(HANDLING_RED_KEY), HANDLING_RED_FALLBACK),
+  };
+}
+
+export async function saveHandlingGoal(
+  db: Queryable,
+  clock: Clock,
+  spec: SaveHandlingGoalSpec,
+): Promise<HandlingGoal> {
+  const actorId = validId(spec.actorId, 'actor');
+  const amberDays = wholeDays(spec.amberDays, 'amber');
+  const redDays = wholeDays(spec.redDays, 'red');
+  if (redDays <= amberDays) {
+    throw new KernelError('invalid', 'red must be older than amber', {
+      field: 'red',
+    });
+  }
+  await inTransaction(db, async (tx) => {
+    await writeSetting(tx, clock, HANDLING_AMBER_KEY, amberDays);
+    await writeSetting(tx, clock, HANDLING_RED_KEY, redDays);
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'staff',
+        actorId,
+        actorRole: spec.actorRole ?? undefined,
+        action: 'calls.handling_clock',
+        inputs: { amberDays, redDays },
+      },
+      { outcome: 'ok' },
+    );
+  });
+  return { amberDays, redDays };
+}
+
+const REPLY_DAYS_KEY = 'calls.reply_target_days';
+const REPLY_SHOWN_KEY = 'calls.reply_target_shown';
+const REPLY_DAYS_FALLBACK = 2;
+
+function storedShown(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'boolean') return value;
+  throw new KernelError('invalid', 'show to tenants is not a switch');
+}
+
+export async function readReplyTarget(db: Queryable): Promise<ReplyTarget> {
+  const { rows } = await db.query<{ key: string; value: unknown }>(
+    `SELECT key, value FROM config_settings WHERE key = ANY($1::text[])`,
+    [[REPLY_DAYS_KEY, REPLY_SHOWN_KEY]],
+  );
+  const byKey = new Map(rows.map((row) => [row.key, row.value]));
+  return {
+    days: storedDays(byKey.get(REPLY_DAYS_KEY), REPLY_DAYS_FALLBACK),
+    shown: storedShown(byKey.get(REPLY_SHOWN_KEY)),
+  };
+}
+
+export async function saveReplyTarget(
+  db: Queryable,
+  clock: Clock,
+  spec: SaveReplyTargetSpec,
+): Promise<ReplyTarget> {
+  const actorId = validId(spec.actorId, 'actor');
+  const days = wholeDays(spec.days, 'days');
+  const shown = spec.shown === true;
+  await inTransaction(db, async (tx) => {
+    await writeSetting(tx, clock, REPLY_DAYS_KEY, days);
+    await writeSetting(tx, clock, REPLY_SHOWN_KEY, shown);
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'staff',
+        actorId,
+        actorRole: spec.actorRole ?? undefined,
+        action: 'calls.reply_target',
+        inputs: { days, shown },
+      },
+      { outcome: 'ok' },
+    );
+  });
+  return { days, shown };
+}
+
+/**
+ * Calls opened on a calendar date in the period, in the office zone. A person's
+ * reply is a reply a staff account sent. The duty reply is not one of those,
+ * and a call sent back to filtered is not in the count.
+ */
+export async function readReplyShare(
+  db: Queryable,
+  zone: string,
+  from: string,
+  to: string,
+  days: number,
+): Promise<ReplyShare> {
+  const dates = await readNonWorkingDates(db);
+  const { rows } = await db.query<{
+    opened_at: Date;
+    replied_at: Date | null;
+  }>(
+    `SELECT sc.opened_at,
+            (
+              SELECT min(t.at)
+                FROM service_call_transition t
+               WHERE t.service_call_id = sc.service_call_id
+                 AND t.kind = 'REPLIED'
+                 AND t.actor_id IS NOT NULL
+            ) AS replied_at
+       FROM service_call sc
+      WHERE sc.returned_at IS NULL
+        AND (sc.opened_at AT TIME ZONE $3)::date >= $1::date
+        AND (sc.opened_at AT TIME ZONE $3)::date <= $2::date`,
+    [from, to, zone],
+  );
+  let replied = 0;
+  for (const row of rows) {
+    if (row.replied_at === null) continue;
+    const age = businessDaysElapsed(row.opened_at, row.replied_at, zone, dates);
+    if (age <= days) replied += 1;
+  }
+  return { from, to, calls: rows.length, replied };
+}
+
+export async function readNonWorkingDates(
+  db: Queryable,
+): Promise<readonly string[]> {
+  const { rows } = await db.query<{ value: unknown }>(
+    `SELECT value FROM config_settings WHERE key = $1`,
+    [NON_WORKING_KEY],
+  );
+  return storedDates(rows[0]?.value);
+}
+
+/**
+ * Adds or removes one non-working date. A date already kept, or a removal of
+ * one that is not, changes nothing and writes no audit row.
+ */
+export async function changeNonWorkingDate(
+  db: Queryable,
+  clock: Clock,
+  spec: ChangeNonWorkingDateSpec,
+): Promise<readonly string[]> {
+  const actorId = validId(spec.actorId, 'actor');
+  const date = calendarDate(spec.date);
+  if (spec.op !== 'add' && spec.op !== 'remove') {
+    throw new KernelError('invalid', 'op is not add or remove', {
+      field: 'op',
+    });
+  }
+  return inTransaction(db, async (tx) => {
+    const current = await readNonWorkingDates(tx);
+    const has = current.includes(date);
+    if (spec.op === 'add' && has) return current;
+    if (spec.op === 'remove' && !has) return current;
+    const next =
+      spec.op === 'add'
+        ? [...current, date].sort()
+        : current.filter((kept) => kept !== date);
+    await writeSetting(tx, clock, NON_WORKING_KEY, next);
+    await createAuditLog(tx, clock).write(
+      {
+        actorKind: 'staff',
+        actorId,
+        actorRole: spec.actorRole ?? undefined,
+        action: 'calls.non_working_date',
+        inputs: { change: spec.op, date },
+      },
+      { outcome: 'ok' },
+    );
+    return next;
+  });
 }
 
 function categoryCode(value: string): string {
