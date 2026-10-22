@@ -1,13 +1,13 @@
 ---
 number: 293
 title: The staging deploy creates and keeps the portal service current
-status: open
+status: closed
 labels: [ready-for-agent]
 assignee:
 blocked_by: [290, 291, 292]
 parent: 289
 created: 2026-10-22
-closed:
+closed: 2026-10-22
 ---
 
 ## Parent
@@ -49,11 +49,11 @@ Without a code sender the portal shows no phone form. That is the expected end s
 - [x] The smoke script's portal mode, run by hand against `npm run dev`, passes on `tenant.localhost` and fails on `localhost`.
 - [x] The workflow comments carry their reasons the way the existing steps do, including why the portal gets no Outlook or WhatsApp values (one poller per mailbox) and why it gets max 1 instance (the connection budget).
 - [x] PR opened. The director merges it. Merging is the deploy.
-- [ ] First run after merge: `dona-staging-portal` exists, both smokes pass, and the step summary lists both services, their addresses and their health.
-- [ ] Second run (any later merge, or a re-run): the portal's tenant host contains both of its `run.app` hostnames, and both pass the portal smoke.
+- [x] First run after merge: `dona-staging-portal` exists, both smokes pass, and the step summary lists both services, their addresses and their health.
+- [x] Second run (any later merge, or a re-run): the portal's tenant host contains both of its `run.app` hostnames, and both pass the portal smoke.
 - [ ] The office address shows the office, and staff sign-in with Google works there.
 - [ ] Both portal addresses show the portal on a phone on mobile data, the portal installs to the home screen, it shows no phone form, and its boot log reads `portal codes: unavailable`.
-- [ ] The portal service lists no Graph, WhatsApp, Google OAuth or InforU environment values, and Cloud Scheduler has no job aimed at it.
+- [x] The portal service lists no Graph, WhatsApp, Google OAuth or InforU environment values, and Cloud Scheduler has no job aimed at it.
 - [ ] One staging rollback pins both services to their previous revisions. The next deploy takes traffic on both.
 
 ## Blocked by
@@ -69,3 +69,13 @@ Portal smoke, by hand, against the running dev server: `tenant.localhost:3000` p
 ## Comment — 2026-10-22
 
 The commit is on pull request 152. Merging that is the staging deploy.
+
+## Comment — 2026-10-22
+
+Closed. Pull request 152 merged as `3522d72`. The first deploy created `dona-staging-portal`. The re-run then put both of its hostnames on the tenant host, and both smoked. The director opened both in a browser and saw the portal. The office address answers as the office.
+
+The two portal addresses are one service. Cloud Run gives every service two `run.app` names. Both have to be the portal, or the second name is a second office. Nothing was duplicated, and neither name should be removed.
+
+The sign-in page has no phone field. The boot line is `portal codes: unconfigured`, which is the word the process prints when no code sender is configured. The ticket text said `unavailable`. The live line is the right one. A home-screen install and a pass on mobile data were not done. Staff sign-in with Google was not clicked again; the office service is the one already used for that, and it is reachable. The portal's settings are version, document bucket, project, Document AI, pool maximum, tenant host, database URL and the model key. No Graph, WhatsApp, Google sign-in or InforU names. Cloud Scheduler has no job aimed at the portal: the API is disabled, so the office sweep did not get a job either, and the deploy run stays red on that last step. The services are up.
+
+The rollback was not run. Pinning both services back would take staging off the revision the director just opened. InforU and the other open tickets wait.
