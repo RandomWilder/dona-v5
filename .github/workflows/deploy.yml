@@ -27,6 +27,7 @@ jobs:
       PROJECT: dona-v5
       REGION: me-west1
       SERVICE: dona-staging
+      PORTAL: dona-staging-portal
       IMAGE: me-west1-docker.pkg.dev/dona-v5/dona/app
       SHA: ${{ github.event.workflow_run.head_sha }}
 
@@ -148,32 +149,151 @@ jobs:
             --max-instances 3 \
             --quiet
 
+      # The portal service, same image, same database (ADR-0020, #293). The office
+      # above is unchanged and keeps the default tenant host, so both of its
+      # run.app names stay the office.
+      #
+      # Tenant host. Before this service exists it has no address list, so the host
+      # is the fixed form Cloud Run always assigns:
+      # dona-staging-portal-<project number>.me-west1.run.app. Once it exists, the
+      # host is every hostname the service reports (run.googleapis.com/urls, plus
+      # the status URL), with no scheme and no path. The second deploy is what adds
+      # the hashed name. An empty list would fall through to tenant.localhost and
+      # the service would answer as the office, so a parse that finds nothing
+      # refuses the deploy. A lookup error does too: replacing the list with the
+      # fixed form would drop a hostname the portal already serves.
+      #
+      # No Google sign-in, Outlook, WhatsApp or InforU values. Outlook and WhatsApp
+      # are one poller per mailbox: a second service holding the same mailbox would
+      # poll it twice. This service does not sign staff in. InforU is mounted, all
+      # three values together, in a later review. Secrets and env vars are replaced
+      # in full each deploy, so a value that does not belong cannot linger.
+      #
+      # Max 1 instance. The pool maximum is 5. The office may run 3, so the budget
+      # is 3 × 5 plus 1 × 5, which leaves room on the staging database for the
+      # migration and the sweep. HTTP/2 and 2Gi are the same upload bound as the
+      # office. No migration job and no scheduled job: both stay on the office, so
+      # each sweep runs once.
+      - name: Deploy portal
+        id: portal
+        run: |
+          # Stderr stays off the JSON. A lookup that fails for any reason other
+          # than "no such service" must not deploy: --set-env-vars replaces the
+          # list, and a fallback host would drop a hostname the portal already serves.
+          PORTAL_ERR="$(mktemp)"
+          if PORTAL_JSON="$(gcloud run services describe "$PORTAL" \
+            --region "$REGION" --project "$PROJECT" --format=json 2>"$PORTAL_ERR")"; then
+            TENANT_HOST="$(printf '%s' "$PORTAL_JSON" | node -e '
+              const fs = require("fs");
+              const doc = JSON.parse(fs.readFileSync(0, "utf8"));
+              const ann = (doc.metadata && doc.metadata.annotations) || {};
+              const raw = ann["run.googleapis.com/urls"] || "";
+              const candidates = [];
+              if (raw.trim().startsWith("[")) candidates.push(...JSON.parse(raw));
+              else if (raw.trim()) candidates.push(...raw.split(","));
+              const status = doc.status || {};
+              if (status.url) candidates.push(status.url);
+              const seen = [];
+              for (const item of candidates) {
+                let host = "";
+                try { host = new URL(String(item).trim()).hostname || ""; }
+                catch { host = ""; }
+                host = host.toLowerCase();
+                if (host && !seen.includes(host)) seen.push(host);
+              }
+              process.stdout.write(seen.join(","));
+            ')"
+            if [[ -z "$TENANT_HOST" ]]; then
+              echo "portal reported no hostnames — refusing to deploy" >&2
+              rm -f "$PORTAL_ERR"
+              exit 1
+            fi
+            echo "portal tenant host $TENANT_HOST"
+          else
+            PORTAL_DESC="$(cat "$PORTAL_ERR")"
+            if [[ "$PORTAL_DESC" == *"Cannot find service"* || "$PORTAL_DESC" == *"NOT_FOUND"* ]]; then
+              NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
+              TENANT_HOST="${PORTAL}-${NUMBER}.${REGION}.run.app"
+              echo "portal service does not exist yet — tenant host $TENANT_HOST"
+            else
+              echo "$PORTAL_DESC" >&2
+              rm -f "$PORTAL_ERR"
+              exit 1
+            fi
+          fi
+          rm -f "$PORTAL_ERR"
+          echo "hosts=$TENANT_HOST" >> "$GITHUB_OUTPUT"
+          # A comma separates env vars for gcloud, and the tenant host is itself a
+          # comma-separated list, so the delimiter here is a pipe.
+          ENV_VARS="VERSION=${SHA:0:7}|DOCS_BUCKET=$PROJECT-staging-docs|GOOGLE_CLOUD_PROJECT=$PROJECT|DOCUMENT_AI_LOCATION=eu|DATABASE_POOL_MAX=5|TENANT_HOST=${TENANT_HOST}"
+          if [[ -n "${{ steps.ocr.outputs.processor }}" ]]; then
+            ENV_VARS="$ENV_VARS|DOCUMENT_AI_PROCESSOR=${{ steps.ocr.outputs.processor }}"
+          fi
+          gcloud run deploy "$PORTAL" \
+            --image "$IMAGE:$SHA" \
+            --region "$REGION" \
+            --project "$PROJECT" \
+            --service-account "app-staging@$PROJECT.iam.gserviceaccount.com" \
+            --add-cloudsql-instances "$PROJECT:$REGION:dona-staging" \
+            --set-secrets "DATABASE_URL=staging-database-url:latest,OPENAI_API_KEY=staging-openai-api-key:latest" \
+            --set-env-vars "^|^${ENV_VARS}" \
+            --allow-unauthenticated \
+            --use-http2 \
+            --memory 2Gi \
+            --min-instances 0 \
+            --max-instances 1 \
+            --quiet
+
       # A rollback pins traffic to a named revision and it stays pinned — the deploy above would
       # then create a revision serving 0%: green pipeline, nothing changed (docs/pipeline.md §5).
+      # Both services, or the next merge would unpin only the office.
       - name: Take traffic
         run: |
           gcloud run services update-traffic "$SERVICE" \
             --to-latest --region "$REGION" --project "$PROJECT" --quiet
+          gcloud run services update-traffic "$PORTAL" \
+            --to-latest --region "$REGION" --project "$PROJECT" --quiet
 
       # "Deployed but silently broken" must fail loudly. The same script prod uses and the same one
-      # you can run by hand: /health returning ok:true *and* db:up (infra/smoke.sh, slice 1.5).
+      # you can run by hand: /health returning ok:true *and* db:up (infra/smoke.sh). The portal also
+      # requires the web app manifest, which only the tenant audience serves.
+      #
+      # Smoke the hosts this deploy configured, every one of them. The service's
+      # primary address can be the hashed name, and on the first deploy that name
+      # is not a tenant host yet — smoking it would fail a good revision. The next
+      # deploy puts both names in the list, and both are smoked.
       - name: Smoke test
         run: |
           URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" --format='value(status.url)')"
           BODY="$(./infra/smoke.sh "$URL")"
           REVISION="$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" --format='value(status.latestReadyRevisionName)')"
+          PORTAL_REVISION="$(gcloud run services describe "$PORTAL" --region "$REGION" --project "$PROJECT" --format='value(status.latestReadyRevisionName)')"
+          HOSTS="${{ steps.portal.outputs.hosts }}"
+          if [[ -z "$HOSTS" ]]; then
+            echo "portal smoke has no hosts" >&2
+            exit 1
+          fi
           {
             echo "### Staging deployed"
             echo ""
-            echo "- URL: $URL"
             echo "- commit: \`$SHA\`"
-            echo "- revision: \`$REVISION\`"
-            echo "- health: \`$BODY\`"
+            echo "- office: $URL"
+            echo "- office revision: \`$REVISION\`"
+            echo "- office health: \`$BODY\`"
+            echo "- portal revision: \`$PORTAL_REVISION\`"
           } >> "$GITHUB_STEP_SUMMARY"
+          for host in ${HOSTS//,/ }; do
+            LINE="$(./infra/smoke.sh --portal "https://${host}")"
+            {
+              echo "- portal: https://${host}"
+              echo "- portal health: \`$LINE\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
 
       # #192. Filtered messages older than 6 months. Once a day, 04:00 Israel,
       # as the runtime account against the staging database. The job is
       # idempotent, so a deploy that recreates it deletes nothing by itself.
+      # Office only: the portal gets no scheduled job, so the sweep runs once.
       # Prod is not scheduled here: production connection is a later ticket.
       - name: Schedule filtered-message sweep
         run: |

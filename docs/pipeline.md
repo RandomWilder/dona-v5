@@ -144,13 +144,23 @@ CI:       typecheck · lint · unit + contract tests
           evals/golden/     ← REQUIRED · grounding · refusal · isolation attempts     (§7)
           five grep guards · race + timeout tests · dependency audit
    ↓ merge to main
-staging:  on workflow_run after CI succeeds → migrations → deploy → take traffic → smoke
+staging:  on workflow_run after CI succeeds → migrate once → deploy office → deploy portal → take traffic on both → smoke both
    ↓ tag v*
 prod:     full CI re-run against the tagged commit → migrations → deploy → take traffic → smoke
 ```
 
 - **Staging deploys on `workflow_run`, after CI succeeds — never on push.** That one wiring choice is
   what makes it impossible for a red commit to reach staging, even by a direct push to `main`.
+- **Staging serves the portal from a second service,** `dona-staging-portal`, from the same image and
+  the same workflow ([ADR-0020](decisions/ADR-0020-staging-serves-the-portal-from-a-second-service.md)).
+  The migration is still the office's job, run once. The portal is then deployed, traffic moves to
+  latest on both, and both are smoked. The portal's tenant host is its own addresses: before the
+  service exists, the fixed `dona-staging-portal-<project number>.me-west1.run.app`; once it exists,
+  every hostname the service reports, with no scheme and no path. It is given the staging database
+  URL, the model key, the pool maximum, and nothing for Google sign-in, Outlook, WhatsApp or InforU —
+  one poller per mailbox, and this service does not sign staff in. Its maximum is one instance, so
+  the connection budget stays 3 × 5 for the office plus 1 × 5 for the portal. Scheduled jobs stay on
+  the office. Production stays one service, and the release workflow does not grow a second.
 - **Migrations run before the revision serves, not after** — as their own Cloud Run job, from the
   image that is about to be deployed, as the *runtime* service account (slice 1.6). Two reasons, and
   the second is the one that decided it. Migrations are append-only, so old code against the new
@@ -165,12 +175,14 @@ prod:     full CI re-run against the tagged commit → migrations → deploy →
   pinned; without `update-traffic --to-latest` the next deploy creates a revision serving 0% — a
   green pipeline that changed nothing.
 - **Rollback is one command, no rebuild and no CI wait** (`infra/rollback.sh`), and it prints the
-  roll-forward command with it.
+  roll-forward command with it. On staging it pins each of the two services to its own previous ready
+  revision. A portal service that does not exist yet is reported and skipped. Production is unchanged.
 - **Smoke is one definition of "actually serving"** (`infra/smoke.sh`), used by both workflows and by
   hand: health plus `db:up`, plus one scripted agent conversation once the agent exists — verify,
   ask a lease question, assert a citation is present — plus the emergency path, which must route to
   the duty phone with no model call in between. "Deployed but silently broken" is the failure this
-  exists to make impossible.
+  exists to make impossible. Portal mode (`--portal`) also requires the web app manifest to answer
+  200, which only the tenant audience serves. A 404 there means the hostname is answering as the office.
 - **The service speaks HTTP/2, and the revision has 2 GiB.** Cloud Run caps an HTTP/1 body at
   32 MiB and answers with its own English page, under the 100 MB upload bound. `--use-http2` is what
   removes that cap; the container listens in cleartext HTTP/2 only when `K_SERVICE` is set, so a
