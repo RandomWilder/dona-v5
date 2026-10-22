@@ -48,7 +48,7 @@ Without a code sender the portal shows no phone form. That is the expected end s
 
 - [x] The smoke script's portal mode, run by hand against `npm run dev`, passes on `tenant.localhost` and fails on `localhost`.
 - [x] The workflow comments carry their reasons the way the existing steps do, including why the portal gets no Outlook or WhatsApp values (one poller per mailbox) and why it gets max 1 instance (the connection budget).
-- [ ] PR opened. The director merges it. Merging is the deploy.
+- [x] PR opened. The director merges it. Merging is the deploy.
 - [ ] First run after merge: `dona-staging-portal` exists, both smokes pass, and the step summary lists both services, their addresses and their health.
 - [ ] Second run (any later merge, or a re-run): the portal's tenant host contains both of its `run.app` hostnames, and both pass the portal smoke.
 - [ ] The office address shows the office, and staff sign-in with Google works there.
@@ -65,3 +65,7 @@ Without a code sender the portal shows no phone form. That is the expected end s
 ## Comment — 2026-10-22
 
 Portal smoke, by hand, against the running dev server: `tenant.localhost:3000` passed (health `db:up`, manifest 200). `localhost:3000` failed (manifest 404). Plain smoke on `localhost` still passes. The staging workflow deploys the portal after the office, from the same image, and the release workflow is untouched. What remains is the director merging, then the first staging run, the second run, the phone click-through and one rollback.
+
+## Comment — 2026-10-22
+
+The commit is on pull request 152. Merging that is the staging deploy.
