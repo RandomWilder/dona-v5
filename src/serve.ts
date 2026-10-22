@@ -2,7 +2,7 @@
 // injects PORT and requires a bind on 0.0.0.0. `npm run dev` layers .env.example then .env in front
 // of it with --env-file-if-exists, neither of which overrides a variable already set in the shell —
 // which is why v3's hand-written .env loader (src/dev.ts) is not lifted.
-import { buildApp, DEFAULT_TENANT_HOST } from './app.ts';
+import { buildApp, tenantHostLine } from './app.ts';
 import { startCallBrief } from './calls/contract.ts';
 import {
   codeSenderFromEnv,
@@ -153,7 +153,7 @@ const app = buildApp({
   // Google matches the redirect URI character for character, so a deployment says its own origin
   // rather than letting a proxy header decide it.
   staffBaseUrl: process.env.STAFF_BASE_URL,
-  tenantHost: process.env.TENANT_HOST ?? DEFAULT_TENANT_HOST,
+  tenantHost: process.env.TENANT_HOST,
   codeSender,
   scanner,
   staffHostedDomain: configuredHostedDomain(),
@@ -178,7 +178,7 @@ console.log(
 );
 console.log(`embed: ${embedder.describe()}`);
 console.log(`identity: ${identity.describe()}`);
-console.log(`tenant host: ${process.env.TENANT_HOST ?? DEFAULT_TENANT_HOST}`);
+console.log(tenantHostLine(process.env.TENANT_HOST));
 console.log(`portal codes: ${portalCodeLabel()}`);
 console.log(`scanner: ${scanner ? 'dev' : 'unconfigured'}`);
 console.log(`clock: ${clock.zone}`);

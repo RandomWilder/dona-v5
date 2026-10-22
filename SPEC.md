@@ -279,9 +279,15 @@ byte for byte. A screen that handles its own refusal still does; this is only th
   composition root calls `requireStaff` for a staff route, and an `onRoute` hook **refuses to start
   the process** if a route declares neither a staff stance nor a tenant stance. Openness is a
   written word, never what happened when nobody said otherwise. **Staff routes are served only on
-  the office host, and tenant routes only on the tenant host** (`TENANT_HOST`, default
-  `tenant.localhost`). A staff route requested on the tenant host is not found, and a tenant route
-  requested on the office host is not found. The liveness probe, the stylesheet and the fonts are
+  the office host, and tenant routes only on the tenant host.** `TENANT_HOST` is one hostname or
+  several, separated by commas (#291). Each entry is lower case, with surrounding spaces and any
+  port removed, and an IPv6 address in brackets reduced to the address inside them — the same
+  reading a single hostname already had. An empty entry is ignored and matches no request. An
+  absent setting, or one that leaves no hostname, is the single default `tenant.localhost`. A
+  request whose hostname is any entry is the tenant audience; every other request is the office.
+  The boot line prints the whole list. A staff route requested on the tenant host is not found,
+  and a tenant route requested on the office host is not found. The liveness probe, the stylesheet
+  and the fonts are
   the process rather than an audience, and are served on both hosts. The portal stylesheet
   (`/ui/portal.css`) is the same kind of asset: it is not the office shell, and a portal page is
   the only page that links it. **A staff session is not a
@@ -514,7 +520,7 @@ Every route in this application declares its own stance — a staff permission, 
 or a tenant stance — and an `onRoute` hook refuses to start the process if one declares neither a
 staff stance nor a tenant stance, so the default is deny on both hosts and an open route is open
 because somebody wrote it down. Staff routes answer only on the office host and tenant routes only
-on the tenant host; the other host is told the route is not found. A staff session cookie is not a
+on a hostname in the tenant host list; any other host is told the route is not found. A staff session cookie is not a
 session on the tenant host, and a tenant session cookie is not a session on the office host. The root index moved from `src/estate/` to the
 composition root in the same slice, because an index of screens stopped being one module's fact the
 week a second module had one. **Slice 5.8 put the settings screen beside that index**, because the

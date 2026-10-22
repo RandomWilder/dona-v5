@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { Pool } from 'pg';
-import { buildApp, hostOf } from './app.ts';
+import { buildApp, hostOf, tenantHostLine } from './app.ts';
 
 const TENANT_HOST = 'tenant.localhost';
 
@@ -143,5 +143,165 @@ describe('the two hosts', () => {
       await app.close();
       await pool.end();
     }
+  });
+});
+
+describe('a list of tenant hostnames', () => {
+  it('serves a tenant route on each of two hostnames and not a staff route, and a third hostname is the office', async () => {
+    const pool = deadPool();
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      tenantHost: 'alpha.localhost,beta.localhost',
+    });
+    app.get(
+      '/only-here',
+      { config: { tenant: 'public' } },
+      async () => 'tenant-only',
+    );
+    try {
+      for (const host of ['alpha.localhost', 'beta.localhost']) {
+        const tenant = await app.inject({
+          method: 'GET',
+          url: '/only-here',
+          headers: { host },
+        });
+        assert.equal(tenant.statusCode, 200);
+        assert.equal(tenant.body, 'tenant-only');
+
+        const staff = await app.inject({
+          method: 'GET',
+          url: '/estate',
+          headers: { host },
+        });
+        assert.equal(staff.statusCode, 404);
+        assert.equal(
+          staff.body,
+          '{"code":"not_found","message":"route not found"}',
+        );
+      }
+
+      const third = await app.inject({
+        method: 'GET',
+        url: '/only-here',
+        headers: { host: 'gamma.localhost' },
+      });
+      assert.equal(third.statusCode, 404);
+      const office = await app.inject({
+        method: 'GET',
+        url: '/',
+        headers: { host: 'gamma.localhost' },
+      });
+      assert.equal(office.statusCode, 303);
+      assert.equal(office.headers.location, '/staff/login');
+    } finally {
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('matches an entry written with upper case, a port, surrounding spaces, or IPv6 brackets', async () => {
+    const pool = deadPool();
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      tenantHost: ' Alpha.Localhost:3000 , [2001:db8::1]:443 ',
+    });
+    app.get(
+      '/only-here',
+      { config: { tenant: 'public' } },
+      async () => 'tenant-only',
+    );
+    try {
+      for (const host of ['alpha.localhost', '[2001:db8::1]']) {
+        const tenant = await app.inject({
+          method: 'GET',
+          url: '/only-here',
+          headers: { host },
+        });
+        assert.equal(tenant.statusCode, 200, host);
+      }
+    } finally {
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('does not treat an empty entry between two commas as a hostname', async () => {
+    const pool = deadPool();
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      tenantHost: 'alpha.localhost,,beta.localhost',
+    });
+    app.get(
+      '/only-here',
+      { config: { tenant: 'public' } },
+      async () => 'tenant-only',
+    );
+    try {
+      // `:` is a hostname that normalises to nothing. An empty header is not, because the
+      // injector replaces it, and that would pass even if the empty entry were kept.
+      const empty = await app.inject({
+        method: 'GET',
+        url: '/only-here',
+        headers: { host: ':' },
+      });
+      assert.equal(empty.statusCode, 404);
+
+      const named = await app.inject({
+        method: 'GET',
+        url: '/only-here',
+        headers: { host: 'beta.localhost' },
+      });
+      assert.equal(named.statusCode, 200);
+    } finally {
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('keeps a single configured hostname exclusive of the default', async () => {
+    const pool = deadPool();
+    const app = buildApp({
+      pool,
+      version: '9.9.9-test',
+      tenantHost: 'only.localhost',
+    });
+    app.get(
+      '/only-here',
+      { config: { tenant: 'public' } },
+      async () => 'tenant-only',
+    );
+    try {
+      const named = await app.inject({
+        method: 'GET',
+        url: '/only-here',
+        headers: { host: 'only.localhost' },
+      });
+      assert.equal(named.statusCode, 200);
+      const fallback = await app.inject({
+        method: 'GET',
+        url: '/only-here',
+        headers: { host: TENANT_HOST },
+      });
+      assert.equal(fallback.statusCode, 404);
+    } finally {
+      await app.close();
+      await pool.end();
+    }
+  });
+
+  it('prints the whole list on the boot line', () => {
+    assert.equal(
+      tenantHostLine('alpha.localhost,beta.localhost'),
+      'tenant host: alpha.localhost, beta.localhost',
+    );
+    assert.equal(tenantHostLine(undefined), 'tenant host: tenant.localhost');
+    assert.equal(tenantHostLine(''), 'tenant host: tenant.localhost');
+    assert.equal(
+      tenantHostLine(' Alpha.Localhost:443 , beta.localhost , '),
+      'tenant host: alpha.localhost, beta.localhost',
+    );
   });
 });

@@ -207,8 +207,8 @@ export interface AppDeps {
   /** Where Google is told to send an operator back. Absent, the request's own origin is used. */
   staffBaseUrl?: string;
   /**
-   * The tenant host, hostname only. Absent, `tenant.localhost`, which resolves to this machine
-   * and is never the office. #272.
+   * The tenant host: one hostname, or several separated by commas. Absent or empty,
+   * `tenant.localhost`, which resolves to this machine and is never the office. #272, #291.
    */
   tenantHost?: string;
   /** The Workspace domain to require, when Dona Dom's answer is known (slice 5.1b). */
@@ -307,6 +307,24 @@ export interface RouteStance {
 
 /** Hostname the tenant host answers on when nothing else is configured. #272. */
 export const DEFAULT_TENANT_HOST = 'tenant.localhost';
+
+/**
+ * The hostnames `TENANT_HOST` names. Each entry is read the way one hostname is: lower case,
+ * port dropped, IPv6 brackets removed. An empty entry matches nothing. Nothing left is the
+ * default. #291.
+ */
+function tenantHostNames(setting: string | undefined): readonly string[] {
+  const names = (setting ?? '')
+    .split(',')
+    .map((entry) => hostnameOf(entry))
+    .filter((name) => name !== '');
+  return names.length === 0 ? [DEFAULT_TENANT_HOST] : names;
+}
+
+/** What the process prints for the tenant host. The whole list, already normalised. #291. */
+export function tenantHostLine(setting: string | undefined): string {
+  return `tenant host: ${tenantHostNames(setting).join(', ')}`;
+}
 
 /** The tenant session's cookie. Read on the tenant host only. #273. */
 export const TENANT_SESSION_COOKIE = PORTAL_SESSION_COOKIE;
@@ -437,11 +455,11 @@ function unexpectedLine(caught: unknown, route: string | undefined): string {
 }
 
 export function buildApp(deps: AppDeps): FastifyInstance {
-  const tenantHost = hostnameOf(deps.tenantHost ?? DEFAULT_TENANT_HOST);
+  const tenantHosts = new Set(tenantHostNames(deps.tenantHost));
   const audienceOf = (headers: {
     host?: string | string[];
     ':authority'?: string | string[];
-  }): Audience => (hostOf(headers) === tenantHost ? 'tenant' : 'office');
+  }): Audience => (tenantHosts.has(hostOf(headers)) ? 'tenant' : 'office');
   // Unconstrained routes (the probe, the assets, Fastify's own 404) still match a request that
   // carries an audience. A constrained route matches only its own host.
   //
